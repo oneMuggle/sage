@@ -109,7 +109,6 @@ jobs:
   build-windows:
     name: Build Windows
     runs-on: windows-latest
-    if: false  # 暂时禁用，因为需要签名证书
     
     steps:
     - name: 检出代码
