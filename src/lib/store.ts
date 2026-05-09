@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { Suspense, lazy } from 'react'
 
 // ==================== 类型定义 ====================
 
@@ -137,38 +136,12 @@ export const useStore = create<StoreState>((set, get) => ({
 
 // ==================== 懒加载页面组件 ====================
 // 使用 React.lazy 懒加载页面组件，减少初始加载时间
+// 注意: 实际的懒加载组件在各自页面文件中
 
-export const LazyChat = lazy(() => import('../pages/Chat'))
-export const LazySettings = lazy(() => import('../pages/Settings'))
-export const LazyMemory = lazy(() => import('../pages/Memory'))
-export const LazySkills = lazy(() => import('../pages/Skills'))
-
-// ==================== 懒加载 Suspense 包装组件 ====================
-
-interface LazyLoadProps {
-  children: React.ReactNode
-  fallback?: React.ReactNode
-  loadingComponent?: React.ReactNode
-}
-
-// 默认加载占位符
-const defaultFallback = (
-  <div className="flex items-center justify-center h-full">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-  </div>
-)
-
-// 懒加载包装组件
-export function LazyLoader({ 
-  children, 
-  fallback 
-}: LazyLoadProps) {
-  return (
-    <Suspense fallback={fallback || defaultFallback}>
-      {children}
-    </Suspense>
-  )
-}
+export const LazyChat = () => import('../pages/Chat')
+export const LazySettings = () => import('../pages/Settings')
+export const LazyMemory = () => import('../pages/Memory')
+export const LazySkills = () => import('../pages/Skills')
 
 // ==================== 缓存策略 ====================
 
