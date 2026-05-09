@@ -13,6 +13,7 @@ httpx==0.26.0
 # Utils
 python-dotenv==1.0.0
 pyyaml==6.0.1
+croniter==2.0.1
 
 # 预留向量存储（后续阶段）
 # chromadb==0.4.22

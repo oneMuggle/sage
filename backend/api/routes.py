@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 from backend.data.session_repo import SessionRepository, Session
 from backend.core.agent import SageAgent
+from backend.scheduler import get_evolution_logs, get_scheduler, create_evolution_tasks
+from backend.data.database import get_database
 
 
 router = APIRouter()
@@ -42,6 +44,42 @@ class MessageResponse(BaseModel):
 class ChatResponse(BaseModel):
     message: MessageResponse
     session: Optional[dict] = None
+
+
+class TriggerEvolutionRequest(BaseModel):
+    """手动触发进化任务请求"""
+    task_name: str
+
+
+class EvolutionLogResponse(BaseModel):
+    """进化日志响应"""
+    id: str
+    evolution_type: str
+    description: str
+    before_state: Optional[str] = None
+    after_state: Optional[str] = None
+    trigger_type: str
+    trigger_condition: Optional[str] = None
+    status: str
+    error_message: Optional[str] = None
+    tokens_used: Optional[int] = None
+    created_at: int
+    completed_at: Optional[int] = None
+
+
+class EvolutionStatusResponse(BaseModel):
+    """进化状态响应"""
+    name: str
+    schedule: str
+    last_run: Optional[str] = None
+    next_run: Optional[str] = None
+    running: bool
+
+
+class TriggerResponse(BaseModel):
+    """触发响应"""
+    success: bool
+    message: str
 
 
 # ==================== 依赖注入 ====================
@@ -155,3 +193,56 @@ async def get_messages(
     """获取会话消息"""
     # TODO: 实现消息获取
     return []
+
+
+# ==================== 进化系统 API ====================
+
+@router.get("/evolution/logs", response_model=List[EvolutionLogResponse])
+async def list_evolution_logs(
+    limit: int = 50,
+    offset: int = 0
+):
+    """获取进化日志列表"""
+    try:
+        db = get_database()
+        logs = get_evolution_logs(db, limit=limit, offset=offset)
+        return logs
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/evolution/trigger", response_model=TriggerResponse)
+async def trigger_evolution(
+    data: TriggerEvolutionRequest
+):
+    """手动触发进化任务"""
+    try:
+        scheduler = get_scheduler()
+        
+        # 检查任务是否存在
+        task_names = [t["name"] for t in scheduler.get_task_status()]
+        if data.task_name not in task_names:
+            raise HTTPException(status_code=404, detail=f"任务不存在: {data.task_name}")
+        
+        # 触发任务
+        success = scheduler.trigger_task(data.task_name)
+        
+        if success:
+            return TriggerResponse(success=True, message=f"任务 {data.task_name} 已触发")
+        else:
+            return TriggerResponse(success=False, message=f"任务 {data.task_name} 触发失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/evolution/status", response_model=List[EvolutionStatusResponse])
+async def get_evolution_status():
+    """获取进化任务状态"""
+    try:
+        scheduler = get_scheduler()
+        status = scheduler.get_task_status()
+        return status
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

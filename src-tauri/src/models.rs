@@ -64,3 +64,36 @@ pub struct Memory {
     pub accessed_at: Option<i64>,
     pub access_count: i32,
 }
+
+/// 进化日志
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvolutionLog {
+    pub id: String,
+    pub evolution_type: String,
+    pub description: String,
+    pub before_state: Option<String>,
+    pub after_state: Option<String>,
+    pub trigger_type: String,
+    pub trigger_condition: Option<String>,
+    pub status: String,
+    pub error_message: Option<String>,
+    pub tokens_used: Option<i64>,
+    pub created_at: i64,
+    pub completed_at: Option<i64>,
+}
+
+/// 进化任务状态
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvolutionTaskStatus {
+    pub name: String,
+    pub schedule: String,
+    pub last_run: Option<String>,
+    pub next_run: Option<String>,
+    pub running: bool,
+}
+
+/// 手动触发请求
+#[derive(Debug, Deserialize)]
+pub struct TriggerRequest {
+    pub task_name: String,
+}

@@ -164,3 +164,39 @@ pub async fn get_memories(
     // TODO: 调用 Python 后端 API
     Ok(vec![])
 }
+
+/// 获取进化日志
+#[tauri::command]
+pub async fn get_evolution_logs(
+    limit: Option<i32>,
+    offset: Option<i32>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<EvolutionLog>, String> {
+    tracing::info!("获取进化日志: limit={:?}, offset={:?}", limit, offset);
+    
+    // TODO: 调用 Python 后端 API
+    Ok(vec![])
+}
+
+/// 手动触发进化任务
+#[tauri::command]
+pub async fn trigger_evolution(
+    task_name: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    tracing::info!("手动触发进化任务: {}", task_name);
+    
+    // TODO: 调用 Python 后端 API
+    Ok(())
+}
+
+/// 获取进化任务状态
+#[tauri::command]
+pub async fn get_evolution_status(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<EvolutionTaskStatus>, String> {
+    tracing::info!("获取进化任务状态");
+    
+    // TODO: 调用 Python 后端 API
+    Ok(vec![])
+}

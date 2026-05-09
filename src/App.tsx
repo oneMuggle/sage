@@ -3,6 +3,7 @@ import { Layout } from './components/layout/Layout'
 import { Chat } from './pages/Chat'
 import { Settings } from './pages/Settings'
 import { Memory } from './pages/Memory'
+import Skills from './pages/Skills'
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
           <Route path="chat" element={<Chat />} />
           <Route path="settings" element={<Settings />} />
           <Route path="memory" element={<Memory />} />
+          <Route path="skills" element={<Skills />} />
         </Route>
       </Routes>
     </BrowserRouter>
