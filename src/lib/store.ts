@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { Suspense, lazy } from 'react'
 
 // ==================== 类型定义 ====================
 
@@ -133,3 +134,94 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ messages: [] })
   },
 }))
+
+// ==================== 懒加载页面组件 ====================
+// 使用 React.lazy 懒加载页面组件，减少初始加载时间
+
+export const LazyChat = lazy(() => import('../pages/Chat'))
+export const LazySettings = lazy(() => import('../pages/Settings'))
+export const LazyMemory = lazy(() => import('../pages/Memory'))
+export const LazySkills = lazy(() => import('../pages/Skills'))
+
+// ==================== 懒加载 Suspense 包装组件 ====================
+
+interface LazyLoadProps {
+  children: React.ReactNode
+  fallback?: React.ReactNode
+  loadingComponent?: React.ReactNode
+}
+
+// 默认加载占位符
+const defaultFallback = (
+  <div className="flex items-center justify-center h-full">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+  </div>
+)
+
+// 懒加载包装组件
+export function LazyLoader({ 
+  children, 
+  fallback 
+}: LazyLoadProps) {
+  return (
+    <Suspense fallback={fallback || defaultFallback}>
+      {children}
+    </Suspense>
+  )
+}
+
+// ==================== 缓存策略 ====================
+
+// 消息缓存 (内存中缓存)
+const messageCache = new Map<string, { messages: Message[]; timestamp: number }>()
+const MESSAGE_CACHE_TTL = 5 * 60 * 1000 // 5分钟
+
+/**
+ * 获取缓存的消息
+ * @param sessionId 会话ID
+ * @returns 缓存的消息或null
+ */
+export function getCachedMessages(sessionId: string): Message[] | null {
+  const cached = messageCache.get(sessionId)
+  if (cached && Date.now() - cached.timestamp < MESSAGE_CACHE_TTL) {
+    return cached.messages
+  }
+  messageCache.delete(sessionId)
+  return null
+}
+
+/**
+ * 设置消息缓存
+ * @param sessionId 会话ID
+ * @param messages 消息列表
+ */
+export function setCachedMessages(sessionId: string, messages: Message[]): void {
+  messageCache.set(sessionId, {
+    messages,
+    timestamp: Date.now()
+  })
+}
+
+/**
+ * 清除指定会话的缓存
+ * @param sessionId 会话ID
+ */
+export function clearCachedMessages(sessionId?: string): void {
+  if (sessionId) {
+    messageCache.delete(sessionId)
+  } else {
+    messageCache.clear()
+  }
+}
+
+/**
+ * 清理过期缓存
+ */
+export function cleanupExpiredCache(): void {
+  const now = Date.now()
+  for (const [key, value] of messageCache.entries()) {
+    if (now - value.timestamp > MESSAGE_CACHE_TTL) {
+      messageCache.delete(key)
+    }
+  }
+}

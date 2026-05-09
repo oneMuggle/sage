@@ -53,11 +53,16 @@
         "timestampUrl": "",
         "webviewInstallMode": {
           "type": "embedBootstrapper"
+        },
+        "nsis": {
+          "displayLanguageSelector": false,
+          "installerIcon": "icons/icon.ico",
+          "installMode": "currentUser"
         }
       }
     },
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
     },
     "updater": {
       "active": false

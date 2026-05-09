@@ -1,0 +1,106 @@
+# Sage CI 工作流
+# 自动构建和测试
+
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # 前端构建检查
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置 Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: 安装依赖
+      run: npm ci
+    
+    - name: 构建前端
+      run: npm run build
+    
+    - name: 上传前端构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-dist
+        path: dist/
+
+  # Python 后端检查
+  backend:
+    name: Backend Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置 Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.8'
+    
+    - name: 安装依赖
+      run: |
+        cd backend
+        pip install -r requirements.txt
+    
+    - name: Python 语法检查
+      run: |
+        python -m py_compile backend/**/*.py
+    
+    - name: 后端单元测试 (模拟)
+      run: |
+        echo "后端测试占位符"
+        # 实际项目需要添加测试用例
+        # pytest backend/tests/
+
+  # Tauri 构建检查 (Linux)
+  tauri:
+    name: Tauri Build (Linux)
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 安装 Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-unknown-linux-gnu
+    
+    - name: 安装 Linux 构建依赖
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+    
+    - name: 安装 Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: 安装前端依赖
+      run: npm ci
+    
+    - name: 构建前端
+      run: npm run build
+    
+    - name: 构建 Tauri (仅检查)
+      uses: tauri-apps/tauri-action@v0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        args: --debug

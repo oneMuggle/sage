@@ -6,14 +6,133 @@ import json
 import time
 import uuid
 import logging
+import hashlib
 from typing import List, Dict, Any, Optional, Callable
+from collections import deque
+from threading import Lock
 
 from backend.data.session_repo import SessionRepository
 from backend.data.database import get_database
 from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager
 from backend.tools import ToolRegistry, register_all_tools
+from backend.core.exceptions import AgentError, ToolCallError, handle_sage_error
 
 logger = logging.getLogger(__name__)
+
+
+class QueryCache:
+    """
+    简单内存缓存
+    最近查询结果缓存，TTL=5分钟
+    """
+    
+    def __init__(self, ttl: int = 300, max_size: int = 100):
+        """
+        初始化缓存
+        
+        Args:
+            ttl: 缓存生存时间（秒），默认5分钟
+            max_size: 缓存最大条目数
+        """
+        self.ttl = ttl
+        self.max_size = max_size
+        self._cache: deque = deque(maxlen=max_size)
+        self._lock = Lock()
+    
+    def _generate_key(self, session_id: str, message: str) -> str:
+        """
+        生成缓存键
+        
+        Args:
+            session_id: 会话ID
+            message: 消息内容
+            
+        Returns:
+            缓存键的哈希值
+        """
+        key_str = f"{session_id}:{message}"
+        return hashlib.md5(key_str.encode()).hexdigest()
+    
+    def get(self, session_id: str, message: str) -> Optional[Dict[str, Any]]:
+        """
+        获取缓存结果
+        
+        Args:
+            session_id: 会话ID
+            message: 消息内容
+            
+        Returns:
+            缓存结果，如果不存在或已过期返回None
+        """
+        key = self._generate_key(session_id, message)
+        
+        with self._lock:
+            for item in self._cache:
+                if item["key"] == key:
+                    # 检查是否过期
+                    if time.time() - item["timestamp"] < self.ttl:
+                        logger.debug(f"缓存命中: {key[:8]}...")
+                        return item["result"]
+                    else:
+                        # 已过期，移除
+                        self._cache.remove(item)
+                        break
+        return None
+    
+    def set(self, session_id: str, message: str, result: Dict[str, Any]) -> None:
+        """
+        设置缓存
+        
+        Args:
+            session_id: 会话ID
+            message: 消息内容
+            result: 结果数据
+        """
+        key = self._generate_key(session_id, message)
+        
+        with self._lock:
+            # 移除已存在的相同键
+            self._cache = deque(
+                (item for item in self._cache if item["key"] != key),
+                maxlen=self.max_size
+            )
+            
+            # 添加新条目
+            self._cache.append({
+                "key": key,
+                "session_id": session_id,
+                "message": message,
+                "result": result,
+                "timestamp": time.time()
+            })
+    
+    def clear(self) -> None:
+        """清空缓存"""
+        with self._lock:
+            self._cache.clear()
+    
+    def cleanup(self) -> int:
+        """
+        清理过期缓存
+        
+        Returns:
+            清理的条目数
+        """
+        now = time.time()
+        removed = 0
+        
+        with self._lock:
+            original_len = len(self._cache)
+            self._cache = deque(
+                (item for item in self._cache if now - item["timestamp"] < self.ttl),
+                maxlen=self.max_size
+            )
+            removed = original_len - len(self._cache)
+        
+        if removed > 0:
+            logger.debug(f"清理了 {removed} 个过期缓存条目")
+        
+        return removed
 
 
 class SageAgent:
@@ -30,6 +149,10 @@ class SageAgent:
         self.session_repo = SessionRepository()
         self._interrupted = False
         self._current_session_id: Optional[str] = None
+        
+        # 初始化查询缓存 (TTL=5分钟)
+        self._cache = QueryCache(ttl=300, max_size=100)
+        logger.info("查询缓存初始化完成，TTL=300秒，最大条目=100")
         
         # 初始化记忆系统
         db = get_database()
@@ -54,54 +177,76 @@ class SageAgent:
         Returns:
             包含 message 和 session 的字典
         """
-        self._current_session_id = session_id
-        self._interrupted = False
-        
-        # 创建用户消息
-        now = int(time.time() * 1000)
-        user_message = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "role": "user",
-            "content": message,
-            "created_at": now,
-        }
-        
-        # 对话前：获取记忆上下文
-        memory_context = self.memory_manager.get_context(limit=10)
-        
-        # 将用户消息添加到工作记忆
-        self.memory_manager.add_to_working("user", message)
-        
-        # TODO: 实现真正的 AI 对话
-        # 临时返回模拟响应
-        assistant_message = {
-            "id": str(uuid.uuid4()),
-            "session_id": session_id,
-            "role": "assistant",
-            "content": f"收到消息: {message}\n\n(Agent 尚未完全实现)",
-            "created_at": int(time.time() * 1000),
-            "model": "gpt-3.5-turbo",
-        }
-        
-        # 将助手消息添加到工作记忆
-        self.memory_manager.add_to_working("assistant", assistant_message["content"])
-        
-        # 对话后：提取关键信息存入情景记忆
-        # 这里可以根据实际对话内容进行重要性评估
-        self._extract_and_save_memories(session_id, user_message, assistant_message)
-        
-        # 更新会话
-        self.session_repo.update(
-            session_id,
-            last_message_at=assistant_message["created_at"],
-            message_count=self.session_repo.get(session_id).message_count + 2 if self.session_repo.get(session_id) else 2
-        )
-        
-        return {
-            "message": assistant_message,
-            "session": self.session_repo.get(session_id).to_dict() if self.session_repo.get(session_id) else None
-        }
+        try:
+            # 检查缓存
+            cached_result = self._cache.get(session_id, message)
+            if cached_result:
+                logger.info(f"返回缓存结果，会话: {session_id}")
+                return cached_result
+            
+            self._current_session_id = session_id
+            self._interrupted = False
+            
+            # 创建用户消息
+            now = int(time.time() * 1000)
+            user_message = {
+                "id": str(uuid.uuid4()),
+                "session_id": session_id,
+                "role": "user",
+                "content": message,
+                "created_at": now,
+            }
+            
+            # 对话前：获取记忆上下文
+            memory_context = self.memory_manager.get_context(limit=10)
+            
+            # 将用户消息添加到工作记忆
+            self.memory_manager.add_to_working("user", message)
+            
+            # TODO: 实现真正的 AI 对话
+            # 临时返回模拟响应
+            assistant_message = {
+                "id": str(uuid.uuid4()),
+                "session_id": session_id,
+                "role": "assistant",
+                "content": f"收到消息: {message}\n\n(Agent 尚未完全实现)",
+                "created_at": int(time.time() * 1000),
+                "model": "gpt-3.5-turbo",
+            }
+            
+            # 将助手消息添加到工作记忆
+            self.memory_manager.add_to_working("assistant", assistant_message["content"])
+            
+            # 对话后：提取关键信息存入情景记忆
+            self._extract_and_save_memories(session_id, user_message, assistant_message)
+            
+            # 更新会话
+            session = self.session_repo.get(session_id)
+            if session:
+                self.session_repo.update(
+                    session_id,
+                    last_message_at=assistant_message["created_at"],
+                    message_count=session.message_count + 2
+                )
+            
+            result = {
+                "message": assistant_message,
+                "session": session.to_dict() if session else None
+            }
+            
+            # 存入缓存
+            self._cache.set(session_id, message, result)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"chat 处理异常: {str(e)}")
+            error_dict = handle_sage_error(e)
+            return {
+                "error": error_dict,
+                "message": assistant_message if 'assistant_message' in dir() else None,
+                "session": None
+            }
     
     def _extract_and_save_memories(
         self,
@@ -117,30 +262,29 @@ class SageAgent:
             user_message: 用户消息
             assistant_message: 助手消息
         """
-        # 简单的记忆提取策略：
-        # 1. 如果消息较长，保存摘要
-        # 2. 如果包含明确的用户偏好或设置，标记为高重要性
-        
-        user_content = user_message.get("content", "")
-        assistant_content = assistant_message.get("content", "")
-        
-        # 对于较长的对话，保存到情景记忆
-        if len(user_content) > 100 or len(assistant_content) > 100:
-            combined_content = f"[用户]: {user_content}\n[助手]: {assistant_content}"
-            importance = 5
+        try:
+            user_content = user_message.get("content", "")
+            assistant_content = assistant_message.get("content", "")
             
-            # 检测是否包含偏好或设置信息
-            preference_keywords = ["喜欢", "偏好", "不要", "记得", "设置", "以后"]
-            for keyword in preference_keywords:
-                if keyword in user_content:
-                    importance = 7
-                    break
-            
-            self.memory_manager.remember(combined_content, {
-                "session_id": session_id,
-                "importance": importance,
-                "memory_type": "conversation"
-            })
+            # 对于较长的对话，保存到情景记忆
+            if len(user_content) > 100 or len(assistant_content) > 100:
+                combined_content = f"[用户]: {user_content}\n[助手]: {assistant_content}"
+                importance = 5
+                
+                # 检测是否包含偏好或设置信息
+                preference_keywords = ["喜欢", "偏好", "不要", "记得", "设置", "以后"]
+                for keyword in preference_keywords:
+                    if keyword in user_content:
+                        importance = 7
+                        break
+                
+                self.memory_manager.remember(combined_content, {
+                    "session_id": session_id,
+                    "importance": importance,
+                    "memory_type": "conversation"
+                })
+        except Exception as e:
+            logger.warning(f"提取记忆失败: {str(e)}")
     
     async def run_loop(self, messages: List[Dict[str, Any]]) -> str:
         """
@@ -152,9 +296,12 @@ class SageAgent:
         Returns:
             Agent 响应
         """
-        # TODO: 实现 ReAct 循环
-        # 临时返回模拟响应
-        return "Agent 循环尚未实现"
+        try:
+            # TODO: 实现 ReAct 循环
+            return "Agent 循环尚未实现"
+        except Exception as e:
+            logger.error(f"run_loop 异常: {str(e)}")
+            raise AgentError(f"Agent 循环执行失败: {str(e)}")
     
     def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -167,22 +314,19 @@ class SageAgent:
         Returns:
             工具执行结果
         """
-        tool = self.tool_registry.get(tool_name)
-        if tool is None:
-            return {
-                "success": False,
-                "error": f"工具不存在: {tool_name}"
-            }
-        
         try:
+            tool = self.tool_registry.get(tool_name)
+            if tool is None:
+                raise ToolCallError(tool_name, f"工具不存在: {tool_name}")
+            
             result = tool.execute(**parameters)
             return result.to_dict()
+            
+        except ToolCallError:
+            raise
         except Exception as e:
             logger.error(f"工具执行失败: {tool_name}, error: {str(e)}")
-            return {
-                "success": False,
-                "error": f"工具执行失败: {str(e)}"
-            }
+            raise ToolCallError(tool_name, str(e))
     
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """
@@ -196,6 +340,7 @@ class SageAgent:
     def interrupt(self):
         """中断当前 Agent 操作"""
         self._interrupted = True
+        logger.info("Agent 被中断")
         print("Agent 被中断")
     
     def is_interrupted(self) -> bool:
@@ -205,3 +350,30 @@ class SageAgent:
     def reset_interrupt(self):
         """重置中断状态"""
         self._interrupted = False
+    
+    def clear_cache(self) -> None:
+        """清空查询缓存"""
+        self._cache.clear()
+        logger.info("查询缓存已清空")
+    
+    def cleanup_cache(self) -> int:
+        """
+        清理过期缓存
+        
+        Returns:
+            清理的条目数
+        """
+        return self._cache.cleanup()
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """
+        获取缓存统计信息
+        
+        Returns:
+            缓存统计字典
+        """
+        return {
+            "size": len(self._cache._cache),
+            "max_size": self._cache.max_size,
+            "ttl": self._cache.ttl
+        }

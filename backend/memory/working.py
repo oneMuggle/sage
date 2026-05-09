@@ -3,8 +3,11 @@ Working Memory - 工作记忆模块
 当前对话上下文，滑动窗口机制
 """
 import time
+import logging
 from collections import deque
 from typing import List, Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class WorkingMemory:
@@ -57,6 +60,12 @@ class WorkingMemory:
         
         # 如果超出最大 Token 数，淘汰旧消息
         self._evict_if_needed()
+        
+        # 内存监控日志 (DEBUG级别)
+        logger.debug(
+            f"工作记忆状态: 消息数={len(self.messages)}, "
+            f"Tokens={self.total_tokens}/{self.max_tokens}"
+        )
     
     def _estimate_tokens(self, text: str) -> int:
         """
