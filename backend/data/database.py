@@ -176,6 +176,40 @@ class Database:
             )
         """)
         
+        # 语义记忆表（用于 FTS5 全文搜索）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS memories_semantic (
+                id TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                summary TEXT,
+                tags TEXT DEFAULT '[]',
+                created_at INTEGER NOT NULL
+            )
+        """)
+        
+        # FTS5 虚拟表用于语义记忆全文搜索
+        cursor.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS memories_semantic_fts USING fts5(
+                content, summary, tags,
+                content='memories_semantic',
+                content_rowid='rowid'
+            )
+        """)
+        
+        # 记忆进化日志表（预留）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS memories_evolution_log (
+                id TEXT PRIMARY KEY,
+                memory_type TEXT NOT NULL,
+                memory_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                before_content TEXT,
+                after_content TEXT,
+                reason TEXT,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        
         # 创建索引
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(is_pinned)")
@@ -186,6 +220,8 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(is_enabled)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_preferences_category ON preferences(category)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_semantic_created ON memories_semantic(created_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_evolution_memory ON memories_evolution_log(memory_id)")
         
         conn.commit()
         print(f"数据库初始化完成: {self.db_path}")
