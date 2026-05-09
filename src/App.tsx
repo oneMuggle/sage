@@ -1,0 +1,20 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Layout } from './components/layout/Layout'
+import { Chat } from './pages/Chat'
+import { Settings } from './pages/Settings'
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Navigate to="/chat" replace />} />
+          <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<Settings />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
+export default App

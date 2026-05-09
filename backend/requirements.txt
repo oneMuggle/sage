@@ -1,0 +1,18 @@
+# Sage 后端依赖
+# Core
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.5.0
+
+# Database
+# sqlite3 is built-in
+
+# HTTP
+httpx==0.26.0
+
+# Utils
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# 预留向量存储（后续阶段）
+# chromadb==0.4.22
