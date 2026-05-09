@@ -49,3 +49,18 @@ pub struct ToolCall {
     pub args: String,
     pub result: Option<String>,
 }
+
+/// 记忆类型枚举
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Memory {
+    pub id: String,
+    pub content: String,
+    pub summary: Option<String>,
+    pub memory_type: Option<String>,
+    pub session_id: Option<String>,
+    pub importance: i32,
+    pub tags: Vec<String>,
+    pub created_at: i64,
+    pub accessed_at: Option<i64>,
+    pub access_count: i32,
+}

@@ -1,5 +1,5 @@
 // Tauri Commands - 与 Python 后端通信
-use crate::models::{Session, Message, ChatResponse};
+use crate::models::{Session, Message, ChatResponse, Memory};
 use crate::state::AppState;
 use std::sync::Arc;
 use tauri::State;
@@ -108,4 +108,59 @@ pub async fn interrupt_agent(
     
     state.set_interrupt();
     Ok(())
+}
+
+/// 搜索记忆
+#[tauri::command]
+pub async fn search_memory(
+    query: String,
+    memory_type: Option<String>,
+    limit: Option<i32>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<Memory>, String> {
+    tracing::info!("搜索记忆: query={}, type={:?}", query, memory_type);
+    
+    // TODO: 调用 Python 后端 API
+    Ok(vec![])
+}
+
+/// 保存记忆
+#[tauri::command]
+pub async fn save_memory(
+    content: String,
+    memory_type: String,
+    importance: Option<i32>,
+    tags: Option<Vec<String>>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Memory, String> {
+    tracing::info!("保存记忆: type={}, importance={:?}", memory_type, importance);
+    
+    // TODO: 调用 Python 后端 API
+    Err("记忆存储尚未实现".to_string())
+}
+
+/// 删除记忆
+#[tauri::command]
+pub async fn delete_memory(
+    id: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    tracing::info!("删除记忆: id={}", id);
+    
+    // TODO: 调用 Python 后端 API
+    Ok(())
+}
+
+/// 获取记忆列表
+#[tauri::command]
+pub async fn get_memories(
+    memory_type: Option<String>,
+    page: Option<i32>,
+    page_size: Option<i32>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<Memory>, String> {
+    tracing::info!("获取记忆列表: type={:?}, page={:?}", memory_type, page);
+    
+    // TODO: 调用 Python 后端 API
+    Ok(vec![])
 }

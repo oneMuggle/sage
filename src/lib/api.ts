@@ -43,6 +43,21 @@ export interface ChatResponse {
   session?: Session
 }
 
+// ==================== Memory 类型定义 ====================
+
+export interface Memory {
+  id: string
+  content: string
+  summary?: string
+  memory_type?: 'episodic' | 'semantic' | 'working'
+  session_id?: string
+  importance: number
+  tags: string[]
+  created_at: number
+  accessed_at?: number
+  access_count: number
+}
+
 // ==================== 懒加载 Tauri API ====================
 
 let _invoke: any = null
@@ -104,5 +119,66 @@ export const chatApi = {
   async interrupt(): Promise<void> {
     const invoke = await getInvoke()
     return invoke('interrupt_agent')
+  },
+}
+
+// ==================== Memory API ====================
+
+export const memoryApi = {
+  /**
+   * 搜索记忆
+   */
+  async searchMemories(
+    query: string,
+    memoryType?: 'episodic' | 'semantic'
+  ): Promise<Memory[]> {
+    const invoke = await getInvoke()
+    return invoke('search_memory', {
+      query,
+      memoryType: memoryType || null,
+      limit: 20,
+    })
+  },
+
+  /**
+   * 保存记忆
+   */
+  async saveMemory(
+    content: string,
+    memoryType: 'episodic' | 'semantic',
+    importance: number = 5,
+    tags?: string[]
+  ): Promise<Memory> {
+    const invoke = await getInvoke()
+    return invoke('save_memory', {
+      content,
+      memoryType,
+      importance,
+      tags: tags || [],
+    })
+  },
+
+  /**
+   * 删除记忆
+   */
+  async deleteMemory(id: string): Promise<void> {
+    const invoke = await getInvoke()
+    return invoke('delete_memory', { id })
+  },
+
+  /**
+   * 获取记忆列表
+   */
+  async getMemories(
+    memoryType?: 'episodic' | 'semantic',
+    page: number = 1,
+    pageSize: number = 20
+  ): Promise<Memory[]> {
+    const invoke = await getInvoke()
+    return invoke('get_memories', {
+      memoryType: memoryType || null,
+      page,
+      pageSize,
+    })
   },
 }
