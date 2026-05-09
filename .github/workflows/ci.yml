@@ -104,3 +104,35 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         args: --debug
+
+  # Windows 构建
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    if: false  # 暂时禁用，因为需要签名证书
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置 Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: 安装依赖
+      run: npm ci
+    
+    - name: 构建前端
+      run: npm run build
+    
+    - name: 安装 Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-msvc
+    
+    - name: 安装 Tauri CLI
+      run: npm install -g @tauri-apps/cli@1
+    
+    - name: 构建 Tauri
+      run: npm run tauri build -- --release
