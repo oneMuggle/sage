@@ -5,11 +5,15 @@ SageAgent - 核心对话引擎
 import json
 import time
 import uuid
+import logging
 from typing import List, Dict, Any, Optional, Callable
 
 from backend.data.session_repo import SessionRepository
 from backend.data.database import get_database
 from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager
+from backend.tools import ToolRegistry, register_all_tools
+
+logger = logging.getLogger(__name__)
 
 
 class SageAgent:
@@ -33,6 +37,11 @@ class SageAgent:
         episodic = EpisodicMemory(db)
         semantic = SemanticMemory(db)
         self.memory_manager = MemoryManager(working, episodic, semantic)
+        
+        # 初始化工具注册表
+        self.tool_registry = ToolRegistry()
+        register_all_tools(self.tool_registry)
+        logger.info("工具注册表初始化完成，已注册 {} 个工具".format(len(self.tool_registry.list())))
     
     async def chat(self, session_id: str, message: str) -> Dict[str, Any]:
         """
@@ -144,7 +153,45 @@ class SageAgent:
             Agent 响应
         """
         # TODO: 实现 ReAct 循环
+        # 临时返回模拟响应
         return "Agent 循环尚未实现"
+    
+    def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行工具
+        
+        Args:
+            tool_name: 工具名称
+            parameters: 工具参数
+            
+        Returns:
+            工具执行结果
+        """
+        tool = self.tool_registry.get(tool_name)
+        if tool is None:
+            return {
+                "success": False,
+                "error": f"工具不存在: {tool_name}"
+            }
+        
+        try:
+            result = tool.execute(**parameters)
+            return result.to_dict()
+        except Exception as e:
+            logger.error(f"工具执行失败: {tool_name}, error: {str(e)}")
+            return {
+                "success": False,
+                "error": f"工具执行失败: {str(e)}"
+            }
+    
+    def get_available_tools(self) -> List[Dict[str, Any]]:
+        """
+        获取所有可用工具的 Schema
+        
+        Returns:
+            工具 Schema 列表
+        """
+        return self.tool_registry.get_schemas_for_llm()
     
     def interrupt(self):
         """中断当前 Agent 操作"""
