@@ -13,9 +13,10 @@ from threading import Lock
 
 from backend.data.session_repo import SessionRepository
 from backend.data.database import get_database
-from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager
+from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager, ConsolidationPipeline
 from backend.tools import ToolRegistry, register_all_tools
 from backend.core.exceptions import AgentError, ToolCallError, handle_sage_error
+from backend.core.llm_client import LLMClient, LLMConfig, LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -138,33 +139,48 @@ class QueryCache:
 class SageAgent:
     """
     Sage 对话引擎
-    
+
     负责:
     - 管理对话循环
+    - 调用 LLM
     - 调用工具
     - 维护上下文
     """
-    
-    def __init__(self):
+
+    def __init__(self, llm_config: Optional[Dict[str, Any]] = None):
         self.session_repo = SessionRepository()
         self._interrupted = False
         self._current_session_id: Optional[str] = None
-        
+
         # 初始化查询缓存 (TTL=5分钟)
         self._cache = QueryCache(ttl=300, max_size=100)
         logger.info("查询缓存初始化完成，TTL=300秒，最大条目=100")
-        
+
         # 初始化记忆系统
         db = get_database()
         working = WorkingMemory(max_size=20, max_tokens=4000)
         episodic = EpisodicMemory(db)
         semantic = SemanticMemory(db)
         self.memory_manager = MemoryManager(working, episodic, semantic)
-        
+
         # 初始化工具注册表
         self.tool_registry = ToolRegistry()
         register_all_tools(self.tool_registry)
         logger.info("工具注册表初始化完成，已注册 {} 个工具".format(len(self.tool_registry.list())))
+
+        # 初始化 LLM 客户端
+        if llm_config:
+            self.llm_config = LLMConfig(**llm_config)
+            self.llm_client: Optional[LLMClient] = LLMClient(self.llm_config)
+            logger.info("LLM 客户端已初始化: provider={}, model={}".format(
+                llm_config.get("provider"), llm_config.get("model")))
+        else:
+            self.llm_config = None
+            self.llm_client = None
+            logger.warning("LLM 未配置，将使用本地模拟响应")
+
+        # 初始化记忆压缩管道
+        self.consolidation = ConsolidationPipeline(llm_client=self.llm_client)
     
     async def chat(self, session_id: str, message: str) -> Dict[str, Any]:
         """
@@ -203,15 +219,19 @@ class SageAgent:
             # 将用户消息添加到工作记忆
             self.memory_manager.add_to_working("user", message)
             
-            # TODO: 实现真正的 AI 对话
-            # 临时返回模拟响应
+            # 调用 LLM
+            if self.llm_client:
+                assistant_content = await self._call_llm(message, memory_context)
+            else:
+                assistant_content = f"收到消息: {message}\n\n(LLM 未配置，使用模拟响应)"
+
             assistant_message = {
                 "id": str(uuid.uuid4()),
                 "session_id": session_id,
                 "role": "assistant",
-                "content": f"收到消息: {message}\n\n(Agent 尚未完全实现)",
+                "content": assistant_content,
                 "created_at": int(time.time() * 1000),
-                "model": "gpt-3.5-turbo",
+                "model": self.llm_config.model if self.llm_config else "local",
             }
             
             # 将助手消息添加到工作记忆
@@ -219,6 +239,13 @@ class SageAgent:
             
             # 对话后：提取关键信息存入情景记忆
             self._extract_and_save_memories(session_id, user_message, assistant_message)
+
+            # 对话后：检查是否需要压缩工作记忆
+            if self.memory_manager.working.total_tokens > 3000:
+                self.consolidation.consolidate(
+                    self.memory_manager,
+                    session_id=session_id
+                )
             
             # 更新会话
             session = self.session_repo.get(session_id)
@@ -286,6 +313,33 @@ class SageAgent:
         except Exception as e:
             logger.warning(f"提取记忆失败: {str(e)}")
     
+    async def _call_llm(self, user_message: str, memory_context: str) -> str:
+        """
+        调用 LLM 生成回复
+
+        Args:
+            user_message: 用户消息
+            memory_context: 记忆上下文
+
+        Returns:
+            LLM 回复内容
+        """
+        system_prompt = "你是 Sage，一个智能 AI 助手。"
+        if memory_context:
+            system_prompt += "\n\n以下是相关的记忆上下文：\n" + memory_context
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+
+        try:
+            response = await self.llm_client.chat(messages)
+            return response.content
+        except Exception as e:
+            logger.error(f"LLM 调用失败: {e}")
+            return f"[LLM 调用失败: {e}]"
+
     async def run_loop(self, messages: List[Dict[str, Any]]) -> str:
         """
         运行 Agent 循环

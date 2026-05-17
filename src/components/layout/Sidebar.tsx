@@ -1,11 +1,12 @@
 import { Link, useLocation } from 'react-router-dom'
-import { MessageSquare, Settings, Brain, Zap } from 'lucide-react'
+import { MessageSquare, Settings, Brain, Zap, Users } from 'lucide-react'
 import { clsx } from 'clsx'
 
 // 导航项配置
 const navItems = [
   { path: '/chat', label: '对话', icon: MessageSquare },
   { path: '/memory', label: '记忆', icon: Brain },
+  { path: '/agents', label: 'Agent', icon: Users },
   { path: '/skills', label: '技能', icon: Zap },
   { path: '/settings', label: '设置', icon: Settings },
 ]

@@ -9,6 +9,7 @@ from backend.data.session_repo import SessionRepository, Session
 from backend.core.agent import SageAgent
 from backend.scheduler import get_evolution_logs, get_scheduler, create_evolution_tasks
 from backend.data.database import get_database
+from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager
 
 
 router = APIRouter()
@@ -244,5 +245,100 @@ async def get_evolution_status():
         scheduler = get_scheduler()
         status = scheduler.get_task_status()
         return status
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 记忆 API ====================
+
+def get_memory_manager() -> MemoryManager:
+    """获取记忆管理器实例"""
+    db = get_database()
+    working = WorkingMemory(max_size=20, max_tokens=4000)
+    episodic = EpisodicMemory(db)
+    semantic = SemanticMemory(db)
+    return MemoryManager(working, episodic, semantic)
+
+
+class MemorySearchRequest(BaseModel):
+    query: str
+    memory_type: Optional[str] = None
+    limit: int = 20
+
+
+class MemorySaveRequest(BaseModel):
+    content: str
+    memory_type: str = "episodic"
+    importance: int = 5
+    tags: List[str] = []
+
+
+class MemoryDeleteRequest(BaseModel):
+    id: str
+
+
+@router.get("/memory/search")
+async def search_memory(
+    query: str,
+    limit: int = 20,
+    type: Optional[str] = None
+):
+    """搜索记忆"""
+    try:
+        mm = get_memory_manager()
+        results = mm.search_memories(query=query, memory_type=type, limit=limit)
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/memory/save")
+async def save_memory(data: MemorySaveRequest):
+    """保存记忆"""
+    try:
+        mm = get_memory_manager()
+        memory_id = mm.memorize(
+            content=data.content,
+            memory_type=data.memory_type,
+            importance=data.importance,
+            tags=data.tags
+        )
+        return {"id": memory_id, "status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/memory/delete")
+async def delete_memory(data: MemoryDeleteRequest):
+    """删除记忆"""
+    try:
+        mm = get_memory_manager()
+        # 尝试从所有类型中删除
+        for mtype in ["episodic", "semantic"]:
+            if mm.delete_memory(data.id, mtype):
+                return {"status": "ok"}
+        raise HTTPException(status_code=404, detail="记忆不存在")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/memory/list")
+async def list_memories(
+    page: int = 1,
+    page_size: int = 20,
+    type: Optional[str] = None
+):
+    """获取记忆列表"""
+    try:
+        mm = get_memory_manager()
+        if type == "episodic":
+            results = mm.episodic.get_recent(limit=page_size)
+        elif type == "semantic":
+            results = mm.semantic.get_recent(limit=page_size)
+        else:
+            results = mm.episodic.get_recent(limit=page_size)
+        return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

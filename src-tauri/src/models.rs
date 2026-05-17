@@ -29,7 +29,7 @@ pub struct Message {
 }
 
 /// 聊天请求
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ChatRequest {
     pub session_id: String,
     pub message: String,
@@ -93,7 +93,7 @@ pub struct EvolutionTaskStatus {
 }
 
 /// 手动触发请求
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TriggerRequest {
     pub task_name: String,
 }

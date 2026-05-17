@@ -3,12 +3,14 @@
 
 提供所有内置工具的注册函数
 """
+from .base import BaseTool, ToolSchema, ToolResult
 from .registry import ToolRegistry
 from .terminal import TerminalTool
 from .file_tool import ReadFileTool, WriteFileTool, ListDirTool
 from .web_tool import WebSearchTool, WebFetchTool
 from .calculator import CalculatorTool
 from .memory_tool import MemorySearchTool, MemorySaveTool
+from .skill import SkillHotLoader
 
 
 def register_all_tools(registry: ToolRegistry) -> None:
@@ -43,5 +45,6 @@ __all__ = [
     'CalculatorTool',
     'MemorySearchTool',
     'MemorySaveTool',
+    'SkillHotLoader',
     'register_all_tools',
 ]

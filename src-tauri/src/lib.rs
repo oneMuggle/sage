@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod models;
+pub mod python;
 pub mod state;
 
 pub use commands::*;

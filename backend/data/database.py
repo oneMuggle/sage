@@ -195,6 +195,33 @@ class Database:
                 content_rowid='rowid'
             )
         """)
+
+        # FTS5 同步触发器 - INSERT
+        cursor.execute("""
+            CREATE TRIGGER IF NOT EXISTS memories_semantic_ai AFTER INSERT ON memories_semantic
+            BEGIN
+                INSERT INTO memories_semantic_fts (rowid, content, summary, tags)
+                VALUES (new.rowid, new.content, new.summary, new.tags);
+            END
+        """)
+
+        # FTS5 同步触发器 - DELETE
+        cursor.execute("""
+            CREATE TRIGGER IF NOT EXISTS memories_semantic_ad AFTER DELETE ON memories_semantic
+            BEGIN
+                DELETE FROM memories_semantic_fts WHERE rowid = old.rowid;
+            END
+        """)
+
+        # FTS5 同步触发器 - UPDATE
+        cursor.execute("""
+            CREATE TRIGGER IF NOT EXISTS memories_semantic_au AFTER UPDATE ON memories_semantic
+            BEGIN
+                DELETE FROM memories_semantic_fts WHERE rowid = old.rowid;
+                INSERT INTO memories_semantic_fts (rowid, content, summary, tags)
+                VALUES (new.rowid, new.content, new.summary, new.tags);
+            END
+        """)
         
         # 记忆进化日志表（预留）
         cursor.execute("""
