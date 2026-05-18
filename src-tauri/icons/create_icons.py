@@ -3,26 +3,26 @@
 import struct
 import zlib
 
-def create_png(width, height, color=(79, 70, 229)):
-    """创建简单的纯色PNG"""
+def create_png(width, height, color=(79, 70, 229), alpha=255):
+    """创建简单的纯色RGBA PNG"""
     def chunk(chunk_type, data):
         chunk_len = struct.pack('>I', len(data))
         chunk_crc = struct.pack('>I', zlib.crc32(chunk_type + data) & 0xffffffff)
         return chunk_len + chunk_type + data + chunk_crc
-    
+
     # PNG signature
     signature = b'\x89PNG\r\n\x1a\n'
-    
-    # IHDR chunk
-    ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+
+    # IHDR chunk - color_type 6 = RGBA
+    ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)
     ihdr = chunk(b'IHDR', ihdr_data)
-    
+
     # IDAT chunk (uncompressed pixel data)
     raw_data = b''
     for y in range(height):
         raw_data += b'\x00'  # filter byte
         for x in range(width):
-            raw_data += bytes(color)
+            raw_data += bytes([*color, alpha])
     
     compressed = zlib.compress(raw_data, 9)
     idat = chunk(b'IDAT', compressed)
