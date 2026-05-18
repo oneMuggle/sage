@@ -36,7 +36,7 @@ pub struct ChatRequest {
 }
 
 /// 聊天响应
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ChatResponse {
     pub message: Message,
     pub session: Option<Session>,

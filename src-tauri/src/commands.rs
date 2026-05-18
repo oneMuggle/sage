@@ -42,7 +42,7 @@ pub async fn delete_session(
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
     tracing::info!("删除会话: {}", id);
-    let _: serde_json::Value = state.python_backend.get(&format!("/sessions/{}")).await?;
+    let _: serde_json::Value = state.python_backend.post(&format!("/sessions/{}/delete", id), &serde_json::json!({})).await?;
     Ok(())
 }
 
