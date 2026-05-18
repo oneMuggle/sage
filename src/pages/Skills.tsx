@@ -43,7 +43,6 @@ const mockSkills: Skill[] = [
 
 const Skills: React.FC = () => {
   const [skills, setSkills] = useState<Skill[]>(mockSkills);
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   // 模拟从后端加载技能数据
@@ -116,13 +115,7 @@ const Skills: React.FC = () => {
       </div>
 
       {/* 技能列表 */}
-      {loading ? (
-        <div className="text-center py-8">
-          <p className="text-gray-500">加载中...</p>
-        </div>
-      ) : (
-        <SkillList skills={filteredSkills} onToggle={handleToggle} />
-      )}
+      <SkillList skills={filteredSkills} onToggle={handleToggle} />
 
       {/* 技能使用提示 */}
       <div className="mt-8 bg-blue-50 rounded-lg p-4">

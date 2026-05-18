@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { sessionApi, useStore } from '../lib/store'
+import { useStore } from '../lib/store'
 
 export function useSessions() {
   const {

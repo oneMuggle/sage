@@ -3,7 +3,7 @@
  * 显示进化系统状态、任务调度信息和手动触发按钮
  */
 import React, { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/tauri';
 
 // 任务状态类型
 interface TaskStatus {

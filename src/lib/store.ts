@@ -1,4 +1,8 @@
 import { create } from 'zustand'
+import { invoke } from '@tauri-apps/api/tauri'
+
+// Re-export API modules from api.ts for convenience
+export { sessionApi, messageApi, chatApi, memoryApi } from './api'
 
 // ==================== 类型定义 ====================
 
@@ -54,7 +58,7 @@ interface StoreState {
 
 // ==================== Zustand Store ====================
 
-export const useStore = create<StoreState>((set, get) => ({
+export const useStore = create<StoreState>((set, _get) => ({
   // 初始状态
   sessions: [],
   currentSessionId: null,
@@ -64,7 +68,6 @@ export const useStore = create<StoreState>((set, get) => ({
   // 加载会话列表
   loadSessions: async () => {
     try {
-      const { invoke } = await import('@tauri-apps/api/tauri')
       const sessions = await invoke<Session[]>('list_sessions')
       set({ sessions })
     } catch (error) {
@@ -80,7 +83,6 @@ export const useStore = create<StoreState>((set, get) => ({
   // 创建会话
   createSession: async () => {
     try {
-      const { invoke } = await import('@tauri-apps/api/tauri')
       const session = await invoke<Session>('create_session', { title: '新对话' })
       set((state) => ({
         sessions: [session, ...state.sessions],
@@ -96,7 +98,6 @@ export const useStore = create<StoreState>((set, get) => ({
   // 删除会话
   deleteSession: async (id) => {
     try {
-      const { invoke } = await import('@tauri-apps/api/tauri')
       await invoke('delete_session', { id })
       set((state) => ({
         sessions: state.sessions.filter((s) => s.id !== id),
@@ -112,7 +113,6 @@ export const useStore = create<StoreState>((set, get) => ({
   loadMessages: async (sessionId) => {
     try {
       set({ isLoading: true })
-      const { invoke } = await import('@tauri-apps/api/tauri')
       const messages = await invoke<Message[]>('get_messages', { sessionId })
       set({ messages, isLoading: false })
     } catch (error) {

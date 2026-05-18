@@ -3,7 +3,7 @@
  * 显示进化任务的执行历史记录
  */
 import React, { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/tauri';
 
 // 进化日志类型
 interface EvolutionLog {

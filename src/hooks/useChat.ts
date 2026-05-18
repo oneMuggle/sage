@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { chatApi, messageApi, useStore, type Message } from '../lib/store'
+import { chatApi, useStore, type Message } from '../lib/store'
 
 export function useChat() {
   const [isLoading, setIsLoading] = useState(false)

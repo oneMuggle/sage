@@ -110,19 +110,9 @@ function isValidSessionId(sessionId: string): boolean {
   return uuidRegex.test(sessionId)
 }
 
-// ==================== 懒加载 Tauri API ====================
+import { invoke } from '@tauri-apps/api/tauri'
 
-let _invoke: any = null
-
-async function getInvoke() {
-  if (!_invoke) {
-    const module = await import('@tauri-apps/api/tauri')
-    _invoke = module.invoke
-  }
-  return _invoke
-}
-
-// ==================== 重试装饰器 ====================
+// ==================== 重试配置 ====================
 
 async function withRetry<T>(
   operation: () => Promise<T>,
@@ -184,7 +174,6 @@ export const sessionApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
         const session = await invoke<Session>('create_session', { title: safeTitle })
         return session
       } catch (error) {
@@ -196,8 +185,7 @@ export const sessionApi = {
   async list(): Promise<Session[]> {
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        return await invoke<Session[]>('list_sessions')
+return await invoke<Session[]>('list_sessions')
       } catch (error) {
         throw handleApiError(error)
       }
@@ -216,8 +204,7 @@ export const sessionApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        return await invoke<Session>('get_session', { id })
+return await invoke<Session>('get_session', { id })
       } catch (error) {
         throw handleApiError(error)
       }
@@ -236,8 +223,7 @@ export const sessionApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        await invoke('delete_session', { id })
+await invoke('delete_session', { id })
       } catch (error) {
         throw handleApiError(error)
       }
@@ -256,8 +242,7 @@ export const sessionApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        return await invoke<Message[]>('get_messages', { sessionId })
+return await invoke<Message[]>('get_messages', { sessionId })
       } catch (error) {
         throw handleApiError(error)
       }
@@ -280,8 +265,7 @@ export const messageApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        await invoke('delete_message', { id })
+await invoke('delete_message', { id })
       } catch (error) {
         throw handleApiError(error)
       }
@@ -307,8 +291,7 @@ export const chatApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        const response = await invoke<ChatResponse>('agent_chat', { 
+const response = await invoke<ChatResponse>('agent_chat', { 
           sessionId, 
           message: safeMessage 
         })
@@ -321,7 +304,6 @@ export const chatApi = {
 
   async interrupt(): Promise<void> {
     try {
-      const invoke = await getInvoke()
       await invoke('interrupt_agent')
     } catch (error) {
       console.error('中断请求失败:', error)
@@ -345,8 +327,7 @@ export const memoryApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        return await invoke<Memory[]>('search_memory', {
+return await invoke<Memory[]>('search_memory', {
           query: safeQuery,
           memoryType: memoryType || null,
           limit: 20,
@@ -375,8 +356,7 @@ export const memoryApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        return await invoke<Memory>('save_memory', {
+return await invoke<Memory>('save_memory', {
           content: safeContent,
           memoryType,
           importance: safeImportance,
@@ -403,8 +383,7 @@ export const memoryApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        await invoke('delete_memory', { id })
+await invoke('delete_memory', { id })
       } catch (error) {
         throw handleApiError(error)
       }
@@ -425,8 +404,7 @@ export const memoryApi = {
     
     return withRetry(async () => {
       try {
-        const invoke = await getInvoke()
-        return await invoke<Memory[]>('get_memories', {
+return await invoke<Memory[]>('get_memories', {
           memoryType: memoryType || null,
           page: safePage,
           pageSize: safePageSize,
