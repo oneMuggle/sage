@@ -77,7 +77,6 @@
         "center": true,
         "decorations": true
       }
-    ],
-    "devtools": true
+    ]
   }
 }
