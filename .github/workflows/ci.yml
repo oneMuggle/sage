@@ -186,7 +186,7 @@ jobs:
       working-directory: src-tauri
       run: |
         cargo update -p idna_adapter --precise 1.2.0
-        cargo update -p indexmap --precise 2.11.4
+        cargo update -p indexmap@2.14.0 --precise 2.11.4
 
     - name: 编译 Rust Release
       run: cargo build --release
