@@ -26,7 +26,7 @@ jobs:
         cache: 'npm'
     
     - name: 安装依赖
-      run: npm ci
+      run: npm ci --registry=https://registry.npmjs.org
     
     - name: 构建前端
       run: npm run build
@@ -87,7 +87,7 @@ jobs:
         cache: 'npm'
     
     - name: 安装前端依赖
-      run: npm ci
+      run: npm ci --registry=https://registry.npmjs.org
     
     - name: 构建前端
       run: npm run build
@@ -112,13 +112,13 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '18'
-    
+
     - name: 安装依赖
-      run: npm ci
-    
+      run: npm ci --registry=https://registry.npmjs.org --registry=https://registry.npmjs.org
+
     - name: 构建前端
       run: npm run build
-    
+
     - name: 安装 Rust (Win7 兼容版本)
       uses: dtolnay/rust-toolchain@1.77.2
       with:
