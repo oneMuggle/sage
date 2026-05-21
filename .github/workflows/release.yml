@@ -1,5 +1,5 @@
 # Sage Windows 构建工作流
-# 构建 NSIS 安装包 (.exe)
+# 构建自定义 NSIS 安装包 (.exe) - 含 WebView2 v109 离线嵌入
 
 name: Release Build
 
@@ -19,32 +19,37 @@ jobs:
   build-windows:
     name: Build Windows Installer
     runs-on: windows-latest
-    
+
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
-    
+
     - name: 设置 Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-    
+
     - name: 安装前端依赖
       run: npm ci
-    
+
     - name: 构建前端
       run: npm run build
-    
+
     - name: 安装 Rust (Win7 兼容版本)
       uses: dtolnay/rust-toolchain@1.77.2
       with:
         targets: x86_64-pc-windows-msvc
-    
+
     - name: 安装 Visual Studio Build Tools
       uses: egor-tensin/vs-setup@v3
       with:
         components: Desktop development with C++
+
+    - name: 缓存 Rust 依赖
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: src-tauri/target
 
     - name: 下载 WebView2 v109 (Win7 兼容离线安装包)
       id: download-webview2
@@ -106,38 +111,39 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: 缓存 Rust 依赖
-      uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: src-tauri/target
-    
-    - name: 安装 Tauri CLI
-      run: npm install -g @tauri-apps/cli@1
-    
-    - name: 构建 Tauri (Release)
-      uses: tauri-apps/tauri-action@v0
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # 注意: 这会生成:
-      # - src-tauri/target/x86_64-pc-windows-msvc/release/Sage.exe
-      # - src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-    
-    - name: 上传 WebView2 资源 (供后续 Release 作为备份)
-      uses: actions/upload-artifact@v4
-      with:
-        name: webview2-runtime
-        path: src-tauri/resources/WebView2Runtime_109.exe
-        if-no-files-found: warn
+    - name: 安装 NSIS
+      run: choco install nsis --no-progress
+      shell: powershell
+
+    - name: 提取版本号
+      id: version
+      run: |
+        if ($env:GITHUB_REF -match '^refs/tags/') {
+          $ver = $env:GITHUB_REF -replace '^refs/tags/v?', ''
+        } else {
+          $ver = '${{ github.event.inputs.version }}'
+        }
+        Write-Host "VERSION=$ver"
+        echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+      shell: powershell
+
+    - name: 编译 Rust Release
+      run: cargo build --release
+      working-directory: src-tauri
+
+    - name: 编译自定义 NSIS 安装包
+      run: |
+        makensis /V3 /DVERSION=${{ steps.version.outputs.VERSION }} installer.nsi
+      shell: powershell
+      working-directory: src-tauri
 
     - name: 上传安装包
       uses: actions/upload-artifact@v4
       with:
         name: windows-installer
-        path: |
-          src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-          src-tauri/target/x86_64-pc-windows-msvc/release/Sage.exe
-        if-no-files-found: warn
-    
+        path: src-tauri/target/release/Sage_${{ steps.version.outputs.VERSION }}_x64-setup.exe
+        if-no-files-found: error
+
     - name: 上传构建日志
       if: always()
       uses: actions/upload-artifact@v4
@@ -151,38 +157,29 @@ jobs:
     name: Create Release
     needs: build-windows
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
-    
+
     - name: 下载安装包
       uses: actions/download-artifact@v4
       with:
         name: windows-installer
         path: installer
 
-    - name: 下载 WebView2 运行时 (如可用)
-      continue-on-error: true
-      uses: actions/download-artifact@v4
-      with:
-        name: webview2-runtime
-        path: release-assets
-    
     - name: 获取版本号
       id: get_version
       run: |
         TAG=${GITHUB_REF#refs/tags/}
-        VERSION=${TAG:-${github.event.inputs.version}}
+        VERSION=${TAG:-${{ github.event.inputs.version }}}
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-    
+
     - name: 创建 Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: |
-          installer/*.exe
-          release-assets/*
+        files: installer/*.exe
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

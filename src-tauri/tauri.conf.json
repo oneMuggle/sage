@@ -46,7 +46,7 @@
       },
       "resources": [],
       "shortDescription": "记忆型 AI 桌面助手",
-      "targets": "all",
+      "targets": [ "msi" ],
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
@@ -56,9 +56,7 @@
         },
         "nsis": {
           "displayLanguageSelector": false,
-          "installerIcon": "icons/icon.ico",
-          "installMode": "currentUser",
-          "templatePath": "installer.nsi"
+          "installMode": "currentUser"
         }
       }
     },
