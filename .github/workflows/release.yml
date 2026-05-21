@@ -120,6 +120,7 @@ jobs:
       run: |
         cargo update -p idna_adapter --precise 1.2.0
         cargo update -p indexmap@2.14.0 --precise 2.11.4
+        cargo update -p time-core --precise 0.1.4
 
     - name: 提取版本号
       id: version
