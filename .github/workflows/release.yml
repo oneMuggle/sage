@@ -117,10 +117,7 @@ jobs:
 
     - name: 锁定依赖版本 (Win7 兼容)
       working-directory: src-tauri
-      run: |
-        cargo update -p idna_adapter --precise 1.2.0
-        cargo update -p cargo-platform --precise 0.1.8
-        cargo update -p cargo_metadata --precise 0.19.0
+      run: cargo update -p idna_adapter --precise 1.2.0
 
     - name: 提取版本号
       id: version
