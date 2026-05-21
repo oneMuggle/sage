@@ -6,6 +6,7 @@ authors = ["Sage Team"]
 license = "MIT"
 repository = ""
 edition = "2021"
+rust-version = "1.77.2"
 
 [lib]
 name = "sage_lib"
@@ -15,12 +16,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
-tauri = { version = "1.6", features = ["shell-open"] }
+tauri = { version = "1.6", features = ["shell-open", "windows7-compat"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = ">=1, <1.39", features = ["full"] }
 reqwest = { version = "0.11", features = ["json"] }
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = ">=0.4, <0.4.39", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

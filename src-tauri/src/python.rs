@@ -9,6 +9,36 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
+/// 检查 Python 版本是否在 Win7 上可能不兼容
+/// Python 3.9+ 已放弃 Windows 7 支持
+fn check_python_win7_compat(python: &str) -> Option<String> {
+    let output = Command::new(python)
+        .args(["--version"])
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            let version_str = String::from_utf8_lossy(&out.stdout)
+                + &String::from_utf8_lossy(&out.stderr);
+            if let Some(version_part) = version_str.split_whitespace().nth(1) {
+                if let Some(minor_str) = version_part.split('.').nth(1) {
+                    if let Ok(minor) = minor_str.parse::<u32>() {
+                        if minor >= 9 {
+                            return Some(format!(
+                                "检测到 Python {}，该版本不支持 Windows 7。\
+                                AI 对话功能可能无法使用，建议安装 Python 3.8。",
+                                version_part
+                            ));
+                        }
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 /// Python 后端进程管理器
 pub struct PythonBackend {
     process: Arc<Mutex<Option<Child>>>,
@@ -65,6 +95,11 @@ impl PythonBackend {
         }
 
         let python = python_path.unwrap_or("python");
+
+        // Win7 兼容性: 检测 Python 版本
+        if let Some(warning) = check_python_win7_compat(python) {
+            tracing::warn!("{}", warning);
+        }
         let port = self.port();
 
         let mut cmd = Command::new(python);

@@ -52,12 +52,13 @@
         "digestAlgorithm": "sha256",
         "timestampUrl": "",
         "webviewInstallMode": {
-          "type": "embedBootstrapper"
+          "type": "skip"
         },
         "nsis": {
           "displayLanguageSelector": false,
           "installerIcon": "icons/icon.ico",
-          "installMode": "currentUser"
+          "installMode": "currentUser",
+          "templatePath": "installer.nsi"
         }
       }
     },

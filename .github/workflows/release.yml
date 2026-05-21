@@ -36,8 +36,8 @@ jobs:
     - name: 构建前端
       run: npm run build
     
-    - name: 安装 Rust
-      uses: dtolnay/rust-toolchain@stable
+    - name: 安装 Rust (Win7 兼容版本)
+      uses: dtolnay/rust-toolchain@1.77.2
       with:
         targets: x86_64-pc-windows-msvc
     
@@ -45,7 +45,67 @@ jobs:
       uses: egor-tensin/vs-setup@v3
       with:
         components: Desktop development with C++
-    
+
+    - name: 下载 WebView2 v109 (Win7 兼容离线安装包)
+      id: download-webview2
+      run: |
+        mkdir src-tauri\resources
+        $out = "src-tauri\resources\WebView2Runtime_109.exe"
+        $success = $false
+
+        # --- 源 1: 微软固定版本直链 ---
+        Write-Host "[1/3] 尝试微软固定版本直链..."
+        try {
+          Invoke-WebRequest -Uri "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/3b009565-19ab-4705-a7a3-5e1bf88e1341/MicrosoftEdgeWebView2RuntimeInstaller_x64_109.0.1518.78.exe" -OutFile $out -UseBasicParsing -TimeoutSec 60
+          if ((Get-Item $out).Length -gt 10MB) {
+            Write-Host "成功: $((Get-Item $out).Length / 1MB)MB"
+            $success = $true
+          }
+        } catch { Write-Host "失败: $_" }
+
+        # --- 源 2: 本仓库 GitHub Releases ---
+        if (-not $success -and $env:GITHUB_TOKEN) {
+          Write-Host "[2/3] 尝试本仓库 Releases..."
+          $headers = @{ Authorization = "token $env:GITHUB_TOKEN" }
+          try {
+            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers
+            foreach ($release in $releases) {
+              foreach ($asset in $release.assets) {
+                if ($asset.name -eq 'WebView2Runtime_109.exe') {
+                  Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $out -Headers $headers -UseBasicParsing -TimeoutSec 60
+                  if ((Get-Item $out).Length -gt 10MB) {
+                    Write-Host "成功 (来自 Release '$($release.tag_name)'): $((Get-Item $out).Length / 1MB)MB"
+                    $success = $true
+                    break
+                  }
+                }
+              }
+              if ($success) { break }
+            }
+          } catch { Write-Host "失败: $_" }
+        }
+
+        # --- 源 3: 仓库内文件 (git commit 提交) ---
+        if (-not $success) {
+          Write-Host "[3/3] 检查仓库内文件..."
+          if (Test-Path "src-tauri\resources\WebView2Runtime_109.exe") {
+            Write-Host "成功 (已在仓库中): $((Get-Item 'src-tauri\resources\WebView2Runtime_109.exe').Length / 1MB)MB"
+            $success = $true
+          } else {
+            Write-Host "仓库内未找到文件"
+          }
+        }
+
+        if (-not $success) {
+          Write-Host "::error::所有 WebView2 下载源均失败。请手动下载 v109 离线安装包并:"
+          Write-Host "  1. 提交到 src-tauri/resources/WebView2Runtime_109.exe，或"
+          Write-Host "  2. 上传到 GitHub Release 并命名为 WebView2Runtime_109.exe"
+          exit 1
+        }
+      shell: powershell
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: 缓存 Rust 依赖
       uses: Swatinem/rust-cache@v2
       with:
@@ -58,12 +118,17 @@ jobs:
       uses: tauri-apps/tauri-action@v0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        args: --release
       # 注意: 这会生成:
       # - src-tauri/target/x86_64-pc-windows-msvc/release/Sage.exe
       # - src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
     
+    - name: 上传 WebView2 资源 (供后续 Release 作为备份)
+      uses: actions/upload-artifact@v4
+      with:
+        name: webview2-runtime
+        path: src-tauri/resources/WebView2Runtime_109.exe
+        if-no-files-found: warn
+
     - name: 上传安装包
       uses: actions/upload-artifact@v4
       with:
@@ -96,6 +161,13 @@ jobs:
       with:
         name: windows-installer
         path: installer
+
+    - name: 下载 WebView2 运行时 (如可用)
+      continue-on-error: true
+      uses: actions/download-artifact@v4
+      with:
+        name: webview2-runtime
+        path: release-assets
     
     - name: 获取版本号
       id: get_version
@@ -108,7 +180,9 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: installer/*.exe
+        files: |
+          installer/*.exe
+          release-assets/*
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
