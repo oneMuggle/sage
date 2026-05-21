@@ -184,12 +184,13 @@ jobs:
 
     - name: 锁定依赖版本 (Win7 兼容)
       working-directory: src-tauri
-      run: cargo update -p idna_adapter --precise 1.2.0
+      run: |
+        cargo update -p idna_adapter --precise 1.2.0
+        cargo update -p indexmap --precise 2.11.4
 
-    - name: 构建 Tauri
-      uses: tauri-apps/tauri-action@v0
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: 编译 Rust Release
+      run: cargo build --release
+      working-directory: src-tauri
 
     - name: 编译自定义 NSIS 安装包 (含 WebView2 v109)
       if: steps.download-webview2.outcome == 'success'
