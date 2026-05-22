@@ -26,7 +26,7 @@ jobs:
         cache: 'npm'
     
     - name: 安装依赖
-      run: npm ci
+      run: npm ci --registry=https://registry.npmjs.org
     
     - name: 构建前端
       run: npm run build
@@ -87,17 +87,20 @@ jobs:
         cache: 'npm'
     
     - name: 安装前端依赖
-      run: npm ci
+      run: npm ci --registry=https://registry.npmjs.org
     
     - name: 构建前端
       run: npm run build
     
     - name: 构建 Tauri (仅检查)
-      uses: tauri-apps/tauri-action@v0
+      run: |
+        cargo update -p idna_adapter --precise 1.2.0
+        cargo update -p indexmap@2.14.0 --precise 2.11.4
+        cargo update -p time --precise 0.3.41
+        cargo build --release
+      working-directory: src-tauri
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        args: --debug
 
   # Windows 构建
   build-windows:
@@ -114,7 +117,7 @@ jobs:
         node-version: '18'
     
     - name: 安装依赖
-      run: npm ci
+      run: npm ci --registry=https://registry.npmjs.org
     
     - name: 构建前端
       run: npm run build
