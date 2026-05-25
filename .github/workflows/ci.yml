@@ -96,6 +96,7 @@ jobs:
       run: |
         cargo update -p idna_adapter --precise 1.2.0
         cargo update -p indexmap --precise 2.2.6
+        cargo update -p hashbrown --precise 0.14.5
         cargo update -p ignore --precise 0.4.20
         cargo update -p globset --precise 0.4.14
         cargo update -p getrandom --precise 0.2.15
@@ -198,6 +199,7 @@ jobs:
       run: |
         cargo update -p idna_adapter --precise 1.2.0
         cargo update -p indexmap --precise 2.2.6
+        cargo update -p hashbrown --precise 0.14.5
         cargo update -p ignore --precise 0.4.20
         cargo update -p globset --precise 0.4.14
         cargo update -p getrandom --precise 0.2.15
