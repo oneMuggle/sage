@@ -123,6 +123,8 @@ jobs:
         cargo update -p ignore --precise 0.4.20
         cargo update -p globset --precise 0.4.14
         cargo update -p getrandom --precise 0.2.15
+        cargo update -p ahash --precise 0.8.11
+        cargo update -p tempfile --precise 3.15.0
         cargo update -p uuid --precise 1.12.1
         cargo update -p plist --precise 1.7.4
         cargo update -p serde_with --precise 3.16.1
