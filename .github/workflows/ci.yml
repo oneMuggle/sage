@@ -94,9 +94,10 @@ jobs:
     
     - name: 构建 Tauri (仅检查)
       run: |
+        # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
+        cargo update -p hashbrown --precise 0.14.5
         cargo update -p idna_adapter --precise 1.2.0
         cargo update -p indexmap --precise 2.2.6
-        cargo update -p hashbrown --precise 0.14.5
         cargo update -p ignore --precise 0.4.20
         cargo update -p globset --precise 0.4.14
         cargo update -p getrandom --precise 0.2.15
@@ -106,6 +107,10 @@ jobs:
         cargo update -p plist --precise 1.7.4
         cargo update -p serde_with --precise 3.16.1
         cargo update -p time --precise 0.3.41
+        cargo update -p toml_edit --precise 0.21.1
+        cargo update -p toml --precise 0.8.8
+        cargo update -p serde_spanned --precise 0.6.5
+        cargo update -p winnow --precise 0.5.40
         cargo build --release
       working-directory: src-tauri
       env:
@@ -197,9 +202,10 @@ jobs:
     - name: 锁定依赖版本 (Win7 兼容)
       working-directory: src-tauri
       run: |
+        # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
+        cargo update -p hashbrown --precise 0.14.5
         cargo update -p idna_adapter --precise 1.2.0
         cargo update -p indexmap --precise 2.2.6
-        cargo update -p hashbrown --precise 0.14.5
         cargo update -p ignore --precise 0.4.20
         cargo update -p globset --precise 0.4.14
         cargo update -p getrandom --precise 0.2.15
@@ -209,6 +215,10 @@ jobs:
         cargo update -p plist --precise 1.7.4
         cargo update -p serde_with --precise 3.16.1
         cargo update -p time --precise 0.3.41
+        cargo update -p toml_edit --precise 0.21.1
+        cargo update -p toml --precise 0.8.8
+        cargo update -p serde_spanned --precise 0.6.5
+        cargo update -p winnow --precise 0.5.40
 
     - name: 编译 Rust Release
       run: cargo build --release
