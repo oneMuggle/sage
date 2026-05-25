@@ -120,6 +120,7 @@ jobs:
       run: |
         cargo update -p idna_adapter --precise 1.2.0
         cargo update -p indexmap@2.14.0 --precise 2.11.4
+        cargo update -p ignore@0.4.25 --precise 0.4.24
         cargo update -p plist --precise 1.7.4
         cargo update -p serde_with --precise 3.16.1
         cargo update -p time --precise 0.3.41
