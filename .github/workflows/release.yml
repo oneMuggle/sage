@@ -131,10 +131,8 @@ jobs:
         cargo update -p plist --precise 1.7.4
         cargo update -p serde_with --precise 3.16.1
         cargo update -p time --precise 0.3.41
-        cargo update -p toml_edit --precise 0.21.1
-        cargo update -p toml --precise 0.8.8
-        cargo update -p serde_spanned --precise 0.6.5
-        cargo update -p winnow --precise 0.5.40
+        cargo update -p serde_spanned --precise 0.6.9
+        cargo update -p toml_edit@0.22.27 --precise 0.22.20
 
     - name: 提取版本号
       id: version
