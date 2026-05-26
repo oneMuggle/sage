@@ -110,6 +110,7 @@ jobs:
         cargo update -p embed-resource --precise 2.4.3
         cargo update -p litemap --precise 0.7.3
         cargo update -p native-tls --precise 0.2.12
+        cargo update -p unicode-segmentation --precise 1.12.0
         cargo build --release
       working-directory: src-tauri
       env:
@@ -217,6 +218,7 @@ jobs:
         cargo update -p embed-resource --precise 2.4.3
         cargo update -p litemap --precise 0.7.3
         cargo update -p native-tls --precise 0.2.12
+        cargo update -p unicode-segmentation --precise 1.12.0
 
     - name: 编译 Rust Release
       run: cargo build --release
