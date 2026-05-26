@@ -96,7 +96,6 @@ jobs:
       run: |
         # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
         cargo update -p idna_adapter --precise 1.2.0
-        cargo update -p indexmap --precise 2.2.6
         cargo update -p ignore --precise 0.4.20
         cargo update -p globset --precise 0.4.14
         cargo update -p getrandom --precise 0.2.15
@@ -203,7 +202,6 @@ jobs:
       run: |
         # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
         cargo update -p idna_adapter --precise 1.2.0
-        cargo update -p indexmap --precise 2.2.6
         cargo update -p ignore --precise 0.4.20
         cargo update -p globset --precise 0.4.14
         cargo update -p getrandom --precise 0.2.15
