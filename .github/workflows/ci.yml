@@ -108,6 +108,7 @@ jobs:
         cargo update -p serde_with --precise 3.16.1
         cargo update -p time --precise 0.3.41
         cargo update -p embed-resource --precise 2.4.3
+        cargo update -p litemap --precise 0.7.3
         cargo build --release
       working-directory: src-tauri
       env:
@@ -213,6 +214,7 @@ jobs:
         cargo update -p serde_with --precise 3.16.1
         cargo update -p time --precise 0.3.41
         cargo update -p embed-resource --precise 2.4.3
+        cargo update -p litemap --precise 0.7.3
 
     - name: 编译 Rust Release
       run: cargo build --release
