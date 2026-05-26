@@ -26,6 +26,11 @@ reqwest = { version = "0.11", features = ["json"] }
 chrono = { version = ">=0.4, <0.4.39", features = ["serde"] }
 uuid = { version = ">=1.0, <1.20", features = ["v4", "serde"] }
 getrandom = ">=0.2, <0.3"
+# 阻止 indexmap 2.7+ (需要 edition2024) 被拉入
+indexmap = ">=1.9, <2.7"
+# 阻止 ignore/globset 最新版 (需要 edition2024) 被拉入
+ignore = ">=0.4, <0.4.23"
+globset = ">=0.4, <0.4.16"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
