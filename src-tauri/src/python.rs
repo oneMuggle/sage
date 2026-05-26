@@ -18,8 +18,11 @@ fn check_python_win7_compat(python: &str) -> Option<String> {
 
     match output {
         Ok(out) if out.status.success() => {
-            let version_str = String::from_utf8_lossy(&out.stdout)
-                + &String::from_utf8_lossy(&out.stderr);
+            let version_str = format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
             if let Some(version_part) = version_str.split_whitespace().nth(1) {
                 if let Some(minor_str) = version_part.split('.').nth(1) {
                     if let Ok(minor) = minor_str.parse::<u32>() {
