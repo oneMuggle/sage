@@ -133,8 +133,8 @@ jobs:
         cargo update -p unicode-segmentation --precise 1.12.0
         cargo update -p reqwest --precise 0.11.22
         cargo update -p native-tls --precise 0.2.11
-        cargo update -p openssl --precise 0.10.70
-        cargo update -p openssl-sys --precise 0.9.105
+        cargo update -p openssl@0.10.80 --precise 0.10.70
+        cargo update -p openssl-sys@0.9.116 --precise 0.9.105
 
     - name: 提取版本号
       id: version

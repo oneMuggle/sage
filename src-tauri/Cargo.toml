@@ -31,6 +31,8 @@ hashbrown = ">=0.14, <0.15"
 ahash = ">=0.8, <0.8.12"
 # 阻止 indexmap 2.3+ (使用 hashbrown 0.15+ → edition2024) 被拉入
 indexmap = ">=1.9, <2.3"
+# openssl 0.10.68+ 需要 Rust 1.80
+openssl = ">=0.10, <0.10.68"
 # 阻止 ignore/globset 最新版 (需要 edition2024) 被拉入
 ignore = ">=0.4, <0.4.23"
 globset = ">=0.4, <0.4.16"
