@@ -36,8 +36,6 @@ openssl = ">=0.10, <0.10.68"
 # 阻止 ignore/globset 最新版 (需要 edition2024) 被拉入
 ignore = ">=0.4, <0.4.23"
 globset = ">=0.4, <0.4.16"
-# openssl / openssl-sys MSRV 约束 (0.10.68+/0.9.116+ 需要 Rust 1.80)
-openssl = ">=0.10, <0.10.68"
 openssl-sys = ">=0.9, <0.9.92"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
