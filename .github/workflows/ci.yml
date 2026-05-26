@@ -109,6 +109,7 @@ jobs:
         cargo update -p native-tls --precise 0.2.12
         cargo update -p unicode-segmentation --precise 1.12.0
         cargo update -p openssl-sys --precise 0.9.105
+        cargo update -p openssl --precise 0.10.70
         cargo build --release
       working-directory: src-tauri
       env:
@@ -215,6 +216,7 @@ jobs:
         cargo update -p native-tls --precise 0.2.12
         cargo update -p unicode-segmentation --precise 1.12.0
         cargo update -p openssl-sys --precise 0.9.105
+        cargo update -p openssl --precise 0.10.70
 
     - name: 编译 Rust Release
       run: cargo build --release
