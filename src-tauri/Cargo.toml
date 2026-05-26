@@ -14,8 +14,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "1.5", features = [] }
-# 阻止 embed-resource 2.5+ 拉入 toml_edit 0.22.27 → hashbrown 0.17
-embed-resource = ">=2.1, <2.5"
+# 阻止 embed-resource 2.5+ 拉入 toml_edit 0.22 → hashbrown 0.15
+embed-resource = ">=2.1, <2.4.1"
 
 [dependencies]
 tauri = { version = "1.6", features = ["shell-open", "windows7-compat"] }
@@ -28,6 +28,8 @@ uuid = { version = ">=1.0, <1.20", features = ["v4", "serde"] }
 getrandom = ">=0.2, <0.3"
 # 强制所有 hashbrown 走 0.14.x，避免 0.15+ (需要 edition2024) 被拉入
 hashbrown = ">=0.14, <0.15"
+# ahash 0.8.12+ 使用 hashbrown 0.15+
+ahash = ">=0.8, <0.8.12"
 # 阻止 indexmap 2.3+ (使用 hashbrown 0.15+ → edition2024) 被拉入
 indexmap = ">=1.9, <2.3"
 # 阻止 ignore/globset 最新版 (需要 edition2024) 被拉入

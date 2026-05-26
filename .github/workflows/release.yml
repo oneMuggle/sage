@@ -130,7 +130,7 @@ jobs:
         cargo update -p plist --precise 1.7.4
         cargo update -p serde_with --precise 3.16.1
         cargo update -p time --precise 0.3.41
-        cargo update -p embed-resource --precise 2.4.3
+        cargo update -p embed-resource --precise 2.4.0
         cargo update -p litemap --precise 0.7.3
         cargo update -p native-tls --precise 0.2.12
         cargo update -p unicode-segmentation --precise 1.12.0
