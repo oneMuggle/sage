@@ -26,8 +26,10 @@ reqwest = { version = "0.11", features = ["json"] }
 chrono = { version = ">=0.4, <0.4.39", features = ["serde"] }
 uuid = { version = ">=1.0, <1.20", features = ["v4", "serde"] }
 getrandom = ">=0.2, <0.3"
-# 阻止 indexmap 2.7+ (需要 edition2024) 被拉入
-indexmap = ">=1.9, <2.7"
+# 强制所有 hashbrown 走 0.14.x，避免 0.15+ (需要 edition2024) 被拉入
+hashbrown = ">=0.14, <0.15"
+# 阻止 indexmap 2.3+ (使用 hashbrown 0.15+ → edition2024) 被拉入
+indexmap = ">=1.9, <2.3"
 # 阻止 ignore/globset 最新版 (需要 edition2024) 被拉入
 ignore = ">=0.4, <0.4.23"
 globset = ">=0.4, <0.4.16"
