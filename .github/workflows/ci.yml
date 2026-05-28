@@ -221,8 +221,7 @@ jobs:
     - name: 安装 NSIS 并编译安装包
       run: |
         choco install nsis --no-progress
-        $env:Path = "$env:ChocolateyInstall\bin;$env:Path"
-        makensis /V3 /DVERSION=0.0.0-CI installer.nsi
+        & "C:\Program Files (x86)\NSIS\makensis.exe" /V3 /DVERSION=0.0.0-CI installer.nsi
       shell: powershell
       working-directory: src-tauri
 
