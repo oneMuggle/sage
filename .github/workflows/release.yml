@@ -1,4 +1,4 @@
-# Sage Windows 构建工作流
+﻿# Sage Windows 构建工作流
 # 构建自定义 NSIS 安装包 (.exe) - 含 WebView2 v109 离线嵌入
 
 name: Release Build
