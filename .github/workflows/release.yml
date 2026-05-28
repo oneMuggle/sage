@@ -58,19 +58,30 @@ jobs:
         $out = "src-tauri\resources\WebView2Runtime_109.exe"
         $success = $false
 
-        # --- Source 1: Microsoft fixed-version direct link ---
-        Write-Host "[1/3] Trying Microsoft fixed-version direct link..."
+        # --- Source 1: GitHub mirror (aedancullen archive, .exe installer) ---
+        Write-Host "[1/4] Trying GitHub mirror (aedancullen)..."
         try {
-          Invoke-WebRequest -Uri "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/3b009565-19ab-4705-a7a3-5e1bf88e1341/MicrosoftEdgeWebView2RuntimeInstaller_x64_109.0.1518.78.exe" -OutFile $out -UseBasicParsing -TimeoutSec 60
+          Invoke-WebRequest -Uri "https://github.com/aedancullen/webview2-evergreen-standalone-installer-archive/releases/download/109.0.1518.78/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" -OutFile $out -UseBasicParsing -FollowRedirect -TimeoutSec 60
           if ((Get-Item $out).Length -gt 10MB) {
             Write-Host "Success: $((Get-Item $out).Length / 1MB)MB"
             $success = $true
           }
         } catch { Write-Host "Failed: $_" }
 
-        # --- Source 2: This repo GitHub Releases ---
+        # --- Source 2: Microsoft fixed-version direct link ---
+        if (-not $success) {
+          Write-Host "[2/4] Trying Microsoft fixed-version direct link..."
+          try {
+            Invoke-WebRequest -Uri "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/3b009565-19ab-4705-a7a3-5e1bf88e1341/MicrosoftEdgeWebView2RuntimeInstallerX64_109.0.1518.78.exe" -OutFile $out -UseBasicParsing -TimeoutSec 60
+            if ((Get-Item $out).Length -gt 10MB) {
+              Write-Host "Success: $((Get-Item $out).Length / 1MB)MB"
+              $success = $true
+            }
+          } catch { Write-Host "Failed: $_" }
+        }
+
         if (-not $success -and $env:GITHUB_TOKEN) {
-          Write-Host "[2/3] Trying this repo Releases..."
+          Write-Host "[3/4] Trying this repo Releases..."
           $headers = @{ Authorization = "token $env:GITHUB_TOKEN" }
           try {
             $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers
@@ -90,9 +101,8 @@ jobs:
           } catch { Write-Host "Failed: $_" }
         }
 
-        # --- Source 3: Repo files (git commit) ---
         if (-not $success) {
-          Write-Host "[3/3] Checking repo files..."
+          Write-Host "[4/4] Checking repo files..."
           if (Test-Path "src-tauri\resources\WebView2Runtime_109.exe") {
             Write-Host "Success (already in repo): $((Get-Item 'src-tauri\resources\WebView2Runtime_109.exe').Length / 1MB)MB"
             $success = $true
