@@ -148,7 +148,7 @@ jobs:
         # --- Source 1: GitHub mirror (aedancullen archive, .exe installer) ---
         Write-Host "[1/4] Trying GitHub mirror (aedancullen)..."
         try {
-          Invoke-WebRequest -Uri "https://github.com/aedancullen/webview2-evergreen-standalone-installer-archive/releases/download/109.0.1518.78/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" -OutFile $out -UseBasicParsing -FollowRedirect -TimeoutSec 60
+          Invoke-WebRequest -Uri "https://github.com/aedancullen/webview2-evergreen-standalone-installer-archive/releases/download/109.0.1518.78/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" -OutFile $out -UseBasicParsing -TimeoutSec 120
           if ((Get-Item $out).Length -gt 10MB) {
             Write-Host "Success: $((Get-Item $out).Length / 1MB)MB"
             $success = $true
