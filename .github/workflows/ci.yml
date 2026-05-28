@@ -215,7 +215,7 @@ jobs:
         cargo update -p reqwest --precise 0.11.22
 
     - name: 编译 Rust Release
-      run: cargo build --release
+      run: cargo build --release --target x86_64-pc-windows-msvc
       working-directory: src-tauri
 
     - name: 安装 NSIS 并编译安装包
