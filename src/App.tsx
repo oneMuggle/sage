@@ -5,6 +5,7 @@ import { Settings } from './pages/Settings'
 import { Memory } from './pages/Memory'
 import { Agents } from './pages/Agents'
 import Skills from './pages/Skills'
+import { Knowledge } from './pages/Knowledge'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route path="memory" element={<Memory />} />
           <Route path="agents" element={<Agents />} />
           <Route path="skills" element={<Skills />} />
+          <Route path="knowledge" element={<Knowledge />} />
         </Route>
       </Routes>
     </BrowserRouter>

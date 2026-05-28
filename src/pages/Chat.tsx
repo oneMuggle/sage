@@ -23,12 +23,10 @@ export function Chat() {
     loadSessions,
   } = useStore()
 
-  // 初始加载会话列表
   useEffect(() => {
     loadSessions()
   }, [loadSessions])
 
-  // 当切换会话时加载消息
   useEffect(() => {
     if (currentSessionId) {
       loadMessages(currentSessionId)
@@ -44,7 +42,11 @@ export function Chat() {
     setCurrentSessionId(id)
   }
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, _options?: {
+    knowledgeRefs?: { id: string; title: string }[]
+    attachments?: { name: string; size: number; type: string; dataUrl?: string }[]
+    images?: { name: string; size: number; type: string; dataUrl?: string }[]
+  }) => {
     if (!currentSessionId) {
       await handleNewSession()
     }
@@ -53,8 +55,7 @@ export function Chat() {
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* 左侧会话列表 */}
-      <div className="w-72 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+      <div className="w-72 border-r border-border bg-bg-muted">
         <SessionList
           sessions={sessions}
           currentSessionId={currentSessionId}
@@ -64,14 +65,11 @@ export function Chat() {
         />
       </div>
 
-      {/* 右侧聊天区域 */}
       <div className="flex-1 flex flex-col">
-        {/* 消息列表 */}
         <div className="flex-1 overflow-y-auto">
           <MessageList messages={messages} />
         </div>
 
-        {/* 输入框 */}
         <ChatInput
           onSend={handleSendMessage}
           onInterrupt={interrupt}

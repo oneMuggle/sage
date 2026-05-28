@@ -4,42 +4,235 @@
 
 /* CSS Variables for Theming */
 :root {
-  /* Light Theme */
+  /* Primary */
   --color-primary: #4F46E5;
   --color-primary-hover: #4338CA;
+  --color-primary-rgb: 79, 70, 229;
+  --color-primary-hover-rgb: 67, 56, 202;
+
+  /* Secondary */
   --color-secondary: #10B981;
+  --color-secondary-rgb: 16, 185, 129;
+
+  /* Accent */
   --color-accent: #F59E0B;
+  --color-accent-rgb: 245, 158, 11;
 
+  /* Background */
   --color-bg: #FFFFFF;
-  --color-bg-secondary: #F9FAFB;
-  --color-bg-tertiary: #F3F4F6;
+  --color-bg-rgb: 255, 255, 255;
+  --color-bg-muted: #F9FAFB;
+  --color-bg-muted-rgb: 249, 250, 251;
+  --color-bg-subtle: #F3F4F6;
+  --color-bg-subtle-rgb: 243, 244, 246;
+  --color-bg-hover: #F3F4F6;
+  --color-bg-hover-rgb: 243, 244, 246;
+  --color-bg-active: #E0E7FF;
+  --color-bg-active-rgb: 224, 231, 255;
 
+  /* Surface */
+  --color-surface: #FFFFFF;
+  --color-surface-rgb: 255, 255, 255;
+  --color-surface-elevated: #FFFFFF;
+  --color-surface-elevated-rgb: 255, 255, 255;
+  --color-surface-overlay: #FFFFFF;
+  --color-surface-overlay-rgb: 255, 255, 255;
+
+  /* Text */
   --color-text: #111827;
+  --color-text-rgb: 17, 24, 39;
   --color-text-secondary: #6B7280;
+  --color-text-secondary-rgb: 107, 114, 128;
   --color-text-muted: #9CA3AF;
+  --color-text-muted-rgb: 156, 163, 175;
+  --color-text-inverse: #FFFFFF;
+  --color-text-inverse-rgb: 255, 255, 255;
 
+  /* Border */
   --color-border: #E5E7EB;
+  --color-border-rgb: 229, 231, 235;
   --color-border-hover: #D1D5DB;
+  --color-border-hover-rgb: 209, 213, 219;
 
+  /* Semantic */
   --color-success: #10B981;
+  --color-success-rgb: 16, 185, 129;
   --color-error: #EF4444;
+  --color-error-rgb: 239, 68, 68;
   --color-warning: #F59E0B;
+  --color-warning-rgb: 245, 158, 11;
+  --color-info: #3B82F6;
+  --color-info-rgb: 59, 130, 246;
+
+  /* Role badges */
+  --color-role-blue: #DBEAFE;
+  --color-role-blue-rgb: 219, 234, 254;
+  --color-role-blue-text: #1E40AF;
+  --color-role-blue-text-rgb: 30, 64, 175;
+  --color-role-green: #D1FAE5;
+  --color-role-green-rgb: 209, 250, 229;
+  --color-role-green-text: #065F46;
+  --color-role-green-text-rgb: 6, 95, 70;
+  --color-role-purple: #EDE9FE;
+  --color-role-purple-rgb: 237, 233, 254;
+  --color-role-purple-text: #5B21B6;
+  --color-role-purple-text-rgb: 91, 33, 182;
+  --color-role-orange: #FEF3C7;
+  --color-role-orange-rgb: 254, 243, 199;
+  --color-role-orange-text: #92400E;
+  --color-role-orange-text-rgb: 146, 64, 14;
+
+  /* Overlay */
+  --color-overlay: rgba(0, 0, 0, 0.25);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radius */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(var(--color-text-rgb), 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(var(--color-text-rgb), 0.1), 0 2px 4px -2px rgba(var(--color-text-rgb), 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(var(--color-text-rgb), 0.1), 0 4px 6px -4px rgba(var(--color-text-rgb), 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(var(--color-text-rgb), 0.1), 0 8px 10px -6px rgba(var(--color-text-rgb), 0.1);
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --header-height: 48px;
 }
 
 [data-theme="dark"] {
+  /* Primary */
   --color-primary: #818CF8;
   --color-primary-hover: #A5B4FC;
+  --color-primary-rgb: 129, 140, 248;
+  --color-primary-hover-rgb: 165, 180, 252;
 
-  --color-bg: #111827;
-  --color-bg-secondary: #1F2937;
-  --color-bg-tertiary: #374151;
+  /* Secondary */
+  --color-secondary: #34D399;
+  --color-secondary-rgb: 52, 211, 153;
 
+  /* Accent */
+  --color-accent: #FBBF24;
+  --color-accent-rgb: 251, 191, 36;
+
+  /* Background */
+  --color-bg: #0F172A;
+  --color-bg-rgb: 15, 23, 42;
+  --color-bg-muted: #1F2937;
+  --color-bg-muted-rgb: 31, 41, 55;
+  --color-bg-subtle: #374151;
+  --color-bg-subtle-rgb: 55, 65, 81;
+  --color-bg-hover: #4B5563;
+  --color-bg-hover-rgb: 75, 85, 99;
+  --color-bg-active: #312E81;
+  --color-bg-active-rgb: 49, 46, 129;
+
+  /* Surface */
+  --color-surface: #111827;
+  --color-surface-rgb: 17, 24, 39;
+  --color-surface-elevated: #1F2937;
+  --color-surface-elevated-rgb: 31, 41, 55;
+  --color-surface-overlay: #374151;
+  --color-surface-overlay-rgb: 55, 65, 81;
+
+  /* Text */
   --color-text: #F9FAFB;
+  --color-text-rgb: 249, 250, 251;
   --color-text-secondary: #D1D5DB;
+  --color-text-secondary-rgb: 209, 213, 219;
   --color-text-muted: #9CA3AF;
+  --color-text-muted-rgb: 156, 163, 175;
+  --color-text-inverse: #FFFFFF;
+  --color-text-inverse-rgb: 255, 255, 255;
 
+  /* Border */
   --color-border: #374151;
+  --color-border-rgb: 55, 65, 81;
   --color-border-hover: #4B5563;
+  --color-border-hover-rgb: 75, 85, 99;
+
+  /* Semantic */
+  --color-success: #34D399;
+  --color-success-rgb: 52, 211, 153;
+  --color-error: #F87171;
+  --color-error-rgb: 248, 113, 113;
+  --color-warning: #FBBF24;
+  --color-warning-rgb: 251, 191, 36;
+  --color-info: #60A5FA;
+  --color-info-rgb: 96, 165, 250;
+
+  /* Role badges */
+  --color-role-blue: #1E3A8A;
+  --color-role-blue-rgb: 30, 58, 138;
+  --color-role-blue-text: #BFDBFE;
+  --color-role-blue-text-rgb: 191, 219, 254;
+  --color-role-green: #064E3B;
+  --color-role-green-rgb: 6, 78, 59;
+  --color-role-green-text: #A7F3D0;
+  --color-role-green-text-rgb: 167, 243, 208;
+  --color-role-purple: #581C87;
+  --color-role-purple-rgb: 88, 28, 135;
+  --color-role-purple-text: #DDD6FE;
+  --color-role-purple-text-rgb: 221, 214, 254;
+  --color-role-orange: #78350F;
+  --color-role-orange-rgb: 120, 53, 15;
+  --color-role-orange-text: #FDE68A;
+  --color-role-orange-text-rgb: 253, 230, 138;
+
+  /* Overlay */
+  --color-overlay: rgba(0, 0, 0, 0.5);
+
+  /* Spacing (same as light) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radius (same as light) */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+
+  /* Shadows (dark adapted) */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+
+  /* Transitions (same as light) */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Layout (same as light) */
+  --sidebar-width: 240px;
+  --header-height: 48px;
 }
 
 body {
@@ -50,14 +243,14 @@ body {
   padding: 0;
 }
 
-/* 自定义滚动条 */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-secondary);
+  background: var(--color-bg-muted);
 }
 
 ::-webkit-scrollbar-thumb {

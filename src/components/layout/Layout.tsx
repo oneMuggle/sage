@@ -3,7 +3,7 @@ import { Sidebar } from './Sidebar'
 
 export function Layout() {
   return (
-    <div className="flex h-screen bg-white dark:bg-gray-900">
+    <div className="flex h-screen bg-bg">
       {/* 侧边栏 */}
       <Sidebar />
 

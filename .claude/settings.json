@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "open-design": {
+      "command": "/home/fz/.nvm/versions/node/v24.16.0/bin/node",
+      "args": ["/home/fz/project/open-design/apps/daemon/dist/cli.js", "mcp", "--daemon-url", "http://127.0.0.1:36271"],
+      "env": {
+        "OD_DATA_DIR": "/home/fz/project/open-design/.od",
+        "OD_SIDECAR_IPC_PATH": "/tmp/open-design/ipc/default/daemon.sock"
+      }
+    }
+  }
+}

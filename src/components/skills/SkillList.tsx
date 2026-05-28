@@ -18,7 +18,7 @@ const SkillList: React.FC<SkillListProps> = ({ skills, onToggle }) => {
   if (skills.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-500">暂无技能</p>
+        <p className="text-muted">暂无技能</p>
       </div>
     );
   }

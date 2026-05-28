@@ -26,10 +26,10 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  coordinator: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  researcher: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  coder: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  memory_manager: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+  coordinator: 'bg-role-blue text-role-blue-text',
+  researcher: 'bg-role-green text-role-green-text',
+  coder: 'bg-role-purple text-role-purple-text',
+  memory_manager: 'bg-role-orange text-role-orange-text',
 }
 
 export function Agents() {
@@ -102,13 +102,13 @@ export function Agents() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm">
+          <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm">
             {error}
           </div>
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-12 text-gray-500">
+          <div className="flex items-center justify-center py-12 text-muted">
             加载中...
           </div>
         ) : (
@@ -130,7 +130,7 @@ export function Agents() {
         )}
 
         {selectedAgent && (
-          <div className="mt-6 p-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="mt-6 p-6 rounded-lg border border-border bg-surface-elevated dark:bg-surface">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">{selectedAgent.name}</h2>
               {!editing && (
@@ -174,7 +174,7 @@ function AgentCard({
   onSelect: () => void
   onToggle: (id: string, enabled: boolean) => void
 }) {
-  const roleColor = ROLE_COLORS[agent.role] || 'bg-gray-100 text-gray-800'
+  const roleColor = ROLE_COLORS[agent.role] || 'bg-bg-subtle text-text-secondary'
   const roleLabel = ROLE_LABELS[agent.role] || agent.role
 
   return (
@@ -182,8 +182,8 @@ function AgentCard({
       onClick={onSelect}
       className={`p-4 rounded-lg border cursor-pointer transition-all ${
         isSelected
-          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+          ? 'border-primary bg-primary/10'
+          : 'border-border hover:border-border-hover'
       } ${!agent.enabled ? 'opacity-50' : ''}`}
     >
       <div className="flex items-center justify-between mb-2">
@@ -193,12 +193,12 @@ function AgentCard({
         </span>
       </div>
 
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3 line-clamp-2">
+      <p className="text-sm text-muted mb-3 line-clamp-2">
         {agent.description}
       </p>
 
       <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-muted">
           模型: {agent.model_config.model}
         </span>
         <label className="flex items-center gap-2 text-xs">
@@ -222,25 +222,25 @@ function AgentDetails({ agent }: { agent: AgentProfile }) {
   return (
     <div className="space-y-4">
       <div>
-        <span className="text-sm font-medium text-gray-500">ID</span>
+        <span className="text-sm font-medium text-muted">ID</span>
         <p className="text-sm font-mono mt-1">{agent.id}</p>
       </div>
 
       <div>
-        <span className="text-sm font-medium text-gray-500">系统提示</span>
-        <pre className="text-sm mt-1 p-3 rounded bg-gray-50 dark:bg-gray-900 whitespace-pre-wrap">
+        <span className="text-sm font-medium text-muted">系统提示</span>
+        <pre className="text-sm mt-1 p-3 rounded bg-bg-subtle dark:bg-bg-muted whitespace-pre-wrap">
           {agent.system_prompt}
         </pre>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <span className="text-sm font-medium text-gray-500">工具</span>
+          <span className="text-sm font-medium text-muted">工具</span>
           <div className="flex flex-wrap gap-1 mt-1">
             {agent.tools.map((tool) => (
               <span
                 key={tool}
-                className="px-2 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-700"
+                className="px-2 py-0.5 text-xs rounded bg-bg-subtle"
               >
                 {tool}
               </span>
@@ -249,12 +249,12 @@ function AgentDetails({ agent }: { agent: AgentProfile }) {
         </div>
 
         <div>
-          <span className="text-sm font-medium text-gray-500">记忆访问</span>
+          <span className="text-sm font-medium text-muted">记忆访问</span>
           <div className="flex flex-wrap gap-1 mt-1">
             {agent.memory_access.map((mem) => (
               <span
                 key={mem}
-                className="px-2 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-700"
+                className="px-2 py-0.5 text-xs rounded bg-bg-subtle"
               >
                 {mem}
               </span>
@@ -265,21 +265,21 @@ function AgentDetails({ agent }: { agent: AgentProfile }) {
 
       <div className="grid grid-cols-3 gap-4">
         <div>
-          <span className="text-sm font-medium text-gray-500">模型</span>
+          <span className="text-sm font-medium text-muted">模型</span>
           <p className="text-sm mt-1">{agent.model_config.model}</p>
         </div>
         <div>
-          <span className="text-sm font-medium text-gray-500">Temperature</span>
+          <span className="text-sm font-medium text-muted">Temperature</span>
           <p className="text-sm mt-1">{agent.model_config.temperature}</p>
         </div>
         <div>
-          <span className="text-sm font-medium text-gray-500">Max Tokens</span>
+          <span className="text-sm font-medium text-muted">Max Tokens</span>
           <p className="text-sm mt-1">{agent.model_config.max_tokens}</p>
         </div>
       </div>
 
       <div>
-        <span className="text-sm font-medium text-gray-500">最大迭代次数</span>
+        <span className="text-sm font-medium text-muted">最大迭代次数</span>
         <p className="text-sm mt-1">{agent.max_iterations}</p>
       </div>
     </div>
@@ -310,7 +310,7 @@ function EditAgentForm({
           type="text"
           value={value('name')}
           onChange={(e) => onChange({ ...form, name: e.target.value })}
-          className="w-full rounded-lg border border-gray-200 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700"
+          className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
         />
       </div>
 
@@ -320,7 +320,7 @@ function EditAgentForm({
           type="text"
           value={value('description')}
           onChange={(e) => onChange({ ...form, description: e.target.value })}
-          className="w-full rounded-lg border border-gray-200 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700"
+          className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
         />
       </div>
 
@@ -330,7 +330,7 @@ function EditAgentForm({
           value={value('system_prompt')}
           onChange={(e) => onChange({ ...form, system_prompt: e.target.value })}
           rows={4}
-          className="w-full rounded-lg border border-gray-200 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700"
+          className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
         />
       </div>
 
@@ -346,7 +346,7 @@ function EditAgentForm({
                 model_config: { ...value('model_config'), model: e.target.value },
               })
             }
-            className="w-full rounded-lg border border-gray-200 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700"
+            className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
           />
         </div>
         <div>
@@ -366,7 +366,7 @@ function EditAgentForm({
                 },
               })
             }
-            className="w-full rounded-lg border border-gray-200 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700"
+            className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
           />
         </div>
         <div>
@@ -386,7 +386,7 @@ function EditAgentForm({
                 },
               })
             }
-            className="w-full rounded-lg border border-gray-200 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700"
+            className="w-full rounded-lg border border-border px-3 py-2 bg-surface dark:bg-surface-elevated"
           />
         </div>
       </div>

@@ -31,9 +31,9 @@ export function SessionList({
   return (
     <div className="flex flex-col h-full">
       {/* 搜索 */}
-      <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+      <div className="p-3 border-b border-border">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
           <input
             type="text"
             placeholder="搜索会话..."
@@ -41,7 +41,7 @@ export function SessionList({
             onChange={e => setSearchQuery(e.target.value)}
             className="
               w-full pl-9 pr-3 py-2 rounded-lg
-              bg-gray-100 dark:bg-gray-700
+              bg-bg-subtle
               border-none focus:outline-none focus:ring-2 focus:ring-primary/50
               text-sm
             "
@@ -62,7 +62,7 @@ export function SessionList({
         {/* 置顶会话 */}
         {pinned.length > 0 && (
           <div className="px-3 py-1">
-            <div className="text-xs text-gray-500 dark:text-gray-400 px-2 mb-1">
+            <div className="text-xs text-muted px-2 mb-1">
               置顶
             </div>
             {pinned.map(session => (
@@ -81,7 +81,7 @@ export function SessionList({
         {unpinned.length > 0 && (
           <div className="px-3 py-1">
             {pinned.length > 0 && (
-              <div className="text-xs text-gray-500 dark:text-gray-400 px-2 mb-1">
+              <div className="text-xs text-muted px-2 mb-1">
                 最近
               </div>
             )}
@@ -99,7 +99,7 @@ export function SessionList({
 
         {/* 空状态 */}
         {filteredSessions.length === 0 && (
-          <div className="text-center text-gray-500 dark:text-gray-400 py-8 text-sm">
+          <div className="text-center text-muted py-8 text-sm">
             {searchQuery ? '未找到匹配的会话' : '暂无会话'}
           </div>
         )}

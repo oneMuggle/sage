@@ -23,7 +23,7 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
         transition-colors
         ${isActive
           ? 'bg-primary/10 text-primary'
-          : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+          : 'hover:bg-bg-hover'
         }
       `}
       onClick={onSelect}
@@ -31,7 +31,7 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
       {/* 会话标题 */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{session.title}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
+        <p className="text-xs text-muted">
           {new Date(session.updated_at).toLocaleDateString()}
         </p>
       </div>
@@ -41,7 +41,7 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
         {session.is_pinned && <Pin className="w-4 h-4 text-primary" />}
         <button
           onClick={handleDelete}
-          className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
+          className="p-1 rounded hover:bg-error/10 text-error"
           title="删除"
         >
           <Trash2 className="w-4 h-4" />

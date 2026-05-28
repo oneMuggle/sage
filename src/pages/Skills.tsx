@@ -78,27 +78,27 @@ const Skills: React.FC = () => {
     <div className="container mx-auto px-4 py-8">
       {/* 页面标题 */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">技能商店</h1>
-        <p className="text-gray-600 mt-2">
+        <h1 className="text-3xl font-bold text-text">技能商店</h1>
+        <p className="text-text-secondary mt-2">
           管理和启用你的 AI 技能
         </p>
       </div>
 
       {/* 统计信息 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">已启用技能</p>
-          <p className="text-2xl font-bold text-blue-600">
+        <div className="bg-surface rounded-lg shadow p-4">
+          <p className="text-sm text-muted">已启用技能</p>
+          <p className="text-2xl font-bold text-primary">
             {enabledCount} / {skills.length}
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">总使用次数</p>
-          <p className="text-2xl font-bold text-green-600">{totalUsage}</p>
+        <div className="bg-surface rounded-lg shadow p-4">
+          <p className="text-sm text-muted">总使用次数</p>
+          <p className="text-2xl font-bold text-success">{totalUsage}</p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">技能类型</p>
-          <p className="text-2xl font-bold text-purple-600">4 种</p>
+        <div className="bg-surface rounded-lg shadow p-4">
+          <p className="text-sm text-muted">技能类型</p>
+          <p className="text-2xl font-bold text-accent">4 种</p>
         </div>
       </div>
 
@@ -109,8 +109,8 @@ const Skills: React.FC = () => {
           placeholder="搜索技能..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg 
-                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full max-w-md px-4 py-2 border border-border rounded-lg
+                   focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
 
@@ -118,9 +118,9 @@ const Skills: React.FC = () => {
       <SkillList skills={filteredSkills} onToggle={handleToggle} />
 
       {/* 技能使用提示 */}
-      <div className="mt-8 bg-blue-50 rounded-lg p-4">
-        <h3 className="font-semibold text-blue-800 mb-2">💡 如何使用技能？</h3>
-        <ul className="text-sm text-blue-700 space-y-1">
+      <div className="mt-8 bg-primary/10 rounded-lg p-4">
+        <h3 className="font-semibold text-primary mb-2">💡 如何使用技能？</h3>
+        <ul className="text-sm text-primary/80 space-y-1">
           <li>• 在聊天框中输入触发词即可自动调用对应技能</li>
           <li>• 例如：输入"帮我搜索 Python 教程"会触发搜索技能</li>
           <li>• 可以在下方开关来启用/禁用特定技能</li>

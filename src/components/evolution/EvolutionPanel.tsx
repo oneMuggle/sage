@@ -82,7 +82,7 @@ export const EvolutionPanel: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-gray-500">加载中...</div>
+        <div className="text-muted">加载中...</div>
       </div>
     );
   }
@@ -92,8 +92,8 @@ export const EvolutionPanel: React.FC = () => {
       {/* 标题和状态 */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">进化系统</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-xl font-semibold text-text">进化系统</h2>
+          <p className="text-sm text-muted mt-1">
             调度器状态: {tasks.some(t => t.running) ? '运行中' : '已停止'}
           </p>
         </div>
@@ -106,31 +106,31 @@ export const EvolutionPanel: React.FC = () => {
           return (
             <div
               key={task.name}
-              className="bg-white rounded-lg shadow p-4 border border-gray-200"
+              className="bg-surface rounded-lg shadow p-4 border border-border"
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-gray-900">
+                    <h3 className="font-medium text-text">
                       {config?.name || task.name}
                     </h3>
-                    <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                    <span className="text-xs px-2 py-0.5 bg-bg-subtle text-text-secondary rounded">
                       {getScheduleText(task.schedule)}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-muted mt-1">
                     {config?.description || ''}
                   </p>
                   
                   {/* 时间信息 */}
                   <div className="mt-3 grid grid-cols-2 gap-4 text-xs">
                     <div>
-                      <span className="text-gray-400">上次执行:</span>
-                      <span className="ml-1 text-gray-600">{formatTime(task.last_run)}</span>
+                      <span className="text-muted">上次执行:</span>
+                      <span className="ml-1 text-text-secondary">{formatTime(task.last_run)}</span>
                     </div>
                     <div>
-                      <span className="text-gray-400">下次执行:</span>
-                      <span className="ml-1 text-gray-600">{formatTime(task.next_run)}</span>
+                      <span className="text-muted">下次执行:</span>
+                      <span className="ml-1 text-text-secondary">{formatTime(task.next_run)}</span>
                     </div>
                   </div>
                 </div>
@@ -141,8 +141,8 @@ export const EvolutionPanel: React.FC = () => {
                   disabled={triggering === task.name}
                   className={`ml-4 px-3 py-1.5 text-sm rounded transition-colors ${
                     triggering === task.name
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                      ? 'bg-bg-subtle text-muted cursor-not-allowed'
+                      : 'bg-primary/10 text-primary hover:bg-primary/20'
                   }`}
                 >
                   {triggering === task.name ? '触发中...' : '立即执行'}
@@ -153,7 +153,7 @@ export const EvolutionPanel: React.FC = () => {
         })}
 
         {tasks.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-muted">
             暂无进化任务
           </div>
         )}
