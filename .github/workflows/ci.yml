@@ -218,12 +218,10 @@ jobs:
       run: cargo build --release
       working-directory: src-tauri
 
-    - name: 安装 NSIS
-      run: choco install nsis --no-progress
-      shell: powershell
-
-    - name: 编译自定义 NSIS 安装包
+    - name: 安装 NSIS 并编译安装包
       run: |
+        choco install nsis --no-progress
+        $env:Path = "$env:ChocolateyInstall\bin;$env:Path"
         makensis /V3 /DVERSION=0.0.0-CI installer.nsi
       shell: powershell
       working-directory: src-tauri
