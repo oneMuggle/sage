@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Copy, ThumbsUp, ThumbsDown, BookOpen } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { Message as MessageType } from '../../lib/store'
@@ -11,7 +10,6 @@ interface MessageProps {
 }
 
 export function Message({ message, onFeedback, knowledgeRefs, attachments }: MessageProps) {
-  const [showActions, setShowActions] = useState(false)
 
   const isUser = message.role === 'user'
   const isAssistant = message.role === 'assistant'
@@ -22,30 +20,27 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
 
   return (
     <div
-      className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      className={`flex gap-3 mb-5 max-w-[720px] ${isUser ? 'flex-row-reverse' : ''}`}
     >
+      {/* 头像 */}
       <div
-        className={`
-          max-w-[80%] rounded-2xl px-4 py-3
-          ${isUser
-            ? 'bg-primary text-text-inverse rounded-br-md'
-            : 'bg-bg-muted rounded-bl-md border border-border'
-          }
-        `}
+        className={`w-7 h-7 rounded-radius-sm flex-shrink-0 flex items-center justify-center text-xs font-semibold ${
+          isAssistant
+            ? 'bg-primary/10 text-primary'
+            : 'bg-bg text-muted border border-border'
+        }`}
       >
+        {isAssistant ? 'S' : 'U'}
+      </div>
+
+      <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
         {/* Knowledge references */}
         {knowledgeRefs && knowledgeRefs.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-2">
+          <div className="flex flex-wrap gap-1 mb-1">
             {knowledgeRefs.map((ref) => (
               <span
                 key={ref.id}
-                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs ${
-                  isUser
-                    ? 'bg-text-inverse/20 text-text-inverse'
-                    : 'bg-subtle text-primary'
-                }`}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-primary/10 text-primary"
               >
                 <BookOpen className="w-2.5 h-2.5" />
                 {ref.title}
@@ -75,10 +70,17 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
           </div>
         )}
 
-        {/* Message content with Markdown */}
-        <div className="text-sm leading-relaxed">
+        {/* 消息气泡 */}
+        <div
+          className={`px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+            isUser
+              ? 'bg-primary text-text-inverse'
+              : 'bg-surface border border-border'
+          }`}
+        >
+          {/* Message content with Markdown */}
           {isAssistant ? (
-            <div className={`prose prose-sm max-w-none ${isUser ? 'prose-invert' : ''}`}>
+            <div className="prose prose-sm max-w-none">
               <ReactMarkdown>{message.content}</ReactMarkdown>
             </div>
           ) : (
@@ -86,57 +88,26 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
           )}
         </div>
 
-        {/* Tool calls display */}
-        {message.tool_calls && message.tool_calls.length > 0 && (
-          <div className="mt-2 text-xs opacity-75">
-            使用工具: {message.tool_calls.map((tc) => tc.name).join(', ')}
-          </div>
-        )}
-
-        {/* Bottom info */}
-        <div
-          className={`
-            flex items-center gap-2 mt-2 text-xs
-            ${isUser ? 'text-text-inverse/70' : 'text-muted'}
-          `}
-        >
-          <span>{new Date(message.created_at).toLocaleTimeString()}</span>
+        {/* 底部信息 */}
+        <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
+          {message.memory_applied && message.memory_applied > 0 && (
+            <span className="text-primary">{message.memory_applied} 条记忆已应用</span>
+          )}
+          <span>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
 
         {/* Action buttons */}
-        {showActions && isAssistant && (
-          <div
-            className={`
-              flex items-center gap-1 mt-2 pt-2 border-t
-              ${isUser ? 'border-text-inverse/20' : 'border-border'}
-            `}
-          >
-            <button
-              onClick={copyToClipboard}
-              className="p-1 rounded hover:bg-text/10"
-              title="复制"
-            >
+        {onFeedback && (
+          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
+            <button onClick={copyToClipboard} className="p-1 rounded hover:bg-bg-hover" title="复制">
               <Copy className="w-4 h-4" />
             </button>
-
-            {onFeedback && (
-              <>
-                <button
-                  onClick={() => onFeedback(message.id, 'up')}
-                  className="p-1 rounded hover:bg-text/10"
-                  title="有帮助"
-                >
-                  <ThumbsUp className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => onFeedback(message.id, 'down')}
-                  className="p-1 rounded hover:bg-text/10"
-                  title="没帮助"
-                >
-                  <ThumbsDown className="w-4 h-4" />
-                </button>
-              </>
-            )}
+            <button onClick={() => onFeedback(message.id, 'up')} className="p-1 rounded hover:bg-bg-hover" title="有帮助">
+              <ThumbsUp className="w-4 h-4" />
+            </button>
+            <button onClick={() => onFeedback(message.id, 'down')} className="p-1 rounded hover:bg-bg-hover" title="没帮助">
+              <ThumbsDown className="w-4 h-4" />
+            </button>
           </div>
         )}
       </div>

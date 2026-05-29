@@ -3,7 +3,7 @@ import { clsx } from 'clsx'
 import { EvolutionPanel } from '../components/evolution/EvolutionPanel'
 import { EvolutionLog } from '../components/evolution/EvolutionLog'
 
-type SettingsTab = 'general' | 'model' | 'memory' | 'network'
+type SettingsTab = 'general' | 'model' | 'memory' | 'network' | 'evolution'
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
@@ -24,13 +24,17 @@ export function Settings() {
     { key: 'model', label: '模型' },
     { key: 'memory', label: '记忆' },
     { key: 'network', label: '网络' },
+    { key: 'evolution', label: '进化' },
   ]
 
   return (
-    <div className="flex-1 overflow-y-auto p-5">
-      <div className="max-w-2xl">
-        <h2 className="text-lg font-semibold text-text mb-5">设置</h2>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* 页面头部 */}
+      <div className="h-12 flex items-center px-5 border-b border-border bg-surface flex-shrink-0">
+        <h2 className="text-[18px] font-semibold text-text">设置</h2>
+      </div>
 
+      <div className="flex-1 overflow-y-auto p-5">
         <div className="flex gap-1 border-b border-border mb-5">
           {tabs.map((tab) => (
             <button
@@ -91,7 +95,7 @@ export function Settings() {
                   type="text"
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
-                  className="w-56 px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+                  className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
                 />
               </SettingRow>
               <SettingRow label="最大上下文长度" desc="单次对话发送给模型的最大 token 数">
@@ -99,7 +103,7 @@ export function Settings() {
                   type="text"
                   value={maxContext}
                   onChange={(e) => setMaxContext(e.target.value)}
-                  className="w-20 px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+                  className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
                 />
               </SettingRow>
               <SettingRow label="Temperature" desc="控制输出的随机性，0 最确定，1 最随机">
@@ -107,7 +111,7 @@ export function Settings() {
                   type="text"
                   value={temperature}
                   onChange={(e) => setTemperature(e.target.value)}
-                  className="w-16 px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+                  className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
                 />
               </SettingRow>
             </section>
@@ -123,7 +127,7 @@ export function Settings() {
                   type="text"
                   value="%APPDATA%\\Sage\\memory.db"
                   readOnly
-                  className="w-52 px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-bg-muted text-text-secondary"
+                  className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-bg-muted text-text-secondary"
                 />
               </SettingRow>
               <SettingRow label="同步到内部服务器" desc="联网时将记忆增量同步到企业内部服务器">
@@ -153,7 +157,7 @@ export function Settings() {
                   type="text"
                   value={proxyUrl}
                   onChange={(e) => setProxyUrl(e.target.value)}
-                  className="w-52 px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+                  className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
                 />
               </SettingRow>
               <SettingRow label="TLS 版本" desc="Windows 7 最高支持 TLS 1.2">
@@ -170,7 +174,7 @@ export function Settings() {
           </div>
         )}
 
-        {activeTab === ('evolution' as SettingsTab) && (
+        {activeTab === 'evolution' && (
           <div className="space-y-6">
             <EvolutionPanel />
             <EvolutionLog />

@@ -3,7 +3,7 @@
 管理所有可用工具的注册和获取
 """
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .base import BaseTool, ToolSchema
 

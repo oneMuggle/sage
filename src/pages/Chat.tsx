@@ -3,7 +3,6 @@ import { useChat } from '../hooks/useChat'
 import { useStore } from '../lib/store'
 import { ChatInput } from '../components/chat/ChatInput'
 import { MessageList } from '../components/chat/MessageList'
-import { SessionList } from '../components/session/SessionList'
 
 export function Chat() {
   const {
@@ -15,17 +14,10 @@ export function Chat() {
   } = useChat()
 
   const {
-    sessions,
     currentSessionId,
     setCurrentSessionId,
     createSession,
-    deleteSession,
-    loadSessions,
   } = useStore()
-
-  useEffect(() => {
-    loadSessions()
-  }, [loadSessions])
 
   useEffect(() => {
     if (currentSessionId) {
@@ -36,10 +28,6 @@ export function Chat() {
   const handleNewSession = async () => {
     const sessionId = await createSession()
     setCurrentSessionId(sessionId)
-  }
-
-  const handleSelectSession = (id: string) => {
-    setCurrentSessionId(id)
   }
 
   const handleSendMessage = async (content: string, _options?: {
@@ -54,30 +42,31 @@ export function Chat() {
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden">
-      <div className="w-72 border-r border-border bg-bg-muted">
-        <SessionList
-          sessions={sessions}
-          currentSessionId={currentSessionId}
-          onSelect={handleSelectSession}
-          onNew={handleNewSession}
-          onDelete={deleteSession}
-        />
-      </div>
-
-      <div className="flex-1 flex flex-col">
-        <div className="flex-1 overflow-y-auto">
-          <MessageList messages={messages} />
+    <div className="flex-1 flex flex-col">
+      {/* 页面头部 */}
+      <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
+        <h2 className="text-sm font-semibold text-text">对话</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleNewSession}
+            className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-hover transition-colors"
+          >
+            + 新对话
+          </button>
         </div>
-
-        <ChatInput
-          onSend={handleSendMessage}
-          onInterrupt={interrupt}
-          isLoading={isLoading}
-          disabled={!currentSessionId}
-          placeholder={currentSessionId ? '输入消息...' : '先选择一个会话或创建新对话'}
-        />
       </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <MessageList messages={messages} />
+      </div>
+
+      <ChatInput
+        onSend={handleSendMessage}
+        onInterrupt={interrupt}
+        isLoading={isLoading}
+        disabled={!currentSessionId}
+        placeholder={currentSessionId ? '输入消息...' : '先选择一个会话或创建新对话'}
+      />
     </div>
   )
 }

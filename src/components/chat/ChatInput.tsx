@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react'
 import { Send, Square, Image, Paperclip, BookOpen } from 'lucide-react'
-import { Button } from '../common/Button'
 import { useFileUpload } from '../../hooks/useFileUpload'
 import { KnowledgeChip } from './KnowledgeChip'
 import { FileAttachment } from './FileAttachment'
@@ -103,7 +102,7 @@ export function ChatInput({
 
   return (
     <div
-      className="border-t p-4 bg-surface-elevated dark:bg-surface relative"
+      className="p-4 border-t border-border bg-surface relative"
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
@@ -156,47 +155,46 @@ export function ChatInput({
       )}
 
       <div className="flex items-end gap-2">
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            title="插入图片"
-            onClick={() => document.getElementById('chat-input-image')?.click()}
-          >
-            <Image className="w-4 h-4 text-muted" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            title="附加文件"
-            onClick={() => document.getElementById('chat-input-file')?.click()}
-          >
-            <Paperclip className="w-4 h-4 text-muted" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            title="引用知识库"
-            onClick={() => setShowKnowledgeSelector(!showKnowledgeSelector)}
-          >
-            <BookOpen className="w-4 h-4 text-muted" />
-          </Button>
-        </div>
-
         <div className="flex-1 relative">
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-            className="w-full resize-none rounded-lg border px-4 py-3 bg-bg-subtle border-border focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 max-h-[200px]"
-          />
+          <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              disabled={disabled}
+              rows={1}
+              className="flex-1 resize-none border-none bg-transparent outline-none text-sm text-text disabled:opacity-50 max-h-[200px] placeholder:text-muted"
+            />
+
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
+                title="插入图片"
+                onClick={() => document.getElementById('chat-input-image')?.click()}
+              >
+                <Image className="w-4 h-4" />
+              </button>
+              <button
+                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
+                title="附加文件"
+                onClick={() => document.getElementById('chat-input-file')?.click()}
+              >
+                <Paperclip className="w-4 h-4" />
+              </button>
+              <button
+                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
+                title="引用知识库"
+                onClick={() => setShowKnowledgeSelector(!showKnowledgeSelector)}
+              >
+                <BookOpen className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
 
           {showKnowledgeSelector && (
-            <div className="absolute bottom-full left-0 mb-2 w-72 bg-surface-elevated border border-border rounded-radius-md shadow-lg z-20">
+            <div className="absolute bottom-full left-0 mb-2 w-72 bg-surface border border-border rounded-radius-md shadow-lg z-20">
               <div className="p-3">
                 <p className="text-xs font-medium text-text mb-2">引用知识库文档</p>
                 {KNOWLEDGE_DOCS.map((doc) => {
@@ -206,7 +204,7 @@ export function ChatInput({
                       key={doc.id}
                       className={`w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 transition-colors ${
                         isSelected
-                          ? 'bg-subtle text-primary'
+                          ? 'bg-primary/10 text-primary'
                           : 'hover:bg-bg-hover text-text-secondary'
                       }`}
                       onClick={() => toggleKnowledgeRef(doc)}
@@ -233,25 +231,30 @@ export function ChatInput({
         </div>
 
         {isLoading ? (
-          <Button variant="danger" onClick={onInterrupt} title="停止">
-            <Square className="w-5 h-5" />
-          </Button>
+          <button
+            onClick={onInterrupt}
+            title="停止"
+            className="h-9 px-4 bg-error text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-error/90 transition-colors"
+          >
+            <Square className="w-3.5 h-3.5" />
+          </button>
         ) : (
-          <Button
-            variant="primary"
+          <button
             onClick={handleSend}
             disabled={!value.trim() && !hasAttachments || disabled}
+            className="h-9 px-4 bg-primary text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <Send className="w-5 h-5" />
-          </Button>
+            发送
+            <Send className="w-3.5 h-3.5" />
+          </button>
         )}
       </div>
 
       <input type="file" id="chat-input-image" accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
       <input type="file" id="chat-input-file" multiple className="hidden" onChange={handleFileSelect} />
 
-      <p className="text-xs text-muted text-center mt-2">
-        支持拖放文件到输入区域 · 文件将作为上下文发送给 AI
+      <p className="text-[11px] text-muted text-center mt-1.5">
+        Sage 会记住你的项目信息，无需重复说明上下文 · 支持 <strong>粗体</strong>、<code className="px-1 py-0.5 bg-bg-subtle rounded text-xs">代码</code>、列表等 Markdown 语法 · 点击知识库按钮多选文档作为上下文引用
       </p>
     </div>
   )

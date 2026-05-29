@@ -75,56 +75,40 @@ const Skills: React.FC = () => {
   const totalUsage = skills.reduce((sum, s) => sum + s.usageCount, 0);
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* 页面标题 */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-text">技能商店</h1>
-        <p className="text-text-secondary mt-2">
-          管理和启用你的 AI 技能
-        </p>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* 页面头部 */}
+      <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
+        <h2 className="text-[18px] font-semibold text-text">技能</h2>
       </div>
 
-      {/* 统计信息 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-surface rounded-lg shadow p-4">
-          <p className="text-sm text-muted">已启用技能</p>
-          <p className="text-2xl font-bold text-primary">
-            {enabledCount} / {skills.length}
-          </p>
+      <div className="flex-1 overflow-y-auto p-5">
+        {/* 统计信息 */}
+        <div className="flex gap-3 mb-5">
+          <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">
+            <p className="text-xs text-muted">已启用技能</p>
+            <p className="text-xl font-bold font-mono text-primary mt-1">
+              {enabledCount} / {skills.length}
+            </p>
+          </div>
+          <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">
+            <p className="text-xs text-muted">总使用次数</p>
+            <p className="text-xl font-bold font-mono text-success mt-1">{totalUsage}</p>
+          </div>
         </div>
-        <div className="bg-surface rounded-lg shadow p-4">
-          <p className="text-sm text-muted">总使用次数</p>
-          <p className="text-2xl font-bold text-success">{totalUsage}</p>
+
+        {/* 搜索框 */}
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="搜索技能..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full max-w-[320px] px-3 py-1.5 border border-border rounded-radius-sm text-sm bg-surface text-text"
+          />
         </div>
-        <div className="bg-surface rounded-lg shadow p-4">
-          <p className="text-sm text-muted">技能类型</p>
-          <p className="text-2xl font-bold text-accent">4 种</p>
-        </div>
-      </div>
 
-      {/* 搜索框 */}
-      <div className="mb-6">
-        <input
-          type="text"
-          placeholder="搜索技能..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full max-w-md px-4 py-2 border border-border rounded-lg
-                   focus:outline-none focus:ring-2 focus:ring-primary"
-        />
-      </div>
-
-      {/* 技能列表 */}
-      <SkillList skills={filteredSkills} onToggle={handleToggle} />
-
-      {/* 技能使用提示 */}
-      <div className="mt-8 bg-primary/10 rounded-lg p-4">
-        <h3 className="font-semibold text-primary mb-2">💡 如何使用技能？</h3>
-        <ul className="text-sm text-primary/80 space-y-1">
-          <li>• 在聊天框中输入触发词即可自动调用对应技能</li>
-          <li>• 例如：输入"帮我搜索 Python 教程"会触发搜索技能</li>
-          <li>• 可以在下方开关来启用/禁用特定技能</li>
-        </ul>
+        {/* 技能列表 */}
+        <SkillList skills={filteredSkills} onToggle={handleToggle} />
       </div>
     </div>
   );

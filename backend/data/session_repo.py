@@ -37,11 +37,11 @@ class Session:
             last_message_at=row["last_message_at"],
             message_count=row["message_count"],
             metadata=row["metadata"],
-            total_tokens=row.get("total_tokens", 0),
-            total_cost=row.get("total_cost", 0.0),
-            is_pinned=bool(row.get("is_pinned", 0)),
-            is_archived=bool(row.get("is_archived", 0)),
-            parent_id=row.get("parent_id"),
+            total_tokens=row["total_tokens"] or 0,
+            total_cost=row["total_cost"] or 0.0,
+            is_pinned=bool(row["is_pinned"] or 0),
+            is_archived=bool(row["is_archived"] or 0),
+            parent_id=row["parent_id"],
         )
     
     def to_dict(self) -> Dict[str, Any]:

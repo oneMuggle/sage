@@ -5,7 +5,7 @@ export function Memory() {
   return (
     <div className="flex-1 overflow-y-auto p-5">
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-semibold text-text">记忆库</h2>
+        <h2 className="text-[18px] font-semibold text-text">记忆库</h2>
         <div className="flex gap-2">
           <button className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm hover:bg-primary-hover transition-colors">
             <Plus className="w-3.5 h-3.5" />

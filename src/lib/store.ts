@@ -33,6 +33,7 @@ export interface Message {
     result?: string
   }>
   tool_call_id?: string
+  memory_applied?: number
 }
 
 // 状态接口
