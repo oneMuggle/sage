@@ -275,8 +275,15 @@ await invoke('delete_message', { id })
 
 // ==================== Chat API ====================
 
+export interface ChatConfig {
+  apiUrl?: string
+  model?: string
+  maxContext?: number
+  temperature?: number
+}
+
 export const chatApi = {
-  async chat(sessionId: string, message: string): Promise<ChatResponse> {
+  async chat(sessionId: string, message: string, config?: ChatConfig): Promise<ChatResponse> {
     // 安全化消息输入
     const safeMessage = sanitizeInput(message)
     
@@ -291,9 +298,13 @@ export const chatApi = {
     
     return withRetry(async () => {
       try {
-const response = await invoke<ChatResponse>('agent_chat', { 
-          sessionId, 
-          message: safeMessage 
+const response = await invoke<ChatResponse>('agent_chat', {
+          sessionId,
+          message: safeMessage,
+          apiUrl: config?.apiUrl ?? null,
+          model: config?.model ?? null,
+          maxContext: config?.maxContext ?? null,
+          temperature: config?.temperature ?? null,
         })
         return response
       } catch (error) {
@@ -429,6 +440,127 @@ export interface Memory {
   created_at: number
   accessed_at?: number
   access_count: number
+}
+
+// ==================== Knowledge API ====================
+
+export interface KnowledgeDoc {
+  id: string
+  title: string
+  description: string
+  pages: number
+  updated_at: string
+  category: string
+  tags?: string[]
+}
+
+export const knowledgeApi = {
+  async list(): Promise<KnowledgeDoc[]> {
+    return withRetry(async () => {
+      try {
+        return await invoke<KnowledgeDoc[]>('list_knowledge_docs')
+      } catch (error) {
+        throw handleApiError(error)
+      }
+    })
+  },
+
+  async search(query: string, category?: string): Promise<KnowledgeDoc[]> {
+    const safeQuery = sanitizeInput(query)
+    return withRetry(async () => {
+      try {
+        return await invoke<KnowledgeDoc[]>('search_knowledge_docs', {
+          query: safeQuery,
+          category: category || null,
+        })
+      } catch (error) {
+        throw handleApiError(error)
+      }
+    })
+  },
+}
+
+// ==================== Skills API ====================
+
+export interface Skill {
+  name: string
+  description: string
+  triggers: string[]
+  enabled: boolean
+  usageCount: number
+}
+
+export const skillsApi = {
+  async list(): Promise<Skill[]> {
+    return withRetry(async () => {
+      try {
+        return await invoke<Skill[]>('list_skills')
+      } catch (error) {
+        throw handleApiError(error)
+      }
+    })
+  },
+
+  async toggle(name: string, enabled: boolean): Promise<void> {
+    return withRetry(async () => {
+      try {
+        await invoke('toggle_skill', { name, enabled })
+      } catch (error) {
+        throw handleApiError(error)
+      }
+    })
+  },
+}
+
+// ==================== Agents API ====================
+
+export interface AgentProfile {
+  id: string
+  name: string
+  role: string
+  description: string
+  system_prompt: string
+  tools: string[]
+  memory_access: string[]
+  model_config: {
+    model: string
+    temperature: number
+    max_tokens: number
+  }
+  max_iterations: number
+  enabled: boolean
+}
+
+export const agentsApi = {
+  async list(): Promise<AgentProfile[]> {
+    return withRetry(async () => {
+      try {
+        return await invoke<AgentProfile[]>('list_agents')
+      } catch (error) {
+        throw handleApiError(error)
+      }
+    })
+  },
+
+  async toggle(id: string, enabled: boolean): Promise<void> {
+    return withRetry(async () => {
+      try {
+        await invoke('toggle_agent', { id, enabled })
+      } catch (error) {
+        throw handleApiError(error)
+      }
+    })
+  },
+
+  async update(agent: AgentProfile): Promise<void> {
+    return withRetry(async () => {
+      try {
+        await invoke('update_agent', { agent })
+      } catch (error) {
+        throw handleApiError(error)
+      }
+    })
+  },
 }
 
 // ==================== 导出工具函数 ====================

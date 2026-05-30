@@ -1,22 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '../components/common'
-
-interface AgentProfile {
-  id: string
-  name: string
-  role: string
-  description: string
-  system_prompt: string
-  tools: string[]
-  memory_access: string[]
-  model_config: {
-    model: string
-    temperature: number
-    max_tokens: number
-  }
-  max_iterations: number
-  enabled: boolean
-}
+import { agentsApi, type AgentProfile } from '../lib/api'
 
 const ROLE_LABELS: Record<string, string> = {
   coordinator: '协调器',
@@ -44,12 +28,10 @@ export function Agents() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/agents/list')
-      if (!res.ok) throw new Error('加载失败')
-      const data = await res.json()
-      setAgents(data.agents || [])
-    } catch {
-      setError('加载失败，使用模拟数据')
+      const data = await agentsApi.list()
+      setAgents(data)
+    } catch (err) {
+      setError(`加载失败: ${err instanceof Error ? err.message : '未知错误'}`)
       setAgents(getMockAgents())
     } finally {
       setLoading(false)
@@ -61,16 +43,15 @@ export function Agents() {
   }, [loadAgents])
 
   const handleToggleAgent = async (agentId: string, enabled: boolean) => {
+    setAgents((prev) =>
+      prev.map((a) => (a.id === agentId ? { ...a, enabled } : a))
+    )
     try {
-      await fetch(`/api/agents/${agentId}/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled }),
-      })
-      setAgents((prev) =>
-        prev.map((a) => (a.id === agentId ? { ...a, enabled } : a))
-      )
+      await agentsApi.toggle(agentId, enabled)
     } catch {
+      setAgents((prev) =>
+        prev.map((a) => (a.id === agentId ? { ...a, enabled: !enabled } : a))
+      )
       setError('切换失败')
     }
   }
@@ -78,11 +59,8 @@ export function Agents() {
   const handleSave = async () => {
     if (!selectedAgent) return
     try {
-      await fetch(`/api/agents/${selectedAgent.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...selectedAgent, ...editForm }),
-      })
+      const updated = { ...selectedAgent, ...editForm } as AgentProfile
+      await agentsApi.update(updated)
       setEditing(false)
       setEditForm({})
       loadAgents()

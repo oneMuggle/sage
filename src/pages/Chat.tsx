@@ -8,6 +8,8 @@ export function Chat() {
   const {
     messages,
     isLoading,
+    error,
+    clearError,
     sendMessage,
     interrupt,
     loadMessages,
@@ -35,10 +37,13 @@ export function Chat() {
     attachments?: { name: string; size: number; type: string; dataUrl?: string }[]
     images?: { name: string; size: number; type: string; dataUrl?: string }[]
   }) => {
+    clearError()
     if (!currentSessionId) {
-      await handleNewSession()
+      const sessionId = await createSession()
+      await sendMessage(content, sessionId)
+    } else {
+      await sendMessage(content)
     }
-    await sendMessage(content)
   }
 
   return (
@@ -56,6 +61,19 @@ export function Chat() {
         </div>
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <div className="mx-4 mt-2 px-3 py-2 text-xs rounded-radius-sm bg-red-50 border border-red-200 text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            onClick={clearError}
+            className="ml-2 text-red-500 hover:text-red-700 font-medium"
+          >
+            关闭
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto">
         <MessageList messages={messages} />
       </div>
@@ -64,8 +82,8 @@ export function Chat() {
         onSend={handleSendMessage}
         onInterrupt={interrupt}
         isLoading={isLoading}
-        disabled={!currentSessionId}
-        placeholder={currentSessionId ? '输入消息...' : '先选择一个会话或创建新对话'}
+        disabled={false}
+        placeholder="输入消息..."
       />
     </div>
   )

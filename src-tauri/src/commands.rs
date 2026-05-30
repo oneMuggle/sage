@@ -61,12 +61,20 @@ pub async fn get_messages(
 pub async fn agent_chat(
     session_id: String,
     message: String,
+    api_url: Option<String>,
+    model: Option<String>,
+    max_context: Option<i32>,
+    temperature: Option<f64>,
     state: State<'_, Arc<AppState>>,
 ) -> Result<ChatResponse, String> {
     tracing::info!("聊天: session_id={}, message={}", session_id, message);
     state.python_backend.post("/chat", &ChatRequest {
         session_id,
         message,
+        api_url,
+        model,
+        max_context,
+        temperature,
     }).await
 }
 

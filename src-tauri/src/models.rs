@@ -33,6 +33,14 @@ pub struct Message {
 pub struct ChatRequest {
     pub session_id: String,
     pub message: String,
+    #[serde(default)]
+    pub api_url: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub max_context: Option<i32>,
+    #[serde(default)]
+    pub temperature: Option<f64>,
 }
 
 /// 聊天响应

@@ -47,6 +47,17 @@ async fn main() {
             sage_lib::commands::get_evolution_logs,
             sage_lib::commands::trigger_evolution,
             sage_lib::commands::get_evolution_status,
+            // Wiki commands
+            sage_lib::wiki::commands::create_wiki_project,
+            sage_lib::wiki::commands::open_wiki_project,
+            sage_lib::wiki::commands::wiki_list_directory,
+            sage_lib::wiki::commands::wiki_read_file,
+            sage_lib::wiki::commands::wiki_write_file,
+            sage_lib::wiki::commands::wiki_delete_file,
+            sage_lib::wiki::commands::wiki_rename_file,
+            sage_lib::wiki::commands::wiki_search,
+            sage_lib::wiki::commands::wiki_ingest_source,
+            sage_lib::wiki::commands::wiki_chat,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Sage 应用时发生错误");

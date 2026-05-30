@@ -59,10 +59,18 @@ interface StoreState {
 
 // ==================== Zustand Store ====================
 
+const SESSION_STORAGE_KEY = 'sage-current-session-id'
+
 export const useStore = create<StoreState>((set, _get) => ({
   // 初始状态
   sessions: [],
-  currentSessionId: null,
+  currentSessionId: (() => {
+    try {
+      return localStorage.getItem(SESSION_STORAGE_KEY)
+    } catch {
+      return null
+    }
+  })(),
   messages: [],
   isLoading: false,
   
@@ -78,6 +86,15 @@ export const useStore = create<StoreState>((set, _get) => ({
   
   // 设置当前会话
   setCurrentSessionId: (id) => {
+    try {
+      if (id) {
+        localStorage.setItem(SESSION_STORAGE_KEY, id)
+      } else {
+        localStorage.removeItem(SESSION_STORAGE_KEY)
+      }
+    } catch {
+      // Silently fail
+    }
     set({ currentSessionId: id })
   },
   
@@ -143,6 +160,7 @@ export const LazyChat = () => import('../pages/Chat')
 export const LazySettings = () => import('../pages/Settings')
 export const LazyMemory = () => import('../pages/Memory')
 export const LazySkills = () => import('../pages/Skills')
+export const LazyKnowledge = () => import('../pages/Knowledge')
 
 // ==================== 缓存策略 ====================
 

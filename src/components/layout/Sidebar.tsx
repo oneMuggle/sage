@@ -1,8 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { MessageSquare, Settings, Brain, BookOpen } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useStore } from '../../lib/store'
+import { useSettings } from '../../hooks/useSettings'
+import { testEndpointConnection } from '../../lib/models'
 
 // 导航项配置
 const navItems = [
@@ -15,10 +17,29 @@ const navItems = [
 export function Sidebar() {
   const location = useLocation()
   const { sessions, currentSessionId, setCurrentSessionId, createSession, loadSessions } = useStore()
+  const { settings } = useSettings()
+  const activeEndpoint = settings.endpoints.find((e) => e.isActive)
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'not-configured' | 'error'>('not-configured')
+  const [latency, setLatency] = useState<number | null>(null)
 
   useEffect(() => {
     loadSessions()
   }, [loadSessions])
+
+  useEffect(() => {
+    if (!activeEndpoint?.baseUrl || !activeEndpoint.apiKey) {
+      setConnectionStatus('not-configured')
+      return
+    }
+    testEndpointConnection(activeEndpoint.baseUrl, activeEndpoint.apiKey)
+      .then((result) => {
+        setConnectionStatus(result.success ? 'connected' : 'error')
+        setLatency(result.latency ?? null)
+      })
+      .catch(() => {
+        setConnectionStatus('error')
+      })
+  }, [activeEndpoint?.baseUrl, activeEndpoint?.apiKey])
 
   const handleNewSession = async () => {
     const sessionId = await createSession()
@@ -91,8 +112,18 @@ export function Sidebar() {
       {/* 底部状态栏 */}
       <div className="px-2 pt-2 border-t border-border">
         <div className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted">
-          <div className="w-[7px] h-[7px] rounded-full bg-success"></div>
-          <span>已连接 · v0.1.0</span>
+          <div className={clsx(
+            'w-[7px] h-[7px] rounded-full',
+            connectionStatus === 'connected' && 'bg-success',
+            connectionStatus === 'not-configured' && 'bg-warning',
+            connectionStatus === 'error' && 'bg-error'
+          )}></div>
+          <span title={latency != null ? `延迟 ${latency}ms` : ''}>
+            {connectionStatus === 'connected' && `已连接${latency != null ? ` · ${latency}ms` : ''}`}
+            {connectionStatus === 'not-configured' && '未配置'}
+            {connectionStatus === 'error' && '连接失败'}
+          </span>
+          <span className="ml-auto">v0.1.0</span>
         </div>
       </div>
     </aside>

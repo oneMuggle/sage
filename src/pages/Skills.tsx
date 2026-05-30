@@ -1,78 +1,70 @@
 import React, { useState, useEffect } from 'react';
 import SkillList from '../components/skills/SkillList';
-
-interface Skill {
-  name: string;
-  description: string;
-  triggers: string[];
-  enabled: boolean;
-  usageCount: number;
-}
-
-// 模拟技能数据（实际应从后端 API 获取）
-const mockSkills: Skill[] = [
-  {
-    name: 'search',
-    description: '搜索网络信息并整理结果',
-    triggers: ['搜索', '查一下', '帮我找', 'search'],
-    enabled: true,
-    usageCount: 42,
-  },
-  {
-    name: 'writer',
-    description: '帮助用户撰写文章、文案、报告等文本内容',
-    triggers: ['写', '帮我写', '创作', 'write'],
-    enabled: true,
-    usageCount: 28,
-  },
-  {
-    name: 'coder',
-    description: '帮助编写、调试、解释代码',
-    triggers: ['写代码', '帮我写程序', 'code'],
-    enabled: true,
-    usageCount: 35,
-  },
-  {
-    name: 'travel',
-    description: '规划旅行行程、推荐景点餐厅',
-    triggers: ['旅行', '旅游', '行程', 'travel'],
-    enabled: false,
-    usageCount: 10,
-  },
-];
+import { skillsApi, type Skill } from '../lib/api';
 
 const Skills: React.FC = () => {
-  const [skills, setSkills] = useState<Skill[]>(mockSkills);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [skills, setSkills] = useState<Skill[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // 模拟从后端加载技能数据
   useEffect(() => {
-    // TODO: 从后端 API 加载真实数据
-    // const loadSkills = async () => {
-    //   const response = await fetch('/api/skills');
-    //   const data = await response.json();
-    //   setSkills(data);
-    // };
-    // loadSkills();
-  }, []);
+    let cancelled = false
+    const loadSkills = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const data = await skillsApi.list()
+        if (!cancelled) setSkills(data)
+      } catch (err) {
+        if (!cancelled) {
+          setError('加载技能列表失败')
+          setSkills([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadSkills()
+    return () => { cancelled = true }
+  }, [])
 
-  const handleToggle = (name: string, enabled: boolean) => {
+  const handleToggle = async (name: string, enabled: boolean) => {
     setSkills((prev) =>
       prev.map((skill) =>
         skill.name === name ? { ...skill, enabled } : skill
       )
-    );
-    // TODO: 同步到后端
-    console.log(`技能 ${name} 已${enabled ? '启用' : '禁用'}`);
-  };
+    )
+    try {
+      await skillsApi.toggle(name, enabled)
+    } catch {
+      setSkills((prev) =>
+        prev.map((skill) =>
+          skill.name === name ? { ...skill, enabled: !enabled } : skill
+        )
+      )
+      setError('切换失败')
+    }
+  }
 
   const filteredSkills = skills.filter((skill) =>
     skill.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     skill.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  )
 
-  const enabledCount = skills.filter((s) => s.enabled).length;
-  const totalUsage = skills.reduce((sum, s) => sum + s.usageCount, 0);
+  const enabledCount = skills.filter((s) => s.enabled).length
+  const totalUsage = skills.reduce((sum, s) => sum + s.usageCount, 0)
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
+          <h2 className="text-[18px] font-semibold text-text">技能</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center text-muted text-sm">加载中...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -82,6 +74,18 @@ const Skills: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-5">
+        {error && (
+          <div className="mb-4 p-3 rounded-radius-sm bg-error/10 text-error text-sm">
+            {error}
+            <button
+              onClick={() => setError(null)}
+              className="ml-2 text-error hover:underline"
+            >
+              关闭
+            </button>
+          </div>
+        )}
+
         {/* 统计信息 */}
         <div className="flex gap-3 mb-5">
           <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">

@@ -1,19 +1,48 @@
-import { Upload } from 'lucide-react'
-import { KnowledgeBrowser } from '../components/knowledge/KnowledgeBrowser'
+// Knowledge Page - Wiki workspace
+import { useWikiStore } from '../stores/wiki-store'
+import { WikiProjectPicker } from '../components/wiki/WikiProjectPicker'
+import { WikiToolbar } from '../components/wiki/WikiToolbar'
+import { WikiFileTree } from '../components/wiki/WikiFileTree'
+import { WikiEditor } from '../components/wiki/WikiEditor'
+import { WikiSearch } from '../components/wiki/WikiSearch'
+import { WikiChat } from '../components/wiki/WikiChat'
 
 export function Knowledge() {
+  const project = useWikiStore((s) => s.project)
+  const activeView = useWikiStore((s) => s.activeView)
+
+  if (!project) {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="h-12 flex items-center px-5 border-b border-border bg-surface flex-shrink-0">
+          <h2 className="text-[18px] font-semibold text-text">知识库</h2>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <WikiProjectPicker />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
+      <div className="h-12 flex items-center px-5 border-b border-border bg-surface flex-shrink-0">
         <h2 className="text-[18px] font-semibold text-text">知识库</h2>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm hover:bg-primary-hover transition-colors">
-          <Upload className="w-3.5 h-3.5" />
-          导入文档
-        </button>
       </div>
-
-      <div className="flex-1 overflow-y-auto">
-        <KnowledgeBrowser />
+      <WikiToolbar />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar: file tree (only in browser view) */}
+        {activeView === 'browser' && (
+          <div className="w-56 border-r border-border overflow-y-auto bg-surface flex-shrink-0">
+            <WikiFileTree />
+          </div>
+        )}
+        {/* Main content area */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          {activeView === 'browser' && <WikiEditor />}
+          {activeView === 'search' && <WikiSearch />}
+          {activeView === 'chat' && <WikiChat />}
+        </div>
       </div>
     </div>
   )

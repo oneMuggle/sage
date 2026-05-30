@@ -39,6 +39,10 @@ export default {
         error: 'rgb(var(--color-error-rgb) / <alpha-value>)',
         warning: 'rgb(var(--color-warning-rgb) / <alpha-value>)',
         info: 'rgb(var(--color-info-rgb) / <alpha-value>)',
+        mem: {
+          accent: 'rgb(var(--color-mem-accent-rgb) / <alpha-value>)',
+          subtle: 'rgb(var(--color-mem-subtle-rgb) / <alpha-value>)',
+        },
         overlay: 'var(--color-overlay)',
         role: {
           blue: 'rgb(var(--color-role-blue-rgb) / <alpha-value>)',

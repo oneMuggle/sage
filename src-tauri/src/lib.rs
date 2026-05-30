@@ -4,6 +4,7 @@ pub mod commands;
 pub mod models;
 pub mod python;
 pub mod state;
+pub mod wiki;
 
 pub use commands::*;
 pub use models::*;

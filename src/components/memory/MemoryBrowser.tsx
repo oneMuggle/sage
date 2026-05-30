@@ -29,6 +29,7 @@ const TAG_CLASSES: Record<string, string> = {
 export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
   const [memories, setMemories] = useState<Memory[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<MemoryFilter>(initialType)
 
   // 模拟统计数据
@@ -46,8 +47,8 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
 
   const loadMemories = async () => {
     setLoading(true)
+    setError(null)
     try {
-      // API 使用 episodic/semantic 类型，这里做兼容处理
       const type = filterType === 'all' ? undefined :
         filterType === 'fact' ? 'semantic' :
         filterType === 'preference' ? 'semantic' :
@@ -55,8 +56,10 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
         'episodic'
       const results = await memoryApi.getMemories(type, 1, 100)
       setMemories(results)
-    } catch (error) {
-      console.error('加载记忆失败:', error)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '加载失败'
+      setError(message)
+      setMemories([])
     } finally {
       setLoading(false)
     }
@@ -92,6 +95,16 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
       {/* 记忆列表 */}
       {loading ? (
         <div className="text-center text-muted py-12 text-sm">加载中...</div>
+      ) : error ? (
+        <div className="text-center py-12">
+          <div className="text-sm text-error mb-2">{error}</div>
+          <button
+            onClick={loadMemories}
+            className="px-3 py-1.5 text-xs border border-error rounded-radius-sm text-error hover:bg-error/5 transition-colors"
+          >
+            重试
+          </button>
+        </div>
       ) : memories.length === 0 ? (
         <div className="text-center text-muted py-12 text-sm">暂无记忆</div>
       ) : (
