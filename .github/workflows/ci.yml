@@ -22,12 +22,12 @@ jobs:
     - name: 设置 Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
-    
+
     - name: 安装依赖
       run: npm ci --registry=https://registry.npmjs.org
-    
+
     - name: 构建前端
       run: npm run build
 
@@ -35,25 +35,25 @@ jobs:
   backend:
     name: Backend Check
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
-    
+
     - name: 设置 Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.8'
-    
+        python-version: '3.11'
+
     - name: 安装依赖
       run: |
         cd backend
         pip install -r requirements.txt
-    
+
     - name: Python 语法检查
       run: |
-        python -m py_compile backend/**/*.py
-    
+        find backend -name "*.py" -exec python -m py_compile {} +
+
     - name: 后端单元测试 (模拟)
       run: |
         echo "后端测试占位符"
@@ -79,11 +79,11 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf libsoup2.4-dev
-    
+
     - name: 安装 Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
     
     - name: 安装前端依赖
@@ -125,7 +125,7 @@ jobs:
     - name: 设置 Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
     
     - name: 安装依赖
       run: npm ci --registry=https://registry.npmjs.org

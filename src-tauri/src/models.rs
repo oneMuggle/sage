@@ -34,6 +34,8 @@ pub struct ChatRequest {
     pub session_id: String,
     pub message: String,
     #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
     pub api_url: Option<String>,
     #[serde(default)]
     pub model: Option<String>,

@@ -61,6 +61,7 @@ pub async fn get_messages(
 pub async fn agent_chat(
     session_id: String,
     message: String,
+    api_key: Option<String>,
     api_url: Option<String>,
     model: Option<String>,
     max_context: Option<i32>,
@@ -71,6 +72,7 @@ pub async fn agent_chat(
     state.python_backend.post("/chat", &ChatRequest {
         session_id,
         message,
+        api_key,
         api_url,
         model,
         max_context,

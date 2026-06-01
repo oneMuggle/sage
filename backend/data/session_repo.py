@@ -150,3 +150,122 @@ class SessionRepository:
     def pin(self, session_id: str, pinned: bool = True) -> bool:
         """置顶/取消置顶会话"""
         return self.update(session_id, is_pinned=1 if pinned else 0)
+
+
+# ==================== 消息仓储 ====================
+
+@dataclass
+class Message:
+    """消息数据模型"""
+    id: str
+    session_id: str
+    role: str
+    content: str
+    created_at: int
+    model: Optional[str] = None
+    provider: Optional[str] = None
+    tool_calls: Optional[str] = None
+    tool_call_id: Optional[str] = None
+
+    @classmethod
+    def from_row(cls, row) -> "Message":
+        return cls(
+            id=row["id"],
+            session_id=row["session_id"],
+            role=row["role"],
+            content=row["content"],
+            created_at=row["created_at"],
+            model=row["model"],
+            provider=row["provider"],
+            tool_calls=row["tool_calls"],
+            tool_call_id=row["tool_call_id"],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "role": self.role,
+            "content": self.content,
+            "created_at": self.created_at,
+            "model": self.model,
+            "provider": self.provider,
+            "tool_calls": self.tool_calls,
+            "tool_call_id": self.tool_call_id,
+        }
+
+
+class MessageRepository:
+    """消息仓储"""
+
+    def __init__(self):
+        self.db = get_database()
+
+    def save(self, message: Message) -> Message:
+        """保存消息"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            message.id,
+            message.session_id,
+            message.role,
+            message.content,
+            message.model,
+            message.provider,
+            message.tool_calls,
+            message.tool_call_id,
+            message.created_at,
+        ))
+
+        conn.commit()
+        return message
+
+    def get_by_session(self, session_id: str, limit: int = 100, offset: int = 0) -> List[Message]:
+        """获取会话消息列表"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM messages
+            WHERE session_id = ?
+            ORDER BY created_at ASC
+            LIMIT ? OFFSET ?
+        """, (session_id, limit, offset))
+
+        return [Message.from_row(row) for row in cursor.fetchall()]
+
+    def get(self, message_id: str) -> Optional[Message]:
+        """获取单条消息"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM messages WHERE id = ?", (message_id,))
+        row = cursor.fetchone()
+
+        if row:
+            return Message.from_row(row)
+        return None
+
+    def delete(self, message_id: str) -> bool:
+        """删除消息"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+        conn.commit()
+
+        return cursor.rowcount > 0
+
+    def delete_by_session(self, session_id: str) -> int:
+        """删除会话的所有消息"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        conn.commit()
+
+        return cursor.rowcount

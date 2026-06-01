@@ -41,6 +41,7 @@ export function useChat() {
       addMessage(userMessage)
 
       const config: ChatConfig = {
+        apiKey: activeEndpoint.apiKey,
         apiUrl: activeEndpoint.baseUrl,
         model: settings.modelSelections.chatModelId ?? undefined,
         maxContext: settings.maxContext,

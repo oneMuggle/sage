@@ -276,6 +276,7 @@ await invoke('delete_message', { id })
 // ==================== Chat API ====================
 
 export interface ChatConfig {
+  apiKey?: string
   apiUrl?: string
   model?: string
   maxContext?: number
@@ -301,6 +302,7 @@ export const chatApi = {
 const response = await invoke<ChatResponse>('agent_chat', {
           sessionId,
           message: safeMessage,
+          apiKey: config?.apiKey ?? null,
           apiUrl: config?.apiUrl ?? null,
           model: config?.model ?? null,
           maxContext: config?.maxContext ?? null,

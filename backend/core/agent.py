@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional, Callable
 from collections import deque
 from threading import Lock
 
-from backend.data.session_repo import SessionRepository
+from backend.data.session_repo import SessionRepository, Message as DbMessage, MessageRepository
 from backend.data.database import get_database
 from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager, ConsolidationPipeline
 from backend.tools import ToolRegistry, register_all_tools
@@ -149,6 +149,7 @@ class SageAgent:
 
     def __init__(self, llm_config: Optional[Dict[str, Any]] = None):
         self.session_repo = SessionRepository()
+        self.message_repo = MessageRepository()
         self._interrupted = False
         self._current_session_id: Optional[str] = None
 
@@ -182,14 +183,15 @@ class SageAgent:
         # 初始化记忆压缩管道
         self.consolidation = ConsolidationPipeline(llm_client=self.llm_client)
     
-    async def chat(self, session_id: str, message: str) -> Dict[str, Any]:
+    async def chat(self, session_id: str, message: str, llm_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         处理用户消息
-        
+
         Args:
             session_id: 会话 ID
             message: 用户消息
-            
+            llm_config: 可选的动态 LLM 配置（覆盖初始化时的配置）
+
         Returns:
             包含 message 和 session 的字典
         """
@@ -199,9 +201,18 @@ class SageAgent:
             if cached_result:
                 logger.info(f"返回缓存结果，会话: {session_id}")
                 return cached_result
-            
+
             self._current_session_id = session_id
             self._interrupted = False
+
+            # 如果传入了动态 LLM 配置，临时覆盖
+            original_llm_client = self.llm_client
+            original_llm_config = self.llm_config
+            if llm_config:
+                self.llm_config = LLMConfig(**llm_config)
+                self.llm_client = LLMClient(self.llm_config)
+                logger.info("使用动态 LLM 配置: provider={}, model={}".format(
+                    llm_config.get("provider"), llm_config.get("model")))
             
             # 创建用户消息
             now = int(time.time() * 1000)
@@ -212,6 +223,18 @@ class SageAgent:
                 "content": message,
                 "created_at": now,
             }
+
+            # 持久化用户消息
+            try:
+                self.message_repo.save(DbMessage(
+                    id=user_message["id"],
+                    session_id=session_id,
+                    role="user",
+                    content=message,
+                    created_at=now,
+                ))
+            except Exception as db_err:
+                logger.warning(f"用户消息持久化失败: {db_err}")
             
             # 对话前：获取记忆上下文
             memory_context = self.memory_manager.get_context(limit=10)
@@ -233,6 +256,19 @@ class SageAgent:
                 "created_at": int(time.time() * 1000),
                 "model": self.llm_config.model if self.llm_config else "local",
             }
+
+            # 持久化助手消息
+            try:
+                self.message_repo.save(DbMessage(
+                    id=assistant_message["id"],
+                    session_id=session_id,
+                    role="assistant",
+                    content=assistant_content,
+                    created_at=assistant_message["created_at"],
+                    model=assistant_message["model"],
+                ))
+            except Exception as db_err:
+                logger.warning(f"助手消息持久化失败: {db_err}")
             
             # 将助手消息添加到工作记忆
             self.memory_manager.add_to_working("assistant", assistant_message["content"])
@@ -260,14 +296,23 @@ class SageAgent:
                 "message": assistant_message,
                 "session": session.to_dict() if session else None
             }
-            
+
             # 存入缓存
             self._cache.set(session_id, message, result)
-            
+
+            # 恢复原始 LLM 配置
+            if llm_config:
+                self.llm_config = original_llm_config
+                self.llm_client = original_llm_client
+
             return result
             
         except Exception as e:
             logger.error(f"chat 处理异常: {str(e)}")
+            # 恢复原始 LLM 配置
+            if llm_config:
+                self.llm_config = original_llm_config
+                self.llm_client = original_llm_client
             error_dict = handle_sage_error(e)
             return {
                 "error": error_dict,

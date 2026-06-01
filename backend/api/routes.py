@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from pydantic import BaseModel
 
-from backend.data.session_repo import SessionRepository, Session
+from backend.data.session_repo import SessionRepository, Session, MessageRepository
 from backend.core.agent import SageAgent
 from backend.scheduler import get_evolution_logs, get_scheduler, create_evolution_tasks
 from backend.data.database import get_database
@@ -30,6 +30,11 @@ class SessionUpdate(BaseModel):
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    api_key: Optional[str] = None
+    api_url: Optional[str] = None
+    model: Optional[str] = None
+    max_context: Optional[int] = None
+    temperature: Optional[float] = None
 
 
 class MessageResponse(BaseModel):
@@ -166,11 +171,22 @@ async def delete_session(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     data: ChatRequest,
-    agent: SageAgent = Depends(get_agent)
 ):
     """发送聊天消息"""
     try:
-        result = await agent.chat(data.session_id, data.message)
+        # 构建 LLM 配置（动态传入）
+        llm_config = None
+        if data.api_key and data.api_url:
+            llm_config = {
+                "provider": "custom",
+                "api_key": data.api_key,
+                "base_url": data.api_url,
+                "model": data.model or "gpt-3.5-turbo",
+                "temperature": data.temperature or 0.7,
+            }
+
+        agent = SageAgent()
+        result = await agent.chat(data.session_id, data.message, llm_config=llm_config)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -192,8 +208,9 @@ async def get_messages(
     offset: int = 0
 ):
     """获取会话消息"""
-    # TODO: 实现消息获取
-    return []
+    repo = MessageRepository()
+    messages = repo.get_by_session(session_id, limit=limit, offset=offset)
+    return [m.to_dict() for m in messages]
 
 
 # ==================== 进化系统 API ====================
