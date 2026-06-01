@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 import { useStore } from '../../lib/store'
 import { useSettings } from '../../hooks/useSettings'
 import { testEndpointConnection } from '../../lib/models'
+import { SessionItem } from '../session/SessionItem'
 
 // 导航项配置
 const navItems = [
@@ -16,7 +17,7 @@ const navItems = [
 
 export function Sidebar() {
   const location = useLocation()
-  const { sessions, currentSessionId, setCurrentSessionId, createSession, loadSessions } = useStore()
+  const { sessions, currentSessionId, setCurrentSessionId, createSession, loadSessions, deleteSession } = useStore()
   const { settings } = useSettings()
   const activeEndpoint = settings.endpoints.find((e) => e.isActive)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'not-configured' | 'error'>('not-configured')
@@ -31,7 +32,7 @@ export function Sidebar() {
       setConnectionStatus('not-configured')
       return
     }
-    testEndpointConnection(activeEndpoint.baseUrl, activeEndpoint.apiKey)
+    testEndpointConnection(activeEndpoint.baseUrl, activeEndpoint.apiKey, settings.modelSelections.chatModelId ?? undefined)
       .then((result) => {
         setConnectionStatus(result.success ? 'connected' : 'error')
         setLatency(result.latency ?? null)
@@ -88,25 +89,22 @@ export function Sidebar() {
         >
           + 新对话
         </button>
-        {sessions.slice(0, 5).map((session) => (
-          <button
-            key={session.id}
-            onClick={() => {
-              setCurrentSessionId(session.id)
-              if (location.pathname !== '/chat') {
-                window.location.href = '/chat'
-              }
-            }}
-            className={clsx(
-              'w-full text-left px-3 py-1.5 rounded-radius-sm transition-colors text-xs truncate',
-              session.id === currentSessionId
-                ? 'text-text bg-bg'
-                : 'text-text-secondary hover:bg-bg-hover'
-            )}
-          >
-            {session.title}
-          </button>
-        ))}
+        <div className="overflow-y-auto max-h-[calc(100vh-320px)]">
+          {sessions.map((session) => (
+            <SessionItem
+              key={session.id}
+              session={session}
+              isActive={session.id === currentSessionId}
+              onSelect={() => {
+                setCurrentSessionId(session.id)
+                if (location.pathname !== '/chat') {
+                  window.location.href = '/chat'
+                }
+              }}
+              onDelete={() => deleteSession(session.id)}
+            />
+          ))}
+        </div>
       </nav>
 
       {/* 底部状态栏 */}

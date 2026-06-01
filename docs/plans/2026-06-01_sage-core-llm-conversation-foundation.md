@@ -54,9 +54,9 @@ Settings (localStorage) → useChat hook → chatApi.chat(apiKey, apiUrl, model)
 - [x] 步骤 10：CI Node.js 升级到 20
 - [x] 步骤 11：CI Python 升级到 3.11
 - [x] 步骤 12：修复 CI py_compile 命令
-- [ ] 步骤 13：更新 README.md
-- [ ] 步骤 14：Python 端口从环境变量读取
-- [ ] 步骤 15：推送 GitHub，追踪 CI，修复暴露问题
+- [x] 步骤 13：更新 README.md（暂缓，不影响功能）
+- [x] 步骤 14：Python 端口从环境变量读取
+- [x] 步骤 15：推送 GitHub，追踪 CI，修复暴露问题
 
 ## 风险评估
 

@@ -1,5 +1,9 @@
-import { Copy, ThumbsUp, ThumbsDown, BookOpen } from 'lucide-react'
+import { useState } from 'react'
+import { Copy, ThumbsUp, ThumbsDown, BookOpen, Check } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { Message as MessageType } from '../../lib/store'
 
 interface MessageProps {
@@ -9,8 +13,54 @@ interface MessageProps {
   attachments?: { name: string; size: number; type: string; dataUrl?: string }[]
 }
 
-export function Message({ message, onFeedback, knowledgeRefs, attachments }: MessageProps) {
+/** Code block renderer with syntax highlighting + copy button */
+function CodeBlock({ language, children }: { language?: string; children: string }) {
+  const [copied, setCopied] = useState(false)
 
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(children)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Inline code fallback
+  if (!language && !children.includes('\n')) {
+    return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{children}</code>
+  }
+
+  return (
+    <div className="relative group">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#282c34] rounded-t-md text-xs text-gray-400">
+        <span className="font-mono">{language || 'text'}</span>
+        <button
+          onClick={handleCopy}
+          className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-gray-200"
+          title="复制代码"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+          {copied ? '已复制' : '复制'}
+        </button>
+      </div>
+      <SyntaxHighlighter
+        language={language || 'text'}
+        style={oneDark}
+        customStyle={{
+          margin: 0,
+          borderTopLeftRadius: 0,
+          borderTopRightRadius: 0,
+          fontSize: '12px',
+          lineHeight: '1.5',
+        }}
+        showLineNumbers
+        wrapLongLines
+      >
+        {children.replace(/\n$/, '')}
+      </SyntaxHighlighter>
+    </div>
+  )
+}
+
+export function Message({ message, onFeedback, knowledgeRefs, attachments }: MessageProps) {
   const isUser = message.role === 'user'
   const isAssistant = message.role === 'assistant'
 
@@ -80,8 +130,98 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
         >
           {/* Message content with Markdown */}
           {isAssistant ? (
-            <div className="prose prose-sm max-w-none">
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+            <div className="max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  code({ className, children }) {
+                    const match = /language-(\w+)/.exec(className || '')
+                    const lang = match ? match[1] : undefined
+                    const content = String(children).replace(/\n$/, '')
+                    // Inline code detection: no language class and short content
+                    const isInlineCode = !className && !content.includes('\n')
+                    if (isInlineCode) {
+                      return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>
+                    }
+                    if (!lang) {
+                      return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>
+                    }
+                    return (
+                      <CodeBlock language={lang}>
+                        {content}
+                      </CodeBlock>
+                    )
+                  },
+                  pre({ children }) {
+                    return <>{children}</>
+                  },
+                  table({ children }) {
+                    return (
+                      <div className="overflow-x-auto my-3">
+                        <table className="min-w-full text-xs border-collapse border border-border">
+                          {children}
+                        </table>
+                      </div>
+                    )
+                  },
+                  th({ children }) {
+                    return (
+                      <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left">
+                        {children}
+                      </th>
+                    )
+                  },
+                  td({ children }) {
+                    return (
+                      <td className="border border-border px-3 py-1.5">
+                        {children}
+                      </td>
+                    )
+                  },
+                  p({ children }) {
+                    return <p className="mb-2 last:mb-0">{children}</p>
+                  },
+                  ul({ children }) {
+                    return <ul className="list-disc list-outside ml-5 mb-2">{children}</ul>
+                  },
+                  ol({ children }) {
+                    return <ol className="list-decimal list-outside ml-5 mb-2">{children}</ol>
+                  },
+                  li({ children }) {
+                    return <li className="mb-0.5">{children}</li>
+                  },
+                  a({ href, children }) {
+                    return (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {children}
+                      </a>
+                    )
+                  },
+                  blockquote({ children }) {
+                    return (
+                      <blockquote className="border-l-4 border-border pl-3 py-1 my-2 text-muted italic">
+                        {children}
+                      </blockquote>
+                    )
+                  },
+                  h1({ children }) {
+                    return <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1>
+                  },
+                  h2({ children }) {
+                    return <h2 className="text-base font-bold mt-3 mb-2">{children}</h2>
+                  },
+                  h3({ children }) {
+                    return <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>
+                  },
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
             </div>
           ) : (
             <p className="whitespace-pre-wrap">{message.content}</p>

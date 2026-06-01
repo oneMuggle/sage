@@ -158,7 +158,7 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
     if (!ep.baseUrl || !ep.apiKey) return
     setTestingId(ep.id)
     setTestResult((prev) => ({ ...prev, [ep.id]: { success: false, message: '测试中...', latency: 0 } }))
-    const result = await testEndpointConnection(ep.baseUrl, ep.apiKey)
+    const result = await testEndpointConnection(ep.baseUrl, ep.apiKey, settings.modelSelections.chatModelId ?? undefined)
     setTestResult((prev) => ({ ...prev, [ep.id]: result }))
     setTestingId(null)
   }

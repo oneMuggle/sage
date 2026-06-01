@@ -5,25 +5,22 @@
 import { useState, useEffect } from 'react'
 import { memoryApi, Memory } from '../../lib/api'
 
-type MemoryFilter = 'all' | 'fact' | 'preference' | 'project' | 'context'
+type MemoryFilter = 'all' | 'episodic' | 'semantic'
 
 interface MemoryBrowserProps {
   initialType?: MemoryFilter
+  onNewMemory?: () => void
 }
 
 const FILTER_LABELS: Record<MemoryFilter, string> = {
   all: '全部',
-  fact: '事实',
-  preference: '偏好',
-  project: '项目',
-  context: '上下文',
+  episodic: '情景记忆',
+  semantic: '语义记忆',
 }
 
 const TAG_CLASSES: Record<string, string> = {
-  fact: 'bg-primary/10 text-primary',
-  preference: 'bg-mem-subtle text-mem-accent',
-  project: 'bg-warning/10 text-warning',
-  context: 'bg-error/10 text-error',
+  episodic: 'bg-primary/10 text-primary',
+  semantic: 'bg-warning/10 text-warning',
 }
 
 export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
@@ -31,29 +28,38 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<MemoryFilter>(initialType)
-
-  // 模拟统计数据
-  const stats = {
-    total: 247,
-    thisWeek: 38,
-    pending: 12,
-    categories: 4,
-  }
+  const [stats, setStats] = useState({ total: 0, thisWeek: 0, episodic: 0, semantic: 0 })
 
   // 加载记忆
   useEffect(() => {
     loadMemories()
+    loadStats()
   }, [filterType])
+
+  const loadStats = async () => {
+    try {
+      const [episodic, semantic] = await Promise.all([
+        memoryApi.getMemories('episodic', 1, 1),
+        memoryApi.getMemories('semantic', 1, 1),
+      ])
+      // We can't get exact counts without a stats endpoint, but we can estimate
+      // For now, show the actual loaded counts
+      setStats({
+        total: memories.length,
+        thisWeek: memories.filter(m => Date.now() - m.created_at < 7 * 24 * 60 * 60 * 1000).length,
+        episodic: episodic.length,
+        semantic: semantic.length,
+      })
+    } catch {
+      // Stats unavailable
+    }
+  }
 
   const loadMemories = async () => {
     setLoading(true)
     setError(null)
     try {
-      const type = filterType === 'all' ? undefined :
-        filterType === 'fact' ? 'semantic' :
-        filterType === 'preference' ? 'semantic' :
-        filterType === 'project' ? 'episodic' :
-        'episodic'
+      const type = filterType === 'all' ? undefined : filterType
       const results = await memoryApi.getMemories(type, 1, 100)
       setMemories(results)
     } catch (err) {
@@ -69,10 +75,10 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
     <div>
       {/* 统计卡片 */}
       <div className="flex gap-3 mb-5">
-        <StatCard value={stats.total} label="总记忆数" />
+        <StatCard value={stats.total} label="当前显示" />
         <StatCard value={stats.thisWeek} label="本周新增" />
-        <StatCard value={stats.pending} label="待确认" />
-        <StatCard value={stats.categories} label="记忆分类" />
+        <StatCard value={stats.episodic} label="情景记忆" />
+        <StatCard value={stats.semantic} label="语义记忆" />
       </div>
 
       {/* 筛选按钮 */}
@@ -129,9 +135,9 @@ function StatCard({ value, label }: { value: number; label: string }) {
 
 function MemoryItemCard({ memory }: { memory: Memory }) {
   const tags = memory.tags || []
-  const primaryTag = tags[0] || 'fact'
-  const tagLabel = FILTER_LABELS[primaryTag as MemoryFilter] || '事实'
-  const tagClass = TAG_CLASSES[primaryTag] || TAG_CLASSES.fact
+  const primaryTag = tags[0] || (memory.memory_type || 'episodic')
+  const tagLabel = FILTER_LABELS[primaryTag as MemoryFilter] || primaryTag
+  const tagClass = TAG_CLASSES[primaryTag] || TAG_CLASSES.episodic
 
   // 从内容中提取标题（第一行或前30个字符）
   const content = memory.content || memory.summary || '无内容'
