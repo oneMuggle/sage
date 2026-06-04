@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from backend.core.errors import LLMError, LLMErrorType
+
 logger = logging.getLogger(__name__)
 
 
@@ -157,12 +159,33 @@ class LLMClient:
             response = await client.post("/chat/completions", json=body)
             response.raise_for_status()
             data = response.json()
+        except httpx.TimeoutException as e:
+            logger.error(f"LLM 请求超时: {e}")
+            raise LLMError(LLMErrorType.TIMEOUT, f"请求 LLM 超时: {e}")
+        except httpx.ConnectError as e:
+            logger.error(f"LLM 连接失败: {e}")
+            raise LLMError(LLMErrorType.NETWORK, f"无法连接 LLM: {e}")
         except httpx.HTTPStatusError as e:
-            logger.error(f"LLM API HTTP 错误: {e.response.status_code} - {e.response.text}")
-            raise RuntimeError(f"LLM API 错误: {e.response.status_code}")
+            status = e.response.status_code
+            if status == 401:
+                raise LLMError(LLMErrorType.AUTH_FAILED, "API Key 无效或过期", status_code=401)
+            elif status == 429:
+                retry_after = None
+                try:
+                    retry_after = int(e.response.headers.get("retry-after", "0")) or None
+                except (ValueError, TypeError):
+                    retry_after = None
+                raise LLMError(LLMErrorType.RATE_LIMITED, "请求过于频繁，请稍后再试", retry_after=retry_after)
+            elif 500 <= status < 600:
+                raise LLMError(LLMErrorType.SERVER_ERROR, f"LLM 服务端错误 (HTTP {status})", status_code=status)
+            else:
+                raise LLMError(LLMErrorType.UNKNOWN, f"LLM HTTP 错误: {status}", status_code=status)
+        except (ValueError, KeyError) as e:
+            logger.error(f"LLM 响应解析失败: {e}")
+            raise LLMError(LLMErrorType.PARSING, f"LLM 响应格式异常: {e}")
         except Exception as e:
-            logger.error(f"LLM API 请求失败: {e}")
-            raise RuntimeError(f"LLM 请求失败: {e}")
+            logger.error(f"LLM 请求未知失败: {e}")
+            raise LLMError(LLMErrorType.UNKNOWN, f"LLM 请求失败: {e}")
 
         elapsed = time.time() - start_time
         logger.debug(f"LLM 响应耗时: {elapsed:.2f}s")
