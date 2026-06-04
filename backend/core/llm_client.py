@@ -192,7 +192,7 @@ class LLMClient:
 
         choices = data.get("choices", [])
         if not choices:
-            raise RuntimeError("LLM 返回空响应")
+            raise LLMError(LLMErrorType.PARSING, "LLM 返回空响应(无 choices)")
 
         choice = choices[0]
         msg_data = choice.get("message", {})
@@ -220,6 +220,8 @@ class LLMClient:
     ) -> AsyncGenerator[str, None]:
         """
         发送聊天请求（流式）
+
+        Note: 流式响应暂抛出 RuntimeError，Task 11 将统一改为 LLMError 分类。
 
         Args:
             messages: 消息列表

@@ -112,3 +112,40 @@ async def test_connect_error_raises_network_error(client):
         with pytest.raises(LLMError) as exc_info:
             await client.chat([{"role": "user", "content": "hi"}])
         assert exc_info.value.type == LLMErrorType.NETWORK
+
+
+@pytest.mark.asyncio
+async def test_parsing_error_raises_parsing_error_type(client):
+    """响应 JSON 解析失败时映射为 PARSING。"""
+    import json
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status = lambda: None
+    mock_response.json = lambda: (_ for _ in ()).throw(json.JSONDecodeError("Expecting value", "", 0))
+
+    with patch.object(client, '_get_client') as mock_get_client:
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        mock_get_client.return_value = mock_http
+
+        with pytest.raises(LLMError) as exc_info:
+            await client.chat([{"role": "user", "content": "hi"}])
+        assert exc_info.value.type == LLMErrorType.PARSING
+
+
+@pytest.mark.asyncio
+async def test_empty_choices_raises_parsing_error(client):
+    """choices 为空时应映射为 PARSING。"""
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status = lambda: None
+    mock_response.json = lambda: {"choices": [], "model": "gpt-3.5-turbo"}
+
+    with patch.object(client, '_get_client') as mock_get_client:
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        mock_get_client.return_value = mock_http
+
+        with pytest.raises(LLMError) as exc_info:
+            await client.chat([{"role": "user", "content": "hi"}])
+        assert exc_info.value.type == LLMErrorType.PARSING
