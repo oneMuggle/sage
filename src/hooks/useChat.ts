@@ -2,6 +2,8 @@ import { useState, useCallback, useRef } from 'react'
 import { chatApi, useStore, type Message } from '../lib/store'
 import { useSettings } from './useSettings'
 import type { ChatConfig } from '../lib/api'
+import { logger } from '../lib/logger'
+import { mapLLMErrorToText, type LLMErrorResponse } from '../lib/errorMapping'
 
 export function useChat() {
   const [isLoading, setIsLoading] = useState(false)
@@ -26,6 +28,13 @@ export function useChat() {
       return
     }
 
+    const requestId = crypto.randomUUID()
+    logger.info(requestId, 'useChat.send.start', {
+      sessionId: sid,
+      hasApiKey: Boolean(activeEndpoint?.apiKey),
+      hasModel: Boolean(settings.modelSelections.chatModelId),
+    })
+
     loadingRef.current = true
     setIsLoading(true)
     setError(null)
@@ -49,9 +58,15 @@ export function useChat() {
       }
       const response = await chatApi.chat(sid, content, config)
       addMessage(response.message)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '发送消息失败'
-      setError(message)
+    } catch (err: unknown) {
+      logger.error(requestId, 'useChat.send.failed', err)
+      const apiErr = err as { error?: LLMErrorResponse; message?: string }
+      if (apiErr.error) {
+        setError(mapLLMErrorToText(apiErr.error))
+      } else {
+        const message = err instanceof Error ? err.message : '发送消息失败'
+        setError(message)
+      }
     } finally {
       setIsLoading(false)
       loadingRef.current = false
