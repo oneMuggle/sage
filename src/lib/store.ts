@@ -18,6 +18,13 @@ export interface Session {
   metadata?: Record<string, unknown>
 }
 
+// 工具调用结构（与后端 AgentEvent 保持一致）
+export interface ToolCall {
+  name: string
+  args: Record<string, unknown>
+  result?: string
+}
+
 // 消息
 export interface Message {
   id: string
@@ -27,11 +34,7 @@ export interface Message {
   created_at: number
   model?: string
   provider?: string
-  tool_calls?: Array<{
-    name: string
-    args: Record<string, unknown>
-    result?: string
-  }>
+  tool_calls?: ToolCall[]
   tool_call_id?: string
   memory_applied?: number
 }

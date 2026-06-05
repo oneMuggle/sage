@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Copy, ThumbsUp, ThumbsDown, BookOpen, Check } from 'lucide-react'
+import { Copy, ThumbsUp, ThumbsDown, BookOpen, Check, Wrench } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import type { Message as MessageType } from '../../lib/store'
+import type { Message as MessageType, ToolCall } from '../../lib/store'
 
 interface MessageProps {
   message: MessageType
@@ -63,6 +63,8 @@ function CodeBlock({ language, children }: { language?: string; children: string
 export function Message({ message, onFeedback, knowledgeRefs, attachments }: MessageProps) {
   const isUser = message.role === 'user'
   const isAssistant = message.role === 'assistant'
+  const isError = message.content?.startsWith('[错误') ?? false
+  const toolCalls: ToolCall[] = message.tool_calls ?? []
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content)
@@ -122,10 +124,13 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
 
         {/* 消息气泡 */}
         <div
+          data-error={isError ? 'true' : undefined}
           className={`px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
             isUser
               ? 'bg-primary text-text-inverse'
-              : 'bg-surface border border-border'
+              : isError
+                ? 'bg-red-50 border border-red-300 text-red-900'
+                : 'bg-surface border border-border'
           }`}
         >
           {/* Message content with Markdown */}
@@ -227,6 +232,32 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
             <p className="whitespace-pre-wrap">{message.content}</p>
           )}
         </div>
+
+        {/* 工具调用展示（ReAct 模式） */}
+        {toolCalls.length > 0 && (
+          <div className="mt-2 flex flex-col gap-1.5">
+            {toolCalls.map((tc, idx) => (
+              <div
+                key={`${tc.name}-${idx}`}
+                className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 rounded border border-border bg-bg-subtle text-[12px] font-mono"
+              >
+                <Wrench className="w-3 h-3 text-primary" />
+                <span className="font-semibold text-primary">{tc.name}</span>
+                <span className="text-muted">(</span>
+                <span className="text-text-secondary break-all">
+                  {JSON.stringify(tc.args)}
+                </span>
+                <span className="text-muted">)</span>
+                {tc.result !== undefined && tc.result !== '' && (
+                  <>
+                    <span className="text-muted">→</span>
+                    <span className="text-text-primary break-all">{tc.result}</span>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* 底部信息 */}
         <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
