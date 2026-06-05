@@ -3,16 +3,16 @@ pre-commit:
   parallel: true
   commands:
     backend-lint:
-      glob: "backend/**/*.py"
+      glob: 'backend/**/*.py'
       run: /home/fz/anaconda3/envs/sage-backend/bin/ruff check --fix {staged_files}
     backend-format:
-      glob: "backend/**/*.py"
+      glob: 'backend/**/*.py'
       run: /home/fz/anaconda3/envs/sage-backend/bin/ruff format {staged_files}
     frontend-lint:
-      glob: "src/**/*.{ts,tsx}"
+      glob: 'src/**/*.{ts,tsx}'
       run: npx eslint --fix {staged_files}
     frontend-format:
-      glob: "src/**/*.{ts,tsx}"
+      glob: 'src/**/*.{ts,tsx}'
       run: npx prettier --write {staged_files}
 
 pre-push:

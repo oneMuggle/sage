@@ -48,7 +48,7 @@ jobs:
         shell: bash -el {0}
         run: |
           conda run -n sage-backend mypy backend/domain backend/ports
-        continue-on-error: true  # P0 期间允许，domain/ports 还没建
+        continue-on-error: true # P0 期间允许，domain/ports 还没建
 
       - name: Pytest with coverage
         shell: bash -el {0}
