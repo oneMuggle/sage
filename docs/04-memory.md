@@ -139,6 +139,7 @@ class WorkingMemory:
 ```
 
 **特点**:
+
 - 存储在内存中，速度最快
 - 基于 LRU 的自动淘汰
 - 支持 Token 数量限制
@@ -227,6 +228,7 @@ class EpisodicMemory:
 ```
 
 **特点**:
+
 - SQLite 持久化存储
 - 支持全文搜索 (FTS5)
 - 重要性评分 (1-10)
@@ -305,6 +307,7 @@ class SemanticMemory:
 ```
 
 **特点**:
+
 - ChromaDB 向量存储
 - 高维语义相似度检索
 - 支持元数据过滤
@@ -673,26 +676,26 @@ memory:
   working:
     max_tokens: 4000
     max_messages: 20
-    eviction_policy: "lru"  # lru | importance
+    eviction_policy: 'lru' # lru | importance
 
   episodic:
     enabled: true
     auto_save: true
     default_importance: 5
-    ttl_days: null  # null = 不过期
+    ttl_days: null # null = 不过期
     retention:
       max_memories: 1000
       min_importance: 1
 
   semantic:
     enabled: true
-    embedding_model: "text-embedding-ada-002"
+    embedding_model: 'text-embedding-ada-002'
     dimension: 1536
     similarity_threshold: 0.7
 
   evolution:
-    daily_summary_time: "02:00"
-    compression_threshold: 50  # 消息数
+    daily_summary_time: '02:00'
+    compression_threshold: 50 # 消息数
     importance_decay_days: 30
 ```
 
@@ -730,4 +733,4 @@ class MemoryManager:
 
 ---
 
-*文档版本: v1.0*
+_文档版本: v1.0_

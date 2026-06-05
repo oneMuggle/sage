@@ -45,7 +45,7 @@ export const EvolutionLog: React.FC = () => {
       if (offset === 0) {
         setLogs(result);
       } else {
-        setLogs(prev => [...prev, ...result]);
+        setLogs((prev) => [...prev, ...result]);
       }
     } catch (error) {
       console.error('获取进化日志失败:', error);
@@ -60,7 +60,7 @@ export const EvolutionLog: React.FC = () => {
 
   // 加载更多
   const handleLoadMore = () => {
-    setPage(prev => prev + 1);
+    setPage((prev) => prev + 1);
   };
 
   // 格式化时间戳
@@ -136,10 +136,7 @@ export const EvolutionLog: React.FC = () => {
           const statusDisplay = getStatusDisplay(log.status);
 
           return (
-            <div
-              key={log.id}
-              className="bg-surface rounded-lg shadow-sm p-4 border border-border"
-            >
+            <div key={log.id} className="bg-surface rounded-lg shadow-sm p-4 border border-border">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -162,35 +159,23 @@ export const EvolutionLog: React.FC = () => {
 
                   {/* 错误信息 */}
                   {log.error_message && (
-                    <p className="text-sm text-error mt-1">
-                      错误: {log.error_message}
-                    </p>
+                    <p className="text-sm text-error mt-1">错误: {log.error_message}</p>
                   )}
 
                   {/* 时间信息 */}
                   <div className="mt-2 flex items-center gap-4 text-xs text-muted">
                     <span>创建: {formatTime(log.created_at)}</span>
-                    {log.completed_at && (
-                      <span>完成: {formatTime(log.completed_at)}</span>
-                    )}
-                    {log.tokens_used && (
-                      <span>消耗 Token: {log.tokens_used}</span>
-                    )}
+                    {log.completed_at && <span>完成: {formatTime(log.completed_at)}</span>}
+                    {log.tokens_used && <span>消耗 Token: {log.tokens_used}</span>}
                   </div>
 
                   {/* 状态变化 */}
                   {(log.before_state || log.after_state) && (
                     <div className="mt-2 text-xs text-text-secondary">
                       {log.before_state && (
-                        <div className="line-through opacity-50">
-                          前: {log.before_state}
-                        </div>
+                        <div className="line-through opacity-50">前: {log.before_state}</div>
                       )}
-                      {log.after_state && (
-                        <div className="text-success">
-                          后: {log.after_state}
-                        </div>
-                      )}
+                      {log.after_state && <div className="text-success">后: {log.after_state}</div>}
                     </div>
                   )}
                 </div>
@@ -199,11 +184,7 @@ export const EvolutionLog: React.FC = () => {
           );
         })}
 
-        {logs.length === 0 && (
-          <div className="text-center py-8 text-muted">
-            暂无进化日志
-          </div>
-        )}
+        {logs.length === 0 && <div className="text-center py-8 text-muted">暂无进化日志</div>}
       </div>
 
       {/* 加载更多 */}

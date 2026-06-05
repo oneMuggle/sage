@@ -30,11 +30,11 @@
 
 ### 10.1.2 Tauri Commands vs REST API
 
-| 场景 | 方式 | 说明 |
-|-----|------|------|
+| 场景        | 方式           | 说明               |
+| ----------- | -------------- | ------------------ |
 | 前端 ↔ 后端 | Tauri Commands | 同一进程内，低延迟 |
-| 后端 ↔ 外部 | HTTP REST | 调用外部 API |
-| 插件/扩展 | Plugin API | 独立模块接口 |
+| 后端 ↔ 外部 | HTTP REST      | 调用外部 API       |
+| 插件/扩展   | Plugin API     | 独立模块接口       |
 
 ---
 
@@ -512,25 +512,25 @@ class SkillResponse(BaseModel):
 
 ```typescript
 // 前端调用示例
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@tauri-apps/api/core';
 
 // 创建会话
 const session = await invoke<SessionResponse>('create_session', {
-  title: '我的新对话'
-})
+  title: '我的新对话',
+});
 
 // 发送消息
 const response = await invoke<ChatResponse>('agent_chat', {
   sessionId: session.id,
-  message: '你好'
-})
+  message: '你好',
+});
 
 // 搜索记忆
 const memories = await invoke<MemoryResponse[]>('search_memory', {
   query: '用户偏好',
   memoryType: 'semantic',
-  limit: 10
-})
+  limit: 10,
+});
 ```
 
 ### 10.4.2 事件系统
@@ -571,17 +571,17 @@ app.emit("typing", TypingEvent {
 
 ### 10.5.1 错误码
 
-| 错误码 | 说明 | HTTP 状态 |
-|-------|------|----------|
-| 1001 | 会话不存在 | 404 |
-| 1002 | 会话已删除 | 410 |
-| 2001 | 记忆不存在 | 404 |
-| 2002 | 记忆存储失败 | 500 |
-| 3001 | 技能不存在 | 404 |
-| 3002 | 技能执行失败 | 500 |
-| 4001 | Agent 超时 | 504 |
-| 4002 | Agent 中断 | 499 |
-| 9001 | 未知错误 | 500 |
+| 错误码 | 说明         | HTTP 状态 |
+| ------ | ------------ | --------- |
+| 1001   | 会话不存在   | 404       |
+| 1002   | 会话已删除   | 410       |
+| 2001   | 记忆不存在   | 404       |
+| 2002   | 记忆存储失败 | 500       |
+| 3001   | 技能不存在   | 404       |
+| 3002   | 技能执行失败 | 500       |
+| 4001   | Agent 超时   | 504       |
+| 4002   | Agent 中断   | 499       |
+| 9001   | 未知错误     | 500       |
 
 ### 10.5.2 错误响应
 
@@ -614,36 +614,36 @@ interface ErrorResponse {
 
 ```typescript
 // 1. 创建会话
-const session = await invoke<Session>('create_session', { title: '测试对话' })
+const session = await invoke<Session>('create_session', { title: '测试对话' });
 
 // 2. 发送消息
 const response = await invoke<ChatResponse>('agent_chat', {
   sessionId: session.id,
-  message: '帮我写一个 Python Hello World'
-})
+  message: '帮我写一个 Python Hello World',
+});
 
-console.log('AI 回复:', response.content)
+console.log('AI 回复:', response.content);
 
 // 3. 获取消息历史
 const messages = await invoke<Message[]>('get_messages', {
   sessionId: session.id,
-  limit: 50
-})
+  limit: 50,
+});
 
 // 4. 搜索相关记忆
 const memories = await invoke<Memory[]>('search_memory', {
-  query: '用户之前的代码偏好'
-})
+  query: '用户之前的代码偏好',
+});
 
 // 5. 保存重要信息到记忆
 await invoke('save_memory', {
   content: '用户喜欢用 Python 3.10+',
   memoryType: 'semantic',
   importance: 8,
-  tags: ['编程', 'Python']
-})
+  tags: ['编程', 'Python'],
+});
 ```
 
 ---
 
-*文档版本: v1.0*
+_文档版本: v1.0_

@@ -1,74 +1,70 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react';
 
-import { Button } from '../components/common'
-import { agentsApi, type AgentProfile } from '../lib/api'
+import { Button } from '../components/common';
+import { agentsApi, type AgentProfile } from '../lib/api';
 
 const ROLE_LABELS: Record<string, string> = {
   coordinator: '协调器',
   researcher: '研究员',
   coder: '工程师',
   memory_manager: '记忆管理',
-}
+};
 
 const ROLE_COLORS: Record<string, string> = {
   coordinator: 'bg-role-blue text-role-blue-text',
   researcher: 'bg-role-green text-role-green-text',
   coder: 'bg-role-purple text-role-purple-text',
   memory_manager: 'bg-role-orange text-role-orange-text',
-}
+};
 
 export function Agents() {
-  const [agents, setAgents] = useState<AgentProfile[]>([])
-  const [selectedAgent, setSelectedAgent] = useState<AgentProfile | null>(null)
-  const [editing, setEditing] = useState(false)
-  const [editForm, setEditForm] = useState<Partial<AgentProfile>>({})
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [agents, setAgents] = useState<AgentProfile[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<AgentProfile | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<AgentProfile>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadAgents = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      const data = await agentsApi.list()
-      setAgents(data)
+      const data = await agentsApi.list();
+      setAgents(data);
     } catch (err) {
-      setError(`加载失败: ${err instanceof Error ? err.message : '未知错误'}`)
-      setAgents(getMockAgents())
+      setError(`加载失败: ${err instanceof Error ? err.message : '未知错误'}`);
+      setAgents(getMockAgents());
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    loadAgents()
-  }, [loadAgents])
+    loadAgents();
+  }, [loadAgents]);
 
   const handleToggleAgent = async (agentId: string, enabled: boolean) => {
-    setAgents((prev) =>
-      prev.map((a) => (a.id === agentId ? { ...a, enabled } : a))
-    )
+    setAgents((prev) => prev.map((a) => (a.id === agentId ? { ...a, enabled } : a)));
     try {
-      await agentsApi.toggle(agentId, enabled)
+      await agentsApi.toggle(agentId, enabled);
     } catch {
-      setAgents((prev) =>
-        prev.map((a) => (a.id === agentId ? { ...a, enabled: !enabled } : a))
-      )
-      setError('切换失败')
+      setAgents((prev) => prev.map((a) => (a.id === agentId ? { ...a, enabled: !enabled } : a)));
+      setError('切换失败');
     }
-  }
+  };
 
   const handleSave = async () => {
-    if (!selectedAgent) return
+    if (!selectedAgent) return;
     try {
-      const updated = { ...selectedAgent, ...editForm } as AgentProfile
-      await agentsApi.update(updated)
-      setEditing(false)
-      setEditForm({})
-      loadAgents()
+      const updated = { ...selectedAgent, ...editForm } as AgentProfile;
+      await agentsApi.update(updated);
+      setEditing(false);
+      setEditForm({});
+      loadAgents();
     } catch {
-      setError('保存失败')
+      setError('保存失败');
     }
-  }
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -80,16 +76,10 @@ export function Agents() {
           </Button>
         </div>
 
-        {error && (
-          <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm">
-            {error}
-          </div>
-        )}
+        {error && <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm">{error}</div>}
 
         {loading ? (
-          <div className="flex items-center justify-center py-12 text-muted">
-            加载中...
-          </div>
+          <div className="flex items-center justify-center py-12 text-muted">加载中...</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {agents.map((agent) => (
@@ -98,9 +88,9 @@ export function Agents() {
                 agent={agent}
                 isSelected={selectedAgent?.id === agent.id}
                 onSelect={() => {
-                  setSelectedAgent(agent)
-                  setEditing(false)
-                  setEditForm({})
+                  setSelectedAgent(agent);
+                  setEditing(false);
+                  setEditForm({});
                 }}
                 onToggle={handleToggleAgent}
               />
@@ -126,8 +116,8 @@ export function Agents() {
                 onChange={setEditForm}
                 onSave={handleSave}
                 onCancel={() => {
-                  setEditing(false)
-                  setEditForm({})
+                  setEditing(false);
+                  setEditForm({});
                 }}
               />
             ) : (
@@ -137,7 +127,7 @@ export function Agents() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
 // ========== 子组件 ==========
@@ -148,45 +138,37 @@ function AgentCard({
   onSelect,
   onToggle,
 }: {
-  agent: AgentProfile
-  isSelected: boolean
-  onSelect: () => void
-  onToggle: (id: string, enabled: boolean) => void
+  agent: AgentProfile;
+  isSelected: boolean;
+  onSelect: () => void;
+  onToggle: (id: string, enabled: boolean) => void;
 }) {
-  const roleColor = ROLE_COLORS[agent.role] || 'bg-bg-subtle text-text-secondary'
-  const roleLabel = ROLE_LABELS[agent.role] || agent.role
+  const roleColor = ROLE_COLORS[agent.role] || 'bg-bg-subtle text-text-secondary';
+  const roleLabel = ROLE_LABELS[agent.role] || agent.role;
 
   return (
     <div
       onClick={onSelect}
       className={`p-4 rounded-lg border cursor-pointer transition-all ${
-        isSelected
-          ? 'border-primary bg-primary/10'
-          : 'border-border hover:border-border-hover'
+        isSelected ? 'border-primary bg-primary/10' : 'border-border hover:border-border-hover'
       } ${!agent.enabled ? 'opacity-50' : ''}`}
     >
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-medium">{agent.name}</h3>
-        <span className={`px-2 py-0.5 text-xs rounded-full ${roleColor}`}>
-          {roleLabel}
-        </span>
+        <span className={`px-2 py-0.5 text-xs rounded-full ${roleColor}`}>{roleLabel}</span>
       </div>
 
-      <p className="text-sm text-muted mb-3 line-clamp-2">
-        {agent.description}
-      </p>
+      <p className="text-sm text-muted mb-3 line-clamp-2">{agent.description}</p>
 
       <div className="flex items-center justify-between">
-        <span className="text-xs text-muted">
-          模型: {agent.model_config.model}
-        </span>
+        <span className="text-xs text-muted">模型: {agent.model_config.model}</span>
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
             checked={agent.enabled}
             onChange={(e) => {
-              e.stopPropagation()
-              onToggle(agent.id, e.target.checked)
+              e.stopPropagation();
+              onToggle(agent.id, e.target.checked);
             }}
             className="rounded"
           />
@@ -194,7 +176,7 @@ function AgentCard({
         </label>
       </div>
     </div>
-  )
+  );
 }
 
 function AgentDetails({ agent }: { agent: AgentProfile }) {
@@ -217,10 +199,7 @@ function AgentDetails({ agent }: { agent: AgentProfile }) {
           <span className="text-sm font-medium text-muted">工具</span>
           <div className="flex flex-wrap gap-1 mt-1">
             {agent.tools.map((tool) => (
-              <span
-                key={tool}
-                className="px-2 py-0.5 text-xs rounded bg-bg-subtle"
-              >
+              <span key={tool} className="px-2 py-0.5 text-xs rounded bg-bg-subtle">
                 {tool}
               </span>
             ))}
@@ -231,10 +210,7 @@ function AgentDetails({ agent }: { agent: AgentProfile }) {
           <span className="text-sm font-medium text-muted">记忆访问</span>
           <div className="flex flex-wrap gap-1 mt-1">
             {agent.memory_access.map((mem) => (
-              <span
-                key={mem}
-                className="px-2 py-0.5 text-xs rounded bg-bg-subtle"
-              >
+              <span key={mem} className="px-2 py-0.5 text-xs rounded bg-bg-subtle">
                 {mem}
               </span>
             ))}
@@ -262,7 +238,7 @@ function AgentDetails({ agent }: { agent: AgentProfile }) {
         <p className="text-sm mt-1">{agent.max_iterations}</p>
       </div>
     </div>
-  )
+  );
 }
 
 function EditAgentForm({
@@ -272,14 +248,14 @@ function EditAgentForm({
   onSave,
   onCancel,
 }: {
-  agent: AgentProfile
-  form: Partial<AgentProfile>
-  onChange: (form: Partial<AgentProfile>) => void
-  onSave: () => void
-  onCancel: () => void
+  agent: AgentProfile;
+  form: Partial<AgentProfile>;
+  onChange: (form: Partial<AgentProfile>) => void;
+  onSave: () => void;
+  onCancel: () => void;
 }) {
   const value = <K extends keyof AgentProfile>(key: K): AgentProfile[K] =>
-    (form[key] !== undefined ? form[key] : agent[key]) as AgentProfile[K]
+    (form[key] !== undefined ? form[key] : agent[key]) as AgentProfile[K];
 
   return (
     <div className="space-y-4">
@@ -379,7 +355,7 @@ function EditAgentForm({
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
 function getMockAgents(): AgentProfile[] {
@@ -432,5 +408,5 @@ function getMockAgents(): AgentProfile[] {
       max_iterations: 5,
       enabled: true,
     },
-  ]
+  ];
 }

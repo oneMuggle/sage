@@ -1,22 +1,22 @@
 // Wiki Toolbar - top navigation and actions
-import { FileText, Search, MessageSquare } from 'lucide-react'
+import { FileText, Search, MessageSquare } from 'lucide-react';
 
-import { useWikiStore } from '../../stores/wiki-store'
-import type { WikiView } from '../../types/wiki'
+import { useWikiStore } from '../../stores/wiki-store';
+import type { WikiView } from '../../types/wiki';
 
 export function WikiToolbar() {
-  const project = useWikiStore((s) => s.project)
-  const activeView = useWikiStore((s) => s.activeView)
-  const setActiveView = useWikiStore((s) => s.setActiveView)
-  const selectedFile = useWikiStore((s) => s.selectedFile)
+  const project = useWikiStore((s) => s.project);
+  const activeView = useWikiStore((s) => s.activeView);
+  const setActiveView = useWikiStore((s) => s.setActiveView);
+  const selectedFile = useWikiStore((s) => s.selectedFile);
 
-  if (!project) return null
+  if (!project) return null;
 
   const views: { key: WikiView; label: string; icon: React.ReactNode }[] = [
     { key: 'browser', label: '浏览', icon: <FileText className="h-4 w-4" /> },
     { key: 'search', label: '搜索', icon: <Search className="h-4 w-4" /> },
     { key: 'chat', label: '对话', icon: <MessageSquare className="h-4 w-4" /> },
-  ]
+  ];
 
   return (
     <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-surface">
@@ -43,5 +43,5 @@ export function WikiToolbar() {
         </span>
       )}
     </div>
-  )
+  );
 }

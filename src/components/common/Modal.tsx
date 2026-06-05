@@ -1,15 +1,15 @@
-import { Dialog, Transition } from '@headlessui/react'
-import { X } from 'lucide-react'
-import { Fragment, ReactNode } from 'react'
+import { Dialog, Transition } from '@headlessui/react';
+import { X } from 'lucide-react';
+import { Fragment, ReactNode } from 'react';
 
-import { Button } from './Button'
+import { Button } from './Button';
 
 export interface ModalProps {
-  isOpen: boolean
-  onClose: () => void
-  title?: string
-  children: ReactNode
-  footer?: ReactNode
+  isOpen: boolean;
+  onClose: () => void;
+  title?: string;
+  children: ReactNode;
+  footer?: ReactNode;
 }
 
 export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) {
@@ -57,16 +57,12 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
                 <div className="px-6 py-4">{children}</div>
 
                 {/* 底部 */}
-                {footer && (
-                  <div className="px-6 py-4 border-t border-border">
-                    {footer}
-                  </div>
-                )}
+                {footer && <div className="px-6 py-4 border-t border-border">{footer}</div>}
               </Dialog.Panel>
             </Transition.Child>
           </div>
         </div>
       </Dialog>
     </Transition>
-  )
+  );
 }

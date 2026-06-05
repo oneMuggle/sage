@@ -1,50 +1,47 @@
-import type { DiscoveredModel, ModelCapability } from '../types/settings'
+import type { DiscoveredModel, ModelCapability } from '../types/settings';
 
 interface OpenAIModelInfo {
-  id: string
-  object: string
-  created?: number
-  owned_by?: string
+  id: string;
+  object: string;
+  created?: number;
+  owned_by?: string;
 }
 
 interface OpenAIModelsResponse {
-  object: string
-  data: OpenAIModelInfo[]
+  object: string;
+  data: OpenAIModelInfo[];
 }
 
 export interface ConnectionTestResult {
-  success: boolean
-  message: string
-  latency: number
+  success: boolean;
+  message: string;
+  latency: number;
 }
 
 /**
  * Fetch available models from an OpenAI-compatible endpoint.
  */
-export async function fetchModels(
-  baseUrl: string,
-  apiKey: string
-): Promise<DiscoveredModel[]> {
-  const normalizedBase = baseUrl.replace(/\/+$/, '')
+export async function fetchModels(baseUrl: string, apiKey: string): Promise<DiscoveredModel[]> {
+  const normalizedBase = baseUrl.replace(/\/+$/, '');
   const response = await fetch(`${normalizedBase}/models`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-  })
+  });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(`HTTP ${response.status}: ${text || response.statusText}`)
+    const text = await response.text().catch(() => '');
+    throw new Error(`HTTP ${response.status}: ${text || response.statusText}`);
   }
 
-  const data: OpenAIModelsResponse = await response.json()
+  const data: OpenAIModelsResponse = await response.json();
   return data.data.map((m) => ({
     id: m.id,
     capabilities: inferCapabilities(m.id),
     endpointId: '',
-  }))
+  }));
 }
 
 /**
@@ -53,12 +50,12 @@ export async function fetchModels(
 async function testChatCompletion(
   baseUrl: string,
   apiKey: string,
-  model: string
+  model: string,
 ): Promise<{ success: boolean; message: string }> {
-  const normalizedBase = baseUrl.replace(/\/+$/, '')
+  const normalizedBase = baseUrl.replace(/\/+$/, '');
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 15000)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const response = await fetch(`${normalizedBase}/chat/completions`, {
       method: 'POST',
@@ -72,29 +69,29 @@ async function testChatCompletion(
         messages: [{ role: 'user', content: 'Hi' }],
         max_tokens: 10,
       }),
-    })
+    });
 
-    clearTimeout(timeoutId)
+    clearTimeout(timeoutId);
 
     if (response.ok) {
-      return { success: true, message: '聊天端点正常' }
+      return { success: true, message: '聊天端点正常' };
     }
 
     // 401 means bad API key, 429 means rate limited
     if (response.status === 401) {
-      return { success: false, message: 'API Key 无效' }
+      return { success: false, message: 'API Key 无效' };
     }
     if (response.status === 429) {
-      return { success: false, message: '请求频率限制' }
+      return { success: false, message: '请求频率限制' };
     }
 
-    const text = await response.text().catch(() => '')
-    return { success: false, message: `HTTP ${response.status}: ${text || response.statusText}` }
+    const text = await response.text().catch(() => '');
+    return { success: false, message: `HTTP ${response.status}: ${text || response.statusText}` };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      return { success: false, message: '请求超时 (15s)' }
+      return { success: false, message: '请求超时 (15s)' };
     }
-    return { success: false, message: error instanceof Error ? error.message : String(error) }
+    return { success: false, message: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -105,42 +102,42 @@ async function testChatCompletion(
 export async function testEndpointConnection(
   baseUrl: string,
   apiKey: string,
-  chatModel?: string
+  chatModel?: string,
 ): Promise<ConnectionTestResult> {
-  const start = Date.now()
+  const start = Date.now();
   try {
     // Step 1: Test /models endpoint
-    const models = await fetchModels(baseUrl, apiKey)
-    const modelDiscovery = `发现 ${models.length} 个模型`
+    const models = await fetchModels(baseUrl, apiKey);
+    const modelDiscovery = `发现 ${models.length} 个模型`;
 
     // Step 2: Test /chat/completions if a chat model is specified
     if (chatModel) {
-      const chatResult = await testChatCompletion(baseUrl, apiKey, chatModel)
+      const chatResult = await testChatCompletion(baseUrl, apiKey, chatModel);
       if (!chatResult.success) {
         return {
           success: false,
           message: `${modelDiscovery}，但聊天端点异常: ${chatResult.message}`,
           latency: Date.now() - start,
-        }
+        };
       }
       return {
         success: true,
         message: `连接成功 · ${modelDiscovery} · ${chatResult.message}`,
         latency: Date.now() - start,
-      }
+      };
     }
 
     return {
       success: true,
       message: `连接成功，${modelDiscovery}`,
       latency: Date.now() - start,
-    }
+    };
   } catch (error) {
     return {
       success: false,
       message: `连接失败: ${error instanceof Error ? error.message : String(error)}`,
       latency: Date.now() - start,
-    }
+    };
   }
 }
 
@@ -148,8 +145,8 @@ export async function testEndpointConnection(
  * Infer model capabilities from the model ID string.
  */
 function inferCapabilities(modelId: string): ModelCapability[] {
-  const lower = modelId.toLowerCase()
-  const caps: ModelCapability[] = ['chat']
+  const lower = modelId.toLowerCase();
+  const caps: ModelCapability[] = ['chat'];
 
   if (
     lower.includes('vision') ||
@@ -158,15 +155,11 @@ function inferCapabilities(modelId: string): ModelCapability[] {
     lower.includes('claude-3') ||
     lower.includes('image')
   ) {
-    caps.push('vision')
+    caps.push('vision');
   }
-  if (
-    lower.includes('embed') ||
-    lower.includes('text-embedding') ||
-    lower.includes('vector')
-  ) {
-    caps.push('embedding')
+  if (lower.includes('embed') || lower.includes('text-embedding') || lower.includes('vector')) {
+    caps.push('embedding');
   }
 
-  return caps
+  return caps;
 }

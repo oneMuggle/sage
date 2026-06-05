@@ -1,18 +1,18 @@
-import { clsx } from 'clsx'
-import { useState } from 'react'
+import { clsx } from 'clsx';
+import { useState } from 'react';
 
-import { EvolutionLog } from '../components/evolution/EvolutionLog'
-import { EvolutionPanel } from '../components/evolution/EvolutionPanel'
-import { useSettings } from '../hooks/useSettings'
-import { fetchModels, testEndpointConnection, type ConnectionTestResult } from '../lib/models'
-import type { EndpointConfig, DiscoveredModel } from '../types/settings'
-import { DEFAULT_ENDPOINT } from '../types/settings'
+import { EvolutionLog } from '../components/evolution/EvolutionLog';
+import { EvolutionPanel } from '../components/evolution/EvolutionPanel';
+import { useSettings } from '../hooks/useSettings';
+import { fetchModels, testEndpointConnection, type ConnectionTestResult } from '../lib/models';
+import type { EndpointConfig, DiscoveredModel } from '../types/settings';
+import { DEFAULT_ENDPOINT } from '../types/settings';
 
-type SettingsTab = 'general' | 'endpoints' | 'models' | 'memory' | 'network' | 'evolution'
+type SettingsTab = 'general' | 'endpoints' | 'models' | 'memory' | 'network' | 'evolution';
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
-  const { settings, updateSettings, resetSettings } = useSettings()
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const { settings, updateSettings, resetSettings } = useSettings();
 
   const tabs: { key: SettingsTab; label: string }[] = [
     { key: 'general', label: '通用' },
@@ -21,7 +21,7 @@ export function Settings() {
     { key: 'memory', label: '记忆' },
     { key: 'network', label: '网络' },
     { key: 'evolution', label: '进化' },
-  ]
+  ];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -48,10 +48,18 @@ export function Settings() {
         </div>
 
         {activeTab === 'general' && <GeneralTab resetSettings={resetSettings} />}
-        {activeTab === 'endpoints' && <EndpointsTab settings={settings} updateSettings={updateSettings} />}
-        {activeTab === 'models' && <ModelsTab settings={settings} updateSettings={updateSettings} />}
-        {activeTab === 'memory' && <MemoryTab settings={settings} updateSettings={updateSettings} />}
-        {activeTab === 'network' && <NetworkTab settings={settings} updateSettings={updateSettings} />}
+        {activeTab === 'endpoints' && (
+          <EndpointsTab settings={settings} updateSettings={updateSettings} />
+        )}
+        {activeTab === 'models' && (
+          <ModelsTab settings={settings} updateSettings={updateSettings} />
+        )}
+        {activeTab === 'memory' && (
+          <MemoryTab settings={settings} updateSettings={updateSettings} />
+        )}
+        {activeTab === 'network' && (
+          <NetworkTab settings={settings} updateSettings={updateSettings} />
+        )}
         {activeTab === 'evolution' && (
           <div className="space-y-6">
             <EvolutionPanel />
@@ -60,20 +68,23 @@ export function Settings() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
 /* ---- General Tab ---- */
 
 function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
-  const { settings, updateSettings } = useSettings()
+  const { settings, updateSettings } = useSettings();
 
   return (
     <div className="space-y-6">
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">外观</h3>
         <SettingRow label="紧凑模式" desc="减少间距，在同一屏幕内显示更多内容">
-          <Toggle value={settings.compactMode} onChange={(v) => updateSettings({ compactMode: v })} />
+          <Toggle
+            value={settings.compactMode}
+            onChange={(v) => updateSettings({ compactMode: v })}
+          />
         </SettingRow>
         <SettingRow label="流式输出" desc="逐字显示 AI 回复，而非等待全部生成完成">
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
@@ -85,7 +96,10 @@ function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
           <Toggle value={settings.autoMemory} onChange={(v) => updateSettings({ autoMemory: v })} />
         </SettingRow>
         <SettingRow label="确认后再删除记忆" desc="删除记忆前弹出确认对话框">
-          <Toggle value={settings.confirmDelete} onChange={(v) => updateSettings({ confirmDelete: v })} />
+          <Toggle
+            value={settings.confirmDelete}
+            onChange={(v) => updateSettings({ confirmDelete: v })}
+          />
         </SettingRow>
       </section>
       <section>
@@ -98,85 +112,92 @@ function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         </button>
       </section>
     </div>
-  )
+  );
 }
 
 /* ---- Endpoints Tab ---- */
 
 interface EndpointsTabProps {
-  settings: ReturnType<typeof useSettings>['settings']
-  updateSettings: ReturnType<typeof useSettings>['updateSettings']
+  settings: ReturnType<typeof useSettings>['settings'];
+  updateSettings: ReturnType<typeof useSettings>['updateSettings'];
 }
 
 function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<Partial<EndpointConfig>>({})
-  const [testResult, setTestResult] = useState<Record<string, ConnectionTestResult>>({})
-  const [testingId, setTestingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<EndpointConfig>>({});
+  const [testResult, setTestResult] = useState<Record<string, ConnectionTestResult>>({});
+  const [testingId, setTestingId] = useState<string | null>(null);
 
   const handleAdd = () => {
     const newEndpoint: EndpointConfig = {
       ...DEFAULT_ENDPOINT,
       id: crypto.randomUUID(),
       name: '新端点',
-    }
-    updateSettings({ endpoints: [...settings.endpoints, newEndpoint] })
-    setEditingId(newEndpoint.id)
-    setEditForm({ name: '新端点', baseUrl: '', apiKey: '' })
-  }
+    };
+    updateSettings({ endpoints: [...settings.endpoints, newEndpoint] });
+    setEditingId(newEndpoint.id);
+    setEditForm({ name: '新端点', baseUrl: '', apiKey: '' });
+  };
 
   const handleSave = (id: string) => {
-    const updated = settings.endpoints.map((ep) =>
-      ep.id === id ? { ...ep, ...editForm } : ep
-    )
-    updateSettings({ endpoints: updated })
-    setEditingId(null)
-    setEditForm({})
-  }
+    const updated = settings.endpoints.map((ep) => (ep.id === id ? { ...ep, ...editForm } : ep));
+    updateSettings({ endpoints: updated });
+    setEditingId(null);
+    setEditForm({});
+  };
 
   const handleDelete = (id: string) => {
-    const remaining = settings.endpoints.filter((ep) => ep.id !== id)
+    const remaining = settings.endpoints.filter((ep) => ep.id !== id);
     // If we deleted the active endpoint, clear active
     if (remaining.length > 0 && !remaining.some((ep) => ep.isActive)) {
-      remaining[0].isActive = true
+      remaining[0].isActive = true;
     }
-    updateSettings({ endpoints: remaining })
+    updateSettings({ endpoints: remaining });
     if (editingId === id) {
-      setEditingId(null)
-      setEditForm({})
+      setEditingId(null);
+      setEditForm({});
     }
-  }
+  };
 
   const handleSetActive = (id: string) => {
     const updated = settings.endpoints.map((ep) => ({
       ...ep,
       isActive: ep.id === id,
-    }))
-    updateSettings({ endpoints: updated })
-  }
+    }));
+    updateSettings({ endpoints: updated });
+  };
 
   const handleTest = async (ep: EndpointConfig) => {
-    if (!ep.baseUrl || !ep.apiKey) return
-    setTestingId(ep.id)
-    setTestResult((prev) => ({ ...prev, [ep.id]: { success: false, message: '测试中...', latency: 0 } }))
-    const result = await testEndpointConnection(ep.baseUrl, ep.apiKey, settings.modelSelections.chatModelId ?? undefined)
-    setTestResult((prev) => ({ ...prev, [ep.id]: result }))
-    setTestingId(null)
-  }
+    if (!ep.baseUrl || !ep.apiKey) return;
+    setTestingId(ep.id);
+    setTestResult((prev) => ({
+      ...prev,
+      [ep.id]: { success: false, message: '测试中...', latency: 0 },
+    }));
+    const result = await testEndpointConnection(
+      ep.baseUrl,
+      ep.apiKey,
+      settings.modelSelections.chatModelId ?? undefined,
+    );
+    setTestResult((prev) => ({ ...prev, [ep.id]: result }));
+    setTestingId(null);
+  };
 
   const handleRefreshModels = async (ep: EndpointConfig) => {
-    if (!ep.baseUrl || !ep.apiKey) return
+    if (!ep.baseUrl || !ep.apiKey) return;
     try {
-      const models = await fetchModels(ep.baseUrl, ep.apiKey)
-      const modelsWithEndpoint = models.map((m: DiscoveredModel) => ({ ...m, endpointId: ep.id }))
+      const models = await fetchModels(ep.baseUrl, ep.apiKey);
+      const modelsWithEndpoint = models.map((m: DiscoveredModel) => ({ ...m, endpointId: ep.id }));
       const updated = settings.endpoints.map((e) =>
-        e.id === ep.id ? { ...e, discoveredModels: modelsWithEndpoint, lastDiscoveredAt: Date.now() } : e
-      )
-      updateSettings({ endpoints: updated })
+        e.id === ep.id
+          ? { ...e, discoveredModels: modelsWithEndpoint, lastDiscoveredAt: Date.now() }
+          : e,
+      );
+      updateSettings({ endpoints: updated });
     } catch {
       // Error shown via test result
     }
-  }
+  };
 
   return (
     <div className="space-y-4">
@@ -197,19 +218,19 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
       )}
 
       {settings.endpoints.map((ep) => {
-        const isEditing = editingId === ep.id
-        const form = isEditing ? editForm : {}
-        const name = form.name ?? ep.name
-        const baseUrl = form.baseUrl ?? ep.baseUrl
-        const apiKey = form.apiKey ?? ep.apiKey
-        const result = testResult[ep.id]
+        const isEditing = editingId === ep.id;
+        const form = isEditing ? editForm : {};
+        const name = form.name ?? ep.name;
+        const baseUrl = form.baseUrl ?? ep.baseUrl;
+        const apiKey = form.apiKey ?? ep.apiKey;
+        const result = testResult[ep.id];
 
         return (
           <div
             key={ep.id}
             className={clsx(
               'p-4 border rounded-radius-sm bg-surface',
-              ep.isActive && 'border-primary'
+              ep.isActive && 'border-primary',
             )}
           >
             <div className="flex items-center justify-between mb-3">
@@ -238,8 +259,8 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                 {!isEditing && (
                   <button
                     onClick={() => {
-                      setEditingId(ep.id)
-                      setEditForm({ name: ep.name, baseUrl: ep.baseUrl, apiKey: ep.apiKey })
+                      setEditingId(ep.id);
+                      setEditForm({ name: ep.name, baseUrl: ep.baseUrl, apiKey: ep.apiKey });
                     }}
                     className="text-xs text-muted hover:text-text transition-colors"
                   >
@@ -295,8 +316,8 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                   </button>
                   <button
                     onClick={() => {
-                      setEditingId(null)
-                      setEditForm({})
+                      setEditingId(null);
+                      setEditForm({});
                     }}
                     className="px-3 py-1.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors"
                   >
@@ -310,7 +331,7 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                         'px-3 py-1.5 text-xs rounded-radius-sm border transition-colors',
                         testingId === ep.id
                           ? 'border-border text-muted cursor-wait'
-                          : 'border-primary text-primary hover:bg-primary/5'
+                          : 'border-primary text-primary hover:bg-primary/5',
                       )}
                     >
                       {testingId === ep.id ? '测试中...' : '测试连接'}
@@ -321,7 +342,7 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                   <span
                     className={clsx(
                       'text-xs font-medium',
-                      result.success ? 'text-green-600' : 'text-red-600'
+                      result.success ? 'text-green-600' : 'text-red-600',
                     )}
                   >
                     {result.message}
@@ -331,7 +352,9 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-muted truncate">{ep.baseUrl || '未配置'}</span>
+                <span className="text-xs font-mono text-muted truncate">
+                  {ep.baseUrl || '未配置'}
+                </span>
                 {ep.baseUrl && ep.apiKey && (
                   <button
                     onClick={() => handleTest(ep)}
@@ -340,7 +363,7 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                       'px-2 py-1 text-xs rounded-radius-sm border transition-colors',
                       testingId === ep.id
                         ? 'border-border text-muted cursor-wait'
-                        : 'border-primary text-primary hover:bg-primary/5'
+                        : 'border-primary text-primary hover:bg-primary/5',
                     )}
                   >
                     {testingId === ep.id ? '测试中...' : '测试连接'}
@@ -358,7 +381,7 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                   <span
                     className={clsx(
                       'text-xs font-medium',
-                      result.success ? 'text-green-600' : 'text-red-600'
+                      result.success ? 'text-green-600' : 'text-red-600',
                     )}
                   >
                     {result.message}
@@ -367,31 +390,29 @@ function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
               </div>
             )}
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 /* ---- Models Tab ---- */
 
 function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
-  const activeEp = settings.endpoints.find((e) => e.isActive)
+  const activeEp = settings.endpoints.find((e) => e.isActive);
 
   if (!activeEp) {
     return (
-      <div className="text-center text-muted py-12 text-sm">
-        请先在"端点"标签页中添加并激活端点
-      </div>
-    )
+      <div className="text-center text-muted py-12 text-sm">请先在"端点"标签页中添加并激活端点</div>
+    );
   }
 
-  const models = activeEp.discoveredModels
-  const { chatModelId, visionModelId, embeddingModelId } = settings.modelSelections
+  const models = activeEp.discoveredModels;
+  const { chatModelId, visionModelId, embeddingModelId } = settings.modelSelections;
 
-  const chatModels = models.filter((m) => m.capabilities.includes('chat'))
-  const visionModels = models.filter((m) => m.capabilities.includes('vision'))
-  const embeddingModels = models.filter((m) => m.capabilities.includes('embedding'))
+  const chatModels = models.filter((m) => m.capabilities.includes('chat'));
+  const visionModels = models.filter((m) => m.capabilities.includes('vision'));
+  const embeddingModels = models.filter((m) => m.capabilities.includes('embedding'));
 
   return (
     <div className="space-y-6">
@@ -410,21 +431,27 @@ function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         required
         models={chatModels}
         value={chatModelId}
-        onChange={(v) => updateSettings({ modelSelections: { ...settings.modelSelections, chatModelId: v } })}
+        onChange={(v) =>
+          updateSettings({ modelSelections: { ...settings.modelSelections, chatModelId: v } })
+        }
       />
       <ModelSelector
         label="视觉理解模型"
         desc="用于图片识别（选填）"
         models={visionModels}
         value={visionModelId}
-        onChange={(v) => updateSettings({ modelSelections: { ...settings.modelSelections, visionModelId: v } })}
+        onChange={(v) =>
+          updateSettings({ modelSelections: { ...settings.modelSelections, visionModelId: v } })
+        }
       />
       <ModelSelector
         label="向量/嵌入模型"
         desc="用于向量化和语义搜索（选填）"
         models={embeddingModels}
         value={embeddingModelId}
-        onChange={(v) => updateSettings({ modelSelections: { ...settings.modelSelections, embeddingModelId: v } })}
+        onChange={(v) =>
+          updateSettings({ modelSelections: { ...settings.modelSelections, embeddingModelId: v } })
+        }
       />
 
       <div className="space-y-3">
@@ -452,16 +479,16 @@ function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         </SettingRow>
       </div>
     </div>
-  )
+  );
 }
 
 interface ModelSelectorProps {
-  label: string
-  desc: string
-  required?: boolean
-  models: DiscoveredModel[]
-  value: string | null
-  onChange: (v: string | null) => void
+  label: string;
+  desc: string;
+  required?: boolean;
+  models: DiscoveredModel[];
+  value: string | null;
+  onChange: (v: string | null) => void;
 }
 
 function ModelSelector({ label, desc, required, models, value, onChange }: ModelSelectorProps) {
@@ -473,20 +500,20 @@ function ModelSelector({ label, desc, required, models, value, onChange }: Model
           onChange={(e) => onChange(e.target.value || null)}
           className={clsx(
             'px-2 py-1 border rounded-radius-sm text-xs font-mono bg-surface text-text',
-            required && !value ? 'border-error' : 'border-border'
+            required && !value ? 'border-error' : 'border-border',
           )}
         >
           <option value="">{required ? '-- 请选择 --' : '-- 不使用 --'}</option>
           {models.map((m) => (
-            <option key={m.id} value={m.id}>{m.id}</option>
+            <option key={m.id} value={m.id}>
+              {m.id}
+            </option>
           ))}
         </select>
-        {required && !value && (
-          <span className="text-[11px] text-error">必填</span>
-        )}
+        {required && !value && <span className="text-[11px] text-error">必填</span>}
       </div>
     </SettingRow>
-  )
+  );
 }
 
 /* ---- Memory Tab ---- */
@@ -509,7 +536,7 @@ function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
         </SettingRow>
       </section>
     </div>
-  )
+  );
 }
 
 /* ---- Network Tab ---- */
@@ -522,7 +549,9 @@ function NetworkTab({ settings, updateSettings }: EndpointsTabProps) {
         <SettingRow label="代理模式" desc="企业内部网络通常需要配置代理">
           <select
             value={settings.proxyMode}
-            onChange={(e) => updateSettings({ proxyMode: e.target.value as 'system' | 'custom' | 'direct' })}
+            onChange={(e) =>
+              updateSettings({ proxyMode: e.target.value as 'system' | 'custom' | 'direct' })
+            }
             className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
           >
             <option value="system">系统代理</option>
@@ -550,15 +579,15 @@ function NetworkTab({ settings, updateSettings }: EndpointsTabProps) {
         </SettingRow>
       </section>
     </div>
-  )
+  );
 }
 
 /* ---- Sub-components ---- */
 
 interface SettingRowProps {
-  label: string
-  desc: string
-  children: React.ReactNode
+  label: string;
+  desc: string;
+  children: React.ReactNode;
 }
 
 function SettingRow({ label, desc, children }: SettingRowProps) {
@@ -570,12 +599,12 @@ function SettingRow({ label, desc, children }: SettingRowProps) {
       </div>
       <div>{children}</div>
     </div>
-  )
+  );
 }
 
 interface ToggleProps {
-  value: boolean
-  onChange: (v: boolean) => void
+  value: boolean;
+  onChange: (v: boolean) => void;
 }
 
 function Toggle({ value, onChange }: ToggleProps) {
@@ -592,5 +621,5 @@ function Toggle({ value, onChange }: ToggleProps) {
         }`}
       />
     </button>
-  )
+  );
 }

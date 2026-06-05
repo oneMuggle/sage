@@ -1,51 +1,43 @@
-import { useEffect } from 'react'
+import { useEffect } from 'react';
 
-import { ChatInput } from '../components/chat/ChatInput'
-import { MessageList } from '../components/chat/MessageList'
-import { useChat } from '../hooks/useChat'
-import { useStore } from '../lib/store'
+import { ChatInput } from '../components/chat/ChatInput';
+import { MessageList } from '../components/chat/MessageList';
+import { useChat } from '../hooks/useChat';
+import { useStore } from '../lib/store';
 
 export function Chat() {
-  const {
-    messages,
-    isLoading,
-    error,
-    clearError,
-    sendMessage,
-    interrupt,
-    loadMessages,
-  } = useChat()
+  const { messages, isLoading, error, clearError, sendMessage, interrupt, loadMessages } =
+    useChat();
 
-  const {
-    currentSessionId,
-    setCurrentSessionId,
-    createSession,
-  } = useStore()
+  const { currentSessionId, setCurrentSessionId, createSession } = useStore();
 
   useEffect(() => {
     if (currentSessionId) {
-      loadMessages(currentSessionId)
+      loadMessages(currentSessionId);
     }
-  }, [currentSessionId, loadMessages])
+  }, [currentSessionId, loadMessages]);
 
   const handleNewSession = async () => {
-    const sessionId = await createSession()
-    setCurrentSessionId(sessionId)
-  }
+    const sessionId = await createSession();
+    setCurrentSessionId(sessionId);
+  };
 
-  const handleSendMessage = async (content: string, _options?: {
-    knowledgeRefs?: { id: string; title: string }[]
-    attachments?: { name: string; size: number; type: string; dataUrl?: string }[]
-    images?: { name: string; size: number; type: string; dataUrl?: string }[]
-  }) => {
-    clearError()
+  const handleSendMessage = async (
+    content: string,
+    _options?: {
+      knowledgeRefs?: { id: string; title: string }[];
+      attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
+      images?: { name: string; size: number; type: string; dataUrl?: string }[];
+    },
+  ) => {
+    clearError();
     if (!currentSessionId) {
-      const sessionId = await createSession()
-      await sendMessage(content, sessionId)
+      const sessionId = await createSession();
+      await sendMessage(content, sessionId);
     } else {
-      await sendMessage(content)
+      await sendMessage(content);
     }
-  }
+  };
 
   return (
     <div className="flex-1 flex flex-col">
@@ -66,10 +58,7 @@ export function Chat() {
       {error && (
         <div className="mx-4 mt-2 px-3 py-2 text-xs rounded-radius-sm bg-red-50 border border-red-200 text-red-700 flex items-center justify-between">
           <span>{error}</span>
-          <button
-            onClick={clearError}
-            className="ml-2 text-red-500 hover:text-red-700 font-medium"
-          >
+          <button onClick={clearError} className="ml-2 text-red-500 hover:text-red-700 font-medium">
             关闭
           </button>
         </div>
@@ -87,5 +76,5 @@ export function Chat() {
         placeholder="输入消息..."
       />
     </div>
-  )
+  );
 }

@@ -1,22 +1,17 @@
-import { clsx } from 'clsx'
-import { Search } from 'lucide-react'
+import { clsx } from 'clsx';
+import { Search } from 'lucide-react';
 
-import { useKnowledge, type KnowledgeDoc } from '../../hooks/useKnowledge'
+import { useKnowledge, type KnowledgeDoc } from '../../hooks/useKnowledge';
 
-import { KnowledgeList } from './KnowledgeList'
-
+import { KnowledgeList } from './KnowledgeList';
 
 interface KnowledgeBrowserProps {
-  selectedIds?: Set<string>
-  onToggle?: (id: string) => void
-  onCardClick?: (doc: KnowledgeDoc) => void
+  selectedIds?: Set<string>;
+  onToggle?: (id: string) => void;
+  onCardClick?: (doc: KnowledgeDoc) => void;
 }
 
-export function KnowledgeBrowser({
-  selectedIds,
-  onToggle,
-  onCardClick,
-}: KnowledgeBrowserProps) {
+export function KnowledgeBrowser({ selectedIds, onToggle, onCardClick }: KnowledgeBrowserProps) {
   const {
     filteredDocs,
     searchQuery,
@@ -26,10 +21,10 @@ export function KnowledgeBrowser({
     categories,
     isLoading,
     error,
-  } = useKnowledge()
+  } = useKnowledge();
 
-  const internalSelected = selectedIds ?? new Set<string>()
-  const internalToggle = onToggle ?? (() => {})
+  const internalSelected = selectedIds ?? new Set<string>();
+  const internalToggle = onToggle ?? (() => {});
 
   return (
     <div className="p-5 space-y-4">
@@ -79,5 +74,5 @@ export function KnowledgeBrowser({
         </>
       )}
     </div>
-  )
+  );
 }

@@ -10,13 +10,13 @@
 
 ### 7.1.2 技能 vs 工具
 
-| 维度 | 工具 (Tool) | 技能 (Skill) |
-|-----|------------|-------------|
-| 粒度 | 单操作 | 多步骤流程 |
-| 调用方式 | AI 自动判断 | 关键词/意图触发 |
-| 复杂度 | 低 | 高 |
-| 自主性 | AI 决定 | 预设流程 |
-| 示例 | 读文件、搜索 | 写文章、做旅行计划 |
+| 维度     | 工具 (Tool)  | 技能 (Skill)       |
+| -------- | ------------ | ------------------ |
+| 粒度     | 单操作       | 多步骤流程         |
+| 调用方式 | AI 自动判断  | 关键词/意图触发    |
+| 复杂度   | 低           | 高                 |
+| 自主性   | AI 决定      | 预设流程           |
+| 示例     | 读文件、搜索 | 写文章、做旅行计划 |
 
 ---
 
@@ -380,7 +380,7 @@ class WriterSkill(BaseSkill):
 
 ### 7.4.3 编程技能
 
-```python
+````python
 # backend/skills/builtin/coder.py
 from typing import Dict, Any, List
 from ..base import BaseSkill, SkillSchema
@@ -456,7 +456,7 @@ class CoderSkill(BaseSkill):
             "language": language,
             "content": result
         }
-```
+````
 
 ### 7.4.4 旅行规划技能
 
@@ -728,7 +728,7 @@ skills:
 
   store:
     enabled: true
-    url: "https://sage-skill-store.example.com"
+    url: 'https://sage-skill-store.example.com'
     auto_update: false
 ```
 
@@ -755,4 +755,4 @@ skills/
 
 ---
 
-*文档版本: v1.0*
+_文档版本: v1.0_

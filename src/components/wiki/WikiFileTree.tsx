@@ -1,26 +1,22 @@
 // Wiki File Tree - recursive tree view of wiki files
-import { ChevronRight, ChevronDown, FileText, Folder } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronRight, ChevronDown, FileText, Folder } from 'lucide-react';
+import { useState } from 'react';
 
-import { useWikiStore } from '../../stores/wiki-store'
-import type { FileNode } from '../../types/wiki'
+import { useWikiStore } from '../../stores/wiki-store';
+import type { FileNode } from '../../types/wiki';
 
 export function WikiFileTree() {
-  const fileTree = useWikiStore((s) => s.fileTree)
-  const selectedFile = useWikiStore((s) => s.selectedFile)
-  const openFile = useWikiStore((s) => s.openFile)
-  const loadFileTree = useWikiStore((s) => s.loadFileTree)
+  const fileTree = useWikiStore((s) => s.fileTree);
+  const selectedFile = useWikiStore((s) => s.selectedFile);
+  const openFile = useWikiStore((s) => s.openFile);
+  const loadFileTree = useWikiStore((s) => s.loadFileTree);
 
   useState(() => {
-    loadFileTree()
-  })
+    loadFileTree();
+  });
 
   if (fileTree.length === 0) {
-    return (
-      <div className="p-4 text-center text-sm text-muted">
-        暂无文件
-      </div>
-    )
+    return <div className="p-4 text-center text-sm text-muted">暂无文件</div>;
   }
 
   return (
@@ -35,7 +31,7 @@ export function WikiFileTree() {
         />
       ))}
     </div>
-  )
+  );
 }
 
 function TreeNode({
@@ -44,23 +40,23 @@ function TreeNode({
   selectedFile,
   onFileClick,
 }: {
-  node: FileNode
-  depth: number
-  selectedFile: string | null
-  onFileClick: (path: string) => void
+  node: FileNode;
+  depth: number;
+  selectedFile: string | null;
+  onFileClick: (path: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(depth === 0)
-  const isSelected = selectedFile === node.path
+  const [expanded, setExpanded] = useState(depth === 0);
+  const isSelected = selectedFile === node.path;
 
   const handleClick = () => {
     if (node.is_dir) {
-      setExpanded(!expanded)
+      setExpanded(!expanded);
     } else {
-      onFileClick(node.path)
+      onFileClick(node.path);
     }
-  }
+  };
 
-  const paddingLeft = depth * 12 + 8
+  const paddingLeft = depth * 12 + 8;
 
   return (
     <div>
@@ -102,5 +98,5 @@ function TreeNode({
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -1,56 +1,56 @@
 // Wiki Project Picker - Create or open a wiki project
-import { FolderPlus, FolderOpen, X } from 'lucide-react'
-import { useState } from 'react'
+import { FolderPlus, FolderOpen, X } from 'lucide-react';
+import { useState } from 'react';
 
-import { createWikiProject, openWikiProject } from '../../lib/wiki-api'
-import { useWikiStore } from '../../stores/wiki-store'
+import { createWikiProject, openWikiProject } from '../../lib/wiki-api';
+import { useWikiStore } from '../../stores/wiki-store';
 
 export function WikiProjectPicker() {
-  const [mode, setMode] = useState<'menu' | 'create' | 'open'>('menu')
-  const [name, setName] = useState('')
-  const [basePath, setBasePath] = useState('')
-  const [openPath, setOpenPath] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [mode, setMode] = useState<'menu' | 'create' | 'open'>('menu');
+  const [name, setName] = useState('');
+  const [basePath, setBasePath] = useState('');
+  const [openPath, setOpenPath] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const setProject = useWikiStore((s) => s.setProject)
-  const setErrorGlobal = useWikiStore((s) => s.setError)
+  const setProject = useWikiStore((s) => s.setProject);
+  const setErrorGlobal = useWikiStore((s) => s.setError);
 
   const handleCreate = async () => {
     if (!name.trim() || !basePath.trim()) {
-      setError('请填写项目名称和路径')
-      return
+      setError('请填写项目名称和路径');
+      return;
     }
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      const project = await createWikiProject(name.trim(), basePath.trim())
-      setProject(project)
+      const project = await createWikiProject(name.trim(), basePath.trim());
+      setProject(project);
     } catch (e) {
-      setError(`创建失败: ${e}`)
-      setErrorGlobal(`创建失败: ${e}`)
+      setError(`创建失败: ${e}`);
+      setErrorGlobal(`创建失败: ${e}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleOpen = async () => {
     if (!openPath.trim()) {
-      setError('请填写项目路径')
-      return
+      setError('请填写项目路径');
+      return;
     }
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      const project = await openWikiProject(openPath.trim())
-      setProject(project)
+      const project = await openWikiProject(openPath.trim());
+      setProject(project);
     } catch (e) {
-      setError(`打开失败: ${e}`)
-      setErrorGlobal(`打开失败: ${e}`)
+      setError(`打开失败: ${e}`);
+      setErrorGlobal(`打开失败: ${e}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex h-full items-center justify-center bg-bg-muted/50">
@@ -148,10 +148,8 @@ export function WikiProjectPicker() {
           </div>
         )}
 
-        {error && (
-          <div className="mt-4 rounded-md bg-error/10 p-3 text-xs text-error">{error}</div>
-        )}
+        {error && <div className="mt-4 rounded-md bg-error/10 p-3 text-xs text-error">{error}</div>}
       </div>
     </div>
-  )
+  );
 }

@@ -1,15 +1,15 @@
 // Knowledge Page - Wiki workspace
-import { WikiChat } from '../components/wiki/WikiChat'
-import { WikiEditor } from '../components/wiki/WikiEditor'
-import { WikiFileTree } from '../components/wiki/WikiFileTree'
-import { WikiProjectPicker } from '../components/wiki/WikiProjectPicker'
-import { WikiSearch } from '../components/wiki/WikiSearch'
-import { WikiToolbar } from '../components/wiki/WikiToolbar'
-import { useWikiStore } from '../stores/wiki-store'
+import { WikiChat } from '../components/wiki/WikiChat';
+import { WikiEditor } from '../components/wiki/WikiEditor';
+import { WikiFileTree } from '../components/wiki/WikiFileTree';
+import { WikiProjectPicker } from '../components/wiki/WikiProjectPicker';
+import { WikiSearch } from '../components/wiki/WikiSearch';
+import { WikiToolbar } from '../components/wiki/WikiToolbar';
+import { useWikiStore } from '../stores/wiki-store';
 
 export function Knowledge() {
-  const project = useWikiStore((s) => s.project)
-  const activeView = useWikiStore((s) => s.activeView)
+  const project = useWikiStore((s) => s.project);
+  const activeView = useWikiStore((s) => s.activeView);
 
   if (!project) {
     return (
@@ -21,7 +21,7 @@ export function Knowledge() {
           <WikiProjectPicker />
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -45,5 +45,5 @@ export function Knowledge() {
         </div>
       </div>
     </div>
-  )
+  );
 }

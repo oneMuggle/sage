@@ -25,12 +25,12 @@ Sage 是 React + Tauri + FastAPI 架构的 LLM 对话应用。上一里程碑（
 
 **目标（4 个方向，统一推进）**：
 
-| 方向 | 期望结果 |
-|------|----------|
-| **架构与可观测性** | 后端六边形（Ports & Adapters）、前端 FSD、9 个核心指标 + OTel trace + 审计 |
-| **测试与质量门禁** | 后端 ≥ 80% 覆盖率、CI 三 job、pre-commit/pre-push、FSD 边界规则 |
-| **前端 UX 与可访问性** | 错误/加载/重试统一、Lighthouse a11y ≥ 95、WCAG 2.2 AA 重点子集 |
-| **全栈质量门禁套餐** | 上述三方向在 CI 中一站式集成 |
+| 方向                   | 期望结果                                                                   |
+| ---------------------- | -------------------------------------------------------------------------- |
+| **架构与可观测性**     | 后端六边形（Ports & Adapters）、前端 FSD、9 个核心指标 + OTel trace + 审计 |
+| **测试与质量门禁**     | 后端 ≥ 80% 覆盖率、CI 三 job、pre-commit/pre-push、FSD 边界规则            |
+| **前端 UX 与可访问性** | 错误/加载/重试统一、Lighthouse a11y ≥ 95、WCAG 2.2 AA 重点子集             |
+| **全栈质量门禁套餐**   | 上述三方向在 CI 中一站式集成                                               |
 
 **成功标准**：
 
@@ -47,6 +47,7 @@ Sage 是 React + Tauri + FastAPI 架构的 LLM 对话应用。上一里程碑（
 **力度**：重量级（1-2 月投入）
 
 **架构选型**：
+
 - 后端：**六边形（Ports & Adapters）**
 - 前端：**Feature-Sliced Design (FSD)**
 - 桌面：**Tauri 2 + Win7 全兼容**（含 x86 workaround）
@@ -152,13 +153,13 @@ backend/tests/
 
 **覆盖率门槛**（分模块，用 `pytest-cov --cov-fail-under=80` + 自定义报告）：
 
-| 模块 | 阈值 | 理由 |
-|------|------|------|
-| `backend/core/` (agent / orchestrator / llm_client) | ≥ 90% | 核心逻辑，错误代价高 |
-| `backend/api/` (routes) | ≥ 85% | HTTP 边界 |
-| `backend/tools/` | ≥ 85% | 安全敏感（终端、文件、网络） |
-| `backend/skills/` | ≥ 70% | 业务逻辑偏轻，输出偏内容 |
-| `backend/agents/`、`backend/scheduler/`、`backend/plugins/` | ≥ 60% | 编排层，集成测试兜底 |
+| 模块                                                        | 阈值  | 理由                         |
+| ----------------------------------------------------------- | ----- | ---------------------------- |
+| `backend/core/` (agent / orchestrator / llm_client)         | ≥ 90% | 核心逻辑，错误代价高         |
+| `backend/api/` (routes)                                     | ≥ 85% | HTTP 边界                    |
+| `backend/tools/`                                            | ≥ 85% | 安全敏感（终端、文件、网络） |
+| `backend/skills/`                                           | ≥ 70% | 业务逻辑偏轻，输出偏内容     |
+| `backend/agents/`、`backend/scheduler/`、`backend/plugins/` | ≥ 60% | 编排层，集成测试兜底         |
 
 ### 3.2 后端 Lint/Type
 
@@ -171,12 +172,14 @@ backend/tests/
 **vitest 4.1.8**（已有）+ `@testing-library/react` 16.3.2（已有）
 
 **已有 4 个测试**（`src/lib/__tests__/`）：
+
 - `apiErrorMapping.test.ts`
 - `llmStream.test.ts`
 - `logger.test.ts`
 - `errorMapping.test.ts`
 
 **本次补 8-12 个关键测试**：
+
 - `useChat.test.ts`（核心 hook）
 - `settings.test.ts`（store 关键）
 - `errorBoundary.test.tsx`
@@ -184,11 +187,11 @@ backend/tests/
 
 **覆盖率阈值**（用 `vitest --coverage.thresholds`）：
 
-| 模块 | 阈值 |
-|------|------|
-| `src/features/`、`src/entities/` | ≥ 80% |
-| `src/widgets/`、`src/pages/` | ≥ 70% |
-| `src/shared/` | 不设阈值 |
+| 模块                             | 阈值     |
+| -------------------------------- | -------- |
+| `src/features/`、`src/entities/` | ≥ 80%    |
+| `src/widgets/`、`src/pages/`     | ≥ 70%    |
+| `src/shared/`                    | 不设阈值 |
 
 ### 3.4 前端 Lint/Format
 
@@ -204,16 +207,16 @@ pre-commit:
   parallel: true
   commands:
     backend-lint:
-      glob: "backend/**/*.py"
+      glob: 'backend/**/*.py'
       run: cd backend && ruff check --fix {staged_files}
     backend-format:
-      glob: "backend/**/*.py"
+      glob: 'backend/**/*.py'
       run: cd backend && ruff format {staged_files}
     frontend-lint:
-      glob: "src/**/*.{ts,tsx}"
+      glob: 'src/**/*.{ts,tsx}'
       run: npx eslint --fix {staged_files}
     frontend-format:
-      glob: "src/**/*.{ts,tsx}"
+      glob: 'src/**/*.{ts,tsx}'
       run: npx prettier --write {staged_files}
 
 pre-push:
@@ -256,7 +259,7 @@ jobs:
         with: { node-version: '25', cache: 'npm' }
       - run: npm ci
       - run: npm run lint
-      - run: npm run typecheck    # tsc --noEmit
+      - run: npm run typecheck # tsc --noEmit
       - run: npm run test:coverage
       - uses: codecov/codecov-action@v4
 
@@ -274,6 +277,7 @@ jobs:
 ```
 
 **后端环境**：
+
 - 沿用 `sage-backend` conda 环境
 - 新增 `backend/environment.yml` 声明 Python 3.11 + 依赖，CI 与本地一致
 - CI 启动慢可用 `micromamba` 替代（10× 快）
@@ -294,6 +298,7 @@ jobs:
 ### 4.1 后端核心模块测试补齐
 
 **重点文件**（按优先级）：
+
 1. `core/agent.py` —— 状态机分支全测（IDLE / THINKING / ACTING / OBSERVING / DONE / FAILED）
 2. `core/orchestrator.py` —— 调度逻辑
 3. `core/llm_client.py` —— 已有 PARSING 测试，需补 timeout / network / rate limit
@@ -302,6 +307,7 @@ jobs:
 6. `skills/` —— 5 个技能（coder / search / travel / writer + builtin registry）
 
 **Mock 约定**：
+
 - LLM mock 用 `httpx.MockTransport` 返回 fixture
 - 文件系统 mock 用 `tmp_path` fixture
 - 不替身内部函数（保持测试真实性）
@@ -376,6 +382,7 @@ backend/
 ```
 
 **约束**：
+
 - 仅允许 `typing`、`dataclasses`、`enum`、`abc`
 - 不允许 import 自 `adapters` / `api` / `core` / `utils`（用 `import-linter` 强约束）
 
@@ -487,17 +494,17 @@ layers = ['backend.domain', 'backend.ports', 'backend.application', 'backend.ada
 
 #### 指标清单（9 个核心）
 
-| 类型 | 指标名 | 标签 | 用途 |
-|------|--------|------|------|
-| Counter | `sage_http_requests_total` | route, method, status | HTTP 请求 |
-| Counter | `sage_llm_calls_total` | model, provider, outcome | LLM 调用 |
-| Counter | `sage_tool_invocations_total` | tool, outcome | 工具调用 |
-| Counter | `sage_tokens_consumed_total` | model, kind | kind ∈ {prompt, completion} |
-| Counter | `sage_errors_total` | layer, error_type | 错误计数 |
-| Histogram | `sage_http_request_duration_seconds` | route | HTTP 延迟 |
-| Histogram | `sage_llm_call_duration_seconds` | model | LLM 延迟 |
-| Histogram | `sage_react_steps_per_request` | — | ReAct 步数分布 |
-| Gauge | `sage_active_sessions` | — | 当前活跃 |
+| 类型      | 指标名                               | 标签                     | 用途                        |
+| --------- | ------------------------------------ | ------------------------ | --------------------------- |
+| Counter   | `sage_http_requests_total`           | route, method, status    | HTTP 请求                   |
+| Counter   | `sage_llm_calls_total`               | model, provider, outcome | LLM 调用                    |
+| Counter   | `sage_tool_invocations_total`        | tool, outcome            | 工具调用                    |
+| Counter   | `sage_tokens_consumed_total`         | model, kind              | kind ∈ {prompt, completion} |
+| Counter   | `sage_errors_total`                  | layer, error_type        | 错误计数                    |
+| Histogram | `sage_http_request_duration_seconds` | route                    | HTTP 延迟                   |
+| Histogram | `sage_llm_call_duration_seconds`     | model                    | LLM 延迟                    |
+| Histogram | `sage_react_steps_per_request`       | —                        | ReAct 步数分布              |
+| Gauge     | `sage_active_sessions`               | —                        | 当前活跃                    |
 
 #### 端口抽象
 
@@ -577,12 +584,12 @@ src/shared/ui/
 
 #### CI 矩阵
 
-| OS | Runner | 验证项 |
-|----|--------|--------|
-| Linux | `ubuntu-latest` | 构建成功 |
-| Windows 10 | `windows-2019` | 构建 + 启动 |
-| Windows 11 | `windows-2022` | 构建 + 启动 |
-| macOS | `macos-latest` | 构建 |
+| OS            | Runner                 | 验证项            |
+| ------------- | ---------------------- | ----------------- |
+| Linux         | `ubuntu-latest`        | 构建成功          |
+| Windows 10    | `windows-2019`         | 构建 + 启动       |
+| Windows 11    | `windows-2022`         | 构建 + 启动       |
+| macOS         | `macos-latest`         | 构建              |
 | Windows 7 x64 | 自托管 runner（P3 末） | 启动 + 显示主窗口 |
 
 ### 6.4 P3 退出标准
@@ -602,32 +609,35 @@ src/shared/ui/
 
 ### 7.1 风险登记
 
-| # | 风险 | 概率 | 影响 | 缓解 |
-|---|------|------|------|------|
-| R1 | pytest 80% 门槛过严，达标耗时超出 P1 工期 | 中 | 中 | 优先 `core/` ≥ 90%，其他模块渐进 |
-| R2 | 后端六边形重构破坏现有 E2E 行为 | 中 | 高 | 严格门禁：每次 PR 必须 e2e 通过；重构期冻结新功能 |
-| R3 | 前端 FSD 迁移引入循环依赖 | 高 | 中 | 物理迁移前先加边界规则空跑一周 |
-| R4 | Tauri 2 迁移到 Win7 x86 编译失败 | 高 | 中 | 双轨：x64 必达，x86 列入 known-limitation |
-| R5 | UX 改造（颜色、a11y）触发视觉回归 | 中 | 中 | 改造前 Playwright snapshot 基线 |
-| R6 | `prometheus_client` 内存随 cardinality 增长 | 低 | 中 | 规范化 route 标签（不用 URL path 含 ID） |
-| R7 | 六边形 + FSD 同时落地，团队认知负担 | 中 | 中 | 阶段间设"消化周"，每阶段末有技术分享 |
-| R8 | Tauri 2 + Win7 embedBootstrapper 增加 1.8MB 安装包 | 低 | 低 | 用户接受（vs 升级价值） |
-| R9 | lint/format hook 让 dev 工作流变慢 | 中 | 低 | hook 异步 + 只跑 staged 文件 |
-| R10 | 多阶段并发出现 PR 冲突 | 中 | 中 | 主分支冻结大变更；PR 24h 内合并 |
+| #   | 风险                                               | 概率 | 影响 | 缓解                                              |
+| --- | -------------------------------------------------- | ---- | ---- | ------------------------------------------------- |
+| R1  | pytest 80% 门槛过严，达标耗时超出 P1 工期          | 中   | 中   | 优先 `core/` ≥ 90%，其他模块渐进                  |
+| R2  | 后端六边形重构破坏现有 E2E 行为                    | 中   | 高   | 严格门禁：每次 PR 必须 e2e 通过；重构期冻结新功能 |
+| R3  | 前端 FSD 迁移引入循环依赖                          | 高   | 中   | 物理迁移前先加边界规则空跑一周                    |
+| R4  | Tauri 2 迁移到 Win7 x86 编译失败                   | 高   | 中   | 双轨：x64 必达，x86 列入 known-limitation         |
+| R5  | UX 改造（颜色、a11y）触发视觉回归                  | 中   | 中   | 改造前 Playwright snapshot 基线                   |
+| R6  | `prometheus_client` 内存随 cardinality 增长        | 低   | 中   | 规范化 route 标签（不用 URL path 含 ID）          |
+| R7  | 六边形 + FSD 同时落地，团队认知负担                | 中   | 中   | 阶段间设"消化周"，每阶段末有技术分享              |
+| R8  | Tauri 2 + Win7 embedBootstrapper 增加 1.8MB 安装包 | 低   | 低   | 用户接受（vs 升级价值）                           |
+| R9  | lint/format hook 让 dev 工作流变慢                 | 中   | 低   | hook 异步 + 只跑 staged 文件                      |
+| R10 | 多阶段并发出现 PR 冲突                             | 中   | 中   | 主分支冻结大变更；PR 24h 内合并                   |
 
 ### 7.2 回滚策略
 
 #### P0 回滚
+
 - 工具链是 additive，CI 配置可整体回退到 P0 前
 - pre-commit hooks 删除 `lefthook.yml` + `git config core.hooksPath` 恢复
 - **回滚时间**：≤ 1 小时
 
 #### P1 回滚
+
 - 覆盖率门槛可临时下调
 - FSD 物理迁移：保留新目录，旧文件保留 `legacy/` 前缀可读路径
 - **回滚时间**：≤ 1 天
 
 #### P2 回滚（关键）
+
 - **双轨策略**：
   - 旧路径（`api/routes.py` 直接调用 `core/agent.py`）保留为 `legacy/`
   - 新路径（`api/routes.py` → `application/services/ChatService` → ports）逐步替代
@@ -635,6 +645,7 @@ src/shared/ui/
 - **回滚时间**：≤ 4 小时
 
 #### P3 回滚
+
 - Tauri 2 → Tauri 1.6：git tag + cherry-pick；依赖锁定文件保留
 - Win7 兼容：可关闭 `windows7-compat` feature
 - Metrics endpoint：可独立移除
@@ -643,44 +654,44 @@ src/shared/ui/
 
 ### 7.3 沟通与变更管理
 
-| 节点 | 动作 |
-|------|------|
+| 节点    | 动作                                                                                                    |
+| ------- | ------------------------------------------------------------------------------------------------------- |
 | P0 启动 | 在 `docs/plans/2026-06-05_sage-quality-optimization.md` 公示 + `.claude/CLAUDE.md` 记录环境与工具链变化 |
-| P0 末 | 技术分享："质量门禁如何工作"（30 分钟） |
-| P1 末 | 技术分享："FSD 边界规则与 React 适配"（45 分钟） |
-| P2 末 | 技术分享："六边形在 LLM 应用的落地"（60 分钟） |
-| P3 末 | 文档发布：`docs/technical/15-quality-gates.md`、`16-observability.md`、`17-frontend-quality.md` |
-| 阶段中 | 每周一状态贴：本周完成 + 下周计划 |
+| P0 末   | 技术分享："质量门禁如何工作"（30 分钟）                                                                 |
+| P1 末   | 技术分享："FSD 边界规则与 React 适配"（45 分钟）                                                        |
+| P2 末   | 技术分享："六边形在 LLM 应用的落地"（60 分钟）                                                          |
+| P3 末   | 文档发布：`docs/technical/15-quality-gates.md`、`16-observability.md`、`17-frontend-quality.md`         |
+| 阶段中  | 每周一状态贴：本周完成 + 下周计划                                                                       |
 
 ---
 
 ## 8. 总体成功指标
 
-| 指标 | 基线（2026-06-05 P0-T3 实测） | 目标 | 衡量方式 |
-|------|------|------|----------|
-| 后端测试覆盖率 | **43%**（2895 stmts, 1650 missed；41 测试全过） | ≥ 80% | `pytest --cov` |
-| 后端测试数 | 41 | ≥ 80（P1 末 +PG1.1–PG1.6 补齐） | `pytest --collect-only` |
-| 前端测试覆盖率 | TBD（P0-T8 末测） | ≥ 60%（核心 ≥ 80%） | `vitest --coverage` |
-| CI 跑通时间 | 无 CI | ≤ 8 分钟（无 Tauri） | GH Actions |
-| 端到端可用率 | 单平台 | Web + 桌面三平台 + Win7 | 手动 + E2E |
-| a11y 评分 | TBD（P3 末测） | ≥ 95 | Lighthouse |
-| 文件 < 800 行 | 100% | 100% 维持 | `wc -l` 扫描 |
-| 模块依赖图 | 散乱 | 后端六边形 + 前端 FSD 清晰 | import-linter / eslint 边界规则 |
-| 平均 PR review 时间 | 无基线 | ≤ 24h | GH 统计 |
+| 指标                | 基线（2026-06-05 P0-T3 实测）                   | 目标                            | 衡量方式                        |
+| ------------------- | ----------------------------------------------- | ------------------------------- | ------------------------------- |
+| 后端测试覆盖率      | **43%**（2895 stmts, 1650 missed；41 测试全过） | ≥ 80%                           | `pytest --cov`                  |
+| 后端测试数          | 41                                              | ≥ 80（P1 末 +PG1.1–PG1.6 补齐） | `pytest --collect-only`         |
+| 前端测试覆盖率      | TBD（P0-T8 末测）                               | ≥ 60%（核心 ≥ 80%）             | `vitest --coverage`             |
+| CI 跑通时间         | 无 CI                                           | ≤ 8 分钟（无 Tauri）            | GH Actions                      |
+| 端到端可用率        | 单平台                                          | Web + 桌面三平台 + Win7         | 手动 + E2E                      |
+| a11y 评分           | TBD（P3 末测）                                  | ≥ 95                            | Lighthouse                      |
+| 文件 < 800 行       | 100%                                            | 100% 维持                       | `wc -l` 扫描                    |
+| 模块依赖图          | 散乱                                            | 后端六边形 + 前端 FSD 清晰      | import-linter / eslint 边界规则 |
+| 平均 PR review 时间 | 无基线                                          | ≤ 24h                           | GH 统计                         |
 
 **P0 末覆盖率摸底（per module）**：
 
-| 模块 | 基线 | 目标 | 阶段 |
-|------|------|------|------|
-| `core/agent.py` | 62% | ≥ 90% | P1 PG1.1 |
-| `core/llm_client.py` | 67% | ≥ 90% | P1 PG1.3 |
-| `core/orchestrator.py` | 21% | ≥ 90% | P1 PG1.2 |
-| `core/conventions.py` | 25% | ≥ 70% | P1 PG1.x |
-| `api/routes.py` | 68% | ≥ 85% | P1 PG1.4 |
-| `tools/*.py` | 待测 | ≥ 85% | P1 PG1.5 |
-| `skills/builtin/*.py` | 19~27% | ≥ 70% | P1 PG1.6 |
-| `scheduler/*.py` | 14~18% | ≥ 60% | P1 PG1.x |
-| `memory/*.py` | 24~28% | ≥ 60% | P1 PG1.x |
+| 模块                   | 基线   | 目标  | 阶段     |
+| ---------------------- | ------ | ----- | -------- |
+| `core/agent.py`        | 62%    | ≥ 90% | P1 PG1.1 |
+| `core/llm_client.py`   | 67%    | ≥ 90% | P1 PG1.3 |
+| `core/orchestrator.py` | 21%    | ≥ 90% | P1 PG1.2 |
+| `core/conventions.py`  | 25%    | ≥ 70% | P1 PG1.x |
+| `api/routes.py`        | 68%    | ≥ 85% | P1 PG1.4 |
+| `tools/*.py`           | 待测   | ≥ 85% | P1 PG1.5 |
+| `skills/builtin/*.py`  | 19~27% | ≥ 70% | P1 PG1.6 |
+| `scheduler/*.py`       | 14~18% | ≥ 60% | P1 PG1.x |
+| `memory/*.py`          | 24~28% | ≥ 60% | P1 PG1.x |
 
 ---
 
@@ -704,35 +715,35 @@ src/shared/ui/
 
 ### 新建（技术手册）
 
-| 文件 | 章节 | 阶段 |
-|------|------|------|
-| `docs/technical/15-quality-gates.md` | 质量门禁：CI / hook / 工具链 | P0 末 |
-| `docs/technical/16-observability.md` | 可观测性：指标 / trace / 审计 | P3 末 |
+| 文件                                    | 章节                          | 阶段          |
+| --------------------------------------- | ----------------------------- | ------------- |
+| `docs/technical/15-quality-gates.md`    | 质量门禁：CI / hook / 工具链  | P0 末         |
+| `docs/technical/16-observability.md`    | 可观测性：指标 / trace / 审计 | P3 末         |
 | `docs/technical/17-frontend-quality.md` | 前端质量：FSD / a11y / 组件库 | P1 末 + P3 末 |
-| `docs/technical/18-hexagonal.md` | 六边形架构详解 | P2 末 |
+| `docs/technical/18-hexagonal.md`        | 六边形架构详解                | P2 末         |
 
 ### 更新（技术手册）
 
-| 文件 | 更新点 | 阶段 |
-|------|--------|------|
-| `docs/technical/02-architecture.md` | 整体重写为六边形视角 | P2 末 |
-| `docs/technical/05-agent.md` | 引用路径更新 | P2 末 |
-| `docs/technical/06-tools.md` | 引用路径更新 | P2 末 |
-| `docs/technical/07-skills.md` | 引用路径更新 | P2 末 |
-| `docs/technical/09-frontend.md` | FSD 章节 | P1 末 |
-| `docs/technical/README.md` | 章节目录更新 | 各阶段末 |
+| 文件                                | 更新点               | 阶段     |
+| ----------------------------------- | -------------------- | -------- |
+| `docs/technical/02-architecture.md` | 整体重写为六边形视角 | P2 末    |
+| `docs/technical/05-agent.md`        | 引用路径更新         | P2 末    |
+| `docs/technical/06-tools.md`        | 引用路径更新         | P2 末    |
+| `docs/technical/07-skills.md`       | 引用路径更新         | P2 末    |
+| `docs/technical/09-frontend.md`     | FSD 章节             | P1 末    |
+| `docs/technical/README.md`          | 章节目录更新         | 各阶段末 |
 
 ### 新建（用户手册）
 
-| 文件 | 内容 | 阶段 |
-|------|------|------|
+| 文件                             | 内容                                    | 阶段  |
+| -------------------------------- | --------------------------------------- | ----- |
 | `docs/user-manual/01-desktop.md` | Tauri 桌面端安装 / 启动 / Win7 兼容说明 | P3 末 |
-| `docs/user-manual/02-metrics.md` | `/metrics` 端点说明（开发者） | P3 末 |
+| `docs/user-manual/02-metrics.md` | `/metrics` 端点说明（开发者）           | P3 末 |
 
 ### 新建（计划文档）
 
-| 文件 | 内容 | 时机 |
-|------|------|------|
+| 文件                                                 | 内容                             | 时机               |
+| ---------------------------------------------------- | -------------------------------- | ------------------ |
 | `docs/plans/2026-06-05_sage-quality-optimization.md` | 本次优化的实施计划（细化到任务） | writing-plans 阶段 |
 
 ---

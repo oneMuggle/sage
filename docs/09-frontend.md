@@ -4,16 +4,16 @@
 
 ### 9.1.1 技术栈
 
-| 层级 | 技术 | 版本 | 说明 |
-|-----|------|------|------|
-| 框架 | React | 18.x | 成熟稳定 |
-| 构建 | Vite | 5.x | 快速开发 |
-| 状态 | Zustand | 4.x | 轻量状态管理 |
-| 样式 | Tailwind CSS | 3.x | Chatbox 同款 |
-| 路由 | React Router | 6.x | SPA 路由 |
-| 组件 | Headless UI | 2.x | 无样式组件库 |
-| i18n | i18next | 23.x | 多语言 |
-| 图标 | Lucide | 0.3xx | 轻量图标 |
+| 层级 | 技术         | 版本  | 说明         |
+| ---- | ------------ | ----- | ------------ |
+| 框架 | React        | 18.x  | 成熟稳定     |
+| 构建 | Vite         | 5.x   | 快速开发     |
+| 状态 | Zustand      | 4.x   | 轻量状态管理 |
+| 样式 | Tailwind CSS | 3.x   | Chatbox 同款 |
+| 路由 | React Router | 6.x   | SPA 路由     |
+| 组件 | Headless UI  | 2.x   | 无样式组件库 |
+| i18n | i18next      | 23.x  | 多语言       |
+| 图标 | Lucide       | 0.3xx | 轻量图标     |
 
 ### 9.1.2 目录结构
 
@@ -103,41 +103,41 @@ src/
 /* CSS Variables for Theming */
 :root {
   /* Light Theme */
-  --color-primary: #4F46E5;      /* 靛蓝色主色 */
-  --color-primary-hover: #4338CA;
-  --color-secondary: #10B981;    /* 翠绿色 */
-  --color-accent: #F59E0B;       /* 琥珀色 */
+  --color-primary: #4f46e5; /* 靛蓝色主色 */
+  --color-primary-hover: #4338ca;
+  --color-secondary: #10b981; /* 翠绿色 */
+  --color-accent: #f59e0b; /* 琥珀色 */
 
-  --color-bg: #FFFFFF;
-  --color-bg-secondary: #F9FAFB;
-  --color-bg-tertiary: #F3F4F6;
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f9fafb;
+  --color-bg-tertiary: #f3f4f6;
 
   --color-text: #111827;
-  --color-text-secondary: #6B7280;
-  --color-text-muted: #9CA3AF;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
 
-  --color-border: #E5E7EB;
-  --color-border-hover: #D1D5DB;
+  --color-border: #e5e7eb;
+  --color-border-hover: #d1d5db;
 
-  --color-success: #10B981;
-  --color-error: #EF4444;
-  --color-warning: #F59E0B;
+  --color-success: #10b981;
+  --color-error: #ef4444;
+  --color-warning: #f59e0b;
 }
 
-[data-theme="dark"] {
-  --color-primary: #818CF8;
-  --color-primary-hover: #A5B4FC;
+[data-theme='dark'] {
+  --color-primary: #818cf8;
+  --color-primary-hover: #a5b4fc;
 
   --color-bg: #111827;
-  --color-bg-secondary: #1F2937;
+  --color-bg-secondary: #1f2937;
   --color-bg-tertiary: #374151;
 
-  --color-text: #F9FAFB;
-  --color-text-secondary: #D1D5DB;
-  --color-text-muted: #9CA3AF;
+  --color-text: #f9fafb;
+  --color-text-secondary: #d1d5db;
+  --color-text-muted: #9ca3af;
 
   --color-border: #374151;
-  --color-border-hover: #4B5563;
+  --color-border-hover: #4b5563;
 }
 ```
 
@@ -159,16 +159,16 @@ font-family:
 
 ```tsx
 // components/chat/ChatInput.tsx
-import { useState, useRef } from 'react'
-import { Send, Square, Loader2 } from 'lucide-react'
-import { Button } from '../common/Button'
+import { useState, useRef } from 'react';
+import { Send, Square, Loader2 } from 'lucide-react';
+import { Button } from '../common/Button';
 
 interface ChatInputProps {
-  onSend: (message: string) => void
-  onInterrupt?: () => void
-  isLoading?: boolean
-  disabled?: boolean
-  placeholder?: string
+  onSend: (message: string) => void;
+  onInterrupt?: () => void;
+  isLoading?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
 }
 
 export function ChatInput({
@@ -176,31 +176,31 @@ export function ChatInput({
   onInterrupt,
   isLoading = false,
   disabled = false,
-  placeholder = '输入消息...'
+  placeholder = '输入消息...',
 }: ChatInputProps) {
-  const [value, setValue] = useState('')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [value, setValue] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = () => {
-    if (!value.trim() || isLoading) return
-    onSend(value.trim())
-    setValue('')
-  }
+    if (!value.trim() || isLoading) return;
+    onSend(value.trim());
+    setValue('');
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
+      e.preventDefault();
+      handleSend();
     }
-  }
+  };
 
   // Auto-resize textarea
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setValue(e.target.value)
-    const ta = e.target
-    ta.style.height = 'auto'
-    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
-  }
+    setValue(e.target.value);
+    const ta = e.target;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  };
 
   return (
     <div className="flex items-end gap-2 border-t p-4 bg-white dark:bg-gray-800">
@@ -255,24 +255,16 @@ export function ChatInput({
 
       {/* 发送按钮 */}
       {isLoading ? (
-        <Button
-          variant="danger"
-          onClick={onInterrupt}
-          title="停止"
-        >
+        <Button variant="danger" onClick={onInterrupt} title="停止">
           <Square className="w-5 h-5" />
         </Button>
       ) : (
-        <Button
-          variant="primary"
-          onClick={handleSend}
-          disabled={!value.trim() || disabled}
-        >
+        <Button variant="primary" onClick={handleSend} disabled={!value.trim() || disabled}>
           <Send className="w-5 h-5" />
         </Button>
       )}
     </div>
-  )
+  );
 }
 ```
 
@@ -280,20 +272,20 @@ export function ChatInput({
 
 ```tsx
 // components/chat/Message.tsx
-import { useState } from 'react'
-import { Copy, ThumbsUp, ThumbsDown, MoreHorizontal } from 'lucide-react'
-import type { Message as MessageType } from '../../lib/api'
+import { useState } from 'react';
+import { Copy, ThumbsUp, ThumbsDown, MoreHorizontal } from 'lucide-react';
+import type { Message as MessageType } from '../../lib/api';
 
 interface MessageProps {
-  message: MessageType
-  onFeedback?: (messageId: string, feedback: 'up' | 'down') => void
+  message: MessageType;
+  onFeedback?: (messageId: string, feedback: 'up' | 'down') => void;
 }
 
 export function Message({ message, onFeedback }: MessageProps) {
-  const [showActions, setShowActions] = useState(false)
+  const [showActions, setShowActions] = useState(false);
 
-  const isUser = message.role === 'user'
-  const isAssistant = message.role === 'assistant'
+  const isUser = message.role === 'user';
+  const isAssistant = message.role === 'assistant';
 
   return (
     <div
@@ -307,9 +299,10 @@ export function Message({ message, onFeedback }: MessageProps) {
       <div
         className={`
           max-w-[80%] rounded-2xl px-4 py-3
-          ${isUser
-            ? 'bg-primary text-white rounded-br-md'
-            : 'bg-gray-100 dark:bg-gray-700 rounded-bl-md'
+          ${
+            isUser
+              ? 'bg-primary text-white rounded-br-md'
+              : 'bg-gray-100 dark:bg-gray-700 rounded-bl-md'
           }
         `}
       >
@@ -321,25 +314,29 @@ export function Message({ message, onFeedback }: MessageProps) {
         {/* 工具调用显示 */}
         {message.tool_calls && message.tool_calls.length > 0 && (
           <div className="mt-2 text-xs opacity-75">
-            🔧 使用工具: {message.tool_calls.map(tc => tc.name).join(', ')}
+            🔧 使用工具: {message.tool_calls.map((tc) => tc.name).join(', ')}
           </div>
         )}
 
         {/* 底部信息 */}
-        <div className={`
+        <div
+          className={`
           flex items-center gap-2 mt-1 text-xs
           ${isUser ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}
-        `}>
+        `}
+        >
           <span>{new Date(message.created_at).toLocaleTimeString()}</span>
           {message.tokens && <span>{message.tokens} tokens</span>}
         </div>
 
         {/* 操作按钮 */}
         {showActions && isAssistant && (
-          <div className={`
+          <div
+            className={`
             flex items-center gap-1 mt-2 pt-2 border-t
             ${isUser ? 'border-white/20' : 'border-gray-200 dark:border-gray-600'}
-          `}>
+          `}
+          >
             <button
               onClick={() => navigator.clipboard.writeText(message.content)}
               className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10"
@@ -370,7 +367,7 @@ export function Message({ message, onFeedback }: MessageProps) {
         )}
       </div>
     </div>
-  )
+  );
 }
 ```
 
@@ -378,25 +375,25 @@ export function Message({ message, onFeedback }: MessageProps) {
 
 ```tsx
 // components/session/SessionList.tsx
-import { useState } from 'react'
-import { Plus, Search, MoreVertical, Trash2, Pin } from 'lucide-react'
-import { SessionItem } from './SessionItem'
-import { Button } from '../common/Button'
+import { useState } from 'react';
+import { Plus, Search, MoreVertical, Trash2, Pin } from 'lucide-react';
+import { SessionItem } from './SessionItem';
+import { Button } from '../common/Button';
 
 interface Session {
-  id: string
-  title: string
-  updated_at: number
-  is_pinned?: boolean
+  id: string;
+  title: string;
+  updated_at: number;
+  is_pinned?: boolean;
 }
 
 interface SessionListProps {
-  sessions: Session[]
-  currentSessionId: string | null
-  onSelect: (id: string) => void
-  onNew: () => void
-  onDelete: (id: string) => void
-  onPin: (id: string) => void
+  sessions: Session[];
+  currentSessionId: string | null;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+  onDelete: (id: string) => void;
+  onPin: (id: string) => void;
 }
 
 export function SessionList({
@@ -405,16 +402,16 @@ export function SessionList({
   onSelect,
   onNew,
   onDelete,
-  onPin
+  onPin,
 }: SessionListProps) {
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredSessions = sessions.filter(s =>
-    s.title.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredSessions = sessions.filter((s) =>
+    s.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
-  const pinned = filteredSessions.filter(s => s.is_pinned)
-  const unpinned = filteredSessions.filter(s => !s.is_pinned)
+  const pinned = filteredSessions.filter((s) => s.is_pinned);
+  const unpinned = filteredSessions.filter((s) => !s.is_pinned);
 
   return (
     <div className="flex flex-col h-full">
@@ -426,7 +423,7 @@ export function SessionList({
             type="text"
             placeholder="搜索会话..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="
               w-full pl-9 pr-3 py-2 rounded-lg
               bg-gray-100 dark:bg-gray-700
@@ -439,11 +436,7 @@ export function SessionList({
 
       {/* 新建按钮 */}
       <div className="p-3">
-        <Button
-          variant="primary"
-          className="w-full"
-          onClick={onNew}
-        >
+        <Button variant="primary" className="w-full" onClick={onNew}>
           <Plus className="w-4 h-4 mr-2" />
           新对话
         </Button>
@@ -454,10 +447,8 @@ export function SessionList({
         {/* 置顶会话 */}
         {pinned.length > 0 && (
           <div className="px-3 py-1">
-            <div className="text-xs text-gray-500 dark:text-gray-400 px-2 mb-1">
-              置顶
-            </div>
-            {pinned.map(session => (
+            <div className="text-xs text-gray-500 dark:text-gray-400 px-2 mb-1">置顶</div>
+            {pinned.map((session) => (
               <SessionItem
                 key={session.id}
                 session={session}
@@ -474,11 +465,9 @@ export function SessionList({
         {unpinned.length > 0 && (
           <div className="px-3 py-1">
             {pinned.length > 0 && (
-              <div className="text-xs text-gray-500 dark:text-gray-400 px-2 mb-1">
-                最近
-              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 px-2 mb-1">最近</div>
             )}
-            {unpinned.map(session => (
+            {unpinned.map((session) => (
               <SessionItem
                 key={session.id}
                 session={session}
@@ -499,7 +488,7 @@ export function SessionList({
         )}
       </div>
     </div>
-  )
+  );
 }
 ```
 
@@ -507,58 +496,53 @@ export function SessionList({
 
 ```tsx
 // components/memory/MemoryBrowser.tsx
-import { useState, useEffect } from 'react'
-import { Search, Filter, Trash2, Edit2, Tag } from 'lucide-react'
-import { Button } from '../common/Button'
-import { Input } from '../common/Input'
+import { useState, useEffect } from 'react';
+import { Search, Filter, Trash2, Edit2, Tag } from 'lucide-react';
+import { Button } from '../common/Button';
+import { Input } from '../common/Input';
 
 interface Memory {
-  id: string
-  content: string
-  summary?: string
-  memory_type: 'episodic' | 'semantic'
-  importance: number
-  created_at: number
-  tags: string[]
+  id: string;
+  content: string;
+  summary?: string;
+  memory_type: 'episodic' | 'semantic';
+  importance: number;
+  created_at: number;
+  tags: string[];
 }
 
 interface MemoryBrowserProps {
-  memories: Memory[]
-  onSearch: (query: string) => void
-  onDelete: (id: string) => void
-  onEdit: (id: string, content: string) => void
+  memories: Memory[];
+  onSearch: (query: string) => void;
+  onDelete: (id: string) => void;
+  onEdit: (id: string, content: string) => void;
 }
 
-export function MemoryBrowser({
-  memories,
-  onSearch,
-  onDelete,
-  onEdit
-}: MemoryBrowserProps) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filterType, setFilterType] = useState<'all' | 'episodic' | 'semantic'>('all')
-  const [editingId, setEditingId] = useState<string | null>(null)
+export function MemoryBrowser({ memories, onSearch, onDelete, onEdit }: MemoryBrowserProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'episodic' | 'semantic'>('all');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchQuery) {
-        onSearch(searchQuery)
+        onSearch(searchQuery);
       }
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [searchQuery, onSearch])
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, onSearch]);
 
-  const filteredMemories = memories.filter(m => {
-    if (filterType !== 'all' && m.memory_type !== filterType) return false
-    return true
-  })
+  const filteredMemories = memories.filter((m) => {
+    if (filterType !== 'all' && m.memory_type !== filterType) return false;
+    return true;
+  });
 
   const getImportanceColor = (importance: number) => {
-    if (importance >= 8) return 'text-red-500'
-    if (importance >= 6) return 'text-orange-500'
-    if (importance >= 4) return 'text-yellow-500'
-    return 'text-gray-400'
-  }
+    if (importance >= 8) return 'text-red-500';
+    if (importance >= 6) return 'text-orange-500';
+    if (importance >= 4) return 'text-yellow-500';
+    return 'text-gray-400';
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -570,7 +554,7 @@ export function MemoryBrowser({
             type="text"
             placeholder="搜索记忆..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="
               w-full pl-9 pr-3 py-2 rounded-lg
               bg-gray-100 dark:bg-gray-700
@@ -580,15 +564,16 @@ export function MemoryBrowser({
         </div>
 
         <div className="flex gap-2">
-          {(['all', 'episodic', 'semantic'] as const).map(type => (
+          {(['all', 'episodic', 'semantic'] as const).map((type) => (
             <button
               key={type}
               onClick={() => setFilterType(type)}
               className={`
                 px-3 py-1 rounded-full text-sm
-                ${filterType === type
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                ${
+                  filterType === type
+                    ? 'bg-primary text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                 }
               `}
             >
@@ -600,7 +585,7 @@ export function MemoryBrowser({
 
       {/* 记忆列表 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {filteredMemories.map(memory => (
+        {filteredMemories.map((memory) => (
           <div
             key={memory.id}
             className="
@@ -657,7 +642,7 @@ export function MemoryBrowser({
                     variant="primary"
                     onClick={() => {
                       // TODO: 保存编辑
-                      setEditingId(null)
+                      setEditingId(null);
                     }}
                   >
                     保存
@@ -665,15 +650,13 @@ export function MemoryBrowser({
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-gray-700 dark:text-gray-300">
-                {memory.content}
-              </p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">{memory.content}</p>
             )}
 
             {/* 标签 */}
             {memory.tags && memory.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
-                {memory.tags.map(tag => (
+                {memory.tags.map((tag) => (
                   <span
                     key={tag}
                     className="
@@ -696,13 +679,11 @@ export function MemoryBrowser({
         ))}
 
         {filteredMemories.length === 0 && (
-          <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-            暂无记忆
-          </div>
+          <div className="text-center text-gray-500 dark:text-gray-400 py-8">暂无记忆</div>
         )}
       </div>
     </div>
-  )
+  );
 }
 ```
 
@@ -714,57 +695,57 @@ export function MemoryBrowser({
 
 ```typescript
 // lib/store.ts
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface Session {
-  id: string
-  title: string
-  created_at: number
-  updated_at: number
-  is_pinned?: boolean
+  id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  is_pinned?: boolean;
 }
 
 interface Message {
-  id: string
-  session_id: string
-  role: 'user' | 'assistant' | 'system' | 'tool'
-  content: string
-  tool_calls?: ToolCall[]
-  created_at: number
-  tokens?: number
+  id: string;
+  session_id: string;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string;
+  tool_calls?: ToolCall[];
+  created_at: number;
+  tokens?: number;
 }
 
 interface AppState {
   // 会话
-  sessions: Session[]
-  currentSessionId: string | null
+  sessions: Session[];
+  currentSessionId: string | null;
 
   // 消息
-  messages: Record<string, Message[]>
+  messages: Record<string, Message[]>;
 
   // UI 状态
-  isTyping: boolean
-  sidebarOpen: boolean
+  isTyping: boolean;
+  sidebarOpen: boolean;
 
   // 记忆
-  memories: Memory[]
-  memorySearchQuery: string
+  memories: Memory[];
+  memorySearchQuery: string;
 
   // Actions
-  setSessions: (sessions: Session[]) => void
-  setCurrentSession: (id: string | null) => void
-  addSession: (session: Session) => void
-  deleteSession: (id: string) => void
+  setSessions: (sessions: Session[]) => void;
+  setCurrentSession: (id: string | null) => void;
+  addSession: (session: Session) => void;
+  deleteSession: (id: string) => void;
 
-  addMessage: (sessionId: string, message: Message) => void
-  clearMessages: (sessionId: string) => void
+  addMessage: (sessionId: string, message: Message) => void;
+  clearMessages: (sessionId: string) => void;
 
-  setIsTyping: (typing: boolean) => void
-  toggleSidebar: () => void
+  setIsTyping: (typing: boolean) => void;
+  toggleSidebar: () => void;
 
-  setMemories: (memories: Memory[]) => void
-  setMemorySearchQuery: (query: string) => void
+  setMemories: (memories: Memory[]) => void;
+  setMemorySearchQuery: (query: string) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -784,33 +765,38 @@ export const useStore = create<AppState>()(
 
       setCurrentSession: (id) => set({ currentSessionId: id }),
 
-      addSession: (session) => set((state) => ({
-        sessions: [session, ...state.sessions]
-      })),
+      addSession: (session) =>
+        set((state) => ({
+          sessions: [session, ...state.sessions],
+        })),
 
-      deleteSession: (id) => set((state) => ({
-        sessions: state.sessions.filter(s => s.id !== id),
-        messages: { ...state.messages, [id]: undefined }
-      })),
+      deleteSession: (id) =>
+        set((state) => ({
+          sessions: state.sessions.filter((s) => s.id !== id),
+          messages: { ...state.messages, [id]: undefined },
+        })),
 
       // 消息操作
-      addMessage: (sessionId, message) => set((state) => ({
-        messages: {
-          ...state.messages,
-          [sessionId]: [...(state.messages[sessionId] || []), message]
-        }
-      })),
+      addMessage: (sessionId, message) =>
+        set((state) => ({
+          messages: {
+            ...state.messages,
+            [sessionId]: [...(state.messages[sessionId] || []), message],
+          },
+        })),
 
-      clearMessages: (sessionId) => set((state) => ({
-        messages: { ...state.messages, [sessionId]: [] }
-      })),
+      clearMessages: (sessionId) =>
+        set((state) => ({
+          messages: { ...state.messages, [sessionId]: [] },
+        })),
 
       // UI 操作
       setIsTyping: (typing) => set({ isTyping: typing }),
 
-      toggleSidebar: () => set((state) => ({
-        sidebarOpen: !state.sidebarOpen
-      })),
+      toggleSidebar: () =>
+        set((state) => ({
+          sidebarOpen: !state.sidebarOpen,
+        })),
 
       // 记忆操作
       setMemories: (memories) => set({ memories }),
@@ -823,91 +809,87 @@ export const useStore = create<AppState>()(
         // 只持久化必要的数据
         sessions: state.sessions,
       }),
-    }
-  )
-)
+    },
+  ),
+);
 ```
 
 ### 9.4.2 Hooks
 
 ```typescript
 // hooks/useChat.ts
-import { useCallback } from 'react'
-import { useStore } from '../lib/store'
-import { invoke } from '@tauri-apps/api/core'
+import { useCallback } from 'react';
+import { useStore } from '../lib/store';
+import { invoke } from '@tauri-apps/api/core';
 
 export function useChat() {
-  const {
-    currentSessionId,
-    addMessage,
-    setIsTyping,
-    messages
-  } = useStore()
+  const { currentSessionId, addMessage, setIsTyping, messages } = useStore();
 
-  const sendMessage = useCallback(async (content: string) => {
-    if (!currentSessionId) return
+  const sendMessage = useCallback(
+    async (content: string) => {
+      if (!currentSessionId) return;
 
-    // 添加用户消息
-    const userMessage = {
-      id: crypto.randomUUID(),
-      session_id: currentSessionId,
-      role: 'user' as const,
-      content,
-      created_at: Date.now()
-    }
-    addMessage(currentSessionId, userMessage)
-
-    // 设置 typing 状态
-    setIsTyping(true)
-
-    try {
-      // 调用后端
-      const response = await invoke<string>('agent_chat', {
-        sessionId: currentSessionId,
-        message: content
-      })
-
-      // 添加助手消息
-      const assistantMessage = {
+      // 添加用户消息
+      const userMessage = {
         id: crypto.randomUUID(),
         session_id: currentSessionId,
-        role: 'assistant' as const,
-        content: response,
-        created_at: Date.now()
+        role: 'user' as const,
+        content,
+        created_at: Date.now(),
+      };
+      addMessage(currentSessionId, userMessage);
+
+      // 设置 typing 状态
+      setIsTyping(true);
+
+      try {
+        // 调用后端
+        const response = await invoke<string>('agent_chat', {
+          sessionId: currentSessionId,
+          message: content,
+        });
+
+        // 添加助手消息
+        const assistantMessage = {
+          id: crypto.randomUUID(),
+          session_id: currentSessionId,
+          role: 'assistant' as const,
+          content: response,
+          created_at: Date.now(),
+        };
+        addMessage(currentSessionId, assistantMessage);
+      } catch (error) {
+        console.error('Chat error:', error);
+
+        // 添加错误消息
+        const errorMessage = {
+          id: crypto.randomUUID(),
+          session_id: currentSessionId,
+          role: 'assistant' as const,
+          content: `错误: ${error}`,
+          created_at: Date.now(),
+        };
+        addMessage(currentSessionId, errorMessage);
+      } finally {
+        setIsTyping(false);
       }
-      addMessage(currentSessionId, assistantMessage)
-
-    } catch (error) {
-      console.error('Chat error:', error)
-
-      // 添加错误消息
-      const errorMessage = {
-        id: crypto.randomUUID(),
-        session_id: currentSessionId,
-        role: 'assistant' as const,
-        content: `错误: ${error}`,
-        created_at: Date.now()
-      }
-      addMessage(currentSessionId, errorMessage)
-
-    } finally {
-      setIsTyping(false)
-    }
-  }, [currentSessionId, addMessage, setIsTyping])
+    },
+    [currentSessionId, addMessage, setIsTyping],
+  );
 
   const interrupt = useCallback(async () => {
     try {
-      await invoke('interrupt_agent')
+      await invoke('interrupt_agent');
     } catch (error) {
-      console.error('Interrupt error:', error)
+      console.error('Interrupt error:', error);
     }
-  }, [])
+  }, []);
 
   return {
     sendMessage,
     interrupt,
-    messages: currentSessionId ? messages[currentSessionId] || [] : []
-  }
+    messages: currentSessionId ? messages[currentSessionId] || [] : [],
+  };
 }
 ```
 
@@ -919,12 +901,12 @@ export function useChat() {
 
 ```tsx
 // App.tsx
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { Chat } from './pages/Chat'
-import { Memory } from './pages/Memory'
-import { Settings } from './pages/Settings'
-import { Skills } from './pages/Skills'
-import { Layout } from './components/layout/Layout'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Chat } from './pages/Chat';
+import { Memory } from './pages/Memory';
+import { Settings } from './pages/Settings';
+import { Skills } from './pages/Skills';
+import { Layout } from './components/layout/Layout';
 
 export function App() {
   return (
@@ -939,7 +921,7 @@ export function App() {
         </Route>
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
 ```
 
@@ -951,26 +933,24 @@ export function App() {
 
 ```typescript
 // i18n/index.ts
-import i18n from 'i18next'
-import { initReactI18next } from 'react-i18next'
-import zhCN from './locales/zh-CN.json'
-import en from './locales/en.json'
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import zhCN from './locales/zh-CN.json';
+import en from './locales/en.json';
 
-i18n
-  .use(initReactI18next)
-  .init({
-    resources: {
-      'zh-CN': { translation: zhCN },
-      'en': { translation: en }
-    },
-    lng: 'zh-CN',
-    fallbackLng: 'en',
-    interpolation: {
-      escapeValue: false
-    }
-  })
+i18n.use(initReactI18next).init({
+  resources: {
+    'zh-CN': { translation: zhCN },
+    en: { translation: en },
+  },
+  lng: 'zh-CN',
+  fallbackLng: 'en',
+  interpolation: {
+    escapeValue: false,
+  },
+});
 
-export default i18n
+export default i18n;
 ```
 
 ### 9.6.2 示例翻译
@@ -1002,4 +982,4 @@ export default i18n
 
 ---
 
-*文档版本: v1.0*
+_文档版本: v1.0_

@@ -5,6 +5,7 @@
 Sage 已具备完整架构（React + Tauri + Python FastAPI），前端构建和 CI 均通过。但存在关键缺陷：**LLM API Key 未从前端传递到 Python 后端**，导致实际对话无法工作。
 
 **目标**：
+
 1. 修复完整对话链路，用户配置 LLM 端点后能正常对话
 2. 实现消息持久化，刷新页面后能加载历史消息
 3. 修复 CI/CD 过时版本警告
@@ -12,17 +13,17 @@ Sage 已具备完整架构（React + Tauri + Python FastAPI），前端构建和
 
 ## 涉及文件与模块
 
-| 层级 | 文件 | 变更类型 |
-|------|------|----------|
-| 前端 API | `src/lib/api.ts` | 新增 `apiKey` 字段 |
-| Rust/Tauri | `src-tauri/src/models.rs` | 新增 `api_key` 字段 |
-| Rust/Tauri | `src-tauri/src/commands.rs` | 新增 `api_key` 参数 |
-| Python API | `backend/api/routes.py` | 扩展 ChatRequest + 实现 get_messages + 透传 LLM 配置 |
-| Python Core | `backend/core/agent.py` | chat() 接受动态 LLM 配置 |
-| Python Data | `backend/data/session_repo.py` | 新增 MessageRepository |
-| Python Entry | `backend/main.py` | 端口从环境变量读取 |
-| CI/CD | `.github/workflows/ci.yml` | Node 20, Python 3.11, 修复 py_compile |
-| 文档 | `README.md` | 修正过时内容 |
+| 层级         | 文件                           | 变更类型                                             |
+| ------------ | ------------------------------ | ---------------------------------------------------- |
+| 前端 API     | `src/lib/api.ts`               | 新增 `apiKey` 字段                                   |
+| Rust/Tauri   | `src-tauri/src/models.rs`      | 新增 `api_key` 字段                                  |
+| Rust/Tauri   | `src-tauri/src/commands.rs`    | 新增 `api_key` 参数                                  |
+| Python API   | `backend/api/routes.py`        | 扩展 ChatRequest + 实现 get_messages + 透传 LLM 配置 |
+| Python Core  | `backend/core/agent.py`        | chat() 接受动态 LLM 配置                             |
+| Python Data  | `backend/data/session_repo.py` | 新增 MessageRepository                               |
+| Python Entry | `backend/main.py`              | 端口从环境变量读取                                   |
+| CI/CD        | `.github/workflows/ci.yml`     | Node 20, Python 3.11, 修复 py_compile                |
+| 文档         | `README.md`                    | 修正过时内容                                         |
 
 ## 技术方案
 

@@ -4,57 +4,54 @@ import SkillList from '../components/skills/SkillList';
 import { skillsApi, type Skill } from '../lib/api';
 
 const Skills: React.FC = () => {
-  const [skills, setSkills] = useState<Skill[]>([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     const loadSkills = async () => {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
-        const data = await skillsApi.list()
-        if (!cancelled) setSkills(data)
+        const data = await skillsApi.list();
+        if (!cancelled) setSkills(data);
       } catch (err) {
         if (!cancelled) {
-          setError('加载技能列表失败')
-          setSkills([])
+          setError('加载技能列表失败');
+          setSkills([]);
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
       }
-    }
-    loadSkills()
-    return () => { cancelled = true }
-  }, [])
+    };
+    loadSkills();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleToggle = async (name: string, enabled: boolean) => {
-    setSkills((prev) =>
-      prev.map((skill) =>
-        skill.name === name ? { ...skill, enabled } : skill
-      )
-    )
+    setSkills((prev) => prev.map((skill) => (skill.name === name ? { ...skill, enabled } : skill)));
     try {
-      await skillsApi.toggle(name, enabled)
+      await skillsApi.toggle(name, enabled);
     } catch {
       setSkills((prev) =>
-        prev.map((skill) =>
-          skill.name === name ? { ...skill, enabled: !enabled } : skill
-        )
-      )
-      setError('切换失败')
+        prev.map((skill) => (skill.name === name ? { ...skill, enabled: !enabled } : skill)),
+      );
+      setError('切换失败');
     }
-  }
+  };
 
-  const filteredSkills = skills.filter((skill) =>
-    skill.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    skill.description.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredSkills = skills.filter(
+    (skill) =>
+      skill.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      skill.description.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
 
-  const enabledCount = skills.filter((s) => s.enabled).length
-  const totalUsage = skills.reduce((sum, s) => sum + s.usageCount, 0)
+  const enabledCount = skills.filter((s) => s.enabled).length;
+  const totalUsage = skills.reduce((sum, s) => sum + s.usageCount, 0);
 
   if (loading) {
     return (
@@ -64,7 +61,7 @@ const Skills: React.FC = () => {
         </div>
         <div className="flex-1 flex items-center justify-center text-muted text-sm">加载中...</div>
       </div>
-    )
+    );
   }
 
   return (
@@ -78,10 +75,7 @@ const Skills: React.FC = () => {
         {error && (
           <div className="mb-4 p-3 rounded-radius-sm bg-error/10 text-error text-sm">
             {error}
-            <button
-              onClick={() => setError(null)}
-              className="ml-2 text-error hover:underline"
-            >
+            <button onClick={() => setError(null)} className="ml-2 text-error hover:underline">
               关闭
             </button>
           </div>

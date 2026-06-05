@@ -4,15 +4,15 @@
 
 `backend/core/errors.py` 定义 7 种错误类型：
 
-| 类型 | 触发条件 | HTTP 状态 |
-|------|----------|-----------|
-| `auth_failed` | API Key 无效 | 401 |
-| `rate_limited` | 请求频率超限 | 429 |
-| `server_error` | LLM 服务端错误 | 5xx |
-| `network_error` | 连接失败 | — |
-| `timeout` | 请求超时 | — |
-| `parsing_error` | 响应格式异常 | — |
-| `unknown` | 未分类错误 | — |
+| 类型            | 触发条件       | HTTP 状态 |
+| --------------- | -------------- | --------- |
+| `auth_failed`   | API Key 无效   | 401       |
+| `rate_limited`  | 请求频率超限   | 429       |
+| `server_error`  | LLM 服务端错误 | 5xx       |
+| `network_error` | 连接失败       | —         |
+| `timeout`       | 请求超时       | —         |
+| `parsing_error` | 响应格式异常   | —         |
+| `unknown`       | 未分类错误     | —         |
 
 ## 端到端错误流
 

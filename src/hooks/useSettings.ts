@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback } from 'react';
 
-import { loadSettings, saveSettings, resetSettings as resetSettingsLib } from '../lib/settings'
-import { AppSettings } from '../types/settings'
+import { loadSettings, saveSettings, resetSettings as resetSettingsLib } from '../lib/settings';
+import { AppSettings } from '../types/settings';
 
 interface UseSettingsReturn {
-  settings: AppSettings
-  updateSettings: (partial: Partial<AppSettings>) => void
-  resetSettings: () => void
+  settings: AppSettings;
+  updateSettings: (partial: Partial<AppSettings>) => void;
+  resetSettings: () => void;
 }
 
 /**
@@ -14,20 +14,20 @@ interface UseSettingsReturn {
  * Loads from localStorage on mount, persists changes on update.
  */
 export function useSettings(): UseSettingsReturn {
-  const [settings, setSettings] = useState<AppSettings>(loadSettings)
+  const [settings, setSettings] = useState<AppSettings>(loadSettings);
 
   const updateSettings = useCallback((partial: Partial<AppSettings>) => {
     setSettings((prev) => {
-      const next = { ...prev, ...partial }
-      saveSettings(partial)
-      return next
-    })
-  }, [])
+      const next = { ...prev, ...partial };
+      saveSettings(partial);
+      return next;
+    });
+  }, []);
 
   const resetSettings = useCallback(() => {
-    resetSettingsLib()
-    setSettings(loadSettings())
-  }, [])
+    resetSettingsLib();
+    setSettings(loadSettings());
+  }, []);
 
-  return { settings, updateSettings, resetSettings }
+  return { settings, updateSettings, resetSettings };
 }

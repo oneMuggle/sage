@@ -1,14 +1,14 @@
-import { clsx } from 'clsx'
-import { BookOpen } from 'lucide-react'
+import { clsx } from 'clsx';
+import { BookOpen } from 'lucide-react';
 
-import type { KnowledgeDoc } from '../../hooks/useKnowledge'
+import type { KnowledgeDoc } from '../../hooks/useKnowledge';
 
 interface KnowledgeCardProps {
-  doc: KnowledgeDoc
-  isSelected: boolean
-  selectMode: boolean
-  onClick: () => void
-  onToggle: () => void
+  doc: KnowledgeDoc;
+  isSelected: boolean;
+  selectMode: boolean;
+  onClick: () => void;
+  onToggle: () => void;
 }
 
 export function KnowledgeCard({
@@ -32,13 +32,11 @@ export function KnowledgeCard({
           <button
             className={clsx(
               'w-5 h-5 rounded-radius-sm border-2 flex items-center justify-center transition-all',
-              isSelected
-                ? 'bg-primary border-primary'
-                : 'border-border bg-surface',
+              isSelected ? 'bg-primary border-primary' : 'border-border bg-surface',
             )}
             onClick={(e) => {
-              e.stopPropagation()
-              onToggle()
+              e.stopPropagation();
+              onToggle();
             }}
           >
             {isSelected && (
@@ -67,12 +65,8 @@ export function KnowledgeCard({
           <BookOpen className="w-4 h-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-sm text-text mb-1 truncate">
-            {doc.title}
-          </h3>
-          <p className="text-xs text-muted mb-2 line-clamp-2">
-            {doc.description}
-          </p>
+          <h3 className="font-semibold text-sm text-text mb-1 truncate">{doc.title}</h3>
+          <p className="text-xs text-muted mb-2 line-clamp-2">{doc.description}</p>
           <div className="flex items-center gap-2 text-xs text-muted">
             <span className="bg-subtle px-2 py-0.5 rounded-radius-sm text-text-secondary">
               {doc.category}
@@ -84,17 +78,17 @@ export function KnowledgeCard({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-  if (days === 0) return '今天'
-  if (days === 1) return '昨天'
-  if (days < 7) return `${days} 天前`
-  return dateStr
+  if (days === 0) return '今天';
+  if (days === 1) return '昨天';
+  if (days < 7) return `${days} 天前`;
+  return dateStr;
 }

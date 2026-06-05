@@ -5,6 +5,7 @@
 ### 5.1.1 设计目标
 
 Sage Agent 是核心对话引擎，负责:
+
 1. 处理用户消息
 2. 管理对话上下文
 3. 调用工具和技能
@@ -12,14 +13,14 @@ Sage Agent 是核心对话引擎，负责:
 
 ### 5.1.2 核心特性
 
-| 特性 | 说明 |
-|-----|------|
+| 特性         | 说明               |
+| ------------ | ------------------ |
 | **多轮对话** | 支持多轮上下文对话 |
 | **工具调用** | 支持自定义工具执行 |
-| **技能调度** | 支持技能系统集成 |
+| **技能调度** | 支持技能系统集成   |
 | **记忆集成** | 自动检索和保存记忆 |
-| **流式输出** | 支持流式响应 |
-| **可中断** | 支持中断长时间运行 |
+| **流式输出** | 支持流式响应       |
+| **可中断**   | 支持中断长时间运行 |
 
 ---
 
@@ -519,15 +520,15 @@ class BaseTool(ABC):
 
 ### 5.4.2 内置工具
 
-| 工具名 | 功能 | 权限 |
-|-------|------|------|
-| terminal | 执行 shell 命令 | terminal |
-| read_file | 读取文件 | file:read |
-| write_file | 写入文件 | file:write |
-| web_search | 网络搜索 | network |
-| calculator | 计算器 | none |
-| memory_search | 搜索记忆 | memory |
-| memory_save | 保存记忆 | memory |
+| 工具名        | 功能            | 权限       |
+| ------------- | --------------- | ---------- |
+| terminal      | 执行 shell 命令 | terminal   |
+| read_file     | 读取文件        | file:read  |
+| write_file    | 写入文件        | file:write |
+| web_search    | 网络搜索        | network    |
+| calculator    | 计算器          | none       |
+| memory_search | 搜索记忆        | memory     |
+| memory_save   | 保存记忆        | memory     |
 
 ### 5.4.3 工具注册表
 
@@ -777,4 +778,4 @@ class AIAgent:
 
 ---
 
-*文档版本: v1.0*
+_文档版本: v1.0_

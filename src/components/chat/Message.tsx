@@ -1,32 +1,32 @@
-import { Copy, ThumbsUp, ThumbsDown, BookOpen, Check, Wrench } from 'lucide-react'
-import { useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import remarkGfm from 'remark-gfm'
+import { Copy, ThumbsUp, ThumbsDown, BookOpen, Check, Wrench } from 'lucide-react';
+import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkGfm from 'remark-gfm';
 
-import type { Message as MessageType, ToolCall } from '../../lib/store'
+import type { Message as MessageType, ToolCall } from '../../lib/store';
 
 interface MessageProps {
-  message: MessageType
-  onFeedback?: (messageId: string, feedback: 'up' | 'down') => void
-  knowledgeRefs?: { id: string; title: string }[]
-  attachments?: { name: string; size: number; type: string; dataUrl?: string }[]
+  message: MessageType;
+  onFeedback?: (messageId: string, feedback: 'up' | 'down') => void;
+  knowledgeRefs?: { id: string; title: string }[];
+  attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
 }
 
 /** Code block renderer with syntax highlighting + copy button */
 function CodeBlock({ language, children }: { language?: string; children: string }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(children)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+    await navigator.clipboard.writeText(children);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Inline code fallback
   if (!language && !children.includes('\n')) {
-    return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{children}</code>
+    return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{children}</code>;
   }
 
   return (
@@ -38,7 +38,11 @@ function CodeBlock({ language, children }: { language?: string; children: string
           className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-gray-200"
           title="复制代码"
         >
-          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+          {copied ? (
+            <Check className="w-3.5 h-3.5 text-green-400" />
+          ) : (
+            <Copy className="w-3.5 h-3.5" />
+          )}
           {copied ? '已复制' : '复制'}
         </button>
       </div>
@@ -58,29 +62,25 @@ function CodeBlock({ language, children }: { language?: string; children: string
         {children.replace(/\n$/, '')}
       </SyntaxHighlighter>
     </div>
-  )
+  );
 }
 
 export function Message({ message, onFeedback, knowledgeRefs, attachments }: MessageProps) {
-  const isUser = message.role === 'user'
-  const isAssistant = message.role === 'assistant'
-  const isError = message.content?.startsWith('[错误') ?? false
-  const toolCalls: ToolCall[] = message.tool_calls ?? []
+  const isUser = message.role === 'user';
+  const isAssistant = message.role === 'assistant';
+  const isError = message.content?.startsWith('[错误') ?? false;
+  const toolCalls: ToolCall[] = message.tool_calls ?? [];
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(message.content)
-  }
+    navigator.clipboard.writeText(message.content);
+  };
 
   return (
-    <div
-      className={`flex gap-3 mb-5 max-w-[720px] ${isUser ? 'flex-row-reverse' : ''}`}
-    >
+    <div className={`flex gap-3 mb-5 max-w-[720px] ${isUser ? 'flex-row-reverse' : ''}`}>
       {/* 头像 */}
       <div
         className={`w-7 h-7 rounded-radius-sm flex-shrink-0 flex items-center justify-center text-xs font-semibold ${
-          isAssistant
-            ? 'bg-primary/10 text-primary'
-            : 'bg-bg text-muted border border-border'
+          isAssistant ? 'bg-primary/10 text-primary' : 'bg-bg text-muted border border-border'
         }`}
       >
         {isAssistant ? 'S' : 'U'}
@@ -141,25 +141,29 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
                 remarkPlugins={[remarkGfm]}
                 components={{
                   code({ className, children }) {
-                    const match = /language-(\w+)/.exec(className || '')
-                    const lang = match ? match[1] : undefined
-                    const content = String(children).replace(/\n$/, '')
+                    const match = /language-(\w+)/.exec(className || '');
+                    const lang = match ? match[1] : undefined;
+                    const content = String(children).replace(/\n$/, '');
                     // Inline code detection: no language class and short content
-                    const isInlineCode = !className && !content.includes('\n')
+                    const isInlineCode = !className && !content.includes('\n');
                     if (isInlineCode) {
-                      return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>
+                      return (
+                        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">
+                          {content}
+                        </code>
+                      );
                     }
                     if (!lang) {
-                      return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{content}</code>
+                      return (
+                        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">
+                          {content}
+                        </code>
+                      );
                     }
-                    return (
-                      <CodeBlock language={lang}>
-                        {content}
-                      </CodeBlock>
-                    )
+                    return <CodeBlock language={lang}>{content}</CodeBlock>;
                   },
                   pre({ children }) {
-                    return <>{children}</>
+                    return <>{children}</>;
                   },
                   table({ children }) {
                     return (
@@ -168,33 +172,29 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
                           {children}
                         </table>
                       </div>
-                    )
+                    );
                   },
                   th({ children }) {
                     return (
                       <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left">
                         {children}
                       </th>
-                    )
+                    );
                   },
                   td({ children }) {
-                    return (
-                      <td className="border border-border px-3 py-1.5">
-                        {children}
-                      </td>
-                    )
+                    return <td className="border border-border px-3 py-1.5">{children}</td>;
                   },
                   p({ children }) {
-                    return <p className="mb-2 last:mb-0">{children}</p>
+                    return <p className="mb-2 last:mb-0">{children}</p>;
                   },
                   ul({ children }) {
-                    return <ul className="list-disc list-outside ml-5 mb-2">{children}</ul>
+                    return <ul className="list-disc list-outside ml-5 mb-2">{children}</ul>;
                   },
                   ol({ children }) {
-                    return <ol className="list-decimal list-outside ml-5 mb-2">{children}</ol>
+                    return <ol className="list-decimal list-outside ml-5 mb-2">{children}</ol>;
                   },
                   li({ children }) {
-                    return <li className="mb-0.5">{children}</li>
+                    return <li className="mb-0.5">{children}</li>;
                   },
                   a({ href, children }) {
                     return (
@@ -206,23 +206,23 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
                       >
                         {children}
                       </a>
-                    )
+                    );
                   },
                   blockquote({ children }) {
                     return (
                       <blockquote className="border-l-4 border-border pl-3 py-1 my-2 text-muted italic">
                         {children}
                       </blockquote>
-                    )
+                    );
                   },
                   h1({ children }) {
-                    return <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1>
+                    return <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1>;
                   },
                   h2({ children }) {
-                    return <h2 className="text-base font-bold mt-3 mb-2">{children}</h2>
+                    return <h2 className="text-base font-bold mt-3 mb-2">{children}</h2>;
                   },
                   h3({ children }) {
-                    return <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>
+                    return <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>;
                   },
                 }}
               >
@@ -245,9 +245,7 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
                 <Wrench className="w-3 h-3 text-primary" />
                 <span className="font-semibold text-primary">{tc.name}</span>
                 <span className="text-muted">(</span>
-                <span className="text-text-secondary break-all">
-                  {JSON.stringify(tc.args)}
-                </span>
+                <span className="text-text-secondary break-all">{JSON.stringify(tc.args)}</span>
                 <span className="text-muted">)</span>
                 {tc.result !== undefined && tc.result !== '' && (
                   <>
@@ -265,24 +263,41 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
           {message.memory_applied && message.memory_applied > 0 && (
             <span className="text-primary">{message.memory_applied} 条记忆已应用</span>
           )}
-          <span>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span>
+            {new Date(message.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
         </div>
 
         {/* Action buttons */}
         {onFeedback && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
-            <button onClick={copyToClipboard} className="p-1 rounded hover:bg-bg-hover" title="复制">
+            <button
+              onClick={copyToClipboard}
+              className="p-1 rounded hover:bg-bg-hover"
+              title="复制"
+            >
               <Copy className="w-4 h-4" />
             </button>
-            <button onClick={() => onFeedback(message.id, 'up')} className="p-1 rounded hover:bg-bg-hover" title="有帮助">
+            <button
+              onClick={() => onFeedback(message.id, 'up')}
+              className="p-1 rounded hover:bg-bg-hover"
+              title="有帮助"
+            >
               <ThumbsUp className="w-4 h-4" />
             </button>
-            <button onClick={() => onFeedback(message.id, 'down')} className="p-1 rounded hover:bg-bg-hover" title="没帮助">
+            <button
+              onClick={() => onFeedback(message.id, 'down')}
+              className="p-1 rounded hover:bg-bg-hover"
+              title="没帮助"
+            >
               <ThumbsDown className="w-4 h-4" />
             </button>
           </div>
         )}
       </div>
     </div>
-  )
+  );
 }

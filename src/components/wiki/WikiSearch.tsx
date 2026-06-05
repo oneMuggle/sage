@@ -1,46 +1,46 @@
 // Wiki Search - search bar and results
-import { Search, FileText } from 'lucide-react'
-import { useState } from 'react'
+import { Search, FileText } from 'lucide-react';
+import { useState } from 'react';
 
-import { wikiSearch } from '../../lib/wiki-api'
-import { useWikiStore } from '../../stores/wiki-store'
-import type { SearchResult } from '../../types/wiki'
+import { wikiSearch } from '../../lib/wiki-api';
+import { useWikiStore } from '../../stores/wiki-store';
+import type { SearchResult } from '../../types/wiki';
 
 export function WikiSearch() {
-  const project = useWikiStore((s) => s.project)
-  const openFile = useWikiStore((s) => s.openFile)
-  const setActiveView = useWikiStore((s) => s.setActiveView)
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResult[]>([])
-  const [searching, setSearching] = useState(false)
-  const [hasSearched, setHasSearched] = useState(false)
+  const project = useWikiStore((s) => s.project);
+  const openFile = useWikiStore((s) => s.openFile);
+  const setActiveView = useWikiStore((s) => s.setActiveView);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const doSearch = async () => {
-    if (!project || !query.trim()) return
-    setSearching(true)
-    setHasSearched(true)
+    if (!project || !query.trim()) return;
+    setSearching(true);
+    setHasSearched(true);
     try {
-      const response = await wikiSearch(query, project.path)
-      setResults(response.results)
+      const response = await wikiSearch(query, project.path);
+      setResults(response.results);
     } catch (e) {
-      console.error('搜索失败:', e)
-      setResults([])
+      console.error('搜索失败:', e);
+      setResults([]);
     } finally {
-      setSearching(false)
+      setSearching(false);
     }
-  }
+  };
 
   const handleOpen = (path: string) => {
-    openFile(path)
-    setActiveView('browser')
-  }
+    openFile(path);
+    setActiveView('browser');
+  };
 
   if (!project) {
     return (
       <div className="flex h-full items-center justify-center text-muted text-sm">
         请先打开一个 wiki 项目
       </div>
-    )
+    );
   }
 
   return (
@@ -54,7 +54,7 @@ export function WikiSearch() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') doSearch()
+              if (e.key === 'Enter') doSearch();
             }}
             placeholder="搜索 wiki 页面 (Enter 搜索)"
             autoFocus
@@ -65,9 +65,7 @@ export function WikiSearch() {
 
       {/* Results */}
       {searching && (
-        <div className="flex-1 flex items-center justify-center text-muted text-sm">
-          搜索中...
-        </div>
+        <div className="flex-1 flex items-center justify-center text-muted text-sm">搜索中...</div>
       )}
 
       {!searching && !hasSearched && (
@@ -85,9 +83,7 @@ export function WikiSearch() {
 
       {!searching && results.length > 0 && (
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          <div className="text-xs text-muted px-1">
-            找到 {results.length} 个结果
-          </div>
+          <div className="text-xs text-muted px-1">找到 {results.length} 个结果</div>
           {results.map((result) => (
             <button
               key={result.path}
@@ -107,5 +103,5 @@ export function WikiSearch() {
         </div>
       )}
     </div>
-  )
+  );
 }

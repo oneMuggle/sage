@@ -5,31 +5,31 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 jobs:
   # 前端构建检查
   frontend:
     name: Frontend Build
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
-    
-    - name: 设置 Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
+      - name: 检出代码
+        uses: actions/checkout@v4
 
-    - name: 安装依赖
-      run: npm ci --registry=https://registry.npmjs.org
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
-    - name: 构建前端
-      run: npm run build
+      - name: 安装依赖
+        run: npm ci --registry=https://registry.npmjs.org
+
+      - name: 构建前端
+        run: npm run build
 
   # Python 后端检查
   backend:
@@ -37,28 +37,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
 
-    - name: 设置 Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: 安装依赖
-      run: |
-        cd backend
-        pip install -r requirements.txt
+      - name: 安装依赖
+        run: |
+          cd backend
+          pip install -r requirements.txt
 
-    - name: Python 语法检查
-      run: |
-        find backend -name "*.py" -exec python -m py_compile {} +
+      - name: Python 语法检查
+        run: |
+          find backend -name "*.py" -exec python -m py_compile {} +
 
-    - name: 后端单元测试 (模拟)
-      run: |
-        echo "后端测试占位符"
-        # 实际项目需要添加测试用例
-        # pytest backend/tests/
+      - name: 后端单元测试 (模拟)
+        run: |
+          echo "后端测试占位符"
+          # 实际项目需要添加测试用例
+          # pytest backend/tests/
 
   # Tauri 构建检查 (Linux)
   tauri:
@@ -67,178 +67,178 @@ jobs:
     needs: [frontend, backend]
 
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
 
-    - name: 安装 Rust (Win7 兼容版本)
-      uses: dtolnay/rust-toolchain@1.77.2
-      with:
-        targets: x86_64-unknown-linux-gnu
+      - name: 安装 Rust (Win7 兼容版本)
+        uses: dtolnay/rust-toolchain@1.77.2
+        with:
+          targets: x86_64-unknown-linux-gnu
 
-    - name: 安装 Linux 构建依赖
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf libsoup2.4-dev
+      - name: 安装 Linux 构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf libsoup2.4-dev
 
-    - name: 安装 Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-    
-    - name: 安装前端依赖
-      run: npm ci --registry=https://registry.npmjs.org
-    
-    - name: 构建前端
-      run: npm run build
-    
-    - name: 构建 Tauri (仅检查)
-      run: |
-        # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
-        cargo update -p idna_adapter --precise 1.2.0
-        cargo update -p ignore --precise 0.4.20
-        cargo update -p globset --precise 0.4.14
-        cargo update -p ahash --precise 0.8.11
-        cargo update -p tempfile --precise 3.15.0
-        cargo update -p uuid --precise 1.12.1
-        cargo update -p plist --precise 1.7.4
-        cargo update -p serde_with --precise 3.16.1
-        cargo update -p time --precise 0.3.41
-        cargo update -p embed-resource --precise 2.4.0
-        cargo update -p litemap --precise 0.7.3
-        cargo update -p unicode-segmentation --precise 1.12.0
-        cargo update -p reqwest --precise 0.11.22
-        cargo build --release
-      working-directory: src-tauri
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 安装前端依赖
+        run: npm ci --registry=https://registry.npmjs.org
+
+      - name: 构建前端
+        run: npm run build
+
+      - name: 构建 Tauri (仅检查)
+        run: |
+          # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
+          cargo update -p idna_adapter --precise 1.2.0
+          cargo update -p ignore --precise 0.4.20
+          cargo update -p globset --precise 0.4.14
+          cargo update -p ahash --precise 0.8.11
+          cargo update -p tempfile --precise 3.15.0
+          cargo update -p uuid --precise 1.12.1
+          cargo update -p plist --precise 1.7.4
+          cargo update -p serde_with --precise 3.16.1
+          cargo update -p time --precise 0.3.41
+          cargo update -p embed-resource --precise 2.4.0
+          cargo update -p litemap --precise 0.7.3
+          cargo update -p unicode-segmentation --precise 1.12.0
+          cargo update -p reqwest --precise 0.11.22
+          cargo build --release
+        working-directory: src-tauri
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Windows 构建
   build-windows:
     name: Build Windows
     runs-on: windows-latest
-    
+
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
-    
-    - name: 设置 Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-    
-    - name: 安装依赖
-      run: npm ci --registry=https://registry.npmjs.org
-    
-    - name: 构建前端
-      run: npm run build
-    
-    - name: 安装 Rust (Win7 兼容版本)
-      uses: dtolnay/rust-toolchain@1.77.2
-      with:
-        targets: x86_64-pc-windows-msvc
+      - name: 检出代码
+        uses: actions/checkout@v4
 
-    - name: 下载 WebView2 v109 (Win7 兼容离线安装包)
-      id: download-webview2
-      run: |
-        mkdir src-tauri\resources
-        $out = "src-tauri\resources\WebView2Runtime_109.exe"
-        $success = $false
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-        # --- Source 1: GitHub mirror (aedancullen archive, .exe installer) ---
-        Write-Host "[1/4] Trying GitHub mirror (aedancullen)..."
-        try {
-          Invoke-WebRequest -Uri "https://github.com/aedancullen/webview2-evergreen-standalone-installer-archive/releases/download/109.0.1518.78/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" -OutFile $out -UseBasicParsing -TimeoutSec 120
-          if ((Get-Item $out).Length -gt 10MB) {
-            Write-Host "Success: $((Get-Item $out).Length / 1MB)MB"
-            $success = $true
-          }
-        } catch { Write-Host "Failed: $_" }
+      - name: 安装依赖
+        run: npm ci --registry=https://registry.npmjs.org
 
-        # --- Source 2: Microsoft fixed-version direct link ---
-        if (-not $success) {
-          Write-Host "[2/4] Trying Microsoft fixed-version direct link..."
+      - name: 构建前端
+        run: npm run build
+
+      - name: 安装 Rust (Win7 兼容版本)
+        uses: dtolnay/rust-toolchain@1.77.2
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: 下载 WebView2 v109 (Win7 兼容离线安装包)
+        id: download-webview2
+        run: |
+          mkdir src-tauri\resources
+          $out = "src-tauri\resources\WebView2Runtime_109.exe"
+          $success = $false
+
+          # --- Source 1: GitHub mirror (aedancullen archive, .exe installer) ---
+          Write-Host "[1/4] Trying GitHub mirror (aedancullen)..."
           try {
-            Invoke-WebRequest -Uri "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/3b009565-19ab-4705-a7a3-5e1bf88e1341/MicrosoftEdgeWebView2RuntimeInstallerX64_109.0.1518.78.exe" -OutFile $out -UseBasicParsing -TimeoutSec 60
+            Invoke-WebRequest -Uri "https://github.com/aedancullen/webview2-evergreen-standalone-installer-archive/releases/download/109.0.1518.78/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" -OutFile $out -UseBasicParsing -TimeoutSec 120
             if ((Get-Item $out).Length -gt 10MB) {
               Write-Host "Success: $((Get-Item $out).Length / 1MB)MB"
               $success = $true
             }
           } catch { Write-Host "Failed: $_" }
-        }
 
-        if (-not $success -and $env:GITHUB_TOKEN) {
-          Write-Host "[3/4] Trying this repo Releases..."
-          $headers = @{ Authorization = "token $env:GITHUB_TOKEN" }
-          try {
-            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers
-            foreach ($release in $releases) {
-              foreach ($asset in $release.assets) {
-                if ($asset.name -eq 'WebView2Runtime_109.exe') {
-                  Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $out -Headers $headers -UseBasicParsing -TimeoutSec 60
-                  if ((Get-Item $out).Length -gt 10MB) {
-                    Write-Host "Success (from Release '$($release.tag_name)'): $((Get-Item $out).Length / 1MB)MB"
-                    $success = $true
-                    break
+          # --- Source 2: Microsoft fixed-version direct link ---
+          if (-not $success) {
+            Write-Host "[2/4] Trying Microsoft fixed-version direct link..."
+            try {
+              Invoke-WebRequest -Uri "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/3b009565-19ab-4705-a7a3-5e1bf88e1341/MicrosoftEdgeWebView2RuntimeInstallerX64_109.0.1518.78.exe" -OutFile $out -UseBasicParsing -TimeoutSec 60
+              if ((Get-Item $out).Length -gt 10MB) {
+                Write-Host "Success: $((Get-Item $out).Length / 1MB)MB"
+                $success = $true
+              }
+            } catch { Write-Host "Failed: $_" }
+          }
+
+          if (-not $success -and $env:GITHUB_TOKEN) {
+            Write-Host "[3/4] Trying this repo Releases..."
+            $headers = @{ Authorization = "token $env:GITHUB_TOKEN" }
+            try {
+              $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers
+              foreach ($release in $releases) {
+                foreach ($asset in $release.assets) {
+                  if ($asset.name -eq 'WebView2Runtime_109.exe') {
+                    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $out -Headers $headers -UseBasicParsing -TimeoutSec 60
+                    if ((Get-Item $out).Length -gt 10MB) {
+                      Write-Host "Success (from Release '$($release.tag_name)'): $((Get-Item $out).Length / 1MB)MB"
+                      $success = $true
+                      break
+                    }
                   }
                 }
+                if ($success) { break }
               }
-              if ($success) { break }
-            }
-          } catch { Write-Host "Failed: $_" }
-        }
-
-        if (-not $success) {
-          Write-Host "[4/4] Checking repo files..."
-          if (Test-Path "src-tauri\resources\WebView2Runtime_109.exe") {
-            Write-Host "Success (already in repo): $((Get-Item 'src-tauri\resources\WebView2Runtime_109.exe').Length / 1MB)MB"
-            $success = $true
-          } else {
-            Write-Host "File not found in repo"
+            } catch { Write-Host "Failed: $_" }
           }
-        }
 
-        if (-not $success) {
-          Write-Host "::error::All WebView2 download sources failed. Please manually download v109 offline installer and:"
-          Write-Host "  1. Commit to src-tauri/resources/WebView2Runtime_109.exe, or"
-          Write-Host "  2. Upload to GitHub Release named WebView2Runtime_109.exe"
-          exit 1
-        }
-      shell: powershell
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if (-not $success) {
+            Write-Host "[4/4] Checking repo files..."
+            if (Test-Path "src-tauri\resources\WebView2Runtime_109.exe") {
+              Write-Host "Success (already in repo): $((Get-Item 'src-tauri\resources\WebView2Runtime_109.exe').Length / 1MB)MB"
+              $success = $true
+            } else {
+              Write-Host "File not found in repo"
+            }
+          }
 
-    - name: 锁定依赖版本 (Win7 兼容)
-      working-directory: src-tauri
-      run: |
-        # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
-        cargo update -p idna_adapter --precise 1.2.0
-        cargo update -p ignore --precise 0.4.20
-        cargo update -p globset --precise 0.4.14
-        cargo update -p ahash --precise 0.8.11
-        cargo update -p tempfile --precise 3.15.0
-        cargo update -p uuid --precise 1.12.1
-        cargo update -p plist --precise 1.7.4
-        cargo update -p serde_with --precise 3.16.1
-        cargo update -p time --precise 0.3.41
-        cargo update -p embed-resource --precise 2.4.0
-        cargo update -p litemap --precise 0.7.3
-        cargo update -p unicode-segmentation --precise 1.12.0
-        cargo update -p reqwest --precise 0.11.22
+          if (-not $success) {
+            Write-Host "::error::All WebView2 download sources failed. Please manually download v109 offline installer and:"
+            Write-Host "  1. Commit to src-tauri/resources/WebView2Runtime_109.exe, or"
+            Write-Host "  2. Upload to GitHub Release named WebView2Runtime_109.exe"
+            exit 1
+          }
+        shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: 编译 Rust Release
-      run: cargo build --release --target x86_64-pc-windows-msvc
-      working-directory: src-tauri
+      - name: 锁定依赖版本 (Win7 兼容)
+        working-directory: src-tauri
+        run: |
+          # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
+          cargo update -p idna_adapter --precise 1.2.0
+          cargo update -p ignore --precise 0.4.20
+          cargo update -p globset --precise 0.4.14
+          cargo update -p ahash --precise 0.8.11
+          cargo update -p tempfile --precise 3.15.0
+          cargo update -p uuid --precise 1.12.1
+          cargo update -p plist --precise 1.7.4
+          cargo update -p serde_with --precise 3.16.1
+          cargo update -p time --precise 0.3.41
+          cargo update -p embed-resource --precise 2.4.0
+          cargo update -p litemap --precise 0.7.3
+          cargo update -p unicode-segmentation --precise 1.12.0
+          cargo update -p reqwest --precise 0.11.22
 
-    - name: 安装 NSIS 并编译安装包
-      run: |
-        choco install nsis --no-progress
-        & "C:\Program Files (x86)\NSIS\makensis.exe" /V3 /DVERSION=0.0.0-CI installer.nsi
-      shell: powershell
-      working-directory: src-tauri
+      - name: 编译 Rust Release
+        run: cargo build --release --target x86_64-pc-windows-msvc
+        working-directory: src-tauri
 
-    - name: 上传 Windows 安装包
-      uses: actions/upload-artifact@v4
-      with:
-        name: sage-windows-installer
-        path: src-tauri/target/release/Sage_*-setup.exe
+      - name: 安装 NSIS 并编译安装包
+        run: |
+          choco install nsis --no-progress
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /V3 /DVERSION=0.0.0-CI installer.nsi
+        shell: powershell
+        working-directory: src-tauri
+
+      - name: 上传 Windows 安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-windows-installer
+          path: src-tauri/target/release/Sage_*-setup.exe

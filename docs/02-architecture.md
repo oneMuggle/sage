@@ -107,24 +107,24 @@ src/
 // store.ts
 interface AppState {
   // 会话状态
-  sessions: Session[]
-  currentSessionId: string | null
+  sessions: Session[];
+  currentSessionId: string | null;
 
   // 消息状态
-  messages: Record<string, Message[]>
+  messages: Record<string, Message[]>;
 
   // 记忆状态
-  memories: Memory[]
-  memorySearchQuery: string
+  memories: Memory[];
+  memorySearchQuery: string;
 
   // UI 状态
-  isTyping: boolean
-  sidebarOpen: boolean
+  isTyping: boolean;
+  sidebarOpen: boolean;
 
   // Actions
-  createSession: () => void
-  sendMessage: (content: string) => Promise<void>
-  searchMemory: (query: string) => Promise<void>
+  createSession: () => void;
+  sendMessage: (content: string) => Promise<void>;
+  searchMemory: (query: string) => Promise<void>;
 }
 ```
 
@@ -132,7 +132,7 @@ interface AppState {
 
 ```typescript
 // lib/api.ts
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@tauri-apps/api/core';
 
 // 会话管理
 export const sessionApi = {
@@ -140,20 +140,21 @@ export const sessionApi = {
   list: () => invoke<Session[]>('list_sessions'),
   delete: (id: string) => invoke('delete_session', { id }),
   getMessages: (sessionId: string) => invoke<Message[]>('get_messages', { sessionId }),
-}
+};
 
 // 记忆管理
 export const memoryApi = {
   search: (query: string) => invoke<Memory[]>('search_memory', { query }),
   save: (content: string, type: MemoryType) => invoke('save_memory', { content, memoryType: type }),
   delete: (id: string) => invoke('delete_memory', { id }),
-}
+};
 
 // Agent 交互
 export const agentApi = {
-  chat: (sessionId: string, message: string) => invoke<string>('agent_chat', { sessionId, message }),
+  chat: (sessionId: string, message: string) =>
+    invoke<string>('agent_chat', { sessionId, message }),
   interrupt: () => invoke('interrupt_agent'),
-}
+};
 ```
 
 ---
@@ -467,4 +468,4 @@ def get_data_dir() -> Path:
 
 ---
 
-*文档版本: v1.0*
+_文档版本: v1.0_

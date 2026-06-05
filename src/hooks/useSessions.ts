@@ -1,6 +1,6 @@
-import { useCallback } from 'react'
+import { useCallback } from 'react';
 
-import { useStore } from '../lib/store'
+import { useStore } from '../lib/store';
 
 export function useSessions() {
   const {
@@ -10,20 +10,26 @@ export function useSessions() {
     setCurrentSessionId,
     createSession,
     deleteSession,
-  } = useStore()
+  } = useStore();
 
   const handleCreateSession = useCallback(async () => {
-    const id = await createSession()
-    return id
-  }, [createSession])
+    const id = await createSession();
+    return id;
+  }, [createSession]);
 
-  const handleDeleteSession = useCallback(async (id: string) => {
-    await deleteSession(id)
-  }, [deleteSession])
+  const handleDeleteSession = useCallback(
+    async (id: string) => {
+      await deleteSession(id);
+    },
+    [deleteSession],
+  );
 
-  const handleSelectSession = useCallback((id: string) => {
-    setCurrentSessionId(id)
-  }, [setCurrentSessionId])
+  const handleSelectSession = useCallback(
+    (id: string) => {
+      setCurrentSessionId(id);
+    },
+    [setCurrentSessionId],
+  );
 
   return {
     sessions,
@@ -32,5 +38,5 @@ export function useSessions() {
     createSession: handleCreateSession,
     deleteSession: handleDeleteSession,
     selectSession: handleSelectSession,
-  }
+  };
 }

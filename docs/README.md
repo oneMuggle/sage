@@ -27,26 +27,26 @@
 
 ### Hermes Agent 参考点
 
-| 模块 | Hermes 实现 | Sage 实现 |
-|-----|------------|----------|
-| 会话存储 | SQLite + FTS5 (`hermes_state.py`) | SQLite + FTS5 |
-| 记忆管理 | `memory_manager.py`, `memory_provider.py` | 自研三层记忆 |
-| 工具系统 | `toolsets.py`, `tools/registry.py` | `tools/registry.py` |
-| 技能系统 | `skills/` 目录, `skill_commands.py` | `skills/` 目录 |
-| Agent 核心 | `run_agent.py` (~12k LOC) | `agent.py` |
-| CLI | `cli.py` (~11k LOC) | `cli.py` |
+| 模块       | Hermes 实现                               | Sage 实现           |
+| ---------- | ----------------------------------------- | ------------------- |
+| 会话存储   | SQLite + FTS5 (`hermes_state.py`)         | SQLite + FTS5       |
+| 记忆管理   | `memory_manager.py`, `memory_provider.py` | 自研三层记忆        |
+| 工具系统   | `toolsets.py`, `tools/registry.py`        | `tools/registry.py` |
+| 技能系统   | `skills/` 目录, `skill_commands.py`       | `skills/` 目录      |
+| Agent 核心 | `run_agent.py` (~12k LOC)                 | `agent.py`          |
+| CLI        | `cli.py` (~11k LOC)                       | `cli.py`            |
 
 ### Chatbox 参考点
 
-| 模块 | Chatbox 实现 | Sage 实现 |
-|-----|------------|----------|
-| 桌面框架 | Electron | Tauri 1.x |
-| 前端框架 | React 18 | React 18 |
-| 构建工具 | electron-vite | Vite |
-| 状态管理 | zustand | zustand |
-| 会话管理 | `electron-store` | SQLite |
-| UI 组件 | 自研组件 | 参考+自研 |
-| 多语言 | i18next | i18next |
+| 模块     | Chatbox 实现     | Sage 实现 |
+| -------- | ---------------- | --------- |
+| 桌面框架 | Electron         | Tauri 1.x |
+| 前端框架 | React 18         | React 18  |
+| 构建工具 | electron-vite    | Vite      |
+| 状态管理 | zustand          | zustand   |
+| 会话管理 | `electron-store` | SQLite    |
+| UI 组件  | 自研组件         | 参考+自研 |
+| 多语言   | i18next          | i18next   |
 
 ---
 

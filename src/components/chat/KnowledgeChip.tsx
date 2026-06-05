@@ -1,8 +1,8 @@
-import { BookOpen, X } from 'lucide-react'
+import { BookOpen, X } from 'lucide-react';
 
 interface KnowledgeChipProps {
-  title: string
-  onRemove?: () => void
+  title: string;
+  onRemove?: () => void;
 }
 
 export function KnowledgeChip({ title, onRemove }: KnowledgeChipProps) {
@@ -11,13 +11,10 @@ export function KnowledgeChip({ title, onRemove }: KnowledgeChipProps) {
       <BookOpen className="w-3 h-3" />
       <span className="truncate max-w-32">{title}</span>
       {onRemove && (
-        <button
-          className="ml-1 hover:text-text transition-colors"
-          onClick={onRemove}
-        >
+        <button className="ml-1 hover:text-text transition-colors" onClick={onRemove}>
           <X className="w-3 h-3" />
         </button>
       )}
     </span>
-  )
+  );
 }

@@ -26,15 +26,15 @@
 
 ### 3.1.2 SQLite 表清单
 
-| 表名 | 说明 | 主键 |
-|-----|------|-----|
-| sessions | 会话表 | id |
-| messages | 消息表 | id |
-| memories_episodic | 情景记忆表 | id |
-| skills | 技能表 | id |
-| preferences | 用户偏好表 | key |
-| evolution_log | 进化日志表 | id |
-| tool_usage | 工具使用记录 | id |
+| 表名              | 说明         | 主键 |
+| ----------------- | ------------ | ---- |
+| sessions          | 会话表       | id   |
+| messages          | 消息表       | id   |
+| memories_episodic | 情景记忆表   | id   |
+| skills            | 技能表       | id   |
+| preferences       | 用户偏好表   | key  |
+| evolution_log     | 进化日志表   | id   |
+| tool_usage        | 工具使用记录 | id   |
 
 ---
 
@@ -70,6 +70,7 @@ CREATE TABLE sessions (
 ```
 
 **说明**:
+
 - `id`: UUID v4
 - `title`: 自动生成或用户指定
 - `metadata`: 存储模型选择、标签等
@@ -110,6 +111,7 @@ CREATE TABLE messages (
 ```
 
 **说明**:
+
 - `role`: 遵循 OpenAI 格式
 - `tool_calls`: 存储工具调用链
 - `latency_ms`: 响应延迟统计
@@ -220,15 +222,15 @@ CREATE TABLE preferences (
 
 **预设偏好项**:
 
-| key | 类型 | 默认值 | 说明 |
-|-----|------|-------|------|
-| model | string | "gpt-3.5-turbo" | 默认模型 |
-| temperature | number | 0.7 | 默认温度 |
-| max_tokens | number | 4096 | 最大 Token |
-| theme | string | "light" | 主题 |
-| language | string | "zh-CN" | 语言 |
-| memory_importance_threshold | number | 5 | 记忆重要性阈值 |
-| evolution_enabled | boolean | true | 启用进化 |
+| key                         | 类型    | 默认值          | 说明           |
+| --------------------------- | ------- | --------------- | -------------- |
+| model                       | string  | "gpt-3.5-turbo" | 默认模型       |
+| temperature                 | number  | 0.7             | 默认温度       |
+| max_tokens                  | number  | 4096            | 最大 Token     |
+| theme                       | string  | "light"         | 主题           |
+| language                    | string  | "zh-CN"         | 语言           |
+| memory_importance_threshold | number  | 5               | 记忆重要性阈值 |
+| evolution_enabled           | boolean | true            | 启用进化       |
 
 ### 3.2.6 进化日志表 (evolution_log)
 
@@ -323,21 +325,21 @@ class VectorStore:
 
 **semantic_memories Collection**:
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| id | string | UUID |
-| embedding | float[1536] | OpenAI embedding |
-| document | string | 原文 |
-| metadata | dict | {type, importance, created_at, tags} |
+| 字段      | 类型        | 说明                                 |
+| --------- | ----------- | ------------------------------------ |
+| id        | string      | UUID                                 |
+| embedding | float[1536] | OpenAI embedding                     |
+| document  | string      | 原文                                 |
+| metadata  | dict        | {type, importance, created_at, tags} |
 
 **knowledge Collection**:
 
-| 字段 | 类型 | 说明 |
-|-----|------|------|
-| id | string | UUID |
-| embedding | float[1536] | OpenAI embedding |
-| document | string | 知识内容 |
-| metadata | dict | {source, topic, confidence} |
+| 字段      | 类型        | 说明                        |
+| --------- | ----------- | --------------------------- |
+| id        | string      | UUID                        |
+| embedding | float[1536] | OpenAI embedding            |
+| document  | string      | 知识内容                    |
+| metadata  | dict        | {source, topic, confidence} |
 
 ---
 
@@ -386,11 +388,11 @@ def run_migrations(conn: sqlite3.Connection, target_version: int):
 
 ### 3.5.1 备份策略
 
-| 备份类型 | 频率 | 保留数量 | 位置 |
-|---------|------|---------|------|
-| 自动备份 | 每 10 分钟 | 5 | 同目录 |
-| 每日备份 | 每天 3:00 | 7 | backup/ |
-| 手动备份 | 用户触发 | 无限制 | 用户指定 |
+| 备份类型 | 频率       | 保留数量 | 位置     |
+| -------- | ---------- | -------- | -------- |
+| 自动备份 | 每 10 分钟 | 5        | 同目录   |
+| 每日备份 | 每天 3:00  | 7        | backup/  |
+| 手动备份 | 用户触发   | 无限制   | 用户指定 |
 
 ### 3.5.2 备份实现
 
@@ -504,4 +506,4 @@ class DatabasePool:
 
 ---
 
-*文档版本: v1.0*
+_文档版本: v1.0_

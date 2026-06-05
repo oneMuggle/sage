@@ -18,9 +18,11 @@ const SkillCard: React.FC<SkillCardProps> = ({
   onToggle,
 }) => {
   return (
-    <div className={`bg-surface rounded-lg shadow-md p-4 border-2 transition-all ${
-      enabled ? 'border-primary' : 'border-border opacity-75'
-    }`}>
+    <div
+      className={`bg-surface rounded-lg shadow-md p-4 border-2 transition-all ${
+        enabled ? 'border-primary' : 'border-border opacity-75'
+      }`}
+    >
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <h3 className="text-lg font-semibold text-text">{name}</h3>
@@ -39,9 +41,7 @@ const SkillCard: React.FC<SkillCardProps> = ({
           </div>
 
           {/* 使用统计 */}
-          <p className="text-xs text-muted mt-2">
-            已使用 {usageCount} 次
-          </p>
+          <p className="text-xs text-muted mt-2">已使用 {usageCount} 次</p>
         </div>
 
         {/* 开关 */}
@@ -52,13 +52,15 @@ const SkillCard: React.FC<SkillCardProps> = ({
             checked={enabled}
             onChange={(e) => onToggle(name, e.target.checked)}
           />
-          <div className="w-11 h-6 bg-bg-subtle peer-focus:outline-none peer-focus:ring-4
+          <div
+            className="w-11 h-6 bg-bg-subtle peer-focus:outline-none peer-focus:ring-4
                        peer-focus:ring-primary/30 rounded-full peer
                        peer-checked:after:translate-x-full peer-checked:after:border-text-inverse
                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
                        after:bg-text-inverse after:border-border after:border after:rounded-full
                        after:h-5 after:w-5 after:transition-all
-                       peer-checked:bg-primary"></div>
+                       peer-checked:bg-primary"
+          ></div>
         </label>
       </div>
     </div>

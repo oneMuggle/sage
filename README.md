@@ -53,13 +53,13 @@ Sage 是一款专为 Windows 7 系统打造的轻量级 AI 桌面助手，具备
 
 ## 技术栈
 
-| 层级 | 技术 | 版本 |
-|-----|------|------|
-| 桌面框架 | Tauri | 1.x |
-| 前端 | React | 18.x |
-| 构建 | Vite | 5.x |
-| 后端 | Python | 3.8+ |
-| 数据库 | SQLite | 3.x |
+| 层级     | 技术     | 版本  |
+| -------- | -------- | ----- |
+| 桌面框架 | Tauri    | 1.x   |
+| 前端     | React    | 18.x  |
+| 构建     | Vite     | 5.x   |
+| 后端     | Python   | 3.8+  |
+| 数据库   | SQLite   | 3.x   |
 | 向量存储 | ChromaDB | 0.4.x |
 
 ---
@@ -192,13 +192,13 @@ npm run tauri build
 export const config = {
   // API 地址
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-  
+
   // 默认模型
   defaultModel: 'gpt-4',
-  
+
   // 主题设置
   theme: 'light', // 'light' | 'dark' | 'auto'
-  
+
   // 日志级别
   logLevel: 'info', // 'debug' | 'info' | 'warn' | 'error'
 };
@@ -284,6 +284,7 @@ python -c "from memory import init_memory; init_memory()"
 ### Q4: Windows 7 下无法运行
 
 **A**: 确保已安装以下依赖：
+
 - WebView2 Runtime (下载: https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
 - Visual C++ Redistributable
 
@@ -297,7 +298,8 @@ python -c "from memory import init_memory; init_memory()"
 
 ### Q6: 如何更新技能？
 
-**A**: 
+**A**:
+
 1. 打开技能商店面板
 2. 浏览可用技能
 3. 点击安装按钮
@@ -343,20 +345,20 @@ sage/
 
 ## 🔧 详细文档
 
-| 文档 | 说明 |
-|-----|------|
-| [设计方案](./docs/01-overview.md) | 项目概述、目标、竞品对比 |
-| [系统架构](./docs/02-architecture.md) | 整体架构、数据流设计 |
-| [数据库设计](./docs/03-database.md) | 表结构、索引、备份 |
-| [记忆系统](./docs/04-memory.md) | 三层记忆、检索、进化 |
-| [Agent 引擎](./docs/05-agent.md) | 对话引擎、消息构建、工具执行 |
-| [工具系统](./docs/06-tools.md) | 内置工具、注册表、权限 |
-| [技能系统](./docs/07-skills.md) | 技能定义、管理器、商店 |
-| [进化系统](./docs/08-evolution.md) | 定时任务、摘要、修剪 |
-| [前端设计](./docs/09-frontend.md) | UI 组件、状态管理 |
-| [API 接口](./docs/10-api.md) | Tauri Commands、REST API |
-| [目录结构](./docs/11-structure.md) | 项目文件结构 |
-| [实施计划](./docs/12-plan.md) | 开发阶段、里程碑 |
+| 文档                                  | 说明                         |
+| ------------------------------------- | ---------------------------- |
+| [设计方案](./docs/01-overview.md)     | 项目概述、目标、竞品对比     |
+| [系统架构](./docs/02-architecture.md) | 整体架构、数据流设计         |
+| [数据库设计](./docs/03-database.md)   | 表结构、索引、备份           |
+| [记忆系统](./docs/04-memory.md)       | 三层记忆、检索、进化         |
+| [Agent 引擎](./docs/05-agent.md)      | 对话引擎、消息构建、工具执行 |
+| [工具系统](./docs/06-tools.md)        | 内置工具、注册表、权限       |
+| [技能系统](./docs/07-skills.md)       | 技能定义、管理器、商店       |
+| [进化系统](./docs/08-evolution.md)    | 定时任务、摘要、修剪         |
+| [前端设计](./docs/09-frontend.md)     | UI 组件、状态管理            |
+| [API 接口](./docs/10-api.md)          | Tauri Commands、REST API     |
+| [目录结构](./docs/11-structure.md)    | 项目文件结构                 |
+| [实施计划](./docs/12-plan.md)         | 开发阶段、里程碑             |
 
 ---
 

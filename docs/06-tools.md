@@ -5,6 +5,7 @@
 ### 6.1.1 设计目标
 
 工具系统让 Agent 能够:
+
 1. 执行外部操作 (文件系统、网络、终端)
 2. 扩展能力边界
 3. 完成复杂多步骤任务
@@ -38,18 +39,18 @@
 
 ### 6.2.1 工具清单
 
-| 工具名 | 功能 | 权限 | 异步 |
-|-------|------|------|------|
-| terminal | 执行 Shell 命令 | terminal | ✅ |
-| read_file | 读取文件内容 | file:read | ✅ |
-| write_file | 写入文件内容 | file:write | ✅ |
-| list_dir | 列出目录内容 | file:read | ✅ |
-| web_search | 网络搜索 | network | ✅ |
-| web_fetch | 获取网页内容 | network | ✅ |
-| calculator | 数学计算 | none | ❌ |
-| memory_search | 搜索记忆 | memory | ✅ |
-| memory_save | 保存记忆 | memory | ✅ |
-| delegate_task | 委托子任务 | none | ✅ |
+| 工具名        | 功能            | 权限       | 异步 |
+| ------------- | --------------- | ---------- | ---- |
+| terminal      | 执行 Shell 命令 | terminal   | ✅   |
+| read_file     | 读取文件内容    | file:read  | ✅   |
+| write_file    | 写入文件内容    | file:write | ✅   |
+| list_dir      | 列出目录内容    | file:read  | ✅   |
+| web_search    | 网络搜索        | network    | ✅   |
+| web_fetch     | 获取网页内容    | network    | ✅   |
+| calculator    | 数学计算        | none       | ❌   |
+| memory_search | 搜索记忆        | memory     | ✅   |
+| memory_save   | 保存记忆        | memory     | ✅   |
+| delegate_task | 委托子任务      | none       | ✅   |
 
 ### 6.2.2 Terminal 工具
 
@@ -854,4 +855,4 @@ class ToolLogger:
 
 ---
 
-*文档版本: v1.0*
+_文档版本: v1.0_

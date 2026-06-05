@@ -9,13 +9,13 @@ export type LLMErrorTypeFE =
   | 'network_error'
   | 'timeout'
   | 'parsing_error'
-  | 'unknown'
+  | 'unknown';
 
 export interface LLMErrorResponse {
-  type: LLMErrorTypeFE
-  message: string
-  status_code: number | null
-  retry_after: number | null
+  type: LLMErrorTypeFE;
+  message: string;
+  status_code: number | null;
+  retry_after: number | null;
 }
 
 const STATIC_MESSAGES: Record<LLMErrorTypeFE, string> = {
@@ -24,14 +24,14 @@ const STATIC_MESSAGES: Record<LLMErrorTypeFE, string> = {
   server_error: 'LLM 服务端错误，请稍后再试',
   network_error: '无法连接到 LLM 服务，请检查网络',
   timeout: '请求超时，请重试',
-  parsing_error: '原始消息',  // 解析错误用原始消息
+  parsing_error: '原始消息', // 解析错误用原始消息
   unknown: '未知错误',
-}
+};
 
 export function mapLLMErrorToText(err: LLMErrorResponse): string {
-  const base = STATIC_MESSAGES[err.type]
+  const base = STATIC_MESSAGES[err.type];
   if (err.type === 'rate_limited' && err.retry_after) {
-    return `${base}（建议 ${err.retry_after} 秒后重试）`
+    return `${base}（建议 ${err.retry_after} 秒后重试）`;
   }
-  return base ?? err.message
+  return base ?? err.message;
 }

@@ -1,11 +1,11 @@
-import type { Message as MessageType } from '../../lib/store'
+import type { Message as MessageType } from '../../lib/store';
 
-import { Message } from './Message'
+import { Message } from './Message';
 
 interface MessageListProps {
-  messages: MessageType[]
-  knowledgeRefs?: Record<string, { id: string; title: string }[]>
-  attachments?: Record<string, { name: string; size: number; type: string; dataUrl?: string }[]>
+  messages: MessageType[];
+  knowledgeRefs?: Record<string, { id: string; title: string }[]>;
+  attachments?: Record<string, { name: string; size: number; type: string; dataUrl?: string }[]>;
 }
 
 export function MessageList({ messages, knowledgeRefs, attachments }: MessageListProps) {
@@ -15,7 +15,7 @@ export function MessageList({ messages, knowledgeRefs, attachments }: MessageLis
         <p className="text-lg mb-2">欢迎使用 Sage</p>
         <p className="text-sm">开始一段新对话吧</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -29,5 +29,5 @@ export function MessageList({ messages, knowledgeRefs, attachments }: MessageLis
         />
       ))}
     </div>
-  )
+  );
 }

@@ -94,7 +94,7 @@ export const EvolutionPanel: React.FC = () => {
         <div>
           <h2 className="text-xl font-semibold text-text">进化系统</h2>
           <p className="text-sm text-muted mt-1">
-            调度器状态: {tasks.some(t => t.running) ? '运行中' : '已停止'}
+            调度器状态: {tasks.some((t) => t.running) ? '运行中' : '已停止'}
           </p>
         </div>
       </div>
@@ -104,24 +104,17 @@ export const EvolutionPanel: React.FC = () => {
         {tasks.map((task) => {
           const config = TASK_CONFIG[task.name as keyof typeof TASK_CONFIG];
           return (
-            <div
-              key={task.name}
-              className="bg-surface rounded-lg shadow p-4 border border-border"
-            >
+            <div key={task.name} className="bg-surface rounded-lg shadow p-4 border border-border">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-text">
-                      {config?.name || task.name}
-                    </h3>
+                    <h3 className="font-medium text-text">{config?.name || task.name}</h3>
                     <span className="text-xs px-2 py-0.5 bg-bg-subtle text-text-secondary rounded">
                       {getScheduleText(task.schedule)}
                     </span>
                   </div>
-                  <p className="text-sm text-muted mt-1">
-                    {config?.description || ''}
-                  </p>
-                  
+                  <p className="text-sm text-muted mt-1">{config?.description || ''}</p>
+
                   {/* 时间信息 */}
                   <div className="mt-3 grid grid-cols-2 gap-4 text-xs">
                     <div>
@@ -152,11 +145,7 @@ export const EvolutionPanel: React.FC = () => {
           );
         })}
 
-        {tasks.length === 0 && (
-          <div className="text-center py-8 text-muted">
-            暂无进化任务
-          </div>
-        )}
+        {tasks.length === 0 && <div className="text-center py-8 text-muted">暂无进化任务</div>}
       </div>
     </div>
   );

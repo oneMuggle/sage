@@ -1,21 +1,21 @@
 # Sage 配置文件
 
 app:
-  name: "Sage"
-  version: "1.0.0"
+  name: 'Sage'
+  version: '1.0.0'
   debug: true
 
 # 数据库配置
 database:
-  path: "data/sage.db"
+  path: 'data/sage.db'
   wal_mode: true
 
 # LLM 配置
 llm:
-  provider: "openai"
-  model: "gpt-3.5-turbo"
-  api_key: ""
-  base_url: ""
+  provider: 'openai'
+  model: 'gpt-3.5-turbo'
+  api_key: ''
+  base_url: ''
 
 # 记忆系统配置
 memory:
@@ -34,20 +34,20 @@ evolution:
   tasks:
     daily_summary:
       enabled: true
-      time: "03:00"
+      time: '03:00'
       min_messages: 3
     memory_pruning:
       enabled: true
-      time: "03:30"
+      time: '03:30'
       max_memories: 1000
     preference_learning:
       enabled: true
-      time: "02:00"
+      time: '02:00'
     importance_reevaluation:
       enabled: true
-      day: "sunday"
-      time: "04:00"
+      day: 'sunday'
+      time: '04:00'
 
 # 调度器配置
 scheduler:
-  check_interval: 60  # 检查间隔（秒）
+  check_interval: 60 # 检查间隔（秒）

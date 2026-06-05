@@ -17,11 +17,13 @@ Sage 是 React + Tauri + FastAPI 架构的 LLM 对话应用。`docs/plans/2026-0
 此外，**上一会话遗留关键 Bug**：用户在浏览器发送消息后无响应，但历史记录会新增一条。该 Bug 阻碍所有后续功能验证。
 
 **目标**：
+
 1. **阶段零**：定位并修复"发送消息无响应" Bug，建立可工作的端到端对话链路
 2. **阶段二**：实现 6 类 LLM 错误的分类与中文化友好提示
 3. **阶段三**：实现 OpenAI 工具调用 schema 透传 + ReAct 循环 + 工具执行 UI
 
 **成功标准**：
+
 - 端到端对话可见助手回复
 - 6 种错误类型有独立单元测试
 - 至少 1 个内置工具（calculator）可在 UI 中端到端调用
@@ -45,11 +47,11 @@ Sage 是 React + Tauri + FastAPI 架构的 LLM 对话应用。`docs/plans/2026-0
 
 ### 2.2 三阶段结构
 
-| 阶段 | 名称 | 关键产出 | 验证手段 |
-|------|------|----------|----------|
-| 0 | Bug 修复 | 端到端可对话 | 手动 + 单元回归测试 |
-| 2 | 错误处理 | 错误分类 + 友好提示 | 单元 + 集成测试 |
-| 3 | 工具系统 | Tool schema + ReAct + UI | 单元 + 集成 + E2E |
+| 阶段 | 名称     | 关键产出                 | 验证手段            |
+| ---- | -------- | ------------------------ | ------------------- |
+| 0    | Bug 修复 | 端到端可对话             | 手动 + 单元回归测试 |
+| 2    | 错误处理 | 错误分类 + 友好提示      | 单元 + 集成测试     |
+| 3    | 工具系统 | Tool schema + ReAct + UI | 单元 + 集成 + E2E   |
 
 ### 2.3 关键技术决策
 
@@ -90,12 +92,12 @@ logger.info(f"[REQ {request_id}] calling LLM: base_url={base_url}, model={model}
 
 ### 3.3 根因假设（按概率排序）
 
-| # | 假设 | 修复方向 |
-|---|------|----------|
-| 1 | `apiKey` 未透传到 `useChat`（settings 读取时机问题） | 修 `src/lib/settings.ts` 的读取顺序 |
-| 2 | Tauri invoke 序列化丢失 `apiKey` 字段 | 修 `src-tauri/src/models.rs` 的字段命名（snake_case ↔ camelCase） |
-| 3 | Python 端 `ChatRequest.api_key` 字段未正确绑定 | 修 Pydantic model + 透传 |
-| 4 | LLM 端点返回非标准响应导致解析失败（被静默 swallow） | 修 `llm_client.py` 显式 raise + 阶段二错误分类 |
+| #   | 假设                                                 | 修复方向                                                          |
+| --- | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| 1   | `apiKey` 未透传到 `useChat`（settings 读取时机问题） | 修 `src/lib/settings.ts` 的读取顺序                               |
+| 2   | Tauri invoke 序列化丢失 `apiKey` 字段                | 修 `src-tauri/src/models.rs` 的字段命名（snake_case ↔ camelCase） |
+| 3   | Python 端 `ChatRequest.api_key` 字段未正确绑定       | 修 Pydantic model + 透传                                          |
+| 4   | LLM 端点返回非标准响应导致解析失败（被静默 swallow） | 修 `llm_client.py` 显式 raise + 阶段二错误分类                    |
 
 ### 3.4 修复流程
 
@@ -392,13 +394,13 @@ def _safe_calculate(expression: str) -> str:
 
 ### 5.6 测试策略（TDD）
 
-| 测试层级 | 覆盖范围 | Mock 策略 |
-|----------|----------|----------|
-| 单元 | `run_loop` 状态转换 | mock `_call_llm` 返回预设 tool_calls |
-| 单元 | `execute_tool` 参数校验 | mock registry |
-| 单元 | `LLMResponse` 解析 | fixture 真实 LLM 响应样本 |
-| 集成 | `/chat` 流式返回 AgentEvent | mock LLMClient 端到端 |
-| E2E | 浏览器中调用 calculator | 真实 Tauri + Python + mock LLM |
+| 测试层级 | 覆盖范围                    | Mock 策略                            |
+| -------- | --------------------------- | ------------------------------------ |
+| 单元     | `run_loop` 状态转换         | mock `_call_llm` 返回预设 tool_calls |
+| 单元     | `execute_tool` 参数校验     | mock registry                        |
+| 单元     | `LLMResponse` 解析          | fixture 真实 LLM 响应样本            |
+| 集成     | `/chat` 流式返回 AgentEvent | mock LLMClient 端到端                |
+| E2E      | 浏览器中调用 calculator     | 真实 Tauri + Python + mock LLM       |
 
 ### 5.7 工具系统完成的判定标准
 
@@ -413,6 +415,7 @@ def _safe_calculate(expression: str) -> str:
 ## 6. 整体测试策略
 
 ### 6.1 测试覆盖目标
+
 - 整体单元测试覆盖率 ≥ 80%
 - 阶段零：关键链路有回归测试
 - 阶段二：6 种错误类型全覆盖
@@ -486,13 +489,13 @@ def _safe_calculate(expression: str) -> str:
 
 ## 8. 风险与缓解
 
-| 风险 | 概率 | 影响 | 缓解措施 |
-|------|------|------|----------|
-| Bug 修复引入新回归 | 中 | 高 | 每修复配 1 个回归测试 + CI 门控 |
-| ReAct 循环死循环 | 低 | 高 | `max_iterations=5` 硬上限 + 单元测试 |
-| 工具执行安全（eval 等） | 中 | 中 | 阶段三仅做 calculator，使用 `asteval` 或类似安全解析器 |
-| 流式响应协议选择 | 中 | 中 | 优先 NDJSON（简单），必要时升级到 SSE |
-| Tauri 启动失败 UI 改动牵动 Tauri 端 | 中 | 中 | 阶段二第 14 步可降级为仅前端检测（探测 /health 端点） |
+| 风险                                | 概率 | 影响 | 缓解措施                                               |
+| ----------------------------------- | ---- | ---- | ------------------------------------------------------ |
+| Bug 修复引入新回归                  | 中   | 高   | 每修复配 1 个回归测试 + CI 门控                        |
+| ReAct 循环死循环                    | 低   | 高   | `max_iterations=5` 硬上限 + 单元测试                   |
+| 工具执行安全（eval 等）             | 中   | 中   | 阶段三仅做 calculator，使用 `asteval` 或类似安全解析器 |
+| 流式响应协议选择                    | 中   | 中   | 优先 NDJSON（简单），必要时升级到 SSE                  |
+| Tauri 启动失败 UI 改动牵动 Tauri 端 | 中   | 中   | 阶段二第 14 步可降级为仅前端检测（探测 /health 端点）  |
 
 ### 8.1 回滚策略
 

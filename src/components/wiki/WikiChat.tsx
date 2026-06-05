@@ -1,37 +1,37 @@
 // Wiki Chat - ask questions and get synthesized answers
-import { Send, BookOpen } from 'lucide-react'
-import { useState } from 'react'
+import { Send, BookOpen } from 'lucide-react';
+import { useState } from 'react';
 
-import { useSettings } from '../../hooks/useSettings'
-import { wikiChat } from '../../lib/wiki-api'
-import { useWikiStore } from '../../stores/wiki-store'
+import { useSettings } from '../../hooks/useSettings';
+import { wikiChat } from '../../lib/wiki-api';
+import { useWikiStore } from '../../stores/wiki-store';
 
 interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-  citations?: string[]
+  role: 'user' | 'assistant';
+  content: string;
+  citations?: string[];
 }
 
 export function WikiChat() {
-  const project = useWikiStore((s) => s.project)
-  const openFile = useWikiStore((s) => s.openFile)
-  const setActiveView = useWikiStore((s) => s.setActiveView)
-  const settings = useSettings()
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
+  const project = useWikiStore((s) => s.project);
+  const openFile = useWikiStore((s) => s.openFile);
+  const setActiveView = useWikiStore((s) => s.setActiveView);
+  const settings = useSettings();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const activeEp = settings.settings.endpoints.find((e) => e.isActive)
-  const chatModel = settings.settings.modelSelections.chatModelId
+  const activeEp = settings.settings.endpoints.find((e) => e.isActive);
+  const chatModel = settings.settings.modelSelections.chatModelId;
 
   const handleSend = async () => {
-    if (!project || !input.trim() || !activeEp || !chatModel) return
+    if (!project || !input.trim() || !activeEp || !chatModel) return;
 
-    const userMessage: ChatMessage = { role: 'user', content: input.trim() }
-    setMessages((prev) => [...prev, userMessage])
-    const query = input.trim()
-    setInput('')
-    setLoading(true)
+    const userMessage: ChatMessage = { role: 'user', content: input.trim() };
+    setMessages((prev) => [...prev, userMessage]);
+    const query = input.trim();
+    setInput('');
+    setLoading(true);
 
     try {
       const response = await wikiChat(
@@ -40,35 +40,32 @@ export function WikiChat() {
         activeEp.baseUrl,
         activeEp.apiKey,
         chatModel,
-      )
+      );
 
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: response.answer,
         citations: response.citations,
-      }
-      setMessages((prev) => [...prev, assistantMessage])
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: `查询失败: ${e}` },
-      ])
+      setMessages((prev) => [...prev, { role: 'assistant', content: `查询失败: ${e}` }]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleCitationClick = (path: string) => {
-    openFile(path)
-    setActiveView('browser')
-  }
+    openFile(path);
+    setActiveView('browser');
+  };
 
   if (!project) {
     return (
       <div className="flex h-full items-center justify-center text-muted text-sm">
         请先打开一个 wiki 项目
       </div>
-    )
+    );
   }
 
   return (
@@ -84,15 +81,10 @@ export function WikiChat() {
         )}
 
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
+          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
               className={`max-w-[80%] rounded-lg px-4 py-3 ${
-                msg.role === 'user'
-                  ? 'bg-primary text-text-inverse'
-                  : 'bg-bg-muted text-text'
+                msg.role === 'user' ? 'bg-primary text-text-inverse' : 'bg-bg-muted text-text'
               }`}
             >
               <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
@@ -118,9 +110,7 @@ export function WikiChat() {
 
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-bg-muted rounded-lg px-4 py-3 text-sm text-muted">
-              正在思考...
-            </div>
+            <div className="bg-bg-muted rounded-lg px-4 py-3 text-sm text-muted">正在思考...</div>
           </div>
         )}
       </div>
@@ -134,8 +124,8 @@ export function WikiChat() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSend()
+                e.preventDefault();
+                handleSend();
               }
             }}
             placeholder="输入你的问题..."
@@ -152,5 +142,5 @@ export function WikiChat() {
         </div>
       </div>
     </div>
-  )
+  );
 }

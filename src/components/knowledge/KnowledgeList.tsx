@@ -1,13 +1,13 @@
-import type { KnowledgeDoc } from '../../hooks/useKnowledge'
+import type { KnowledgeDoc } from '../../hooks/useKnowledge';
 
-import { KnowledgeCard } from './KnowledgeCard'
+import { KnowledgeCard } from './KnowledgeCard';
 
 interface KnowledgeListProps {
-  docs: KnowledgeDoc[]
-  selectedIds: Set<string>
-  selectMode: boolean
-  onToggle: (id: string) => void
-  onCardClick?: (doc: KnowledgeDoc) => void
+  docs: KnowledgeDoc[];
+  selectedIds: Set<string>;
+  selectMode: boolean;
+  onToggle: (id: string) => void;
+  onCardClick?: (doc: KnowledgeDoc) => void;
 }
 
 export function KnowledgeList({
@@ -23,7 +23,7 @@ export function KnowledgeList({
         <p className="text-lg mb-2">未找到匹配的文档</p>
         <p className="text-sm">尝试调整搜索词或筛选条件</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -39,5 +39,5 @@ export function KnowledgeList({
         />
       ))}
     </div>
-  )
+  );
 }

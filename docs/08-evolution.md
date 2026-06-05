@@ -5,18 +5,19 @@
 ### 8.1.1 设计理念
 
 进化系统让 Sage 能够:
+
 1. **自我优化** - 从交互中学习，不断改进
 2. **适应用户** - 理解用户偏好，个性化服务
 3. **知识沉淀** - 将对话中的知识转化为长期记忆
 
 ### 8.1.2 进化维度
 
-| 维度 | 方式 | 触发条件 |
-|-----|------|---------|
+| 维度     | 方式           | 触发条件    |
+| -------- | -------------- | ----------- |
 | 记忆进化 | 摘要/压缩/遗忘 | 定时 + 阈值 |
-| 偏好学习 | 反馈强化 | 用户评分 |
-| 技能进化 | 模式提取 | 对话分析 |
-| 响应优化 | RL 风格调整 | 使用统计 |
+| 偏好学习 | 反馈强化       | 用户评分    |
+| 技能进化 | 模式提取       | 对话分析    |
+| 响应优化 | RL 风格调整    | 使用统计    |
 
 ---
 
@@ -533,23 +534,23 @@ evolution:
   tasks:
     daily_summary:
       enabled: true
-      time: "03:00"
+      time: '03:00'
       min_messages: 3
 
     memory_pruning:
       enabled: true
-      time: "03:30"
+      time: '03:30'
       max_memories: 1000
       auto_delete_below: 1
 
     importance_reevaluation:
       enabled: true
-      day: "sunday"
-      time: "04:00"
+      day: 'sunday'
+      time: '04:00'
 
     preference_learning:
       enabled: true
-      time: "02:00"
+      time: '02:00'
 
   thresholds:
     high_importance: 7
@@ -599,4 +600,4 @@ async def get_evolution_history(limit: int = 50) -> List[dict]:
 
 ---
 
-*文档版本: v1.0*
+_文档版本: v1.0_

@@ -1,34 +1,34 @@
-import { Plus, Download, X } from 'lucide-react'
-import { useState } from 'react'
+import { Plus, Download, X } from 'lucide-react';
+import { useState } from 'react';
 
-import { MemoryBrowser } from '../components/memory'
-import { memoryApi } from '../lib/api'
+import { MemoryBrowser } from '../components/memory';
+import { memoryApi } from '../lib/api';
 
 export function Memory() {
-  const [showNewMemory, setShowNewMemory] = useState(false)
-  const [exporting, setExporting] = useState(false)
+  const [showNewMemory, setShowNewMemory] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const handleExport = async () => {
-    setExporting(true)
+    setExporting(true);
     try {
-      const memories = await memoryApi.getMemories(undefined, 1, 1000)
-      const blob = new Blob([JSON.stringify(memories, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `sage-memories-${new Date().toISOString().slice(0, 10)}.json`
-      a.click()
-      URL.revokeObjectURL(url)
+      const memories = await memoryApi.getMemories(undefined, 1, 1000);
+      const blob = new Blob([JSON.stringify(memories, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sage-memories-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('导出失败:', err)
+      console.error('导出失败:', err);
     } finally {
-      setExporting(false)
+      setExporting(false);
     }
-  }
+  };
 
   const handleNewMemory = () => {
-    setShowNewMemory(true)
-  }
+    setShowNewMemory(true);
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-5">
@@ -53,40 +53,41 @@ export function Memory() {
         </div>
       </div>
 
-      {showNewMemory && (
-        <NewMemoryModal onClose={() => setShowNewMemory(false)} />
-      )}
+      {showNewMemory && <NewMemoryModal onClose={() => setShowNewMemory(false)} />}
 
       <MemoryBrowser initialType="all" />
     </div>
-  )
+  );
 }
 
 function NewMemoryModal({ onClose }: { onClose: () => void }) {
-  const [content, setContent] = useState('')
-  const [memoryType, setMemoryType] = useState<'episodic' | 'semantic'>('episodic')
-  const [importance, setImportance] = useState(5)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [content, setContent] = useState('');
+  const [memoryType, setMemoryType] = useState<'episodic' | 'semantic'>('episodic');
+  const [importance, setImportance] = useState(5);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSave = async () => {
-    if (!content.trim()) return
-    setSaving(true)
-    setError(null)
+    if (!content.trim()) return;
+    setSaving(true);
+    setError(null);
     try {
-      await memoryApi.saveMemory(content.trim(), memoryType, importance)
-      onClose()
+      await memoryApi.saveMemory(content.trim(), memoryType, importance);
+      onClose();
       // Reload the page to show new memory
-      window.location.reload()
+      window.location.reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(err instanceof Error ? err.message : '保存失败');
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
       <div
         className="bg-surface border border-border rounded-lg w-full max-w-md mx-4 p-5"
         onClick={(e) => e.stopPropagation()}
@@ -150,9 +151,7 @@ function NewMemoryModal({ onClose }: { onClose: () => void }) {
             />
           </div>
 
-          {error && (
-            <div className="text-xs text-error">{error}</div>
-          )}
+          {error && <div className="text-xs text-error">{error}</div>}
 
           <div className="flex justify-end gap-2 pt-2">
             <button
@@ -172,5 +171,5 @@ function NewMemoryModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
-  )
+  );
 }

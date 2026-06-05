@@ -1,58 +1,58 @@
 /** Settings version for future migration support */
-export const SETTINGS_VERSION = '2.0.0'
+export const SETTINGS_VERSION = '2.0.0';
 
 /** localStorage key for settings persistence */
-export const SETTINGS_STORAGE_KEY = 'sage-settings'
+export const SETTINGS_STORAGE_KEY = 'sage-settings';
 
 /** Model capability types */
-export type ModelCapability = 'chat' | 'vision' | 'embedding'
+export type ModelCapability = 'chat' | 'vision' | 'embedding';
 
 /** A model discovered from an endpoint's /v1/models */
 export interface DiscoveredModel {
-  id: string
-  capabilities: ModelCapability[]
-  endpointId: string
+  id: string;
+  capabilities: ModelCapability[];
+  endpointId: string;
 }
 
 /** Configuration for a single OpenAI-compatible endpoint */
 export interface EndpointConfig {
-  id: string
-  name: string
-  baseUrl: string
-  apiKey: string
-  isActive: boolean
-  discoveredModels: DiscoveredModel[]
-  lastDiscoveredAt: number | null
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  isActive: boolean;
+  discoveredModels: DiscoveredModel[];
+  lastDiscoveredAt: number | null;
 }
 
 /** User's model selections per type */
 export interface ModelSelections {
-  chatModelId: string | null
-  visionModelId: string | null
-  embeddingModelId: string | null
+  chatModelId: string | null;
+  visionModelId: string | null;
+  embeddingModelId: string | null;
 }
 
 /** All application settings */
 export interface AppSettings {
   // General
-  streaming: boolean
-  autoMemory: boolean
-  confirmDelete: boolean
-  compactMode: boolean
+  streaming: boolean;
+  autoMemory: boolean;
+  confirmDelete: boolean;
+  compactMode: boolean;
 
   // Endpoint & Model
-  endpoints: EndpointConfig[]
-  modelSelections: ModelSelections
-  maxContext: number
-  temperature: number
+  endpoints: EndpointConfig[];
+  modelSelections: ModelSelections;
+  maxContext: number;
+  temperature: number;
 
   // Network
-  proxyMode: 'system' | 'custom' | 'direct'
-  proxyUrl: string
-  tlsVersion: '1.2' | '1.3'
+  proxyMode: 'system' | 'custom' | 'direct';
+  proxyUrl: string;
+  tlsVersion: '1.2' | '1.3';
 
   // Internal
-  version: string
+  version: string;
 }
 
 export const DEFAULT_ENDPOINT: EndpointConfig = {
@@ -63,13 +63,13 @@ export const DEFAULT_ENDPOINT: EndpointConfig = {
   isActive: false,
   discoveredModels: [],
   lastDiscoveredAt: null,
-}
+};
 
 const DEFAULT_MODEL_SELECTIONS: ModelSelections = {
   chatModelId: null,
   visionModelId: null,
   embeddingModelId: null,
-}
+};
 
 /** Sensible defaults for all settings */
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -92,4 +92,4 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // Internal
   version: SETTINGS_VERSION,
-}
+};

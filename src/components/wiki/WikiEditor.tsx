@@ -1,48 +1,46 @@
 // Wiki Editor - split-pane markdown editor/viewer
-import { Eye, Pencil, Save } from 'lucide-react'
-import { useState } from 'react'
+import { Eye, Pencil, Save } from 'lucide-react';
+import { useState } from 'react';
 
-import { useWikiStore } from '../../stores/wiki-store'
+import { useWikiStore } from '../../stores/wiki-store';
 
-import { MarkdownPreview } from './MarkdownPreview'
+import { MarkdownPreview } from './MarkdownPreview';
 
 export function WikiEditor() {
-  const selectedFile = useWikiStore((s) => s.selectedFile)
-  const fileContent = useWikiStore((s) => s.fileContent)
-  const saveFile = useWikiStore((s) => s.saveFile)
-  const isLoading = useWikiStore((s) => s.isLoading)
-  const [editContent, setEditContent] = useState('')
-  const [isEditing, setIsEditing] = useState(false)
+  const selectedFile = useWikiStore((s) => s.selectedFile);
+  const fileContent = useWikiStore((s) => s.fileContent);
+  const saveFile = useWikiStore((s) => s.saveFile);
+  const isLoading = useWikiStore((s) => s.isLoading);
+  const [editContent, setEditContent] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
 
   // Sync edit content when file changes
   useState(() => {
-    setEditContent(fileContent)
-    setIsEditing(false)
-  })
+    setEditContent(fileContent);
+    setIsEditing(false);
+  });
 
   const handleSave = async () => {
-    if (!selectedFile) return
-    await saveFile(selectedFile, editContent)
-    setIsEditing(false)
-  }
+    if (!selectedFile) return;
+    await saveFile(selectedFile, editContent);
+    setIsEditing(false);
+  };
 
   if (!selectedFile) {
     return (
       <div className="flex h-full items-center justify-center text-muted text-sm">
         选择一个文件以查看或编辑
       </div>
-    )
+    );
   }
 
   if (isLoading && !fileContent) {
     return (
-      <div className="flex h-full items-center justify-center text-muted text-sm">
-        加载中...
-      </div>
-    )
+      <div className="flex h-full items-center justify-center text-muted text-sm">加载中...</div>
+    );
   }
 
-  const fileName = selectedFile.split('/').pop() || selectedFile
+  const fileName = selectedFile.split('/').pop() || selectedFile;
 
   return (
     <div className="flex h-full flex-col">
@@ -53,10 +51,10 @@ export function WikiEditor() {
           <button
             onClick={() => {
               if (!isEditing) {
-                setEditContent(fileContent)
-                setIsEditing(true)
+                setEditContent(fileContent);
+                setIsEditing(true);
               } else {
-                handleSave()
+                handleSave();
               }
             }}
             className="flex items-center gap-1 px-2 py-1 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-muted transition-colors"
@@ -96,5 +94,5 @@ export function WikiEditor() {
         )}
       </div>
     </div>
-  )
+  );
 }

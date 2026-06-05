@@ -1,8 +1,8 @@
-import { clsx } from 'clsx'
-import { InputHTMLAttributes, forwardRef } from 'react'
+import { clsx } from 'clsx';
+import { InputHTMLAttributes, forwardRef } from 'react';
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-  error?: boolean
+  error?: boolean;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -17,13 +17,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           'disabled:opacity-50 disabled:cursor-not-allowed',
           'placeholder:text-muted',
           error && 'border-error focus:ring-error/50',
-          className
+          className,
         )}
         ref={ref}
         {...props}
       />
-    )
-  }
-)
+    );
+  },
+);
 
-Input.displayName = 'Input'
+Input.displayName = 'Input';

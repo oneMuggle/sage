@@ -21,161 +21,161 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
 
-    - name: 设置 Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
 
-    - name: 安装前端依赖
-      run: npm ci
+      - name: 安装前端依赖
+        run: npm ci
 
-    - name: 构建前端
-      run: npm run build
+      - name: 构建前端
+        run: npm run build
 
-    - name: 安装 Rust (Win7 兼容版本)
-      uses: dtolnay/rust-toolchain@1.77.2
-      with:
-        targets: x86_64-pc-windows-msvc
+      - name: 安装 Rust (Win7 兼容版本)
+        uses: dtolnay/rust-toolchain@1.77.2
+        with:
+          targets: x86_64-pc-windows-msvc
 
-    - name: 安装 Visual Studio Build Tools
-      uses: egor-tensin/vs-setup@v3
-      with:
-        components: Desktop development with C++
+      - name: 安装 Visual Studio Build Tools
+        uses: egor-tensin/vs-setup@v3
+        with:
+          components: Desktop development with C++
 
-    - name: 缓存 Rust 依赖
-      uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: src-tauri/target
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri/target
 
-    - name: 下载 WebView2 v109 (Win7 兼容离线安装包)
-      id: download-webview2
-      run: |
-        mkdir src-tauri\resources
-        $out = "src-tauri\resources\WebView2Runtime_109.exe"
-        $success = $false
+      - name: 下载 WebView2 v109 (Win7 兼容离线安装包)
+        id: download-webview2
+        run: |
+          mkdir src-tauri\resources
+          $out = "src-tauri\resources\WebView2Runtime_109.exe"
+          $success = $false
 
-        # --- Source 1: GitHub mirror (aedancullen archive, .exe installer) ---
-        Write-Host "[1/4] Trying GitHub mirror (aedancullen)..."
-        try {
-          Invoke-WebRequest -Uri "https://github.com/aedancullen/webview2-evergreen-standalone-installer-archive/releases/download/109.0.1518.78/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" -OutFile $out -UseBasicParsing -TimeoutSec 120
-          if ((Get-Item $out).Length -gt 10MB) {
-            Write-Host "Success: $((Get-Item $out).Length / 1MB)MB"
-            $success = $true
-          }
-        } catch { Write-Host "Failed: $_" }
-
-        # --- Source 2: Microsoft fixed-version direct link ---
-        if (-not $success) {
-          Write-Host "[2/4] Trying Microsoft fixed-version direct link..."
+          # --- Source 1: GitHub mirror (aedancullen archive, .exe installer) ---
+          Write-Host "[1/4] Trying GitHub mirror (aedancullen)..."
           try {
-            Invoke-WebRequest -Uri "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/3b009565-19ab-4705-a7a3-5e1bf88e1341/MicrosoftEdgeWebView2RuntimeInstallerX64_109.0.1518.78.exe" -OutFile $out -UseBasicParsing -TimeoutSec 60
+            Invoke-WebRequest -Uri "https://github.com/aedancullen/webview2-evergreen-standalone-installer-archive/releases/download/109.0.1518.78/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" -OutFile $out -UseBasicParsing -TimeoutSec 120
             if ((Get-Item $out).Length -gt 10MB) {
               Write-Host "Success: $((Get-Item $out).Length / 1MB)MB"
               $success = $true
             }
           } catch { Write-Host "Failed: $_" }
-        }
 
-        if (-not $success -and $env:GITHUB_TOKEN) {
-          Write-Host "[3/4] Trying this repo Releases..."
-          $headers = @{ Authorization = "token $env:GITHUB_TOKEN" }
-          try {
-            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers
-            foreach ($release in $releases) {
-              foreach ($asset in $release.assets) {
-                if ($asset.name -eq 'WebView2Runtime_109.exe') {
-                  Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $out -Headers $headers -UseBasicParsing -TimeoutSec 60
-                  if ((Get-Item $out).Length -gt 10MB) {
-                    Write-Host "Success (from Release '$($release.tag_name)'): $((Get-Item $out).Length / 1MB)MB"
-                    $success = $true
-                    break
+          # --- Source 2: Microsoft fixed-version direct link ---
+          if (-not $success) {
+            Write-Host "[2/4] Trying Microsoft fixed-version direct link..."
+            try {
+              Invoke-WebRequest -Uri "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/3b009565-19ab-4705-a7a3-5e1bf88e1341/MicrosoftEdgeWebView2RuntimeInstallerX64_109.0.1518.78.exe" -OutFile $out -UseBasicParsing -TimeoutSec 60
+              if ((Get-Item $out).Length -gt 10MB) {
+                Write-Host "Success: $((Get-Item $out).Length / 1MB)MB"
+                $success = $true
+              }
+            } catch { Write-Host "Failed: $_" }
+          }
+
+          if (-not $success -and $env:GITHUB_TOKEN) {
+            Write-Host "[3/4] Trying this repo Releases..."
+            $headers = @{ Authorization = "token $env:GITHUB_TOKEN" }
+            try {
+              $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers
+              foreach ($release in $releases) {
+                foreach ($asset in $release.assets) {
+                  if ($asset.name -eq 'WebView2Runtime_109.exe') {
+                    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $out -Headers $headers -UseBasicParsing -TimeoutSec 60
+                    if ((Get-Item $out).Length -gt 10MB) {
+                      Write-Host "Success (from Release '$($release.tag_name)'): $((Get-Item $out).Length / 1MB)MB"
+                      $success = $true
+                      break
+                    }
                   }
                 }
+                if ($success) { break }
               }
-              if ($success) { break }
-            }
-          } catch { Write-Host "Failed: $_" }
-        }
-
-        if (-not $success) {
-          Write-Host "[4/4] Checking repo files..."
-          if (Test-Path "src-tauri\resources\WebView2Runtime_109.exe") {
-            Write-Host "Success (already in repo): $((Get-Item 'src-tauri\resources\WebView2Runtime_109.exe').Length / 1MB)MB"
-            $success = $true
-          } else {
-            Write-Host "File not found in repo"
+            } catch { Write-Host "Failed: $_" }
           }
-        }
 
-        if (-not $success) {
-          Write-Host "::error::All WebView2 download sources failed. Please manually download v109 offline installer and:"
-          Write-Host "  1. Commit to src-tauri/resources/WebView2Runtime_109.exe, or"
-          Write-Host "  2. Upload to GitHub Release named WebView2Runtime_109.exe"
-          exit 1
-        }
-      shell: powershell
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if (-not $success) {
+            Write-Host "[4/4] Checking repo files..."
+            if (Test-Path "src-tauri\resources\WebView2Runtime_109.exe") {
+              Write-Host "Success (already in repo): $((Get-Item 'src-tauri\resources\WebView2Runtime_109.exe').Length / 1MB)MB"
+              $success = $true
+            } else {
+              Write-Host "File not found in repo"
+            }
+          }
 
-    - name: 提取版本号
-      id: version
-      run: |
-        if ($env:GITHUB_REF -match '^refs/tags/') {
-          $ver = $env:GITHUB_REF -replace '^refs/tags/v?', ''
-        } else {
-          $ver = '${{ github.event.inputs.version }}'
-        }
-        Write-Host "VERSION=$ver"
-        echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
-      shell: powershell
+          if (-not $success) {
+            Write-Host "::error::All WebView2 download sources failed. Please manually download v109 offline installer and:"
+            Write-Host "  1. Commit to src-tauri/resources/WebView2Runtime_109.exe, or"
+            Write-Host "  2. Upload to GitHub Release named WebView2Runtime_109.exe"
+            exit 1
+          }
+        shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: 锁定依赖版本 (Win7 兼容)
-      working-directory: src-tauri
-      run: |
-        # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
-        cargo update -p idna_adapter --precise 1.2.0
-        cargo update -p ignore --precise 0.4.20
-        cargo update -p globset --precise 0.4.14
-        cargo update -p ahash --precise 0.8.11
-        cargo update -p tempfile --precise 3.15.0
-        cargo update -p uuid --precise 1.12.1
-        cargo update -p plist --precise 1.7.4
-        cargo update -p serde_with --precise 3.16.1
-        cargo update -p time --precise 0.3.41
-        cargo update -p embed-resource --precise 2.4.0
-        cargo update -p litemap --precise 0.7.3
-        cargo update -p unicode-segmentation --precise 1.12.0
-        cargo update -p reqwest --precise 0.11.22
+      - name: 提取版本号
+        id: version
+        run: |
+          if ($env:GITHUB_REF -match '^refs/tags/') {
+            $ver = $env:GITHUB_REF -replace '^refs/tags/v?', ''
+          } else {
+            $ver = '${{ github.event.inputs.version }}'
+          }
+          Write-Host "VERSION=$ver"
+          echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+        shell: powershell
 
-    - name: 编译 Rust Release
-      run: cargo build --release --target x86_64-pc-windows-msvc
-      working-directory: src-tauri
+      - name: 锁定依赖版本 (Win7 兼容)
+        working-directory: src-tauri
+        run: |
+          # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
+          cargo update -p idna_adapter --precise 1.2.0
+          cargo update -p ignore --precise 0.4.20
+          cargo update -p globset --precise 0.4.14
+          cargo update -p ahash --precise 0.8.11
+          cargo update -p tempfile --precise 3.15.0
+          cargo update -p uuid --precise 1.12.1
+          cargo update -p plist --precise 1.7.4
+          cargo update -p serde_with --precise 3.16.1
+          cargo update -p time --precise 0.3.41
+          cargo update -p embed-resource --precise 2.4.0
+          cargo update -p litemap --precise 0.7.3
+          cargo update -p unicode-segmentation --precise 1.12.0
+          cargo update -p reqwest --precise 0.11.22
 
-    - name: 安装 NSIS 并编译安装包
-      run: |
-        choco install nsis --no-progress
-        & "C:\Program Files (x86)\NSIS\makensis.exe" /V3 /DVERSION=${{ steps.version.outputs.VERSION }} installer.nsi
-      shell: powershell
-      working-directory: src-tauri
+      - name: 编译 Rust Release
+        run: cargo build --release --target x86_64-pc-windows-msvc
+        working-directory: src-tauri
 
-    - name: 上传安装包
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-installer
-        path: src-tauri/target/release/Sage_${{ steps.version.outputs.VERSION }}_x64-setup.exe
-        if-no-files-found: error
+      - name: 安装 NSIS 并编译安装包
+        run: |
+          choco install nsis --no-progress
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /V3 /DVERSION=${{ steps.version.outputs.VERSION }} installer.nsi
+        shell: powershell
+        working-directory: src-tauri
 
-    - name: 上传构建日志
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-logs
-        path: src-tauri/target/x86_64-pc-windows-msvc/release/**/*.log
-        if-no-files-found: ignore
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: src-tauri/target/release/Sage_${{ steps.version.outputs.VERSION }}_x64-setup.exe
+          if-no-files-found: error
+
+      - name: 上传构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/**/*.log
+          if-no-files-found: ignore
 
   # 创建 GitHub Release
   release:
@@ -184,27 +184,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
 
-    - name: 下载安装包
-      uses: actions/download-artifact@v4
-      with:
-        name: windows-installer
-        path: installer
+      - name: 下载安装包
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: installer
 
-    - name: 获取版本号
-      id: get_version
-      run: |
-        TAG=${GITHUB_REF#refs/tags/}
-        VERSION=${TAG:-${{ github.event.inputs.version }}}
-        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+      - name: 获取版本号
+        id: get_version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG:-${{ github.event.inputs.version }}}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-    - name: 创建 Release
-      uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: installer/*.exe
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: installer/*.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,18 +1,17 @@
-import { Plus, Search } from 'lucide-react'
-import { useState } from 'react'
+import { Plus, Search } from 'lucide-react';
+import { useState } from 'react';
 
-import type { Session } from '../../lib/store'
-import { Button } from '../common/Button'
+import type { Session } from '../../lib/store';
+import { Button } from '../common/Button';
 
-import { SessionItem } from './SessionItem'
-
+import { SessionItem } from './SessionItem';
 
 interface SessionListProps {
-  sessions: Session[]
-  currentSessionId: string | null
-  onSelect: (id: string) => void
-  onNew: () => void
-  onDelete: (id: string) => void
+  sessions: Session[];
+  currentSessionId: string | null;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+  onDelete: (id: string) => void;
 }
 
 export function SessionList({
@@ -22,14 +21,14 @@ export function SessionList({
   onNew,
   onDelete,
 }: SessionListProps) {
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredSessions = sessions.filter(s =>
-    s.title.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredSessions = sessions.filter((s) =>
+    s.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
-  const pinned = filteredSessions.filter(s => s.is_pinned)
-  const unpinned = filteredSessions.filter(s => !s.is_pinned)
+  const pinned = filteredSessions.filter((s) => s.is_pinned);
+  const unpinned = filteredSessions.filter((s) => !s.is_pinned);
 
   return (
     <div className="flex flex-col h-full">
@@ -41,7 +40,7 @@ export function SessionList({
             type="text"
             placeholder="搜索会话..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="
               w-full pl-9 pr-3 py-2 rounded-lg
               bg-bg-subtle
@@ -65,10 +64,8 @@ export function SessionList({
         {/* 置顶会话 */}
         {pinned.length > 0 && (
           <div className="px-3 py-1">
-            <div className="text-xs text-muted px-2 mb-1">
-              置顶
-            </div>
-            {pinned.map(session => (
+            <div className="text-xs text-muted px-2 mb-1">置顶</div>
+            {pinned.map((session) => (
               <SessionItem
                 key={session.id}
                 session={session}
@@ -83,12 +80,8 @@ export function SessionList({
         {/* 普通会话 */}
         {unpinned.length > 0 && (
           <div className="px-3 py-1">
-            {pinned.length > 0 && (
-              <div className="text-xs text-muted px-2 mb-1">
-                最近
-              </div>
-            )}
-            {unpinned.map(session => (
+            {pinned.length > 0 && <div className="text-xs text-muted px-2 mb-1">最近</div>}
+            {unpinned.map((session) => (
               <SessionItem
                 key={session.id}
                 session={session}
@@ -108,5 +101,5 @@ export function SessionList({
         )}
       </div>
     </div>
-  )
+  );
 }

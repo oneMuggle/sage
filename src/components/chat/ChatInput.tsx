@@ -1,21 +1,24 @@
-import { Send, Square, Image, Paperclip, BookOpen } from 'lucide-react'
-import { useState, useRef } from 'react'
+import { Send, Square, Image, Paperclip, BookOpen } from 'lucide-react';
+import { useState, useRef } from 'react';
 
-import { useFileUpload } from '../../hooks/useFileUpload'
+import { useFileUpload } from '../../hooks/useFileUpload';
 
-import { FileAttachment } from './FileAttachment'
-import { KnowledgeChip } from './KnowledgeChip'
+import { FileAttachment } from './FileAttachment';
+import { KnowledgeChip } from './KnowledgeChip';
 
 interface ChatInputProps {
-  onSend: (message: string, options?: {
-    knowledgeRefs?: { id: string; title: string }[]
-    attachments?: { name: string; size: number; type: string; dataUrl?: string }[]
-    images?: { name: string; size: number; type: string; dataUrl?: string }[]
-  }) => void
-  onInterrupt?: () => void
-  isLoading?: boolean
-  disabled?: boolean
-  placeholder?: string
+  onSend: (
+    message: string,
+    options?: {
+      knowledgeRefs?: { id: string; title: string }[];
+      attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
+      images?: { name: string; size: number; type: string; dataUrl?: string }[];
+    },
+  ) => void;
+  onInterrupt?: () => void;
+  isLoading?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
 }
 
 const KNOWLEDGE_DOCS = [
@@ -25,19 +28,19 @@ const KNOWLEDGE_DOCS = [
   { id: 'memory-arch', title: '记忆系统架构', desc: '本地存储与同步策略' },
   { id: 'ui-spec', title: 'UI 设计规范', desc: '设计令牌与组件库' },
   { id: 'test-data', title: '测试数据集', desc: '样本对话和测试用例' },
-]
+];
 
 export function ChatInput({
   onSend,
   onInterrupt,
   isLoading = false,
   disabled = false,
-  placeholder = '输入消息...'
+  placeholder = '输入消息...',
 }: ChatInputProps) {
-  const [value, setValue] = useState('')
-  const [knowledgeRefs, setKnowledgeRefs] = useState<{ id: string; title: string }[]>([])
-  const [showKnowledgeSelector, setShowKnowledgeSelector] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [value, setValue] = useState('');
+  const [knowledgeRefs, setKnowledgeRefs] = useState<{ id: string; title: string }[]>([]);
+  const [showKnowledgeSelector, setShowKnowledgeSelector] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const {
     files,
@@ -50,57 +53,57 @@ export function ChatInput({
     handleDrop,
     handleDragOver,
     isDragOver,
-  } = useFileUpload()
+  } = useFileUpload();
 
   const handleSend = () => {
-    if (!value.trim() || isLoading) return
+    if (!value.trim() || isLoading) return;
     onSend(value.trim(), {
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,
       images: images.length > 0 ? images : undefined,
-    })
-    setValue('')
-    setKnowledgeRefs([])
-    clearAll()
-  }
+    });
+    setValue('');
+    setKnowledgeRefs([]);
+    clearAll();
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
+      e.preventDefault();
+      handleSend();
     }
-  }
+  };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setValue(e.target.value)
-    const ta = e.target
-    ta.style.height = 'auto'
-    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
-  }
+    setValue(e.target.value);
+    const ta = e.target;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files
-    if (!selectedFiles) return
-    Array.from(selectedFiles).forEach(addImage)
-    e.target.value = ''
-  }
+    const selectedFiles = e.target.files;
+    if (!selectedFiles) return;
+    Array.from(selectedFiles).forEach(addImage);
+    e.target.value = '';
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files
-    if (!selectedFiles) return
-    Array.from(selectedFiles).forEach(addFile)
-    e.target.value = ''
-  }
+    const selectedFiles = e.target.files;
+    if (!selectedFiles) return;
+    Array.from(selectedFiles).forEach(addFile);
+    e.target.value = '';
+  };
 
-  const toggleKnowledgeRef = (doc: typeof KNOWLEDGE_DOCS[number]) => {
+  const toggleKnowledgeRef = (doc: (typeof KNOWLEDGE_DOCS)[number]) => {
     setKnowledgeRefs((prev) =>
       prev.find((r) => r.id === doc.id)
         ? prev.filter((r) => r.id !== doc.id)
-        : [...prev, { id: doc.id, title: doc.title }]
-    )
-  }
+        : [...prev, { id: doc.id, title: doc.title }],
+    );
+  };
 
-  const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0
+  const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0;
 
   return (
     <div
@@ -117,8 +120,13 @@ export function ChatInput({
       {images.length > 0 && (
         <div className="flex gap-2 mb-2">
           {images.map((img, idx) => (
-            <div key={idx} className="relative w-14 h-14 rounded-radius-sm border border-border overflow-hidden">
-              {img.dataUrl && <img src={img.dataUrl} alt="" className="w-full h-full object-cover" />}
+            <div
+              key={idx}
+              className="relative w-14 h-14 rounded-radius-sm border border-border overflow-hidden"
+            >
+              {img.dataUrl && (
+                <img src={img.dataUrl} alt="" className="w-full h-full object-cover" />
+              )}
               <button
                 className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-text/80 text-text-inverse flex items-center justify-center text-xs"
                 onClick={() => removeImage(idx)}
@@ -200,7 +208,7 @@ export function ChatInput({
               <div className="p-3">
                 <p className="text-xs font-medium text-text mb-2">引用知识库文档</p>
                 {KNOWLEDGE_DOCS.map((doc) => {
-                  const isSelected = !!knowledgeRefs.find((r) => r.id === doc.id)
+                  const isSelected = !!knowledgeRefs.find((r) => r.id === doc.id);
                   return (
                     <button
                       key={doc.id}
@@ -211,11 +219,20 @@ export function ChatInput({
                       }`}
                       onClick={() => toggleKnowledgeRef(doc)}
                     >
-                      <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
-                        isSelected ? 'bg-primary border-primary' : 'border-border'
-                      }`}>
+                      <span
+                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
+                          isSelected ? 'bg-primary border-primary' : 'border-border'
+                        }`}
+                      >
                         {isSelected && (
-                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4">
+                          <svg
+                            width="8"
+                            height="8"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="white"
+                            strokeWidth="4"
+                          >
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
                         )}
@@ -225,7 +242,7 @@ export function ChatInput({
                         <div className="text-muted">{doc.desc}</div>
                       </div>
                     </button>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -243,7 +260,7 @@ export function ChatInput({
         ) : (
           <button
             onClick={handleSend}
-            disabled={!value.trim() && !hasAttachments || disabled}
+            disabled={(!value.trim() && !hasAttachments) || disabled}
             className="h-9 px-4 bg-primary text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             发送
@@ -252,12 +269,27 @@ export function ChatInput({
         )}
       </div>
 
-      <input type="file" id="chat-input-image" accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
-      <input type="file" id="chat-input-file" multiple className="hidden" onChange={handleFileSelect} />
+      <input
+        type="file"
+        id="chat-input-image"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleImageSelect}
+      />
+      <input
+        type="file"
+        id="chat-input-file"
+        multiple
+        className="hidden"
+        onChange={handleFileSelect}
+      />
 
       <p className="text-[11px] text-muted text-center mt-1.5">
-        Sage 会记住你的项目信息，无需重复说明上下文 · 支持 <strong>粗体</strong>、<code className="px-1 py-0.5 bg-bg-subtle rounded text-xs">代码</code>、列表等 Markdown 语法 · 点击知识库按钮多选文档作为上下文引用
+        Sage 会记住你的项目信息，无需重复说明上下文 · 支持 <strong>粗体</strong>、
+        <code className="px-1 py-0.5 bg-bg-subtle rounded text-xs">代码</code>、列表等 Markdown 语法
+        · 点击知识库按钮多选文档作为上下文引用
       </p>
     </div>
-  )
+  );
 }

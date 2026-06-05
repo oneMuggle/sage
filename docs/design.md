@@ -13,13 +13,13 @@
 
 ### 2.1 关键技术约束
 
-| 技术组件 | Chatbox/Hermes 原始方案 | Win7 兼容替代方案 |
-|---------|------------------------|------------------|
-| 运行时 | Electron (Chromium) | Tauri 1.x (WebView2) 或 C# .NET WPF |
-| Node.js | ≥20.0.0 | Node.js 16.x (或纯 Python 方案) |
-| 系统API | 现代 Windows API | Win32 API / Windows 7 API |
-| TLS | 现代 TLS 1.3 | Windows 7 最高 TLS 1.2 (KB3140245) |
-| WebView | Chromium | IE11 WebView 或 WebView2 (需Win7支持版) |
+| 技术组件 | Chatbox/Hermes 原始方案 | Win7 兼容替代方案                       |
+| -------- | ----------------------- | --------------------------------------- |
+| 运行时   | Electron (Chromium)     | Tauri 1.x (WebView2) 或 C# .NET WPF     |
+| Node.js  | ≥20.0.0                 | Node.js 16.x (或纯 Python 方案)         |
+| 系统API  | 现代 Windows API        | Win32 API / Windows 7 API               |
+| TLS      | 现代 TLS 1.3            | Windows 7 最高 TLS 1.2 (KB3140245)      |
+| WebView  | Chromium                | IE11 WebView 或 WebView2 (需Win7支持版) |
 
 ### 2.2 Electron vs Tauri 对比
 
@@ -130,6 +130,7 @@ hermes-win7/
 ```
 
 **关键特性**:
+
 - `memory.tools()`: 自动保存对话摘要
 - `session_search()`: 跨会话搜索
 - 记忆衰减 + 重要性加权
@@ -173,14 +174,14 @@ class HermesWin7Agent:
 
 参考 Hermes `toolsets.py`:
 
-| 工具类别 | 功能 | 实现方式 |
-|---------|------|---------|
-| terminal | 执行命令 | subprocess |
-| file | 文件读写 | pathlib |
-| web | 网络搜索 | requests |
-| code | 代码执行 | subprocess + REPL |
-| memory | 记忆操作 | SQLite |
-| delegate | 任务委托 | multiprocessing |
+| 工具类别 | 功能     | 实现方式          |
+| -------- | -------- | ----------------- |
+| terminal | 执行命令 | subprocess        |
+| file     | 文件读写 | pathlib           |
+| web      | 网络搜索 | requests          |
+| code     | 代码执行 | subprocess + REPL |
+| memory   | 记忆操作 | SQLite            |
+| delegate | 任务委托 | multiprocessing   |
 
 ### 4.4 技能系统 (Skills)
 
@@ -197,6 +198,7 @@ class Skill:
 ```
 
 **内置技能**:
+
 - 写作代理 (Writing Agent)
 - 编程助手 (Coding Agent)
 - 研究助理 (Research Agent)
@@ -209,13 +211,13 @@ class Skill:
 
 ### 5.1 技术选型
 
-| 层级 | 技术 | 理由 |
-|-----|------|------|
-| 框架 | React 18 | 成熟生态，Chatbox 已用 |
-| 状态管理 | Zustand | 轻量，Win7 兼容 |
-| 样式 | Tailwind CSS | Chatbox 已用 |
-| 打包 | Vite | 快速构建 |
-| Tauri | 1.x | Win7 兼容 |
+| 层级     | 技术         | 理由                   |
+| -------- | ------------ | ---------------------- |
+| 框架     | React 18     | 成熟生态，Chatbox 已用 |
+| 状态管理 | Zustand      | 轻量，Win7 兼容        |
+| 样式     | Tailwind CSS | Chatbox 已用           |
+| 打包     | Vite         | 快速构建               |
+| Tauri    | 1.x          | Win7 兼容              |
 
 ### 5.2 界面布局
 
@@ -265,12 +267,12 @@ class Skill:
 
 ### 6.2 进化维度
 
-| 维度 | 方式 | 实现 |
-|-----|------|------|
-| 记忆优化 | 定期摘要 | 自动压缩旧对话 |
+| 维度     | 方式       | 实现           |
+| -------- | ---------- | -------------- |
+| 记忆优化 | 定期摘要   | 自动压缩旧对话 |
 | 技能习得 | 从对话学习 | 提取新技能模式 |
-| 响应优化 | 反馈学习 | 用户评分 → RL |
-| 个性化 | 用户画像 | 偏好记忆 |
+| 响应优化 | 反馈学习   | 用户评分 → RL  |
+| 个性化   | 用户画像   | 偏好记忆       |
 
 ### 6.3 进化触发条件
 
@@ -359,16 +361,16 @@ if sys.getwindowsversion()[:2] <= (6, 1):  # Win7
 
 ### 8.1 最终技术选型
 
-| 层级 | 技术 | 版本 | 说明 |
-|-----|------|------|------|
-| 桌面框架 | Tauri | 1.x | Win7 兼容，轻量 |
-| 前端框架 | React | 18.x | 成熟生态 |
-| 前端构建 | Vite | 5.x | 快速 |
-| 后端语言 | Python | 3.8-3.11 | 兼容性广泛 |
-| 数据库 | SQLite | 3.x | 零依赖 |
-| 向量存储 | ChromaDB | 0.4.x | 轻量级 |
-| AI SDK | openai-python | 1.x | 统一接口 |
-| HTTP 客户端 | httpx | 0.25.x | 异步支持 |
+| 层级        | 技术          | 版本     | 说明            |
+| ----------- | ------------- | -------- | --------------- |
+| 桌面框架    | Tauri         | 1.x      | Win7 兼容，轻量 |
+| 前端框架    | React         | 18.x     | 成熟生态        |
+| 前端构建    | Vite          | 5.x      | 快速            |
+| 后端语言    | Python        | 3.8-3.11 | 兼容性广泛      |
+| 数据库      | SQLite        | 3.x      | 零依赖          |
+| 向量存储    | ChromaDB      | 0.4.x    | 轻量级          |
+| AI SDK      | openai-python | 1.x      | 统一接口        |
+| HTTP 客户端 | httpx         | 0.25.x   | 异步支持        |
 
 ### 8.2 Win7 特殊处理
 
@@ -382,30 +384,35 @@ if sys.getwindowsversion()[:2] <= (6, 1):  # Win7
 ## 九、实施计划
 
 ### 阶段一: 基础框架 (第1-2周)
+
 - [ ] 项目初始化 (Tauri + React + Python)
 - [ ] 基础聊天界面
 - [ ] SQLite 会话管理
 - [ ] 基础 Agent 类
 
 ### 阶段二: 记忆系统 (第3-4周)
+
 - [ ] 情景记忆实现
 - [ ] 语义记忆 + 向量搜索
 - [ ] 记忆检索 API
 - [ ] 记忆浏览器 UI
 
 ### 阶段三: 工具与技能 (第5-6周)
+
 - [ ] 基础工具集 (terminal, file, web)
 - [ ] 技能系统框架
 - [ ] 内置技能实现
 - [ ] 技能商店 UI
 
 ### 阶段四: 进化系统 (第7-8周)
+
 - [ ] 自动摘要任务
 - [ ] 反馈学习机制
 - [ ] 定期进化调度
 - [ ] 进化日志
 
 ### 阶段五: 优化与打包 (第9-10周)
+
 - [ ] 性能优化
 - [ ] Win7 兼容性测试
 - [ ] 安装包制作
@@ -433,5 +440,5 @@ if sys.getwindowsversion()[:2] <= (6, 1):  # Win7
 
 ---
 
-*文档版本: v1.0*  
-*创建时间: 2026-05-09*
+_文档版本: v1.0_  
+_创建时间: 2026-05-09_
