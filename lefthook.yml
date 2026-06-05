@@ -1,0 +1,28 @@
+# lefthook.yml
+pre-commit:
+  parallel: true
+  commands:
+    backend-lint:
+      glob: "backend/**/*.py"
+      run: cd backend && /home/fz/anaconda3/envs/sage-backend/bin/ruff check --fix {staged_files}
+    backend-format:
+      glob: "backend/**/*.py"
+      run: cd backend && /home/fz/anaconda3/envs/sage-backend/bin/ruff format {staged_files}
+    frontend-lint:
+      glob: "src/**/*.{ts,tsx}"
+      run: npx eslint --fix {staged_files}
+    frontend-format:
+      glob: "src/**/*.{ts,tsx}"
+      run: npx prettier --write {staged_files}
+
+pre-push:
+  commands:
+    backend-test:
+      run: cd backend && /home/fz/anaconda3/envs/sage-backend/bin/pytest -x --no-cov
+    frontend-test:
+      run: npm run test:run -- --no-coverage
+
+post-merge:
+  commands:
+    deps-install:
+      run: npm install
