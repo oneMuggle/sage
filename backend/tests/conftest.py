@@ -43,3 +43,96 @@ async def client():
     """提供异步 HTTP 测试客户端"""
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
         yield c
+
+
+# ========== LLM Mock Fixtures (P0-T7) ==========
+import respx
+from httpx import Response
+
+
+@pytest.fixture
+def mock_llm_ok():
+    """Mock LLM 返回正常 chat completion.
+
+    用法：
+        def test_something(mock_llm_ok):
+            # 在测试中，调用 LLM 的请求会被 mock
+            response = await llm_client.chat(...)
+            assert response == expected
+    """
+    with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
+        mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                200,
+                json={
+                    "id": "test-completion",
+                    "object": "chat.completion",
+                    "created": 1700000000,
+                    "model": "test-model",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "Hello from mock!"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+                },
+            )
+        )
+        yield mock
+
+
+@pytest.fixture
+def mock_llm_rate_limit():
+    """Mock LLM 返回 429 限流响应"""
+    with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
+        mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                429,
+                json={"error": {"message": "Rate limit exceeded", "type": "rate_limit_error"}},
+            )
+        )
+        yield mock
+
+
+@pytest.fixture
+def mock_llm_timeout():
+    """Mock LLM 模拟超时（抛 TimeoutError）"""
+    with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
+        mock.post("/v1/chat/completions").mock(side_effect=TimeoutError("LLM request timed out"))
+        yield mock
+
+
+@pytest.fixture
+def mock_llm_server_error():
+    """Mock LLM 返回 500 服务端错误"""
+    with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
+        mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                500,
+                json={"error": {"message": "Internal server error"}},
+            )
+        )
+        yield mock
+
+
+@pytest.fixture
+def sample_messages():
+    """测试用消息列表（标准 system + user 开头）"""
+    return [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hi"},
+    ]
+
+
+@pytest.fixture
+def sample_user_query():
+    """测试用用户查询"""
+    return "What is the capital of France?"
+
+
+@pytest.fixture
+def tmp_data_dir(tmp_path):
+    """临时数据目录（避免污染真实 data/）—— 直接返回 tmp_path 便于测试中使用"""
+    return tmp_path
