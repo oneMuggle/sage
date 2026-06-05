@@ -3,7 +3,7 @@ API 路由定义
 """
 import uuid
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -18,6 +18,17 @@ from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, Memory
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _safe_log_field(value: object, max_length: int = 64) -> str:
+    """Sanitize a user-controlled field for safe logging.
+
+    - Strip newlines and control chars to prevent log injection
+    - Truncate to max_length to prevent log spam
+    """
+    s = str(value)
+    s = "".join(c for c in s if c.isprintable() or c == " ")
+    return s[:max_length]
 
 
 # ==================== Pydantic 模型 ====================
@@ -189,18 +200,19 @@ async def delete_session(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     data: ChatRequest,
+    request: Request,
 ):
     """发送聊天消息。
 
     错误处理：
     - LLMError: 返回 HTTP 200 + 结构化 error 字段
-    - 其他未预期错误: 返回 HTTP 200 + 通用 unknown 错误（前端统一处理）
-    - 响应头包含 x-request-id 用于日志追踪（在 main.py 中间件添加）
+    - 其他未预期错误: 返回 HTTP 200 + 通用 unknown 错误
+    - request_id 来自中间件（确保响应头与日志一致）
     """
-    request_id = str(uuid.uuid4())
-    logger.info(f"[REQ {request_id}] /chat received: session_id={data.session_id}, "
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+    logger.info(f"[REQ {request_id}] /chat received: session_id={_safe_log_field(data.session_id)}, "
                 f"api_key={'***' if data.api_key else 'MISSING'}, "
-                f"model={data.model}")
+                f"model={_safe_log_field(data.model or 'default')}")
 
     try:
         llm_config = None
@@ -212,7 +224,7 @@ async def chat(
                 "model": data.model or "gpt-3.5-turbo",
                 "temperature": data.temperature or 0.7,
             }
-            logger.info(f"[REQ {request_id}] using custom LLM config: model={llm_config['model']}")
+            logger.info(f"[REQ {request_id}] using custom LLM config: model={_safe_log_field(llm_config['model'])}")
 
         agent = SageAgent()
         result = await agent.chat(data.session_id, data.message, llm_config=llm_config)

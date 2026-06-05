@@ -3,7 +3,7 @@ Sage - 记忆型 AI 桌面助手
 FastAPI 后端入口
 """
 import asyncio
-import uuid as _uuid
+import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,12 +46,9 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_request_id_header(request: Request, call_next):
-    """为每个响应添加 x-request-id header。
-
-    用途：让前端日志能与后端日志按同一 ID 关联，跨进程追踪单次请求。
-    若客户端已提供 x-request-id，则沿用；否则由后端生成 UUID4。
-    """
-    request_id = request.headers.get("x-request-id") or str(_uuid.uuid4())
+    """为每个响应添加 x-request-id header（与 handler 共享同一 ID）。"""
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    request.state.request_id = request_id
     response = await call_next(request)
     response.headers["x-request-id"] = request_id
     return response
