@@ -53,7 +53,7 @@ jobs:
       - name: Pytest with coverage
         shell: bash -el {0}
         run: |
-          conda run -n sage-backend pytest --cov=backend --cov-report=xml --cov-report=term --cov-fail-under=0
+          conda run -n sage-backend pytest --cov=backend --cov-report=xml --cov-report=term --cov-fail-under=80
 
       - name: Upload coverage
         if: always()
