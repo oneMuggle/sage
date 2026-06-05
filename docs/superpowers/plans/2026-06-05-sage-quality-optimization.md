@@ -1559,18 +1559,18 @@ class PrometheusMetricAdapter:
 
 ### P0 阶段
 
-- [ ] Task 1: 添加 backend 测试与质量工具依赖
-- [ ] Task 2: 创建 backend conda 环境锁定文件
-- [ ] Task 3: 配置 pytest 与覆盖率门槛
-- [ ] Task 4: 配置 ruff 后端 lint
-- [ ] Task 5: 配置 mypy 后端类型检查
-- [ ] Task 6: 拆分 backend 测试到 unit/integration/e3e
-- [ ] Task 7: 增强 conftest.py 提供共享 fixture
-- [ ] Task 8: 配置前端 ESLint 9 flat config
-- [ ] Task 9: 配置 Prettier
-- [ ] Task 10: 配置 Lefthook 钩子
-- [ ] Task 11: 重写 CI 工作流
-- [ ] Task 12: 验证 P0 全部交付
+- [x] Task 1: 添加 backend 测试与质量工具依赖
+- [x] Task 2: 创建 backend conda 环境锁定文件
+- [x] Task 3: 配置 pytest 与覆盖率门槛
+- [x] Task 4: 配置 ruff 后端 lint
+- [x] Task 5: 配置 mypy 后端类型检查
+- [x] Task 6: 拆分 backend 测试到 unit/integration/e3e
+- [x] Task 7: 增强 conftest.py 提供共享 fixture
+- [x] Task 8: 配置前端 ESLint 9 flat config
+- [x] Task 9: 配置 Prettier
+- [x] Task 10: 配置 Lefthook 钩子
+- [x] Task 11: 重写 CI 工作流
+- [x] Task 12: 验证 P0 全部交付
 
 ### P1 阶段（任务组）
 
