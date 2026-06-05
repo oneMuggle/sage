@@ -15,8 +15,9 @@ from backend.data.session_repo import SessionRepository, Message as DbMessage, M
 from backend.data.database import get_database
 from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager, ConsolidationPipeline
 from backend.tools import ToolRegistry, register_all_tools
-from backend.core.exceptions import AgentError, ToolCallError, handle_sage_error
+from backend.core.exceptions import AgentError, ToolCallError
 from backend.core.llm_client import LLMClient, LLMConfig, LLMResponse
+from backend.core.errors import LLMError, LLMErrorType
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +245,8 @@ class SageAgent:
             
             # 调用 LLM
             if self.llm_client:
-                assistant_content = await self._call_llm(message, memory_context)
+                llm_response: LLMResponse = await self._call_llm(message, memory_context)
+                assistant_content = llm_response.content
             else:
                 assistant_content = f"收到消息: {message}\n\n(LLM 未配置，使用模拟响应)"
 
@@ -307,17 +309,28 @@ class SageAgent:
 
             return result
             
-        except Exception as e:
-            logger.error(f"chat 处理异常: {str(e)}")
+        except LLMError as e:
+            logger.error(f"chat LLM 错误: type={e.type.value}, message={e.message}")
             # 恢复原始 LLM 配置
             if llm_config:
                 self.llm_config = original_llm_config
                 self.llm_client = original_llm_client
-            error_dict = handle_sage_error(e)
             return {
-                "error": error_dict,
-                "message": assistant_message if 'assistant_message' in dir() else None,
-                "session": None
+                "error": e.to_dict(),
+                "message": None,
+                "session": None,
+            }
+        except Exception as e:
+            logger.exception(f"chat 处理异常: {str(e)}")
+            # 恢复原始 LLM 配置
+            if llm_config:
+                self.llm_config = original_llm_config
+                self.llm_client = original_llm_client
+            wrapped = LLMError(LLMErrorType.UNKNOWN, str(e))
+            return {
+                "error": wrapped.to_dict(),
+                "message": None,
+                "session": None,
             }
     
     def _extract_and_save_memories(
@@ -358,16 +371,19 @@ class SageAgent:
         except Exception as e:
             logger.warning(f"提取记忆失败: {str(e)}")
     
-    async def _call_llm(self, user_message: str, memory_context: str) -> str:
+    async def _call_llm(self, user_message: str, memory_context: str) -> LLMResponse:
         """
-        调用 LLM 生成回复
+        调用 LLM 生成回复。
+
+        让 LLMError 透传给调用方，由 chat() 统一处理为结构化 error 响应。
+        返回 LLMResponse 而非 str，以保留 tool_calls 等元数据供 Task 9 使用。
 
         Args:
             user_message: 用户消息
             memory_context: 记忆上下文
 
         Returns:
-            LLM 回复内容
+            LLMResponse：包含 content 和 tool_calls（透传不被吞没）
         """
         system_prompt = "你是 Sage，一个智能 AI 助手。"
         if memory_context:
@@ -378,12 +394,9 @@ class SageAgent:
             {"role": "user", "content": user_message},
         ]
 
-        try:
-            response = await self.llm_client.chat(messages)
-            return response.content
-        except Exception as e:
-            logger.error(f"LLM 调用失败: {e}")
-            return f"[LLM 调用失败: {e}]"
+        # 让 LLMError 透传给调用方，由 chat() 统一处理
+        response = await self.llm_client.chat(messages)
+        return response
 
     async def run_loop(self, messages: List[Dict[str, Any]]) -> str:
         """
