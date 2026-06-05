@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
 
-import { ChatInput } from '../components/chat/ChatInput';
-import { MessageList } from '../components/chat/MessageList';
-import { useChat } from '../hooks/useChat';
+import { useChat } from '../features/send-message/useChat';
 import { useStore } from '../lib/store';
+import { ChatInput, MessageList } from '../widgets/chat';
 
 export function Chat() {
   const { messages, isLoading, error, clearError, sendMessage, interrupt, loadMessages } =

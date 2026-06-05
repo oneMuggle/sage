@@ -1,11 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
 
-import { ApiException, type ChatConfig } from '../lib/api';
-import { mapLLMErrorToText, type LLMErrorResponse } from '../lib/errorMapping';
-import { logger } from '../lib/logger';
-import { chatApi, useStore, type Message } from '../lib/store';
-
-import { useSettings } from './useSettings';
+import { useSettings } from '../../hooks/useSettings';
+import { ApiException, type ChatConfig } from '../../lib/api';
+import { mapLLMErrorToText, type LLMErrorResponse } from '../../lib/errorMapping';
+import { logger } from '../../lib/logger';
+import { chatApi, useStore, type Message } from '../../lib/store';
 
 export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
