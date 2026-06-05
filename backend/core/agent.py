@@ -18,6 +18,7 @@ from backend.tools import ToolRegistry, register_all_tools
 from backend.core.exceptions import AgentError, ToolCallError
 from backend.core.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.core.errors import LLMError, LLMErrorType
+from backend.core.agent_state import AgentState, AgentEvent, ToolCallRequest, ToolCallResult
 
 logger = logging.getLogger(__name__)
 
@@ -398,22 +399,117 @@ class SageAgent:
         response = await self.llm_client.chat(messages)
         return response
 
-    async def run_loop(self, messages: List[Dict[str, Any]]) -> str:
-        """
-        运行 Agent 循环
-        
+    async def run_loop(
+        self,
+        messages: List[Dict[str, Any]],
+        max_iterations: int = 5,
+    ):
+        """ReAct 主循环。
+
+        状态机:IDLE → THINKING → (ACTING → OBSERVING)* → DONE/FAILED
+
         Args:
-            messages: 消息历史
-            
-        Returns:
-            Agent 响应
+            messages: 完整消息历史（含 system/user/assistant/tool），会被就地修改
+            max_iterations: 最大循环次数，防止死循环
+
+        Yields:
+            AgentEvent:状态机事件,前端通过流式响应(NDJSON)接收
         """
-        try:
-            # TODO: 实现 ReAct 循环
-            return "Agent 循环尚未实现"
-        except Exception as e:
-            logger.error(f"run_loop 异常: {str(e)}")
-            raise AgentError(f"Agent 循环执行失败: {str(e)}")
+        if self.llm_client is None:
+            raise AgentError("LLM 未配置,无法运行 Agent 循环")
+
+        for i in range(max_iterations):
+            yield AgentEvent(state=AgentState.THINKING, iteration=i)
+
+            response: LLMResponse = await self.llm_client.chat(messages)
+
+            if not response.tool_calls:
+                messages.append({
+                    "role": "assistant",
+                    "content": response.content,
+                })
+                yield AgentEvent(
+                    state=AgentState.DONE,
+                    iteration=i,
+                    content=response.content,
+                )
+                return
+
+            messages.append({
+                "role": "assistant",
+                "content": response.content or "",
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": tc.arguments,
+                        },
+                    }
+                    for tc in response.tool_calls
+                ],
+            })
+
+            for tc in response.tool_calls:
+                try:
+                    args = json.loads(tc.arguments) if isinstance(tc.arguments, str) else tc.arguments
+                except json.JSONDecodeError:
+                    args = {}
+
+                tool_req = ToolCallRequest(id=tc.id, name=tc.name, arguments=args)
+                yield AgentEvent(state=AgentState.ACTING, iteration=i, tool_call=tool_req)
+
+                is_error = False
+                result_content = ""
+                try:
+                    tool = self.tool_registry.get(tc.name)
+                    if tool is None:
+                        result_content = f"[错误] 工具不存在: {tc.name}"
+                        is_error = True
+                    else:
+                        result = tool.execute(**args)
+                        if hasattr(result, "success") and hasattr(result, "content"):
+                            is_error = not result.success
+                            if result.success:
+                                result_content = json.dumps(
+                                    result.content, ensure_ascii=False
+                                )
+                            else:
+                                result_content = result.error or "工具执行失败"
+                        else:
+                            is_error = False
+                            result_content = json.dumps(
+                                result, ensure_ascii=False, default=str
+                            )
+                except Exception as e:
+                    logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
+                    result_content = f"[工具错误] {str(e)}"
+                    is_error = True
+
+                tool_result = ToolCallResult(
+                    tool_call_id=tc.id,
+                    content=result_content,
+                    is_error=is_error,
+                )
+                yield AgentEvent(
+                    state=AgentState.OBSERVING,
+                    iteration=i,
+                    tool_call=tool_req,
+                    tool_result=tool_result,
+                )
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result_content,
+                })
+
+        yield AgentEvent(
+            state=AgentState.FAILED,
+            iteration=max_iterations,
+            error="max_iterations_exceeded",
+        )
     
     def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
