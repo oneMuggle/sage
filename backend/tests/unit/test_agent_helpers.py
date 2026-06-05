@@ -5,6 +5,7 @@ SageAgent 辅助方法测试 (PG1.1 - 覆盖补齐)
 还不够 —— QueryCache、interrupt、execute_tool、get_available_tools、clear_cache
 等都是高频入口。本文件为这些"非状态机但很重要"的辅助方法补齐测试。
 """
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -141,7 +142,9 @@ def test_execute_tool_returns_tool_result_dict():
     """execute_tool 成功时,应返回 tool.execute(**params).to_dict()。"""
     agent = SageAgent()
     mock_tool = MagicMock()
-    mock_tool.execute = MagicMock(return_value=MagicMock(to_dict=MagicMock(return_value={"out": 42})))
+    mock_tool.execute = MagicMock(
+        return_value=MagicMock(to_dict=MagicMock(return_value={"out": 42}))
+    )
     agent.tool_registry.get = MagicMock(return_value=mock_tool)
 
     result = agent.execute_tool("calculator", {"expression": "1+1"})
@@ -263,9 +266,7 @@ async def test_chat_with_llm_client_returns_llm_response():
     }
     agent = SageAgent(llm_config=cfg)
     # 用 AsyncMock 替换真正的 LLM chat 调用
-    agent.llm_client.chat = AsyncMock(
-        return_value=LLMResponse(content="mocked LLM reply")
-    )
+    agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="mocked LLM reply"))
 
     result = await agent.chat("s-llm", "user msg")
     assert result["message"]["role"] == "assistant"
@@ -280,12 +281,14 @@ async def test_chat_with_dynamic_llm_config_restores_original():
     from backend.core import agent as agent_mod
 
     # 初始化时用 gpt-3.5
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     original_client = agent.llm_client
     original_config = agent.llm_config
 
@@ -294,9 +297,7 @@ async def test_chat_with_dynamic_llm_config_restores_original():
     class _FlakyClient:
         def __init__(self, config):
             self.config = config
-            self.chat = AsyncMock(
-                side_effect=LLMError(LLMErrorType.RATE_LIMITED, "rate limit")
-            )
+            self.chat = AsyncMock(side_effect=LLMError(LLMErrorType.RATE_LIMITED, "rate limit"))
 
     with patch.object(agent_mod, "LLMClient", _FlakyClient):
         dynamic_cfg = {
@@ -319,12 +320,14 @@ async def test_chat_with_dynamic_llm_config_restores_original():
 @pytest.mark.asyncio()
 async def test_chat_returns_llm_error_response_on_llm_error():
     """LLMError 抛出时,chat() 应返回 error 字段结构化响应,而不是抛异常。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     agent.llm_client.chat = AsyncMock(
         side_effect=LLMError(LLMErrorType.AUTH_FAILED, "bad key", status_code=401)
     )
@@ -340,12 +343,14 @@ async def test_chat_returns_llm_error_response_on_llm_error():
 @pytest.mark.asyncio()
 async def test_chat_returns_unknown_error_response_on_unexpected_exception():
     """非 LLMError 异常(如 DB 错、编程错)时,chat() 应包装为 UNKNOWN LLMError。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     agent.llm_client.chat = AsyncMock(side_effect=RuntimeError("unexpected"))
 
     result = await agent.chat("s-boom", "hi")
@@ -362,15 +367,15 @@ async def test_chat_returns_unknown_error_response_on_unexpected_exception():
 @pytest.mark.asyncio()
 async def test_call_llm_returns_llm_response():
     """_call_llm 应构造 system + user 消息并返回 LLM 客户端的响应。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
-    agent.llm_client.chat = AsyncMock(
-        return_value=LLMResponse(content="ok", model="gpt-3.5-turbo")
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
     )
+    agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok", model="gpt-3.5-turbo"))
 
     resp = await agent._call_llm("user msg", memory_context="prior context")
     assert resp.content == "ok"
@@ -386,12 +391,14 @@ async def test_call_llm_returns_llm_response():
 @pytest.mark.asyncio()
 async def test_call_llm_works_without_memory_context():
     """memory_context 为空时,system prompt 不应拼接"记忆上下文"段落。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
 
     await agent._call_llm("user msg", memory_context="")
@@ -455,12 +462,14 @@ def test_extract_and_save_memories_swallows_exception():
 @pytest.mark.asyncio()
 async def test_chat_continues_when_message_save_fails():
     """message_repo.save 抛错时,chat() 应记录警告但不中断。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
     agent.message_repo.save = MagicMock(side_effect=RuntimeError("db down"))
 
@@ -472,12 +481,14 @@ async def test_chat_continues_when_message_save_fails():
 @pytest.mark.asyncio()
 async def test_chat_triggers_memory_consolidation_when_over_threshold():
     """工作记忆 token > 3000 时,chat() 应触发 consolidation.consolidate。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
     # 强制 working.total_tokens 超过阈值
     agent.memory_manager.working.total_tokens = 3001
@@ -490,12 +501,14 @@ async def test_chat_triggers_memory_consolidation_when_over_threshold():
 @pytest.mark.asyncio()
 async def test_chat_skips_consolidation_when_under_threshold():
     """工作记忆 token ≤ 3000 时,chat() 不应触发 consolidation。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
     agent.memory_manager.working.total_tokens = 500
     agent.consolidation.consolidate = MagicMock()
@@ -507,12 +520,14 @@ async def test_chat_skips_consolidation_when_under_threshold():
 @pytest.mark.asyncio()
 async def test_chat_updates_session_when_session_exists():
     """session_repo.get 找到 session 时,chat() 应更新 last_message_at 和 message_count。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
     # 准备一个 mock session
     mock_session = MagicMock()
@@ -530,12 +545,14 @@ async def test_chat_updates_session_when_session_exists():
 @pytest.mark.asyncio()
 async def test_chat_handles_missing_session_gracefully():
     """session_repo.get 返回 None 时,chat() 不应尝试 update,直接走 result 构造。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
     agent.session_repo.get = MagicMock(return_value=None)
     agent.session_repo.update = MagicMock()
@@ -549,12 +566,14 @@ async def test_chat_handles_missing_session_gracefully():
 @pytest.mark.asyncio()
 async def test_chat_caches_successful_result():
     """成功返回的 result 应被写入 _cache,下次同 query 命中缓存。"""
-    agent = SageAgent(llm_config={
-        "provider": "openai",
-        "api_key": "k",
-        "base_url": "https://api.example.com/v1",
-        "model": "gpt-3.5-turbo",
-    })
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
 
     result1 = await agent.chat("s-cache", "hello")

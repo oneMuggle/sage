@@ -14,6 +14,7 @@ Agent / LLMClient 流式响应边界测试 (PG1.1 - Task 1.1.3)
 
 这些测试只覆盖流式路径中"易出 bug 的边界",不重复 `test_agent_run_loop.py` 的内容。
 """
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -70,12 +71,14 @@ def _sse_response(chunks: list, status_code: int = 200):
 
 
 def _make_client() -> LLMClient:
-    return LLMClient(LLMConfig(
-        provider="openai",
-        api_key="test-key",
-        base_url="https://api.example.com/v1",
-        model="gpt-3.5-turbo",
-    ))
+    return LLMClient(
+        LLMConfig(
+            provider="openai",
+            api_key="test-key",
+            base_url="https://api.example.com/v1",
+            model="gpt-3.5-turbo",
+        )
+    )
 
 
 # =============================================================================
@@ -87,11 +90,13 @@ def _make_client() -> LLMClient:
 async def test_chat_stream_yields_each_delta_in_order():
     """多个 SSE delta 应按顺序逐个 yield 出来。"""
     client = _make_client()
-    ctx = _sse_response([
-        {"choices": [{"delta": {"content": "你"}}]},
-        {"choices": [{"delta": {"content": "好"}}]},
-        {"choices": [{"delta": {"content": "！"}}]},
-    ])
+    ctx = _sse_response(
+        [
+            {"choices": [{"delta": {"content": "你"}}]},
+            {"choices": [{"delta": {"content": "好"}}]},
+            {"choices": [{"delta": {"content": "！"}}]},
+        ]
+    )
 
     with pytest.MonkeyPatch.context() as mp:
         mock_http = MagicMock()
@@ -115,12 +120,14 @@ async def test_chat_stream_terminates_on_done_sentinel():
         data: [DONE]
     """
     client = _make_client()
-    ctx = _sse_response([
-        {"choices": [{"delta": {"content": "片段1"}}]},
-        "data: [DONE]",
-        # [DONE] 之后如果还有内容,也不应被消费
-        {"choices": [{"delta": {"content": "不该出现"}}]},
-    ])
+    ctx = _sse_response(
+        [
+            {"choices": [{"delta": {"content": "片段1"}}]},
+            "data: [DONE]",
+            # [DONE] 之后如果还有内容,也不应被消费
+            {"choices": [{"delta": {"content": "不该出现"}}]},
+        ]
+    )
 
     with pytest.MonkeyPatch.context() as mp:
         mock_http = MagicMock()
@@ -136,12 +143,14 @@ async def test_chat_stream_terminates_on_done_sentinel():
 async def test_chat_stream_skips_empty_delta_and_malformed_lines():
     """空 content / 损坏 JSON 行应被静默跳过,不影响后续正常 chunk。"""
     client = _make_client()
-    ctx = _sse_response([
-        {"choices": [{"delta": {"content": ""}}]},  # 空 content
-        "data: not-json-at-all{{{",                 # 损坏 JSON
-        {"choices": [{"delta": {"role": "assistant"}}]},  # 无 content
-        {"choices": [{"delta": {"content": "有效片段"}}]},
-    ])
+    ctx = _sse_response(
+        [
+            {"choices": [{"delta": {"content": ""}}]},  # 空 content
+            "data: not-json-at-all{{{",  # 损坏 JSON
+            {"choices": [{"delta": {"role": "assistant"}}]},  # 无 content
+            {"choices": [{"delta": {"content": "有效片段"}}]},
+        ]
+    )
 
     with pytest.MonkeyPatch.context() as mp:
         mock_http = MagicMock()
@@ -159,9 +168,7 @@ async def test_chat_stream_raises_runtime_error_on_http_error():
     client = _make_client()
     ctx = _sse_response([], status_code=500)
     # 覆写 raise_for_status 抛错
-    ctx.__aenter__.return_value.raise_for_status = MagicMock(
-        side_effect=Exception("HTTP 500")
-    )
+    ctx.__aenter__.return_value.raise_for_status = MagicMock(side_effect=Exception("HTTP 500"))
 
     with pytest.MonkeyPatch.context() as mp:
         mock_http = MagicMock()
@@ -206,7 +213,7 @@ async def test_run_loop_terminates_immediately_after_done_event():
     assert events[-1].state.value == "done"
     # DONE 之后不应再有 THINKING
     done_idx = next(i for i, e in enumerate(events) if e.state.value == "done")
-    assert "thinking" not in [e.state.value for e in events[done_idx + 1:]]
+    assert "thinking" not in [e.state.value for e in events[done_idx + 1 :]]
 
 
 @pytest.mark.asyncio()
