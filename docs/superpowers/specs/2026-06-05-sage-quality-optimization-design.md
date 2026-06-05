@@ -656,16 +656,31 @@ src/shared/ui/
 
 ## 8. 总体成功指标
 
-| 指标 | 基线 | 目标 | 衡量方式 |
+| 指标 | 基线（2026-06-05 P0-T3 实测） | 目标 | 衡量方式 |
 |------|------|------|----------|
-| 后端测试覆盖率 | 估约 40% | ≥ 80% | `pytest --cov` |
-| 前端测试覆盖率 | < 20% | ≥ 60%（核心 ≥ 80%） | `vitest --coverage` |
+| 后端测试覆盖率 | **43%**（2895 stmts, 1650 missed；41 测试全过） | ≥ 80% | `pytest --cov` |
+| 后端测试数 | 41 | ≥ 80（P1 末 +PG1.1–PG1.6 补齐） | `pytest --collect-only` |
+| 前端测试覆盖率 | TBD（P0-T8 末测） | ≥ 60%（核心 ≥ 80%） | `vitest --coverage` |
 | CI 跑通时间 | 无 CI | ≤ 8 分钟（无 Tauri） | GH Actions |
 | 端到端可用率 | 单平台 | Web + 桌面三平台 + Win7 | 手动 + E2E |
-| a11y 评分 | 估约 70 | ≥ 95 | Lighthouse |
+| a11y 评分 | TBD（P3 末测） | ≥ 95 | Lighthouse |
 | 文件 < 800 行 | 100% | 100% 维持 | `wc -l` 扫描 |
 | 模块依赖图 | 散乱 | 后端六边形 + 前端 FSD 清晰 | import-linter / eslint 边界规则 |
 | 平均 PR review 时间 | 无基线 | ≤ 24h | GH 统计 |
+
+**P0 末覆盖率摸底（per module）**：
+
+| 模块 | 基线 | 目标 | 阶段 |
+|------|------|------|------|
+| `core/agent.py` | 62% | ≥ 90% | P1 PG1.1 |
+| `core/llm_client.py` | 67% | ≥ 90% | P1 PG1.3 |
+| `core/orchestrator.py` | 21% | ≥ 90% | P1 PG1.2 |
+| `core/conventions.py` | 25% | ≥ 70% | P1 PG1.x |
+| `api/routes.py` | 68% | ≥ 85% | P1 PG1.4 |
+| `tools/*.py` | 待测 | ≥ 85% | P1 PG1.5 |
+| `skills/builtin/*.py` | 19~27% | ≥ 70% | P1 PG1.6 |
+| `scheduler/*.py` | 14~18% | ≥ 60% | P1 PG1.x |
+| `memory/*.py` | 24~28% | ≥ 60% | P1 PG1.x |
 
 ---
 
