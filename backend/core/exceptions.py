@@ -3,7 +3,7 @@ Sage 异常类定义
 统一错误处理规范
 """
 
-from typing import Optional, Any, Dict
+from typing import Any
 
 
 class SageError(Exception):
@@ -11,26 +11,26 @@ class SageError(Exception):
     Sage 基础异常类
     所有 Sage 相关异常的基类
     """
-    
+
     def __init__(
         self,
         message: str,
         code: str = "SAGE_ERROR",
-        details: Optional[Dict[str, Any]] = None
+        details: dict[str, Any] | None = None
     ):
         super().__init__(message)
         self.message = message
         self.code = code
         self.details = details or {}
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式"""
         return {
             "error": self.code,
             "message": self.message,
             "details": self.details
         }
-    
+
     def __str__(self) -> str:
         if self.details:
             return f"[{self.code}] {self.message} - {self.details}"
@@ -42,11 +42,11 @@ class AgentError(SageError):
     Agent 执行异常
     Agent 引擎运行过程中的错误
     """
-    
+
     def __init__(
         self,
         message: str,
-        details: Optional[Dict[str, Any]] = None
+        details: dict[str, Any] | None = None
     ):
         super().__init__(
             message=message,
@@ -60,12 +60,12 @@ class ToolCallError(SageError):
     工具调用异常
     工具执行失败时抛出
     """
-    
+
     def __init__(
         self,
         tool_name: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None
+        details: dict[str, Any] | None = None
     ):
         details = details or {}
         details["tool_name"] = tool_name
@@ -81,11 +81,11 @@ class MaxIterationsError(SageError):
     最大迭代次数异常
     Agent 循环超过最大迭代次数时抛出
     """
-    
+
     def __init__(
         self,
         max_iterations: int,
-        details: Optional[Dict[str, Any]] = None
+        details: dict[str, Any] | None = None
     ):
         details = details or {}
         details["max_iterations"] = max_iterations
@@ -101,12 +101,12 @@ class MemoryError(SageError):
     记忆系统异常
     记忆操作失败时抛出
     """
-    
+
     def __init__(
         self,
         operation: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None
+        details: dict[str, Any] | None = None
     ):
         details = details or {}
         details["operation"] = operation
@@ -122,11 +122,11 @@ class SessionNotFoundError(SageError):
     会话未找到异常
     指定的会话 ID 不存在时抛出
     """
-    
+
     def __init__(
         self,
         session_id: str,
-        details: Optional[Dict[str, Any]] = None
+        details: dict[str, Any] | None = None
     ):
         details = details or {}
         details["session_id"] = session_id
@@ -142,12 +142,12 @@ class ValidationError(SageError):
     数据验证异常
     输入数据验证失败时抛出
     """
-    
+
     def __init__(
         self,
         field: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None
+        details: dict[str, Any] | None = None
     ):
         details = details or {}
         details["field"] = field
@@ -163,12 +163,12 @@ class SecurityError(SageError):
     安全异常
     安全检查失败时抛出 (SQL注入、XSS等)
     """
-    
+
     def __init__(
         self,
         threat_type: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None
+        details: dict[str, Any] | None = None
     ):
         details = details or {}
         details["threat_type"] = threat_type
@@ -179,19 +179,19 @@ class SecurityError(SageError):
         )
 
 
-def handle_sage_error(error: Exception) -> Dict[str, Any]:
+def handle_sage_error(error: Exception) -> dict[str, Any]:
     """
     将异常转换为统一错误格式
-    
+
     Args:
         error: 原始异常
-        
+
     Returns:
         统一格式的错误字典
     """
     if isinstance(error, SageError):
         return error.to_dict()
-    
+
     # 未知异常，包装为通用错误
     return {
         "error": "INTERNAL_ERROR",

@@ -3,18 +3,18 @@
 
 提供所有内置技能的注册函数
 """
-from .registry import SkillRegistry
-from .base import BaseSkill, SkillSchema, SkillResult
-from .builtin.search import SearchSkill
-from .builtin.writer import WriterSkill
+from .base import BaseSkill, SkillResult, SkillSchema
 from .builtin.coder import CoderSkill
+from .builtin.search import SearchSkill
 from .builtin.travel import TravelSkill
+from .builtin.writer import WriterSkill
+from .registry import SkillRegistry
 
 
 def register_all_skills(registry: SkillRegistry) -> None:
     """
     注册所有内置技能到注册表
-    
+
     Args:
         registry: 技能注册表
     """
@@ -25,13 +25,13 @@ def register_all_skills(registry: SkillRegistry) -> None:
 
 
 __all__ = [
-    'SkillRegistry',
-    'BaseSkill',
-    'SkillSchema',
-    'SkillResult',
-    'SearchSkill',
-    'WriterSkill',
-    'CoderSkill',
-    'TravelSkill',
-    'register_all_skills',
+    "SkillRegistry",
+    "BaseSkill",
+    "SkillSchema",
+    "SkillResult",
+    "SearchSkill",
+    "WriterSkill",
+    "CoderSkill",
+    "TravelSkill",
+    "register_all_skills",
 ]

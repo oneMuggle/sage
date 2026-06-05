@@ -2,11 +2,8 @@
 Memory Consolidation Pipeline - 记忆压缩管道
 负责工作记忆到情景记忆的自动摘要和压缩
 """
-import json
-import time
-import uuid
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from backend.core.llm_client import LLMClient
 
@@ -23,12 +20,12 @@ class ConsolidationPipeline:
     3. 可选：使用 LLM 辅助摘要生成
     """
 
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(self, llm_client: LLMClient | None = None):
         self.llm_client = llm_client
 
     def compress_working_memory(
-        self, messages: List[Dict[str, Any]]
-    ) -> Optional[str]:
+        self, messages: list[dict[str, Any]]
+    ) -> str | None:
         """
         压缩工作记忆为摘要
 
@@ -61,12 +58,12 @@ class ConsolidationPipeline:
 
         return self._fallback_summary(messages)
 
-    def _fallback_summary(self, messages: List[Dict[str, Any]]) -> str:
+    def _fallback_summary(self, messages: list[dict[str, Any]]) -> str:
         """简单的回退摘要策略"""
         user_msgs = [m for m in messages if m.get("role") == "user"]
         if user_msgs:
             first = user_msgs[0].get("content", "")[:80]
-            last = user_msgs[-1].get("content", "")[:80]
+            user_msgs[-1].get("content", "")[:80]
             return f"对话围绕「{first}...」等话题展开，共 {len(messages)} 条消息"
         return f"共 {len(messages)} 条消息的对话"
 
@@ -74,7 +71,7 @@ class ConsolidationPipeline:
         self,
         episodic_memory,
         summary: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         importance: int = 5,
         message_count: int = 0
     ) -> str:
@@ -106,9 +103,9 @@ class ConsolidationPipeline:
     def consolidate(
         self,
         memory_manager,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         importance_threshold: int = 5
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         完整的记忆压缩流程
 
@@ -138,17 +135,15 @@ class ConsolidationPipeline:
         memory_manager.working.clear()
 
         logger.info(
-            "记忆压缩完成: {} 条消息 → 摘要 (memory_id={})".format(
-                len(working_messages), memory_id[:8]
-            )
+            f"记忆压缩完成: {len(working_messages)} 条消息 → 摘要 (memory_id={memory_id[:8]})"
         )
 
         return memory_id
 
     def extract_key_facts(
         self,
-        messages: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         从对话中提取关键事实
 

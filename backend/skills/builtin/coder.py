@@ -1,9 +1,9 @@
 """
 编程技能 - 代码编写、调试、解释
 """
-from typing import Dict, Any
+from typing import Any
 
-from ..base import BaseSkill, SkillSchema, SkillResult
+from ..base import BaseSkill, SkillResult, SkillSchema
 
 
 class CoderSkill(BaseSkill):
@@ -44,7 +44,7 @@ class CoderSkill(BaseSkill):
             ]
         )
 
-    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
+    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
         """执行编程任务"""
         action = params.get("action")
         language = params.get("language", "python")
@@ -53,7 +53,7 @@ class CoderSkill(BaseSkill):
 
         # 获取 LLM
         llm = context.get("llm")
-        
+
         # 构建代码任务提示
         if action == "write":
             prompt = f"请用 {language} 实现以下功能:\n{requirement}"
@@ -103,7 +103,7 @@ class CoderSkill(BaseSkill):
         templates = {
             "write": f"```{language}\n# {language} 代码示例\n# 根据需求: {requirement}\n\ndef example_function():\n    pass\n```",
             "explain": f"这段 {language} 代码的主要功能是...\n它包含以下部分:\n1. 函数定义\n2. 业务逻辑\n3. 返回值处理",
-            "debug": f"代码检查结果:\n- 语法正确\n- 请检查边界条件\n- 建议添加错误处理",
+            "debug": "代码检查结果:\n- 语法正确\n- 请检查边界条件\n- 建议添加错误处理",
             "review": f"{language} 代码审查建议:\n1. 代码结构良好\n2. 建议添加注释\n3. 可以考虑性能优化",
             "refactor": f"重构后的 {language} 代码:\n```\n# 重构版本\n# 更清晰的结构和命名\n```",
         }

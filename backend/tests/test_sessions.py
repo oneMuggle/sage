@@ -6,7 +6,7 @@ import pytest
 PREFIX = "/api/v1"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_create_session(client):
     """创建新会话"""
     resp = await client.post(f"{PREFIX}/sessions", json={"title": "测试对话"})
@@ -17,7 +17,7 @@ async def test_create_session(client):
     assert data["message_count"] == 0
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_list_sessions_empty(client):
     """空列表返回空数组"""
     resp = await client.get(f"{PREFIX}/sessions")
@@ -25,7 +25,7 @@ async def test_list_sessions_empty(client):
     assert resp.json() == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_list_sessions_after_create(client):
     """创建后可在列表中看到"""
     await client.post(f"{PREFIX}/sessions", json={"title": "对话A"})
@@ -40,7 +40,7 @@ async def test_list_sessions_after_create(client):
     assert "对话B" in titles
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_get_session(client):
     """获取单个会话"""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "获取测试"})
@@ -53,14 +53,14 @@ async def test_get_session(client):
     assert data["id"] == session_id
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_get_session_not_found(client):
     """不存在的会话返回 404"""
     resp = await client.get(f"{PREFIX}/sessions/nonexistent-id")
     assert resp.status_code == 404
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_update_session(client):
     """更新会话标题"""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "旧标题"})
@@ -72,7 +72,7 @@ async def test_update_session(client):
     assert data["title"] == "新标题"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_delete_session(client):
     """删除会话"""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "待删除"})
@@ -87,7 +87,7 @@ async def test_delete_session(client):
     assert resp.status_code == 404
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_delete_nonexistent_session(client):
     """删除不存在的会话返回 404"""
     resp = await client.delete(f"{PREFIX}/sessions/nonexistent-id")

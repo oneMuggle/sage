@@ -3,10 +3,11 @@ LLM Client - 大语言模型客户端
 支持 OpenAI-compatible API 协议，兼容多种提供商
 """
 import json
-import time
 import logging
-from typing import List, Dict, Any, Optional, AsyncGenerator
+import time
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 
@@ -20,8 +21,8 @@ class LLMMessage:
     """单条对话消息"""
     role: str  # "system" | "user" | "assistant" | "tool"
     content: str
-    tool_calls: Optional[List[Dict[str, Any]]] = None
-    tool_call_id: Optional[str] = None
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str | None = None
 
 
 @dataclass
@@ -36,8 +37,8 @@ class LLMToolCall:
 class LLMChoice:
     """单条回复选项"""
     message: LLMMessage
-    finish_reason: Optional[str] = None
-    tool_calls: Optional[List[LLMToolCall]] = None
+    finish_reason: str | None = None
+    tool_calls: list[LLMToolCall] | None = None
 
 
 @dataclass
@@ -45,12 +46,12 @@ class LLMResponse:
     """LLM 回复"""
     content: str = ""
     model: str = ""
-    finish_reason: Optional[str] = None
-    tool_calls: List[LLMToolCall] = field(default_factory=list)
+    finish_reason: str | None = None
+    tool_calls: list[LLMToolCall] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
-    raw: Optional[Dict[str, Any]] = None
+    raw: dict[str, Any] | None = None
 
 
 @dataclass
@@ -63,7 +64,7 @@ class LLMConfig:
     temperature: float = 0.7
     max_tokens: int = 4096
     timeout: int = 60
-    extra_headers: Dict[str, str] = field(default_factory=dict)
+    extra_headers: dict[str, str] = field(default_factory=dict)
 
 
 class LLMClient:
@@ -82,7 +83,7 @@ class LLMClient:
 
     def __init__(self, config: LLMConfig):
         self.config = config
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """获取或创建 HTTP 客户端"""
@@ -107,7 +108,7 @@ class LLMClient:
             await self._client.aclose()
 
     @staticmethod
-    def _convert_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _convert_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """转换消息格式"""
         result = []
         for msg in messages:
@@ -120,7 +121,7 @@ class LLMClient:
         return result
 
     @staticmethod
-    def _parse_tool_calls(raw_tool_calls: list) -> List[LLMToolCall]:
+    def _parse_tool_calls(raw_tool_calls: list) -> list[LLMToolCall]:
         """解析工具调用"""
         result = []
         for tc in raw_tool_calls:
@@ -133,9 +134,9 @@ class LLMClient:
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = None,
     ) -> LLMResponse:
         """
         发送聊天请求（非流式）
@@ -227,7 +228,7 @@ class LLMClient:
         )
 
     async def chat_stream(
-        self, messages: List[Dict[str, Any]]
+        self, messages: list[dict[str, Any]]
     ) -> AsyncGenerator[str, None]:
         """
         发送聊天请求（流式）
@@ -294,7 +295,7 @@ class LLMClient:
         response = await self.chat(messages)
         return response.content
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """导出配置信息"""
         return {
             "provider": self.config.provider,

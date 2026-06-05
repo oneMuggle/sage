@@ -4,7 +4,7 @@
 import pytest
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_health_check(client):
     """健康检查端点返回 ok 状态"""
     resp = await client.get("/health")
@@ -14,7 +14,7 @@ async def test_health_check(client):
     assert "version" in data
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_openapi_docs(client):
     """OpenAPI 文档端点可访问"""
     resp = await client.get("/openapi.json")
@@ -23,7 +23,7 @@ async def test_openapi_docs(client):
     assert "openapi" in schema
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_docs_ui(client):
     """Swagger UI 端点可访问"""
     resp = await client.get("/docs")

@@ -2,23 +2,29 @@
 SageAgent - 核心对话引擎
 基于 ReAct 模式的 Agent 实现
 """
+import hashlib
 import json
+import logging
 import time
 import uuid
-import logging
-import hashlib
-from typing import List, Dict, Any, Optional, Callable
 from collections import deque
 from threading import Lock
+from typing import Any
 
-from backend.data.session_repo import SessionRepository, Message as DbMessage, MessageRepository
-from backend.data.database import get_database
-from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager, ConsolidationPipeline
-from backend.tools import ToolRegistry, register_all_tools
+from backend.core.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
+from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import AgentError, ToolCallError
 from backend.core.llm_client import LLMClient, LLMConfig, LLMResponse
-from backend.core.errors import LLMError, LLMErrorType
-from backend.core.agent_state import AgentState, AgentEvent, ToolCallRequest, ToolCallResult
+from backend.data.database import get_database
+from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+from backend.memory import (
+    ConsolidationPipeline,
+    EpisodicMemory,
+    MemoryManager,
+    SemanticMemory,
+    WorkingMemory,
+)
+from backend.tools import ToolRegistry, register_all_tools
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +34,11 @@ class QueryCache:
     简单内存缓存
     最近查询结果缓存，TTL=5分钟
     """
-    
+
     def __init__(self, ttl: int = 300, max_size: int = 100):
         """
         初始化缓存
-        
+
         Args:
             ttl: 缓存生存时间（秒），默认5分钟
             max_size: 缓存最大条目数
@@ -41,34 +47,34 @@ class QueryCache:
         self.max_size = max_size
         self._cache: deque = deque(maxlen=max_size)
         self._lock = Lock()
-    
+
     def _generate_key(self, session_id: str, message: str) -> str:
         """
         生成缓存键
-        
+
         Args:
             session_id: 会话ID
             message: 消息内容
-            
+
         Returns:
             缓存键的哈希值
         """
         key_str = f"{session_id}:{message}"
         return hashlib.md5(key_str.encode()).hexdigest()
-    
-    def get(self, session_id: str, message: str) -> Optional[Dict[str, Any]]:
+
+    def get(self, session_id: str, message: str) -> dict[str, Any] | None:
         """
         获取缓存结果
-        
+
         Args:
             session_id: 会话ID
             message: 消息内容
-            
+
         Returns:
             缓存结果，如果不存在或已过期返回None
         """
         key = self._generate_key(session_id, message)
-        
+
         with self._lock:
             for item in self._cache:
                 if item["key"] == key:
@@ -81,25 +87,25 @@ class QueryCache:
                         self._cache.remove(item)
                         break
         return None
-    
-    def set(self, session_id: str, message: str, result: Dict[str, Any]) -> None:
+
+    def set(self, session_id: str, message: str, result: dict[str, Any]) -> None:
         """
         设置缓存
-        
+
         Args:
             session_id: 会话ID
             message: 消息内容
             result: 结果数据
         """
         key = self._generate_key(session_id, message)
-        
+
         with self._lock:
             # 移除已存在的相同键
             self._cache = deque(
                 (item for item in self._cache if item["key"] != key),
                 maxlen=self.max_size
             )
-            
+
             # 添加新条目
             self._cache.append({
                 "key": key,
@@ -108,22 +114,22 @@ class QueryCache:
                 "result": result,
                 "timestamp": time.time()
             })
-    
+
     def clear(self) -> None:
         """清空缓存"""
         with self._lock:
             self._cache.clear()
-    
+
     def cleanup(self) -> int:
         """
         清理过期缓存
-        
+
         Returns:
             清理的条目数
         """
         now = time.time()
         removed = 0
-        
+
         with self._lock:
             original_len = len(self._cache)
             self._cache = deque(
@@ -131,10 +137,10 @@ class QueryCache:
                 maxlen=self.max_size
             )
             removed = original_len - len(self._cache)
-        
+
         if removed > 0:
             logger.debug(f"清理了 {removed} 个过期缓存条目")
-        
+
         return removed
 
 
@@ -149,11 +155,11 @@ class SageAgent:
     - 维护上下文
     """
 
-    def __init__(self, llm_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, llm_config: dict[str, Any] | None = None):
         self.session_repo = SessionRepository()
         self.message_repo = MessageRepository()
         self._interrupted = False
-        self._current_session_id: Optional[str] = None
+        self._current_session_id: str | None = None
 
         # 初始化查询缓存 (TTL=5分钟)
         self._cache = QueryCache(ttl=300, max_size=100)
@@ -169,12 +175,12 @@ class SageAgent:
         # 初始化工具注册表
         self.tool_registry = ToolRegistry()
         register_all_tools(self.tool_registry)
-        logger.info("工具注册表初始化完成，已注册 {} 个工具".format(len(self.tool_registry.list())))
+        logger.info(f"工具注册表初始化完成，已注册 {len(self.tool_registry.list())} 个工具")
 
         # 初始化 LLM 客户端
         if llm_config:
             self.llm_config = LLMConfig(**llm_config)
-            self.llm_client: Optional[LLMClient] = LLMClient(self.llm_config)
+            self.llm_client: LLMClient | None = LLMClient(self.llm_config)
             logger.info("LLM 客户端已初始化: provider={}, model={}".format(
                 llm_config.get("provider"), llm_config.get("model")))
         else:
@@ -184,8 +190,8 @@ class SageAgent:
 
         # 初始化记忆压缩管道
         self.consolidation = ConsolidationPipeline(llm_client=self.llm_client)
-    
-    async def chat(self, session_id: str, message: str, llm_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+
+    async def chat(self, session_id: str, message: str, llm_config: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         处理用户消息
 
@@ -215,7 +221,7 @@ class SageAgent:
                 self.llm_client = LLMClient(self.llm_config)
                 logger.info("使用动态 LLM 配置: provider={}, model={}".format(
                     llm_config.get("provider"), llm_config.get("model")))
-            
+
             # 创建用户消息
             now = int(time.time() * 1000)
             user_message = {
@@ -237,13 +243,13 @@ class SageAgent:
                 ))
             except Exception as db_err:
                 logger.warning(f"用户消息持久化失败: {db_err}")
-            
+
             # 对话前：获取记忆上下文
             memory_context = self.memory_manager.get_context(limit=10)
-            
+
             # 将用户消息添加到工作记忆
             self.memory_manager.add_to_working("user", message)
-            
+
             # 调用 LLM
             if self.llm_client:
                 llm_response: LLMResponse = await self._call_llm(message, memory_context)
@@ -272,10 +278,10 @@ class SageAgent:
                 ))
             except Exception as db_err:
                 logger.warning(f"助手消息持久化失败: {db_err}")
-            
+
             # 将助手消息添加到工作记忆
             self.memory_manager.add_to_working("assistant", assistant_message["content"])
-            
+
             # 对话后：提取关键信息存入情景记忆
             self._extract_and_save_memories(session_id, user_message, assistant_message)
 
@@ -285,7 +291,7 @@ class SageAgent:
                     self.memory_manager,
                     session_id=session_id
                 )
-            
+
             # 更新会话
             session = self.session_repo.get(session_id)
             if session:
@@ -294,7 +300,7 @@ class SageAgent:
                     last_message_at=assistant_message["created_at"],
                     message_count=session.message_count + 2
                 )
-            
+
             result = {
                 "message": assistant_message,
                 "session": session.to_dict() if session else None
@@ -309,7 +315,7 @@ class SageAgent:
                 self.llm_client = original_llm_client
 
             return result
-            
+
         except LLMError as e:
             logger.error(f"chat LLM 错误: type={e.type.value}, message={e.message}")
             # 恢复原始 LLM 配置
@@ -333,16 +339,16 @@ class SageAgent:
                 "message": None,
                 "session": None,
             }
-    
+
     def _extract_and_save_memories(
         self,
         session_id: str,
-        user_message: Dict[str, Any],
-        assistant_message: Dict[str, Any]
+        user_message: dict[str, Any],
+        assistant_message: dict[str, Any]
     ) -> None:
         """
         从对话中提取关键信息并存入情景记忆
-        
+
         Args:
             session_id: 会话 ID
             user_message: 用户消息
@@ -351,19 +357,19 @@ class SageAgent:
         try:
             user_content = user_message.get("content", "")
             assistant_content = assistant_message.get("content", "")
-            
+
             # 对于较长的对话，保存到情景记忆
             if len(user_content) > 100 or len(assistant_content) > 100:
                 combined_content = f"[用户]: {user_content}\n[助手]: {assistant_content}"
                 importance = 5
-                
+
                 # 检测是否包含偏好或设置信息
                 preference_keywords = ["喜欢", "偏好", "不要", "记得", "设置", "以后"]
                 for keyword in preference_keywords:
                     if keyword in user_content:
                         importance = 7
                         break
-                
+
                 self.memory_manager.remember(combined_content, {
                     "session_id": session_id,
                     "importance": importance,
@@ -371,7 +377,7 @@ class SageAgent:
                 })
         except Exception as e:
             logger.warning(f"提取记忆失败: {str(e)}")
-    
+
     async def _call_llm(self, user_message: str, memory_context: str) -> LLMResponse:
         """
         调用 LLM 生成回复。
@@ -396,12 +402,11 @@ class SageAgent:
         ]
 
         # 让 LLMError 透传给调用方，由 chat() 统一处理
-        response = await self.llm_client.chat(messages)
-        return response
+        return await self.llm_client.chat(messages)
 
     async def run_loop(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         max_iterations: int = 5,
     ):
         """ReAct 主循环。
@@ -510,15 +515,15 @@ class SageAgent:
             iteration=max_iterations,
             error="max_iterations_exceeded",
         )
-    
-    def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+
+    def execute_tool(self, tool_name: str, parameters: dict[str, Any]) -> dict[str, Any]:
         """
         执行工具
-        
+
         Args:
             tool_name: 工具名称
             parameters: 工具参数
-            
+
         Returns:
             工具执行结果
         """
@@ -526,57 +531,56 @@ class SageAgent:
             tool = self.tool_registry.get(tool_name)
             if tool is None:
                 raise ToolCallError(tool_name, f"工具不存在: {tool_name}")
-            
+
             result = tool.execute(**parameters)
             return result.to_dict()
-            
+
         except ToolCallError:
             raise
         except Exception as e:
             logger.error(f"工具执行失败: {tool_name}, error: {str(e)}")
             raise ToolCallError(tool_name, str(e))
-    
-    def get_available_tools(self) -> List[Dict[str, Any]]:
+
+    def get_available_tools(self) -> list[dict[str, Any]]:
         """
         获取所有可用工具的 Schema
-        
+
         Returns:
             工具 Schema 列表
         """
         return self.tool_registry.get_schemas_for_llm()
-    
+
     def interrupt(self):
         """中断当前 Agent 操作"""
         self._interrupted = True
         logger.info("Agent 被中断")
-        print("Agent 被中断")
-    
+
     def is_interrupted(self) -> bool:
         """检查是否被中断"""
         return self._interrupted
-    
+
     def reset_interrupt(self):
         """重置中断状态"""
         self._interrupted = False
-    
+
     def clear_cache(self) -> None:
         """清空查询缓存"""
         self._cache.clear()
         logger.info("查询缓存已清空")
-    
+
     def cleanup_cache(self) -> int:
         """
         清理过期缓存
-        
+
         Returns:
             清理的条目数
         """
         return self._cache.cleanup()
-    
-    def get_cache_stats(self) -> Dict[str, Any]:
+
+    def get_cache_stats(self) -> dict[str, Any]:
         """
         获取缓存统计信息
-        
+
         Returns:
             缓存统计字典
         """

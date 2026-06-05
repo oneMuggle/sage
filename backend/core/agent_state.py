@@ -5,9 +5,9 @@ Agent 状态机与事件流定义
 事件流通过 FastAPI 流式响应(NDJSON)下发到前端。
 """
 import json
-from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from enum import Enum
+from typing import Any
 
 
 class AgentState(str, Enum):
@@ -25,9 +25,9 @@ class ToolCallRequest:
     """工具调用请求(LLM 发出)。"""
     id: str
     name: str
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """序列化为 OpenAI 工具调用格式。"""
         return {
             "id": self.id,
@@ -46,7 +46,7 @@ class ToolCallResult:
     content: str
     is_error: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "tool_call_id": self.tool_call_id,
             "role": "tool",
@@ -59,14 +59,14 @@ class AgentEvent:
     """Agent 事件,前端通过流式响应接收。"""
     state: AgentState
     iteration: int = 0
-    content: Optional[str] = None
-    tool_call: Optional[ToolCallRequest] = None
-    tool_result: Optional[ToolCallResult] = None
-    error: Optional[str] = None
+    content: str | None = None
+    tool_call: ToolCallRequest | None = None
+    tool_result: ToolCallResult | None = None
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """序列化为 JSON 友好的字典。"""
-        d: Dict[str, Any] = {
+        d: dict[str, Any] = {
             "state": self.state.value,
             "iteration": self.iteration,
         }

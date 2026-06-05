@@ -4,13 +4,14 @@ LLMClient tools 透传测试
 验证 LLMClient.chat() 在传入 tools 时把 OpenAI 兼容的 tools / tool_choice
 字段写入请求体；未传 tools 时请求体不包含这两个字段。
 """
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from backend.core.llm_client import LLMClient, LLMConfig
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     return LLMClient(LLMConfig(
         provider="openai",
@@ -20,7 +21,7 @@ def client():
     ))
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_sends_tools_when_provided(client):
     """tools 参数应传递到请求体。"""
     mock_response = AsyncMock()
@@ -31,7 +32,7 @@ async def test_chat_sends_tools_when_provided(client):
     }
     mock_response.raise_for_status = lambda: None
 
-    with patch.object(client, '_get_client') as mock_get_client:
+    with patch.object(client, "_get_client") as mock_get_client:
         mock_http = AsyncMock()
         mock_http.post = AsyncMock(return_value=mock_response)
         mock_get_client.return_value = mock_http
@@ -53,7 +54,7 @@ async def test_chat_sends_tools_when_provided(client):
         assert body["tool_choice"] == "auto"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_omits_tools_when_none(client):
     """tools=None 时请求体不应包含 tools 字段。"""
     mock_response = AsyncMock()
@@ -64,7 +65,7 @@ async def test_chat_omits_tools_when_none(client):
     }
     mock_response.raise_for_status = lambda: None
 
-    with patch.object(client, '_get_client') as mock_get_client:
+    with patch.object(client, "_get_client") as mock_get_client:
         mock_http = AsyncMock()
         mock_http.post = AsyncMock(return_value=mock_response)
         mock_get_client.return_value = mock_http

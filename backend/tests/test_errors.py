@@ -1,5 +1,6 @@
 import pytest
-from backend.core.errors import LLMErrorType, LLMError
+
+from backend.core.errors import LLMError, LLMErrorType
 
 
 def test_llm_error_contains_type_and_message():

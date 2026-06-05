@@ -3,14 +3,14 @@ Convention Manager - 惯例管理
 从交互模式中提取、评估和激活行为惯例
 """
 import json
+import logging
 import time
 import uuid
-import logging
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
+from typing import Any
 
-from backend.data.database import get_database
 from backend.core.llm_client import LLMClient
+from backend.data.database import get_database
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class Convention:
     last_updated: int = field(default_factory=lambda: int(time.time()))
     is_active: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id, "name": self.name, "description": self.description,
             "category": self.category, "confidence": self.confidence,
@@ -51,7 +51,7 @@ class ConventionManager:
     DECAY_FACTOR = 0.9
     MIN_CONFIDENCE = 0.1
 
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(self, llm_client: LLMClient | None = None):
         self.db = get_database()
         self.llm_client = llm_client
         self._ensure_table()
@@ -115,7 +115,7 @@ class ConventionManager:
         conn.commit()
         return cursor.rowcount > 0
 
-    def get(self, convention_id: str) -> Optional[Convention]:
+    def get(self, convention_id: str) -> Convention | None:
         """获取单个惯例"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -126,7 +126,7 @@ class ConventionManager:
         row["is_active"] = bool(row["is_active"])
         return Convention(**dict(row))
 
-    def get_active(self, category: Optional[str] = None) -> List[Convention]:
+    def get_active(self, category: str | None = None) -> list[Convention]:
         """获取活跃惯例"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -168,7 +168,7 @@ class ConventionManager:
 
     # ========== LLM 驱动学习 ==========
 
-    async def learn_from_conversation(self, messages: List[Dict[str, Any]]) -> List[str]:
+    async def learn_from_conversation(self, messages: list[dict[str, Any]]) -> list[str]:
         """从对话中提取新惯例"""
         if not self.llm_client:
             return []
@@ -217,7 +217,7 @@ class ConventionManager:
             logger.warning(f"惯例学习失败: {e}")
             return []
 
-    def _find_by_name(self, name: str) -> Optional[Convention]:
+    def _find_by_name(self, name: str) -> Convention | None:
         """按名称查找惯例"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -263,7 +263,7 @@ class ConventionManager:
 
     # ========== 统计 ==========
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取惯例统计"""
         conn = self.db.get_connection()
         cursor = conn.cursor()

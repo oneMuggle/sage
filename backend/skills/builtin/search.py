@@ -1,9 +1,9 @@
 """
 搜索技能 - 网络搜索并整理结果
 """
-from typing import Dict, Any, List
+from typing import Any
 
-from ..base import BaseSkill, SkillSchema, SkillResult
+from ..base import BaseSkill, SkillResult, SkillSchema
 
 
 class SearchSkill(BaseSkill):
@@ -35,7 +35,7 @@ class SearchSkill(BaseSkill):
             ]
         )
 
-    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
+    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
         """执行搜索"""
         query = params.get("query")
         limit = params.get("limit", 5)
@@ -43,7 +43,7 @@ class SearchSkill(BaseSkill):
         # 获取 web_search 工具
         tools = context.get("tools", {})
         web_search = tools.get("web_search")
-        
+
         if web_search is None:
             return SkillResult(
                 success=False,
@@ -69,17 +69,17 @@ class SearchSkill(BaseSkill):
             error=result.error or "搜索失败"
         )
 
-    def _format_results(self, results: List[Dict]) -> str:
+    def _format_results(self, results: list[dict]) -> str:
         """格式化搜索结果"""
         if not results:
             return "没有找到相关结果。"
 
         lines = []
         for i, r in enumerate(results, 1):
-            title = r.get('title', '无标题')
-            snippet = r.get('snippet', '')
-            url = r.get('url', '')
-            
+            title = r.get("title", "无标题")
+            snippet = r.get("snippet", "")
+            url = r.get("url", "")
+
             lines.append(f"{i}. **{title}**")
             lines.append(f"   {snippet}")
             if url:

@@ -1,0 +1,45 @@
+# backend/ruff.toml
+target-version = "py311"
+line-length = 100
+extend-exclude = [".venv", "__pycache__", ".ruff_cache", "data"]
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+    "T20", # flake8-print
+    "PT",  # flake8-pytest-style
+    "Q",   # flake8-quotes
+    "RET", # flake8-return
+    "SIM", # flake8-simplify
+    "TID", # flake8-tidy-imports
+    "ARG", # flake8-unused-arguments
+    "PTH", # flake8-use-pathlib
+    "ERA", # eradicate (commented-out code)
+    "PL",  # pylint
+]
+ignore = [
+    "E501",  # line-too-long (handled by formatter)
+    "PLR0913", # too-many-arguments
+    "PLR2004", # magic-value-comparison
+]
+
+[lint.per-file-ignores]
+"tests/**/*.py" = ["PLR2004", "S101", "ARG"]
+"__init__.py" = ["F401"]
+
+[lint.isort]
+known-first-party = ["backend"]
+combine-as-imports = true
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

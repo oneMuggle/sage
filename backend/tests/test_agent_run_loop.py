@@ -6,12 +6,13 @@ agent.run_loop() 状态机测试
 2. LLM 返回工具调用时，状态机经过 THINKING → ACTING → OBSERVING → THINKING → DONE
 3. max_iterations 限制：超过时发出 FAILED 事件
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from backend.core.agent import SageAgent
-from backend.core.llm_client import LLMResponse, LLMToolCall
 from backend.core.agent_state import AgentState
+from backend.core.llm_client import LLMResponse, LLMToolCall
 
 
 def _make_response(content: str = "", tool_calls: list = None) -> LLMResponse:
@@ -21,7 +22,7 @@ def _make_response(content: str = "", tool_calls: list = None) -> LLMResponse:
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_returns_done_when_no_tool_call():
     """LLM 返回纯文本时，状态机经过 THINKING → DONE。"""
     agent = SageAgent()
@@ -39,7 +40,7 @@ async def test_run_loop_returns_done_when_no_tool_call():
     assert done_evt.content == "你好"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_executes_tool_and_observes():
     """LLM 返回工具调用时，状态机经过 THINKING → ACTING → OBSERVING → THINKING → DONE。"""
     tool_call = LLMToolCall(
@@ -73,7 +74,7 @@ async def test_run_loop_executes_tool_and_observes():
     assert AgentState.DONE in states
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_respects_max_iterations():
     """max_iterations=2 时，应发出 FAILED。"""
     tool_call = LLMToolCall(id="c", name="calculator", arguments="{}")

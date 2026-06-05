@@ -11,18 +11,18 @@
 所以实际挂载路径是 /api/v1/chat/stream。
 """
 import json
-import pytest
-from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch
 
-from backend.main import app
-from backend.core.agent_state import AgentState, AgentEvent, ToolCallRequest, ToolCallResult
+import pytest
+from httpx import ASGITransport, AsyncClient
 
+from backend.core.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
+from backend.main import app
 
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_stream_yields_ndjson_events():
     """/chat/stream 端点以 NDJSON 格式返回 AgentEvent。"""
     async def mock_run_loop(messages, max_iterations=5):
@@ -47,7 +47,7 @@ async def test_chat_stream_yields_ndjson_events():
             content="答案是 2",
         )
 
-    with patch('backend.api.routes.SageAgent') as MockAgent:
+    with patch("backend.api.routes.SageAgent") as MockAgent:
         mock_agent = MockAgent.return_value
         mock_agent.run_loop = mock_run_loop
 

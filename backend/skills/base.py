@@ -4,7 +4,7 @@
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -12,20 +12,20 @@ class SkillSchema:
     """技能 Schema - 定义技能的元数据"""
     name: str  # 技能名称
     description: str  # 技能描述
-    triggers: List[str] = field(default_factory=list)  # 触发关键词列表
-    parameters: Dict[str, Any] = field(default_factory=dict)  # JSON Schema 格式参数
-    examples: List[str] = field(default_factory=list)  # 使用示例
+    triggers: list[str] = field(default_factory=list)  # 触发关键词列表
+    parameters: dict[str, Any] = field(default_factory=dict)  # JSON Schema 格式参数
+    examples: list[str] = field(default_factory=list)  # 使用示例
 
 
 @dataclass
 class SkillResult:
     """技能执行结果"""
     content: Any = None  # 返回内容
-    metadata: Dict[str, Any] = field(default_factory=dict)  # 元数据
+    metadata: dict[str, Any] = field(default_factory=dict)  # 元数据
     success: bool = True  # 是否成功
-    error: Optional[str] = None  # 错误信息
+    error: str | None = None  # 错误信息
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式"""
         result = {
             "success": self.success,
@@ -40,7 +40,7 @@ class SkillResult:
 class BaseSkill(ABC):
     """
     技能基类
-    
+
     所有技能必须继承此类并实现:
     - _build_schema(): 返回技能的 Schema
     - execute(): 执行技能逻辑
@@ -48,7 +48,7 @@ class BaseSkill(ABC):
     """
 
     def __init__(self):
-        self._schema: Optional[SkillSchema] = None
+        self._schema: SkillSchema | None = None
 
     @property
     def schema(self) -> SkillSchema:
@@ -68,7 +68,7 @@ class BaseSkill(ABC):
         return self.schema.description
 
     @property
-    def triggers(self) -> List[str]:
+    def triggers(self) -> list[str]:
         """获取触发关键词列表"""
         return self.schema.triggers
 
@@ -76,21 +76,21 @@ class BaseSkill(ABC):
     def _build_schema(self) -> SkillSchema:
         """
         构建技能 Schema
-        
+
         Returns:
             SkillSchema 对象
         """
         pass
 
     @abstractmethod
-    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
+    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
         """
         执行技能
-        
+
         Args:
             params: 技能参数
             context: 执行上下文 (包含 agent, memory, tools 等)
-            
+
         Returns:
             SkillResult 对象
         """
@@ -99,18 +99,15 @@ class BaseSkill(ABC):
     def match(self, text: str) -> bool:
         """
         检查文本是否匹配技能触发词
-        
+
         Args:
             text: 用户输入文本
-            
+
         Returns:
             是否匹配
         """
         text_lower = text.lower()
-        for trigger in self.triggers:
-            if trigger.lower() in text_lower:
-                return True
-        return False
+        return any(trigger.lower() in text_lower for trigger in self.triggers)
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} name='{self.name}' triggers={self.triggers}>"

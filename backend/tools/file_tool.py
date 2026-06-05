@@ -3,9 +3,8 @@
 """
 import os
 from pathlib import Path
-from typing import Dict, Any, List
 
-from .base import BaseTool, ToolSchema, ToolResult
+from .base import BaseTool, ToolResult, ToolSchema
 
 
 class ReadFileTool(BaseTool):
@@ -38,11 +37,11 @@ class ReadFileTool(BaseTool):
     def _is_safe_path(self, path: str, allowed_base: str) -> bool:
         """
         检查路径是否在允许的基础目录内
-        
+
         Args:
             path: 文件路径
             allowed_base: 允许的基础目录
-            
+
         Returns:
             是否安全
         """
@@ -56,7 +55,7 @@ class ReadFileTool(BaseTool):
     def execute(self, path: str, offset: int = 1, limit: int = 500, **kwargs) -> ToolResult:
         """
         读取文件
-        
+
         Args:
             path: 文件路径
             offset: 起始行号
@@ -75,13 +74,13 @@ class ReadFileTool(BaseTool):
             if not os.access(file_path, os.R_OK):
                 return ToolResult(success=False, error="无读取权限")
 
-            content = file_path.read_text(encoding='utf-8', errors='replace')
-            lines = content.split('\n')
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+            lines = content.split("\n")
 
             # 处理分页
             start = max(0, offset - 1)
             end = min(len(lines), start + limit)
-            selected_content = '\n'.join(lines[start:end])
+            selected_content = "\n".join(lines[start:end])
 
             return ToolResult(
                 success=True,
@@ -126,7 +125,7 @@ class WriteFileTool(BaseTool):
     def execute(self, path: str, content: str, append: bool = False, **kwargs) -> ToolResult:
         """
         写入文件
-        
+
         Args:
             path: 文件路径
             content: 文件内容
@@ -138,15 +137,15 @@ class WriteFileTool(BaseTool):
             # 检查目录是否存在
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            mode = 'a' if append else 'w'
-            with open(file_path, mode, encoding='utf-8') as f:
+            mode = "a" if append else "w"
+            with open(file_path, mode, encoding="utf-8") as f:
                 f.write(content)
 
             return ToolResult(
                 success=True,
                 content={
                     "path": str(file_path.resolve()),
-                    "bytes_written": len(content.encode('utf-8')),
+                    "bytes_written": len(content.encode("utf-8")),
                     "mode": mode
                 }
             )
@@ -181,7 +180,7 @@ class ListDirTool(BaseTool):
     def execute(self, path: str, all: bool = True, **kwargs) -> ToolResult:
         """
         列出目录
-        
+
         Args:
             path: 目录路径
             all: 是否显示隐藏文件
@@ -197,7 +196,7 @@ class ListDirTool(BaseTool):
 
             items = []
             for item in dir_path.iterdir():
-                if not all and item.name.startswith('.'):
+                if not all and item.name.startswith("."):
                     continue
                 items.append({
                     "name": item.name,
@@ -206,7 +205,7 @@ class ListDirTool(BaseTool):
                 })
 
             # 排序：目录在前，文件在后，按名称排序
-            items.sort(key=lambda x: (x['type'] != 'dir', x['name']))
+            items.sort(key=lambda x: (x["type"] != "dir", x["name"]))
 
             return ToolResult(
                 success=True,

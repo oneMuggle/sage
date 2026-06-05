@@ -2,9 +2,9 @@
 Sage - 记忆型 AI 桌面助手
 FastAPI 后端入口
 """
-import asyncio
 import uuid
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,9 +19,9 @@ async def lifespan(app: FastAPI):
     db = Database()
     db.init_db()
     app.state.db = db
-    
+
     yield
-    
+
     # 关闭时清理
     pass
 
@@ -65,7 +65,8 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    import uvicorn
     import os
+
+    import uvicorn
     port = int(os.environ.get("PYTHON_BACKEND_PORT", "8765"))
     uvicorn.run(app, host="127.0.0.1", port=port)

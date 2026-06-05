@@ -4,6 +4,7 @@ Sage 后端测试 - 共享 fixtures
 import os
 import sys
 import tempfile
+
 import pytest
 import pytest_asyncio
 
@@ -13,10 +14,11 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 import httpx
+
 from backend.main import app
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_db_path():
     """创建临时数据库文件，测试后自动清理"""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:

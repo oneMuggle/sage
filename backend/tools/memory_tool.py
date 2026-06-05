@@ -1,13 +1,13 @@
 """
 Memory 工具 - 记忆系统操作
 """
-from typing import Dict, Any, List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from .base import BaseTool, ToolSchema, ToolResult
+from .base import BaseTool, ToolResult, ToolSchema
 
 # 避免循环导入
 if TYPE_CHECKING:
-    from backend.memory import MemoryManager
+    pass
 
 
 class MemorySearchTool(BaseTool):
@@ -49,7 +49,7 @@ class MemorySearchTool(BaseTool):
     def execute(self, query: str, memory_type: str = "all", limit: int = 5, **kwargs) -> ToolResult:
         """
         搜索记忆
-        
+
         Args:
             query: 搜索查询
             memory_type: 记忆类型
@@ -123,7 +123,7 @@ class MemorySaveTool(BaseTool):
     def execute(self, content: str, importance: int = 5, memory_type: str = "episodic", **kwargs) -> ToolResult:
         """
         保存记忆
-        
+
         Args:
             content: 要保存的内容
             importance: 重要性 (1-10)

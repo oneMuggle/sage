@@ -4,9 +4,9 @@ LLM 错误类型定义
 将 LLM API 调用中可能出现的错误统一分类为 7 种类型，
 便于前端做中文化友好提示与差异化处理。
 """
-from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from enum import Enum
+from typing import Any
 
 
 class LLMErrorType(str, Enum):
@@ -28,15 +28,15 @@ class LLMError(Exception):
     """LLM 错误异常，承载分类信息与原始上下文。"""
     type: LLMErrorType
     message: str
-    status_code: Optional[int] = None
-    retry_after: Optional[int] = None  # 仅 RATE_LIMITED 时使用（秒）
+    status_code: int | None = None
+    retry_after: int | None = None  # 仅 RATE_LIMITED 时使用（秒）
 
     def __post_init__(self) -> None:
         # dataclass 不会自动调用 super().__init__，手动把 message 传给 Exception，
         # 让 str(err) / err.args / traceback 能正确携带信息。
         super().__init__(self.message)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """序列化为 API 响应格式。"""
         return {
             "type": self.type.value,

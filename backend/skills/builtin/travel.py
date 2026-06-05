@@ -1,9 +1,9 @@
 """
 旅行规划技能 - 规划旅行行程、推荐景点餐厅
 """
-from typing import Dict, Any
+from typing import Any
 
-from ..base import BaseSkill, SkillSchema, SkillResult
+from ..base import BaseSkill, SkillResult, SkillSchema
 
 
 class TravelSkill(BaseSkill):
@@ -43,7 +43,7 @@ class TravelSkill(BaseSkill):
             ]
         )
 
-    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
+    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
         """执行旅行规划"""
         destination = params.get("destination")
         days = params.get("days", 3)
@@ -52,7 +52,7 @@ class TravelSkill(BaseSkill):
 
         # 获取 LLM
         llm = context.get("llm")
-        
+
         # 构建旅行规划提示
         prompt = self._build_prompt(destination, days, budget, style)
 

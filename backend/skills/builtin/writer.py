@@ -1,9 +1,9 @@
 """
 写作技能 - 根据要求生成各类文本
 """
-from typing import Dict, Any
+from typing import Any
 
-from ..base import BaseSkill, SkillSchema, SkillResult
+from ..base import BaseSkill, SkillResult, SkillSchema
 
 
 class WriterSkill(BaseSkill):
@@ -46,7 +46,7 @@ class WriterSkill(BaseSkill):
             ]
         )
 
-    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
+    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
         """执行写作"""
         article_type = params.get("type")
         topic = params.get("topic")

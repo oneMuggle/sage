@@ -1,22 +1,21 @@
 """
 终端工具 - 执行 Shell 命令
 """
-import subprocess
 import shlex
-from typing import Dict, Any, List
+import subprocess
 
-from .base import BaseTool, ToolSchema, ToolResult
+from .base import BaseTool, ToolResult, ToolSchema
 
 
 class TerminalTool(BaseTool):
     """
     终端工具 - 执行 Shell 命令
-    
+
     注意: Windows 7 上建议使用 PowerShell 命令
     """
 
     # 危险命令黑名单
-    DANGEROUS_PATTERNS: List[str] = [
+    DANGEROUS_PATTERNS: list[str] = [
         "rm -rf /",
         "rm -rf /",
         "fork bomb",
@@ -57,36 +56,36 @@ class TerminalTool(BaseTool):
     def _is_dangerous(self, command: str) -> bool:
         """
         检查命令是否危险
-        
+
         Args:
             command: 要执行的命令
-            
+
         Returns:
             是否危险
         """
         command_lower = command.lower()
-        
+
         # 检查是否包含危险模式
         for pattern in self.DANGEROUS_PATTERNS:
             if pattern.lower() in command_lower:
                 return True
-        
+
         # 检查是否有破坏性的 rm -rf 组合
         if "rm -rf" in command_lower and ("/" in command or "--no-preserve-root" not in command):
             # 允许 rm -rf /tmp 等相对路径
             return True
-            
+
         return False
 
     def execute(self, command: str, cwd: str = None, timeout: int = 30, **kwargs) -> ToolResult:
         """
         执行命令
-        
+
         Args:
             command: 要执行的命令
             cwd: 工作目录
             timeout: 超时时间(秒)
-            
+
         Returns:
             ToolResult 对象
         """
@@ -100,7 +99,7 @@ class TerminalTool(BaseTool):
         try:
             # 使用 shlex 分割命令（更安全）
             cmd_list = shlex.split(command) if not command.startswith("cmd") else None
-            
+
             if cmd_list is None:
                 # Windows cmd 命令
                 result = subprocess.run(
@@ -109,7 +108,7 @@ class TerminalTool(BaseTool):
                     shell=True,
                     capture_output=True,
                     text=True,
-                    timeout=timeout
+                    timeout=timeout, check=False
                 )
             else:
                 # Unix 命令
@@ -118,11 +117,10 @@ class TerminalTool(BaseTool):
                     cwd=cwd,
                     capture_output=True,
                     text=True,
-                    timeout=timeout
+                    timeout=timeout, check=False
                 )
 
             success = result.returncode == 0
-            content = result.stdout if success else None
             error = result.stderr if not success else None
 
             return ToolResult(

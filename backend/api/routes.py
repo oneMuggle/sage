@@ -2,20 +2,19 @@
 API 路由定义
 """
 import json
-import uuid
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Request
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from typing import List, Optional
 from pydantic import BaseModel
 
-from backend.data.session_repo import SessionRepository, Session, MessageRepository
 from backend.core.agent import SageAgent
 from backend.core.errors import LLMError
-from backend.scheduler import get_evolution_logs, get_scheduler, create_evolution_tasks
 from backend.data.database import get_database
-from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager
-
+from backend.data.session_repo import MessageRepository, SessionRepository
+from backend.memory import EpisodicMemory, MemoryManager, SemanticMemory, WorkingMemory
+from backend.scheduler import get_evolution_logs, get_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -37,22 +36,22 @@ def _safe_log_field(value: object, max_length: int = 64) -> str:
 
 class SessionCreate(BaseModel):
     title: str = "新对话"
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
 
 
 class SessionUpdate(BaseModel):
-    title: Optional[str] = None
-    is_pinned: Optional[bool] = None
+    title: str | None = None
+    is_pinned: bool | None = None
 
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    api_key: Optional[str] = None
-    api_url: Optional[str] = None
-    model: Optional[str] = None
-    max_context: Optional[int] = None
-    temperature: Optional[float] = None
+    api_key: str | None = None
+    api_url: str | None = None
+    model: str | None = None
+    max_context: int | None = None
+    temperature: float | None = None
 
 
 class MessageResponse(BaseModel):
@@ -61,8 +60,8 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: int
-    model: Optional[str] = None
-    tool_calls: Optional[str] = None
+    model: str | None = None
+    tool_calls: str | None = None
 
 
 class ChatErrorInfo(BaseModel):
@@ -72,15 +71,15 @@ class ChatErrorInfo(BaseModel):
     """
     type: str
     message: str
-    status_code: Optional[int] = None
-    retry_after: Optional[int] = None
+    status_code: int | None = None
+    retry_after: int | None = None
 
 
 class ChatResponse(BaseModel):
     """聊天响应：成功时含 message+session，失败时含 error+null message。"""
-    message: Optional[MessageResponse] = None
-    session: Optional[dict] = None
-    error: Optional[ChatErrorInfo] = None
+    message: MessageResponse | None = None
+    session: dict | None = None
+    error: ChatErrorInfo | None = None
 
 
 class TriggerEvolutionRequest(BaseModel):
@@ -93,23 +92,23 @@ class EvolutionLogResponse(BaseModel):
     id: str
     evolution_type: str
     description: str
-    before_state: Optional[str] = None
-    after_state: Optional[str] = None
+    before_state: str | None = None
+    after_state: str | None = None
     trigger_type: str
-    trigger_condition: Optional[str] = None
+    trigger_condition: str | None = None
     status: str
-    error_message: Optional[str] = None
-    tokens_used: Optional[int] = None
+    error_message: str | None = None
+    tokens_used: int | None = None
     created_at: int
-    completed_at: Optional[int] = None
+    completed_at: int | None = None
 
 
 class EvolutionStatusResponse(BaseModel):
     """进化状态响应"""
     name: str
     schedule: str
-    last_run: Optional[str] = None
-    next_run: Optional[str] = None
+    last_run: str | None = None
+    next_run: str | None = None
     running: bool
 
 
@@ -141,7 +140,7 @@ async def create_session(
     return session.to_dict()
 
 
-@router.get("/sessions", response_model=List[dict])
+@router.get("/sessions", response_model=list[dict])
 async def list_sessions(
     limit: int = 100,
     offset: int = 0,
@@ -176,10 +175,10 @@ async def update_session(
         update_data["title"] = data.title
     if data.is_pinned is not None:
         update_data["is_pinned"] = 1 if data.is_pinned else 0
-    
+
     if update_data:
         repo.update(session_id, **update_data)
-    
+
     session = repo.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="会话不存在")
@@ -250,7 +249,7 @@ async def chat(
             "message": None,
             "session": None,
         }
-    except Exception as e:
+    except Exception:
         logger.exception(f"[REQ {request_id}] /chat unexpected error")
         return {
             "error": {
@@ -345,7 +344,7 @@ async def interrupt(agent: SageAgent = Depends(get_agent)):
 
 # ==================== 消息 API ====================
 
-@router.get("/sessions/{session_id}/messages", response_model=List[dict])
+@router.get("/sessions/{session_id}/messages", response_model=list[dict])
 async def get_messages(
     session_id: str,
     limit: int = 100,
@@ -359,7 +358,7 @@ async def get_messages(
 
 # ==================== 进化系统 API ====================
 
-@router.get("/evolution/logs", response_model=List[EvolutionLogResponse])
+@router.get("/evolution/logs", response_model=list[EvolutionLogResponse])
 async def list_evolution_logs(
     limit: int = 50,
     offset: int = 0
@@ -367,8 +366,7 @@ async def list_evolution_logs(
     """获取进化日志列表"""
     try:
         db = get_database()
-        logs = get_evolution_logs(db, limit=limit, offset=offset)
-        return logs
+        return get_evolution_logs(db, limit=limit, offset=offset)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -380,15 +378,15 @@ async def trigger_evolution(
     """手动触发进化任务"""
     try:
         scheduler = get_scheduler()
-        
+
         # 检查任务是否存在
         task_names = [t["name"] for t in scheduler.get_task_status()]
         if data.task_name not in task_names:
             raise HTTPException(status_code=404, detail=f"任务不存在: {data.task_name}")
-        
+
         # 触发任务
         success = scheduler.trigger_task(data.task_name)
-        
+
         if success:
             return TriggerResponse(success=True, message=f"任务 {data.task_name} 已触发")
         else:
@@ -399,13 +397,12 @@ async def trigger_evolution(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/evolution/status", response_model=List[EvolutionStatusResponse])
+@router.get("/evolution/status", response_model=list[EvolutionStatusResponse])
 async def get_evolution_status():
     """获取进化任务状态"""
     try:
         scheduler = get_scheduler()
-        status = scheduler.get_task_status()
-        return status
+        return scheduler.get_task_status()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -423,7 +420,7 @@ def get_memory_manager() -> MemoryManager:
 
 class MemorySearchRequest(BaseModel):
     query: str
-    memory_type: Optional[str] = None
+    memory_type: str | None = None
     limit: int = 20
 
 
@@ -431,7 +428,7 @@ class MemorySaveRequest(BaseModel):
     content: str
     memory_type: str = "episodic"
     importance: int = 5
-    tags: List[str] = []
+    tags: list[str] = []
 
 
 class MemoryDeleteRequest(BaseModel):
@@ -442,13 +439,12 @@ class MemoryDeleteRequest(BaseModel):
 async def search_memory(
     query: str,
     limit: int = 20,
-    type: Optional[str] = None
+    type: str | None = None
 ):
     """搜索记忆"""
     try:
         mm = get_memory_manager()
-        results = mm.search_memories(query=query, memory_type=type, limit=limit)
-        return results
+        return mm.search_memories(query=query, memory_type=type, limit=limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -489,7 +485,7 @@ async def delete_memory(data: MemoryDeleteRequest):
 async def list_memories(
     page: int = 1,
     page_size: int = 20,
-    type: Optional[str] = None
+    type: str | None = None
 ):
     """获取记忆列表"""
     try:
