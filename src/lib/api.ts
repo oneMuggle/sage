@@ -3,6 +3,8 @@
  * 包含错误处理和重试逻辑
  */
 
+import type { LLMErrorResponse } from './errorMapping'
+
 // ==================== 类型定义 ====================
 
 export interface Session {
@@ -50,17 +52,20 @@ export interface ApiError {
   error: string
   message: string
   details?: Record<string, unknown>
+  llmError?: LLMErrorResponse
 }
 
 export class ApiException extends Error {
   code: string
   details: Record<string, unknown>
-  
+  llmError?: LLMErrorResponse
+
   constructor(error: ApiError) {
     super(error.message)
     this.name = 'ApiException'
     this.code = error.error
     this.details = error.details || {}
+    this.llmError = error.llmError
   }
 }
 
@@ -151,12 +156,25 @@ function handleApiError(error: unknown): ApiException {
   if (error instanceof ApiException) {
     return error
   }
-  
+
   // 尝试解析错误响应
   if (error && typeof error === 'object' && 'error' in error) {
-    return new ApiException(error as ApiError)
+    const e = error as { error: unknown; message?: string }
+    // 如果内层 error 字段是 LLMErrorResponse（带 type），保留完整对象
+    if (e.error && typeof e.error === 'object' && 'type' in e.error) {
+      const llmError = e.error as LLMErrorResponse
+      return new ApiException({
+        error: llmError.type,
+        message: e.message ?? llmError.message,
+        llmError,
+      })
+    }
+    return new ApiException({
+      error: e.error as string,
+      message: e.message as string,
+    })
   }
-  
+
   // 包装未知错误
   return new ApiException({
     error: 'UNKNOWN_ERROR',

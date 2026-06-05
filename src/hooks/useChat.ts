@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { chatApi, useStore, type Message } from '../lib/store'
 import { useSettings } from './useSettings'
-import type { ChatConfig } from '../lib/api'
+import { ApiException, type ChatConfig } from '../lib/api'
 import { logger } from '../lib/logger'
 import { mapLLMErrorToText, type LLMErrorResponse } from '../lib/errorMapping'
 
@@ -60,9 +60,17 @@ export function useChat() {
       addMessage(response.message)
     } catch (err: unknown) {
       logger.error(requestId, 'useChat.send.failed', err)
-      const apiErr = err as { error?: LLMErrorResponse; message?: string }
-      if (apiErr.error) {
-        setError(mapLLMErrorToText(apiErr.error))
+
+      // ApiException 携带着结构化 LLMErrorResponse（保存为 llmError 字段）
+      if (err instanceof ApiException && err.llmError) {
+        setError(mapLLMErrorToText(err.llmError))
+        return
+      }
+
+      // 兜底：Tauri 通道可能直接抛出后端结构，err 上可能有 llmError/error 字段
+      const apiErr = err as { llmError?: LLMErrorResponse; error?: LLMErrorResponse; message?: string }
+      if (apiErr.llmError || apiErr.error) {
+        setError(mapLLMErrorToText(apiErr.llmError ?? apiErr.error!))
       } else {
         const message = err instanceof Error ? err.message : '发送消息失败'
         setError(message)
