@@ -228,7 +228,17 @@ async def chat(
 
         agent = SageAgent()
         result = await agent.chat(data.session_id, data.message, llm_config=llm_config)
-        logger.info(f"[REQ {request_id}] /chat success: message_id={result.get('message', {}).get('id')}")
+
+        # agent.chat() may return a structured error dict (Task 6 refactor) instead of raising
+        if isinstance(result, dict) and result.get("error"):
+            logger.warning(
+                f"[REQ {request_id}] /chat returned error from agent: "
+                f"type={result['error'].get('type')}, message={result['error'].get('message')}"
+            )
+        else:
+            msg = result.get("message") if isinstance(result, dict) else None
+            msg_id = msg.get("id") if isinstance(msg, dict) else None
+            logger.info(f"[REQ {request_id}] /chat success: message_id={msg_id}")
         return result
 
     except LLMError as e:

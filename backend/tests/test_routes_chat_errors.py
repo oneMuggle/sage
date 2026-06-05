@@ -63,6 +63,39 @@ async def test_chat_returns_structured_error_on_timeout():
 
 
 @pytest.mark.asyncio
+async def test_chat_handles_agent_returning_error_dict_without_crashing():
+    """回归测试：agent.chat() 返回 error 字典时（Task 6 后的新契约），
+    路由不能因 success 日志崩溃，要透传 error 字典给前端。
+    这是用户报告的'发送消息无响应' bug 的根因。"""
+    with patch('backend.api.routes.SageAgent') as MockAgent:
+        mock_agent_instance = MockAgent.return_value
+        # chat() 返回 error 字典而不是 raise LLMError（Task 6 的新契约）
+        mock_agent_instance.chat = AsyncMock(return_value={
+            "error": {
+                "type": "auth_failed",
+                "message": "API Key 无效",
+                "status_code": 401,
+                "retry_after": None,
+            },
+            "message": None,
+            "session": None,
+        })
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post(CHAT_PATH, json={
+                "session_id": "00000000-0000-0000-0000-000000000000",
+                "message": "hi",
+                "api_key": "bad-key",
+                "api_url": "https://api.example.com/v1",
+            })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["error"]["type"] == "auth_failed"
+        assert body["error"]["message"] == "API Key 无效"
+        assert body["message"] is None
+
+
+@pytest.mark.asyncio
 async def test_chat_request_id_in_response_header():
     """响应头应包含 x-request-id 用于诊断追踪。"""
     with patch('backend.api.routes.SageAgent') as MockAgent:
