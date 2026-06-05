@@ -1,9 +1,11 @@
 """
 API 路由定义
 """
+import json
 import uuid
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -260,6 +262,78 @@ async def chat(
             "message": None,
             "session": None,
         }
+
+
+@router.post("/chat/stream")
+async def chat_stream(data: ChatRequest):
+    """流式聊天端点，以 NDJSON 格式逐事件下发 AgentEvent。
+
+    每个事件是一行独立 JSON 对象：
+    - 正常事件：``{"state": "...", "iteration": n, ...}``
+    - 错误事件：``{"error": {...}, "state": "failed"}``
+
+    Args:
+        data: 与 /chat 相同的 ChatRequest 体
+
+    Returns:
+        StreamingResponse，media_type 为 application/x-ndjson
+    """
+    request_id = str(uuid.uuid4())
+    logger.info(
+        f"[REQ {request_id}] /chat/stream received: "
+        f"session_id={_safe_log_field(data.session_id)}, "
+        f"api_key={'***' if data.api_key else 'MISSING'}, "
+        f"model={_safe_log_field(data.model or 'default')}"
+    )
+
+    async def event_generator():
+        try:
+            llm_config = None
+            if data.api_key and data.api_url:
+                llm_config = {
+                    "provider": "custom",
+                    "api_key": data.api_key,
+                    "base_url": data.api_url,
+                    "model": data.model or "gpt-3.5-turbo",
+                    "temperature": data.temperature or 0.7,
+                }
+                logger.info(
+                    f"[REQ {request_id}] /chat/stream using custom LLM config: "
+                    f"model={_safe_log_field(llm_config['model'])}"
+                )
+
+            agent = SageAgent()
+            messages = [
+                {"role": "system", "content": "你是 Sage，一个智能 AI 助手。"},
+                {"role": "user", "content": data.message},
+            ]
+            # 通过 run_loop 产出事件流
+            async for evt in agent.run_loop(messages):
+                yield _ndjson(evt.to_dict())
+
+        except LLMError as e:
+            logger.warning(
+                f"[REQ {request_id}] /chat/stream LLM error: "
+                f"type={e.type.value}, message={e.message}"
+            )
+            yield _ndjson({"error": e.to_dict(), "state": "failed"})
+        except Exception as e:
+            logger.exception(f"[REQ {request_id}] /chat/stream unexpected error")
+            yield _ndjson({"error": {"type": "unknown", "message": str(e)}, "state": "failed"})
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+
+
+def _ndjson(d: dict) -> str:
+    """序列化为 NDJSON 行（以 \\n 结尾）。
+
+    Args:
+        d: 可被 json.dumps 序列化的字典
+
+    Returns:
+        单行 JSON 字符串，末尾带换行符
+    """
+    return json.dumps(d, ensure_ascii=False) + "\n"
 
 
 @router.post("/interrupt")
