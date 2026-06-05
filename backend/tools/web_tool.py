@@ -51,7 +51,7 @@ class WebSearchTool(BaseTool):
             response.raise_for_status()
 
             # 解析搜索结果
-            results = self._parse_results(response.text, limit)
+            results = self._parse_results(response.text, limit, query)
 
             return ToolResult(
                 success=True,
@@ -66,13 +66,14 @@ class WebSearchTool(BaseTool):
         except Exception as e:
             return ToolResult(success=False, error=f"搜索失败: {str(e)}")
 
-    def _parse_results(self, html: str, limit: int) -> list:
+    def _parse_results(self, html: str, limit: int, query: str) -> list:
         """
         解析 DuckDuckGo HTML 搜索结果
 
         Args:
             html: HTML 内容
             limit: 限制数量
+            query: 搜索查询（用于空结果时构造占位条目）
 
         Returns:
             结果列表

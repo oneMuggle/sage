@@ -61,7 +61,6 @@ class WorkingMemory:
         # 如果超出最大 Token 数，淘汰旧消息
         self._evict_if_needed()
 
-        # 内存监控日志 (DEBUG级别)
         logger.debug(
             f"工作记忆状态: 消息数={len(self.messages)}, "
             f"Tokens={self.total_tokens}/{self.max_tokens}"

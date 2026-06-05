@@ -279,7 +279,6 @@ class AgentOrchestrator:
             except Exception as e:
                 logger.warning(f"任务拆解失败: {e}")
 
-        # 回退: 整个任务作为单个子任务
         return [{"intent": "general", "description": message}]
 
     async def _aggregate_results(
@@ -316,7 +315,6 @@ class AgentOrchestrator:
             except Exception as e:
                 logger.warning(f"结果聚合失败: {e}")
 
-        # 回退: 简单拼接
         parts = []
         for i, r in enumerate(results):
             response = r["result"].get("response", "")

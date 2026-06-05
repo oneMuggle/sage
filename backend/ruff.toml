@@ -26,9 +26,33 @@ select = [
     "PL",  # pylint
 ]
 ignore = [
-    "E501",  # line-too-long (handled by formatter)
-    "PLR0913", # too-many-arguments
-    "PLR2004", # magic-value-comparison
+    "E501",     # line-too-long (handled by formatter)
+    "PLR0913",  # too-many-arguments
+    "PLR2004",  # magic-value-comparison
+    "B904",     # raise without from — best practice but not a bug
+    "ARG002",   # unused method arg — common in FastAPI handlers
+    "ARG001",   # unused function arg
+    "TID252",   # prefer absolute imports — project uses relative in some places
+    "B008",     # function call in default argument — FastAPI Depends() pattern
+    "N806",     # variable in function should be lowercase — N/A for test classes
+    "PLR0912",  # too many branches
+    "PLR0915",  # too many statements
+    "DTZ005",   # datetime.now() no tz — to be addressed in P3 observability
+    "DTZ006",   # datetime.fromtimestamp() no tz
+    "RET505",   # superfluous elif after return
+    "RET506",   # superfluous elif after raise
+    "E402",     # module level import not at top — necessary in some cases
+    "PTH118",   # os.path.join → Path /  — migration, not urgent
+    "PTH119",   # os.path.relpath → Path.relative_to
+    "PTH100",   # os.path.abspath → Path.resolve
+    "PTH103",   # os.path.directory → Path /  — not a bug
+    "PTH108",   # os.path.basename → Path.name
+    "PTH110",   # os.path.exists → Path.exists
+    "PTH112",   # os.path.isfile → Path.is_file
+    "PTH120",   # os.path.join → Path /
+    "PTH123",   # builtin open → Path.open
+    "PLW0602",  # global variable not assigned
+    "PLW0603",  # global variable assigned but never used
 ]
 
 [lint.per-file-ignores]

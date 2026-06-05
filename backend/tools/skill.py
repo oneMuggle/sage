@@ -89,7 +89,7 @@ class SkillHotLoader:
                         self._loaded_skills[instance.name] = file_path
                         self._file_hashes[file_path] = self._compute_hash(file_path)
                         found = True
-                        logger.info(f"加载 Skill: {instance.name} from {filename}")
+                        logger.info(f"加载 Skill: {instance.name} from {file_path}")
                     except Exception as e:
                         logger.error(f"实例化 Skill 失败: {attr_name}, error: {e}")
 
