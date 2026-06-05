@@ -2,6 +2,8 @@ import pytest
 
 from backend.core.errors import LLMError, LLMErrorType
 
+pytestmark = pytest.mark.unit
+
 
 def test_llm_error_contains_type_and_message():
     err = LLMError(LLMErrorType.AUTH_FAILED, "API Key 无效", status_code=401)

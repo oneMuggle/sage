@@ -1,9 +1,13 @@
+import pytest
+
 from backend.core.agent_state import (
     AgentEvent,
     AgentState,
     ToolCallRequest,
     ToolCallResult,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def test_agent_state_enum_values():

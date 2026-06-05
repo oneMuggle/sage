@@ -16,6 +16,8 @@ from backend.core.agent import SageAgent
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.llm_client import LLMResponse
 
+pytestmark = pytest.mark.e2e
+
 
 @pytest.mark.asyncio()
 async def test_chat_returns_error_dict_on_llm_error():

@@ -10,6 +10,8 @@ import pytest
 
 from backend.core.llm_client import LLMClient, LLMConfig
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture()
 def client():

@@ -12,6 +12,8 @@ import pytest
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.llm_client import LLMClient, LLMConfig
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture()
 def client():

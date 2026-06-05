@@ -19,6 +19,8 @@ from httpx import ASGITransport, AsyncClient
 from backend.core.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
 from backend.main import app
 
+pytestmark = pytest.mark.integration
+
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
 
 

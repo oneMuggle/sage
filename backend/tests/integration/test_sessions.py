@@ -3,6 +3,8 @@
 """
 import pytest
 
+pytestmark = pytest.mark.integration
+
 PREFIX = "/api/v1"
 
 

@@ -14,6 +14,8 @@ from backend.core.agent import SageAgent
 from backend.core.agent_state import AgentState
 from backend.core.llm_client import LLMResponse, LLMToolCall
 
+pytestmark = pytest.mark.unit
+
 
 def _make_response(content: str = "", tool_calls: list = None) -> LLMResponse:
     return LLMResponse(

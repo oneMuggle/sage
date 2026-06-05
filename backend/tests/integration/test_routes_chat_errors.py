@@ -17,6 +17,8 @@ from httpx import ASGITransport, AsyncClient
 from backend.core.errors import LLMError, LLMErrorType
 from backend.main import app
 
+pytestmark = pytest.mark.integration
+
 CHAT_PATH = "/api/v1/chat"
 
 

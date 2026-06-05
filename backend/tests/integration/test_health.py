@@ -3,6 +3,8 @@
 """
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.asyncio()
 async def test_health_check(client):
