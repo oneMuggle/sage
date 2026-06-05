@@ -1,5 +1,6 @@
-import { KnowledgeCard } from './KnowledgeCard'
 import type { KnowledgeDoc } from '../../hooks/useKnowledge'
+
+import { KnowledgeCard } from './KnowledgeCard'
 
 interface KnowledgeListProps {
   docs: KnowledgeDoc[]

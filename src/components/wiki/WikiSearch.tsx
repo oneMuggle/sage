@@ -1,8 +1,9 @@
 // Wiki Search - search bar and results
-import { useState } from 'react'
 import { Search, FileText } from 'lucide-react'
-import { useWikiStore } from '../../stores/wiki-store'
+import { useState } from 'react'
+
 import { wikiSearch } from '../../lib/wiki-api'
+import { useWikiStore } from '../../stores/wiki-store'
 import type { SearchResult } from '../../types/wiki'
 
 export function WikiSearch() {

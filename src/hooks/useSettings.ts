@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
-import { AppSettings } from '../types/settings'
+
 import { loadSettings, saveSettings, resetSettings as resetSettingsLib } from '../lib/settings'
+import { AppSettings } from '../types/settings'
 
 interface UseSettingsReturn {
   settings: AppSettings

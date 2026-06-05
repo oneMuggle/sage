@@ -1,8 +1,10 @@
-import { useState, useRef } from 'react'
 import { Send, Square, Image, Paperclip, BookOpen } from 'lucide-react'
+import { useState, useRef } from 'react'
+
 import { useFileUpload } from '../../hooks/useFileUpload'
-import { KnowledgeChip } from './KnowledgeChip'
+
 import { FileAttachment } from './FileAttachment'
+import { KnowledgeChip } from './KnowledgeChip'
 
 interface ChatInputProps {
   onSend: (message: string, options?: {

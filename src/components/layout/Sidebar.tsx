@@ -1,10 +1,11 @@
+import { clsx } from 'clsx'
+import { MessageSquare, Settings, Brain, BookOpen } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { MessageSquare, Settings, Brain, BookOpen } from 'lucide-react'
-import { clsx } from 'clsx'
-import { useStore } from '../../lib/store'
+
 import { useSettings } from '../../hooks/useSettings'
 import { testEndpointConnection } from '../../lib/models'
+import { useStore } from '../../lib/store'
 import { SessionItem } from '../session/SessionItem'
 
 // 导航项配置

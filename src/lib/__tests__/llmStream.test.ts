@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { parseNDJSONStream, type AgentEvent } from '../llmStream'
 
 function makeStream(chunks: string[]): ReadableStream<Uint8Array> {

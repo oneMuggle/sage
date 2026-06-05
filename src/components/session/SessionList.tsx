@@ -1,8 +1,11 @@
-import { useState } from 'react'
 import { Plus, Search } from 'lucide-react'
-import { SessionItem } from './SessionItem'
-import { Button } from '../common/Button'
+import { useState } from 'react'
+
 import type { Session } from '../../lib/store'
+import { Button } from '../common/Button'
+
+import { SessionItem } from './SessionItem'
+
 
 interface SessionListProps {
   sessions: Session[]

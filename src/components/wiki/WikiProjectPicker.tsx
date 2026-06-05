@@ -1,8 +1,9 @@
 // Wiki Project Picker - Create or open a wiki project
-import { useState } from 'react'
 import { FolderPlus, FolderOpen, X } from 'lucide-react'
-import { useWikiStore } from '../../stores/wiki-store'
+import { useState } from 'react'
+
 import { createWikiProject, openWikiProject } from '../../lib/wiki-api'
+import { useWikiStore } from '../../stores/wiki-store'
 
 export function WikiProjectPicker() {
   const [mode, setMode] = useState<'menu' | 'create' | 'open'>('menu')

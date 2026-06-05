@@ -1,6 +1,7 @@
-import { Fragment, ReactNode } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X } from 'lucide-react'
+import { Fragment, ReactNode } from 'react'
+
 import { Button } from './Button'
 
 export interface ModalProps {

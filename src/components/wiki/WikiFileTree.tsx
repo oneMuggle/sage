@@ -1,6 +1,7 @@
 // Wiki File Tree - recursive tree view of wiki files
-import { useState } from 'react'
 import { ChevronRight, ChevronDown, FileText, Folder } from 'lucide-react'
+import { useState } from 'react'
+
 import { useWikiStore } from '../../stores/wiki-store'
 import type { FileNode } from '../../types/wiki'
 

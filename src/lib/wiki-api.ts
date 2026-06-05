@@ -1,5 +1,6 @@
 // Wiki API layer - wrappers around Tauri invoke()
 import { invoke } from '@tauri-apps/api/tauri'
+
 import type { WikiProject, FileNode, SearchResponse, IngestResult, WikiChatResponse } from '../types/wiki'
 
 // ==================== Project API ====================

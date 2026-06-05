@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { Message } from '../Message'
+import { describe, it, expect } from 'vitest'
+
 import type { Message as MessageType } from '../../../lib/store'
+import { Message } from '../Message'
 
 describe('Message', () => {
   it('renders plain text content', () => {

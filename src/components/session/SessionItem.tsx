@@ -1,4 +1,5 @@
 import { Trash2, Pin } from 'lucide-react'
+
 import type { Session } from '../../lib/store'
 
 interface SessionItemProps {

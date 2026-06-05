@@ -1,5 +1,6 @@
-import { Message } from './Message'
 import type { Message as MessageType } from '../../lib/store'
+
+import { Message } from './Message'
 
 interface MessageListProps {
   messages: MessageType[]

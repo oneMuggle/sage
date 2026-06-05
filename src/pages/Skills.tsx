@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+
 import SkillList from '../components/skills/SkillList';
 import { skillsApi, type Skill } from '../lib/api';
 

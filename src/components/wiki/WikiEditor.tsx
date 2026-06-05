@@ -1,7 +1,9 @@
 // Wiki Editor - split-pane markdown editor/viewer
-import { useState } from 'react'
 import { Eye, Pencil, Save } from 'lucide-react'
+import { useState } from 'react'
+
 import { useWikiStore } from '../../stores/wiki-store'
+
 import { MarkdownPreview } from './MarkdownPreview'
 
 export function WikiEditor() {

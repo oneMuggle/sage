@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
-import { useChat } from '../hooks/useChat'
-import { useStore } from '../lib/store'
+
 import { ChatInput } from '../components/chat/ChatInput'
 import { MessageList } from '../components/chat/MessageList'
+import { useChat } from '../hooks/useChat'
+import { useStore } from '../lib/store'
 
 export function Chat() {
   const {

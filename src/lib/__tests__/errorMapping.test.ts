@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { mapLLMErrorToText, type LLMErrorResponse, type LLMErrorTypeFE } from '../errorMapping'
 
 describe('mapLLMErrorToText', () => {

@@ -1,7 +1,10 @@
-import { Search } from 'lucide-react'
 import { clsx } from 'clsx'
-import { KnowledgeList } from './KnowledgeList'
+import { Search } from 'lucide-react'
+
 import { useKnowledge, type KnowledgeDoc } from '../../hooks/useKnowledge'
+
+import { KnowledgeList } from './KnowledgeList'
+
 
 interface KnowledgeBrowserProps {
   selectedIds?: Set<string>

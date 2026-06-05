@@ -1,9 +1,10 @@
 // Wiki Chat - ask questions and get synthesized answers
-import { useState } from 'react'
 import { Send, BookOpen } from 'lucide-react'
-import { useWikiStore } from '../../stores/wiki-store'
+import { useState } from 'react'
+
 import { useSettings } from '../../hooks/useSettings'
 import { wikiChat } from '../../lib/wiki-api'
+import { useWikiStore } from '../../stores/wiki-store'
 
 interface ChatMessage {
   role: 'user' | 'assistant'

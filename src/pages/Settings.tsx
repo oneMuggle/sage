@@ -1,7 +1,8 @@
-import { useState } from 'react'
 import { clsx } from 'clsx'
-import { EvolutionPanel } from '../components/evolution/EvolutionPanel'
+import { useState } from 'react'
+
 import { EvolutionLog } from '../components/evolution/EvolutionLog'
+import { EvolutionPanel } from '../components/evolution/EvolutionPanel'
 import { useSettings } from '../hooks/useSettings'
 import { fetchModels, testEndpointConnection, type ConnectionTestResult } from '../lib/models'
 import type { EndpointConfig, DiscoveredModel } from '../types/settings'

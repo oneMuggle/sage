@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { ApiException, type ApiError } from '../api'
 import { mapLLMErrorToText } from '../errorMapping'
 

@@ -1,5 +1,6 @@
 // Wiki Toolbar - top navigation and actions
 import { FileText, Search, MessageSquare } from 'lucide-react'
+
 import { useWikiStore } from '../../stores/wiki-store'
 import type { WikiView } from '../../types/wiki'
 
