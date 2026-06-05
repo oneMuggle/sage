@@ -1,16 +1,21 @@
 """
 API 路由定义
 """
+import uuid
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from pydantic import BaseModel
 
 from backend.data.session_repo import SessionRepository, Session, MessageRepository
 from backend.core.agent import SageAgent
+from backend.core.errors import LLMError
 from backend.scheduler import get_evolution_logs, get_scheduler, create_evolution_tasks
 from backend.data.database import get_database
 from backend.memory import WorkingMemory, EpisodicMemory, SemanticMemory, MemoryManager
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -47,9 +52,22 @@ class MessageResponse(BaseModel):
     tool_calls: Optional[str] = None
 
 
+class ChatErrorInfo(BaseModel):
+    """结构化的 /chat 错误信息。
+
+    字段与 LLMError.to_dict() 对齐，便于前端统一处理。
+    """
+    type: str
+    message: str
+    status_code: Optional[int] = None
+    retry_after: Optional[int] = None
+
+
 class ChatResponse(BaseModel):
-    message: MessageResponse
+    """聊天响应：成功时含 message+session，失败时含 error+null message。"""
+    message: Optional[MessageResponse] = None
     session: Optional[dict] = None
+    error: Optional[ChatErrorInfo] = None
 
 
 class TriggerEvolutionRequest(BaseModel):
@@ -172,9 +190,19 @@ async def delete_session(
 async def chat(
     data: ChatRequest,
 ):
-    """发送聊天消息"""
+    """发送聊天消息。
+
+    错误处理：
+    - LLMError: 返回 HTTP 200 + 结构化 error 字段
+    - 其他未预期错误: 返回 HTTP 200 + 通用 unknown 错误（前端统一处理）
+    - 响应头包含 x-request-id 用于日志追踪（在 main.py 中间件添加）
+    """
+    request_id = str(uuid.uuid4())
+    logger.info(f"[REQ {request_id}] /chat received: session_id={data.session_id}, "
+                f"api_key={'***' if data.api_key else 'MISSING'}, "
+                f"model={data.model}")
+
     try:
-        # 构建 LLM 配置（动态传入）
         llm_config = None
         if data.api_key and data.api_url:
             llm_config = {
@@ -184,12 +212,32 @@ async def chat(
                 "model": data.model or "gpt-3.5-turbo",
                 "temperature": data.temperature or 0.7,
             }
+            logger.info(f"[REQ {request_id}] using custom LLM config: model={llm_config['model']}")
 
         agent = SageAgent()
         result = await agent.chat(data.session_id, data.message, llm_config=llm_config)
+        logger.info(f"[REQ {request_id}] /chat success: message_id={result.get('message', {}).get('id')}")
         return result
+
+    except LLMError as e:
+        logger.warning(f"[REQ {request_id}] /chat LLM error: type={e.type.value}, message={e.message}")
+        return {
+            "error": e.to_dict(),
+            "message": None,
+            "session": None,
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"[REQ {request_id}] /chat unexpected error")
+        return {
+            "error": {
+                "type": "unknown",
+                "message": "服务内部错误",
+                "status_code": 500,
+                "retry_after": None,
+            },
+            "message": None,
+            "session": None,
+        }
 
 
 @router.post("/interrupt")

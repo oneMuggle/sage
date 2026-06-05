@@ -1,0 +1,83 @@
+"""
+/chat 端点结构化错误响应测试
+
+验证 /chat 端点：
+1. LLMError 时返回 HTTP 200 + 结构化 error 字段（而非 500）
+2. 错误字段包含 type/message/status_code/retry_after
+3. 响应头包含 x-request-id 用于诊断追踪
+
+注意：路由通过 app.include_router(api_router, prefix="/api/v1") 注册，
+所以实际挂载路径是 /api/v1/chat 而非 /chat。
+"""
+import pytest
+from httpx import AsyncClient, ASGITransport
+from unittest.mock import AsyncMock, patch
+
+from backend.main import app
+from backend.core.errors import LLMError, LLMErrorType
+
+
+CHAT_PATH = "/api/v1/chat"
+
+
+@pytest.mark.asyncio
+async def test_chat_returns_structured_error_on_auth_failed():
+    """LLM 401 时 /chat 返回结构化错误响应（HTTP 200 + error 字段）。"""
+    with patch('backend.api.routes.SageAgent') as MockAgent:
+        mock_agent_instance = MockAgent.return_value
+        mock_agent_instance.chat = AsyncMock(
+            side_effect=LLMError(LLMErrorType.AUTH_FAILED, "API Key 无效", status_code=401)
+        )
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post(CHAT_PATH, json={
+                "session_id": "00000000-0000-0000-0000-000000000000",
+                "message": "hi",
+                "api_key": "bad-key",
+                "api_url": "https://api.example.com/v1",
+            })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["error"]["type"] == "auth_failed"
+        assert body["error"]["message"] == "API Key 无效"
+        assert body["message"] is None
+
+
+@pytest.mark.asyncio
+async def test_chat_returns_structured_error_on_timeout():
+    """LLM 超时时 /chat 返回 timeout 错误。"""
+    with patch('backend.api.routes.SageAgent') as MockAgent:
+        mock_agent_instance = MockAgent.return_value
+        mock_agent_instance.chat = AsyncMock(
+            side_effect=LLMError(LLMErrorType.TIMEOUT, "请求 LLM 超时")
+        )
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post(CHAT_PATH, json={
+                "session_id": "00000000-0000-0000-0000-000000000000",
+                "message": "hi",
+            })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["error"]["type"] == "timeout"
+
+
+@pytest.mark.asyncio
+async def test_chat_request_id_in_response_header():
+    """响应头应包含 x-request-id 用于诊断追踪。"""
+    with patch('backend.api.routes.SageAgent') as MockAgent:
+        mock_agent_instance = MockAgent.return_value
+        mock_agent_instance.chat = AsyncMock(return_value={
+            "message": {
+                "id": "m1", "session_id": "00000000-0000-0000-0000-000000000000",
+                "role": "assistant", "content": "ok", "created_at": 0
+            },
+            "session": None,
+        })
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post(CHAT_PATH, json={
+                "session_id": "00000000-0000-0000-0000-000000000000",
+                "message": "hi",
+            })
+        assert "x-request-id" in resp.headers
