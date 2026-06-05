@@ -42,6 +42,52 @@ export default [
         },
       ],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+      // FSD 边界规则（warn only — PG1.9 阶段不阻塞，PG1.13 改为 error）
+      // 层级（自顶向下）：app > processes > pages > widgets > features > entities > shared
+      // 下层不可 import 上层，但可 import 自身 + 下层。
+      'import/no-restricted-paths': [
+        'warn',
+        {
+          zones: [
+            // pages 不可 import app / processes
+            { target: './src/pages', from: './src/app' },
+            { target: './src/pages', from: './src/processes' },
+            // widgets 不可 import pages / app / processes
+            {
+              target: './src/widgets',
+              from: ['./src/pages', './src/app', './src/processes'],
+            },
+            // features 不可 import widgets / pages / app / processes
+            {
+              target: './src/features',
+              from: ['./src/widgets', './src/pages', './src/app', './src/processes'],
+            },
+            // entities 不可 import features / widgets / pages / app / processes
+            {
+              target: './src/entities',
+              from: [
+                './src/features',
+                './src/widgets',
+                './src/pages',
+                './src/app',
+                './src/processes',
+              ],
+            },
+            // shared 是最底层 — 不可 import 任何上层
+            {
+              target: './src/shared',
+              from: [
+                './src/entities',
+                './src/features',
+                './src/widgets',
+                './src/pages',
+                './src/app',
+                './src/processes',
+              ],
+            },
+          ],
+        },
+      ],
     },
   },
 ];
