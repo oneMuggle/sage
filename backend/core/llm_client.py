@@ -131,12 +131,19 @@ class LLMClient:
             ))
         return result
 
-    async def chat(self, messages: List[Dict[str, Any]]) -> LLMResponse:
+    async def chat(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
+    ) -> LLMResponse:
         """
         发送聊天请求（非流式）
 
         Args:
             messages: 消息列表，每条包含 role 和 content
+            tools: OpenAI 格式工具 schema 列表（可选）
+            tool_choice: "auto" | "none" | "required"（默认 "auto"，仅当 tools 非空时写入请求体）
 
         Returns:
             LLM 回复
@@ -149,6 +156,10 @@ class LLMClient:
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
         }
+
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = tool_choice or "auto"
 
         if self.config.provider == "claude":
             body["max_tokens"] = self.config.max_tokens
