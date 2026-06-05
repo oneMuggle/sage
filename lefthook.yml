@@ -4,10 +4,10 @@ pre-commit:
   commands:
     backend-lint:
       glob: "backend/**/*.py"
-      run: cd backend && /home/fz/anaconda3/envs/sage-backend/bin/ruff check --fix {staged_files}
+      run: /home/fz/anaconda3/envs/sage-backend/bin/ruff check --fix {staged_files}
     backend-format:
       glob: "backend/**/*.py"
-      run: cd backend && /home/fz/anaconda3/envs/sage-backend/bin/ruff format {staged_files}
+      run: /home/fz/anaconda3/envs/sage-backend/bin/ruff format {staged_files}
     frontend-lint:
       glob: "src/**/*.{ts,tsx}"
       run: npx eslint --fix {staged_files}

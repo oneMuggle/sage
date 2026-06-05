@@ -50,7 +50,7 @@ import respx
 from httpx import Response
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_llm_ok():
     """Mock LLM 返回正常 chat completion.
 
@@ -83,7 +83,7 @@ def mock_llm_ok():
         yield mock
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_llm_rate_limit():
     """Mock LLM 返回 429 限流响应"""
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
@@ -96,7 +96,7 @@ def mock_llm_rate_limit():
         yield mock
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_llm_timeout():
     """Mock LLM 模拟超时（抛 TimeoutError）"""
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
@@ -104,7 +104,7 @@ def mock_llm_timeout():
         yield mock
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_llm_server_error():
     """Mock LLM 返回 500 服务端错误"""
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
@@ -117,7 +117,7 @@ def mock_llm_server_error():
         yield mock
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_messages():
     """测试用消息列表（标准 system + user 开头）"""
     return [
@@ -126,13 +126,13 @@ def sample_messages():
     ]
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_user_query():
     """测试用用户查询"""
     return "What is the capital of France?"
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_data_dir(tmp_path):
     """临时数据目录（避免污染真实 data/）—— 直接返回 tmp_path 便于测试中使用"""
     return tmp_path
