@@ -1,6 +1,7 @@
 """
 Sage 后端测试 - 共享 fixtures
 """
+
 import os
 import sys
 import tempfile
@@ -31,6 +32,7 @@ def tmp_db_path():
 def setup_test_db(tmp_db_path):
     """每个测试自动使用独立临时数据库"""
     import backend.data.database as db_mod
+
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
     db_mod._db.init_db()
     yield db_mod._db
@@ -41,7 +43,9 @@ def setup_test_db(tmp_db_path):
 @pytest_asyncio.fixture
 async def client():
     """提供异步 HTTP 测试客户端"""
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
         yield c
 
 
