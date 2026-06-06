@@ -39,7 +39,7 @@ export function LoadingState({
         className="h-5 w-5 border-2 border-t-transparent rounded-full animate-spin border-blue-600"
         aria-hidden
       />
-      <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
+      <span className="text-sm text-gray-600 dark:text-gray-300">{label}</span>
     </div>
   );
 }

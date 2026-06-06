@@ -31,11 +31,11 @@ function CodeBlock({ language, children }: { language?: string; children: string
 
   return (
     <div className="relative group">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#282c34] rounded-t-md text-xs text-gray-400">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#282c34] rounded-t-md text-xs text-gray-300">
         <span className="font-mono">{language || 'text'}</span>
         <button
           onClick={handleCopy}
-          className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-gray-200"
+          className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10 text-gray-300 hover:text-white"
           title="复制代码"
         >
           {copied ? (

@@ -48,8 +48,11 @@ export function NewMemoryModal({ onClose }: NewMemoryModalProps) {
 
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-text-secondary mb-1">内容</label>
+            <label htmlFor="new-memory-content" className="block text-xs text-text-secondary mb-1">
+              内容
+            </label>
             <textarea
+              id="new-memory-content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={4}
@@ -59,9 +62,12 @@ export function NewMemoryModal({ onClose }: NewMemoryModalProps) {
           </div>
 
           <div>
-            <label className="block text-xs text-text-secondary mb-1">类型</label>
-            <div className="flex gap-2">
+            <span className="block text-xs text-text-secondary mb-1">类型</span>
+            <div className="flex gap-2" role="radiogroup" aria-label="记忆类型">
               <button
+                type="button"
+                role="radio"
+                aria-checked={memoryType === 'episodic'}
                 onClick={() => setMemoryType('episodic')}
                 className={`px-3 py-1 text-xs rounded border ${
                   memoryType === 'episodic'
@@ -72,6 +78,9 @@ export function NewMemoryModal({ onClose }: NewMemoryModalProps) {
                 情景记忆
               </button>
               <button
+                type="button"
+                role="radio"
+                aria-checked={memoryType === 'semantic'}
                 onClick={() => setMemoryType('semantic')}
                 className={`px-3 py-1 text-xs rounded border ${
                   memoryType === 'semantic'
@@ -85,10 +94,14 @@ export function NewMemoryModal({ onClose }: NewMemoryModalProps) {
           </div>
 
           <div>
-            <label className="block text-xs text-text-secondary mb-1">
+            <label
+              htmlFor="new-memory-importance"
+              className="block text-xs text-text-secondary mb-1"
+            >
               重要性: {importance}/10
             </label>
             <input
+              id="new-memory-importance"
               type="range"
               min={1}
               max={10}

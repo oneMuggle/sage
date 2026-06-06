@@ -16,8 +16,11 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium mb-1">名称</label>
+        <label htmlFor="agent-name" className="block text-sm font-medium mb-1">
+          名称
+        </label>
         <input
+          id="agent-name"
           type="text"
           value={value('name')}
           onChange={(e) => onChange({ ...form, name: e.target.value })}
@@ -26,8 +29,11 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">描述</label>
+        <label htmlFor="agent-description" className="block text-sm font-medium mb-1">
+          描述
+        </label>
         <input
+          id="agent-description"
           type="text"
           value={value('description')}
           onChange={(e) => onChange({ ...form, description: e.target.value })}
@@ -36,8 +42,11 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">系统提示</label>
+        <label htmlFor="agent-system-prompt" className="block text-sm font-medium mb-1">
+          系统提示
+        </label>
         <textarea
+          id="agent-system-prompt"
           value={value('system_prompt')}
           onChange={(e) => onChange({ ...form, system_prompt: e.target.value })}
           rows={4}
@@ -47,8 +56,11 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
 
       <div className="grid grid-cols-3 gap-4">
         <div>
-          <label className="block text-sm font-medium mb-1">模型</label>
+          <label htmlFor="agent-model" className="block text-sm font-medium mb-1">
+            模型
+          </label>
           <input
+            id="agent-model"
             type="text"
             value={value('model_config').model}
             onChange={(e) =>
@@ -61,8 +73,11 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Temperature</label>
+          <label htmlFor="agent-temperature" className="block text-sm font-medium mb-1">
+            Temperature
+          </label>
           <input
+            id="agent-temperature"
             type="number"
             min="0"
             max="2"
@@ -81,8 +96,11 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Max Tokens</label>
+          <label htmlFor="agent-max-tokens" className="block text-sm font-medium mb-1">
+            Max Tokens
+          </label>
           <input
+            id="agent-max-tokens"
             type="number"
             min="256"
             max="8192"

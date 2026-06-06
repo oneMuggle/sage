@@ -17,14 +17,26 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelect();
+    }
+  };
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`选择会话 ${session.title}`}
+      aria-pressed={isActive}
+      onClick={onSelect}
+      onKeyDown={handleKeyDown}
       className={`
         group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer
-        transition-colors
+        transition-colors focus:outline-none focus:ring-2 focus:ring-primary
         ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-bg-hover'}
       `}
-      onClick={onSelect}
     >
       {/* 会话标题 */}
       <div className="flex-1 min-w-0">

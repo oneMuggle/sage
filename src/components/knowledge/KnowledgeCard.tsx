@@ -18,14 +18,30 @@ export function KnowledgeCard({
   onClick,
   onToggle,
 }: KnowledgeCardProps) {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (selectMode) {
+        onToggle();
+      } else {
+        onClick();
+      }
+    }
+  };
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`${selectMode ? '选择' : '打开'}知识库文档 ${doc.title}`}
+      aria-pressed={isSelected}
+      onClick={selectMode ? onToggle : onClick}
+      onKeyDown={handleKeyDown}
       className={clsx(
         'border rounded-radius-md p-space-4 cursor-pointer transition-all',
-        'hover:border-primary',
+        'hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary',
         isSelected ? 'border-primary bg-active' : 'border-border bg-surface',
       )}
-      onClick={selectMode ? onToggle : onClick}
     >
       {selectMode && (
         <div className="flex justify-end mb-2">

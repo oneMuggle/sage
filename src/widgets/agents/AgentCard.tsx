@@ -25,10 +25,22 @@ export function AgentCard({ agent, isSelected, onSelect, onToggle }: AgentCardPr
   const roleColor = ROLE_COLORS[agent.role] || 'bg-bg-subtle text-text-secondary';
   const roleLabel = ROLE_LABELS[agent.role] || agent.role;
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelect();
+    }
+  };
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`选择智能体 ${agent.name}`}
+      aria-pressed={isSelected}
       onClick={onSelect}
-      className={`p-4 rounded-lg border cursor-pointer transition-all ${
+      onKeyDown={handleKeyDown}
+      className={`p-4 rounded-lg border cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-primary ${
         isSelected ? 'border-primary bg-primary/10' : 'border-border hover:border-border-hover'
       } ${!agent.enabled ? 'opacity-50' : ''}`}
     >
