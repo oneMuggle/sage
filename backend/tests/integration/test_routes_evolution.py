@@ -64,7 +64,7 @@ async def test_evolution_status_with_mock_scheduler(client):
         },
     ]
 
-    with patch("backend.api.routes.get_scheduler", return_value=mock_scheduler):
+    with patch("backend.api.legacy_routes.get_scheduler", return_value=mock_scheduler):
         resp = await client.get(f"{PREFIX}/evolution/status")
 
     assert resp.status_code == 200
@@ -80,7 +80,7 @@ async def test_evolution_status_empty(client):
     mock_scheduler = MagicMock()
     mock_scheduler.get_task_status.return_value = []
 
-    with patch("backend.api.routes.get_scheduler", return_value=mock_scheduler):
+    with patch("backend.api.legacy_routes.get_scheduler", return_value=mock_scheduler):
         resp = await client.get(f"{PREFIX}/evolution/status")
 
     assert resp.status_code == 200
@@ -102,7 +102,7 @@ async def test_evolution_trigger_success(client):
     ]
     mock_scheduler.trigger_task.return_value = True
 
-    with patch("backend.api.routes.get_scheduler", return_value=mock_scheduler):
+    with patch("backend.api.legacy_routes.get_scheduler", return_value=mock_scheduler):
         resp = await client.post(
             f"{PREFIX}/evolution/trigger",
             json={"task_name": "daily_summary"},
@@ -129,7 +129,7 @@ async def test_evolution_trigger_task_not_found(client):
         },
     ]
 
-    with patch("backend.api.routes.get_scheduler", return_value=mock_scheduler):
+    with patch("backend.api.legacy_routes.get_scheduler", return_value=mock_scheduler):
         resp = await client.post(
             f"{PREFIX}/evolution/trigger",
             json={"task_name": "nonexistent_task"},
@@ -154,7 +154,7 @@ async def test_evolution_trigger_failure(client):
     ]
     mock_scheduler.trigger_task.return_value = False
 
-    with patch("backend.api.routes.get_scheduler", return_value=mock_scheduler):
+    with patch("backend.api.legacy_routes.get_scheduler", return_value=mock_scheduler):
         resp = await client.post(
             f"{PREFIX}/evolution/trigger",
             json={"task_name": "daily_summary"},

@@ -49,7 +49,7 @@ async def test_chat_stream_yields_ndjson_events():
             content="答案是 2",
         )
 
-    with patch("backend.api.routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         mock_agent = MockAgent.return_value
         mock_agent.run_loop = mock_run_loop
 

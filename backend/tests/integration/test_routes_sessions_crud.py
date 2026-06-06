@@ -126,7 +126,7 @@ async def test_get_messages_returns_inserted_messages(client):
 @pytest.mark.asyncio()
 async def test_interrupt_endpoint_calls_agent_interrupt(client):
     """POST /interrupt 调用 SageAgent.interrupt()。"""
-    with patch("backend.api.routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         mock_instance = MagicMock()
         MockAgent.return_value = mock_instance
 
