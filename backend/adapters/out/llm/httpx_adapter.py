@@ -22,8 +22,12 @@ from typing import Any
 
 from backend.core.legacy.llm_client import LLMClient as _LLMClient, LLMConfig, LLMResponse
 from backend.domain.message import Message, Role, ToolCall
+from backend.utils.otel import get_tracer
 
 logger = logging.getLogger(__name__)
+
+# P3.3: OTel tracer（记录 LLM 调用的耗时、消息 / 工具数量）
+_tracer = get_tracer("llm_adapter")
 
 
 # ============================================================================
@@ -133,12 +137,17 @@ class HttpxLLMAdapter:
         # 解析为 provider-specific 形式，adapter 不做猜测。
         tc: str | None = tool_choice if isinstance(tool_choice, str) else None
 
-        response: LLMResponse = await self._client.chat(
-            raw_messages,
-            tools=tools,
-            tool_choice=tc,
-        )
-        return _to_domain_message(response)
+        # P3.3: 整个 chat 调用包一层 OTel span，便于后端看 LLM 调用耗时
+        with _tracer.start_as_current_span("llm.chat") as span:
+            span.set_attribute("messages.count", len(messages))
+            if tools:
+                span.set_attribute("tools.count", len(tools))
+            response: LLMResponse = await self._client.chat(
+                raw_messages,
+                tools=tools,
+                tool_choice=tc,
+            )
+            return _to_domain_message(response)
 
     async def chat_stream(
         self,

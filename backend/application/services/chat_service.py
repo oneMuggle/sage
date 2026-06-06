@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from backend.domain.errors import LLMError
 from backend.domain.message import Message, Role, ToolCall
@@ -32,12 +33,16 @@ from backend.ports.observability import EventPort, MetricPort
 from backend.ports.skill import SkillPort
 from backend.ports.storage import StoragePort
 from backend.ports.tool import ToolPort
+from backend.utils.otel import get_tracer
 
 # 默认拉取的历史消息窗口大小（最新 N 条）
 _DEFAULT_HISTORY_LIMIT = 20
 
 # 默认 LLM 调用计数 label
 _DEFAULT_MODEL_LABEL = "default"
+
+# OTel tracer（P3.3：用于在 span 上记录关键属性）
+_tracer = get_tracer("chat_service")
 
 # PrometheusMetricAdapter 9 指标名（spec § 6.1）— 集中定义便于复用
 _LLM_CALL_DURATION_METRIC = "sage_llm_call_duration_seconds"
@@ -85,21 +90,26 @@ class ChatService:
         P3.2 引入：业务方（API 路由 / CLI）应通过本方法建会话，而不是直接调
         ``self.storage.create_session``，确保审计与指标的"session_created"埋点
         不会被遗漏。
+
+        P3.3 增强：包一层 OTel span ``session.create``，便于在 trace 后端
+        查看"创建会话"步骤的耗时与上下文。
         """
-        session_id = await self.storage.create_session(title=title)
-        # 审计事件：与 spec § 6.1 5 类事件对齐
-        self.events.emit(
-            "session_created",
-            {"session_id": session_id, "title": title},
-        )
-        # 9 指标之一：active_sessions gauge（set 绝对值）
-        self._active_session_count += 1
-        self.metrics.gauge(
-            _ACTIVE_SESSIONS_METRIC,
-            float(self._active_session_count),
-            {},
-        )
-        return session_id
+        with _tracer.start_as_current_span("session.create") as span:
+            session_id = await self.storage.create_session(title=title)
+            span.set_attribute("session.id", session_id)
+            # 审计事件：与 spec § 6.1 5 类事件对齐
+            self.events.emit(
+                "session_created",
+                {"session_id": session_id, "title": title},
+            )
+            # 9 指标之一：active_sessions gauge（set 绝对值）
+            self._active_session_count += 1
+            self.metrics.gauge(
+                _ACTIVE_SESSIONS_METRIC,
+                float(self._active_session_count),
+                {},
+            )
+            return session_id
 
     async def delete_session(self, session_id: str) -> None:
         """删除会话（仅当会话存在时减计数）。"""
@@ -134,6 +144,20 @@ class ChatService:
         Raises:
             LLMError: 由底层 ``LLMPort`` 抛出（不吞掉）。
         """
+        # P3.3: 包一层 OTel span，覆盖整个 run_turn 生命周期。
+        # 子 span（llm.chat / tool.execute）由底层 adapter 自动 nest。
+        with _tracer.start_as_current_span("chat.run_turn") as span:
+            span.set_attribute("session.id", session_id)
+            span.set_attribute("message.role", user_message.role.value)
+            return await self._run_turn_inner(session_id, user_message, span)
+
+    async def _run_turn_inner(
+        self,
+        session_id: str,
+        user_message: Message,
+        span: Any,
+    ) -> list[Message]:
+        """``run_turn`` 的实际实现，调用方需已开好 OTel span。"""
         # 1) 持久化 user message
         await self.storage.append_message(session_id, user_message)
         self.events.emit(
@@ -146,6 +170,7 @@ class ChatService:
             session_id,
             limit=_DEFAULT_HISTORY_LIMIT,
         )
+        span.set_attribute("history.size", len(history))
 
         # 3) 调 LLM（单次调用；错误时记 metric + event 后透传）
         # 埋点：LLM 调用计数（9 指标之一）
@@ -184,6 +209,8 @@ class ChatService:
                 _ERRORS_METRIC,
                 {"layer": "llm", "error_type": exc.type.value},
             )
+            span.set_attribute("error", True)
+            span.set_attribute("error.type", exc.type.value)
             raise
 
         # 成功路径：直方图 + 成功 outcome
@@ -201,6 +228,8 @@ class ChatService:
                 "outcome": "success",
             },
         )
+        span.set_attribute("llm.duration_ms", int(duration * 1000))
+        span.set_attribute("response.has_tool_calls", bool(response.tool_calls))
 
         # 4) 执行模型发起的 tool_calls（PG2.9：单轮执行；不触发二次 LLM）
         if response.tool_calls:
@@ -211,6 +240,7 @@ class ChatService:
                 float(len(response.tool_calls)),
                 {},
             )
+            span.set_attribute("tool_calls.count", len(response.tool_calls))
 
         # 5) 持久化 assistant response（即使触发了 tool_calls，
         #    仍把 LLM 原始的 assistant message 落库）
@@ -239,6 +269,8 @@ class ChatService:
                     _TOKENS_CONSUMED_METRIC,
                     {"model": model_label, "kind": "completion"},
                 )
+            span.set_attribute("tokens.prompt", prompt_tokens)
+            span.set_attribute("tokens.completion", completion_tokens)
 
         return [user_message, response]
 

@@ -9,8 +9,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from opentelemetry import trace
+
 # 日志格式
-LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+LOG_FORMAT = "%(asctime)s [%(levelname)s] [trace=%(trace_id)s] %(name)s: %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 # 日志级别
@@ -27,6 +29,43 @@ DEFAULT_LOG_LEVEL = "INFO"
 
 # 日志文件保留天数
 LOG_FILE_MAX_DAYS = 7
+
+# 没有活动 span 时填充的占位符（避免 format 报 KeyError）
+_NO_TRACE_ID = "-"
+
+
+class TraceIdFilter(logging.Filter):
+    """把当前 OTel span 的 ``trace_id`` / ``span_id`` 注入 log record。
+
+    给所有 handler 装上后，``LOG_FORMAT`` 中的 ``%(trace_id)s`` / ``%(span_id)s``
+    就会被替换为十六进制字符串。
+
+    设计要点：
+
+    - **静默容错**：在 OTel 未初始化或当前无活动 span 时，
+      仍然返回 ``True``（让日志继续输出），只是 trace_id/span_id
+      留为 ``-``。绝不抛错吞日志。
+    - **不会覆盖**：如果 record 上已有同名字段（业务代码手动设过），
+      保留原值不覆盖。
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        try:
+            span = trace.get_current_span()
+            if span is not None and span.is_recording():
+                ctx = span.get_span_context()
+                if getattr(ctx, "trace_id", 0):
+                    record.trace_id = format(ctx.trace_id, "032x")
+                if getattr(ctx, "span_id", 0):
+                    record.span_id = format(ctx.span_id, "016x")
+        except Exception:  # noqa: BLE001 — 静默吞异常
+            pass
+        # 若没有 trace_id/span_id 属性，用占位符避免 format KeyError
+        if not hasattr(record, "trace_id"):
+            record.trace_id = _NO_TRACE_ID
+        if not hasattr(record, "span_id"):
+            record.span_id = _NO_TRACE_ID
+        return True
 
 
 class SageLogger:
@@ -112,6 +151,8 @@ class SageLogger:
 
         formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
         handler.setFormatter(formatter)
+        # 注入 OTel trace_id / span_id（即使没有活跃 span 也不抛错）
+        handler.addFilter(TraceIdFilter())
 
         return handler
 
@@ -130,6 +171,7 @@ class SageLogger:
 
         formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
         handler.setFormatter(formatter)
+        handler.addFilter(TraceIdFilter())
 
         return handler
 

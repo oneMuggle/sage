@@ -13,6 +13,11 @@ httpx==0.26.0
 # Observability
 prometheus-client==0.25.0
 
+# Tracing
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-exporter-otlp-proto-grpc==1.27.0
+
 # Utils
 python-dotenv==1.0.0
 pyyaml==6.0.1
