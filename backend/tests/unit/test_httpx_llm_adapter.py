@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
-from backend.core.llm_client import LLMConfig, LLMResponse, LLMToolCall
+from backend.core.legacy.llm_client import LLMConfig, LLMResponse, LLMToolCall
 from backend.domain.message import Message, Role, ToolCall
 from backend.ports.llm import LLMPort
 

@@ -20,8 +20,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from backend.core.llm_client import LLMResponse
-from backend.core.orchestrator import AgentOrchestrator, Intent
+from backend.core.legacy.llm_client import LLMResponse
+from backend.core.legacy.orchestrator import AgentOrchestrator, Intent
 
 pytestmark = pytest.mark.unit
 

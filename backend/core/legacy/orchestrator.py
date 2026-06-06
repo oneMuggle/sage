@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any
 
 from backend.agents.profiles import AgentProfile, get_agent
-from backend.core.llm_client import LLMClient
+from backend.core.legacy.llm_client import LLMClient
 from backend.data.blackboard_repo import BlackboardRepo
 
 logger = logging.getLogger(__name__)

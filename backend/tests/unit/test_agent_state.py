@@ -1,6 +1,6 @@
 import pytest
 
-from backend.core.agent_state import (
+from backend.core.legacy.agent_state import (
     AgentEvent,
     AgentState,
     ToolCallRequest,

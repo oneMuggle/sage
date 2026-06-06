@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from backend.core.llm_client import LLMClient
+from backend.core.legacy.llm_client import LLMClient
 from backend.data.database import get_database
 
 logger = logging.getLogger(__name__)

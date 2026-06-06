@@ -5,7 +5,7 @@ Memory Consolidation Pipeline - 记忆压缩管道
 import logging
 from typing import Any
 
-from backend.core.llm_client import LLMClient
+from backend.core.legacy.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 

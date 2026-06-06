@@ -19,8 +19,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from backend.core.agent import SageAgent
-from backend.core.llm_client import LLMClient, LLMConfig, LLMResponse
+from backend.core.legacy.agent import SageAgent
+from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 
 pytestmark = pytest.mark.unit
 

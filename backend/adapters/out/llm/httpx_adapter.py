@@ -20,7 +20,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-from backend.core.llm_client import LLMClient as _LLMClient, LLMConfig, LLMResponse
+from backend.core.legacy.llm_client import LLMClient as _LLMClient, LLMConfig, LLMResponse
 from backend.domain.message import Message, Role, ToolCall
 
 logger = logging.getLogger(__name__)

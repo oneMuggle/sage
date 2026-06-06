@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.core.llm_client import LLMClient, LLMConfig
+from backend.core.legacy.llm_client import LLMClient, LLMConfig
 
 pytestmark = pytest.mark.unit
 

@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from backend.core.errors import LLMError, LLMErrorType
-from backend.core.llm_client import LLMClient, LLMConfig
+from backend.core.legacy.llm_client import LLMClient, LLMConfig
 
 pytestmark = pytest.mark.unit
 

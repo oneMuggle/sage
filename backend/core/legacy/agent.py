@@ -11,10 +11,10 @@ from collections import deque
 from threading import Lock
 from typing import Any
 
-from backend.core.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
+from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import AgentError, ToolCallError
-from backend.core.llm_client import LLMClient, LLMConfig, LLMResponse
+from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.memory import (

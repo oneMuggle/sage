@@ -10,10 +10,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.core.agent import QueryCache, SageAgent
+from backend.core.legacy.agent import QueryCache, SageAgent
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import ToolCallError
-from backend.core.llm_client import LLMResponse
+from backend.core.legacy.llm_client import LLMResponse
 
 pytestmark = pytest.mark.unit
 
@@ -278,7 +278,7 @@ async def test_chat_with_llm_client_returns_llm_response():
 @pytest.mark.asyncio()
 async def test_chat_with_dynamic_llm_config_restores_original():
     """传入 llm_config 时,chat() 应临时覆盖,结束后恢复。"""
-    from backend.core import agent as agent_mod
+    from backend.core.legacy import agent as agent_mod
 
     # 初始化时用 gpt-3.5
     agent = SageAgent(

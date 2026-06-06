@@ -10,13 +10,14 @@
 注意：路由通过 app.include_router(api_router, prefix="/api/v1") 注册，
 所以实际挂载路径是 /api/v1/chat/stream。
 """
+
 import json
 from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from backend.core.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
+from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
 from backend.main import app
 
 pytestmark = pytest.mark.integration
@@ -27,6 +28,7 @@ CHAT_STREAM_PATH = "/api/v1/chat/stream"
 @pytest.mark.asyncio()
 async def test_chat_stream_yields_ndjson_events():
     """/chat/stream 端点以 NDJSON 格式返回 AgentEvent。"""
+
     async def mock_run_loop(messages, max_iterations=5):
         yield AgentEvent(state=AgentState.THINKING, iteration=0)
         yield AgentEvent(
@@ -53,13 +55,14 @@ async def test_chat_stream_yields_ndjson_events():
         mock_agent = MockAgent.return_value
         mock_agent.run_loop = mock_run_loop
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
-            resp = await ac.post(CHAT_STREAM_PATH, json={
-                "session_id": "00000000-0000-0000-0000-000000000000",
-                "message": "1+1 等于几",
-            })
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={
+                    "session_id": "00000000-0000-0000-0000-000000000000",
+                    "message": "1+1 等于几",
+                },
+            )
 
         assert resp.status_code == 200
         lines = [line for line in resp.text.split("\n") if line.strip()]
