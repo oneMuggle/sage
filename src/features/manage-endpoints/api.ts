@@ -1,4 +1,4 @@
-import type { DiscoveredModel, ModelCapability } from '../types/settings';
+import type { DiscoveredModel, ModelCapability } from '../../entities/setting/types';
 
 interface OpenAIModelInfo {
   id: string;

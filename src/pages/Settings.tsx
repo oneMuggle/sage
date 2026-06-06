@@ -1,12 +1,11 @@
 import { clsx } from 'clsx';
 import { useState } from 'react';
 
-import { EvolutionLog } from '../components/evolution/EvolutionLog';
-import { EvolutionPanel } from '../components/evolution/EvolutionPanel';
-import { useSettings } from '../hooks/useSettings';
-import { fetchModels, testEndpointConnection, type ConnectionTestResult } from '../lib/models';
-import type { EndpointConfig, DiscoveredModel } from '../types/settings';
-import { DEFAULT_ENDPOINT } from '../types/settings';
+import { DEFAULT_ENDPOINT, type DiscoveredModel, type EndpointConfig } from '../entities/setting/types';
+import { fetchModels, type ConnectionTestResult, testEndpointConnection } from '../features/manage-endpoints/api';
+import { useSettings } from '../features/manage-settings/useSettings';
+import { EvolutionLog } from '../widgets/evolution/EvolutionLog';
+import { EvolutionPanel } from '../widgets/evolution/EvolutionPanel';
 
 type SettingsTab = 'general' | 'endpoints' | 'models' | 'memory' | 'network' | 'evolution';
 

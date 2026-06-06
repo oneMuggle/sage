@@ -1,11 +1,11 @@
 import {
   AppSettings,
-  DEFAULT_SETTINGS,
   DEFAULT_ENDPOINT,
+  DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
   SETTINGS_VERSION,
-} from '../types/settings';
-import type { EndpointConfig } from '../types/settings';
+} from './types';
+import type { EndpointConfig } from './types';
 
 /**
  * Load settings from localStorage, merge with defaults.

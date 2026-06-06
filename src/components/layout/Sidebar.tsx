@@ -3,8 +3,8 @@ import { MessageSquare, Settings, Brain, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-import { useSettings } from '../../hooks/useSettings';
-import { testEndpointConnection } from '../../lib/models';
+import { testEndpointConnection } from '../../features/manage-endpoints/api';
+import { useSettings } from '../../features/manage-settings/useSettings';
 import { useStore } from '../../lib/store';
 import { SessionItem } from '../session/SessionItem';
 

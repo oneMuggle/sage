@@ -2,7 +2,7 @@
 import { Send, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 
-import { useSettings } from '../../hooks/useSettings';
+import { useSettings } from '../../features/manage-settings/useSettings';
 import { wikiChat } from '../../lib/wiki-api';
 import { useWikiStore } from '../../stores/wiki-store';
 
