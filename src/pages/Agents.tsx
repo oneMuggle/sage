@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 
 import { Button } from '../components/common';
 import { agentsApi, type AgentProfile } from '../lib/api';
+import { ErrorState } from '../shared/ui/ErrorState';
+import { LoadingState } from '../shared/ui/LoadingState';
+import { RetryButton } from '../shared/ui/RetryButton';
 import { AgentCard, AgentDetails, EditAgentForm } from '../widgets/agents';
 
 export function Agents() {
@@ -53,20 +56,56 @@ export function Agents() {
     }
   };
 
+  // 首次加载且失败 + 尚无数据：整页 ErrorState + 重试
+  if (loading && agents.length === 0 && error) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl font-bold">Agent 管理</h1>
+            <Button variant="primary" onClick={loadAgents}>
+              刷新
+            </Button>
+          </div>
+          <ErrorState
+            title="Agent 列表加载失败"
+            message={error}
+            onRetry={loadAgents}
+            retryLabel="重新加载"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Agent 管理</h1>
-          <Button variant="primary" onClick={loadAgents}>
-            刷新
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="primary" onClick={loadAgents}>
+              刷新
+            </Button>
+            {error && (
+              <RetryButton onRetry={loadAgents} label="重试" className="!px-3 !py-1.5 !text-xs" />
+            )}
+          </div>
         </div>
 
-        {error && <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm">{error}</div>}
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="text-error hover:underline">
+              关闭
+            </button>
+          </div>
+        )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-12 text-muted">加载中...</div>
+          <div className="flex items-center justify-center py-12">
+            <LoadingState label="加载 Agent 中..." />
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {agents.map((agent) => (

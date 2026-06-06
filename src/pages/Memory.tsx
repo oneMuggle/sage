@@ -2,14 +2,17 @@ import { Plus, Download } from 'lucide-react';
 import { useState } from 'react';
 
 import { memoryApi } from '../lib/api';
+import { ErrorState } from '../shared/ui/ErrorState';
 import { MemoryBrowser, NewMemoryModal } from '../widgets/memory';
 
 export function Memory() {
   const [showNewMemory, setShowNewMemory] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const handleExport = async () => {
     setExporting(true);
+    setExportError(null);
     try {
       const memories = await memoryApi.getMemories(undefined, 1, 1000);
       const blob = new Blob([JSON.stringify(memories, null, 2)], { type: 'application/json' });
@@ -20,7 +23,7 @@ export function Memory() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('导出失败:', err);
+      setExportError(`导出失败: ${err instanceof Error ? err.message : '未知错误'}`);
     } finally {
       setExporting(false);
     }
@@ -52,6 +55,20 @@ export function Memory() {
           </button>
         </div>
       </div>
+
+      {exportError && (
+        <div className="mb-4">
+          <ErrorState
+            title="导出失败"
+            message={exportError}
+            onRetry={() => {
+              setExportError(null);
+              void handleExport();
+            }}
+            retryLabel="重新导出"
+          />
+        </div>
+      )}
 
       {showNewMemory && <NewMemoryModal onClose={() => setShowNewMemory(false)} />}
 

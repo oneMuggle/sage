@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 
 import { useChat } from '../features/send-message/useChat';
 import { useStore } from '../lib/store';
+import { ErrorState } from '../shared/ui/ErrorState';
+import { LoadingState } from '../shared/ui/LoadingState';
 import { ChatInput, MessageList } from '../widgets/chat';
 
 export function Chat() {
@@ -38,6 +40,25 @@ export function Chat() {
     }
   };
 
+  // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col">
+        <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
+          <h2 className="text-sm font-semibold text-text">对话</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <ErrorState
+            title="对话出错"
+            message={error}
+            onRetry={clearError}
+            retryLabel="关闭并重试"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col">
       {/* 页面头部 */}
@@ -53,18 +74,14 @@ export function Chat() {
         </div>
       </div>
 
-      {/* Error banner */}
-      {error && (
-        <div className="mx-4 mt-2 px-3 py-2 text-xs rounded-radius-sm bg-red-50 border border-red-200 text-red-700 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={clearError} className="ml-2 text-red-500 hover:text-red-700 font-medium">
-            关闭
-          </button>
-        </div>
-      )}
-
       <div className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} />
+        {isLoading && messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <LoadingState label="正在加载对话..." />
+          </div>
+        ) : (
+          <MessageList messages={messages} />
+        )}
       </div>
 
       <ChatInput

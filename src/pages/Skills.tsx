@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 
 import { skillsApi, type Skill } from '../lib/api';
+import { ErrorState } from '../shared/ui/ErrorState';
+import { LoadingState } from '../shared/ui/LoadingState';
+import { RetryButton } from '../shared/ui/RetryButton';
 import { SkillList } from '../widgets/skills';
 
 const Skills: React.FC = () => {
@@ -9,28 +12,23 @@ const Skills: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadSkills = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await skillsApi.list();
-        if (!cancelled) setSkills(data);
-      } catch {
-        if (!cancelled) {
-          setError('加载技能列表失败');
-          setSkills([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    loadSkills();
-    return () => {
-      cancelled = true;
-    };
+  const loadSkills = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await skillsApi.list();
+      setSkills(data);
+    } catch {
+      setError('加载技能列表失败');
+      setSkills([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadSkills();
+  }, [loadSkills]);
 
   const handleToggle = async (name: string, enabled: boolean) => {
     setSkills((prev) => prev.map((skill) => (skill.name === name ? { ...skill, enabled } : skill)));
@@ -53,13 +51,34 @@ const Skills: React.FC = () => {
   const enabledCount = skills.filter((s) => s.enabled).length;
   const totalUsage = skills.reduce((sum, s) => sum + s.usageCount, 0);
 
+  // 首次加载且失败：整页错误态 + 重试
+  if (loading && skills.length === 0 && error) {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
+          <h2 className="text-[18px] font-semibold text-text">技能</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <ErrorState
+            title="技能加载失败"
+            message={error}
+            onRetry={loadSkills}
+            retryLabel="重新加载"
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
           <h2 className="text-[18px] font-semibold text-text">技能</h2>
         </div>
-        <div className="flex-1 flex items-center justify-center text-muted text-sm">加载中...</div>
+        <div className="flex-1 flex items-center justify-center">
+          <LoadingState label="加载技能中..." />
+        </div>
       </div>
     );
   }
@@ -73,11 +92,14 @@ const Skills: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto p-5">
         {error && (
-          <div className="mb-4 p-3 rounded-radius-sm bg-error/10 text-error text-sm">
-            {error}
-            <button onClick={() => setError(null)} className="ml-2 text-error hover:underline">
-              关闭
-            </button>
+          <div className="mb-4 p-3 rounded-radius-sm bg-error/10 text-error text-sm flex items-center justify-between">
+            <span>{error}</span>
+            <div className="flex items-center gap-2">
+              <RetryButton onRetry={loadSkills} label="重试" className="!px-2 !py-1 !text-xs" />
+              <button onClick={() => setError(null)} className="text-error hover:underline">
+                关闭
+              </button>
+            </div>
           </div>
         )}
 
