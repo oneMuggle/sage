@@ -9,11 +9,13 @@
 **周期：** 3-4 周（单人）/ 2-3 周（2 人）
 
 **关联文档：**
+
 - 总体规划：`docs/superpowers/plans/2026-06-05-sage-quality-optimization.md`
 - 设计 spec：`docs/superpowers/specs/2026-06-05-sage-quality-optimization-design.md`
 - 质量门禁：`docs/technical/15-quality-gates.md`
 
 **P0 基线（2026-06-05 末）：**
+
 - 后端覆盖率：43%（2895 stmts / 1650 missed）
 - 后端测试：48/48
 - 前端覆盖率：未测
@@ -39,23 +41,23 @@
 
 ## P1 任务组概览
 
-| ID | 主题 | 文件 | 验收 |
-|----|------|------|------|
-| **PG1.1** | agent 状态机测试 | `backend/tests/unit/test_agent_state_transitions.py` 等 | `core/agent.py` ≥ 90% |
-| **PG1.2** | orchestrator 测试 | `backend/tests/unit/test_orchestrator_*.py` | `core/orchestrator.py` ≥ 90% |
-| **PG1.3** | llm_client 错误分支 | `backend/tests/unit/test_llm_client_*.py` | `core/llm_client.py` ≥ 90% |
-| **PG1.4** | api 路由测试 | `backend/tests/integration/test_routes_*.py` | `api/routes.py` ≥ 85% |
-| **PG1.5** | tools 测试 | `backend/tests/unit/test_tools_*.py` | `tools/*.py` ≥ 85% |
-| **PG1.6** | skills/builtin 测试 | `backend/tests/unit/test_skills_builtin_*.py` | `skills/builtin/*.py` ≥ 70% |
-| **PG1.7** | 覆盖率门槛 | `pytest.ini` | `--cov-fail-under=80` 生效 |
-| **PG1.8** | FSD 目录骨架 | `src/{app,...,shared}/` | 7 个目录存在 |
-| **PG1.9** | FSD 边界规则空跑 | `eslint.config.js` | 规则 warn-only |
-| **PG1.10** | 迁移 Chat 页面 | `src/pages/Chat.tsx` + 依赖 | UI 行为不变 |
-| **PG1.11** | 迁移 Settings 页面 | `src/pages/Settings.tsx` + 依赖 | UI 行为不变 |
-| **PG1.12** | 迁移 K/S/A/M 页面 | 4 个 page 文件 | UI 行为不变 |
-| **PG1.13** | 启用 FSD enforcement | `eslint.config.js` | 违规即 fail |
-| **PG1.14** | 前端关键组件测试 | `src/**/__tests__/` | features+entities ≥ 80% |
-| **PG1.15** | P1 完工 | `docs/technical/17-frontend-quality.md` + spec | 发布 |
+| ID         | 主题                 | 文件                                                    | 验收                         |
+| ---------- | -------------------- | ------------------------------------------------------- | ---------------------------- |
+| **PG1.1**  | agent 状态机测试     | `backend/tests/unit/test_agent_state_transitions.py` 等 | `core/agent.py` ≥ 90%        |
+| **PG1.2**  | orchestrator 测试    | `backend/tests/unit/test_orchestrator_*.py`             | `core/orchestrator.py` ≥ 90% |
+| **PG1.3**  | llm_client 错误分支  | `backend/tests/unit/test_llm_client_*.py`               | `core/llm_client.py` ≥ 90%   |
+| **PG1.4**  | api 路由测试         | `backend/tests/integration/test_routes_*.py`            | `api/routes.py` ≥ 85%        |
+| **PG1.5**  | tools 测试           | `backend/tests/unit/test_tools_*.py`                    | `tools/*.py` ≥ 85%           |
+| **PG1.6**  | skills/builtin 测试  | `backend/tests/unit/test_skills_builtin_*.py`           | `skills/builtin/*.py` ≥ 70%  |
+| **PG1.7**  | 覆盖率门槛           | `pytest.ini`                                            | `--cov-fail-under=80` 生效   |
+| **PG1.8**  | FSD 目录骨架         | `src/{app,...,shared}/`                                 | 7 个目录存在                 |
+| **PG1.9**  | FSD 边界规则空跑     | `eslint.config.js`                                      | 规则 warn-only               |
+| **PG1.10** | 迁移 Chat 页面       | `src/pages/Chat.tsx` + 依赖                             | UI 行为不变                  |
+| **PG1.11** | 迁移 Settings 页面   | `src/pages/Settings.tsx` + 依赖                         | UI 行为不变                  |
+| **PG1.12** | 迁移 K/S/A/M 页面    | 4 个 page 文件                                          | UI 行为不变                  |
+| **PG1.13** | 启用 FSD enforcement | `eslint.config.js`                                      | 违规即 fail                  |
+| **PG1.14** | 前端关键组件测试     | `src/**/__tests__/`                                     | features+entities ≥ 80%      |
+| **PG1.15** | P1 完工              | `docs/technical/17-frontend-quality.md` + spec          | 发布                         |
 
 ---
 
@@ -68,6 +70,7 @@
 ### 任务 1.1.1：扩展 agent 状态转移测试
 
 **Files:**
+
 - Create: `backend/tests/unit/test_agent_state_transitions.py`
 
 ```python
@@ -121,9 +124,11 @@ def test_terminal_states_have_no_transitions():
 ### 任务 1.1.2：补 run_loop 工具调用与错误恢复测试
 
 **Files:**
+
 - Modify: `backend/tests/unit/test_agent_run_loop.py`
 
 读现有 `test_agent_run_loop.py`，识别 run_loop 行为边界，添加：
+
 - 工具调用成功 → OBSERVING → DONE 路径
 - 工具调用失败 → FAILED 路径
 - 工具返回错误 observation → 继续 THINKING 路径
@@ -141,6 +146,7 @@ def test_terminal_states_have_no_transitions():
 ### 任务 1.1.3：流式响应边界测试
 
 **Files:**
+
 - Create: `backend/tests/unit/test_agent_streaming.py`
 
 ```python
@@ -188,6 +194,7 @@ def test_streaming_aggregates_tool_observations():
 ### 任务 1.2.2：写 orchestrator 核心测试
 
 **Files:**
+
 - Create: `backend/tests/unit/test_orchestrator_dispatch.py`
 - Create: `backend/tests/unit/test_orchestrator_scheduling.py`
 
@@ -245,6 +252,7 @@ def test_queue_add_and_drain():
 ### 任务 1.3.1：使用 P0 conftest mock fixtures 补缺失场景
 
 **Files:**
+
 - Create: `backend/tests/unit/test_llm_client_remaining.py`
 
 利用 P0-T7 新增的 `mock_llm_ok`、`mock_llm_rate_limit`、`mock_llm_timeout`、`mock_llm_server_error` 写测试覆盖：
@@ -312,6 +320,7 @@ def test_chat_completion_500_raises(mock_llm_server_error):
 ### 任务 1.4.2：补齐未覆盖端点测试
 
 **Files:**
+
 - Modify: `backend/tests/integration/test_routes_settings.py`（新建）
 - Modify: `backend/tests/integration/test_routes_sessions_crud.py`（新建）
 - Modify: `backend/tests/integration/test_routes_memory.py`（新建）
@@ -358,6 +367,7 @@ async def test_update_settings(client):
 ### 任务 1.5.2：calculator 测试
 
 **Files:**
+
 - Create: `backend/tests/unit/test_calculator.py`
 
 ```python
@@ -391,6 +401,7 @@ def test_calculator_handles_invalid_expression():
 ### 任务 1.5.4：tool registry 测试
 
 **Files:**
+
 - Create: `backend/tests/unit/test_tools_registry.py`
 
 测试：register / get / list / unregister / 重复注册检测
@@ -410,12 +421,14 @@ def test_calculator_handles_invalid_expression():
 ### 任务 1.6.1-1.6.4：每个 skill 一个测试文件
 
 **Files:**
+
 - Create: `backend/tests/unit/test_skills_coder.py`
 - Create: `backend/tests/unit/test_skills_search.py`
 - Create: `backend/tests/unit/test_skills_travel.py`
 - Create: `backend/tests/unit/test_skills_writer.py`
 
 每个文件 3-5 个测试：
+
 - 初始化（参数验证）
 - 正常执行
 - 错误处理（缺参数、不可用 LLM 等）
@@ -539,6 +552,7 @@ plugins: {
 ### 任务 1.10.2：迁移 Chat + 依赖
 
 按 import 关系先迁依赖、再迁 Chat 自身：
+
 - 如果依赖是 component：迁到 `widgets/` 或 `features/`
 - 如果依赖是 hook：迁到 `features/`
 - 如果依赖是 store：迁到 `entities/` 或 `features/`
@@ -606,6 +620,7 @@ Knowledge / Skills / Agents / Memory 四个页面。
 ### 任务 1.14.1：列出要测的核心 hook / store
 
 按 P0 spec 列出的清单：
+
 - `useChat.test.ts`（核心 hook）
 - `useSettings.test.ts`（store 关键）
 - `useSessions.test.ts`
@@ -615,6 +630,7 @@ Knowledge / Skills / Agents / Memory 四个页面。
 ### 任务 1.14.2：写 useChat 测试
 
 **Files:**
+
 - Create: `src/hooks/__tests__/useChat.test.ts`
 
 ```typescript
@@ -668,9 +684,11 @@ describe('useChat', () => {
 ### 任务 1.15.2：写 17-frontend-quality.md
 
 **Files:**
+
 - Create: `docs/technical/17-frontend-quality.md`
 
 包含：
+
 - FSD 架构总览
 - 七层目录说明
 - 边界规则 enforcement
@@ -696,13 +714,13 @@ describe('useChat', () => {
 
 ### Spec 覆盖
 
-| Spec 节 | 对应 PG | 状态 |
-|---------|--------|------|
-| § 3.1 后端测试体系 | PG1.1-PG1.7 | ✅ |
-| § 3.3 前端测试体系 | PG1.14 | ✅ |
-| § 3.4 前端 Lint/Format | PG1.9, PG1.13 | ✅ |
-| § 4 P1 全节 | 全部 | ✅ |
-| § 8 总体成功指标 | PG1.7, PG1.15 | ✅ |
+| Spec 节                | 对应 PG       | 状态 |
+| ---------------------- | ------------- | ---- |
+| § 3.1 后端测试体系     | PG1.1-PG1.7   | ✅   |
+| § 3.3 前端测试体系     | PG1.14        | ✅   |
+| § 3.4 前端 Lint/Format | PG1.9, PG1.13 | ✅   |
+| § 4 P1 全节            | 全部          | ✅   |
+| § 8 总体成功指标       | PG1.7, PG1.15 | ✅   |
 
 ### 类型/接口一致性
 
@@ -724,20 +742,21 @@ describe('useChat', () => {
 ## 实施步骤追踪
 
 ### P1 阶段
-- [ ] PG1.1: agent 状态机测试（3 任务）
-- [ ] PG1.2: orchestrator 测试（2 任务）
-- [ ] PG1.3: llm_client 错误分支（1 任务）
-- [ ] PG1.4: api 路由测试（2 任务）
-- [ ] PG1.5: tools 测试（4 任务）
-- [ ] PG1.6: skills/builtin 测试（4 任务）
-- [ ] PG1.7: 覆盖率门槛（4 任务）
-- [ ] PG1.8: FSD 目录骨架（1 任务）
-- [ ] PG1.9: FSD 边界规则空跑（2 任务）
-- [ ] PG1.10: 迁移 Chat 页面（3 任务）
-- [ ] PG1.11: 迁移 Settings 页面（3 任务）
-- [ ] PG1.12: 迁移 K/S/A/M 页面（5 任务）
-- [ ] PG1.13: 启用 FSD enforcement（2 任务）
-- [ ] PG1.14: 前端关键组件测试（4 任务）
-- [ ] PG1.15: P1 完工（4 任务）
 
-**总计：40 个任务**
+- [x] PG1.1: agent 状态机测试（3 任务）
+- [x] PG1.2: orchestrator 测试（2 任务）
+- [x] PG1.3: llm_client 错误分支（1 任务）
+- [x] PG1.4: api 路由测试（2 任务）
+- [x] PG1.5: tools 测试（4 任务）
+- [x] PG1.6: skills/builtin 测试（4 任务）
+- [x] PG1.7: 覆盖率门槛（4 任务）
+- [x] PG1.8: FSD 目录骨架（1 任务）
+- [x] PG1.9: FSD 边界规则空跑（2 任务）
+- [x] PG1.10: 迁移 Chat 页面（3 任务）
+- [x] PG1.11: 迁移 Settings 页面（3 任务）
+- [x] PG1.12: 迁移 K/S/A/M 页面（5 任务）
+- [x] PG1.13: 启用 FSD enforcement（2 任务）
+- [x] PG1.14: 前端关键组件测试（4 任务）
+- [x] PG1.15: P1 完工（4 任务）
+
+**总计：40 个任务 ✅ 全部完成**
