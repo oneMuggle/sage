@@ -85,7 +85,11 @@ export function useKnowledge(): UseKnowledgeReturn {
   }, [docs, searchQuery, selectedCategory]);
 
   const toggleSelection = (id: string) => {
-    selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
+    if (selectedIds.has(id)) {
+      selectedIds.delete(id);
+    } else {
+      selectedIds.add(id);
+    }
   };
 
   const clearSelection = () => {
