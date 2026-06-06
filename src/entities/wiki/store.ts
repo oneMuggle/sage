@@ -1,8 +1,8 @@
 // Wiki Zustand store
 import { create } from 'zustand';
 
-import { wikiListDirectory, wikiReadFile, wikiWriteFile, wikiDeleteFile } from '../lib/wiki-api';
-import type { WikiProject, FileNode, WikiView } from '../types/wiki';
+import { wikiListDirectory, wikiReadFile, wikiWriteFile, wikiDeleteFile } from '../../shared/api-client/wiki';
+import type { WikiProject, FileNode, WikiView } from '../../shared/types/wiki';
 
 interface WikiStoreState {
   project: WikiProject | null;

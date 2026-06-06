@@ -2,9 +2,9 @@
 import { Send, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 
+import { useWikiStore } from '../../entities/wiki/store';
 import { useSettings } from '../../features/manage-settings/useSettings';
-import { wikiChat } from '../../lib/wiki-api';
-import { useWikiStore } from '../../stores/wiki-store';
+import { wikiChat } from '../../shared/api-client/wiki';
 
 interface ChatMessage {
   role: 'user' | 'assistant';

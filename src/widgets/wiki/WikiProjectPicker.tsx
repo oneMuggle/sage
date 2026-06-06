@@ -2,8 +2,8 @@
 import { FolderPlus, FolderOpen, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { createWikiProject, openWikiProject } from '../../lib/wiki-api';
-import { useWikiStore } from '../../stores/wiki-store';
+import { useWikiStore } from '../../entities/wiki/store';
+import { createWikiProject, openWikiProject } from '../../shared/api-client/wiki';
 
 export function WikiProjectPicker() {
   const [mode, setMode] = useState<'menu' | 'create' | 'open'>('menu');

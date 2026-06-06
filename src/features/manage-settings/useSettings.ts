@@ -1,6 +1,10 @@
 import { useState, useCallback } from 'react';
 
-import { loadSettings, resetSettings as resetSettingsLib, saveSettings } from '../../entities/setting/storage';
+import {
+  loadSettings,
+  resetSettings as resetSettingsLib,
+  saveSettings,
+} from '../../entities/setting/storage';
 import type { AppSettings } from '../../entities/setting/types';
 
 interface UseSettingsReturn {

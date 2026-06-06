@@ -2,9 +2,9 @@
 import { Search, FileText } from 'lucide-react';
 import { useState } from 'react';
 
-import { wikiSearch } from '../../lib/wiki-api';
-import { useWikiStore } from '../../stores/wiki-store';
-import type { SearchResult } from '../../types/wiki';
+import { useWikiStore } from '../../entities/wiki/store';
+import { wikiSearch } from '../../shared/api-client/wiki';
+import type { SearchResult } from '../../shared/types/wiki';
 
 export function WikiSearch() {
   const project = useWikiStore((s) => s.project);

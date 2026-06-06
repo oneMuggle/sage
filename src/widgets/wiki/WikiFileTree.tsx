@@ -2,8 +2,8 @@
 import { ChevronRight, ChevronDown, FileText, Folder } from 'lucide-react';
 import { useState } from 'react';
 
-import { useWikiStore } from '../../stores/wiki-store';
-import type { FileNode } from '../../types/wiki';
+import { useWikiStore } from '../../entities/wiki/store';
+import type { FileNode } from '../../shared/types/wiki';
 
 export function WikiFileTree() {
   const fileTree = useWikiStore((s) => s.fileTree);

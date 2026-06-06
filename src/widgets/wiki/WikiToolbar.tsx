@@ -1,8 +1,8 @@
 // Wiki Toolbar - top navigation and actions
 import { FileText, Search, MessageSquare } from 'lucide-react';
 
-import { useWikiStore } from '../../stores/wiki-store';
-import type { WikiView } from '../../types/wiki';
+import { useWikiStore } from '../../entities/wiki/store';
+import type { WikiView } from '../../shared/types/wiki';
 
 export function WikiToolbar() {
   const project = useWikiStore((s) => s.project);

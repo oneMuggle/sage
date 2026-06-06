@@ -1,8 +1,16 @@
 import { clsx } from 'clsx';
 import { useState } from 'react';
 
-import { DEFAULT_ENDPOINT, type DiscoveredModel, type EndpointConfig } from '../entities/setting/types';
-import { fetchModels, type ConnectionTestResult, testEndpointConnection } from '../features/manage-endpoints/api';
+import {
+  DEFAULT_ENDPOINT,
+  type DiscoveredModel,
+  type EndpointConfig,
+} from '../entities/setting/types';
+import {
+  fetchModels,
+  type ConnectionTestResult,
+  testEndpointConnection,
+} from '../features/manage-endpoints/api';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { EvolutionLog } from '../widgets/evolution/EvolutionLog';
 import { EvolutionPanel } from '../widgets/evolution/EvolutionPanel';
