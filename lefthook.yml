@@ -4,10 +4,10 @@ pre-commit:
   commands:
     backend-lint:
       glob: 'backend/**/*.py'
-      run: /home/fz/anaconda3/envs/sage-backend/bin/ruff check --fix {staged_files}
+      run: bash scripts/lint.sh check --fix {staged_files}
     backend-format:
       glob: 'backend/**/*.py'
-      run: /home/fz/anaconda3/envs/sage-backend/bin/ruff format {staged_files}
+      run: bash scripts/lint.sh format {staged_files}
     frontend-lint:
       glob: 'src/**/*.{ts,tsx}'
       run: npx eslint --fix {staged_files}
@@ -18,7 +18,7 @@ pre-commit:
 pre-push:
   commands:
     backend-test:
-      run: cd backend && /home/fz/anaconda3/envs/sage-backend/bin/pytest -x --no-cov
+      run: cd backend && bash ../scripts/pytest.sh -x --no-cov
     frontend-test:
       run: npm run test:run -- --no-coverage
 
