@@ -154,14 +154,15 @@ jobs:
   # ========== All-checks aggregator ==========
   all-green:
     name: All Checks
-    needs: [backend, frontend]
+    needs: [backend, frontend, lighthouse]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
       - name: Check all jobs passed
         run: |
           if [ "${{ needs.backend.result }}" != "success" ] || \
-             [ "${{ needs.frontend.result }}" != "success" ]; then
+             [ "${{ needs.frontend.result }}" != "success" ] || \
+             [ "${{ needs.lighthouse.result }}" != "success" ]; then
             echo "One or more required jobs failed"
             exit 1
           fi
