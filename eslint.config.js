@@ -42,11 +42,11 @@ export default [
         },
       ],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
-      // FSD 边界规则（warn only — PG1.9 阶段不阻塞，PG1.13 改为 error）
+      // FSD 边界规则（PG1.13 启用为 error — 任何违规将失败 build）
       // 层级（自顶向下）：app > processes > pages > widgets > features > entities > shared
       // 下层不可 import 上层，但可 import 自身 + 下层。
       'import/no-restricted-paths': [
-        'warn',
+        'error',
         {
           zones: [
             // pages 不可 import app / processes
