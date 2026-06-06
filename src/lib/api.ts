@@ -3,6 +3,8 @@
  * 包含错误处理和重试逻辑
  */
 
+import { invoke } from '@tauri-apps/api/core';
+
 import type { LLMErrorResponse } from './errorMapping';
 
 // ==================== 类型定义 ====================
@@ -115,7 +117,6 @@ function isValidSessionId(sessionId: string): boolean {
   return uuidRegex.test(sessionId);
 }
 
-import { invoke } from '@tauri-apps/api/tauri';
 
 // ==================== 重试配置 ====================
 
