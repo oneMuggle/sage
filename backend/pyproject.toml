@@ -1,0 +1,29 @@
+# backend/pyproject.toml
+# 仅用于 import-linter / 未来集中化配置（不影响 requirements.txt）
+[tool.importlinter]
+root_package = "backend"
+
+# 六边形架构 5 层依赖图（PG2.11 启用）
+#
+# import-linter 的约定：layers 列表按"高层 → 低层"排列（高层可以 import 低层，反之禁止）。
+#   高层 = 离用户更近、依赖更多的层（api 依赖 application 依赖 ports 依赖 domain）
+#   低层 = 离用户更远、被依赖的层（domain 是最内层，被所有其他层依赖）
+# 因此虽然 PG2.11 描述写作 "domain → ports → application → adapters → api"，
+# pyproject.toml 中需要反向书写，让 import-linter 把 api 当作最外层、domain 当作最内层。
+#
+# 依赖规则（hexagonal 期望）：
+#   - domain:    零外部依赖（仅 typing + dataclass + enum + abc）
+#   - ports:     → domain
+#   - application: → domain, ports
+#   - adapters:  → domain, ports
+#   - api:       → domain, ports, application, adapters
+[[tool.importlinter.contracts]]
+name = "hexagonal-architecture"
+type = "layers"
+layers = [
+    "backend.api",            # highest layer
+    "backend.adapters",
+    "backend.application",
+    "backend.ports",
+    "backend.domain",         # lowest layer
+]

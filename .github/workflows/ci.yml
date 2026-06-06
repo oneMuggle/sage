@@ -50,6 +50,15 @@ jobs:
           conda run -n sage-backend mypy backend/domain backend/ports
         continue-on-error: true # P0 期间允许，domain/ports 还没建
 
+      # PG2.11：5 层依赖图（hexagonal-architecture contract）
+      # - backend/ 是 import-linter 的 root_package
+      # - 必须 cd backend 让 import-linter 找到 pyproject.toml
+      # - PYTHONPATH=.. 让它能 import "backend.*" 模块
+      - name: Import linter (hexagonal architecture)
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend bash -c "cd backend && PYTHONPATH=.. lint-imports"
+
       - name: Pytest with coverage
         shell: bash -el {0}
         run: |
