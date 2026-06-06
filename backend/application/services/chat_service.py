@@ -23,6 +23,8 @@
 
 from __future__ import annotations
 
+import time
+
 from backend.domain.errors import LLMError
 from backend.domain.message import Message, Role, ToolCall
 from backend.ports.llm import LLMPort
@@ -36,6 +38,14 @@ _DEFAULT_HISTORY_LIMIT = 20
 
 # 默认 LLM 调用计数 label
 _DEFAULT_MODEL_LABEL = "default"
+
+# PrometheusMetricAdapter 9 指标名（spec § 6.1）— 集中定义便于复用
+_LLM_CALL_DURATION_METRIC = "sage_llm_call_duration_seconds"
+_LLM_CALLS_METRIC = "sage_llm_calls_total"
+_TOKENS_CONSUMED_METRIC = "sage_tokens_consumed_total"
+_REACT_STEPS_METRIC = "sage_react_steps_per_request"
+_TOOL_INVOCATIONS_METRIC = "sage_tool_invocations_total"
+_ERRORS_METRIC = "sage_errors_total"
 
 
 class ChatService:
@@ -91,10 +101,6 @@ class ChatService:
             "chat_message_sent",
             {"session_id": session_id, "role": Role.USER.value},
         )
-        self.metrics.counter(
-            "chat_messages_total",
-            {"role": Role.USER.value},
-        )
 
         # 2) 拉取历史上下文（用于喂给 LLM）
         history = await self.storage.get_messages(
@@ -103,26 +109,69 @@ class ChatService:
         )
 
         # 3) 调 LLM（单次调用；错误时记 metric + event 后透传）
+        # 埋点：LLM 调用计数（9 指标之一）
         self.metrics.counter(
-            "llm_calls_total",
-            {"model": _DEFAULT_MODEL_LABEL},
+            _LLM_CALLS_METRIC,
+            {
+                "model": _DEFAULT_MODEL_LABEL,
+                "provider": "default",
+                "outcome": "started",
+            },
         )
+        start = time.monotonic()
         try:
             response = await self.llm.chat(history)
         except LLMError as exc:
+            duration = time.monotonic() - start
+            # 失败也记直方图，便于看错误率 / 失败延迟分布
+            self.metrics.histogram(
+                _LLM_CALL_DURATION_METRIC,
+                duration,
+                {"model": _DEFAULT_MODEL_LABEL},
+            )
+            self.metrics.counter(
+                _LLM_CALLS_METRIC,
+                {
+                    "model": _DEFAULT_MODEL_LABEL,
+                    "provider": "default",
+                    "outcome": "error",
+                },
+            )
             self.events.emit(
                 "llm_error",
                 {"session_id": session_id, "type": exc.type.value},
             )
             self.metrics.counter(
-                "errors_total",
-                {"layer": "llm", "type": exc.type.value},
+                _ERRORS_METRIC,
+                {"layer": "llm", "error_type": exc.type.value},
             )
             raise
+
+        # 成功路径：直方图 + 成功 outcome
+        duration = time.monotonic() - start
+        self.metrics.histogram(
+            _LLM_CALL_DURATION_METRIC,
+            duration,
+            {"model": _DEFAULT_MODEL_LABEL},
+        )
+        self.metrics.counter(
+            _LLM_CALLS_METRIC,
+            {
+                "model": _DEFAULT_MODEL_LABEL,
+                "provider": "default",
+                "outcome": "success",
+            },
+        )
 
         # 4) 执行模型发起的 tool_calls（PG2.9：单轮执行；不触发二次 LLM）
         if response.tool_calls:
             await self._execute_tool_calls(session_id, response.tool_calls)
+            # 埋点：ReAct 步数（9 指标之一）— 本轮触发的 tool_call 数
+            self.metrics.histogram(
+                _REACT_STEPS_METRIC,
+                float(len(response.tool_calls)),
+                {},
+            )
 
         # 5) 持久化 assistant response（即使触发了 tool_calls，
         #    仍把 LLM 原始的 assistant message 落库）
@@ -131,6 +180,26 @@ class ChatService:
             "chat_response_completed",
             {"session_id": session_id},
         )
+
+        # 6) 埋点：token 消耗（9 指标之一）— 仅在响应携带 usage 时记录
+        # MetricPort 的 counter 只能 inc(1)；此处用 Counter 表示
+        # "至少发生了一次 token 消耗" 的事件计数。精确的 token 总数
+        # 在 LLM 客户端 / 适配器层独立记录（不在 P3.1 范围）。
+        usage = getattr(response, "usage", None)
+        if isinstance(usage, dict) and usage:
+            model_label = str(usage.get("model", _DEFAULT_MODEL_LABEL))
+            prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+            completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+            if prompt_tokens > 0:
+                self.metrics.counter(
+                    _TOKENS_CONSUMED_METRIC,
+                    {"model": model_label, "kind": "prompt"},
+                )
+            if completion_tokens > 0:
+                self.metrics.counter(
+                    _TOKENS_CONSUMED_METRIC,
+                    {"model": model_label, "kind": "completion"},
+                )
 
         return [user_message, response]
 
@@ -155,9 +224,10 @@ class ChatService:
                 "tool_invoked",
                 {"session_id": session_id, "tool": tc.name, "args": tc.args},
             )
+            # 新 9 指标命名：成功/失败由 outcome 区分
             self.metrics.counter(
-                "tool_invocations_total",
-                {"tool": tc.name},
+                _TOOL_INVOCATIONS_METRIC,
+                {"tool": tc.name, "outcome": "started"},
             )
             result = await self.tools.execute(tc.name, tc.args)
             # 把工具结果作为 TOOL 消息回写会话历史
@@ -177,6 +247,15 @@ class ChatService:
                     },
                 )
                 self.metrics.counter(
-                    "tool_errors_total",
-                    {"tool": tc.name},
+                    _TOOL_INVOCATIONS_METRIC,
+                    {"tool": tc.name, "outcome": "error"},
+                )
+                self.metrics.counter(
+                    _ERRORS_METRIC,
+                    {"layer": "tool", "error_type": "tool_failed"},
+                )
+            else:
+                self.metrics.counter(
+                    _TOOL_INVOCATIONS_METRIC,
+                    {"tool": tc.name, "outcome": "success"},
                 )
