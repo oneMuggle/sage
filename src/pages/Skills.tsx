@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
-import SkillList from '../components/skills/SkillList';
 import { skillsApi, type Skill } from '../lib/api';
+import { SkillList } from '../widgets/skills';
 
 const Skills: React.FC = () => {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -17,7 +17,7 @@ const Skills: React.FC = () => {
       try {
         const data = await skillsApi.list();
         if (!cancelled) setSkills(data);
-      } catch (err) {
+      } catch {
         if (!cancelled) {
           setError('加载技能列表失败');
           setSkills([]);

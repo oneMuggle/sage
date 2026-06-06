@@ -1,7 +1,12 @@
 // Wiki Zustand store
 import { create } from 'zustand';
 
-import { wikiListDirectory, wikiReadFile, wikiWriteFile, wikiDeleteFile } from '../../shared/api-client/wiki';
+import {
+  wikiListDirectory,
+  wikiReadFile,
+  wikiWriteFile,
+  wikiDeleteFile,
+} from '../../shared/api-client/wiki';
 import type { WikiProject, FileNode, WikiView } from '../../shared/types/wiki';
 
 interface WikiStoreState {
