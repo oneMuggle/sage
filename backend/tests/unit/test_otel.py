@@ -1,4 +1,5 @@
 """验证 OpenTelemetry 工具与 trace_id 注入。"""
+
 from __future__ import annotations
 
 import logging
