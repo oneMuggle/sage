@@ -4,6 +4,7 @@ Agent 状态机与事件流定义
 用于 ReAct 循环:IDLE → THINKING → ACTING → OBSERVING → DONE/FAILED
 事件流通过 FastAPI 流式响应(NDJSON)下发到前端。
 """
+
 import json
 from dataclasses import dataclass
 from enum import Enum
@@ -12,6 +13,7 @@ from typing import Any
 
 class AgentState(str, Enum):
     """Agent 状态枚举。"""
+
     IDLE = "idle"
     THINKING = "thinking"
     ACTING = "acting"
@@ -23,6 +25,7 @@ class AgentState(str, Enum):
 @dataclass
 class ToolCallRequest:
     """工具调用请求(LLM 发出)。"""
+
     id: str
     name: str
     arguments: dict[str, Any]
@@ -42,6 +45,7 @@ class ToolCallRequest:
 @dataclass
 class ToolCallResult:
     """工具调用结果(前端展示用)。"""
+
     tool_call_id: str
     content: str
     is_error: bool = False
@@ -57,6 +61,7 @@ class ToolCallResult:
 @dataclass
 class AgentEvent:
     """Agent 事件,前端通过流式响应接收。"""
+
     state: AgentState
     iteration: int = 0
     content: str | None = None

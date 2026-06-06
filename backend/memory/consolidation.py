@@ -2,6 +2,7 @@
 Memory Consolidation Pipeline - 记忆压缩管道
 负责工作记忆到情景记忆的自动摘要和压缩
 """
+
 import logging
 from typing import Any
 
@@ -23,9 +24,7 @@ class ConsolidationPipeline:
     def __init__(self, llm_client: LLMClient | None = None):
         self.llm_client = llm_client
 
-    def compress_working_memory(
-        self, messages: list[dict[str, Any]]
-    ) -> str | None:
+    def compress_working_memory(self, messages: list[dict[str, Any]]) -> str | None:
         """
         压缩工作记忆为摘要
 
@@ -38,10 +37,9 @@ class ConsolidationPipeline:
         if not messages:
             return None
 
-        messages_text = "\n".join([
-            f"[{msg.get('role', 'unknown')}]: {msg.get('content', '')[:300]}"
-            for msg in messages
-        ])
+        messages_text = "\n".join(
+            [f"[{msg.get('role', 'unknown')}]: {msg.get('content', '')[:300]}" for msg in messages]
+        )
 
         if self.llm_client:
             try:
@@ -73,7 +71,7 @@ class ConsolidationPipeline:
         summary: str,
         session_id: str | None = None,
         importance: int = 5,
-        message_count: int = 0
+        message_count: int = 0,
     ) -> str:
         """
         将压缩后的摘要存入情景记忆
@@ -97,14 +95,11 @@ class ConsolidationPipeline:
                 "message_count": message_count,
             },
             session_id=session_id,
-            memory_type="summary"
+            memory_type="summary",
         )
 
     def consolidate(
-        self,
-        memory_manager,
-        session_id: str | None = None,
-        importance_threshold: int = 5
+        self, memory_manager, session_id: str | None = None, importance_threshold: int = 5
     ) -> str | None:
         """
         完整的记忆压缩流程
@@ -129,7 +124,7 @@ class ConsolidationPipeline:
             episodic_memory=memory_manager.episodic,
             summary=summary,
             session_id=session_id,
-            message_count=len(working_messages)
+            message_count=len(working_messages),
         )
 
         memory_manager.working.clear()
@@ -140,10 +135,7 @@ class ConsolidationPipeline:
 
         return memory_id
 
-    def extract_key_facts(
-        self,
-        messages: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def extract_key_facts(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         从对话中提取关键事实
 
@@ -161,12 +153,14 @@ class ConsolidationPipeline:
             preference_keywords = ["喜欢", "偏好", "不要", "记得", "设置", "以后", "习惯"]
             for keyword in preference_keywords:
                 if keyword in content:
-                    facts.append({
-                        "type": "preference",
-                        "content": content[:200],
-                        "keyword": keyword,
-                        "role": role,
-                    })
+                    facts.append(
+                        {
+                            "type": "preference",
+                            "content": content[:200],
+                            "keyword": keyword,
+                            "role": role,
+                        }
+                    )
                     break
 
         return facts

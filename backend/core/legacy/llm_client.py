@@ -2,6 +2,7 @@
 LLM Client - 大语言模型客户端
 支持 OpenAI-compatible API 协议，兼容多种提供商
 """
+
 import json
 import logging
 import time
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LLMMessage:
     """单条对话消息"""
+
     role: str  # "system" | "user" | "assistant" | "tool"
     content: str
     tool_calls: list[dict[str, Any]] | None = None
@@ -28,6 +30,7 @@ class LLMMessage:
 @dataclass
 class LLMToolCall:
     """工具调用"""
+
     id: str
     name: str
     arguments: str  # JSON string
@@ -36,6 +39,7 @@ class LLMToolCall:
 @dataclass
 class LLMChoice:
     """单条回复选项"""
+
     message: LLMMessage
     finish_reason: str | None = None
     tool_calls: list[LLMToolCall] | None = None
@@ -44,6 +48,7 @@ class LLMChoice:
 @dataclass
 class LLMResponse:
     """LLM 回复"""
+
     content: str = ""
     model: str = ""
     finish_reason: str | None = None
@@ -57,6 +62,7 @@ class LLMResponse:
 @dataclass
 class LLMConfig:
     """LLM 连接配置"""
+
     provider: str = "openai"  # openai, claude, ollama, custom
     api_key: str = ""
     base_url: str = "https://api.openai.com/v1"
@@ -125,11 +131,13 @@ class LLMClient:
         """解析工具调用"""
         result = []
         for tc in raw_tool_calls:
-            result.append(LLMToolCall(
-                id=tc.get("id", ""),
-                name=tc["function"]["name"],
-                arguments=tc["function"].get("arguments", "{}"),
-            ))
+            result.append(
+                LLMToolCall(
+                    id=tc.get("id", ""),
+                    name=tc["function"]["name"],
+                    arguments=tc["function"].get("arguments", "{}"),
+                )
+            )
         return result
 
     async def chat(
@@ -187,9 +195,13 @@ class LLMClient:
                     retry_after = int(e.response.headers.get("retry-after", "0")) or None
                 except (ValueError, TypeError):
                     retry_after = None
-                raise LLMError(LLMErrorType.RATE_LIMITED, "请求过于频繁，请稍后再试", retry_after=retry_after)
+                raise LLMError(
+                    LLMErrorType.RATE_LIMITED, "请求过于频繁，请稍后再试", retry_after=retry_after
+                )
             elif 500 <= status < 600:
-                raise LLMError(LLMErrorType.SERVER_ERROR, f"LLM 服务端错误 (HTTP {status})", status_code=status)
+                raise LLMError(
+                    LLMErrorType.SERVER_ERROR, f"LLM 服务端错误 (HTTP {status})", status_code=status
+                )
             else:
                 raise LLMError(LLMErrorType.UNKNOWN, f"LLM HTTP 错误: {status}", status_code=status)
         except (ValueError, KeyError) as e:
@@ -227,9 +239,7 @@ class LLMClient:
             raw=data,
         )
 
-    async def chat_stream(
-        self, messages: list[dict[str, Any]]
-    ) -> AsyncGenerator[str, None]:
+    async def chat_stream(self, messages: list[dict[str, Any]]) -> AsyncGenerator[str, None]:
         """
         发送聊天请求（流式）
 

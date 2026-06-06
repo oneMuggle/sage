@@ -2,6 +2,7 @@
 Agent Orchestrator - 多Agent协作编排
 基于 Supervisor + Shared Blackboard 模式
 """
+
 import json
 import logging
 import time
@@ -17,11 +18,12 @@ logger = logging.getLogger(__name__)
 
 class Intent(str, Enum):
     """用户意图分类"""
-    GENERAL = "general"          # 一般对话
-    RESEARCH = "research"        # 研究/信息收集
-    CODING = "coding"            # 代码相关
-    MEMORY = "memory"            # 记忆管理
-    MULTI_STEP = "multi_step"    # 多步骤复杂任务
+
+    GENERAL = "general"  # 一般对话
+    RESEARCH = "research"  # 研究/信息收集
+    CODING = "coding"  # 代码相关
+    MEMORY = "memory"  # 记忆管理
+    MULTI_STEP = "multi_step"  # 多步骤复杂任务
 
 
 class AgentOrchestrator:
@@ -40,10 +42,7 @@ class AgentOrchestrator:
         self._agent_cache: dict[str, AgentProfile] = {}
 
     async def process_request(
-        self,
-        session_id: str,
-        user_message: str,
-        history: list[dict[str, Any]] | None = None
+        self, session_id: str, user_message: str, history: list[dict[str, Any]] | None = None
     ) -> dict[str, Any]:
         """
         处理用户请求的主入口
@@ -67,9 +66,7 @@ class AgentOrchestrator:
             result = await self._execute_multi_step(session_id, user_message, history)
         else:
             agent_id = self._select_agent(intent)
-            result = await self._execute_agent_task(
-                session_id, agent_id, user_message, history
-            )
+            result = await self._execute_agent_task(session_id, agent_id, user_message, history)
 
         # 3. 记录结果
         elapsed = time.time() - start_time
@@ -94,7 +91,17 @@ class AgentOrchestrator:
         # 关键词回退策略
         keyword_map = {
             Intent.RESEARCH: ["搜索", "查找", "研究", "调查", "search", "find", "research"],
-            Intent.CODING: ["代码", "编程", "debug", "bug", "写代码", "code", "program", "函数", "类"],
+            Intent.CODING: [
+                "代码",
+                "编程",
+                "debug",
+                "bug",
+                "写代码",
+                "code",
+                "program",
+                "函数",
+                "类",
+            ],
             Intent.MEMORY: ["记忆", "忘记", "记住", "回顾", "memory", "forget", "remember"],
         }
 
@@ -114,10 +121,12 @@ class AgentOrchestrator:
 
 只回复意图名称，不要解释。"""
 
-                response = await self.llm_client.chat([
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": message},
-                ])
+                response = await self.llm_client.chat(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": message},
+                    ]
+                )
 
                 intent_str = response.content.strip().lower()
                 for intent in Intent:
@@ -152,7 +161,7 @@ class AgentOrchestrator:
         session_id: str,
         agent_id: str,
         message: str,
-        history: list[dict[str, Any]] | None = None
+        history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         执行单个 Agent 任务
@@ -204,10 +213,7 @@ class AgentOrchestrator:
         }
 
     async def _execute_multi_step(
-        self,
-        session_id: str,
-        message: str,
-        history: list[dict[str, Any]] | None = None
+        self, session_id: str, message: str, history: list[dict[str, Any]] | None = None
     ) -> dict[str, Any]:
         """
         执行多步骤任务
@@ -232,10 +238,12 @@ class AgentOrchestrator:
             result = await self._execute_agent_task(
                 session_id, agent_id, subtask["description"], history
             )
-            results.append({
-                "subtask": subtask,
-                "result": result,
-            })
+            results.append(
+                {
+                    "subtask": subtask,
+                    "result": result,
+                }
+            )
 
         # 2. 聚合结果
         final_response = await self._aggregate_results(message, results)
@@ -268,10 +276,12 @@ class AgentOrchestrator:
 回复 JSON 数组格式: [{"intent": "research", "description": "..."}, ...]
 只回复 JSON，不要解释。"""
 
-                response = await self.llm_client.chat([
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": message},
-                ])
+                response = await self.llm_client.chat(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": message},
+                    ]
+                )
 
                 subtasks = json.loads(response.content)
                 if isinstance(subtasks, list) and len(subtasks) > 0:
@@ -281,11 +291,7 @@ class AgentOrchestrator:
 
         return [{"intent": "general", "description": message}]
 
-    async def _aggregate_results(
-        self,
-        original_message: str,
-        results: list[dict[str, Any]]
-    ) -> str:
+    async def _aggregate_results(self, original_message: str, results: list[dict[str, Any]]) -> str:
         """
         聚合多个子任务的结果
 
@@ -307,10 +313,12 @@ class AgentOrchestrator:
                 system_prompt = "你是一个任务协调者。将以下子任务的结果整合为一个连贯的回复。"
                 user_prompt = f"原始问题: {original_message}\n\n" + "\n\n".join(context_parts)
 
-                response = await self.llm_client.chat([
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ])
+                response = await self.llm_client.chat(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ]
+                )
                 return response.content
             except Exception as e:
                 logger.warning(f"结果聚合失败: {e}")
@@ -322,10 +330,7 @@ class AgentOrchestrator:
         return "\n\n".join(parts)
 
     async def _run_agent_llm(
-        self,
-        agent: AgentProfile,
-        message: str,
-        history: list[dict[str, Any]] | None = None
+        self, agent: AgentProfile, message: str, history: list[dict[str, Any]] | None = None
     ) -> str:
         """
         使用 Agent 的 LLM 配置执行对话
@@ -358,10 +363,7 @@ class AgentOrchestrator:
             logger.error(f"Agent LLM 调用失败 ({agent.id}): {e}")
             return f"[{agent.name} LLM 调用失败: {e}]"
 
-    def _summarize_history(
-        self,
-        history: list[dict[str, Any]] | None = None
-    ) -> str:
+    def _summarize_history(self, history: list[dict[str, Any]] | None = None) -> str:
         """
         简单总结对话历史
 

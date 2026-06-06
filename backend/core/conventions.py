@@ -2,6 +2,7 @@
 Convention Manager - 惯例管理
 从交互模式中提取、评估和激活行为惯例
 """
+
 import json
 import logging
 import time
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Convention:
     """惯例规则"""
+
     id: str
     name: str
     description: str
@@ -30,10 +32,15 @@ class Convention:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "id": self.id, "name": self.name, "description": self.description,
-            "category": self.category, "confidence": self.confidence,
-            "usage_count": self.usage_count, "created_at": self.created_at,
-            "last_updated": self.last_updated, "is_active": self.is_active,
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "category": self.category,
+            "confidence": self.confidence,
+            "usage_count": self.usage_count,
+            "created_at": self.created_at,
+            "last_updated": self.last_updated,
+            "is_active": self.is_active,
         }
 
 
@@ -74,8 +81,12 @@ class ConventionManager:
                 is_active INTEGER DEFAULT 1
             )
         """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_conventions_category ON conventions(category)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_conventions_confidence ON conventions(confidence)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conventions_category ON conventions(category)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conventions_confidence ON conventions(confidence)"
+        )
         conn.commit()
 
     # ========== CRUD ==========
@@ -84,15 +95,24 @@ class ConventionManager:
         """添加新惯例"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO conventions
             (id, name, description, category, confidence, usage_count, created_at, last_updated, is_active)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            convention.id, convention.name, convention.description,
-            convention.category, convention.confidence, convention.usage_count,
-            convention.created_at, convention.last_updated, int(convention.is_active)
-        ))
+        """,
+            (
+                convention.id,
+                convention.name,
+                convention.description,
+                convention.category,
+                convention.confidence,
+                convention.usage_count,
+                convention.created_at,
+                convention.last_updated,
+                int(convention.is_active),
+            ),
+        )
         conn.commit()
         logger.info(f"惯例添加: {convention.name} (confidence={convention.confidence})")
         return convention.id
@@ -184,10 +204,12 @@ class ConventionManager:
 只回复 JSON。"""
 
             text = "\n".join(f"- {m['content']}" for m in user_msgs)
-            response = await self.llm_client.chat([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text},
-            ])
+            response = await self.llm_client.chat(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text},
+                ]
+            )
 
             items = json.loads(response.content)
             if not isinstance(items, list):
@@ -236,14 +258,20 @@ class ConventionManager:
         cursor = conn.cursor()
         cutoff = int(time.time()) - (days * 86400)
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE conventions
             SET confidence = confidence * ?, last_updated = ?
             WHERE last_updated < ? AND is_active = 1 AND confidence > ?
-        """, (self.DECAY_FACTOR, int(time.time()), cutoff, self.MIN_CONFIDENCE))
+        """,
+            (self.DECAY_FACTOR, int(time.time()), cutoff, self.MIN_CONFIDENCE),
+        )
         conn.commit()
 
-        cursor.execute("UPDATE conventions SET is_active = 0 WHERE confidence < ? AND is_active = 1", (self.MIN_CONFIDENCE,))
+        cursor.execute(
+            "UPDATE conventions SET is_active = 0 WHERE confidence < ? AND is_active = 1",
+            (self.MIN_CONFIDENCE,),
+        )
         conn.commit()
         return cursor.rowcount
 
@@ -268,7 +296,9 @@ class ConventionManager:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT COUNT(*) as total, COUNT(CASE WHEN is_active=1 THEN 1 END) as active FROM conventions")
+        cursor.execute(
+            "SELECT COUNT(*) as total, COUNT(CASE WHEN is_active=1 THEN 1 END) as active FROM conventions"
+        )
         row = cursor.fetchone()
 
         cursor.execute("SELECT category, COUNT(*) as count FROM conventions GROUP BY category")

@@ -4,6 +4,7 @@ LLMClient 错误分类测试
 验证 LLMClient.chat() 在不同错误情形下抛出 LLMError(LLMErrorType.*)
 而非原先的 RuntimeError。
 """
+
 from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
@@ -17,12 +18,14 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture()
 def client():
-    return LLMClient(LLMConfig(
-        provider="openai",
-        api_key="test-key",
-        base_url="https://api.example.com/v1",
-        model="gpt-3.5-turbo",
-    ))
+    return LLMClient(
+        LLMConfig(
+            provider="openai",
+            api_key="test-key",
+            base_url="https://api.example.com/v1",
+            model="gpt-3.5-turbo",
+        )
+    )
 
 
 @pytest.mark.asyncio()
@@ -33,9 +36,9 @@ async def test_401_raises_auth_failed(client):
     mock_response.text = "Unauthorized"
     # httpx.Response.raise_for_status 是同步方法；AsyncMock 会让调用返回
     # 未被 await 的协程，因此必须用普通 Mock 替换才能正确触发 side_effect。
-    mock_response.raise_for_status = Mock(side_effect=httpx.HTTPStatusError(
-        "401", request=AsyncMock(), response=mock_response
-    ))
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError("401", request=AsyncMock(), response=mock_response)
+    )
 
     with patch.object(client, "_get_client") as mock_get_client:
         mock_http = AsyncMock()
@@ -55,9 +58,9 @@ async def test_429_raises_rate_limited(client):
     mock_response.status_code = 429
     mock_response.text = "Too Many Requests"
     mock_response.headers = {"retry-after": "60"}
-    mock_response.raise_for_status = Mock(side_effect=httpx.HTTPStatusError(
-        "429", request=AsyncMock(), response=mock_response
-    ))
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError("429", request=AsyncMock(), response=mock_response)
+    )
 
     with patch.object(client, "_get_client") as mock_get_client:
         mock_http = AsyncMock()
@@ -76,9 +79,9 @@ async def test_500_raises_server_error(client):
     mock_response = AsyncMock()
     mock_response.status_code = 500
     mock_response.text = "Internal Server Error"
-    mock_response.raise_for_status = Mock(side_effect=httpx.HTTPStatusError(
-        "500", request=AsyncMock(), response=mock_response
-    ))
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError("500", request=AsyncMock(), response=mock_response)
+    )
 
     with patch.object(client, "_get_client") as mock_get_client:
         mock_http = AsyncMock()
@@ -121,10 +124,13 @@ async def test_connect_error_raises_network_error(client):
 async def test_parsing_error_raises_parsing_error_type(client):
     """响应 JSON 解析失败时映射为 PARSING。"""
     import json
+
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.raise_for_status = lambda: None
-    mock_response.json = lambda: (_ for _ in ()).throw(json.JSONDecodeError("Expecting value", "", 0))
+    mock_response.json = lambda: (_ for _ in ()).throw(
+        json.JSONDecodeError("Expecting value", "", 0)
+    )
 
     with patch.object(client, "_get_client") as mock_get_client:
         mock_http = AsyncMock()

@@ -12,6 +12,7 @@ legacy 路径覆盖全部端点（/chat、/sessions、/memory、/evolution、/in
 在 hex 模式下，``/chat`` 由 hex_routes 提供，其它端点暂不提供
 （这是 P2 末的有意收窄，P3+ 逐步迁移）。
 """
+
 import os
 
 _API_MODE = os.environ.get("API_MODE", "hex").lower()
@@ -21,6 +22,4 @@ if _API_MODE == "hex":
 elif _API_MODE == "legacy":
     from backend.api.legacy_routes import router  # noqa: F401, E402
 else:
-    raise ValueError(
-        f"API_MODE must be 'hex' or 'legacy', got: {_API_MODE!r}"
-    )
+    raise ValueError(f"API_MODE must be 'hex' or 'legacy', got: {_API_MODE!r}")

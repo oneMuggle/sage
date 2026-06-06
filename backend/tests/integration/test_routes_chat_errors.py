@@ -13,6 +13,7 @@ P2 双轨说明：本文件测试的是**legacy** /chat 行为（通过 SageAgen
 在 API_MODE=hex 下，``/chat`` 路由由 ``hex_routes`` 提供（走 ChatService），
 本文件不适用——对应测试在 ``test_hex_routes_chat.py``。
 """
+
 import os
 from unittest.mock import AsyncMock, patch
 
@@ -45,12 +46,15 @@ async def test_chat_returns_structured_error_on_auth_failed():
         )
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(CHAT_PATH, json={
-                "session_id": "00000000-0000-0000-0000-000000000000",
-                "message": "hi",
-                "api_key": "bad-key",
-                "api_url": "https://api.example.com/v1",
-            })
+            resp = await ac.post(
+                CHAT_PATH,
+                json={
+                    "session_id": "00000000-0000-0000-0000-000000000000",
+                    "message": "hi",
+                    "api_key": "bad-key",
+                    "api_url": "https://api.example.com/v1",
+                },
+            )
         assert resp.status_code == 200
         body = resp.json()
         assert body["error"]["type"] == "auth_failed"
@@ -69,10 +73,13 @@ async def test_chat_returns_structured_error_on_timeout():
         )
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(CHAT_PATH, json={
-                "session_id": "00000000-0000-0000-0000-000000000000",
-                "message": "hi",
-            })
+            resp = await ac.post(
+                CHAT_PATH,
+                json={
+                    "session_id": "00000000-0000-0000-0000-000000000000",
+                    "message": "hi",
+                },
+            )
         assert resp.status_code == 200
         body = resp.json()
         assert body["error"]["type"] == "timeout"
@@ -87,24 +94,29 @@ async def test_chat_handles_agent_returning_error_dict_without_crashing():
     with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
         # chat() 返回 error 字典而不是 raise LLMError（Task 6 的新契约）
-        mock_agent_instance.chat = AsyncMock(return_value={
-            "error": {
-                "type": "auth_failed",
-                "message": "API Key 无效",
-                "status_code": 401,
-                "retry_after": None,
-            },
-            "message": None,
-            "session": None,
-        })
+        mock_agent_instance.chat = AsyncMock(
+            return_value={
+                "error": {
+                    "type": "auth_failed",
+                    "message": "API Key 无效",
+                    "status_code": 401,
+                    "retry_after": None,
+                },
+                "message": None,
+                "session": None,
+            }
+        )
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(CHAT_PATH, json={
-                "session_id": "00000000-0000-0000-0000-000000000000",
-                "message": "hi",
-                "api_key": "bad-key",
-                "api_url": "https://api.example.com/v1",
-            })
+            resp = await ac.post(
+                CHAT_PATH,
+                json={
+                    "session_id": "00000000-0000-0000-0000-000000000000",
+                    "message": "hi",
+                    "api_key": "bad-key",
+                    "api_url": "https://api.example.com/v1",
+                },
+            )
         assert resp.status_code == 200
         body = resp.json()
         assert body["error"]["type"] == "auth_failed"
@@ -118,19 +130,27 @@ async def test_chat_request_id_in_response_header():
     """响应头应包含 x-request-id 用于诊断追踪。"""
     with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
-        mock_agent_instance.chat = AsyncMock(return_value={
-            "message": {
-                "id": "m1", "session_id": "00000000-0000-0000-0000-000000000000",
-                "role": "assistant", "content": "ok", "created_at": 0
-            },
-            "session": None,
-        })
+        mock_agent_instance.chat = AsyncMock(
+            return_value={
+                "message": {
+                    "id": "m1",
+                    "session_id": "00000000-0000-0000-0000-000000000000",
+                    "role": "assistant",
+                    "content": "ok",
+                    "created_at": 0,
+                },
+                "session": None,
+            }
+        )
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(CHAT_PATH, json={
-                "session_id": "00000000-0000-0000-0000-000000000000",
-                "message": "hi",
-            })
+            resp = await ac.post(
+                CHAT_PATH,
+                json={
+                    "session_id": "00000000-0000-0000-0000-000000000000",
+                    "message": "hi",
+                },
+            )
         assert "x-request-id" in resp.headers
 
 
@@ -139,29 +159,38 @@ async def test_chat_request_id_in_response_header():
 async def test_chat_response_header_request_id_matches_handler_logs(caplog):
     """响应头 x-request-id 应与 handler 日志中的 [REQ xxx] 一致。"""
     import logging
+
     caplog.set_level(logging.INFO, logger="backend.api.legacy_routes")
 
     with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
-        mock_agent_instance.chat = AsyncMock(return_value={
-            "message": {
-                "id": "m1", "session_id": "00000000-0000-0000-0000-000000000000",
-                "role": "assistant", "content": "ok", "created_at": 0
-            },
-            "session": None,
-        })
+        mock_agent_instance.chat = AsyncMock(
+            return_value={
+                "message": {
+                    "id": "m1",
+                    "session_id": "00000000-0000-0000-0000-000000000000",
+                    "role": "assistant",
+                    "content": "ok",
+                    "created_at": 0,
+                },
+                "session": None,
+            }
+        )
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(CHAT_PATH, json={
-                "session_id": "00000000-0000-0000-0000-000000000000",
-                "message": "hi",
-            })
+            resp = await ac.post(
+                CHAT_PATH,
+                json={
+                    "session_id": "00000000-0000-0000-0000-000000000000",
+                    "message": "hi",
+                },
+            )
 
         header_id = resp.headers.get("x-request-id")
         assert header_id is not None
 
         # Verify the same ID appears in at least one log record
         log_text = caplog.text
-        assert f"[REQ {header_id}]" in log_text, (
-            f"Expected log to contain [REQ {header_id}], got:\n{log_text}"
-        )
+        assert (
+            f"[REQ {header_id}]" in log_text
+        ), f"Expected log to contain [REQ {header_id}], got:\n{log_text}"

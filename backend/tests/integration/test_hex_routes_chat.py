@@ -6,6 +6,7 @@ P2 末的双轨架构：
 - ``API_MODE=legacy``：``/chat`` 由 ``legacy_routes.chat`` 提供（旧
   SageAgent 直调路径），由 ``test_routes_chat_errors.py`` 覆盖。
 """
+
 import os
 from unittest.mock import MagicMock
 
@@ -51,9 +52,7 @@ async def hex_client():
     mock_registry.get.return_value = mock_tool
 
     fake_svc = ChatService(
-        llm=MockLLMAdapter(
-            responses=[Message(role=Role.ASSISTANT, content="hello from hex")]
-        ),
+        llm=MockLLMAdapter(responses=[Message(role=Role.ASSISTANT, content="hello from hex")]),
         tools=InprocToolAdapter(registry=mock_registry),
         skills=MagicMock(),  # SkillPort 协议未实现；用 MagicMock 占位
         storage=MemoryStorageAdapter(),
@@ -65,9 +64,7 @@ async def hex_client():
     saved_override = app.dependency_overrides.get(get_chat_service)
     app.dependency_overrides[get_chat_service] = lambda: fake_svc
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac, fake_svc
     finally:
         # 还原 override，避免污染后续测试
@@ -86,9 +83,7 @@ async def test_chat_endpoint_via_chat_service(hex_client):
     # 在 fake_svc 的内存 storage 中预建一个 session
     sid = await fake_svc.storage.create_session()
 
-    resp = await client.post(
-        CHAT_PATH, json={"session_id": sid, "message": "hi"}
-    )
+    resp = await client.post(CHAT_PATH, json={"session_id": sid, "message": "hi"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["session_id"] == sid
@@ -103,9 +98,7 @@ async def test_chat_endpoint_persists_user_and_assistant_messages(hex_client):
 
     sid = await fake_svc.storage.create_session()
 
-    resp = await client.post(
-        CHAT_PATH, json={"session_id": sid, "message": "ping"}
-    )
+    resp = await client.post(CHAT_PATH, json={"session_id": sid, "message": "ping"})
     assert resp.status_code == 200, resp.text
 
     stored = await fake_svc.storage.get_messages(sid, limit=50)

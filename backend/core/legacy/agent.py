@@ -2,6 +2,7 @@
 SageAgent - 核心对话引擎
 基于 ReAct 模式的 Agent 实现
 """
+
 import hashlib
 import json
 import logging
@@ -11,9 +12,9 @@ from collections import deque
 from threading import Lock
 from typing import Any
 
-from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import AgentError, ToolCallError
+from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
@@ -102,18 +103,19 @@ class QueryCache:
         with self._lock:
             # 移除已存在的相同键
             self._cache = deque(
-                (item for item in self._cache if item["key"] != key),
-                maxlen=self.max_size
+                (item for item in self._cache if item["key"] != key), maxlen=self.max_size
             )
 
             # 添加新条目
-            self._cache.append({
-                "key": key,
-                "session_id": session_id,
-                "message": message,
-                "result": result,
-                "timestamp": time.time()
-            })
+            self._cache.append(
+                {
+                    "key": key,
+                    "session_id": session_id,
+                    "message": message,
+                    "result": result,
+                    "timestamp": time.time(),
+                }
+            )
 
     def clear(self) -> None:
         """清空缓存"""
@@ -134,7 +136,7 @@ class QueryCache:
             original_len = len(self._cache)
             self._cache = deque(
                 (item for item in self._cache if now - item["timestamp"] < self.ttl),
-                maxlen=self.max_size
+                maxlen=self.max_size,
             )
             removed = original_len - len(self._cache)
 
@@ -181,8 +183,11 @@ class SageAgent:
         if llm_config:
             self.llm_config = LLMConfig(**llm_config)
             self.llm_client: LLMClient | None = LLMClient(self.llm_config)
-            logger.info("LLM 客户端已初始化: provider={}, model={}".format(
-                llm_config.get("provider"), llm_config.get("model")))
+            logger.info(
+                "LLM 客户端已初始化: provider={}, model={}".format(
+                    llm_config.get("provider"), llm_config.get("model")
+                )
+            )
         else:
             self.llm_config = None
             self.llm_client = None
@@ -191,7 +196,9 @@ class SageAgent:
         # 初始化记忆压缩管道
         self.consolidation = ConsolidationPipeline(llm_client=self.llm_client)
 
-    async def chat(self, session_id: str, message: str, llm_config: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def chat(
+        self, session_id: str, message: str, llm_config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         处理用户消息
 
@@ -219,8 +226,11 @@ class SageAgent:
             if llm_config:
                 self.llm_config = LLMConfig(**llm_config)
                 self.llm_client = LLMClient(self.llm_config)
-                logger.info("使用动态 LLM 配置: provider={}, model={}".format(
-                    llm_config.get("provider"), llm_config.get("model")))
+                logger.info(
+                    "使用动态 LLM 配置: provider={}, model={}".format(
+                        llm_config.get("provider"), llm_config.get("model")
+                    )
+                )
 
             # 创建用户消息
             now = int(time.time() * 1000)
@@ -234,13 +244,15 @@ class SageAgent:
 
             # 持久化用户消息
             try:
-                self.message_repo.save(DbMessage(
-                    id=user_message["id"],
-                    session_id=session_id,
-                    role="user",
-                    content=message,
-                    created_at=now,
-                ))
+                self.message_repo.save(
+                    DbMessage(
+                        id=user_message["id"],
+                        session_id=session_id,
+                        role="user",
+                        content=message,
+                        created_at=now,
+                    )
+                )
             except Exception as db_err:
                 logger.warning(f"用户消息持久化失败: {db_err}")
 
@@ -268,14 +280,16 @@ class SageAgent:
 
             # 持久化助手消息
             try:
-                self.message_repo.save(DbMessage(
-                    id=assistant_message["id"],
-                    session_id=session_id,
-                    role="assistant",
-                    content=assistant_content,
-                    created_at=assistant_message["created_at"],
-                    model=assistant_message["model"],
-                ))
+                self.message_repo.save(
+                    DbMessage(
+                        id=assistant_message["id"],
+                        session_id=session_id,
+                        role="assistant",
+                        content=assistant_content,
+                        created_at=assistant_message["created_at"],
+                        model=assistant_message["model"],
+                    )
+                )
             except Exception as db_err:
                 logger.warning(f"助手消息持久化失败: {db_err}")
 
@@ -287,10 +301,7 @@ class SageAgent:
 
             # 对话后：检查是否需要压缩工作记忆
             if self.memory_manager.working.total_tokens > 3000:
-                self.consolidation.consolidate(
-                    self.memory_manager,
-                    session_id=session_id
-                )
+                self.consolidation.consolidate(self.memory_manager, session_id=session_id)
 
             # 更新会话
             session = self.session_repo.get(session_id)
@@ -298,12 +309,12 @@ class SageAgent:
                 self.session_repo.update(
                     session_id,
                     last_message_at=assistant_message["created_at"],
-                    message_count=session.message_count + 2
+                    message_count=session.message_count + 2,
                 )
 
             result = {
                 "message": assistant_message,
-                "session": session.to_dict() if session else None
+                "session": session.to_dict() if session else None,
             }
 
             # 存入缓存
@@ -341,10 +352,7 @@ class SageAgent:
             }
 
     def _extract_and_save_memories(
-        self,
-        session_id: str,
-        user_message: dict[str, Any],
-        assistant_message: dict[str, Any]
+        self, session_id: str, user_message: dict[str, Any], assistant_message: dict[str, Any]
     ) -> None:
         """
         从对话中提取关键信息并存入情景记忆
@@ -370,11 +378,14 @@ class SageAgent:
                         importance = 7
                         break
 
-                self.memory_manager.remember(combined_content, {
-                    "session_id": session_id,
-                    "importance": importance,
-                    "memory_type": "conversation"
-                })
+                self.memory_manager.remember(
+                    combined_content,
+                    {
+                        "session_id": session_id,
+                        "importance": importance,
+                        "memory_type": "conversation",
+                    },
+                )
         except Exception as e:
             logger.warning(f"提取记忆失败: {str(e)}")
 
@@ -429,10 +440,12 @@ class SageAgent:
             response: LLMResponse = await self.llm_client.chat(messages)
 
             if not response.tool_calls:
-                messages.append({
-                    "role": "assistant",
-                    "content": response.content,
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": response.content,
+                    }
+                )
                 yield AgentEvent(
                     state=AgentState.DONE,
                     iteration=i,
@@ -440,25 +453,29 @@ class SageAgent:
                 )
                 return
 
-            messages.append({
-                "role": "assistant",
-                "content": response.content or "",
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": tc.arguments,
-                        },
-                    }
-                    for tc in response.tool_calls
-                ],
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": tc.arguments,
+                            },
+                        }
+                        for tc in response.tool_calls
+                    ],
+                }
+            )
 
             for tc in response.tool_calls:
                 try:
-                    args = json.loads(tc.arguments) if isinstance(tc.arguments, str) else tc.arguments
+                    args = (
+                        json.loads(tc.arguments) if isinstance(tc.arguments, str) else tc.arguments
+                    )
                 except json.JSONDecodeError:
                     args = {}
 
@@ -477,16 +494,12 @@ class SageAgent:
                         if hasattr(result, "success") and hasattr(result, "content"):
                             is_error = not result.success
                             if result.success:
-                                result_content = json.dumps(
-                                    result.content, ensure_ascii=False
-                                )
+                                result_content = json.dumps(result.content, ensure_ascii=False)
                             else:
                                 result_content = result.error or "工具执行失败"
                         else:
                             is_error = False
-                            result_content = json.dumps(
-                                result, ensure_ascii=False, default=str
-                            )
+                            result_content = json.dumps(result, ensure_ascii=False, default=str)
                 except Exception as e:
                     logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
                     result_content = f"[工具错误] {str(e)}"
@@ -504,11 +517,13 @@ class SageAgent:
                     tool_result=tool_result,
                 )
 
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": result_content,
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result_content,
+                    }
+                )
 
         yield AgentEvent(
             state=AgentState.FAILED,
@@ -587,5 +602,5 @@ class SageAgent:
         return {
             "size": len(self._cache._cache),
             "max_size": self._cache.max_size,
-            "ttl": self._cache.ttl
+            "ttl": self._cache.ttl,
         }

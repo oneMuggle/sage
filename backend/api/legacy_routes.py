@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from backend.core.legacy.agent import SageAgent
 from backend.core.errors import LLMError
+from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database
 from backend.data.session_repo import MessageRepository, SessionRepository
 from backend.memory import EpisodicMemory, MemoryManager, SemanticMemory, WorkingMemory

@@ -16,6 +16,7 @@
   HTTP 4xx/5xx 响应（与 legacy 端点的"HTTP 200 + error 字段"格式不同，
   因为 hex 路径是"明确失败就明确报错"，便于客户端统一处理）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,19 +36,23 @@ router = APIRouter()
 
 # ==================== Pydantic 模型 ====================
 
+
 class ChatRequest(BaseModel):
     """Hex 路径的 /chat 请求体。"""
+
     session_id: str
     message: str
 
 
 class ChatResponse(BaseModel):
     """Hex 路径的 /chat 响应体。"""
+
     session_id: str
     reply: str
 
 
 # ==================== 依赖注入 ====================
+
 
 def get_chat_service() -> ChatService:
     """工厂：返回一个装配好的 ``ChatService``。
@@ -56,12 +61,11 @@ def get_chat_service() -> ChatService:
     ``app.dependency_overrides[get_chat_service] = lambda: real_svc``
     注入真实实例；测试可在 conftest 或用例里替换为 mock 实例。
     """
-    raise NotImplementedError(
-        "get_chat_service() must be overridden via app.dependency_overrides"
-    )
+    raise NotImplementedError("get_chat_service() must be overridden via app.dependency_overrides")
 
 
 # ==================== 聊天 API ====================
+
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(

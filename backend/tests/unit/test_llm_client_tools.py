@@ -4,6 +4,7 @@ LLMClient tools 透传测试
 验证 LLMClient.chat() 在传入 tools 时把 OpenAI 兼容的 tools / tool_choice
 字段写入请求体；未传 tools 时请求体不包含这两个字段。
 """
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -15,12 +16,14 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture()
 def client():
-    return LLMClient(LLMConfig(
-        provider="openai",
-        api_key="test-key",
-        base_url="https://api.example.com/v1",
-        model="gpt-3.5-turbo",
-    ))
+    return LLMClient(
+        LLMConfig(
+            provider="openai",
+            api_key="test-key",
+            base_url="https://api.example.com/v1",
+            model="gpt-3.5-turbo",
+        )
+    )
 
 
 @pytest.mark.asyncio()
@@ -39,14 +42,19 @@ async def test_chat_sends_tools_when_provided(client):
         mock_http.post = AsyncMock(return_value=mock_response)
         mock_get_client.return_value = mock_http
 
-        tools = [{
-            "type": "function",
-            "function": {
-                "name": "calculator",
-                "description": "数学计算",
-                "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}},
-            },
-        }]
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "calculator",
+                    "description": "数学计算",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"expression": {"type": "string"}},
+                    },
+                },
+            }
+        ]
         await client.chat([{"role": "user", "content": "hi"}], tools=tools)
 
         call_args = mock_http.post.call_args

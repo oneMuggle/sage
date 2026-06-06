@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.core.legacy.agent import QueryCache, SageAgent
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import ToolCallError
+from backend.core.legacy.agent import QueryCache, SageAgent
 from backend.core.legacy.llm_client import LLMResponse
 
 pytestmark = pytest.mark.unit
