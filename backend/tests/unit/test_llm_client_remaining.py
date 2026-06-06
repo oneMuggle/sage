@@ -80,17 +80,18 @@ async def test_chat_server_error_via_fixture(mock_llm_server_error):
 
 
 @pytest.mark.asyncio()
-async def test_chat_timeout_fixture_falls_through_to_unknown(mock_llm_timeout):
-    """mock_llm_timeout 抛的是 builtin TimeoutError（不是 httpx.TimeoutException），
+async def test_chat_timeout_fixture_maps_to_timeout(mock_llm_timeout):
+    """mock_llm_timeout 抛 httpx.TimeoutException，命中 LLMClient 中
+    ``except httpx.TimeoutException`` 分支，映射为 LLMErrorType.TIMEOUT。
 
-    故 LLMClient 的 `except httpx.TimeoutException` 不会命中，
-    落到通用 `except Exception` 分支并映射为 LLMErrorType.UNKNOWN。
-    本测试记录该真实行为。
+    本测试同时是 mock_llm_timeout fixture 的回归门禁：
+    若有人把 fixture 的 side_effect 改回 builtin TimeoutError，
+    此断言会立刻失败（实际类型会 fallback 到 UNKNOWN）。
     """
     client = LLMClient(_make_config())
     with pytest.raises(LLMError) as exc_info:
         await client.chat([{"role": "user", "content": "hi"}])
-    assert exc_info.value.type == LLMErrorType.UNKNOWN
+    assert exc_info.value.type == LLMErrorType.TIMEOUT
 
 
 # ============================================================================

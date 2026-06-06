@@ -98,9 +98,16 @@ def mock_llm_rate_limit():
 
 @pytest.fixture()
 def mock_llm_timeout():
-    """Mock LLM 模拟超时（抛 TimeoutError）"""
+    """Mock LLM 模拟超时（抛 httpx.TimeoutException）。
+
+    使用 ``httpx.TimeoutException``（而非 builtin ``TimeoutError``）以匹配
+    ``LLMClient.chat`` 中 ``except httpx.TimeoutException`` 分支，
+    确保被映射为 ``LLMErrorType.TIMEOUT`` 而不是 fallback 到 UNKNOWN。
+    """
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
-        mock.post("/v1/chat/completions").mock(side_effect=TimeoutError("LLM request timed out"))
+        mock.post("/v1/chat/completions").mock(
+            side_effect=httpx.TimeoutException("LLM request timed out")
+        )
         yield mock
 
 
