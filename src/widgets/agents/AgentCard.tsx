@@ -21,12 +21,7 @@ interface AgentCardProps {
   onToggle: (id: string, enabled: boolean) => void;
 }
 
-export function AgentCard({
-  agent,
-  isSelected,
-  onSelect,
-  onToggle,
-}: AgentCardProps) {
+export function AgentCard({ agent, isSelected, onSelect, onToggle }: AgentCardProps) {
   const roleColor = ROLE_COLORS[agent.role] || 'bg-bg-subtle text-text-secondary';
   const roleLabel = ROLE_LABELS[agent.role] || agent.role;
 

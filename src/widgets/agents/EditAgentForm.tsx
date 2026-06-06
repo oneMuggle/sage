@@ -1,7 +1,6 @@
 import { Button } from '../../components/common/Button';
 import type { AgentProfile } from '../../lib/api';
 
-
 interface EditAgentFormProps {
   agent: AgentProfile;
   form: Partial<AgentProfile>;
@@ -10,13 +9,7 @@ interface EditAgentFormProps {
   onCancel: () => void;
 }
 
-export function EditAgentForm({
-  agent,
-  form,
-  onChange,
-  onSave,
-  onCancel,
-}: EditAgentFormProps) {
+export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditAgentFormProps) {
   const value = <K extends keyof AgentProfile>(key: K): AgentProfile[K] =>
     (form[key] !== undefined ? form[key] : agent[key]) as AgentProfile[K];
 
