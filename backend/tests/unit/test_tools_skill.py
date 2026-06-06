@@ -20,11 +20,9 @@ from __future__ import annotations
 import os
 import textwrap
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from backend.skills.base import BaseSkill, SkillResult, SkillSchema
 from backend.skills.registry import SkillRegistry
 from backend.tools.skill import SkillHotLoader
 
@@ -349,9 +347,7 @@ def test_check_for_updates_detects_file_change(tmp_path) -> None:
     initial_hash = loader._file_hashes[str(target)]
 
     # 修改文件内容
-    target.write_text(
-        target.read_text(encoding="utf-8") + "\n# tweak\n", encoding="utf-8"
-    )
+    target.write_text(target.read_text(encoding="utf-8") + "\n# tweak\n", encoding="utf-8")
     new_hash = loader._compute_hash(str(target))
     assert new_hash != initial_hash
 
@@ -415,9 +411,7 @@ def test_hot_reload_success_updates_hash(tmp_path) -> None:
     old_hash = loader._file_hashes[str(target)]
 
     # 修改文件让 hash 改变
-    target.write_text(
-        target.read_text(encoding="utf-8") + "\n# new\n", encoding="utf-8"
-    )
+    target.write_text(target.read_text(encoding="utf-8") + "\n# new\n", encoding="utf-8")
 
     assert loader.hot_reload("rlskill") is True
     # 新的 hash 与 _compute_hash 一致
