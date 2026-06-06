@@ -16,6 +16,7 @@ PG1.3 目标：把 core/llm_client.py 覆盖率从 67% 推到 ≥ 90%。
     - complete() 简单补全
     - to_dict() 配置导出
 """
+
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -184,10 +185,12 @@ async def test_close_skips_already_closed_client():
 
 def test_convert_messages_basic_passthrough():
     """普通消息只保留 role 和 content."""
-    out = LLMClient._convert_messages([
-        {"role": "system", "content": "you are helpful"},
-        {"role": "user", "content": "hi"},
-    ])
+    out = LLMClient._convert_messages(
+        [
+            {"role": "system", "content": "you are helpful"},
+            {"role": "user", "content": "hi"},
+        ]
+    )
     assert out == [
         {"role": "system", "content": "you are helpful"},
         {"role": "user", "content": "hi"},
@@ -278,9 +281,9 @@ async def test_rate_limit_with_invalid_retry_after_header_falls_back_to_none():
     mock_response.status_code = 429
     mock_response.text = "Too Many Requests"
     mock_response.headers = {"retry-after": "not-a-number"}
-    mock_response.raise_for_status = Mock(side_effect=httpx.HTTPStatusError(
-        "429", request=AsyncMock(), response=mock_response
-    ))
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError("429", request=AsyncMock(), response=mock_response)
+    )
     with patch.object(client, "_get_client") as mock_get_client:
         mock_http = AsyncMock()
         mock_http.post = AsyncMock(return_value=mock_response)
@@ -298,9 +301,9 @@ async def test_unknown_http_error_status_maps_to_unknown():
     mock_response = AsyncMock()
     mock_response.status_code = 418
     mock_response.text = "I'm a teapot"
-    mock_response.raise_for_status = Mock(side_effect=httpx.HTTPStatusError(
-        "418", request=AsyncMock(), response=mock_response
-    ))
+    mock_response.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError("418", request=AsyncMock(), response=mock_response)
+    )
     with patch.object(client, "_get_client") as mock_get_client:
         mock_http = AsyncMock()
         mock_http.post = AsyncMock(return_value=mock_response)
@@ -424,12 +427,14 @@ async def test_chat_stream_skips_non_data_lines():
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.raise_for_status = lambda: None
-    mock_response.aiter_lines = lambda: _async_iter([
-        ": keep-alive",
-        "",
-        'data: {"choices": [{"delta": {"content": "ok"}}]}',
-        "data: [DONE]",
-    ])
+    mock_response.aiter_lines = lambda: _async_iter(
+        [
+            ": keep-alive",
+            "",
+            'data: {"choices": [{"delta": {"content": "ok"}}]}',
+            "data: [DONE]",
+        ]
+    )
 
     mock_http = AsyncMock()
 
@@ -453,11 +458,13 @@ async def test_chat_stream_skips_invalid_json_lines():
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.raise_for_status = lambda: None
-    mock_response.aiter_lines = lambda: _async_iter([
-        "data: not-json-at-all",
-        'data: {"choices": [{"delta": {"content": "valid"}}]}',
-        "data: [DONE]",
-    ])
+    mock_response.aiter_lines = lambda: _async_iter(
+        [
+            "data: not-json-at-all",
+            'data: {"choices": [{"delta": {"content": "valid"}}]}',
+            "data: [DONE]",
+        ]
+    )
 
     mock_http = AsyncMock()
 
@@ -483,9 +490,11 @@ async def test_chat_stream_http_error_raises_runtime_error():
     @asynccontextmanager
     async def _stream_ctx(*_args, **_kwargs):
         mock_response = AsyncMock()
-        mock_response.raise_for_status = Mock(side_effect=httpx.HTTPStatusError(
-            "500", request=AsyncMock(), response=AsyncMock(status_code=500)
-        ))
+        mock_response.raise_for_status = Mock(
+            side_effect=httpx.HTTPStatusError(
+                "500", request=AsyncMock(), response=AsyncMock(status_code=500)
+            )
+        )
         yield mock_response
 
     mock_http.stream = _stream_ctx

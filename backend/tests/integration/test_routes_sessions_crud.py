@@ -7,6 +7,7 @@
 3. GET /sessions/{id}/messages 空列表
 4. POST /interrupt 触发 agent.interrupt()
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -93,20 +94,24 @@ async def test_get_messages_returns_inserted_messages(client):
 
     # 手动保存两条消息
     repo = MessageRepository()
-    repo.save(Message(
-        id="m-001",
-        session_id=session_id,
-        role="user",
-        content="你好",
-        created_at=1700000000000,
-    ))
-    repo.save(Message(
-        id="m-002",
-        session_id=session_id,
-        role="assistant",
-        content="你好！有什么可以帮你？",
-        created_at=1700000001000,
-    ))
+    repo.save(
+        Message(
+            id="m-001",
+            session_id=session_id,
+            role="user",
+            content="你好",
+            created_at=1700000000000,
+        )
+    )
+    repo.save(
+        Message(
+            id="m-002",
+            session_id=session_id,
+            role="assistant",
+            content="你好！有什么可以帮你？",
+            created_at=1700000001000,
+        )
+    )
 
     resp = await client.get(f"{PREFIX}/sessions/{session_id}/messages")
     assert resp.status_code == 200

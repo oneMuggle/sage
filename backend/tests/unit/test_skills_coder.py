@@ -178,9 +178,7 @@ def test_execute_with_very_long_code_input():
     """超长 code 不会导致 mock/explain 路径崩溃."""
     skill = CoderSkill()
     long_code = "x = 1\n" * 10_000
-    result = skill.execute(
-        {"action": "explain", "language": "python", "code": long_code}, {}
-    )
+    result = skill.execute({"action": "explain", "language": "python", "code": long_code}, {})
     assert result.success is True
     assert result.metadata["action"] == "explain"
 

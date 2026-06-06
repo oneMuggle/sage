@@ -38,10 +38,7 @@ describe('MessageList', () => {
   it('forwards knowledgeRefs to the matching message', () => {
     const messages: MessageType[] = [baseMsg('m1', 'assistant', 'with refs')];
     render(
-      <MessageList
-        messages={messages}
-        knowledgeRefs={{ m1: [{ id: 'k1', title: '知识A' }] }}
-      />,
+      <MessageList messages={messages} knowledgeRefs={{ m1: [{ id: 'k1', title: '知识A' }] }} />,
     );
     expect(screen.getByText('知识A')).toBeInTheDocument();
   });

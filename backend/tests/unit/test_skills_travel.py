@@ -124,9 +124,7 @@ def test_execute_with_llm_raises_returns_failure_result():
     llm = Mock()
     llm.complete.side_effect = RuntimeError("rate limit")
     skill = TravelSkill()
-    result = skill.execute(
-        {"destination": "广州"}, {"llm": llm}
-    )
+    result = skill.execute({"destination": "广州"}, {"llm": llm})
     assert result.success is False
     assert "rate limit" in (result.error or "")
     assert result.content is None

@@ -64,9 +64,7 @@ def test_execute_without_tools_key_returns_failure():
 def test_execute_with_empty_query_passes_through_to_tool():
     """query 为空时仍调用工具（不做业务校验, 这是 skill 的契约）."""
     web_search = Mock()
-    web_search.execute.return_value = ToolResult(
-        success=True, content={"results": []}
-    )
+    web_search.execute.return_value = ToolResult(success=True, content={"results": []})
     skill = SearchSkill()
     result = skill.execute({"query": ""}, {"tools": {"web_search": web_search}})
     assert result.success is True
@@ -95,7 +93,9 @@ def test_execute_with_results_formats_them():
         },
     )
     skill = SearchSkill()
-    result = skill.execute({"query": "python 异步", "limit": 2}, {"tools": {"web_search": web_search}})
+    result = skill.execute(
+        {"query": "python 异步", "limit": 2}, {"tools": {"web_search": web_search}}
+    )
     assert result.success is True
     assert "Python 异步编程" in result.content
     assert "FastAPI" in result.content

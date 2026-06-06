@@ -1,6 +1,7 @@
 """
 进化系统 API 集成测试 — 覆盖 /evolution/logs, /evolution/trigger, /evolution/status。
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -91,8 +92,13 @@ async def test_evolution_trigger_success(client):
     """POST /evolution/trigger 任务存在时返回 success=True。"""
     mock_scheduler = MagicMock()
     mock_scheduler.get_task_status.return_value = [
-        {"name": "daily_summary", "schedule": "daily", "last_run": None,
-         "next_run": None, "running": False},
+        {
+            "name": "daily_summary",
+            "schedule": "daily",
+            "last_run": None,
+            "next_run": None,
+            "running": False,
+        },
     ]
     mock_scheduler.trigger_task.return_value = True
 
@@ -114,8 +120,13 @@ async def test_evolution_trigger_task_not_found(client):
     """POST /evolution/trigger 任务不存在时返回 404。"""
     mock_scheduler = MagicMock()
     mock_scheduler.get_task_status.return_value = [
-        {"name": "daily_summary", "schedule": "daily", "last_run": None,
-         "next_run": None, "running": False},
+        {
+            "name": "daily_summary",
+            "schedule": "daily",
+            "last_run": None,
+            "next_run": None,
+            "running": False,
+        },
     ]
 
     with patch("backend.api.routes.get_scheduler", return_value=mock_scheduler):
@@ -133,8 +144,13 @@ async def test_evolution_trigger_failure(client):
     """POST /evolution/trigger trigger_task 返回 False 时 success=False。"""
     mock_scheduler = MagicMock()
     mock_scheduler.get_task_status.return_value = [
-        {"name": "daily_summary", "schedule": "daily", "last_run": None,
-         "next_run": None, "running": False},
+        {
+            "name": "daily_summary",
+            "schedule": "daily",
+            "last_run": None,
+            "next_run": None,
+            "running": False,
+        },
     ]
     mock_scheduler.trigger_task.return_value = False
 
