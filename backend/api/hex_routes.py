@@ -55,6 +55,26 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class SettingsRequest(BaseModel):
+    """Hex 路径的 PUT /settings 请求体（PG3.2）。
+
+    所有字段可选；为 ``None`` 表示该字段未变更。``api_key`` 永远不应
+    在审计日志中明文落盘（adapter 侧负责脱敏），本路由层只关心
+    "哪些字段被改"，不持久化值。
+    """
+
+    api_base_url: str | None = None
+    api_key: str | None = None  # noqa: S105 — 字段名占位；不存储
+    model: str | None = None
+
+
+class SettingsResponse(BaseModel):
+    """Hex 路径的 PUT /settings 响应体。"""
+
+    status: str
+    changed_fields: list[str]
+
+
 # ==================== 依赖注入 ====================
 
 
@@ -145,3 +165,47 @@ def metrics(svc: ChatService = Depends(get_chat_service)) -> Response:
     if isinstance(adapter, PrometheusMetricAdapter):
         return Response(content=adapter.render(), media_type=adapter.content_type)
     return Response(content=b"", media_type="text/plain; charset=utf-8")
+
+
+# ==================== PUT /settings 端点（PG3.2 — settings_changed 审计） ====================
+
+
+@router.put("/settings", response_model=SettingsResponse)
+async def update_settings(
+    req: SettingsRequest,
+    request: Request,
+    svc: ChatService = Depends(get_chat_service),
+) -> SettingsResponse:
+    """Hex 路径的 settings 更新端点 + emit ``settings_changed`` 审计事件。
+
+    PG3.2 范围：
+    - 不持久化（持久化由 ``legacy_routes`` / 配置层负责；hex 路径只关心审计埋点）
+    - emit 1 条 ``settings_changed`` 事件，payload 包含 ``changed_fields``（不包含值）
+
+    安全：
+    - ``api_key`` 字段**永不**写入审计 payload（避免密钥泄露到 audit.jsonl）
+    - 未来如需持久化，``api_key`` 必须经加密层处理
+    """
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+    # 仅记录"哪些字段被改"，不记录值；排除 api_key 防止密钥泄露到审计日志
+    changed_fields = [
+        k
+        for k, v in req.model_dump(exclude_none=True).items()
+        if k != "api_key"
+    ]
+    api_key_changed = "api_key" in req.model_dump(exclude_none=True)
+    if api_key_changed:
+        changed_fields.append("api_key")  # 仅占位标记存在变更
+
+    logger.info(
+        f"[HEX REQ {request_id}] /settings updated: changed={changed_fields}"
+    )
+
+    svc.events.emit(
+        "settings_changed",
+        {
+            "changed_fields": changed_fields,
+            "request_id": request_id,
+        },
+    )
+    return SettingsResponse(status="ok", changed_fields=changed_fields)

@@ -46,6 +46,7 @@ _TOKENS_CONSUMED_METRIC = "sage_tokens_consumed_total"
 _REACT_STEPS_METRIC = "sage_react_steps_per_request"
 _TOOL_INVOCATIONS_METRIC = "sage_tool_invocations_total"
 _ERRORS_METRIC = "sage_errors_total"
+_ACTIVE_SESSIONS_METRIC = "sage_active_sessions"
 
 
 class ChatService:
@@ -71,6 +72,44 @@ class ChatService:
         self.storage = storage
         self.metrics = metrics
         self.events = events
+        # P3.2: 当前活跃 session 计数（用于 sage_active_sessions gauge）
+        self._active_session_count: int = 0
+
+    # ------------------------------------------------------------------ #
+    # 会话生命周期（含审计事件 + Prometheus 指标）
+    # ------------------------------------------------------------------ #
+
+    async def create_session(self, title: str = "") -> str:
+        """创建新会话并 emit ``session_created`` 审计事件 + ``active_sessions`` 计数 +1。
+
+        P3.2 引入：业务方（API 路由 / CLI）应通过本方法建会话，而不是直接调
+        ``self.storage.create_session``，确保审计与指标的"session_created"埋点
+        不会被遗漏。
+        """
+        session_id = await self.storage.create_session(title=title)
+        # 审计事件：与 spec § 6.1 5 类事件对齐
+        self.events.emit(
+            "session_created",
+            {"session_id": session_id, "title": title},
+        )
+        # 9 指标之一：active_sessions gauge（set 绝对值）
+        self._active_session_count += 1
+        self.metrics.gauge(
+            _ACTIVE_SESSIONS_METRIC,
+            float(self._active_session_count),
+            {},
+        )
+        return session_id
+
+    async def delete_session(self, session_id: str) -> None:
+        """删除会话（仅当会话存在时减计数）。"""
+        await self.storage.delete_session(session_id)
+        self._active_session_count = max(0, self._active_session_count - 1)
+        self.metrics.gauge(
+            _ACTIVE_SESSIONS_METRIC,
+            float(self._active_session_count),
+            {},
+        )
 
     # ------------------------------------------------------------------ #
     # 主入口：执行一轮对话
