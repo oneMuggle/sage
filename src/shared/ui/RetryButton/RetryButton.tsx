@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import clsx from 'clsx';
+import { useState } from 'react';
 
 export interface RetryButtonProps {
   onRetry: () => void | Promise<void>;

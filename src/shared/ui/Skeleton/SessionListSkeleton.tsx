@@ -2,11 +2,7 @@ import { Skeleton } from './Skeleton';
 
 export function SessionListSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <div
-      role="status"
-      aria-label="加载会话列表中"
-      className="flex flex-col gap-2 p-2"
-    >
+    <div role="status" aria-label="加载会话列表中" className="flex flex-col gap-2 p-2">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-2 p-2">
           <Skeleton circle width="1.5rem" height="1.5rem" />

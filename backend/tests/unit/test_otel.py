@@ -13,10 +13,9 @@ def test_init_tracing_is_idempotent():
 
     二次调用不会重新注册 ``BatchSpanProcessor``，避免 span 重复导出。
     """
-    from backend.utils.otel import init_tracing
-
     # 强制清理以保证测试可重复（其他测试可能已初始化过）
     from backend.utils import otel as _otel_mod
+    from backend.utils.otel import init_tracing
 
     _otel_mod._provider = None
     p1 = init_tracing("test-svc-1")

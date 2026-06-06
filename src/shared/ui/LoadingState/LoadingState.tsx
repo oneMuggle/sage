@@ -27,18 +27,14 @@ export function LoadingState({
           <div
             key={i}
             className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"
-            style={{ width: `${80 + (i * 5) % 20}%` }}
+            style={{ width: `${80 + ((i * 5) % 20)}%` }}
           />
         ))}
       </div>
     );
   }
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={clsx('flex items-center gap-2', className)}
-    >
+    <div role="status" aria-live="polite" className={clsx('flex items-center gap-2', className)}>
       <div
         className="h-5 w-5 border-2 border-t-transparent rounded-full animate-spin border-blue-600"
         aria-hidden

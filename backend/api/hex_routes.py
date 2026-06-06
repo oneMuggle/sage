@@ -188,18 +188,12 @@ async def update_settings(
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     # 仅记录"哪些字段被改"，不记录值；排除 api_key 防止密钥泄露到审计日志
-    changed_fields = [
-        k
-        for k, v in req.model_dump(exclude_none=True).items()
-        if k != "api_key"
-    ]
+    changed_fields = [k for k, v in req.model_dump(exclude_none=True).items() if k != "api_key"]
     api_key_changed = "api_key" in req.model_dump(exclude_none=True)
     if api_key_changed:
         changed_fields.append("api_key")  # 仅占位标记存在变更
 
-    logger.info(
-        f"[HEX REQ {request_id}] /settings updated: changed={changed_fields}"
-    )
+    logger.info(f"[HEX REQ {request_id}] /settings updated: changed={changed_fields}")
 
     svc.events.emit(
         "settings_changed",

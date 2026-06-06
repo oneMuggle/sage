@@ -20,15 +20,13 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
 # 模块级 provider 缓存（保持单例）
-_provider: Optional[TracerProvider] = None
+_provider: TracerProvider | None = None
 
 
 def init_tracing(service_name: str = "sage") -> TracerProvider:

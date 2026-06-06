@@ -291,9 +291,7 @@ async def test_tool_invoked_event_recorded_when_llm_returns_tool_calls(tmp_path:
     try:
         sid = await fake_svc.create_session()
         # 直接调 ChatService.run_turn 触发 tool_calls 分支
-        await fake_svc.run_turn(
-            sid, Message(role=Role.USER, content="trigger tool")
-        )
+        await fake_svc.run_turn(sid, Message(role=Role.USER, content="trigger tool"))
     finally:
         if saved_override is not None:
             app.dependency_overrides[get_chat_service] = saved_override

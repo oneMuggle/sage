@@ -93,7 +93,7 @@ class SageLogger:
         self,
         log_dir: str | None = None,
         log_level: str = DEFAULT_LOG_LEVEL,
-        project_root: str | None = None
+        project_root: str | None = None,
     ) -> None:
         """
         配置日志系统
@@ -225,7 +225,9 @@ class SageLogger:
 
         # 更新控制台处理器级别
         for handler in root_logger.handlers:
-            if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+            if isinstance(handler, logging.StreamHandler) and not isinstance(
+                handler, logging.FileHandler
+            ):
                 handler.setLevel(LOG_LEVELS[level])
 
 
@@ -234,9 +236,7 @@ _logger_manager = SageLogger()
 
 
 def setup_logging(
-    log_dir: str | None = None,
-    log_level: str = DEFAULT_LOG_LEVEL,
-    project_root: str | None = None
+    log_dir: str | None = None, log_level: str = DEFAULT_LOG_LEVEL, project_root: str | None = None
 ) -> None:
     """
     设置全局日志系统（便捷函数）
