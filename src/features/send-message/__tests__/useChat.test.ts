@@ -1,7 +1,7 @@
 /**
  * useChat hook 测试
  *
- * 策略：mock @tauri-apps/api/tauri 的 invoke，从而控制 chatApi 的行为；
+ * 策略：mock @tauri-apps/api/core 的 invoke，从而控制 chatApi 的行为；
  * 同时在每个用例前重置 zustand store 与 localStorage，确保测试隔离。
  */
 import { act, renderHook, waitFor } from '@testing-library/react';
@@ -13,7 +13,7 @@ import { useChat } from '../useChat';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
 const invokeMock = vi.fn();
-vi.mock('@tauri-apps/api/tauri', () => ({
+vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
