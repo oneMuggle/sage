@@ -1,5 +1,10 @@
 # Sage - Agent 引擎
 
+> **P2 备注（2026-06-06）**：Sage 后端已迁移到六边形架构（Ports & Adapters）。
+> 本章中标注的旧 `backend/core/*` 路径已迁移到 `backend/core/legacy/*`（双轨安全网）；
+> 新业务代码位于 `backend/domain/*`（纯领域模型）、`backend/application/services/chat_service.py`（用例编排）、
+> `backend/adapters/out/*`（端口实现）。详细架构请阅读 [`docs/technical/18-hexagonal.md`](./technical/18-hexagonal.md)。
+
 ## 5.1 Agent 概述
 
 ### 5.1.1 设计目标
@@ -125,7 +130,8 @@ User Input
 ### 5.3.1 SageAgent 主类
 
 ```python
-# backend/core/agent.py
+# legacy code: backend/core/legacy/agent.py
+# new architecture: backend/domain/agent.py + backend/application/services/chat_service.py
 import asyncio
 import time
 import uuid
@@ -326,7 +332,8 @@ class SageAgent:
 ### 5.3.2 MessageBuilder
 
 ```python
-# backend/core/message_builder.py
+# legacy code: backend/core/legacy/agent.py (MessageBuilder 内联)
+# new architecture: 逻辑并入 backend/application/services/chat_service.py
 class MessageBuilder:
     """消息构建器"""
 
@@ -400,7 +407,9 @@ class MessageBuilder:
 ### 5.3.3 ToolExecutor
 
 ```python
-# backend/core/tool_executor.py
+# legacy code: backend/core/legacy/agent.py (ToolExecutor 内联)
+# new architecture: 工具调用逻辑并入 backend/application/services/chat_service.py，
+#                   通过 ToolPort (InprocToolAdapter) 调用
 import json
 import logging
 from typing import Dict, Any
@@ -585,7 +594,9 @@ class ToolRegistry:
 ### 5.5.1 会话状态
 
 ```python
-# backend/core/session.py
+# legacy code: backend/core/legacy/agent_state.py
+# new architecture: backend/domain/agent.py (AgentState dataclass) +
+#                   StoragePort (SqliteStorageAdapter)
 from typing import List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -615,7 +626,8 @@ class Message:
 ### 5.5.2 会话管理器
 
 ```python
-# backend/core/session_manager.py
+# legacy code: backend/core/legacy/agent_state.py
+# new architecture: 会话管理由 StoragePort (SqliteStorageAdapter) 承担
 class SessionManager:
     """会话管理器"""
 

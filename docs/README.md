@@ -21,6 +21,12 @@
 11. [目录结构](./11-structure.md)
 12. [实施计划](./12-plan.md)
 
+### 技术专题
+
+- [15. 质量门禁](./technical/15-quality-gates.md) — CI / pre-commit / pre-push / 工具链版本
+- [17. 前端质量](./technical/17-frontend-quality.md) — FSD 架构 / 测试覆盖 / a11y 状态
+- [18. 六边形架构](./technical/18-hexagonal.md) — 五层职责 / 6 个 Protocol / 双轨策略 / import-linter 约束
+
 ---
 
 ## 核心技术参考

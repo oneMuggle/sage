@@ -1,5 +1,8 @@
 # Sage - 技能系统
 
+> **P2 备注（2026-06-06）**：技能系统已纳入六边形架构（`SkillPort` Protocol）。
+> 生产 adapter 计划在 PG3 实现；当前业务调用链详见 [`docs/technical/18-hexagonal.md`](./technical/18-hexagonal.md)。
+
 ## 7.1 技能系统概述
 
 ### 7.1.1 设计理念

@@ -64,6 +64,61 @@
 
 ---
 
+### 2.1.3 后端：六边形架构（Hexagonal Architecture，2026-06-06 P2 完工）
+
+> **P2 重构说明**：Sage 后端已从单体 `core/` 迁移到六边形架构（Ports & Adapters），实现"业务与技术分离"。本节为新架构概览；详细端口列表、依赖约束、双轨切换请阅读 [`docs/technical/18-hexagonal.md`](./technical/18-hexagonal.md)。
+
+```
+                    ┌──────────────────────┐
+   HTTP/SSE/WS ───▶ │   api (adapters in)  │
+                    └──────────┬───────────┘
+                               │
+                    ┌──────────▼───────────┐
+                    │  application services │  ← 用例编排（ChatService 等）
+                    └──────────┬───────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+   ┌──────────▼────┐  ┌─────────▼─────┐  ┌───────▼──────┐
+   │  domain core  │  │     ports     │  │   ports      │
+   │  (pure)       │◀─┤  (interfaces) │─▶│  (interfaces)│
+   │  Agent        │  │  LLMPort      │  │  StoragePort │
+   │  Message      │  │  ToolPort     │  │  EventPort   │
+   │  Tool/Skill   │  │  SkillPort    │  │  MetricPort  │
+   └───────────────┘  └────────┬──────┘  └───────┬──────┘
+                               │                │
+              ┌────────────────┼────────────────┤
+              │                │                │
+   ┌──────────▼────┐  ┌────────▼─────┐  ┌───────▼──────┐
+   │  adapters out │  │  adapters   │  │  adapters    │
+   │  httpx LLM    │  │  sqlite     │  │  prom client │
+   │  in-proc tool │  │  in-mem     │  │  otel stdlib │
+   └───────────────┘  └─────────────┘  └──────────────┘
+```
+
+**五层职责**：
+
+| 层 | 路径 | 职责 |
+|----|------|------|
+| domain | `backend/domain/` | 纯领域模型（AgentState、Message、ToolSpec、LLMError） |
+| ports | `backend/ports/` | 6 个 Protocol 接口（LLM / Tool / Skill / Storage / Metric / Event） |
+| application | `backend/application/` | 用例编排（ChatService） |
+| adapters | `backend/adapters/out/` | 端口的具体实现（httpx / sqlite / inproc / prometheus / file） |
+| api | `backend/api/` | HTTP 路由（hex + legacy 双轨，`API_MODE` 切换） |
+
+**双轨策略**：
+
+- `API_MODE=hex`（默认）：新六边形路径，`hex_routes.py` → `ChatService` → ports
+- `API_MODE=legacy`：旧路径完全回滚，`legacy_routes.py` → `core/legacy/SageAgent`
+
+**依赖约束**：由 `import-linter` 在 `backend/pyproject.toml` 中配置，5 层单向依赖，**0 violations**。
+
+**测试覆盖**：整体 87%（domain 100% / ports 100% / application 96% / adapters 100% 15/16 / api 75-83%）。
+
+> 旧 `backend/core/agent.py`、`core/orchestrator.py` 等单体文件已迁移至 `backend/core/legacy/`，作为双轨安全网保留。
+
+---
+
 ## 2.2 前端架构 (React + Vite)
 
 ### 2.2.1 组件层次

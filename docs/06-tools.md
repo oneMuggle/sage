@@ -1,5 +1,10 @@
 # Sage - 工具系统
 
+> **P2 备注（2026-06-06）**：工具系统已纳入六边形架构。
+> 旧 `backend/tools/registry.py` 包装为 `backend/adapters/out/tool/inproc_adapter.py`（`InprocToolAdapter`），
+> 通过 `ToolPort` Protocol 暴露给 `backend/application/services/chat_service.py`。
+> 详细架构请阅读 [`docs/technical/18-hexagonal.md`](./technical/18-hexagonal.md)。
+
 ## 6.1 工具系统概述
 
 ### 6.1.1 设计目标
