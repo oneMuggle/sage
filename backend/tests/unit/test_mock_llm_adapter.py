@@ -10,6 +10,7 @@
 6. ``reset`` 清空状态。
 7. ``LLMPort`` 协议结构一致性。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -105,9 +106,7 @@ async def test_chat_stream_yields_chars():
     """流式返回 ``default_content`` 的每个字符。"""
     adapter = MockLLMAdapter(default_content="abc")
     chunks: list[str] = []
-    async for chunk in adapter.chat_stream(
-        [Message(role=Role.USER, content="hi")]
-    ):
+    async for chunk in adapter.chat_stream([Message(role=Role.USER, content="hi")]):
         chunks.append(chunk)
     assert chunks == ["a", "b", "c"]
 
@@ -178,9 +177,7 @@ def test_reset_clears_state():
 
 async def test_reset_allows_reusing_same_responses():
     """``reset`` 后可以重新消费同一组预置 responses。"""
-    adapter = MockLLMAdapter(
-        responses=[Message(role=Role.ASSISTANT, content="again")]
-    )
+    adapter = MockLLMAdapter(responses=[Message(role=Role.ASSISTANT, content="again")])
     r1 = await adapter.chat([Message(role=Role.USER, content="1")])
     assert r1.content == "again"
     r2 = await adapter.chat([Message(role=Role.USER, content="2")])

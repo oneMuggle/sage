@@ -3,6 +3,7 @@
 仅承载工具的规格与执行结果数据，不包含任何执行/IO 逻辑。
 真正的 ``BaseTool`` 抽象与实现保留在 ``backend.tools`` 中。
 """
+
 from dataclasses import dataclass, field
 from typing import Any
 

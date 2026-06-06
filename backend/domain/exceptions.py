@@ -5,6 +5,7 @@
 P2 设计稿一致）。旧位置短期保留以避免破坏既有 import，PG2.13
 统一迁出到 ``core/legacy/`` 后删除。
 """
+
 from typing import Any
 
 

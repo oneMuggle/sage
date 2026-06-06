@@ -8,6 +8,7 @@
 注意：domain 层禁止使用 pydantic。如果 api 层需要校验，请在 api/schemas
 中单独定义 pydantic 模型并与本模块互转。
 """
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any

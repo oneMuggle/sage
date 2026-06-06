@@ -12,6 +12,7 @@
   ``domain.ToolCall.args``（dict）；空字符串安全降级为 ``{}``。
 - **stream 透传**：``LLMClient.chat_stream`` 已是 async generator，adapter 直接 yield。
 """
+
 from __future__ import annotations
 
 import json

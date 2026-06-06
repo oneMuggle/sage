@@ -1,4 +1,5 @@
 """验证 ChatService 用 mock adapters 编排 ports。"""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -20,9 +21,7 @@ pytestmark = pytest.mark.unit
 def _make_service(llm_responses=None, llm=None):
     """Helper to build ChatService with mock adapters."""
     mock_tool = MagicMock()
-    mock_tool.execute.return_value = MagicMock(
-        success=True, output="ok", error=None
-    )
+    mock_tool.execute.return_value = MagicMock(success=True, output="ok", error=None)
     mock_tool_registry = MagicMock()
     mock_tool_registry.list.return_value = []
     mock_tool_registry.get.return_value = mock_tool

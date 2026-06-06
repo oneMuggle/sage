@@ -3,6 +3,7 @@
 仅承载技能的规格与执行结果数据。``BaseSkill`` 抽象与实现保留在
 ``backend.skills`` 中。
 """
+
 from dataclasses import dataclass, field
 from typing import Any
 

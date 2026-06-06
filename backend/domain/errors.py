@@ -7,6 +7,7 @@
 权威定义。旧位置短期保留以避免破坏既有 import，PG2.13 阶段一并
 迁出到 ``core/legacy/`` 后删除。
 """
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any

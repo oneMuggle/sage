@@ -3,6 +3,7 @@
 包含 ReAct 状态机所需的状态枚举与决策值对象。
 不允许引入 fastapi / pydantic / httpx 或任何项目内部模块。
 """
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any

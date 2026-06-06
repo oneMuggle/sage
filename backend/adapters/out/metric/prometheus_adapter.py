@@ -1,4 +1,5 @@
 """Prometheus 指标 adapter（骨架，P3.1 完善）。"""
+
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 

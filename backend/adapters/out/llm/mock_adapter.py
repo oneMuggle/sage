@@ -5,6 +5,7 @@
     result = await adapter.chat([Message(role=USER, content="hello")])
     assert result.content == "hi"
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -47,9 +48,7 @@ class MockLLMAdapter:
         tool_choice: str | dict[str, Any] | None = None,
     ) -> Message:
         """按顺序返回预置 responses；耗尽后回退到 ``default_content``。"""
-        self.calls.append(
-            {"messages": messages, "tools": tools, "tool_choice": tool_choice}
-        )
+        self.calls.append({"messages": messages, "tools": tools, "tool_choice": tool_choice})
         if self._index < len(self._responses):
             resp = self._responses[self._index]
             self._index += 1
@@ -83,9 +82,9 @@ class MockLLMAdapter:
             raise AssertionError("LLM adapter was not called")
         last = self.calls[-1]
         if messages is not None:
-            assert last["messages"] == messages, (
-                f"Expected messages={messages}, got {last['messages']}"
-            )
+            assert (
+                last["messages"] == messages
+            ), f"Expected messages={messages}, got {last['messages']}"
         for key, expected in kwargs.items():
             actual = last.get(key)
             assert actual == expected, f"Expected {key}={expected!r}, got {actual!r}"

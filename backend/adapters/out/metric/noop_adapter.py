@@ -1,7 +1,6 @@
 """No-op 指标 adapter（测试用，不做任何事）。"""
 
 
-
 class NoopMetricAdapter:
     """什么都不做的 MetricPort 实现。"""
 

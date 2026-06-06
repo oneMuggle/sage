@@ -40,11 +40,15 @@ def test_list_tools_returns_specs_from_mock_registry() -> None:
 
     mock_registry = type("FakeRegistry", (), {})()
     mock_registry.list = lambda: [  # type: ignore[method-assign]
-        type("FakeSchema", (), {
-            "name": "calculator",
-            "description": "Math operations",
-            "parameters": mock_tool.parameters,
-        })()
+        type(
+            "FakeSchema",
+            (),
+            {
+                "name": "calculator",
+                "description": "Math operations",
+                "parameters": mock_tool.parameters,
+            },
+        )()
     ]
 
     adapter = InprocToolAdapter(registry=mock_registry)  # type: ignore[arg-type]

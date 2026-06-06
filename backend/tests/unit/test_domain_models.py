@@ -3,6 +3,7 @@
 仅依赖 Python 标准库与 pytest；不允许 import fastapi / httpx / pydantic
 或 backend.core / backend.application 等任何非 domain 模块。
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -29,8 +30,8 @@ from backend.domain import (
     ToolResult,
     ToolSpec,
     ValidationError,
+    exceptions as domain_exceptions,
 )
-from backend.domain import exceptions as domain_exceptions
 
 pytestmark = pytest.mark.unit
 
@@ -295,6 +296,4 @@ class TestDomainPurity:
                     continue
                 offenders.append(f"{py_file.name}: {line.strip()}")
 
-        assert offenders == [], f"domain/ 出现非法外部 import:\n" + "\n".join(
-            offenders
-        )
+        assert offenders == [], "domain/ 出现非法外部 import:\n" + "\n".join(offenders)

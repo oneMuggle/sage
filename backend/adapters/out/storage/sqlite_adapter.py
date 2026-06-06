@@ -45,10 +45,7 @@ def _serialize_tool_calls(tool_calls: list[ToolCall]) -> str | None:
     if not tool_calls:
         return None
     return json.dumps(
-        [
-            {"name": tc.name, "args": tc.args, "id": tc.id}
-            for tc in tool_calls
-        ],
+        [{"name": tc.name, "args": tc.args, "id": tc.id} for tc in tool_calls],
         ensure_ascii=False,
     )
 
