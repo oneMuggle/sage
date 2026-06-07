@@ -28,6 +28,45 @@
 - Python 3.8 已 EOL（2024 年 10 月），同上。
 - WebView2 v109 不再获得微软安全更新（微软官方支持止于 2023 年 2 月）。
 
+## 长期路线图（1-2 年后 Web 化迁移）
+
+**为什么是 1-2 年**：本分支技术栈（Tauri 1.6 + Python 3.8 + WebView2 v109）已 EOL，建议商业承诺期不超过 24 个月。逾期后：
+
+1. **Phase A — 准备（0-3 个月）**：
+   - 把 Sage 后端（FastAPI）+ 前端（React + Vite）作为**纯 Web 应用**部署
+   - 静态前端 `npm run build` → 上传到任意静态托管（S3 / Vercel / Netlify / 自建 Nginx）
+   - FastAPI 后端 + ChromaDB + SQLite 部署在服务器
+   - 域名 + HTTPS
+
+2. **Phase B — Win7 用户迁移（3-6 个月）**：
+   - **Win7 兼容浏览器**（Win7 用户用浏览器访问）：
+     - Chrome **109**（2023-03 发布，**最后支持 Win7**）
+     - Firefox **ESR 102**（最后支持 Win7 的 ESR）
+     - Edge 109（同 Chrome 109 内核）
+   - 给 Win7 用户发邮件/通知：「请升级到 Chrome 109 或 Firefox ESR 102，访问 https://sage.example.com 即可使用」
+   - 提供"如何检查浏览器版本"指南
+
+3. **Phase C — 桌面端 EOL（6-12 个月）**：
+   - 在 GitHub Release 标注"Win7 桌面端最后一次发布是 vX.Y.Z"
+   - BRANCH_NOTES.md 加 "DEPRECATED" 横幅
+   - 桌面端停止维护，但二进制仍可下载（"as-is"）
+
+4. **Phase D — 分支归档（12-18 个月）**：
+   - `release/win7` 分支 read-only
+   - 主仓 release 流程完全 Web 化
+   - 至此 Win7 用户全部迁移到 Web 客户端
+
+**为什么选 Web 化而不是其他桌面框架**：
+- .NET Framework 4.8 + WPF：需重写后端（Python→C#），3-6 个月工作量
+- PyQt5：UI 改写 + Qt5 EOL，2-4 个月工作量
+- Electron ≤ 22：已 EOL，包大小翻倍，违反"轻量"目标
+- **Web 化**：后端 + 前端都不动，**1-2 周工作量**
+
+**Web 化对 Win7 用户的实际体验**：
+- 浏览器双击 .html 启动 → 首次需要输入 URL 或收藏
+- 之后与桌面应用**几乎无差别**（功能 100% 相同，无 WebView2 依赖）
+- 唯一区别：少了"双击 .exe"这一步骤
+
 ## 本分支的特殊性
 
 1. **CI 在 self-hosted Windows 7 runner 上跑**（label `windows-7`），不在 GH-hosted。
