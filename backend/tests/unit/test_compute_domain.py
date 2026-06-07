@@ -23,7 +23,6 @@ from backend.domain.compute import (
 )
 from backend.ports.compute import ComputePort
 
-
 # ---------- ComputeSpec ----------
 
 
@@ -204,7 +203,7 @@ def test_compute_port_missing_method_fails() -> None:
     assert not isinstance(_PartialImpl(), ComputePort)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_fake_compute_port_execute() -> None:
     """``_FakeComputePort.execute`` 能正确返回 ``ComputeResult``。"""
     fake = _FakeComputePort()

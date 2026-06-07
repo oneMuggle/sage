@@ -58,9 +58,9 @@ class ComputeErrorType(str, Enum):
     OPERATION_NOT_FOUND = "operation_not_found"
     INVALID_PARAMS = "invalid_params"
     TIMEOUT = "timeout"
-    PROCESS_FAILED = "process_failed"          # 非零退出码 / HTTP 5xx
+    PROCESS_FAILED = "process_failed"  # 非零退出码 / HTTP 5xx
     OUTPUT_PARSE_ERROR = "output_parse_error"
-    INTERNAL_ERROR = "internal_error"          # 配置错误 / 可执行文件找不到等
+    INTERNAL_ERROR = "internal_error"  # 配置错误 / 可执行文件找不到等
 
 
 @dataclass
