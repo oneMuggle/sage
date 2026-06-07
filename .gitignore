@@ -86,6 +86,14 @@ htmlcov/
 
 # Tauri
 src-tauri/target/
+src-tauri/gen/
+
+# Test coverage reports
+coverage/
+.coverage
+
+# Claude Code local config (per-developer)
+.claude/
 
 # Playwright MCP
 .playwright-mcp/
