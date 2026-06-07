@@ -3,6 +3,7 @@ Agent Profiles - Agent 角色定义和配置
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -45,7 +46,7 @@ class AgentProfile:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentProfile":
+    def from_dict(cls, data: dict[str, Any]) -> AgentProfile:
         """从字典创建"""
         model_data = data.pop("model_config", {})
         model_config = AgentModelConfig(**model_data) if model_data else AgentModelConfig()

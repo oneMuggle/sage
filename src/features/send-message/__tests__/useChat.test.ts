@@ -13,7 +13,7 @@ import { useChat } from '../useChat';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
 const invokeMock = vi.fn();
-vi.mock('@tauri-apps/api/tauri', () => ({
+vi.mock('../../../lib/tauriInvoke', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 

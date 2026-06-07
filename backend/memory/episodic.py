@@ -4,6 +4,7 @@ Episodic Memory - 情景记忆模块
 """
 
 from __future__ import annotations
+
 import json
 import time
 import uuid
@@ -36,7 +37,7 @@ class EpisodicMemory:
         importance: int = 5,
         metadata: dict[str, Any] | None = None,
         session_id: str | None = None,
-        memory_type: str = "conversation"
+        memory_type: str = "conversation",
     ) -> str:
         """
         保存情景记忆
@@ -67,20 +68,14 @@ class EpisodicMemory:
         # 生成摘要
         summary = self._generate_summary(content)
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO memories_episodic
             (id, content, summary, session_id, memory_type, importance, tags, created_at, is_valid)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-        """, (
-            memory_id,
-            content,
-            summary,
-            session_id,
-            memory_type,
-            importance,
-            tags,
-            now
-        ))
+        """,
+            (memory_id, content, summary, session_id, memory_type, importance, tags, now),
+        )
 
         conn.commit()
         return memory_id
@@ -101,11 +96,7 @@ class EpisodicMemory:
         return content[:max_length] + "..."
 
     def search(
-        self,
-        query: str,
-        limit: int = 10,
-        min_importance: int = 1,
-        memory_type: str | None = None
+        self, query: str, limit: int = 10, min_importance: int = 1, memory_type: str | None = None
     ) -> list[dict[str, Any]]:
         """
         搜索情景记忆
@@ -169,19 +160,25 @@ class EpisodicMemory:
         cursor = conn.cursor()
 
         if session_id:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM memories_episodic
                 WHERE session_id = ? AND is_valid = 1
                 ORDER BY created_at DESC
                 LIMIT ?
-            """, (session_id, limit))
+            """,
+                (session_id, limit),
+            )
         else:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM memories_episodic
                 WHERE is_valid = 1
                 ORDER BY created_at DESC
                 LIMIT ?
-            """, (limit,))
+            """,
+                (limit,),
+            )
 
         results = []
         for row in cursor.fetchall():
@@ -221,11 +218,14 @@ class EpisodicMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE memories_episodic
             SET is_valid = 0
             WHERE id = ?
-        """, (memory_id,))
+        """,
+            (memory_id,),
+        )
 
         conn.commit()
         return cursor.rowcount > 0
@@ -241,11 +241,14 @@ class EpisodicMemory:
         cursor = conn.cursor()
 
         now = int(time.time() * 1000)
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE memories_episodic
             SET access_count = access_count + 1, accessed_at = ?
             WHERE id = ?
-        """, (now, memory_id))
+        """,
+            (now, memory_id),
+        )
 
         conn.commit()
 
@@ -262,10 +265,13 @@ class EpisodicMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM memories_episodic
             WHERE id = ? AND is_valid = 1
-        """, (memory_id,))
+        """,
+            (memory_id,),
+        )
 
         row = cursor.fetchone()
         if row:

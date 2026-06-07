@@ -2,7 +2,7 @@
  * EvolutionLog - 进化日志列表
  * 显示进化任务的执行历史记录
  */
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '../../../lib/tauriInvoke';
 import React, { useEffect, useState } from 'react';
 
 // 进化日志类型

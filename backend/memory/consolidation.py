@@ -4,6 +4,7 @@ Memory Consolidation Pipeline - 记忆压缩管道
 """
 
 from __future__ import annotations
+
 import logging
 from typing import Any
 

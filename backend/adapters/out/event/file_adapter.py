@@ -6,6 +6,7 @@ tool_invoked / session_created / settings_changed，全部落盘到
 """
 
 from __future__ import annotations
+
 import json
 from datetime import datetime
 from pathlib import Path

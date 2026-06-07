@@ -5,6 +5,7 @@ Semantic Memory - 语义记忆模块
 """
 
 from __future__ import annotations
+
 import json
 import time
 import uuid
@@ -59,12 +60,7 @@ class SemanticMemory:
 
         conn.commit()
 
-    def save(
-        self,
-        content: str,
-        summary: str | None = None,
-        tags: list[str] | None = None
-    ) -> str:
+    def save(self, content: str, summary: str | None = None, tags: list[str] | None = None) -> str:
         """
         保存语义记忆
 
@@ -90,19 +86,25 @@ class SemanticMemory:
         tags_json = json.dumps(tags or [], ensure_ascii=False)
 
         # 插入主表
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO memories_semantic (id, content, summary, tags, created_at)
             VALUES (?, ?, ?, ?, ?)
-        """, (memory_id, content, summary, tags_json, now))
+        """,
+            (memory_id, content, summary, tags_json, now),
+        )
 
         # 插入 FTS 表
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO memories_semantic_fts (rowid, content, summary, tags)
             VALUES (
                 (SELECT rowid FROM memories_semantic WHERE id = ?),
                 ?, ?, ?
             )
-        """, (memory_id, content, summary, tags_json))
+        """,
+            (memory_id, content, summary, tags_json),
+        )
 
         conn.commit()
         return memory_id
@@ -123,10 +125,7 @@ class SemanticMemory:
         return content[:max_length] + "..."
 
     def search(
-        self,
-        query: str,
-        limit: int = 10,
-        tags: list[str] | None = None
+        self, query: str, limit: int = 10, tags: list[str] | None = None
     ) -> list[dict[str, Any]]:
         """
         搜索语义记忆
@@ -151,13 +150,16 @@ class SemanticMemory:
             # FTS5 搜索 - 处理特殊字符
             fts_query = self._prepare_fts_query(query)
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT m.* FROM memories_semantic m
                 INNER JOIN memories_semantic_fts fts ON m.rowid = fts.rowid
                 WHERE memories_semantic_fts MATCH ?
                 ORDER BY rank
                 LIMIT ?
-            """, (fts_query, limit))
+            """,
+                (fts_query, limit),
+            )
 
             results = []
             for row in cursor.fetchall():
@@ -192,10 +194,7 @@ class SemanticMemory:
         return " OR ".join(f'"{term}"' for term in terms if term)
 
     def _search_like(
-        self,
-        query: str,
-        limit: int = 10,
-        tags: list[str] | None = None
+        self, query: str, limit: int = 10, tags: list[str] | None = None
     ) -> list[dict[str, Any]]:
         """
         使用 LIKE 进行回退搜索
@@ -211,12 +210,15 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM memories_semantic
             WHERE content LIKE ? OR summary LIKE ?
             ORDER BY created_at DESC
             LIMIT ?
-        """, (f"%{query}%", f"%{query}%", limit))
+        """,
+            (f"%{query}%", f"%{query}%", limit),
+        )
 
         results = []
         for row in cursor.fetchall():
@@ -250,11 +252,14 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM memories_semantic
             ORDER BY created_at DESC
             LIMIT ?
-        """, (limit,))
+        """,
+            (limit,),
+        )
 
         results = []
         for row in cursor.fetchall():
@@ -290,10 +295,13 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM memories_semantic
             WHERE id = ?
-        """, (memory_id,))
+        """,
+            (memory_id,),
+        )
 
         row = cursor.fetchone()
         if row:
@@ -365,18 +373,24 @@ class SemanticMemory:
 
         tags_json = json.dumps(tags, ensure_ascii=False)
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE memories_semantic
             SET tags = ?
             WHERE id = ?
-        """, (tags_json, memory_id))
+        """,
+            (tags_json, memory_id),
+        )
 
         # 同时更新 FTS 表
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE memories_semantic_fts
             SET tags = ?
             WHERE rowid = (SELECT rowid FROM memories_semantic WHERE id = ?)
-        """, (tags_json, memory_id))
+        """,
+            (tags_json, memory_id),
+        )
 
         conn.commit()
         return cursor.rowcount > 0
