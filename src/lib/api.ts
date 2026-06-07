@@ -6,7 +6,6 @@
 import type { LLMErrorResponse } from './errorMapping';
 import { invoke } from './tauriInvoke';
 
-
 // ==================== 类型定义 ====================
 
 export interface Session {
