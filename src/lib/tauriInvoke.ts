@@ -12,4 +12,4 @@
  * src/shared/api-client/wiki.ts、src/widgets/evolution/*.tsx、
  * src/features/send-message/__tests__/useChat.test.ts 的 mock 字符串。
  */
-export { invoke } from '@tauri-apps/api/core';
+export { invoke } from '@tauri-apps/api';
