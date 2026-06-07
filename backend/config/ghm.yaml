@@ -1,0 +1,179 @@
+# ghm（激波管/风洞计算器）外部计算能力配置
+#
+# 由 backend/main.py:_build_chat_service() 读取并装配 SubprocessComputeAdapter。
+#
+# 详细说明：docs/technical/19-ghm-integration.md
+
+ghm:
+  # 总开关：false 时 ComputePort 不装配，工具不暴露给 LLM
+  enabled: true
+
+  # 单次计算超时（秒）
+  timeout_seconds: 30
+
+  # adapter 类型：subprocess（本期实现） | http（本期空壳，未来实现）
+  adapter: subprocess
+
+  # ---- subprocess 模式：通过 ExecutableResolver 解析 ghm 入口 ----
+  subprocess:
+    # 路径解析按以下优先级（任一命中即用）：
+    # 1) GHM_EXECUTABLE_PATH 环境变量（最高，调试/CI 用）
+    # 2) executable_path: 显式 exe 路径（给打包后的用户）
+    # 3) sidecar_name: Tauri sidecar 解析（**本期预留**，未来桌面分发）
+    # 4) python_module: conda python -m ghm（**当前开发期默认走这一条**）
+    # 5) shutil.which(path_lookup_name): 系统 PATH 兜底
+    #
+    # 任一字段为 null 跳过该级别，全部失败则 ComputePort 报 INTERNAL_ERROR
+
+    executable_path: null
+    # 例 (Windows): "C:/Program Files/ghm/ghm-cli.exe"
+    # 例 (Linux):   "/usr/local/bin/ghm-cli"
+
+    sidecar_name: null
+    # 启用 Tauri sidecar 时：
+    # sidecar_name: "ghm-cli"
+    #   → src-tauri/binaries/ghm-cli-x86_64-pc-windows-msvc.exe（按 target triple）
+
+    python_module:
+      # 开发期回退：用 conda python -m ghm 调用
+      python: "/home/fz/anaconda3/envs/ghm/bin/python"
+      working_dir: "/home/fz/project/ghm"   # 子进程 cwd（确保 import 路径正确）
+      module: "ghm"                          # python -m ghm
+
+    path_lookup_name: "ghm-cli"
+
+  # ---- http 模式：本期不实现，预留升级路径 ----
+  http:
+    base_url: "http://127.0.0.1:8000"
+    timeout_seconds: 30
+    # 未来：sage 启动时拉起 `ghm gui web --host 127.0.0.1 --port <auto>`，
+    # 或要求用户预先启动 ghm web 服务（端口可配置）。
+
+  # ---- 6 个 core 计算 operation 声明（subprocess 与 http 模式共享） ----
+  operations:
+    - name: compute_shock
+      cli_subcommand: ["core", "shock"]
+      http_endpoint: "/api/shock/calculate"
+      description: "理想气体正激波计算 — 输入上游马赫数 mach、比热比 gamma、上游压力 p1 (Pa)、上游温度 t1 (K)，返回激波后的 p2/t2/m2 等参数。"
+      params_schema:
+        type: object
+        required: [mach, gamma, p1, t1]
+        properties:
+          mach:
+            type: number
+            description: "上游马赫数 (无量纲)"
+          gamma:
+            type: number
+            default: 1.4
+            description: "比热比 (无量纲)，空气取 1.4"
+          p1:
+            type: number
+            description: "上游压力 (Pa)"
+          t1:
+            type: number
+            description: "上游温度 (K)"
+
+    - name: compute_equilibrium
+      cli_subcommand: ["core", "equilibrium"]
+      http_endpoint: "/api/equilibrium/calculate"
+      description: "平衡气体性质计算 — 输入物种 species（目前仅 'air'）、压力 p (Pa)、温度 t (K)，返回平衡态下的密度、声速、组分等。"
+      params_schema:
+        type: object
+        required: [species, p, t]
+        properties:
+          species:
+            type: string
+            enum: ["air"]
+            description: "气体种类（目前仅支持 air）"
+          p:
+            type: number
+            description: "压力 (Pa)"
+          t:
+            type: number
+            description: "温度 (K)"
+
+    - name: compute_heatflux
+      cli_subcommand: ["core", "heatflux"]
+      http_endpoint: "/api/heatflux/calculate"
+      description: "驻点热流密度计算（Fay-Riddell 简化版）— 输入密度 rho (kg/m^3)、速度 u (m/s)、温度 t (K)、模型名 model，返回驻点热流 q (W/m^2)。"
+      params_schema:
+        type: object
+        required: [rho, u, t]
+        properties:
+          rho:
+            type: number
+            description: "气体密度 (kg/m^3)"
+          u:
+            type: number
+            description: "速度 (m/s)"
+          t:
+            type: number
+            description: "温度 (K)"
+          model:
+            type: string
+            default: "fay_riddell"
+            description: "热流模型名称（默认 fay_riddell）"
+
+    - name: compute_nozzle
+      cli_subcommand: ["core", "nozzle"]
+      http_endpoint: "/api/nozzle/calculate"
+      description: "准一维等熵喷管出口面积比求解（二分法）— 输入比热比 gamma、总压 p0 (Pa)、总温 t0 (K)、面积比 area_ratio，返回该截面马赫数 mach/压强 p/温度 t 等。注：ghm 当前实现选超音速分支；亚音速分支未实现。"
+      params_schema:
+        type: object
+        required: [gamma, p0, t0, area_ratio]
+        properties:
+          gamma:
+            type: number
+            default: 1.4
+            description: "比热比"
+          p0:
+            type: number
+            description: "总压 (Pa)"
+          t0:
+            type: number
+            description: "总温 (K)"
+          area_ratio:
+            type: number
+            description: "出口-喉部面积比 A/A* (无量纲)"
+
+    - name: compute_plasma
+      cli_subcommand: ["core", "plasma", "empirical"]
+      http_endpoint: "/api/plasma/empirical"
+      description: "等离子体频率经验公式 nu = 5.82e12 * P / sqrt(T) — 输入压力 p_atm (atm)、温度 t (K)，返回等离子体频率 nu。"
+      params_schema:
+        type: object
+        required: [p_atm, t]
+        properties:
+          p_atm:
+            type: number
+            description: "压力 (atm)"
+          t:
+            type: number
+            description: "温度 (K)"
+
+    - name: compute_eqcomposition
+      cli_subcommand: ["core", "eqcomposition"]
+      http_endpoint: "/api/eqcomposition/calculate"
+      description: "平衡组分计算 — 输入气体类型 gas (1-7, 1=AIR/2=N2/3=N2+O2/4=N2+NO/5=H2/6=He/7=H2+N2)、模式 mode (1=T+Rho / 2=P+T)、温度 t (K)；mode=1 还需 rho；mode=2 还需 p。返回各组分摩尔分数。"
+      params_schema:
+        type: object
+        required: [gas, mode, t]
+        properties:
+          gas:
+            type: integer
+            minimum: 1
+            maximum: 7
+            description: "气体编号 (1=AIR, 2=N2, 3=N2+O2, 4=N2+NO, 5=H2, 6=He, 7=H2+N2)"
+          mode:
+            type: integer
+            enum: [1, 2]
+            description: "1=输入 T+Rho（需 rho）；2=输入 P+T（需 p）"
+          t:
+            type: number
+            description: "温度 (K)"
+          rho:
+            type: number
+            description: "密度 (kg/m^3)，mode=1 时必填"
+          p:
+            type: number
+            description: "压力 (Pa)，mode=2 时必填"
