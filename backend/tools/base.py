@@ -2,6 +2,8 @@
 工具系统基类
 定义工具的基础接口和数据结构
 """
+
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any

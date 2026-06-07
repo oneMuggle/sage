@@ -3,6 +3,7 @@ Sage 日志配置模块
 使用 Python 标准库 logging，支持文件和控制台输出
 """
 
+from __future__ import annotations
 import logging
 import sys
 from datetime import datetime

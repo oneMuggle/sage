@@ -3,6 +3,7 @@ Memory Consolidation Pipeline - 记忆压缩管道
 负责工作记忆到情景记忆的自动摘要和压缩
 """
 
+from __future__ import annotations
 import logging
 from typing import Any
 

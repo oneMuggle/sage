@@ -1,5 +1,14 @@
 # backend/pyproject.toml
 # 仅用于 import-linter / 未来集中化配置（不影响 requirements.txt）
+#
+# release/win7 分支：requires-python 锁定 3.8.x
+# main 分支：项目无 pyproject [project] 表，CI 实际跑 3.11
+
+[project]
+name = "sage-backend"
+version = "0.1.0"
+requires-python = ">=3.8,<3.9"
+
 [tool.importlinter]
 root_package = "backend"
 

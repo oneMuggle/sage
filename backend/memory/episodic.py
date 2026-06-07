@@ -2,6 +2,8 @@
 Episodic Memory - 情景记忆模块
 基于 SQLite 存储对话历史和事件序列
 """
+
+from __future__ import annotations
 import json
 import time
 import uuid

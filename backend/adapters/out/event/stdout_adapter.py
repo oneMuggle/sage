@@ -1,5 +1,6 @@
 """Stdout event adapter — 开发用，把事件打到控制台。"""
 
+from __future__ import annotations
 import json
 from typing import Any
 

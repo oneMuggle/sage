@@ -2,6 +2,8 @@
 进化任务调度器
 基于 time.sleep 的简单定时调度实现，兼容 Win7
 """
+
+from __future__ import annotations
 import logging
 import threading
 import time

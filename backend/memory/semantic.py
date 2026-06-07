@@ -3,6 +3,8 @@ Semantic Memory - 语义记忆模块
 使用 SQLite FTS5 全文搜索存储知识和概念
 注意：暂不使用 ChromaDB，保持简单
 """
+
+from __future__ import annotations
 import json
 import time
 import uuid
