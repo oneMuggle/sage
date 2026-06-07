@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 
-import { invoke } from '../../../lib/tauriInvoke';
+import { invoke } from '../../lib/tauriInvoke';
 
 // 任务状态类型
 interface TaskStatus {
