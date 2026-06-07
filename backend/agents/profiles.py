@@ -11,6 +11,7 @@ from typing import Any
 @dataclass
 class AgentModelConfig:
     """Agent 使用的 LLM 模型配置"""
+
     model: str = "gpt-3.5-turbo"
     temperature: float = 0.7
     max_tokens: int = 4096
@@ -19,6 +20,7 @@ class AgentModelConfig:
 @dataclass
 class AgentProfile:
     """Agent 角色档案"""
+
     id: str
     name: str
     role: str  # "coordinator" | "researcher" | "coder" | "memory_manager"
