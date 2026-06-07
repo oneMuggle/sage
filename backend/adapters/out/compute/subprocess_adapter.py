@@ -133,9 +133,7 @@ class SubprocessComputeAdapter:
         # 拼 argv:resolver 前缀 + subcommand + params + --json
         argv = self._build_argv(resolved, op, req.params)
 
-        timeout_s = (
-            req.timeout_ms / 1000 if req.timeout_ms is not None else self._timeout_s
-        )
+        timeout_s = req.timeout_ms / 1000 if req.timeout_ms is not None else self._timeout_s
 
         start = monotonic()
         try:
@@ -308,7 +306,7 @@ def _parse_failure(
     else:
         err_type = ComputeErrorType.PROCESS_FAILED
 
-    message = (stderr.strip() or stdout.strip() or f"exit code {return_code}")
+    message = stderr.strip() or stdout.strip() or f"exit code {return_code}"
     return ComputeResult(
         success=False,
         raw_stdout=stdout,

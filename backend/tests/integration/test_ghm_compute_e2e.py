@@ -129,9 +129,7 @@ async def ghm_e2e_client():
     saved_override = app.dependency_overrides.get(get_chat_service)
     app.dependency_overrides[get_chat_service] = lambda: fake_svc
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac, fake_svc
     finally:
         if saved_override is not None:

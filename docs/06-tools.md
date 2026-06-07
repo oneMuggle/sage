@@ -860,4 +860,40 @@ class ToolLogger:
 
 ---
 
+## ghm 外部计算工具（PG3.x）
+
+> 通过 `ComputePort` 桥接 ghm（激波管/风洞计算器）CLI，把 6 个物理计算包装为 LLM tool。
+> 详细架构：[`technical/19-ghm-integration.md`](./technical/19-ghm-integration.md)。
+
+启用条件：`backend/config/ghm.yaml: ghm.enabled = true`。关闭时这些工具不会出现在 LLM 工具列表，对现有行为零影响。
+
+### 已接入的 6 个 compute 工具
+
+| 工具名 | 物理意义 | 必填参数 |
+|---|---|---|
+| `compute_shock` | 理想气体正激波 | mach / gamma / p1 / t1 |
+| `compute_equilibrium` | 平衡气体性质 | species / p / t |
+| `compute_heatflux` | 驻点热流（Fay-Riddell）| rho / u / t |
+| `compute_nozzle` | 准一维等熵喷管面积比 | gamma / p0 / t0 / area_ratio |
+| `compute_plasma` | 等离子体频率（经验公式）| p_atm / t |
+| `compute_eqcomposition` | 平衡组分 | gas / mode / t |
+
+### 路径解析（ExecutableResolver）
+
+ghm 可执行文件按优先级查找：
+
+1. 环境变量 `GHM_EXECUTABLE_PATH`
+2. yaml `subprocess.executable_path`（独立 exe 路径）
+3. yaml `subprocess.sidecar_name`（Tauri sidecar，**本期预留**）
+4. yaml `subprocess.python_module`（开发期 conda `python -m ghm`）
+5. yaml `subprocess.path_lookup_name`（系统 PATH 兜底）
+
+任一字段为 `null` 时跳过。全部失败 → `ComputePort` 返回 `INTERNAL_ERROR`，工具自动不注册。
+
+### HTTP 升级（预留）
+
+`HttpComputeAdapter` 是空壳，签名已定但未实现（`execute` 抛 `NotImplementedError`）。未来当 subprocess 冷启动延迟（~600ms）成为瓶颈时，可改 yaml `adapter: http` 并补完该 adapter（约 200 行），sage 会通过 httpx 调 `ghm gui web` 的 HTTP 服务。
+
+---
+
 _文档版本: v1.0_

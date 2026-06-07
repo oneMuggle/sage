@@ -179,7 +179,7 @@ def test_sidecar_field_skipped_when_not_implemented(
     """sidecar_name 当前实现是 no-op，回退到 python_module 命中。"""
     resolver = ExecutableResolver(
         config={
-            "sidecar_name": "ghm-cli",   # 当前实现仅记录到 tried，不解析
+            "sidecar_name": "ghm-cli",  # 当前实现仅记录到 tried，不解析
             "python_module": {"python": str(fake_exe), "module": "ghm"},
         },
     )

@@ -59,9 +59,7 @@ async def test_execute_raises_not_implemented() -> None:
     adapter = HttpComputeAdapter(_make_config())
 
     with pytest.raises(NotImplementedError) as exc_info:
-        await adapter.execute(
-            ComputeRequest(operation="compute_shock", params={"mach": 6.5})
-        )
+        await adapter.execute(ComputeRequest(operation="compute_shock", params={"mach": 6.5}))
 
     msg = str(exc_info.value)
     assert "adapter=subprocess" in msg

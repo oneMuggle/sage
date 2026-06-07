@@ -142,9 +142,7 @@ async def test_execute_routes_compute_tool() -> None:
 @pytest.mark.asyncio()
 async def test_execute_routes_inner_tool() -> None:
     """非 compute 工具应委托给 inner.execute。"""
-    compute = MockComputeAdapter(
-        specs=[ComputeSpec(name="compute_shock", description="d")]
-    )
+    compute = MockComputeAdapter(specs=[ComputeSpec(name="compute_shock", description="d")])
     inner = _FakeInnerTool(specs=[ToolSpec(name="terminal", description="d")])
     adapter = ComputeToolAdapter(compute=compute, inner=inner)
 
