@@ -46,11 +46,31 @@
 
 ## 发布
 
-本分支通过 GitHub Actions `release.yml` 的 `release-win7` job 产出预编译安装包：
+本分支通过 GitHub Actions `release-win7.yml`（独立 workflow，不在 `release.yml` 内）产出预编译安装包：
 - `sage_<version>_x64-setup.exe`（Tauri 1.6 NSIS 安装包，~140MB，含 WebView2 v109 离线安装器）
 - `sage_<version>_x64.msi`（Tauri 1.6 MSI 安装包，~140MB，含 WebView2 v109 离线安装器）
 
+触发方式：
+- 自动：push tag `v*.*.*-win7`（如 `v0.1.0-win7`）
+- 手动：Actions UI → "Release Build (Windows 7)" → Run workflow
+
+注意：tag `v*.*.*-win7` 不会触发 main 的 `release.yml`（已加 if 守卫 `!endsWith(github.ref, '-win7')`）。
+
 **完全离线内网部署**：用户双击 `.msi` 或 `.exe`，Tauri 自带的 v109 离线安装器自动部署 WebView2，无需任何网络连接。
+
+## CI 强门禁
+
+本分支通过 `.github/workflows/ci-win7.yml`（独立 workflow）做 3 段强门禁：
+
+| Job | 内容 | 强门禁 |
+|---|---|---|
+| `backend-py38` | Python 3.8 + coverage ≥ 80% | ✅ |
+| `frontend` | Node 20 LTS + build + lint + test | ✅ |
+| `tauri-win7-build` | self-hosted [windows-7] runner + Tauri 1.6 build + sage.exe 10s 冒烟 | ✅ |
+
+`all-green` 任务：3 个 job 全过才算通过。
+
+注意：main 的 `ci.yml` 不会在本分支触发（它只在 `[main, develop]` 分支跑）；本分支的 `ci-win7.yml` 也不会在 main 跑。
 
 ---
 
