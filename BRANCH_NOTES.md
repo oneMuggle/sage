@@ -31,7 +31,7 @@
 ## 本分支的特殊性
 
 1. **CI 在 self-hosted Windows 7 runner 上跑**（label `windows-7`），不在 GH-hosted。
-2. **NSIS 安装器内嵌 WebView2 v109 离线包**（~127MB），首次安装时自动静默部署。
+2. **WebView2 完全离线安装**：`tauri.conf.json` 设 `webviewInstallMode: "offlineInstaller"`。Tauri 1.6 在 `tauri build` 时从微软官方下载 `MicrosoftEdgeWebView2RuntimeInstallerX64.exe`（~127MB，官方签名）并 embed 到 MSI/NSIS。**Win7 上自动 fallback 到 v109**（最后兼容版本，微软官方机制）。用户完全离线可用，无需任何手动步骤。
 3. **`tauri = { features = ["windows7-compat"] }`**：使用旧版 WebView2 SDK (webview2-com) 而非新版 (webview2)。
 4. **Python 3.8 兼容**：15 个文件加 `from __future__ import annotations`，避免 PEP 604/585 在 3.8 上解析失败。
 5. **前端 shim** `src/lib/tauriInvoke.ts` 指向 `@tauri-apps/api/tauri`（1.6 路径），main 上指向 `core`（2.x 路径）。
@@ -47,8 +47,10 @@
 ## 发布
 
 本分支通过 GitHub Actions `release.yml` 的 `release-win7` job 产出预编译安装包：
-- `sage_<version>_x64-setup.exe`（NSIS 安装包，~140MB，含 WebView2）
-- `sage_<version>_x64-portable.zip`（便携版，无需安装）
+- `sage_<version>_x64-setup.exe`（Tauri 1.6 NSIS 安装包，~140MB，含 WebView2 v109 离线安装器）
+- `sage_<version>_x64.msi`（Tauri 1.6 MSI 安装包，~140MB，含 WebView2 v109 离线安装器）
+
+**完全离线内网部署**：用户双击 `.msi` 或 `.exe`，Tauri 自带的 v109 离线安装器自动部署 WebView2，无需任何网络连接。
 
 ---
 

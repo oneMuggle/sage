@@ -52,7 +52,7 @@
         "digestAlgorithm": "sha256",
         "timestampUrl": "",
         "webviewInstallMode": {
-          "type": "skip"
+          "type": "offlineInstaller"
         },
         "nsis": {
           "displayLanguageSelector": false,

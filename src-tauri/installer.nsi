@@ -7,9 +7,11 @@
 ; 前置条件:
 ;   - target/x86_64-pc-windows-msvc/release/ 下已有 cargo build --release 产物
 ;   - ../dist/ 下已有前端构建产物 (npm run build)
-;   - resources/WebView2Runtime_109.exe 已存在 (Win7 兼容的 v109 离线安装包)
+;   - 注意: WebView2 安装由 Tauri 1.6 的 webviewInstallMode=offlineInstaller 自动处理
+;     （不再需要本脚本手工安装 WebView2 v109）
 ;
-; 安装包大小估算: 应用 (~10MB) + WebView2 v109 (~127MB) ≈ ~140MB
+; 安装包大小估算: 应用 (~10MB) + WebView2 standalone (~127MB) ≈ ~140MB
+;   (WebView2 由 `tauri build` 从微软官方下载并 embed 到 MSI/NSIS)
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
@@ -65,51 +67,9 @@ Section "Sage"
     WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd
 
-Section "WebView2 Runtime (v109, Win7 兼容)"
-    Call InstallWebView2
-SectionEnd
-
 Section "Uninstall"
     RMDir /r "$INSTDIR"
     Delete "$SMPROGRAMS\Sage.lnk"
     Delete "$DESKTOP\Sage.lnk"
     DeleteRegKey HKCU "${PRODUCT_UNINST_KEY}"
 SectionEnd
-
-Function InstallWebView2
-    ; 检查 WebView2 是否已安装
-    ClearErrors
-    ReadRegStr $0 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
-    ${If} $0 != ""
-        DetailPrint "WebView2 运行时已安装 (版本: $0)"
-        Return
-    ${EndIf}
-
-    ClearErrors
-    ReadRegStr $0 HKLM "SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
-    ${If} $0 != ""
-        DetailPrint "WebView2 运行时已安装 (版本: $0)"
-        Return
-    ${EndIf}
-
-    ; WebView2 未安装，从资源目录提取并安装
-    DetailPrint "正在安装 WebView2 运行时 (v109, Win7 兼容)..."
-
-    SetOutPath "$TEMP\SageWebView2"
-    File "resources\WebView2Runtime_109.exe"
-
-    ExecWait '"$TEMP\SageWebView2\WebView2Runtime_109.exe" /silent /install' $WebView2ExitCode
-
-    RMDir /r "$TEMP\SageWebView2"
-    SetOutPath "$INSTDIR"
-
-    ${If} $WebView2ExitCode != 0
-        DetailPrint "WebView2 安装退出，代码: $WebView2ExitCode"
-        MessageBox MB_ICONEXCLAMATION|MB_OK \
-            "WebView2 运行时安装失败 (错误代码: $WebView2ExitCode)。$\n$\n\
-            此应用需要 Microsoft WebView2 运行时才能运行。$\n\
-            请联系系统管理员手动安装 WebView2 v109。" /SD IDOK
-    ${Else}
-        DetailPrint "WebView2 运行时安装成功"
-    ${EndIf}
-FunctionEnd
