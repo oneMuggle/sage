@@ -21,6 +21,17 @@
 11. [目录结构](./11-structure.md)
 12. [实施计划](./12-plan.md)
 
+## 🪟 双轨分支（main + release/win7）
+
+Sage 维护两条独立分支：
+
+| 分支 | 目标平台 | 文档 |
+|---|---|---|
+| `main` | Win10+ / macOS / Linux | 本目录所有章节 |
+| `release/win7` | **Windows 7 SP1 x64**（完全离线部署）| [`../../BRANCH_NOTES.md`](../../BRANCH_NOTES.md) |
+
+设计 spec §2.3 "桌面：Tauri 2 + Win7 全兼容" 的实现已迁出 main，详见 [`superpowers/specs/2026-06-05-sage-quality-optimization-design.md`](./superpowers/specs/2026-06-05-sage-quality-optimization-design.md) §2.3 的实现状态注脚。
+
 ### 技术专题
 
 - [15. 质量门禁](./technical/15-quality-gates.md) — CI / pre-commit / pre-push / 工具链版本
@@ -46,7 +57,7 @@
 
 | 模块     | Chatbox 实现     | Sage 实现 |
 | -------- | ---------------- | --------- |
-| 桌面框架 | Electron         | Tauri 1.x |
+| 桌面框架 | Electron         | Tauri 2.x（main）/ Tauri 1.6（release/win7）|
 | 前端框架 | React 18         | React 18  |
 | 构建工具 | electron-vite    | Vite      |
 | 状态管理 | zustand          | zustand   |

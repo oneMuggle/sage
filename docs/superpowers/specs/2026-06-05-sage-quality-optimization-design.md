@@ -125,6 +125,10 @@ src/
   - `Cargo.toml` → `tauri = { features = ["windows7-compat"] }`
   - Win7 x86 workaround（参考 issue #11381）：rust 1.77.2 + 特定依赖版本，CI 矩阵加 win7-x86
 
+> **实现状态（2026-06-07 更新）**：Win7 兼容性已通过 **`release/win7`** 长期维护分支实现（不再合并到 main）。原因是 Tauri 2 已实质放弃 Win7 兼容（强制 WebView2，WebView2 仅支持 Win8.1+）。详见：
+> - [`release/win7` 分支的 BRANCH_NOTES.md](../../../BRANCH_NOTES.md)
+> - 关键决策：`webviewInstallMode: "offlineInstaller"` 取代原 `embedBootstrapper`（满足"完全离线"部署需求），由 Tauri 1.6 build 时从微软下载 WebView2 standalone installer（~127MB，官方签名）并 embed；Win7 上微软自动 fallback 到 v109。
+
 ### 2.4 总体时间线
 
 ```
