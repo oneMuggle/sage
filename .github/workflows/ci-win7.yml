@@ -124,11 +124,13 @@ jobs:
           flags: frontend-win7
           fail_ci_if_error: false
 
-  # ========== Tauri 1.6 build on self-hosted Win7 runner ==========
-  # 必须有 runner label: windows-7
+  # ========== Tauri 1.6 cross-build (interim mode) ==========
+  # 现状：无 Win7 self-hosted runner，使用 GH-hosted windows-latest (Server 2022) cross-build
+  # 跳过 sage.exe 冒烟测试（启动验证需在真实 Win7 物理机人工执行）
+  # 详见 BRANCH_NOTES.md §"本分支的特殊性 §1" + Phase 4 roadmap
   tauri-win7-build:
-    name: Tauri 1.6 build (Windows 7 self-hosted)
-    runs-on: [self-hosted, windows-7]
+    name: Tauri 1.6 build (cross-build, Win7 冒烟需人工)
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -140,6 +142,7 @@ jobs:
           cache: 'npm'
 
       # Rust 1.77.2 是 Win7 x86 workaround（issue #11381 社区方案）
+      # cross-build 在 Server 2022 上进行，target 需 x86_64-pc-windows-msvc
       - name: Install Rust 1.77.2
         uses: dtolnay/rust-toolchain@1.77.2
         with:
@@ -162,6 +165,9 @@ jobs:
       #   - webviewInstallMode=offlineInstaller: Tauri 自动从微软下载 WebView2 standalone
       #     installer (~127MB) 并 embed 到 MSI/NSIS（仅 build 时联网，运行时完全离线）
       #   - targets: msi + nsis 给用户两种选择
+      # 注：此 build 在 Server 2022 上进行，编译产物**配置**为 Win7 兼容
+      #   （tauri=1.6 + windows7-compat + WebView2 v109 fallback）
+      #   但 Server 2022 本身不验证 Win7 启动行为，需 Win7 物理机人工测试
       - name: Build Tauri (offline WebView2)
         shell: pwsh
         run: npx tauri build --bundles msi,nsis
@@ -177,18 +183,24 @@ jobs:
             exit 1
           }
 
-      - name: Smoke test launch (10 sec, then kill)
+      # 跳过 sage.exe 启动冒烟的原因：
+      #   - WebView2 v109 fallback 行为只在 Win7 上触发
+      #   - Server 2022 上无法验证 Win7 特定行为（KERNEL32.dll patch、TLS 1.2、UAC、DPI）
+      #   - Win7 启动验证是 manual step：下载 artifact 到 Win7 物理机双击运行
+      - name: Print manual Win7 verification instructions
+        if: success()
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath "src-tauri\target\release\sage.exe" -PassThru
-          Start-Sleep -Seconds 10
-          if (-not $proc.HasExited) {
-            Write-Host "sage.exe still running after 10s — Win7 launch successful"
-            Stop-Process -Id $proc.Id -Force
-          } else {
-            Write-Error "sage.exe crashed within 10s (exit code: $($proc.ExitCode))"
-            exit 1
-          }
+          Write-Host "============================================"
+          Write-Host "  Win7 实机验证（手动步骤）"
+          Write-Host "============================================"
+          Write-Host "CI 仅完成 cross-build。Win7 启动验证需在物理机执行："
+          Write-Host "  1. 下载 artifact: sage-win7-installer"
+          Write-Host "  2. 拷贝到 Windows 7 SP1 x64 物理机"
+          Write-Host "  3. 双击 .msi 或 .exe 验证安装"
+          Write-Host "  4. 启动 sage.exe 验证主窗口出现"
+          Write-Host "  5. 确认 WebView2 v109 自动安装（MSI/EXE 内嵌）"
+          Write-Host "============================================"
 
       - name: Upload Win7 installer artifacts
         uses: actions/upload-artifact@v4

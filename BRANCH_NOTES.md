@@ -69,7 +69,12 @@
 
 ## 本分支的特殊性
 
-1. **CI 在 self-hosted Windows 7 runner 上跑**（label `windows-7`），不在 GH-hosted。
+1. **CI 用 GH-hosted `windows-latest` (Server 2022) 做 cross-build**（**interim 模式**——Win7 self-hosted runner 当前不可用）：
+   - `ci-win7.yml` 和 `release-win7.yml` 都用 `runs-on: windows-latest`
+   - cross-build 编译产物配置为 Win7 兼容（tauri=1.6 + windows7-compat + WebView2 v109 fallback）
+   - **不**做 `sage.exe` 启动冒烟（WebView2 v109 fallback 行为只在真 Win7 上触发，Server 2022 上无法验证）
+   - **Win7 启动验证 = 人工步骤**：维护者下载 artifact 拷贝到 Win7 物理机双击运行
+   - 未来：拿到 Win7 物理机/VM 后，把 `runs-on` 改回 `[self-hosted, windows-7]` + 恢复 smoke test
 2. **WebView2 完全离线安装**：`tauri.conf.json` 设 `webviewInstallMode: "offlineInstaller"`。Tauri 1.6 在 `tauri build` 时从微软官方下载 `MicrosoftEdgeWebView2RuntimeInstallerX64.exe`（~127MB，官方签名）并 embed 到 MSI/NSIS。**Win7 上自动 fallback 到 v109**（最后兼容版本，微软官方机制）。用户完全离线可用，无需任何手动步骤。
 3. **`tauri = { features = ["windows7-compat"] }`**：使用旧版 WebView2 SDK (webview2-com) 而非新版 (webview2)。
 4. **Python 3.8 兼容**：15 个文件加 `from __future__ import annotations`，避免 PEP 604/585 在 3.8 上解析失败。
@@ -105,11 +110,24 @@
 |---|---|---|
 | `backend-py38` | Python 3.8 + coverage ≥ 80% | ✅ |
 | `frontend` | Node 20 LTS + build + lint + test | ✅ |
-| `tauri-win7-build` | self-hosted [windows-7] runner + Tauri 1.6 build + sage.exe 10s 冒烟 | ✅ |
+| `tauri-win7-build` | GH-hosted `windows-latest` (Server 2022) cross-build + Tauri 1.6 + 跳过 sage.exe 冒烟（**Win7 实机验证为 manual step**）| ✅ |
 
 `all-green` 任务：3 个 job 全过才算通过。
 
 注意：main 的 `ci.yml` 不会在本分支触发（它只在 `[main, develop]` 分支跑）；本分支的 `ci-win7.yml` 也不会在 main 跑。
+
+**Interim 模式下的 Win7 验证流程**：
+
+1. CI 跑通 `ci-win7.yml`（backend-py38 + frontend + cross-build 都 success）
+2. 维护者下载 artifact `sage-win7-installer`（含 .msi + .exe）
+3. 拷贝到 **Windows 7 SP1 x64 物理机或 VM**（关键步骤）
+4. 双击 `.msi` 或 `.exe`，验证：
+   - WebView2 v109 自动 fallback 安装
+   - sage 主窗口出现
+   - 基本聊天功能可用
+5. 在 release/win7 分支的 issue/PR 中报告验证结果
+
+未来拿到 Win7 物理机/VM 后，把 `runs-on: windows-latest` 改回 `runs-on: [self-hosted, windows-7]` 即可恢复完整自动化。
 
 ---
 

@@ -6,7 +6,8 @@
 # 与 main 的 release.yml 区别：
 #   - main: Tauri 2.x / Windows 10+ / macOS / Linux
 #   - win7: Tauri 1.6 + webviewInstallMode=offlineInstaller / Windows 7 SP1 x64
-#   - 走 self-hosted windows-7 runner（**不是** GH-hosted）
+#   - 走 GH-hosted windows-latest (Server 2022) 做 cross-build（interim 模式）
+#   - 实际 Win7 启动验证由维护者在物理机人工执行（详见 BRANCH_NOTES.md）
 #   - build 完不上传 GH Release（手动 workflow_dispatch 模式），仅上传 artifacts
 #
 # 为什么不自动发 Release：避免和 main 的 release.yml 在同一 tag 上冲突。
@@ -31,10 +32,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ========== Windows 7 专用：self-hosted runner 上构建 ==========
+  # ========== Windows 7 专用：GH-hosted windows-latest (Server 2022) cross-build ==========
+  # 当前 interim 模式：Win7 self-hosted runner 不可用，使用 cross-build
+  # 产物为 Win7 兼容配置（tauri=1.6 + windows7-compat + WebView2 v109 fallback）
+  # Win7 实机验证由维护者在物理机人工执行
   build-windows-win7:
-    name: Build Windows 7 Installer (self-hosted)
-    runs-on: [self-hosted, windows-7]
+    name: Build Windows 7 Installer (cross-build, 需人工 Win7 验证)
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -118,11 +122,17 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "==========================================="
-          Write-Host "  Sage Windows 7 Build Successful"
+          Write-Host "  Sage Windows 7 Build Successful (cross-build)"
           Write-Host "==========================================="
           Write-Host "Artifacts uploaded as: sage-win7-installer"
           Write-Host ""
+          Write-Host "Build 在 windows-latest (Server 2022) 上 cross-build 完成"
+          Write-Host "产物配置为 Win7 兼容（tauri 1.6 + windows7-compat + WebView2 v109）"
+          Write-Host ""
           Write-Host "下一步："
-          Write-Host "  1. 在 GitHub Actions 页面下载 artifact"
-          Write-Host "  2. 手动创建 GH Release（tag: v<version>-win7）"
-          Write-Host "  3. 上传 .msi 和 .exe 作为 Release assets"
+          Write-Host "  1. 在 GitHub Actions 页面下载 artifact: sage-win7-installer"
+          Write-Host "  2. （关键）拷贝到 Windows 7 SP1 x64 物理机双击 .msi/.exe 验证"
+          Write-Host "     - 验证 WebView2 v109 自动 fallback"
+          Write-Host "     - 验证主窗口出现 + 基本功能可用"
+          Write-Host "  3. 人工验证通过后，手动创建 GH Release（tag: v<version>-win7）"
+          Write-Host "  4. 上传 .msi 和 .exe 作为 Release assets"
