@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './tauriInvoke';
 import { create } from 'zustand';
 
 // Re-export API modules from api.ts for convenience

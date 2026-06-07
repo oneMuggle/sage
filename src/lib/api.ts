@@ -3,7 +3,7 @@
  * 包含错误处理和重试逻辑
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './tauriInvoke';
 
 import type { LLMErrorResponse } from './errorMapping';
 
