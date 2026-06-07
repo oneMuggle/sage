@@ -23,11 +23,54 @@ from backend.data.database import Database
 logger = logging.getLogger(__name__)
 
 
+def _build_compute_adapter():
+    """按 ``backend/config/ghm.yaml`` 装配 ComputePort。
+
+    返回 ``None`` 时表示:
+
+    - yaml 文件不存在(向后兼容,旧部署无 ghm 集成)
+    - ``ghm.enabled = false`` (显式关闭)
+
+    yaml 加载/解析异常会被记录并降级为 ``None``,不阻塞主流程。
+    """
+    from pathlib import Path
+
+    import yaml
+
+    cfg_path = Path("backend/config/ghm.yaml")
+    if not cfg_path.is_file():
+        return None
+
+    try:
+        raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+        ghm_cfg = raw.get("ghm") or {}
+    except (OSError, yaml.YAMLError) as exc:
+        logger.warning("ghm.yaml 加载失败，跳过 ComputePort 装配: %s", exc)
+        return None
+
+    if not ghm_cfg.get("enabled", False):
+        return None
+
+    adapter_type = ghm_cfg.get("adapter", "subprocess")
+    if adapter_type == "subprocess":
+        from backend.adapters.out.compute.subprocess_adapter import (
+            SubprocessComputeAdapter,
+        )
+        return SubprocessComputeAdapter(ghm_cfg)
+    if adapter_type == "http":
+        from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
+        logger.warning(
+            "ghm.adapter=http: HttpComputeAdapter 仍是空壳,运行时调用会抛 NotImplementedError"
+        )
+        return HttpComputeAdapter(ghm_cfg)
+    raise ValueError(f"未知的 ghm.adapter 类型: {adapter_type!r}")
+
+
 def _build_chat_service() -> ChatService:
     """工厂：装配 6 个 ports（5 个生产 adapter + 1 个暂未实现 placeholder）。
 
     - llm:     HttpxLLMAdapter（包装既有 LLMClient）
-    - tools:   InprocToolAdapter（包装 ToolRegistry）
+    - tools:   InprocToolAdapter（如启用 ghm，则用 ComputeToolAdapter 包装合并）
     - skills:  None（SkillPort 协议未实现；P3 接入）
     - storage: SqliteStorageAdapter（包装既有 SessionRepository / MessageRepository）
     - metrics: PrometheusMetricAdapter
@@ -35,9 +78,21 @@ def _build_chat_service() -> ChatService:
 
     装配在每次依赖注入时被调用——单例化由调用方（如 ``app.state``）自行管理。
     """
+    inner_tools = InprocToolAdapter()
+    compute = _build_compute_adapter()
+    if compute is not None:
+        from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
+        tools = ComputeToolAdapter(compute=compute, inner=inner_tools)
+        logger.info(
+            "ComputeToolAdapter 已装配,注册 %d 个计算工具",
+            len(compute.list_operations()),
+        )
+    else:
+        tools = inner_tools
+
     return ChatService(
         llm=HttpxLLMAdapter(),
-        tools=InprocToolAdapter(),
+        tools=tools,
         skills=None,  # SkillPort 协议未实现；P3 接入
         storage=SqliteStorageAdapter(),
         metrics=PrometheusMetricAdapter(),
