@@ -15,9 +15,11 @@ on:
         default: '0.1.0'
 
 jobs:
-  # Windows NSIS 安装包构建
+  # Windows NSIS 安装包构建（main 分支用，Win7 tag 由 release-win7.yml 处理）
+  # 跳过 v*.*.*-win7 tag（由 release-win7.yml 接管）
   build-windows:
     name: Build Windows Installer
+    if: "!endsWith(github.ref, '-win7')"
     runs-on: windows-latest
 
     steps:
@@ -181,6 +183,7 @@ jobs:
   release:
     name: Create Release
     needs: build-windows
+    if: "!endsWith(github.ref, '-win7')"
     runs-on: ubuntu-latest
 
     steps:
