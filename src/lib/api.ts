@@ -3,9 +3,9 @@
  * 包含错误处理和重试逻辑
  */
 
+import type { LLMErrorResponse } from './errorMapping';
 import { invoke } from './tauriInvoke';
 
-import type { LLMErrorResponse } from './errorMapping';
 
 // ==================== 类型定义 ====================
 

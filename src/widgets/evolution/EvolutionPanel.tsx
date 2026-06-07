@@ -2,8 +2,9 @@
  * EvolutionPanel - 进化状态面板
  * 显示进化系统状态、任务调度信息和手动触发按钮
  */
-import { invoke } from '../../../lib/tauriInvoke';
 import React, { useEffect, useState } from 'react';
+
+import { invoke } from '../../lib/tauriInvoke';
 
 // 任务状态类型
 interface TaskStatus {
