@@ -203,16 +203,16 @@
 
 | 任务           | 负责 | 状态 | 说明           |
 | -------------- | ---- | ---- | -------------- |
-| T5.6 Win7 测试 | 测试 | ⬜   | 兼容性测试     |
-| T5.7 WebView2  | 前端 | ⬜   | 引导安装       |
+| T5.6 Win7 测试 | 测试 | ✅   | 在 `release/win7` 分支 + self-hosted Win7 runner 上 CI 验证（见 `.github/workflows/ci-win7.yml`）|
+| T5.7 WebView2  | 前端 | ✅   | `webviewInstallMode: "offlineInstaller"` 自动 embed v109 离线安装器，Win7 上微软官方 fallback |
 | T5.8 图标制作  | 设计 | ⬜   | 应用图标       |
-| T5.9 安装包    | 前端 | ⬜   | NSIS 安装包    |
+| T5.9 安装包    | 前端 | ✅   | NSIS + MSI 双轨，self-hosted Win7 runner 产出（见 `.github/workflows/release-win7.yml`）|
 | T5.10 文档     | 文档 | ⬜   | 用户文档       |
 | T5.11 发布     | 全栈 | ⬜   | GitHub Release |
 
 ### 交付物
 
-- [ ] Windows 安装包 (.exe)
+- [x] Windows 安装包（main: .msi + .exe via Tauri 2；`release/win7`: .msi + .exe via Tauri 1.6 + offlineInstaller 嵌入 WebView2 v109）
 - [ ] 用户文档
 - [ ] GitHub Release
 
@@ -279,9 +279,9 @@
 
 ### 12.10.3 兼容性
 
-- [ ] Windows 7 SP1
-- [ ] Windows 10
-- [ ] Windows 11
+- [x] Windows 7 SP1（`release/win7` 分支 + offlineInstaller）
+- [x] Windows 10（`main` 分支）
+- [x] Windows 11（`main` 分支）
 
 ---
 
