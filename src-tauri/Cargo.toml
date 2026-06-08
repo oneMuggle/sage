@@ -13,18 +13,26 @@ name = "sage_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
-# 阻止 embed-resource 2.5+ 拉入 toml_edit 0.22 → hashbrown 0.15
+# Tauri 2.1.x 配套 build script (2025-04 发布, Win7 + Rust 1.77.2 最后兼容版)
+tauri-build = { version = "=2.0.5", features = [] }
+# 严格上限 < 2.4.1 触发 cargo 版本统一, 阻止 tauri-winres → embed-resource 3.x → toml 1.0
 embed-resource = ">=2.1, <2.4.1"
 
 [dependencies]
-tauri = { version = "2" }
+# === Tauri 2.1.1 矩阵 (Win7 + Rust 1.77.2 兼容) ===
+# 详见 docs/technical/ 中"Win7 兼容性"章节
+# - Tauri 2.2+ tauri-utils 引入 toml 0.9 (要 edition2024 → Rust 1.85+)
+# - 必须严格 pin tauri-utils, 否则 ^ resolver 拉 2.9.x 仍会带 toml 1.0
+tauri = "=2.1.1"
+tauri-utils = "=2.1.1"
+
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = ">=1, <1.39", features = ["full"] }
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
 chrono = { version = ">=0.4, <0.4.39", features = ["serde"] }
-uuid = { version = ">=1.0, <1.20", features = ["v4", "serde"] }
+# uuid 1.13+ → getrandom 0.3.x → wasip2 (Rust 1.87+); 锁 < 1.13 保留 getrandom 0.2.x
+uuid = { version = ">=1.0, <1.13", features = ["v4", "serde"] }
 # 强制所有 hashbrown 走 0.14.x，避免 0.15+ (需要 edition2024) 被拉入
 hashbrown = ">=0.14, <0.15"
 # ahash 0.8.12+ 使用 hashbrown 0.15+

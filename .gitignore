@@ -48,7 +48,9 @@ build/
 
 # Rust / Cargo
 target/
-Cargo.lock
+# 注: Cargo.lock 必须 commit (应用程序, 非库)
+# - CI 用 --locked 严格按此 lock 编译
+# - Tauri 2.1.1 + Win7 + Rust 1.77.2 依赖图脆弱, lock 是唯一锚点
 
 # IDE
 .idea/
