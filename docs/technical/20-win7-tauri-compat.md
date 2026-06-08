@@ -76,6 +76,36 @@ tauri-macros       = { git = "https://github.com/oneMuggle/tauri", branch = "v2.
 tauri-codegen      = { git = "https://github.com/oneMuggle/tauri", branch = "v2.1.1-win7-cve-patched" }
 ```
 
+### 3.1.b package.json 必须同步锁 npm 端 Tauri 包
+
+Tauri CLI 在 `npx tauri build` 启动时会做 **major.minor 一致性校验**,不通过会直接 fail:
+
+```
+Found version mismatched Tauri packages. Make sure the NPM package and Rust crate
+versions are on the same major/minor releases:
+  tauri (v2.1.1) : @tauri-apps/api (v2.11.0)
+```
+
+所以 `package.json` 必须把 `@tauri-apps/api` 和 `@tauri-apps/cli` 也锁到 **2.1.x**:
+
+```jsonc
+{
+  "dependencies": {
+    "@tauri-apps/api": "=2.1.0",   // ⚠️ npm 2.1.x 只有 2.1.0,没有 2.1.1
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "=2.1.0",   // (同上)
+  }
+}
+```
+
+**重要差异**:
+- Rust Cargo.toml 锁 `tauri = "=2.1.1"`(fork 的 v2.1.1 tag 是 2.1.1)
+- npm registry 上 `@tauri-apps/cli` 的 2.1.x 系列**只有 2.1.0**,**没有 2.1.1**
+- Tauri CLI 的校验比较 **major.minor**(忽略 patch),所以 cli 2.1.0 + Rust 2.1.1 都通过
+
+修改后用 `npm install --package-lock-only` 重新 sync `package-lock.json`,然后 commit。
+
 ### 3.2 .gitignore 必须删除 `Cargo.lock`
 
 ```diff
