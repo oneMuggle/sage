@@ -41,11 +41,6 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: 安装 Visual Studio Build Tools
-        uses: egor-tensin/vs-setup@v3
-        with:
-          components: Desktop development with C++
-
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
         with:
