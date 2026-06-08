@@ -138,7 +138,7 @@ export function Sidebar() {
             {connectionStatus === 'not-configured' && '未配置'}
             {connectionStatus === 'error' && '连接失败'}
           </span>
-          <span className="ml-auto">v0.1.0</span>
+          <span className="ml-auto">v0.1.1</span>
         </div>
       </div>
     </aside>

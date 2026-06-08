@@ -1,6 +1,6 @@
 [package]
 name = "sage"
-version = "0.1.0"
+version = "0.1.1"
 description = "记忆型 AI 桌面助手"
 authors = ["Sage Team"]
 license = "MIT"

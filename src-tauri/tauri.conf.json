@@ -1,6 +1,6 @@
 {
   "productName": "Sage",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.sage.ai",
   "build": {
     "beforeDevCommand": "npm run dev",

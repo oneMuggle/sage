@@ -128,7 +128,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Sage API",
     description="记忆型 AI 桌面助手后端 API",
-    version="0.1.0",
+    version="0.1.1",
     lifespan=lifespan,
 )
 
@@ -170,7 +170,7 @@ else:
 @app.get("/health")
 async def health_check():
     """健康检查"""
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": "0.1.1"}
 
 
 if __name__ == "__main__":
