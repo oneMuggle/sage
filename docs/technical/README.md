@@ -13,6 +13,7 @@
 | 17 | [前端质量](./17-frontend-quality.md) | FSD 架构 / 测试覆盖 / a11y 状态 |
 | 18 | [六边形架构](./18-hexagonal.md) | 五层职责 / 6 个 Protocol / 双轨策略 / import-linter 约束 |
 | 19 | [ghm 外部计算集成](./19-ghm-integration.md) | LLM 工具调用桥接 ghm CLI / ExecutableResolver / HTTP 升级预留 |
+| 20 | [Win7 + Tauri 2 兼容性](./20-win7-tauri-compat.md) | Tauri 2.1.1 矩阵 / CVE backport via fork / Cargo.lock 锚点 |
 
 ---
 
@@ -21,7 +22,7 @@
 | 关注层 | 文档 |
 |---|---|
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-19） |
+| 横切关注点 | 本目录（15-20） |
 
 ---
 
