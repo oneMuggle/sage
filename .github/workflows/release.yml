@@ -159,6 +159,10 @@ jobs:
     name: Create Release
     needs: build-windows
     runs-on: ubuntu-latest
+    permissions:
+      # 需要写 Release 的权限 (默认 GITHUB_TOKEN 只有 contents: read,
+      # softprops/action-gh-release 会返回 403 Too many retries)
+      contents: write
 
     steps:
       - name: 检出代码
