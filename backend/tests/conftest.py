@@ -35,6 +35,11 @@ def setup_test_db(tmp_db_path):
 
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
     db_mod._db.init_db()
+    # PR-3: 与生产 lifespan 保持一致, 启动时种子化 4 个默认 agent.
+    # 测试不走 FastAPI lifespan, 显式调一次以模拟.
+    from backend.data.agent_repo import AgentRepository
+
+    AgentRepository().seed_defaults_if_empty()
     yield db_mod._db
     db_mod._db.close()
     db_mod._db = None

@@ -2,26 +2,25 @@
 数据库连接和初始化
 SQLite 实现
 """
+
 import sqlite3
 from pathlib import Path
-from typing import Optional
-import os
 
 
 class Database:
     """SQLite 数据库管理"""
-    
-    def __init__(self, db_path: Optional[str] = None):
+
+    def __init__(self, db_path: str | None = None):
         if db_path is None:
             # 默认路径：项目根目录下的 data/sage.db
             base_dir = Path(__file__).parent.parent.parent
             data_dir = base_dir / "data"
             data_dir.mkdir(exist_ok=True)
             db_path = str(data_dir / "sage.db")
-        
+
         self.db_path = db_path
-        self._connection: Optional[sqlite3.Connection] = None
-    
+        self._connection: sqlite3.Connection | None = None
+
     def get_connection(self) -> sqlite3.Connection:
         """获取数据库连接"""
         if self._connection is None:
@@ -31,18 +30,18 @@ class Database:
             self._connection.execute("PRAGMA journal_mode=WAL")
             self._connection.execute("PRAGMA busy_timeout=5000")
         return self._connection
-    
+
     def close(self):
         """关闭数据库连接"""
         if self._connection:
             self._connection.close()
             self._connection = None
-    
+
     def init_db(self):
         """初始化数据库表结构"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         # 会话表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
@@ -61,7 +60,7 @@ class Database:
                 FOREIGN KEY (parent_id) REFERENCES sessions(id)
             )
         """)
-        
+
         # 消息表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -82,7 +81,7 @@ class Database:
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
-        
+
         # 情景记忆表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memories_episodic (
@@ -103,7 +102,7 @@ class Database:
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
             )
         """)
-        
+
         # 技能表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS skills (
@@ -126,7 +125,7 @@ class Database:
                 updated_at INTEGER
             )
         """)
-        
+
         # 用户偏好表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS preferences (
@@ -139,7 +138,7 @@ class Database:
                 updated_at INTEGER
             )
         """)
-        
+
         # 进化日志表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS evolution_log (
@@ -157,7 +156,7 @@ class Database:
                 completed_at INTEGER
             )
         """)
-        
+
         # 工具使用记录表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tool_usage (
@@ -175,7 +174,29 @@ class Database:
                 FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE SET NULL
             )
         """)
-        
+
+        # Agent 配置表 (PR-3)
+        # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan
+        # 启动时由 backend/data/agent_repo.py:AgentRepository.seed_defaults_if_empty 种子化
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS agents (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                system_prompt TEXT NOT NULL DEFAULT '',
+                tools TEXT NOT NULL DEFAULT '[]',
+                memory_access TEXT NOT NULL DEFAULT '[]',
+                model_config TEXT NOT NULL DEFAULT '{}',
+                max_iterations INTEGER NOT NULL DEFAULT 10,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                description TEXT NOT NULL DEFAULT '',
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_agents_role ON agents(role)
+        """)
+
         # 语义记忆表（用于 FTS5 全文搜索）
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memories_semantic (
@@ -186,7 +207,7 @@ class Database:
                 created_at INTEGER NOT NULL
             )
         """)
-        
+
         # FTS5 虚拟表用于语义记忆全文搜索
         cursor.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS memories_semantic_fts USING fts5(
@@ -222,7 +243,7 @@ class Database:
                 VALUES (new.rowid, new.content, new.summary, new.tags);
             END
         """)
-        
+
         # 记忆进化日志表（预留）
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memories_evolution_log (
@@ -236,26 +257,42 @@ class Database:
                 created_at INTEGER NOT NULL
             )
         """)
-        
+
         # 创建索引
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC)"
+        )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(is_pinned)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_episodic_importance ON memories_episodic(importance DESC)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_episodic_created ON memories_episodic(created_at DESC)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_episodic_session ON memories_episodic(session_id)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_episodic_importance ON memories_episodic(importance DESC)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_episodic_created ON memories_episodic(created_at DESC)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_episodic_session ON memories_episodic(session_id)"
+        )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(is_enabled)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_preferences_category ON preferences(category)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_semantic_created ON memories_semantic(created_at DESC)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_evolution_memory ON memories_evolution_log(memory_id)")
-        
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_preferences_category ON preferences(category)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_semantic_created ON memories_semantic(created_at DESC)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_evolution_memory ON memories_evolution_log(memory_id)"
+        )
+
         conn.commit()
-        print(f"数据库初始化完成: {self.db_path}")
+        print(f"数据库初始化完成: {self.db_path}")  # noqa: T201 (历史遗留, init 阶段一次性输出)
 
 
 # 全局数据库实例
-_db: Optional[Database] = None
+_db: Database | None = None
 
 
 def get_database() -> Database:

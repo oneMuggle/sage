@@ -1,5 +1,5 @@
 // Tauri Commands - 通过 Python 后端通信
-use crate::models::{ChatRequest, ChatResponse, EvolutionLog, EvolutionTaskStatus, Memory, Message, Session, TriggerRequest};
+use crate::models::{Agent, ChatRequest, ChatResponse, EvolutionLog, EvolutionTaskStatus, Memory, Message, Session, TriggerRequest};
 use crate::state::AppState;
 use std::sync::Arc;
 use tauri::State;
@@ -220,4 +220,16 @@ pub async fn get_evolution_status(
 ) -> Result<Vec<EvolutionTaskStatus>, String> {
     tracing::info!("获取进化任务状态");
     state.python_backend.get("/evolution/status").await
+}
+
+// ==================== Agent 命令 (PR-3) ====================
+
+/// 列出所有 agent (含 disabled)
+/// 对应后端 GET /api/v1/agents
+#[tauri::command]
+pub async fn list_agents(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<Agent>, String> {
+    tracing::info!("获取 agent 列表");
+    state.python_backend.get("/agents").await
 }

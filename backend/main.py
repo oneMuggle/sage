@@ -109,6 +109,13 @@ async def lifespan(app: FastAPI):
     db.init_db()
     app.state.db = db
 
+    # PR-3: agents 表种子化 (空表时插 4 个默认 agent, 幂等)
+    from backend.data.agent_repo import AgentRepository
+
+    seeded = AgentRepository().seed_defaults_if_empty()
+    if seeded:
+        logger.info("已种子化 %d 个默认 agent (primary/researcher/coder/memory_manager)", seeded)
+
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
     api_mode = os.environ.get("API_MODE", "hex").lower()
     if api_mode == "hex":

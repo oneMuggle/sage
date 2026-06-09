@@ -107,3 +107,19 @@ pub struct EvolutionTaskStatus {
 pub struct TriggerRequest {
     pub task_name: String,
 }
+
+/// Agent 配置 (PR-3)
+/// 字段与后端 AgentRepository._row_to_dict() 输出一致 (snake_case from Python)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agent {
+    pub id: String,
+    pub name: String,
+    pub role: String,
+    pub system_prompt: String,
+    pub tools: Vec<String>,
+    pub memory_access: Vec<String>,
+    pub model_config: serde_json::Value,
+    pub max_iterations: i32,
+    pub enabled: bool,
+    pub description: String,
+}
