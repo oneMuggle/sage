@@ -43,6 +43,7 @@ async fn main() {
             sage_lib::commands::search_memory,
             sage_lib::commands::save_memory,
             sage_lib::commands::delete_memory,
+            sage_lib::commands::delete_message, // PR-2
             sage_lib::commands::get_memories,
             sage_lib::commands::get_evolution_logs,
             sage_lib::commands::trigger_evolution,
