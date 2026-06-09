@@ -193,6 +193,35 @@ async def delete_session(session_id: str, repo: SessionRepository = Depends(get_
     return {"status": "ok"}
 
 
+# ==================== 消息 API ====================
+
+
+@router.post("/messages/{message_id}/delete")
+async def delete_message(message_id: str):
+    """删除单条消息（物理删除，非软删）。
+
+    对应 Tauri command ``delete_message`` (PR-2):
+    - 现有消息 → 200 + ``{"deleted": true}``
+    - 不存在消息 → 404 + 结构化 detail (前端可分类处理)
+    - 重复删除 → 第二次 404 (幂等性)
+
+    注: 选 POST 而非 DELETE 是为了与项目其他 `/<resource>/<id>/delete` 路由
+    (sessions/{id}/delete) 保持一致; 真正的 RESTful DELETE 在 v2 改造时再做。
+    """
+    from backend.data.session_repo import MessageRepository
+
+    deleted = MessageRepository().delete(message_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "message_not_found",
+                "message": f"message {message_id} not found",
+            },
+        )
+    return {"deleted": True}
+
+
 # ==================== 聊天 API ====================
 
 

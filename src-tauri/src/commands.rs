@@ -154,6 +154,19 @@ pub async fn delete_memory(
     Ok(())
 }
 
+/// 删除单条消息 (PR-2)
+/// 对应后端 POST /api/v1/messages/{message_id}/delete
+#[tauri::command]
+pub async fn delete_message(
+    id: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    tracing::info!("删除消息: id={}", id);
+    let path = format!("/messages/{}/delete", id);
+    let _: serde_json::Value = state.python_backend.post(&path, &serde_json::json!({})).await?;
+    Ok(())
+}
+
 /// 获取记忆列表
 #[tauri::command]
 pub async fn get_memories(
