@@ -193,6 +193,44 @@ async def delete_session(session_id: str, repo: SessionRepository = Depends(get_
     return {"status": "ok"}
 
 
+# ==================== Agent API (PR-3) ====================
+#
+# 4 个默认 agent (primary/researcher/coder/memory_manager) 由
+# backend/main.py:lifespan 启动时通过 AgentRepository.seed_defaults_if_empty
+# 种子化到 SQLite agents 表. 本节路由不写 (PR-4/5 负责 PATCH /toggle).
+
+
+@router.get("/agents")
+async def list_agents():
+    """列出所有 agent (含 disabled), 按 id 排序。
+
+    对应 Tauri command ``list_agents`` (PR-3)。
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    return AgentRepository().list_all()
+
+
+@router.get("/agents/{agent_id}")
+async def get_agent_by_id(agent_id: str):
+    """按 id 取单个 agent。
+
+    命名注意: 不能叫 ``get_agent`` — 与本文件 line 136 的 dependency
+    provider ``def get_agent()`` 同名会覆盖, 导致 ``/interrupt`` 路由
+    拿错函数. 后续 PR 可把 dependency 改名 ``make_sage_agent()``,
+    本 PR 仅做局部重命名.
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    agent = AgentRepository().get(agent_id)
+    if not agent:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id} not found"},
+        )
+    return agent
+
+
 # ==================== 聊天 API ====================
 
 
