@@ -14,6 +14,7 @@
 | 18 | [六边形架构](./18-hexagonal.md) | 五层职责 / 6 个 Protocol / 双轨策略 / import-linter 约束 |
 | 19 | [ghm 外部计算集成](./19-ghm-integration.md) | LLM 工具调用桥接 ghm CLI / ExecutableResolver / HTTP 升级预留 |
 | 20 | [Win7 + Tauri 2 兼容性](./20-win7-tauri-compat.md) | Tauri 2.1.1 矩阵 / CVE backport via fork / Cargo.lock 锚点 |
+| 21 | [LLM 代理路由](./21-llm-proxy.md) | `/api/v1/llm/*` 透传上游,绕开浏览器到 Ollama/OpenAI 的 CORS 拦截 |
 
 ---
 

@@ -17,6 +17,7 @@ from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
+from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
 
@@ -157,6 +158,10 @@ async def add_request_id_header(request: Request, call_next):
 #   再注册 legacy（/sessions、/memory、/evolution、/interrupt）。
 #   FastAPI 按注册顺序匹配——hex 的 /chat 优先命中，其余走 legacy。
 # - API_MODE=legacy：仅注册 legacy。
+# 通用 LLM 代理（/api/v1/llm/*）在两种模式下都注册 — 浏览器到 LLM 的
+# 测试连接 / 拉取模型调用都走它，与 API_MODE 无关（见 llm_proxy_routes.py）。
+app.include_router(llm_proxy_router, prefix="/api/v1")
+
 _API_MODE = os.environ.get("API_MODE", "hex").lower()
 if _API_MODE == "hex":
     app.include_router(hex_router, prefix="/api/v1")
