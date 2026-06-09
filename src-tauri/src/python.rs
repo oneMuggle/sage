@@ -218,6 +218,37 @@ impl PythonBackend {
             .map_err(|e| format!("解析 JSON 失败: {}", e))
     }
 
+    /// 调用后端 API (PATCH) — PR-4
+    pub async fn patch<T: serde::de::DeserializeOwned, B: serde::Serialize>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T, String> {
+        let url = format!("{}/api/v1{}", self.base_url(), path);
+        tracing::debug!("PATCH {}", url);
+
+        let resp = self
+            .http_client
+            .patch(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("HTTP PATCH 请求失败: {}", e))?;
+
+        let status = resp.status();
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| format!("读取响应体失败: {}", e))?;
+
+        if !status.is_success() {
+            return Err(format!("API 返回错误 ({}): {}", status, text));
+        }
+
+        serde_json::from_str(&text)
+            .map_err(|e| format!("解析 JSON 失败: {}", e))
+    }
+
     /// 健康检查
     pub async fn health_check(&self) -> bool {
         let url = format!("{}/health", self.base_url());
