@@ -2,6 +2,8 @@
 pub mod chat;
 pub mod commands;
 pub mod ingest;
+pub mod llm_provider;
+pub mod llm_prompts;
 pub mod models;
 pub mod search;
 pub mod util;
