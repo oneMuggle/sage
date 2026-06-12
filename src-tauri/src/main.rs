@@ -66,6 +66,7 @@ async fn main() {
             sage_lib::wiki::commands::wiki_search,
             sage_lib::wiki::commands::wiki_ingest_source,
             sage_lib::wiki::commands::wiki_chat,
+            sage_lib::wiki::commands::wiki_get_graph,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Sage 应用时发生错误");

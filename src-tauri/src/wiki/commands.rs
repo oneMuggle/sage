@@ -276,3 +276,19 @@ pub async fn wiki_chat(
         citations: outcome.citations,
     })
 }
+
+/// Get the wiki knowledge graph (4-signal edges with caching)
+#[command]
+pub async fn wiki_get_graph(
+    project_path: String,
+    query: Option<String>,
+    limit: Option<usize>,
+) -> Result<GraphData, String> {
+    use crate::wiki::graph::get_graph_cached;
+
+    let project_root = Path::new(&project_path)
+        .canonicalize()
+        .map_err(|e| format!("无法访问项目目录: {}", e))?;
+
+    get_graph_cached(&project_root, query.as_deref(), limit.unwrap_or(100))
+}

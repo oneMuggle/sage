@@ -6,6 +6,7 @@ import type {
   SearchResponse,
   IngestResult,
   WikiChatResponse,
+  GraphData,
 } from '../types/wiki';
 
 // ==================== Project API ====================
@@ -103,5 +104,19 @@ export async function wikiChat(
     embedApiUrl,
     embedApiKey,
     embedModel,
+  });
+}
+
+// ==================== Graph API ====================
+
+export async function getWikiGraph(
+  projectPath: string,
+  query?: string,
+  limit: number = 100,
+): Promise<GraphData> {
+  return invoke<GraphData>('wiki_get_graph', {
+    projectPath,
+    query: query ?? null,
+    limit,
   });
 }
