@@ -42,7 +42,7 @@ export interface WikiChatResponse {
   citations: string[];
 }
 
-export type WikiView = 'browser' | 'search' | 'chat';
+export type WikiView = 'browser' | 'search' | 'chat' | 'graph';
 
 export type GraphSignal = 'DirectLink' | 'SourceOverlap' | 'TypeAffinity';
 

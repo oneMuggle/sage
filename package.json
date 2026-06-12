@@ -20,6 +20,7 @@
   "dependencies": {
     "@headlessui/react": "^1.7.17",
     "@tauri-apps/api": "=2.1.0",
+    "@xyflow/react": "^12.11.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "lucide-react": "^0.294.0",

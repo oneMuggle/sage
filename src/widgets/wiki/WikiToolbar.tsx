@@ -1,5 +1,5 @@
 // Wiki Toolbar - top navigation and actions
-import { FileText, Search, MessageSquare } from 'lucide-react';
+import { FileText, Search, MessageSquare, Network } from 'lucide-react';
 
 import { useWikiStore } from '../../entities/wiki/store';
 import type { WikiView } from '../../shared/types/wiki';
@@ -16,6 +16,7 @@ export function WikiToolbar() {
     { key: 'browser', label: '浏览', icon: <FileText className="h-4 w-4" /> },
     { key: 'search', label: '搜索', icon: <Search className="h-4 w-4" /> },
     { key: 'chat', label: '对话', icon: <MessageSquare className="h-4 w-4" /> },
+    { key: 'graph', label: '图谱', icon: <Network className="h-4 w-4" /> },
   ];
 
   return (
