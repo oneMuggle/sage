@@ -151,3 +151,48 @@ pub struct AgentUpdateRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
+
+/// 流式聊天工具调用 (PR-6)
+/// 对应后端 backend.core.legacy.agent_state.ToolCallRequest.to_dict()
+/// (OpenAI 工具调用格式)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentToolCall {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String, // "function"
+    pub function: AgentToolCallFunction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentToolCallFunction {
+    pub name: String,
+    /// 字符串化的 JSON (与 OpenAI tool_calls 格式一致)
+    pub arguments: String,
+}
+
+/// 流式聊天工具结果 (PR-6)
+/// 对应后端 backend.core.legacy.agent_state.ToolCallResult.to_dict()
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentToolResult {
+    pub tool_call_id: String,
+    pub role: String, // "tool"
+    pub content: String,
+}
+
+/// 流式聊天事件 (PR-6)
+/// 对应后端 backend.core.legacy.agent_state.AgentEvent.to_dict()
+/// - `state` 取值: "idle" | "thinking" | "acting" | "observing" | "done" | "failed"
+/// - 失败时 `error` 为非 None 字符串(后端为结构化 LLMError,这里只透传原始 JSON)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentEvent {
+    pub state: String,
+    pub iteration: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call: Option<AgentToolCall>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_result: Option<AgentToolResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}

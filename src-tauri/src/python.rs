@@ -1,11 +1,13 @@
 // Python Agent 子进程管理器
 // 负责启动、停止、健康检查和 HTTP 调用
 
+use futures_util::stream::{Stream, StreamExt};
 use reqwest::Client;
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
@@ -43,6 +45,7 @@ fn check_python_win7_compat(python: &str) -> Option<String> {
 }
 
 /// Python 后端进程管理器
+#[derive(Clone)]
 pub struct PythonBackend {
     process: Arc<Mutex<Option<Child>>>,
     running: Arc<AtomicBool>,
@@ -249,6 +252,81 @@ impl PythonBackend {
             .map_err(|e| format!("解析 JSON 失败: {}", e))
     }
 
+    /// 调用后端 API 并以 NDJSON 行流的形式返回 (PR-6 chat streaming)
+    ///
+    /// 每个 yield 是一行 NDJSON(不含末尾换行),调用方自行 JSON.parse。
+    /// 首个非 2xx 响应会立即以 Err 终止,不会进入流。
+    /// 内部通过 mpsc 通道 + 后台 task 把 reqwest 的 bytes_stream
+    /// 切成按 `\n` 切分的行流,简化调用方逻辑。
+    pub async fn post_stream<B: serde::Serialize>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<LineStream, String> {
+        let url = format!("{}/api/v1{}", self.base_url(), path);
+        tracing::debug!("POST {} (stream)", url);
+
+        let resp = self
+            .http_client
+            .post(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("HTTP POST 请求失败: {}", e))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let text = resp
+                .text()
+                .await
+                .map_err(|e| format!("读取响应体失败: {}", e))?;
+            return Err(format!("API 返回错误 ({}): {}", status, text));
+        }
+
+        let mut byte_stream = resp.bytes_stream();
+        let (tx, rx) = mpsc::channel::<Result<String, String>>(32);
+
+        // 后台 task: 把字节流切分成 NDJSON 行
+        tokio::spawn(async move {
+            let mut buf = String::new();
+            while let Some(chunk_result) = byte_stream.next().await {
+                match chunk_result {
+                    Ok(bytes) => {
+                        buf.push_str(&String::from_utf8_lossy(bytes.as_ref()));
+                        // 切分完整的行 (以 \n 分隔)
+                        while let Some(idx) = buf.find('\n') {
+                            let line: String = buf.drain(..=idx).collect();
+                            let line = line
+                                .trim_end_matches('\n')
+                                .trim_end_matches('\r')
+                                .to_string();
+                            if line.is_empty() {
+                                continue;
+                            }
+                            if tx.send(Ok(line)).await.is_err() {
+                                // 调用方已断开 (channel close)
+                                return;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx
+                            .send(Err(format!("读取流式响应失败: {}", e)))
+                            .await;
+                        return;
+                    }
+                }
+            }
+            // 末尾可能还残留一行不带 \n 的内容
+            let tail = buf.trim_end_matches('\r').to_string();
+            if !tail.is_empty() {
+                let _ = tx.send(Ok(tail)).await;
+            }
+        });
+
+        Ok(LineStream { rx })
+    }
+
     /// 健康检查
     pub async fn health_check(&self) -> bool {
         let url = format!("{}/health", self.base_url());
@@ -263,5 +341,22 @@ impl PythonBackend {
 impl Default for PythonBackend {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// NDJSON 行流 (PR-6 chat streaming)
+/// 把 tokio mpsc::Receiver 包装成 futures Stream,避免引入 tokio-stream crate。
+pub struct LineStream {
+    rx: mpsc::Receiver<Result<String, String>>,
+}
+
+impl Stream for LineStream {
+    type Item = Result<String, String>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        self.rx.poll_recv(cx)
     }
 }

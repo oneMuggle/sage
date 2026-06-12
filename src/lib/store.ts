@@ -58,6 +58,8 @@ interface StoreState {
 
   loadMessages: (sessionId: string) => Promise<void>;
   addMessage: (message: Message) => void;
+  /** PR-6: 用同一 id 的新对象替换某条消息 (流式 chat 结束时写回最终 content) */
+  updateMessage: (id: string, patch: Partial<Message>) => void;
   clearMessages: () => void;
 }
 
@@ -147,6 +149,13 @@ export const useStore = create<StoreState>((set, _get) => ({
   addMessage: (message) => {
     set((state) => ({
       messages: [...state.messages, message],
+    }));
+  },
+
+  // PR-6: 按 id 替换 (流式 chat 把占位 assistant 写回最终 content)
+  updateMessage: (id, patch) => {
+    set((state) => ({
+      messages: state.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
     }));
   },
 
