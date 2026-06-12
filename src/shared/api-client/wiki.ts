@@ -9,6 +9,7 @@ import type {
   GraphData,
 } from '../types/wiki';
 
+
 // ==================== Project API ====================
 
 export async function createWikiProject(name: string, basePath: string): Promise<WikiProject> {
@@ -62,6 +63,7 @@ export async function wikiSearch(
 // ==================== Ingest API ====================
 
 export async function wikiIngestSource(
+  ingestId: string,
   sourceFilePath: string,
   projectPath: string,
   apiUrl: string,
@@ -72,6 +74,7 @@ export async function wikiIngestSource(
   embedModel: string,
 ): Promise<IngestResult> {
   return invoke<IngestResult>('wiki_ingest_source', {
+    ingestId,
     sourceFilePath,
     projectPath,
     apiUrl,

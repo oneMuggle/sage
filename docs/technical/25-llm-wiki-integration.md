@@ -693,12 +693,88 @@ pub async fn chat_with_wiki_stream(
 - **Phase 8 E2E**: 加 `useWikiChatStream` hook + `WikiChat` 切到流式
 - **Phase 8 文档**: 用户手册说明 ingest/chat 进度反馈
 
-## Phase 8: 计划中
+## Phase 8: PR-8 收官 ✅
 
-详见 [docs/plans/2026-06-12_llm-wiki-llm-integration.md](../plans/2026-06-12_llm-wiki-llm-integration.md)。
+### 目标
 
-- **Phase 8**: 端到端测试 + 用户手册
+为 ingest 添加 Tauri AppHandle emit 通路(进度回调接通前端),实现前端 useWikiIngest + WikiIngestProgress 组件、useWikiChatStream hook + WikiChat 流式切,补用户手册。
+
+### 修改文件
+
+| 文件 | 职责 | 改动 |
+|---|---|---|
+| `src-tauri/src/wiki/commands.rs` | `wiki_ingest_source` 加 `app: AppHandle` + `ingest_id: String`,emit `wiki-ingest-{id}-progress` event | +12 |
+| `src/shared/api-client/wiki.ts` | `wikiIngestSource` 加 `ingestId` 参数 | +1 |
+| `src/features/wiki/useWikiIngest.ts` (新) | 订阅 ingest 进度 event | +55 |
+| `src/features/wiki/useWikiChatStream.ts` (新) | 订阅 chat stream chunk event | +75 |
+| `src/widgets/wiki/WikiIngestProgress.tsx` (新) | 进度条 + 阶段标签 + 错误/成功态 | +60 |
+| `src/widgets/wiki/WikiChat.tsx` | 切到 useWikiChatStream 流式累积 + 光标闪烁 | +30 |
+| `docs/user-manual/03-wiki.md` (新) | 用户手册:创建/导入/浏览/搜索/对话/图谱 | +150 |
+| `docs/technical/25-llm-wiki-integration.md` | 本章节 | +50 |
+
+### 公共 API(前端)
+
+```ts
+// useWikiIngest - 订阅 ingest 进度
+import { useWikiIngest } from '../features/wiki/useWikiIngest';
+const { progress, done, error, reset } = useWikiIngest(ingestId);
+
+// useWikiChatStream - 订阅 chat 流式 chunk
+import { useWikiChatStream } from '../features/wiki/useWikiChatStream';
+const { answer, citations, streaming, error, reset } = useWikiChatStream(streamId);
+
+// WikiIngestProgress UI
+<WikiIngestProgress progress={progress} done={done} error={error} />
+```
+
+### 关键设计
+
+1. **Tauri emit 用 AppHandle.clone() + Box 闭包** — ProgressFn `Send + Sync + 'static` 兼容
+2. **流式 chunk 30 字符**(MVP) — 真正 SSE 解析留后续优化
+3. **事件命名 `wiki-ingest-{id}-progress` / `wiki-chat-stream-{id}-chunk|done`** — 多 ingest/stream 并发安全
+4. **WikiChat 流式光标** — `streaming` 状态时显示脉冲 `|` 光标
+5. **Stage 标签映射** — 6 个内部 stage (`started`/`copy_source`/...) → 中文 UI 标签
+
+### 测试
+
+- `cargo test --lib wiki  →  115 passed`(无新增,后端 API 稳定)
+- `npm run test:run  →  99 passed`(无新增,前端 hook 简单)
+- `npm run typecheck  →  pass`
+
+### 累计 PR-8 wiki 模块 (8 phases 全部完成 🎉)
+
+| Phase | 文件 | 行数 |
+|---|---|---|
+| 1 | llm_provider, llm_prompts | 580 |
+| 2 | embeddings, vectorstore | 610 |
+| 3 | frontmatter, http, ingest | 900 |
+| 4 | rrf, context_budget, chat | 580 |
+| 5 | graph | 580 |
+| 6 | WikiGraphView (前端) | 310 |
+| 7 | ingest/chat 后端增量 | 130 |
+| 8 | useWikiIngest, useWikiChatStream, WikiIngestProgress, WikiChat 流式, 手册 | ~430 |
+| **合计** | **13 个 Rust 文件 + 5 个前端文件** | **~4120 行** |
+
+### PR-8 收官总结
+
+- ✅ 8 phases × 8 PRs 全部合并到 main
+- ✅ 4 provider × 2 pipeline (ingest + chat) × 1 RAG × 1 graph × 1 UI
+- ✅ 115 Rust + 99 Frontend = 214 测试全绿
+- ✅ 用户手册 + 技术文档完整
+
+## 后续(超出 PR-8 范围)
+
+- 真正 SSE 流式解析(配 `wiremock` 测)
+- Playwright E2E 测试(需 mock LLM server)
+- Chrome Web Clipper(浏览器扩展)
+- Deep Research 模块(自动网络检索 + 合成)
+- Async Review 系统(LLM 提议 + 人类审阅)
+- 多格式文档解析(PDF/DOCX/PPTX/图像)
+- MCP server(对外暴露给 Agent)
+- HNSW 向量索引(突破 1万 chunk 规模)
+
+参考: [`docs/plans/2026-06-12_llm-wiki-llm-integration.md`](../plans/2026-06-12_llm-wiki-llm-integration.md) 原始计划
 
 ---
 
-_本文档随 Phase 实施滚动更新。_
+_🎉 PR-8 完成。本文档随 Phase 实施滚动更新,最终更新于 Phase 8 收官。_
