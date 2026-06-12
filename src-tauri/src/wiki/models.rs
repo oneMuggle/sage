@@ -57,3 +57,6 @@ pub struct WikiChatResponse {
     pub answer: String,
     pub citations: Vec<String>, // paths of pages cited
 }
+
+// Re-export Graph types from graph module (避免重复定义)
+pub use crate::wiki::graph::{GraphData, GraphEdge, GraphNode, SignalType as GraphSignal};

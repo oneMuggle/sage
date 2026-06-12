@@ -4,6 +4,7 @@ pub mod commands;
 pub mod context_budget;
 pub mod embeddings;
 pub mod frontmatter;
+pub mod graph;
 pub mod http;
 pub mod ingest;
 pub mod llm_provider;

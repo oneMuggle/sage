@@ -441,11 +441,106 @@ pub async fn chat_with_wiki(config, http, project_root, query) -> Result<WikiCha
 - **Phase 6 (Graph UI)**: 显示图谱
 - **Phase 7 (进度 + 流式)**: `WikiChatOutcome.stats` 已可用于前端展示,流式拆分需 Phase 7 进一步
 
-## Phase 5-8: 计划中
+## Phase 5: 4-signal 知识图谱生成 ✅
+
+### 目标
+
+把 wiki 页面解析为节点 + 边,实现 4-signal 相关性评分(对齐 llm_wiki),支持 2-hop 扩散与缓存。
+
+### 新增文件
+
+| 文件 | 职责 | 行数 |
+|---|---|---|
+| `src-tauri/src/wiki/graph.rs` | 节点构建 + 4-signal 边 + relevance 2-hop + mtime 缓存 | ~580 |
+
+### 修改文件
+
+- `src-tauri/src/wiki/commands.rs`: 新增 `wiki_get_graph` Tauri 命令
+- `src-tauri/src/wiki/models.rs`: re-export GraphData/GraphNode/GraphEdge
+- `src-tauri/src/main.rs`: 注册 `wiki_get_graph` 命令
+- `src-tauri/src/wiki/mod.rs`: 导出 graph
+- `src/shared/types/wiki.ts`: 新增 `GraphSignal` / `GraphNode` / `GraphEdge` / `GraphData` 类型
+- `src/shared/api-client/wiki.ts`: 新增 `getWikiGraph()` 包装
+- `docs/technical/25-llm-wiki-integration.md`: 本章节
+
+### 4-signal 边权重 (对齐 llm_wiki)
+
+| Signal | 权重 | 计算方式 |
+|---|---|---|
+| **DirectLink** | ×3.0 | `[[wikilink]]` 出现一次 +3.0 |
+| **SourceOverlap** | ×4.0 | `(shared_sources / max(\|a\|, \|b\|)) × 4.0` |
+| **TypeAffinity** | ×1.0 | 两页同 `type` 字段 +1.0 |
+| Adamic-Adar | TODO | 未来 Phase |
+
+### wikilink 解析策略
+
+`resolve_wikilink` 3 级 fallback:
+1. 节点 `label` 精确匹配
+2. 节点 `id` (file path) 精确匹配
+3. label 模糊匹配(lower-case + slug 化,中文保留)
+
+### 缓存机制
+
+`compute_mtime_signature` 拼接所有 wiki/*.md 的 mtime + path → 字符串;与 `.llm-wiki/graph-cache.json` 的签名匹配则直接 load,否则 rebuild + save。原子写(临时 + rename)。
+
+### 公共 API
+
+```rust
+pub enum SignalType { DirectLink, SourceOverlap, TypeAffinity }
+impl SignalType { pub fn weight(self) -> f32 }
+pub struct GraphNode { id, label, page_type, sources, wikilinks }
+pub struct GraphEdge { source, target, signal, weight }
+pub struct GraphData { nodes, edges }
+pub fn build_graph(project_root: &Path) -> Result<GraphData, String>;
+pub fn relevance(query: &str, graph: &GraphData, k_hops: u32) -> Vec<(String, f32)>;
+pub fn relevance_with_decay(query, graph, k_hops, decay) -> Vec<(String, f32)>;
+pub fn relevance_from_seeds(seed_ids, graph, k_hops) -> Vec<(String, f32)>;
+pub fn get_graph_cached(project_root, query, limit) -> Result<GraphData, String>;
+```
+
+### Tauri 命令
+
+```rust
+#[command]
+pub async fn wiki_get_graph(
+    project_path: String,
+    query: Option<String>,
+    limit: Option<usize>,  // 默认 100
+) -> Result<GraphData, String>;
+```
+
+### 关键设计
+
+1. **跳过 index.md / log.md**: 元数据不作为图节点
+2. **边去重**: `(source, target, signal)` 三元组去重
+3. **2-hop 扩散**: `score = parent_score × edge_weight × decay(0.5)`
+4. **query 过滤 + limit**: 默认 limit=100,但 relevance 截断时至少保留 50 个相关节点
+5. **mtime 缓存**: 零散 IO 性能优化,wiki 变更才重建
+
+### 单元测试覆盖(23/23 通过)
+
+**graph 构建** (10):
+- signal 权重匹配设计 / slug 化基本 + 中文
+- 空 wiki 目录 / 单页 / DirectLink / SourceOverlap + disjoint / TypeAffinity
+- 综合(3 种 signal 都生成) / 跳过 index.md+log.md
+
+**wikilink 解析** (3):
+- 按 label / 按 slug(case-insensitive) / 未知返回 None
+
+**relevance 2-hop** (6):
+- 无 seed 空 / 单 seed / 2-hop decay / 0-hop 仅 seed / relevance_from_seeds / 排序降序
+
+### 累计 wiki 测试: 115 passed (Phase 1 20 + Phase 2 24 + Phase 3 33 + Phase 4 18 + Phase 5 23)
+
+### 与后续 Phase 衔接
+
+- **Phase 6 (Graph UI)**: 调 `getWikiGraph(project, query, limit)` 渲染 React Flow
+- **Phase 7 (进度 + 流式 UI)**: Phase 5 提供 RAG 相关性辅助
+
+## Phase 6-8: 计划中
 
 详见 [docs/plans/2026-06-12_llm-wiki-llm-integration.md](../plans/2026-06-12_llm-wiki-llm-integration.md)。
 
-- **Phase 5**: 4-signal 知识图谱生成
 - **Phase 6**: React Flow 知识图谱视图
 - **Phase 7**: 进度反馈 + 流式 chat UI
 - **Phase 8**: 端到端测试 + 用户手册
