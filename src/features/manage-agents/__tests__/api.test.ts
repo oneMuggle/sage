@@ -89,7 +89,11 @@ describe('agentsApi.toggle', () => {
   });
 
   it('返回完整的 AgentProfile (含 updated_at), 不丢字段', async () => {
-    const updated: AgentProfile = { ...SAMPLE_AGENT, enabled: false, updated_at: 1_700_000_999_999 };
+    const updated: AgentProfile = {
+      ...SAMPLE_AGENT,
+      enabled: false,
+      updated_at: 1_700_000_999_999,
+    };
     invokeMock.mockResolvedValueOnce(updated);
 
     const result = await agentsApi.toggle('coder', false);

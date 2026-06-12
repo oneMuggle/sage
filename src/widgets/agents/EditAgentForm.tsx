@@ -13,9 +13,9 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
   // 取值优先用 form 中的草稿值, 缺则回退到 agent 原值。
   // 注: model_config 在 form 中是部分对象, 取时合并 agent 原值的字段。
   const value = <K extends keyof AgentProfile>(key: K): AgentProfile[K] =>
-    (form[key as keyof AgentUpdate] !== undefined
+    form[key as keyof AgentUpdate] !== undefined
       ? (form[key as keyof AgentUpdate] as AgentProfile[K])
-      : agent[key]);
+      : agent[key];
 
   return (
     <div className="space-y-4">
