@@ -4,8 +4,8 @@ import { useState } from 'react';
 
 import { useWikiStore } from '../../entities/wiki/store';
 import { useSettings } from '../../features/manage-settings/useSettings';
-import { wikiChat } from '../../shared/api-client/wiki';
 import { useWikiChatStream } from '../../features/wiki/useWikiChatStream';
+import { wikiChat } from '../../shared/api-client/wiki';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
