@@ -1,8 +1,9 @@
 // Tauri Commands - 通过 Python 后端通信
-use crate::models::{Agent, AgentUpdateRequest, ChatRequest, ChatResponse, EvolutionLog, EvolutionTaskStatus, Memory, Message, Session, TriggerRequest};
+use crate::models::{Agent, AgentEvent, AgentUpdateRequest, ChatRequest, ChatResponse, EvolutionLog, EvolutionTaskStatus, Memory, Message, Session, TriggerRequest};
 use crate::state::AppState;
+use futures_util::StreamExt;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 /// 创建新会话
 #[tauri::command]
@@ -268,4 +269,143 @@ pub async fn toggle_agent(
         .python_backend
         .patch(&path, &serde_json::json!({ "enabled": enabled }))
         .await
+}
+
+// ==================== 流式聊天命令 (PR-6) ====================
+
+/// 流式聊天 — 后端走 POST /api/v1/chat/stream (NDJSON)
+/// 本命令立刻返回 `stream_id` (UUID),不阻塞 Tauri 通道。
+/// 后台 task 拉取 Python 流,逐行解析为 AgentEvent 后通过
+/// `app.emit("chat-stream-{stream_id}", payload)` 推送到前端。
+/// 前端用 `listen` 订阅该事件,stream_id 让多次并行流互不干扰。
+/// 流结束 (done / failed / error) 时多 emit 一个 `{ state: "done" }` 终止信号。
+#[tauri::command]
+pub async fn agent_chat_stream(
+    session_id: String,
+    message: String,
+    api_key: Option<String>,
+    api_url: Option<String>,
+    model: Option<String>,
+    max_context: Option<i32>,
+    temperature: Option<f64>,
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let stream_id = uuid::Uuid::new_v4().to_string();
+    tracing::info!(
+        "流式聊天: session_id={}, stream_id={}, message={}",
+        session_id,
+        stream_id,
+        message
+    );
+
+    let backend = state.python_backend.clone();
+    let body = ChatRequest {
+        session_id: session_id.clone(),
+        message,
+        api_key,
+        api_url,
+        model,
+        max_context,
+        temperature,
+    };
+    let event_name = format!("chat-stream-{}", stream_id);
+    let app_clone = app.clone();
+    let sid_for_log = stream_id.clone();
+
+    // 后台 task: 拉流 → 解析 → emit
+    tokio::spawn(async move {
+        let mut line_stream = match backend.post_stream("/chat/stream", &body).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("[stream {}] post_stream 失败: {}", sid_for_log, e);
+                let _ = app_clone.emit(
+                    &event_name,
+                    AgentEvent {
+                        state: "failed".to_string(),
+                        iteration: 0,
+                        content: None,
+                        tool_call: None,
+                        tool_result: None,
+                        error: Some(e),
+                    },
+                );
+                return;
+            }
+        };
+
+        while let Some(line_result) = line_stream.next().await {
+            match line_result {
+                Ok(line) => {
+                    // 解析 NDJSON 一行 → AgentEvent
+                    match serde_json::from_str::<AgentEvent>(&line) {
+                        Ok(evt) => {
+                            let is_terminal = matches!(evt.state.as_str(), "done" | "failed");
+                            if let Err(e) = app_clone.emit(&event_name, &evt) {
+                                tracing::warn!(
+                                    "[stream {}] emit 失败: {}",
+                                    sid_for_log,
+                                    e
+                                );
+                            }
+                            if is_terminal {
+                                tracing::info!("[stream {}] 流结束: state={}", sid_for_log, evt.state);
+                                return;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "[stream {}] 解析 NDJSON 失败: line={:?}, err={}",
+                                sid_for_log,
+                                line,
+                                e
+                            );
+                            // 把原始 line 作为 content 推送,前端拿到 raw 可排查
+                            let _ = app_clone.emit(
+                                &event_name,
+                                AgentEvent {
+                                    state: "observing".to_string(),
+                                    iteration: 0,
+                                    content: Some(line),
+                                    tool_call: None,
+                                    tool_result: None,
+                                    error: Some(format!("NDJSON parse error: {}", e)),
+                                },
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("[stream {}] 读流失败: {}", sid_for_log, e);
+                    let _ = app_clone.emit(
+                        &event_name,
+                        AgentEvent {
+                            state: "failed".to_string(),
+                            iteration: 0,
+                            content: None,
+                            tool_call: None,
+                            tool_result: None,
+                            error: Some(e),
+                        },
+                    );
+                    return;
+                }
+            }
+        }
+        // 流自然结束但后端没发 done/failed — 补一个 done
+        tracing::info!("[stream {}] 流自然结束,补发 done", sid_for_log);
+        let _ = app_clone.emit(
+            &event_name,
+            AgentEvent {
+                state: "done".to_string(),
+                iteration: 0,
+                content: None,
+                tool_call: None,
+                tool_result: None,
+                error: None,
+            },
+        );
+    });
+
+    Ok(stream_id)
 }
