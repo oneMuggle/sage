@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use tauri::command;
+use tauri::Emitter;
 
 use crate::wiki::models::*;
 use crate::wiki::util::*;
@@ -161,8 +162,12 @@ pub async fn wiki_search(
 }
 
 /// Ingest a source document into the wiki (LLM 驱动的两步 CoT)
+///
+/// emit `wiki-ingest-{ingest_id}-progress` event 携带 IngestProgress 进度
 #[command]
 pub async fn wiki_ingest_source(
+    app: tauri::AppHandle,
+    ingest_id: String,
     source_file_path: String,
     project_path: String,
     api_url: String,
@@ -174,7 +179,7 @@ pub async fn wiki_ingest_source(
 ) -> Result<IngestResult, String> {
     use crate::wiki::embeddings::EmbeddingConfig;
     use crate::wiki::http::HttpClient;
-    use crate::wiki::ingest::{ingest_source as do_ingest, IngestConfig};
+    use crate::wiki::ingest::{ingest_source as do_ingest, IngestConfig, ProgressFn};
     use crate::wiki::llm_provider::{LlmProviderConfig, Provider};
 
     let project_root = Path::new(&project_path)
@@ -211,7 +216,15 @@ pub async fn wiki_ingest_source(
     };
     let http = HttpClient::new();
     let src = Path::new(&source_file_path);
-    let outcome = do_ingest(&cfg, &http, &project_root, src, None).await?;
+
+    // 进度回调 → Tauri emit(emit 不影响主流程,失败忽略)
+    let app_clone = app.clone();
+    let id_clone = ingest_id.clone();
+    let progress: ProgressFn = Box::new(move |p| {
+        let _ = app_clone.emit(&format!("wiki-ingest-{}-progress", id_clone), p);
+    });
+
+    let outcome = do_ingest(&cfg, &http, &project_root, src, Some(progress)).await?;
     Ok(IngestResult {
         source_path: outcome.source_path,
         wiki_page_path: outcome.wiki_page_path,
