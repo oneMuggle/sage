@@ -8,7 +8,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool
 
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
@@ -124,6 +124,43 @@ class TriggerResponse(BaseModel):
 
     success: bool
     message: str
+
+
+class AgentToggle(BaseModel):
+    """PATCH /agents/{id}/toggle 请求体 (PR-5)。
+
+    单字段 ``enabled`` 必填 — 缺失走 Pydantic 自动 422。专门用来对
+    enable/disable 这一高频操作做语义化端点 (审计 + 未来权限),不
+    与 PATCH /agents/{id} 重叠。
+
+    注: 用 ``StrictBool`` 而非 ``bool`` — Pydantic v2 默认 lax 模式会把
+    "yes"/"1"/1 等强转 True, 在 API 边界宁可 422 也不要静默转换。前端
+    TypeScript 永远传真 bool, 严格模式不会误伤。
+    """
+
+    enabled: StrictBool
+
+
+class AgentUpdate(BaseModel):
+    """PATCH /agents/{id} 请求体 (PR-4)。
+
+    所有字段可选 — 不传视为"该字段不更新"。role / max_iterations
+    走 Pydantic 校验, 非法值 422 (由 FastAPI 自动处理)。
+    """
+
+    # 注: Pydantic v2 默认对 "model_" 前缀的字段名有保留命名空间保护.
+    # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
+    model_config = {"protected_namespaces": ()}
+
+    name: str | None = None
+    role: str | None = None  # 校验放在路由层 (依赖 Pydantic Literal 不直观)
+    system_prompt: str | None = None
+    tools: list[str] | None = None
+    memory_access: list[str] | None = None
+    model_config_data: dict | None = None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
+    max_iterations: int | None = None  # 路由层校验 1..50
+    enabled: bool | None = None
+    description: str | None = None
 
 
 # ==================== 依赖注入 ====================
@@ -258,6 +295,87 @@ async def get_agent_by_id(agent_id: str):
             detail={"type": "agent_not_found", "message": f"agent {agent_id} not found"},
         )
     return agent
+
+
+@router.patch("/agents/{agent_id}")
+async def update_agent(agent_id: str, data: AgentUpdate):
+    """部分更新 agent (PR-4)。
+
+    - 200 + 更新后完整 profile
+    - 404 + 结构化 detail (id 不存在)
+    - 422 (FastAPI 自动) — 字段类型 / role 白名单 / max_iterations 范围
+    - PATCH 是 partial update: 缺省字段保留原值
+    - 空 body: 视为 no-op, 返回当前 profile, updated_at 不动
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    # 字段级校验: role 白名单
+    valid_roles = {"coordinator", "researcher", "coder", "memory_manager"}
+    if data.role is not None and data.role not in valid_roles:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_role",
+                "message": f"role must be one of {sorted(valid_roles)}, got {data.role!r}",
+            },
+        )
+
+    # 字段级校验: max_iterations 范围
+    if data.max_iterations is not None and not (1 <= data.max_iterations <= 50):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_max_iterations",
+                "message": f"max_iterations must be in 1..50, got {data.max_iterations}",
+            },
+        )
+
+    repo = AgentRepository()
+
+    # 不存在 → 404 (update 返回 0 时区分"没字段改"和"id 不存在")
+    if repo.get(agent_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id} not found"},
+        )
+
+    # 转 dict 给 repo.update; 字段名 model_config_data → model_config (避开 Pydantic 保留名)
+    update_payload = data.model_dump(exclude_none=True)
+    if "model_config_data" in update_payload:
+        update_payload["model_config"] = update_payload.pop("model_config_data")
+
+    repo.update(agent_id, update_payload)
+    return repo.get(agent_id)
+
+
+@router.patch("/agents/{agent_id}/toggle")
+async def toggle_agent(agent_id: str, data: AgentToggle):
+    """启用/禁用 agent (PR-5)。
+
+    - 200 + 更新后完整 profile (含 enabled / updated_at 新值)
+    - 404 + 结构化 detail (id 不存在, 与 PR-3/PR-4 复用同一 type)
+    - 422 (FastAPI 自动) — enabled 缺失 / 类型错
+
+    选 ``/toggle`` 子路径而非复用 ``PATCH /agents/{id}`` 的理由:
+    - 审计语义清晰: events.jsonl 里可单独 grep 出 toggle 操作
+    - 未来权限模型: toggle 与 system_prompt 编辑可独立授权
+
+    同值 toggle 也走 SQL UPDATE — 幂等但 updated_at 仍刷新, 符合
+    set_enabled() 语义。
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    repo = AgentRepository()
+
+    # 与 update_agent 一致: 显式查存在性, 给出比 set_enabled() 更友好的 404 detail
+    if repo.get(agent_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id} not found"},
+        )
+
+    repo.set_enabled(agent_id, data.enabled)
+    return repo.get(agent_id)
 
 
 # ==================== 聊天 API ====================

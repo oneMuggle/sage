@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 import { Button } from '../components/common';
-import { agentsApi, type AgentProfile } from '../lib/api';
+import { agentsApi, type AgentProfile, type AgentUpdate } from '../lib/api';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { RetryButton } from '../shared/ui/RetryButton';
@@ -11,7 +11,10 @@ export function Agents() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<AgentProfile | null>(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState<Partial<AgentProfile>>({});
+  // 用 Partial<AgentUpdate> 而非 Partial<AgentProfile> — 避免 id/updated_at
+  // 等不允许更新的字段悄悄随 PATCH body 一起送出 (Pydantic 不会接, 但
+  // 类型层面应当先拦)。EditAgentForm 实际只动 name/description/system_prompt/model_config。
+  const [editForm, setEditForm] = useState<Partial<AgentUpdate>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,9 +37,15 @@ export function Agents() {
   }, [loadAgents]);
 
   const handleToggleAgent = async (agentId: string, enabled: boolean) => {
+    // Optimistic update: 先反应 UI, 失败再回滚
     setAgents((prev) => prev.map((a) => (a.id === agentId ? { ...a, enabled } : a)));
     try {
-      await agentsApi.toggle(agentId, enabled);
+      // PR-5: toggle 返回完整 profile, 用返回值覆盖本地状态 (含新 updated_at)
+      const updated = await agentsApi.toggle(agentId, enabled);
+      setAgents((prev) => prev.map((a) => (a.id === agentId ? updated : a)));
+      if (selectedAgent?.id === agentId) {
+        setSelectedAgent(updated);
+      }
     } catch {
       setAgents((prev) => prev.map((a) => (a.id === agentId ? { ...a, enabled: !enabled } : a)));
       setError('切换失败');
@@ -46,11 +55,13 @@ export function Agents() {
   const handleSave = async () => {
     if (!selectedAgent) return;
     try {
-      const updated = { ...selectedAgent, ...editForm } as AgentProfile;
-      await agentsApi.update(updated);
+      // PR-4 契约: 仅传 diff (editForm 已是 Partial<AgentUpdate>, 无需 cast)
+      const updated = await agentsApi.update(selectedAgent.id, editForm);
+      // 用后端返回的完整 profile 覆盖本地状态 (避免漂移)
+      setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      setSelectedAgent(updated);
       setEditing(false);
       setEditForm({});
-      loadAgents();
     } catch {
       setError('保存失败');
     }
@@ -157,18 +168,21 @@ export function Agents() {
 }
 
 function getMockAgents(): AgentProfile[] {
+  // 注: 后端 PR-3 起返回 updated_at; mock 固定为 0 表示"未知/未持久化"。
+  // 仅 loadAgents() 出错时作为占位渲染, 真实数据流不依赖这里。
   return [
     {
       id: 'primary',
       name: 'Sage 主助手',
       role: 'coordinator',
-      description: '面向用户的协调 Agent，负责意图识别和任务分发',
-      system_prompt: '你是 Sage，一个智能 AI 助手。',
+      description: '面向用户的协调 Agent,负责意图识别和任务分发',
+      system_prompt: '你是 Sage,一个智能 AI 助手。',
       tools: ['calculator', 'memory_search', 'memory_save'],
       memory_access: ['working', 'episodic', 'semantic'],
       model_config: { model: 'gpt-4', temperature: 0.7, max_tokens: 4096 },
       max_iterations: 10,
       enabled: true,
+      updated_at: 0,
     },
     {
       id: 'researcher',
@@ -181,6 +195,7 @@ function getMockAgents(): AgentProfile[] {
       model_config: { model: 'gpt-4', temperature: 0.5, max_tokens: 4096 },
       max_iterations: 8,
       enabled: true,
+      updated_at: 0,
     },
     {
       id: 'coder',
@@ -193,6 +208,7 @@ function getMockAgents(): AgentProfile[] {
       model_config: { model: 'gpt-4', temperature: 0.3, max_tokens: 4096 },
       max_iterations: 15,
       enabled: true,
+      updated_at: 0,
     },
     {
       id: 'memory_manager',
@@ -205,6 +221,7 @@ function getMockAgents(): AgentProfile[] {
       model_config: { model: 'gpt-3.5-turbo', temperature: 0.5, max_tokens: 4096 },
       max_iterations: 5,
       enabled: true,
+      updated_at: 0,
     },
   ];
 }

@@ -182,7 +182,11 @@ class AgentRepository:
 
     @staticmethod
     def _row_to_dict(row: Any) -> dict[str, Any]:
-        """``sqlite3.Row`` → wire-format dict (与 ``AgentProfile.to_dict()`` 字段对齐)。"""
+        """``sqlite3.Row`` → wire-format dict (与 ``AgentProfile.to_dict()`` 字段对齐)。
+
+        注: ``updated_at`` 在 PR-3 漏返, PR-4 测试 ``test_update_agent_bumps_updated_at``
+        显式依赖此字段 (PATCH 后必刷新). 现补上, 不破坏现有调用方.
+        """
         return {
             "id": row["id"],
             "name": row["name"],
@@ -194,4 +198,5 @@ class AgentRepository:
             "max_iterations": int(row["max_iterations"]),
             "enabled": bool(row["enabled"]),
             "description": row["description"] or "",
+            "updated_at": int(row["updated_at"]),
         }

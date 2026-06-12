@@ -1,5 +1,5 @@
 // Tauri Commands - 通过 Python 后端通信
-use crate::models::{Agent, ChatRequest, ChatResponse, EvolutionLog, EvolutionTaskStatus, Memory, Message, Session, TriggerRequest};
+use crate::models::{Agent, AgentUpdateRequest, ChatRequest, ChatResponse, EvolutionLog, EvolutionTaskStatus, Memory, Message, Session, TriggerRequest};
 use crate::state::AppState;
 use std::sync::Arc;
 use tauri::State;
@@ -232,4 +232,40 @@ pub async fn list_agents(
 ) -> Result<Vec<Agent>, String> {
     tracing::info!("获取 agent 列表");
     state.python_backend.get("/agents").await
+}
+
+/// 部分更新 agent (PR-4)
+/// 对应后端 PATCH /api/v1/agents/{id}
+/// - update: 仅含需要修改的字段 (None = 不动该字段)
+/// - 后端 AgentUpdate Pydantic 校验 role 白名单 / max_iterations 范围
+#[tauri::command]
+pub async fn update_agent(
+    id: String,
+    update: AgentUpdateRequest,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Agent, String> {
+    tracing::info!("更新 agent: id={}", id);
+    let path = format!("/agents/{}", id);
+    state
+        .python_backend
+        .patch(&path, &update)
+        .await
+}
+
+/// 启用/禁用 agent (PR-5)
+/// 对应后端 PATCH /api/v1/agents/{id}/toggle
+/// - 与 update_agent 的区别: 单独端点便于审计与未来权限模型
+/// - 返回完整 profile, 前端可一次性 setState (含新 enabled / updated_at)
+#[tauri::command]
+pub async fn toggle_agent(
+    id: String,
+    enabled: bool,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Agent, String> {
+    tracing::info!("切换 agent: id={}, enabled={}", id, enabled);
+    let path = format!("/agents/{}/toggle", id);
+    state
+        .python_backend
+        .patch(&path, &serde_json::json!({ "enabled": enabled }))
+        .await
 }

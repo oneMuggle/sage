@@ -122,4 +122,32 @@ pub struct Agent {
     pub max_iterations: i32,
     pub enabled: bool,
     pub description: String,
+    pub updated_at: i64, // PR-4 补: PATCH 后必刷新
+}
+
+/// Agent 部分更新请求 (PR-4)
+/// 所有字段 Optional — 不传视为"该字段不更新"。前端用 patch_agent 全对象透传
+/// (类似 serde flatten), Rust 端转 JSON body 后端仅接非 None 字段.
+/// 注: `model_config` 序列化时 rename 成 `model_config_data` (避开后端
+/// Pydantic v2 保留命名空间, 路由层再 map 回 `model_config`).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentUpdateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_access: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "model_config_data")]
+    pub model_config: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_iterations: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }

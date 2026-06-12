@@ -548,6 +548,30 @@ export interface AgentProfile {
   };
   max_iterations: number;
   enabled: boolean;
+  /** 后端 PR-3 起返回; PR-4 PATCH 后被刷新 */
+  updated_at?: number;
+}
+
+/**
+ * PR-4 `update_agent` 命令的部分更新 payload。
+ *
+ * 字段全为可选 — 仅传需要修改的字段, 缺省字段保留原值 (PATCH 语义)。
+ * 形状匹配 Tauri `AgentUpdateRequest` (src-tauri/src/models.rs:134),
+ * 后端再映射到 Pydantic `AgentUpdate` 做白名单/范围校验。
+ *
+ * 注: 仅暴露 9 个允许字段, 不含 `id` (id 不可变, 见 agent_repo.py 注释)
+ * 与 `updated_at` (DB 自动维护)。
+ */
+export interface AgentUpdate {
+  name?: string;
+  role?: string;
+  system_prompt?: string;
+  tools?: string[];
+  memory_access?: string[];
+  model_config?: AgentProfile['model_config'];
+  max_iterations?: number;
+  enabled?: boolean;
+  description?: string;
 }
 
 export const agentsApi = {
@@ -561,20 +585,42 @@ export const agentsApi = {
     });
   },
 
-  async toggle(id: string, enabled: boolean): Promise<void> {
+  /**
+   * 启用/禁用 agent (PR-5)。
+   *
+   * 走专用端点 `PATCH /api/v1/agents/{id}/toggle`, 与 `update()` 区分:
+   * - toggle 是高频、单字段、可审计的独立操作
+   * - 返回完整更新后的 profile, 调用方一次 setState 即可
+   *
+   * @throws 后端 404 (id 不存在) 或 422 (类型错) 经 handleApiError 包装
+   */
+  async toggle(id: string, enabled: boolean): Promise<AgentProfile> {
     return withRetry(async () => {
       try {
-        await invoke('toggle_agent', { id, enabled });
+        return await invoke<AgentProfile>('toggle_agent', { id, enabled });
       } catch (error) {
         throw handleApiError(error);
       }
     });
   },
 
-  async update(agent: AgentProfile): Promise<void> {
+  /**
+   * 部分更新 agent (PR-4)。
+   *
+   * Tauri 命令签名 `update_agent(id, update)`, 不接受整 AgentProfile —
+   * 调用方应传 diff (例如 `{ name: '新名' }`), 不要把当前 profile 整对象塞进来。
+   *
+   * 后端 Pydantic 校验:
+   * - role 必须 ∈ {coordinator, researcher, coder, memory_manager} 否则 422
+   * - max_iterations 必须 ∈ [1, 50] 否则 422
+   * - 空 body 视为 no-op, 200 返回当前 profile, updated_at 不刷新
+   *
+   * @throws 后端 404 / 422 经 handleApiError 包装
+   */
+  async update(id: string, update: AgentUpdate): Promise<AgentProfile> {
     return withRetry(async () => {
       try {
-        await invoke('update_agent', { agent });
+        return await invoke<AgentProfile>('update_agent', { id, update });
       } catch (error) {
         throw handleApiError(error);
       }

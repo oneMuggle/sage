@@ -49,6 +49,8 @@ async fn main() {
             sage_lib::commands::trigger_evolution,
             sage_lib::commands::get_evolution_status,
             sage_lib::commands::list_agents, // PR-3
+            sage_lib::commands::update_agent, // PR-4
+            sage_lib::commands::toggle_agent, // PR-5
             // Wiki commands
             sage_lib::wiki::commands::create_wiki_project,
             sage_lib::wiki::commands::open_wiki_project,
