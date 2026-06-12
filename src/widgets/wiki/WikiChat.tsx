@@ -123,7 +123,9 @@ export function WikiChat() {
             <div className="max-w-[80%] rounded-lg px-4 py-3 bg-bg-muted text-text">
               <div className="text-sm whitespace-pre-wrap">
                 {stream.answer}
-                {stream.streaming && <span className="inline-block w-1 h-3 ml-0.5 bg-primary animate-pulse" />}
+                {stream.streaming && (
+                  <span className="inline-block w-1 h-3 ml-0.5 bg-primary animate-pulse" />
+                )}
               </div>
               {stream.citations.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-border/30">
