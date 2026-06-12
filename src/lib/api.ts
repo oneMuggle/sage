@@ -640,14 +640,28 @@ export const knowledgeApi = {
   },
 };
 
-// ==================== Skills API ====================
+// ==================== Skills API (PR-7) ====================
 
 export interface Skill {
   name: string;
   description: string;
   triggers: string[];
+  parameters: Record<string, unknown>;
+  examples: string[];
   enabled: boolean;
-  usageCount: number;
+  usage_count: number;
+}
+
+export interface SkillExecuteRequest {
+  action?: string;
+  args?: Record<string, unknown>;
+}
+
+export interface SkillExecuteResult {
+  success: boolean;
+  content?: unknown;
+  metadata: Record<string, unknown>;
+  error?: string;
 }
 
 export const skillsApi = {
@@ -661,10 +675,24 @@ export const skillsApi = {
     });
   },
 
-  async toggle(name: string, enabled: boolean): Promise<void> {
+  async toggle(name: string, enabled: boolean): Promise<Skill> {
     return withRetry(async () => {
       try {
-        await invoke('toggle_skill', { name, enabled });
+        return await invoke<Skill>('toggle_skill', { name, enabled });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  async execute(name: string, req: SkillExecuteRequest = {}): Promise<SkillExecuteResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<SkillExecuteResult>('execute_skill', {
+          name,
+          action: req.action ?? null,
+          args: req.args ?? null,
+        });
       } catch (error) {
         throw handleApiError(error);
       }

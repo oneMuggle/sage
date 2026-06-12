@@ -378,6 +378,111 @@ async def toggle_agent(agent_id: str, data: AgentToggle):
     return repo.get(agent_id)
 
 
+# ==================== 技能 API (PR-7) ====================
+
+# 进程内单例: adapter 自身带 enabled / usage_count 内存状态,
+# 模块级 cache 让多个请求共享同一份,避免 toggle 后状态错位。
+_skill_adapter_singleton: object | None = None
+
+
+def _get_skill_adapter():
+    """惰性构造 + 缓存 InprocSkillAdapter 单例。"""
+    global _skill_adapter_singleton
+    if _skill_adapter_singleton is None:
+        from backend.adapters.out.skill import InprocSkillAdapter
+
+        _skill_adapter_singleton = InprocSkillAdapter()
+    return _skill_adapter_singleton
+
+
+def _skill_to_dict(spec, enabled: bool, usage_count: int) -> dict:
+    """把 SkillSpec + 路由层扩展字段序列化为 dict。"""
+    return {
+        "name": spec.name,
+        "description": spec.description,
+        "triggers": list(spec.triggers),
+        "parameters": dict(spec.parameters),
+        "examples": list(spec.examples),
+        "enabled": enabled,
+        "usage_count": usage_count,
+    }
+
+
+@router.get("/skills")
+async def list_skills():
+    """列出所有已注册技能 (含 disabled 与 usage_count)。"""
+    adapter = _get_skill_adapter()
+    return [
+        _skill_to_dict(spec, adapter.is_enabled(spec.name), adapter.usage_count(spec.name))
+        for spec in adapter.list_skills()
+    ]
+
+
+class SkillToggle(BaseModel):
+    """``POST /skills/{name}/toggle`` 请求体。"""
+
+    enabled: StrictBool
+
+
+@router.post("/skills/{name}/toggle")
+async def toggle_skill(name: str, data: SkillToggle):
+    """启用 / 禁用技能 (PR-7)。
+
+    - 200 + 完整 skill dict (含新 enabled)
+    - 404 + 结构化 detail (技能名不存在)
+    - 422 (FastAPI 自动) — enabled 缺失 / 类型错
+    """
+    adapter = _get_skill_adapter()
+    if not adapter.set_enabled(name, data.enabled):
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "skill_not_found", "message": f"skill '{name}' not found"},
+        )
+    # 返回完整 skill dict (与 list 接口一致)
+    spec = next((s for s in adapter.list_skills() if s.name == name), None)
+    assert spec is not None  # set_enabled 已 guard
+    return _skill_to_dict(spec, adapter.is_enabled(name), adapter.usage_count(name))
+
+
+class SkillExecuteRequest(BaseModel):
+    """``POST /skills/{name}/execute`` 请求体。
+
+    - action: 技能子动作(单动作 builtin 留空字符串即可)
+    - args:   技能参数 (透传给 BaseSkill.execute)
+    """
+
+    action: str = ""
+    args: dict = {}
+
+
+@router.post("/skills/{name}/execute")
+async def execute_skill(name: str, data: SkillExecuteRequest):
+    """执行技能 (PR-7)。
+
+    - 200 + SkillResult (success / content / metadata / error)
+    - 404 + 结构化 detail (技能名不存在 — 资源不存在的标准 REST 语义)
+    - 422 (FastAPI 自动) — args 类型错等
+    - execute 内部失败(技能 disabled / builtin 工具不可用)→ 200 + success=False,
+      **不抛 4xx/5xx**,由前端按 success 字段判定。
+    """
+    adapter = _get_skill_adapter()
+    # 资源不存在 → 404 (与 disabled 走 200 + success=False 区分开)
+    if not adapter.has_skill(name):
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "skill_not_found", "message": f"skill '{name}' not found"},
+        )
+    result = await adapter.execute(name, data.action, data.args)
+    if result.success:
+        adapter.bump_usage(name)
+    return {
+        "success": result.success,
+        "content": result.content,
+        "metadata": result.metadata,
+        "error": result.error,
+    }
+
+
 # ==================== 聊天 API ====================
 
 
