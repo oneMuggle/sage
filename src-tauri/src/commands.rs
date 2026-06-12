@@ -1,5 +1,5 @@
 // Tauri Commands - 通过 Python 后端通信
-use crate::models::{Agent, AgentEvent, AgentUpdateRequest, ChatRequest, ChatResponse, EvolutionLog, EvolutionTaskStatus, Memory, Message, Session, TriggerRequest};
+use crate::models::{Agent, AgentEvent, AgentUpdateRequest, ChatRequest, ChatResponse, EvolutionLog, EvolutionTaskStatus, Memory, Message, Session, Skill, SkillExecuteResult, TriggerRequest};
 use crate::state::AppState;
 use futures_util::StreamExt;
 use std::sync::Arc;
@@ -408,4 +408,55 @@ pub async fn agent_chat_stream(
     });
 
     Ok(stream_id)
+}
+
+// ==================== 技能命令 (PR-7) ====================
+
+/// 列出所有已注册技能 (PR-7)
+/// 对应后端 GET /api/v1/skills
+#[tauri::command]
+pub async fn list_skills(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<Skill>, String> {
+    tracing::info!("获取技能列表");
+    state.python_backend.get("/skills").await
+}
+
+/// 启用/禁用技能 (PR-7)
+/// 对应后端 POST /api/v1/skills/{name}/toggle
+/// - 返回完整 skill dict (含新 enabled)
+/// - 不存在 → 后端 404, Tauri 命令透传为 Err
+#[tauri::command]
+pub async fn toggle_skill(
+    name: String,
+    enabled: bool,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Skill, String> {
+    tracing::info!("切换技能: name={}, enabled={}", name, enabled);
+    let path = format!("/skills/{}/toggle", name);
+    state
+        .python_backend
+        .post(&path, &serde_json::json!({ "enabled": enabled }))
+        .await
+}
+
+/// 执行技能 (PR-7)
+/// 对应后端 POST /api/v1/skills/{name}/execute
+/// - 资源不存在 → 404 透传
+/// - 资源存在但 disabled / 工具未注入 → 200 + success=False (SkillExecuteResult)
+#[tauri::command]
+pub async fn execute_skill(
+    name: String,
+    action: Option<String>,
+    args: Option<serde_json::Value>,
+    state: State<'_, Arc<AppState>>,
+) -> Result<SkillExecuteResult, String> {
+    tracing::info!("执行技能: name={}, action={:?}", name, action);
+    let path = format!("/skills/{}/execute", name);
+    let action = action.unwrap_or_default();
+    let args = args.unwrap_or_else(|| serde_json::json!({}));
+    state
+        .python_backend
+        .post(&path, &serde_json::json!({ "action": action, "args": args }))
+        .await
 }

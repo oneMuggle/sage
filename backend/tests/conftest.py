@@ -152,3 +152,13 @@ def sample_user_query():
 def tmp_data_dir(tmp_path):
     """临时数据目录（避免污染真实 data/）—— 直接返回 tmp_path 便于测试中使用"""
     return tmp_path
+
+
+@pytest.fixture(autouse=False)
+def reset_skill_adapter():  # noqa: PT004 - 空 yield 是合法的 teardown-only fixture
+    """PR-7: 重置 skills 路由层模块级 adapter 单例 (enabled / usage_count)。"""
+    import backend.api.legacy_routes as routes
+
+    routes._skill_adapter_singleton = None
+    yield
+    routes._skill_adapter_singleton = None

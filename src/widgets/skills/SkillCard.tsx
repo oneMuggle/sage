@@ -5,7 +5,7 @@ interface SkillCardProps {
   description: string;
   triggers: string[];
   enabled: boolean;
-  usageCount: number;
+  usage_count: number;
   onToggle: (name: string, enabled: boolean) => void;
 }
 
@@ -14,7 +14,7 @@ const SkillCard: React.FC<SkillCardProps> = ({
   description,
   triggers,
   enabled,
-  usageCount,
+  usage_count,
   onToggle,
 }) => {
   return (
@@ -41,7 +41,7 @@ const SkillCard: React.FC<SkillCardProps> = ({
           </div>
 
           {/* 使用统计 */}
-          <p className="text-xs text-muted mt-2">已使用 {usageCount} 次</p>
+          <p className="text-xs text-muted mt-2">已使用 {usage_count} 次</p>
         </div>
 
         {/* 开关 */}

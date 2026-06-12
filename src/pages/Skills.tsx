@@ -49,7 +49,7 @@ const Skills: React.FC = () => {
   );
 
   const enabledCount = skills.filter((s) => s.enabled).length;
-  const totalUsage = skills.reduce((sum, s) => sum + s.usageCount, 0);
+  const totalUsage = skills.reduce((sum, s) => sum + s.usage_count, 0);
 
   // 首次加载且失败：整页错误态 + 重试
   if (loading && skills.length === 0 && error) {

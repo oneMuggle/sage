@@ -196,3 +196,32 @@ pub struct AgentEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
+
+/// 技能规格 (PR-7)
+/// 对应后端 ``backend.api.legacy_routes._skill_to_dict()`` 序列化字段
+/// (SkillSpec + enabled + usage_count)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Skill {
+    pub name: String,
+    pub description: String,
+    pub triggers: Vec<String>,
+    #[serde(default)]
+    pub parameters: serde_json::Value,
+    #[serde(default)]
+    pub examples: Vec<String>,
+    pub enabled: bool,
+    pub usage_count: i32,
+}
+
+/// 技能执行结果 (PR-7)
+/// 对应后端 ``backend.api.legacy_routes.execute_skill`` 返回体
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillExecuteResult {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<serde_json::Value>,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
