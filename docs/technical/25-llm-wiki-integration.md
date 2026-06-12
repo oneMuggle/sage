@@ -537,11 +537,90 @@ pub async fn wiki_get_graph(
 - **Phase 6 (Graph UI)**: 调 `getWikiGraph(project, query, limit)` 渲染 React Flow
 - **Phase 7 (进度 + 流式 UI)**: Phase 5 提供 RAG 相关性辅助
 
-## Phase 6-8: 计划中
+## Phase 6: React Flow 知识图谱视图 ✅
+
+### 目标
+
+把 Phase 5 生成的 4-signal 图谱数据用 React Flow 渲染,支持节点 click、query 高亮、图例。
+
+### 新增/修改文件
+
+| 文件 | 职责 | 行数 |
+|---|---|---|
+| `src/widgets/wiki/WikiGraphView.tsx` (新) | React Flow 渲染 + 节点/边/图例 | ~250 |
+| `src/widgets/wiki/index.ts` | 导出 `WikiGraphView` | +1 |
+| `src/widgets/wiki/WikiToolbar.tsx` | 加 `graph` view + `Network` 图标 | +1 |
+| `src/shared/types/wiki.ts` | `WikiView` 加 `'graph'` + Graph 类型 | +25 |
+| `src/shared/api-client/wiki.ts` | `getWikiGraph()` 包装(已 Phase 5 加) | 0 |
+| `src/entities/wiki/store.ts` | 加 `graphData` / `graphQuery` / `loadGraph()` / `setGraphQuery()` | +30 |
+| `src/pages/Knowledge.tsx` | 加 `GraphPanel` 子组件 + `useEffect` 懒加载 | +50 |
+| `package.json` + `package-lock.json` | 加 `@xyflow/react@^12.11.0` | +1 dep |
+
+### 公共 API
+
+```tsx
+import { WikiGraphView } from '../widgets/wiki';
+
+<WikiGraphView
+  data={graphData}              // GraphData: { nodes, edges }
+  query="albert"                // 可选:高亮匹配节点
+  onNodeClick={(path) => ...}   // 可选:点击节点回调
+/>
+```
+
+```ts
+// store
+useWikiStore.getState().loadGraph(query?: string);  // 加载或重新加载图谱
+useWikiStore.getState().setGraphQuery(q: string);   // 设置 query
+```
+
+### 节点/边可视化
+
+- **节点**: 自定义 React 组件 `WikiNode`,按 `page_type` 颜色编码
+  - `source` = 蓝,`entity` = 紫,`concept` = 绿,`query` = 黄,`synthesis` = 红
+  - hover 时显示 frontmatter 摘要(title + type + source count + wikilink count)
+  - 不匹配 query 时 dim 到 70% opacity
+- **边**: 按 `signal` 颜色 + `weight` 粗细
+  - `DirectLink` = 蓝(animated),`SourceOverlap` = 紫,`TypeAffinity` = 灰
+  - strokeWidth = max(1, weight / 2)
+- **图例**: 右上角浮层,显示节点类型 + 边类型 + 匹配计数
+- **MiniMap + Controls**: 内置缩放/平移控件
+
+### 简化布局
+
+按 `id` 哈希到固定网格位置:`x = (i % cols) * 220, y = floor(i / cols) * 120`,其中 `cols = ceil(sqrt(N))`。无 dagre/force-layout(后续 Phase 可加)。
+
+### 关键设计
+
+1. **懒加载**: `useEffect` 监听 `activeView === 'graph' && !graphData` 才调 `loadGraph`,避免切到 graph 视图前就拉数据
+2. **query 防抖**: onChange 立即更新 local,onBlur 或 Enter 才提交 store + reload(避免每次按键都 reload)
+3. **节点 click → 切到 browser view**: 复用现有 `openFile` 行为,无需新逻辑
+4. **类型扩展**: `WikiView` 加 `'graph'`,`WikiView = 'browser' | 'search' | 'chat' | 'graph'`
+5. **依赖管理**: `@xyflow/react@^12.11.0`(latest stable),自带 `dist/style.css` 样式
+
+### 单元测试覆盖(7/7 通过)
+
+`WikiGraphView helpers`:
+- `colorByType` 默认 / 映射
+- `buildGraph` 节点/边生成 / query 过滤 / 大小写不敏感 / id 匹配
+
+### 累计测试
+
+| 范围 | 数量 |
+|---|---|
+| Rust (cargo test --lib wiki) | 115 |
+| Frontend (vitest) | 99 (其中 7 个新增 WikiGraphView) |
+| **合计** | **214** |
+
+### 与后续 Phase 衔接
+
+- **Phase 7 (进度 + 流式 UI)**: ingest/chunk 进度事件 + chat 流式
+- **Phase 8 (E2E + 用户手册)**: Playwright 测试 graph view
+
+## Phase 7-8: 计划中
 
 详见 [docs/plans/2026-06-12_llm-wiki-llm-integration.md](../plans/2026-06-12_llm-wiki-llm-integration.md)。
 
-- **Phase 6**: React Flow 知识图谱视图
 - **Phase 7**: 进度反馈 + 流式 chat UI
 - **Phase 8**: 端到端测试 + 用户手册
 

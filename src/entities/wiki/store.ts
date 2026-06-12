@@ -6,8 +6,9 @@ import {
   wikiReadFile,
   wikiWriteFile,
   wikiDeleteFile,
+  getWikiGraph,
 } from '../../shared/api-client/wiki';
-import type { WikiProject, FileNode, WikiView } from '../../shared/types/wiki';
+import type { WikiProject, FileNode, WikiView, GraphData } from '../../shared/types/wiki';
 
 interface WikiStoreState {
   project: WikiProject | null;
@@ -17,6 +18,8 @@ interface WikiStoreState {
   activeView: WikiView;
   isLoading: boolean;
   error: string | null;
+  graphData: GraphData | null;
+  graphQuery: string;
 
   setProject: (project: WikiProject | null) => void;
   loadFileTree: () => Promise<void>;
@@ -28,6 +31,8 @@ interface WikiStoreState {
   setActiveView: (view: WikiView) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  loadGraph: (query?: string) => Promise<void>;
+  setGraphQuery: (q: string) => void;
 }
 
 export const useWikiStore = create<WikiStoreState>((set, get) => ({
@@ -37,6 +42,8 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
   fileContent: '',
   activeView: 'browser',
   isLoading: false,
+  graphData: null,
+  graphQuery: '',
   error: null,
 
   setProject: (project) => set({ project, fileTree: [], selectedFile: null, fileContent: '' }),
@@ -97,4 +104,18 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
   setActiveView: (view) => set({ activeView: view }),
   setLoading: (loading) => set({ isLoading: loading }),
   setError: (error) => set({ error }),
+
+  loadGraph: async (query) => {
+    const { project } = get();
+    if (!project) return;
+    set({ isLoading: true, error: null });
+    try {
+      const q = query ?? get().graphQuery;
+      const data = await getWikiGraph(project.path, q || undefined, 100);
+      set({ graphData: data, isLoading: false });
+    } catch (e) {
+      set({ error: `加载图谱失败: ${e}`, isLoading: false });
+    }
+  },
+  setGraphQuery: (q) => set({ graphQuery: q }),
 }));
