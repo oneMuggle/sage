@@ -66,6 +66,9 @@ export async function wikiIngestSource(
   apiUrl: string,
   apiKey: string,
   model: string,
+  embedApiUrl: string,
+  embedApiKey: string,
+  embedModel: string,
 ): Promise<IngestResult> {
   return invoke<IngestResult>('wiki_ingest_source', {
     sourceFilePath,
@@ -73,6 +76,9 @@ export async function wikiIngestSource(
     apiUrl,
     apiKey,
     model,
+    embedApiUrl,
+    embedApiKey,
+    embedModel,
   });
 }
 

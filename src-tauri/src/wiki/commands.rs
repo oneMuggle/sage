@@ -160,7 +160,7 @@ pub async fn wiki_search(
     search_wiki(&project_root, &query, limit.unwrap_or(20))
 }
 
-/// Ingest a source document into the wiki
+/// Ingest a source document into the wiki (LLM 驱动的两步 CoT)
 #[command]
 pub async fn wiki_ingest_source(
     source_file_path: String,
@@ -168,14 +168,55 @@ pub async fn wiki_ingest_source(
     api_url: String,
     api_key: String,
     model: String,
+    embed_api_url: String,
+    embed_api_key: String,
+    embed_model: String,
 ) -> Result<IngestResult, String> {
-    use crate::wiki::ingest::ingest_source;
+    use crate::wiki::embeddings::EmbeddingConfig;
+    use crate::wiki::http::HttpClient;
+    use crate::wiki::ingest::{ingest_source as do_ingest, IngestConfig};
+    use crate::wiki::llm_provider::{LlmProviderConfig, Provider};
 
     let project_root = Path::new(&project_path)
         .canonicalize()
         .map_err(|e| format!("无法访问项目目录: {}", e))?;
 
-    ingest_source(&source_file_path, &project_root, &api_url, &api_key, &model).await
+    // 推断 LLM provider(简单按 base_url 关键词)
+    let llm_provider = if api_url.contains("anthropic") {
+        Provider::Anthropic
+    } else if api_url.contains("localhost:11434") {
+        Provider::Ollama
+    } else {
+        Provider::OpenAI
+    };
+    let llm_cfg = LlmProviderConfig {
+        provider: llm_provider,
+        base_url: api_url,
+        api_key,
+        model,
+        max_tokens: 4096,
+        temperature: 0.3,
+        custom_headers: std::collections::HashMap::new(),
+    };
+    let embed_cfg = EmbeddingConfig {
+        base_url: embed_api_url,
+        api_key: embed_api_key,
+        model: embed_model,
+        dim: 1536,
+    };
+    let cfg = IngestConfig {
+        llm: llm_cfg,
+        embedding: embed_cfg,
+        max_content_chars: 50_000,
+    };
+    let http = HttpClient::new();
+    let src = Path::new(&source_file_path);
+    let outcome = do_ingest(&cfg, &http, &project_root, src).await?;
+    Ok(IngestResult {
+        source_path: outcome.source_path,
+        wiki_page_path: outcome.wiki_page_path,
+        page_type: outcome.page_type,
+    })
 }
 
 /// Chat with the wiki

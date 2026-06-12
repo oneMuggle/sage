@@ -2,6 +2,8 @@
 pub mod chat;
 pub mod commands;
 pub mod embeddings;
+pub mod frontmatter;
+pub mod http;
 pub mod ingest;
 pub mod llm_provider;
 pub mod llm_prompts;
