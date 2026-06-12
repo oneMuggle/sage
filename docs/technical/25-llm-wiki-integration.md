@@ -617,11 +617,86 @@ useWikiStore.getState().setGraphQuery(q: string);   // 设置 query
 - **Phase 7 (进度 + 流式 UI)**: ingest/chunk 进度事件 + chat 流式
 - **Phase 8 (E2E + 用户手册)**: Playwright 测试 graph view
 
-## Phase 7-8: 计划中
+## Phase 7: 进度反馈 + 流式 chat UI(后端) ✅ (前端留 Phase 8)
+
+### 目标
+
+为 ingest 添加 5 阶段进度回调,让 chat 支持流式 chunk 推送。前端 UI 实现留 Phase 8 与 E2E 一起做(本阶段专注后端基础)。
+
+### 修改文件
+
+| 文件 | 职责 | 改动 |
+|---|---|---|
+| `src-tauri/src/wiki/ingest.rs` | 加 `IngestProgress` 类型 + `ProgressFn` 回调 + 5 阶段 emit | +50 |
+| `src-tauri/src/wiki/chat.rs` | 拆 `build_chat_context` + `chat_with_wiki_stream`(30 字符 chunk) | +80 |
+| `src-tauri/src/wiki/commands.rs` | `do_ingest` 调用传 `None` 进度(无 Tauri emit 通路) | +1 |
+
+### 公共 API
+
+```rust
+// ingest
+pub struct IngestProgress {
+    pub stage: String,    // "started" / "copy_source" / "step1_analyze" /
+                          // "step2_write" / "embedding" / "completed"
+    pub percent: u8,       // 0-100
+    pub message: Option<String>,
+}
+pub type ProgressFn = Box<dyn Fn(IngestProgress) + Send + Sync>;
+pub async fn ingest_source(
+    config, http, project_root, source_file_path,
+    progress: Option<ProgressFn>,  // 新参数
+) -> Result<IngestOutcome, String>;
+
+// chat
+pub struct ChatContext {
+    pub context: String,
+    pub citations: Vec<String>,
+    pub stats: RetrievalStats,
+}
+pub async fn build_chat_context(...) -> Result<(ChatContext, ChatRequest), String>;
+pub type ChatStreamChunkFn<'a> = &'a mut dyn FnMut(&str);
+pub async fn chat_with_wiki_stream(
+    ..., on_chunk: &mut ChatStreamChunkFn<'_>,
+) -> Result<WikiChatOutcome, String>;
+```
+
+### 5 阶段 ingest 进度
+
+| Stage | Percent | 触发 |
+|---|---|---|
+| `started` | 0% | 入口 |
+| `copy_source` | 10% | 复制源到 raw/sources/ |
+| `step1_analyze` | 20-40% | LLM 分析 |
+| `step2_write` | 45-70% | LLM 写作 |
+| `embedding` | 80-90% | 嵌入 + 写 VectorStore |
+| `completed` | 100% | 全部完成 |
+
+缓存命中时直接 `completed 100% 缓存命中,跳过`。
+
+### chat 流式 chunk
+
+`chat_with_wiki_stream` 用 30 字符分块模拟流式推送:
+- 复用 `build_chat_context` 构造 context + ChatRequest
+- 调非流式 LLM 端点拿完整响应
+- 每 30 字符调 `on_chunk(chunk)` 推给前端
+- 真正 SSE 解析留 Phase 8(需要 `wiremock` 测流式端点)
+
+### 测试
+
+- `cargo test --lib wiki  →  115 passed; 0 failed`(无新增,改动不破现有)
+- ingest 测试 12/12 通过(签名加 None 后)
+- chat 测试 4/4 通过
+
+### 与 Phase 8 衔接
+
+- **Phase 8 E2E**: 加 `useWikiIngest` hook + `WikiIngestProgress` 组件订阅 `wiki-ingest-{id}-progress` event
+- **Phase 8 E2E**: 加 `useWikiChatStream` hook + `WikiChat` 切到流式
+- **Phase 8 文档**: 用户手册说明 ingest/chat 进度反馈
+
+## Phase 8: 计划中
 
 详见 [docs/plans/2026-06-12_llm-wiki-llm-integration.md](../plans/2026-06-12_llm-wiki-llm-integration.md)。
 
-- **Phase 7**: 进度反馈 + 流式 chat UI
 - **Phase 8**: 端到端测试 + 用户手册
 
 ---
