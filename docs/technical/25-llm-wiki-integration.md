@@ -245,11 +245,115 @@ test wiki::vectorstore::tests::upsert_with_wrong_dim_errors ... ok
 - **Phase 4 (RAG Chat)**: 调 `build_embed_request` + `VectorStore::search` 做 hybrid retrieval
 - **Phase 5-7**: 暂不直接调用
 
-## Phase 3-8: 计划中
+## Phase 3: LLM 驱动 Ingest (两步 CoT) ✅
+
+### 目标
+
+把 wiki ingest 从"占位 TODO"升级为"完整 LLM 集成",实现 6 步管线 + SHA256 增量缓存。
+
+### 新增文件
+
+| 文件 | 职责 | 行数 |
+|---|---|---|
+| `src-tauri/src/wiki/frontmatter.rs` | 解析/序列化 YAML frontmatter + extract_wikilinks | ~290 |
+| `src-tauri/src/wiki/http.rs` | reqwest HTTP 客户端(post_json 通用方法) | ~110 |
+| `src-tauri/src/wiki/ingest.rs` | **重写** 完整 6 步 ingest 管线 | ~450 |
+
+### 修改文件
+
+- `src-tauri/src/wiki/commands.rs`: `wiki_ingest_source` 签名扩展加 3 个 embedding 参数
+- `src-tauri/src/wiki/mod.rs`: 导出 frontmatter + http
+- `src/shared/api-client/wiki.ts`: `wikiIngestSource` 包装加 3 个 embedding 参数
+- `src-tauri/Cargo.toml`: 新增 `sha2 = "0.10.9"`(SHA256 摘要)
+
+### Ingest 6 步管线
+
+```
+1. 复制源 → raw/sources/{filename}
+2. SHA256 摘要;命中 cache → 跳过 LLM,直接返回 cached=true
+3. Step 1 LLM 分析 → entities/concepts/tags/related_topics/summary (JSON)
+4. Step 2 LLM 写作 → 完整 wiki 页面 (markdown + frontmatter)
+5. 解析 frontmatter (frontmatter::parse) + body
+6. 写 wiki/sources/{slug}.md (原子写)
+7. chunk_markdown + embed + VectorStore.upsert_chunks
+8. 更新 ingest-cache.json
+```
+
+### 公共 API
+
+```rust
+// frontmatter
+pub struct Frontmatter { title, page_type, tags, related, sources, created, updated, extra }
+pub struct ParsedDoc { frontmatter, body }
+pub fn parse(content: &str) -> ParsedDoc;
+pub fn serialize(doc: &ParsedDoc) -> String;
+pub fn extract_wikilinks(content: &str) -> Vec<String>;
+
+// http
+pub struct HttpClient { client: reqwest::Client, timeout: Duration }
+impl HttpClient {
+    pub fn new() -> Self;
+    pub fn with_timeout(timeout: Duration) -> Self;
+    pub async fn post_json(&self, url: &str, headers: &HashMap, body: &Value) -> Result<String, String>;
+}
+
+// ingest
+pub struct IngestConfig { llm: LlmProviderConfig, embedding: EmbeddingConfig, max_content_chars: usize }
+pub struct IngestOutcome { source_path, wiki_page_path, page_type, cached: bool }
+pub async fn ingest_source(
+    config: &IngestConfig,
+    http: &HttpClient,
+    project_root: &Path,
+    source_file_path: &Path,
+) -> Result<IngestOutcome, String>;
+```
+
+### LLM 推断策略
+
+`commands.rs` 按 `api_url` 关键词推断 provider:
+- 包含 `anthropic` → `Provider::Anthropic`
+- 包含 `localhost:11434` → `Provider::Ollama`
+- 其他 → `Provider::OpenAI`(默认)
+
+未来 Phase 7 进度事件 + 流式 chat 时,前端会显式传 `provider` 字段,这里先按 URL 启发式。
+
+### 关键设计
+
+1. **两步 CoT** (分析 → 写作): 与 llm_wiki 一致,质量显著高于单次 LLM 调用
+2. **宽松 JSON 解析** (`parse_analysis_json`): 提取首个 `{` 到最后 `}` 之间的内容,容忍 markdown fence + 前导文本
+3. **SHA256 增量缓存**: 源文件未变更则跳过两次 LLM 调用,节省 token 成本
+4. **原子写 wiki 页面**: 临时文件 + rename,避免半写状态
+5. **slugify 中英兼容**: 中文字符保留,英文小写 + `-` 分隔
+6. **HTTP 客户端 30 分钟 timeout**: 同 llm_wiki,长文档 LLM 处理可能慢
+
+### 单元测试覆盖(34/34 通过)
+
+**frontmatter** (18 测试):
+- parse 无 frontmatter / 简单 / list / related / sources / dates / 未知字段
+- serialize 往返 / 空 frontmatter
+- extract_wikilinks 简单 / 多个 / alias / 去重 / 无 / 未闭合
+
+**http** (4 测试):
+- new 30min timeout / with_timeout / with_timeout(0) / default
+
+**ingest** (12 测试):
+- sha256 空串 / hello
+- slugify 各种边界(中文/连续分隔符/特殊字符)
+- parse_analysis_json 严格 JSON / markdown fence / 前导文本 / 无效
+- cache 往返 / 缺失
+
+### 累计 wiki 测试: 77 passed (Phase 1 20 + Phase 2 24 + Phase 3 33)
+
+### 与后续 Phase 衔接
+
+- **Phase 4 (RAG Chat)**: 调 `VectorStore::search` + token search 做 hybrid retrieval
+- **Phase 5 (Graph)**: 调 `frontmatter::extract_wikilinks` 解析 `[[X]]` 链接
+- **Phase 7 (UI)**: 进度事件 + 流式 chat(IngestOutcome 已有 `cached` 字段)
+
+## Phase 4-8: 计划中
 
 详见 [docs/plans/2026-06-12_llm-wiki-llm-integration.md](../plans/2026-06-12_llm-wiki-llm-integration.md)。
 
-- **Phase 3**: LLM 驱动 Ingest(两步 CoT 分析→写作)+ frontmatter 解析 + wikilink 提取
 - **Phase 4**: RAG 增强 Wiki Chat(token + 向量 RRF + token 预算)
 - **Phase 5**: 4-signal 知识图谱生成
 - **Phase 6**: React Flow 知识图谱视图
