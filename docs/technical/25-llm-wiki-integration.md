@@ -118,11 +118,137 @@ test result: ok. 20 passed; 0 failed
 - **Phase 4 (RAG Chat)**: 调用 `RAG_SYSTEM` + `format_rag_user_message` + `build_request` + `parse_response`
 - **Phase 5-7**: 暂不直接调用本模块,只通过 wiki 现有命令
 
-## Phase 2-8: 计划中
+## Phase 2: 向量存储 + Embedding 客户端 ✅
+
+### 目标
+
+提供 `VectorStore` 给后续 Phase 3 (Ingest) 和 Phase 4 (Chat) 调用,实现 wiki 的语义检索能力。
+
+### 选型决策(重要)
+
+**最初计划用 LanceDB,实测不兼容 sage Rust 1.77.2 / edition2021**:
+- lancedb 0.10-0.30 全部拉 lance 0.10-0.20,lance 内部 async block 类型 layout 深度 > 128
+- 触发 Rust 1.77 `queries overflow the depth limit` 错误
+- Workaround (`-Z crate-attr=recursion_limit=512`) 需要 nightly Rust,sage 锁 stable
+
+**备选 sqlite-vec (0.1.10-alpha.4) 也有自身 bug**:打包漏 `sqlite-vec-diskann.c`
+
+**最终选定: 纯 Rust 自实现,零新依赖**:
+- `Vec<f32>` 存向量,JSON 文件持久化
+- Brute-force cosine similarity + top-k
+- 规模上限 < 1万 chunk(MVP wiki 规模足够)
+- 后续如需扩展到 10万+ chunk,可平滑切换 HNSW (如 `usearch`)
+
+### 新增文件
+
+| 文件 | 职责 | 行数 |
+|---|---|---|
+| `src-tauri/src/wiki/embeddings.rs` | chunk_markdown + OpenAI 兼容 /v1/embeddings 客户端 | ~270 |
+| `src-tauri/src/wiki/vectorstore.rs` | 嵌入式 JSON 向量存储 + cosine 检索 | ~340 |
+
+### 公共 API
+
+```rust
+// embeddings
+pub struct EmbeddingConfig { base_url, api_key, model, dim }
+pub struct EmbedHttpRequest { url, method, headers, body }
+pub const DEFAULT_CHUNK_SIZE: usize = 500;
+pub const DEFAULT_CHUNK_OVERLAP: usize = 50;
+pub fn chunk_markdown(content: &str, target: usize) -> Vec<String>;
+pub fn build_embed_request(config: &EmbeddingConfig, texts: &[String]) -> EmbedHttpRequest;
+pub fn parse_embed_response(body: &str, expected_dim: u32) -> Result<Vec<Vec<f32>>, String>;
+
+// vectorstore
+pub struct ChunkRecord { id, page_path, chunk_index, content, vector }
+pub struct SearchHit { page_path, chunk_index, content, score }
+pub struct VectorStore { ... }  // 不导出字段
+impl VectorStore {
+    pub fn open(project_root: &Path, dim: u32) -> Result<Self, String>;
+    pub fn upsert_chunks(&mut self, page_path: &str, chunks: &[(u32, String, Vec<f32>)]) -> Result<(), String>;
+    pub fn delete_by_page(&mut self, page_path: &str) -> usize;
+    pub fn search(&self, query_vec: &[f32], limit: usize) -> Result<Vec<SearchHit>, String>;
+    pub fn len(&self) -> usize;
+    pub fn is_empty(&self) -> bool;
+}
+```
+
+### chunk_markdown 切分策略
+
+1. 按 `\n\n`(空行)切成段落
+2. 合并过短段落(累加直到接近 `target_chunk_size`)
+3. 切分过长段落(强制 `target_chunk_size`,带 50 字符 overlap)
+
+### VectorStore 文件格式
+
+`{project_root}/.llm-wiki/vectors.json`:
+
+```json
+{
+  "version": 1,
+  "dim": 1536,
+  "records": [
+    {
+      "id": "wiki/sources/albert-einstein.md::0",
+      "page_path": "wiki/sources/albert-einstein.md",
+      "chunk_index": 0,
+      "content": "1879-1955,德国物理学家...",
+      "vector": [0.012, -0.034, ...]
+    }
+  ]
+}
+```
+
+- 原子写(临时文件 + rename)
+- 维度不匹配时 `open` 失败(防止 embedding 模型切换后检索错误)
+- 全量内存索引(适合 < 1万 chunk;超过需要 HNSW)
+
+### 单元测试覆盖(24/24 通过)
+
+```
+test wiki::embeddings::tests::chunk_empty_returns_empty ... ok
+test wiki::embeddings::tests::chunk_huge_paragraph_gets_split_with_overlap ... ok
+test wiki::embeddings::tests::chunk_long_content_splits_into_multiple ... ok
+test wiki::embeddings::tests::chunk_preserves_markdown_structure ... ok
+test wiki::embeddings::tests::chunk_short_paragraphs_merged ... ok
+test wiki::embeddings::tests::chunk_single_paragraph_returns_one ... ok
+test wiki::embeddings::tests::embed_request_batch_input ... ok
+test wiki::embeddings::tests::embed_request_omits_auth_when_no_key ... ok
+test wiki::embeddings::tests::embed_request_url_and_auth ... ok
+test wiki::embeddings::tests::parse_response_extracts_vectors ... ok
+test wiki::embeddings::tests::parse_response_invalid_json_errors ... ok
+test wiki::embeddings::tests::parse_response_missing_data_errors ... ok
+test wiki::embeddings::tests::parse_response_with_no_dim_check ... ok
+test wiki::embeddings::tests::parse_response_wrong_dim_errors ... ok
+test wiki::vectorstore::tests::delete_by_page_removes_all_chunks_of_page ... ok
+test wiki::vectorstore::tests::open_empty_when_file_missing ... ok
+test wiki::vectorstore::tests::open_persists_and_reloads ... ok
+test wiki::vectorstore::tests::open_with_mismatched_dim_errors ... ok
+test wiki::vectorstore::tests::search_after_delete_omits_removed_page ... ok
+test wiki::vectorstore::tests::search_returns_top_k_by_cosine ... ok
+test wiki::vectorstore::tests::search_with_wrong_dim_errors ... ok
+test wiki::vectorstore::tests::search_with_zero_query_vector_returns_empty ... ok
+test wiki::vectorstore::tests::upsert_replaces_existing_page_chunks ... ok
+test wiki::vectorstore::tests::upsert_with_wrong_dim_errors ... ok
+```
+
+### 关键设计决策
+
+1. **零新依赖**: 整个 Phase 2 不加任何 Cargo.toml 依赖(只复用现有 serde + serde_json + std)
+2. **build_request 模式**: 同 llm_provider,实际 HTTP 调用推迟到 Phase 4,单元测试不需 mock
+3. **维度硬约束 1536**: 与 text-embedding-3-small 绑定;切换模型需清空 vectors.json
+4. **文件路径 `.llm-wiki/`**: 与 llm_wiki 一致(便于将来迁移),不进 git
+5. **MVP 规模假设**: < 1万 chunk 性能足够(每搜索 1ms 内),超过时切换 HNSW
+
+### 与后续 Phase 的衔接
+
+- **Phase 3 (Ingest)**: 调 `chunk_markdown` + `build_embed_request` + `VectorStore::upsert_chunks`
+- **Phase 4 (RAG Chat)**: 调 `build_embed_request` + `VectorStore::search` 做 hybrid retrieval
+- **Phase 5-7**: 暂不直接调用
+
+## Phase 3-8: 计划中
 
 详见 [docs/plans/2026-06-12_llm-wiki-llm-integration.md](../plans/2026-06-12_llm-wiki-llm-integration.md)。
 
-- **Phase 2**: LanceDB 嵌入式向量存储 + OpenAI 兼容 embedding 客户端
 - **Phase 3**: LLM 驱动 Ingest(两步 CoT 分析→写作)+ frontmatter 解析 + wikilink 提取
 - **Phase 4**: RAG 增强 Wiki Chat(token + 向量 RRF + token 预算)
 - **Phase 5**: 4-signal 知识图谱生成
