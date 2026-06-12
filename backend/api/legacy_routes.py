@@ -8,7 +8,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool
 
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
@@ -124,6 +124,21 @@ class TriggerResponse(BaseModel):
 
     success: bool
     message: str
+
+
+class AgentToggle(BaseModel):
+    """PATCH /agents/{id}/toggle 请求体 (PR-5)。
+
+    单字段 ``enabled`` 必填 — 缺失走 Pydantic 自动 422。专门用来对
+    enable/disable 这一高频操作做语义化端点 (审计 + 未来权限),不
+    与 PATCH /agents/{id} 重叠。
+
+    注: 用 ``StrictBool`` 而非 ``bool`` — Pydantic v2 默认 lax 模式会把
+    "yes"/"1"/1 等强转 True, 在 API 边界宁可 422 也不要静默转换。前端
+    TypeScript 永远传真 bool, 严格模式不会误伤。
+    """
+
+    enabled: StrictBool
 
 
 class AgentUpdate(BaseModel):
@@ -330,6 +345,36 @@ async def update_agent(agent_id: str, data: AgentUpdate):
         update_payload["model_config"] = update_payload.pop("model_config_data")
 
     repo.update(agent_id, update_payload)
+    return repo.get(agent_id)
+
+
+@router.patch("/agents/{agent_id}/toggle")
+async def toggle_agent(agent_id: str, data: AgentToggle):
+    """启用/禁用 agent (PR-5)。
+
+    - 200 + 更新后完整 profile (含 enabled / updated_at 新值)
+    - 404 + 结构化 detail (id 不存在, 与 PR-3/PR-4 复用同一 type)
+    - 422 (FastAPI 自动) — enabled 缺失 / 类型错
+
+    选 ``/toggle`` 子路径而非复用 ``PATCH /agents/{id}`` 的理由:
+    - 审计语义清晰: events.jsonl 里可单独 grep 出 toggle 操作
+    - 未来权限模型: toggle 与 system_prompt 编辑可独立授权
+
+    同值 toggle 也走 SQL UPDATE — 幂等但 updated_at 仍刷新, 符合
+    set_enabled() 语义。
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    repo = AgentRepository()
+
+    # 与 update_agent 一致: 显式查存在性, 给出比 set_enabled() 更友好的 404 detail
+    if repo.get(agent_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "agent_not_found", "message": f"agent {agent_id} not found"},
+        )
+
+    repo.set_enabled(agent_id, data.enabled)
     return repo.get(agent_id)
 
 
