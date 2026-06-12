@@ -63,6 +63,20 @@ pub struct IngestOutcome {
     pub cached: bool,
 }
 
+/// 进度事件(用于 Tauri emit)
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct IngestProgress {
+    /// 当前阶段名(copy_source / step1_analyze / step2_write / embedding / finalize)
+    pub stage: String,
+    /// 进度百分比 0-100
+    pub percent: u8,
+    /// 可选消息
+    pub message: Option<String>,
+}
+
+/// 进度回调(无 → 不报进度)
+pub type ProgressFn = Box<dyn Fn(IngestProgress) + Send + Sync>;
+
 /// Step 1 分析结果(从 LLM 输出的 JSON 解析)
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Analysis {
@@ -108,16 +122,29 @@ type Cache = HashMap<String, CacheEntry>;
 // 入口
 // ============================================================================
 
-/// 完整 ingest 管线(异步)
+/// 完整 ingest 管线(异步,带可选进度回调)
 pub async fn ingest_source(
     config: &IngestConfig,
     http: &HttpClient,
     project_root: &Path,
     source_file_path: &Path,
+    progress: Option<ProgressFn>,
 ) -> Result<IngestOutcome, String> {
     if !source_file_path.exists() {
         return Err(format!("源文件不存在: {}", source_file_path.display()));
     }
+
+    let report = |stage: &str, percent: u8, message: Option<String>| {
+        if let Some(p) = &progress {
+            p(IngestProgress {
+                stage: stage.to_string(),
+                percent,
+                message,
+            });
+        }
+    };
+
+    report("started", 0, Some("开始导入".to_string()));
 
     // 1. 复制源到 raw/sources/
     let file_name = source_file_path
@@ -130,6 +157,7 @@ pub async fn ingest_source(
     let dest = raw_sources_dir.join(&file_name);
     fs::copy(source_file_path, &dest).map_err(|e| format!("复制源文件失败: {}", e))?;
     let rel_source = format!("raw/sources/{}", file_name);
+    report("copy_source", 10, None);
 
     // 2. SHA256 缓存检查
     let content = fs::read_to_string(&dest).map_err(|e| format!("读取源文件失败: {}", e))?;
@@ -143,6 +171,7 @@ pub async fn ingest_source(
     let mut cache = read_cache(project_root);
     if let Some(entry) = cache.get(&rel_source) {
         if entry.sha256 == sha {
+            report("completed", 100, Some("缓存命中,跳过".to_string()));
             return Ok(IngestOutcome {
                 source_path: rel_source,
                 wiki_page_path: entry.wiki_page_path.clone(),
@@ -153,10 +182,13 @@ pub async fn ingest_source(
     }
 
     // 3. Step 1: LLM 分析
+    report("step1_analyze", 20, Some("调用 LLM 分析".to_string()));
     let step1_prompt = format_step1_prompt(&truncated);
     let step1_analysis = run_step1(config, http, &step1_prompt).await?;
+    report("step1_analyze", 40, Some("分析完成".to_string()));
 
     // 4. Step 2: LLM 写作
+    report("step2_write", 45, Some("调用 LLM 写作".to_string()));
     let slug = slugify(&file_name);
     let today = Local::now().format("%Y-%m-%d").to_string();
     let analysis_json = serde_json::to_string(&step1_analysis).unwrap_or_else(|_| "{}".to_string());
@@ -176,6 +208,7 @@ pub async fn ingest_source(
         &today,
     );
     let step2_content = run_step2(config, http, &step2_prompt).await?;
+    report("step2_write", 70, Some("写作完成".to_string()));
 
     // 5. 解析 LLM 输出,提取 frontmatter + body
     let parsed = parse_frontmatter(&step2_content);
@@ -198,7 +231,9 @@ pub async fn ingest_source(
     write_atomic(&full_wiki_path, &final_md)?;
 
     // 7. 嵌入 + VectorStore
+    report("embedding", 80, Some("嵌入 + 写向量库".to_string()));
     embed_and_store(config, http, project_root, &wiki_page_path, &final_md).await?;
+    report("embedding", 90, Some("嵌入完成".to_string()));
 
     // 8. 更新缓存
     cache.insert(
@@ -211,6 +246,7 @@ pub async fn ingest_source(
     );
     write_cache(project_root, &cache)?;
 
+    report("completed", 100, Some("导入完成".to_string()));
     Ok(IngestOutcome {
         source_path: rel_source,
         wiki_page_path,

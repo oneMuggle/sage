@@ -211,7 +211,7 @@ pub async fn wiki_ingest_source(
     };
     let http = HttpClient::new();
     let src = Path::new(&source_file_path);
-    let outcome = do_ingest(&cfg, &http, &project_root, src).await?;
+    let outcome = do_ingest(&cfg, &http, &project_root, src, None).await?;
     Ok(IngestResult {
         source_path: outcome.source_path,
         wiki_page_path: outcome.wiki_page_path,

@@ -84,32 +84,34 @@ pub struct WikiChatOutcome {
     pub stats: RetrievalStats,
 }
 
-// ============================================================================
-// 入口
-// ============================================================================
+/// 流式 chunk 回调(用于 wiki_chat_stream)
+pub type ChatStreamChunkFn<'a> = &'a mut dyn FnMut(&str);
 
-/// 完整 RAG 管线
-pub async fn chat_with_wiki(
+/// Chat 检索+上下文构造(纯函数,不调 LLM,便于复用 + 测试)
+pub struct ChatContext {
+    pub context: String,
+    pub citations: Vec<String>,
+    pub stats: RetrievalStats,
+}
+
+/// 构造 RAG context(检索 + 拼装 prompt,但不调 LLM)
+pub async fn build_chat_context(
     config: &RagConfig,
     http: &HttpClient,
     project_root: &Path,
     query: &str,
-) -> Result<WikiChatOutcome, String> {
-    // 1. token search
+) -> Result<(ChatContext, ChatRequest), String> {
     let token_resp = search_wiki(project_root, query, config.retrieval_limit)?;
     let token_paths: Vec<String> = token_resp.results.iter().map(|r| r.path.clone()).collect();
 
-    // 2. embed query + 向量 search
     let (vector_paths, vector_hits_count) =
         vector_search(config, http, project_root, query).await?;
 
-    // 3. RRF 融合
     let fused = rrf_fuse(&token_paths, &vector_paths, DEFAULT_RRF_K);
 
     if fused.is_empty() {
-        return Ok(WikiChatOutcome {
-            answer: "未在 wiki 中找到相关内容。请先导入一些源文档,或者手动创建 wiki 页面。"
-                .to_string(),
+        let ctx = ChatContext {
+            context: String::new(),
             citations: Vec::new(),
             stats: RetrievalStats {
                 token_hits: token_paths.len(),
@@ -117,14 +119,21 @@ pub async fn chat_with_wiki(
                 fused_top_score: 0.0,
                 total_context_tokens: 0,
             },
-        });
+        };
+        let req = ChatRequest {
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: "未在 wiki 中找到相关内容。请先导入一些源文档,或者手动创建 wiki 页面。".to_string(),
+            }],
+            max_tokens: 1024,
+            temperature: 0.3,
+        };
+        return Ok((ctx, req));
     }
 
-    // 4. 取 top_k fused
     let top_k: Vec<(String, f64)> = fused.into_iter().take(config.final_top_k).collect();
     let top_score = top_k.first().map(|(_, s)| *s).unwrap_or(0.0);
 
-    // 5. 读 wiki 页面内容
     let mut pages: Vec<(String, String)> = Vec::new();
     let mut citations: Vec<String> = Vec::new();
     for (path, _) in &top_k {
@@ -135,7 +144,6 @@ pub async fn chat_with_wiki(
         }
     }
 
-    // 6. token 预算 + truncate
     let budget = ContextBudget::compute(config.max_tokens);
     let chunks = truncate_pages(&pages, &budget);
     let mut context = String::new();
@@ -148,7 +156,6 @@ pub async fn chat_with_wiki(
         total_context_tokens += ContextBudget::estimate_tokens(&chunk.content);
     }
 
-    // 7. 拼装 RAG prompt
     let system = format!("{}{}", RAG_SYSTEM, context);
     let user = format_rag_user_message(query);
     let req = ChatRequest {
@@ -165,14 +172,8 @@ pub async fn chat_with_wiki(
         max_tokens: budget.response_reserve,
         temperature: 0.3,
     };
-    let http_req = build_chat_request(&config.llm, &req)?;
-    let body = http
-        .post_json(&http_req.url, &http_req.headers, &http_req.body)
-        .await?;
-    let resp = parse_chat_response(&config.llm.provider, &body)?;
-
-    Ok(WikiChatOutcome {
-        answer: resp.content,
+    let ctx = ChatContext {
+        context,
         citations,
         stats: RetrievalStats {
             token_hits: token_paths.len(),
@@ -180,6 +181,80 @@ pub async fn chat_with_wiki(
             fused_top_score: top_score,
             total_context_tokens,
         },
+    };
+    Ok((ctx, req))
+}
+
+// ============================================================================
+// 入口
+// ============================================================================
+
+/// 完整 RAG 管线(非流式,返回完整回答)
+pub async fn chat_with_wiki(
+    config: &RagConfig,
+    http: &HttpClient,
+    project_root: &Path,
+    query: &str,
+) -> Result<WikiChatOutcome, String> {
+    let (ctx, req) = build_chat_context(config, http, project_root, query).await?;
+    if ctx.citations.is_empty() && ctx.context.is_empty() {
+        return Ok(WikiChatOutcome {
+            answer: "未在 wiki 中找到相关内容。请先导入一些源文档,或者手动创建 wiki 页面。"
+                .to_string(),
+            citations: Vec::new(),
+            stats: ctx.stats,
+        });
+    }
+    let http_req = build_chat_request(&config.llm, &req)?;
+    let body = http
+        .post_json(&http_req.url, &http_req.headers, &http_req.body)
+        .await?;
+    let resp = parse_chat_response(&config.llm.provider, &body)?;
+    Ok(WikiChatOutcome {
+        answer: resp.content,
+        citations: ctx.citations,
+        stats: ctx.stats,
+    })
+}
+
+/// 流式 RAG 管线(用 chunk 回调推送每个 token)
+/// 注意:MVP 用非流式 LLM 端点,一次性返回完整内容,然后 chunk 模拟流(逐段推送)。
+/// 真正流式 SSE 解析留 Phase 8 E2E 验证或后续优化。
+pub async fn chat_with_wiki_stream(
+    config: &RagConfig,
+    http: &HttpClient,
+    project_root: &Path,
+    query: &str,
+    on_chunk: &mut ChatStreamChunkFn<'_>,
+) -> Result<WikiChatOutcome, String> {
+    let (ctx, req) = build_chat_context(config, http, project_root, query).await?;
+    if ctx.citations.is_empty() && ctx.context.is_empty() {
+        let msg = "未在 wiki 中找到相关内容。请先导入一些源文档,或者手动创建 wiki 页面。";
+        on_chunk(msg);
+        return Ok(WikiChatOutcome {
+            answer: msg.to_string(),
+            citations: Vec::new(),
+            stats: ctx.stats,
+        });
+    }
+    let http_req = build_chat_request(&config.llm, &req)?;
+    let body = http
+        .post_json(&http_req.url, &http_req.headers, &http_req.body)
+        .await?;
+    let resp = parse_chat_response(&config.llm.provider, &body)?;
+
+    // 模拟流:每 30 字符一个 chunk
+    let mut acc = String::new();
+    let chars: Vec<char> = resp.content.chars().collect();
+    for chunk in chars.chunks(30) {
+        let s: String = chunk.iter().collect();
+        acc.push_str(&s);
+        on_chunk(&s);
+    }
+    Ok(WikiChatOutcome {
+        answer: acc,
+        citations: ctx.citations,
+        stats: ctx.stats,
     })
 }
 
