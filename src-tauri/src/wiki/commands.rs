@@ -219,7 +219,7 @@ pub async fn wiki_ingest_source(
     })
 }
 
-/// Chat with the wiki
+/// Chat with the wiki (RAG 增强:token + 向量 + LLM 综合)
 #[command]
 pub async fn wiki_chat(
     query: String,
@@ -227,12 +227,52 @@ pub async fn wiki_chat(
     api_url: String,
     api_key: String,
     model: String,
+    embed_api_url: String,
+    embed_api_key: String,
+    embed_model: String,
 ) -> Result<WikiChatResponse, String> {
-    use crate::wiki::chat::chat_with_wiki;
+    use crate::wiki::chat::{chat_with_wiki, RagConfig};
+    use crate::wiki::embeddings::EmbeddingConfig;
+    use crate::wiki::http::HttpClient;
+    use crate::wiki::llm_provider::{LlmProviderConfig, Provider};
 
     let project_root = Path::new(&project_path)
         .canonicalize()
         .map_err(|e| format!("无法访问项目目录: {}", e))?;
 
-    chat_with_wiki(&project_root, &query, &api_url, &api_key, &model).await
+    let llm_provider = if api_url.contains("anthropic") {
+        Provider::Anthropic
+    } else if api_url.contains("localhost:11434") {
+        Provider::Ollama
+    } else {
+        Provider::OpenAI
+    };
+    let llm_cfg = LlmProviderConfig {
+        provider: llm_provider,
+        base_url: api_url,
+        api_key,
+        model,
+        max_tokens: 4096,
+        temperature: 0.3,
+        custom_headers: std::collections::HashMap::new(),
+    };
+    let embed_cfg = EmbeddingConfig {
+        base_url: embed_api_url,
+        api_key: embed_api_key,
+        model: embed_model,
+        dim: 1536,
+    };
+    let cfg = RagConfig {
+        llm: llm_cfg,
+        embedding: embed_cfg,
+        max_tokens: 4096,
+        retrieval_limit: 20,
+        final_top_k: 5,
+    };
+    let http = HttpClient::new();
+    let outcome = chat_with_wiki(&cfg, &http, &project_root, &query).await?;
+    Ok(WikiChatResponse {
+        answer: outcome.answer,
+        citations: outcome.citations,
+    })
 }

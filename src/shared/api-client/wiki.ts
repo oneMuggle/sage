@@ -90,6 +90,9 @@ export async function wikiChat(
   apiUrl: string,
   apiKey: string,
   model: string,
+  embedApiUrl: string,
+  embedApiKey: string,
+  embedModel: string,
 ): Promise<WikiChatResponse> {
   return invoke<WikiChatResponse>('wiki_chat', {
     query,
@@ -97,5 +100,8 @@ export async function wikiChat(
     apiUrl,
     apiKey,
     model,
+    embedApiUrl,
+    embedApiKey,
+    embedModel,
   });
 }

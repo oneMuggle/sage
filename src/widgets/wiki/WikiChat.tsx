@@ -40,6 +40,9 @@ export function WikiChat() {
         activeEp.baseUrl,
         activeEp.apiKey,
         chatModel,
+        activeEp.baseUrl, // 复用 chat 端点作为 embedding 端点(MVP)
+        activeEp.apiKey,
+        'text-embedding-3-small', // 默认 embedding 模型
       );
 
       const assistantMessage: ChatMessage = {

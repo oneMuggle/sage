@@ -350,11 +350,101 @@ pub async fn ingest_source(
 - **Phase 5 (Graph)**: 调 `frontmatter::extract_wikilinks` 解析 `[[X]]` 链接
 - **Phase 7 (UI)**: 进度事件 + 流式 chat(IngestOutcome 已有 `cached` 字段)
 
-## Phase 4-8: 计划中
+## Phase 4: RAG 增强 Wiki Chat ✅
+
+### 目标
+
+把 wiki chat 从"占位回答页面列表"升级为"完整 RAG 增强回答",实现 hybrid retrieval (token + 向量) + LLM 综合 + token 预算管理。
+
+### 新增文件
+
+| 文件 | 职责 | 行数 |
+|---|---|---|
+| `src-tauri/src/wiki/rrf.rs` | Reciprocal Rank Fusion 融合 (k=60) | ~110 |
+| `src-tauri/src/wiki/context_budget.rs` | Token 预算分配 (50/30/5/15) + 截断 | ~170 |
+
+### 修改文件
+
+- `src-tauri/src/wiki/chat.rs`: **重写** RAG 完整管线 (~300 行)
+- `src-tauri/src/wiki/commands.rs`: `wiki_chat` 签名扩展加 3 个 embedding 参数
+- `src-tauri/src/wiki/mod.rs`: 导出 rrf + context_budget
+- `src/widgets/wiki/WikiChat.tsx`: 加 3 个 embed 参数(复用 chat 端点作 embedding)
+- `src/shared/api-client/wiki.ts`: `wikiChat` 包装加 3 个参数
+
+### RAG 8 步管线
+
+```
+1. token search (search_wiki)  →  Vec<String> token_paths
+2. embed query + 向量 search (VectorStore::search)  →  Vec<String> vector_paths
+3. RRF 融合 (rrf_fuse)  →  Vec<(String, f64)> 按 RRF score 降序
+4. 取 top_k fused  →  top_k 页面路径
+5. 读 wiki 页面内容
+6. token 预算 + truncate (ContextBudget + truncate_pages)
+7. 拼装 RAG prompt (RAG_SYSTEM + 截断后 pages + query)
+8. 调 LLM 综合回答
+```
+
+### 公共 API
+
+```rust
+// rrf
+pub const DEFAULT_RRF_K: f64 = 60.0;
+pub fn rrf_fuse<T: Hash + Eq + Clone>(token_hits: &[T], vector_hits: &[T], k: f64) -> Vec<(T, f64)>;
+
+// context_budget
+pub const PAGES_RATIO: f64 = 0.50;
+pub const HISTORY_RATIO: f64 = 0.30;
+pub const INDEX_RATIO: f64 = 0.05;
+pub const RESERVE_RATIO: f64 = 0.15;
+pub const DEFAULT_MAX_TOKENS: u32 = 8192;
+pub struct ContextBudget { total, pages, history, index, response_reserve, per_page_cap }
+pub struct PageChunk { page_path, content, truncated }
+impl ContextBudget {
+    pub fn compute(model_max_tokens: u32) -> Self;
+    pub fn estimate_tokens(text: &str) -> u32;
+}
+pub fn truncate_pages(pages: &[(String, String)], budget: &ContextBudget) -> Vec<PageChunk>;
+
+// chat (重写)
+pub struct RagConfig { llm, embedding, max_tokens, retrieval_limit, final_top_k }
+pub struct RetrievalStats { token_hits, vector_hits, fused_top_score, total_context_tokens }
+pub struct WikiChatOutcome { answer, citations, stats }
+pub async fn chat_with_wiki(config, http, project_root, query) -> Result<WikiChatOutcome, String>;
+```
+
+### 关键设计
+
+1. **RRF (Reciprocal Rank Fusion) k=60**: 论文推荐值,平衡 token + 向量排名
+2. **Token 预算 50/30/5/15**: 与 llm_wiki 一致,pages 50% / history+system 30% / index 5% / reserve 15%
+3. **per_page_cap = total/8**: 防止一坨内容压垮 context
+4. **极简 token 计数 (chars/3)**: MVP 简化,精度足够,可后续换 `tiktoken-rs`
+5. **MVP embedding 复用 chat 端点**: Settings 暂未单独配 embedding,先用 chat 端点 + text-embedding-3-small
+6. **融合降序 + 跳过空 hits**: 任意一边为空时另一边仍参与,空 result 直接返回 "未找到"
+
+### 单元测试覆盖(18/18 通过)
+
+**rrf** (7):
+- 空输入 / 只 token / 只 vector / 交叉 boost score / dedup / 自定义 k / 不重叠
+
+**context_budget** (8):
+- compute 70% 上限 / caps at default / ratios sum / per_page cap / estimate_tokens
+- truncate: within / huge / stops when exhausted
+
+**chat** (3):
+- RagConfig default / RetrievalStats default / PartialEq 行为
+
+### 累计 wiki 测试: 95 passed (Phase 1 20 + Phase 2 24 + Phase 3 33 + Phase 4 18)
+
+### 与后续 Phase 衔接
+
+- **Phase 5 (Graph)**: 调 `frontmatter::extract_wikilinks` + 解析 `[[X]]` 链接
+- **Phase 6 (Graph UI)**: 显示图谱
+- **Phase 7 (进度 + 流式)**: `WikiChatOutcome.stats` 已可用于前端展示,流式拆分需 Phase 7 进一步
+
+## Phase 5-8: 计划中
 
 详见 [docs/plans/2026-06-12_llm-wiki-llm-integration.md](../plans/2026-06-12_llm-wiki-llm-integration.md)。
 
-- **Phase 4**: RAG 增强 Wiki Chat(token + 向量 RRF + token 预算)
 - **Phase 5**: 4-signal 知识图谱生成
 - **Phase 6**: React Flow 知识图谱视图
 - **Phase 7**: 进度反馈 + 流式 chat UI
