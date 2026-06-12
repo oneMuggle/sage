@@ -1,7 +1,7 @@
 # Sage 全栈质量优化设计
 
 **日期**：2026-06-05
-**状态**：P0/P1/P2 已完工（2026-06-06），P3 待启动
+**状态**：P0/P1/P2/P3 已完工（2026-06-06）
 **关联规划**：`docs/plans/2026-06-01_sage-next-features.md` 中三阶段均已完成（提交 `b3eb6d7` 标记归档），本次为"质量升级"专项
 
 ---
@@ -671,19 +671,25 @@ src/shared/ui/
 
 ## 8. 总体成功指标
 
-| 指标                | 基线（2026-06-05 P0-T3 实测）                   | P1 末实测                            | P2 末实测 (2026-06-06) ✅                  | 目标                            | 衡量方式                        |
-| ------------------- | ----------------------------------------------- | ------------------------------------ | ----------------------------------------- | ------------------------------- | ------------------------------- |
-| 后端测试覆盖率      | **43%**（2895 stmts, 1650 missed；41 测试全过） | **84%**（2874 stmts, 862 missed）    | **87%**（hex 模式：507 + 5 skip）         | ≥ 80%                           | `pytest --cov`                  |
-| 后端测试数          | 41                                              | **383**                              | **512**（hex 模式）                        | ≥ 80（P1 末 +PG1.1–PG1.6 补齐） | `pytest --collect-only`         |
-| 前端测试覆盖率      | TBD（P0-T8 末测）                               | **features 87.72%, entities 91.18%** | features 87.72%, entities 91.18%（P1 末维持） | ≥ 60%（核心 ≥ 80%）             | `vitest --coverage`             |
-| 前端测试数          | 17 (P0) → 53 (P1)                               | **53** (P1 末实测 PG1.14)            | 53                                        | ≥ 80                            | `vitest run`                    |
-| CI 跑通时间         | 无 CI                                           | ≤ 8 分钟（无 Tauri）                 | ≤ 8 分钟（无 Tauri）                      | ≤ 8 分钟（无 Tauri）            | GH Actions                      |
-| 端到端可用率        | 单平台                                          | Web + 桌面三平台 + Win7              | Web + 桌面三平台 + Win7                   | Web + 桌面三平台 + Win7         | 手动 + E2E                      |
-| a11y 评分           | TBD（P3 末测）                                  | 未测                                 | 未测                                      | ≥ 95                            | Lighthouse                      |
-| 文件 < 800 行       | 100%                                            | 100% 维持                            | 100% 维持                                 | 100% 维持                       | `wc -l` 扫描                    |
-| 模块依赖图          | 散乱                                            | 后端六边形 + 前端 FSD 清晰           | 后端六边形 + 前端 FSD 清晰                | 后端六边形 + 前端 FSD 清晰      | import-linter / eslint 边界规则 |
-| 后端架构层覆盖率    | 散乱                                            | 散乱                                 | **100% domain+ports / 96% application / 100% adapters (15/16) / 87% 整体** | ≥ 80% | import-linter 0 violations |
-| 平均 PR review 时间 | 无基线                                          | 无基线                               | 无基线                                    | ≤ 24h                           | GH 统计                         |
+| 指标                | 基线（2026-06-05 P0-T3 实测）                   | P1 末实测                            | P2 末实测 (2026-06-06) ✅                  | P3 末实测 (2026-06-06) ✅                                            | 目标                            | 衡量方式                        |
+| ------------------- | ----------------------------------------------- | ------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------- | ------------------------------- | ------------------------------- |
+| 后端测试覆盖率      | **43%**（2895 stmts, 1650 missed；41 测试全过） | **84%**（2874 stmts, 862 missed）    | **87%**（hex 模式：507 + 5 skip）         | **72%**（3669 stmts, 1022 missed；530 + 5 skip；新覆盖层缺测试）       | ≥ 80%                           | `pytest --cov`                  |
+| 后端测试数          | 41                                              | **383**                              | **512**（hex 模式）                        | **530**（+18 含 /metrics、审计、OTel）                              | ≥ 80（P1 末 +PG1.1–PG1.6 补齐） | `pytest --collect-only`         |
+| 前端测试覆盖率      | TBD（P0-T8 末测）                               | **features 87.72%, entities 91.18%** | features 87.72%, entities 91.18%（P1 末维持） | features/entities 维持（P3 增 21 项组件测试）                       | ≥ 60%（核心 ≥ 80%）             | `vitest --coverage`             |
+| 前端测试数          | 17 (P0) → 53 (P1)                               | **53** (P1 末实测 PG1.14)            | 53                                        | **74**（+21：ErrorState/LoadingState/RetryButton/Skeleton）         | ≥ 80                            | `vitest run`                    |
+| CI 跑通时间         | 无 CI                                           | ≤ 8 分钟（无 Tauri）                 | ≤ 8 分钟（无 Tauri）                      | 三平台矩阵（ubuntu/macos/windows）+ Lighthouse job                  | ≤ 8 分钟（无 Tauri）            | GH Actions                      |
+| 端到端可用率        | 单平台                                          | Web + 桌面三平台 + Win7              | Web + 桌面三平台 + Win7                   | Web + 桌面三平台 + Win7                                             | Web + 桌面三平台 + Win7         | 手动 + E2E                      |
+| a11y 评分           | TBD（P3 末测）                                  | 未测                                 | 未测                                      | **CI 验证中**（PG3.9: skip link/landmark/label/button + Lighthouse job）| ≥ 95                            | Lighthouse                      |
+| 文件 < 800 行       | 100%                                            | 100% 维持                            | 100% 维持                                 | 100% 维持                                                           | 100% 维持                       | `wc -l` 扫描                    |
+| 模块依赖图          | 散乱                                            | 后端六边形 + 前端 FSD 清晰           | 后端六边形 + 前端 FSD 清晰                | 后端六边形 + 前端 FSD 清晰                                          | 后端六边形 + 前端 FSD 清晰      | import-linter / eslint 边界规则 |
+| 后端架构层覆盖率    | 散乱                                            | 散乱                                 | **100% domain+ports / 96% application / 100% adapters (15/16) / 87% 整体** | 100% domain+ports / 96% application / 100% adapters (15/16) / 72% 整体 | ≥ 80% | import-linter 0 violations |
+| 平均 PR review 时间 | 无基线                                          | 无基线                               | 无基线                                    | 无基线                                                              | ≤ 24h                           | GH 统计                         |
+| /metrics 端点       | 无                                              | 无                                   | 无                                        | **✅（PG3.1，hex 模式暴露 Prometheus 文本）**                        | 9 指标                          | curl /metrics                   |
+| 9 Prometheus 指标   | 无                                              | 无                                   | 无                                        | **✅（PG3.1：chat_* 4 / llm_* 3 / tool_* 2）**                       | ≥ 8 个核心                      | 单元测试 + 实际 scrape          |
+| 5 审计事件类型      | 无                                              | 无                                   | 无                                        | **✅（PG3.2：session_created/memory_added/settings_changed/llm_error/tool_called）** | ≥ 5 类别       | audit.jsonl 验证                |
+| 4 共享 UI 组件      | 无                                              | 无                                   | 无                                        | **✅（PG3.4-3.7：ErrorState/LoadingState/RetryButton/Skeleton）**      | ≥ 3 个复用组件                  | 组件 import 引用统计            |
+| Tauri 2 升级        | 1.x                                             | 1.x                                  | 1.x                                       | **✅（PG3.10，CI 验证中）**                                          | 2.x                             | Cargo.toml / API 升级           |
+| 3 平台 CI 矩阵      | 无                                              | 无                                   | 无                                        | **✅（PG3.11：ubuntu/macos/windows + Win7 self-hosted）**            | 3 平台 + Win7                   | GH Actions matrix               |
 
 **P1 末覆盖率摸底（per module）**：
 

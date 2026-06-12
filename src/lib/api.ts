@@ -4,6 +4,8 @@
  */
 
 import type { LLMErrorResponse } from './errorMapping';
+import { listen, type UnlistenFn } from './tauriEvent';
+import { invoke } from './tauriInvoke';
 
 // ==================== 类型定义 ====================
 
@@ -44,6 +46,39 @@ export interface ChatRequest {
 export interface ChatResponse {
   message: Message;
   session?: Session;
+}
+
+// ==================== Agent 流式事件 (PR-6) ====================
+
+/** Agent 状态机 — 与后端 backend.core.legacy.agent_state.AgentState 一致 */
+export type AgentState = 'idle' | 'thinking' | 'acting' | 'observing' | 'done' | 'failed';
+
+/** 流式聊天工具调用 (对应 OpenAI 工具调用格式) */
+export interface AgentToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    /** 字符串化的 JSON 参数 */
+    arguments: string;
+  };
+}
+
+/** 流式聊天工具结果 */
+export interface AgentToolResult {
+  tool_call_id: string;
+  role: 'tool';
+  content: string;
+}
+
+/** 流式聊天事件 (NDJSON 协议的一行) */
+export interface AgentEvent {
+  state: AgentState;
+  iteration: number;
+  content?: string;
+  tool_call?: AgentToolCall;
+  tool_result?: AgentToolResult;
+  error?: string;
 }
 
 // ==================== 错误类型定义 ====================
@@ -114,8 +149,6 @@ function isValidSessionId(sessionId: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return uuidRegex.test(sessionId);
 }
-
-import { invoke } from '@tauri-apps/api/tauri';
 
 // ==================== 重试配置 ====================
 
@@ -344,6 +377,113 @@ export const chatApi = {
       // 中断操作不重试，忽略错误
     }
   },
+
+  /**
+   * 流式聊天 (PR-6)
+   * 1. invoke('agent_chat_stream') 立刻返回 stream_id (UUID)
+   * 2. listen('chat-stream-{stream_id}') 订阅 Tauri event
+   * 3. 逐事件回调 onEvent; state=done/failed 时调 onDone 并自动 cancel
+   * 4. 调用方在 unmount/中断时调返回的 cancel() 释放 listener
+   *
+   * 注: 后端流是 fire-and-forget, 本方法不取消后端; 中断整个 chat 用 chatApi.interrupt()
+   */
+  async chatStream(
+    sessionId: string,
+    message: string,
+    handlers: {
+      onEvent: (event: AgentEvent) => void;
+      onError?: (error: Error) => void;
+      onDone?: () => void;
+    },
+    config?: ChatConfig,
+  ): Promise<{ streamId: string; cancel: () => void }> {
+    const safeMessage = sanitizeInput(message);
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    if (!handlers || typeof handlers.onEvent !== 'function') {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: 'chatStream 缺少 onEvent 回调',
+        details: {},
+      });
+    }
+
+    // 1) 启动流 (同步 invoke, 立即返回 stream_id)
+    const streamId = await invoke<string>('agent_chat_stream', {
+      sessionId,
+      message: safeMessage,
+      apiKey: config?.apiKey ?? null,
+      apiUrl: config?.apiUrl ?? null,
+      model: config?.model ?? null,
+      maxContext: config?.maxContext ?? null,
+      temperature: config?.temperature ?? null,
+    });
+    const eventName = `chat-stream-${streamId}`;
+
+    // 2) 监听事件
+    let unlisten: UnlistenFn | null = null;
+    let settled = false;
+
+    const cancel = (): void => {
+      if (unlisten) {
+        try {
+          unlisten();
+        } catch {
+          // ignore
+        }
+        unlisten = null;
+      }
+    };
+
+    const finishOnce = (cb: () => void): void => {
+      if (settled) return;
+      settled = true;
+      cancel();
+      try {
+        cb();
+      } catch {
+        // 用户回调里抛错不外泄
+      }
+    };
+
+    try {
+      unlisten = await listen<AgentEvent>(eventName, (evt) => {
+        const payload = evt.payload;
+        try {
+          handlers.onEvent(payload);
+        } catch (cbErr) {
+          // 用户回调抛错 → 终止流,不让坏回调拖死循环
+          if (handlers.onError) {
+            handlers.onError(cbErr instanceof Error ? cbErr : new Error(String(cbErr)));
+          }
+          finishOnce(() => handlers.onDone?.());
+          return;
+        }
+        if (payload.state === 'done' || payload.state === 'failed') {
+          if (payload.state === 'failed' && payload.error && handlers.onError) {
+            handlers.onError(new Error(payload.error));
+          }
+          finishOnce(() => handlers.onDone?.());
+        }
+      });
+    } catch (listenErr) {
+      // listen 失败: 后端流可能已经在推,告知用户
+      const err = listenErr instanceof Error ? listenErr : new Error('订阅流式事件失败');
+      if (handlers.onError) handlers.onError(err);
+      throw new ApiException({
+        error: 'STREAM_LISTEN_FAILED',
+        message: err.message,
+        details: { streamId },
+      });
+    }
+
+    return { streamId, cancel };
+  },
 };
 
 // ==================== Memory API ====================
@@ -500,14 +640,28 @@ export const knowledgeApi = {
   },
 };
 
-// ==================== Skills API ====================
+// ==================== Skills API (PR-7) ====================
 
 export interface Skill {
   name: string;
   description: string;
   triggers: string[];
+  parameters: Record<string, unknown>;
+  examples: string[];
   enabled: boolean;
-  usageCount: number;
+  usage_count: number;
+}
+
+export interface SkillExecuteRequest {
+  action?: string;
+  args?: Record<string, unknown>;
+}
+
+export interface SkillExecuteResult {
+  success: boolean;
+  content?: unknown;
+  metadata: Record<string, unknown>;
+  error?: string;
 }
 
 export const skillsApi = {
@@ -521,10 +675,24 @@ export const skillsApi = {
     });
   },
 
-  async toggle(name: string, enabled: boolean): Promise<void> {
+  async toggle(name: string, enabled: boolean): Promise<Skill> {
     return withRetry(async () => {
       try {
-        await invoke('toggle_skill', { name, enabled });
+        return await invoke<Skill>('toggle_skill', { name, enabled });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  async execute(name: string, req: SkillExecuteRequest = {}): Promise<SkillExecuteResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<SkillExecuteResult>('execute_skill', {
+          name,
+          action: req.action ?? null,
+          args: req.args ?? null,
+        });
       } catch (error) {
         throw handleApiError(error);
       }
@@ -549,6 +717,30 @@ export interface AgentProfile {
   };
   max_iterations: number;
   enabled: boolean;
+  /** 后端 PR-3 起返回; PR-4 PATCH 后被刷新 */
+  updated_at?: number;
+}
+
+/**
+ * PR-4 `update_agent` 命令的部分更新 payload。
+ *
+ * 字段全为可选 — 仅传需要修改的字段, 缺省字段保留原值 (PATCH 语义)。
+ * 形状匹配 Tauri `AgentUpdateRequest` (src-tauri/src/models.rs:134),
+ * 后端再映射到 Pydantic `AgentUpdate` 做白名单/范围校验。
+ *
+ * 注: 仅暴露 9 个允许字段, 不含 `id` (id 不可变, 见 agent_repo.py 注释)
+ * 与 `updated_at` (DB 自动维护)。
+ */
+export interface AgentUpdate {
+  name?: string;
+  role?: string;
+  system_prompt?: string;
+  tools?: string[];
+  memory_access?: string[];
+  model_config?: AgentProfile['model_config'];
+  max_iterations?: number;
+  enabled?: boolean;
+  description?: string;
 }
 
 export const agentsApi = {
@@ -562,20 +754,42 @@ export const agentsApi = {
     });
   },
 
-  async toggle(id: string, enabled: boolean): Promise<void> {
+  /**
+   * 启用/禁用 agent (PR-5)。
+   *
+   * 走专用端点 `PATCH /api/v1/agents/{id}/toggle`, 与 `update()` 区分:
+   * - toggle 是高频、单字段、可审计的独立操作
+   * - 返回完整更新后的 profile, 调用方一次 setState 即可
+   *
+   * @throws 后端 404 (id 不存在) 或 422 (类型错) 经 handleApiError 包装
+   */
+  async toggle(id: string, enabled: boolean): Promise<AgentProfile> {
     return withRetry(async () => {
       try {
-        await invoke('toggle_agent', { id, enabled });
+        return await invoke<AgentProfile>('toggle_agent', { id, enabled });
       } catch (error) {
         throw handleApiError(error);
       }
     });
   },
 
-  async update(agent: AgentProfile): Promise<void> {
+  /**
+   * 部分更新 agent (PR-4)。
+   *
+   * Tauri 命令签名 `update_agent(id, update)`, 不接受整 AgentProfile —
+   * 调用方应传 diff (例如 `{ name: '新名' }`), 不要把当前 profile 整对象塞进来。
+   *
+   * 后端 Pydantic 校验:
+   * - role 必须 ∈ {coordinator, researcher, coder, memory_manager} 否则 422
+   * - max_iterations 必须 ∈ [1, 50] 否则 422
+   * - 空 body 视为 no-op, 200 返回当前 profile, updated_at 不刷新
+   *
+   * @throws 后端 404 / 422 经 handleApiError 包装
+   */
+  async update(id: string, update: AgentUpdate): Promise<AgentProfile> {
     return withRetry(async () => {
       try {
-        await invoke('update_agent', { agent });
+        return await invoke<AgentProfile>('update_agent', { id, update });
       } catch (error) {
         throw handleApiError(error);
       }

@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (如 0.1.0)'
+        description: '版本号 (如 0.1.1)'
         required: true
-        default: '0.1.0'
+        default: '0.1.1'
 
 jobs:
   # Windows NSIS 安装包构建（main 分支用，Win7 tag 由 release-win7.yml 处理）
@@ -29,7 +29,7 @@ jobs:
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '25'
           cache: 'npm'
 
       - name: 安装前端依赖
@@ -42,11 +42,6 @@ jobs:
         uses: dtolnay/rust-toolchain@1.77.2
         with:
           targets: x86_64-pc-windows-msvc
-
-      - name: 安装 Visual Studio Build Tools
-        uses: egor-tensin/vs-setup@v3
-        with:
-          components: Desktop development with C++
 
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
@@ -135,26 +130,8 @@ jobs:
           echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
         shell: powershell
 
-      - name: 锁定依赖版本 (Win7 兼容)
-        working-directory: src-tauri
-        run: |
-          # 先锁定底层包，再锁定上层包，避免解析器拉入新版本
-          cargo update -p idna_adapter --precise 1.2.0
-          cargo update -p ignore --precise 0.4.20
-          cargo update -p globset --precise 0.4.14
-          cargo update -p ahash --precise 0.8.11
-          cargo update -p tempfile --precise 3.15.0
-          cargo update -p uuid --precise 1.12.1
-          cargo update -p plist --precise 1.7.4
-          cargo update -p serde_with --precise 3.16.1
-          cargo update -p time --precise 0.3.41
-          cargo update -p embed-resource --precise 2.4.0
-          cargo update -p litemap --precise 0.7.3
-          cargo update -p unicode-segmentation --precise 1.12.0
-          cargo update -p reqwest --precise 0.11.22
-
       - name: 编译 Rust Release
-        run: cargo build --release --target x86_64-pc-windows-msvc
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
         working-directory: src-tauri
 
       - name: 安装 NSIS 并编译安装包
@@ -185,6 +162,10 @@ jobs:
     needs: build-windows
     if: "!endsWith(github.ref, '-win7')"
     runs-on: ubuntu-latest
+    permissions:
+      # 需要写 Release 的权限 (默认 GITHUB_TOKEN 只有 contents: read,
+      # softprops/action-gh-release 会返回 403 Too many retries)
+      contents: write
 
     steps:
       - name: 检出代码

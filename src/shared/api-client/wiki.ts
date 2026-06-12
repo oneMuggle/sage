@@ -6,7 +6,9 @@ import type {
   SearchResponse,
   IngestResult,
   WikiChatResponse,
+  GraphData,
 } from '../types/wiki';
+
 
 // ==================== Project API ====================
 
@@ -61,18 +63,26 @@ export async function wikiSearch(
 // ==================== Ingest API ====================
 
 export async function wikiIngestSource(
+  ingestId: string,
   sourceFilePath: string,
   projectPath: string,
   apiUrl: string,
   apiKey: string,
   model: string,
+  embedApiUrl: string,
+  embedApiKey: string,
+  embedModel: string,
 ): Promise<IngestResult> {
   return invoke<IngestResult>('wiki_ingest_source', {
+    ingestId,
     sourceFilePath,
     projectPath,
     apiUrl,
     apiKey,
     model,
+    embedApiUrl,
+    embedApiKey,
+    embedModel,
   });
 }
 
@@ -84,6 +94,9 @@ export async function wikiChat(
   apiUrl: string,
   apiKey: string,
   model: string,
+  embedApiUrl: string,
+  embedApiKey: string,
+  embedModel: string,
 ): Promise<WikiChatResponse> {
   return invoke<WikiChatResponse>('wiki_chat', {
     query,
@@ -91,5 +104,22 @@ export async function wikiChat(
     apiUrl,
     apiKey,
     model,
+    embedApiUrl,
+    embedApiKey,
+    embedModel,
+  });
+}
+
+// ==================== Graph API ====================
+
+export async function getWikiGraph(
+  projectPath: string,
+  query?: string,
+  limit: number = 100,
+): Promise<GraphData> {
+  return invoke<GraphData>('wiki_get_graph', {
+    projectPath,
+    query: query ?? null,
+    limit,
   });
 }

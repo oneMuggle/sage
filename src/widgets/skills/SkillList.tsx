@@ -1,14 +1,8 @@
 import React from 'react';
 
-import SkillCard from './SkillCard';
+import { type Skill } from '../../lib/api';
 
-interface Skill {
-  name: string;
-  description: string;
-  triggers: string[];
-  enabled: boolean;
-  usageCount: number;
-}
+import SkillCard from './SkillCard';
 
 interface SkillListProps {
   skills: Skill[];
@@ -33,7 +27,7 @@ const SkillList: React.FC<SkillListProps> = ({ skills, onToggle }) => {
           description={skill.description}
           triggers={skill.triggers}
           enabled={skill.enabled}
-          usageCount={skill.usageCount}
+          usage_count={skill.usage_count}
           onToggle={onToggle}
         />
       ))}

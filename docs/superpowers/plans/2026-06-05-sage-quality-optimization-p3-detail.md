@@ -27,17 +27,17 @@
 
 ## P3 验收标准
 
-- [ ] `GET /metrics` 返回 9 个 Prometheus 指标（5 counter + 3 histogram + 1 gauge）
-- [ ] `backend/data/audit/audit.jsonl` 记录 5 类事件（chat_message_sent / chat_response_completed / tool_invoked / session_created / settings_changed）
-- [ ] OpenTelemetry span 注入 request_id；日志带 trace_id
-- [ ] 4 个共享 UI 组件（ErrorState / LoadingState / RetryButton / Skeleton）创建并测试
-- [ ] 5 页面采用新组件
-- [ ] Lighthouse a11y ≥ 95
-- [ ] Tauri 2 升级；3 平台 build 成功（Windows 10/11、macOS、Linux）
-- [ ] Win7 兼容：embedBootstrapper + windows7-compat feature
-- [ ] 端到端 512 + 新增测试全过
-- [ ] `docs/technical/16-observability.md` 发布
-- [ ] `docs/user-manual/01-desktop.md` + `02-metrics.md` 发布
+- [x] `GET /metrics` 返回 9 个 Prometheus 指标（5 counter + 3 histogram + 1 gauge）
+- [x] `backend/data/audit/audit.jsonl` 记录 5 类事件（chat_message_sent / chat_response_completed / tool_invoked / session_created / settings_changed）
+- [x] OpenTelemetry span 注入 request_id；日志带 trace_id
+- [x] 4 个共享 UI 组件（ErrorState / LoadingState / RetryButton / Skeleton）创建并测试
+- [x] 5 页面采用新组件
+- [x] Lighthouse a11y ≥ 95
+- [x] Tauri 2 升级；3 平台 build 成功（Windows 10/11、macOS、Linux）
+- [x] Win7 兼容：embedBootstrapper + windows7-compat feature
+- [x] 端到端 512 + 新增测试全过
+- [x] `docs/technical/16-observability.md` 发布
+- [x] `docs/user-manual/01-desktop.md` + `02-metrics.md` 发布
 
 ---
 
@@ -651,18 +651,18 @@ cd /home/fz/project/sage && \
 ## 实施步骤追踪
 
 ### P3 阶段
-- [ ] PG3.1: Prometheus 9 指标 + /metrics 端点
-- [ ] PG3.2: 5 类审计事件落盘
-- [ ] PG3.3: OpenTelemetry 接入
-- [ ] PG3.4: ErrorState 共享组件
-- [ ] PG3.5: LoadingState 共享组件
-- [ ] PG3.6: RetryButton 共享组件
-- [ ] PG3.7: Skeleton 共享组件
-- [ ] PG3.8: 5 页面采用共享组件
-- [ ] PG3.9: a11y 改造 + Lighthouse ≥ 95
-- [ ] PG3.10: Tauri 2 升级
-- [ ] PG3.11: Win7 兼容 + CI 矩阵
-- [ ] PG3.12: 文档发布（3 文件）
-- [ ] PG3.13: 集成测试 + 门禁
+- [x] PG3.1: Prometheus 9 指标 + /metrics 端点
+- [x] PG3.2: 5 类审计事件落盘
+- [x] PG3.3: OpenTelemetry 接入
+- [x] PG3.4: ErrorState 共享组件
+- [x] PG3.5: LoadingState 共享组件
+- [x] PG3.6: RetryButton 共享组件
+- [x] PG3.7: Skeleton 共享组件
+- [x] PG3.8: 5 页面采用共享组件
+- [x] PG3.9: a11y 改造 + Lighthouse ≥ 95
+- [x] PG3.10: Tauri 2 升级
+- [x] PG3.11: Win7 兼容 + CI 矩阵
+- [x] PG3.12: 文档发布（3 文件）
+- [x] PG3.13: 集成测试 + 门禁
 
 **总计：13 任务组**

@@ -19,16 +19,37 @@ export interface ConnectionTestResult {
 }
 
 /**
+ * 所有浏览器到 LLM 的请求统一走本机后端代理,避免 CORS。
+ * 见 ``docs/technical/21-llm-proxy.md`` 与 ``backend/api/llm_proxy_routes.py``。
+ * 可通过 ``VITE_LLM_PROXY_BASE`` 覆盖,默认 ``http://localhost:8765/api/v1/llm``。
+ */
+const LLM_PROXY_BASE: string =
+  (import.meta.env.VITE_LLM_PROXY_BASE as string | undefined) ?? 'http://localhost:8765/api/v1/llm';
+
+/** 构造代理请求头:Authorization + X-LLM-Provider-Url。 */
+function proxyHeaders(providerUrl: string, apiKey: string): HeadersInit {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-LLM-Provider-Url': providerUrl,
+  };
+  // Ollama 等本地服务默认无鉴权,空 apiKey 不要发「Bearer 」(避免上游 log 噪音)
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+  return headers;
+}
+
+/**
  * Fetch available models from an OpenAI-compatible endpoint.
+ *
+ * 实际打到本机后端代理 ``${LLM_PROXY_BASE}/v1/models``;
+ * 真实上游地址通过 ``X-LLM-Provider-Url`` 头传入,后端用 ``httpx`` 透传。
+ * 这样浏览器永远只跟同源后端对话,绕开 CORS。
  */
 export async function fetchModels(baseUrl: string, apiKey: string): Promise<DiscoveredModel[]> {
-  const normalizedBase = baseUrl.replace(/\/+$/, '');
-  const response = await fetch(`${normalizedBase}/models`, {
+  const response = await fetch(`${LLM_PROXY_BASE}/v1/models`, {
     method: 'GET',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: proxyHeaders(baseUrl, apiKey),
   });
 
   if (!response.ok) {
@@ -46,23 +67,21 @@ export async function fetchModels(baseUrl: string, apiKey: string): Promise<Disc
 
 /**
  * Test a chat completion call to verify the actual chat endpoint works.
+ *
+ * 同 ``fetchModels`` — 走本机后端代理,真实上游通过 ``X-LLM-Provider-Url`` 头传入。
  */
 async function testChatCompletion(
   baseUrl: string,
   apiKey: string,
   model: string,
 ): Promise<{ success: boolean; message: string }> {
-  const normalizedBase = baseUrl.replace(/\/+$/, '');
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-    const response = await fetch(`${normalizedBase}/chat/completions`, {
+    const response = await fetch(`${LLM_PROXY_BASE}/v1/chat/completions`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: proxyHeaders(baseUrl, apiKey),
       signal: controller.signal,
       body: JSON.stringify({
         model,

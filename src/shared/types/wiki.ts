@@ -42,4 +42,26 @@ export interface WikiChatResponse {
   citations: string[];
 }
 
-export type WikiView = 'browser' | 'search' | 'chat';
+export type WikiView = 'browser' | 'search' | 'chat' | 'graph';
+
+export type GraphSignal = 'DirectLink' | 'SourceOverlap' | 'TypeAffinity';
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  page_type?: string;
+  sources: string[];
+  wikilinks: string[];
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  signal: GraphSignal;
+  weight: number;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}

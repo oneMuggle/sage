@@ -1,7 +1,7 @@
 /**
  * useChat hook 测试
  *
- * 策略：mock @tauri-apps/api/tauri 的 invoke，从而控制 chatApi 的行为；
+ * 策略：mock @tauri-apps/api/core 的 invoke，从而控制 chatApi 的行为；
  * 同时在每个用例前重置 zustand store 与 localStorage，确保测试隔离。
  */
 import { act, renderHook, waitFor } from '@testing-library/react';
@@ -13,8 +13,12 @@ import { useChat } from '../useChat';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
 const invokeMock = vi.fn();
+const listenMock = vi.fn();
 vi.mock('../../../lib/tauriInvoke', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
+}));
+vi.mock('../../../lib/tauriEvent', () => ({
+  listen: (...args: unknown[]) => listenMock(...args),
 }));
 
 const VALID_SESSION_ID = '11111111-2222-3333-4444-555555555555';
@@ -90,14 +94,20 @@ describe('useChat', () => {
 
   it('appends user + assistant message on successful chat', async () => {
     seedActiveEndpoint();
-    const assistantMessage = {
-      id: 'msg-assistant',
-      session_id: VALID_SESSION_ID,
-      role: 'assistant' as const,
-      content: 'hi from assistant',
-      created_at: 100,
-    };
-    invokeMock.mockResolvedValueOnce({ message: assistantMessage });
+    // PR-6: useChat 改走 chatStream
+    invokeMock.mockResolvedValueOnce('stream-1');
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
+      ) => {
+        // 立即同步调 cb 触发 done 事件 (微观队列避免与 state setter 互卡)
+        Promise.resolve().then(() =>
+          cb({ payload: { state: 'done', iteration: 1, content: 'hi from assistant' } }),
+        );
+        return vi.fn();
+      },
+    );
 
     const { result } = renderHook(() => useChat());
 
@@ -115,9 +125,9 @@ describe('useChat', () => {
     expect(result.current.isLoading).toBe(false);
     expect(result.current.error).toBeNull();
 
-    // chatApi.chat 应该调用 agent_chat
+    // PR-6: useChat 应该调 agent_chat_stream
     expect(invokeMock).toHaveBeenCalledWith(
-      'agent_chat',
+      'agent_chat_stream',
       expect.objectContaining({
         sessionId: VALID_SESSION_ID,
         model: 'gpt-test',
@@ -127,8 +137,9 @@ describe('useChat', () => {
 
   it('sets error when chat API throws', async () => {
     seedActiveEndpoint();
-    // chatApi 内部 withRetry({maxRetries:2}) → 总共 3 次 invoke
-    invokeMock.mockRejectedValue(new Error('boom'));
+    // PR-6: listen 抛错 → chatStream reject → handleError
+    invokeMock.mockResolvedValueOnce('stream-x');
+    listenMock.mockRejectedValueOnce(new Error('event subscribe failed'));
 
     const { result } = renderHook(() => useChat());
 

@@ -1,6 +1,7 @@
 """
 Sage 后端测试 - 共享 fixtures
 """
+
 import os
 import sys
 import tempfile
@@ -31,8 +32,14 @@ def tmp_db_path():
 def setup_test_db(tmp_db_path):
     """每个测试自动使用独立临时数据库"""
     import backend.data.database as db_mod
+
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
     db_mod._db.init_db()
+    # PR-3: 与生产 lifespan 保持一致, 启动时种子化 4 个默认 agent.
+    # 测试不走 FastAPI lifespan, 显式调一次以模拟.
+    from backend.data.agent_repo import AgentRepository
+
+    AgentRepository().seed_defaults_if_empty()
     yield db_mod._db
     db_mod._db.close()
     db_mod._db = None
@@ -41,7 +48,9 @@ def setup_test_db(tmp_db_path):
 @pytest_asyncio.fixture
 async def client():
     """提供异步 HTTP 测试客户端"""
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
         yield c
 
 
@@ -98,9 +107,16 @@ def mock_llm_rate_limit():
 
 @pytest.fixture()
 def mock_llm_timeout():
-    """Mock LLM 模拟超时（抛 TimeoutError）"""
+    """Mock LLM 模拟超时（抛 httpx.TimeoutException）。
+
+    使用 ``httpx.TimeoutException``（而非 builtin ``TimeoutError``）以匹配
+    ``LLMClient.chat`` 中 ``except httpx.TimeoutException`` 分支，
+    确保被映射为 ``LLMErrorType.TIMEOUT`` 而不是 fallback 到 UNKNOWN。
+    """
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
-        mock.post("/v1/chat/completions").mock(side_effect=TimeoutError("LLM request timed out"))
+        mock.post("/v1/chat/completions").mock(
+            side_effect=httpx.TimeoutException("LLM request timed out")
+        )
         yield mock
 
 
@@ -136,3 +152,13 @@ def sample_user_query():
 def tmp_data_dir(tmp_path):
     """临时数据目录（避免污染真实 data/）—— 直接返回 tmp_path 便于测试中使用"""
     return tmp_path
+
+
+@pytest.fixture(autouse=False)
+def reset_skill_adapter():  # noqa: PT004 - 空 yield 是合法的 teardown-only fixture
+    """PR-7: 重置 skills 路由层模块级 adapter 单例 (enabled / usage_count)。"""
+    import backend.api.legacy_routes as routes
+
+    routes._skill_adapter_singleton = None
+    yield
+    routes._skill_adapter_singleton = None

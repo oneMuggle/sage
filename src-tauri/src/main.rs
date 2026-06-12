@@ -43,10 +43,18 @@ async fn main() {
             sage_lib::commands::search_memory,
             sage_lib::commands::save_memory,
             sage_lib::commands::delete_memory,
+            sage_lib::commands::delete_message, // PR-2
             sage_lib::commands::get_memories,
             sage_lib::commands::get_evolution_logs,
             sage_lib::commands::trigger_evolution,
             sage_lib::commands::get_evolution_status,
+            sage_lib::commands::list_agents, // PR-3
+            sage_lib::commands::update_agent, // PR-4
+            sage_lib::commands::toggle_agent, // PR-5
+            sage_lib::commands::agent_chat_stream, // PR-6
+            sage_lib::commands::list_skills, // PR-7
+            sage_lib::commands::toggle_skill, // PR-7
+            sage_lib::commands::execute_skill, // PR-7
             // Wiki commands
             sage_lib::wiki::commands::create_wiki_project,
             sage_lib::wiki::commands::open_wiki_project,
@@ -58,6 +66,7 @@ async fn main() {
             sage_lib::wiki::commands::wiki_search,
             sage_lib::wiki::commands::wiki_ingest_source,
             sage_lib::wiki::commands::wiki_chat,
+            sage_lib::wiki::commands::wiki_get_graph,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Sage 应用时发生错误");

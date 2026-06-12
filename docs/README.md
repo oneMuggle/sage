@@ -37,6 +37,9 @@ Sage 维护两条独立分支：
 - [15. 质量门禁](./technical/15-quality-gates.md) — CI / pre-commit / pre-push / 工具链版本
 - [17. 前端质量](./technical/17-frontend-quality.md) — FSD 架构 / 测试覆盖 / a11y 状态
 - [18. 六边形架构](./technical/18-hexagonal.md) — 五层职责 / 6 个 Protocol / 双轨策略 / import-linter 约束
+- [19. ghm 外部计算集成](./technical/19-ghm-integration.md) — LLM 工具调用桥接 ghm CLI / ExecutableResolver / HTTP 升级预留
+
+> 完整技术专题目录见 [`technical/README.md`](./technical/README.md)。
 
 ---
 

@@ -1,9 +1,10 @@
-// Wiki Chat - ask questions and get synthesized answers
+// Wiki Chat - ask questions and get synthesized answers (with streaming)
 import { Send, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 
 import { useWikiStore } from '../../entities/wiki/store';
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { useWikiChatStream } from '../../features/wiki/useWikiChatStream';
 import { wikiChat } from '../../shared/api-client/wiki';
 
 interface ChatMessage {
@@ -20,6 +21,8 @@ export function WikiChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streamId, setStreamId] = useState<string | null>(null);
+  const stream = useWikiChatStream(streamId);
 
   const activeEp = settings.settings.endpoints.find((e) => e.isActive);
   const chatModel = settings.settings.modelSelections.chatModelId;
@@ -33,6 +36,9 @@ export function WikiChat() {
     setInput('');
     setLoading(true);
 
+    const newStreamId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setStreamId(newStreamId);
+
     try {
       const response = await wikiChat(
         query,
@@ -40,6 +46,9 @@ export function WikiChat() {
         activeEp.baseUrl,
         activeEp.apiKey,
         chatModel,
+        activeEp.baseUrl, // 复用 chat 端点作为 embedding 端点(MVP)
+        activeEp.apiKey,
+        'text-embedding-3-small', // 默认 embedding 模型
       );
 
       const assistantMessage: ChatMessage = {
@@ -72,7 +81,7 @@ export function WikiChat() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
+        {messages.length === 0 && !stream.answer && (
           <div className="flex flex-col items-center justify-center gap-2 text-muted text-sm py-12">
             <BookOpen className="h-8 w-8 text-muted/30" />
             <p>向你的 wiki 提问</p>
@@ -108,7 +117,41 @@ export function WikiChat() {
           </div>
         ))}
 
-        {loading && (
+        {/* 流式累积中(还在 receiving chunks) */}
+        {stream.answer && (
+          <div className="flex justify-start">
+            <div className="max-w-[80%] rounded-lg px-4 py-3 bg-bg-muted text-text">
+              <div className="text-sm whitespace-pre-wrap">
+                {stream.answer}
+                {stream.streaming && <span className="inline-block w-1 h-3 ml-0.5 bg-primary animate-pulse" />}
+              </div>
+              {stream.citations.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-border/30">
+                  <div className="text-[11px] text-muted mb-1">引用:</div>
+                  {stream.citations.map((cite: string, j: number) => (
+                    <button
+                      key={j}
+                      onClick={() => handleCitationClick(cite)}
+                      className="block text-xs text-primary hover:underline truncate w-full text-left"
+                    >
+                      {cite.split('/').pop()}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {stream.error && (
+          <div className="flex justify-start">
+            <div className="bg-red-500/10 text-red-400 rounded-lg px-4 py-3 text-sm">
+              流式错误: {stream.error}
+            </div>
+          </div>
+        )}
+
+        {loading && !stream.answer && (
           <div className="flex justify-start">
             <div className="bg-bg-muted rounded-lg px-4 py-3 text-sm text-muted">正在思考...</div>
           </div>

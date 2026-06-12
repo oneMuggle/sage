@@ -1,6 +1,6 @@
 /**
  * SkillCard 测试
- * - 渲染 name/description/triggers/usageCount
+ * - 渲染 name/description/triggers/usage_count
  * - 切换开关触发 onToggle(name, enabled)
  */
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -16,7 +16,7 @@ describe('SkillCard', () => {
         description="网络搜索能力"
         triggers={['查', '搜索']}
         enabled
-        usageCount={42}
+        usage_count={42}
         onToggle={() => undefined}
       />,
     );
@@ -35,7 +35,7 @@ describe('SkillCard', () => {
         description="天气查询"
         triggers={['天气']}
         enabled={false}
-        usageCount={0}
+        usage_count={0}
         onToggle={onToggle}
       />,
     );

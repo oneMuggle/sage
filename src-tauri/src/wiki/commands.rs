@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use tauri::command;
+use tauri::Emitter;
 
 use crate::wiki::models::*;
 use crate::wiki::util::*;
@@ -160,25 +161,78 @@ pub async fn wiki_search(
     search_wiki(&project_root, &query, limit.unwrap_or(20))
 }
 
-/// Ingest a source document into the wiki
+/// Ingest a source document into the wiki (LLM 驱动的两步 CoT)
+///
+/// emit `wiki-ingest-{ingest_id}-progress` event 携带 IngestProgress 进度
 #[command]
 pub async fn wiki_ingest_source(
+    app: tauri::AppHandle,
+    ingest_id: String,
     source_file_path: String,
     project_path: String,
     api_url: String,
     api_key: String,
     model: String,
+    embed_api_url: String,
+    embed_api_key: String,
+    embed_model: String,
 ) -> Result<IngestResult, String> {
-    use crate::wiki::ingest::ingest_source;
+    use crate::wiki::embeddings::EmbeddingConfig;
+    use crate::wiki::http::HttpClient;
+    use crate::wiki::ingest::{ingest_source as do_ingest, IngestConfig, ProgressFn};
+    use crate::wiki::llm_provider::{LlmProviderConfig, Provider};
 
     let project_root = Path::new(&project_path)
         .canonicalize()
         .map_err(|e| format!("无法访问项目目录: {}", e))?;
 
-    ingest_source(&source_file_path, &project_root, &api_url, &api_key, &model).await
+    // 推断 LLM provider(简单按 base_url 关键词)
+    let llm_provider = if api_url.contains("anthropic") {
+        Provider::Anthropic
+    } else if api_url.contains("localhost:11434") {
+        Provider::Ollama
+    } else {
+        Provider::OpenAI
+    };
+    let llm_cfg = LlmProviderConfig {
+        provider: llm_provider,
+        base_url: api_url,
+        api_key,
+        model,
+        max_tokens: 4096,
+        temperature: 0.3,
+        custom_headers: std::collections::HashMap::new(),
+    };
+    let embed_cfg = EmbeddingConfig {
+        base_url: embed_api_url,
+        api_key: embed_api_key,
+        model: embed_model,
+        dim: 1536,
+    };
+    let cfg = IngestConfig {
+        llm: llm_cfg,
+        embedding: embed_cfg,
+        max_content_chars: 50_000,
+    };
+    let http = HttpClient::new();
+    let src = Path::new(&source_file_path);
+
+    // 进度回调 → Tauri emit(emit 不影响主流程,失败忽略)
+    let app_clone = app.clone();
+    let id_clone = ingest_id.clone();
+    let progress: ProgressFn = Box::new(move |p| {
+        let _ = app_clone.emit(&format!("wiki-ingest-{}-progress", id_clone), p);
+    });
+
+    let outcome = do_ingest(&cfg, &http, &project_root, src, Some(progress)).await?;
+    Ok(IngestResult {
+        source_path: outcome.source_path,
+        wiki_page_path: outcome.wiki_page_path,
+        page_type: outcome.page_type,
+    })
 }
 
-/// Chat with the wiki
+/// Chat with the wiki (RAG 增强:token + 向量 + LLM 综合)
 #[command]
 pub async fn wiki_chat(
     query: String,
@@ -186,12 +240,68 @@ pub async fn wiki_chat(
     api_url: String,
     api_key: String,
     model: String,
+    embed_api_url: String,
+    embed_api_key: String,
+    embed_model: String,
 ) -> Result<WikiChatResponse, String> {
-    use crate::wiki::chat::chat_with_wiki;
+    use crate::wiki::chat::{chat_with_wiki, RagConfig};
+    use crate::wiki::embeddings::EmbeddingConfig;
+    use crate::wiki::http::HttpClient;
+    use crate::wiki::llm_provider::{LlmProviderConfig, Provider};
 
     let project_root = Path::new(&project_path)
         .canonicalize()
         .map_err(|e| format!("无法访问项目目录: {}", e))?;
 
-    chat_with_wiki(&project_root, &query, &api_url, &api_key, &model).await
+    let llm_provider = if api_url.contains("anthropic") {
+        Provider::Anthropic
+    } else if api_url.contains("localhost:11434") {
+        Provider::Ollama
+    } else {
+        Provider::OpenAI
+    };
+    let llm_cfg = LlmProviderConfig {
+        provider: llm_provider,
+        base_url: api_url,
+        api_key,
+        model,
+        max_tokens: 4096,
+        temperature: 0.3,
+        custom_headers: std::collections::HashMap::new(),
+    };
+    let embed_cfg = EmbeddingConfig {
+        base_url: embed_api_url,
+        api_key: embed_api_key,
+        model: embed_model,
+        dim: 1536,
+    };
+    let cfg = RagConfig {
+        llm: llm_cfg,
+        embedding: embed_cfg,
+        max_tokens: 4096,
+        retrieval_limit: 20,
+        final_top_k: 5,
+    };
+    let http = HttpClient::new();
+    let outcome = chat_with_wiki(&cfg, &http, &project_root, &query).await?;
+    Ok(WikiChatResponse {
+        answer: outcome.answer,
+        citations: outcome.citations,
+    })
+}
+
+/// Get the wiki knowledge graph (4-signal edges with caching)
+#[command]
+pub async fn wiki_get_graph(
+    project_path: String,
+    query: Option<String>,
+    limit: Option<usize>,
+) -> Result<GraphData, String> {
+    use crate::wiki::graph::get_graph_cached;
+
+    let project_root = Path::new(&project_path)
+        .canonicalize()
+        .map_err(|e| format!("无法访问项目目录: {}", e))?;
+
+    get_graph_cached(&project_root, query.as_deref(), limit.unwrap_or(100))
 }
