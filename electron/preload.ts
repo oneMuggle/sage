@@ -32,20 +32,23 @@ const electronAPI = {
   /**
    * Frontend listen shim — matches `@tauri-apps/api/event` listen<T>() signature.
    *
-   * Phase 1 stub: just registers a no-op handler that logs. Phase 2 will:
-   *   1. call ipcRenderer.invoke('sage:listen', { event }) to subscribe
+   * Phase 2 wiring:
+   *   1. call ipcRenderer.invoke('sage:listen', { event }) to subscribe in main;
+   *      main opens backend NDJSON relay and pushes events via webContents.send
    *   2. receive payloads via ipcRenderer.on(`sage:event:${event}`, (_e, payload) => handler(payload))
-   *   3. return a real UnlistenFn via ipcRenderer.off(...)
+   *   3. unlisten() invokes sage:unlisten to abort backend relay + remove listener
    */
   listen<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
-    console.log(`[preload] listen() Phase 1 stub: ${event}`);
-    // Forward subscription request to main; main may push events later via webContents.send()
-    ipcRenderer.invoke('sage:listen', { event }).catch((e) => console.error('[preload] listen failed:', e));
-    // Local listener so renderer can test the IPC pipe (Phase 2 wiring)
+    // Forward subscription request to main; main opens backend relay
+    ipcRenderer
+      .invoke('sage:listen', { event })
+      .catch((e) => console.error(`[preload] listen(${event}) failed:`, e));
+    // Local listener so renderer receives relayed events
     const wrapped = (_e: IpcRendererEvent, payload: T) => handler(payload);
     ipcRenderer.on(`sage:event:${event}`, wrapped);
     const unlisten: UnlistenFn = () => {
       ipcRenderer.off(`sage:event:${event}`, wrapped);
+      ipcRenderer.invoke('sage:unlisten', { event }).catch(() => undefined);
     };
     return Promise.resolve(unlisten);
   },

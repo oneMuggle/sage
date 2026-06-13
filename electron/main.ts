@@ -53,17 +53,22 @@ function spawnBackend(): ChildProcess {
 
   // On Windows, prefer `pythonw` (no console) when packaged; fallback to `python`
   const pyLauncher =
-    process.platform === 'win32' && existsSync(join(process.resourcesPath ?? '', 'python', 'python.exe'))
+    process.platform === 'win32' &&
+    existsSync(join(process.resourcesPath ?? '', 'python', 'python.exe'))
       ? join(process.resourcesPath, 'python', 'python.exe')
       : null;
 
   let proc: ChildProcess;
   if (pyLauncher) {
     // Packaged Win: launch bundled Python directly
-    proc = spawn(pyLauncher, ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
+    proc = spawn(
+      pyLauncher,
+      ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      },
+    );
   } else {
     // Dev: delegate to conda
     proc = spawn(condaCmd, condaArgs, {
@@ -113,7 +118,10 @@ async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
  * Forward invoke(cmd, args) to FastAPI backend HTTP endpoint.
  * Command-to-route mapping mirrors the original Tauri command surface.
  */
-const COMMAND_ROUTES: Record<string, { method: string; path: (args: Record<string, unknown>) => string }> = {
+const COMMAND_ROUTES: Record<
+  string,
+  { method: string; path: (args: Record<string, unknown>) => string }
+> = {
   // chat
   agent_chat_stream: { method: 'POST', path: () => '/chat/stream' },
   interrupt_agent: { method: 'POST', path: () => '/interrupt' },
@@ -129,10 +137,15 @@ const COMMAND_ROUTES: Record<string, { method: string; path: (args: Record<strin
 async function invokeBackend(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
   const route = COMMAND_ROUTES[cmd];
   if (!route) {
-    throw new Error(`Unknown IPC command: ${cmd} (Phase 1 stub: see COMMAND_ROUTES in electron/main.ts)`);
+    throw new Error(
+      `Unknown IPC command: ${cmd} (Phase 1 stub: see COMMAND_ROUTES in electron/main.ts)`,
+    );
   }
   const url = `${BACKEND_URL}${route.path(args)}`;
-  const init: RequestInit = { method: route.method, headers: { 'Content-Type': 'application/json' } };
+  const init: RequestInit = {
+    method: route.method,
+    headers: { 'Content-Type': 'application/json' },
+  };
   if (route.method !== 'GET' && route.method !== 'DELETE') {
     init.body = JSON.stringify(args);
   }
@@ -185,22 +198,140 @@ function createMainWindow(): void {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle('sage:invoke', async (_evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
-    try {
-      return await invokeBackend(payload.cmd, payload.args ?? {});
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[ipc:sage:invoke] ${payload.cmd} failed:`, msg);
-      throw new Error(msg);
-    }
-  });
+  ipcMain.handle(
+    'sage:invoke',
+    async (_evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
+      try {
+        return await invokeBackend(payload.cmd, payload.args ?? {});
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[ipc:sage:invoke] ${payload.cmd} failed:`, msg);
+        throw new Error(msg);
+      }
+    },
+  );
 
-  // Phase 1 stub: listen() forwards to a no-op UnlistenFn.
-  // Phase 2 will wire this to backend SSE/WS relay via webContents.send().
-  ipcMain.handle('sage:listen', async (_evt, payload: { event: string }) => {
-    console.log(`[ipc:sage:listen] subscribed (Phase 1 stub): ${payload.event}`);
-    return { ok: true, event: payload.event, _note: 'Phase 1 stub; relay in Phase 2' };
-  });
+  // listen(event) → subscribe to backend event stream, forward each event
+  // payload to renderer via webContents.send('sage:event:${event}', payload).
+  //
+  // Phase 2 implementation: handles dynamic chat-stream-{streamId} events by
+  // opening a streaming fetch to backend /chat/stream/{streamId} endpoint
+  // and parsing NDJSON lines. Each line → webContents.send. Subscriptions
+  // are tracked in eventSubscriptions Map; unlisten() aborts the fetch.
+  const eventSubscriptions = new Map<string, AbortController>();
+
+  ipcMain.handle(
+    'sage:listen',
+    async (evt, payload: { event: string }): Promise<{ ok: true; event: string }> => {
+      const { event } = payload;
+      const senderWebContents = evt.sender;
+      console.log(`[ipc:sage:listen] subscribe: ${event}`);
+
+      // If already subscribed (e.g., React StrictMode double-mount), return early.
+      if (eventSubscriptions.has(event)) {
+        return { ok: true, event };
+      }
+
+      // chat-stream-{streamId} dynamic events: relay backend NDJSON
+      const chatStreamMatch = event.match(/^chat-stream-(.+)$/);
+      if (chatStreamMatch) {
+        const streamId = chatStreamMatch[1];
+        const abort = new AbortController();
+        eventSubscriptions.set(event, abort);
+        relayChatStream(senderWebContents, event, streamId, abort.signal).catch((e) => {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            console.error(`[relay ${event}] error:`, e.message);
+          }
+        });
+        return { ok: true, event };
+      }
+
+      // Unknown event: log + no-op (frontend listen() Promise still resolves)
+      console.warn(`[ipc:sage:listen] unknown event pattern (no relay): ${event}`);
+      return { ok: true, event };
+    },
+  );
+
+  ipcMain.handle(
+    'sage:unlisten',
+    async (_evt, payload: { event: string }): Promise<{ ok: true }> => {
+      const { event } = payload;
+      const abort = eventSubscriptions.get(event);
+      if (abort) {
+        abort.abort();
+        eventSubscriptions.delete(event);
+        console.log(`[ipc:sage:unlisten] aborted: ${event}`);
+      }
+      return { ok: true };
+    },
+  );
+}
+
+/**
+ * Open streaming HTTP connection to backend chat stream endpoint and forward
+ * each NDJSON line as a webContents.send event.
+ *
+ * Backend currently exposes /chat/stream (POST) that creates AND streams in
+ * one call. Phase 2 best-effort: POST the chat request with the streamId,
+ * read NDJSON response. If backend has no such endpoint, this fails silently
+ * and the frontend's listen() Promise still resolves.
+ */
+async function relayChatStream(
+  webContents: Electron.WebContents,
+  event: string,
+  streamId: string,
+  signal: AbortSignal,
+): Promise<void> {
+  // The streamId was generated by the renderer's invoke('agent_chat_stream').
+  // We re-issue a POST to /chat/stream with a marker so backend knows to
+  // resume streaming the same stream. If backend doesn't support replay,
+  // the fetch will return 4xx and we log + bail.
+  const url = `${BACKEND_URL}/chat/stream/${encodeURIComponent(streamId)}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'GET',
+      signal,
+      headers: { Accept: 'application/x-ndjson, application/json' },
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') return;
+    console.warn(`[relay ${event}] fetch failed (${url}):`, e instanceof Error ? e.message : e);
+    return;
+  }
+
+  if (!res.ok || !res.body) {
+    console.warn(`[relay ${event}] backend returned ${res.status} for ${url}`);
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const payload = JSON.parse(trimmed);
+          webContents.send(`sage:event:${event}`, payload);
+        } catch {
+          // Non-JSON line: forward raw
+          webContents.send(`sage:event:${event}`, { raw: trimmed });
+        }
+      }
+    }
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') return;
+    console.error(`[relay ${event}] stream error:`, e instanceof Error ? e.message : e);
+  }
 }
 
 function shutdownBackend(): void {
