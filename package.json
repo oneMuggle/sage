@@ -3,11 +3,11 @@
   "private": true,
   "version": "0.1.1",
   "type": "module",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "postinstall": "node scripts/patch-webkit2js.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
@@ -15,11 +15,15 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "build:electron": "tsc -p tsconfig.electron.json && node -e \"require('fs').writeFileSync('dist-electron/package.json', JSON.stringify({type:'commonjs'},null,2))\"",
+    "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
+    "electron:dev": "npm run build:electron && electron .",
+    "electron:build": "npm run build && npm run build:electron",
+    "electron:dist": "npm run electron:build && electron-builder --publish never"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",
-    "@tauri-apps/api": "=2.1.0",
     "@xyflow/react": "^12.11.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
@@ -34,7 +38,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@tauri-apps/cli": "=2.1.0",
+    "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.2.43",
@@ -44,6 +48,8 @@
     "@vitest/coverage-v8": "^4.1.8",
     "@vitest/ui": "^4.1.8",
     "autoprefixer": "^10.4.16",
+    "electron": "^21.4.4",
+    "electron-builder": "^24.13.3",
     "eslint": "^9.39.4",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
