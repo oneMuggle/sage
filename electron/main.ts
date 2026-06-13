@@ -30,10 +30,31 @@ const BACKEND_HEALTH = `${BACKEND_URL}/health`;
 const isDev = !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
 
-// Win7 compat: disable GPU + sandbox BEFORE app ready
+// Win7 compat: disable GPU + sandbox BEFORE app ready.
+// Order matters — these flags must be set before `whenReady()`.
+//
+// Why each flag:
+//   - disableHardwareAcceleration: Win7 GPU drivers are flaky under V8/Blink;
+//     falling back to software compositing is more reliable on legacy GPUs.
+//   - --no-sandbox: Win7 lacks the SUID chrome-sandbox helper (chmod 4755
+//     chrome-sandbox), so Electron refuses to launch sandboxed.
+//   - --disable-gpu: forces CPU compositor path; Win7 D3D11 drivers
+//     often crash Electron's GPU process.
+//   - --disable-software-rasterizer: opt out of Skia software rasterizer
+//     to avoid Win7 GPU driver DLL conflicts.
+//   - --in-process-gpu: keep GPU in main process (Win7 multi-process model
+//     is more crash-prone than single-process).
+//   - --disable-features=VizDisplayCompositor: skip Chromium's Viz
+//     display compositor; Win7 D3D11 not feature-complete.
+//   - --js-flags=--max-old-space-size=2048: cap V8 heap to 2GB so Win7
+//     systems with 4GB RAM don't OOM-kill during chat streaming.
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('no-sandbox');
 app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+app.commandLine.appendSwitch('in-process-gpu');
+app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=2048');
 
 let backendProc: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;

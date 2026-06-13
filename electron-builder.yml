@@ -44,8 +44,13 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Sage
   uninstallDisplayName: Sage ${version}
-  # Win7: KB3033929 (SHA-2 code signing) prerequisite surfaced in installer
-  # Phase 3: add custom Install Step to enable TLS 1.2 in SCHANNEL registry
+  # Win7 prerequisites (documented in README.md, surfaced in installer welcome):
+  #   1. KB3033929 (SHA-2 code signing support) — Win7 SP1 must have this or
+  #      Sage.exe signed with SHA-2 cert refuses to launch.
+  #   2. KB3140245 (TLS 1.2 default-on for SChannel) — NOT required by Sage
+  #      itself (Electron uses Chromium BoringSSL, Python uses rustls), but
+  #      needed if user wants default IE/Edge legacy to load HTTPS sites.
+  #   3. Win7 SP1 x64 minimum (32-bit Win7 not supported by Electron 21).
 
 # macOS: skip for now (focus is Win7 first; can revisit later)
 mac:
