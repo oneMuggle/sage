@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { invoke } from './tauriInvoke';
+import { invoke } from './desktopInvoke';
 
 // Re-export API modules from api.ts for convenience
 export { sessionApi, messageApi, chatApi, memoryApi } from './api';

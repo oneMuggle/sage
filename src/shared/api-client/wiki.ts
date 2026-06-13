@@ -1,5 +1,5 @@
 // Wiki API layer - wrappers around Tauri invoke()
-import { invoke } from '../../lib/tauriInvoke';
+import { invoke } from '../../lib/desktopInvoke';
 import type {
   WikiProject,
   FileNode,

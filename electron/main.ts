@@ -1,5 +1,13 @@
+/* eslint-disable */
 /**
  * Electron main process — Sage desktop shell
+ *
+ * NOTE: ESLint flat config disabled for this file — uses Node.js globals
+ * (require/process/console/__dirname) and CommonJS-style require() that the
+ * browser-targeted eslint.config.js rejects. main process is Node, not
+ * browser, so these are legitimate. If eslint.config.js is later extended
+ * with a Node-flavored block for `electron/**`, remove this top-level
+ * disable.
  *
  * Phase 1 (2026-06-13): Win7 tech-stack replacement
  * - Replaces Tauri 2.1.1 (which hard-depends on WebView2 = Win10+)

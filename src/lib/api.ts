@@ -3,9 +3,9 @@
  * 包含错误处理和重试逻辑
  */
 
+import { listen, type UnlistenFn } from './desktopEvent';
+import { invoke } from './desktopInvoke';
 import type { LLMErrorResponse } from './errorMapping';
-import { listen, type UnlistenFn } from './tauriEvent';
-import { invoke } from './tauriInvoke';
 
 // ==================== 类型定义 ====================
 
