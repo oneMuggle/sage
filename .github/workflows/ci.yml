@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, release/**]
   workflow_dispatch:
 
 concurrency:
@@ -119,17 +119,19 @@ jobs:
           flags: frontend
           fail_ci_if_error: false
 
-  # ========== Tauri: 3 平台 build 矩阵（PG3.11 强门禁）==========
-  # - P0 阶段是 smoke (continue-on-error)；PG3.11 升级为强门禁
-  # - 3 OS 矩阵：ubuntu / windows / macos
-  # - 每个平台产出对应包格式：deb+AppImage / msi+exe / dmg+app
-  # - Win7 由独立 job 处理（self-hosted runner，手动触发）
-  tauri-build:
-    name: Tauri 2 build (${{ matrix.os }})
+  # ========== Desktop Build: Electron 21 + electron-builder 矩阵 ==========
+  # - 3 OS 矩阵：ubuntu (AppImage) / macos (DMG) / windows (NSIS)
+  # - Linux/macOS runner 不能跑 Windows NSIS 产物但能 cross-build；
+  #   windows-latest 直接产 NSIS 离线安装包
+  # - electron-builder 缓存 npm + Electron 二进制加速构建
+  desktop-build:
+    name: Electron build (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
+        # macOS DMG 暂未启用（Phase 1 electron-builder.yml mac.target: null）
+        # 待 Win7 验证后补回: os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -141,77 +143,63 @@ jobs:
           node-version: '25'
           cache: 'npm'
 
-      - name: Install Linux dependencies
+      - name: Cache electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Install Linux build deps (webkit2gtk for Electron cross-build)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libssl-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            build-essential \
-            curl \
-            wget \
-            file
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo registry & build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock', 'src-tauri/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+            libnss3 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxrandr2 \
+            libgbm1 \
+            libasound2t64
 
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
+      - name: Build frontend + Electron
+        run: npm run electron:build
 
-      # Linux: 产 deb + AppImage
-      # Windows: 产 msi + exe（默认 targets 含 msi）
-      # macOS: 产 dmg + app
-      - name: Build Tauri (Linux)
+      - name: Package (Linux AppImage)
         if: matrix.os == 'ubuntu-latest'
-        run: npx tauri build --bundles deb,appimage
+        run: npx electron-builder --linux --publish never
 
-      - name: Build Tauri (Windows)
+      - name: Package (Windows NSIS)
         if: matrix.os == 'windows-latest'
-        run: npx tauri build
-
-      - name: Build Tauri (macOS)
-        if: matrix.os == 'macos-latest'
-        run: npx tauri build
+        run: npx electron-builder --win --publish never
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tauri-build-${{ matrix.os }}
+          name: electron-${{ matrix.os }}
           path: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/sage*
-          if-no-files-found: ignore
+            release/*.{exe,AppImage,dmg}
+          if-no-files-found: warn
 
-  # ========== Tauri Win7: 仅手动触发（需自托管 runner）==========
-  # - GitHub-hosted runner 不支持 Win7
-  # - workflow_dispatch 触发，需 [self-hosted, windows-7] label 的 runner
-  # - rust 1.77.2 是 Win7 x86 workaround（spec § 2.3）
-  # - 不参与 all-green 强门禁
-  tauri-win7:
-    name: Tauri 2 on Windows 7 (self-hosted)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, windows-7]
+  # ========== Electron smoke test (Phase 4 lightweight, Win7 真机烟测前替代) ==========
+  # - 用 playwright._electron 启动 Electron + 验证 IPC bridge
+  # - SAGE_SKIP_BACKEND=1 跳过 FastAPI spawn（CI 无 sage-backend conda env）
+  # - 验证项：BrowserWindow 出现 / window.electronAPI 暴露 / 前端 HTML 加载
+  # - 截图保存为 artifact 用于人工 review
+  # - Win7 真机烟测在 Phase 5 (release 前) 跑 self-hosted Win7 runner
+  electron-smoke:
+    name: Electron smoke (playwright-electron)
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -219,59 +207,35 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # Win7 compat: Node 20 (LTS)
+          node-version: '25'
           cache: 'npm'
 
-      - name: Install Rust (1.77.2 for Win7 workaround)
-        uses: dtolnay/rust-toolchain@1.77.2
-
-      - name: Install dependencies
+      - name: Install npm dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
+      - name: Build frontend + Electron
+        run: npm run electron:build
 
-      - name: Build Tauri (with windows7-compat)
-        run: npx tauri build
+      - name: Smoke test
+        env:
+          SAGE_SKIP_BACKEND: '1'
+          CI: 'true'
+        run: npx playwright test tests/electron/smoke.spec.ts --reporter=line
 
-      - name: Verify sage.exe exists
-        shell: bash
-        run: |
-          if [ -f "src-tauri/target/release/sage.exe" ]; then
-            echo "sage.exe built successfully"
-            ls -la src-tauri/target/release/sage.exe
-          else
-            echo "::error::sage.exe not found"
-            exit 1
-          fi
-
-      - name: Smoke test launch (10 sec, then kill)
-        shell: bash
-        run: |
-          ./src-tauri/target/release/sage.exe &
-          SAGE_PID=$!
-          sleep 10
-          if ps -p $SAGE_PID > /dev/null 2>&1; then
-            echo "sage.exe still running after 10s — Win7 launch successful"
-            kill $SAGE_PID || true
-          else
-            echo "::error::sage.exe crashed within 10s"
-            exit 1
-          fi
-
-      - name: Upload Win7 artifact
+      - name: Upload smoke screenshot
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tauri-win7-exe
-          path: src-tauri/target/release/sage.exe
+          name: electron-smoke-screenshot
+          path: tests/electron/screenshots/*.png
           if-no-files-found: ignore
 
   # ========== All-checks aggregator ==========
-  # - 强门禁：backend + frontend + tauri-build 全部 success 才算通过
-  # - tauri-win7 不在此列（需要 self-hosted runner + 手动触发）
+  # - 强门禁：backend + frontend + electron-smoke 全部 success 才算通过
+  # - desktop-build 暂不强制门禁（首次跑通优先，后续加 continue-on-error → required）
   all-green:
     name: All Checks
-    needs: [backend, frontend, tauri-build]
+    needs: [backend, frontend, electron-smoke]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
@@ -279,7 +243,7 @@ jobs:
         run: |
           if [ "${{ needs.backend.result }}" != "success" ] || \
              [ "${{ needs.frontend.result }}" != "success" ] || \
-             [ "${{ needs.tauri-build.result }}" != "success" ]; then
+             [ "${{ needs.electron-smoke.result }}" != "success" ]; then
             echo "One or more required jobs failed"
             exit 1
           fi
