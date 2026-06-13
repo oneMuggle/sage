@@ -108,3 +108,4 @@ release/
 .playwright/
 test-results/
 playwright-report/
+tests/electron/screenshots/
