@@ -135,6 +135,9 @@ Win7 SP1 x64 系统装 Sage 前**必须**：
 ## 7. Phase 5 真机烟测 SOP（release 前执行）
 
 > 用户确认：Phase 5 延后到 release 前执行。Phase 4 CI 轻量烟测为常驻回归护栏。
+>
+> **自动化脚本位置**：[`scripts/win7-smoke/`](../../../scripts/win7-smoke/) — 5 步 PowerShell 脚本 + README 编排说明。
+> 用户在自己 Win7 VM（手动 / SSH / WinRM 任一通道）跑脚本，结果以 `*-result.json` 形式回收。
 
 ### 7.1 准备
 
@@ -145,7 +148,21 @@ Win7 SP1 x64 系统装 Sage 前**必须**：
 - VM 配置：4 vCPU / 4GB RAM / 启用 VT-x / 网络 NAT 或 Host-Only
 - 打完 KB3033929 + VirtualBox Guest Additions 后**立即打快照** `win7-baseline`，每次烟测前恢复
 
-### 7.2 烟测流程
+### 7.2 自动化烟测矩阵（5 步 PowerShell）
+
+[`scripts/win7-smoke/`](../../../scripts/win7-smoke/) 提供 5 步脚本，对应下表：
+
+| Step | 脚本 | 验证内容 | 期望耗时 |
+|---|---|---|---|
+| 1. Deploy | `deploy.ps1` | OS 版本 + KB3033929 + 后端端口 + Ollama 端口 + 安装包存在 | ~30s |
+| 2. Install | `install.ps1` | NSIS 静默安装 + Sage.exe 存在 + 注册表项存在 | ~1-2 min |
+| 3. Launch | `launch-test.ps1` | Sage.exe 启动 < 10s + 主窗口出现 + 后端 /health + 截图 | ~30s |
+| 4. Ollama | `verify-ollama.ps1` | Ollama /api/tags + /api/generate + 后端 /chat 链路 | ~30s |
+| 5. Teardown | `teardown.ps1` | NSIS 卸载 + 日志收集到 smoke-results/Sage-logs/ | ~30s |
+
+**PASS 准则**：5 步全部 PASS，且 Launch 步骤截图肉眼确认非白屏、xyflow 节点连线可见。
+
+### 7.3 手动烟测流程（不跑脚本时）
 
 ```
 Step 1 [基线恢复]   VirtualBox → win7-baseline 快照恢复
@@ -164,7 +181,7 @@ Step 8 [关闭]       关闭窗口 → Python 子进程应自动结束
 Step 9 [回归]      重启 Sage → 设置应保留
 ```
 
-### 7.3 PASS 准则
+### 7.4 PASS 准则
 
 - ✅ 主窗口 < 10s 出现
 - ✅ xyflow / markdown / 代码高亮全部渲染
@@ -173,7 +190,7 @@ Step 9 [回归]      重启 Sage → 设置应保留
 - ✅ 二次启动设置保留
 - ✅ 卸载干净（无残留文件/注册表）
 
-### 7.4 FAIL 升级路径
+### 7.5 FAIL 升级路径
 
 | 失败位置 | 升级动作 |
 |---|---|
@@ -181,6 +198,7 @@ Step 9 [回归]      重启 Sage → 设置应保留
 | Ollama 调用超时 | host 防火墙阻挡 11434 → VM 改 Host-Only + host 加规则 |
 | 安装器 UAC 失败 | NSIS 改 `perMachine: true` + admin 启动安装 |
 | Electron 主进程崩溃 | 加 `--disable-software-rasterizer --disable-dev-shm-usage` 启动参数 |
+| 脚本某 step FAIL | 见 [`scripts/win7-smoke/README.md §4`](../../../scripts/win7-smoke/README.md) 排错速查表 |
 
 ## 8. 文件与目录速查
 
