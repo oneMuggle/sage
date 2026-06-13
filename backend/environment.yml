@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.8
+  - python=3.10
   - pip
   - pip:
       # Core
@@ -30,5 +30,5 @@ dependencies:
       # Quality
       - ruff==0.4.4
       - mypy==1.8.0
-      - import-linter==2.11
+      - import-linter==2.0
       - types-PyYAML==6.0.12.20240311
