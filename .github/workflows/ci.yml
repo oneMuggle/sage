@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, release/win7]
   pull_request:
     branches: [main, develop, release/**]
   workflow_dispatch:
@@ -12,9 +12,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ========== Backend (Win7 LTS): Python 3.8 兼容性 ==========
+  # - 仅 release/win7 触发（保护 win7 钉死的 Python 3.8 兼容性）
+  # - 用独立 conda env sage-backend-py38 隔离 main 的 sage-backend
+  # - 钉死依赖版本（backend/requirements-py38.txt）
+  # - coverage 强门禁 ≥ 80%
+  backend-py38:
+    name: Backend (Python 3.8, Win7 LTS)
+    if: github.ref == 'refs/heads/release/win7'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Miniconda + Python 3.8
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.8'
+          channels: conda-forge
+
+      - name: Create py38 env
+        shell: bash -el {0}
+        run: |
+          conda create -n sage-backend-py38 python=3.8 -y
+          conda run -n sage-backend-py38 pip install --upgrade pip
+
+      - name: Install backend deps (py38, locked)
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend-py38 pip install -r backend/requirements-py38.txt
+          conda run -n sage-backend-py38 pip install ruff mypy import-linter
+
+      - name: Ruff check
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend-py38 ruff check backend/
+
+      - name: Pytest (py38, hex mode) with coverage
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend-py38 bash -c "cd backend && pytest --cov --cov-report=xml --cov-report=term --cov-fail-under=80"
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: backend/coverage.xml
+          flags: backend-py38
+          fail_ci_if_error: false
+
   # ========== Backend: lint + type + test + coverage ==========
   backend:
     name: Backend (Python)
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
 
     steps:
@@ -235,16 +285,28 @@ jobs:
   # - desktop-build 暂不强制门禁（首次跑通优先，后续加 continue-on-error → required）
   all-green:
     name: All Checks
-    needs: [backend, frontend, electron-smoke]
+    needs: [backend, backend-py38, frontend, electron-smoke]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
-      - name: Check all jobs passed
+      - name: Check all required jobs passed
         run: |
-          if [ "${{ needs.backend.result }}" != "success" ] || \
-             [ "${{ needs.frontend.result }}" != "success" ] || \
-             [ "${{ needs.electron-smoke.result }}" != "success" ]; then
-            echo "One or more required jobs failed"
+          set -e
+          # 必过项：frontend + electron-smoke
+          [ "${{ needs.frontend.result }}" = "success" ]
+          [ "${{ needs.electron-smoke.result }}" = "success" ]
+          # backend job: main 走 backend, win7 走 backend-py38.
+          # skipped (守卫 if 不匹配) 也算 success —— PR 不在 main/win7 上时预期 skip.
+          backend_ok=false
+          if [ "${{ needs.backend.result }}" = "success" ] || [ "${{ needs.backend.result }}" = "skipped" ]; then
+            backend_ok=true
+          fi
+          backend_py38_ok=false
+          if [ "${{ needs.backend-py38.result }}" = "success" ] || [ "${{ needs.backend-py38.result }}" = "skipped" ]; then
+            backend_py38_ok=true
+          fi
+          if [ "$backend_ok" != "true" ] && [ "$backend_py38_ok" != "true" ]; then
+            echo "No backend job succeeded"
             exit 1
           fi
           echo "All required checks passed"

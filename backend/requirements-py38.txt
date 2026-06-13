@@ -1,0 +1,47 @@
+# Win7 LTS branch — Python 3.8 兼容依赖列表
+#
+# 任何 main 上升级的依赖**不**自动同步到这里
+# 升级需走 cherry-pick PR + Win7 兼容性测试
+#
+# Python 3.8 兼容关键约束：
+# - pydantic 钉 1.x（2.x 要求 3.9+）
+# - fastapi 钉 0.85+（与 pydantic 1.x 兼容）
+# - 其他依赖跟随 backend/requirements.txt 但带 == 版本
+# - opentelemetry 1.27.0 支持 3.8（要 verify 实际包）
+# - ruff/mypy/import-linter 钉 0.x 系列（避免 1.x 新语法要求）
+
+# Core
+fastapi==0.85.0      # py38 兼容 (与 pydantic 1.x 配)
+uvicorn==0.20.0      # py38 兼容
+pydantic==1.10.13    # 1.x 最后版本, 2.x 要求 3.9+
+
+# Database
+# sqlite3 is built-in
+
+# HTTP
+httpx==0.26.0
+
+# Observability
+prometheus-client==0.25.0
+
+# Tracing
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-exporter-otlp-proto-grpc==1.27.0
+
+# Utils
+python-dotenv==1.0.0
+pyyaml==6.0.1
+croniter==2.0.1
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==5.0.0
+respx==0.21.1
+
+# Quality
+ruff==0.4.4
+mypy==1.8.0
+import-linter==2.11
+types-PyYAML==6.0.12.20240311
