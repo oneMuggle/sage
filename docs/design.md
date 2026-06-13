@@ -13,13 +13,13 @@
 
 ### 2.1 关键技术约束
 
-| 技术组件 | Chatbox/Hermes 原始方案 | Win7 兼容替代方案                       |
-| -------- | ----------------------- | --------------------------------------- |
-| 运行时   | Electron (Chromium)     | Tauri 1.x (WebView2) 或 C# .NET WPF     |
-| Node.js  | ≥20.0.0                 | Node.js 16.x (或纯 Python 方案)         |
-| 系统API  | 现代 Windows API        | Win32 API / Windows 7 API               |
-| TLS      | 现代 TLS 1.3            | Windows 7 最高 TLS 1.2 (KB3140245)      |
-| WebView  | Chromium                | IE11 WebView 或 WebView2 (需Win7支持版) |
+| 技术组件 | Chatbox/Hermes 原始方案        | Win7 兼容替代方案                       |
+| -------- | ------------------------------ | --------------------------------------- |
+| 运行时   | Electron 21.4.4 (Chromium 106) | Tauri 1.x (WebView2) 或 C# .NET WPF     |
+| Node.js  | ≥20.0.0                        | Node.js 16.x (或纯 Python 方案)         |
+| 系统API  | 现代 Windows API               | Win32 API / Windows 7 API               |
+| TLS      | 现代 TLS 1.3                   | Windows 7 最高 TLS 1.2 (KB3140245)      |
+| WebView  | Chromium                       | IE11 WebView 或 WebView2 (需Win7支持版) |
 
 ### 2.2 Electron vs Tauri 对比
 
@@ -36,7 +36,7 @@ Tauri 1.x 优势:
 - Rust 后端，性能好
 ```
 
-**结论**: 推荐 **Tauri 1.x** + **Python 后端** 架构
+**结论**: 推荐 **Electron 21.4.4** (Chromium 106) + **Python 后端** 架构。Electron 21.4.4 是官方最后支持 Windows 7 的稳定 Electron 版本（≥22 起官方停止 Win7 支持）。
 
 ---
 
@@ -46,12 +46,12 @@ Tauri 1.x 优势:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    桌面客户端 (Tauri + React)              │
+│                    桌面客户端 (Electron + React)              │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
 │  │   聊天界面   │  │   设置面板   │  │   记忆浏览器 │     │
 │  └─────────────┘  └─────────────┘  └─────────────┘     │
 ├─────────────────────────────────────────────────────────┤
-│                    IPC 通信层 (Tauri Commands)            │
+│                    IPC 通信层 (BrowserWindow + preload)            │
 ├─────────────────────────────────────────────────────────┤
 │                    Python 后端服务                         │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐ │
@@ -68,13 +68,12 @@ Tauri 1.x 优势:
 
 ```
 hermes-win7/
-├── src-tauri/                 # Tauri Rust 后端
-│   ├── src/
-│   │   ├── main.rs           # 入口
-│   │   ├── commands/         # Tauri Commands
-│   │   └── webview/          # WebView 配置
-│   ├── Cargo.toml
-│   └── tauri.conf.json
+├── electron-src/              # Electron 主进程源码
+│   ├── main.ts               # 主进程入口
+│   ├── preload.ts            # preload 桥接
+│   └── ipc/                  # IPC handlers
+├── electron-builder.yml      # Electron 打包配置
+├── tsconfig.electron.json    # 主进程 TS 配置
 │
 ├── src/                      # React 前端
 │   ├── components/          # UI 组件
@@ -211,13 +210,13 @@ class Skill:
 
 ### 5.1 技术选型
 
-| 层级     | 技术         | 理由                   |
-| -------- | ------------ | ---------------------- |
-| 框架     | React 18     | 成熟生态，Chatbox 已用 |
-| 状态管理 | Zustand      | 轻量，Win7 兼容        |
-| 样式     | Tailwind CSS | Chatbox 已用           |
-| 打包     | Vite         | 快速构建               |
-| Tauri    | 1.x          | Win7 兼容              |
+| 层级     | 技术         | 理由                    |
+| -------- | ------------ | ----------------------- |
+| 框架     | React 18     | 成熟生态，Chatbox 已用  |
+| 状态管理 | Zustand      | 轻量，Win7 兼容         |
+| 样式     | Tailwind CSS | Chatbox 已用            |
+| 打包     | Vite         | 快速构建                |
+| Electron | 21.4.4       | Chromium 106, Win7 兼容 |
 
 ### 5.2 界面布局
 
@@ -361,16 +360,16 @@ if sys.getwindowsversion()[:2] <= (6, 1):  # Win7
 
 ### 8.1 最终技术选型
 
-| 层级        | 技术          | 版本     | 说明            |
-| ----------- | ------------- | -------- | --------------- |
-| 桌面框架    | Tauri         | 1.x      | Win7 兼容，轻量 |
-| 前端框架    | React         | 18.x     | 成熟生态        |
-| 前端构建    | Vite          | 5.x      | 快速            |
-| 后端语言    | Python        | 3.8-3.11 | 兼容性广泛      |
-| 数据库      | SQLite        | 3.x      | 零依赖          |
-| 向量存储    | ChromaDB      | 0.4.x    | 轻量级          |
-| AI SDK      | openai-python | 1.x      | 统一接口        |
-| HTTP 客户端 | httpx         | 0.25.x   | 异步支持        |
+| 层级        | 技术          | 版本     | 说明                    |
+| ----------- | ------------- | -------- | ----------------------- |
+| 桌面框架    | Electron      | 21.4.4   | Chromium 106, Win7 兼容 |
+| 前端框架    | React         | 18.x     | 成熟生态                |
+| 前端构建    | Vite          | 5.x      | 快速                    |
+| 后端语言    | Python        | 3.8-3.11 | 兼容性广泛              |
+| 数据库      | SQLite        | 3.x      | 零依赖                  |
+| 向量存储    | ChromaDB      | 0.4.x    | 轻量级                  |
+| AI SDK      | openai-python | 1.x      | 统一接口                |
+| HTTP 客户端 | httpx         | 0.25.x   | 异步支持                |
 
 ### 8.2 Win7 特殊处理
 
@@ -385,7 +384,7 @@ if sys.getwindowsversion()[:2] <= (6, 1):  # Win7
 
 ### 阶段一: 基础框架 (第1-2周)
 
-- [ ] 项目初始化 (Tauri + React + Python)
+- [ ] 项目初始化 (Electron + React + Python)
 - [ ] 基础聊天界面
 - [ ] SQLite 会话管理
 - [ ] 基础 Agent 类
@@ -434,7 +433,8 @@ if sys.getwindowsversion()[:2] <= (6, 1):  # Win7
    - 插件架构
 
 3. **相关技术**
-   - Tauri: https://tauri.app/
+   - Electron: https://www.electronjs.org/
+   - Electron Win7 兼容: https://www.electronjs.org/docs/latest/tutorial/support#supported-platforms
    - ChromaDB: https://www.trychroma.com/
    - SQLite: 内置 Python
 
