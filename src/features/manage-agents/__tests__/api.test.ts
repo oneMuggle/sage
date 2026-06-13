@@ -1,7 +1,7 @@
 /**
  * agentsApi 测试 (PR-5)
  *
- * 策略:mock `@tauri-apps/api/core` 的 invoke (通过 lib/tauriInvoke shim),
+ * 策略:mock `@tauri-apps/api/core` 的 invoke (通过 lib/desktopInvoke shim),
  * 验证 agentsApi.toggle / update / list 三个方法传给 invoke 的契约:
  *
  *  1. 命令名正确 (list_agents / toggle_agent / update_agent)
@@ -20,7 +20,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invokeMock = vi.fn();
-vi.mock('../../../lib/tauriInvoke', () => ({
+vi.mock('../../../lib/desktopInvoke', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 

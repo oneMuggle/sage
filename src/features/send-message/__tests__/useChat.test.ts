@@ -14,10 +14,10 @@ import { useChat } from '../useChat';
 // 必须使用工厂函数，vitest 才能正确 hoist
 const invokeMock = vi.fn();
 const listenMock = vi.fn();
-vi.mock('../../../lib/tauriInvoke', () => ({
+vi.mock('../../../lib/desktopInvoke', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
-vi.mock('../../../lib/tauriEvent', () => ({
+vi.mock('../../../lib/desktopEvent', () => ({
   listen: (...args: unknown[]) => listenMock(...args),
 }));
 
