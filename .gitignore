@@ -91,6 +91,10 @@ src-tauri/target/
 src-tauri/gen/
 # Phase 0 归档目录
 archive/
+# Phase 1 Electron 编译输出
+dist-electron/
+# Electron-builder 产物
+release/
 
 # Test coverage reports
 coverage/
