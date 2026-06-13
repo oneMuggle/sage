@@ -11,23 +11,24 @@ Sage 是一款**轻量级 AI 桌面助手**，具备：
 - 🧠 **持久记忆** - 跨会话记住你的偏好、习惯和重要信息
 - 🔄 **自我进化** - 从对话中学习，不断优化响应质量
 - 🛠️ **技能扩展** - 支持插件和自定义技能
-- 💻 **轻量运行** - Tauri + Python 架构，跨平台
+- 💻 **轻量运行** - Electron + Python 架构，跨平台
 
 ## 🪟 双轨发布
 
 Sage 维护**两条独立分支**，分别针对不同平台：
 
-| 分支 | 目标平台 | Tauri | Python | WebView2 | 状态 |
-|---|---|---|---|---|---|
-| **`main`** | Win10+ / macOS / Linux | 2.x | 3.11+ | Evergreen | ✅ 主线持续迭代 |
-| **`release/win7`** | **Windows 7 SP1 x64**（**完全离线**部署）| 1.6（冻结）| 3.8（最后兼容版本）| v109（官方 fallback 机制）| ⚠️ 长期维护，仅 hotfix |
+| 分支               | 目标平台                                  | Electron       | Python              | Chromium                  | 状态                   |
+| ------------------ | ----------------------------------------- | -------------- | ------------------- | ------------------------- | ---------------------- |
+| **`main`**         | Win10+ / macOS / Linux                    | 21.4.4         | 3.11+               | 106                       | ✅ 主线持续迭代        |
+| **`release/win7`** | **Windows 7 SP1 x64**（**完全离线**部署） | 21.4.4（冻结） | 3.8（最后兼容版本） | 106（官方 fallback 机制） | ⚠️ 长期维护，仅 hotfix |
 
 **如何选择？**
+
 - 普通用户：使用 `main` 分支，享受最新功能。
 - **Win7 用户**（内网/无网/老硬件）：使用 `release/win7` 分支。下载方式见各分支的 [GitHub Releases](https://github.com/your-repo/sage/releases) 页面。
 
 **为什么需要两条分支？**
-Tauri 2 在 Windows 上**强制使用 WebView2**，而 WebView2 官方支持 Win8.1+——无法在 Windows 7 上运行。Tauri 1.6 是最后一个原生支持 Win7 的版本。因此 Win7 用户需要独立的维护分支。
+Electron 21.4.4 内嵌 Chromium 106，对 Windows 7 仍有官方支持（Electron ≥22 起官方停止 Win7 支持）。Electron 21.4.4 是最后支持 Win7 的稳定版本，因此 Win7 用户需要独立的维护分支。
 
 详细同步策略和风险说明见 [`release/win7` 分支的 BRANCH_NOTES.md](https://github.com/your-repo/sage/blob/release/win7/BRANCH_NOTES.md)。
 
@@ -55,9 +56,9 @@ Tauri 2 在 Windows 上**强制使用 WebView2**，而 WebView2 官方支持 Win
 
 ```
 ┌─────────────────────────────────────────┐
-│         桌面客户端 (Tauri + React)        │
+│         桌面客户端 (Electron + React)        │
 ├─────────────────────────────────────────┤
-│         IPC 通信层 (Tauri Commands)      │
+│         IPC 通信层 (BrowserWindow + preload)      │
 ├─────────────────────────────────────────┤
 │         Python 后端                      │
 │  ├── Agent 编排引擎                      │
@@ -71,14 +72,14 @@ Tauri 2 在 Windows 上**强制使用 WebView2**，而 WebView2 官方支持 Win
 
 ## 技术栈
 
-| 层级     | 技术     | 版本  |
-| -------- | -------- | ----- |
-| 桌面框架 | Tauri    | 1.x   |
-| 前端     | React    | 18.x  |
-| 构建     | Vite     | 5.x   |
-| 后端     | Python   | 3.8+  |
-| 数据库   | SQLite   | 3.x   |
-| 向量存储 | ChromaDB | 0.4.x |
+| 层级     | 技术     | 版本   |
+| -------- | -------- | ------ |
+| 桌面框架 | Electron | 21.4.4 |
+| 前端     | React    | 18.x   |
+| 构建     | Vite     | 5.x    |
+| 后端     | Python   | 3.8+   |
+| 数据库   | SQLite   | 3.x    |
+| 向量存储 | ChromaDB | 0.4.x  |
 
 ---
 
@@ -89,7 +90,7 @@ Tauri 2 在 Windows 上**强制使用 WebView2**，而 WebView2 官方支持 Win
 - **操作系统**: Windows 7+ / Linux / macOS
 - **Node.js**: ≥ 18.x
 - **Python**: ≥ 3.8
-- **Rust**: (仅 Tauri 构建需要)
+- **Rust**: (不需要，Electron 是 JS 运行时)
 
 ### 1. 克隆项目
 
@@ -176,10 +177,10 @@ npm run build
 
 构建产物将输出到 `dist/` 目录。
 
-#### 构建 Tauri 应用
+#### 构建 Electron 应用
 
 ```bash
-npm run tauri build
+npm run electron:dist
 ```
 
 ### 应用界面
@@ -199,7 +200,7 @@ npm run tauri build
 
 - **前端配置**: `src/config.ts`
 - **后端配置**: `backend/config.py`
-- **Tauri配置**: `src-tauri/tauri.conf.json`
+- **Electron配置**: `electron-builder.yml` + `tsconfig.electron.json`
 - **环境变量**: `.env`
 
 ### 主要配置项
@@ -236,26 +237,35 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 ```
 
-#### Tauri 配置 (`src-tauri/tauri.conf.json`)
+#### Electron 配置 (`electron-builder.yml` + `tsconfig.electron.json`)
 
-```json
+```yaml
+# electron-builder.yml (节选)
+appId: com.sage.desktop
+productName: Sage
+directories:
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+win:
+  target: nsis
+mac:
+  target: dmg
+linux:
+  target: AppImage
+```
+
+```jsonc
+// tsconfig.electron.json (节选)
 {
-  "build": {
-    "devtools": true
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "outDir": "dist-electron",
+    "strict": true,
   },
-  "app": {
-    "windows": [
-      {
-        "title": "Sage",
-        "width": 1200,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ]
-  }
+  "include": ["electron/**/*"],
 }
 ```
 
@@ -301,18 +311,17 @@ python -c "from memory import init_memory; init_memory()"
 
 ### Q4: Windows 7 下无法运行
 
-**A**: 确保已安装以下依赖：
+**A**: 当前 `main` 分支（Electron 21.4.4）支持 Win7。Win10+ 用户使用 `main`；纯 Win7 用户请使用 `release/win7` 分支。如遇到具体问题，确保已安装以下依赖：
 
-- WebView2 Runtime (下载: https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
-- Visual C++ Redistributable
+- Visual C++ Redistributable (Electron 21 仍需要)
 
 ### Q5: 构建产物巨大
 
-**A**: 这是 Tauri 的正常行为。如需减小体积：
+**A**: 这是 Electron 的正常行为（基础安装包约 100-150MB，含 Chromium）。如需减小体积：
 
-1. 在 `tauri.conf.json` 中启用 `bundle.resources`
-2. 使用 `tauri build --debug` 进行开发构建
-3. 考虑使用 UPX 压缩可执行文件
+1. 在 `electron-builder.yml` 中使用 `asar` 打包
+2. 排除不必要的 `node_modules` 子模块
+3. 考虑按目标平台分别构建（win/mac/linux 各占约 50-80MB）
 
 ### Q6: 如何更新技能？
 
@@ -339,11 +348,13 @@ sage/
 │   ├── lib/                # 工具库
 │   ├── pages/              # 页面组件
 │   └── config.ts           # 前端配置
-├── src-tauri/              # Tauri Rust 后端
-│   ├── src/                # Rust 源码
-│   ├── icons/              # 应用图标
-│   ├── Cargo.toml          # Rust 依赖
-│   └── tauri.conf.json     # Tauri 配置
+├── electron/              # Electron 主进程源码
+│   ├── main.ts            # Electron 主进程入口
+│   └── preload.ts         # preload 脚本（IPC 桥）
+├── electron-builder.yml    # Electron 打包配置
+├── build/                  # 应用图标资源
+│   ├── icon.ico
+│   └── icon.png
 ├── backend/                # Python 后端
 │   ├── agents/             # Agent 引擎
 │   ├── memory/             # 记忆系统
@@ -374,7 +385,7 @@ sage/
 | [技能系统](./docs/07-skills.md)       | 技能定义、管理器、商店       |
 | [进化系统](./docs/08-evolution.md)    | 定时任务、摘要、修剪         |
 | [前端设计](./docs/09-frontend.md)     | UI 组件、状态管理            |
-| [API 接口](./docs/10-api.md)          | Tauri Commands、REST API     |
+| [API 接口](./docs/10-api.md)          | BrowserWindow IPC、REST API  |
 | [目录结构](./docs/11-structure.md)    | 项目文件结构                 |
 | [实施计划](./docs/12-plan.md)         | 开发阶段、里程碑             |
 
@@ -385,11 +396,11 @@ sage/
 ### T5.8 构建验证
 
 - **前端构建**: ⚠️ TypeScript 类型错误 (开发阶段正常)
-  - 主要问题: Tauri API 模块未安装、store API 导出问题
-  - 解决方案: 完善 @tauri-apps/api 依赖和 store 模块导出
+  - 主要问题: Electron API 模块未安装、preload 类型导出问题
+  - 解决方案: 完善 electron 类型定义和 preload 模块导出
 
-- **Rust 检查**: ⚠️ Cargo 未安装
-  - 预期行为: 仅验证代码可用性，实际构建需在目标环境执行
+- **Electron 主进程构建**: ✅ `npm run build:electron` 通过
+  - 预期行为: 仅验证代码可用性，实际打包需在目标环境执行
 
 ---
 

@@ -99,3 +99,13 @@ coverage/
 
 # Playwright MCP
 .playwright-mcp/
+
+# Electron builder
+dist-electron/
+release/
+
+# Playwright
+.playwright/
+test-results/
+playwright-report/
+tests/electron/screenshots/
