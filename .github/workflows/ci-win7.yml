@@ -170,7 +170,10 @@ jobs:
       #   但 Server 2022 本身不验证 Win7 启动行为，需 Win7 物理机人工测试
       - name: Build Tauri (offline WebView2)
         shell: pwsh
-        run: npx tauri build --bundles msi,nsis
+        # CARGO_FLAGS 透传给底层 cargo build (Tauri 2.1+ 支持)
+        # 锁住 Cargo.lock 防止 cargo 自由解析时再次拉入 edition2024 依赖
+        # 详见 docs/superpowers/plans/2026-06-13-tauri-2.1.1-zeroize-edition2024-fix.md
+        run: $env:CARGO_FLAGS="--locked"; npx tauri build --bundles msi,nsis
 
       - name: Verify sage.exe exists
         shell: pwsh

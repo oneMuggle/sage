@@ -52,6 +52,9 @@ indexmap = ">=1.9, <2.3"
 # 阻止 ignore/globset 最新版 (需要 edition2024) 被拉入
 ignore = ">=0.4, <0.4.23"
 globset = ">=0.4, <0.4.16"
+# zeroize 1.9.0 切到 edition2024 (Rust 1.85+), Win7 1.77.2 toolchain 不能解析。
+# 与 hashbrown/ahash/indexmap 同款阻断；lockfile 显式锁 1.8.x
+zeroize = ">=1.5, <1.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sha2 = "0.10.9"

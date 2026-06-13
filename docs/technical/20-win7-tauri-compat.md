@@ -62,6 +62,7 @@ ahash       = ">=0.8,  <0.8.12" # 0.8.12+ 用 hashbrown 0.15+
 indexmap    = ">=1.9,  <2.3"    # 2.3+ 用 hashbrown 0.15+
 ignore      = ">=0.4,  <0.4.23" # 后续版本要 edition2024
 globset     = ">=0.4,  <0.4.16" # 同上
+zeroize     = ">=1.5,  <1.9"    # 1.9.0 切 edition2024, Windows target 路径 (webview2-com 链) 会拉它
 chrono      = ">=0.4,  <0.4.39"
 tokio       = ">=1,    <1.39"
 
@@ -91,15 +92,16 @@ versions are on the same major/minor releases:
 ```jsonc
 {
   "dependencies": {
-    "@tauri-apps/api": "=2.1.0",   // ⚠️ npm 2.1.x 只有 2.1.0,没有 2.1.1
+    "@tauri-apps/api": "=2.1.0", // ⚠️ npm 2.1.x 只有 2.1.0,没有 2.1.1
   },
   "devDependencies": {
-    "@tauri-apps/cli": "=2.1.0",   // (同上)
-  }
+    "@tauri-apps/cli": "=2.1.0", // (同上)
+  },
 }
 ```
 
 **重要差异**:
+
 - Rust Cargo.toml 锁 `tauri = "=2.1.1"`(fork 的 v2.1.1 tag 是 2.1.1)
 - npm registry 上 `@tauri-apps/cli` 的 2.1.x 系列**只有 2.1.0**,**没有 2.1.1**
 - Tauri CLI 的校验比较 **major.minor**(忽略 patch),所以 cli 2.1.0 + Rust 2.1.1 都通过
@@ -186,16 +188,40 @@ if (plugin_command.is_some() || has_app_acl_manifest || !is_local)
 
 发版前 7 次失败 CI run 累积出来的教训:
 
-| # | commit | 失败原因 | 根因 |
-|---|--------|----------|------|
-| 1 | `4c38285` | `egor-tensin/vs-setup` 仓库 404 | 第三方 action 仓库已删除 |
-| 2 | `dfcccf5` | npm ci 失败 | Node 18 太老(vitest 4.x 要 20+) |
-| 3 | `385cc57` | cargo update --precise 命令过时 | tempfile 不在依赖图、reqwest 多版本歧义 |
-| 4 | `6135b69` | serde_spanned v1.1.1 要 edition2024 | cargo update 步骤触发 resolver 重新解析 |
-| 5 | `34785f2` | `--locked` 报 lock 不同步 | Cargo.lock 没 commit,CI 现场生成时不匹配 |
-| 6 | `32bc334` | webview2-com 多版本冲突 (E0308) | tauri-runtime-wry ^2.2 拉到 2.3.0 (用 webview2-com 0.34) |
-| 7 | `0db08aa` | 成功 ✓ | (D1 通过) |
-| 8 | `3e8e172` | 成功 ✓ | (D2 通过) |
+| #   | commit    | 失败原因                            | 根因                                                     |
+| --- | --------- | ----------------------------------- | -------------------------------------------------------- |
+| 1   | `4c38285` | `egor-tensin/vs-setup` 仓库 404     | 第三方 action 仓库已删除                                 |
+| 2   | `dfcccf5` | npm ci 失败                         | Node 18 太老(vitest 4.x 要 20+)                          |
+| 3   | `385cc57` | cargo update --precise 命令过时     | tempfile 不在依赖图、reqwest 多版本歧义                  |
+| 4   | `6135b69` | serde_spanned v1.1.1 要 edition2024 | cargo update 步骤触发 resolver 重新解析                  |
+| 5   | `34785f2` | `--locked` 报 lock 不同步           | Cargo.lock 没 commit,CI 现场生成时不匹配                 |
+| 6   | `32bc334` | webview2-com 多版本冲突 (E0308)     | tauri-runtime-wry ^2.2 拉到 2.3.0 (用 webview2-com 0.34) |
+| 7   | `0db08aa` | 成功 ✓                              | (D1 通过)                                                |
+| 8   | `3e8e172` | 成功 ✓                              | (D2 通过)                                                |
+
+---
+
+### 5.1 zeroize 1.9.0 edition2024 漏网（2026-06-13）
+
+**症状**：
+
+```
+error: failed to parse manifest at `zeroize-1.9.0\Cargo.toml`
+feature `edition2024` is required
+```
+
+**触发路径**：
+
+- 本地 Linux target 编译干净（不拉 zeroize）
+- CI Windows target (`x86_64-pc-windows-msvc`) 编译时通过 `webview2-com 0.33.0` → 某个 Windows 专属子依赖 → `zeroize 1.9.0`
+- 1.77.2 cargo 解析 1.9.0 Cargo.toml 失败（edition2024 未稳定）
+
+**修复**：
+
+- `Cargo.toml` 加 `zeroize = ">=1.5, <1.9"`（同款 cap 模式）
+- `Cargo.lock` 重新生成，显式锁 zeroize 1.8.x
+- CI 加 `CARGO_FLAGS="--locked"` 防止 cargo 自由解析
+- 详见 `docs/superpowers/plans/2026-06-13-tauri-2.1.1-zeroize-edition2024-fix.md`
 
 ---
 
