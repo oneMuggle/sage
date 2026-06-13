@@ -5,3 +5,6 @@ src-tauri/target
 coverage
 *.lock
 package-lock.json
+tests/electron/screenshots/
+tests/electron/test-results/
+playwright-report/

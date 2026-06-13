@@ -1,10 +1,7 @@
 name: Release Build
 
-# Phase 0 (2026-06-13) 占位:原 Tauri Windows NSIS 构建 job 已删除
-# (工作目录 src-tauri/ 已归档至 archive/src-tauri-2026-06-13-win7-migration/)
-# 替代方案: Electron 21 + electron-builder NSIS pipeline,见
-# docs/technical/XX-electron-win7.md (Phase 6 出)
-# 当前 workflow 保留 trigger 配置,Phase 1 实现 build + release job 后激活
+# Phase 4 (2026-06-13): Electron 21 + electron-builder NSIS pipeline
+# Tag 触发 (v*.*.*) 或手动触发;产 Sage-Setup-X.Y.Z.exe + GH Release
 on:
   push:
     tags:
@@ -17,9 +14,82 @@ on:
         default: '0.1.1'
 
 jobs:
-  placeholder:
-    name: Phase 1 placeholder (electron-builder)
-    if: false
-    runs-on: ubuntu-latest
+  build-windows:
+    name: Build Windows NSIS installer
+    runs-on: windows-latest
+
     steps:
-      - run: echo "TODO Phase 1: electron-builder NSIS pipeline + GH release"
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+          cache: 'npm'
+
+      - name: Cache electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend + Electron
+        run: npm run electron:build
+
+      - name: Package Windows NSIS
+        run: npx electron-builder --win --publish never
+
+      - name: Extract version
+        id: version
+        run: |
+          if ($env:GITHUB_REF -match '^refs/tags/v?(.+)$') {
+            $ver = $matches[1]
+          } else {
+            $ver = '${{ github.event.inputs.version }}'
+          }
+          echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+        shell: powershell
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: release/Sage-Setup-${{ steps.version.outputs.VERSION}}.exe
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # softprops/action-gh-release 需要写 Release 权限
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: installer
+
+      - name: Get version
+        id: get_version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG:-${{ github.event.inputs.version }}}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: installer/*.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

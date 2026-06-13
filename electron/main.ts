@@ -370,6 +370,14 @@ function shutdownBackend(): void {
 
 app.whenReady().then(async () => {
   registerIpcHandlers();
+  // Phase 4 lightweight smoke test path: skip backend spawn + health wait
+  // (CI doesn't have the sage-backend conda env; main renderer still loads
+  // and exposes window.electronAPI for IPC contract verification).
+  if (process.env.SAGE_SKIP_BACKEND === '1') {
+    console.log('[main] SAGE_SKIP_BACKEND=1 — skipping backend spawn');
+    createMainWindow();
+    return;
+  }
   backendProc = spawnBackend();
   const ready = await waitForBackend();
   if (!ready) {

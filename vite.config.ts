@@ -22,5 +22,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    // Phase 4: exclude Playwright Electron smoke tests (run separately via
+    // `npx playwright test tests/electron/smoke.spec.ts`, not Vitest).
+    exclude: ['**/node_modules/**', '**/dist/**', '**/dist-electron/**', 'tests/electron/**'],
   },
 });

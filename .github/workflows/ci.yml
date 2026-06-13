@@ -119,31 +119,131 @@ jobs:
           flags: frontend
           fail_ci_if_error: false
 
-  # ========== Desktop Build: Phase 1 (Electron 21) 占位 ==========
-  # - Phase 0 (2026-06-13) 已归档 src-tauri/ 至 archive/src-tauri-2026-06-13-win7-migration/
-  # - 原 tauri-build (3 OS 矩阵) + tauri-win7 (self-hosted) job 已删除
-  # - 替代方案: Electron 21 + electron-builder,见 docs/technical/XX-electron-win7.md (Phase 6 出)
-  # - 当前 job 为占位 (if: false 不执行),Phase 1 实现 electron-builder 矩阵后激活
+  # ========== Desktop Build: Electron 21 + electron-builder 矩阵 ==========
+  # - 3 OS 矩阵：ubuntu (AppImage) / macos (DMG) / windows (NSIS)
+  # - Linux/macOS runner 不能跑 Windows NSIS 产物但能 cross-build；
+  #   windows-latest 直接产 NSIS 离线安装包
+  # - electron-builder 缓存 npm + Electron 二进制加速构建
   desktop-build:
-    name: Desktop build (electron, placeholder for Phase 1)
-    if: false
-    runs-on: ubuntu-latest
+    name: Electron build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # macOS DMG 暂未启用（Phase 1 electron-builder.yml mac.target: null）
+        # 待 Win7 验证后补回: os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
     steps:
-      - run: echo "TODO Phase 1: electron-builder NSIS pipeline"
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+          cache: 'npm'
+
+      - name: Cache electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Install Linux build deps (webkit2gtk for Electron cross-build)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxrandr2 \
+            libgbm1 \
+            libasound2
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend + Electron
+        run: npm run electron:build
+
+      - name: Package (Linux AppImage)
+        if: matrix.os == 'ubuntu-latest'
+        run: npx electron-builder --linux --publish never
+
+      - name: Package (Windows NSIS)
+        if: matrix.os == 'windows-latest'
+        run: npx electron-builder --win --publish never
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-${{ matrix.os }}
+          path: |
+            release/*.{exe,AppImage,dmg}
+          if-no-files-found: warn
+
+  # ========== Electron smoke test (Phase 4 lightweight, Win7 真机烟测前替代) ==========
+  # - 用 playwright._electron 启动 Electron + 验证 IPC bridge
+  # - SAGE_SKIP_BACKEND=1 跳过 FastAPI spawn（CI 无 sage-backend conda env）
+  # - 验证项：BrowserWindow 出现 / window.electronAPI 暴露 / 前端 HTML 加载
+  # - 截图保存为 artifact 用于人工 review
+  # - Win7 真机烟测在 Phase 5 (release 前) 跑 self-hosted Win7 runner
+  electron-smoke:
+    name: Electron smoke (playwright-electron)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend + Electron
+        run: npm run electron:build
+
+      - name: Smoke test
+        env:
+          SAGE_SKIP_BACKEND: '1'
+          CI: 'true'
+        run: npx playwright test tests/electron/smoke.spec.ts --reporter=line
+
+      - name: Upload smoke screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-smoke-screenshot
+          path: tests/electron/screenshots/*.png
+          if-no-files-found: ignore
 
   # ========== All-checks aggregator ==========
-  # - 强门禁：backend + frontend 全部 success 才算通过
-  # - desktop-build 占位未激活,不参与门禁
+  # - 强门禁：backend + frontend + electron-smoke 全部 success 才算通过
+  # - desktop-build 暂不强制门禁（首次跑通优先，后续加 continue-on-error → required）
   all-green:
     name: All Checks
-    needs: [backend, frontend]
+    needs: [backend, frontend, electron-smoke]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
       - name: Check all jobs passed
         run: |
           if [ "${{ needs.backend.result }}" != "success" ] || \
-             [ "${{ needs.frontend.result }}" != "success" ]; then
+             [ "${{ needs.frontend.result }}" != "success" ] || \
+             [ "${{ needs.electron-smoke.result }}" != "success" ]; then
             echo "One or more required jobs failed"
             exit 1
           fi
