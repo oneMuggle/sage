@@ -6,7 +6,7 @@ asarUnpack:
   # Phase 3 will add: '**/node_modules/sharp/**' if we ever embed heavy native modules
 directories:
   output: release/${version}
-  buildResources: build
+  buildResources: resources
 files:
   - dist/**/*
   - dist-electron/**/*
