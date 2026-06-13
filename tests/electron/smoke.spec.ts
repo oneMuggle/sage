@@ -48,19 +48,23 @@ test('Electron launches and exposes electronAPI', async () => {
   const window = await app!.firstWindow({ timeout: 30_000 });
   await window.waitForLoadState('domcontentloaded');
 
-  // Verify electronAPI is exposed (preload.ts loaded)
-  const hasElectronAPI = await window.evaluate(() => {
-    return (
-      typeof window.electronAPI !== 'undefined' && typeof window.electronAPI.invoke === 'function'
-    );
-  });
-  expect(hasElectronAPI, 'window.electronAPI.invoke must be a function (preload.ts loaded)').toBe(
-    true,
+  // Wait for electronAPI to be exposed by preload (contextBridge.exposeInMainWorld
+  // is called synchronously but Playwright's firstWindow may resolve before
+  // preload finishes — waitForFunction polls until the API is on window).
+  await window.waitForFunction(
+    () =>
+      typeof (window as unknown as { electronAPI?: { invoke?: unknown } }).electronAPI?.invoke ===
+      'function',
+    undefined,
+    { timeout: 10_000 },
   );
 
   // Verify electronAPI.listen also exposed
   const hasListen = await window.evaluate(() => {
-    return typeof window.electronAPI?.listen === 'function';
+    const win = globalThis as unknown as {
+      electronAPI?: { listen: unknown };
+    };
+    return typeof win.electronAPI?.listen === 'function';
   });
   expect(hasListen, 'window.electronAPI.listen must be a function').toBe(true);
 
@@ -79,13 +83,26 @@ test('Electron launches and exposes electronAPI', async () => {
 test('invoke IPC bridge round-trips through main process', async () => {
   expect(app).not.toBeNull();
   const window = await app!.firstWindow({ timeout: 10_000 });
+  await window.waitForLoadState('domcontentloaded');
+
+  // Wait for electronAPI ready (same as first test)
+  await window.waitForFunction(
+    () =>
+      typeof (window as unknown as { electronAPI?: { invoke?: unknown } }).electronAPI?.invoke ===
+      'function',
+    undefined,
+    { timeout: 10_000 },
+  );
 
   // electronAPI.invoke calls ipcRenderer.invoke('sage:invoke', {cmd, args}).
   // Main process will throw "Unknown IPC command" for an unrecognized cmd —
   // that's expected and proves the bridge is wired through main.
   const errorMsg = await window.evaluate(async () => {
+    const win = globalThis as unknown as {
+      electronAPI?: { invoke: (cmd: string) => Promise<unknown> };
+    };
     try {
-      await window.electronAPI!.invoke('definitely_not_a_real_command');
+      await win.electronAPI!.invoke('definitely_not_a_real_command');
       return null; // no error — bridge bypassed main??
     } catch (e) {
       return e instanceof Error ? e.message : String(e);
@@ -94,7 +111,8 @@ test('invoke IPC bridge round-trips through main process', async () => {
 
   // Either we got an error message (bridge works, main rejected cmd)
   // or main allowed it (shouldn't happen for unknown cmd)
-  expect(errorMsg, 'invoke must route through main process; unknown cmd should throw').toMatch(
-    /Unknown IPC command|definitely_not_a_real_command/i,
-  );
+  expect(
+    errorMsg,
+    'invoke must route through main process; unknown cmd should throw',
+  ).toMatch(/Unknown IPC command|definitely_not_a_real_command/i);
 });
