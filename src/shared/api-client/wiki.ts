@@ -9,7 +9,6 @@ import type {
   GraphData,
 } from '../types/wiki';
 
-
 // ==================== Project API ====================
 
 export async function createWikiProject(name: string, basePath: string): Promise<WikiProject> {
