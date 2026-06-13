@@ -26,6 +26,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from backend.utils import logging as _logging_mod
 from backend.utils.logging import (
     DEFAULT_LOG_LEVEL,
     LOG_FILE_MAX_DAYS,
@@ -246,7 +247,6 @@ def test_setup_logging_uses_project_root_when_no_log_dir(tmp_path) -> None:
     expected = tmp_path / "logs"
     assert expected.is_dir()
     # _log_dir 已被设置
-    from backend.utils import logging as _logging_mod
 
     assert _logging_mod._logger_manager._log_dir == expected
 
@@ -256,7 +256,6 @@ def test_setup_logging_respects_explicit_log_dir(tmp_path) -> None:
     explicit = tmp_path / "explicit"
     setup_logging(log_dir=str(explicit), project_root=str(tmp_path))
     assert explicit.is_dir()
-    from backend.utils import logging as _logging_mod
 
     assert _logging_mod._logger_manager._log_dir == explicit
 
@@ -422,7 +421,6 @@ def test_set_level_updates_root_and_console_handlers(tmp_path) -> None:
 
 def test_set_level_ignores_invalid_level(tmp_path) -> None:
     """set_level('BOGUS') 静默忽略, 不修改 _log_level / root level."""
-    from backend.utils import logging as _logging_mod
 
     setup_logging(log_dir=str(tmp_path / "logs"), log_level="INFO")
     before = _logging_mod._logger_manager._log_level

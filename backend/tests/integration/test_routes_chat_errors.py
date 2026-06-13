@@ -14,6 +14,7 @@ P2 双轨说明：本文件测试的是**legacy** /chat 行为（通过 SageAgen
 本文件不适用——对应测试在 ``test_hex_routes_chat.py``。
 """
 
+import logging
 import os
 from unittest.mock import AsyncMock, patch
 
@@ -35,7 +36,7 @@ _LEGACY_ONLY = pytest.mark.skipif(
 )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_LEGACY_ONLY
 async def test_chat_returns_structured_error_on_auth_failed():
     """LLM 401 时 /chat 返回结构化错误响应（HTTP 200 + error 字段）。"""
@@ -62,7 +63,7 @@ async def test_chat_returns_structured_error_on_auth_failed():
         assert body["message"] is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_LEGACY_ONLY
 async def test_chat_returns_structured_error_on_timeout():
     """LLM 超时时 /chat 返回 timeout 错误。"""
@@ -85,7 +86,7 @@ async def test_chat_returns_structured_error_on_timeout():
         assert body["error"]["type"] == "timeout"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_LEGACY_ONLY
 async def test_chat_handles_agent_returning_error_dict_without_crashing():
     """回归测试：agent.chat() 返回 error 字典时（Task 6 后的新契约），
@@ -124,7 +125,7 @@ async def test_chat_handles_agent_returning_error_dict_without_crashing():
         assert body["message"] is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_LEGACY_ONLY
 async def test_chat_request_id_in_response_header():
     """响应头应包含 x-request-id 用于诊断追踪。"""
@@ -154,11 +155,10 @@ async def test_chat_request_id_in_response_header():
         assert "x-request-id" in resp.headers
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_LEGACY_ONLY
 async def test_chat_response_header_request_id_matches_handler_logs(caplog):
     """响应头 x-request-id 应与 handler 日志中的 [REQ xxx] 一致。"""
-    import logging
 
     caplog.set_level(logging.INFO, logger="backend.api.legacy_routes")
 

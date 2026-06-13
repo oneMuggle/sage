@@ -2,6 +2,8 @@
 Skill Hot-Loader - Skill热加载系统
 从文件系统动态加载 BaseSkill 子类，支持热更新
 """
+
+import hashlib
 import importlib
 import importlib.util
 import logging
@@ -53,11 +55,15 @@ class SkillHotLoader:
             if not os.path.isdir(skill_dir):
                 continue
 
-            for filename in sorted(os.listdir(skill_dir)):
-                if filename.endswith(".py") and not filename.startswith("_"):
-                    file_path = os.path.join(skill_dir, filename)
-                    if self._load_from_file(file_path):
-                        loaded += 1
+            for file_path in sorted(Path(skill_dir).iterdir()):
+                if (
+                    not file_path.is_file()
+                    or file_path.suffix != ".py"
+                    or file_path.name.startswith("_")
+                ):
+                    continue
+                if self._load_from_file(str(file_path)):
+                    loaded += 1
 
         logger.info(f"扫描加载完成: {loaded} new skills")
         return loaded
@@ -81,8 +87,7 @@ class SkillHotLoader:
             found = False
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if (isinstance(attr, type) and issubclass(attr, BaseSkill)
-                        and attr is not BaseSkill):
+                if isinstance(attr, type) and issubclass(attr, BaseSkill) and attr is not BaseSkill:
                     try:
                         instance = attr()
                         self.registry.register(instance)
@@ -149,6 +154,5 @@ class SkillHotLoader:
     @staticmethod
     def _compute_hash(file_path: str) -> str:
         """计算文件哈希"""
-        import hashlib
         with open(file_path, "rb") as f:
             return hashlib.md5(f.read()).hexdigest()

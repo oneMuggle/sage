@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Any
 
 
-class Role(str, Enum):
+class Role(str, Enum):  # noqa: UP042 — Python 3.10 不支持 StrEnum，留 str+Enum 形式
     """对话消息角色。"""
 
     SYSTEM = "system"

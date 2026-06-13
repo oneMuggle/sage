@@ -206,7 +206,7 @@ class EvolutionScheduler:
 
         try:
             # 判断是 async 函数还是普通函数
-            import asyncio
+            import asyncio  # noqa: PLC0415
 
             if asyncio.iscoroutinefunction(task):
                 # 创建新的事件循环来运行 async 函数

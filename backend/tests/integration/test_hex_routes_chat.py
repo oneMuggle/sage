@@ -74,7 +74,7 @@ async def hex_client():
             app.dependency_overrides.pop(get_chat_service, None)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_chat_endpoint_via_chat_service(hex_client):
     """POST /chat 经由 hex_routes 走 ChatService.run_turn。"""
@@ -90,7 +90,7 @@ async def test_chat_endpoint_via_chat_service(hex_client):
     assert "hello from hex" in body["reply"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_chat_endpoint_persists_user_and_assistant_messages(hex_client):
     """ChatService 应把 user + assistant 两条消息都写入 storage。"""
@@ -110,7 +110,7 @@ async def test_chat_endpoint_persists_user_and_assistant_messages(hex_client):
     assert stored[-1].content == "hello from hex"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_chat_endpoint_returns_500_when_session_missing(hex_client):
     """session 不存在时 ChatService 仍接受（MemoryStorageAdapter 会自动建），

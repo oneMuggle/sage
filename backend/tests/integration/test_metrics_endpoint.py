@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from prometheus_client import CollectorRegistry
 
 from backend.adapters.out.event.stdout_adapter import StdoutEventAdapter
 from backend.adapters.out.llm.mock_adapter import MockLLMAdapter
@@ -64,7 +65,6 @@ async def prom_client():
     但 ``metrics`` 端口是真实 ``PrometheusMetricAdapter``，使 ``/metrics``
     端点能输出 Prometheus text-format。
     """
-    from prometheus_client import CollectorRegistry
 
     prom = PrometheusMetricAdapter(registry=CollectorRegistry())
 
@@ -125,7 +125,7 @@ async def noop_client():
             app.dependency_overrides.pop(get_chat_service, None)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_metrics_endpoint_returns_200_with_text_plain(prom_client):
     """GET /metrics 返回 200 + Prometheus text-format content-type。"""
@@ -139,7 +139,7 @@ async def test_metrics_endpoint_returns_200_with_text_plain(prom_client):
     assert "version=" in ctype or "text/plain" in ctype
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_metrics_endpoint_lists_all_9_core_metrics(prom_client):
     """9 个 spec § 6.1 核心指标全部以 # HELP 形式暴露。"""
@@ -152,7 +152,7 @@ async def test_metrics_endpoint_lists_all_9_core_metrics(prom_client):
         assert f"# HELP {name}" in body, f"missing metric: {name}"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_metrics_endpoint_after_chat_does_not_decrease_llm_counter(prom_client):
     """POST /chat 后 llm_calls_total 计数 >= pre（不会减少）。"""
@@ -170,7 +170,7 @@ async def test_metrics_endpoint_after_chat_does_not_decrease_llm_counter(prom_cl
     assert post_count >= pre_count
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_metrics_endpoint_with_noop_adapter_returns_empty(noop_client):
     """Noop adapter 下 /metrics 端点返回 200 + 空 body（不崩）。"""

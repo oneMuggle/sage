@@ -5,6 +5,11 @@ from __future__ import annotations
 import logging
 
 import pytest
+from opentelemetry import trace
+
+from backend.utils import otel as _otel_mod
+from backend.utils.logging import TraceIdFilter
+from backend.utils.otel import get_tracer, init_tracing
 
 pytestmark = pytest.mark.unit
 
@@ -15,8 +20,6 @@ def test_init_tracing_is_idempotent():
     二次调用不会重新注册 ``BatchSpanProcessor``，避免 span 重复导出。
     """
     # 强制清理以保证测试可重复（其他测试可能已初始化过）
-    from backend.utils import otel as _otel_mod
-    from backend.utils.otel import init_tracing
 
     _otel_mod._provider = None
     p1 = init_tracing("test-svc-1")
@@ -27,7 +30,6 @@ def test_init_tracing_is_idempotent():
 
 def test_get_tracer_returns_tracer():
     """get_tracer 返回 Tracer 实例。"""
-    from backend.utils.otel import get_tracer
 
     t = get_tracer("test")
     assert t is not None
@@ -36,9 +38,6 @@ def test_get_tracer_returns_tracer():
 
 def test_span_context_manager_works():
     """start_as_current_span 上下文管理器工作。"""
-    from opentelemetry import trace
-
-    from backend.utils.otel import get_tracer
 
     tracer = get_tracer("test")
     with tracer.start_as_current_span("test-span") as span:
@@ -55,7 +54,6 @@ def test_span_context_manager_works():
 
 def test_trace_id_filter_handles_no_active_span():
     """无活跃 span 时 filter 不抛错。"""
-    from backend.utils.logging import TraceIdFilter
 
     f = TraceIdFilter()
     record = logging.LogRecord(
@@ -78,8 +76,6 @@ def test_trace_id_filter_handles_no_active_span():
 
 def test_trace_id_filter_injects_active_span_ids():
     """有活跃 span 时 filter 注入 trace_id / span_id。"""
-    from backend.utils.logging import TraceIdFilter
-    from backend.utils.otel import get_tracer
 
     tracer = get_tracer("test")
     with tracer.start_as_current_span("with-trace") as span:

@@ -27,6 +27,7 @@ from typing import Any
 
 from backend.domain.skill import SkillResult, SkillSpec
 from backend.ports.skill import SkillPort  # noqa: F401  (structural typing target)
+from backend.skills import register_all_skills
 from backend.skills.registry import SkillRegistry as _SkillRegistry
 
 
@@ -38,8 +39,6 @@ class InprocSkillAdapter:
         if registry is not None:
             self._registry = registry
         else:
-            from backend.skills import register_all_skills
-
             self._registry = _SkillRegistry()
             register_all_skills(self._registry)
         # enabled 状态: 未登记视为 enabled

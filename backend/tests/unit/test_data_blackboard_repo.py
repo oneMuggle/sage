@@ -12,7 +12,7 @@ from backend.data.database import Database
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture  # noqa: PT001 — 兼容 CI ruff 0.15.x (偏好无括号)
 def repo(tmp_db_path: str) -> BlackboardRepo:
     db = Database(db_path=tmp_db_path)
     db.init_db()

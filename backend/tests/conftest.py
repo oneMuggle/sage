@@ -19,7 +19,7 @@ import httpx
 from backend.main import app
 
 
-@pytest.fixture()
+@pytest.fixture()  # noqa: PT001 — 兼容项目 lint.sh (ruff 0.4.4) 偏好有括号形式
 def tmp_db_path():
     """创建临时数据库文件，测试后自动清理"""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -31,13 +31,13 @@ def tmp_db_path():
 @pytest.fixture(autouse=True)
 def setup_test_db(tmp_db_path):
     """每个测试自动使用独立临时数据库"""
-    import backend.data.database as db_mod
+    import backend.data.database as db_mod  # noqa: PLC0415  # 延迟 import：依赖本文件前置的 sys.path 注入
 
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
     db_mod._db.init_db()
     # PR-3: 与生产 lifespan 保持一致, 启动时种子化 4 个默认 agent.
     # 测试不走 FastAPI lifespan, 显式调一次以模拟.
-    from backend.data.agent_repo import AgentRepository
+    from backend.data.agent_repo import AgentRepository  # noqa: PLC0415  # 延迟 import：同上
 
     AgentRepository().seed_defaults_if_empty()
     yield db_mod._db
@@ -59,7 +59,7 @@ import respx
 from httpx import Response
 
 
-@pytest.fixture()
+@pytest.fixture()  # noqa: PT001 — 兼容项目 lint.sh (ruff 0.4.4) 偏好有括号形式
 def mock_llm_ok():
     """Mock LLM 返回正常 chat completion.
 
@@ -92,7 +92,7 @@ def mock_llm_ok():
         yield mock
 
 
-@pytest.fixture()
+@pytest.fixture()  # noqa: PT001 — 兼容项目 lint.sh (ruff 0.4.4) 偏好有括号形式
 def mock_llm_rate_limit():
     """Mock LLM 返回 429 限流响应"""
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
@@ -105,7 +105,7 @@ def mock_llm_rate_limit():
         yield mock
 
 
-@pytest.fixture()
+@pytest.fixture()  # noqa: PT001 — 兼容项目 lint.sh (ruff 0.4.4) 偏好有括号形式
 def mock_llm_timeout():
     """Mock LLM 模拟超时（抛 httpx.TimeoutException）。
 
@@ -120,7 +120,7 @@ def mock_llm_timeout():
         yield mock
 
 
-@pytest.fixture()
+@pytest.fixture()  # noqa: PT001 — 兼容项目 lint.sh (ruff 0.4.4) 偏好有括号形式
 def mock_llm_server_error():
     """Mock LLM 返回 500 服务端错误"""
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
@@ -133,7 +133,7 @@ def mock_llm_server_error():
         yield mock
 
 
-@pytest.fixture()
+@pytest.fixture()  # noqa: PT001 — 兼容项目 lint.sh (ruff 0.4.4) 偏好有括号形式
 def sample_messages():
     """测试用消息列表（标准 system + user 开头）"""
     return [
@@ -142,22 +142,22 @@ def sample_messages():
     ]
 
 
-@pytest.fixture()
+@pytest.fixture()  # noqa: PT001 — 兼容项目 lint.sh (ruff 0.4.4) 偏好有括号形式
 def sample_user_query():
     """测试用用户查询"""
     return "What is the capital of France?"
 
 
-@pytest.fixture()
+@pytest.fixture()  # noqa: PT001 — 兼容项目 lint.sh (ruff 0.4.4) 偏好有括号形式
 def tmp_data_dir(tmp_path):
     """临时数据目录（避免污染真实 data/）—— 直接返回 tmp_path 便于测试中使用"""
     return tmp_path
 
 
 @pytest.fixture(autouse=False)
-def reset_skill_adapter():  # noqa: PT004 - 空 yield 是合法的 teardown-only fixture
+def reset_skill_adapter():  # noqa: PT004 — fixture 用 yield 而无 setup body，PT004 误判为 "helper"
     """PR-7: 重置 skills 路由层模块级 adapter 单例 (enabled / usage_count)。"""
-    import backend.api.legacy_routes as routes
+    import backend.api.legacy_routes as routes  # noqa: PLC0415  # 延迟 import：依赖本文件前置的 sys.path 注入
 
     routes._skill_adapter_singleton = None
     yield

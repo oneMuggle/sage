@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import pathlib
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -16,6 +18,7 @@ import pytest
 from backend.domain.message import Message, Role
 from backend.domain.skill import SkillResult, SkillSpec
 from backend.domain.tool import ToolResult, ToolSpec
+from backend.ports import __all__ as ports_all
 from backend.ports.llm import LLMPort
 from backend.ports.observability import EventPort, MetricPort
 from backend.ports.skill import SkillPort
@@ -40,7 +43,6 @@ def test_all_ports_importable() -> None:
 
 def test_all_ports_re_exported_in_init() -> None:
     """``backend.ports.__all__`` 必须包含全部 6 个 port。"""
-    from backend.ports import __all__ as ports_all
 
     assert set(ports_all) == {
         "LLMPort",
@@ -255,8 +257,6 @@ def test_llm_port_structural_typing() -> None:
 
 def test_ports_only_depend_on_domain() -> None:
     """ports/ 仅允许 import ``backend.domain.*``，禁止外部依赖。"""
-    import pathlib
-    import re
 
     ports_dir = pathlib.Path(__file__).resolve().parents[2] / "ports"
     assert ports_dir.is_dir(), f"ports/ 不存在: {ports_dir}"

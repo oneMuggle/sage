@@ -53,7 +53,7 @@ def test_list_operations_with_empty_yaml() -> None:
     assert adapter.list_operations() == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_raises_not_implemented() -> None:
     """execute 必须抛 NotImplementedError 并指向 plan 文档。"""
     adapter = HttpComputeAdapter(_make_config())

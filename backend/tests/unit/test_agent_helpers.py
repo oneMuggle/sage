@@ -12,6 +12,7 @@ import pytest
 
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import ToolCallError
+from backend.core.legacy import agent as agent_mod
 from backend.core.legacy.agent import QueryCache, SageAgent
 from backend.core.legacy.llm_client import LLMResponse
 
@@ -212,7 +213,7 @@ def test_agent_init_with_llm_config_creates_llm_client():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_returns_cached_result_when_cache_hit():
     """缓存命中时,chat() 应直接返回缓存,完全不走 LLM 路径。"""
     agent = SageAgent()
@@ -232,7 +233,7 @@ async def test_chat_returns_cached_result_when_cache_hit():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_returns_simulated_response_when_llm_unset():
     """llm_client is None 时,chat() 应走本地模拟响应分支。"""
     agent = SageAgent()
@@ -254,7 +255,7 @@ async def test_chat_returns_simulated_response_when_llm_unset():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_with_llm_client_returns_llm_response():
     """配置了 LLM 时,chat() 应调用 _call_llm 并返回其内容。"""
 
@@ -275,10 +276,9 @@ async def test_chat_with_llm_client_returns_llm_response():
     agent.llm_client.chat.assert_awaited_once()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_with_dynamic_llm_config_restores_original():
     """传入 llm_config 时,chat() 应临时覆盖,结束后恢复。"""
-    from backend.core.legacy import agent as agent_mod
 
     # 初始化时用 gpt-3.5
     agent = SageAgent(
@@ -317,7 +317,7 @@ async def test_chat_with_dynamic_llm_config_restores_original():
     assert agent.llm_client is original_client
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_returns_llm_error_response_on_llm_error():
     """LLMError 抛出时,chat() 应返回 error 字段结构化响应,而不是抛异常。"""
     agent = SageAgent(
@@ -340,7 +340,7 @@ async def test_chat_returns_llm_error_response_on_llm_error():
     assert result["session"] is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_returns_unknown_error_response_on_unexpected_exception():
     """非 LLMError 异常(如 DB 错、编程错)时,chat() 应包装为 UNKNOWN LLMError。"""
     agent = SageAgent(
@@ -364,7 +364,7 @@ async def test_chat_returns_unknown_error_response_on_unexpected_exception():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_call_llm_returns_llm_response():
     """_call_llm 应构造 system + user 消息并返回 LLM 客户端的响应。"""
     agent = SageAgent(
@@ -388,7 +388,7 @@ async def test_call_llm_returns_llm_response():
     assert msgs[1]["content"] == "user msg"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_call_llm_works_without_memory_context():
     """memory_context 为空时,system prompt 不应拼接"记忆上下文"段落。"""
     agent = SageAgent(
@@ -459,7 +459,7 @@ def test_extract_and_save_memories_swallows_exception():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_continues_when_message_save_fails():
     """message_repo.save 抛错时,chat() 应记录警告但不中断。"""
     agent = SageAgent(
@@ -478,7 +478,7 @@ async def test_chat_continues_when_message_save_fails():
     assert result["message"]["content"] == "ok"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_triggers_memory_consolidation_when_over_threshold():
     """工作记忆 token > 3000 时,chat() 应触发 consolidation.consolidate。"""
     agent = SageAgent(
@@ -498,7 +498,7 @@ async def test_chat_triggers_memory_consolidation_when_over_threshold():
     agent.consolidation.consolidate.assert_called_once()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_skips_consolidation_when_under_threshold():
     """工作记忆 token ≤ 3000 时,chat() 不应触发 consolidation。"""
     agent = SageAgent(
@@ -517,7 +517,7 @@ async def test_chat_skips_consolidation_when_under_threshold():
     agent.consolidation.consolidate.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_updates_session_when_session_exists():
     """session_repo.get 找到 session 时,chat() 应更新 last_message_at 和 message_count。"""
     agent = SageAgent(
@@ -542,7 +542,7 @@ async def test_chat_updates_session_when_session_exists():
     assert call_kwargs["message_count"] == 6
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_handles_missing_session_gracefully():
     """session_repo.get 返回 None 时,chat() 不应尝试 update,直接走 result 构造。"""
     agent = SageAgent(
@@ -563,7 +563,7 @@ async def test_chat_handles_missing_session_gracefully():
     agent.session_repo.update.assert_not_called()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_caches_successful_result():
     """成功返回的 result 应被写入 _cache,下次同 query 命中缓存。"""
     agent = SageAgent(

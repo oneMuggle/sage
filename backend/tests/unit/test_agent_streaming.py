@@ -15,6 +15,7 @@ Agent / LLMClient 流式响应边界测试 (PG1.1 - Task 1.1.3)
 这些测试只覆盖流式路径中"易出 bug 的边界",不重复 `test_agent_run_loop.py` 的内容。
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -39,7 +40,6 @@ def _sse_response(chunks: list, status_code: int = 200):
                 - 字符串:按原样写入(用于 `[DONE]` 或损坏行)
         status_code: HTTP 状态码
     """
-    import json
 
     lines: list[str] = []
     for c in chunks:
@@ -86,7 +86,7 @@ def _make_client() -> LLMClient:
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_stream_yields_each_delta_in_order():
     """多个 SSE delta 应按顺序逐个 yield 出来。"""
     client = _make_client()
@@ -112,7 +112,7 @@ async def test_chat_stream_yields_each_delta_in_order():
     assert "".join(chunks) == "你好！"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_stream_terminates_on_done_sentinel():
     """`data: [DONE]` 哨兵出现时,迭代器应停止,不再 yield。
 
@@ -139,7 +139,7 @@ async def test_chat_stream_terminates_on_done_sentinel():
     assert chunks == ["片段1"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_stream_skips_empty_delta_and_malformed_lines():
     """空 content / 损坏 JSON 行应被静默跳过,不影响后续正常 chunk。"""
     client = _make_client()
@@ -162,7 +162,7 @@ async def test_chat_stream_skips_empty_delta_and_malformed_lines():
     assert chunks == ["有效片段"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_stream_raises_runtime_error_on_http_error():
     """HTTP 错误状态码应抛 RuntimeError(注:后续 Task 11 将统一为 LLMError 分类)。"""
     client = _make_client()
@@ -199,7 +199,7 @@ def _mock_llm_no_tool(content: str = "ok") -> MagicMock:
     return mock_client
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_terminates_immediately_after_done_event():
     """DONE 事件之后,async for 应立即停止(不再有 THINKING 之类的后续事件)。"""
     agent = SageAgent()
@@ -216,7 +216,7 @@ async def test_run_loop_terminates_immediately_after_done_event():
     assert "thinking" not in [e.state.value for e in events[done_idx + 1 :]]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_reusable_across_iterations():
     """同一个 agent 实例可以连续多次运行 run_loop,无残留状态。
 

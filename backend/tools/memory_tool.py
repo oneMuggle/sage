@@ -1,6 +1,7 @@
 """
 Memory 工具 - 记忆系统操作
 """
+
 from typing import TYPE_CHECKING
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -28,22 +29,16 @@ class MemorySearchTool(BaseTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "搜索查询"
-                    },
+                    "query": {"type": "string", "description": "搜索查询"},
                     "memory_type": {
                         "type": "string",
                         "enum": ["all", "episodic", "semantic"],
-                        "description": "记忆类型 (默认 all)"
+                        "description": "记忆类型 (默认 all)",
                     },
-                    "limit": {
-                        "type": "integer",
-                        "description": "返回数量 (默认 5)"
-                    }
+                    "limit": {"type": "integer", "description": "返回数量 (默认 5)"},
                 },
-                "required": ["query"]
-            }
+                "required": ["query"],
+            },
         )
 
     def execute(self, query: str, memory_type: str = "all", limit: int = 5, **kwargs) -> ToolResult:
@@ -60,14 +55,12 @@ class MemorySearchTool(BaseTool):
 
         try:
             # 调用记忆管理器的搜索功能
-            import asyncio
+            import asyncio  # noqa: PLC0415
+
             loop = asyncio.new_event_loop()
             try:
                 results = loop.run_until_complete(
-                    self.memory.remember(
-                        query=query,
-                        context={"memory_type_filter": memory_type}
-                    )
+                    self.memory.remember(query=query, context={"memory_type_filter": memory_type})
                 )
             finally:
                 loop.close()
@@ -77,8 +70,8 @@ class MemorySearchTool(BaseTool):
                 content={
                     "query": query,
                     "memory_type": memory_type,
-                    "results": results[:limit] if results else []
-                }
+                    "results": results[:limit] if results else [],
+                },
             )
 
         except Exception as e:
@@ -103,24 +96,20 @@ class MemorySaveTool(BaseTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": "要保存的内容"
-                    },
-                    "importance": {
-                        "type": "integer",
-                        "description": "重要性 (1-10, 默认 5)"
-                    },
+                    "content": {"type": "string", "description": "要保存的内容"},
+                    "importance": {"type": "integer", "description": "重要性 (1-10, 默认 5)"},
                     "memory_type": {
                         "type": "string",
-                        "description": "记忆类型: episodic, semantic (默认 episodic)"
-                    }
+                        "description": "记忆类型: episodic, semantic (默认 episodic)",
+                    },
                 },
-                "required": ["content"]
-            }
+                "required": ["content"],
+            },
         )
 
-    def execute(self, content: str, importance: int = 5, memory_type: str = "episodic", **kwargs) -> ToolResult:
+    def execute(
+        self, content: str, importance: int = 5, memory_type: str = "episodic", **kwargs
+    ) -> ToolResult:
         """
         保存记忆
 
@@ -133,13 +122,13 @@ class MemorySaveTool(BaseTool):
             return ToolResult(success=False, error="记忆管理器未初始化")
 
         try:
-            import asyncio
+            import asyncio  # noqa: PLC0415
+
             loop = asyncio.new_event_loop()
             try:
                 loop.run_until_complete(
                     self.memory.remember(
-                        content,
-                        {"importance": importance, "memory_type": memory_type}
+                        content, {"importance": importance, "memory_type": memory_type}
                     )
                 )
             finally:
@@ -150,8 +139,8 @@ class MemorySaveTool(BaseTool):
                 content={
                     "content_length": len(content),
                     "importance": importance,
-                    "memory_type": memory_type
-                }
+                    "memory_type": memory_type,
+                },
             )
 
         except Exception as e:

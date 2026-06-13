@@ -29,7 +29,7 @@ def _make_response(content: str = "", tool_calls: list = None) -> LLMResponse:
     )
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_returns_done_when_no_tool_call():
     """LLM 返回纯文本时，状态机经过 THINKING → DONE。"""
     agent = SageAgent()
@@ -47,7 +47,7 @@ async def test_run_loop_returns_done_when_no_tool_call():
     assert done_evt.content == "你好"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_executes_tool_and_observes():
     """LLM 返回工具调用时，状态机经过 THINKING → ACTING → OBSERVING → THINKING → DONE。"""
     tool_call = LLMToolCall(
@@ -85,7 +85,7 @@ async def test_run_loop_executes_tool_and_observes():
     assert AgentState.DONE in states
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_respects_max_iterations():
     """max_iterations=2 时，应发出 FAILED。"""
     tool_call = LLMToolCall(id="c", name="calculator", arguments="{}")
@@ -111,7 +111,7 @@ async def test_run_loop_respects_max_iterations():
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_tool_success_yields_observation_with_content():
     """工具调用成功:THINKING → ACTING → OBSERVING(带 tool_result) → THINKING → DONE。"""
     tool_call = LLMToolCall(
@@ -166,7 +166,7 @@ async def test_run_loop_tool_success_yields_observation_with_content():
     mock_tool.execute.assert_called_once_with(expression="2+2")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_tool_returns_error_observation_continues():
     """工具返回 success=False → 标记 is_error=True 但不进入 FAILED,继续 THINKING 循环。"""
     tool_call = LLMToolCall(
@@ -211,7 +211,7 @@ async def test_run_loop_tool_returns_error_observation_continues():
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_tool_not_found_marks_error_and_continues():
     """工具不存在 → result_content 标记错误,继续循环(不抛异常)。"""
     tool_call = LLMToolCall(
@@ -242,7 +242,7 @@ async def test_run_loop_tool_not_found_marks_error_and_continues():
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_tool_raises_exception_is_caught():
     """工具 execute() 抛异常 → 内部 try/except 捕获,is_error=True,继续循环。"""
     tool_call = LLMToolCall(
@@ -273,7 +273,7 @@ async def test_run_loop_tool_raises_exception_is_caught():
     assert events[-1].state == AgentState.DONE
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_malformed_tool_arguments_fall_back_to_empty_dict():
     """LLM 返回的 tool_call.arguments 是非 JSON 字符串时,降级为 {} 而不抛。"""
     tool_call = LLMToolCall(
@@ -310,7 +310,7 @@ async def test_run_loop_malformed_tool_arguments_fall_back_to_empty_dict():
     mock_tool.execute.assert_called_once_with()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_llm_empty_content_yields_done_with_empty_string():
     """LLM 返回空 content 且无 tool_call → 直接 DONE,content 为空串。"""
     agent = SageAgent()
@@ -327,7 +327,7 @@ async def test_run_loop_llm_empty_content_yields_done_with_empty_string():
     assert done.content == ""
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_max_iterations_exceeded_yields_failed_event():
     """max_iterations=1 且 LLM 持续返回 tool_call → 第 1 次迭代后发出 FAILED 事件。
 
@@ -356,7 +356,7 @@ async def test_run_loop_max_iterations_exceeded_yields_failed_event():
     assert AgentState.DONE not in states[failed_idx + 1 :]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_llm_exception_propagates_without_being_swallowed():
     """LLM 抛 LLMError 时不会被 run_loop 捕获,直接向上传播(由 chat() 统一处理)。
 
@@ -376,7 +376,7 @@ async def test_run_loop_llm_exception_propagates_without_being_swallowed():
     assert exc_info.value.type == LLMErrorType.RATE_LIMITED
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_raises_agent_error_when_llm_client_unset():
     """self.llm_client is None 时,run_loop 启动就抛 AgentError,不发任何事件。"""
     agent = SageAgent()
@@ -391,7 +391,7 @@ async def test_run_loop_raises_agent_error_when_llm_client_unset():
         await _consume()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_appends_tool_message_to_messages_in_place():
     """run_loop 应当在原 messages 列表中追加 tool 消息(供下一轮 LLM 看到工具结果)。"""
     tool_call = LLMToolCall(id="c1", name="calc", arguments="{}")
@@ -421,7 +421,7 @@ async def test_run_loop_appends_tool_message_to_messages_in_place():
     assert tool_msg["tool_call_id"] == "c1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_tool_with_non_typed_result_serializes_via_default():
     """工具返回非 success/content 对象(例如裸 str)时,走 default=str 序列化路径。"""
     tool_call = LLMToolCall(id="c1", name="weird", arguments="{}")
@@ -449,7 +449,7 @@ async def test_run_loop_tool_with_non_typed_result_serializes_via_default():
     assert "plain string result" in observing.tool_result.content
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_loop_handles_multiple_tool_calls_in_one_iteration():
     """单轮 LLM 响应包含多个 tool_call 时,每个都应被独立执行 + 观察。"""
     tc1 = LLMToolCall(id="c1", name="a", arguments="{}")

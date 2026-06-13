@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from backend.agents.profiles import get_agent
 from backend.core.legacy.llm_client import LLMResponse
 from backend.core.legacy.orchestrator import AgentOrchestrator, Intent
 
@@ -68,7 +69,7 @@ def test_orchestrator_init_accepts_llm_client():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_process_request_routes_general_message_to_primary_agent():
     """ "你好" 触发关键词未命中 → fallback general → primary agent。"""
     llm = MagicMock()
@@ -84,7 +85,7 @@ async def test_process_request_routes_general_message_to_primary_agent():
     assert result["metadata"]["elapsed_ms"] >= 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_process_request_keyword_coding_short_circuits_llm():
     """ "写代码" 关键词命中 CODING → 选 coder agent,且不会调用 LLM 做意图分类。"""
     llm = MagicMock()
@@ -101,7 +102,7 @@ async def test_process_request_keyword_coding_short_circuits_llm():
     assert llm.chat.await_count == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_process_request_multi_step_routes_to_multi_step_branch():
     """消息无关键词命中 + LLM 分类为 multi_step → 走 _execute_multi_step 分支。"""
     llm = MagicMock()
@@ -127,7 +128,7 @@ async def test_process_request_multi_step_routes_to_multi_step_branch():
     assert result["metadata"]["intent"] == "multi_step"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_process_request_without_llm_uses_keyword_fallback():
     """无 llm_client 时,纯靠关键词 + 模拟回复。"""
     orch = AgentOrchestrator()  # llm_client=None
@@ -145,7 +146,7 @@ async def test_process_request_without_llm_uses_keyword_fallback():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_classify_intent_keyword_match_chinese():
     """中文关键词命中。"""
     orch = AgentOrchestrator()
@@ -154,7 +155,7 @@ async def test_classify_intent_keyword_match_chinese():
     assert await orch._classify_intent("搜索最新论文") == Intent.RESEARCH
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_classify_intent_keyword_match_english_case_insensitive():
     """英文关键词大小写不敏感。"""
     orch = AgentOrchestrator()
@@ -163,14 +164,14 @@ async def test_classify_intent_keyword_match_english_case_insensitive():
     assert await orch._classify_intent("Write CODE for me") == Intent.CODING
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_classify_intent_falls_back_to_general_when_no_keywords():
     """无关键词命中 + 无 LLM → GENERAL。"""
     orch = AgentOrchestrator()
     assert await orch._classify_intent("今天天气真好") == Intent.GENERAL
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_classify_intent_uses_llm_when_provided():
     """有 llm_client 时,关键词未命中 → 调 LLM 分类。"""
     llm = MagicMock()
@@ -183,7 +184,7 @@ async def test_classify_intent_uses_llm_when_provided():
     assert llm.chat.await_count == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_classify_intent_llm_failure_falls_back_to_general():
     """LLM 抛异常 → 记 warning → 返回 GENERAL。"""
     llm = MagicMock()
@@ -195,7 +196,7 @@ async def test_classify_intent_llm_failure_falls_back_to_general():
     assert intent == Intent.GENERAL
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_classify_intent_llm_unknown_label_falls_back_to_general():
     """LLM 返回无法识别的标签 → GENERAL。"""
     llm = MagicMock()
@@ -232,7 +233,7 @@ def test_select_agent_maps_each_known_intent(intent, expected):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_agent_task_success_publishes_task_and_result():
     """正常路径:发布 task → 调 LLM → 发布 result → 返回 dict。"""
     llm = MagicMock()
@@ -249,7 +250,7 @@ async def test_execute_agent_task_success_publishes_task_and_result():
     assert len(result["task_id"]) > 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_agent_task_returns_error_when_agent_not_found():
     """agent_id 不存在 → 返回 error dict、不调 LLM。"""
     orch = AgentOrchestrator()  # llm_client=None
@@ -261,7 +262,7 @@ async def test_execute_agent_task_returns_error_when_agent_not_found():
     assert result["agent_id"] == "ghost_agent"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_agent_task_includes_history_summary():
     """带 history 时,发布到黑板的 task content 应包含 history_summary。"""
     llm = MagicMock()
@@ -291,10 +292,9 @@ async def test_execute_agent_task_includes_history_summary():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_agent_llm_with_llm_uses_system_prompt_and_history():
     """有 llm_client:使用 agent.system_prompt + 最近 5 条历史。"""
-    from backend.agents.profiles import get_agent
 
     llm = MagicMock()
     llm.chat = AsyncMock(return_value=_make_response(content="response"))
@@ -324,11 +324,10 @@ async def test_run_agent_llm_with_llm_uses_system_prompt_and_history():
     assert messages[-1]["content"] == "current"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_agent_llm_without_llm_returns_simulated():
     """llm_client=None → 返回模拟回复。"""
     orch = AgentOrchestrator()
-    from backend.agents.profiles import get_agent
 
     agent = get_agent("researcher")
     response = await orch._run_agent_llm(agent, "search X")
@@ -337,10 +336,9 @@ async def test_run_agent_llm_without_llm_returns_simulated():
     assert "researcher" in response or "研究" in response
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_run_agent_llm_llm_error_returns_error_string():
     """LLM 抛异常 → 返回错误字符串而非抛错。"""
-    from backend.agents.profiles import get_agent
 
     llm = MagicMock()
     llm.chat = AsyncMock(side_effect=RuntimeError("upstream down"))

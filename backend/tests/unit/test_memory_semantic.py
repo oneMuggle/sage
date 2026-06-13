@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from backend.data.database import Database
@@ -10,7 +12,7 @@ from backend.memory.semantic import SemanticMemory
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture  # noqa: PT001 — 兼容 CI ruff 0.15.x (偏好无括号)
 def semantic(tmp_db_path: str) -> SemanticMemory:
     db = Database(db_path=tmp_db_path)
     db.init_db()
@@ -76,8 +78,6 @@ def test_search_like_fallback_path(semantic: SemanticMemory) -> None:
 
 
 def test_get_recent_orders_newest_first(semantic: SemanticMemory) -> None:
-    import time
-
     semantic.save("oldest")
     time.sleep(0.01)
     semantic.save("middle")

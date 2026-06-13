@@ -12,8 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, StrictBool
 
+from backend.adapters.out.skill import InprocSkillAdapter
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
+from backend.data.agent_repo import AgentRepository
 from backend.data.database import get_database
 from backend.data.session_repo import MessageRepository, SessionRepository
 from backend.memory import EpisodicMemory, MemoryManager, SemanticMemory, WorkingMemory
@@ -247,7 +249,6 @@ async def delete_message(message_id: str):
     注: 选 POST 而非 DELETE 是为了与项目其他 `/<resource>/<id>/delete` 路由
     (sessions/{id}/delete) 保持一致; 真正的 RESTful DELETE 在 v2 改造时再做。
     """
-    from backend.data.session_repo import MessageRepository
 
     deleted = MessageRepository().delete(message_id)
     if not deleted:
@@ -274,7 +275,6 @@ async def list_agents():
 
     对应 Tauri command ``list_agents`` (PR-3)。
     """
-    from backend.data.agent_repo import AgentRepository
 
     return AgentRepository().list_all()
 
@@ -288,7 +288,6 @@ async def get_agent_by_id(agent_id: str):
     拿错函数. 后续 PR 可把 dependency 改名 ``make_sage_agent()``,
     本 PR 仅做局部重命名.
     """
-    from backend.data.agent_repo import AgentRepository
 
     agent = AgentRepository().get(agent_id)
     if not agent:
@@ -309,7 +308,6 @@ async def update_agent(agent_id: str, data: AgentUpdate):
     - PATCH 是 partial update: 缺省字段保留原值
     - 空 body: 视为 no-op, 返回当前 profile, updated_at 不动
     """
-    from backend.data.agent_repo import AgentRepository
 
     # 字段级校验: role 白名单
     valid_roles = {"coordinator", "researcher", "coder", "memory_manager"}
@@ -365,7 +363,6 @@ async def toggle_agent(agent_id: str, data: AgentToggle):
     同值 toggle 也走 SQL UPDATE — 幂等但 updated_at 仍刷新, 符合
     set_enabled() 语义。
     """
-    from backend.data.agent_repo import AgentRepository
 
     repo = AgentRepository()
 
@@ -391,8 +388,6 @@ def _get_skill_adapter():
     """惰性构造 + 缓存 InprocSkillAdapter 单例。"""
     global _skill_adapter_singleton
     if _skill_adapter_singleton is None:
-        from backend.adapters.out.skill import InprocSkillAdapter
-
         _skill_adapter_singleton = InprocSkillAdapter()
     return _skill_adapter_singleton
 

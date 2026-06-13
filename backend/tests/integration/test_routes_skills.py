@@ -27,7 +27,7 @@ PREFIX = "/api/v1"
 # ========== list_skills ==========
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_list_skills_returns_4_builtins(client, reset_skill_adapter):
     """GET /skills 返回 4 个 builtin (search / writer / coder / travel), 默认全 enabled."""
     resp = await client.get(f"{PREFIX}/skills")
@@ -47,7 +47,7 @@ async def test_list_skills_returns_4_builtins(client, reset_skill_adapter):
 # ========== toggle_skill ==========
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_toggle_skill_disable_persists_in_list(client, reset_skill_adapter):
     """POST /toggle 关闭 search → list_skills 反映 enabled=false."""
     off = await client.post(f"{PREFIX}/skills/search/toggle", json={"enabled": False})
@@ -60,7 +60,7 @@ async def test_toggle_skill_disable_persists_in_list(client, reset_skill_adapter
     assert search["enabled"] is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_toggle_skill_enable_after_disable(client, reset_skill_adapter):
     """先关再开, 状态恢复."""
     await client.post(f"{PREFIX}/skills/coder/toggle", json={"enabled": False})
@@ -69,7 +69,7 @@ async def test_toggle_skill_enable_after_disable(client, reset_skill_adapter):
     assert on.json()["enabled"] is True
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_toggle_skill_not_found_returns_404(client, reset_skill_adapter):
     """不存在的 skill name → 404 + 结构化 detail."""
     resp = await client.post(
@@ -82,14 +82,14 @@ async def test_toggle_skill_not_found_returns_404(client, reset_skill_adapter):
     assert "nonexistent-skill" in detail["message"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_toggle_skill_missing_enabled_returns_422(client, reset_skill_adapter):
     """缺 enabled 字段 → 422 (FastAPI 自动校验)."""
     resp = await client.post(f"{PREFIX}/skills/search/toggle", json={})
     assert resp.status_code == 422
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_toggle_skill_wrong_type_returns_422(client, reset_skill_adapter):
     """enabled 类型错 (字符串) → 422."""
     resp = await client.post(f"{PREFIX}/skills/search/toggle", json={"enabled": "yes"})
@@ -99,7 +99,7 @@ async def test_toggle_skill_wrong_type_returns_422(client, reset_skill_adapter):
 # ========== execute_skill ==========
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_skill_not_found_returns_404(client, reset_skill_adapter):
     """不存在的 skill name → 404."""
     resp = await client.post(
@@ -110,7 +110,7 @@ async def test_execute_skill_not_found_returns_404(client, reset_skill_adapter):
     assert resp.json()["detail"]["type"] == "skill_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_disabled_skill_returns_200_with_error(client, reset_skill_adapter):
     """disabled skill → 200 + success=False, 不抛 4xx."""
     await client.post(f"{PREFIX}/skills/search/toggle", json={"enabled": False})
@@ -124,7 +124,7 @@ async def test_execute_disabled_skill_returns_200_with_error(client, reset_skill
     assert "disabled" in body["error"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_enabled_skill_with_no_tools_returns_200_failure(client, reset_skill_adapter):
     """enabled 但 builtin 缺工具 (context={}) → 200 + success=False。
 
@@ -143,7 +143,7 @@ async def test_execute_enabled_skill_with_no_tools_returns_200_failure(client, r
     assert body["error"]  # 任何非空错误描述
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_skill_default_args_and_action(client, reset_skill_adapter):
     """execute 不传 action / args 也能走通 (defaults: action='', args={})."""
     resp = await client.post(f"{PREFIX}/skills/search/execute", json={})
@@ -154,7 +154,7 @@ async def test_execute_skill_default_args_and_action(client, reset_skill_adapter
     assert body["error"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_skill_does_not_bump_usage_on_failure(client, reset_skill_adapter):
     """execute 失败时不累计 usage_count, 成功时累计 (本测试用例里只验证失败不累计)."""
     # search 默认 enabled, 但缺 web_search 工具 → 失败
@@ -167,7 +167,7 @@ async def test_execute_skill_does_not_bump_usage_on_failure(client, reset_skill_
     assert search["usage_count"] == 0  # 失败不累计
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_skill_args_wrong_type_returns_422(client, reset_skill_adapter):
     """args 类型错 (字符串而非 dict) → 422 (Pydantic 自动)."""
     resp = await client.post(

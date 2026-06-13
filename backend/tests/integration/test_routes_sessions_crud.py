@@ -12,12 +12,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from backend.data.session_repo import Message, MessageRepository
+
 pytestmark = pytest.mark.integration
 
 PREFIX = "/api/v1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_update_session_pin(client):
     """PATCH /sessions/{id} 接受 is_pinned 字段更新。"""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "可置顶"})
@@ -32,7 +34,7 @@ async def test_update_session_pin(client):
     assert data["is_pinned"] is True
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_update_session_unpin(client):
     """PATCH is_pinned=False 取消置顶。"""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "置顶会话"})
@@ -49,7 +51,7 @@ async def test_update_session_unpin(client):
     assert resp.json()["is_pinned"] is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_update_session_not_found_returns_404(client):
     """PATCH 不存在的会话返回 404。"""
     resp = await client.patch(
@@ -60,7 +62,7 @@ async def test_update_session_not_found_returns_404(client):
     assert resp.json()["detail"] == "会话不存在"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_update_session_empty_body(client):
     """PATCH 空 body（无字段更新）仍然返回当前会话。"""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "空更新"})
@@ -73,7 +75,7 @@ async def test_update_session_empty_body(client):
     assert data["id"] == session_id
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_get_messages_empty(client):
     """新会话没有消息时返回空数组。"""
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "空消息"})
@@ -84,10 +86,9 @@ async def test_get_messages_empty(client):
     assert resp.json() == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_get_messages_returns_inserted_messages(client):
     """插入消息后可通过 GET messages 查询到。"""
-    from backend.data.session_repo import Message, MessageRepository
 
     create_resp = await client.post(f"{PREFIX}/sessions", json={"title": "消息测试"})
     session_id = create_resp.json()["id"]
@@ -123,7 +124,7 @@ async def test_get_messages_returns_inserted_messages(client):
     assert messages[1]["role"] == "assistant"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_interrupt_endpoint_calls_agent_interrupt(client):
     """POST /interrupt 调用 SageAgent.interrupt()。"""
     with patch("backend.api.legacy_routes.SageAgent") as MockAgent:

@@ -6,19 +6,25 @@ import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+import yaml
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
+from backend.adapters.out.compute.subprocess_adapter import SubprocessComputeAdapter
 from backend.adapters.out.event.file_adapter import FileEventAdapter
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
+from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
-from backend.api.hex_routes import router as hex_router
+from backend.api.hex_routes import get_chat_service, router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.application.services.chat_service import ChatService
+from backend.data.agent_repo import AgentRepository
 from backend.data.database import Database
 
 logger = logging.getLogger(__name__)
@@ -34,9 +40,7 @@ def _build_compute_adapter():
 
     yaml 加载/解析异常会被记录并降级为 ``None``,不阻塞主流程。
     """
-    from pathlib import Path
 
-    import yaml
 
     cfg_path = Path("backend/config/ghm.yaml")
     if not cfg_path.is_file():
@@ -54,12 +58,8 @@ def _build_compute_adapter():
 
     adapter_type = ghm_cfg.get("adapter", "subprocess")
     if adapter_type == "subprocess":
-        from backend.adapters.out.compute.subprocess_adapter import (
-            SubprocessComputeAdapter,
-        )
         return SubprocessComputeAdapter(ghm_cfg)
     if adapter_type == "http":
-        from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
         logger.warning(
             "ghm.adapter=http: HttpComputeAdapter 仍是空壳,运行时调用会抛 NotImplementedError"
         )
@@ -82,7 +82,6 @@ def _build_chat_service() -> ChatService:
     inner_tools = InprocToolAdapter()
     compute = _build_compute_adapter()
     if compute is not None:
-        from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
         tools = ComputeToolAdapter(compute=compute, inner=inner_tools)
         logger.info(
             "ComputeToolAdapter 已装配,注册 %d 个计算工具",
@@ -110,7 +109,6 @@ async def lifespan(app: FastAPI):
     app.state.db = db
 
     # PR-3: agents 表种子化 (空表时插 4 个默认 agent, 幂等)
-    from backend.data.agent_repo import AgentRepository
 
     seeded = AgentRepository().seed_defaults_if_empty()
     if seeded:
@@ -119,7 +117,6 @@ async def lifespan(app: FastAPI):
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
     api_mode = os.environ.get("API_MODE", "hex").lower()
     if api_mode == "hex":
-        from backend.api.hex_routes import get_chat_service
         app.dependency_overrides[get_chat_service] = _build_chat_service
         app.state.chat_service = _build_chat_service()
         logger.info("Hex 模式：ChatService 已装配（/chat 走 hex_routes，其余走 legacy_routes）")

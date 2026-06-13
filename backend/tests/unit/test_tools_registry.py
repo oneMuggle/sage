@@ -5,6 +5,7 @@
 
 import pytest
 
+from backend.tools import register_all_tools
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.registry import ToolRegistry
 
@@ -134,7 +135,6 @@ def test_registry_get_schemas_for_llm_empty():
 
 def test_register_all_tools_registers_builtin_set():
     """register_all_tools 注册所有内置工具"""
-    from backend.tools import register_all_tools
 
     reg = ToolRegistry()
     register_all_tools(reg)

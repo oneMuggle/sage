@@ -73,7 +73,7 @@ def _make_config(**overrides: Any) -> dict[str, Any]:
     return cfg
 
 
-@pytest.fixture()
+@pytest.fixture  # noqa: PT001 — 兼容 CI ruff 0.15.x (偏好无括号)
 def resolved_dummy() -> ResolvedExecutable:
     return ResolvedExecutable(
         argv_prefix=["/usr/bin/python3", "-m", "ghm"],
@@ -131,7 +131,7 @@ def test_list_operations_reflects_yaml() -> None:
 # ---------- 成功路径 ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_success(resolved_dummy: ResolvedExecutable) -> None:
     """正常执行 → success=True,output 解析自 stdout JSON。"""
     cfg = _make_config()
@@ -168,7 +168,7 @@ async def test_execute_success(resolved_dummy: ResolvedExecutable) -> None:
 # ---------- 错误:OPERATION_NOT_FOUND ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_unknown_operation() -> None:
     """未声明的 operation → OPERATION_NOT_FOUND,不会 spawn 进程。"""
     adapter = SubprocessComputeAdapter(_make_config())
@@ -185,7 +185,7 @@ async def test_execute_unknown_operation() -> None:
 # ---------- 错误:ExecutableNotFoundError → INTERNAL_ERROR ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_resolver_failure() -> None:
     """ExecutableResolver 抛错 → INTERNAL_ERROR,details.tried 包含尝试。"""
     adapter = SubprocessComputeAdapter(_make_config())
@@ -208,7 +208,7 @@ async def test_execute_resolver_failure() -> None:
 # ---------- 错误:TIMEOUT ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_timeout(resolved_dummy: ResolvedExecutable) -> None:
     """超时 → TIMEOUT 且 proc.kill() / wait() 被调用。"""
     cfg = _make_config(timeout_seconds=1)
@@ -243,7 +243,7 @@ async def test_execute_timeout(resolved_dummy: ResolvedExecutable) -> None:
     mock_proc.wait.assert_awaited_once()
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_per_request_timeout_overrides(
     resolved_dummy: ResolvedExecutable,
 ) -> None:
@@ -284,7 +284,7 @@ async def test_execute_per_request_timeout_overrides(
 # ---------- 错误:PROCESS_FAILED (exit_code != 0,!= 2) ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_process_failed(resolved_dummy: ResolvedExecutable) -> None:
     """退出码 1 → PROCESS_FAILED,error.message 来自 stderr。"""
     adapter = SubprocessComputeAdapter(_make_config())
@@ -317,7 +317,7 @@ async def test_execute_process_failed(resolved_dummy: ResolvedExecutable) -> Non
 # ---------- 错误:INVALID_PARAMS (exit_code == 2) ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_invalid_params(resolved_dummy: ResolvedExecutable) -> None:
     """退出码 2 → INVALID_PARAMS(argparse 错误)。"""
     adapter = SubprocessComputeAdapter(_make_config())
@@ -347,7 +347,7 @@ async def test_execute_invalid_params(resolved_dummy: ResolvedExecutable) -> Non
 # ---------- 错误:OUTPUT_PARSE_ERROR ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_output_parse_error(resolved_dummy: ResolvedExecutable) -> None:
     """exit_code=0 但 stdout 非 JSON → OUTPUT_PARSE_ERROR。"""
     adapter = SubprocessComputeAdapter(_make_config())
@@ -375,7 +375,7 @@ async def test_execute_output_parse_error(resolved_dummy: ResolvedExecutable) ->
     assert result.raw_stdout == "not valid json {{{"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_output_not_object(resolved_dummy: ResolvedExecutable) -> None:
     """exit_code=0 但 stdout 是 JSON 数组(非 dict)→ OUTPUT_PARSE_ERROR。"""
     adapter = SubprocessComputeAdapter(_make_config())
@@ -402,7 +402,7 @@ async def test_execute_output_not_object(resolved_dummy: ResolvedExecutable) -> 
 # ---------- 异常包裹:意外异常 → INTERNAL_ERROR ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_unexpected_exception_swallowed(
     resolved_dummy: ResolvedExecutable,
 ) -> None:
@@ -430,7 +430,7 @@ async def test_execute_unexpected_exception_swallowed(
 # ---------- argv 拼装 ----------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_argv_includes_subcommand_and_flags(
     resolved_dummy: ResolvedExecutable,
 ) -> None:

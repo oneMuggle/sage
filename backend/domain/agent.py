@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any
 
 
-class AgentState(str, Enum):
+class AgentState(str, Enum):  # noqa: UP042 — Python 3.10 不支持 StrEnum，留 str+Enum 形式
     """ReAct 状态机枚举。"""
 
     IDLE = "idle"

@@ -13,7 +13,7 @@ from enum import Enum
 from typing import Any
 
 
-class LLMErrorType(str, Enum):
+class LLMErrorType(str, Enum):  # noqa: UP042 — Python 3.10 不支持 StrEnum，留 str+Enum 形式
     """LLM 错误类型枚举。
 
     采用 snake_case 字符串值，便于 JSON 序列化与前端映射。

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 
+import httpx as _httpx
 import pytest
 import respx
 from httpx import Response
@@ -20,7 +21,7 @@ UPSTREAM = "http://upstream.example.com"
 PROXY_BASE = "/api/v1/llm"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_get_models_forwards_to_upstream(client):
     """GET /v1/models 应转发到上游 GET /v1/models,响应 JSON 透传。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -46,7 +47,7 @@ async def test_get_models_forwards_to_upstream(client):
     assert route.calls[0].request.url.path == "/v1/models"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_post_chat_forwards_body(client):
     """POST /v1/chat/completions 应携带 body 字节级转发。"""
     sent_body = {
@@ -76,7 +77,7 @@ async def test_post_chat_forwards_body(client):
     assert received == sent_body
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_missing_header_returns_400(client):
     """缺 X-LLM-Provider-Url 应返 400 + missing_provider_url。"""
     resp = await client.get(f"{PROXY_BASE}/v1/models")
@@ -87,7 +88,7 @@ async def test_missing_header_returns_400(client):
     assert "X-LLM-Provider-Url" in detail["message"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_invalid_url_returns_400(client):
     """X-LLM-Provider-Url 不是 http/https 应返 400 + invalid_provider_url。"""
     resp = await client.get(
@@ -100,7 +101,7 @@ async def test_invalid_url_returns_400(client):
     assert detail["type"] == "invalid_provider_url"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_authorization_header_reaches_upstream(client):
     """Authorization 头应原样转发到上游(API key 透传)。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -120,7 +121,7 @@ async def test_authorization_header_reaches_upstream(client):
     assert route.calls[0].request.headers.get("authorization") == "Bearer sk-test-xyz"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_query_string_forwarded(client):
     """查询串应原样转发到上游。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -139,7 +140,7 @@ async def test_query_string_forwarded(client):
     assert route.calls[0].request.url.params.get("limit") == "10"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_upstream_4xx_passes_through(client):
     """上游 401 应原样透传给客户端(状态码 + body)。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -153,7 +154,7 @@ async def test_upstream_4xx_passes_through(client):
     assert resp.json() == {"error": "bad key"}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_upstream_5xx_passes_through(client):
     """上游 500 应原样透传给客户端。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -167,7 +168,7 @@ async def test_upstream_5xx_passes_through(client):
     assert "internal error" in resp.text
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_provider_url_header_not_forwarded(client):
     """X-LLM-Provider-Url 不应被转发到上游(避免循环引用)。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -184,7 +185,7 @@ async def test_provider_url_header_not_forwarded(client):
     assert "x-llm-provider-url" not in route.calls[0].request.headers
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_dotdot_path_normalized_to_root(client):
     """``..`` 路径段经 ``posixpath.normpath`` 折叠 — 永远不会逃出上游根(根级变 ``/``)。
 
@@ -204,7 +205,7 @@ async def test_dotdot_path_normalized_to_root(client):
     assert route.calls[0].request.url.path == "/"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_userinfo_in_provider_url_rejected(client):
     """带 userinfo 的 URL(``user:pass@host``)应被拒绝(防止凭据泄露到 log)。"""
     resp = await client.get(
@@ -218,10 +219,9 @@ async def test_userinfo_in_provider_url_rejected(client):
     assert "userinfo" in detail["message"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_upstream_timeout_returns_504(client):
     """httpx.TimeoutException 应映射为 504 upstream_timeout。"""
-    import httpx as _httpx
 
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
         mock.get("/v1/models").mock(side_effect=_httpx.TimeoutException("slow"))
@@ -234,10 +234,9 @@ async def test_upstream_timeout_returns_504(client):
     assert resp.json()["detail"]["type"] == "upstream_timeout"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_upstream_connect_error_returns_502(client):
     """httpx.ConnectError 应映射为 502 upstream_unreachable。"""
-    import httpx as _httpx
 
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
         mock.get("/v1/models").mock(side_effect=_httpx.ConnectError("nope"))
@@ -250,10 +249,9 @@ async def test_upstream_connect_error_returns_502(client):
     assert resp.json()["detail"]["type"] == "upstream_unreachable"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_upstream_transport_error_returns_502(client):
     """其它 httpx.TransportError(half-close 等)应映射为 502 upstream_transport_error。"""
-    import httpx as _httpx
 
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
         mock.get("/v1/models").mock(side_effect=_httpx.RemoteProtocolError("half close"))
@@ -266,7 +264,7 @@ async def test_upstream_transport_error_returns_502(client):
     assert resp.json()["detail"]["type"] == "upstream_transport_error"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_nested_path_normalized(client):
     """path 含 ``..`` 但最终不逃出根(``v1/../v1/models`` → ``/v1/models``)应正常转发。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:

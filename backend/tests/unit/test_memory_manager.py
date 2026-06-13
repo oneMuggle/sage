@@ -13,7 +13,7 @@ from backend.memory.working import WorkingMemory
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture  # noqa: PT001 — 兼容 CI ruff 0.15.x (偏好无括号)
 def manager(tmp_db_path: str) -> MemoryManager:
     db = Database(db_path=tmp_db_path)
     db.init_db()

@@ -16,7 +16,7 @@ from backend.data.blackboard_repo import BlackboardRepo
 logger = logging.getLogger(__name__)
 
 
-class Intent(str, Enum):
+class Intent(str, Enum):  # noqa: UP042 — Python 3.10 不支持 StrEnum，留 str+Enum 形式
     """用户意图分类"""
 
     GENERAL = "general"  # 一般对话

@@ -42,7 +42,7 @@ def _orch_with_llm(llm_mock: MagicMock) -> AgentOrchestrator:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_decompose_task_with_llm_returns_parsed_subtasks():
     """有 LLM 时,成功解析 JSON 数组返回子任务列表。"""
     llm = MagicMock()
@@ -63,7 +63,7 @@ async def test_decompose_task_with_llm_returns_parsed_subtasks():
     assert llm.chat.await_count == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_decompose_task_fallback_to_single_general_when_llm_fails():
     """LLM 抛异常 → fallback 到 [{"intent": "general", "description": message}]。"""
     llm = MagicMock()
@@ -75,7 +75,7 @@ async def test_decompose_task_fallback_to_single_general_when_llm_fails():
     assert subtasks == [{"intent": "general", "description": "complex task"}]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_decompose_task_fallback_when_invalid_json():
     """LLM 返回非 JSON → JSON 解析异常 → fallback。"""
     llm = MagicMock()
@@ -87,7 +87,7 @@ async def test_decompose_task_fallback_when_invalid_json():
     assert subtasks == [{"intent": "general", "description": "task"}]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_decompose_task_fallback_when_llm_returns_empty_list():
     """LLM 返回空列表 → 走 fallback(因为 len(subtasks) > 0 失败)。"""
     llm = MagicMock()
@@ -99,7 +99,7 @@ async def test_decompose_task_fallback_when_llm_returns_empty_list():
     assert subtasks == [{"intent": "general", "description": "task"}]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_decompose_task_fallback_when_llm_returns_non_list():
     """LLM 返回非 list 类型 → fallback。"""
     llm = MagicMock()
@@ -111,7 +111,7 @@ async def test_decompose_task_fallback_when_llm_returns_non_list():
     assert subtasks == [{"intent": "general", "description": "task"}]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_decompose_task_without_llm_returns_single_general():
     """无 llm_client → 直接 fallback 到单子任务。"""
     orch = AgentOrchestrator()
@@ -124,7 +124,7 @@ async def test_decompose_task_without_llm_returns_single_general():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_aggregate_results_with_llm_returns_llm_content():
     """有 LLM 时,聚合 prompt 调 LLM 返回整合结果。"""
     llm = MagicMock()
@@ -155,7 +155,7 @@ async def test_aggregate_results_with_llm_returns_llm_content():
     assert "write B" in user_prompt
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_aggregate_results_llm_failure_falls_back_to_concat():
     """LLM 抛异常 → fallback 拼接各子任务结果。"""
     llm = MagicMock()
@@ -181,7 +181,7 @@ async def test_aggregate_results_llm_failure_falls_back_to_concat():
     assert "write B" in final
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_aggregate_results_without_llm_concatenates():
     """无 llm_client → 直接拼接(走 fallback 路径)。"""
     orch = AgentOrchestrator()
@@ -193,7 +193,7 @@ async def test_aggregate_results_without_llm_concatenates():
     assert "【子任务 1】" in final
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_aggregate_results_handles_missing_subtask_description():
     """子任务缺 description 字段时,聚合不应崩。"""
     llm = MagicMock()
@@ -211,7 +211,7 @@ async def test_aggregate_results_handles_missing_subtask_description():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_multi_step_dispatches_each_subtask_and_aggregates():
     """多步端到端:decompose → 多个 _execute_agent_task → aggregate。"""
     llm = MagicMock()
@@ -257,7 +257,7 @@ async def test_execute_multi_step_dispatches_each_subtask_and_aggregates():
     assert len(orch_results) == 2
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_multi_step_without_llm_uses_single_general_subtask():
     """无 llm_client:decompose 退化到单子任务 general,aggregate 直接拼接。"""
     orch = AgentOrchestrator()
@@ -270,7 +270,7 @@ async def test_execute_multi_step_without_llm_uses_single_general_subtask():
     assert "【子任务 1】" in result["response"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_multi_step_decompose_failure_proceeds_with_general():
     """decompose 失败时,仍能跑通:用单 general 子任务走完。"""
     llm = MagicMock()
@@ -294,7 +294,7 @@ async def test_execute_multi_step_decompose_failure_proceeds_with_general():
     assert "response" in result
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_execute_multi_step_subtask_routes_by_intent():
     """子任务的 intent 字段决定派发到哪个 agent。"""
     llm = MagicMock()

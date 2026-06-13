@@ -29,7 +29,7 @@ from backend.adapters.out.compute._resolver import (
 # ---------- 辅助 fixtures ----------
 
 
-@pytest.fixture()
+@pytest.fixture  # noqa: PT001 — 兼容 CI ruff 0.15.x (偏好无括号)
 def fake_exe(tmp_path: Path) -> Path:
     """生成一个临时的"可执行"文件（chmod +x）。"""
     p = tmp_path / "fake-exe"
@@ -38,7 +38,7 @@ def fake_exe(tmp_path: Path) -> Path:
     return p
 
 
-@pytest.fixture()
+@pytest.fixture  # noqa: PT001 — 兼容 CI ruff 0.15.x (偏好无括号)
 def another_fake_exe(tmp_path: Path) -> Path:
     """第二个临时可执行文件（用于优先级测试）。"""
     p = tmp_path / "another-exe"
@@ -47,7 +47,7 @@ def another_fake_exe(tmp_path: Path) -> Path:
     return p
 
 
-@pytest.fixture()
+@pytest.fixture  # noqa: PT001 — 兼容 CI ruff 0.15.x (偏好无括号)
 def _clean_env() -> Iterator[None]:
     """确保测试前清除 GHM_EXECUTABLE_PATH 环境变量。"""
     saved = os.environ.pop("GHM_EXECUTABLE_PATH", None)

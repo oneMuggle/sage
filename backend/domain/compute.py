@@ -52,7 +52,7 @@ class ComputeRequest:
     request_id: str | None = None
 
 
-class ComputeErrorType(str, Enum):
+class ComputeErrorType(str, Enum):  # noqa: UP042 — Python 3.10 不支持 StrEnum，留 str+Enum 形式
     """计算失败的分类。"""
 
     OPERATION_NOT_FOUND = "operation_not_found"

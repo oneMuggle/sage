@@ -25,7 +25,7 @@ pytestmark = pytest.mark.integration
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_chat_stream_yields_ndjson_events():
     """/chat/stream 端点以 NDJSON 格式返回 AgentEvent。"""
 

@@ -203,7 +203,7 @@ def test_compute_port_missing_method_fails() -> None:
     assert not isinstance(_PartialImpl(), ComputePort)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_fake_compute_port_execute() -> None:
     """``_FakeComputePort.execute`` 能正确返回 ``ComputeResult``。"""
     fake = _FakeComputePort()

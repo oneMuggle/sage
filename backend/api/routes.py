@@ -18,8 +18,8 @@ import os
 _API_MODE = os.environ.get("API_MODE", "hex").lower()
 
 if _API_MODE == "hex":
-    from backend.api.hex_routes import router  # noqa: F401, E402
+    from backend.api.hex_routes import router  # noqa: F401, E402, PLC0415
 elif _API_MODE == "legacy":
-    from backend.api.legacy_routes import router  # noqa: F401, E402
+    from backend.api.legacy_routes import router  # noqa: F401, E402, PLC0415
 else:
     raise ValueError(f"API_MODE must be 'hex' or 'legacy', got: {_API_MODE!r}")

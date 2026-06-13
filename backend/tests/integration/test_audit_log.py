@@ -167,7 +167,7 @@ async def audit_client(tmp_path: Path):
             app.dependency_overrides.pop(get_chat_service, None)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_chat_endpoint_emits_chat_message_and_completed(audit_client):
     """POST /chat 触发 ``chat_message_sent`` + ``chat_response_completed`` 2 类事件。"""
@@ -185,7 +185,7 @@ async def test_chat_endpoint_emits_chat_message_and_completed(audit_client):
     assert "chat_response_completed" in seen
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_chat_service_create_session_emits_session_created(audit_client):
     """``ChatService.create_session()`` 触发 ``session_created`` 审计事件。"""
@@ -198,7 +198,7 @@ async def test_chat_service_create_session_emits_session_created(audit_client):
     assert "session_created" in seen
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_settings_endpoint_emits_settings_changed(audit_client):
     """PUT /settings 触发 ``settings_changed`` 事件。"""
@@ -218,7 +218,7 @@ async def test_settings_endpoint_emits_settings_changed(audit_client):
     assert "settings_changed" in seen
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_5_event_types_e2e_via_hex_paths(audit_client):
     """端到端：触发全部 5 类事件，验证全部落盘。
@@ -254,7 +254,7 @@ async def test_5_event_types_e2e_via_hex_paths(audit_client):
     assert len(seen) >= 4
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 @_HEX_ONLY
 async def test_tool_invoked_event_recorded_when_llm_returns_tool_calls(tmp_path: Path):
     """LLM 返回 tool_calls 时，tool_invoked 事件被 emit 并落盘。"""

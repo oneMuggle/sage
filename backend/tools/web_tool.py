@@ -2,6 +2,8 @@
 Web 工具 - 网络搜索和网页获取
 """
 
+import re
+
 import httpx
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -21,17 +23,11 @@ class WebSearchTool(BaseTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "搜索查询"
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "返回结果数量 (默认 5)"
-                    }
+                    "query": {"type": "string", "description": "搜索查询"},
+                    "limit": {"type": "integer", "description": "返回结果数量 (默认 5)"},
                 },
-                "required": ["query"]
-            }
+                "required": ["query"],
+            },
         )
 
     def execute(self, query: str, limit: int = 5, **kwargs) -> ToolResult:
@@ -53,13 +49,7 @@ class WebSearchTool(BaseTool):
             # 解析搜索结果
             results = self._parse_results(response.text, limit, query)
 
-            return ToolResult(
-                success=True,
-                content={
-                    "query": query,
-                    "results": results
-                }
-            )
+            return ToolResult(success=True, content={"query": query, "results": results})
 
         except httpx.HTTPError as e:
             return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
@@ -101,13 +91,19 @@ class WebSearchTool(BaseTool):
                             if '<a class="result__snippet"' in snippet_line:
                                 snippet_start = snippet_line.find(">") + 1
                                 snippet_end = snippet_line.find("</a>")
-                                snippet = snippet_line[snippet_start:snippet_end] if snippet_start > 0 and snippet_end > snippet_start else ""
+                                snippet = (
+                                    snippet_line[snippet_start:snippet_end]
+                                    if snippet_start > 0 and snippet_end > snippet_start
+                                    else ""
+                                )
 
-                                results.append({
-                                    "title": self._clean_html(title),
-                                    "url": "",  # DuckDuckGo HTML 版本没有直接 URL
-                                    "snippet": self._clean_html(snippet)
-                                })
+                                results.append(
+                                    {
+                                        "title": self._clean_html(title),
+                                        "url": "",  # DuckDuckGo HTML 版本没有直接 URL
+                                        "snippet": self._clean_html(snippet),
+                                    }
+                                )
                                 break
                             i += 1
                 except Exception:
@@ -120,7 +116,7 @@ class WebSearchTool(BaseTool):
                 {
                     "title": f"关于 {query} 的搜索结果",
                     "url": "https://example.com/search?q=" + query,
-                    "snippet": f"这是关于 {query} 的搜索结果..."
+                    "snippet": f"这是关于 {query} 的搜索结果...",
                 }
             ]
 
@@ -128,7 +124,6 @@ class WebSearchTool(BaseTool):
 
     def _clean_html(self, text: str) -> str:
         """清理 HTML 标签"""
-        import re
         # 移除 HTML 标签
         clean = re.sub(r"<[^>]+>", "", text)
         # 解码 HTML 实体
@@ -150,17 +145,11 @@ class WebFetchTool(BaseTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "网页 URL"
-                    },
-                    "max_length": {
-                        "type": "integer",
-                        "description": "最大获取长度 (默认 10000)"
-                    }
+                    "url": {"type": "string", "description": "网页 URL"},
+                    "max_length": {"type": "integer", "description": "最大获取长度 (默认 10000)"},
                 },
-                "required": ["url"]
-            }
+                "required": ["url"],
+            },
         )
 
     def execute(self, url: str, max_length: int = 10000, **kwargs) -> ToolResult:
@@ -174,7 +163,9 @@ class WebFetchTool(BaseTool):
         try:
             # 验证 URL
             if not url.startswith(("http://", "https://")):
-                return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
+                return ToolResult(
+                    success=False, error="无效的 URL，必须以 http:// 或 https:// 开头"
+                )
 
             response = self.client.get(url)
             response.raise_for_status()
@@ -188,8 +179,8 @@ class WebFetchTool(BaseTool):
                     "status_code": response.status_code,
                     "content": content,
                     "content_type": response.headers.get("content-type", ""),
-                    "encoding": response.encoding or "utf-8"
-                }
+                    "encoding": response.encoding or "utf-8",
+                },
             )
 
         except httpx.HTTPError as e:

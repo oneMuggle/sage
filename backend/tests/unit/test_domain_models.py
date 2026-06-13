@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import pathlib
+import re
 
 import pytest
 
@@ -263,9 +265,6 @@ class TestDomainPurity:
     """确保 domain/ 模块只 import 标准库 + 自身。"""
 
     def test_no_external_imports_in_domain(self) -> None:
-        import pathlib
-        import re
-
         domain_dir = pathlib.Path(__file__).resolve().parents[2] / "domain"
         assert domain_dir.is_dir(), f"domain/ 不存在: {domain_dir}"
 

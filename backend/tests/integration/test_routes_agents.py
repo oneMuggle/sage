@@ -12,6 +12,8 @@ list_agents 路由集成测试 — 覆盖 GET /api/v1/agents 端点。
 
 import pytest
 
+from backend.data.agent_repo import AgentRepository
+
 pytestmark = pytest.mark.integration
 
 PREFIX = "/api/v1"
@@ -19,7 +21,7 @@ PREFIX = "/api/v1"
 EXPECTED_DEFAULT_IDS = {"primary", "researcher", "coder", "memory_manager"}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_list_agents_returns_four_defaults_after_lifespan(client):
     """lifespan 启动后 GET /agents 必返回 4 个默认 agent."""
     resp = await client.get(f"{PREFIX}/agents")
@@ -31,7 +33,7 @@ async def test_list_agents_returns_four_defaults_after_lifespan(client):
     assert ids == EXPECTED_DEFAULT_IDS, f"期望默认 4 个 agent, 实际 {ids}"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_list_agents_profile_preserves_all_fields(client):
     """Agent profile 字段完整保留: name/role/system_prompt/tools/memory_access/
     model_config/max_iterations/enabled/description."""
@@ -54,10 +56,9 @@ async def test_list_agents_profile_preserves_all_fields(client):
     assert primary["description"]  # 非空
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_list_agents_includes_disabled_agents(client):
     """disabled 的 agent 仍在列表里 — GET /agents 不做 enabled 过滤."""
-    from backend.data.agent_repo import AgentRepository
 
     AgentRepository().set_enabled("coder", False)
 
@@ -71,10 +72,9 @@ async def test_list_agents_includes_disabled_agents(client):
     assert by_id["primary"]["enabled"] is True
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_list_agents_idempotent_across_lifespan(client):
     """同一 DB 多次跑 seed 不会重复插入 — 不破坏 (PRIMARY KEY, id)."""
-    from backend.data.agent_repo import AgentRepository
 
     first = await client.get(f"{PREFIX}/agents")
     assert first.status_code == 200
@@ -87,7 +87,7 @@ async def test_list_agents_idempotent_across_lifespan(client):
     assert len(second.json()) == 4
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_get_agent_by_id_returns_404(client):
     """不存在的 agent_id → 404 + 结构化 detail (给前端用)."""
     resp = await client.get(f"{PREFIX}/agents/nonexistent-agent-id")
@@ -96,7 +96,7 @@ async def test_get_agent_by_id_returns_404(client):
     assert detail["type"] == "agent_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_get_agent_by_id_returns_profile(client):
     """存在的 agent_id → 200 + 该 agent 完整 profile."""
     resp = await client.get(f"{PREFIX}/agents/coder")

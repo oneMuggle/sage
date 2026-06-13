@@ -6,12 +6,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from backend.data.database import get_database
+
 pytestmark = pytest.mark.integration
 
 PREFIX = "/api/v1"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_evolution_logs_empty(client):
     """空库上 /evolution/logs 返回空列表。"""
     resp = await client.get(f"{PREFIX}/evolution/logs")
@@ -19,10 +21,9 @@ async def test_evolution_logs_empty(client):
     assert resp.json() == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_evolution_logs_returns_inserted(client):
     """插入 evolution_log 后 /evolution/logs 能查到。"""
-    from backend.data.database import get_database
 
     db = get_database()
     now = int(1.7e12)
@@ -43,7 +44,7 @@ async def test_evolution_logs_returns_inserted(client):
     assert any(log["id"] == "ev-001" for log in logs)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_evolution_status_with_mock_scheduler(client):
     """GET /evolution/status 返回调度器任务列表。"""
     mock_scheduler = MagicMock()
@@ -74,7 +75,7 @@ async def test_evolution_status_with_mock_scheduler(client):
     assert statuses[1]["name"] == "memory_pruning"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_evolution_status_empty(client):
     """无任务时 /evolution/status 返回空数组。"""
     mock_scheduler = MagicMock()
@@ -87,7 +88,7 @@ async def test_evolution_status_empty(client):
     assert resp.json() == []
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_evolution_trigger_success(client):
     """POST /evolution/trigger 任务存在时返回 success=True。"""
     mock_scheduler = MagicMock()
@@ -115,7 +116,7 @@ async def test_evolution_trigger_success(client):
     mock_scheduler.trigger_task.assert_called_once_with("daily_summary")
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_evolution_trigger_task_not_found(client):
     """POST /evolution/trigger 任务不存在时返回 404。"""
     mock_scheduler = MagicMock()
@@ -139,7 +140,7 @@ async def test_evolution_trigger_task_not_found(client):
     assert "nonexistent_task" in resp.json()["detail"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio  # noqa: PT023 — 兼容 CI ruff 0.15.x (偏好无括号)
 async def test_evolution_trigger_failure(client):
     """POST /evolution/trigger trigger_task 返回 False 时 success=False。"""
     mock_scheduler = MagicMock()

@@ -2,6 +2,8 @@
 进化任务实现
 包含每日摘要、记忆修剪、偏好学习、重要性重评估等任务
 """
+
+import asyncio
 import logging
 import time
 import uuid
@@ -25,7 +27,6 @@ class BaseEvolutionTask:
 
     def run(self):
         """同步执行任务"""
-        import asyncio
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -63,12 +64,15 @@ class DailySummaryTask(BaseEvolutionTask):
         now_ts = int(time.time())
 
         # 1. 获取今日所有会话
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id, title, message_count
             FROM sessions
             WHERE created_at >= ? AND created_at < ?
             ORDER BY created_at DESC
-        """, [today_start_ts, now_ts])
+        """,
+            [today_start_ts, now_ts],
+        )
 
         sessions = cursor.fetchall()
         logger.info(f"今日会话数量: {len(sessions)}")
@@ -84,12 +88,15 @@ class DailySummaryTask(BaseEvolutionTask):
                 continue
 
             # 2. 获取会话消息
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT role, content
                 FROM messages
                 WHERE session_id = ?
                 ORDER BY created_at ASC
-            """, [session_id])
+            """,
+                [session_id],
+            )
 
             messages = cursor.fetchall()
 
@@ -104,27 +111,33 @@ class DailySummaryTask(BaseEvolutionTask):
 
             # 4. 保存到情景记忆
             memory_id = str(uuid.uuid4())
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO memories_episodic
                 (id, session_id, content, summary, memory_type, importance, source, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                memory_id,
-                session_id,
-                f"每日摘要: {summary}",
-                summary,
-                "daily_summary",
-                6,  # importance=6
-                "evolution",
-                now_ts
-            ))
+            """,
+                (
+                    memory_id,
+                    session_id,
+                    f"每日摘要: {summary}",
+                    summary,
+                    "daily_summary",
+                    6,  # importance=6
+                    "evolution",
+                    now_ts,
+                ),
+            )
 
             # 5. 标记会话已摘要
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE sessions
                 SET metadata = json_set(COALESCE(metadata, '{}'), '$.summarized', 1)
                 WHERE id = ?
-            """, [session_id])
+            """,
+                [session_id],
+            )
 
             processed += 1
             logger.info(f"会话 {session_id} 摘要完成: {summary[:50]}...")
@@ -136,7 +149,7 @@ class DailySummaryTask(BaseEvolutionTask):
         await self._log_evolution(
             evolution_type="daily_summary",
             description=f"每日摘要完成，处理了 {processed} 个会话",
-            status="success"
+            status="success",
         )
 
         return processed
@@ -155,10 +168,12 @@ class DailySummaryTask(BaseEvolutionTask):
             return None
 
         # 构建消息文本
-        messages_text = "\n".join([
-            f"[{msg['role']}]: {msg['content'][:200]}"
-            for msg in messages[:20]  # 最多20条消息
-        ])
+        messages_text = "\n".join(
+            [
+                f"[{msg['role']}]: {msg['content'][:200]}"
+                for msg in messages[:20]  # 最多20条消息
+            ]
+        )
 
         # 如果有 LLM 客户端，使用 LLM 生成摘要
         if self.llm:
@@ -191,29 +206,32 @@ class DailySummaryTask(BaseEvolutionTask):
         status: str,
         error_message: str = None,
         before_state: str = None,
-        after_state: str = None
+        after_state: str = None,
     ):
         """记录进化日志"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO evolution_log
             (id, evolution_type, description, status, error_message, before_state, after_state,
              trigger_type, created_at, completed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            str(uuid.uuid4()),
-            evolution_type,
-            description,
-            status,
-            error_message,
-            before_state,
-            after_state,
-            "scheduled",
-            int(time.time()),
-            int(time.time()) if status == "success" else None
-        ))
+        """,
+            (
+                str(uuid.uuid4()),
+                evolution_type,
+                description,
+                status,
+                error_message,
+                before_state,
+                after_state,
+                "scheduled",
+                int(time.time()),
+                int(time.time()) if status == "success" else None,
+            ),
+        )
 
         conn.commit()
 
@@ -245,33 +263,42 @@ class MemoryPruningTask(BaseEvolutionTask):
         thirty_days_ago = now_ts - 30 * 24 * 3600
 
         # 1. 删除过期记忆
-        cursor.execute("""
+        cursor.execute(
+            """
             DELETE FROM memories_episodic
             WHERE expires_at IS NOT NULL AND expires_at < ?
-        """, [now_ts])
+        """,
+            [now_ts],
+        )
         expired_deleted = cursor.rowcount
         total_deleted += expired_deleted
         logger.info(f"删除过期记忆: {expired_deleted} 条")
 
         # 2. 删除极低价值且长期未访问的记忆
-        cursor.execute("""
+        cursor.execute(
+            """
             DELETE FROM memories_episodic
             WHERE importance <= 1
             AND access_count = 0
             AND created_at < ?
-        """, [thirty_days_ago])
+        """,
+            [thirty_days_ago],
+        )
         low_value_deleted = cursor.rowcount
         total_deleted += low_value_deleted
         logger.info(f"删除低价值记忆: {low_value_deleted} 条")
 
         # 3. 删除孤儿记忆（无关联会话且无重要内容）
-        cursor.execute("""
+        cursor.execute(
+            """
             DELETE FROM memories_episodic
             WHERE session_id IS NOT NULL
             AND importance <= 3
             AND access_count = 0
             AND created_at < ?
-        """, [thirty_days_ago])
+        """,
+            [thirty_days_ago],
+        )
         orphaned_deleted = cursor.rowcount
         total_deleted += orphaned_deleted
         logger.info(f"删除孤儿记忆: {orphaned_deleted} 条")
@@ -282,14 +309,17 @@ class MemoryPruningTask(BaseEvolutionTask):
 
         if current_count > self.max_memories:
             excess = current_count - self.max_memories
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE FROM memories_episodic
                 WHERE id IN (
                     SELECT id FROM memories_episodic
                     ORDER BY importance ASC, created_at ASC
                     LIMIT ?
                 )
-            """, [excess])
+            """,
+                [excess],
+            )
             limit_deleted = cursor.rowcount
             total_deleted += limit_deleted
             logger.info(f"超过上限删除: {limit_deleted} 条")
@@ -301,36 +331,35 @@ class MemoryPruningTask(BaseEvolutionTask):
         await self._log_evolution(
             evolution_type="memory_pruning",
             description=f"记忆修剪完成，删除了 {total_deleted} 条记忆，当前记忆数: {current_count - total_deleted}",
-            status="success"
+            status="success",
         )
 
         return total_deleted
 
     async def _log_evolution(
-        self,
-        evolution_type: str,
-        description: str,
-        status: str,
-        error_message: str = None
+        self, evolution_type: str, description: str, status: str, error_message: str = None
     ):
         """记录进化日志"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO evolution_log
             (id, evolution_type, description, status, error_message, trigger_type, created_at, completed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            str(uuid.uuid4()),
-            evolution_type,
-            description,
-            status,
-            error_message,
-            "scheduled",
-            int(time.time()),
-            int(time.time()) if status == "success" else None
-        ))
+        """,
+            (
+                str(uuid.uuid4()),
+                evolution_type,
+                description,
+                status,
+                error_message,
+                "scheduled",
+                int(time.time()),
+                int(time.time()) if status == "success" else None,
+            ),
+        )
 
         conn.commit()
 
@@ -358,7 +387,18 @@ class PreferenceLearningTask(BaseEvolutionTask):
         cursor = conn.cursor()
 
         # 1. 获取近期反馈消息（包含反馈关键词的用户消息）
-        feedback_keywords = ["反馈", "评分", "喜欢", "不喜欢", "太短", "太长", "详细", "简单", "好", "差"]
+        feedback_keywords = [
+            "反馈",
+            "评分",
+            "喜欢",
+            "不喜欢",
+            "太短",
+            "太长",
+            "详细",
+            "简单",
+            "好",
+            "差",
+        ]
         "%" + "%".join(feedback_keywords) + "%"
 
         cursor.execute("""
@@ -398,36 +438,35 @@ class PreferenceLearningTask(BaseEvolutionTask):
         memory_id = str(uuid.uuid4())
         now_ts = int(time.time())
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO memories_semantic
             (id, content, summary, tags, created_at)
             VALUES (?, ?, ?, ?, ?)
-        """, (
-            memory_id,
-            f"用户偏好总结: {profile_text}",
-            f"用户偏好: {preferences.get('response_length', 'medium')}, "
-            f"风格: {preferences.get('tone', 'friendly')}, "
-            f"详细度: {preferences.get('detail_level', 'medium')}",
-            '["user_preference", "evolution"]',
-            now_ts
-        ))
+        """,
+            (
+                memory_id,
+                f"用户偏好总结: {profile_text}",
+                f"用户偏好: {preferences.get('response_length', 'medium')}, "
+                f"风格: {preferences.get('tone', 'friendly')}, "
+                f"详细度: {preferences.get('detail_level', 'medium')}",
+                '["user_preference", "evolution"]',
+                now_ts,
+            ),
+        )
 
         # 同时更新用户偏好表
         for key, value in preferences.items():
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO preferences (key, value, value_type, category, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(key) DO UPDATE SET
                     value = excluded.value,
                     updated_at = excluded.updated_at
-            """, (
-                f"pref_{key}",
-                str(value),
-                "string",
-                "preference",
-                now_ts,
-                now_ts
-            ))
+            """,
+                (f"pref_{key}", str(value), "string", "preference", now_ts, now_ts),
+            )
 
         conn.commit()
         logger.info(f"偏好学习完成: {preferences}")
@@ -437,7 +476,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
             evolution_type="preference_learning",
             description=f"偏好学习完成，分析出 {len(preferences)} 个偏好维度",
             status="success",
-            after_state=profile_text
+            after_state=profile_text,
         )
 
         return len(preferences)
@@ -452,15 +491,16 @@ class PreferenceLearningTask(BaseEvolutionTask):
         Returns:
             偏好字典
         """
-        preferences = {
-            "response_length": "medium",
-            "tone": "friendly",
-            "detail_level": "medium"
-        }
+        preferences = {"response_length": "medium", "tone": "friendly", "detail_level": "medium"}
 
         # 简单的关键词分析
         length_prefs = {"太短": "long", "太长": "short", "简短": "short", "详细": "detailed"}
-        tone_prefs = {"友好": "friendly", "专业": "professional", "幽默": "humorous", "严肃": "formal"}
+        tone_prefs = {
+            "友好": "friendly",
+            "专业": "professional",
+            "幽默": "humorous",
+            "严肃": "formal",
+        }
         detail_prefs = {"详细": "detailed", "简单": "brief", "复杂": "comprehensive"}
 
         for msg in feedback_messages:
@@ -487,29 +527,32 @@ class PreferenceLearningTask(BaseEvolutionTask):
         status: str,
         error_message: str = None,
         before_state: str = None,
-        after_state: str = None
+        after_state: str = None,
     ):
         """记录进化日志"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO evolution_log
             (id, evolution_type, description, status, error_message, before_state, after_state,
              trigger_type, created_at, completed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            str(uuid.uuid4()),
-            evolution_type,
-            description,
-            status,
-            error_message,
-            before_state,
-            after_state,
-            "scheduled",
-            int(time.time()),
-            int(time.time()) if status == "success" else None
-        ))
+        """,
+            (
+                str(uuid.uuid4()),
+                evolution_type,
+                description,
+                status,
+                error_message,
+                before_state,
+                after_state,
+                "scheduled",
+                int(time.time()),
+                int(time.time()) if status == "success" else None,
+            ),
+        )
 
         conn.commit()
 
@@ -541,13 +584,16 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
         total_adjusted = 0
 
         # 1. 重评估长期未访问的高重要性记忆
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id, importance, access_count, content
             FROM memories_episodic
             WHERE importance >= 7
             AND access_count < 2
             AND created_at < ?
-        """, [seven_days_ago])
+        """,
+            [seven_days_ago],
+        )
 
         high_importance = cursor.fetchall()
         logger.info(f"高重要性长期未访问记忆: {len(high_importance)} 条")
@@ -555,22 +601,30 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
         for memory in high_importance:
             new_importance = max(5, memory["importance"] - 1)  # 最低降到5
             if new_importance != memory["importance"]:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     UPDATE memories_episodic
                     SET importance = ?
                     WHERE id = ?
-                """, [new_importance, memory["id"]])
+                """,
+                    [new_importance, memory["id"]],
+                )
                 total_adjusted += 1
-                logger.debug(f"降低记忆重要性: {memory['id']}, {memory['importance']} -> {new_importance}")
+                logger.debug(
+                    f"降低记忆重要性: {memory['id']}, {memory['importance']} -> {new_importance}"
+                )
 
         # 2. 重评估频繁访问的低重要性记忆
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id, importance, access_count, content
             FROM memories_episodic
             WHERE importance <= 4
             AND access_count >= 5
             AND created_at > ?
-        """, [thirty_days_ago])
+        """,
+            [thirty_days_ago],
+        )
 
         low_importance = cursor.fetchall()
         logger.info(f"低重要性频繁访问记忆: {len(low_importance)} 条")
@@ -578,13 +632,18 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
         for memory in low_importance:
             new_importance = min(10, memory["importance"] + 1)  # 最高升到10
             if new_importance != memory["importance"]:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     UPDATE memories_episodic
                     SET importance = ?
                     WHERE id = ?
-                """, [new_importance, memory["id"]])
+                """,
+                    [new_importance, memory["id"]],
+                )
                 total_adjusted += 1
-                logger.debug(f"提高记忆重要性: {memory['id']}, {memory['importance']} -> {new_importance}")
+                logger.debug(
+                    f"提高记忆重要性: {memory['id']}, {memory['importance']} -> {new_importance}"
+                )
 
         conn.commit()
         logger.info(f"重要性重评估完成，调整了 {total_adjusted} 条记忆")
@@ -593,36 +652,35 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
         await self._log_evolution(
             evolution_type="importance_reevaluation",
             description=f"重要性重评估完成，调整了 {total_adjusted} 条记忆",
-            status="success"
+            status="success",
         )
 
         return total_adjusted
 
     async def _log_evolution(
-        self,
-        evolution_type: str,
-        description: str,
-        status: str,
-        error_message: str = None
+        self, evolution_type: str, description: str, status: str, error_message: str = None
     ):
         """记录进化日志"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO evolution_log
             (id, evolution_type, description, status, error_message, trigger_type, created_at, completed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            str(uuid.uuid4()),
-            evolution_type,
-            description,
-            status,
-            error_message,
-            "scheduled",
-            int(time.time()),
-            int(time.time()) if status == "success" else None
-        ))
+        """,
+            (
+                str(uuid.uuid4()),
+                evolution_type,
+                description,
+                status,
+                error_message,
+                "scheduled",
+                int(time.time()),
+                int(time.time()) if status == "success" else None,
+            ),
+        )
 
         conn.commit()
 
@@ -644,30 +702,22 @@ def create_evolution_tasks(config: dict = None) -> dict[str, BaseEvolutionTask]:
 
     # 每日摘要任务
     if config.get("daily_summary", {}).get("enabled", True):
-        tasks["daily_summary"] = DailySummaryTask(
-            db=db,
-            config=config.get("daily_summary", {})
-        )
+        tasks["daily_summary"] = DailySummaryTask(db=db, config=config.get("daily_summary", {}))
 
     # 记忆修剪任务
     if config.get("memory_pruning", {}).get("enabled", True):
-        tasks["memory_pruning"] = MemoryPruningTask(
-            db=db,
-            config=config.get("memory_pruning", {})
-        )
+        tasks["memory_pruning"] = MemoryPruningTask(db=db, config=config.get("memory_pruning", {}))
 
     # 偏好学习任务
     if config.get("preference_learning", {}).get("enabled", True):
         tasks["preference_learning"] = PreferenceLearningTask(
-            db=db,
-            config=config.get("preference_learning", {})
+            db=db, config=config.get("preference_learning", {})
         )
 
     # 重要性重评估任务
     if config.get("importance_reevaluation", {}).get("enabled", True):
         tasks["importance_reevaluation"] = ImportanceReevaluationTask(
-            db=db,
-            config=config.get("importance_reevaluation", {})
+            db=db, config=config.get("importance_reevaluation", {})
         )
 
     return tasks
@@ -688,14 +738,17 @@ def get_evolution_logs(db, limit: int = 50, offset: int = 0) -> list[dict]:
     conn = db.get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT id, evolution_type, description, before_state, after_state,
                trigger_type, trigger_condition, status, error_message,
                tokens_used, created_at, completed_at
         FROM evolution_log
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
-    """, [limit, offset])
+    """,
+        [limit, offset],
+    )
 
     rows = cursor.fetchall()
     return [dict(row) for row in rows]
