@@ -16,7 +16,7 @@
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:electron": "tsc -p tsconfig.electron.json && node -e \"require('fs').writeFileSync('dist-electron/package.json', JSON.stringify({type:'commonjs'},null,2))\"",
     "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
     "electron:dev": "npm run build:electron && electron .",
     "electron:build": "npm run build && npm run build:electron",

@@ -9,6 +9,7 @@ directories:
   buildResources: build
 files:
   - dist/**/*
+  - dist-electron/**/*
   - electron/**/*
   - package.json
   - "!**/.git"

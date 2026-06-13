@@ -24,7 +24,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           environment-file: backend/environment.yml
-          python-version: '3.11'
+          python-version: '3.8'
           activate-environment: sage-backend
           channels: conda-forge
 
@@ -167,7 +167,7 @@ jobs:
             libxdamage1 \
             libxrandr2 \
             libgbm1 \
-            libasound2
+            libasound2t64
 
       - name: Install npm dependencies
         run: npm ci
