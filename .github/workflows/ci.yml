@@ -295,8 +295,17 @@ jobs:
           # 必过项：frontend + electron-smoke
           [ "${{ needs.frontend.result }}" = "success" ]
           [ "${{ needs.electron-smoke.result }}" = "success" ]
-          # backend job：main 走 backend，win7 走 backend-py38（用 || 兜底）
-          if [ "${{ needs.backend.result }}" != "success" ] && [ "${{ needs.backend-py38.result }}" != "success" ]; then
+          # backend job: main 走 backend, win7 走 backend-py38.
+          # skipped (守卫 if 不匹配) 也算 success —— PR 不在 main/win7 上时预期 skip.
+          backend_ok=false
+          if [ "${{ needs.backend.result }}" = "success" ] || [ "${{ needs.backend.result }}" = "skipped" ]; then
+            backend_ok=true
+          fi
+          backend_py38_ok=false
+          if [ "${{ needs.backend-py38.result }}" = "success" ] || [ "${{ needs.backend-py38.result }}" = "skipped" ]; then
+            backend_py38_ok=true
+          fi
+          if [ "$backend_ok" != "true" ] && [ "$backend_py38_ok" != "true" ]; then
             echo "No backend job succeeded"
             exit 1
           fi
