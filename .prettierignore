@@ -1,5 +1,6 @@
 dist
 node_modules
+archive/
 src-tauri/target
 coverage
 *.lock
