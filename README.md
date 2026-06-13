@@ -11,25 +11,28 @@ Sage 是一款**轻量级 AI 桌面助手**，具备：
 - 🧠 **持久记忆** - 跨会话记住你的偏好、习惯和重要信息
 - 🔄 **自我进化** - 从对话中学习，不断优化响应质量
 - 🛠️ **技能扩展** - 支持插件和自定义技能
-- 💻 **轻量运行** - Tauri + Python 架构，跨平台
+- 💻 **轻量运行** - Electron + Python 架构，跨平台
 
 ## 🪟 双轨发布
 
 Sage 维护**两条独立分支**，分别针对不同平台：
 
-| 分支 | 目标平台 | Tauri | Python | WebView2 | 状态 |
+| 分支 | 目标平台 | 桌面框架 | Python | Win7 前置 | 状态 |
 |---|---|---|---|---|---|
-| **`main`** | Win10+ / macOS / Linux | 2.x | 3.11+ | Evergreen | ✅ 主线持续迭代 |
-| **`release/win7`** | **Windows 7 SP1 x64**（**完全离线**部署）| 1.6（冻结）| 3.8（最后兼容版本）| v109（官方 fallback 机制）| ⚠️ 长期维护，仅 hotfix |
+| **`main`** | Win10+ / macOS / Linux | Electron 21.4.4 | 3.10+ | n/a | ✅ 主线持续迭代 |
+| **`release/win7`** | **Windows 7 SP1 x64**（**完全离线**部署）| Electron 21.4.4 | 3.10+ | KB3033929（必装）| ⚠️ 长期维护 |
 
 **如何选择？**
 - 普通用户：使用 `main` 分支，享受最新功能。
 - **Win7 用户**（内网/无网/老硬件）：使用 `release/win7` 分支。下载方式见各分支的 [GitHub Releases](https://github.com/your-repo/sage/releases) 页面。
 
-**为什么需要两条分支？**
-Tauri 2 在 Windows 上**强制使用 WebView2**，而 WebView2 官方支持 Win8.1+——无法在 Windows 7 上运行。Tauri 1.6 是最后一个原生支持 Win7 的版本。因此 Win7 用户需要独立的维护分支。
+**Win7 部署前置**：
+1. **KB3033929**（SHA-2 代码签名支持）— 必装，否则 Sage.exe 启动被拒
+2. **x64 only** — Electron 21 不支持 Win7 32-bit
+3. 详见 [docs/technical/20-electron-win7.md §6](./docs/technical/20-electron-win7.md#6-win7-部署前置)
 
-详细同步策略和风险说明见 [`release/win7` 分支的 BRANCH_NOTES.md](https://github.com/your-repo/sage/blob/release/win7/BRANCH_NOTES.md)。
+**为什么 Electron 21 而非 Electron 28+？**
+Electron 22 起官方 changelog 砍掉 Win7/8/8.1 支持。Electron 21.4.4 是最后一版自带 Chromium 106 + Node 16.20、能真正在 Win7 SP1 上启动的版本。详见 [docs/technical/20-electron-win7.md](./docs/technical/20-electron-win7.md)。
 
 ## 核心功能
 
@@ -88,8 +91,8 @@ Tauri 2 在 Windows 上**强制使用 WebView2**，而 WebView2 官方支持 Win
 
 - **操作系统**: Windows 7+ / Linux / macOS
 - **Node.js**: ≥ 18.x
-- **Python**: ≥ 3.8
-- **Rust**: (仅 Tauri 构建需要)
+- **Python**: ≥ 3.10
+- **Conda**: `sage-backend` 环境（用于 FastAPI 后端）
 
 ### 1. 克隆项目
 
@@ -176,10 +179,14 @@ npm run build
 
 构建产物将输出到 `dist/` 目录。
 
-#### 构建 Tauri 应用
+#### 构建 Electron 桌面应用
 
 ```bash
-npm run tauri build
+# 开发模式（自动启动 vite dev server + electron 主进程 + FastAPI 子进程）
+npm run electron:dev
+
+# 生产构建（前端 + 主进程编译 + electron-builder 打包 NSIS）
+npm run electron:dist
 ```
 
 ### 应用界面

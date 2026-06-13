@@ -7,25 +7,21 @@ sage/
 ├── .git/                      # Git 版本控制
 ├── .gitignore
 │
-├── src-tauri/                 # Tauri 后端 (Rust)
-│   ├── Cargo.toml
-│   ├── tauri.conf.json
-│   ├── build.rs
-│   ├── src/
-│   │   ├── main.rs           # 入口
-│   │   ├── lib.rs            # 库入口
-│   │   ├── commands.rs        # Tauri Commands
-│   │   ├── models.rs          # 数据模型
-│   │   ├── state.rs           # 应用状态
-│   │   └── utils.rs           # 工具函数
-│   └── icons/                 # 应用图标
+├── electron/                  # Electron 主进程 (Phase 1, 2026-06-13 替代 src-tauri/)
+│   ├── main.ts                # 主进程: spawn backend + BrowserWindow + IPC handlers + Win7 flags
+│   ├── preload.ts             # contextBridge API (window.electronAPI)
+│   └── tsconfig 走 tsconfig.electron.json
+│
+├── archive/                   # 归档目录 (Phase 0, 2026-06-13)
+│   └── src-tauri-2026-06-13-win7-migration/   # 原 Tauri 2.1.1 代码 (git mv, history 保留)
 │
 ├── src/                       # React 前端
 │   ├── components/            # React 组件
 │   ├── pages/                 # 页面组件
 │   ├── hooks/                 # 自定义 Hooks
-│   ├── lib/                  # 工具库
+│   ├── lib/                   # 工具库 (含 tauriInvoke.ts / tauriEvent.ts IPC shim)
 │   ├── i18n/                  # 国际化
+│   ├── types/                 # 全局类型声明 (electron-api.d.ts)
 │   ├── App.tsx                # 根组件
 │   ├── main.tsx               # 入口
 │   └── index.css              # 全局样式

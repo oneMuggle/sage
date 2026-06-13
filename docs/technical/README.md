@@ -13,11 +13,11 @@
 | 17   | [前端质量](./17-frontend-quality.md)               | FSD 架构 / 测试覆盖 / a11y 状态                                                                |
 | 18   | [六边形架构](./18-hexagonal.md)                    | 五层职责 / 6 个 Protocol / 双轨策略 / import-linter 约束                                       |
 | 19   | [ghm 外部计算集成](./19-ghm-integration.md)        | LLM 工具调用桥接 ghm CLI / ExecutableResolver / HTTP 升级预留                                  |
-| 20   | [Win7 + Tauri 2 兼容性](./20-win7-tauri-compat.md) | Tauri 2.1.1 矩阵 / CVE backport via fork / Cargo.lock 锚点                                     |
+| 20   | [Win7 + Electron 21 兼容性](./20-electron-win7.md) | Tauri → Electron 21 迁移理由 / 7 个 Win7 启动开关 / CI 流水线 / Phase 5 真机烟测 SOP           |
 | 21   | [LLM 代理路由](./21-llm-proxy.md)                  | `/api/v1/llm/*` 透传上游,绕开浏览器到 Ollama/OpenAI 的 CORS 拦截                               |
-| 22   | [Agents CRUD 端到端](./22-agents-crud.md)          | list/update/toggle 三层链路 (后端路由 → Tauri → 前端 API → UI)                                 |
-| 23   | [Chat 流式响应端到端](./23-chat-streaming.md)      | NDJSON 协议 + Tauri event 桥接 + PythonBackend::post_stream + chatStream 中间态文案            |
-| 24   | [Skills 系统端到端](./24-skills-system.md)         | InprocSkillAdapter + 3 路由 + 3 Tauri 命令 + 4 builtin skills 端到端可见 (list/toggle/execute) |
+| 22   | [Agents CRUD 端到端](./22-agents-crud.md)          | list/update/toggle 三层链路 (后端路由 → Electron IPC → 前端 API → UI)                          |
+| 23   | [Chat 流式响应端到端](./23-chat-streaming.md)      | NDJSON 协议 + Electron IPC event 桥接 + NDJSON relay + chatStream 中间态文案                   |
+| 24   | [Skills 系统端到端](./24-skills-system.md)         | InprocSkillAdapter + 3 路由 + 3 Electron IPC 命令 + 4 builtin skills 端到端可见 (list/toggle/execute) |
 | 25   | [LLM Wiki 集成 (PR-8)](./25-llm-wiki-integration.md) | 4 LLM provider 抽象 + prompt 模板 + LanceDB RAG + 知识图谱 8 阶段实施 |
 
 ---

@@ -68,19 +68,20 @@ Tauri 1.x 优势:
 
 ```
 hermes-win7/
-├── src-tauri/                 # Tauri Rust 后端
-│   ├── src/
-│   │   ├── main.rs           # 入口
-│   │   ├── commands/         # Tauri Commands
-│   │   └── webview/          # WebView 配置
-│   ├── Cargo.toml
-│   └── tauri.conf.json
+├── electron/                  # Electron 主进程 (Phase 1, 2026-06-13)
+│   ├── main.ts                # spawn backend + BrowserWindow + IPC handlers + Win7 flags
+│   ├── preload.ts             # contextBridge API (window.electronAPI)
+│   └── tsconfig 走 tsconfig.electron.json
+│
+├── archive/                   # 归档目录 (Phase 0, 2026-06-13)
+│   └── src-tauri-2026-06-13-win7-migration/   # 原 Tauri 2.1.1 代码 (git mv, history 保留)
 │
 ├── src/                      # React 前端
 │   ├── components/          # UI 组件
 │   ├── pages/               # 页面
 │   ├── hooks/               # 自定义 Hooks
-│   └── lib/                 # 前端工具库
+│   ├── lib/                 # 前端工具库 (含 IPC shim)
+│   └── types/               # 全局类型声明 (electron-api.d.ts)
 │
 ├── backend/                  # Python 后端
 │   ├── core/
