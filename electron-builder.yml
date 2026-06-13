@@ -1,0 +1,70 @@
+appId: com.sage.app
+productName: Sage
+copyright: Copyright © 2026 Sage Team
+asar: true
+asarUnpack:
+  # Phase 3 will add: '**/node_modules/sharp/**' if we ever embed heavy native modules
+directories:
+  output: release/${version}
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - electron/**/*
+  - package.json
+  - "!**/.git"
+  - "!**/node_modules/.cache"
+  - "!**/archive/**"
+  - "!**/__tests__/**"
+  - "!**/*.test.{ts,tsx,js,jsx}"
+  - "!**/*.map"
+  - "!**/.DS_Store"
+extraResources:
+  # Phase 3: bundle Python interpreter + sage-backend conda env here
+  # from: python/
+  # to: python/
+  # For Phase 1, backend runs via host conda (dev) only.
+
+# Win7 + Win10/11 NSIS installer (electron-builder 24.x)
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  # Force code signing stub (Phase 3 will add real cert)
+  # signtoolOptions:
+  #   sign: scripts/sign-windows.js
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false # Show installer wizard (Win7 UAC friendlier than silent)
+  perMachine: false # HKCU install, no admin required
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Sage
+  uninstallDisplayName: Sage ${version}
+  # Win7 prerequisites (documented in README.md, surfaced in installer welcome):
+  #   1. KB3033929 (SHA-2 code signing support) — Win7 SP1 must have this or
+  #      Sage.exe signed with SHA-2 cert refuses to launch.
+  #   2. KB3140245 (TLS 1.2 default-on for SChannel) — NOT required by Sage
+  #      itself (Electron uses Chromium BoringSSL, Python uses rustls), but
+  #      needed if user wants default IE/Edge legacy to load HTTPS sites.
+  #   3. Win7 SP1 x64 minimum (32-bit Win7 not supported by Electron 21).
+
+# macOS: skip for now (focus is Win7 first; can revisit later)
+mac:
+  target: null
+  identity: null
+
+# Linux: keep simple AppImage for dev convenience
+linux:
+  target:
+    - AppImage
+  icon: build/icon.png
+  category: Office
+  artifactName: ${productName}-${version}.${ext}
+
+# electron-builder publish config (off by default for Phase 1)
+publish: null
