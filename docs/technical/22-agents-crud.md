@@ -11,22 +11,22 @@
 但早期实现只把 dataclass 写在 `backend/agents/profiles.py`,**没有 SQLite 持久化、没有
 路由、没有前端入口**。PR-3 起按"单命令一 PR"节奏分阶段补齐:
 
-| PR | 范围 | 状态 |
-|----|------|------|
-| PR-3 | SQLite `agents` 表 + seed_defaults_if_empty + `GET /agents[/{id}]` + Tauri `list_agents` | ✅ |
-| PR-4 | `PATCH /agents/{id}` 部分更新 + Pydantic 白名单校验 + Tauri `update_agent(id, update)` | ✅ |
-| PR-5 | `PATCH /agents/{id}/toggle` 启停专用端点 + Tauri `toggle_agent` + 前端契约修复 | ✅ |
+| PR   | 范围                                                                                     | 状态 |
+| ---- | ---------------------------------------------------------------------------------------- | ---- |
+| PR-3 | SQLite `agents` 表 + seed_defaults_if_empty + `GET /agents[/{id}]` + Tauri `list_agents` | ✅   |
+| PR-4 | `PATCH /agents/{id}` 部分更新 + Pydantic 白名单校验 + Tauri `update_agent(id, update)`   | ✅   |
+| PR-5 | `PATCH /agents/{id}/toggle` 启停专用端点 + Tauri `toggle_agent` + 前端契约修复           | ✅   |
 
 ---
 
 ## 端点全表
 
-| 端点 | 用途 | Pydantic 校验 | Tauri 命令 |
-|------|------|---------------|------------|
-| `GET /api/v1/agents` | 列出全部(含 disabled), 按 id 排序 | — | `list_agents()` |
-| `GET /api/v1/agents/{id}` | 取单个; 404 + `agent_not_found` | — | (走 `list_agents` 客户端过滤) |
-| `PATCH /api/v1/agents/{id}` | 部分更新; 422 校验 role 白名单 + max_iterations ∈ [1,50] | `AgentUpdate` | `update_agent(id, update)` |
-| `PATCH /api/v1/agents/{id}/toggle` | 启用/禁用; 422 StrictBool | `AgentToggle` | `toggle_agent(id, enabled)` |
+| 端点                               | 用途                                                     | Pydantic 校验 | Tauri 命令                    |
+| ---------------------------------- | -------------------------------------------------------- | ------------- | ----------------------------- |
+| `GET /api/v1/agents`               | 列出全部(含 disabled), 按 id 排序                        | —             | `list_agents()`               |
+| `GET /api/v1/agents/{id}`          | 取单个; 404 + `agent_not_found`                          | —             | (走 `list_agents` 客户端过滤) |
+| `PATCH /api/v1/agents/{id}`        | 部分更新; 422 校验 role 白名单 + max_iterations ∈ [1,50] | `AgentUpdate` | `update_agent(id, update)`    |
+| `PATCH /api/v1/agents/{id}/toggle` | 启用/禁用; 422 StrictBool                                | `AgentToggle` | `toggle_agent(id, enabled)`   |
 
 **返回**:所有写端点返回**完整最新 profile**(含新 `updated_at`),前端可一次 setState 覆盖。
 
@@ -36,12 +36,12 @@
 
 `PATCH /agents/{id}` 本来已能改 `enabled` 字段,为什么还要单开 `PATCH /agents/{id}/toggle`?
 
-| 维度 | `PATCH /agents/{id}` | `PATCH /agents/{id}/toggle` |
-|------|---------------------|----------------------------|
-| 字段范围 | 9 个字段任意子集 | 仅 `enabled` 必填 |
-| 审计语义 | 杂(可能改 name 也可能切 enable) | 单一(必为启停) |
-| 未来权限 | 编辑权限 | 启停权限(可与编辑分离) |
-| 高频性 | 低 | 高 |
+| 维度       | `PATCH /agents/{id}`              | `PATCH /agents/{id}/toggle`    |
+| ---------- | --------------------------------- | ------------------------------ |
+| 字段范围   | 9 个字段任意子集                  | 仅 `enabled` 必填              |
+| 审计语义   | 杂(可能改 name 也可能切 enable)   | 单一(必为启停)                 |
+| 未来权限   | 编辑权限                          | 启停权限(可与编辑分离)         |
+| 高频性     | 低                                | 高                             |
 | 校验严格度 | role 白名单 / max_iterations 范围 | `StrictBool`(拒绝 `"yes"`/`1`) |
 
 events.jsonl 里 `grep "POST.*toggle"` 比 `grep "PATCH /agents.*enabled"` 干净得多。
@@ -139,31 +139,31 @@ await agentsApi.update(selectedAgent.id, { name: '新名' });
 
 ### `AgentUpdate` (PATCH /agents/{id})
 
-| 字段 | 校验 | 失败 |
-|------|------|------|
-| `role` | 必须 ∈ `{coordinator, researcher, coder, memory_manager}` | 422 `invalid_role` |
-| `max_iterations` | 必须 ∈ `[1, 50]` | 422 `invalid_max_iterations` |
-| 其余字段 | Pydantic 自动类型校验 | 422 |
-| 空 body | 视为 no-op, 返回当前 profile, `updated_at` **不刷新** | 200 |
+| 字段             | 校验                                                      | 失败                         |
+| ---------------- | --------------------------------------------------------- | ---------------------------- |
+| `role`           | 必须 ∈ `{coordinator, researcher, coder, memory_manager}` | 422 `invalid_role`           |
+| `max_iterations` | 必须 ∈ `[1, 50]`                                          | 422 `invalid_max_iterations` |
+| 其余字段         | Pydantic 自动类型校验                                     | 422                          |
+| 空 body          | 视为 no-op, 返回当前 profile, `updated_at` **不刷新**     | 200                          |
 
 ### `AgentToggle` (PATCH /agents/{id}/toggle)
 
-| 字段 | 校验 | 失败 |
-|------|------|------|
-| `enabled` | `StrictBool` — 拒绝 `"yes"`/`1` 等强转 | 422 |
-| 缺 `enabled` | Pydantic 必填 | 422 |
-| 同值 toggle | 200, `updated_at` **仍刷新**(`set_enabled` 总 UPDATE) | 200 |
+| 字段         | 校验                                                  | 失败 |
+| ------------ | ----------------------------------------------------- | ---- |
+| `enabled`    | `StrictBool` — 拒绝 `"yes"`/`1` 等强转                | 422  |
+| 缺 `enabled` | Pydantic 必填                                         | 422  |
+| 同值 toggle  | 200, `updated_at` **仍刷新**(`set_enabled` 总 UPDATE) | 200  |
 
 ---
 
 ## 测试覆盖
 
-| 文件 | 用例数 | 关注 |
-|------|--------|------|
-| `backend/tests/integration/test_routes_agents.py` | 6 | list / get / 404 / 顺序 |
-| `backend/tests/integration/test_routes_agents_update.py` | 10 | PATCH 全字段 / 校验 / 隔离 |
-| `backend/tests/integration/test_routes_agents_toggle.py` | 10 | toggle / 幂等 / StrictBool / 隔离 |
-| `src/features/manage-agents/__tests__/api.test.ts` | 8 | 前端契约(命令名 / 参数形状 / 返回值) |
+| 文件                                                     | 用例数 | 关注                                 |
+| -------------------------------------------------------- | ------ | ------------------------------------ |
+| `backend/tests/integration/test_routes_agents.py`        | 6      | list / get / 404 / 顺序              |
+| `backend/tests/integration/test_routes_agents_update.py` | 10     | PATCH 全字段 / 校验 / 隔离           |
+| `backend/tests/integration/test_routes_agents_toggle.py` | 10     | toggle / 幂等 / StrictBool / 隔离    |
+| `src/features/manage-agents/__tests__/api.test.ts`       | 8      | 前端契约(命令名 / 参数形状 / 返回值) |
 
 26 个后端用例 + 8 个前端用例,覆盖三层(repo / 路由 / 前端 API)。
 
