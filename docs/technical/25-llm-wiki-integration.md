@@ -15,10 +15,10 @@
 
 ### 新增文件
 
-| 文件 | 职责 | 行数 |
-|---|---|---|
-| `src-tauri/src/wiki/llm_provider.rs` | 公共类型 + 4 provider 实现 + 单元测试 | ~430 |
-| `src-tauri/src/wiki/llm_prompts.rs` | 4 个 prompt 模板常量 + format 便利函数 + 单元测试 | ~150 |
+| 文件                                 | 职责                                              | 行数 |
+| ------------------------------------ | ------------------------------------------------- | ---- |
+| `src-tauri/src/wiki/llm_provider.rs` | 公共类型 + 4 provider 实现 + 单元测试             | ~430 |
+| `src-tauri/src/wiki/llm_prompts.rs`  | 4 个 prompt 模板常量 + format 便利函数 + 单元测试 | ~150 |
 
 ### 公共 API
 
@@ -38,25 +38,25 @@ pub fn parse_response(provider: &Provider, body: &str) -> Result<ChatResponse, S
 
 ### 4 个 provider 的协议差异
 
-| 维度 | OpenAI | Anthropic | Ollama | Custom |
-|---|---|---|---|---|
-| **endpoint** | `POST {base}/chat/completions` | `POST {base}/v1/messages` | `POST {base}/chat/completions` | `POST {base}/chat/completions` |
-| **鉴权头** | `Authorization: Bearer {key}` | `x-api-key: {key}` + `anthropic-version: 2023-06-01` | 无 | `Authorization: Bearer {key}` + 自定义头 |
-| **system 消息** | 放在 `messages[0]` | 抽到顶层 `system` 字段 | 放在 `messages[0]` | 放在 `messages[0]` |
-| **响应 content 路径** | `choices[0].message.content` | `content[0].text` | (OpenAI 兼容) | (OpenAI 兼容) |
-| **token 字段** | `usage.prompt_tokens` / `completion_tokens` | `usage.input_tokens` / `output_tokens` | (OpenAI 兼容) | (OpenAI 兼容) |
-| **api_key 必填** | 否 | **是** | 否 | 否 |
+| 维度                  | OpenAI                                      | Anthropic                                            | Ollama                         | Custom                                   |
+| --------------------- | ------------------------------------------- | ---------------------------------------------------- | ------------------------------ | ---------------------------------------- |
+| **endpoint**          | `POST {base}/chat/completions`              | `POST {base}/v1/messages`                            | `POST {base}/chat/completions` | `POST {base}/chat/completions`           |
+| **鉴权头**            | `Authorization: Bearer {key}`               | `x-api-key: {key}` + `anthropic-version: 2023-06-01` | 无                             | `Authorization: Bearer {key}` + 自定义头 |
+| **system 消息**       | 放在 `messages[0]`                          | 抽到顶层 `system` 字段                               | 放在 `messages[0]`             | 放在 `messages[0]`                       |
+| **响应 content 路径** | `choices[0].message.content`                | `content[0].text`                                    | (OpenAI 兼容)                  | (OpenAI 兼容)                            |
+| **token 字段**        | `usage.prompt_tokens` / `completion_tokens` | `usage.input_tokens` / `output_tokens`               | (OpenAI 兼容)                  | (OpenAI 兼容)                            |
+| **api_key 必填**      | 否                                          | **是**                                               | 否                             | 否                                       |
 
 ### Prompt 模板
 
 `llm_prompts.rs` 集中 4 个模板,Phase 3/4 会用到:
 
-| 常量 | 用途 | 占位符 |
-|---|---|---|
-| `STEP1_ANALYZE` | Step 1: 提取实体/概念/标签/相关主题 | `{source_content}` |
-| `STEP2_WRITE` | Step 2: 写完整 wiki 页面(frontmatter + body) | `{filename}` `{content}` `{analysis}` `{tags_csv}` `{related_links}` `{today}` |
-| `RAG_SYSTEM` | wiki_chat 系统提示词(强调不引入外部知识) | 无 |
-| `RAG_USER_TEMPLATE` | wiki_chat 用户消息模板 | `{query}` |
+| 常量                | 用途                                         | 占位符                                                                         |
+| ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------ |
+| `STEP1_ANALYZE`     | Step 1: 提取实体/概念/标签/相关主题          | `{source_content}`                                                             |
+| `STEP2_WRITE`       | Step 2: 写完整 wiki 页面(frontmatter + body) | `{filename}` `{content}` `{analysis}` `{tags_csv}` `{related_links}` `{today}` |
+| `RAG_SYSTEM`        | wiki_chat 系统提示词(强调不引入外部知识)     | 无                                                                             |
+| `RAG_USER_TEMPLATE` | wiki_chat 用户消息模板                       | `{query}`                                                                      |
 
 ### 单元测试覆盖(20/20 通过)
 
@@ -127,6 +127,7 @@ test result: ok. 20 passed; 0 failed
 ### 选型决策(重要)
 
 **最初计划用 LanceDB,实测不兼容 sage Rust 1.77.2 / edition2021**:
+
 - lancedb 0.10-0.30 全部拉 lance 0.10-0.20,lance 内部 async block 类型 layout 深度 > 128
 - 触发 Rust 1.77 `queries overflow the depth limit` 错误
 - Workaround (`-Z crate-attr=recursion_limit=512`) 需要 nightly Rust,sage 锁 stable
@@ -134,6 +135,7 @@ test result: ok. 20 passed; 0 failed
 **备选 sqlite-vec (0.1.10-alpha.4) 也有自身 bug**:打包漏 `sqlite-vec-diskann.c`
 
 **最终选定: 纯 Rust 自实现,零新依赖**:
+
 - `Vec<f32>` 存向量,JSON 文件持久化
 - Brute-force cosine similarity + top-k
 - 规模上限 < 1万 chunk(MVP wiki 规模足够)
@@ -141,10 +143,10 @@ test result: ok. 20 passed; 0 failed
 
 ### 新增文件
 
-| 文件 | 职责 | 行数 |
-|---|---|---|
-| `src-tauri/src/wiki/embeddings.rs` | chunk_markdown + OpenAI 兼容 /v1/embeddings 客户端 | ~270 |
-| `src-tauri/src/wiki/vectorstore.rs` | 嵌入式 JSON 向量存储 + cosine 检索 | ~340 |
+| 文件                                | 职责                                               | 行数 |
+| ----------------------------------- | -------------------------------------------------- | ---- |
+| `src-tauri/src/wiki/embeddings.rs`  | chunk_markdown + OpenAI 兼容 /v1/embeddings 客户端 | ~270 |
+| `src-tauri/src/wiki/vectorstore.rs` | 嵌入式 JSON 向量存储 + cosine 检索                 | ~340 |
 
 ### 公共 API
 
@@ -253,11 +255,11 @@ test wiki::vectorstore::tests::upsert_with_wrong_dim_errors ... ok
 
 ### 新增文件
 
-| 文件 | 职责 | 行数 |
-|---|---|---|
+| 文件                                | 职责                                             | 行数 |
+| ----------------------------------- | ------------------------------------------------ | ---- |
 | `src-tauri/src/wiki/frontmatter.rs` | 解析/序列化 YAML frontmatter + extract_wikilinks | ~290 |
-| `src-tauri/src/wiki/http.rs` | reqwest HTTP 客户端(post_json 通用方法) | ~110 |
-| `src-tauri/src/wiki/ingest.rs` | **重写** 完整 6 步 ingest 管线 | ~450 |
+| `src-tauri/src/wiki/http.rs`        | reqwest HTTP 客户端(post_json 通用方法)          | ~110 |
+| `src-tauri/src/wiki/ingest.rs`      | **重写** 完整 6 步 ingest 管线                   | ~450 |
 
 ### 修改文件
 
@@ -311,6 +313,7 @@ pub async fn ingest_source(
 ### LLM 推断策略
 
 `commands.rs` 按 `api_url` 关键词推断 provider:
+
 - 包含 `anthropic` → `Provider::Anthropic`
 - 包含 `localhost:11434` → `Provider::Ollama`
 - 其他 → `Provider::OpenAI`(默认)
@@ -329,14 +332,17 @@ pub async fn ingest_source(
 ### 单元测试覆盖(34/34 通过)
 
 **frontmatter** (18 测试):
+
 - parse 无 frontmatter / 简单 / list / related / sources / dates / 未知字段
 - serialize 往返 / 空 frontmatter
 - extract_wikilinks 简单 / 多个 / alias / 去重 / 无 / 未闭合
 
 **http** (4 测试):
+
 - new 30min timeout / with_timeout / with_timeout(0) / default
 
 **ingest** (12 测试):
+
 - sha256 空串 / hello
 - slugify 各种边界(中文/连续分隔符/特殊字符)
 - parse_analysis_json 严格 JSON / markdown fence / 前导文本 / 无效
@@ -358,9 +364,9 @@ pub async fn ingest_source(
 
 ### 新增文件
 
-| 文件 | 职责 | 行数 |
-|---|---|---|
-| `src-tauri/src/wiki/rrf.rs` | Reciprocal Rank Fusion 融合 (k=60) | ~110 |
+| 文件                                   | 职责                               | 行数 |
+| -------------------------------------- | ---------------------------------- | ---- |
+| `src-tauri/src/wiki/rrf.rs`            | Reciprocal Rank Fusion 融合 (k=60) | ~110 |
 | `src-tauri/src/wiki/context_budget.rs` | Token 预算分配 (50/30/5/15) + 截断 | ~170 |
 
 ### 修改文件
@@ -424,13 +430,16 @@ pub async fn chat_with_wiki(config, http, project_root, query) -> Result<WikiCha
 ### 单元测试覆盖(18/18 通过)
 
 **rrf** (7):
+
 - 空输入 / 只 token / 只 vector / 交叉 boost score / dedup / 自定义 k / 不重叠
 
 **context_budget** (8):
+
 - compute 70% 上限 / caps at default / ratios sum / per_page cap / estimate_tokens
 - truncate: within / huge / stops when exhausted
 
 **chat** (3):
+
 - RagConfig default / RetrievalStats default / PartialEq 行为
 
 ### 累计 wiki 测试: 95 passed (Phase 1 20 + Phase 2 24 + Phase 3 33 + Phase 4 18)
@@ -449,8 +458,8 @@ pub async fn chat_with_wiki(config, http, project_root, query) -> Result<WikiCha
 
 ### 新增文件
 
-| 文件 | 职责 | 行数 |
-|---|---|---|
+| 文件                          | 职责                                                  | 行数 |
+| ----------------------------- | ----------------------------------------------------- | ---- |
 | `src-tauri/src/wiki/graph.rs` | 节点构建 + 4-signal 边 + relevance 2-hop + mtime 缓存 | ~580 |
 
 ### 修改文件
@@ -465,23 +474,24 @@ pub async fn chat_with_wiki(config, http, project_root, query) -> Result<WikiCha
 
 ### 4-signal 边权重 (对齐 llm_wiki)
 
-| Signal | 权重 | 计算方式 |
-|---|---|---|
-| **DirectLink** | ×3.0 | `[[wikilink]]` 出现一次 +3.0 |
+| Signal            | 权重 | 计算方式                                     |
+| ----------------- | ---- | -------------------------------------------- |
+| **DirectLink**    | ×3.0 | `[[wikilink]]` 出现一次 +3.0                 |
 | **SourceOverlap** | ×4.0 | `(shared_sources / max(\|a\|, \|b\|)) × 4.0` |
-| **TypeAffinity** | ×1.0 | 两页同 `type` 字段 +1.0 |
-| Adamic-Adar | TODO | 未来 Phase |
+| **TypeAffinity**  | ×1.0 | 两页同 `type` 字段 +1.0                      |
+| Adamic-Adar       | TODO | 未来 Phase                                   |
 
 ### wikilink 解析策略
 
 `resolve_wikilink` 3 级 fallback:
+
 1. 节点 `label` 精确匹配
 2. 节点 `id` (file path) 精确匹配
 3. label 模糊匹配(lower-case + slug 化,中文保留)
 
 ### 缓存机制
 
-`compute_mtime_signature` 拼接所有 wiki/*.md 的 mtime + path → 字符串;与 `.llm-wiki/graph-cache.json` 的签名匹配则直接 load,否则 rebuild + save。原子写(临时 + rename)。
+`compute_mtime_signature` 拼接所有 wiki/\*.md 的 mtime + path → 字符串;与 `.llm-wiki/graph-cache.json` 的签名匹配则直接 load,否则 rebuild + save。原子写(临时 + rename)。
 
 ### 公共 API
 
@@ -520,14 +530,17 @@ pub async fn wiki_get_graph(
 ### 单元测试覆盖(23/23 通过)
 
 **graph 构建** (10):
+
 - signal 权重匹配设计 / slug 化基本 + 中文
 - 空 wiki 目录 / 单页 / DirectLink / SourceOverlap + disjoint / TypeAffinity
 - 综合(3 种 signal 都生成) / 跳过 index.md+log.md
 
 **wikilink 解析** (3):
+
 - 按 label / 按 slug(case-insensitive) / 未知返回 None
 
 **relevance 2-hop** (6):
+
 - 无 seed 空 / 单 seed / 2-hop decay / 0-hop 仅 seed / relevance_from_seeds / 排序降序
 
 ### 累计 wiki 测试: 115 passed (Phase 1 20 + Phase 2 24 + Phase 3 33 + Phase 4 18 + Phase 5 23)
@@ -545,16 +558,16 @@ pub async fn wiki_get_graph(
 
 ### 新增/修改文件
 
-| 文件 | 职责 | 行数 |
-|---|---|---|
-| `src/widgets/wiki/WikiGraphView.tsx` (新) | React Flow 渲染 + 节点/边/图例 | ~250 |
-| `src/widgets/wiki/index.ts` | 导出 `WikiGraphView` | +1 |
-| `src/widgets/wiki/WikiToolbar.tsx` | 加 `graph` view + `Network` 图标 | +1 |
-| `src/shared/types/wiki.ts` | `WikiView` 加 `'graph'` + Graph 类型 | +25 |
-| `src/shared/api-client/wiki.ts` | `getWikiGraph()` 包装(已 Phase 5 加) | 0 |
-| `src/entities/wiki/store.ts` | 加 `graphData` / `graphQuery` / `loadGraph()` / `setGraphQuery()` | +30 |
-| `src/pages/Knowledge.tsx` | 加 `GraphPanel` 子组件 + `useEffect` 懒加载 | +50 |
-| `package.json` + `package-lock.json` | 加 `@xyflow/react@^12.11.0` | +1 dep |
+| 文件                                      | 职责                                                              | 行数   |
+| ----------------------------------------- | ----------------------------------------------------------------- | ------ |
+| `src/widgets/wiki/WikiGraphView.tsx` (新) | React Flow 渲染 + 节点/边/图例                                    | ~250   |
+| `src/widgets/wiki/index.ts`               | 导出 `WikiGraphView`                                              | +1     |
+| `src/widgets/wiki/WikiToolbar.tsx`        | 加 `graph` view + `Network` 图标                                  | +1     |
+| `src/shared/types/wiki.ts`                | `WikiView` 加 `'graph'` + Graph 类型                              | +25    |
+| `src/shared/api-client/wiki.ts`           | `getWikiGraph()` 包装(已 Phase 5 加)                              | 0      |
+| `src/entities/wiki/store.ts`              | 加 `graphData` / `graphQuery` / `loadGraph()` / `setGraphQuery()` | +30    |
+| `src/pages/Knowledge.tsx`                 | 加 `GraphPanel` 子组件 + `useEffect` 懒加载                       | +50    |
+| `package.json` + `package-lock.json`      | 加 `@xyflow/react@^12.11.0`                                       | +1 dep |
 
 ### 公共 API
 
@@ -601,16 +614,17 @@ useWikiStore.getState().setGraphQuery(q: string);   // 设置 query
 ### 单元测试覆盖(7/7 通过)
 
 `WikiGraphView helpers`:
+
 - `colorByType` 默认 / 映射
 - `buildGraph` 节点/边生成 / query 过滤 / 大小写不敏感 / id 匹配
 
 ### 累计测试
 
-| 范围 | 数量 |
-|---|---|
-| Rust (cargo test --lib wiki) | 115 |
-| Frontend (vitest) | 99 (其中 7 个新增 WikiGraphView) |
-| **合计** | **214** |
+| 范围                         | 数量                             |
+| ---------------------------- | -------------------------------- |
+| Rust (cargo test --lib wiki) | 115                              |
+| Frontend (vitest)            | 99 (其中 7 个新增 WikiGraphView) |
+| **合计**                     | **214**                          |
 
 ### 与后续 Phase 衔接
 
@@ -625,11 +639,11 @@ useWikiStore.getState().setGraphQuery(q: string);   // 设置 query
 
 ### 修改文件
 
-| 文件 | 职责 | 改动 |
-|---|---|---|
-| `src-tauri/src/wiki/ingest.rs` | 加 `IngestProgress` 类型 + `ProgressFn` 回调 + 5 阶段 emit | +50 |
-| `src-tauri/src/wiki/chat.rs` | 拆 `build_chat_context` + `chat_with_wiki_stream`(30 字符 chunk) | +80 |
-| `src-tauri/src/wiki/commands.rs` | `do_ingest` 调用传 `None` 进度(无 Tauri emit 通路) | +1 |
+| 文件                             | 职责                                                             | 改动 |
+| -------------------------------- | ---------------------------------------------------------------- | ---- |
+| `src-tauri/src/wiki/ingest.rs`   | 加 `IngestProgress` 类型 + `ProgressFn` 回调 + 5 阶段 emit       | +50  |
+| `src-tauri/src/wiki/chat.rs`     | 拆 `build_chat_context` + `chat_with_wiki_stream`(30 字符 chunk) | +80  |
+| `src-tauri/src/wiki/commands.rs` | `do_ingest` 调用传 `None` 进度(无 Tauri emit 通路)               | +1   |
 
 ### 公共 API
 
@@ -662,20 +676,21 @@ pub async fn chat_with_wiki_stream(
 
 ### 5 阶段 ingest 进度
 
-| Stage | Percent | 触发 |
-|---|---|---|
-| `started` | 0% | 入口 |
-| `copy_source` | 10% | 复制源到 raw/sources/ |
-| `step1_analyze` | 20-40% | LLM 分析 |
-| `step2_write` | 45-70% | LLM 写作 |
-| `embedding` | 80-90% | 嵌入 + 写 VectorStore |
-| `completed` | 100% | 全部完成 |
+| Stage           | Percent | 触发                  |
+| --------------- | ------- | --------------------- |
+| `started`       | 0%      | 入口                  |
+| `copy_source`   | 10%     | 复制源到 raw/sources/ |
+| `step1_analyze` | 20-40%  | LLM 分析              |
+| `step2_write`   | 45-70%  | LLM 写作              |
+| `embedding`     | 80-90%  | 嵌入 + 写 VectorStore |
+| `completed`     | 100%    | 全部完成              |
 
 缓存命中时直接 `completed 100% 缓存命中,跳过`。
 
 ### chat 流式 chunk
 
 `chat_with_wiki_stream` 用 30 字符分块模拟流式推送:
+
 - 复用 `build_chat_context` 构造 context + ChatRequest
 - 调非流式 LLM 端点拿完整响应
 - 每 30 字符调 `on_chunk(chunk)` 推给前端
@@ -701,16 +716,16 @@ pub async fn chat_with_wiki_stream(
 
 ### 修改文件
 
-| 文件 | 职责 | 改动 |
-|---|---|---|
-| `src-tauri/src/wiki/commands.rs` | `wiki_ingest_source` 加 `app: AppHandle` + `ingest_id: String`,emit `wiki-ingest-{id}-progress` event | +12 |
-| `src/shared/api-client/wiki.ts` | `wikiIngestSource` 加 `ingestId` 参数 | +1 |
-| `src/features/wiki/useWikiIngest.ts` (新) | 订阅 ingest 进度 event | +55 |
-| `src/features/wiki/useWikiChatStream.ts` (新) | 订阅 chat stream chunk event | +75 |
-| `src/widgets/wiki/WikiIngestProgress.tsx` (新) | 进度条 + 阶段标签 + 错误/成功态 | +60 |
-| `src/widgets/wiki/WikiChat.tsx` | 切到 useWikiChatStream 流式累积 + 光标闪烁 | +30 |
-| `docs/user-manual/03-wiki.md` (新) | 用户手册:创建/导入/浏览/搜索/对话/图谱 | +150 |
-| `docs/technical/25-llm-wiki-integration.md` | 本章节 | +50 |
+| 文件                                           | 职责                                                                                                  | 改动 |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---- |
+| `src-tauri/src/wiki/commands.rs`               | `wiki_ingest_source` 加 `app: AppHandle` + `ingest_id: String`,emit `wiki-ingest-{id}-progress` event | +12  |
+| `src/shared/api-client/wiki.ts`                | `wikiIngestSource` 加 `ingestId` 参数                                                                 | +1   |
+| `src/features/wiki/useWikiIngest.ts` (新)      | 订阅 ingest 进度 event                                                                                | +55  |
+| `src/features/wiki/useWikiChatStream.ts` (新)  | 订阅 chat stream chunk event                                                                          | +75  |
+| `src/widgets/wiki/WikiIngestProgress.tsx` (新) | 进度条 + 阶段标签 + 错误/成功态                                                                       | +60  |
+| `src/widgets/wiki/WikiChat.tsx`                | 切到 useWikiChatStream 流式累积 + 光标闪烁                                                            | +30  |
+| `docs/user-manual/03-wiki.md` (新)             | 用户手册:创建/导入/浏览/搜索/对话/图谱                                                                | +150 |
+| `docs/technical/25-llm-wiki-integration.md`    | 本章节                                                                                                | +50  |
 
 ### 公共 API(前端)
 
@@ -743,17 +758,17 @@ const { answer, citations, streaming, error, reset } = useWikiChatStream(streamI
 
 ### 累计 PR-8 wiki 模块 (8 phases 全部完成 🎉)
 
-| Phase | 文件 | 行数 |
-|---|---|---|
-| 1 | llm_provider, llm_prompts | 580 |
-| 2 | embeddings, vectorstore | 610 |
-| 3 | frontmatter, http, ingest | 900 |
-| 4 | rrf, context_budget, chat | 580 |
-| 5 | graph | 580 |
-| 6 | WikiGraphView (前端) | 310 |
-| 7 | ingest/chat 后端增量 | 130 |
-| 8 | useWikiIngest, useWikiChatStream, WikiIngestProgress, WikiChat 流式, 手册 | ~430 |
-| **合计** | **13 个 Rust 文件 + 5 个前端文件** | **~4120 行** |
+| Phase    | 文件                                                                      | 行数         |
+| -------- | ------------------------------------------------------------------------- | ------------ |
+| 1        | llm_provider, llm_prompts                                                 | 580          |
+| 2        | embeddings, vectorstore                                                   | 610          |
+| 3        | frontmatter, http, ingest                                                 | 900          |
+| 4        | rrf, context_budget, chat                                                 | 580          |
+| 5        | graph                                                                     | 580          |
+| 6        | WikiGraphView (前端)                                                      | 310          |
+| 7        | ingest/chat 后端增量                                                      | 130          |
+| 8        | useWikiIngest, useWikiChatStream, WikiIngestProgress, WikiChat 流式, 手册 | ~430         |
+| **合计** | **13 个 Rust 文件 + 5 个前端文件**                                        | **~4120 行** |
 
 ### PR-8 收官总结
 

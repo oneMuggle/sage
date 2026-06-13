@@ -18,26 +18,26 @@ Sage 后端通过三层可观测性基础设施支撑生产环境：
 
 ### Counter（5 个）
 
-| 指标 | 标签 | 含义 |
-|------|------|------|
-| `sage_http_requests_total` | route, method, status | HTTP 请求总数（按 route/method/status 分桶） |
-| `sage_llm_calls_total` | model, provider, outcome | LLM 调用总数（按 model/provider/outcome） |
-| `sage_tool_invocations_total` | tool, outcome | 工具调用总数（按 tool/outcome） |
-| `sage_tokens_consumed_total` | model, kind | LLM token 消耗（kind: prompt/completion） |
-| `sage_errors_total` | layer, error_type | 错误总数（layer: api/llm/tool/skill） |
+| 指标                          | 标签                     | 含义                                         |
+| ----------------------------- | ------------------------ | -------------------------------------------- |
+| `sage_http_requests_total`    | route, method, status    | HTTP 请求总数（按 route/method/status 分桶） |
+| `sage_llm_calls_total`        | model, provider, outcome | LLM 调用总数（按 model/provider/outcome）    |
+| `sage_tool_invocations_total` | tool, outcome            | 工具调用总数（按 tool/outcome）              |
+| `sage_tokens_consumed_total`  | model, kind              | LLM token 消耗（kind: prompt/completion）    |
+| `sage_errors_total`           | layer, error_type        | 错误总数（layer: api/llm/tool/skill）        |
 
 ### Histogram（3 个）
 
-| 指标 | 标签 | 含义 |
-|------|------|------|
-| `sage_http_request_duration_seconds` | route | HTTP 请求延迟（秒） |
-| `sage_llm_call_duration_seconds` | model | LLM 调用延迟（秒） |
-| `sage_react_steps_per_request` | (无标签，buckets=[1,2,3,5,10,20]) | ReAct 循环步数分布 |
+| 指标                                 | 标签                              | 含义                |
+| ------------------------------------ | --------------------------------- | ------------------- |
+| `sage_http_request_duration_seconds` | route                             | HTTP 请求延迟（秒） |
+| `sage_llm_call_duration_seconds`     | model                             | LLM 调用延迟（秒）  |
+| `sage_react_steps_per_request`       | (无标签，buckets=[1,2,3,5,10,20]) | ReAct 循环步数分布  |
 
 ### Gauge（1 个）
 
-| 指标 | 标签 | 含义 |
-|------|------|------|
+| 指标                   | 标签     | 含义                |
+| ---------------------- | -------- | ------------------- |
 | `sage_active_sessions` | (无标签) | 当前活跃 session 数 |
 
 ### 接入方式
@@ -72,13 +72,13 @@ sage_llm_calls_total{model="default",outcome="success",provider="default"} 42.0
 
 `backend/adapters/out/event/file_adapter.py` 定义 `AuditEventType`：
 
-| 事件 | 触发点 | Payload 字段 |
-|------|--------|--------------|
-| `chat_message_sent` | `ChatService.run_turn()` 入口 | session_id, role |
-| `chat_response_completed` | `ChatService.run_turn()` 出口 | session_id |
-| `tool_invoked` | `ChatService._execute_tool_calls()` | session_id, tool, args |
-| `session_created` | `ChatService.create_session()` | session_id, title |
-| `settings_changed` | `PUT /api/v1/settings` | changed_fields (列表) |
+| 事件                      | 触发点                              | Payload 字段           |
+| ------------------------- | ----------------------------------- | ---------------------- |
+| `chat_message_sent`       | `ChatService.run_turn()` 入口       | session_id, role       |
+| `chat_response_completed` | `ChatService.run_turn()` 出口       | session_id             |
+| `tool_invoked`            | `ChatService._execute_tool_calls()` | session_id, tool, args |
+| `session_created`         | `ChatService.create_session()`      | session_id, title      |
+| `settings_changed`        | `PUT /api/v1/settings`              | changed_fields (列表)  |
 
 ### 落盘格式
 
@@ -91,6 +91,7 @@ sage_llm_calls_total{model="default",outcome="success",provider="default"} 42.0
 ```
 
 **注意**：
+
 - 敏感字段（`api_key` 等）**永不**写入 audit payload
 - 审计日志由 P2.5 `SqliteStorageAdapter` 之外的 `FileEventAdapter` 独立管理
 - 按日轮转可加 cron 任务（PG3.13 收尾时考虑）
@@ -113,11 +114,11 @@ def get_tracer(name: str = "sage") -> trace.Tracer:
 
 ### 已注入的 Span
 
-| Span 名 | 位置 | 属性 |
-|---------|------|------|
-| `chat.run_turn` | `ChatService.run_turn` 入口 | session.id, message.role, has_tool_calls, duration, error |
-| `session.create` | `ChatService.create_session` | session.id, title |
-| `llm.chat` | `HttpxLLMAdapter.chat` | messages.count, tools.count |
+| Span 名          | 位置                         | 属性                                                      |
+| ---------------- | ---------------------------- | --------------------------------------------------------- |
+| `chat.run_turn`  | `ChatService.run_turn` 入口  | session.id, message.role, has_tool_calls, duration, error |
+| `session.create` | `ChatService.create_session` | session.id, title                                         |
+| `llm.chat`       | `HttpxLLMAdapter.chat`       | messages.count, tools.count                               |
 
 Span 嵌套：`chat.run_turn` ⊃ `llm.chat`（通过 `_run_turn_inner` 内部方法解包）。
 
