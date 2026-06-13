@@ -50,9 +50,13 @@ test('Electron launches and exposes electronAPI', async () => {
 
   // Verify electronAPI is exposed (preload.ts loaded)
   const hasElectronAPI = await window.evaluate(() => {
-    return typeof window.electronAPI !== 'undefined' && typeof window.electronAPI.invoke === 'function';
+    return (
+      typeof window.electronAPI !== 'undefined' && typeof window.electronAPI.invoke === 'function'
+    );
   });
-  expect(hasElectronAPI, 'window.electronAPI.invoke must be a function (preload.ts loaded)').toBe(true);
+  expect(hasElectronAPI, 'window.electronAPI.invoke must be a function (preload.ts loaded)').toBe(
+    true,
+  );
 
   // Verify electronAPI.listen also exposed
   const hasListen = await window.evaluate(() => {
@@ -90,8 +94,7 @@ test('invoke IPC bridge round-trips through main process', async () => {
 
   // Either we got an error message (bridge works, main rejected cmd)
   // or main allowed it (shouldn't happen for unknown cmd)
-  expect(
-    errorMsg,
-    'invoke must route through main process; unknown cmd should throw',
-  ).toMatch(/Unknown IPC command|definitely_not_a_real_command/i);
+  expect(errorMsg, 'invoke must route through main process; unknown cmd should throw').toMatch(
+    /Unknown IPC command|definitely_not_a_real_command/i,
+  );
 });
