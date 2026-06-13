@@ -68,10 +68,9 @@ Tauri 1.x 优势:
 
 ```
 hermes-win7/
-├── electron-src/              # Electron 主进程源码
+├── electron/                  # Electron 主进程源码
 │   ├── main.ts               # 主进程入口
-│   ├── preload.ts            # preload 桥接
-│   └── ipc/                  # IPC handlers
+│   └── preload.ts            # preload 桥接
 ├── electron-builder.yml      # Electron 打包配置
 ├── tsconfig.electron.json    # 主进程 TS 配置
 │

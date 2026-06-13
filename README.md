@@ -265,7 +265,7 @@ linux:
     "outDir": "dist-electron",
     "strict": true,
   },
-  "include": ["electron-src/**/*"],
+  "include": ["electron/**/*"],
 }
 ```
 
@@ -348,10 +348,9 @@ sage/
 │   ├── lib/                # 工具库
 │   ├── pages/              # 页面组件
 │   └── config.ts           # 前端配置
-├── electron-src/           # Electron 主进程源码
-│   ├── main.ts             # Electron 主进程入口
-│   ├── preload.ts          # preload 脚本（IPC 桥）
-│   └── tsconfig.electron.json
+├── electron/              # Electron 主进程源码
+│   ├── main.ts            # Electron 主进程入口
+│   └── preload.ts         # preload 脚本（IPC 桥）
 ├── electron-builder.yml    # Electron 打包配置
 ├── build/                  # 应用图标资源
 │   ├── icon.ico
