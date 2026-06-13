@@ -50,7 +50,7 @@ jobs:
       - name: Install dev tools
         shell: bash -el {0}
         run: |
-          conda run -n sage-backend-win7 pip install ruff mypy import-linter
+          conda run -n sage-backend-win7 pip install -r backend/requirements.txt ruff mypy import-linter
 
       - name: Ruff check
         shell: bash -el {0}
