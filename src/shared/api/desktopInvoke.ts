@@ -10,7 +10,7 @@
  *
  * 测试通过 `vi.mock('@/shared/api/desktopInvoke')` 桩化，与底层 transport 解耦
  */
-import type { ElectronAPI } from '../../types/electron-api';
+import type { ElectronAPI } from '../types/electron-api';
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const api: ElectronAPI | undefined =

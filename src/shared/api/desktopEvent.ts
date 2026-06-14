@@ -3,7 +3,7 @@
  *
  * 命名历史（2026-06-13）：从 tauriEvent 改为 desktopEvent，理由同 desktopInvoke.ts。
  */
-import type { ElectronAPI, UnlistenFn } from '../../types/electron-api';
+import type { ElectronAPI, UnlistenFn } from '../types/electron-api';
 
 export type { UnlistenFn };
 
