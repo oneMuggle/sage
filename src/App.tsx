@@ -1,12 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-import { Layout } from './components/layout/Layout';
 import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
 import { Knowledge } from './pages/Knowledge';
 import { Memory } from './pages/Memory';
 import { Settings } from './pages/Settings';
 import Skills from './pages/Skills';
+import { Layout } from './widgets/layout';
 
 function App() {
   return (
