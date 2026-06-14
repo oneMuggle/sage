@@ -29,7 +29,8 @@ pytestmark = pytest.mark.integration
 CHAT_PATH = "/api/v1/chat"
 
 # 本文件专门测 hex 路径；legacy 模式下 /chat 不走 hex_routes，本文件全部跳过
-_API_MODE = os.environ.get("API_MODE", "hex").lower()
+# PG-A1: local default 同步 main.py flip (hex→legacy)
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
 _HEX_ONLY = pytest.mark.skipif(
     _API_MODE != "hex",
     reason=f"本文件测 hex /chat 行为；当前 API_MODE={_API_MODE!r}（需 hex）",

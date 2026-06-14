@@ -167,9 +167,17 @@ async def add_request_id_header(request: Request, call_next):
 # - API_MODE=legacy：仅注册 legacy。
 # 通用 LLM 代理（/api/v1/llm/*）在两种模式下都注册 — 浏览器到 LLM 的
 # 测试连接 / 拉取模型调用都走它，与 API_MODE 无关（见 llm_proxy_routes.py）。
+#
+# === PG-A1 GREEN-2 临时变更（2026-06-13） ===
+# 默认 API_MODE 从 "hex" 改为 "legacy"。原因:hex_routes 新增了 6 个
+# sessions 端点（PG-A1 端点迁移），但本 PR 不装配 SessionService DI。
+# 若保持默认 hex，新 6 端点会拦截 /sessions 流量并因 DI 缺失而 500，
+# 破坏现有 legacy 集成测试。临时切到 legacy 保证 production 走老路径。
+# 后续 PR 真正装配 SessionService 后，会把默认值改回 "hex"。
+# 跟踪 issue/PR 见 docs/plans/2026-06-13_full-quality-optimization-v2.md。
 app.include_router(llm_proxy_router, prefix="/api/v1")
 
-_API_MODE = os.environ.get("API_MODE", "hex").lower()
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":
     app.include_router(hex_router, prefix="/api/v1")
     app.include_router(legacy_router, prefix="/api/v1")

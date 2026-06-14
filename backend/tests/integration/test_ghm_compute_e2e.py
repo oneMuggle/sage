@@ -36,7 +36,8 @@ pytestmark = pytest.mark.integration
 CHAT_PATH = "/api/v1/chat"
 
 # 仅在 hex 模式 + ghm 可用时跑
-_API_MODE = os.environ.get("API_MODE", "hex").lower()
+# PG-A1: local default 同步 main.py flip (hex→legacy)
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
 
 _GHM_PYTHON = os.environ.get(
     "GHM_PYTHON",

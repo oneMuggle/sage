@@ -39,6 +39,14 @@ class StoragePort(Protocol):
         """列出当前所有会话（字典形式，键集由实现定义）。"""
         ...
 
-    async def delete_session(self, session_id: str) -> None:
-        """按 ID 删除会话（级联消息由实现侧负责）。"""
+    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+        """按 ID 取单个会话；不存在返 ``None``（路由层映射 404）。"""
+        ...
+
+    async def update_session(self, session_id: str, **fields: Any) -> int:
+        """局部更新会话字段；返受影响行数（0 = 会话不存在, 1 = 已更新）。"""
+        ...
+
+    async def delete_session(self, session_id: str) -> int:
+        """按 ID 删除会话（级联消息由实现侧负责）；返受影响行数。"""
         ...

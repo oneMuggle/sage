@@ -63,8 +63,28 @@ class MemoryStorageAdapter:
             for sid, state in self._sessions.items()
         ]
 
-    async def delete_session(self, session_id: str) -> None:
+    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+        state = self._sessions.get(session_id)
+        if state is None:
+            return None
+        return {
+            "id": session_id,
+            "title": state.title,
+            "message_count": len(state.messages),
+        }
+
+    async def update_session(self, session_id: str, **fields: Any) -> int:
+        state = self._sessions.get(session_id)
+        if state is None:
+            return 0
+        if "title" in fields and fields["title"] is not None:
+            state.title = fields["title"]
+        return 1
+
+    async def delete_session(self, session_id: str) -> int:
+        existed = session_id in self._sessions
         self._sessions.pop(session_id, None)
+        return 1 if existed else 0
 
     # ----- 消息 -----
 
