@@ -107,7 +107,13 @@ def test_file_event_adapter_writes_5_audit_types(tmp_path: Path):
 # ==================== 集成层：hex 路径端到端触发 5 类事件 ====================
 
 
-_API_MODE = os.environ.get("API_MODE", "hex").lower()
+# PG-A1: local default "legacy" 同步 backend/main.py 临时 flip
+# (见 main.py 注释)。 此前默认 "hex" 是因为 main.py 默认就是 "hex";
+# 现在 main.py 改为 "legacy",这里同步改默认。
+# 副作用:CI 默认(legacy)模式下本文件所有 _HEX_ONLY 测试被 skip,
+# 失去 hex 模式审计测试覆盖;后续 PR 把 main.py 默认改回 "hex" 时
+# 这里也要同步改回。
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
 _HEX_ONLY = pytest.mark.skipif(
     _API_MODE != "hex",
     reason=f"本文件测 hex 路径 5 类事件；当前 API_MODE={_API_MODE!r}（需 hex）",

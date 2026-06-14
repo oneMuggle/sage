@@ -35,7 +35,8 @@ CHAT_PATH = "/api/v1/chat"
 METRICS_PATH = "/api/v1/metrics"
 
 # 仅在 hex 模式下有效
-_API_MODE = os.environ.get("API_MODE", "hex").lower()
+# PG-A1: local default 同步 main.py flip (hex→legacy)
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
 _HEX_ONLY = pytest.mark.skipif(
     _API_MODE != "hex",
     reason=f"本文件测 hex /metrics 行为；当前 API_MODE={_API_MODE!r}（需 hex）",
