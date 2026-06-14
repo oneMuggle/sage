@@ -2,7 +2,7 @@ import { Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 
 import type { Session } from '../../shared/lib/store';
-import { Button } from '../common/Button';
+import { Button } from '../../shared/ui/Button';
 
 import { SessionItem } from './SessionItem';
 
