@@ -3,7 +3,7 @@
 不测行为,只验"7 个 API 对象 + 17 个 interface + 1 class + 2 utils"都从
 新位置正确导出。确保 codemod 把 caller 切到新路径后,行为不变。
 
-同源:src/lib/api.ts 暂作 re-export shim(过渡期),所有调用方未变,
+同源:src/shared/api/api.ts 暂作 re-export shim(过渡期),所有调用方未变,
 所以这个测试既验新位置,又间接证明 shim 链路完整。
 */
 

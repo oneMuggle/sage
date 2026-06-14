@@ -7,7 +7,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Skill } from '../../../lib/api';
+import type { Skill } from '../../../shared/api/api';
 import SkillList from '../SkillList';
 
 const SAMPLE_SKILLS: Skill[] = [

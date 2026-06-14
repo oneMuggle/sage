@@ -8,7 +8,7 @@
  * 内部委托 `window.electronAPI.invoke`（preload.ts 通过 contextBridge 注入）
  * 主进程（electron/main.ts）再把 invoke 转成对 backend FastAPI 的 HTTP 调用
  *
- * 测试通过 `vi.mock('@/lib/desktopInvoke')` 桩化，与底层 transport 解耦
+ * 测试通过 `vi.mock('@/shared/api/desktopInvoke')` 桩化，与底层 transport 解耦
  */
 import type { ElectronAPI } from '../../types/electron-api';
 

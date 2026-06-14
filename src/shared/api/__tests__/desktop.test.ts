@@ -38,7 +38,11 @@ describe('src/shared/api/llmStream', () => {
     // 构造 fake NDJSON 流
     const lines = [
       JSON.stringify({ state: 'thinking', iteration: 1, content: 'hello' }),
-      JSON.stringify({ state: 'acting', iteration: 1, tool_call: { id: 't1', type: 'function', function: { name: 'fn', arguments: '{}' } } }),
+      JSON.stringify({
+        state: 'acting',
+        iteration: 1,
+        tool_call: { id: 't1', type: 'function', function: { name: 'fn', arguments: '{}' } },
+      }),
       JSON.stringify({ state: 'done', iteration: 1 }),
     ];
     const stream = new ReadableStream<Uint8Array>({

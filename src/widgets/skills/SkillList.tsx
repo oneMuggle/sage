@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { type Skill } from '../../lib/api';
+import { type Skill } from '../../shared/api/api';
 
 import SkillCard from './SkillCard';
 

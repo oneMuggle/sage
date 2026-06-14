@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 
-import { memoryApi, Memory } from '../../lib/api';
+import { memoryApi, Memory } from '../../shared/api/api';
 
 type MemoryFilter = 'all' | 'episodic' | 'semantic';
 

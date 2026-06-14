@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 
-import { knowledgeApi, type KnowledgeDoc as ApiKnowledgeDoc } from '../lib/api';
+import { knowledgeApi, type KnowledgeDoc as ApiKnowledgeDoc } from '../shared/api/api';
 
 export interface KnowledgeDoc {
   id: string;

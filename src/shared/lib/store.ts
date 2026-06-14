@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { invoke } from '../../lib/desktopInvoke';
+import { invoke } from '../api/desktopInvoke';
 
 // Re-export API modules from api.ts for convenience
 export { sessionApi, messageApi, chatApi, memoryApi } from '../api/api';

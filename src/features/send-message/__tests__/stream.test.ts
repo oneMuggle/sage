@@ -1,7 +1,7 @@
 /**
  * chatApi.chatStream (PR-6) 单元测试
  *
- * 策略: mock lib/desktopInvoke 的 invoke 和 lib/desktopEvent 的 listen,
+ * 策略: mock shared/api/desktopInvoke 的 invoke 和 shared/api/desktopEvent 的 listen,
  * 验证 NDJSON → Tauri event 的契约:
  *   1. invoke('agent_chat_stream', {sessionId, message, ...config}) 返回 streamId
  *   2. listen('chat-stream-{streamId}', cb) 订阅事件
@@ -12,16 +12,16 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { chatApi, type AgentEvent } from '../../../lib/api';
+import { chatApi, type AgentEvent } from '../../../shared/api/api';
 
 const invokeMock = vi.fn();
 const listenMock = vi.fn();
 
-vi.mock('../../../lib/desktopInvoke', () => ({
+vi.mock('../../../shared/api/desktopInvoke', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
-vi.mock('../../../lib/desktopEvent', () => ({
+vi.mock('../../../shared/api/desktopEvent', () => ({
   listen: (...args: unknown[]) => listenMock(...args),
 }));
 

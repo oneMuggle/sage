@@ -8,16 +8,16 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
-import { useStore } from '../../../lib/store';
+import { useStore } from '../../../shared/lib/store';
 import { useChat } from '../useChat';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
 const invokeMock = vi.fn();
 const listenMock = vi.fn();
-vi.mock('../../../lib/desktopInvoke', () => ({
+vi.mock('../../../shared/api/desktopInvoke', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
-vi.mock('../../../lib/desktopEvent', () => ({
+vi.mock('../../../shared/api/desktopEvent', () => ({
   listen: (...args: unknown[]) => listenMock(...args),
 }));
 

@@ -2,7 +2,7 @@
  * MemoryItem - 单条记忆显示组件
  * 显示记忆内容、重要性星级、标签和删除按钮
  */
-import { Memory } from '../../lib/api';
+import { Memory } from '../../shared/api/api';
 
 interface MemoryItemProps {
   memory: Memory;

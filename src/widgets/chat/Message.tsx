@@ -5,7 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 
-import type { Message as MessageType, ToolCall } from '../../lib/store';
+import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 
 interface MessageProps {
   message: MessageType;

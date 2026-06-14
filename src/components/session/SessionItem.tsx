@@ -1,6 +1,6 @@
 import { Trash2, Pin } from 'lucide-react';
 
-import type { Session } from '../../lib/store';
+import type { Session } from '../../shared/lib/store';
 
 interface SessionItemProps {
   session: Session;
