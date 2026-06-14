@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 
-import { useStore } from '../shared/lib/store';
+import { useStore } from '../store';
 
 export function useSessions() {
   const {

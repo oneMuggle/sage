@@ -1,7 +1,7 @@
 import { clsx } from 'clsx';
 import { BookOpen } from 'lucide-react';
 
-import type { KnowledgeDoc } from '../../hooks/useKnowledge';
+import type { KnowledgeDoc } from '../../shared/lib/hooks/useKnowledge';
 
 interface KnowledgeCardProps {
   doc: KnowledgeDoc;

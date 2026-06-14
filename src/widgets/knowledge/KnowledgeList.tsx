@@ -1,4 +1,4 @@
-import type { KnowledgeDoc } from '../../hooks/useKnowledge';
+import type { KnowledgeDoc } from '../../shared/lib/hooks/useKnowledge';
 
 import { KnowledgeCard } from './KnowledgeCard';
 

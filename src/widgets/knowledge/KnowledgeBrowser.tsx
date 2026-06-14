@@ -1,7 +1,7 @@
 import { clsx } from 'clsx';
 import { Search } from 'lucide-react';
 
-import { useKnowledge, type KnowledgeDoc } from '../../hooks/useKnowledge';
+import { useKnowledge, type KnowledgeDoc } from '../../shared/lib/hooks/useKnowledge';
 
 import { KnowledgeList } from './KnowledgeList';
 

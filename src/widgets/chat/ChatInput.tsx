@@ -1,7 +1,7 @@
 import { Send, Square, Image, Paperclip, BookOpen } from 'lucide-react';
 import { useState, useRef } from 'react';
 
-import { useFileUpload } from '../../hooks/useFileUpload';
+import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 
 import { FileAttachment } from './FileAttachment';
 import { KnowledgeChip } from './KnowledgeChip';
