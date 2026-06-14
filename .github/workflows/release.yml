@@ -18,14 +18,18 @@ jobs:
   # Windows NSIS 安装包构建
   build-windows:
     name: Build Windows Installer
-    runs-on: windows-latest
+    # PG-AA: pin windows-2022 (not windows-latest),避免 2026-06-15 后
+    # GitHub 自动重定向到 windows-2025-vs2026。windows-2022 与本项目
+    # Win7 LTS 兼容链(Rust 1.77.2 + WebView2 v109 离线嵌入)匹配。
+    runs-on: windows-2022
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        # PG-AA: v4 用 Node 20,2026-09 强制 Node 24;v5 已 Node 24-ready
+        uses: actions/checkout@v5
 
       - name: 设置 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '25'
           cache: 'npm'
@@ -140,7 +144,8 @@ jobs:
         working-directory: src-tauri
 
       - name: 上传安装包
-        uses: actions/upload-artifact@v4
+        # PG-AA: v4 → v5 (Node 24-ready)
+        uses: actions/upload-artifact@v5
         with:
           name: windows-installer
           path: src-tauri/target/release/Sage_${{ steps.version.outputs.VERSION }}_x64-setup.exe
@@ -148,7 +153,8 @@ jobs:
 
       - name: 上传构建日志
         if: always()
-        uses: actions/upload-artifact@v4
+        # PG-AA: v4 → v5 (Node 24-ready)
+        uses: actions/upload-artifact@v5
         with:
           name: build-logs
           path: src-tauri/target/x86_64-pc-windows-msvc/release/**/*.log
@@ -158,7 +164,8 @@ jobs:
   release:
     name: Create Release
     needs: build-windows
-    runs-on: ubuntu-latest
+    # PG-AA: 也 pin ubuntu-2024 (LTS),避免类似 windows-latest 重定向
+    runs-on: ubuntu-2024
     permissions:
       # 需要写 Release 的权限 (默认 GITHUB_TOKEN 只有 contents: read,
       # softprops/action-gh-release 会返回 403 Too many retries)
@@ -166,10 +173,12 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        # PG-AA: v4 → v5
+        uses: actions/checkout@v5
 
       - name: 下载安装包
-        uses: actions/download-artifact@v4
+        # PG-AA: v4 → v5
+        uses: actions/download-artifact@v5
         with:
           name: windows-installer
           path: installer
