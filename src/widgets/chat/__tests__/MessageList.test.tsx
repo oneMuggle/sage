@@ -7,7 +7,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
-import type { Message as MessageType } from '../../../lib/store';
+import type { Message as MessageType } from '../../../shared/lib/store';
 import { MessageList } from '../MessageList';
 
 const baseMsg = (id: string, role: MessageType['role'], content: string): MessageType => ({

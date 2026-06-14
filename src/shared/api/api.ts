@@ -3,9 +3,10 @@
  * 包含错误处理和重试逻辑
  */
 
+import type { LLMErrorResponse } from '../lib/errorMapping';
+
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
-import type { LLMErrorResponse } from './errorMapping';
 
 // ==================== 类型定义 ====================
 

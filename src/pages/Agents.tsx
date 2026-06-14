@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 import { Button } from '../components/common';
-import { agentsApi, type AgentProfile, type AgentUpdate } from '../lib/api';
+import { agentsApi, type AgentProfile, type AgentUpdate } from '../shared/api/api';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { RetryButton } from '../shared/ui/RetryButton';

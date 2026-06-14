@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 
-import { invoke } from './desktopInvoke';
+import { invoke } from '../api/desktopInvoke';
 
 // Re-export API modules from api.ts for convenience
-export { sessionApi, messageApi, chatApi, memoryApi } from './api';
+export { sessionApi, messageApi, chatApi, memoryApi } from '../api/api';
 
 // ==================== 类型定义 ====================
 
@@ -169,11 +169,11 @@ export const useStore = create<StoreState>((set, _get) => ({
 // 使用 React.lazy 懒加载页面组件，减少初始加载时间
 // 注意: 实际的懒加载组件在各自页面文件中
 
-export const LazyChat = () => import('../pages/Chat');
-export const LazySettings = () => import('../pages/Settings');
-export const LazyMemory = () => import('../pages/Memory');
-export const LazySkills = () => import('../pages/Skills');
-export const LazyKnowledge = () => import('../pages/Knowledge');
+export const LazyChat = () => import('../../pages/Chat');
+export const LazySettings = () => import('../../pages/Settings');
+export const LazyMemory = () => import('../../pages/Memory');
+export const LazySkills = () => import('../../pages/Skills');
+export const LazyKnowledge = () => import('../../pages/Knowledge');
 
 // ==================== 缓存策略 ====================
 

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 import { useChat } from '../features/send-message/useChat';
-import { useStore } from '../lib/store';
+import { useStore } from '../shared/lib/store';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ChatInput, MessageList } from '../widgets/chat';

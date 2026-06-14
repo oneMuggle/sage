@@ -1,7 +1,7 @@
 // useWikiIngest - 订阅 wiki-ingest-{id}-progress 事件,返回进度状态
 import { useEffect, useState, useCallback } from 'react';
 
-import { listen, type UnlistenFn } from '../../lib/desktopEvent';
+import { listen, type UnlistenFn } from '../../shared/api/desktopEvent';
 
 export interface IngestProgress {
   stage: string;

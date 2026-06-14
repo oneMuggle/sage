@@ -1,7 +1,7 @@
 // useWikiChatStream - 订阅 wiki-chat-stream-{id} 事件,累积 chunk
 import { useEffect, useState, useCallback } from 'react';
 
-import { listen, type UnlistenFn } from '../../lib/desktopEvent';
+import { listen, type UnlistenFn } from '../../shared/api/desktopEvent';
 
 export interface ChatStreamState {
   /** 累积的完整回答 */

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
-import type { Message as MessageType } from '../../../lib/store';
+import type { Message as MessageType } from '../../../shared/lib/store';
 import { Message } from '../Message';
 
 describe('Message', () => {

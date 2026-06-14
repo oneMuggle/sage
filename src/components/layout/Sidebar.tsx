@@ -5,7 +5,7 @@ import { Link, useLocation } from 'react-router-dom';
 
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
-import { useStore } from '../../lib/store';
+import { useStore } from '../../shared/lib/store';
 import { SessionItem } from '../session/SessionItem';
 
 // 导航项配置

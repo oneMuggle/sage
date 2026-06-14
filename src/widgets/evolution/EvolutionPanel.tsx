@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 
-import { invoke } from '../../lib/desktopInvoke';
+import { invoke } from '../../shared/api/desktopInvoke';
 
 // 任务状态类型
 interface TaskStatus {
