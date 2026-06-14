@@ -1,54 +1,10 @@
 /**
- * 轻量结构化 logger，支持 request_id 追踪
- * 用于诊断 LLM 链路 Bug
+ * logger.ts — re-export shim (B1 过渡期, 4 files batch)
+ *
+ * 实际实现已迁到 src/shared/lib/logger.ts。本文件保留 re-export 以让
+ * 旧 caller (`from '@/lib/logger'` 或 `from '../lib/logger'`) 不破。codemod
+ * 阶段批量改 caller,所有 caller 切完后,本文件删 (B21)。
+ *
+ * 删除截止:v0.3.0 (B1 完成后)
  */
-
-type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-class Logger {
-  private enabled = false;
-
-  setEnabled(value: boolean): void {
-    this.enabled = value;
-  }
-
-  isEnabled(): boolean {
-    return this.enabled;
-  }
-
-  private log(level: LogLevel, requestId: string, label: string, data?: unknown): void {
-    if (!this.enabled) return;
-    const prefix = `[${requestId}] [${label}]`;
-    const consoleFn = console[level] as (...args: unknown[]) => void;
-    if (data instanceof Error) {
-      consoleFn(prefix, data.message, data.stack);
-    } else if (data !== undefined) {
-      consoleFn(prefix, data);
-    } else {
-      consoleFn(prefix);
-    }
-  }
-
-  debug(requestId: string, label: string, data?: unknown): void {
-    this.log('debug', requestId, label, data);
-  }
-
-  info(requestId: string, label: string, data?: unknown): void {
-    this.log('info', requestId, label, data);
-  }
-
-  warn(requestId: string, label: string, data?: unknown): void {
-    this.log('warn', requestId, label, data);
-  }
-
-  error(requestId: string, label: string, data?: unknown): void {
-    this.log('error', requestId, label, data);
-  }
-}
-
-export const logger = new Logger();
-
-// 开发模式默认开启；生产模式默认关闭
-if (import.meta.env.DEV) {
-  logger.setEnabled(true);
-}
+export * from '../shared/lib/logger';
