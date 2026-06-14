@@ -1,24 +1,10 @@
 /**
- * Renderer-side IPC shim — listen(event, handler) → Electron main → backend NDJSON stream.
+ * desktopEvent.ts — re-export shim (B1 过渡期, unit 3)
  *
- * 命名历史（2026-06-13）：从 tauriEvent 改为 desktopEvent，理由同 desktopInvoke.ts。
+ * 实际实现已迁到 src/shared/api/desktopEvent.ts。本文件保留 re-export 以让
+ * 旧 caller 不破。codemod 阶段批量改 caller,所有 caller 切完后,
+ * 本文件删 (B21)。
+ *
+ * 删除截止:v0.3.0 (B1 完成后)
  */
-import type { ElectronAPI, UnlistenFn } from '../types/electron-api';
-
-export type { UnlistenFn };
-
-export async function listen<T>(
-  event: string,
-  handler: (e: { payload: T }) => void,
-): Promise<UnlistenFn> {
-  const api: ElectronAPI | undefined =
-    typeof window !== 'undefined' ? window.electronAPI : undefined;
-  if (!api) {
-    throw new Error(
-      'electronAPI not available — preload script not loaded. ' +
-        'If running outside Electron (e.g. plain browser), this is expected.',
-    );
-  }
-  // Unwrap electronAPI's (payload) → wrap back to Tauri-compatible ({ payload })
-  return api.listen<T>(event, (payload) => handler({ payload }));
-}
+export * from '../shared/api/desktopEvent';
