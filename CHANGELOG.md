@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - F. 安全审计入 CI(npm/pip audit + gitleaks + electronegativity)
   - G. onboarding 一键脚本 + ADR 起步
 
-## [v0.1.2] - 2026-06-13
+## [v0.1.2] - 2026-06-15
 
 ### Added
 - **PG-A1 sessions 6 端点 hex 迁移(#19)**——把 legacy 路由的 `/sessions/*` 迁到六边形架构
@@ -44,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Deprecated
 - `src/lib/tauriInvoke.ts` / `tauriEvent.ts` re-export shim——已 `@deprecated`,计划 2026-12-31 删除(`release/win7` 临时保留到 2026-12-31)
+
+### Fixed
+- **Electron 桌面端 Linux 启动修复(#25)**——`electron/main.ts` 把后端 spawn 从 `python backend/main.py` 改成 `python -m backend.main`,让 `from backend.adapters...` 绝对 import 能 resolve;同步加 `postinstall` (`scripts/fix-chrome-sandbox.sh`) 在 `npm install` 后自动恢复 `chrome-sandbox` 的 root 所有权 + 4755 SUID 位(Linux-only,macOS/Windows 跳过,idempotent)
+- **构建图标 gitignore 修正**——`build/icon.{ico,png}` 改为跟踪,修 `electron-builder` 缺图标的隐式失败
+- **WikiGraphView 单元测试外移**——inline `describe` 移到独立文件,修 vitest 多文件解析问题
+- **Tauri CLI 锁版本**——`@tauri-apps/api` / `@tauri-apps/cli` 锁到 `=2.1.0`,修 major.minor 一致性校验
+- **WikiChat import 顺序**——CI lint 失败的 import 顺序修正
 
 ## [v0.1.1] - 2026-06-08
 
