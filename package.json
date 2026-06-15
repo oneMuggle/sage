@@ -21,7 +21,8 @@
     "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
     "electron:dev": "npm run build:electron && electron .",
     "electron:build": "npm run build && npm run build:electron",
-    "electron:dist": "npm run electron:build && electron-builder --publish never"
+    "electron:dist": "npm run electron:build && electron-builder --publish never",
+    "postinstall": "bash scripts/fix-chrome-sandbox.sh"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",
