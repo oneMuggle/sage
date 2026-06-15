@@ -84,3 +84,20 @@ Phase 3 时：
 - `launch-test.ps1` — 启动 + 验证
 - `verify-ollama.ps1` — 验证 Ollama API
 - `teardown.ps1` — 清理
+
+## 8. VC++ Redistributable(自 0.1.2 起自动 bundling)
+
+NSIS 安装包内含 `vc_redist.x64.exe`(由 `build/installer.nsh` customInstall 宏在
+安装阶段静默运行)。用户**无需**手动下载 VC++。
+
+构建侧细节:
+
+- `scripts/fetch-vcredist.ps1` 在 CI(`windows-latest`)和本地 Win 构建前下载
+- `resources/vc_redist.x64.exe` 已 gitignore(~14MB 二进制)
+- 已装更新版本的用户:MSI 返回 1638,customInstall 宏忽略并继续
+
+人工烟测时(`scripts/win7-smoke/install.ps1`)无需再单独验证 VC++ 安装路径,
+但**首次跑**仍要确认安装日志出现:
+`Installing Microsoft Visual C++ 2015-2022 Redistributable (x64)...`
+
+详见 [`26-packaging-matrix.md`](./26-packaging-matrix.md)§2。
