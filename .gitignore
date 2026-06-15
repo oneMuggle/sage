@@ -109,3 +109,6 @@ release/
 test-results/
 playwright-report/
 tests/electron/screenshots/
+
+# VCRedist runtime bundled at build time (fetched by scripts/fetch-vcredist.ps1)
+resources/vc_redist.x64.exe
