@@ -58,13 +58,36 @@ mac:
   target: null
   identity: null
 
-# Linux: keep simple AppImage for dev convenience
+# Linux: AppImage (universal) + deb (Ubuntu/Debian native)
 linux:
   target:
     - AppImage
+    - deb
   icon: build/icon.png
   category: Office
+  synopsis: Sage — agentic knowledge & chat desktop
+  description: |
+    Sage is a local-first desktop client that combines LLM chat, agent
+    orchestration, and a personal knowledge wiki. Backed by Python +
+    FastAPI for offline-capable AI workflows.
+  maintainer: Sage Team <sage@example.com>
+  vendor: Sage Team
   artifactName: ${productName}-${version}.${ext}
+
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+  packageCategory: utils
+  priority: optional
+  artifactName: sage_${version}_amd64.${ext}
 
 # electron-builder publish config (off by default for Phase 1)
 publish: null
