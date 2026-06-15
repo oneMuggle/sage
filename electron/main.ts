@@ -78,7 +78,10 @@ let mainWindow: BrowserWindow | null = null;
 function spawnBackend(): ChildProcess {
   // Pick the right launcher based on platform / packaging
   const condaCmd = process.env.SAGE_PYTHON ?? 'conda';
-  const condaArgs = ['run', '-n', 'sage-backend', 'python', 'backend/main.py'];
+  // Run as a module so `from backend.adapters...` absolute imports resolve
+  // (running `python backend/main.py` puts the script's dir on sys.path[0],
+  // which makes the `backend` package unfindable).
+  const condaArgs = ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'];
 
   // On Windows, prefer `pythonw` (no console) when packaged; fallback to `python`
   const pyLauncher =
