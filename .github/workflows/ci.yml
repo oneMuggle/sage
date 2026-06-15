@@ -225,9 +225,13 @@ jobs:
       - name: Build frontend + Electron
         run: npm run electron:build
 
-      - name: Package (Linux AppImage)
+      - name: Package (Linux AppImage + deb)
         if: matrix.os == 'ubuntu-latest'
-        run: npx electron-builder --linux --publish never
+        run: npx electron-builder --linux AppImage deb --publish never
+
+      - name: Verify Linux artifacts (vitest)
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run test:packaging
 
       - name: Package (Windows NSIS)
         if: matrix.os == 'windows-latest'
@@ -238,8 +242,11 @@ jobs:
         with:
           name: electron-${{ matrix.os }}
           path: |
-            release/*.{exe,AppImage,dmg}
-          if-no-files-found: warn
+            release/**/*.exe
+            release/**/*.AppImage
+            release/**/*.deb
+            release/**/*.dmg
+          if-no-files-found: error
 
   # ========== Electron smoke test (Phase 4 lightweight, Win7 真机烟测前替代) ==========
   # - 用 playwright._electron 启动 Electron + 验证 IPC bridge
