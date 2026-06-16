@@ -28,7 +28,13 @@ describe('COMMAND_ROUTES', () => {
   // expose at root.
   it('all command paths are prefixed with /api/v1', () => {
     for (const [cmd, route] of Object.entries(COMMAND_ROUTES)) {
-      const samplePath = route.path({ limit: 1, offset: 0, id: 'x', streamId: 'x', sessionId: 'x' });
+      const samplePath = route.path({
+        limit: 1,
+        offset: 0,
+        id: 'x',
+        streamId: 'x',
+        sessionId: 'x',
+      });
       expect(samplePath, `${cmd} path must start with ${API_PREFIX}`).toMatch(
         new RegExp(`^${API_PREFIX}/`),
       );

@@ -33,9 +33,7 @@ describe('invokeBackend', () => {
   });
 
   it('throws UnknownIpcCommandError for unknown cmd', async () => {
-    await expect(invokeBackend('foo_bar', {}, 'http://127.0.0.1:8765')).rejects.toThrow(
-      /foo_bar/,
-    );
+    await expect(invokeBackend('foo_bar', {}, 'http://127.0.0.1:8765')).rejects.toThrow(/foo_bar/);
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 
