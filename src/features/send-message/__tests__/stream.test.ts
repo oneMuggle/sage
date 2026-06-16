@@ -41,7 +41,8 @@ describe('chatApi.chatStream (PR-6)', () => {
 
   it('invokes agent_chat_stream then listens on chat-stream-{id}', async () => {
     const streamId = 'stream-abc-123';
-    invokeMock.mockResolvedValueOnce(streamId);
+    // 后端真实返回: { streamId: "..." } 对象,不是裸 string
+    invokeMock.mockResolvedValueOnce({ streamId });
     listenMock.mockResolvedValueOnce(vi.fn());
 
     const result = await chatApi.chatStream(
@@ -67,7 +68,7 @@ describe('chatApi.chatStream (PR-6)', () => {
       maxContext: 8192,
       temperature: 0.7,
     });
-    // 2) listen 订阅 chat-stream-{id}
+    // 2) listen 订阅 chat-stream-{id} (从 {streamId} 对象解构得到)
     expect(listenMock).toHaveBeenCalledWith(`chat-stream-${streamId}`, expect.any(Function));
     // 3) 返回 streamId + cancel
     expect(result.streamId).toBe(streamId);
@@ -76,7 +77,7 @@ describe('chatApi.chatStream (PR-6)', () => {
 
   it('dispatches AgentEvent to onEvent callback', async () => {
     const streamId = 'stream-evt';
-    invokeMock.mockResolvedValueOnce(streamId);
+    invokeMock.mockResolvedValueOnce({ streamId });
     let listenCb: ListenCallback | null = null;
     listenMock.mockImplementationOnce(async (_name: string, cb: ListenCallback) => {
       listenCb = cb;
@@ -97,7 +98,7 @@ describe('chatApi.chatStream (PR-6)', () => {
 
   it('calls onDone on state=done and cancel() is a no-op after', async () => {
     const streamId = 'stream-done';
-    invokeMock.mockResolvedValueOnce(streamId);
+    invokeMock.mockResolvedValueOnce({ streamId });
     let listenCb: ListenCallback | null = null;
     listenMock.mockImplementationOnce(async (_name: string, cb: ListenCallback) => {
       listenCb = cb;
@@ -123,7 +124,7 @@ describe('chatApi.chatStream (PR-6)', () => {
 
   it('calls onError + onDone on state=failed with error', async () => {
     const streamId = 'stream-fail';
-    invokeMock.mockResolvedValueOnce(streamId);
+    invokeMock.mockResolvedValueOnce({ streamId });
     let listenCb: ListenCallback | null = null;
     listenMock.mockImplementationOnce(async (_name: string, cb: ListenCallback) => {
       listenCb = cb;
@@ -148,7 +149,7 @@ describe('chatApi.chatStream (PR-6)', () => {
   });
 
   it('rejects with STREAM_LISTEN_FAILED when listen throws', async () => {
-    invokeMock.mockResolvedValueOnce('stream-x');
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-x' });
     listenMock.mockRejectedValueOnce(new Error('event subscribe failed'));
 
     await expect(
