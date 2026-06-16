@@ -16,23 +16,35 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   interrupt_agent: { method: 'POST', path: () => '/interrupt' },
 
   // sessions
-  list_sessions: { method: 'GET', path: (a) => {
-    const limit = (a?.limit as number) ?? 100;
-    const offset = (a?.offset as number) ?? 0;
-    return `/sessions?limit=${limit}&offset=${offset}`;
-  }},
+  list_sessions: {
+    method: 'GET',
+    path: (a) => {
+      const limit = (a?.limit as number) ?? 100;
+      const offset = (a?.offset as number) ?? 0;
+      return `/sessions?limit=${limit}&offset=${offset}`;
+    },
+  },
   create_session: { method: 'POST', path: () => '/sessions' },
   get_session: { method: 'GET', path: (a) => `/sessions/${encodeURIComponent(String(a.id))}` },
-  delete_session: { method: 'DELETE', path: (a) => `/sessions/${encodeURIComponent(String(a.id))}` },
+  delete_session: {
+    method: 'DELETE',
+    path: (a) => `/sessions/${encodeURIComponent(String(a.id))}`,
+  },
 
   // messages
-  get_messages: { method: 'GET', path: (a) => {
-    const id = encodeURIComponent(String(a.sessionId));
-    const limit = (a?.limit as number) ?? 100;
-    const offset = (a?.offset as number) ?? 0;
-    return `/sessions/${id}/messages?limit=${limit}&offset=${offset}`;
-  }},
-  delete_message: { method: 'POST', path: (a) => `/messages/${encodeURIComponent(String(a.id))}/delete` },
+  get_messages: {
+    method: 'GET',
+    path: (a) => {
+      const id = encodeURIComponent(String(a.sessionId));
+      const limit = (a?.limit as number) ?? 100;
+      const offset = (a?.offset as number) ?? 0;
+      return `/sessions/${id}/messages?limit=${limit}&offset=${offset}`;
+    },
+  },
+  delete_message: {
+    method: 'POST',
+    path: (a) => `/messages/${encodeURIComponent(String(a.id))}/delete`,
+  },
 
   // memory
   delete_memory: { method: 'POST', path: () => '/memory/delete' },
@@ -45,7 +57,7 @@ export class UnknownIpcCommandError extends Error {
   constructor(cmd: string) {
     super(
       `Unknown IPC command: ${cmd}. ` +
-      `See electron/commands.ts COMMAND_ROUTES for the supported set.`,
+        `See electron/commands.ts COMMAND_ROUTES for the supported set.`,
     );
     this.name = 'UnknownIpcCommandError';
   }
