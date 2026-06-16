@@ -13,31 +13,64 @@
  *
  * 注意: 整个 chat 流只有一次 LLM 调用,发生在 step 1 create 时。
  * step 3 attach 只是从后端已有的 stream queue 拉取事件,不会再触发 LLM。
+ *
+ * Why node-fetch (not global `fetch`):
+ *   Electron 21 bundles Node 16.13.1 — no global fetch.
+ *   See electron/invoke.ts for the same rationale.
+ *
+ * Why Node ReadableStream (not Web ReadableStream):
+ *   node-fetch@2 returns a Node `Readable` from `res.body`, not a Web
+ *   `ReadableStream`. `Readable.toWeb()` (Web stream adapter) is Node 17+,
+ *   so we consume Node streams directly with `.on('data' / 'end')`.
  */
+
+import fetch from 'node-fetch';
+import type { Readable } from 'node:stream';
 
 export type WebContentsLike = {
   send: (channel: string, payload: unknown) => void;
 };
 
 /**
- * Iterate over a fetch Response with NDJSON body, invoking `onEvent`
- * for each parsed line. Honors AbortSignal.
+ * Iterate over a Node Readable stream with NDJSON body, invoking
+ * `onEvent` for each parsed line. Honors AbortSignal.
+ *
+ * The `body` parameter is typed as `NodeJS.ReadableStream | null` to match
+ * what `@types/node-fetch` declares for `Response.body`. At runtime in Node
+ * 16 / Electron 21, both node-fetch@2's body and `Readable.from()` return a
+ * Node `Readable` (with `.destroy()`, `.setEncoding()`, `.on('data')`).
+ * We cast through `unknown` to call those Node-stream methods.
  */
 export async function parseNdjsonStream(
-  res: Response,
+  body: NodeJS.ReadableStream | null,
   onEvent: (event: unknown) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!res.body) return;
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  try {
-    while (true) {
-      if (signal?.aborted) return;
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+  if (!body) return;
+  const stream = body as unknown as Readable;
+  if (signal?.aborted) {
+    stream.destroy();
+    return;
+  }
+
+  return new Promise<void>((resolve) => {
+    let buffer = '';
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    const onAbort = () => {
+      stream.destroy();
+      // 'close'/'error' will fire after destroy and call finish()
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    stream.setEncoding('utf8');
+    stream.on('data', (chunk: unknown) => {
+      buffer += String(chunk);
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
       for (const line of lines) {
@@ -49,11 +82,20 @@ export async function parseNdjsonStream(
           onEvent({ raw: trimmed });
         }
       }
-    }
-  } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') return;
-    throw e;
-  }
+    });
+    stream.on('end', finish);
+    stream.on('close', finish);
+    stream.on('error', (e: unknown) => {
+      // Aborting the underlying fetch surfaces as ERR_STREAM_PREMATURE_CLOSE
+      // (Node 16) or AbortError on the body. Neither is a real error for us.
+      const err = e as { name?: string; code?: string } | null;
+      if (err?.name === 'AbortError' || err?.code === 'ERR_STREAM_PREMATURE_CLOSE') {
+        finish();
+        return;
+      }
+      finish();
+    });
+  });
 }
 
 /**
@@ -70,7 +112,7 @@ export async function relayChatStream(
   backendUrl: string,
   signal: AbortSignal,
 ): Promise<void> {
-  let res: Response;
+  let res: import('node-fetch').Response;
   try {
     res = await fetch(`${backendUrl}/chat/stream/${encodeURIComponent(streamId)}`, {
       method: 'GET',
@@ -86,7 +128,7 @@ export async function relayChatStream(
   if (!res.ok) return;
 
   await parseNdjsonStream(
-    res,
+    res.body,
     (event) => {
       webContents.send(`sage:event:${eventName}`, event);
     },
