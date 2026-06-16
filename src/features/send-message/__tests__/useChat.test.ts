@@ -90,6 +90,11 @@ describe('useChat', () => {
 
     expect(result.current.error).toMatch(/未配置 API 地址/);
     expect(invokeMock).not.toHaveBeenCalled();
+
+    // 关键:即使 settings 缺失,user 消息也必须进 store (fix for swallowed input)
+    const userMsg = result.current.messages.find((m) => m.role === 'user');
+    expect(userMsg).toBeDefined();
+    expect(userMsg?.content).toBe('hello');
   });
 
   it('appends user + assistant message on successful chat', async () => {

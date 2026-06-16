@@ -19,7 +19,7 @@ vi.mock('../../../shared/lib/hooks/useFileUpload', () => ({
 import { ChatInput } from '../ChatInput';
 
 describe('ChatInput — disabled when settings missing', () => {
-  it('disables send button and shows hint when no onSend callback reaches the API', () => {
+  it('renders enabled by default when no disabled prop is passed', () => {
     const onSend = vi.fn();
     render(<ChatInput onSend={onSend} />);
 
