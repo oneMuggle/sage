@@ -13,7 +13,7 @@ vi.mock('../../../shared/api/desktopEvent', () => ({
 vi.mock('../manage-settings/useSettings', () => ({
   useSettings: () => ({
     settings: {
-      endpoints: [],                                       // 无 active 端点
+      endpoints: [], // 无 active 端点
       modelSelections: { chatModelId: null, visionModelId: null, embeddingModelId: null },
       maxContext: 4096,
       temperature: 0.7,
@@ -23,12 +23,12 @@ vi.mock('../manage-settings/useSettings', () => ({
   }),
 }));
 
-import { useChat } from '../useChat';
 import { useStore } from '../../../shared/lib/store';
+import { useChat } from '../useChat';
 
 describe('useChat — input should never be swallowed on validation failure', () => {
   beforeEach(() => {
-    useStore.setState({ messages: [], sessions: [], currentSessionId: 'sid-1' });
+    useStore.setState({ messages: [], currentSessionId: 'sid-1' });
   });
 
   it('appends the user message to the store even when no endpoint is configured', async () => {
@@ -42,7 +42,6 @@ describe('useChat — input should never be swallowed on validation failure', ()
     const userMsg = messages.find((m) => m.role === 'user');
     expect(userMsg).toBeDefined();
     expect(userMsg?.content).toBe('hello world');
-    // 仍然记录错误（仅用于上层 UI 提示），但消息已经进 store
     expect(result.current.error).toMatch(/未配置|未选择/);
   });
 });
