@@ -31,7 +31,7 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import http from 'node:http';
-import { COMMAND_ROUTES, UnknownIpcCommandError } from './commands';
+import { invokeBackend } from './invoke';
 import { relayChatStream } from './relay';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
@@ -158,28 +158,10 @@ async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
  *
  * I1 fix (待清理): 老的 pendingChatArgs TTL 缓存在 I2 后不再需要(后端持有 args,
  * streamId 唯一即可定位)。本 PR 暂时保留该类供 review,下一 PR 删除。
+ *
+ * `invokeBackend` 本身已抽到 electron/invoke.ts(用 node-fetch 替代全局 fetch,
+ * 详见该文件头注)。本文件只保留 IPC handler 注册 + Electron 生命周期。
  */
-
-async function invokeBackend(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
-  const route = COMMAND_ROUTES[cmd];
-  if (!route) {
-    throw new UnknownIpcCommandError(cmd);
-  }
-  const url = `${BACKEND_URL}${route.path(args)}`;
-  const init: RequestInit = {
-    method: route.method,
-    headers: { 'Content-Type': 'application/json' },
-  };
-  if (route.method !== 'GET' && route.method !== 'DELETE') {
-    init.body = JSON.stringify(args);
-  }
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Backend ${route.method} ${url} → ${res.status}: ${text}`);
-  }
-  return res.json();
-}
 
 function createMainWindow(): void {
   mainWindow = new BrowserWindow({
@@ -221,7 +203,7 @@ function registerIpcHandlers(): void {
     'sage:invoke',
     async (_evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
       try {
-        return await invokeBackend(payload.cmd, payload.args ?? {});
+        return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`[ipc:sage:invoke] ${payload.cmd} failed:`, msg);
