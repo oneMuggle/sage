@@ -1,15 +1,18 @@
 /**
- * Pure SSE/NDJSON relay between FastAPI backend and Electron renderer.
+ * Pure NDJSON relay between FastAPI backend and Electron renderer.
  *
  * Extracted from electron/main.ts so it can be unit-tested without
  * spinning up the Electron runtime.
  *
- * Flow:
+ * Flow (I2: create + attach split, 避免 LLM 被调两次):
  *   1. main process receives ipcMain.handle('sage:invoke', 'agent_chat_stream', args)
- *      → POSTs args to backend /chat/stream
+ *      → POSTs args to backend /chat/stream → 立即拿到 {streamId}
  *   2. renderer subscribes via listen('chat-stream-{streamId}', handler)
- *   3. main process opens an internal stream relay: POSTs the same args
- *      to /chat/stream, parses NDJSON, webContents.send for each event
+ *   3. main process opens relay: GET /chat/stream/{streamId}, parses NDJSON,
+ *      webContents.send for each event
+ *
+ * 注意: 整个 chat 流只有一次 LLM 调用,发生在 step 1 create 时。
+ * step 3 attach 只是从后端已有的 stream queue 拉取事件,不会再触发 LLM。
  */
 
 export type WebContentsLike = {
@@ -54,26 +57,24 @@ export async function parseNdjsonStream(
 }
 
 /**
- * Open a streaming chat connection and forward events to the renderer.
+ * Attach to an existing chat stream (I2) and forward events to the renderer.
  *
- * Strategy: the backend's /chat/stream endpoint creates the stream
- * AND returns events in the same response. So we POST the chat args
- * directly and parse the NDJSON response.
+ * 与旧版的差异:
+ *   - 旧: POST /chat/stream with args → 再次触发 LLM (重复调用)
+ *   - 新: GET /chat/stream/{streamId} → 拉取后端 queue 中的事件,不再触发 LLM
  */
 export async function relayChatStream(
   webContents: WebContentsLike,
   eventName: string,
-  sessionId: string,
-  args: Record<string, unknown>,
+  streamId: string,
   backendUrl: string,
   signal: AbortSignal,
 ): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(`${backendUrl}/chat/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
-      body: JSON.stringify({ ...args, session_id: sessionId }),
+    res = await fetch(`${backendUrl}/chat/stream/${encodeURIComponent(streamId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/x-ndjson' },
       signal,
     });
   } catch (e) {

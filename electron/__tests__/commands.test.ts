@@ -5,6 +5,7 @@ describe('COMMAND_ROUTES', () => {
   it('includes the full session/message/chat surface used by the renderer', () => {
     const required = [
       'agent_chat_stream',
+      'attach_chat_stream',
       'interrupt_agent',
       'list_sessions',
       'create_session',
@@ -17,8 +18,19 @@ describe('COMMAND_ROUTES', () => {
     }
   });
 
-  it('marks agent_chat_stream as SSE', () => {
-    expect(COMMAND_ROUTES.agent_chat_stream.isSse).toBe(true);
+  // I2: agent_chat_stream 改为同步 create(JSON 立即返回 streamId),不再是 SSE
+  it('agent_chat_stream is now plain POST /chat/stream (not SSE)', () => {
+    const r = COMMAND_ROUTES.agent_chat_stream;
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/chat/stream');
+    expect(r.isSse).toBeUndefined();
+  });
+
+  it('attach_chat_stream is GET with streamId as path param (url-encoded)', () => {
+    const r = COMMAND_ROUTES.attach_chat_stream;
+    expect(r.method).toBe('GET');
+    expect(r.path({ streamId: 'sid/1' })).toBe('/chat/stream/sid%2F1');
+    expect(r.path({ streamId: 'abc-123' })).toBe('/chat/stream/abc-123');
   });
 
   it('builds list_sessions URL with limit/offset query params', () => {

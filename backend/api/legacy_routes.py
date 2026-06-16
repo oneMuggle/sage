@@ -2,6 +2,7 @@
 API 路由定义
 """
 
+import asyncio
 import json
 import logging
 import uuid
@@ -10,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, StrictBool
 
+from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database
@@ -558,28 +560,40 @@ async def chat(
 
 
 @router.post("/chat/stream")
-async def chat_stream(data: ChatRequest):
-    """流式聊天端点，以 NDJSON 格式逐事件下发 AgentEvent。
+async def chat_stream_create(data: ChatRequest, request: Request):
+    """创建 chat 流 (I2)。
 
-    每个事件是一行独立 JSON 对象：
-    - 正常事件：``{"state": "...", "iteration": n, ...}``
-    - 错误事件：``{"error": {...}, "state": "failed"}``
+    立即返回 ``{"streamId": "..."}``,后台启动 ``agent.run_loop`` 跑一次 LLM,
+    事件入 ``app.state.streams[streamId].queue``。
+
+    Electron 端拿到 streamId 后调 ``GET /chat/stream/{streamId}`` attach 取事件。
+    这样 LLM 只被调一次(原方案 invoke 阶段读首行 + relay 重放 = 两次)。
 
     Args:
-        data: 与 /chat 相同的 ChatRequest 体
+        data: 与原 /chat 相同的 ChatRequest 体
+        request: FastAPI Request,用于访问 app.state
 
     Returns:
-        StreamingResponse，media_type 为 application/x-ndjson
+        ``{"streamId": "<uuid4>"}``
     """
     request_id = str(uuid.uuid4())
+    stream_id = str(uuid.uuid4())
     logger.info(
-        f"[REQ {request_id}] /chat/stream received: "
+        f"[REQ {request_id}] /chat/stream create: "
+        f"streamId={stream_id}, "
         f"session_id={_safe_log_field(data.session_id)}, "
         f"api_key={'***' if data.api_key else 'MISSING'}, "
         f"model={_safe_log_field(data.model or 'default')}"
     )
 
-    async def event_generator():
+    registry: StreamRegistry = request.app.state.streams
+
+    async def producer(entry: StreamEntry) -> None:
+        """后台跑 agent.run_loop,事件入 entry.queue。
+
+        这里把 AgentEvent.to_dict() 在入队时序列化,避免对象跨 task 边界泄漏
+        内部状态(detached Pydantic / cyclic ref 等)。
+        """
         try:
             llm_config = None
             if data.api_key and data.api_url:
@@ -591,7 +605,7 @@ async def chat_stream(data: ChatRequest):
                     "temperature": data.temperature or 0.7,
                 }
                 logger.info(
-                    f"[REQ {request_id}] /chat/stream using custom LLM config: "
+                    f"[REQ {request_id}] /chat/stream producer using custom LLM: "
                     f"model={_safe_log_field(llm_config['model'])}"
                 )
 
@@ -600,19 +614,68 @@ async def chat_stream(data: ChatRequest):
                 {"role": "system", "content": "你是 Sage，一个智能 AI 助手。"},
                 {"role": "user", "content": data.message},
             ]
-            # 通过 run_loop 产出事件流
             async for evt in agent.run_loop(messages):
-                yield _ndjson(evt.to_dict())
-
+                await entry.queue.put(evt.to_dict())
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "
                 f"type={e.type.value}, message={e.message}"
             )
-            yield _ndjson({"error": e.to_dict(), "state": "failed"})
-        except Exception as e:
-            logger.exception(f"[REQ {request_id}] /chat/stream unexpected error")
-            yield _ndjson({"error": {"type": "unknown", "message": str(e)}, "state": "failed"})
+            await entry.queue.put({"error": e.to_dict(), "state": "failed"})
+
+    await registry.create(stream_id, queue_maxsize=1000, producer=producer)
+    return {"streamId": stream_id}
+
+
+@router.get("/chat/stream/{stream_id}")
+async def chat_stream_attach(stream_id: str, request: Request):
+    """attach 到已创建的 chat 流 (I2),NDJSON 推送事件。
+
+    从 ``app.state.streams[stream_id].queue`` 拉事件,序列化 NDJSON 返回。
+    多次同时 attach 到同一 streamId 会**共享**queue(广播) — 不会触发新的 LLM 调用。
+    客户端断开时(CancelledError)不取消后台 producer(已消耗的 token 不浪费),
+    producer 跑完后会通过 SENTINEL 关闭此流。
+
+    Args:
+        stream_id: create 端点返回的 streamId
+        request: FastAPI Request
+
+    Returns:
+        StreamingResponse(media_type=application/x-ndjson)
+
+    Raises:
+        HTTPException 404: streamId 不存在或已过期
+    """
+    registry: StreamRegistry = request.app.state.streams
+    entry = registry.get(stream_id)
+    if entry is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"chat stream not found or expired: {stream_id}",
+        )
+    logger.info(f"chat-stream attach: streamId={stream_id} status={entry.status}")
+
+    async def event_generator():
+        try:
+            while True:
+                try:
+                    # 短 timeout 让多消费者场景下能感知 producer done 状态。
+                    # SENTINEL 只入队一次,只有一个 attach 能拿到 — 其余
+                    # attach 必须靠 status 字段判断流是否结束。
+                    event = await asyncio.wait_for(entry.queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:  # noqa: UP041 — Py3.10 中 asyncio.TimeoutError ≠ built-in TimeoutError
+                    # 1s 内没新事件 — 检查 producer 是否已结束
+                    # 注: Python 3.10 中 asyncio.TimeoutError 不等同内置 TimeoutError
+                    if entry.status in ("done", "failed"):
+                        break
+                    continue
+                if event is SENTINEL:
+                    break
+                yield _ndjson(event)
+        except asyncio.CancelledError:
+            # 客户端断开 — 后台 producer 继续跑,队列中未消费的事件留给下次 attach
+            logger.info(f"chat-stream attach cancelled: streamId={stream_id}")
+            return
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 

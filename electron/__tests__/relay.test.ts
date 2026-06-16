@@ -58,12 +58,12 @@ describe('parseNdjsonStream', () => {
   });
 });
 
-describe('relayChatStream', () => {
+describe('relayChatStream (I2: attach to existing stream via GET)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('POSTs /chat/stream with the same args as invoke, then relays NDJSON to webContents', async () => {
+  it('GETs /chat/stream/{streamId} with no body, relays NDJSON to webContents', async () => {
     const wc = new MockWebContents();
     const fetchMock = vi
       .fn()
@@ -75,25 +75,45 @@ describe('relayChatStream', () => {
     await relayChatStream(
       wc as unknown as Electron.WebContents,
       'chat-stream-abc',
-      'sid-1',
-      { sessionId: 'sid-1', message: 'hi', model: 'gpt-4', apiKey: 'sk' },
+      'abc',
+      'http://127.0.0.1:8765',
+      new AbortController().signal,
+    );
+
+    // I2 关键: 不再 POST + body,改为 GET + path param streamId
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8765/chat/stream/abc',
+      expect.objectContaining({
+        method: 'GET',
+      }),
+    );
+    // 确保没有 POST body(GET 也不应带 body)
+    const callArgs = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(callArgs.body).toBeUndefined();
+    expect(wc.sent).toEqual([
+      { channel: 'sage:event:chat-stream-abc', payload: { state: 'done', content: 'ok' } },
+    ]);
+  });
+
+  it('url-encodes streamId with special characters', async () => {
+    const wc = new MockWebContents();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(makeNdjsonResponse([JSON.stringify({ state: 'done' })]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await relayChatStream(
+      wc as unknown as Electron.WebContents,
+      'chat-stream-x',
+      'sid/with/slashes',
       'http://127.0.0.1:8765',
       new AbortController().signal,
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:8765/chat/stream',
-      expect.objectContaining({
-        method: 'POST',
-        // The FastAPI/Pydantic backend reads `session_id` (snake_case) — verify
-        // the relay translates the renderer's camelCase `sessionId` into the
-        // snake_case contract the backend actually expects.
-        body: expect.stringContaining('"session_id":"sid-1"'),
-      }),
+      'http://127.0.0.1:8765/chat/stream/sid%2Fwith%2Fslashes',
+      expect.anything(),
     );
-    expect(wc.sent).toEqual([
-      { channel: 'sage:event:chat-stream-abc', payload: { state: 'done', content: 'ok' } },
-    ]);
   });
 
   it('does nothing if backend returns non-OK (no error thrown)', async () => {
@@ -102,8 +122,20 @@ describe('relayChatStream', () => {
     await relayChatStream(
       wc as unknown as Electron.WebContents,
       'chat-stream-abc',
-      'sid-1',
-      { sessionId: 'sid-1', message: 'hi' },
+      'abc',
+      'http://127.0.0.1:8765',
+      new AbortController().signal,
+    );
+    expect(wc.sent).toEqual([]);
+  });
+
+  it('does nothing on network error (does not crash main process)', async () => {
+    const wc = new MockWebContents();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('ECONNREFUSED')));
+    await relayChatStream(
+      wc as unknown as Electron.WebContents,
+      'chat-stream-abc',
+      'abc',
       'http://127.0.0.1:8765',
       new AbortController().signal,
     );
