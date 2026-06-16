@@ -81,7 +81,7 @@ async def test_chat_stream_attach_streams_ndjson_events():
     if not hasattr(app.state, "streams") or app.state.streams is None:
         app.state.streams = StreamRegistry()
 
-    async def mock_run_loop(messages, max_iterations=5):
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
         yield AgentEvent(state=AgentState.THINKING, iteration=0)
         yield AgentEvent(
             state=AgentState.ACTING,
@@ -150,7 +150,7 @@ async def test_two_attaches_share_queue_without_invoking_llm_twice():
     run_loop_call_count = 0
     lock = asyncio.Lock()
 
-    async def mock_run_loop(messages, max_iterations=5):
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
         nonlocal run_loop_call_count
         async with lock:
             run_loop_call_count += 1
@@ -205,7 +205,7 @@ async def test_attach_unknown_stream_id_returns_404():
 async def test_producer_exception_emits_failed_event_and_closes_stream():
     """producer 抛异常 → attach 收到 failed 事件 + 流正常关闭。"""
 
-    async def broken_run_loop(messages, max_iterations=5):
+    async def broken_run_loop(messages, max_iterations=5, **kwargs):
         yield AgentEvent(state=AgentState.THINKING, iteration=0)
         raise RuntimeError("LLM exploded")
         yield  # pragma: no cover — unreachable, makes this an async generator
@@ -230,3 +230,94 @@ async def test_producer_exception_emits_failed_event_and_closes_stream():
         # failed 事件应含 error 字段
         failed = next(e for e in events if e["state"] == "failed")
         assert "error" in failed
+
+
+# =============================================================================
+# I3: 回归保护 — producer 必须把 request body 里的 llm_config 透传给 agent.run_loop
+# =============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_producer_passes_llm_config_to_run_loop_when_api_key_and_url_provided():
+    """回归保护:当请求体含 api_key + api_url 时,producer 必须把 llm_config
+    传给 agent.run_loop,而不是用实例化时为 None 的默认 LLM。
+
+    之前 PR #28 + PR #27 让 IPC 能调通,但 /chat/stream 一直报 "LLM 未配置"
+    因为 producer 构造了 llm_config 却没传给 run_loop(签名根本不接受)。
+    本测试锁定 producer 的透传行为。
+    """
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    captured_kwargs: dict = {}
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            create_resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={
+                    "session_id": "s",
+                    "message": "hi",
+                    "api_key": "sk-test-123",
+                    "api_url": "https://example.com/v1",
+                    "model": "test-model",
+                    "temperature": 0.3,
+                },
+            )
+            assert create_resp.status_code == 200
+            stream_id = create_resp.json()["streamId"]
+
+            # 拉一次 attach 让 producer 跑完
+            attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+            assert attach_resp.status_code == 200
+
+    # 关键断言: llm_config 真的被传过去了
+    assert (
+        "llm_config" in captured_kwargs
+    ), f"producer 没把 llm_config 透传给 run_loop,kwargs={captured_kwargs}"
+    llm_config = captured_kwargs["llm_config"]
+    assert llm_config is not None
+    assert llm_config["api_key"] == "sk-test-123"
+    assert llm_config["base_url"] == "https://example.com/v1"
+    assert llm_config["model"] == "test-model"
+    assert llm_config["provider"] == "custom"
+    assert llm_config["temperature"] == 0.3
+
+
+@pytest.mark.asyncio()
+async def test_producer_passes_no_llm_config_when_request_omits_api_key():
+    """请求不带 api_key/api_url → producer 不传 llm_config(走默认 agent client)。"""
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    captured_kwargs: dict = {}
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            create_resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={"session_id": "s", "message": "hi"},
+            )
+            stream_id = create_resp.json()["streamId"]
+            attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+            assert attach_resp.status_code == 200
+
+    # 没 api_key/api_url → llm_config 应该是 None
+    assert captured_kwargs.get("llm_config") is None
