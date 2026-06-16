@@ -2,6 +2,7 @@
 Sage - 记忆型 AI 桌面助手
 FastAPI 后端入口
 """
+import asyncio
 import logging
 import os
 import uuid
@@ -15,6 +16,7 @@ from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
+from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
@@ -116,6 +118,13 @@ async def lifespan(app: FastAPI):
     if seeded:
         logger.info("已种子化 %d 个默认 agent (primary/researcher/coder/memory_manager)", seeded)
 
+    # I2: chat 流注册表 — 拆分 /chat/stream 为 create + attach,避免 LLM 被调两次
+    app.state.streams = StreamRegistry()
+    sweeper_task = asyncio.create_task(
+        _periodic_stream_sweeper(app.state.streams), name="chat-stream-sweeper"
+    )
+    logger.info("ChatStreamRegistry 已初始化(后台 sweeper 每 60s 清理孤儿流)")
+
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
     api_mode = os.environ.get("API_MODE", "hex").lower()
     if api_mode == "hex":
@@ -129,7 +138,28 @@ async def lifespan(app: FastAPI):
     yield
 
     # 关闭时清理
-    pass
+    sweeper_task.cancel()
+    try:
+        await sweeper_task
+    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        pass
+    # 取消所有残留的 producer task
+    if hasattr(app.state, "streams") and app.state.streams is not None:
+        for entry in list(app.state.streams._entries.values()):
+            if entry.task is not None and not entry.task.done():
+                entry.task.cancel()
+
+
+async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
+    """每 60s 清理一次孤儿流(创建后 5 分钟仍未 done/failed 的)。"""
+    try:
+        while True:
+            await asyncio.sleep(interval_s)
+            removed = await registry.sweep_expired(max_age_seconds=300.0)
+            if removed:
+                logger.info("chat-stream sweeper removed %d stale streams", removed)
+    except asyncio.CancelledError:
+        return
 
 
 # 创建 FastAPI 应用

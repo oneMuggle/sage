@@ -48,10 +48,23 @@ def setup_test_db(tmp_db_path):
 @pytest_asyncio.fixture
 async def client():
     """提供异步 HTTP 测试客户端"""
+    # I2: tests 不走 FastAPI lifespan(ASGITransport 默认不触发),
+    # 但 app.state.streams 必须存在否则 /chat/stream/{id} 端点 500。
+    # 这里兜底初始化并在测试间清空,保证隔离。
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        from backend.api.chat_stream_registry import StreamRegistry
+
+        app.state.streams = StreamRegistry()
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as c:
         yield c
+    # 清理:取消任何残留 task,清空注册表
+    if hasattr(app.state, "streams") and app.state.streams is not None:
+        for entry in list(app.state.streams._entries.values()):
+            if entry.task is not None and not entry.task.done():
+                entry.task.cancel()
+        app.state.streams._entries.clear()
 
 
 # ========== LLM Mock Fixtures (P0-T7) ==========

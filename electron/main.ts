@@ -151,13 +151,14 @@ async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
 /**
  * Forward invoke(cmd, args) to FastAPI backend HTTP endpoint.
  * Command-to-route mapping mirrors the original Tauri command surface.
+ *
+ * I2: 后端 /chat/stream 拆成 create + attach。create 端点(agent_chat_stream)
+ * 直接返回 {streamId: '...'} JSON,无需读 NDJSON 首行。attach 端点由
+ * ipcMain.handle('sage:listen') 触发 relayChatStream,GET 拉事件。
+ *
+ * I1 fix (待清理): 老的 pendingChatArgs TTL 缓存在 I2 后不再需要(后端持有 args,
+ * streamId 唯一即可定位)。本 PR 暂时保留该类供 review,下一 PR 删除。
  */
-
-// Bridge invoke(agent_chat_stream) → listen(chat-stream-{streamId}):
-// renderer first invokes to get a streamId, then subscribes via listen();
-// we cache the original request args by streamId so the listen phase can
-// replay them when opening the actual NDJSON stream to the renderer.
-const pendingChatArgs = new Map<string, Record<string, unknown>>();
 
 async function invokeBackend(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
   const route = COMMAND_ROUTES[cmd];
@@ -176,38 +177,6 @@ async function invokeBackend(cmd: string, args: Record<string, unknown> = {}): P
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Backend ${route.method} ${url} → ${res.status}: ${text}`);
-  }
-  // chat/stream returns NDJSON: read the first line to obtain a streamId
-  // metadata (backend may emit it on the first line), then close the body
-  // — the relay phase (sage:listen) re-issues a fresh POST to stream events
-  // to the renderer. We cache the original args by streamId so the listen
-  // handler can replay the request.
-  if (route.isSse) {
-    if (!res.body) {
-      throw new Error(`Backend ${route.method} ${url} returned no body for SSE`);
-    }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    const { value } = await reader.read();
-    reader.cancel().catch(() => undefined);
-    const firstLine = decoder.decode(value).split('\n')[0].trim();
-    // Frontend sends `sessionId` (camelCase) via the invoke IPC payload, but
-    // also accept `session_id` (snake_case) for compatibility. Without this
-    // fallback, streamId collapses to '' and the chat-stream-{streamId}
-    // listener match fails, breaking the entire SSE relay.
-    const sessionIdArg = (args.sessionId ?? args.session_id) as string | undefined;
-    let streamId: string;
-    try {
-      const parsed = JSON.parse(firstLine) as { streamId?: unknown };
-      streamId =
-        typeof parsed.streamId === 'string' && parsed.streamId
-          ? parsed.streamId
-          : String(sessionIdArg ?? '');
-    } catch {
-      streamId = String(sessionIdArg ?? '');
-    }
-    pendingChatArgs.set(streamId, args);
-    return streamId;
   }
   return res.json();
 }
@@ -288,9 +257,9 @@ function registerIpcHandlers(): void {
         const streamId = chatStreamMatch[1];
         const abort = new AbortController();
         eventSubscriptions.set(event, abort);
-        const args = pendingChatArgs.get(streamId) ?? {};
-        pendingChatArgs.delete(streamId);
-        relayChatStream(senderWebContents, event, streamId, args, BACKEND_URL, abort.signal).catch(
+        // I2: 直接用 streamId attach 到后端已有流 — 不再需要 pendingChatArgs
+        // 缓存 args(后端持有,前端只关心 streamId)
+        relayChatStream(senderWebContents, event, streamId, BACKEND_URL, abort.signal).catch(
           (e) => {
             if (e instanceof Error && e.name !== 'AbortError') {
               console.error(`[relay ${event}] error:`, e.message);
@@ -314,11 +283,6 @@ function registerIpcHandlers(): void {
       if (abort) {
         abort.abort();
         eventSubscriptions.delete(event);
-        // Free cached chat args too so a re-listen for the same streamId
-        // doesn't pick up stale args from a previous request.
-        if (event.startsWith('chat-stream-')) {
-          pendingChatArgs.delete(event.replace(/^chat-stream-/, ''));
-        }
         console.log(`[ipc:sage:unlisten] aborted: ${event}`);
       }
       return { ok: true };
@@ -327,7 +291,6 @@ function registerIpcHandlers(): void {
 }
 
 function shutdownBackend(): void {
-  pendingChatArgs.clear();
   if (backendProc && backendProc.exitCode === null) {
     console.log('[main] killing backend subprocess');
     backendProc.kill('SIGTERM');

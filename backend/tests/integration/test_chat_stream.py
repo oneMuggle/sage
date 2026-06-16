@@ -1,23 +1,35 @@
 """
-/chat/stream 端点 NDJSON 流式响应测试
+/chat/stream create + attach 端点集成测试 (I2)
 
-验证 /api/v1/chat/stream 端点：
-1. 以 NDJSON 格式逐事件下发 AgentEvent
-2. 每个事件可被独立解析为 JSON 对象
-3. thinking / acting / observing / done 状态正确序列化
-4. tool_call 字段包含 OpenAI 风格的 function.name 结构
+拆分原 /chat/stream POST 流式响应为:
+  - POST /chat/stream        → 立即返回 {"streamId": ...},后台启动 agent.run_loop
+  - GET  /chat/stream/{id}   → NDJSON 流式输出已产生的事件
 
-注意：路由通过 app.include_router(api_router, prefix="/api/v1") 注册，
-所以实际挂载路径是 /api/v1/chat/stream。
+主要验证点:
+  1. create 返回 streamId,无 NDJSON
+  2. attach 返回 NDJSON 事件
+  3. **两个 attach 共享同一 streamId,只触发一次 LLM**(回归 I2 关键不变性)
+  4. 未知 streamId → 404
+  5. producer 抛异常时,attach 仍能拿到 failed 事件 + 正常关闭
+
+注意:路由通过 app.include_router(legacy_router, prefix="/api/v1") 注册,
+所以实际挂载路径是 /api/v1/chat/stream 和 /api/v1/chat/stream/{id}。
 """
 
+import asyncio
+import contextlib
 import json
 from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequest, ToolCallResult
+from backend.core.legacy.agent_state import (
+    AgentEvent,
+    AgentState,
+    ToolCallRequest,
+    ToolCallResult,
+)
 from backend.main import app
 
 pytestmark = pytest.mark.integration
@@ -25,9 +37,49 @@ pytestmark = pytest.mark.integration
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
 
 
+def _parse_ndjson(text: str) -> list[dict]:
+    return [json.loads(line) for line in text.split("\n") if line.strip()]
+
+
 @pytest.mark.asyncio()
-async def test_chat_stream_yields_ndjson_events():
-    """/chat/stream 端点以 NDJSON 格式返回 AgentEvent。"""
+async def test_chat_stream_create_returns_stream_id_immediately():
+    """POST /chat/stream 返回 {"streamId": "..."},无 NDJSON 流式输出。"""
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    # 兜底:某些测试路径可能不经过 client fixture
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.post(
+            CHAT_STREAM_PATH,
+            json={
+                "session_id": "00000000-0000-0000-0000-000000000000",
+                "message": "hi",
+            },
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "streamId" in body
+    assert isinstance(body["streamId"], str)
+    assert len(body["streamId"]) >= 16  # uuid4 长度
+
+    # 清理 task
+    entry = app.state.streams.get(body["streamId"])
+    if entry and entry.task and not entry.task.done():
+        entry.task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await entry.task
+
+
+@pytest.mark.asyncio()
+async def test_chat_stream_attach_streams_ndjson_events():
+    """create + attach: NDJSON 事件按序到达。"""
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
 
     async def mock_run_loop(messages, max_iterations=5):
         yield AgentEvent(state=AgentState.THINKING, iteration=0)
@@ -52,25 +104,129 @@ async def test_chat_stream_yields_ndjson_events():
         )
 
     with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
-        mock_agent = MockAgent.return_value
-        mock_agent.run_loop = mock_run_loop
+        MockAgent.return_value.run_loop = mock_run_loop
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(
+            # 1. create
+            create_resp = await ac.post(
                 CHAT_STREAM_PATH,
                 json={
                     "session_id": "00000000-0000-0000-0000-000000000000",
                     "message": "1+1 等于几",
                 },
             )
+            assert create_resp.status_code == 200
+            stream_id = create_resp.json()["streamId"]
 
-        assert resp.status_code == 200
-        lines = [line for line in resp.text.split("\n") if line.strip()]
-        events = [json.loads(line) for line in lines]
-        assert len(events) == 4
-        assert events[0]["state"] == "thinking"
-        assert events[1]["state"] == "acting"
-        assert events[1]["tool_call"]["function"]["name"] == "calculator"
-        assert events[2]["state"] == "observing"
-        assert events[3]["state"] == "done"
-        assert events[3]["content"] == "答案是 2"
+            # 2. attach
+            attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+            assert attach_resp.status_code == 200
+            assert attach_resp.headers["content-type"].startswith("application/x-ndjson")
+
+            events = _parse_ndjson(attach_resp.text)
+            assert len(events) == 4
+            assert events[0]["state"] == "thinking"
+            assert events[1]["state"] == "acting"
+            assert events[1]["tool_call"]["function"]["name"] == "calculator"
+            assert events[2]["state"] == "observing"
+            assert events[3]["state"] == "done"
+            assert events[3]["content"] == "答案是 2"
+
+
+@pytest.mark.asyncio()
+async def test_two_attaches_share_queue_without_invoking_llm_twice():
+    """关键不变性:同一 streamId 多次 attach,LLM 只被调一次。
+
+    回归 I2 的核心目的 — 修复前 invoke+relay 各发一次 POST,LLM 调两次。
+
+    注:多 attach 共享一个 asyncio.Queue,事件会被两个 consumer 竞争消费
+    (类似 work-stealing)。所以两个 attach 各自只拿部分事件,但合计覆盖全部。
+    """
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    run_loop_call_count = 0
+    lock = asyncio.Lock()
+
+    async def mock_run_loop(messages, max_iterations=5):
+        nonlocal run_loop_call_count
+        async with lock:
+            run_loop_call_count += 1
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            create_resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={"session_id": "s", "message": "hi"},
+            )
+            stream_id = create_resp.json()["streamId"]
+
+            # 并发两个 attach
+            resp_a, resp_b = await asyncio.gather(
+                ac.get(f"{CHAT_STREAM_PATH}/{stream_id}"),
+                ac.get(f"{CHAT_STREAM_PATH}/{stream_id}"),
+            )
+
+            # 两个响应都成功
+            assert resp_a.status_code == 200
+            assert resp_b.status_code == 200
+
+            # 关键断言:LLM 只跑了一次(回归 I2 核心)
+            assert run_loop_call_count == 1, f"LLM 应该只调一次,实际 {run_loop_call_count} 次"
+
+            # 共享 queue 下事件被两个 consumer 竞争,合计应包含全部事件
+            events_a = _parse_ndjson(resp_a.text)
+            events_b = _parse_ndjson(resp_b.text)
+            all_states = {e["state"] for e in events_a} | {e["state"] for e in events_b}
+            assert "thinking" in all_states
+            assert "done" in all_states
+
+
+@pytest.mark.asyncio()
+async def test_attach_unknown_stream_id_returns_404():
+    """attach 一个不存在的 streamId → 404。"""
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.get(f"{CHAT_STREAM_PATH}/does-not-exist")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio()
+async def test_producer_exception_emits_failed_event_and_closes_stream():
+    """producer 抛异常 → attach 收到 failed 事件 + 流正常关闭。"""
+
+    async def broken_run_loop(messages, max_iterations=5):
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        raise RuntimeError("LLM exploded")
+        yield  # pragma: no cover — unreachable, makes this an async generator
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = broken_run_loop
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            create_resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={"session_id": "s", "message": "hi"},
+            )
+            stream_id = create_resp.json()["streamId"]
+            attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+
+        assert attach_resp.status_code == 200
+        events = _parse_ndjson(attach_resp.text)
+        # 至少包含 thinking + failed(异常后无 done)
+        states = [e["state"] for e in events]
+        assert "thinking" in states
+        assert "failed" in states
+        # failed 事件应含 error 字段
+        failed = next(e for e in events if e["state"] == "failed")
+        assert "error" in failed

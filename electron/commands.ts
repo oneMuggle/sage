@@ -12,7 +12,13 @@ export interface CommandRoute {
 
 export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // chat
-  agent_chat_stream: { method: 'POST', path: () => '/chat/stream', isSse: true },
+  // I2: create + attach split — POST 立即返回 {streamId} 启动后台 LLM 调用,
+  // GET attach 到同一 stream 拉取 NDJSON 事件。LLM 只跑一次。
+  agent_chat_stream: { method: 'POST', path: () => '/chat/stream' },
+  attach_chat_stream: {
+    method: 'GET',
+    path: (a) => `/chat/stream/${encodeURIComponent(String(a.streamId))}`,
+  },
   interrupt_agent: { method: 'POST', path: () => '/interrupt' },
 
   // sessions
