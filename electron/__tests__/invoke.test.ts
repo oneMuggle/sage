@@ -33,18 +33,16 @@ describe('invokeBackend', () => {
   });
 
   it('throws UnknownIpcCommandError for unknown cmd', async () => {
-    await expect(invokeBackend('foo_bar', {}, 'http://127.0.0.1:8765')).rejects.toThrow(
-      /foo_bar/,
-    );
+    await expect(invokeBackend('foo_bar', {}, 'http://127.0.0.1:8765')).rejects.toThrow(/foo_bar/);
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 
-  it('GET /sessions?limit=100&offset=0 with no body and parses JSON response', async () => {
+  it('GET /api/v1/sessions?limit=100&offset=0 with no body and parses JSON response', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse([{ id: 's1' }]));
     const result = await invokeBackend('list_sessions', {}, 'http://127.0.0.1:8765');
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:8765/sessions?limit=100&offset=0',
+      'http://127.0.0.1:8765/api/v1/sessions?limit=100&offset=0',
       expect.objectContaining({ method: 'GET' }),
     );
     const init = mockedFetch.mock.calls[0][1] as RequestInit;
@@ -56,16 +54,16 @@ describe('invokeBackend', () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse([]));
     await invokeBackend('list_sessions', { limit: 5, offset: 20 }, 'http://127.0.0.1:8765');
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:8765/sessions?limit=5&offset=20',
+      'http://127.0.0.1:8765/api/v1/sessions?limit=5&offset=20',
       expect.anything(),
     );
   });
 
-  it('POST /sessions serializes args as JSON body and sends Content-Type', async () => {
+  it('POST /api/v1/sessions serializes args as JSON body and sends Content-Type', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse({ id: 'new' }));
     await invokeBackend('create_session', { title: 'hello' }, 'http://x');
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://x/sessions',
+      'http://x/api/v1/sessions',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
@@ -78,7 +76,7 @@ describe('invokeBackend', () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse({ ok: true }));
     await invokeBackend('delete_session', { id: 's1' }, 'http://x');
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://x/sessions/s1',
+      'http://x/api/v1/sessions/s1',
       expect.objectContaining({ method: 'DELETE' }),
     );
     const init = mockedFetch.mock.calls[0][1] as RequestInit;
@@ -90,9 +88,9 @@ describe('invokeBackend', () => {
     await expect(invokeBackend('list_sessions', {}, 'http://x')).rejects.toThrow(/500.*boom/);
   });
 
-  it('GET /sessions/:id url-encodes ids with special characters', async () => {
+  it('GET /api/v1/sessions/:id url-encodes ids with special characters', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse({ id: 's/1' }));
     await invokeBackend('get_session', { id: 's/1' }, 'http://x');
-    expect(mockedFetch).toHaveBeenCalledWith('http://x/sessions/s%2F1', expect.anything());
+    expect(mockedFetch).toHaveBeenCalledWith('http://x/api/v1/sessions/s%2F1', expect.anything());
   });
 });

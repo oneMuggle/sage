@@ -14,12 +14,16 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // chat
   // I2: create + attach split — POST 立即返回 {streamId} 启动后台 LLM 调用,
   // GET attach 到同一 stream 拉取 NDJSON 事件。LLM 只跑一次。
-  agent_chat_stream: { method: 'POST', path: () => '/chat/stream' },
+  //
+  // 注意：所有路径以 /api/v1 开头。backend/main.py:215 把 legacy_router 挂在
+  // /api/v1 下 —— 去掉前缀会全部 404。commands.test.ts 有 guard 测试
+  // 防止漏前缀。
+  agent_chat_stream: { method: 'POST', path: () => '/api/v1/chat/stream' },
   attach_chat_stream: {
     method: 'GET',
-    path: (a) => `/chat/stream/${encodeURIComponent(String(a.streamId))}`,
+    path: (a) => `/api/v1/chat/stream/${encodeURIComponent(String(a.streamId))}`,
   },
-  interrupt_agent: { method: 'POST', path: () => '/interrupt' },
+  interrupt_agent: { method: 'POST', path: () => '/api/v1/interrupt' },
 
   // sessions
   list_sessions: {
@@ -27,14 +31,17 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => {
       const limit = (a?.limit as number) ?? 100;
       const offset = (a?.offset as number) ?? 0;
-      return `/sessions?limit=${limit}&offset=${offset}`;
+      return `/api/v1/sessions?limit=${limit}&offset=${offset}`;
     },
   },
-  create_session: { method: 'POST', path: () => '/sessions' },
-  get_session: { method: 'GET', path: (a) => `/sessions/${encodeURIComponent(String(a.id))}` },
+  create_session: { method: 'POST', path: () => '/api/v1/sessions' },
+  get_session: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.id))}`,
+  },
   delete_session: {
     method: 'DELETE',
-    path: (a) => `/sessions/${encodeURIComponent(String(a.id))}`,
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.id))}`,
   },
 
   // messages
@@ -44,19 +51,19 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const id = encodeURIComponent(String(a.sessionId));
       const limit = (a?.limit as number) ?? 100;
       const offset = (a?.offset as number) ?? 0;
-      return `/sessions/${id}/messages?limit=${limit}&offset=${offset}`;
+      return `/api/v1/sessions/${id}/messages?limit=${limit}&offset=${offset}`;
     },
   },
   delete_message: {
     method: 'POST',
-    path: (a) => `/messages/${encodeURIComponent(String(a.id))}/delete`,
+    path: (a) => `/api/v1/messages/${encodeURIComponent(String(a.id))}/delete`,
   },
 
   // memory
-  delete_memory: { method: 'POST', path: () => '/memory/delete' },
+  delete_memory: { method: 'POST', path: () => '/api/v1/memory/delete' },
 
   // evolution
-  trigger_evolution: { method: 'POST', path: () => '/evolution/trigger' },
+  trigger_evolution: { method: 'POST', path: () => '/api/v1/evolution/trigger' },
 };
 
 export class UnknownIpcCommandError extends Error {
