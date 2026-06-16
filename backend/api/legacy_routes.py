@@ -614,7 +614,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 {"role": "system", "content": "你是 Sage，一个智能 AI 助手。"},
                 {"role": "user", "content": data.message},
             ]
-            async for evt in agent.run_loop(messages):
+            async for evt in agent.run_loop(messages, llm_config=llm_config):
                 await entry.queue.put(evt.to_dict())
         except LLMError as e:
             logger.warning(
