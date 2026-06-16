@@ -31,6 +31,7 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import http from 'node:http';
+import { COMMAND_ROUTES, UnknownIpcCommandError } from './commands';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -150,28 +151,11 @@ async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
  * Forward invoke(cmd, args) to FastAPI backend HTTP endpoint.
  * Command-to-route mapping mirrors the original Tauri command surface.
  */
-const COMMAND_ROUTES: Record<
-  string,
-  { method: string; path: (args: Record<string, unknown>) => string }
-> = {
-  // chat
-  agent_chat_stream: { method: 'POST', path: () => '/chat/stream' },
-  interrupt_agent: { method: 'POST', path: () => '/interrupt' },
-  // sessions
-  delete_session: { method: 'DELETE', path: (a) => `/sessions/${a.id}` },
-  delete_message: { method: 'POST', path: (a) => `/messages/${a.id}/delete` },
-  // memory
-  delete_memory: { method: 'POST', path: () => '/memory/delete' },
-  // evolution
-  trigger_evolution: { method: 'POST', path: () => '/evolution/trigger' },
-};
 
 async function invokeBackend(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
   const route = COMMAND_ROUTES[cmd];
   if (!route) {
-    throw new Error(
-      `Unknown IPC command: ${cmd} (Phase 1 stub: see COMMAND_ROUTES in electron/main.ts)`,
-    );
+    throw new UnknownIpcCommandError(cmd);
   }
   const url = `${BACKEND_URL}${route.path(args)}`;
   const init: RequestInit = {
