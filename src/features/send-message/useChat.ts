@@ -56,15 +56,8 @@ export function useChat() {
       const sid = sessionId ?? currentSessionId;
       if (!sid || isLoading || loadingRef.current) return;
 
-      if (!activeEndpoint?.baseUrl) {
-        setError('未配置 API 地址，请在设置中配置');
-        return;
-      }
-
-      if (!settings.modelSelections.chatModelId) {
-        setError('未选择对话模型，请在设置中配置');
-        return;
-      }
+      // PR-6 风格:先加 user message,让用户立即看到自己输入的内容
+      // settings 缺失由 ChatInput 的 disabled 状态 + 提示条兜底,这里仅记录错误
 
       const requestId = crypto.randomUUID();
       logger.info(requestId, 'useChat.send.start', {
@@ -85,6 +78,21 @@ export function useChat() {
         created_at: Date.now(),
       };
       addMessage(userMessage);
+
+      if (!activeEndpoint?.baseUrl) {
+        // 仍记录错误供上层展示,但消息已经进 store
+        setError('未配置 API 地址，请在设置中配置');
+        loadingRef.current = false;
+        setIsLoading(false);
+        return;
+      }
+
+      if (!settings.modelSelections.chatModelId) {
+        setError('未选择对话模型，请在设置中配置');
+        loadingRef.current = false;
+        setIsLoading(false);
+        return;
+      }
 
       // PR-6: 先占位 assistant message, 流式过程中累积 content
       const assistantId = crypto.randomUUID();

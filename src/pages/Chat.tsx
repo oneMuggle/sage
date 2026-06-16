@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { useChat } from '../features/send-message/useChat';
+import { useSettings } from '../features/manage-settings/useSettings';
 import { useStore } from '../shared/lib/store';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
@@ -11,6 +13,13 @@ export function Chat() {
     useChat();
 
   const { currentSessionId, setCurrentSessionId, createSession } = useStore();
+  const { settings } = useSettings();
+  const navigate = useNavigate();
+
+  const activeEndpoint = settings.endpoints.find((e) => e.isActive);
+  const hasConfig =
+    Boolean(activeEndpoint?.baseUrl) && Boolean(settings.modelSelections.chatModelId);
+  const showConfigWarning = !hasConfig;
 
   useEffect(() => {
     if (currentSessionId) {
@@ -84,11 +93,30 @@ export function Chat() {
         )}
       </div>
 
+      {showConfigWarning && (
+        <div
+          data-testid="config-warning"
+          className="px-4 py-2 bg-yellow-50 border-t border-yellow-300 text-yellow-900 text-xs flex items-center gap-2"
+        >
+          <span aria-hidden="true">⚠️</span>
+          <span>
+            未配置 API 端点或对话模型，
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className="underline text-yellow-900 hover:text-yellow-700 transition-colors"
+            >
+              前往设置
+            </button>
+          </span>
+        </div>
+      )}
+
       <ChatInput
         onSend={handleSendMessage}
         onInterrupt={interrupt}
         isLoading={isLoading}
-        disabled={false}
+        disabled={!hasConfig}
         placeholder="输入消息..."
       />
     </div>
