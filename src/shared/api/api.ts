@@ -414,8 +414,10 @@ export const chatApi = {
       });
     }
 
-    // 1) 启动流 (同步 invoke, 立即返回 stream_id)
-    const streamId = await invoke<string>('agent_chat_stream', {
+    // 1) 启动流 (同步 invoke, 立即返回 { streamId: "..." } 对象)
+    // 后端 /chat/stream POST 真实响应是 JSON {streamId}, 不是裸 string
+    // (invoke<T> 泛型是编译期断言,运行时还是 res.json() — 必须是解构)
+    const { streamId } = await invoke<{ streamId: string }>('agent_chat_stream', {
       sessionId,
       message: safeMessage,
       apiKey: config?.apiKey ?? null,
