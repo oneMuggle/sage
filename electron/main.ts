@@ -191,15 +191,20 @@ async function invokeBackend(cmd: string, args: Record<string, unknown> = {}): P
     const { value } = await reader.read();
     reader.cancel().catch(() => undefined);
     const firstLine = decoder.decode(value).split('\n')[0].trim();
+    // Frontend sends `sessionId` (camelCase) via the invoke IPC payload, but
+    // also accept `session_id` (snake_case) for compatibility. Without this
+    // fallback, streamId collapses to '' and the chat-stream-{streamId}
+    // listener match fails, breaking the entire SSE relay.
+    const sessionIdArg = (args.sessionId ?? args.session_id) as string | undefined;
     let streamId: string;
     try {
       const parsed = JSON.parse(firstLine) as { streamId?: unknown };
       streamId =
         typeof parsed.streamId === 'string' && parsed.streamId
           ? parsed.streamId
-          : String((args.session_id as string | undefined) ?? '');
+          : String(sessionIdArg ?? '');
     } catch {
-      streamId = String((args.session_id as string | undefined) ?? '');
+      streamId = String(sessionIdArg ?? '');
     }
     pendingChatArgs.set(streamId, args);
     return streamId;
@@ -322,6 +327,7 @@ function registerIpcHandlers(): void {
 }
 
 function shutdownBackend(): void {
+  pendingChatArgs.clear();
   if (backendProc && backendProc.exitCode === null) {
     console.log('[main] killing backend subprocess');
     backendProc.kill('SIGTERM');

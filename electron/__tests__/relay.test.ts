@@ -65,9 +65,11 @@ describe('relayChatStream', () => {
 
   it('POSTs /chat/stream with the same args as invoke, then relays NDJSON to webContents', async () => {
     const wc = new MockWebContents();
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      makeNdjsonResponse([JSON.stringify({ state: 'done', content: 'ok' })]),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        makeNdjsonResponse([JSON.stringify({ state: 'done', content: 'ok' })]),
+      );
     vi.stubGlobal('fetch', fetchMock);
 
     await relayChatStream(
@@ -83,7 +85,10 @@ describe('relayChatStream', () => {
       'http://127.0.0.1:8765/chat/stream',
       expect.objectContaining({
         method: 'POST',
-        body: expect.stringContaining('"sessionId":"sid-1"'),
+        // The FastAPI/Pydantic backend reads `session_id` (snake_case) — verify
+        // the relay translates the renderer's camelCase `sessionId` into the
+        // snake_case contract the backend actually expects.
+        body: expect.stringContaining('"session_id":"sid-1"'),
       }),
     );
     expect(wc.sent).toEqual([
@@ -93,9 +98,7 @@ describe('relayChatStream', () => {
 
   it('does nothing if backend returns non-OK (no error thrown)', async () => {
     const wc = new MockWebContents();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
-      new Response('boom', { status: 500 }),
-    ));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('boom', { status: 500 })));
     await relayChatStream(
       wc as unknown as Electron.WebContents,
       'chat-stream-abc',
