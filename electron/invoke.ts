@@ -33,7 +33,11 @@ export function camelToSnakeKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => camelToSnakeKeys(item));
   }
-  if (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       const snake = k.replace(/([A-Z])/g, (_, c) => '_' + c.toLowerCase());
