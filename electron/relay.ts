@@ -84,7 +84,11 @@ export async function relayChatStream(
 
   if (!res.ok) return;
 
-  await parseNdjsonStream(res, (event) => {
-    webContents.send(`sage:event:${eventName}`, event);
-  }, signal);
+  await parseNdjsonStream(
+    res,
+    (event) => {
+      webContents.send(`sage:event:${eventName}`, event);
+    },
+    signal,
+  );
 }
