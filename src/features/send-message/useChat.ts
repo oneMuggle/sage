@@ -138,6 +138,17 @@ export function useChat() {
         );
       };
 
+      // I5-2: 中间态 (thinking/acting/observing) 的 uiText 应"覆盖"而非"追加"，
+      // 避免 "🤔 思考中…🤔 思考中…" 这种重复前缀 bug。
+      // appendContent 用于累积真实回答 (content_delta / done.content)，
+      // replaceContent 用于切换中间态占位符。
+      const replaceContent = (next: string): void => {
+        streamingContentRef.current = next;
+        setStreaming((prev) =>
+          prev && prev.messageId === assistantId ? { ...prev, content: next } : prev,
+        );
+      };
+
       const handleError = (err: unknown): void => {
         logger.error(requestId, 'useChat.send.failed', err);
         if (err instanceof ApiException && err.llmError) {
@@ -190,16 +201,16 @@ export function useChat() {
             onEvent: (evt) => {
               const uiText = agentStateToUiText(evt.state, evt.tool_call?.function.name);
               // 累积策略 (I5: 流式逐字):
-              // - content_delta + done.content 触发 appendContent 追加
-              // - thinking/acting/observing 的 uiText 也走 appendContent (覆盖式累积到 ref,
-              //   让用户看到"思考中…"占位)
+              // - content_delta + done.content 触发 appendContent 追加 (累积真实回答)
+              // - thinking/acting/observing 的 uiText 触发 replaceContent 覆盖
+              //   (切换中间态占位, 避免 "🤔 思考中…🤔 思考中…" 重复前缀)
               if (typeof evt.content === 'string' && evt.content.length > 0) {
                 appendContent(evt.content);
                 if (evt.state === 'done') {
                   lastDoneContent = evt.content;
                 }
               } else if (uiText) {
-                appendContent(uiText);
+                replaceContent(uiText);
               }
               setStreaming((prev) =>
                 prev && prev.messageId === assistantId ? { ...prev, state: evt.state } : prev,
