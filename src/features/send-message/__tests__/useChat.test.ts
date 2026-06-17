@@ -280,4 +280,162 @@ describe('useChat', () => {
       }),
     ).resolves.not.toThrow();
   });
+
+  // I5: 流式逐字渲染 — backend producer 把 done.content 拆成 content_delta chunks,
+  // useChat 必须累积 chunks 成完整回答 (而不是只显示最后 chunk)。
+  // 旧实现是覆盖 (ref = next) — 修成 ref += next 才能逐字增长。
+  it('accumulates content_delta chunks into full assistant content', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-chunks' });
+
+    let capturedCb:
+      | ((e: { payload: { state: string; iteration: number; content?: string } }) => void)
+      | null = null;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
+      ) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('你好') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(capturedCb).not.toBeNull();
+
+    // 模拟 producer 拆 3 个 chunk + thinking 占位 + done 收尾
+    act(() => {
+      capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '你好,' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '我是 ' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: 'Sage' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 1, content: '你好,我是 Sage' } });
+    });
+
+    // 关键断言: assistant message 的 content 必须是完整累积,不是最后 chunk "Sage"
+    await waitFor(() => {
+      const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(assistantMsg?.content).toBe('你好,我是 Sage');
+    });
+
+    await act(async () => {
+      await sendPromise!;
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  // I5-2 回归保护: thinking/acting/observing 的 uiText 必须 REPLACE 而不是 APPEND,
+  // 否则会出现 "🤔 思考中…🤔 思考中…" 这种重复前缀。
+  // 旧实现 append 导致每次 state event 都拼到 ref 上,最终 done.content 还要被
+  // ref 里的占位符污染 (用 lastDoneContent 修复)。本次把 uiText 改成 replace,
+  // 让 state event 清掉之前的占位符,真正累积只来自 content_delta。
+  it('replaces thinking/acting/observing uiText (no double-prefix bug)', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-states' });
+
+    let capturedCb:
+      | ((e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            tool_call?: { function: { name: string } };
+          };
+        }) => void)
+      | null = null;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            tool_call?: { function: { name: string } };
+          };
+        }) => void,
+      ) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('hi') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(capturedCb).not.toBeNull();
+
+    // 模拟 producer: thinking → acting → observing → content_delta* → done
+    act(() => {
+      capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
+    });
+    // 关键断言 1: thinking 后 content 应该是单个 "🤔 思考中…",不是重复
+    const afterThinking = result.current.messages.find((m) => m.role === 'assistant');
+    expect(afterThinking?.content).toBe('🤔 思考中…');
+
+    act(() => {
+      capturedCb!({
+        payload: { state: 'acting', iteration: 0, tool_call: { function: { name: 'calculator' } } },
+      });
+    });
+    // 关键断言 2: acting 后应该是 "🔧 调工具 calculator…",之前 thinking 占位已清掉
+    const afterActing = result.current.messages.find((m) => m.role === 'assistant');
+    expect(afterActing?.content).toBe('🔧 调工具 calculator…');
+
+    act(() => {
+      capturedCb!({ payload: { state: 'observing', iteration: 0 } });
+    });
+    const afterObserving = result.current.messages.find((m) => m.role === 'assistant');
+    expect(afterObserving?.content).toBe('👀 观察结果…');
+
+    // content_delta chunks 走 append,累积到当前 content (当前是 observing 占位)
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '答' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '案是' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: ' 2' } });
+    });
+    // chunks 期间 uiText 占位保留作为视觉上下文(让用户看到 "刚才在观察,现在答案出来")
+    const afterChunks = result.current.messages.find((m) => m.role === 'assistant');
+    expect(afterChunks?.content).toBe('👀 观察结果…答案是 2');
+
+    // done 事件触发 finishStream, lastDoneContent 覆盖 store content → 清掉占位
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 1, content: '答案是 2' } });
+    });
+
+    await act(async () => {
+      await sendPromise!;
+    });
+    // 最终 store content = lastDoneContent (clean)
+    const final = result.current.messages.find((m) => m.role === 'assistant');
+    expect(final?.content).toBe('答案是 2');
+    expect(result.current.isLoading).toBe(false);
+  });
 });

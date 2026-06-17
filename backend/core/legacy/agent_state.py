@@ -18,6 +18,9 @@ class AgentState(str, Enum):
     THINKING = "thinking"
     ACTING = "acting"
     OBSERVING = "observing"
+    # I4: 流式 LLM 响应时,每个 token chunk 推一个 CONTENT_DELTA 事件,
+    # 前端 appendContent 累积,实现逐字流式
+    CONTENT_DELTA = "content_delta"
     DONE = "done"
     FAILED = "failed"
 

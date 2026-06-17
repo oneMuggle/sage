@@ -52,7 +52,14 @@ export interface ChatResponse {
 // ==================== Agent 流式事件 (PR-6) ====================
 
 /** Agent 状态机 — 与后端 backend.core.legacy.agent_state.AgentState 一致 */
-export type AgentState = 'idle' | 'thinking' | 'acting' | 'observing' | 'done' | 'failed';
+export type AgentState =
+  | 'idle'
+  | 'thinking'
+  | 'acting'
+  | 'observing'
+  | 'content_delta'
+  | 'done'
+  | 'failed';
 
 /** 流式聊天工具调用 (对应 OpenAI 工具调用格式) */
 export interface AgentToolCall {

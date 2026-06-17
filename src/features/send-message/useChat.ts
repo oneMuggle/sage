@@ -130,6 +130,19 @@ export function useChat() {
       };
 
       const appendContent = (next: string): void => {
+        // I5: 流式逐字 — 之前是覆盖 (ref = next), 现在追加 (ref += next),
+        // 让 CONTENT_DELTA 事件累积成完整回答
+        streamingContentRef.current = streamingContentRef.current + next;
+        setStreaming((prev) =>
+          prev && prev.messageId === assistantId ? { ...prev, content: prev.content + next } : prev,
+        );
+      };
+
+      // I5-2: 中间态 (thinking/acting/observing) 的 uiText 应"覆盖"而非"追加"，
+      // 避免 "🤔 思考中…🤔 思考中…" 这种重复前缀 bug。
+      // appendContent 用于累积真实回答 (content_delta / done.content)，
+      // replaceContent 用于切换中间态占位符。
+      const replaceContent = (next: string): void => {
         streamingContentRef.current = next;
         setStreaming((prev) =>
           prev && prev.messageId === assistantId ? { ...prev, content: next } : prev,
@@ -159,11 +172,17 @@ export function useChat() {
       // 不能放 finally ——chatStream promise 在 listen() resolve 后就返回,
       // 不等 NDJSON 事件到。事件真实到达时机是 IPC 跨进程 (异步 macrotask),
       // 所以 cleanup 必须由 onDone / onError 触发。
+      //
+      // I5: onDone 时存 done 事件的 content (完整回答, 不是累积的 ref,
+      // 因为 ref 里混了 '🤔 思考中…' 占位符)。finishStream 用这个写 store。
       let finished = false;
+      let lastDoneContent: string | null = null;
       const finishStream = (): void => {
         if (finished) return;
         finished = true;
-        const finalContent = streamingContentRef.current;
+        // 优先用 done 事件自带的完整 content (避免混入 thinking 占位符)
+        // 退回到 streamingContentRef (向后兼容旧的非流式 done 事件)
+        const finalContent = lastDoneContent ?? streamingContentRef.current;
         if (finalContent) {
           updateMessage(assistantId, { content: finalContent });
         }
@@ -181,12 +200,17 @@ export function useChat() {
           {
             onEvent: (evt) => {
               const uiText = agentStateToUiText(evt.state, evt.tool_call?.function.name);
-              // 累积策略: thinking/acting/observing 替换为 uiText (单一占位);
-              // 若事件同时带 content (LLM 最终答案逐字到达), 替换占位为答案。
+              // 累积策略 (I5: 流式逐字):
+              // - content_delta + done.content 触发 appendContent 追加 (累积真实回答)
+              // - thinking/acting/observing 的 uiText 触发 replaceContent 覆盖
+              //   (切换中间态占位, 避免 "🤔 思考中…🤔 思考中…" 重复前缀)
               if (typeof evt.content === 'string' && evt.content.length > 0) {
                 appendContent(evt.content);
+                if (evt.state === 'done') {
+                  lastDoneContent = evt.content;
+                }
               } else if (uiText) {
-                appendContent(uiText);
+                replaceContent(uiText);
               }
               setStreaming((prev) =>
                 prev && prev.messageId === assistantId ? { ...prev, state: evt.state } : prev,

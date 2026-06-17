@@ -3,6 +3,13 @@ API 路由定义
 """
 
 import asyncio
+
+# I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
+# 让前端能逐字渲染 (避免 LLM 一次返回完整字符串时 "砰一下" 全显示)。
+# 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls (大改),
+# 先用这个 producer 端的 fake stream 解决 90% 的视觉体验。
+_STREAMING_CHUNK_SIZE = 6
+_STREAMING_CHUNK_DELAY_S = 0.04
 import json
 import logging
 import uuid
@@ -615,7 +622,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 {"role": "user", "content": data.message},
             ]
             async for evt in agent.run_loop(messages, llm_config=llm_config):
-                await entry.queue.put(evt.to_dict())
+                # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
+                # 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls,
+                # 那是更大的重构;这个 producer 端的 fake stream 给出 90% 视觉效果。
+                if evt.state.value == "done" and evt.content:
+                    content = evt.content
+                    for i in range(0, len(content), _STREAMING_CHUNK_SIZE):
+                        delta = content[i : i + _STREAMING_CHUNK_SIZE]
+                        await entry.queue.put(
+                            {
+                                "state": "content_delta",
+                                "iteration": evt.iteration,
+                                "content": delta,
+                            }
+                        )
+                        await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
+                    # 最终 DONE 事件保留完整 content (前端 finishStream 需要)
+                    await entry.queue.put(evt.to_dict())
+                else:
+                    await entry.queue.put(evt.to_dict())
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "
