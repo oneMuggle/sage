@@ -140,6 +140,68 @@ describe('useChat', () => {
     );
   });
 
+  // 回归保护: 真实场景下 NDJSON 事件从主进程 IPC 跨进程过来,
+  // 一定晚于 chatStream() 的 await 解析(IPC 是异步 round-trip)。
+  // 旧测试用 Promise.resolve().then 调 cb 把事件塞在同一个微任务里,
+  // 掩盖了 finally 提前清 streaming state 的 bug。
+  it('persists streaming state for events arriving AFTER chatStream() resolves (real IPC timing)', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-real-timing' });
+
+    let capturedCb:
+      | ((e: { payload: { state: string; iteration: number; content?: string } }) => void)
+      | null = null;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
+      ) => {
+        // 保存 cb 但不立即调 — 模拟 IPC 事件在 chatStream() 返回后才到
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+
+    // 启动 sendMessage 但不 await 完(让 finally 跑)
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('ping') as unknown as Promise<void>;
+      // 让 chatStream() 内部的 listen await 完成,sendMessage 同步部分跑完
+      await Promise.resolve();
+      await Promise.resolve();
+      // 此时 finally 应该已跑过(如果 bug 存在,streaming state 被清)
+    });
+
+    // 现在模拟 IPC 事件到达 (用 setTimeout 推到下一个 macrotask,
+    // 确保在 sendMessage finally 之后)
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(capturedCb).not.toBeNull();
+    // 派发 thinking 事件
+    act(() => {
+      capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
+    });
+    // 派发 done 事件,带 content
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 0, content: 'real-timing answer' } });
+    });
+
+    // 关键断言: assistant message 必须有真实 content
+    // (旧 bug 下 content 是空 / '🤔 思考中…',永远不更新)
+    await waitFor(() => {
+      const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(assistantMsg?.content).toBe('real-timing answer');
+    });
+
+    // 等待 sendMessage 完全结束
+    await act(async () => {
+      await sendPromise!;
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
+
   it('sets error when chat API throws', async () => {
     seedActiveEndpoint();
     // PR-6: listen 抛错 → chatStream reject → handleError
