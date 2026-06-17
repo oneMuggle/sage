@@ -50,6 +50,9 @@ class LLMResponse:
     """LLM 回复"""
 
     content: str = ""
+    reasoning_content: str | None = (
+        None  # LLM 思考/推理过程（Claude extended thinking, o1 reasoning 等）
+    )
     model: str = ""
     finish_reason: str | None = None
     tool_calls: list[LLMToolCall] = field(default_factory=list)
@@ -222,6 +225,13 @@ class LLMClient:
         msg_data = choice.get("message", {})
         content = msg_data.get("content", "")
 
+        # 提取 reasoning_content（多提供商兼容）
+        # Anthropic Claude 使用 reasoning_content 字段
+        # OpenAI o1/o3 使用 reasoning 或 reasoning_content 字段
+        # DeepSeek 使用 reasoning_content 字段
+        # 优先使用 reasoning_content，其次 reasoning
+        reasoning_content = msg_data.get("reasoning_content") or msg_data.get("reasoning")
+
         tool_calls = []
         if msg_data.get("tool_calls"):
             tool_calls = self._parse_tool_calls(msg_data["tool_calls"])
@@ -230,6 +240,7 @@ class LLMClient:
 
         return LLMResponse(
             content=content,
+            reasoning_content=reasoning_content,
             model=data.get("model", self.config.model),
             finish_reason=choice.get("finish_reason"),
             tool_calls=tool_calls,

@@ -1,4 +1,13 @@
-import { Copy, ThumbsUp, ThumbsDown, BookOpen, Check, Wrench } from 'lucide-react';
+import {
+  Copy,
+  ThumbsUp,
+  ThumbsDown,
+  BookOpen,
+  Check,
+  Wrench,
+  Brain,
+  ChevronDown,
+} from 'lucide-react';
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -65,6 +74,34 @@ function CodeBlock({ language, children }: { language?: string; children: string
   );
 }
 
+/** ThinkingPanel - 可折叠的 LLM 思考过程展示面板 */
+function ThinkingPanel({ reasoning }: { reasoning: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="mb-2 border border-border/50 rounded-radius-sm overflow-hidden">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 bg-bg-subtle hover:bg-bg-hover transition-colors text-left"
+        aria-expanded={isExpanded}
+      >
+        <Brain className="w-4 h-4 text-primary" />
+        <span className="text-xs font-medium text-text-secondary">
+          思考过程 ({reasoning.length} 字)
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {isExpanded && (
+        <div className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">
+          {reasoning}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Message({ message, onFeedback, knowledgeRefs, attachments }: MessageProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
@@ -87,6 +124,11 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
       </div>
 
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
+        {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
+        {isAssistant && message.reasoning_content && (
+          <ThinkingPanel reasoning={message.reasoning_content} />
+        )}
+
         {/* Knowledge references */}
         {knowledgeRefs && knowledgeRefs.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-1">

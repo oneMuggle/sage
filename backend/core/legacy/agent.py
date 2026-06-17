@@ -459,6 +459,15 @@ class SageAgent:
 
                 response: LLMResponse = await self.llm_client.chat(messages)
 
+                # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
+                # 这允许前端展示 LLM 的思考/推理过程
+                if response.reasoning_content:
+                    yield AgentEvent(
+                        state=AgentState.REASONING,
+                        iteration=i,
+                        reasoning=response.reasoning_content,
+                    )
+
                 if not response.tool_calls:
                     messages.append(
                         {

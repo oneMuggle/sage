@@ -591,3 +591,74 @@ async def test_run_loop_raises_agent_error_when_no_client_and_no_llm_config():
 
     with pytest.raises(AgentError, match="LLM 未配置"):
         await _consume()
+
+
+# =============================================================================
+# Reasoning/Thinking 内容展示测试
+# =============================================================================
+
+
+def _make_response_with_reasoning(
+    content: str = "", reasoning_content: str | None = None, tool_calls: list = None
+) -> LLMResponse:
+    """创建包含 reasoning_content 的 LLM 响应。"""
+    return LLMResponse(
+        content=content,
+        reasoning_content=reasoning_content,
+        tool_calls=tool_calls or [],
+    )
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_yields_reasoning_event_when_llm_returns_reasoning():
+    """LLM 返回 reasoning_content 时，run_loop 应 yield REASONING 事件。"""
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        return_value=_make_response_with_reasoning(
+            content="答案是 42",
+            reasoning_content="让我思考一下：6 * 7 = 42",
+        )
+    )
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "6*7=?"}]):
+        events.append(evt)
+
+    states = [e.state for e in events]
+    # 应该有 REASONING 状态
+    assert AgentState.REASONING in states, f"States: {states}"
+
+    # REASONING 事件应携带 reasoning 内容
+    reasoning_evt = next(e for e in events if e.state == AgentState.REASONING)
+    assert reasoning_evt.reasoning == "让我思考一下：6 * 7 = 42"
+
+    # 最终应有 DONE 状态
+    assert AgentState.DONE in states
+    done_evt = next(e for e in events if e.state == AgentState.DONE)
+    assert done_evt.content == "答案是 42"
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_no_reasoning_event_when_llm_returns_no_reasoning():
+    """LLM 不返回 reasoning_content 时，run_loop 不应 yield REASONING 事件。"""
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        return_value=_make_response_with_reasoning(
+            content="你好",
+            reasoning_content=None,  # 没有 reasoning
+        )
+    )
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "hi"}]):
+        events.append(evt)
+
+    states = [e.state for e in events]
+    # 不应该有 REASONING 状态
+    assert AgentState.REASONING not in states, f"States: {states}"
+
+    # 应该有 THINKING 和 DONE
+    assert AgentState.THINKING in states
+    assert AgentState.DONE in states
