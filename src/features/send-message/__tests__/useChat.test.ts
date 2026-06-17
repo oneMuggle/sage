@@ -351,12 +351,26 @@ describe('useChat', () => {
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-states' });
 
     let capturedCb:
-      | ((e: { payload: { state: string; iteration: number; content?: string; tool_call?: { function: { name: string } } } }) => void)
+      | ((e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            tool_call?: { function: { name: string } };
+          };
+        }) => void)
       | null = null;
     listenMock.mockImplementationOnce(
       async (
         _name: string,
-        cb: (e: { payload: { state: string; iteration: number; content?: string; tool_call?: { function: { name: string } } } }) => void,
+        cb: (e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            tool_call?: { function: { name: string } };
+          };
+        }) => void,
       ) => {
         capturedCb = cb;
         return vi.fn();
@@ -383,7 +397,9 @@ describe('useChat', () => {
     expect(afterThinking?.content).toBe('🤔 思考中…');
 
     act(() => {
-      capturedCb!({ payload: { state: 'acting', iteration: 0, tool_call: { function: { name: 'calculator' } } } });
+      capturedCb!({
+        payload: { state: 'acting', iteration: 0, tool_call: { function: { name: 'calculator' } } },
+      });
     });
     // 关键断言 2: acting 后应该是 "🔧 调工具 calculator…",之前 thinking 占位已清掉
     const afterActing = result.current.messages.find((m) => m.role === 'assistant');
