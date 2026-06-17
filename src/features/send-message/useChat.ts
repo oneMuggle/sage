@@ -29,6 +29,7 @@ export function useChat() {
   const [streaming, setStreaming] = useState<{
     messageId: string;
     content: string;
+    reasoning: string; // 新增：累积的 LLM 思考/推理过程
     state: AgentEvent['state'] | null;
   } | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
@@ -37,17 +38,21 @@ export function useChat() {
   const cancelRef = useRef<(() => void) | null>(null);
   // PR-6: ref 镜像 streaming.content, finally 写回 store 时同步读 (避免依赖 React state)
   const streamingContentRef = useRef<string>('');
+  // 新增：ref 镜像 streaming.reasoning
+  const streamingReasoningRef = useRef<string>('');
 
   const activeEndpoint = settings.endpoints.find((e) => e.isActive);
 
   /**
-   * 派生 messages: 当 streaming 时, 替换 store.messages 中对应 id 的 content
+   * 派生 messages: 当 streaming 时, 替换 store.messages 中对应 id 的 content 和 reasoning_content
    * — widget 看到的最后一条 assistant 消息会"长出"内容
    */
   const derivedMessages = useMemo<Message[]>(() => {
     if (!streaming) return messages;
     return messages.map((m) =>
-      m.id === streaming.messageId ? { ...m, content: streaming.content } : m,
+      m.id === streaming.messageId
+        ? { ...m, content: streaming.content, reasoning_content: streaming.reasoning || undefined }
+        : m,
     );
   }, [messages, streaming]);
 
@@ -119,7 +124,14 @@ export function useChat() {
         created_at: Date.now(),
       };
       addMessage(assistantMessage);
-      setStreaming({ messageId: assistantId, content: '🤔 思考中…', state: 'thinking' });
+      setStreaming({
+        messageId: assistantId,
+        content: '🤔 思考中…',
+        reasoning: '',
+        state: 'thinking',
+      });
+      // 重置 reasoning ref
+      streamingReasoningRef.current = '';
 
       const config: ChatConfig = {
         apiKey: activeEndpoint.apiKey,
@@ -183,10 +195,15 @@ export function useChat() {
         // 优先用 done 事件自带的完整 content (避免混入 thinking 占位符)
         // 退回到 streamingContentRef (向后兼容旧的非流式 done 事件)
         const finalContent = lastDoneContent ?? streamingContentRef.current;
-        if (finalContent) {
-          updateMessage(assistantId, { content: finalContent });
+        const finalReasoning = streamingReasoningRef.current;
+        if (finalContent || finalReasoning) {
+          updateMessage(assistantId, {
+            content: finalContent,
+            reasoning_content: finalReasoning || undefined,
+          });
         }
         streamingContentRef.current = '';
+        streamingReasoningRef.current = '';
         setStreaming(null);
         cancelRef.current = null;
         resetLoading();
@@ -199,22 +216,41 @@ export function useChat() {
           content,
           {
             onEvent: (evt) => {
+              // 处理 reasoning 事件：累积 reasoning 内容
+              if (evt.state === 'reasoning' && evt.reasoning) {
+                streamingReasoningRef.current = streamingReasoningRef.current + evt.reasoning;
+                setStreaming((prev) =>
+                  prev && prev.messageId === assistantId
+                    ? { ...prev, reasoning: streamingReasoningRef.current }
+                    : prev,
+                );
+              }
+
               const uiText = agentStateToUiText(evt.state, evt.tool_call?.function.name);
               // 累积策略 (I5: 流式逐字):
               // - content_delta + done.content 触发 appendContent 追加 (累积真实回答)
               // - thinking/acting/observing 的 uiText 触发 replaceContent 覆盖
               //   (切换中间态占位, 避免 "🤔 思考中…🤔 思考中…" 重复前缀)
-              if (typeof evt.content === 'string' && evt.content.length > 0) {
+              // - reasoning 事件已在上面处理，不触发 content 更新
+              if (evt.state === 'reasoning') {
+                // reasoning 事件不更新 content，仅更新 state
+                setStreaming((prev) =>
+                  prev && prev.messageId === assistantId ? { ...prev, state: evt.state } : prev,
+                );
+              } else if (typeof evt.content === 'string' && evt.content.length > 0) {
                 appendContent(evt.content);
                 if (evt.state === 'done') {
                   lastDoneContent = evt.content;
                 }
+                setStreaming((prev) =>
+                  prev && prev.messageId === assistantId ? { ...prev, state: evt.state } : prev,
+                );
               } else if (uiText) {
                 replaceContent(uiText);
+                setStreaming((prev) =>
+                  prev && prev.messageId === assistantId ? { ...prev, state: evt.state } : prev,
+                );
               }
-              setStreaming((prev) =>
-                prev && prev.messageId === assistantId ? { ...prev, state: evt.state } : prev,
-              );
             },
             onError: (err) => {
               handleError(err);

@@ -55,6 +55,7 @@ export interface ChatResponse {
 export type AgentState =
   | 'idle'
   | 'thinking'
+  | 'reasoning' // 新增：携带 LLM 思考/推理过程内容
   | 'acting'
   | 'observing'
   | 'content_delta'
@@ -84,6 +85,7 @@ export interface AgentEvent {
   state: AgentState;
   iteration: number;
   content?: string;
+  reasoning?: string; // LLM 思考/推理过程内容
   tool_call?: AgentToolCall;
   tool_result?: AgentToolResult;
   error?: string;

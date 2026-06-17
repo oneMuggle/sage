@@ -16,6 +16,9 @@ class AgentState(str, Enum):
 
     IDLE = "idle"
     THINKING = "thinking"
+    # REASONING: 携带 LLM 思考/推理过程内容（reasoning_content）
+    # 区别于 THINKING（仅表示"LLM 正在思考"阶段标记）
+    REASONING = "reasoning"
     ACTING = "acting"
     OBSERVING = "observing"
     # I4: 流式 LLM 响应时,每个 token chunk 推一个 CONTENT_DELTA 事件,
@@ -68,6 +71,7 @@ class AgentEvent:
     state: AgentState
     iteration: int = 0
     content: str | None = None
+    reasoning: str | None = None  # LLM 思考/推理过程内容
     tool_call: ToolCallRequest | None = None
     tool_result: ToolCallResult | None = None
     error: str | None = None
@@ -80,6 +84,8 @@ class AgentEvent:
         }
         if self.content is not None:
             d["content"] = self.content
+        if self.reasoning is not None:
+            d["reasoning"] = self.reasoning
         if self.tool_call is not None:
             d["tool_call"] = self.tool_call.to_dict()
         if self.tool_result is not None:

@@ -13,6 +13,7 @@ pytestmark = pytest.mark.unit
 def test_agent_state_enum_values():
     assert AgentState.IDLE.value == "idle"
     assert AgentState.THINKING.value == "thinking"
+    assert AgentState.REASONING.value == "reasoning"  # 新增：reasoning 状态
     assert AgentState.ACTING.value == "acting"
     assert AgentState.OBSERVING.value == "observing"
     assert AgentState.DONE.value == "done"
@@ -50,3 +51,43 @@ def test_tool_call_result_serialization():
         "role": "tool",
         "content": "2",
     }
+
+
+def test_agent_event_reasoning_creation():
+    """AgentEvent with REASONING state should carry reasoning content."""
+    evt = AgentEvent(
+        state=AgentState.REASONING,
+        iteration=0,
+        reasoning="Let me think about this step by step...",
+    )
+    assert evt.state == AgentState.REASONING
+    assert evt.iteration == 0
+    assert evt.reasoning == "Let me think about this step by step..."
+    assert evt.content is None
+
+
+def test_agent_event_reasoning_defaults_to_none():
+    """AgentEvent.reasoning should default to None."""
+    evt = AgentEvent(state=AgentState.THINKING, iteration=0)
+    assert evt.reasoning is None
+
+
+def test_agent_event_to_dict_includes_reasoning():
+    """AgentEvent.to_dict() should include reasoning field when set."""
+    evt = AgentEvent(
+        state=AgentState.REASONING,
+        iteration=1,
+        reasoning="Analyzing the problem...",
+    )
+    d = evt.to_dict()
+    assert d["state"] == "reasoning"
+    assert d["iteration"] == 1
+    assert d["reasoning"] == "Analyzing the problem..."
+
+
+def test_agent_event_to_dict_excludes_reasoning_when_none():
+    """AgentEvent.to_dict() should exclude reasoning field when None."""
+    evt = AgentEvent(state=AgentState.DONE, iteration=0, content="Answer")
+    d = evt.to_dict()
+    assert "reasoning" not in d
+    assert d["content"] == "Answer"

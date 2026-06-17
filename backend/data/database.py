@@ -76,11 +76,19 @@ class Database:
                 total_tokens INTEGER,
                 tool_calls TEXT,
                 tool_call_id TEXT,
+                reasoning_content TEXT,
                 created_at INTEGER NOT NULL,
                 latency_ms INTEGER,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
+
+        # 数据库迁移：为已有数据库添加 reasoning_content 列（如果不存在）
+        cursor.execute("PRAGMA table_info(messages)")
+        columns = [row["name"] for row in cursor.fetchall()]
+        if "reasoning_content" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_content TEXT")
+            conn.commit()
 
         # 情景记忆表
         cursor.execute("""

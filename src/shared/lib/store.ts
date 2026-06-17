@@ -38,6 +38,7 @@ export interface Message {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   memory_applied?: number;
+  reasoning_content?: string; // LLM 思考/推理过程
 }
 
 // 状态接口
