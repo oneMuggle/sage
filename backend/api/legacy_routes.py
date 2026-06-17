@@ -12,6 +12,7 @@ _STREAMING_CHUNK_SIZE = 6
 _STREAMING_CHUNK_DELAY_S = 0.04
 import json
 import logging
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -22,7 +23,7 @@ from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegist
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database
-from backend.data.session_repo import MessageRepository, SessionRepository
+from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.memory import EpisodicMemory, MemoryManager, SemanticMemory, WorkingMemory
 from backend.scheduler import get_evolution_logs, get_scheduler
 
@@ -621,11 +622,33 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 {"role": "system", "content": "你是 Sage，一个智能 AI 助手。"},
                 {"role": "user", "content": data.message},
             ]
+            # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
+            # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
+            # session metadata。每个落盘独立 try/except,失败只 logger.warning
+            # 不破坏流。
+            message_repo = MessageRepository()
+            session_repo = SessionRepository()
+            user_now = int(time.time() * 1000)
+            try:
+                message_repo.save(
+                    DbMessage(
+                        id=str(uuid.uuid4()),
+                        session_id=data.session_id,
+                        role="user",
+                        content=data.message,
+                        created_at=user_now,
+                    )
+                )
+            except Exception as db_err:
+                logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
+
+            done_content: str | None = None
             async for evt in agent.run_loop(messages, llm_config=llm_config):
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
                 # 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls,
                 # 那是更大的重构;这个 producer 端的 fake stream 给出 90% 视觉效果。
                 if evt.state.value == "done" and evt.content:
+                    done_content = evt.content
                     content = evt.content
                     for i in range(0, len(content), _STREAMING_CHUNK_SIZE):
                         delta = content[i : i + _STREAMING_CHUNK_SIZE]
@@ -641,6 +664,34 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     await entry.queue.put(evt.to_dict())
                 else:
                     await entry.queue.put(evt.to_dict())
+
+            # run_loop 正常结束 (DONE) → 持久化 assistant + 更新 session。
+            # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
+            if done_content:
+                assistant_now = int(time.time() * 1000)
+                try:
+                    message_repo.save(
+                        DbMessage(
+                            id=str(uuid.uuid4()),
+                            session_id=data.session_id,
+                            role="assistant",
+                            content=done_content,
+                            created_at=assistant_now,
+                            model=(llm_config.get("model") if llm_config else "local"),
+                        )
+                    )
+                except Exception as db_err:
+                    logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
+                try:
+                    sess = session_repo.get(data.session_id)
+                    if sess is not None:
+                        session_repo.update(
+                            data.session_id,
+                            last_message_at=assistant_now,
+                            message_count=sess.message_count + 2,
+                        )
+                except Exception as db_err:
+                    logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "

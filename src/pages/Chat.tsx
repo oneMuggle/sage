@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useSettings } from '../features/manage-settings/useSettings';
@@ -15,6 +15,15 @@ export function Chat() {
   const { currentSessionId, setCurrentSessionId, createSession } = useStore();
   const { settings } = useSettings();
   const navigate = useNavigate();
+  // PR-7: 跟随新消息/流式 token 自动滚到底。依赖同时含 messages.length
+  // 和最后一条消息的 content 长度 — 流式更新时 length 不变但 content 在变。
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastMsg = messages[messages.length - 1];
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages.length, lastMsg?.content]);
 
   const activeEndpoint = settings.endpoints.find((e) => e.isActive);
   const hasConfig =
@@ -83,7 +92,7 @@ export function Chat() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {isLoading && messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <LoadingState label="正在加载对话..." />
