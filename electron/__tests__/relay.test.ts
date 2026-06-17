@@ -92,9 +92,7 @@ describe('parseNdjsonStream', () => {
   it('resolves when stream ends naturally (no abort)', async () => {
     const stream = Readable.from(['{"state":"done"}\n']) as unknown as NodeJS.ReadableStream;
     const events: unknown[] = [];
-    await expect(
-      parseNdjsonStream(stream, (e) => events.push(e)),
-    ).resolves.toBeUndefined();
+    await expect(parseNdjsonStream(stream, (e) => events.push(e))).resolves.toBeUndefined();
     expect(events).toEqual([{ state: 'done' }]);
   });
 
@@ -140,9 +138,7 @@ describe('relayChatStream (I2: attach to existing stream via GET)', () => {
 
   it('url-encodes streamId with special characters', async () => {
     const wc = new MockWebContents();
-    mockedFetch.mockResolvedValueOnce(
-      makeNdjsonFetchResponse([JSON.stringify({ state: 'done' })]),
-    );
+    mockedFetch.mockResolvedValueOnce(makeNdjsonFetchResponse([JSON.stringify({ state: 'done' })]));
     await relayChatStream(
       wc as unknown as Electron.WebContents,
       'chat-stream-x',
