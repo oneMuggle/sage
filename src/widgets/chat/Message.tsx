@@ -76,7 +76,7 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
   };
 
   return (
-    <div className={`flex gap-3 mb-5 max-w-[720px] ${isUser ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex gap-3 mb-5 w-full ${isUser ? 'flex-row-reverse' : ''}`}>
       {/* 头像 */}
       <div
         className={`w-7 h-7 rounded-radius-sm flex-shrink-0 flex items-center justify-center text-xs font-semibold ${

@@ -49,4 +49,21 @@ describe('Message', () => {
     const errorEl = container.querySelector('[data-error="true"]');
     expect(errorEl).toBeInTheDocument();
   });
+
+  it('message row does not constrain to max-w-[720px] (full-width layout)', () => {
+    // Regression for "对话区域没有占满": previously Message.tsx had
+    // `max-w-[720px]` on the row, leaving a big empty right side.
+    // Width should now come from the MessageList container.
+    const msg: MessageType = {
+      id: '1',
+      session_id: 's',
+      role: 'assistant',
+      content: 'hi',
+      created_at: 0,
+    };
+    const { container } = render(<Message message={msg} />);
+    const row = container.firstChild as HTMLElement;
+    expect(row.className).not.toMatch(/max-w-\[720px\]/);
+    expect(row.className).toMatch(/\bw-full\b/);
+  });
 });
