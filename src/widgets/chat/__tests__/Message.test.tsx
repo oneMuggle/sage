@@ -66,4 +66,20 @@ describe('Message', () => {
     expect(row.className).not.toMatch(/max-w-\[720px\]/);
     expect(row.className).toMatch(/\bw-full\b/);
   });
+
+  it('message bubble caps width with max-w-2xl (so text stays readable)', () => {
+    // PR-7b: width constraint moved from MessageList wrapper to the bubble
+    // itself, so the panel uses full width but text doesn't get too wide.
+    const msg: MessageType = {
+      id: '1',
+      session_id: 's',
+      role: 'assistant',
+      content: 'hi',
+      created_at: 0,
+    };
+    const { container } = render(<Message message={msg} />);
+    // 找 data-error 属性所在的 div(就是气泡)
+    const bubble = container.querySelector('div[class*="max-w-2xl"]');
+    expect(bubble).toBeTruthy();
+  });
 });

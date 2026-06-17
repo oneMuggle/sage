@@ -126,7 +126,7 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
         {/* 消息气泡 */}
         <div
           data-error={isError ? 'true' : undefined}
-          className={`px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+          className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
             isUser
               ? 'bg-primary text-text-inverse'
               : isError

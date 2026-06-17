@@ -43,14 +43,14 @@ describe('MessageList', () => {
     expect(screen.getByText('知识A')).toBeInTheDocument();
   });
 
-  it('centers the list with max-w-3xl mx-auto (so chat fills the pane)', () => {
-    // Regression for "右侧还空了很大一块": previously MessageList had no
-    // max-width/centering, so messages flushed left and the right side was
-    // empty padding. Now the list is centered like Agents does it.
+  it('wrapper does not constrain width (full panel width, bubble caps internally)', () => {
+    // PR-7b regression: MessageList 不再带 max-w-3xl mx-auto。
+    // 之前把整个 wrapper 限到 768px 居中 → 在 1040px 主区域里左右各空 136px。
+    // 现在 wrapper 撑满主区域,宽度约束下放到 Message 气泡( max-w-2xl)。
     const messages: MessageType[] = [baseMsg('1', 'user', 'hi')];
     const { container } = render(<MessageList messages={messages} />);
     const wrapper = container.firstChild as HTMLElement;
-    expect(wrapper.className).toMatch(/max-w-3xl/);
-    expect(wrapper.className).toMatch(/mx-auto/);
+    expect(wrapper.className).not.toMatch(/max-w-3xl/);
+    expect(wrapper.className).not.toMatch(/mx-auto/);
   });
 });

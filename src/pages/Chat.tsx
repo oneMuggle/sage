@@ -78,7 +78,7 @@ export function Chat() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* 页面头部 */}
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
         <h2 className="text-sm font-semibold text-text">对话</h2>
@@ -92,7 +92,7 @@ export function Chat() {
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
         {isLoading && messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <LoadingState label="正在加载对话..." />
