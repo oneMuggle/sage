@@ -202,6 +202,38 @@ describe('useChat', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  // 回归保护: cancel-prev 路径 — sendMessage 必须把 chatStream 返回的
+  // cancel 存进 cancelRef, 下次 sendMessage 时 cancel-prev 块会调用它。
+  // 真实触发场景: React StrictMode 双调用 / 用户双击 / 路由切换。
+  it('stores chatStream cancel into cancelRef for next sendMessage cancellation', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-X' });
+    const cancelSpy = vi.fn();
+    // listen 返回的 unlisten 函数就是 chatStream 暴露给 cancelRef 的 cancel
+    listenMock.mockResolvedValueOnce(cancelSpy);
+
+    const { result } = renderHook(() => useChat());
+
+    // 触发 sendMessage, 让 invoke + listen microtask 都跑完
+    // chatStream 内部 listen 的 await resolve 后, sendMessage 同步设置
+    // cancelRef.current = cancelSpy, 然后函数自然结束
+    await act(async () => {
+      result.current.sendMessage('hello');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // chatStream 完成后, cancelRef 持有 cancelSpy
+    // 通过 interrupt() (用 cancelRef.current) 来间接验证:
+    // 如果 cancelRef 是空, interrupt 的 cancel 调用会是 no-op, cancelSpy 不被调
+    await act(async () => {
+      await result.current.interrupt();
+    });
+
+    // interrupt 会调 cancelRef.current() — 我们就是 cancelSpy
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('sets error when chat API throws', async () => {
     seedActiveEndpoint();
     // PR-6: listen 抛错 → chatStream reject → handleError
