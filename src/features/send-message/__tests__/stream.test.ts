@@ -163,4 +163,37 @@ describe('chatApi.chatStream (PR-6)', () => {
     );
     expect(invokeMock).not.toHaveBeenCalled();
   });
+
+  // I5: 流式 producer 把 done.content 拆成 content_delta chunks,
+  // 每个 chunk 触发 onEvent 但不应触发 onDone — onDone 由最终的 done 事件触发。
+  // 这一不变性保证前端能累积所有 chunk,然后才完成流。
+  it('content_delta events do NOT trigger onDone (only final done does)', async () => {
+    const streamId = 'stream-deltas';
+    invokeMock.mockResolvedValueOnce({ streamId });
+    let listenCb: ListenCallback | null = null;
+    listenMock.mockImplementationOnce(async (_name: string, cb: ListenCallback) => {
+      listenCb = cb;
+      return vi.fn();
+    });
+
+    const onEvent = vi.fn();
+    const onDone = vi.fn();
+    const { cancel } = await chatApi.chatStream(VALID_SESSION_ID, 'q', {
+      onEvent,
+      onDone,
+    });
+
+    // 派发 3 个 content_delta chunks + 1 个 done
+    listenCb!({ payload: { state: 'content_delta', iteration: 0, content: '答' } });
+    listenCb!({ payload: { state: 'content_delta', iteration: 0, content: '案是' } });
+    listenCb!({ payload: { state: 'content_delta', iteration: 0, content: ' 2' } });
+    listenCb!({ payload: { state: 'done', iteration: 1, content: '答案是 2' } });
+
+    // 4 个事件全部走到 onEvent
+    expect(onEvent).toHaveBeenCalledTimes(4);
+    // onDone 只在最终 done 触发一次
+    expect(onDone).toHaveBeenCalledTimes(1);
+    // cancel() 在 done 后是 no-op (不抛错)
+    expect(() => cancel()).not.toThrow();
+  });
 });

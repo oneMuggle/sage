@@ -124,13 +124,20 @@ async def test_chat_stream_attach_streams_ndjson_events():
             assert attach_resp.headers["content-type"].startswith("application/x-ndjson")
 
             events = _parse_ndjson(attach_resp.text)
-            assert len(events) == 4
+            # I5: DONE 事件的 content 现在会被 producer 拆成 content_delta chunks
+            # 逐个入队 (逐字流式效果)。所以 events 是 [thinking, acting, observing,
+            # content_delta*, done]。
+            delta_events = [e for e in events if e["state"] == "content_delta"]
+            done_events = [e for e in events if e["state"] == "done"]
             assert events[0]["state"] == "thinking"
             assert events[1]["state"] == "acting"
             assert events[1]["tool_call"]["function"]["name"] == "calculator"
             assert events[2]["state"] == "observing"
-            assert events[3]["state"] == "done"
-            assert events[3]["content"] == "答案是 2"
+            # content_delta 累积 = 完整 content
+            accumulated = "".join(e["content"] for e in delta_events)
+            assert accumulated == "答案是 2", f"accumulated {accumulated!r} != '答案是 2'"
+            assert len(done_events) == 1
+            assert done_events[0]["content"] == "答案是 2"
 
 
 @pytest.mark.asyncio()

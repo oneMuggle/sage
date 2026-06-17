@@ -280,4 +280,64 @@ describe('useChat', () => {
       }),
     ).resolves.not.toThrow();
   });
+
+  // I5: 流式逐字渲染 — backend producer 把 done.content 拆成 content_delta chunks,
+  // useChat 必须累积 chunks 成完整回答 (而不是只显示最后 chunk)。
+  // 旧实现是覆盖 (ref = next) — 修成 ref += next 才能逐字增长。
+  it('accumulates content_delta chunks into full assistant content', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-chunks' });
+
+    let capturedCb:
+      | ((e: { payload: { state: string; iteration: number; content?: string } }) => void)
+      | null = null;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
+      ) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('你好') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(capturedCb).not.toBeNull();
+
+    // 模拟 producer 拆 3 个 chunk + thinking 占位 + done 收尾
+    act(() => {
+      capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '你好,' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '我是 ' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: 'Sage' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 1, content: '你好,我是 Sage' } });
+    });
+
+    // 关键断言: assistant message 的 content 必须是完整累积,不是最后 chunk "Sage"
+    await waitFor(() => {
+      const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(assistantMsg?.content).toBe('你好,我是 Sage');
+    });
+
+    await act(async () => {
+      await sendPromise!;
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
 });
