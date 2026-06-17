@@ -143,6 +143,25 @@ export function useChat() {
         }
       };
 
+      // 把流式最终 content 写回 store.messages,让 derivedMessages 退回
+      // store 后仍显示完整答案 (而不是占位 "🤔 思考中…")。
+      // 不能放 finally ——chatStream promise 在 listen() resolve 后就返回,
+      // 不等 NDJSON 事件到。事件真实到达时机是 IPC 跨进程 (异步 macrotask),
+      // 所以 cleanup 必须由 onDone / onError 触发。
+      let finished = false;
+      const finishStream = (): void => {
+        if (finished) return;
+        finished = true;
+        const finalContent = streamingContentRef.current;
+        if (finalContent) {
+          updateMessage(assistantId, { content: finalContent });
+        }
+        streamingContentRef.current = '';
+        setStreaming(null);
+        cancelRef.current = null;
+        resetLoading();
+      };
+
       try {
         await chatApi.chatStream(
           sid,
@@ -163,28 +182,21 @@ export function useChat() {
             },
             onError: (err) => {
               handleError(err);
+              finishStream();
             },
             onDone: () => {
-              // 流自然结束 — 保留 streaming, 让用户看到最终内容;
-              // finally 会清掉 streaming
+              // 流自然结束 — 把 streaming.content 写回 store,
+              // 然后清掉 streaming overlay 让消息退回 store 视图
+              finishStream();
             },
           },
           config,
         );
       } catch (err: unknown) {
         // chatStream 启动失败 (validate / listen 失败等)
+        // onDone/onError 不会触发,这里兜底
         handleError(err);
-      } finally {
-        // 把流式最终 content 写回 store.messages,让 derivedMessages 退回
-        // store 后仍显示完整答案 (而不是占位 "🤔 思考中…")
-        const finalContent = streamingContentRef.current;
-        if (finalContent) {
-          updateMessage(assistantId, { content: finalContent });
-        }
-        streamingContentRef.current = '';
-        setStreaming(null);
-        cancelRef.current = null;
-        resetLoading();
+        finishStream();
       }
     },
     [currentSessionId, isLoading, activeEndpoint, settings, addMessage, updateMessage],

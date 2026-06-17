@@ -114,7 +114,10 @@ export async function relayChatStream(
 ): Promise<void> {
   let res: import('node-fetch').Response;
   try {
-    res = await fetch(`${backendUrl}/chat/stream/${encodeURIComponent(streamId)}`, {
+    // 注意路径前缀: backend/main.py:215 把 legacy_router 挂在 /api/v1 下,
+    // attach 端点也必须带前缀(否则 404)。PR #28 修了 invoke/commands.ts 路径,
+    // 这里 relay 直接拼 URL 漏了 — 本 PR 修。
+    res = await fetch(`${backendUrl}/api/v1/chat/stream/${encodeURIComponent(streamId)}`, {
       method: 'GET',
       headers: { Accept: 'application/x-ndjson' },
       signal,

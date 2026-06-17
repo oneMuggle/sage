@@ -92,9 +92,7 @@ describe('parseNdjsonStream', () => {
   it('resolves when stream ends naturally (no abort)', async () => {
     const stream = Readable.from(['{"state":"done"}\n']) as unknown as NodeJS.ReadableStream;
     const events: unknown[] = [];
-    await expect(
-      parseNdjsonStream(stream, (e) => events.push(e)),
-    ).resolves.toBeUndefined();
+    await expect(parseNdjsonStream(stream, (e) => events.push(e))).resolves.toBeUndefined();
     expect(events).toEqual([{ state: 'done' }]);
   });
 
@@ -126,7 +124,7 @@ describe('relayChatStream (I2: attach to existing stream via GET)', () => {
 
     // I2 关键: 不再 POST + body,改为 GET + path param streamId
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:8765/chat/stream/abc',
+      'http://127.0.0.1:8765/api/v1/chat/stream/abc',
       expect.objectContaining({
         method: 'GET',
       }),
@@ -140,9 +138,7 @@ describe('relayChatStream (I2: attach to existing stream via GET)', () => {
 
   it('url-encodes streamId with special characters', async () => {
     const wc = new MockWebContents();
-    mockedFetch.mockResolvedValueOnce(
-      makeNdjsonFetchResponse([JSON.stringify({ state: 'done' })]),
-    );
+    mockedFetch.mockResolvedValueOnce(makeNdjsonFetchResponse([JSON.stringify({ state: 'done' })]));
     await relayChatStream(
       wc as unknown as Electron.WebContents,
       'chat-stream-x',
@@ -151,7 +147,7 @@ describe('relayChatStream (I2: attach to existing stream via GET)', () => {
       new AbortController().signal,
     );
     expect(mockedFetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:8765/chat/stream/sid%2Fwith%2Fslashes',
+      'http://127.0.0.1:8765/api/v1/chat/stream/sid%2Fwith%2Fslashes',
       expect.anything(),
     );
   });
