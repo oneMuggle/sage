@@ -56,6 +56,17 @@ export function useChat() {
       const sid = sessionId ?? currentSessionId;
       if (!sid || isLoading || loadingRef.current) return;
 
+      // 取消上一次还在飞的 chatStream (React StrictMode 双调用 / 用户双击 /
+      // 路由切换等场景),避免两个流并存导致 invoke 重复 + LLM 双调用 + 流事件混乱
+      if (cancelRef.current) {
+        try {
+          cancelRef.current();
+        } catch {
+          /* ignore */
+        }
+        cancelRef.current = null;
+      }
+
       // 即使 settings 缺失,user 消息也必须先 addMessage 再校验失败返回 —
       // ChatInput 已在 UI 层通过 disabled 状态阻止发送路径,
       // 此处的校验是 belt-and-suspenders 兜底(防止通过其他入口直接调 sendMessage)
@@ -163,7 +174,8 @@ export function useChat() {
       };
 
       try {
-        await chatApi.chatStream(
+        // 解构 cancel 用于下次 sendMessage 时取消 (cancel-prev)
+        const { cancel } = await chatApi.chatStream(
           sid,
           content,
           {
@@ -192,6 +204,8 @@ export function useChat() {
           },
           config,
         );
+        // 存 cancel 用于下次 sendMessage 取消 + interrupt 用
+        cancelRef.current = cancel;
       } catch (err: unknown) {
         // chatStream 启动失败 (validate / listen 失败等)
         // onDone/onError 不会触发,这里兜底
