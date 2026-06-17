@@ -64,6 +64,14 @@ class ChatRequest(BaseModel):
     model: str | None = None
     max_context: int | None = None
     temperature: float | None = None
+    # 透传字段:provider 让后端不再硬写,reasoning_effort/thinking_budget
+    # 让上游 LLM 启用 thinking 输出(provider 决定哪种 key 会被接受)
+    # - provider: openai / claude / gemini / deepseek / ollama / custom
+    # - reasoning_effort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
+    # - thinking_budget: Gemini 2.5 OpenAI 兼容模式
+    provider: str | None = None
+    reasoning_effort: str | None = None
+    thinking_budget: int | None = None
 
 
 class MessageResponse(BaseModel):
@@ -606,12 +614,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             llm_config = None
             if data.api_key and data.api_url:
                 llm_config = {
-                    "provider": "custom",
+                    # 修: provider 不再硬写,从前端请求透传;
+                    # 默认 "custom" 保留向后兼容(老客户端/无 provider 字段)
+                    "provider": data.provider or "custom",
                     "api_key": data.api_key,
                     "base_url": data.api_url,
                     "model": data.model or "gpt-3.5-turbo",
                     "temperature": data.temperature or 0.7,
                 }
+                # 推理参数:None 时不传,避免污染老 LLM
+                if data.reasoning_effort is not None:
+                    llm_config["reasoning_effort"] = data.reasoning_effort
+                if data.thinking_budget is not None:
+                    llm_config["thinking_budget"] = data.thinking_budget
                 logger.info(
                     f"[REQ {request_id}] /chat/stream producer using custom LLM: "
                     f"model={_safe_log_field(llm_config['model'])}"

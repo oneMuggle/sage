@@ -55,6 +55,37 @@ function seedActiveEndpoint(): void {
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
 }
 
+/** PR-7a: 同 seedActiveEndpoint,但 baseUrl 自由指定(测 provider 推导)。 */
+function seedActiveEndpointWithUrl(baseUrl: string): void {
+  const payload = {
+    streaming: true,
+    autoMemory: true,
+    confirmDelete: true,
+    compactMode: false,
+    endpoints: [
+      {
+        id: 'ep-1',
+        name: 'Test',
+        baseUrl,
+        apiKey: 'sk-test',
+        isActive: true,
+        discoveredModels: [],
+        lastDiscoveredAt: null,
+      },
+    ],
+    modelSelections: {
+      chatModelId: 'gpt-test',
+      visionModelId: null,
+      embeddingModelId: null,
+    },
+    maxContext: 4096,
+    temperature: 0.7,
+    tlsVersion: '1.2',
+    version: SETTINGS_VERSION,
+  };
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+}
+
 beforeEach(() => {
   invokeMock.mockReset();
   localStorage.clear();
@@ -138,6 +169,80 @@ describe('useChat', () => {
         model: 'gpt-test',
       }),
     );
+  });
+
+  // PR-7a: useChat 根据 baseUrl 推导 provider 并透传到 IPC,
+  // 这样后端 LLMConfig 不再被硬写成 'custom'。
+  it('infers provider from Gemini baseUrl and forwards to invoke', async () => {
+    seedActiveEndpointWithUrl('https://generativelanguage.googleapis.com/v1beta/openai');
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-gemini' });
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
+      ) => {
+        Promise.resolve().then(() =>
+          cb({ payload: { state: 'done', iteration: 0, content: 'gemini says hi' } }),
+        );
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      'agent_chat_stream',
+      expect.objectContaining({
+        provider: 'gemini',
+      }),
+    );
+  });
+
+  it('infers provider from DeepSeek baseUrl and forwards to invoke', async () => {
+    seedActiveEndpointWithUrl('https://api.deepseek.com/v1');
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-deepseek' });
+    listenMock.mockImplementationOnce(async (_n, cb) => {
+      Promise.resolve().then(() => cb({ payload: { state: 'done', iteration: 0, content: 'ok' } }));
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      'agent_chat_stream',
+      expect.objectContaining({
+        provider: 'deepseek',
+      }),
+    );
+  });
+
+  // 未知 / 自托管 URL → provider 应该是 undefined,后端默认 'custom'
+  it('omits provider for unknown baseUrl (falls back to custom)', async () => {
+    seedActiveEndpointWithUrl('http://192.168.1.10:11434/v1'); // Ollama
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-ollama' });
+    listenMock.mockImplementationOnce(async (_n, cb) => {
+      Promise.resolve().then(() => cb({ payload: { state: 'done', iteration: 0, content: 'ok' } }));
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    const [, args] = invokeMock.mock.calls[0];
+    // api.ts 用 `config?.provider ?? null` 转 null,后端收到 null
+    // 在 ChatRequest Optional 校验下走默认 "custom"
+    expect(args.provider).toBeNull();
   });
 
   // 回归保护: 真实场景下 NDJSON 事件从主进程 IPC 跨进程过来,
