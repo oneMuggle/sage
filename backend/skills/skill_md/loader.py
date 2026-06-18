@@ -16,6 +16,7 @@
 - 路径遍历防御由 ``validation.validate_base_dir`` 提供 (此处不调,
   在 chat 层的 ``{baseDir}`` 替换路径上拦截)。
 - 日志中的不可信 body 走 ``validation.sanitize_for_logging`` 脱敏。
+- v2: 支持条件加载门控 (requires/os/always), 通过 ``gating_ctx`` 参数启用。
 """
 
 from __future__ import annotations
@@ -28,7 +29,8 @@ from typing import Any
 
 from ..registry import SkillRegistry
 from .frontmatter import SkillMdParseError, parse_file
-from .skill import SkillMdDocument, SkillMdSkill
+from .gating import GatingContext, evaluate_gating
+from .skill import DispatchMode, RequiresSpec, SkillMdDocument, SkillMdSkill
 from .validation import sanitize_for_logging
 
 logger = logging.getLogger(__name__)
@@ -70,13 +72,20 @@ class SkillMdHotLoader:
       - 加载的是 ``<dir>/<name>/SKILL.md`` 目录形态 (不是 ``*.py`` 文件)
       - 注册的是 ``SkillMdSkill(BaseSkill)`` (不是任意 ``BaseSkill`` 子类)
       - 冲突优先级: builtin 胜, SKILL.md skip
+      - v2: 支持条件加载门控 (requires/os/always)
     """
 
-    def __init__(self, registry: SkillRegistry, dirs: list[Path] | None = None) -> None:
+    def __init__(
+        self,
+        registry: SkillRegistry,
+        dirs: list[Path] | None = None,
+        gating_ctx: GatingContext | None = None,
+    ) -> None:
         self._registry = registry
         self._dirs: list[Path] = list(dirs or [])
         self._file_hashes: dict[str, str] = {}
         self._loaded_paths: dict[str, str] = {}  # skill_name -> file_path str
+        self._gating_ctx = gating_ctx  # None = 不门控 (v1 行为)
 
     # ===== scan / load =====
 
@@ -140,6 +149,23 @@ class SkillMdHotLoader:
             )
             return False
 
+        # 构造 SkillMdDocument (含 v2 字段)
+        requires_data = meta.get("requires", {})
+        if not isinstance(requires_data, dict):
+            requires_data = {}
+
+        requires_spec = RequiresSpec(
+            bins=list(requires_data.get("bins", []))
+            if isinstance(requires_data.get("bins"), list)
+            else [],
+            env=list(requires_data.get("env", []))
+            if isinstance(requires_data.get("env"), list)
+            else [],
+            config=list(requires_data.get("config", []))
+            if isinstance(requires_data.get("config"), list)
+            else [],
+        )
+
         doc = SkillMdDocument(
             name=name,
             description=meta.get("description", ""),
@@ -153,7 +179,34 @@ class SkillMdHotLoader:
             if isinstance(meta.get("metadata"), dict)
             else {},
             raw_frontmatter=dict(meta),
+            # v2 字段
+            requires=requires_spec,
+            os=list(meta.get("os", [])) if isinstance(meta.get("os"), list) else [],
+            always=bool(meta.get("always", False)),
+            dispatch=DispatchMode(
+                disable_model_invocation=bool(meta.get("disable-model-invocation", False)),
+                user_invocable=bool(meta.get("user-invocable", False)),
+                user_invocable_name=str(meta["user-invocable-name"])
+                if "user-invocable-name" in meta
+                else None,
+                command_dispatch=str(meta.get("command-dispatch", "auto")),
+            ),
+            resources=None,  # ResourceIndex 后续构建
         )
+
+        # 评估门控条件 (v2 特性)
+        if self._gating_ctx is not None:
+            gating_result = evaluate_gating(doc, self._gating_ctx)
+            if not gating_result.allowed:
+                logger.info(
+                    "SKILL.md gating failed for '%s' at %s: %s (always=%s, always_override=%s)",
+                    name,
+                    path,
+                    "; ".join(gating_result.reasons),
+                    doc.always,
+                    gating_result.always_override,
+                )
+                return False
 
         try:
             skill = SkillMdSkill(doc, base_dir=path.parent)
@@ -228,8 +281,14 @@ class SkillMdHotLoader:
 def register_skill_md_skills(
     registry: SkillRegistry,
     dirs: list[str] | None = None,
+    gating_ctx: GatingContext | None = None,
 ) -> int:
     """便捷封装: 从 ``dirs`` (或 ``discover_skill_md_dirs()``) 加载 SKILL.md。
+
+    Args:
+        registry: 技能注册表
+        dirs: 搜索目录列表 (None = 使用默认发现逻辑)
+        gating_ctx: 门控上下文 (None = 不门控, v1 行为)
 
     Returns:
         成功加载的 skill 数量 (跳过的不计)。
@@ -243,6 +302,6 @@ def register_skill_md_skills(
     if not skill_dirs:
         return 0
 
-    loader = SkillMdHotLoader(registry, skill_dirs)
+    loader = SkillMdHotLoader(registry, skill_dirs, gating_ctx=gating_ctx)
     loaded, _ = loader.scan_and_load()
     return loaded
