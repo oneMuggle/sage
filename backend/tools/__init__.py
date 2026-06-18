@@ -3,6 +3,7 @@
 
 提供所有内置工具的注册函数
 """
+
 from .base import BaseTool, ToolResult, ToolSchema
 from .calculator import CalculatorTool
 from .file_tool import ListDirTool, ReadFileTool, WriteFileTool
@@ -29,6 +30,16 @@ def register_all_tools(registry: ToolRegistry) -> None:
     registry.register(CalculatorTool())
     registry.register(MemorySearchTool())
     registry.register(MemorySaveTool())
+
+    # Register MCP tools (from external MCP servers like draw.io)
+    try:
+        from backend.mcp import register_mcp_tools
+
+        register_mcp_tools(registry)
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning(f"Failed to register MCP tools: {exc}")
 
 
 __all__ = [
