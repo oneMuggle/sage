@@ -20,11 +20,9 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 
 from backend.skills.skill_md.sandbox import (
     DEFAULT_ENV_DENYLIST,
-    SandboxPort,
     SandboxRequest,
     SandboxResult,
 )
@@ -92,7 +90,9 @@ class SubprocessSandboxAdapter:
                 *argv,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                stdin=asyncio.subprocess.PIPE if req.stdin_data is not None else asyncio.subprocess.DEVNULL,
+                stdin=asyncio.subprocess.PIPE
+                if req.stdin_data is not None
+                else asyncio.subprocess.DEVNULL,
                 env=env,
                 cwd=cwd,
             )
@@ -114,7 +114,7 @@ class SubprocessSandboxAdapter:
                 process.communicate(input=req.stdin_data),
                 timeout=timeout,
             )
-        except (TimeoutError, asyncio.TimeoutError):
+        except (asyncio.TimeoutError, TimeoutError):
             # 超时: kill 子进程
             try:
                 process.kill()
@@ -123,7 +123,9 @@ class SubprocessSandboxAdapter:
                 pass  # 子进程已退出
             duration_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning(
-                "Sandbox subprocess timeout after %.1fs: %s", timeout, req.script_path,
+                "Sandbox subprocess timeout after %.1fs: %s",
+                timeout,
+                req.script_path,
             )
             return SandboxResult(
                 success=False,

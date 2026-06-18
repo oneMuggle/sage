@@ -5,6 +5,7 @@
 ``.loader`` / ``.validation`` / ``.gating``。
 """
 
+from .confirm import ConfirmationPort
 from .frontmatter import SkillMdParseError, dump, parse, parse_file
 from .gating import GatingContext, GatingResult, build_gating_context, evaluate_gating
 from .loader import (
@@ -34,6 +35,7 @@ from .validation import (
 
 __all__ = [
     "ALLOWED_RESOURCE_DIRS",
+    "ConfirmationPort",
     "DEFAULT_ENV_DENYLIST",
     "SkillMdParseError",
     "dump",
