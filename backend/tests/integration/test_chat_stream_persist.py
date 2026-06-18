@@ -113,12 +113,12 @@ async def test_streaming_chat_updates_session_metadata(client):
     assert sess is not None
     # 修复前: message_count=0, last_message_at=NULL → 侧栏历史显示"空对话"
     assert sess.message_count == 2, f"message_count={sess.message_count}, expected 2"
-    assert sess.last_message_at is not None, (
-        f"last_message_at={sess.last_message_at}, expected non-null ms timestamp"
-    )
-    assert sess.last_message_at > 0, (
-        f"last_message_at={sess.last_message_at}, expected positive ms timestamp"
-    )
+    assert (
+        sess.last_message_at is not None
+    ), f"last_message_at={sess.last_message_at}, expected non-null ms timestamp"
+    assert (
+        sess.last_message_at > 0
+    ), f"last_message_at={sess.last_message_at}, expected positive ms timestamp"
 
 
 @pytest.mark.asyncio()
@@ -158,3 +158,110 @@ async def test_message_save_failure_does_not_break_stream(client):
         if entry and entry.task:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await entry.task
+
+
+# =============================================================================
+# PR-7b: reasoning_content 持久化
+# =============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_streaming_chat_persists_reasoning_content(client):
+    """一次带 reasoning 的 chat 后,assistant 消息的 reasoning_content 被写入 DB。"""
+    create_sess = await client.post(SESSIONS_PATH, json={"title": "PR-7b reasoning"})
+    assert create_sess.status_code == 200, create_sess.text
+    session_id = create_sess.json()["id"]
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(
+            state=AgentState.REASONING,
+            iteration=0,
+            reasoning="这是 LLM 的思考过程,会被持久化到 DB",
+        )
+        yield AgentEvent(
+            state=AgentState.DONE,
+            iteration=0,
+            content="这是 assistant 回答",
+        )
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+
+        create_stream = await client.post(
+            CHAT_STREAM_PATH,
+            json={
+                "session_id": session_id,
+                "message": "PR-7b 回归消息",
+                "api_key": "sk-test",
+                "api_url": "https://example.com/v1",
+                "model": "gpt-4",
+            },
+        )
+        assert create_stream.status_code == 200, create_stream.text
+        stream_id = create_stream.json()["streamId"]
+
+        attach = await client.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+        assert attach.status_code == 200
+
+        entry = app.state.streams.get(stream_id)
+        if entry and entry.task:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await entry.task
+
+    msg_repo = MessageRepository()
+    persisted = msg_repo.get_by_session(session_id)
+    asst_msg = next((m for m in persisted if m.role == "assistant"), None)
+    assert asst_msg is not None, "assistant message not persisted"
+    assert (
+        asst_msg.reasoning_content == "这是 LLM 的思考过程,会被持久化到 DB"
+    ), f"reasoning_content not persisted, got {asst_msg.reasoning_content!r}"
+    assert asst_msg.content == "这是 assistant 回答"
+
+
+@pytest.mark.asyncio()
+async def test_streaming_chat_without_reasoning_has_null_reasoning_content(client):
+    """不带 reasoning 的 chat,assistant 消息的 reasoning_content 应该是 None。"""
+    create_sess = await client.post(SESSIONS_PATH, json={"title": "PR-7b no reasoning"})
+    assert create_sess.status_code == 200
+    session_id = create_sess.json()["id"]
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(
+            state=AgentState.DONE,
+            iteration=0,
+            content="普通回答,无思考",
+        )
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+
+        create_stream = await client.post(
+            CHAT_STREAM_PATH,
+            json={
+                "session_id": session_id,
+                "message": "普通消息",
+                "api_key": "sk-test",
+                "api_url": "https://example.com/v1",
+                "model": "gpt-4",
+            },
+        )
+        assert create_stream.status_code == 200
+        stream_id = create_stream.json()["streamId"]
+
+        attach = await client.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+        assert attach.status_code == 200
+
+        entry = app.state.streams.get(stream_id)
+        if entry and entry.task:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await entry.task
+
+    msg_repo = MessageRepository()
+    persisted = msg_repo.get_by_session(session_id)
+    asst_msg = next((m for m in persisted if m.role == "assistant"), None)
+    assert asst_msg is not None
+    assert (
+        asst_msg.reasoning_content is None
+    ), f"reasoning_content should be None when no reasoning event, got {asst_msg.reasoning_content!r}"
