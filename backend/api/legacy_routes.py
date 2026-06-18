@@ -633,8 +633,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
 
             agent = SageAgent()
+
+            # Build system prompt with optional diagram tool guidance
+            system_content = "你是 Sage，一个智能 AI 助手。"
+            try:
+                from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
+                # Check if diagram MCP tools are registered
+                _registry = getattr(agent, "tool_registry", None)
+                if _registry and _registry.exists("drawio__render_diagram"):
+                    system_content += DIAGRAM_TOOL_PROMPT
+            except Exception:
+                pass  # Graceful fallback if diagram module unavailable
+
             messages = [
-                {"role": "system", "content": "你是 Sage，一个智能 AI 助手。"},
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": data.message},
             ]
             # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
