@@ -279,24 +279,47 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
         {/* 工具调用展示（ReAct 模式） */}
         {toolCalls.length > 0 && (
           <div className="mt-2 flex flex-col gap-1.5">
-            {toolCalls.map((tc, idx) => (
-              <div
-                key={`${tc.name}-${idx}`}
-                className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 rounded border border-border bg-bg-subtle text-[12px] font-mono"
-              >
-                <Wrench className="w-3 h-3 text-primary" />
-                <span className="font-semibold text-primary">{tc.name}</span>
-                <span className="text-muted">(</span>
-                <span className="text-text-secondary break-all">{JSON.stringify(tc.args)}</span>
-                <span className="text-muted">)</span>
-                {tc.result !== undefined && tc.result !== '' && (
-                  <>
-                    <span className="text-muted">→</span>
-                    <span className="text-text-primary break-all">{tc.result}</span>
-                  </>
-                )}
-              </div>
-            ))}
+            {toolCalls.map((tc, idx) => {
+              const hasImage = tc.metadata?.imageData;
+              return (
+                <div
+                  key={`${tc.name}-${idx}`}
+                  className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-[12px]"
+                >
+                  {/* Tool call header */}
+                  <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 font-mono">
+                    <Wrench className="w-3 h-3 text-primary shrink-0" />
+                    <span className="font-semibold text-primary">{tc.name}</span>
+                    {!hasImage && (
+                      <>
+                        <span className="text-muted">(</span>
+                        <span className="text-text-secondary break-all">
+                          {JSON.stringify(tc.args)}
+                        </span>
+                        <span className="text-muted">)</span>
+                      </>
+                    )}
+                    {tc.result !== undefined && tc.result !== '' && !hasImage && (
+                      <>
+                        <span className="text-muted">→</span>
+                        <span className="text-text-primary break-all">{tc.result}</span>
+                      </>
+                    )}
+                  </div>
+                  {/* Inline image preview for diagram tools */}
+                  {hasImage && (
+                    <div className="px-2 pb-2">
+                      <img
+                        src={tc.metadata!.imageData}
+                        alt={`Diagram from ${tc.name}`}
+                        className="max-w-full rounded border border-border bg-white"
+                        style={{ maxHeight: '400px' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

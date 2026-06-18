@@ -24,6 +24,10 @@ export interface ToolCall {
   name: string;
   args: Record<string, unknown>;
   result?: string;
+  metadata?: {
+    imageData?: string; // base64 data URL for inline image display
+    imageFormat?: string; // 'svg' | 'png'
+  };
 }
 
 // 消息

@@ -4,7 +4,7 @@ import { resolveEndpoint } from '../../entities/setting/types';
 import { ApiException, type AgentEvent, type ChatConfig } from '../../shared/api/api';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
-import { chatApi, useStore, type Message } from '../../shared/lib/store';
+import { chatApi, useStore, type Message, type ToolCall } from '../../shared/lib/store';
 import { useSettings } from '../manage-settings/useSettings';
 
 /**
@@ -154,6 +154,9 @@ export function useChat() {
       // 重置 reasoning ref
       streamingReasoningRef.current = '';
 
+      // Accumulate tool calls during streaming
+      const streamingToolCalls: ToolCall[] = [];
+
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
         apiUrl: chatEndpoint.baseUrl,
@@ -221,10 +224,11 @@ export function useChat() {
         // 退回到 streamingContentRef (向后兼容旧的非流式 done 事件)
         const finalContent = lastDoneContent ?? streamingContentRef.current;
         const finalReasoning = streamingReasoningRef.current;
-        if (finalContent || finalReasoning) {
+        if (finalContent || finalReasoning || streamingToolCalls.length > 0) {
           updateMessage(assistantId, {
             content: finalContent,
             reasoning_content: finalReasoning || undefined,
+            tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
           });
         }
         streamingContentRef.current = '';
@@ -249,6 +253,38 @@ export function useChat() {
                     ? { ...prev, reasoning: streamingReasoningRef.current }
                     : prev,
                 );
+              }
+
+              // Collect tool calls during streaming
+              if (evt.state === 'acting' && evt.tool_call) {
+                const tc = evt.tool_call;
+                let args: Record<string, unknown> = {};
+                try {
+                  args = JSON.parse(tc.function.arguments);
+                } catch {
+                  // ignore parse errors
+                }
+                streamingToolCalls.push({
+                  name: tc.function.name,
+                  args,
+                });
+              }
+              if (evt.state === 'observing' && evt.tool_result) {
+                const tr = evt.tool_result;
+                // Find the matching tool call (by matching tool_call_id to the last acting event)
+                const lastTc = streamingToolCalls[streamingToolCalls.length - 1];
+                if (lastTc) {
+                  lastTc.result = tr.content;
+                  // Try to parse JSON result to extract metadata (e.g., image data from MCP tools)
+                  try {
+                    const parsed = JSON.parse(tr.content);
+                    if (parsed && typeof parsed === 'object' && parsed.metadata) {
+                      lastTc.metadata = parsed.metadata;
+                    }
+                  } catch {
+                    // Not JSON, ignore
+                  }
+                }
               }
 
               const uiText = agentStateToUiText(evt.state, evt.tool_call?.function.name);
