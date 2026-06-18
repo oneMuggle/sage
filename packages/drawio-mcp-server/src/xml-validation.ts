@@ -586,41 +586,57 @@ export function autoFixXml(xml: string): { fixed: string; fixes: string[] } {
         )
     }
 
-    // 17. Fix unclosed tags
+    // 17. Fix unclosed tags — insert missing closing tags at correct positions
+    //    (before their parent's closing tag, not at the end of document)
     const tagStack: string[] = []
+    const tagStackPositions: number[] = [] // tracks endIndex of each opening tag
     const parsedTags = parseXmlTags(fixed)
 
-    for (const { tagName, isClosing, isSelfClosing } of parsedTags) {
+    for (const { tagName, isClosing, isSelfClosing, endIndex } of parsedTags) {
         if (isClosing) {
             const lastIdx = tagStack.lastIndexOf(tagName)
             if (lastIdx !== -1) {
                 tagStack.splice(lastIdx, 1)
+                tagStackPositions.splice(lastIdx, 1)
             }
         } else if (!isSelfClosing) {
             tagStack.push(tagName)
+            tagStackPositions.push(endIndex)
         }
     }
 
     if (tagStack.length > 0) {
-        const tagsToClose: string[] = []
-        for (const tagName of tagStack.reverse()) {
-            const openCount = (
-                fixed.match(new RegExp(`<${tagName}[\\s>]`, "gi")) || []
-            ).length
-            const closeCount = (
-                fixed.match(new RegExp(`</${tagName}>`, "gi")) || []
-            ).length
-            if (openCount > closeCount) {
-                tagsToClose.push(tagName)
+        // For each unclosed tag, find the position to insert its closing tag.
+        // Strategy: insert before the next sibling/parent closing tag,
+        // or at the end of the document if no more tags.
+        // Simplest: iterate from innermost to outermost, inserting each
+        // closing tag at the position of the parent's closing tag (or end).
+        const unclosedTags = [...tagStack]
+        // Insert from innermost (end of array) to outermost
+        for (let i = unclosedTags.length - 1; i >= 0; i--) {
+            const tagName = unclosedTags[i]
+            // Find the position of the next closing tag after this opening tag
+            // For the outermost unclosed tag, append at end
+            if (i === unclosedTags.length - 1) {
+                // Innermost: find next closing tag position
+                const openEndPos = tagStackPositions[i]
+                const closingTagPattern = new RegExp(`</[a-zA-Z][a-zA-Z0-9:_-]*>`, "g")
+                closingTagPattern.lastIndex = openEndPos
+                const nextClose = closingTagPattern.exec(fixed)
+                if (nextClose) {
+                    const insertPos = nextClose.index
+                    fixed = fixed.slice(0, insertPos) + `</${tagName}>` + fixed.slice(insertPos)
+                } else {
+                    fixed = fixed + `</${tagName}>`
+                }
+            } else {
+                // Outer tags: insert at end (after all inner inserts)
+                fixed = fixed + `</${tagName}>`
             }
         }
-        if (tagsToClose.length > 0) {
-            const closingTags = tagsToClose.map((t) => `</${t}>`).join("\n")
-            fixed = fixed.trimEnd() + "\n" + closingTags
-            fixes.push(
-                `Closed ${tagsToClose.length} unclosed tag(s): ${tagsToClose.join(", ")}`,
-            )
-        }
+        fixes.push(
+            `Closed ${unclosedTags.length} unclosed tag(s): ${unclosedTags.join(", ")}`,
+        )
     }
 
     // 18. Remove extra closing tags

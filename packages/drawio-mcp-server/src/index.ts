@@ -152,18 +152,25 @@ The tool returns an SVG preview image that will be displayed inline in the chat.
 
             log.info(`Diagram rendered: ${xml.length} chars XML → ${dataUrl.length} chars ${outputFormat.toUpperCase()}`)
 
+            // Return image as MCP standard "image" content type
+            // This ensures image data flows through the MCP protocol correctly
+            const mimeType = outputFormat === "svg" ? "image/svg+xml" : "image/png"
+            const base64Data = dataUrl.includes(",")
+                ? dataUrl.split(",")[1]
+                : dataUrl
+
             return {
                 content: [
                     {
                         type: "text",
                         text: `Diagram rendered successfully!\n\nXML length: ${xml.length} characters\nFormat: ${outputFormat.toUpperCase()}`,
                     },
+                    {
+                        type: "image",
+                        data: base64Data,
+                        mimeType: mimeType,
+                    },
                 ],
-                // Metadata for sage frontend to display the image inline
-                metadata: {
-                    imageData: dataUrl,
-                    imageFormat: outputFormat,
-                },
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error)

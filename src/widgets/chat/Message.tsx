@@ -268,7 +268,7 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
                   },
                 }}
               >
-                {message.content}
+                {message.content.replace(/<img\s+[^>]*src=["']data:[^"']*["'][^>]*\/?>/gi, '')}
               </ReactMarkdown>
             </div>
           ) : (
@@ -312,8 +312,8 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
                       <img
                         src={tc.metadata!.imageData}
                         alt={`Diagram from ${tc.name}`}
-                        className="max-w-full rounded border border-border bg-white"
-                        style={{ maxHeight: '400px' }}
+                        className="max-w-full rounded border border-border"
+                        style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
                       />
                     </div>
                   )}

@@ -93,9 +93,25 @@ class McpTool(BaseTool):
             if part.get("type") == "text":
                 text_parts.append(part.get("text", ""))
             elif part.get("type") == "image":
-                # Store image data in metadata
-                metadata["imageData"] = part.get("data", "")
-                metadata["imageFormat"] = part.get("format", "png")
+                # MCP standard uses "mimeType", fall back to "format"
+                raw_data = part.get("data", "")
+                mime = part.get("mimeType") or part.get("format", "png")
+                # Normalize mime type
+                if mime == "image/svg+xml":
+                    image_format = "svg"
+                    mime_full = "image/svg+xml"
+                elif mime == "image/png":
+                    image_format = "png"
+                    mime_full = "image/png"
+                else:
+                    image_format = "png"
+                    mime_full = mime
+                # Reconstruct full data URL with prefix if missing
+                if raw_data.startswith("data:"):
+                    metadata["imageData"] = raw_data
+                else:
+                    metadata["imageData"] = f"data:{mime_full};base64,{raw_data}"
+                metadata["imageFormat"] = image_format
 
         # Also check for metadata at the response level
         if "metadata" in response:

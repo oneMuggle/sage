@@ -145,27 +145,48 @@ export class DrawioRenderer {
     }
 
     /**
-     * Send load command to draw.io iframe
+     * Send load command to draw.io iframe and wait for it to be ready
      */
     private async loadDiagram(xml: string): Promise<void> {
         if (!this.page) throw new Error("Page not initialized")
 
+        // Set up listener for autosave event (indicates load is complete)
+        await this.page.evaluate(() => {
+            return new Promise<void>((resolve) => {
+                const handler = (e: MessageEvent) => {
+                    try {
+                        const msg = JSON.parse(e.data)
+                        if (msg.event === "autosave" || msg.event === "save") {
+                            window.removeEventListener("message", handler)
+                            // Give draw.io a moment to finish rendering
+                            setTimeout(resolve, 300)
+                        }
+                    } catch {
+                        // ignore
+                    }
+                }
+                window.addEventListener("message", handler)
+                // Timeout fallback
+                setTimeout(() => {
+                    window.removeEventListener("message", handler)
+                    resolve()
+                }, 8000)
+            })
+        })
+
+        // Send load command
         const loadMsg = JSON.stringify({
             action: "load",
             xml,
             autosave: 0,
         })
 
-        // Send postMessage to the iframe's contentWindow
         await this.page.evaluate((msg: string) => {
             const iframe = document.getElementById("drawio") as HTMLIFrameElement
             if (iframe?.contentWindow) {
                 iframe.contentWindow.postMessage(msg, "*")
             }
         }, loadMsg)
-
-        // Wait for draw.io to process the load
-        await this.waitForEvent("load", 10000)
     }
 
     /**

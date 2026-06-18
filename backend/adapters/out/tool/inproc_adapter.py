@@ -34,6 +34,11 @@ class InprocToolAdapter:
     def __init__(self, registry: _ToolRegistry | None = None) -> None:
         # 接受外部注入（用于测试）或使用新建 registry
         self._registry = registry if registry is not None else _ToolRegistry()
+        # 注册所有内置工具（含 MCP 工具）
+        if registry is None:
+            from backend.tools import register_all_tools
+
+            register_all_tools(self._registry)
 
     def list_tools(self) -> list[ToolSpec]:
         """返回所有已注册工具的 spec（按注册顺序）。"""
