@@ -67,6 +67,10 @@ describe('chatApi.chatStream (PR-6)', () => {
       model: 'gpt-x',
       maxContext: 8192,
       temperature: 0.7,
+      // PR-7a: 新增 3 个推理参数透传字段(默认 null)
+      provider: null,
+      reasoningEffort: null,
+      thinkingBudget: null,
     });
     // 2) listen 订阅 chat-stream-{id} (从 {streamId} 对象解构得到)
     expect(listenMock).toHaveBeenCalledWith(`chat-stream-${streamId}`, expect.any(Function));

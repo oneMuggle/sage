@@ -6,6 +6,26 @@ import { logger } from '../../shared/lib/logger';
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
 import { useSettings } from '../manage-settings/useSettings';
 
+/**
+ * 从 endpoint baseUrl 启发式推导 LLM provider 字符串。
+ *
+ * 后端在 PR-7a 后不再硬写 provider="custom",改用请求里的字段。
+ * 暂时用 baseUrl 子串匹配,后续 PR 会给 EndpointConfig 加显式 provider
+ * 字段(settings UI 让用户选),届时这个函数就退化成兜底。
+ *
+ * 返回值与 backend LLMConfig.provider 注释里允许的值对齐。
+ */
+function inferProviderFromBaseUrl(baseUrl: string | undefined): string | undefined {
+  if (!baseUrl) return undefined;
+  const u = baseUrl.toLowerCase();
+  if (u.includes('generativelanguage.googleapis.com')) return 'gemini';
+  if (u.includes('api.openai.com')) return 'openai';
+  if (u.includes('api.deepseek.com')) return 'deepseek';
+  if (u.includes('anthropic.com')) return 'claude';
+  // Ollama / 局域网 / 其它 OpenAI 兼容代理 → 后端默认 'custom'
+  return undefined;
+}
+
 /** 把后端 AgentState 映射到 UI 中间态文本 (PR-6) */
 function agentStateToUiText(state: AgentEvent['state'], toolName?: string): string | null {
   switch (state) {
@@ -139,6 +159,10 @@ export function useChat() {
         model: settings.modelSelections.chatModelId ?? undefined,
         maxContext: settings.maxContext,
         temperature: settings.temperature,
+        // 从 baseUrl 推导 provider,后端不再硬写 "custom"。
+        // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
+        // 不再靠 URL 启发式。详见 docs/plans/2026-06-17_thinking-passthrough.md
+        provider: inferProviderFromBaseUrl(activeEndpoint.baseUrl),
       };
 
       const appendContent = (next: string): void => {

@@ -328,3 +328,128 @@ async def test_producer_passes_no_llm_config_when_request_omits_api_key():
 
     # 没 api_key/api_url → llm_config 应该是 None
     assert captured_kwargs.get("llm_config") is None
+
+
+# =============================================================================
+# PR-7a: provider 透传 + 推理参数 (reasoning_effort / thinking_budget)
+# =============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_producer_passes_provider_from_request_body():
+    """请求体显式带 provider → llm_config["provider"] 跟着变,不再硬写 'custom'。"""
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    captured_kwargs: dict = {}
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={
+                    "session_id": "s",
+                    "message": "hi",
+                    "api_key": "sk-test",
+                    "api_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+                    "model": "gemini-2.5-flash",
+                    "provider": "gemini",
+                },
+            )
+            assert resp.status_code == 200
+            stream_id = resp.json()["streamId"]
+            await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+
+    llm_config = captured_kwargs["llm_config"]
+    assert (
+        llm_config["provider"] == "gemini"
+    ), f"provider 应该透传,实际 {llm_config.get('provider')!r}"
+
+
+@pytest.mark.asyncio()
+async def test_producer_passes_reasoning_params_when_provided():
+    """请求体带 reasoning_effort / thinking_budget → 出现在 llm_config 里。"""
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    captured_kwargs: dict = {}
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={
+                    "session_id": "s",
+                    "message": "hi",
+                    "api_key": "sk-test",
+                    "api_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+                    "model": "gemini-2.5-flash",
+                    "reasoning_effort": "high",
+                    "thinking_budget": 4096,
+                },
+            )
+            assert resp.status_code == 200
+            stream_id = resp.json()["streamId"]
+            await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+
+    llm_config = captured_kwargs["llm_config"]
+    assert llm_config["reasoning_effort"] == "high"
+    assert llm_config["thinking_budget"] == 4096
+
+
+@pytest.mark.asyncio()
+async def test_producer_omits_reasoning_params_when_not_provided():
+    """请求体不带推理参数 → llm_config 里也不带(避免污染老 LLM)。"""
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    captured_kwargs: dict = {}
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={
+                    "session_id": "s",
+                    "message": "hi",
+                    "api_key": "sk-test",
+                    "api_url": "https://example.com/v1",
+                    "model": "gpt-4",
+                    # 没传 reasoning_effort / thinking_budget
+                },
+            )
+            assert resp.status_code == 200
+            stream_id = resp.json()["streamId"]
+            await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+
+    llm_config = captured_kwargs["llm_config"]
+    # 向后兼容: 老请求不带新字段时,llm_config 也不该有这些 key
+    assert "reasoning_effort" not in llm_config
+    assert "thinking_budget" not in llm_config

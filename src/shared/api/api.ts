@@ -342,6 +342,14 @@ export interface ChatConfig {
   model?: string;
   maxContext?: number;
   temperature?: number;
+  // 推理参数（PR-7a 透传到后端 → LLMConfig → 请求体）
+  // - provider: 前端在 settings 选的真实 provider,后端用它路由
+  //   (openai / claude / gemini / deepseek / ollama / custom)
+  // - reasoningEffort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
+  // - thinkingBudget: Gemini 2.5 OpenAI 兼容模式
+  provider?: string;
+  reasoningEffort?: 'low' | 'medium' | 'high';
+  thinkingBudget?: number;
 }
 
 export const chatApi = {
@@ -369,6 +377,9 @@ export const chatApi = {
             model: config?.model ?? null,
             maxContext: config?.maxContext ?? null,
             temperature: config?.temperature ?? null,
+            provider: config?.provider ?? null,
+            reasoningEffort: config?.reasoningEffort ?? null,
+            thinkingBudget: config?.thinkingBudget ?? null,
           });
           return response;
         } catch (error) {
@@ -434,6 +445,9 @@ export const chatApi = {
       model: config?.model ?? null,
       maxContext: config?.maxContext ?? null,
       temperature: config?.temperature ?? null,
+      provider: config?.provider ?? null,
+      reasoningEffort: config?.reasoningEffort ?? null,
+      thinkingBudget: config?.thinkingBudget ?? null,
     });
     const eventName = `chat-stream-${streamId}`;
 
