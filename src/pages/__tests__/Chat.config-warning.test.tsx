@@ -2,7 +2,7 @@
  * Chat 页 配置缺失警告条 测试
  *
  * 覆盖 Chat.tsx 中：
- *   - hasConfig 派生（active endpoint.baseUrl && modelSelections.chatModelId）
+ *   - hasConfig 派生（chatEndpoint.baseUrl && modelSelections.chatModel.modelId）
  *   - data-testid="config-warning" 警告条
  *   - 跳转设置链接 (useNavigate → '/settings')
  *   - ChatInput 的 disabled 透传
@@ -57,11 +57,15 @@ import { Chat } from '../Chat';
 describe('Chat — config warning banner', () => {
   beforeEach(() => {
     navigateMock.mockReset();
-    // 没有 active endpoint，没有 chatModelId → hasConfig = false
+    // 没有 chatEndpoint，没有 chatModel.modelId → hasConfig = false
     useSettingsMock.mockReturnValue({
       settings: {
         endpoints: [],
-        modelSelections: { chatModelId: null, visionModelId: null, embeddingModelId: null },
+        modelSelections: {
+          chatModel: { endpointId: null, modelId: null },
+          visionModel: { endpointId: null, modelId: null },
+          embeddingModel: { endpointId: null, modelId: null },
+        },
         maxContext: 4096,
         temperature: 0.7,
       },
@@ -106,12 +110,15 @@ describe('Chat — config warning banner', () => {
             name: 'Test',
             baseUrl: 'https://api.example.test/v1',
             apiKey: 'sk-test',
-            isActive: true,
             discoveredModels: [],
             lastDiscoveredAt: null,
           },
         ],
-        modelSelections: { chatModelId: 'gpt-test', visionModelId: null, embeddingModelId: null },
+        modelSelections: {
+          chatModel: { endpointId: 'ep-1', modelId: 'gpt-test' },
+          visionModel: { endpointId: null, modelId: null },
+          embeddingModel: { endpointId: null, modelId: null },
+        },
         maxContext: 4096,
         temperature: 0.7,
       },

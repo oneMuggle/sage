@@ -16,6 +16,8 @@ export interface ConnectionTestResult {
   success: boolean;
   message: string;
   latency: number;
+  /** Models discovered during the test (present on success) */
+  discoveredModels?: DiscoveredModel[];
 }
 
 /**
@@ -137,12 +139,14 @@ export async function testEndpointConnection(
           success: false,
           message: `${modelDiscovery}，但聊天端点异常: ${chatResult.message}`,
           latency: Date.now() - start,
+          discoveredModels: models,
         };
       }
       return {
         success: true,
         message: `连接成功 · ${modelDiscovery} · ${chatResult.message}`,
         latency: Date.now() - start,
+        discoveredModels: models,
       };
     }
 
@@ -150,6 +154,7 @@ export async function testEndpointConnection(
       success: true,
       message: `连接成功，${modelDiscovery}`,
       latency: Date.now() - start,
+      discoveredModels: models,
     };
   } catch (error) {
     return {

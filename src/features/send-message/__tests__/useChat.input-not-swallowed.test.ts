@@ -14,7 +14,11 @@ vi.mock('../manage-settings/useSettings', () => ({
   useSettings: () => ({
     settings: {
       endpoints: [], // 无 active 端点
-      modelSelections: { chatModelId: null, visionModelId: null, embeddingModelId: null },
+      modelSelections: {
+        chatModel: { endpointId: null, modelId: null },
+        visionModel: { endpointId: null, modelId: null },
+        embeddingModel: { endpointId: null, modelId: null },
+      },
       maxContext: 4096,
       temperature: 0.7,
     },

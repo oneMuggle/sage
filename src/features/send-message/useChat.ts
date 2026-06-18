@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { ApiException, type AgentEvent, type ChatConfig } from '../../shared/api/api';
+import { resolveEndpoint } from '../../entities/setting/types';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
@@ -61,7 +62,7 @@ export function useChat() {
   // 新增：ref 镜像 streaming.reasoning
   const streamingReasoningRef = useRef<string>('');
 
-  const activeEndpoint = settings.endpoints.find((e) => e.isActive);
+  const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
 
   /**
    * 派生 messages: 当 streaming 时, 替换 store.messages 中对应 id 的 content 和 reasoning_content
@@ -99,8 +100,8 @@ export function useChat() {
       const requestId = crypto.randomUUID();
       logger.info(requestId, 'useChat.send.start', {
         sessionId: sid,
-        hasApiKey: Boolean(activeEndpoint?.apiKey),
-        hasModel: Boolean(settings.modelSelections.chatModelId),
+        hasApiKey: Boolean(chatEndpoint?.apiKey),
+        hasModel: Boolean(settings.modelSelections.chatModel.modelId),
       });
 
       loadingRef.current = true;
@@ -121,14 +122,14 @@ export function useChat() {
         setIsLoading(false);
       };
 
-      if (!activeEndpoint?.baseUrl) {
+      if (!chatEndpoint?.baseUrl) {
         // 仍记录错误供上层展示,但消息已经进 store
         setError('未配置 API 地址，请在设置中配置');
         resetLoading();
         return;
       }
 
-      if (!settings.modelSelections.chatModelId) {
+      if (!settings.modelSelections.chatModel.modelId) {
         setError('未选择对话模型，请在设置中配置');
         resetLoading();
         return;
@@ -154,15 +155,15 @@ export function useChat() {
       streamingReasoningRef.current = '';
 
       const config: ChatConfig = {
-        apiKey: activeEndpoint.apiKey,
-        apiUrl: activeEndpoint.baseUrl,
-        model: settings.modelSelections.chatModelId ?? undefined,
+        apiKey: chatEndpoint.apiKey,
+        apiUrl: chatEndpoint.baseUrl,
+        model: settings.modelSelections.chatModel.modelId ?? undefined,
         maxContext: settings.maxContext,
         temperature: settings.temperature,
         // 从 baseUrl 推导 provider,后端不再硬写 "custom"。
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
         // 不再靠 URL 启发式。详见 docs/plans/2026-06-17_thinking-passthrough.md
-        provider: inferProviderFromBaseUrl(activeEndpoint.baseUrl),
+        provider: inferProviderFromBaseUrl(chatEndpoint.baseUrl),
       };
 
       const appendContent = (next: string): void => {
@@ -297,7 +298,7 @@ export function useChat() {
         finishStream();
       }
     },
-    [currentSessionId, isLoading, activeEndpoint, settings, addMessage, updateMessage],
+    [currentSessionId, isLoading, chatEndpoint, settings, addMessage, updateMessage],
   );
 
   const interrupt = useCallback(async () => {

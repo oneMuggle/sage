@@ -3,6 +3,7 @@ import { MessageSquare, Settings, Brain, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
+import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useStore } from '../../shared/lib/store';
@@ -27,7 +28,7 @@ export function Sidebar() {
     deleteSession,
   } = useStore();
   const { settings } = useSettings();
-  const activeEndpoint = settings.endpoints.find((e) => e.isActive);
+  const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const [connectionStatus, setConnectionStatus] = useState<
     'connected' | 'not-configured' | 'error'
   >('not-configured');
@@ -38,14 +39,14 @@ export function Sidebar() {
   }, [loadSessions]);
 
   useEffect(() => {
-    if (!activeEndpoint?.baseUrl || !activeEndpoint.apiKey) {
+    if (!chatEndpoint?.baseUrl || !chatEndpoint.apiKey) {
       setConnectionStatus('not-configured');
       return;
     }
     testEndpointConnection(
-      activeEndpoint.baseUrl,
-      activeEndpoint.apiKey,
-      settings.modelSelections.chatModelId ?? undefined,
+      chatEndpoint.baseUrl,
+      chatEndpoint.apiKey,
+      settings.modelSelections.chatModel.modelId ?? undefined,
     )
       .then((result) => {
         setConnectionStatus(result.success ? 'connected' : 'error');
@@ -54,7 +55,7 @@ export function Sidebar() {
       .catch(() => {
         setConnectionStatus('error');
       });
-  }, [activeEndpoint?.baseUrl, activeEndpoint?.apiKey]);
+  }, [chatEndpoint?.baseUrl, chatEndpoint?.apiKey]);
 
   const handleNewSession = async () => {
     const sessionId = await createSession();

@@ -1,5 +1,5 @@
 /** Settings version for future migration support */
-export const SETTINGS_VERSION = '2.0.0';
+export const SETTINGS_VERSION = '3.0.0';
 
 /** localStorage key for settings persistence */
 export const SETTINGS_STORAGE_KEY = 'sage-settings';
@@ -20,16 +20,21 @@ export interface EndpointConfig {
   name: string;
   baseUrl: string;
   apiKey: string;
-  isActive: boolean;
   discoveredModels: DiscoveredModel[];
   lastDiscoveredAt: number | null;
 }
 
+/** User's model selection — binds a model to its source endpoint */
+export interface ModelSelection {
+  endpointId: string | null;
+  modelId: string | null;
+}
+
 /** User's model selections per type */
 export interface ModelSelections {
-  chatModelId: string | null;
-  visionModelId: string | null;
-  embeddingModelId: string | null;
+  chatModel: ModelSelection;
+  visionModel: ModelSelection;
+  embeddingModel: ModelSelection;
 }
 
 /** All application settings */
@@ -60,15 +65,19 @@ export const DEFAULT_ENDPOINT: EndpointConfig = {
   name: '',
   baseUrl: '',
   apiKey: '',
-  isActive: false,
   discoveredModels: [],
   lastDiscoveredAt: null,
 };
 
+const DEFAULT_MODEL_SELECTION: ModelSelection = {
+  endpointId: null,
+  modelId: null,
+};
+
 const DEFAULT_MODEL_SELECTIONS: ModelSelections = {
-  chatModelId: null,
-  visionModelId: null,
-  embeddingModelId: null,
+  chatModel: { ...DEFAULT_MODEL_SELECTION },
+  visionModel: { ...DEFAULT_MODEL_SELECTION },
+  embeddingModel: { ...DEFAULT_MODEL_SELECTION },
 };
 
 /** Sensible defaults for all settings */
@@ -93,3 +102,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Internal
   version: SETTINGS_VERSION,
 };
+
+/**
+ * Resolve the endpoint that backs a given model selection.
+ * Returns undefined when the selection is empty or the endpoint was deleted.
+ */
+export function resolveEndpoint(
+  selection: ModelSelection,
+  endpoints: EndpointConfig[],
+): EndpointConfig | undefined {
+  if (!selection.endpointId) return undefined;
+  return endpoints.find((ep) => ep.id === selection.endpointId);
+}

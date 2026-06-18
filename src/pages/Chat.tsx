@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
 import { useStore } from '../shared/lib/store';
@@ -25,9 +26,9 @@ export function Chat() {
     el.scrollTop = el.scrollHeight;
   }, [messages.length, lastMsg?.content]);
 
-  const activeEndpoint = settings.endpoints.find((e) => e.isActive);
+  const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const hasConfig =
-    Boolean(activeEndpoint?.baseUrl) && Boolean(settings.modelSelections.chatModelId);
+    Boolean(chatEndpoint?.baseUrl) && Boolean(settings.modelSelections.chatModel.modelId);
   const showConfigWarning = !hasConfig;
 
   useEffect(() => {
