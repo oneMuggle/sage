@@ -12,6 +12,13 @@ from .loader import (
     discover_skill_md_dirs,
     register_skill_md_skills,
 )
+from .resources import (
+    ALLOWED_RESOURCE_DIRS,
+    ResourceIndex,
+    build_resource_index,
+    render_body_with_resources,
+    validate_resource_path,
+)
 from .skill import DispatchMode, RequiresSpec, SkillMdDocument, SkillMdSkill
 from .validation import (
     SkillMdSecurityError,
@@ -20,6 +27,7 @@ from .validation import (
 )
 
 __all__ = [
+    "ALLOWED_RESOURCE_DIRS",
     "SkillMdParseError",
     "dump",
     "parse",
@@ -28,14 +36,18 @@ __all__ = [
     "GatingContext",
     "GatingResult",
     "RequiresSpec",
+    "ResourceIndex",
     "SkillMdDocument",
     "SkillMdSkill",
     "SkillMdHotLoader",
     "build_gating_context",
+    "build_resource_index",
     "discover_skill_md_dirs",
     "evaluate_gating",
     "register_skill_md_skills",
+    "render_body_with_resources",
     "SkillMdSecurityError",
     "sanitize_for_logging",
     "validate_base_dir",
+    "validate_resource_path",
 ]
