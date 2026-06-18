@@ -121,3 +121,7 @@ reference/
 
 # Temporary screenshots
 chat-*.png
+
+# MCP Server build artifacts
+packages/drawio-mcp-server/node_modules/
+packages/drawio-mcp-server/dist/

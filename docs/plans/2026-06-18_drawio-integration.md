@@ -1,9 +1,10 @@
-# Draw.io 图表集成实现计划
+# Draw.io 图表集成实现计划（v2）
 
 > 创建日期：2026-06-18  
-> 状态：进行中  
+> 更新日期：2026-06-18  
+> 状态：待确认  
 > 复杂度：中-高  
-> 预计工期：8-11 天（MVP）
+> 预计工期：8-12 天（MVP）
 
 ---
 
@@ -11,237 +12,352 @@
 
 ### 1.1 背景
 
-用户希望在 sage 项目（React + Vite + Python FastAPI 桌面 AI 助手）中集成 draw.io 图表功能，使 AI 能够通过对话生成、展示和编辑可视化图表。参考项目 `next-ai-draw-io`（Next.js + AI SDK）提供了成熟的 draw.io 嵌入方案。
+用户希望在 sage 项目中集成 draw.io 图表功能。AI 通过 MCP Server 调用 draw.io 生成图表，将预览图（SVG/PNG）直接显示在聊天会话区域。
 
-### 1.2 核心目标
+### 1.2 核心需求
 
-- 用户在 sage 中通过聊天请求图表，AI 生成 draw.io XML
-- 前端实时渲染可交互的 draw.io 图表
-- 支持图表的编辑、导出、版本历史
+- ✅ 通过 **MCP Server** 调用 draw.io（非嵌入编辑器）
+- ✅ 图表预览图**内联显示在聊天消息中**
+- ✅ 连接**自托管 Docker draw.io** 实例
+- ❌ 不需要嵌入完整 draw.io 编辑器
 
 ### 1.3 参考项目
 
-`/home/fz/project/next-ai-draw-io` - Next.js + AI SDK 实现的 draw.io AI 图表生成器
+`/home/fz/project/next-ai-draw-io` — 其中的 `packages/mcp-server/` 提供了 MCP Server 实现，但**依赖浏览器窗口**进行渲染（通过 `open()` 打开浏览器，postMessage 与 draw.io iframe 通信）。需要改造为 headless 方案。
 
 ---
 
-## 二、涉及的文件与模块
+## 二、技术方案
 
-### 2.1 新增文件（FSD 结构）
+### 2.1 核心问题
+
+参考项目的 MCP Server 的 XML → SVG/PNG 转换**完全依赖浏览器端的 draw.io iframe**。MCP Server 本身（Node.js 进程）不做任何渲染，它通过以下链路与浏览器通信：
 
 ```
-src/
-├── widgets/
-│   └── diagram/                    # 新增 widget
-│       ├── DiagramEditor.tsx       # 包装 react-drawio
-│       ├── DiagramToolbar.tsx      # 导出/历史/清除按钮
-│       └── index.ts
-├── features/
-│   └── manage-diagrams/            # 新增 feature
-│       ├── DiagramContext.tsx       # 图表状态管理
-│       ├── useDiagramTools.ts      # AI 工具调用处理
-│       └── xmlUtils.ts             # XML 工具函数
-├── pages/
-│   └── Diagram.tsx                 # 新增页面
-└── app/
-    └── App.tsx                     # 添加 /diagrams 路由
+MCP Server → HTTP API (localhost:6002) → 浏览器页面 → draw.io iframe → postMessage → 导出图片
+```
 
+这意味着需要一个浏览器实例来完成渲染。参考项目直接打开用户浏览器窗口，但对 sage 来说更合适的方案是 **headless 浏览器**（Puppeteer）。
+
+### 2.2 整体架构
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      Sage 桌面应用                            │
+├──────────────────────────────────────────────────────────────┤
+│  前端 (React)                                                │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  ChatMessage 组件                                       │ │
+│  │  - 检测 tool_result 中的 image/svg 类型                 │ │
+│  │  - 内联渲染 <img src="data:image/svg+xml;base64,..." /> │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                          ↕ SSE (AgentEvent)                  │
+│  后端 (FastAPI)                                              │
+│  ┌────────────────┐    ┌──────────────────────────────────┐ │
+│  │  MCP Client    │────│  Agent (ReAct 循环)               │ │
+│  │  Manager       │    │  - LLM 调用 diagram 工具          │ │
+│  │  - 管理 MCP    │    │  - 工具结果包含 SVG/PNG 数据      │ │
+│  │    Server 进程  │    │  - 结果传递给前端渲染              │ │
+│  └───────┬────────┘    └──────────────────────────────────┘ │
+└──────────┼──────────────────────────────────────────────────┘
+           │ stdio (MCP Protocol)
+           ▼
+┌──────────────────────────────────────┐
+│  draw.io MCP Server (Node.js)        │
+│  - 自包含，独立进程                    │
+│  - Puppeteer headless 浏览器          │
+│  - 连接自托管 draw.io Docker 实例     │
+│                                      │
+│  工具：                               │
+│  - render_diagram(xml) → SVG/PNG     │
+│  - edit_diagram(xml, ops) → SVG/PNG  │
+└──────────┬───────────────────────────┘
+           │ HTTP (postMessage)
+           ▼
+┌──────────────────────────────────────┐
+│  自托管 draw.io Docker                │
+│  http://localhost:8080                │
+│  (jgraph/drawio 镜像)                 │
+└──────────────────────────────────────┘
+```
+
+### 2.3 两种 MCP Server 方案对比
+
+| 方案 | 描述 | 优点 | 缺点 |
+|------|------|------|------|
+| **A: Puppeteer Headless（推荐）** | MCP Server 内置 Puppeteer，在 headless 浏览器中加载 draw.io 并导出 | 无 UI 弹窗、自包含、生产可用 | 需安装 Chromium (~170MB)、首次启动慢 |
+| **B: 复用参考项目 MCP Server** | 直接使用 `@next-ai-drawio/mcp-server`，打开浏览器窗口 | 零开发、功能完整 | 每次弹出浏览器窗口、用户体验差 |
+
+**推荐方案 A** — 创建轻量 Puppeteer-based MCP Server。
+
+### 2.4 sage 后端 MCP Client 设计
+
+sage 目前没有 MCP 客户端支持。需要新增：
+
+```
 backend/
-└── tools/
-    └── diagram_tool.py             # 新增图表工具
+├── mcp/
+│   ├── __init__.py
+│   ├── client.py          # MCP Client — 管理 MCP Server 进程
+│   ├── config.py          # MCP Server 配置（路径、环境变量）
+│   └── types.py           # MCP 数据类型定义
+├── adapters/out/mcp/
+│   └── mcp_tool_adapter.py  # ToolPort 适配器 — 将 MCP 工具暴露为 BaseTool
 ```
 
-### 2.2 修改的现有文件
+**核心流程：**
 
-| 文件 | 修改内容 |
-|---|---|
-| `src/app/App.tsx` | 添加 `/diagrams` 路由 |
-| `src/widgets/layout/Sidebar.tsx` | 添加图表页面导航入口 |
-| `backend/tools/__init__.py` | 注册 DiagramTool |
-| `backend/core/chat_service.py` | 注入图表系统提示词 |
+1. `McpClient` 启动 MCP Server 子进程（stdio transport）
+2. 发现 MCP Server 注册的工具 → 转换为 sage 的 `ToolSpec`
+3. 注册到 `ToolRegistry`（或作为独立的 `McpToolAdapter`）
+4. Agent 的 ReAct 循环中，LLM 可调用这些 MCP 工具
+5. 工具返回的 SVG/PNG 数据通过 `ToolResult.metadata` 传递给前端
 
----
+### 2.5 前端图片渲染
 
-## 三、技术方案
+在 `Message.tsx` 的 tool_call 渲染区域，检测工具结果中的图片数据：
 
-### 3.1 架构设计
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Sage 前端 (React)                     │
-├─────────────────────────────────────────────────────────┤
-│  /diagrams 页面                                          │
-│  ┌─────────────────────┬───────────────────────────┐   │
-│  │  DiagramEditor      │  ChatPanel                │   │
-│  │  (react-drawio)     │  (复用现有 Chat 组件)      │   │
-│  │                     │                           │   │
-│  │  ← 渲染 XML ────────┤─── AgentEvent.tool_call → │   │
-│  └─────────────────────┴───────────────────────────┘   │
-│                         ↕ SSE                           │
-├─────────────────────────────────────────────────────────┤
-│                    Sage 后端 (FastAPI)                   │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  DiagramTool (display_diagram / edit_diagram)   │   │
-│  │  → XML 验证 → 存储 → 透传给前端渲染              │   │
-│  └─────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-```
-
-### 3.2 核心技术选型
-
-| 技术 | 用途 | 备注 |
-|---|---|---|
-| `react-drawio` | 嵌入 draw.io 编辑器 | 核心依赖，封装了 iframe postMessage |
-| `@xmldom/xmldom` | XML DOM 操作 | edit_diagram 需要 |
-| `react-resizable-panels` | 分栏布局 | 可选，可自实现 |
-| React Context | 图表状态管理 | 页面级状态，与全局 store 解耦 |
-
-### 3.3 工具调用处理方案
-
-**方案：前端拦截 AgentEvent.tool_call 事件**
-
-1. 后端 `DiagramTool.execute()` 只做 XML 验证/存储，结果作为 tool result 返回给 LLM
-2. 前端监听 `AgentEvent` 流中的 `tool_call` 事件
-3. 当 `tool_call.function.name === 'display_diagram'` 时，前端解析 XML 参数并渲染图表
-4. 图表渲染本质上是客户端行为，不应由后端执行
-
-### 3.4 系统提示词设计
-
-```python
-DIAGRAM_SYSTEM_PROMPT = """
-你是专业的图表创建助手，专精 draw.io XML 生成。
-当用户请求创建图表时，先用 2-3 句话描述布局计划，
-然后使用 display_diagram 工具生成 XML。
-
-工具说明：
-- display_diagram(xml): 创建新图表
-- edit_diagram(operations): 编辑现有图表元素
-
-布局约束：
-- 所有元素保持在单页视口内
-- x: 0-800, y: 0-600
-- 容器最大宽度 700px，最大高度 550px
-"""
+```tsx
+// 当 tool_call.result 包含 image/svg 类型时
+if (tc.name === 'render_diagram' && tc.result?.metadata?.imageData) {
+  const { imageData, format } = tc.result.metadata;
+  return <img src={imageData} alt="AI 生成的图表" className="max-w-full rounded border" />;
+}
 ```
 
 ---
 
-## 四、实施步骤
+## 三、实施步骤
 
-### 阶段 1：基础设施搭建（3-4 天）
+### 阶段 1：draw.io Docker 部署与验证（0.5 天）
 
-- [ ] 步骤 1.1 — 安装前端依赖
+- [ ] 步骤 1.1 — 部署 draw.io Docker 实例
   ```bash
-  npm install react-drawio @xmldom/xmldom
-  npm install -D @types/xmldom
+  docker run -d --name drawio -p 8080:8080 jgraph/drawio
+  ```
+- [ ] 步骤 1.2 — 验证 embed API
+  - 确认 `http://localhost:8080/?embed=1&proto=json` 可访问
+  - 测试 postMessage 通信（load / export）
+
+### 阶段 2：创建 draw.io MCP Server（3-4 天）
+
+- [ ] 步骤 2.1 — 创建项目结构
+  ```
+  packages/drawio-mcp-server/
+  ├── package.json
+  ├── tsconfig.json
+  └── src/
+      ├── index.ts              # MCP 入口 (stdio transport)
+      ├── renderer.ts           # Puppeteer 渲染器
+      ├── drawio-bridge.ts      # draw.io postMessage 通信
+      ├── diagram-operations.ts # 图表操作（从参考项目移植）
+      └── xml-validation.ts     # XML 验证/修复（从参考项目移植）
   ```
 
-- [ ] 步骤 1.2 — 创建 FSD 目录结构
-  - `src/widgets/diagram/`
-  - `src/features/manage-diagrams/`
-  - `src/pages/Diagram.tsx`
+- [ ] 步骤 2.2 — 实现 Puppeteer 渲染器
+  ```typescript
+  // renderer.ts — 核心
+  class DrawioRenderer {
+    private browser: puppeteer.Browser;
+    private page: puppeteer.Page;
 
-- [ ] 步骤 1.3 — 创建 `DiagramEditor` 组件
-  - 包装 `react-drawio` 的 `DrawIoEmbed`
-  - 处理 onLoad/onExport 事件
-  - 支持 dark mode、UI 主题切换
+    async init(drawioBaseUrl: string) {
+      this.browser = await puppeteer.launch({ headless: true });
+      this.page = await this.browser.newPage();
+      // 加载 draw.io embed 页面
+      await this.page.goto(`${drawioBaseUrl}/?embed=1&proto=json&spin=0`);
+      // 等待 draw.io 初始化完成
+      await this.waitForInit();
+    }
 
-- [ ] 步骤 1.4 — 创建 `DiagramContext`
-  - 从参考项目适配核心状态管理
-  - `chartXML`, `diagramHistory`, `isDrawioReady`
-  - `loadDiagram()`, `handleDiagramExport()`, `clearDiagram()`
+    async renderDiagram(xml: string, format: 'svg' | 'png' = 'svg'): Promise<string> {
+      // 1. postMessage({ action: 'load', xml })
+      // 2. 等待渲染完成
+      // 3. postMessage({ action: 'export', format })
+      // 4. 接收导出结果 (data URL)
+      // 5. 返回 data URL
+    }
+  }
+  ```
 
-- [ ] 步骤 1.5 — 添加路由和页面
-  - `App.tsx` 新增 `/diagrams` 路由
-  - 侧边栏添加导航入口
+- [ ] 步骤 2.3 — 实现 MCP 工具注册
+  ```typescript
+  // index.ts
+  server.tool('render_diagram', '渲染 draw.io 图表为 SVG 或 PNG', {
+    xml: z.string(),
+    format: z.enum(['svg', 'png']).optional(),
+  }, async ({ xml, format }) => {
+    const validatedXml = validateAndFixXml(xml);
+    const dataUrl = await renderer.renderDiagram(validatedXml, format ?? 'svg');
+    return {
+      content: [{ type: 'text', text: '图表已生成' }],
+      // 图片数据通过 metadata 或特殊 content type 返回
+    };
+  });
+  ```
 
-- [ ] 步骤 1.6 — 验证基础功能
-  - 手动加载 XML 验证渲染
-  - 导出功能测试
+- [ ] 步骤 2.4 — 移植 XML 工具函数
+  - 从参考项目移植 `validateAndFixXml()`、`isMxCellXmlComplete()` 等
+  - 从参考项目移植 `applyDiagramOperations()`（用于 edit_diagram）
 
-### 阶段 2：后端工具与 AI 集成（3-4 天）
+- [ ] 步骤 2.5 — 测试 MCP Server
+  - 使用 MCP Inspector 测试工具调用
+  - 验证 XML → SVG/PNG 转换正确性
 
-- [ ] 步骤 2.1 — 创建 `DiagramTool`（后端）
-  - `DisplayDiagramTool` - 生成图表
-  - `EditDiagramTool` - 编辑图表
-  - 在 `register_all_tools()` 中注册
+### 阶段 3：sage 后端 MCP Client（2-3 天）
 
-- [ ] 步骤 2.2 — 前端工具调用拦截
-  - 创建 `useDiagramTools.ts` hook
-  - 监听 `AgentEvent.tool_call` 事件
-  - 解析 XML 参数并调用 `diagramContext.loadDiagram()`
+- [ ] 步骤 3.1 — 创建 MCP Client 模块
+  ```python
+  # backend/mcp/client.py
+  class McpClient:
+      """管理 MCP Server 子进程，通过 stdio 通信"""
 
-- [ ] 步骤 2.3 — 添加图表系统提示词
-  - 创建 `backend/core/diagram_prompts.py`
-  - 在 `ChatService` 中根据配置注入 prompt
+      async def start(self, command: str, args: list[str], env: dict):
+          """启动 MCP Server 子进程"""
 
-- [ ] 步骤 2.4 — XML 工具函数移植
-  - 从参考项目移植核心函数
-  - `extractDiagramXML()`, `isRealDiagram()`, `validateAndFixXml()`
-  - `wrapWithMxFile()`, `isMxCellXmlComplete()`, `applyDiagramOperations()`
+      async def list_tools(self) -> list[McpToolSpec]:
+          """发现 MCP Server 注册的工具"""
 
-### 阶段 3：UI 完善与集成（2-3 天）
+      async def call_tool(self, name: str, arguments: dict) -> McpToolResult:
+          """调用 MCP 工具"""
 
-- [ ] 步骤 3.1 — 分栏布局
-  - 引入 `react-resizable-panels`
-  - draw.io 编辑器 (67%) | 聊天面板 (33%)
+      async def stop(self):
+          """停止 MCP Server 子进程"""
+  ```
 
-- [ ] 步骤 3.2 — 导出功能
-  - 支持 `.drawio` / `.svg` / `.png` 格式
-  - 复用参考项目 `saveDiagramToFile` 逻辑
+- [ ] 步骤 3.2 — 创建 MCP 配置
+  ```python
+  # backend/mcp/config.py
+  MCP_SERVERS = {
+      "drawio": {
+          "command": "node",
+          "args": ["packages/drawio-mcp-server/dist/index.js"],
+          "env": {
+              "DRAWIO_BASE_URL": "http://localhost:8080",
+          }
+  }
+  ```
 
-- [ ] 步骤 3.3 — 图表历史
-  - 保存每次 AI 操作前的快照
-  - 支持查看/回退到历史版本
+- [ ] 步骤 3.3 — 创建 MCP ToolPort 适配器
+  ```python
+  # backend/adapters/out/mcp/mcp_tool_adapter.py
+  class McpToolAdapter(ToolPort):
+      """将 MCP Server 的工具暴露为 sage 的 ToolPort"""
 
-- [ ] 步骤 3.4 — Electron 离线支持（可选）
-  - 检测 Electron 环境
-  - 使用本地打包的 draw.io 文件
+      def list_tools(self) -> list[ToolSpec]:
+          # 从 MCP Client 获取工具列表 → 转换为 ToolSpec
 
-### 阶段 4：增强功能（可选，5-7 天）
+      async def execute(self, name: str, args: dict) -> ToolResult:
+          # 调用 MCP Client → 等待结果 → 转换为 ToolResult
+          # 图片数据通过 ToolResult.metadata 传递
+  ```
 
-- [ ] 步骤 4.1 — `append_diagram` 截断续传
-- [ ] 步骤 4.2 — VLM 视觉验证
-- [ ] 步骤 4.3 — 云图标库支持 (AWS/Azure/GCP)
-- [ ] 步骤 4.4 — 聊天消息内联图表预览
+- [ ] 步骤 3.4 — 集成到 Agent 循环
+  - 在 `register_all_tools()` 中注册 MCP 工具
+  - 确保 `ToolResult.metadata` 能携带图片数据
+  - 确保 SSE 事件能传递图片数据到前端
+
+### 阶段 4：前端图片内联渲染（1-2 天）
+
+- [ ] 步骤 4.1 — 扩展 ToolCall 类型
+  ```typescript
+  // shared/lib/store.ts
+  interface ToolCall {
+    name: string;
+    args: Record<string, unknown>;
+    result?: string;
+    metadata?: {               // 新增
+      imageData?: string;      // base64 data URL
+      imageFormat?: 'svg' | 'png';
+    };
+  }
+  ```
+
+- [ ] 步骤 4.2 — 修改 Message.tsx 渲染逻辑
+  - 检测 `tool_call.metadata.imageData`
+  - 渲染 `<img>` 标签内联显示图表
+  - 支持点击放大查看
+
+- [ ] 步骤 4.3 — 处理 SSE 事件中的图片数据
+  - 确保 `AgentEvent.tool_result` 能传递 metadata
+  - 在 `useChat.ts` 中正确解析和存储
+
+### 阶段 5：系统提示词与体验优化（1-2 天）
+
+- [ ] 步骤 5.1 — 添加图表系统提示词
+  - 指导 LLM 何时使用 `render_diagram` 工具
+  - 提供 draw.io XML 生成的最佳实践
+
+- [ ] 步骤 5.2 — 错误处理
+  - draw.io Docker 不可用时的降级提示
+  - XML 无效时的自动修复和重试
+  - Puppeteer 超时处理
 
 ---
 
-## 五、风险评估与依赖
+## 四、涉及的文件与模块
 
-### 5.1 风险评估
+### 新增文件
 
-| 风险 | 级别 | 影响 | 缓解策略 |
-|---|---|---|---|
-| **LLM 生成无效 XML** | 🔴 高 | 图表无法渲染或渲染异常 | XML 验证 + 自动修复 + 错误反馈循环 |
-| **前端工具调用拦截复杂度** | 🟡 中 | 需要修改现有 AgentEvent 处理流 | 利用已有的 `tool_calls` 事件通道 |
-| **draw.io iframe 跨域通信** | 🟡 中 | postMessage API 可能有延迟 | `react-drawio` 已封装，生产验证 |
-| **XML 截断（token 限制）** | 🟡 中 | 大型图表生成不完整 | MVP 限制图表复杂度；P2 加 `append_diagram` |
-| **Electron 离线模式** | 🟡 中 | 需打包 draw.io 静态文件 | 参考项目的打包脚本 |
+| 位置 | 文件 | 描述 |
+|------|------|------|
+| `packages/drawio-mcp-server/` | 整个目录 | MCP Server（独立 npm 包） |
+| `backend/mcp/` | `client.py`, `config.py`, `types.py` | MCP Client 模块 |
+| `backend/adapters/out/mcp/` | `mcp_tool_adapter.py` | MCP ToolPort 适配器 |
+| `src/widgets/chat/DiagramPreview.tsx` | 新组件 | 图表预览组件（可选） |
 
-### 5.2 依赖项
+### 修改文件
 
-| 依赖 | 说明 |
-|---|---|
-| `react-drawio` | 核心嵌入库，无替代品 |
-| `@xmldom/xmldom` | XML DOM 操作 |
-| `react-resizable-panels` | 分栏布局（可选） |
-| 后端 LLM 配置 | 需确认 LLM 支持 tool_calls |
-| draw.io CDN 访问 | 在线模式依赖 `embed.diagrams.net` |
+| 文件 | 修改内容 |
+|------|----------|
+| `src/widgets/chat/Message.tsx` | tool_call 图片内联渲染 |
+| `src/shared/lib/store.ts` | ToolCall 类型扩展 metadata |
+| `src/shared/api/api.ts` | AgentEvent 类型扩展 |
+| `src/features/send-message/useChat.ts` | 处理工具结果中的图片数据 |
+| `backend/tools/__init__.py` | 注册 MCP 工具 |
+| `backend/core/legacy/agent.py` | 传递 metadata |
 
 ---
 
-## 六、关键技术决策
+## 五、风险评估
 
-1. **前端嵌入 vs 后端渲染**：选择前端 `react-drawio` 嵌入，因为图表交互必须在浏览器端完成。
+| 风险 | 级别 | 缓解策略 |
+|------|------|----------|
+| **Puppeteer 安装体积大** (~170MB Chromium) | 🟡 中 | 可使用 `puppeteer-core` + 系统已安装的 Chrome |
+| **draw.io Docker 未部署** | 🟢 低 | 提供 Docker Compose 配置 + 部署文档 |
+| **headless 渲染超时** | 🟡 中 | 设置超时 + 重试 + 错误反馈 |
+| **MCP Client 稳定性** | 🟡 中 | 进程管理 + 自动重启 + 健康检查 |
+| **图片数据体积大** | 🟡 中 | SVG 优先（文本格式，可压缩）；PNG 限制分辨率 |
+| **SSE 传输图片数据** | 🔴 高 | 考虑替代方案：存储到临时文件，传递文件路径/URL |
 
-2. **工具调用处理位置**：前端拦截 `AgentEvent.tool_call` 事件，在客户端执行图表加载。后端的 `DiagramTool.execute()` 只做 XML 验证/存储。
+### SSE 图片数据传输方案
 
-3. **XML 验证策略**：MVP 使用客户端规则验证；P2 可选加 VLM 视觉验证。
+**方案 A：直接在 SSE 中传 base64**（简单但体积大）
+- SVG 文本通常 5-50KB → 可接受
+- PNG base64 通常 100KB-1MB → 可能阻塞流
 
-4. **状态管理**：使用 React Context（`DiagramContext`）而非 Zustand，因为图表状态是页面级的。
+**方案 B：存储到临时文件，传递路径**（推荐）
+- 后端收到 SVG/PNG → 写入 `temp/diagrams/{id}.svg`
+- SSE 传递文件路径 → 前端通过 HTTP 加载
+- 优点：不阻塞 SSE 流，支持大图片
 
-5. **布局方案**：新增独立 `/diagrams` 页面，降低对现有 chat 页面的影响。
+**方案 C：Data URL（MVP 先用这个）**
+- SVG 作为 data URL 直接嵌入 tool_result
+- MVP 阶段 SVG 体积可控，后续优化为方案 B
+
+---
+
+## 六、依赖项
+
+| 依赖 | 说明 | 状态 |
+|------|------|------|
+| Docker + `jgraph/drawio` | 自托管 draw.io 实例 | 需用户部署 |
+| Node.js + npm | MCP Server 运行时 | ✅ 已有 |
+| `puppeteer` | headless 浏览器 | 需安装 |
+| `@modelcontextprotocol/sdk` | MCP 官方 SDK | 需安装 |
+| `linkedom` | Node.js DOM polyfill | 需安装 |
+| `zod` | 工具参数校验 | ✅ 已有（后端） |
+| Python `mcp` 库 | sage 的 MCP Client | 需评估/安装 |
 
 ---
 
@@ -249,23 +365,27 @@ DIAGRAM_SYSTEM_PROMPT = """
 
 ### MVP 验收
 
-- [ ] 用户可以通过 `/diagrams` 页面访问图表功能
-- [ ] AI 可以通过 `display_diagram` 工具生成图表
-- [ ] 图表在 draw.io 编辑器中正确渲染
-- [ ] 用户可以手动编辑图表
-- [ ] 用户可以导出图表为 `.drawio` / `.svg` / `.png`
+- [ ] draw.io Docker 实例正常运行
+- [ ] MCP Server 能启动 Puppeteer 并连接 draw.io
+- [ ] `render_diagram(xml)` 工具返回 SVG data URL
+- [ ] sage 后端能发现并调用 MCP 工具
+- [ ] 聊天消息中内联显示 SVG 图表预览
+- [ ] 用户请求"画一个流程图"→ AI 生成 XML → 预览图显示在聊天中
 
-### 增强功能验收
+### 增强功能（后续）
 
-- [ ] 用户可以通过 `edit_diagram` 工具编辑现有图表
-- [ ] 图表历史可以查看和回退
-- [ ] Electron 离线模式下正常工作
-- [ ] VLM 视觉验证可以检测图表错误
+- [ ] `edit_diagram` — 编辑现有图表
+- [ ] 导出为文件（.drawio / .png / .svg）
+- [ ] 图表历史记录
+- [ ] 点击图表放大查看
 
 ---
 
 ## 八、参考资源
 
-- 参考项目：`/home/fz/project/next-ai-draw-io`
-- react-drawio 文档：https://github.com/zhangfishiu/react-drawio
-- draw.io 嵌入文档：https://www.drawio.com/doc/embed
+- 参考项目 MCP Server：`/home/fz/project/next-ai-draw-io/packages/mcp-server/`
+- MCP 协议规范：https://modelcontextprotocol.io
+- MCP SDK (TypeScript)：https://github.com/modelcontextprotocol/typescript-sdk
+- MCP SDK (Python)：https://github.com/modelcontextprotocol/python-sdk
+- draw.io embed 文档：https://www.drawio.com/doc/embed
+- Puppeteer 文档：https://pptr.dev
