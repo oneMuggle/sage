@@ -39,15 +39,17 @@ def get_mcp_server_configs() -> list[McpServerConfig]:
 
     # draw.io MCP server
     drawio_base_url = os.environ.get("DRAWIO_BASE_URL", "http://localhost:8080")
+    chrome_path = os.environ.get("CHROME_PATH", "")
     if mcp_server_entry.exists():
+        env = {"DRAWIO_BASE_URL": drawio_base_url}
+        if chrome_path:
+            env["CHROME_PATH"] = chrome_path
         servers.append(
             McpServerConfig(
                 name="drawio",
                 command="node",
                 args=[str(mcp_server_entry)],
-                env={
-                    "DRAWIO_BASE_URL": drawio_base_url,
-                },
+                env=env,
             )
         )
 

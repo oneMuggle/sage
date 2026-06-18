@@ -32,21 +32,22 @@ export class DrawioRenderer {
     /**
      * Initialize the headless browser and load draw.io embed page
      */
-    async init(drawioBaseUrl: string): Promise<void> {
+    async init(drawioBaseUrl: string, executablePath?: string): Promise<void> {
         if (this.isReady) return
         if (this.initPromise) return this.initPromise
 
-        this.initPromise = this._doInit(drawioBaseUrl)
+        this.initPromise = this._doInit(drawioBaseUrl, executablePath)
         return this.initPromise
     }
 
-    private async _doInit(drawioBaseUrl: string): Promise<void> {
+    private async _doInit(drawioBaseUrl: string, executablePath?: string): Promise<void> {
         this.drawioBaseUrl = drawioBaseUrl.replace(/\/$/, "")
         this.drawioOrigin = getOrigin(this.drawioBaseUrl)
 
         log.info(`Launching headless browser...`)
         this.browser = await puppeteer.launch({
             headless: true,
+            executablePath: executablePath || undefined,
             args: [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
@@ -58,13 +59,20 @@ export class DrawioRenderer {
         this.page = await this.browser.newPage()
         await this.page.setViewport({ width: 1200, height: 800 })
 
-        // Navigate to draw.io embed page
-        const embedUrl = `${this.drawioBaseUrl}/?embed=1&proto=json&spin=0&libraries=0&noSaveBtn=1&noExitBtn=1`
-        log.info(`Loading draw.io embed page: ${embedUrl}`)
+        // Create a container page with an iframe for draw.io embed mode
+        // draw.io's embed+proto=json requires being inside an iframe to work properly
+        const iframeUrl = `${this.drawioBaseUrl}/?embed=1&proto=json&spin=0&libraries=0&noSaveBtn=1&noExitBtn=1`
+        const containerHtml = `<!DOCTYPE html><html><head><style>
+            html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;}
+            iframe{width:100%;height:100%;border:none;}
+        </style></head><body>
+            <iframe id="drawio" src="${iframeUrl}"></iframe>
+        </body></html>`
 
-        await this.page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 30000 })
+        await this.page.setContent(containerHtml)
+        log.info(`Loaded container page with draw.io iframe: ${iframeUrl}`)
 
-        // Wait for draw.io to initialize via postMessage
+        // Wait for draw.io to initialize via postMessage from iframe
         await this.waitForDrawioInit()
         this.isReady = true
         log.info("draw.io renderer ready")
@@ -142,16 +150,18 @@ export class DrawioRenderer {
     private async loadDiagram(xml: string): Promise<void> {
         if (!this.page) throw new Error("Page not initialized")
 
-        // The draw.io embed page is loaded directly (not in an iframe)
-        // So we send postMessage to the page's window
         const loadMsg = JSON.stringify({
             action: "load",
             xml,
             autosave: 0,
         })
 
+        // Send postMessage to the iframe's contentWindow
         await this.page.evaluate((msg: string) => {
-            window.postMessage(msg, "*")
+            const iframe = document.getElementById("drawio") as HTMLIFrameElement
+            if (iframe?.contentWindow) {
+                iframe.contentWindow.postMessage(msg, "*")
+            }
         }, loadMsg)
 
         // Wait for draw.io to process the load
@@ -217,9 +227,12 @@ export class DrawioRenderer {
             }, 200)
         })
 
-        // Send export request
+        // Send export request to iframe
         await this.page.evaluate((msg: string) => {
-            window.postMessage(msg, "*")
+            const iframe = document.getElementById("drawio") as HTMLIFrameElement
+            if (iframe?.contentWindow) {
+                iframe.contentWindow.postMessage(msg, "*")
+            }
         }, exportMsg)
 
         const data = await resultPromise

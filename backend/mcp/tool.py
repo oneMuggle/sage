@@ -141,21 +141,14 @@ def register_mcp_tools(registry: Any) -> None:
             for spec in tool_specs:
                 tool = McpTool(client, spec)
                 registry.register(tool)
-                logger.info(
-                    f"Registered MCP tool: {tool.schema.name} "
-                    f"(server={config.name})"
-                )
+                logger.info(f"Registered MCP tool: {tool.schema.name} " f"(server={config.name})")
 
-            logger.info(
-                f"Registered {len(tool_specs)} tools from MCP server '{config.name}'"
-            )
+            logger.info(f"Registered {len(tool_specs)} tools from MCP server '{config.name}'")
 
         except McpClientError as exc:
             logger.error(f"Failed to connect to MCP server '{config.name}': {exc}")
         except Exception as exc:
-            logger.error(
-                f"Unexpected error registering MCP server '{config.name}': {exc}"
-            )
+            logger.error(f"Unexpected error registering MCP server '{config.name}': {exc}")
 
 
 def shutdown_mcp_clients() -> None:

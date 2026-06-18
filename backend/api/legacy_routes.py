@@ -638,6 +638,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             system_content = "你是 Sage，一个智能 AI 助手。"
             try:
                 from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
+
                 # Check if diagram MCP tools are registered
                 _registry = getattr(agent, "tool_registry", None)
                 if _registry and _registry.exists("drawio__render_diagram"):

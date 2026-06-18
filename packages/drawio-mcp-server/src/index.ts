@@ -33,6 +33,7 @@ import { log } from "./logger.js"
 
 // Configuration
 const DRAWIO_BASE_URL = process.env.DRAWIO_BASE_URL || "http://localhost:8080"
+const CHROME_PATH = process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH || ""
 
 // Create MCP server
 const server = new McpServer({
@@ -51,8 +52,8 @@ let currentSvgDataUrl: string | null = null
 let initPromise: Promise<void> | null = null
 async function ensureInitialized(): Promise<void> {
     if (!initPromise) {
-        log.info(`Initializing renderer with DRAWIO_BASE_URL=${DRAWIO_BASE_URL}`)
-        initPromise = renderer.init(DRAWIO_BASE_URL)
+        log.info(`Initializing renderer with DRAWIO_BASE_URL=${DRAWIO_BASE_URL}${CHROME_PATH ? `, CHROME_PATH=${CHROME_PATH}` : ""}`)
+        initPromise = renderer.init(DRAWIO_BASE_URL, CHROME_PATH || undefined)
     }
     return initPromise
 }
