@@ -112,3 +112,12 @@ tests/electron/screenshots/
 
 # VCRedist runtime bundled at build time (fetched by scripts/fetch-vcredist.ps1)
 resources/vc_redist.x64.exe
+
+# Build artifacts and release packages
+release-artifacts/
+
+# Reference files with sensitive credentials (API keys, tokens)
+reference/
+
+# Temporary screenshots
+chat-*.png
