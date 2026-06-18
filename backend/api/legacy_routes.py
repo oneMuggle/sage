@@ -658,6 +658,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
             done_content: str | None = None
+            done_reasoning: str | None = None
             async for evt in agent.run_loop(messages, llm_config=llm_config):
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
                 # 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls,
@@ -677,6 +678,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
                     # 最终 DONE 事件保留完整 content (前端 finishStream 需要)
                     await entry.queue.put(evt.to_dict())
+                elif evt.state.value == "reasoning" and evt.reasoning:
+                    # PR-7b: 累积 reasoning 事件,持久化时一起写入 DB
+                    if done_reasoning is None:
+                        done_reasoning = evt.reasoning
+                    else:
+                        done_reasoning += evt.reasoning
+                    # 透传给前端 (原样入队,前端 useChat 累积显示)
+                    await entry.queue.put(evt.to_dict())
                 else:
                     await entry.queue.put(evt.to_dict())
 
@@ -691,6 +700,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             session_id=data.session_id,
                             role="assistant",
                             content=done_content,
+                            reasoning_content=done_reasoning,
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
                         )
