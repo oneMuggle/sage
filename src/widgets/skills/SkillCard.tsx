@@ -7,6 +7,11 @@ interface SkillCardProps {
   enabled: boolean;
   usage_count: number;
   onToggle: (name: string, enabled: boolean) => void;
+  // SKILL.md 适配层 (PR-8) 新增字段 — builtin 时不传
+  source?: 'builtin' | 'skillmd';
+  body?: string;
+  version?: string;
+  base_dir?: string;
 }
 
 const SkillCard: React.FC<SkillCardProps> = ({
@@ -16,6 +21,10 @@ const SkillCard: React.FC<SkillCardProps> = ({
   enabled,
   usage_count,
   onToggle,
+  source = 'builtin',
+  body,
+  version,
+  base_dir,
 }) => {
   return (
     <div
@@ -25,7 +34,24 @@ const SkillCard: React.FC<SkillCardProps> = ({
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-text">{name}</h3>
+          {/* 名称 + 来源 badge */}
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-text">{name}</h3>
+            <span
+              className={`px-2 py-0.5 text-xs rounded-full ${
+                source === 'skillmd'
+                  ? 'bg-accent text-text-inverse'
+                  : 'bg-bg-subtle text-text-secondary'
+              }`}
+            >
+              {source}
+            </span>
+            {version && (
+              <span className="px-2 py-0.5 text-xs rounded-full bg-bg-subtle text-text-secondary">
+                v{version}
+              </span>
+            )}
+          </div>
           <p className="text-sm text-text-secondary mt-1">{description}</p>
 
           {/* 触发词 */}
@@ -42,6 +68,23 @@ const SkillCard: React.FC<SkillCardProps> = ({
 
           {/* 使用统计 */}
           <p className="text-xs text-muted mt-2">已使用 {usage_count} 次</p>
+
+          {/* SKILL.md body 折叠区 (仅 SKILL.md 显示) */}
+          {source === 'skillmd' && body && (
+            <details className="mt-3 border-t border-border pt-2">
+              <summary className="text-xs text-text-secondary cursor-pointer hover:text-text">
+                查看提示词模板
+              </summary>
+              <pre className="mt-2 p-2 bg-bg-subtle rounded text-xs whitespace-pre-wrap text-text-secondary max-h-64 overflow-auto">
+                {body}
+              </pre>
+              {base_dir && (
+                <p className="text-xs text-muted mt-1 truncate" title={base_dir}>
+                  路径: {base_dir}
+                </p>
+              )}
+            </details>
+          )}
         </div>
 
         {/* 开关 */}

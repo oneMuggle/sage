@@ -676,6 +676,12 @@ export interface Skill {
   examples: string[];
   enabled: boolean;
   usage_count: number;
+  // SKILL.md 适配层 (PR-8) 新增字段 — builtin 时不存在
+  source?: 'builtin' | 'skillmd';
+  body?: string;
+  scripts?: string[];
+  base_dir?: string;
+  version?: string;
 }
 
 export interface SkillExecuteRequest {

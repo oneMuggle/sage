@@ -155,3 +155,162 @@ pub struct SkillExecuteResult {
 - PR-7.4: Skill parameters 表单动态生成 (基于 JSON Schema) + execute UI
 
 PR-7 完工后,`docs/plans/2026-06-12_finish-designed-features.md` 可删除(按 `feature-development.md` 规则)。
+
+---
+
+## 9. SKILL.md 适配层 (PR-8)
+
+> PR-8 新增: 让 Sage 兼容 AgentSkills 开放规范 (agentskills.io),与 Hermes Agent / OpenClaw / Claude Skills 生态互通。
+> 完整设计文档见 `docs/plans/2026-06-18_skill-md-adapter.md` (按 `feature-development.md` 规则完工后并入本节并删除 plan 文档)。
+
+### 9.1 双 loader 并存
+
+Sage 现在有两套技能加载机制,**共享同一个 `SkillRegistry`**:
+
+| Loader | 路径 | 职责 |
+|---|---|---|
+| builtin (Python `BaseSkill` 子类) | `backend/skills/builtin/*.py` | 4 个内置: search / writer / coder / travel |
+| **SKILL.md (AgentSkills 规范)** | `backend/skills/skill_md/` (新增) | 解析 SKILL.md (YAML frontmatter + markdown body),包装为 `SkillMdSkill` |
+
+**冲突优先级**: builtin 永远胜。SKILL.md 命名若与 builtin 冲突 (例如 `name: search`),SKILL.md 被 skip 并记 WARNING 日志。
+
+### 9.2 发现根优先级
+
+`backend/skills/skill_md/loader.py::discover_skill_md_dirs()` 按以下顺序返回搜索根 (不存在的目录被过滤):
+
+1. `$SAGE_SKILLS_DIR` 环境变量指向的目录 (若存在) — 优先级最高
+2. `$CWD/skills` (若存在) — 项目级
+3. `~/.sage/skills` (若存在) — 用户级
+
+每个根目录下识别 `<skill_name>/SKILL.md` 形态 (深度 1 子目录, 内含 SKILL.md 文件)。
+
+### 9.3 支持的 frontmatter 字段 (v1)
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `name` | ✅ | 合法 slug (小写字母/数字/连字符), 也是技能的注册名 |
+| `description` | ✅ | 一句话描述 |
+| `triggers` | ❌ | 触发关键词列表, 缺省时默认 `[name.lower()]` |
+| `version` | ❌ | 版本号字符串, 透传到 `metadata.version` |
+| `metadata` | ❌ | 任意嵌套 dict, 透传到 `metadata.frontmatter` |
+| 其他任意字段 | ❌ | 原样保留在 `metadata.frontmatter`, 供聊天层高级处理 |
+
+### 9.4 SKILL.md 形态示例
+
+`~/.sage/skills/code-review/SKILL.md`:
+
+```markdown
+---
+name: code-review
+description: Review a code diff for correctness and reuse opportunities.
+triggers: [review, code review]
+version: 0.1.0
+---
+
+You are a careful code reviewer. For each diff, look for:
+- correctness bugs
+- reuse opportunities
+- simplification cleanups
+```
+
+### 9.5 `execute()` 语义 (v1)
+
+`SkillMdSkill.execute(params, context)` 是**无副作用**的纯函数:
+
+```python
+return SkillResult(
+    success=True,
+    content=doc.body,            # markdown body 字符串, 供聊天层拼到 system prompt
+    metadata={
+        "source": "skillmd",
+        "name": doc.name,
+        "version": doc.version,
+        "frontmatter": dict(doc.raw_frontmatter),
+    },
+)
+```
+
+**v1 故意不调 LLM / 工具**。聊天层拿到 `content` 后自行组装到 system prompt。这样保持技能层的纯净,也避免双倍 LLM 调用 (写 builtin + 跑 skill)。
+
+### 9.6 `{baseDir}` 占位符语义
+
+body 中可包含 `{baseDir}`, 由聊天层替换为 `metadata.base_dir` 的绝对路径。**路径遍历防御**通过 `backend/skills/skill_md/validation.py::validate_base_dir()` 强制 base_dir 必须落在允许根 (`~/.sage/skills`、`cwd/skills`、`$SAGE_SKILLS_DIR`) 之一。
+
+### 9.7 路由层 JSON 形状
+
+`GET /api/v1/skills` 返回列表,每项除原有 `name/description/triggers/parameters/examples/enabled/usage_count` 7 字段外:
+
+- builtin 时多一个 `"source": "builtin"`, **不** 输出 `body/base_dir/version`
+- SKILL.md 时输出 `"source": "skillmd"` + `"body": "..."` + `"base_dir": "/path/..."` + `"version": "0.1.0"`
+
+`POST /api/v1/skills/{name}/execute` 返回结构同 builtin, SKILL.md 技能的 `content` 是 markdown body, `metadata.source == "skillmd"`。
+
+### 9.8 前端展示
+
+`Skill` interface (`src/shared/api/api.ts`) 新增 5 个可选字段:
+
+```typescript
+source?: 'builtin' | 'skillmd';
+body?: string;
+scripts?: string[];
+base_dir?: string;
+version?: string;
+```
+
+`SkillCard` 在 `source === 'skillmd'` 时:
+
+- 渲染 `skillmd` badge (accent 颜色, 与 builtin 的灰色 badge 区分)
+- 渲染 `v{version}` badge (若有)
+- 在卡片底部渲染 `<details>` 折叠区,点击展开 body + 显示 `base_dir` 路径
+
+### 9.9 v1 不支持的特性 (v2 路线)
+
+| 特性 | 说明 | v2 计划 |
+|---|---|---|
+| `scripts/*.py` 执行 | AgentSkills spec 支持, 但 `exec` 用户代码风险高 | 走 subprocess 沙箱 + 显式确认 |
+| `references/`、`assets/`、`templates/` | 引用文件 / 模板资源 | 按需加载到聊天上下文 |
+| `requires.bins/env/config` 门控 | 仅在依赖满足时加载 | loader 层加 gating filter |
+| `os` 平台过滤 | 仅在指定 OS 加载 | loader 层加 platform check |
+| `always` 跳过门控 | 始终加载 | 同上 |
+| `disable-model-invocation` | 不进 system prompt, 仅手动触发 | execute 返回额外 flag, 聊天层处理 |
+| `user-invocable` | 暴露为 slash command | 与 `Skills` UI 集成 |
+| `command-dispatch: tool` | 直接派发到工具, 不经 LLM | 路由层额外 endpoint |
+
+### 9.10 端到端验证
+
+手测冒烟流程:
+
+```bash
+mkdir -p ~/.sage/skills/code-review
+
+cat > ~/.sage/skills/code-review/SKILL.md << 'EOF'
+---
+name: code-review
+description: Review a code diff for correctness and reuse opportunities.
+triggers: [review, code review]
+version: 0.1.0
+---
+
+You are a careful code reviewer. For each diff, look for:
+- correctness bugs
+- reuse opportunities
+- simplification cleanups
+EOF
+
+# 重启后端
+cd /home/fz/project/sage/backend && python -m uvicorn main:app --reload
+
+# 列技能 (应见 4 builtin + code-review)
+curl http://127.0.0.1:8765/api/v1/skills | jq '.[] | {name, source}'
+
+# 执行 SKILL.md 技能
+curl -X POST http://127.0.0.1:8765/api/v1/skills/code-review/execute \
+  -H 'Content-Type: application/json' \
+  -d '{"action": "run", "args": {}}'
+```
+
+### 9.11 风险
+
+- **Prompt injection**: SKILL.md body 含恶意指令。聊天层应把 body 视为不可信用户内容, 包装成 system message 而非塞进开发者模板。
+- **路径遍历**: `{baseDir}` 占位符可能被恶意替换到允许根之外。`validate_base_dir` 强制 base_dir 必须在允许根内。
+- **LLM 行为差异**: 同一 SKILL.md 在不同 LLM 下表现可能差异大。建议作者跨模型测试。
