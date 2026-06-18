@@ -99,6 +99,67 @@ def _validate_description(description: Any) -> str:
     return description
 
 
+def _validate_requires(requires: Any) -> dict[str, Any]:
+    """校验 requires 字段（v2）。"""
+    if requires is None:
+        return {}
+    if not isinstance(requires, dict):
+        raise SkillMdParseError(f"frontmatter 'requires' must be a dict, got {type(requires).__name__}")
+    # 校验子字段
+    for key in ("bins", "env", "config"):
+        if key in requires:
+            val = requires[key]
+            if not isinstance(val, list):
+                raise SkillMdParseError(f"frontmatter 'requires.{key}' must be a list")
+            if not all(isinstance(item, str) for item in val):
+                raise SkillMdParseError(f"frontmatter 'requires.{key}' must be a list of strings")
+    return requires
+
+
+def _validate_os(os_field: Any) -> list[str]:
+    """校验 os 字段（v2）。"""
+    if os_field is None:
+        return []
+    if not isinstance(os_field, list):
+        raise SkillMdParseError(f"frontmatter 'os' must be a list, got {type(os_field).__name__}")
+    valid_platforms = {"macos", "linux", "windows"}
+    for platform in os_field:
+        if not isinstance(platform, str):
+            raise SkillMdParseError(f"frontmatter 'os' must be a list of strings")
+        if platform not in valid_platforms:
+            raise SkillMdParseError(
+                f"frontmatter 'os' contains invalid platform '{platform}', "
+                f"valid platforms are: {', '.join(sorted(valid_platforms))}"
+            )
+    return os_field
+
+
+def _validate_always(always: Any) -> bool:
+    """校验 always 字段（v2）。"""
+    if always is None:
+        return False
+    if not isinstance(always, bool):
+        raise SkillMdParseError(f"frontmatter 'always' must be a bool, got {type(always).__name__}")
+    return always
+
+
+def _validate_command_dispatch(command_dispatch: Any) -> str:
+    """校验 command-dispatch 字段（v2）。"""
+    if command_dispatch is None:
+        return "auto"
+    valid_modes = {"auto", "tool", "prompt"}
+    if not isinstance(command_dispatch, str):
+        raise SkillMdParseError(
+            f"frontmatter 'command-dispatch' must be a string, got {type(command_dispatch).__name__}"
+        )
+    if command_dispatch not in valid_modes:
+        raise SkillMdParseError(
+            f"frontmatter 'command-dispatch' must be one of {', '.join(sorted(valid_modes))}, "
+            f"got '{command_dispatch}'"
+        )
+    return command_dispatch
+
+
 def parse(text: str) -> tuple[dict[str, Any], str]:
     """解析 SKILL.md 文本, 返回 (frontmatter_dict, body)。
 
@@ -133,6 +194,12 @@ def parse(text: str) -> tuple[dict[str, Any], str]:
 
     _validate_name(meta.get("name"))
     _validate_description(meta.get("description"))
+
+    # v2 字段校验
+    _validate_requires(meta.get("requires"))
+    _validate_os(meta.get("os"))
+    _validate_always(meta.get("always"))
+    _validate_command_dispatch(meta.get("command-dispatch"))
 
     return meta, body
 

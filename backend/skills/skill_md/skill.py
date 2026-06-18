@@ -24,6 +24,23 @@ from typing import Any
 from ..base import BaseSkill, SkillResult, SkillSchema
 
 
+@dataclass(frozen=True)
+class RequiresSpec:
+    """技能执行前置条件规格（v2）。"""
+    bins: list[str] = field(default_factory=list)
+    env: list[str] = field(default_factory=list)
+    config: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class DispatchMode:
+    """调度控制元数据（v2）。"""
+    disable_model_invocation: bool = False
+    user_invocable: bool = False
+    user_invocable_name: str | None = None
+    command_dispatch: str = "auto"
+
+
 @dataclass
 class SkillMdDocument:
     """一份 SKILL.md 文件解析后的全部内容。"""
@@ -36,6 +53,13 @@ class SkillMdDocument:
     version: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     raw_frontmatter: dict[str, Any] = field(default_factory=dict)
+
+    # v2 新增字段（向后兼容）
+    requires: RequiresSpec = field(default_factory=RequiresSpec)
+    os: list[str] = field(default_factory=list)  # 平台过滤
+    always: bool = False  # 跳过条件加载
+    dispatch: DispatchMode = field(default_factory=DispatchMode)
+    resources: Any | None = None  # ResourceIndex，由 loader 构建
 
 
 class SkillMdSkill(BaseSkill):

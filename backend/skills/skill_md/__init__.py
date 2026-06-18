@@ -11,7 +11,7 @@ from .loader import (
     discover_skill_md_dirs,
     register_skill_md_skills,
 )
-from .skill import SkillMdDocument, SkillMdSkill
+from .skill import DispatchMode, RequiresSpec, SkillMdDocument, SkillMdSkill
 from .validation import (
     SkillMdSecurityError,
     sanitize_for_logging,
@@ -23,6 +23,8 @@ __all__ = [
     "dump",
     "parse",
     "parse_file",
+    "DispatchMode",
+    "RequiresSpec",
     "SkillMdDocument",
     "SkillMdSkill",
     "SkillMdHotLoader",
