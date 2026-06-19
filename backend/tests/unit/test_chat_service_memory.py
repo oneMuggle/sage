@@ -6,6 +6,7 @@
 - 对话后存储记忆
 - 压缩工作记忆
 """
+
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -94,9 +95,7 @@ def chat_service_with_memory(
 
 
 @pytest.fixture()
-def chat_service_without_memory(
-    mock_llm, mock_tools, mock_storage, mock_metrics, mock_events
-):
+def chat_service_without_memory(mock_llm, mock_tools, mock_storage, mock_metrics, mock_events):
     """创建不带记忆功能的 ChatService 实例 (向后兼容)"""
     return ChatService(
         llm=mock_llm,
@@ -301,9 +300,7 @@ class TestChatServiceBackwardCompatibility:
     """测试向后兼容性"""
 
     @pytest.mark.asyncio()
-    async def test_chat_service_works_without_memory(
-        self, chat_service_without_memory
-    ):
+    async def test_chat_service_works_without_memory(self, chat_service_without_memory):
         """测试 ChatService 在没有 memory 时仍能工作"""
         # Arrange
         user_message = Message(role=Role.USER, content="你好")
