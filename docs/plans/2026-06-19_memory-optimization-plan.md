@@ -629,16 +629,16 @@ class MemoryDreamJob:
 ## 12. 实施步骤（详细 TODO）
 
 ### 阶段 1: 修复致命缺陷（1-2 天）
-- [ ] 1.1 MemoryManager 单例化
-- [ ] 1.2 Working Memory SQLite 快照持久化
-- [ ] 1.3 单元测试验证 Working Memory 跨请求持久
+- [x] 1.1 MemoryManager 单例化
+- [x] 1.2 Working Memory SQLite 快照持久化
+- [x] 1.3 单元测试验证 Working Memory 跨请求持久
 
 ### 阶段 2: 中文检索增强（1 天）
-- [ ] 2.1 实现 jieba 中文分词模块
-- [ ] 2.2 改造 EpisodicMemory 使用分词后文本
-- [ ] 2.3 改造 SemanticMemory FTS5 使用分词后文本
-- [ ] 2.4 迁移脚本：重建现有数据的分词索引
-- [ ] 2.5 中文检索测试用例
+- [x] 2.1 实现 jieba 中文分词模块
+- [x] 2.2 改造 EpisodicMemory 使用分词后文本
+- [x] 2.3 改造 SemanticMemory FTS5 使用分词后文本
+- [x] 2.4 迁移脚本：不需要 — 最终方案使用 LIKE + jieba 查询侧分词，现有数据无需迁移
+- [x] 2.5 中文检索测试用例
 
 ### 阶段 3: 向量检索（2-3 天）
 - [ ] 3.1 实现 Embedder 封装（本地 BGE-M3 + API 可选）

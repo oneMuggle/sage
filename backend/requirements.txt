@@ -6,6 +6,7 @@ pydantic==2.5.0
 
 # Database
 # sqlite3 is built-in
+jieba>=0.42.1
 
 # HTTP
 httpx==0.26.0

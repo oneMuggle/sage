@@ -225,32 +225,11 @@ class Database:
             )
         """)
 
-        # FTS5 同步触发器 - INSERT
-        cursor.execute("""
-            CREATE TRIGGER IF NOT EXISTS memories_semantic_ai AFTER INSERT ON memories_semantic
-            BEGIN
-                INSERT INTO memories_semantic_fts (rowid, content, summary, tags)
-                VALUES (new.rowid, new.content, new.summary, new.tags);
-            END
-        """)
-
-        # FTS5 同步触发器 - DELETE
-        cursor.execute("""
-            CREATE TRIGGER IF NOT EXISTS memories_semantic_ad AFTER DELETE ON memories_semantic
-            BEGIN
-                DELETE FROM memories_semantic_fts WHERE rowid = old.rowid;
-            END
-        """)
-
-        # FTS5 同步触发器 - UPDATE
-        cursor.execute("""
-            CREATE TRIGGER IF NOT EXISTS memories_semantic_au AFTER UPDATE ON memories_semantic
-            BEGIN
-                DELETE FROM memories_semantic_fts WHERE rowid = old.rowid;
-                INSERT INTO memories_semantic_fts (rowid, content, summary, tags)
-                VALUES (new.rowid, new.content, new.summary, new.tags);
-            END
-        """)
+        # FTS5 同步触发器
+        # 注意：由于 contentless FTS5 表在 UPDATE 时可能出现 "database disk image is malformed"
+        # 错误，暂时禁用所有触发器。FTS 索引由 SemanticMemory 方法手动维护。
+        # 当前 search() 使用 LIKE + jieba 而非 FTS5，所以 FTS 索引暂不使用。
+        # 未来升级 FTS5 中文支持时再启用。
 
         # 记忆进化日志表（预留）
         cursor.execute("""

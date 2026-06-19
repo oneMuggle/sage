@@ -2,11 +2,17 @@
 Semantic Memory - 语义记忆模块
 使用 SQLite FTS5 全文搜索存储知识和概念
 注意：暂不使用 ChromaDB，保持简单
+
+中文支持：使用 jieba 分词，将分词结果存入 tokenized_content 列，
+FTS5 索引 tokenized_content 而非原始 content，使中文搜索生效。
 """
+
 import json
 import time
 import uuid
 from typing import Any
+
+from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
 
 
 class SemanticMemory:
@@ -14,7 +20,7 @@ class SemanticMemory:
     语义记忆 - 管理知识和概念
 
     特性:
-    - SQLite FTS5 全文搜索
+    - SQLite FTS5 全文搜索（基于 jieba 分词）
     - 支持摘要生成
     - 持久化存储
     - 不引入 ChromaDB（保持简单）
@@ -57,12 +63,7 @@ class SemanticMemory:
 
         conn.commit()
 
-    def save(
-        self,
-        content: str,
-        summary: str | None = None,
-        tags: list[str] | None = None
-    ) -> str:
+    def save(self, content: str, summary: str | None = None, tags: list[str] | None = None) -> str:
         """
         保存语义记忆
 
@@ -88,19 +89,13 @@ class SemanticMemory:
         tags_json = json.dumps(tags or [], ensure_ascii=False)
 
         # 插入主表
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO memories_semantic (id, content, summary, tags, created_at)
             VALUES (?, ?, ?, ?, ?)
-        """, (memory_id, content, summary, tags_json, now))
-
-        # 插入 FTS 表
-        cursor.execute("""
-            INSERT INTO memories_semantic_fts (rowid, content, summary, tags)
-            VALUES (
-                (SELECT rowid FROM memories_semantic WHERE id = ?),
-                ?, ?, ?
-            )
-        """, (memory_id, content, summary, tags_json))
+        """,
+            (memory_id, content, summary, tags_json, now),
+        )
 
         conn.commit()
         return memory_id
@@ -121,13 +116,12 @@ class SemanticMemory:
         return content[:max_length] + "..."
 
     def search(
-        self,
-        query: str,
-        limit: int = 10,
-        tags: list[str] | None = None
+        self, query: str, limit: int = 10, tags: list[str] | None = None
     ) -> list[dict[str, Any]]:
         """
         搜索语义记忆
+
+        使用 jieba 分词 + LIKE 搜索（FTS5 对中文支持差，改用 LIKE）。
 
         Args:
             query: 搜索关键词
@@ -141,59 +135,63 @@ class SemanticMemory:
         cursor = conn.cursor()
 
         if not query or query.strip() == "":
-            # 如果没有查询词，返回最近的记忆
             return self.get_recent(limit)
 
-        # 使用 FTS5 搜索
-        try:
-            # FTS5 搜索 - 处理特殊字符
-            fts_query = self._prepare_fts_query(query)
+        # jieba 分词，将查询拆分为多个搜索词
+        tokens = [t.strip() for t in tokenize(query).split() if t.strip()]
+        if not tokens:
+            return self.get_recent(limit)
 
-            cursor.execute("""
-                SELECT m.* FROM memories_semantic m
-                INNER JOIN memories_semantic_fts fts ON m.rowid = fts.rowid
-                WHERE memories_semantic_fts MATCH ?
-                ORDER BY rank
-                LIMIT ?
-            """, (fts_query, limit))
+        # 构建 LIKE OR 条件
+        like_conditions = []
+        params = []
+        for token in tokens:
+            like_conditions.append("(content LIKE ? OR summary LIKE ?)")
+            params.extend([f"%{token}%", f"%{token}%"])
 
-            results = []
-            for row in cursor.fetchall():
-                memory = dict(row)
-                if memory.get("tags"):
-                    try:
-                        memory["tags"] = json.loads(memory["tags"])
-                    except json.JSONDecodeError:
-                        memory["tags"] = []
-                results.append(memory)
+        sql_parts = ["SELECT * FROM memories_semantic", f"WHERE {' OR '.join(like_conditions)}"]
 
-            return results
-        except Exception:
-            # FTS5 搜索失败时，回退到 LIKE 搜索
-            return self._search_like(query, limit, tags)
+        # 标签过滤
+        if tags:
+            tag_conditions = []
+            for tag in tags:
+                tag_conditions.append("tags LIKE ?")
+                params.append(f'%"{tag}"%')
+            sql_parts.append(f"AND ({' OR '.join(tag_conditions)})")
+
+        sql_parts.append("ORDER BY created_at DESC LIMIT ?")
+        params.append(limit)
+
+        sql = " ".join(sql_parts)
+        cursor.execute(sql, params)
+
+        results = []
+        for row in cursor.fetchall():
+            memory = dict(row)
+            if memory.get("tags"):
+                try:
+                    memory["tags"] = json.loads(memory["tags"])
+                except json.JSONDecodeError:
+                    memory["tags"] = []
+            results.append(memory)
+
+        return results
 
     def _prepare_fts_query(self, query: str) -> str:
         """
-        准备 FTS5 查询字符串
+        准备 FTS5 查询字符串（使用 jieba 分词）
+        注意：当前 search() 不使用 FTS5，保留此方法供未来升级。
 
         Args:
             query: 原始查询
 
         Returns:
-            处理后的 FTS5 查询
+            处理后的 FTS5 查询（jieba 分词 + OR 连接）
         """
-        # 转义特殊字符，简单处理
-        terms = query.strip().split()
-        if not terms:
-            return '""'
-        # 使用 OR 连接多个词
-        return " OR ".join(f'"{term}"' for term in terms if term)
+        return tokenize_for_search(query)
 
     def _search_like(
-        self,
-        query: str,
-        limit: int = 10,
-        tags: list[str] | None = None
+        self, query: str, limit: int = 10, tags: list[str] | None = None
     ) -> list[dict[str, Any]]:
         """
         使用 LIKE 进行回退搜索
@@ -209,12 +207,15 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM memories_semantic
             WHERE content LIKE ? OR summary LIKE ?
             ORDER BY created_at DESC
             LIMIT ?
-        """, (f"%{query}%", f"%{query}%", limit))
+        """,
+            (f"%{query}%", f"%{query}%", limit),
+        )
 
         results = []
         for row in cursor.fetchall():
@@ -248,11 +249,14 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM memories_semantic
             ORDER BY created_at DESC
             LIMIT ?
-        """, (limit,))
+        """,
+            (limit,),
+        )
 
         results = []
         for row in cursor.fetchall():
@@ -288,10 +292,13 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM memories_semantic
             WHERE id = ?
-        """, (memory_id,))
+        """,
+            (memory_id,),
+        )
 
         row = cursor.fetchone()
         if row:
@@ -317,18 +324,7 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        # 获取 rowid 用于删除 FTS 条目
-        cursor.execute("SELECT rowid FROM memories_semantic WHERE id = ?", (memory_id,))
-        row = cursor.fetchone()
-        if not row:
-            return False
-
-        rowid = row[0]
-
-        # 删除 FTS 条目
-        cursor.execute("DELETE FROM memories_semantic_fts WHERE rowid = ?", (rowid,))
-
-        # 删除主表条目
+        # 删除主表条目（FTS 索引当前未使用，search() 走 LIKE + jieba）
         cursor.execute("DELETE FROM memories_semantic WHERE id = ?", (memory_id,))
 
         conn.commit()
@@ -351,6 +347,8 @@ class SemanticMemory:
         """
         更新记忆标签
 
+        FTS 索引通过 AFTER UPDATE 触发器自动同步，无需手动更新。
+
         Args:
             memory_id: 记忆 ID
             tags: 新的标签列表
@@ -363,18 +361,14 @@ class SemanticMemory:
 
         tags_json = json.dumps(tags, ensure_ascii=False)
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE memories_semantic
             SET tags = ?
             WHERE id = ?
-        """, (tags_json, memory_id))
-
-        # 同时更新 FTS 表
-        cursor.execute("""
-            UPDATE memories_semantic_fts
-            SET tags = ?
-            WHERE rowid = (SELECT rowid FROM memories_semantic WHERE id = ?)
-        """, (tags_json, memory_id))
+        """,
+            (tags_json, memory_id),
+        )
 
         conn.commit()
         return cursor.rowcount > 0

@@ -5,6 +5,7 @@ Working Memory - 工作记忆模块
 支持 SQLite 持久化：进程内 deque 保持高性能，同时定期快照到 SQLite，
 确保重启后工作记忆不丢失。
 """
+
 import logging
 import time
 from collections import deque
@@ -67,12 +68,14 @@ class WorkingMemory:
         tokens = self._estimate_tokens(content)
 
         # 存储消息
-        self.messages.append({
-            "role": message.get("role", "unknown"),
-            "content": content,
-            "tokens": tokens,
-            "timestamp": time.time()
-        })
+        self.messages.append(
+            {
+                "role": message.get("role", "unknown"),
+                "content": content,
+                "tokens": tokens,
+                "timestamp": time.time(),
+            }
+        )
 
         self.total_tokens += tokens
 
@@ -232,8 +235,7 @@ class WorkingMemory:
                 )
             conn.commit()
             logger.debug(
-                f"工作记忆快照已保存: session={self._session_id}, "
-                f"消息数={len(self.messages)}"
+                f"工作记忆快照已保存: session={self._session_id}, " f"消息数={len(self.messages)}"
             )
         except Exception as e:
             logger.warning(f"保存工作记忆快照失败: {e}")
@@ -258,12 +260,14 @@ class WorkingMemory:
             rows = cursor.fetchall()
             if rows:
                 for row in rows:
-                    self.messages.append({
-                        "role": row["role"],
-                        "content": row["content"],
-                        "tokens": row["tokens"],
-                        "timestamp": row["timestamp"],
-                    })
+                    self.messages.append(
+                        {
+                            "role": row["role"],
+                            "content": row["content"],
+                            "tokens": row["tokens"],
+                            "timestamp": row["timestamp"],
+                        }
+                    )
                     self.total_tokens += row["tokens"]
                 # 确保不超过 max_size（deque 自动截断，但 total_tokens 需要手动调整）
                 self._evict_if_needed()
