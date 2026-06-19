@@ -32,6 +32,7 @@ def tmp_db_path():
 def setup_test_db(tmp_db_path):
     """每个测试自动使用独立临时数据库"""
     import backend.data.database as db_mod
+    from backend.memory.registry import reset_memory_manager
 
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
     db_mod._db.init_db()
@@ -40,9 +41,15 @@ def setup_test_db(tmp_db_path):
     from backend.data.agent_repo import AgentRepository
 
     AgentRepository().seed_defaults_if_empty()
+
+    # 重置 MemoryManager 单例，确保每个测试使用新的数据库
+    reset_memory_manager()
+
     yield db_mod._db
     db_mod._db.close()
     db_mod._db = None
+    # 测试结束后也重置 MemoryManager
+    reset_memory_manager()
 
 
 @pytest_asyncio.fixture
