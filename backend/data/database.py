@@ -266,6 +266,23 @@ class Database:
             )
         """)
 
+        # 工作记忆快照表（持久化 WorkingMemory 的 deque 内容）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS working_memory_snapshot (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                tokens INTEGER NOT NULL DEFAULT 0,
+                timestamp REAL NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_wm_snapshot_session
+            ON working_memory_snapshot(session_id)
+        """)
+
         # 创建索引
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC)"

@@ -24,7 +24,7 @@ from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
-from backend.memory import EpisodicMemory, MemoryManager, SemanticMemory, WorkingMemory
+from backend.memory import get_memory_manager
 
 logger = logging.getLogger(__name__)
 
@@ -101,15 +101,10 @@ def _build_chat_service() -> ChatService:
         tools = inner_tools
 
     # 装配 MemoryPort (Memory Integration)
-    # 使用单例 Database 实例，确保记忆数据持久化
-    db = Database()
-    memory_manager = MemoryManager(
-        working=WorkingMemory(max_size=20, max_tokens=4000),
-        episodic=EpisodicMemory(db),
-        semantic=SemanticMemory(db),
-    )
+    # 使用全局单例 MemoryManager，确保 WorkingMemory 跨请求持久存在
+    memory_manager = get_memory_manager()
     memory_adapter = MemoryAdapter(memory_manager)
-    logger.info("MemoryAdapter 已装配（三层记忆系统：Working/Episodic/Semantic）")
+    logger.info("MemoryAdapter 已装配（三层记忆系统：Working/Episodic/Semantic，全局单例）")
 
     return ChatService(
         llm=HttpxLLMAdapter(),
