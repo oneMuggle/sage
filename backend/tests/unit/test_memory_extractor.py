@@ -15,7 +15,9 @@ class TestMemoryExtractorKeywords:
         """包含偏好关键词时应提取事实。"""
         extractor = MemoryExtractor(llm_client=None)
         # 消息需要足够长（> 20 字符）才触发提取
-        facts = await extractor.extract("我喜欢吃火锅，每次去成都都要找地道的火锅店" + "x" * 20, "好的")
+        facts = await extractor.extract(
+            "我喜欢吃火锅，每次去成都都要找地道的火锅店" + "x" * 20, "好的"
+        )
         assert len(facts) >= 1
         assert any("火锅" in f["content"] for f in facts)
         assert all(f["importance"] == 7 for f in facts)
@@ -45,6 +47,7 @@ class TestMemoryExtractorLLM:
         class MockLLM:
             async def chat(self, messages, **kwargs):
                 from backend.domain.message import Message
+
                 return Message(
                     role="assistant",
                     content='[{"content":"用户喜欢吃火锅","importance":8,"category":"preference","tags":["火锅"]}]',
@@ -67,6 +70,7 @@ class TestMemoryExtractorLLM:
         class MockLLM:
             async def chat(self, messages, **kwargs):
                 from backend.domain.message import Message
+
                 return Message(
                     role="assistant",
                     content='好的，以下是提取的结果：\n```json\n[{"content":"用户喜欢Python","importance":6,"category":"fact","tags":["编程"]}]\n```\n希望这对你有帮助！',
@@ -87,6 +91,7 @@ class TestMemoryExtractorLLM:
         class MockLLM:
             async def chat(self, messages, **kwargs):
                 from backend.domain.message import Message
+
                 return Message(
                     role="assistant",
                     content="这不是JSON格式",

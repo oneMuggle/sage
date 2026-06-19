@@ -57,7 +57,7 @@ def reciprocal_rank_fusion(
     scores: dict[str, float] = {}
     items: dict[str, dict[str, Any]] = {}
 
-    for results, weight in zip(result_lists, weights):
+    for results, weight in zip(result_lists, weights, strict=False):
         for rank, item in enumerate(results, start=1):
             item_id = str(item.get("id", item.get("memory_id", id(item))))
             if item_id not in scores:

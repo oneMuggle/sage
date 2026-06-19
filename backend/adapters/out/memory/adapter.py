@@ -79,9 +79,7 @@ class MemoryAdapter:
 
         # 1. 关键词检索（MemoryManager）
         keyword_results = self.memory_manager.recall(query, limit=limit)
-        keyword_items = keyword_results.get("episodic", []) + keyword_results.get(
-            "semantic", []
-        )
+        keyword_items = keyword_results.get("episodic", []) + keyword_results.get("semantic", [])
 
         # 2. 向量检索（VectorStore）
         vector_items: list[dict] = []
@@ -130,6 +128,7 @@ class MemoryAdapter:
 
         调用 MemoryManager.memorize() 存储记忆到合适的记忆层。
         同时将记忆内容向量化存入 VectorStore，供后续向量检索使用。
+        写入前进行安全扫描（Hermes 风格），阻止可疑内容。
 
         Args:
             content: 要存储的记忆内容
@@ -140,7 +139,18 @@ class MemoryAdapter:
         Returns:
             str: 生成的记忆 ID,对于工作记忆返回空字符串
         """
+        from backend.memory.safety import get_scanner
+
         logger.debug(f"Storing memory: {content[:50]}...")
+
+        # 安全扫描（Hermes 风格）
+        scan_result = get_scanner().scan_write(content)
+        if scan_result.blocked:
+            logger.warning(
+                f"Memory write blocked: {scan_result.reason} "
+                f"(threat_level={scan_result.threat_level})"
+            )
+            return ""
 
         # 构建元数据
         metadata = {"session_id": session_id, "tags": tags or []}

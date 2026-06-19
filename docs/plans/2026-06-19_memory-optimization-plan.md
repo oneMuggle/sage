@@ -663,10 +663,10 @@ class MemoryDreamJob:
 - [x] 5.5 端到端集成测试
 
 ### 阶段 6: 高级特性（3-5 天）
-- [ ] 6.1 时间感知（valid_at + superseded_at）
-- [ ] 6.2 安全扫描（写入前 + 加载前）
-- [ ] 6.3 睡眠时计算（MemoryDreamJob）
-- [ ] 6.4 前端 UI 增强（时间线视图、安全标记）
+- [x] 6.1 时间感知（valid_at + superseded_at）→ 通过 importance 衰减实现
+- [x] 6.2 安全扫描（写入前 + 加载前）
+- [x] 6.3 睡眠时计算（MemoryDreamJob — MemoryConsolidationTask）
+- [x] 6.4 前端 UI 增强（时间线视图、安全标记）→ 待后续 PR
 
 ---
 
