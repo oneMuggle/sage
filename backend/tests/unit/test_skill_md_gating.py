@@ -8,14 +8,10 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import pytest
 
 from backend.skills.skill_md.gating import (
     GatingContext,
-    GatingResult,
     build_gating_context,
     evaluate_gating,
 )

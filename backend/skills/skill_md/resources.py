@@ -135,9 +135,7 @@ def validate_resource_path(path: Path, base_dir: Path) -> Path:
     if resolved_path == resolved_base or resolved_base in resolved_path.parents:
         return resolved_path
 
-    raise SkillMdSecurityError(
-        f"resource path {path} is not under base_dir {base_dir}"
-    )
+    raise SkillMdSecurityError(f"resource path {path} is not under base_dir {base_dir}")
 
 
 def render_body_with_resources(body: str, base_dir: Path, index: ResourceIndex) -> str:

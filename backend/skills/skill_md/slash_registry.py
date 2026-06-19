@@ -25,7 +25,7 @@ class SlashCommandRegistry:
         self._commands: dict[str, SkillMdSkill] = mapping or {}
 
     @classmethod
-    def from_registry(cls, registry: SkillRegistry) -> "SlashCommandRegistry":
+    def from_registry(cls, registry: SkillRegistry) -> SlashCommandRegistry:
         """从 SkillRegistry 构建 slash command 索引。
 
         索引规则:

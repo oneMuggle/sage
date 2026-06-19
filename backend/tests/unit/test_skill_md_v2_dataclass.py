@@ -9,16 +9,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
+from backend.skills.skill_md.frontmatter import SkillMdParseError, parse
 from backend.skills.skill_md.skill import (
     DispatchMode,
     RequiresSpec,
     SkillMdDocument,
 )
-from backend.skills.skill_md.frontmatter import parse, SkillMdParseError
 
 pytestmark = pytest.mark.unit
 

@@ -94,7 +94,7 @@ def _build_adapter_with_skillmd(tmp_path: Path, name: str, body: str = "Skill bo
     return adapter
 
 
-def _build_adapter_from_existing(tmp_path: Path) -> "InprocSkillAdapter":  # noqa: F821
+def _build_adapter_from_existing(tmp_path: Path) -> InprocSkillAdapter:  # noqa: F821
     """从已存在 SKILL.md 的 tmp_path 构造 adapter (不重写文件)。
 
     用于 M9 测试: caller 先用 ``_write_skill_md_with_dispatch`` 写好文件,

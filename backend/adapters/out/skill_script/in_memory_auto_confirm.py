@@ -45,11 +45,11 @@ class InMemoryAutoConfirmAdapter:
         return self._response
 
     @classmethod
-    def auto_approve(cls) -> "InMemoryAutoConfirmAdapter":
+    def auto_approve(cls) -> InMemoryAutoConfirmAdapter:
         """工厂方法: 构造一个自动批准的适配器。"""
         return cls(response=True)
 
     @classmethod
-    def auto_deny(cls) -> "InMemoryAutoConfirmAdapter":
+    def auto_deny(cls) -> InMemoryAutoConfirmAdapter:
         """工厂方法: 构造一个自动拒绝的适配器。"""
         return cls(response=False)

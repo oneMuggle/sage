@@ -18,42 +18,43 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
-
+from typing import Protocol
 
 # 默认敏感环境变量黑名单（防止子进程访问宿主机的密钥）
-DEFAULT_ENV_DENYLIST: frozenset[str] = frozenset({
-    # 云服务凭据
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SESSION_TOKEN",
-    "AZURE_CLIENT_SECRET",
-    "AZURE_TENANT_KEY",
-    "GCP_SERVICE_ACCOUNT_KEY",
-    # AI/LLM API keys
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "GOOGLE_API_KEY",
-    "GEMINI_API_KEY",
-    "COHERE_API_KEY",
-    "MISTRAL_API_KEY",
-    # Git 平台
-    "GITHUB_TOKEN",
-    "GITLAB_TOKEN",
-    "BITBUCKET_TOKEN",
-    # 数据库
-    "DATABASE_URL",
-    "POSTGRES_PASSWORD",
-    "MYSQL_PASSWORD",
-    "MONGO_PASSWORD",
-    "REDIS_PASSWORD",
-    # 其他常见 secret
-    "SECRET_KEY",
-    "JWT_SECRET",
-    "PRIVATE_KEY",
-    "API_TOKEN",
-    "AUTH_TOKEN",
-})
+DEFAULT_ENV_DENYLIST: frozenset[str] = frozenset(
+    {
+        # 云服务凭据
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SESSION_TOKEN",
+        "AZURE_CLIENT_SECRET",
+        "AZURE_TENANT_KEY",
+        "GCP_SERVICE_ACCOUNT_KEY",
+        # AI/LLM API keys
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+        "COHERE_API_KEY",
+        "MISTRAL_API_KEY",
+        # Git 平台
+        "GITHUB_TOKEN",
+        "GITLAB_TOKEN",
+        "BITBUCKET_TOKEN",
+        # 数据库
+        "DATABASE_URL",
+        "POSTGRES_PASSWORD",
+        "MYSQL_PASSWORD",
+        "MONGO_PASSWORD",
+        "REDIS_PASSWORD",
+        # 其他常见 secret
+        "SECRET_KEY",
+        "JWT_SECRET",
+        "PRIVATE_KEY",
+        "API_TOKEN",
+        "AUTH_TOKEN",
+    }
+)
 
 
 @dataclass(frozen=True)

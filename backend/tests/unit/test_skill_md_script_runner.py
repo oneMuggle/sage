@@ -57,7 +57,9 @@ def test_script_runner_with_allowed_roots():
     confirmer = MagicMock(spec=ConfirmationPort)
     allowed_roots = [Path("/tmp/skills"), Path("/home/user/.sage/skills")]
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=allowed_roots,
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=allowed_roots,
     )
     assert runner._allowed_roots == allowed_roots
 
@@ -94,11 +96,15 @@ async def test_script_runner_happy_path(tmp_path):
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[tmp_path],
     )
 
     result = await runner.run_script(
-        doc=doc, script_name="scripts/test_script.py", args=(),
+        doc=doc,
+        script_name="scripts/test_script.py",
+        args=(),
     )
 
     # 验证结果
@@ -133,14 +139,20 @@ async def test_script_runner_with_args(tmp_path):
     sandbox = MagicMock(spec=SandboxPort)
     sandbox.run = AsyncMock(
         return_value=SandboxResult(
-            success=True, exit_code=0, stdout="", stderr="", duration_ms=10,
+            success=True,
+            exit_code=0,
+            stdout="",
+            stderr="",
+            duration_ms=10,
         ),
     )
     confirmer = MagicMock(spec=ConfirmationPort)
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[tmp_path],
     )
 
     await runner.run_script(doc=doc, script_name="scripts/test.py", args=("arg1", "arg2"))
@@ -173,7 +185,9 @@ async def test_script_runner_rejects_traversal(tmp_path):
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[base],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[base],
     )
 
     result = await runner.run_script(doc=doc, script_name=evil_script_name, args=())
@@ -205,12 +219,16 @@ async def test_script_runner_rejects_script_not_in_base_dir(tmp_path):
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[base],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[base],
     )
 
     # 引用 outside_script（通过 ..）
     result = await runner.run_script(
-        doc=doc, script_name=f"../{outside_script.name}", args=(),
+        doc=doc,
+        script_name=f"../{outside_script.name}",
+        args=(),
     )
 
     assert result.success is False
@@ -231,14 +249,20 @@ async def test_script_runner_accepts_script_in_nested_subdir(tmp_path):
     sandbox = MagicMock(spec=SandboxPort)
     sandbox.run = AsyncMock(
         return_value=SandboxResult(
-            success=True, exit_code=0, stdout="", stderr="", duration_ms=10,
+            success=True,
+            exit_code=0,
+            stdout="",
+            stderr="",
+            duration_ms=10,
         ),
     )
     confirmer = MagicMock(spec=ConfirmationPort)
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[base],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[base],
     )
 
     result = await runner.run_script(doc=doc, script_name="scripts/subdir/deep.py", args=())
@@ -267,13 +291,19 @@ async def test_script_runner_user_declined_returns_error(tmp_path):
     confirmer.confirm = AsyncMock(return_value=False)  # 用户拒绝
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[tmp_path],
     )
 
     result = await runner.run_script(doc=doc, script_name="scripts/test.py", args=())
 
     assert result.success is False
-    assert "declined" in result.error.lower() or "拒绝" in result.error or "user" in result.error.lower()
+    assert (
+        "declined" in result.error.lower()
+        or "拒绝" in result.error
+        or "user" in result.error.lower()
+    )
     sandbox.run.assert_not_called()
 
 
@@ -294,14 +324,20 @@ async def test_script_runner_sandbox_failure_returns_error(tmp_path):
     sandbox = MagicMock(spec=SandboxPort)
     sandbox.run = AsyncMock(
         return_value=SandboxResult(
-            success=False, exit_code=1, stdout="", stderr="Error", duration_ms=10,
+            success=False,
+            exit_code=1,
+            stdout="",
+            stderr="Error",
+            duration_ms=10,
         ),
     )
     confirmer = MagicMock(spec=ConfirmationPort)
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[tmp_path],
     )
 
     result = await runner.run_script(doc=doc, script_name="scripts/fail.py", args=())
@@ -322,15 +358,22 @@ async def test_script_runner_sandbox_timeout_returns_error(tmp_path):
     sandbox = MagicMock(spec=SandboxPort)
     sandbox.run = AsyncMock(
         return_value=SandboxResult(
-            success=False, exit_code=-1, stdout="", stderr="",
-            duration_ms=30000, timed_out=True, error="timeout after 30.0s",
+            success=False,
+            exit_code=-1,
+            stdout="",
+            stderr="",
+            duration_ms=30000,
+            timed_out=True,
+            error="timeout after 30.0s",
         ),
     )
     confirmer = MagicMock(spec=ConfirmationPort)
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[tmp_path],
     )
 
     result = await runner.run_script(doc=doc, script_name="scripts/slow.py", args=())
@@ -359,7 +402,9 @@ async def test_script_runner_sandbox_exception_does_not_propagate(tmp_path):
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[tmp_path],
     )
 
     # 不应抛异常
@@ -384,7 +429,9 @@ async def test_script_runner_confirmer_exception_does_not_propagate(tmp_path):
     confirmer.confirm = AsyncMock(side_effect=Exception("confirmer crashed"))
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[tmp_path],
     )
 
     # 不应抛异常
@@ -411,7 +458,9 @@ async def test_script_runner_path_validation_before_confirmation(tmp_path):
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[base],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[base],
     )
 
     # 非法脚本名
@@ -438,7 +487,10 @@ async def test_script_runner_metadata_includes_execution_info(tmp_path):
     sandbox = MagicMock(spec=SandboxPort)
     sandbox.run = AsyncMock(
         return_value=SandboxResult(
-            success=True, exit_code=0, stdout="output\n", stderr="warning\n",
+            success=True,
+            exit_code=0,
+            stdout="output\n",
+            stderr="warning\n",
             duration_ms=150,
         ),
     )
@@ -446,11 +498,15 @@ async def test_script_runner_metadata_includes_execution_info(tmp_path):
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[tmp_path],
     )
 
     result = await runner.run_script(
-        doc=doc, script_name="scripts/test.py", args=("arg1",),
+        doc=doc,
+        script_name="scripts/test.py",
+        args=("arg1",),
     )
 
     assert result.metadata["source"] == "script_execution"
@@ -480,7 +536,9 @@ async def test_script_runner_nonexistent_script(tmp_path):
     confirmer.confirm = AsyncMock(return_value=True)
 
     runner = ScriptRunner(
-        sandbox=sandbox, confirmer=confirmer, allowed_roots=[base],
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[base],
     )
 
     # 引用不存在的脚本（路径在 base_dir 内但文件不存在）

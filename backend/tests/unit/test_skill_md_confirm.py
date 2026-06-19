@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from backend.adapters.out.skill_script.cli_confirmation import CliConfirmationAdapter
 from backend.adapters.out.skill_script.in_memory_auto_confirm import (
     InMemoryAutoConfirmAdapter,
 )
-from backend.adapters.out.skill_script.cli_confirmation import CliConfirmationAdapter
 from backend.skills.skill_md.confirm import ConfirmationPort
 
 pytestmark = pytest.mark.unit
@@ -149,13 +149,9 @@ def test_cli_confirmation_passes_correct_args_to_callback():
     script = Path("/tmp/test_script.py")
     args = ("arg1", "arg2", "arg3")
 
-    asyncio.run(
-        adapter.confirm(skill_name="my-skill", script_path=script, args=args)
-    )
+    asyncio.run(adapter.confirm(skill_name="my-skill", script_path=script, args=args))
 
-    callback.assert_called_once_with(
-        skill_name="my-skill", script_path=script, args=args
-    )
+    callback.assert_called_once_with(skill_name="my-skill", script_path=script, args=args)
 
 
 def test_cli_confirmation_without_callback_defaults_to_true():

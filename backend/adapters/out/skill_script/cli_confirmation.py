@@ -16,8 +16,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,16 @@ class CliConfirmationAdapter:
         """
         if self._callback is None:
             logger.debug(
-                "CliConfirmationAdapter has no callback, auto-approving %s", skill_name,
+                "CliConfirmationAdapter has no callback, auto-approving %s",
+                skill_name,
             )
             return True
 
         try:
             result = self._callback(
-                skill_name=skill_name, script_path=script_path, args=args,
+                skill_name=skill_name,
+                script_path=script_path,
+                args=args,
             )
 
             # 如果 callback 返回的是 coroutine，等待它
@@ -80,12 +84,14 @@ class CliConfirmationAdapter:
         except TimeoutError:
             logger.warning(
                 "CliConfirmationAdapter timeout after %.1fs for skill %s",
-                self._timeout_s, skill_name,
+                self._timeout_s,
+                skill_name,
             )
             return False
         except Exception as exc:
             logger.warning(
                 "CliConfirmationAdapter callback failed for skill %s: %s",
-                skill_name, exc,
+                skill_name,
+                exc,
             )
             return False

@@ -183,10 +183,9 @@ async def test_execute_skill_args_wrong_type_returns_422(client, reset_skill_ada
 @pytest.mark.asyncio()
 async def test_slash_command_returns_skill_body(client, reset_skill_adapter):
     """POST /skills/command 触发 user_invocable 技能 → 返回 SKILL.md body。"""
-    from backend.adapters.out.skill.inproc import InprocSkillAdapter
-    from backend.skills.registry import SkillRegistry
-    from backend.skills.skill_md.skill import DispatchMode, SkillMdDocument, SkillMdSkill
     from pathlib import Path
+
+    from backend.skills.skill_md.skill import DispatchMode, SkillMdDocument, SkillMdSkill
 
     # 注入一个 user_invocable 的 SKILL.md 技能
     adapter = _get_skill_adapter_singleton()
@@ -203,6 +202,7 @@ async def test_slash_command_returns_skill_body(client, reset_skill_adapter):
     adapter._registry.register(SkillMdSkill(skill_doc, base_dir=skill_doc.base_dir))
     # 重建 slash registry (绕开 reload)
     from backend.skills.skill_md.slash_registry import SlashCommandRegistry
+
     adapter._slash_registry = SlashCommandRegistry.from_registry(adapter._registry)
 
     resp = await client.post(
@@ -240,11 +240,10 @@ async def test_slash_command_missing_command_field_returns_422(client, reset_ski
 @pytest.mark.asyncio()
 async def test_list_slash_commands_returns_registered(client, reset_skill_adapter):
     """GET /skills/commands → 返回已注册的命令列表。"""
-    from backend.adapters.out.skill.inproc import InprocSkillAdapter
+    from pathlib import Path
+
     from backend.skills.skill_md.skill import DispatchMode, SkillMdDocument, SkillMdSkill
     from backend.skills.skill_md.slash_registry import SlashCommandRegistry
-    from backend.skills.registry import SkillRegistry
-    from pathlib import Path
 
     adapter = _get_skill_adapter_singleton()
     for cmd_name, slash_name in [("review", "/review"), ("commit", "/commit")]:

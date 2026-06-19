@@ -104,7 +104,9 @@ def _validate_requires(requires: Any) -> dict[str, Any]:
     if requires is None:
         return {}
     if not isinstance(requires, dict):
-        raise SkillMdParseError(f"frontmatter 'requires' must be a dict, got {type(requires).__name__}")
+        raise SkillMdParseError(
+            f"frontmatter 'requires' must be a dict, got {type(requires).__name__}"
+        )
     # 校验子字段
     for key in ("bins", "env", "config"):
         if key in requires:
@@ -125,7 +127,7 @@ def _validate_os(os_field: Any) -> list[str]:
     valid_platforms = {"macos", "linux", "windows"}
     for platform in os_field:
         if not isinstance(platform, str):
-            raise SkillMdParseError(f"frontmatter 'os' must be a list of strings")
+            raise SkillMdParseError("frontmatter 'os' must be a list of strings")
         if platform not in valid_platforms:
             raise SkillMdParseError(
                 f"frontmatter 'os' contains invalid platform '{platform}', "

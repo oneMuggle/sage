@@ -19,8 +19,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,6 +29,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class GatingContext:
     """门控评估所需的环境快照。"""
+
     platform: str
     available_bins: frozenset[str]
     available_env: frozenset[str]
@@ -73,6 +73,7 @@ class GatingContext:
 @dataclass(frozen=True)
 class GatingResult:
     """门控评估结果。"""
+
     allowed: bool
     reasons: tuple[str, ...] = ()
     always_override: bool = False

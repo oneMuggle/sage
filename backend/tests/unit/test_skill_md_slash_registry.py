@@ -13,13 +13,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
+from backend.skills.registry import SkillRegistry
 from backend.skills.skill_md.skill import DispatchMode, SkillMdDocument, SkillMdSkill
 from backend.skills.skill_md.slash_registry import SlashCommandRegistry
-from backend.skills.registry import SkillRegistry
 
 pytestmark = pytest.mark.unit
 
