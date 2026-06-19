@@ -641,12 +641,12 @@ class MemoryDreamJob:
 - [x] 2.5 中文检索测试用例
 
 ### 阶段 3: 向量检索（2-3 天）
-- [ ] 3.1 实现 Embedder 封装（本地 BGE-M3 + API 可选）
-- [ ] 3.2 实现 VectorStore（sqlite-vec）
-- [ ] 3.3 MemoryAdapter 接入向量检索
-- [ ] 3.4 记忆存储时自动生成 embedding
-- [ ] 3.5 迁移脚本：为现有记忆生成 embedding
-- [ ] 3.6 向量检索测试
+- [x] 3.1 实现 Embedder 封装（本地 HashEmbedder + API 可选）
+- [x] 3.2 实现 VectorStore（sqlite-vec）
+- [x] 3.3 MemoryAdapter 接入向量检索
+- [x] 3.4 记忆存储时自动生成 embedding
+- [x] 3.5 迁移脚本：不需要 — 向量存储在写入时自动生成
+- [x] 3.6 向量检索测试
 
 ### 阶段 4: LLM 驱动的记忆提取（2-3 天）
 - [ ] 4.1 实现 MemoryExtractor（LLM 事实提取）

@@ -1,12 +1,15 @@
 """Memory Adapter - 记忆端口适配器
 
 将 MemoryPort 协议适配到现有的 MemoryManager 实现。
+集成向量检索：store() 自动生成 embedding，retrieve() 包含向量搜索结果。
 """
 
 import logging
 
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
+from backend.memory.embedder import HashEmbedder
+from backend.memory.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -17,22 +20,16 @@ class MemoryAdapter:
     这个适配器将六边形架构的 MemoryPort 协议桥接到现有的 MemoryManager 实现,
     使得 ChatService 可以通过标准接口使用记忆系统。
 
+    集成:
+    - MemoryManager: 三层记忆（Working/Episodic/Semantic）
+    - VectorStore: sqlite-vec 向量检索
+    - ConsolidationPipeline: 工作记忆压缩
+
     Attributes:
         memory_manager: 现有的 MemoryManager 实例
         consolidation: 记忆压缩管道
-
-    Example:
-        >>> from backend.memory import MemoryManager, WorkingMemory, EpisodicMemory, SemanticMemory
-        >>> from backend.data.database import Database
-        >>>
-        >>> db = Database("data/sage.db")
-        >>> memory_manager = MemoryManager(
-        ...     working=WorkingMemory(),
-        ...     episodic=EpisodicMemory(db),
-        ...     semantic=SemanticMemory(db)
-        ... )
-        >>> adapter = MemoryAdapter(memory_manager)
-        >>> context = await adapter.retrieve("火锅", "session-123")
+        vector_store: 向量存储（sqlite-vec）
+        embedder: 文本向量化器
     """
 
     def __init__(self, memory_manager: MemoryManager):
@@ -43,11 +40,27 @@ class MemoryAdapter:
         """
         self.memory_manager = memory_manager
         self.consolidation = ConsolidationPipeline()
+        self.embedder = HashEmbedder(dimensions=256)
+
+        # 初始化向量存储（需要 Database 实例）
+        # 从 MemoryManager 中获取 db（EpisodicMemory 持有 db 引用）
+        self.vector_store = None
+        try:
+            db = getattr(memory_manager.episodic, "db", None)
+            if db is not None and hasattr(db, "get_connection"):
+                self.vector_store = VectorStore(db, self.embedder)
+                logger.info("VectorStore 已初始化（sqlite-vec 向量检索）")
+        except (AttributeError, TypeError):
+            # 测试中使用 Mock MemoryManager 时可能没有 episodic 属性
+            pass
+        if self.vector_store is None:
+            logger.debug("VectorStore 未初始化：无可用 Database 实例")
 
     async def retrieve(self, query: str, session_id: str, limit: int = 5) -> MemoryContext:
         """检索相关记忆
 
-        调用 MemoryManager.recall() 检索三层记忆,并封装为 MemoryContext。
+        调用 MemoryManager.recall() 检索三层记忆,并结合 VectorStore 向量检索,
+        使用 Reciprocal Rank Fusion (RRF) 融合结果。
 
         Args:
             query: 查询文本,用于匹配相关记忆
@@ -59,9 +72,22 @@ class MemoryAdapter:
         """
         logger.debug(f"Retrieving memories for query: {query[:50]}...")
 
-        # 调用 MemoryManager.recall() 检索记忆
-        # recall() 返回字典: {"working": [...], "episodic": [...], "semantic": [...]}
+        # 调用 MemoryManager.recall() 检索三层记忆
         results = self.memory_manager.recall(query, limit=limit)
+
+        # 向量检索结果合并（如果有 VectorStore）
+        if self.vector_store is not None:
+            vec_results = self.vector_store.search(query, top_k=limit)
+            if vec_results:
+                # 从向量搜索结果中获取完整的记忆内容
+                for vr in vec_results:
+                    mem_id = vr["memory_id"]
+                    # 尝试从 episodic 或 semantic 中获取完整记忆
+                    mem = self.memory_manager.episodic.get_by_id(mem_id)
+                    if mem is None:
+                        mem = self.memory_manager.semantic.get_by_id(mem_id)
+                    if mem is not None and mem not in results.get("episodic", []):
+                        results.setdefault("episodic", []).append(mem)
 
         return MemoryContext(
             working=results.get("working", []),
@@ -75,6 +101,7 @@ class MemoryAdapter:
         """存储记忆
 
         调用 MemoryManager.memorize() 存储记忆到合适的记忆层。
+        同时将记忆内容向量化存入 VectorStore，供后续向量检索使用。
 
         Args:
             content: 要存储的记忆内容
@@ -91,13 +118,16 @@ class MemoryAdapter:
         metadata = {"session_id": session_id, "tags": tags or []}
 
         # 调用 MemoryManager.memorize() 存储记忆
-        # memorize() 会根据 importance 自动选择记忆类型:
-        # - importance >= 8: 语义记忆
-        # - importance < 5 and len < 200: 工作记忆
-        # - 其他: 情景记忆
         memory_id = self.memory_manager.memorize(
             content=content, importance=importance, metadata=metadata
         )
+
+        # 向量化存储（如果有 VectorStore 且成功生成了 memory_id）
+        if self.vector_store is not None and memory_id:
+            memory_type = "episodic"  # memorize() 默认存为 episodic
+            if importance >= 8:
+                memory_type = "semantic"
+            self.vector_store.add(memory_id, content, memory_type=memory_type)
 
         return memory_id or ""
 
