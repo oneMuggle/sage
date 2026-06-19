@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -34,6 +35,8 @@ from backend.ports.skill import SkillPort
 from backend.ports.storage import StoragePort
 from backend.ports.tool import ToolPort
 from backend.utils.otel import get_tracer
+
+logger = logging.getLogger(__name__)
 
 # 默认拉取的历史消息窗口大小（最新 N 条）
 _DEFAULT_HISTORY_LIMIT = 20
@@ -172,6 +175,21 @@ class ChatService:
         )
         span.set_attribute("history.size", len(history))
 
+        # Inject system prompt (including diagram tool guidance if available)
+        system_content = "你是 Sage，一个智能 AI 助手。"
+        try:
+            from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
+
+            # Check if diagram tools are available in the tool registry
+            if self.tools and any("drawio" in t.name for t in self.tools.list()):
+                system_content += DIAGRAM_TOOL_PROMPT
+        except Exception:
+            pass
+
+        # Prepend system message to history
+        system_msg = Message(role=Role.SYSTEM, content=system_content)
+        history = [system_msg] + list(history)
+
         # 3) 调 LLM（单次调用；错误时记 metric + event 后透传）
         # 埋点：LLM 调用计数（9 指标之一）
         self.metrics.counter(
@@ -184,7 +202,32 @@ class ChatService:
         )
         start = time.monotonic()
         try:
-            response = await self.llm.chat(history)
+            # Build tool schemas for LLM (OpenAI function-calling format)
+            llm_tools = None
+            if self.tools:
+                tool_specs = self.tools.list_tools()
+                logger.info(f"[ChatService] ToolPort.list_tools() returned {len(tool_specs)} tools")
+                if tool_specs:
+                    llm_tools = [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": ts.name,
+                                "description": ts.description,
+                                "parameters": ts.parameters,
+                            },
+                        }
+                        for ts in tool_specs
+                    ]
+                    logger.info(
+                        f"[ChatService] Passing {len(llm_tools)} tools to LLM: {[t['function']['name'] for t in llm_tools]}"
+                    )
+                else:
+                    logger.warning("[ChatService] ToolPort.list_tools() returned empty list!")
+            else:
+                logger.warning("[ChatService] self.tools is None!")
+
+            response = await self.llm.chat(history, tools=llm_tools)
         except LLMError as exc:
             duration = time.monotonic() - start
             # 失败也记直方图，便于看错误率 / 失败延迟分布

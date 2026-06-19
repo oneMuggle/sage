@@ -31,7 +31,20 @@ from backend.skills.registry import SkillRegistry as _SkillRegistry
 
 
 class InprocSkillAdapter:
-    """``SkillPort`` 的 in-process 实现 (PR-7)。"""
+    """``SkillPort`` 的 in-process 实现 (PR-7)。
+
+    SKILL.md 适配层 (v1)
+    ---------------------
+
+    PR-7 之后扩展: 在 ``__init__`` 末尾尝试调用 ``register_skill_md_skills``
+    从 ``discover_skill_md_dirs()`` 发现的目录加载 AgentSkills 规范的
+    SKILL.md 技能。SKILL.md 技能与 4 个 builtin 共享同一个 ``SkillRegistry``,
+    builtin 名字永远胜 (冲突时 SKILL.md 被 skip + WARNING 日志)。
+
+    路由层调用 ``list_skills_extended()`` (而非 ``list_skills()``) 拿到
+    包含 ``source / body / base_dir / version`` 等扩展字段的 dict 列表,
+    用于前端折叠展示 SKILL.md 的 body。
+    """
 
     def __init__(self, registry: _SkillRegistry | None = None) -> None:
         # 接受外部注入(用于测试)或使用新建 registry 并装载 builtin
@@ -42,10 +55,25 @@ class InprocSkillAdapter:
 
             self._registry = _SkillRegistry()
             register_all_skills(self._registry)
+        # v1: SKILL.md 适配层 (guarded 调用, 失败不破坏 adapter 构造)
+        try:
+            from backend.skills import register_skill_md_skills
+
+            register_skill_md_skills(self._registry)
+        except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
+            import logging
+
+            logging.getLogger(__name__).warning("SkillMd loader skipped in adapter init: %s", exc)
         # enabled 状态: 未登记视为 enabled
         self._enabled: dict[str, bool] = {}
         # usage_count: 进程内累计,重启归零
         self._usage_count: dict[str, int] = {}
+        # M10: slash command 索引 (从 registry 一次性构建)
+        from backend.skills.skill_md.slash_registry import SlashCommandRegistry
+
+        self._slash_registry: SlashCommandRegistry = SlashCommandRegistry.from_registry(
+            self._registry,
+        )
 
     # ========== SkillPort 协议方法 ==========
 
@@ -133,3 +161,95 @@ class InprocSkillAdapter:
         if not self._registry.exists(name):
             return
         self._usage_count[name] = self._usage_count.get(name, 0) + 1
+
+    # ========== M10: slash command 暴露 ==========
+
+    async def execute_command(
+        self,
+        command: str,
+        args: list[str] | tuple[str, ...] = (),
+    ) -> SkillResult:
+        """通过 slash command 触发 SKILL.md 技能 (M10)。
+
+        委托 ``SlashCommandRegistry.execute_command`` (走 ``SkillMdSkill.execute_v2``
+        v1 body fallback 路径)。返回的 ``content`` 是 SKILL.md body,
+        供聊天层注入 system prompt 模板。
+
+        Args:
+            command: slash command 名 (带或不带 ``/``)
+            args: 命令参数列表 (透传给 execute_v2 params)
+
+        Returns:
+            SkillResult: 成功时 ``content`` 是 SKILL.md body
+
+        Raises:
+            LookupError: 命令未注册 (路由层转 404)
+        """
+        result = await self._slash_registry.execute_command(
+            command_name=command,
+            args=tuple(args),
+        )
+        # SkillMdSkill.execute_v2 返回 backend.skills.base.SkillResult (含 metadata dict)
+        # 路由层需要的是 backend.domain.skill.SkillResult,字段同构,直接构造
+        return SkillResult(
+            success=result.success,
+            content=result.content,
+            metadata=dict(result.metadata),
+            error=result.error,
+        )
+
+    def list_slash_commands(self) -> list[str]:
+        """列出所有已注册的 slash command (M10)。
+
+        用于前端自动补全 / chat 输入提示。
+        """
+        return self._slash_registry.list_commands()
+
+    # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
+
+    def list_skills_extended(self) -> list[dict[str, Any]]:
+        """列出所有技能 + 扩展字段 (供路由层序列化到前端)。
+
+        返回的 dict 包含 SkillSpec 全字段 + 扩展字段:
+          - ``source`` (str): ``"builtin"`` 或 ``"skillmd"``
+          - ``body`` (str | None): 仅 SKILL.md 有值, 是 markdown body
+          - ``base_dir`` (str | None): 仅 SKILL.md 有值, 是 SKILL.md 所在目录绝对路径
+          - ``version`` (str | None): 仅 SKILL.md 有值, 是 frontmatter ``version`` 字段
+
+        builtin 技能只输出 SkillSpec 字段, **不** 输出扩展字段 (空 key 省略,
+        避免 TS strict optional 报警)。
+        """
+        # 延迟导入避免循环 (skill_md 依赖 base, base 在更早的初始化阶段)
+        from backend.skills.skill_md.skill import SkillMdSkill
+
+        result: list[dict[str, Any]] = []
+        for schema in self._registry.list():
+            skill = self._registry.get(schema.name)
+            assert skill is not None  # list() 与 get() 同源, exists 已 guard
+            is_skillmd = isinstance(skill, SkillMdSkill)
+            item: dict[str, Any] = {
+                "name": schema.name,
+                "description": schema.description,
+                "triggers": list(schema.triggers),
+                "parameters": dict(schema.parameters),
+                "examples": list(schema.examples),
+                "source": "skillmd" if is_skillmd else "builtin",
+            }
+            if is_skillmd:
+                # 仅在 SKILL.md 时输出扩展字段
+                doc = skill._doc  # type: ignore[attr-defined]
+                item["body"] = doc.body
+                item["base_dir"] = str(doc.base_dir) if doc.base_dir is not None else None
+                item["version"] = doc.version
+                # v2 DispatchMode 元数据 (M9): 前端根据 user_invocable / command_dispatch
+                # 决定如何暴露 (slash command / tool mode),disable_model_invocation
+                # 由 chat 层消费 (阻止自动触发),嵌套 dict 形式便于前端 TS 类型推导。
+                dp = doc.dispatch
+                item["dispatch"] = {
+                    "disable_model_invocation": dp.disable_model_invocation,
+                    "user_invocable": dp.user_invocable,
+                    "user_invocable_name": dp.user_invocable_name,
+                    "command_dispatch": dp.command_dispatch,
+                }
+            result.append(item)
+        return result

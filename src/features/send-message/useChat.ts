@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
+import { resolveEndpoint } from '../../entities/setting/types';
 import { ApiException, type AgentEvent, type ChatConfig } from '../../shared/api/api';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
-import { chatApi, useStore, type Message } from '../../shared/lib/store';
+import { chatApi, useStore, type Message, type ToolCall } from '../../shared/lib/store';
 import { useSettings } from '../manage-settings/useSettings';
 
 /**
@@ -61,7 +62,7 @@ export function useChat() {
   // 新增：ref 镜像 streaming.reasoning
   const streamingReasoningRef = useRef<string>('');
 
-  const activeEndpoint = settings.endpoints.find((e) => e.isActive);
+  const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
 
   /**
    * 派生 messages: 当 streaming 时, 替换 store.messages 中对应 id 的 content 和 reasoning_content
@@ -99,8 +100,8 @@ export function useChat() {
       const requestId = crypto.randomUUID();
       logger.info(requestId, 'useChat.send.start', {
         sessionId: sid,
-        hasApiKey: Boolean(activeEndpoint?.apiKey),
-        hasModel: Boolean(settings.modelSelections.chatModelId),
+        hasApiKey: Boolean(chatEndpoint?.apiKey),
+        hasModel: Boolean(settings.modelSelections.chatModel.modelId),
       });
 
       loadingRef.current = true;
@@ -121,14 +122,14 @@ export function useChat() {
         setIsLoading(false);
       };
 
-      if (!activeEndpoint?.baseUrl) {
+      if (!chatEndpoint?.baseUrl) {
         // 仍记录错误供上层展示,但消息已经进 store
         setError('未配置 API 地址，请在设置中配置');
         resetLoading();
         return;
       }
 
-      if (!settings.modelSelections.chatModelId) {
+      if (!settings.modelSelections.chatModel.modelId) {
         setError('未选择对话模型，请在设置中配置');
         resetLoading();
         return;
@@ -153,16 +154,19 @@ export function useChat() {
       // 重置 reasoning ref
       streamingReasoningRef.current = '';
 
+      // Accumulate tool calls during streaming
+      const streamingToolCalls: ToolCall[] = [];
+
       const config: ChatConfig = {
-        apiKey: activeEndpoint.apiKey,
-        apiUrl: activeEndpoint.baseUrl,
-        model: settings.modelSelections.chatModelId ?? undefined,
+        apiKey: chatEndpoint.apiKey,
+        apiUrl: chatEndpoint.baseUrl,
+        model: settings.modelSelections.chatModel.modelId ?? undefined,
         maxContext: settings.maxContext,
         temperature: settings.temperature,
         // 从 baseUrl 推导 provider,后端不再硬写 "custom"。
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
         // 不再靠 URL 启发式。详见 docs/plans/2026-06-17_thinking-passthrough.md
-        provider: inferProviderFromBaseUrl(activeEndpoint.baseUrl),
+        provider: inferProviderFromBaseUrl(chatEndpoint.baseUrl),
       };
 
       const appendContent = (next: string): void => {
@@ -220,10 +224,11 @@ export function useChat() {
         // 退回到 streamingContentRef (向后兼容旧的非流式 done 事件)
         const finalContent = lastDoneContent ?? streamingContentRef.current;
         const finalReasoning = streamingReasoningRef.current;
-        if (finalContent || finalReasoning) {
+        if (finalContent || finalReasoning || streamingToolCalls.length > 0) {
           updateMessage(assistantId, {
             content: finalContent,
             reasoning_content: finalReasoning || undefined,
+            tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
           });
         }
         streamingContentRef.current = '';
@@ -248,6 +253,38 @@ export function useChat() {
                     ? { ...prev, reasoning: streamingReasoningRef.current }
                     : prev,
                 );
+              }
+
+              // Collect tool calls during streaming
+              if (evt.state === 'acting' && evt.tool_call) {
+                const tc = evt.tool_call;
+                let args: Record<string, unknown> = {};
+                try {
+                  args = JSON.parse(tc.function.arguments);
+                } catch {
+                  // ignore parse errors
+                }
+                streamingToolCalls.push({
+                  name: tc.function.name,
+                  args,
+                });
+              }
+              if (evt.state === 'observing' && evt.tool_result) {
+                const tr = evt.tool_result;
+                // Find the matching tool call (by matching tool_call_id to the last acting event)
+                const lastTc = streamingToolCalls[streamingToolCalls.length - 1];
+                if (lastTc) {
+                  lastTc.result = tr.content;
+                  // Try to parse JSON result to extract metadata (e.g., image data from MCP tools)
+                  try {
+                    const parsed = JSON.parse(tr.content);
+                    if (parsed && typeof parsed === 'object' && parsed.metadata) {
+                      lastTc.metadata = parsed.metadata;
+                    }
+                  } catch {
+                    // Not JSON, ignore
+                  }
+                }
               }
 
               const uiText = agentStateToUiText(evt.state, evt.tool_call?.function.name);
@@ -297,7 +334,7 @@ export function useChat() {
         finishStream();
       }
     },
-    [currentSessionId, isLoading, activeEndpoint, settings, addMessage, updateMessage],
+    [currentSessionId, isLoading, chatEndpoint, settings, addMessage, updateMessage],
   );
 
   const interrupt = useCallback(async () => {

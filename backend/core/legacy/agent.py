@@ -457,7 +457,11 @@ class SageAgent:
             for i in range(max_iterations):
                 yield AgentEvent(state=AgentState.THINKING, iteration=i)
 
-                response: LLMResponse = await self.llm_client.chat(messages)
+                # Pass available tools to LLM so it can call them
+                available_tools = self.get_available_tools()
+                response: LLMResponse = await self.llm_client.chat(
+                    messages, tools=available_tools or None
+                )
 
                 # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
                 # 这允许前端展示 LLM 的思考/推理过程
@@ -594,12 +598,24 @@ class SageAgent:
 
     def get_available_tools(self) -> list[dict[str, Any]]:
         """
-        获取所有可用工具的 Schema
+        获取所有可用工具的 Schema（OpenAI function-calling 格式）
 
         Returns:
-            工具 Schema 列表
+            工具 Schema 列表，每个为：
+            {"type": "function", "function": {"name", "description", "parameters"}}
         """
-        return self.tool_registry.get_schemas_for_llm()
+        schemas = self.tool_registry.get_schemas_for_llm()
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": s["name"],
+                    "description": s["description"],
+                    "parameters": s["parameters"],
+                },
+            }
+            for s in schemas
+        ]
 
     def interrupt(self):
         """中断当前 Agent 操作"""

@@ -413,26 +413,27 @@ def _get_skill_adapter():
     return _skill_adapter_singleton
 
 
-def _skill_to_dict(spec, enabled: bool, usage_count: int) -> dict:
-    """把 SkillSpec + 路由层扩展字段序列化为 dict。"""
-    return {
-        "name": spec.name,
-        "description": spec.description,
-        "triggers": list(spec.triggers),
-        "parameters": dict(spec.parameters),
-        "examples": list(spec.examples),
-        "enabled": enabled,
-        "usage_count": usage_count,
-    }
+def _skill_to_dict(ext: dict, enabled: bool, usage_count: int) -> dict:
+    """把扩展 SkillSpec dict + 路由层 enabled/usage_count 序列化为响应 dict。
+
+    ``ext`` 来自 ``InprocSkillAdapter.list_skills_extended()``,
+    含 ``source / body / base_dir / version`` 等字段 (SKILL.md 时填充, builtin 时不存在)。
+
+    复制一份避免修改 adapter 返回的共享 dict (immutable-ish 风格)。
+    """
+    out = dict(ext)
+    out["enabled"] = enabled
+    out["usage_count"] = usage_count
+    return out
 
 
 @router.get("/skills")
 async def list_skills():
-    """列出所有已注册技能 (含 disabled 与 usage_count)。"""
+    """列出所有已注册技能 (含 disabled 与 usage_count + SKILL.md 扩展字段)。"""
     adapter = _get_skill_adapter()
     return [
-        _skill_to_dict(spec, adapter.is_enabled(spec.name), adapter.usage_count(spec.name))
-        for spec in adapter.list_skills()
+        _skill_to_dict(ext, adapter.is_enabled(ext["name"]), adapter.usage_count(ext["name"]))
+        for ext in adapter.list_skills_extended()
     ]
 
 
@@ -456,10 +457,10 @@ async def toggle_skill(name: str, data: SkillToggle):
             status_code=404,
             detail={"type": "skill_not_found", "message": f"skill '{name}' not found"},
         )
-    # 返回完整 skill dict (与 list 接口一致)
-    spec = next((s for s in adapter.list_skills() if s.name == name), None)
-    assert spec is not None  # set_enabled 已 guard
-    return _skill_to_dict(spec, adapter.is_enabled(name), adapter.usage_count(name))
+    # 返回完整 skill dict (与 list 接口一致) —— 用 list_skills_extended 拿带 source/body 的版本
+    ext = next((e for e in adapter.list_skills_extended() if e["name"] == name), None)
+    assert ext is not None  # set_enabled 已 guard
+    return _skill_to_dict(ext, adapter.is_enabled(name), adapter.usage_count(name))
 
 
 class SkillExecuteRequest(BaseModel):
@@ -499,6 +500,61 @@ async def execute_skill(name: str, data: SkillExecuteRequest):
         "metadata": result.metadata,
         "error": result.error,
     }
+
+
+# ==================== M10: slash command 暴露 ====================
+
+
+class SkillCommandRequest(BaseModel):
+    """``POST /skills/command`` 请求体 (M10)。
+
+    - command: slash command 名 (带或不带 ``/``,如 ``/review`` 或 ``review``)
+    - args: 命令参数列表 (透传给 SkillMdSkill.execute_v2 params['args'])
+    """
+
+    command: str
+    args: list[str] = []
+
+
+@router.post("/skills/command")
+async def execute_slash_command(data: SkillCommandRequest):
+    """执行 slash command (M10)。
+
+    - 200 + SkillResult (success / content / metadata / error)
+      - success=True → content 是 SKILL.md body,供聊天层注入 system prompt
+      - success=False → 内部执行失败(脚本异常等),前端按 success 字段判定
+    - 404 + 结构化 detail — command 未注册 (无 user_invocable 技能匹配)
+    - 422 (FastAPI 自动) — command 缺失或类型错
+
+    设计: chat 层剥离 ``/`` 前缀后 POST 此端点;不需要再走 SkillRegistry.exists()
+    (slash registry 本身就是 user_invocable 技能的子集,索引已构建完成)。
+    """
+    adapter = _get_skill_adapter()
+    try:
+        result = await adapter.execute_command(data.command, data.args)
+    except LookupError as exc:
+        # 命令未注册 → 404 (与 skill_not_found 语义一致)
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "command_not_found", "message": str(exc)},
+        ) from exc
+    return {
+        "success": result.success,
+        "content": result.content,
+        "metadata": result.metadata,
+        "error": result.error,
+    }
+
+
+@router.get("/skills/commands")
+async def list_slash_commands():
+    """列出所有已注册的 slash command (M10)。
+
+    用于前端自动补全 / chat 输入提示。
+    返回命令名列表 (带 ``/`` 前缀,如 ``["/review", "/commit"]``)。
+    """
+    adapter = _get_skill_adapter()
+    return {"commands": adapter.list_slash_commands()}
 
 
 # ==================== 聊天 API ====================
@@ -633,8 +689,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
 
             agent = SageAgent()
+
+            # Build system prompt with optional diagram tool guidance
+            system_content = "你是 Sage，一个智能 AI 助手。"
+            try:
+                from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
+
+                # Check if diagram MCP tools are registered
+                _registry = getattr(agent, "tool_registry", None)
+                if _registry and _registry.exists("drawio__render_diagram"):
+                    system_content += DIAGRAM_TOOL_PROMPT
+            except Exception:
+                pass  # Graceful fallback if diagram module unavailable
+
             messages = [
-                {"role": "system", "content": "你是 Sage，一个智能 AI 助手。"},
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": data.message},
             ]
             # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct

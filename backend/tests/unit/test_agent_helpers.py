@@ -178,13 +178,26 @@ def test_execute_tool_wraps_unexpected_exception_in_tool_call_error():
 
 
 def test_get_available_tools_delegates_to_tool_registry():
-    """get_available_tools() 应透传 tool_registry.get_schemas_for_llm()。"""
+    """get_available_tools() 应包装 tool_registry.get_schemas_for_llm() 为 OpenAI function-calling 格式。"""
     agent = SageAgent()
-    expected = [{"type": "function", "function": {"name": "calculator"}}]
-    agent.tool_registry.get_schemas_for_llm = MagicMock(return_value=expected)
+    # ToolRegistry.get_schemas_for_llm 返回 flat 格式 (name/description/parameters)
+    flat_schemas = [
+        {"name": "calculator", "description": "do math", "parameters": {}},
+    ]
+    agent.tool_registry.get_schemas_for_llm = MagicMock(return_value=flat_schemas)
 
     result = agent.get_available_tools()
-    assert result == expected
+    # agent 包装为 OpenAI function-calling 格式
+    assert result == [
+        {
+            "type": "function",
+            "function": {
+                "name": "calculator",
+                "description": "do math",
+                "parameters": {},
+            },
+        }
+    ]
     agent.tool_registry.get_schemas_for_llm.assert_called_once()
 
 

@@ -3,7 +3,8 @@
  *
  * 覆盖：
  *   - 无 persistence → 返回 DEFAULT_SETTINGS
- *   - v1 (apiUrl + model) → v2 (endpoints + modelSelections) 迁移
+ *   - v1 (apiUrl + model) → v3 (endpoints + ModelSelection bindings) 迁移
+ *   - v2 (isActive + flat modelSelections) → v3 迁移
  *   - saveSettings 合并并 stamp version
  *   - 解析失败回退默认值
  *   - resetSettings 写回默认
@@ -35,7 +36,7 @@ describe('storage.loadSettings', () => {
     expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
   });
 
-  it('migrates legacy v1 schema (apiUrl + model) to v2', () => {
+  it('migrates legacy v1 schema (apiUrl + model) to v3', () => {
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify({
@@ -51,12 +52,63 @@ describe('storage.loadSettings', () => {
     expect(settings.version).toBe(SETTINGS_VERSION);
     expect(settings.endpoints).toHaveLength(1);
     expect(settings.endpoints[0].baseUrl).toBe('https://legacy.test/v1');
-    expect(settings.endpoints[0].isActive).toBe(true);
+    expect(settings.endpoints[0]).not.toHaveProperty('isActive');
     expect(settings.endpoints[0].discoveredModels[0].id).toBe('gpt-legacy');
-    expect(settings.modelSelections.chatModelId).toBe('gpt-legacy');
+    expect(settings.modelSelections.chatModel.modelId).toBe('gpt-legacy');
+    expect(settings.modelSelections.chatModel.endpointId).toBe(settings.endpoints[0].id);
   });
 
-  it('merges with defaults when version is current v2', () => {
+  it('migrates v2 schema (isActive + flat modelSelections) to v3', () => {
+    const ep1Id = 'ep-1-uuid';
+    const ep2Id = 'ep-2-uuid';
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        version: '2.0.0',
+        endpoints: [
+          {
+            id: ep1Id,
+            name: 'OpenAI',
+            baseUrl: 'https://api.openai.com/v1',
+            apiKey: 'sk-1',
+            isActive: false,
+            discoveredModels: [{ id: 'gpt-4o', capabilities: ['chat'], endpointId: ep1Id }],
+            lastDiscoveredAt: null,
+          },
+          {
+            id: ep2Id,
+            name: 'Ollama',
+            baseUrl: 'http://localhost:11434/v1',
+            apiKey: '',
+            isActive: true,
+            discoveredModels: [{ id: 'llama3', capabilities: ['chat'], endpointId: ep2Id }],
+            lastDiscoveredAt: null,
+          },
+        ],
+        modelSelections: {
+          chatModelId: 'llama3',
+          visionModelId: null,
+          embeddingModelId: null,
+        },
+        temperature: 0.7,
+      }),
+    );
+
+    const settings = loadSettings();
+
+    expect(settings.version).toBe(SETTINGS_VERSION);
+    // isActive stripped from all endpoints
+    expect(settings.endpoints[0]).not.toHaveProperty('isActive');
+    expect(settings.endpoints[1]).not.toHaveProperty('isActive');
+    // model selection bound to the previously-active endpoint
+    expect(settings.modelSelections.chatModel.endpointId).toBe(ep2Id);
+    expect(settings.modelSelections.chatModel.modelId).toBe('llama3');
+    // null selections remain unbound
+    expect(settings.modelSelections.visionModel.endpointId).toBeNull();
+    expect(settings.modelSelections.visionModel.modelId).toBeNull();
+  });
+
+  it('merges with defaults when version is current v3', () => {
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify({
@@ -89,7 +141,6 @@ describe('storage.saveSettings', () => {
       name: 'A',
       baseUrl: 'https://a.test',
       apiKey: 'sk',
-      isActive: true,
       discoveredModels: [],
       lastDiscoveredAt: null,
     };
