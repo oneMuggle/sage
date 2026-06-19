@@ -69,7 +69,7 @@ class TestMemoryExtractorLLM:
                 from backend.domain.message import Message
                 return Message(
                     role="assistant",
-                    content="好的，以下是提取的结果：\n```json\n[{\"content\":\"用户喜欢Python\",\"importance\":6,\"category\":\"fact\",\"tags\":[\"编程\"]}]\n```\n希望这对你有帮助！",
+                    content='好的，以下是提取的结果：\n```json\n[{"content":"用户喜欢Python","importance":6,"category":"fact","tags":["编程"]}]\n```\n希望这对你有帮助！',
                 )
 
         extractor = MemoryExtractor(llm_client=MockLLM())

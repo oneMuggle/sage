@@ -107,7 +107,9 @@ class MemoryExtractor:
             response_msg = await self._llm.chat(
                 messages=[Message(role="user", content=prompt)],
             )
-            content = response_msg.content if hasattr(response_msg, "content") else str(response_msg)
+            content = (
+                response_msg.content if hasattr(response_msg, "content") else str(response_msg)
+            )
         except (ImportError, TypeError, AttributeError):
             # 降级：简单 chat() 接口
             response = await self._llm.chat(
@@ -136,12 +138,14 @@ class MemoryExtractor:
         valid_facts = []
         for fact in facts:
             if isinstance(fact, dict) and "content" in fact:
-                valid_facts.append({
-                    "content": str(fact["content"])[:200],
-                    "importance": min(max(int(fact.get("importance", 5)), 1), 10),
-                    "category": fact.get("category", "fact"),
-                    "tags": fact.get("tags", [])[:3],
-                })
+                valid_facts.append(
+                    {
+                        "content": str(fact["content"])[:200],
+                        "importance": min(max(int(fact.get("importance", 5)), 1), 10),
+                        "category": fact.get("category", "fact"),
+                        "tags": fact.get("tags", [])[:3],
+                    }
+                )
 
         return valid_facts
 
@@ -154,12 +158,14 @@ class MemoryExtractor:
             if keyword in user_message:
                 for sentence in user_message.replace("。", ".").split("."):
                     if keyword in sentence and len(sentence.strip()) > 5:
-                        facts.append({
-                            "content": f"用户{sentence.strip()}",
-                            "importance": 7,
-                            "category": "preference",
-                            "tags": ["preference"],
-                        })
+                        facts.append(
+                            {
+                                "content": f"用户{sentence.strip()}",
+                                "importance": 7,
+                                "category": "preference",
+                                "tags": ["preference"],
+                            }
+                        )
                         break
                 break
 

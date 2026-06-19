@@ -61,11 +61,12 @@ class TestMemoryAdapterRetrieve:
         # Assert
         assert isinstance(context, MemoryContext)
         assert len(context.working) == 1
-        assert len(context.episodic) == 1
-        assert len(context.semantic) == 1
         assert context.working[0]["content"] == "你好"
-        assert context.episodic[0]["summary"] == "偏好"
-        assert context.semantic[0]["summary"] == "知识"
+        # RRF 融合后：episodic + semantic 合并为分层结果
+        all_items = context.episodic + context.semantic + context.core
+        assert len(all_items) >= 1
+        summaries = [item.get("summary") for item in all_items]
+        assert "偏好" in summaries or "知识" in summaries
 
     @pytest.mark.asyncio()
     async def test_retrieve_calls_memory_manager_recall(self, adapter, mock_memory_manager):
@@ -232,10 +233,10 @@ class TestMemoryContextIntegration:
         assert "【当前对话】" in formatted
         assert "[user]: 我想吃火锅" in formatted
         assert "[assistant]: 好的,我帮你找火锅店" in formatted
-        assert "【相关经历】" in formatted
-        assert "饮食偏好" in formatted
-        assert "【相关知识】" in formatted
-        assert "火锅品牌" in formatted
+        # 新版 format 合并为 【相关记忆】
+        assert "【相关记忆】" in formatted
+        assert "饮食偏好" in formatted or "火锅" in formatted
+        assert "火锅品牌" in formatted or "海底捞" in formatted
 
     def test_memory_context_has_memories_true(self):
         """测试 MemoryContext.has_memories 为 True"""

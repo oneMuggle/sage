@@ -399,9 +399,7 @@ class ChatService:
             )
 
         if facts:
-            logger.debug(
-                f"Extracted {len(facts)} facts for session {session_id}"
-            )
+            logger.debug(f"Extracted {len(facts)} facts for session {session_id}")
 
     # ------------------------------------------------------------------ #
     # 内部辅助：执行 tool_calls

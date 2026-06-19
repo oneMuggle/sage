@@ -219,7 +219,10 @@ class TestChatServiceMemoryStorage:
         # Mock LLM 返回：第一次是主 chat（自然语言），后续是提取（JSON）
         mock_llm.chat.side_effect = [
             Message(role=Role.ASSISTANT, content=assistant_content),  # 主 chat
-            Message(role=Role.ASSISTANT, content='[{"content":"用户想吃火锅","importance":5,"category":"preference","tags":["火锅"]}]'),  # 提取
+            Message(
+                role=Role.ASSISTANT,
+                content='[{"content":"用户想吃火锅","importance":5,"category":"preference","tags":["火锅"]}]',
+            ),  # 提取
         ]
 
         # Act
@@ -244,7 +247,10 @@ class TestChatServiceMemoryStorage:
         # Mock LLM 返回：第一次是主 chat，后续是提取（JSON，含 importance=7）
         mock_llm.chat.side_effect = [
             Message(role=Role.ASSISTANT, content=assistant_content),
-            Message(role=Role.ASSISTANT, content='[{"content":"用户喜欢吃火锅","importance":7,"category":"preference","tags":["火锅"]}]'),
+            Message(
+                role=Role.ASSISTANT,
+                content='[{"content":"用户喜欢吃火锅","importance":7,"category":"preference","tags":["火锅"]}]',
+            ),
         ]
 
         # Act

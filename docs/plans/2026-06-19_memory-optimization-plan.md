@@ -656,11 +656,11 @@ class MemoryDreamJob:
 - [x] 4.5 集成测试（ChatService 测试已更新通过）
 
 ### 阶段 5: 混合检索 + Token 预算（2-3 天）
-- [ ] 5.1 实现 RRF 混合融合
-- [ ] 5.2 MemoryContext.format() Token 预算感知
-- [ ] 5.3 核心记忆层（用户画像 + 偏好）
-- [ ] 5.4 冻结快照机制
-- [ ] 5.5 端到端集成测试
+- [x] 5.1 实现 RRF 混合融合
+- [x] 5.2 MemoryContext.format() Token 预算感知
+- [x] 5.3 核心记忆层（用户画像 + 偏好）
+- [x] 5.4 冻结快照机制 → 简化为在 MemoryContext 中通过 core 字段实现
+- [x] 5.5 端到端集成测试
 
 ### 阶段 6: 高级特性（3-5 天）
 - [ ] 6.1 时间感知（valid_at + superseded_at）

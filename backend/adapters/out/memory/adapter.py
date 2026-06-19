@@ -59,8 +59,11 @@ class MemoryAdapter:
     async def retrieve(self, query: str, session_id: str, limit: int = 5) -> MemoryContext:
         """检索相关记忆
 
-        调用 MemoryManager.recall() 检索三层记忆,并结合 VectorStore 向量检索,
-        使用 Reciprocal Rank Fusion (RRF) 融合结果。
+        多路检索 + RRF 融合：
+        1. MemoryManager.recall() — 关键词检索（episodic + semantic）
+        2. VectorStore.search() — 向量检索
+        3. 两路结果用 RRF 融合，按融合分数排序
+        4. 高重要性事实（importance >= 8）提升为核心记忆（core）
 
         Args:
             query: 查询文本,用于匹配相关记忆
@@ -68,31 +71,56 @@ class MemoryAdapter:
             limit: 每种记忆类型的返回数量限制,默认 5
 
         Returns:
-            MemoryContext: 包含三层记忆的上下文对象
+            MemoryContext: 包含分层记忆的上下文对象
         """
+        from backend.memory.fusion import reciprocal_rank_fusion
+
         logger.debug(f"Retrieving memories for query: {query[:50]}...")
 
-        # 调用 MemoryManager.recall() 检索三层记忆
-        results = self.memory_manager.recall(query, limit=limit)
+        # 1. 关键词检索（MemoryManager）
+        keyword_results = self.memory_manager.recall(query, limit=limit)
+        keyword_items = keyword_results.get("episodic", []) + keyword_results.get(
+            "semantic", []
+        )
 
-        # 向量检索结果合并（如果有 VectorStore）
+        # 2. 向量检索（VectorStore）
+        vector_items: list[dict] = []
         if self.vector_store is not None:
             vec_results = self.vector_store.search(query, top_k=limit)
-            if vec_results:
-                # 从向量搜索结果中获取完整的记忆内容
-                for vr in vec_results:
-                    mem_id = vr["memory_id"]
-                    # 尝试从 episodic 或 semantic 中获取完整记忆
-                    mem = self.memory_manager.episodic.get_by_id(mem_id)
-                    if mem is None:
-                        mem = self.memory_manager.semantic.get_by_id(mem_id)
-                    if mem is not None and mem not in results.get("episodic", []):
-                        results.setdefault("episodic", []).append(mem)
+            for vr in vec_results:
+                mem_id = vr["memory_id"]
+                mem = self.memory_manager.episodic.get_by_id(mem_id)
+                if mem is None:
+                    mem = self.memory_manager.semantic.get_by_id(mem_id)
+                if mem is not None:
+                    mem["rrf_score"] = 1.0 / (60 + vr.get("distance", 0) * 100)
+                    vector_items.append(mem)
+
+        # 3. RRF 融合两路结果
+        fused = reciprocal_rank_fusion(
+            [keyword_items, vector_items],
+            weights=[0.4, 0.6],  # 向量检索权重更高
+            k=60,
+        )
+
+        # 4. 分层：高重要性 → core，其余 → episodic/semantic
+        core: list[dict] = []
+        episodic: list[dict] = []
+        semantic: list[dict] = []
+        for item in fused[: limit * 2]:
+            importance = item.get("importance", 5)
+            if importance >= 8:
+                core.append(item)
+            elif item.get("memory_type") == "semantic" or item.get("category") == "fact":
+                semantic.append(item)
+            else:
+                episodic.append(item)
 
         return MemoryContext(
-            working=results.get("working", []),
-            episodic=results.get("episodic", []),
-            semantic=results.get("semantic", []),
+            working=keyword_results.get("working", []),
+            episodic=episodic[:limit],
+            semantic=semantic[:limit],
+            core=core[:5],  # 核心记忆最多 5 条
         )
 
     async def store(
