@@ -273,8 +273,8 @@ version?: string;
 | `os` 平台过滤 | 仅在指定 OS 加载 | ✅ M3: 同上 |
 | `always` 跳过门控 | 始终加载 | ✅ M3: 同上 |
 | `disable-model-invocation` | 不进 system prompt, 仅手动触发 | ✅ M9: DispatchMode 元数据序列化 |
-| `user-invocable` | 暴露为 slash command | ✅ M9: SkillCard 渲染 slash command badge;执行走 `execute_v2` |
-| `command-dispatch: tool` | 直接派发到工具, 不经 LLM | ⏳ M10: 路由层额外 endpoint |
+| `user-invocable` | 暴露为 slash command | ✅ M9: SkillCard 渲染 slash command badge;✅ M10: POST `/skills/command` + SlashCommandRegistry |
+| `command-dispatch: tool` | 直接派发到工具, 不经 LLM | ⏳ M11+: 路由层额外 endpoint |
 
 ### 9.10 DispatchMode 元数据序列化 (M9)
 
@@ -306,9 +306,40 @@ SKILL.md v2 frontmatter 中的 4 个 dispatch 字段（`disable-model-invocation
 - `src/widgets/skills/SkillCard.tsx` 渲染（slash command badge + mode chip）
 - chat 层（M10+）消费 `disable_model_invocation` / `command_dispatch` 决定派发策略
 
-### 9.11 端到端验证
+### 9.11 Slash Command 暴露 (M10)
 
-### 9.10 端到端验证
+SKILL.md v2 的 `user-invocable` / `user-invocable-name` 字段通过 `SlashCommandRegistry` 暴露为运行时 slash command,提供两个新路由:
+
+| 路由 | 方法 | 说明 |
+|---|---|---|
+| `/api/v1/skills/command` | POST | 执行 slash command,返回 SKILL.md body |
+| `/api/v1/skills/commands` | GET | 列出所有已注册命令(供前端自动补全) |
+
+**SlashCommandRegistry** (`backend/skills/skill_md/slash_registry.py`):
+
+- `from_registry(registry)` 一次性构建索引:遍历 `SkillRegistry`,仅索引 `SkillMdSkill` 且 `dispatch.user_invocable=true` 的技能
+- `resolve(command_name) -> SkillMdSkill | None`:接受 `/foo` / `foo` / `//foo` 等变体,内部规范化
+- `execute_command(command, args)` 委托 `SkillMdSkill.execute_v2`(M8) 走 v1 body fallback 路径,返回 `SkillResult(content=body, ...)` 供聊天层注入 system prompt 模板
+
+**契约要点**:
+
+- **不直接执行脚本**:slash command 触发后默认返回 body 作为 prompt 模板。脚本执行仍走 POST `/skills/{name}/execute` with 显式 `script` 参数 — slash command 不直接 dispatch 脚本
+- **builtin 永不索引**:`isinstance(skill, SkillMdSkill)` 检查过滤 builtin
+- **404 语义**:`LookupError` 在路由层映射为 404 + `command_not_found` detail
+- **reload 时需重建**:`SlashCommandRegistry` 是不可变快照,registry reload 后需重新 `from_registry()` 重建
+
+**集成点**:
+
+- `InprocSkillAdapter.__init__` 末尾构建 `self._slash_registry = SlashCommandRegistry.from_registry(self._registry)`
+- `InprocSkillAdapter.execute_command(command, args)` 公共方法供路由层调用
+- `InprocSkillAdapter.list_slash_commands()` 返回命令名列表
+
+**消费者(M11+)**:
+
+- 聊天层解析用户输入 `/review arg1 arg2` → 剥离 `/` 前缀 → POST `/skills/command`
+- 前端自动补全通过 GET `/skills/commands` 拿命令列表
+
+### 9.12 端到端验证
 
 手测冒烟流程:
 
@@ -339,10 +370,17 @@ curl http://127.0.0.1:8765/api/v1/skills | jq '.[] | {name, source}'
 curl -X POST http://127.0.0.1:8765/api/v1/skills/code-review/execute \
   -H 'Content-Type: application/json' \
   -d '{"action": "run", "args": {}}'
+
+# M10: slash command 端点 (user-invocable=true 的 SKILL.md)
+curl http://127.0.0.1:8765/api/v1/skills/commands
+curl -X POST http://127.0.0.1:8765/api/v1/skills/command \
+  -H 'Content-Type: application/json' \
+  -d '{"command": "/review", "args": []}'
 ```
 
-### 9.11 风险
+### 9.13 风险
 
 - **Prompt injection**: SKILL.md body 含恶意指令。聊天层应把 body 视为不可信用户内容, 包装成 system message 而非塞进开发者模板。
 - **路径遍历**: `{baseDir}` 占位符可能被恶意替换到允许根之外。`validate_base_dir` 强制 base_dir 必须在允许根内。
 - **LLM 行为差异**: 同一 SKILL.md 在不同 LLM 下表现可能差异大。建议作者跨模型测试。
+- **Slash command 索引陈旧**: `SlashCommandRegistry` 是不可变快照,registry reload 后需重建 — `InprocSkillAdapter.hot_reload()` 路径会同步重建(M11+ 跟进)。

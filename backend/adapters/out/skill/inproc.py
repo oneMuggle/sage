@@ -68,6 +68,12 @@ class InprocSkillAdapter:
         self._enabled: dict[str, bool] = {}
         # usage_count: 进程内累计,重启归零
         self._usage_count: dict[str, int] = {}
+        # M10: slash command 索引 (从 registry 一次性构建)
+        from backend.skills.skill_md.slash_registry import SlashCommandRegistry
+
+        self._slash_registry: SlashCommandRegistry = SlashCommandRegistry.from_registry(
+            self._registry,
+        )
 
     # ========== SkillPort 协议方法 ==========
 
@@ -155,6 +161,49 @@ class InprocSkillAdapter:
         if not self._registry.exists(name):
             return
         self._usage_count[name] = self._usage_count.get(name, 0) + 1
+
+    # ========== M10: slash command 暴露 ==========
+
+    async def execute_command(
+        self,
+        command: str,
+        args: list[str] | tuple[str, ...] = (),
+    ) -> SkillResult:
+        """通过 slash command 触发 SKILL.md 技能 (M10)。
+
+        委托 ``SlashCommandRegistry.execute_command`` (走 ``SkillMdSkill.execute_v2``
+        v1 body fallback 路径)。返回的 ``content`` 是 SKILL.md body,
+        供聊天层注入 system prompt 模板。
+
+        Args:
+            command: slash command 名 (带或不带 ``/``)
+            args: 命令参数列表 (透传给 execute_v2 params)
+
+        Returns:
+            SkillResult: 成功时 ``content`` 是 SKILL.md body
+
+        Raises:
+            LookupError: 命令未注册 (路由层转 404)
+        """
+        result = await self._slash_registry.execute_command(
+            command_name=command,
+            args=tuple(args),
+        )
+        # SkillMdSkill.execute_v2 返回 backend.skills.base.SkillResult (含 metadata dict)
+        # 路由层需要的是 backend.domain.skill.SkillResult,字段同构,直接构造
+        return SkillResult(
+            success=result.success,
+            content=result.content,
+            metadata=dict(result.metadata),
+            error=result.error,
+        )
+
+    def list_slash_commands(self) -> list[str]:
+        """列出所有已注册的 slash command (M10)。
+
+        用于前端自动补全 / chat 输入提示。
+        """
+        return self._slash_registry.list_commands()
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
 

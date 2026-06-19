@@ -502,6 +502,61 @@ async def execute_skill(name: str, data: SkillExecuteRequest):
     }
 
 
+# ==================== M10: slash command 暴露 ====================
+
+
+class SkillCommandRequest(BaseModel):
+    """``POST /skills/command`` 请求体 (M10)。
+
+    - command: slash command 名 (带或不带 ``/``,如 ``/review`` 或 ``review``)
+    - args: 命令参数列表 (透传给 SkillMdSkill.execute_v2 params['args'])
+    """
+
+    command: str
+    args: list[str] = []
+
+
+@router.post("/skills/command")
+async def execute_slash_command(data: SkillCommandRequest):
+    """执行 slash command (M10)。
+
+    - 200 + SkillResult (success / content / metadata / error)
+      - success=True → content 是 SKILL.md body,供聊天层注入 system prompt
+      - success=False → 内部执行失败(脚本异常等),前端按 success 字段判定
+    - 404 + 结构化 detail — command 未注册 (无 user_invocable 技能匹配)
+    - 422 (FastAPI 自动) — command 缺失或类型错
+
+    设计: chat 层剥离 ``/`` 前缀后 POST 此端点;不需要再走 SkillRegistry.exists()
+    (slash registry 本身就是 user_invocable 技能的子集,索引已构建完成)。
+    """
+    adapter = _get_skill_adapter()
+    try:
+        result = await adapter.execute_command(data.command, data.args)
+    except LookupError as exc:
+        # 命令未注册 → 404 (与 skill_not_found 语义一致)
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "command_not_found", "message": str(exc)},
+        ) from exc
+    return {
+        "success": result.success,
+        "content": result.content,
+        "metadata": result.metadata,
+        "error": result.error,
+    }
+
+
+@router.get("/skills/commands")
+async def list_slash_commands():
+    """列出所有已注册的 slash command (M10)。
+
+    用于前端自动补全 / chat 输入提示。
+    返回命令名列表 (带 ``/`` 前缀,如 ``["/review", "/commit"]``)。
+    """
+    adapter = _get_skill_adapter()
+    return {"commands": adapter.list_slash_commands()}
+
+
 # ==================== 聊天 API ====================
 
 

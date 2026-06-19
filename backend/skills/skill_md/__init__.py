@@ -52,6 +52,7 @@ __all__ = [
     "SkillMdDocument",
     "SkillMdSkill",
     "SkillMdHotLoader",
+    "SlashCommandRegistry",
     "build_gating_context",
     "build_resource_index",
     "discover_skill_md_dirs",
