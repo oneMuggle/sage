@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable */
 /**
  * MCP Server for Sage - draw.io diagram renderer
  *

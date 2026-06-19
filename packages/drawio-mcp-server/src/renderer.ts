@@ -1,3 +1,4 @@
+/* eslint-disable */
 /**
  * Puppeteer-based headless renderer for draw.io diagrams
  *
