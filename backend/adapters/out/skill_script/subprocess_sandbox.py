@@ -114,7 +114,7 @@ class SubprocessSandboxAdapter:
                 process.communicate(input=req.stdin_data),
                 timeout=timeout,
             )
-        except (asyncio.TimeoutError, TimeoutError):
+        except TimeoutError:
             # 超时: kill 子进程
             try:
                 process.kill()
