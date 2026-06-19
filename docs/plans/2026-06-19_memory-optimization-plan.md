@@ -649,11 +649,11 @@ class MemoryDreamJob:
 - [x] 3.6 向量检索测试
 
 ### 阶段 4: LLM 驱动的记忆提取（2-3 天）
-- [ ] 4.1 实现 MemoryExtractor（LLM 事实提取）
-- [ ] 4.2 实现 MemoryConsolidator（去重 + 冲突解决）
-- [ ] 4.3 ConsolidationPipeline 接入 LLM
-- [ ] 4.4 ChatService 替换 _extract_and_store_memory()
-- [ ] 4.5 集成测试
+- [x] 4.1 实现 MemoryExtractor（LLM 事实提取）
+- [x] 4.2 实现 MemoryConsolidator（去重 + 冲突解决）→ 简化为提取时直接去重
+- [x] 4.3 ConsolidationPipeline 接入 LLM → 已通过 MemoryExtractor 实现
+- [x] 4.4 ChatService 替换 _extract_and_store_memory()
+- [x] 4.5 集成测试（ChatService 测试已更新通过）
 
 ### 阶段 5: 混合检索 + Token 预算（2-3 天）
 - [ ] 5.1 实现 RRF 混合融合

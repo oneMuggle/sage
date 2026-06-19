@@ -215,7 +215,12 @@ class TestChatServiceMemoryStorage:
         assistant_content = "好的,我理解您想吃火锅。成都确实有很多不错的火锅店,除了海底捞之外,还有小龙坎、大龙燚、蜀大侠等,这些都是非常受欢迎的火锅店,每家都有特色。小龙坎以麻辣著称,人均消费约100元;大龙燚以牛油锅底闻名,人均消费约120元"
 
         user_message = Message(role=Role.USER, content=user_content)
-        mock_llm.chat.return_value = Message(role=Role.ASSISTANT, content=assistant_content)
+
+        # Mock LLM 返回：第一次是主 chat（自然语言），后续是提取（JSON）
+        mock_llm.chat.side_effect = [
+            Message(role=Role.ASSISTANT, content=assistant_content),  # 主 chat
+            Message(role=Role.ASSISTANT, content='[{"content":"用户想吃火锅","importance":5,"category":"preference","tags":["火锅"]}]'),  # 提取
+        ]
 
         # Act
         await chat_service_with_memory.run_turn("session-123", user_message)
@@ -224,9 +229,6 @@ class TestChatServiceMemoryStorage:
         assert mock_memory.store.called
         call_kwargs = mock_memory.store.call_args[1]
         assert call_kwargs["session_id"] == "session-123"
-        assert call_kwargs["tags"] == ["conversation"]
-        assert "用户" in call_kwargs["content"]
-        assert "助手" in call_kwargs["content"]
 
     @pytest.mark.asyncio()
     async def test_chat_service_detects_preferences(
@@ -238,7 +240,12 @@ class TestChatServiceMemoryStorage:
         user_message = Message(role=Role.USER, content=user_content)
 
         assistant_content = "好的,我记住了,您喜欢吃火锅,特别是四川麻辣口味的。我会为您推荐一些地道的四川火锅店,比如小龙坎、大龙燚、蜀大侠、电台巷等,这些都是非常受欢迎的连锁店,环境也很好,非常适合朋友聚会和家庭聚餐,人均消费在100到150之间"
-        mock_llm.chat.return_value = Message(role=Role.ASSISTANT, content=assistant_content)
+
+        # Mock LLM 返回：第一次是主 chat，后续是提取（JSON，含 importance=7）
+        mock_llm.chat.side_effect = [
+            Message(role=Role.ASSISTANT, content=assistant_content),
+            Message(role=Role.ASSISTANT, content='[{"content":"用户喜欢吃火锅","importance":7,"category":"preference","tags":["火锅"]}]'),
+        ]
 
         # Act
         await chat_service_with_memory.run_turn("session-123", user_message)
@@ -246,7 +253,7 @@ class TestChatServiceMemoryStorage:
         # Assert 验证 importance 被提高
         assert mock_memory.store.called
         call_kwargs = mock_memory.store.call_args[1]
-        assert call_kwargs["importance"] == 7  # 偏好关键词触发
+        assert call_kwargs["importance"] == 7  # LLM 提取设定 importance=7
 
     @pytest.mark.asyncio()
     async def test_chat_service_skips_short_conversations(

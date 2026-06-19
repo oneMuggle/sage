@@ -145,8 +145,7 @@ class VectorStore:
                 ).fetchall()
 
             return [
-                {"memory_id": row[0], "memory_type": row[1], "distance": row[2]}
-                for row in rows
+                {"memory_id": row[0], "memory_type": row[1], "distance": row[2]} for row in rows
             ]
         except Exception as e:
             logger.warning(f"向量搜索失败: {e}")

@@ -371,36 +371,37 @@ class ChatService:
     ) -> None:
         """从对话中提取关键信息并存入记忆系统
 
-        类似 Legacy Agent 的 _extract_and_save_memories 方法,
-        自动检测对话中的关键信息并存储到记忆系统。
+        使用 LLM 驱动的事实提取（MemoryExtractor），自动检测对话中的
+        关键信息并存储到记忆系统。当 LLM 不可用时降级为关键词提取。
 
         Args:
             session_id: 会话 ID
             user_message: 用户消息
             assistant_message: 助手消息
         """
-        user_content = user_message.content
-        assistant_content = assistant_message.content
+        if not self.memory:
+            return
 
-        # 对于较长的对话,保存到记忆
-        if len(user_content) > 100 or len(assistant_content) > 100:
-            combined_content = f"[用户]: {user_content}\n[助手]: {assistant_content}"
-            importance = 5
+        from backend.memory.extractor import MemoryExtractor
 
-            # 检测是否包含偏好或设置信息
-            preference_keywords = ["喜欢", "偏好", "不要", "记得", "设置", "以后"]
-            for keyword in preference_keywords:
-                if keyword in user_content:
-                    importance = 7
-                    break
+        extractor = MemoryExtractor(llm_client=self.llm)
+        facts = await extractor.extract(
+            user_message=user_message.content or "",
+            assistant_message=assistant_message.content or "",
+        )
 
+        for fact in facts:
             await self.memory.store(
-                content=combined_content,
+                content=fact["content"],
                 session_id=session_id,
-                importance=importance,
-                tags=["conversation"],
+                importance=fact.get("importance", 5),
+                tags=fact.get("tags", ["conversation"]),
             )
-            logger.debug(f"Stored memory for session {session_id}, importance={importance}")
+
+        if facts:
+            logger.debug(
+                f"Extracted {len(facts)} facts for session {session_id}"
+            )
 
     # ------------------------------------------------------------------ #
     # 内部辅助：执行 tool_calls
