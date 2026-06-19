@@ -1,10 +1,23 @@
-# 24 — Skills 系统端到端 (PR-7)
+# 24 — Skills 系统端到端
 
-> 收口 [`docs/plans/2026-06-12_finish-designed-features.md`](../plans/2026-06-12_finish-designed-features.md) 的"缺口 C":
-> 前端 `pages/Skills.tsx` + `widgets/skills/{SkillCard,SkillList}.tsx` + `api.ts::skillsApi.toggle()` 早已存在,
-> 但 Tauri 层无 `list_skills / toggle_skill / execute_skill` 命令,
-> 后端 `SkillPort` (`backend/ports/skill.py`) 仅 Protocol,**生产 adapter 标注"未实现,PG3"**。
-> 本章记录端到端贯通方案。
+**最后更新**: 2026-06-19 (M11 收口)
+**覆盖范围**: PR-7 (v1 builtin 端到端) + PR-8 (SKILL.md v1) + v2 适配层 (M4-M10)
+
+> 本章合并记录 Skills 系统的全链路实现,涵盖:
+> - **PR-7 缺口 C 收口**: InprocSkillAdapter + 3 路由 (list/toggle/execute) + 4 builtin
+> - **PR-8 SKILL.md 适配层 v1**: frontmatter 解析 / hot loader / 路径校验
+> - **v2 适配层 (M4-M10)**:
+>   - M3 Loader gating (requires/os/always)
+>   - M4 ResourceIndex (references/ 渲染)
+>   - M5 沙箱 port (SandboxPort / subprocess 实现 / denylist)
+>   - M6 确认 port (ConfirmationPort / CLI / auto-confirm)
+>   - M7 ScriptRunner 编排 (路径校验 → 确认 → 沙箱 → 异常收敛)
+>   - M8 execute_v2 路径 (SkillMdSkill.execute_v2 异步方法,回退 v1)
+>   - M9 DispatchMode 元数据序列化 (前端 SkillDispatch interface + SkillCard UI)
+>   - M10 SlashCommandRegistry (POST `/skills/command` + GET `/skills/commands`)
+>
+> 用户视角文档见 [`../user-manual/04-skill-md-authoring.md`](../user-manual/04-skill-md-authoring.md)
+> 与 [`../user-manual/05-skill-md-migration.md`](../user-manual/05-skill-md-migration.md)。
 
 ## 1. 全景
 
