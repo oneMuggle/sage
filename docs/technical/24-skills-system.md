@@ -265,16 +265,48 @@ version?: string;
 
 ### 9.9 v1 不支持的特性 (v2 路线)
 
-| 特性 | 说明 | v2 计划 |
+| 特性 | 说明 | v2 计划 / 状态 |
 |---|---|---|
-| `scripts/*.py` 执行 | AgentSkills spec 支持, 但 `exec` 用户代码风险高 | 走 subprocess 沙箱 + 显式确认 |
-| `references/`、`assets/`、`templates/` | 引用文件 / 模板资源 | 按需加载到聊天上下文 |
-| `requires.bins/env/config` 门控 | 仅在依赖满足时加载 | loader 层加 gating filter |
-| `os` 平台过滤 | 仅在指定 OS 加载 | loader 层加 platform check |
-| `always` 跳过门控 | 始终加载 | 同上 |
-| `disable-model-invocation` | 不进 system prompt, 仅手动触发 | execute 返回额外 flag, 聊天层处理 |
-| `user-invocable` | 暴露为 slash command | 与 `Skills` UI 集成 |
-| `command-dispatch: tool` | 直接派发到工具, 不经 LLM | 路由层额外 endpoint |
+| `scripts/*.py` 执行 | AgentSkills spec 支持, 但 `exec` 用户代码风险高 | ✅ M5-M8: subprocess 沙箱 + 用户确认 + ScriptRunner 编排 + `execute_v2` 路径 |
+| `references/`、`assets/`、`templates/` | 引用文件 / 模板资源 | ⏳ M4: ResourceIndex 构建（已实现）,渲染到聊天上下文待 M10+ |
+| `requires.bins/env/config` 门控 | 仅在依赖满足时加载 | ✅ M3: `gating.evaluate_gating` |
+| `os` 平台过滤 | 仅在指定 OS 加载 | ✅ M3: 同上 |
+| `always` 跳过门控 | 始终加载 | ✅ M3: 同上 |
+| `disable-model-invocation` | 不进 system prompt, 仅手动触发 | ✅ M9: DispatchMode 元数据序列化 |
+| `user-invocable` | 暴露为 slash command | ✅ M9: SkillCard 渲染 slash command badge;执行走 `execute_v2` |
+| `command-dispatch: tool` | 直接派发到工具, 不经 LLM | ⏳ M10: 路由层额外 endpoint |
+
+### 9.10 DispatchMode 元数据序列化 (M9)
+
+SKILL.md v2 frontmatter 中的 4 个 dispatch 字段（`disable-model-invocation` / `user-invocable` / `user-invocable-name` / `command-dispatch`）经 `InprocSkillAdapter.list_skills_extended()` 序列化为前端 JSON 的 `dispatch` 嵌套对象:
+
+```json
+{
+  "name": "code-review",
+  "source": "skillmd",
+  "dispatch": {
+    "disable_model_invocation": false,
+    "user_invocable": true,
+    "user_invocable_name": "/review",
+    "command_dispatch": "auto"
+  }
+}
+```
+
+**契约要点**：
+
+- builtin 技能无 `dispatch` key（TS strict optional 兼容）
+- `user_invocable_name` 为 `null` 时,前端不渲染 slash command badge（不自动回退到 `name`,避免语义混淆）
+- `command_dispatch='auto'` 时前端不显示 chip（默认模式,渲染会增加 UI 噪音）
+- 前端 `SkillCard` 消费方式：`dispatch?.user_invocable && dispatch.user_invocable_name` 渲染等宽字体 badge；`dispatch?.command_dispatch !== 'auto'` 渲染灰色 mode chip
+
+**消费者**：
+
+- `src/shared/api/api.ts::SkillDispatch` 类型定义
+- `src/widgets/skills/SkillCard.tsx` 渲染（slash command badge + mode chip）
+- chat 层（M10+）消费 `disable_model_invocation` / `command_dispatch` 决定派发策略
+
+### 9.11 端到端验证
 
 ### 9.10 端到端验证
 

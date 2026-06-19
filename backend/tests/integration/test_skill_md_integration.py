@@ -36,13 +36,74 @@ def _write_skill_md(tmp_path: Path, name: str, body: str = "Skill body\n") -> Pa
     return path
 
 
+def _write_skill_md_with_dispatch(
+    tmp_path: Path,
+    name: str,
+    *,
+    user_invocable: bool = False,
+    user_invocable_name: str | None = None,
+    command_dispatch: str = "auto",
+    disable_model_invocation: bool = False,
+    body: str = "Skill body\n",
+) -> Path:
+    """写带 v2 dispatch frontmatter 的 SKILL.md (M9 测试用)。"""
+    skill_dir = tmp_path / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    path = skill_dir / "SKILL.md"
+    extra_lines: list[str] = []
+    if user_invocable:
+        extra_lines.append("user-invocable: true")
+    if user_invocable_name is not None:
+        extra_lines.append(f"user-invocable-name: {user_invocable_name}")
+    if command_dispatch != "auto":
+        extra_lines.append(f"command-dispatch: {command_dispatch}")
+    if disable_model_invocation:
+        extra_lines.append("disable-model-invocation: true")
+    extra_block = ("\n" + "\n".join(extra_lines)) if extra_lines else ""
+    path.write_text(
+        f"---\n"
+        f"name: {name}\n"
+        f"description: test {name}\n"
+        f"version: 0.1.0{extra_block}\n"
+        f"---\n"
+        f"{body}",
+        encoding="utf-8",
+    )
+    return path
+
+
 def _build_adapter_with_skillmd(tmp_path: Path, name: str, body: str = "Skill body\n"):
-    """构造 InprocSkillAdapter 并在 tmp_path 加载一个 SKILL.md。"""
+    """构造 InprocSkillAdapter 并在 tmp_path 加载一个 SKILL.md。
+
+    注: M9 测试需要自定义 frontmatter (dispatch 字段),请直接用
+    ``_build_adapter_with_skillmd_path()`` 或先写文件再调本函数。
+    本函数保留默认 body 用于简单场景。
+    """
     from backend.adapters.out.skill import InprocSkillAdapter
     from backend.skills import register_all_skills, register_skill_md_skills
     from backend.skills.registry import SkillRegistry
 
     _write_skill_md(tmp_path, name, body)
+    registry = SkillRegistry()
+    register_all_skills(registry)
+    register_skill_md_skills(registry, dirs=[str(tmp_path)])
+    adapter = InprocSkillAdapter.__new__(InprocSkillAdapter)
+    adapter._registry = registry
+    adapter._enabled = {}
+    adapter._usage_count = {}
+    return adapter
+
+
+def _build_adapter_from_existing(tmp_path: Path) -> "InprocSkillAdapter":  # noqa: F821
+    """从已存在 SKILL.md 的 tmp_path 构造 adapter (不重写文件)。
+
+    用于 M9 测试: caller 先用 ``_write_skill_md_with_dispatch`` 写好文件,
+    再调本函数构造 adapter 以保留 dispatch frontmatter。
+    """
+    from backend.adapters.out.skill import InprocSkillAdapter
+    from backend.skills import register_all_skills, register_skill_md_skills
+    from backend.skills.registry import SkillRegistry
+
     registry = SkillRegistry()
     register_all_skills(registry)
     register_skill_md_skills(registry, dirs=[str(tmp_path)])
@@ -147,5 +208,65 @@ def test_adapter_no_skillmd_dirs_does_not_break(tmp_path):
             adapter = InprocSkillAdapter()
             names = set(adapter._registry.list_names())
             assert {"search", "writer", "coder", "travel"} <= names
+        finally:
+            os.chdir(old_cwd)
+
+
+# =====================================================================
+# M9: DispatchMode 元数据序列化
+# =====================================================================
+
+
+def test_adapter_extended_includes_dispatch_defaults_for_skillmd(tmp_path):
+    """SKILL.md 无 dispatch 字段时, 序列化输出 default DispatchMode（嵌套 dispatch dict）。"""
+    adapter = _build_adapter_with_skillmd(tmp_path, "alpha")
+    items = adapter.list_skills_extended()
+    alpha = next(i for i in items if i["name"] == "alpha")
+
+    assert "dispatch" in alpha
+    assert alpha["dispatch"] == {
+        "disable_model_invocation": False,
+        "user_invocable": False,
+        "user_invocable_name": None,
+        "command_dispatch": "auto",
+    }
+
+
+def test_adapter_extended_includes_dispatch_custom_values(tmp_path):
+    """SKILL.md 自定义 dispatch 字段 → 序列化输出对应值。"""
+    _write_skill_md_with_dispatch(
+        tmp_path,
+        "alpha",
+        user_invocable=True,
+        user_invocable_name="/review",
+        command_dispatch="tool",
+        disable_model_invocation=True,
+    )
+    adapter = _build_adapter_from_existing(tmp_path)
+    items = adapter.list_skills_extended()
+    alpha = next(i for i in items if i["name"] == "alpha")
+
+    assert alpha["dispatch"] == {
+        "disable_model_invocation": True,
+        "user_invocable": True,
+        "user_invocable_name": "/review",
+        "command_dispatch": "tool",
+    }
+
+
+def test_adapter_extended_omits_dispatch_for_builtin(tmp_path):
+    """builtin 技能（无 v2 dispatch）→ 不输出 dispatch key（TS strict optional 兼容）。"""
+    from backend.adapters.out.skill import InprocSkillAdapter
+
+    # 用全 builtin adapter (没有 SKILL.md 加载)
+    env_dir = tmp_path / "no-skills"
+    with unittest.mock.patch.dict(os.environ, {"SAGE_SKILLS_DIR": str(env_dir)}, clear=False):
+        old_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            adapter = InprocSkillAdapter()
+            items = adapter.list_skills_extended()
+            search = next(i for i in items if i["name"] == "search")
+            assert "dispatch" not in search
         finally:
             os.chdir(old_cwd)

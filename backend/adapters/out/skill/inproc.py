@@ -192,5 +192,15 @@ class InprocSkillAdapter:
                 item["body"] = doc.body
                 item["base_dir"] = str(doc.base_dir) if doc.base_dir is not None else None
                 item["version"] = doc.version
+                # v2 DispatchMode 元数据 (M9): 前端根据 user_invocable / command_dispatch
+                # 决定如何暴露 (slash command / tool mode),disable_model_invocation
+                # 由 chat 层消费 (阻止自动触发),嵌套 dict 形式便于前端 TS 类型推导。
+                dp = doc.dispatch
+                item["dispatch"] = {
+                    "disable_model_invocation": dp.disable_model_invocation,
+                    "user_invocable": dp.user_invocable,
+                    "user_invocable_name": dp.user_invocable_name,
+                    "command_dispatch": dp.command_dispatch,
+                }
             result.append(item)
         return result

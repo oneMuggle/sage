@@ -668,6 +668,24 @@ export const knowledgeApi = {
 
 // ==================== Skills API (PR-7) ====================
 
+/**
+ * SKILL.md v2 DispatchMode 元数据 (M9) — 嵌套对象, 与后端
+ * backend/skills/skill_md/skill.py::DispatchMode 字段一一对应。
+ *
+ * - disable_model_invocation: true → chat 层阻止自动触发
+ * - user_invocable: true → 用户可通过 slash command 主动调用
+ * - user_invocable_name: slash command 名 (如 "/review");为 null 时回退到 name
+ * - command_dispatch: 'auto' (默认, LLM 决定) / 'tool' (强制工具调用) / 'prompt' (注入 prompt)
+ *
+ * builtin 技能没有 dispatch key (后端 list_skills_extended 对 builtin 省略)。
+ */
+export interface SkillDispatch {
+  disable_model_invocation: boolean;
+  user_invocable: boolean;
+  user_invocable_name: string | null;
+  command_dispatch: 'auto' | 'tool' | 'prompt';
+}
+
 export interface Skill {
   name: string;
   description: string;
@@ -682,6 +700,8 @@ export interface Skill {
   scripts?: string[];
   base_dir?: string;
   version?: string;
+  // SKILL.md v2 DispatchMode (M9) — builtin 时不存在
+  dispatch?: SkillDispatch;
 }
 
 export interface SkillExecuteRequest {
