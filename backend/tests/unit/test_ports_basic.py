@@ -264,6 +264,8 @@ def test_ports_only_depend_on_domain() -> None:
         "collections.abc",
     }
     allowed_internal = ("backend.domain", "backend.ports")
+    # 允许从 sage_core 导入（核心包提取后）
+    allowed_external = {"sage_core"}
 
     import_re = re.compile(r"^\s*(?:from|import)\s+([\w\.]+)")
     offenders: list[str] = []
@@ -278,6 +280,8 @@ def test_ports_only_depend_on_domain() -> None:
                 continue
             root = mod.split(".")[0]
             if root in allowed_stdlib:
+                continue
+            if root in allowed_external:
                 continue
             offenders.append(f"{py_file.name}: {line.strip()}")
 
