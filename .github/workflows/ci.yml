@@ -40,6 +40,9 @@ jobs:
       - name: Install backend deps (py38, locked)
         shell: bash -el {0}
         run: |
+          # Install sage-core first (editable mode)
+          conda run -n sage-backend-py38 pip install -e packages/sage-core
+          # Install backend requirements
           conda run -n sage-backend-py38 pip install -r backend/requirements-py38.txt
           conda run -n sage-backend-py38 pip install -r backend/requirements-dev.txt
 
