@@ -12,7 +12,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { chatApi, type AgentEvent } from '../../../shared/api/api';
+import { chatApi, type AgentEvent } from '../../../shared/api';
 
 const invokeMock = vi.fn();
 const listenMock = vi.fn();

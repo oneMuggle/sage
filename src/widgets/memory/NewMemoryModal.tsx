@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
 
-import { memoryApi } from '../../shared/api/api';
+import { memoryApi } from '../../shared/api';
 
 interface NewMemoryModalProps {
   onClose: () => void;

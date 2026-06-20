@@ -1,4 +1,4 @@
-import type { AgentProfile } from '../../shared/api/api';
+import type { AgentProfile } from '../../shared/api';
 
 interface AgentDetailsProps {
   agent: AgentProfile;

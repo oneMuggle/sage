@@ -1,6 +1,6 @@
 import React from 'react';
 
-import type { SkillDispatch } from '../../shared/api/api';
+import type { SkillDispatch } from '../../shared/api';
 
 interface SkillCardProps {
   name: string;
