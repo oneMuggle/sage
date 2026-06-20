@@ -34,14 +34,14 @@ from backend.adapters.out.compute._resolver import (
     ExecutableResolver,
     ResolvedExecutable,
 )
-from backend.domain.compute import (
+from sage_core import (
     ComputeError,
     ComputeErrorType,
     ComputeRequest,
     ComputeResult,
     ComputeSpec,
 )
-from backend.ports.compute import ComputePort  # noqa: F401  (structural typing target)
+from sage_core.repositories import ComputePort  # noqa: F401  (structural typing target)
 
 logger = logging.getLogger(__name__)
 

@@ -11,8 +11,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from backend.domain.message import Message, Role
-from backend.ports.llm import LLMPort
+from sage_core import Message, Role
+from sage_core.repositories import LLMPort
 
 
 class MockLLMAdapter:

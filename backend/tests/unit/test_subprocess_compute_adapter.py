@@ -32,7 +32,7 @@ from backend.adapters.out.compute.subprocess_adapter import (
     _parse_failure,
     _parse_success,
 )
-from backend.domain.compute import (
+from sage_core import (
     ComputeErrorType,
     ComputeRequest,
 )

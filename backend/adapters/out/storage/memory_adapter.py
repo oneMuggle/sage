@@ -22,8 +22,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from backend.domain.message import Message
-from backend.ports.storage import StoragePort  # noqa: F401  (structural typing target)
+from sage_core import Message
+from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
 
 
 @dataclass

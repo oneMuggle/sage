@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 
 from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
-from backend.domain.message import Message, Role, ToolCall
-from backend.ports.storage import StoragePort
+from sage_core import Message, Role, ToolCall
+from sage_core.repositories import StoragePort
 
 pytestmark = pytest.mark.unit
 

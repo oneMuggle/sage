@@ -24,11 +24,11 @@
 | ``observability``   | ``EventPort``          | 业务事件（审计/调试）               |
 """
 
-from backend.ports.llm import LLMPort
-from backend.ports.observability import EventPort, MetricPort
-from backend.ports.skill import SkillPort
-from backend.ports.storage import StoragePort
-from backend.ports.tool import ToolPort
+from sage_core.repositories import LLMPort
+from sage_core.repositories import EventPort, MetricPort
+from sage_core.repositories import SkillPort
+from sage_core.repositories import StoragePort
+from sage_core.repositories import ToolPort
 
 __all__ = [
     "LLMPort",

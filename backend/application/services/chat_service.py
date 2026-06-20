@@ -27,15 +27,16 @@ import logging
 import time
 from typing import Any
 
-from backend.domain.errors import LLMError
-from backend.domain.memory import MemoryContext
-from backend.domain.message import Message, Role, ToolCall
-from backend.ports.llm import LLMPort
-from backend.ports.memory import MemoryPort
-from backend.ports.observability import EventPort, MetricPort
-from backend.ports.skill import SkillPort
-from backend.ports.storage import StoragePort
-from backend.ports.tool import ToolPort
+from sage_core import LLMError, Message, Role, ToolCall
+from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
+
+# Optional memory types (for backward compatibility)
+try:
+    from backend.domain.memory import MemoryContext
+    from backend.ports.memory import MemoryPort
+except ImportError:
+    MemoryPort = None  # type: ignore
+    MemoryContext = None  # type: ignore
 from backend.utils.otel import get_tracer
 
 logger = logging.getLogger(__name__)

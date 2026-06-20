@@ -13,14 +13,14 @@ from typing import Any
 
 import pytest
 
-from backend.domain.message import Message, Role
-from backend.domain.skill import SkillResult, SkillSpec
-from backend.domain.tool import ToolResult, ToolSpec
-from backend.ports.llm import LLMPort
-from backend.ports.observability import EventPort, MetricPort
-from backend.ports.skill import SkillPort
-from backend.ports.storage import StoragePort
-from backend.ports.tool import ToolPort
+from sage_core import Message, Role
+from sage_core import SkillResult, SkillSpec
+from sage_core import ToolResult, ToolSpec
+from sage_core.repositories import LLMPort
+from sage_core.repositories import EventPort, MetricPort
+from sage_core.repositories import SkillPort
+from sage_core.repositories import StoragePort
+from sage_core.repositories import ToolPort
 
 pytestmark = pytest.mark.unit
 

@@ -213,7 +213,7 @@ async def test_get_messages_empty_for_new_session(hex_sessions_client):
 async def test_get_messages_returns_dicts(hex_sessions_client):
     """GET messages 返 list[dict],每条含 role + content。"""
     ac, fake_svc = hex_sessions_client
-    from backend.domain.message import Message, Role
+    from sage_core import Message, Role
 
     create = await ac.post(f"{PREFIX}/sessions", json={"title": "chat"})
     sid = create.json()["id"]

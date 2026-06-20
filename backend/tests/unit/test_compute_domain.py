@@ -14,14 +14,14 @@ from typing import Any
 
 import pytest
 
-from backend.domain.compute import (
+from sage_core import (
     ComputeError,
     ComputeErrorType,
     ComputeRequest,
     ComputeResult,
     ComputeSpec,
 )
-from backend.ports.compute import ComputePort
+from sage_core.repositories import ComputePort
 
 # ---------- ComputeSpec ----------
 

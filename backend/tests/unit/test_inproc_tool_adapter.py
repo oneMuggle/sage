@@ -16,8 +16,8 @@ from typing import Any
 import pytest
 
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
-from backend.domain.tool import ToolResult, ToolSpec
-from backend.ports.tool import ToolPort
+from sage_core import ToolResult, ToolSpec
+from sage_core.repositories import ToolPort
 
 pytestmark = pytest.mark.unit
 

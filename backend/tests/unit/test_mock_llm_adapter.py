@@ -16,8 +16,8 @@ from __future__ import annotations
 import pytest
 
 from backend.adapters.out.llm.mock_adapter import MockLLMAdapter
-from backend.domain.message import Message, Role, ToolCall
-from backend.ports.llm import LLMPort
+from sage_core import Message, Role, ToolCall
+from sage_core.repositories import LLMPort
 
 pytestmark = pytest.mark.unit
 

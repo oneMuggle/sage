@@ -22,8 +22,8 @@ import pytest
 
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
 from backend.core.legacy.llm_client import LLMConfig, LLMResponse, LLMToolCall
-from backend.domain.message import Message, Role, ToolCall
-from backend.ports.llm import LLMPort
+from sage_core import Message, Role, ToolCall
+from sage_core.repositories import LLMPort
 
 pytestmark = pytest.mark.unit
 

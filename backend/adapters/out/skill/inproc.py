@@ -25,8 +25,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.domain.skill import SkillResult, SkillSpec
-from backend.ports.skill import SkillPort  # noqa: F401  (structural typing target)
+from sage_core import SkillResult, SkillSpec
+from sage_core.repositories import SkillPort  # noqa: F401  (structural typing target)
 from backend.skills.registry import SkillRegistry as _SkillRegistry
 
 
