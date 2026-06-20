@@ -308,9 +308,7 @@ async def update_session(
 ) -> dict:
     """Hex 路径 PATCH /sessions/{id}:局部更新;会话不存在返 404。"""
     try:
-        return await svc.update_session(
-            session_id, title=data.title, is_pinned=data.is_pinned
-        )
+        return await svc.update_session(session_id, title=data.title, is_pinned=data.is_pinned)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="会话不存在")
 

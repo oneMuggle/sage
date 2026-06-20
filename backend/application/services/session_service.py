@@ -48,9 +48,7 @@ def _message_to_dict(m: Message) -> dict[str, Any]:
     return {
         "role": m.role.value,
         "content": m.content,
-        "tool_calls": [
-            {"name": tc.name, "args": tc.args, "id": tc.id} for tc in m.tool_calls
-        ],
+        "tool_calls": [{"name": tc.name, "args": tc.args, "id": tc.id} for tc in m.tool_calls],
         "tool_call_id": m.tool_call_id,
     }
 
