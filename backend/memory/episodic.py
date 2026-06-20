@@ -1,11 +1,17 @@
 """
 Episodic Memory - 情景记忆模块
 基于 SQLite 存储对话历史和事件序列
+
+中文支持：搜索时使用 jieba 分词，将查询拆分为多个词，
+用多个 LIKE 条件 OR 连接，提升中文检索质量。
 """
+
 import json
 import time
 import uuid
 from typing import Any
+
+from backend.memory.chinese_tokenizer import tokenize
 
 
 class EpisodicMemory:
@@ -34,7 +40,7 @@ class EpisodicMemory:
         importance: int = 5,
         metadata: dict[str, Any] | None = None,
         session_id: str | None = None,
-        memory_type: str = "conversation"
+        memory_type: str = "conversation",
     ) -> str:
         """
         保存情景记忆
@@ -65,20 +71,14 @@ class EpisodicMemory:
         # 生成摘要
         summary = self._generate_summary(content)
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO memories_episodic
             (id, content, summary, session_id, memory_type, importance, tags, created_at, is_valid)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-        """, (
-            memory_id,
-            content,
-            summary,
-            session_id,
-            memory_type,
-            importance,
-            tags,
-            now
-        ))
+        """,
+            (memory_id, content, summary, session_id, memory_type, importance, tags, now),
+        )
 
         conn.commit()
         return memory_id
@@ -99,14 +99,13 @@ class EpisodicMemory:
         return content[:max_length] + "..."
 
     def search(
-        self,
-        query: str,
-        limit: int = 10,
-        min_importance: int = 1,
-        memory_type: str | None = None
+        self, query: str, limit: int = 10, min_importance: int = 1, memory_type: str | None = None
     ) -> list[dict[str, Any]]:
         """
         搜索情景记忆
+
+        使用 jieba 分词，将查询拆分为多个词，用多个 LIKE 条件 OR 连接，
+        支持中文检索（如搜索 "用户 火锅" 可匹配 "用户喜欢火锅"）。
 
         Args:
             query: 搜索关键词
@@ -120,24 +119,43 @@ class EpisodicMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        sql = """
-            SELECT * FROM memories_episodic
-            WHERE is_valid = 1
-            AND (content LIKE ? OR summary LIKE ?)
-            AND importance >= ?
-        """
-        params = [f"%{query}%", f"%{query}%", min_importance]
+        # 使用 jieba 分词，将查询拆分为多个搜索词
+        tokens = [t.strip() for t in tokenize(query).split() if t.strip()]
 
+        if not tokens:
+            return []
+
+        # 构建 WHERE 子句：每个 token 匹配 content OR summary
+        like_conditions = []
+        params = []
+        for token in tokens:
+            like_conditions.append("(content LIKE ? OR summary LIKE ?)")
+            params.extend([f"%{token}%", f"%{token}%"])
+
+        # 基础条件
+        base_sql = "SELECT * FROM memories_episodic WHERE is_valid = 1"
+        where_parts = [base_sql]
+
+        # 分词 OR 条件
+        where_parts.append(f"AND ({' OR '.join(like_conditions)})")
+
+        # 重要性条件
+        where_parts.append("AND importance >= ?")
+        params.append(min_importance)
+
+        # 记忆类型筛选
         if memory_type:
-            sql += " AND memory_type = ?"
+            where_parts.append("AND memory_type = ?")
             params.append(memory_type)
 
-        sql += " ORDER BY importance DESC, access_count DESC, created_at DESC LIMIT ?"
+        # 排序 + 限制
+        where_parts.append("ORDER BY importance DESC, access_count DESC, created_at DESC LIMIT ?")
         params.append(limit)
 
+        sql = " ".join(where_parts)
         cursor.execute(sql, params)
-        results = []
 
+        results = []
         for row in cursor.fetchall():
             memory = dict(row)
             # 解析标签 JSON
@@ -167,19 +185,25 @@ class EpisodicMemory:
         cursor = conn.cursor()
 
         if session_id:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM memories_episodic
                 WHERE session_id = ? AND is_valid = 1
                 ORDER BY created_at DESC
                 LIMIT ?
-            """, (session_id, limit))
+            """,
+                (session_id, limit),
+            )
         else:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM memories_episodic
                 WHERE is_valid = 1
                 ORDER BY created_at DESC
                 LIMIT ?
-            """, (limit,))
+            """,
+                (limit,),
+            )
 
         results = []
         for row in cursor.fetchall():
@@ -219,11 +243,14 @@ class EpisodicMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE memories_episodic
             SET is_valid = 0
             WHERE id = ?
-        """, (memory_id,))
+        """,
+            (memory_id,),
+        )
 
         conn.commit()
         return cursor.rowcount > 0
@@ -239,11 +266,14 @@ class EpisodicMemory:
         cursor = conn.cursor()
 
         now = int(time.time() * 1000)
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE memories_episodic
             SET access_count = access_count + 1, accessed_at = ?
             WHERE id = ?
-        """, (now, memory_id))
+        """,
+            (now, memory_id),
+        )
 
         conn.commit()
 
@@ -260,10 +290,13 @@ class EpisodicMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM memories_episodic
             WHERE id = ? AND is_valid = 1
-        """, (memory_id,))
+        """,
+            (memory_id,),
+        )
 
         row = cursor.fetchone()
         if row:
