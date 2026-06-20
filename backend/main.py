@@ -2,6 +2,7 @@
 Sage - 记忆型 AI 桌面助手
 FastAPI 后端入口
 """
+
 import asyncio
 import logging
 import os
@@ -13,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.adapters.out.event.file_adapter import FileEventAdapter
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+from backend.adapters.out.memory.adapter import MemoryAdapter
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
@@ -22,6 +24,7 @@ from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
+from backend.memory import get_memory_manager
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +62,11 @@ def _build_compute_adapter():
         from backend.adapters.out.compute.subprocess_adapter import (
             SubprocessComputeAdapter,
         )
+
         return SubprocessComputeAdapter(ghm_cfg)
     if adapter_type == "http":
         from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
+
         logger.warning(
             "ghm.adapter=http: HttpComputeAdapter 仍是空壳,运行时调用会抛 NotImplementedError"
         )
@@ -70,7 +75,7 @@ def _build_compute_adapter():
 
 
 def _build_chat_service() -> ChatService:
-    """工厂：装配 6 个 ports（5 个生产 adapter + 1 个暂未实现 placeholder）。
+    """工厂：装配 7 个 ports（6 个生产 adapter + 1 个暂未实现 placeholder）。
 
     - llm:     HttpxLLMAdapter（包装既有 LLMClient）
     - tools:   InprocToolAdapter（如启用 ghm，则用 ComputeToolAdapter 包装合并）
@@ -78,6 +83,7 @@ def _build_chat_service() -> ChatService:
     - storage: SqliteStorageAdapter（包装既有 SessionRepository / MessageRepository）
     - metrics: PrometheusMetricAdapter
     - events:  FileEventAdapter（写 audit jsonl）
+    - memory:  MemoryAdapter（包装 MemoryManager，提供三层记忆系统）
 
     装配在每次依赖注入时被调用——单例化由调用方（如 ``app.state``）自行管理。
     """
@@ -85,6 +91,7 @@ def _build_chat_service() -> ChatService:
     compute = _build_compute_adapter()
     if compute is not None:
         from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
+
         tools = ComputeToolAdapter(compute=compute, inner=inner_tools)
         logger.info(
             "ComputeToolAdapter 已装配,注册 %d 个计算工具",
@@ -93,6 +100,12 @@ def _build_chat_service() -> ChatService:
     else:
         tools = inner_tools
 
+    # 装配 MemoryPort (Memory Integration)
+    # 使用全局单例 MemoryManager，确保 WorkingMemory 跨请求持久存在
+    memory_manager = get_memory_manager()
+    memory_adapter = MemoryAdapter(memory_manager)
+    logger.info("MemoryAdapter 已装配（三层记忆系统：Working/Episodic/Semantic，全局单例）")
+
     return ChatService(
         llm=HttpxLLMAdapter(),
         tools=tools,
@@ -100,6 +113,7 @@ def _build_chat_service() -> ChatService:
         storage=SqliteStorageAdapter(),
         metrics=PrometheusMetricAdapter(),
         events=FileEventAdapter(),
+        memory=memory_adapter,  # MemoryPort for memory integration
     )
 
 
@@ -129,6 +143,7 @@ async def lifespan(app: FastAPI):
     api_mode = os.environ.get("API_MODE", "hex").lower()
     if api_mode == "hex":
         from backend.api.hex_routes import get_chat_service
+
         app.dependency_overrides[get_chat_service] = _build_chat_service
         app.state.chat_service = _build_chat_service()
         logger.info("Hex 模式：ChatService 已装配（/chat 走 hex_routes，其余走 legacy_routes）")

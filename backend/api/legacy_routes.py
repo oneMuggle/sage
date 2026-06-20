@@ -24,7 +24,7 @@ from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
-from backend.memory import EpisodicMemory, MemoryManager, SemanticMemory, WorkingMemory
+from backend.memory import get_memory_manager
 from backend.scheduler import get_evolution_logs, get_scheduler
 
 logger = logging.getLogger(__name__)
@@ -929,14 +929,7 @@ async def get_evolution_status():
 
 # ==================== 记忆 API ====================
 
-
-def get_memory_manager() -> MemoryManager:
-    """获取记忆管理器实例"""
-    db = get_database()
-    working = WorkingMemory(max_size=20, max_tokens=4000)
-    episodic = EpisodicMemory(db)
-    semantic = SemanticMemory(db)
-    return MemoryManager(working, episodic, semantic)
+# get_memory_manager 从 backend.memory 导入（全局单例）
 
 
 class MemorySearchRequest(BaseModel):
