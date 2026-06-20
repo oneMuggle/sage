@@ -1,5 +1,5 @@
-import { Button } from '../../components/common/Button';
-import type { AgentProfile, AgentUpdate } from '../../lib/api';
+import type { AgentProfile, AgentUpdate } from '../../shared/api';
+import { Button } from '../../shared/ui/Button';
 
 interface EditAgentFormProps {
   agent: AgentProfile;

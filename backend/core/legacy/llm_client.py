@@ -50,6 +50,9 @@ class LLMResponse:
     """LLM 回复"""
 
     content: str = ""
+    reasoning_content: str | None = (
+        None  # LLM 思考/推理过程（Claude extended thinking, o1 reasoning 等）
+    )
     model: str = ""
     finish_reason: str | None = None
     tool_calls: list[LLMToolCall] = field(default_factory=list)
@@ -63,13 +66,17 @@ class LLMResponse:
 class LLMConfig:
     """LLM 连接配置"""
 
-    provider: str = "openai"  # openai, claude, ollama, custom
+    provider: str = "openai"  # openai, claude, gemini, deepseek, ollama, custom
     api_key: str = ""
     base_url: str = "https://api.openai.com/v1"
     model: str = "gpt-3.5-turbo"
     temperature: float = 0.7
     max_tokens: int = 4096
     timeout: int = 60
+    # 推理参数（覆盖 commit #38 之前的硬编码 "custom" provider 路径，
+    # 让用户在前端选的真实 provider 透传到 LLMClient，并启用 thinking 输出）
+    reasoning_effort: str | None = None  # OpenAI o1/o3/5: "low" | "medium" | "high"
+    thinking_budget: int | None = None  # Gemini 2.5: 思考 token 上限,0 关闭,-1 动态
     extra_headers: dict[str, str] = field(default_factory=dict)
 
 
@@ -173,6 +180,15 @@ class LLMClient:
         if self.config.provider == "claude":
             body["max_tokens"] = self.config.max_tokens
 
+        # 推理参数透传: provider 决定哪种 key 会被上游接受
+        # - OpenAI o1/o3/5 + DeepSeek + 多数 OpenAI 兼容代理: reasoning_effort
+        # - Gemini 2.5 (OpenAI 兼容模式): thinking_budget
+        # 同时存在时,让上游自己挑(不同 provider 接受不同 key)
+        if self.config.reasoning_effort is not None:
+            body["reasoning_effort"] = self.config.reasoning_effort
+        if self.config.thinking_budget is not None:
+            body["thinking_budget"] = self.config.thinking_budget
+
         start_time = time.time()
 
         try:
@@ -222,6 +238,13 @@ class LLMClient:
         msg_data = choice.get("message", {})
         content = msg_data.get("content", "")
 
+        # 提取 reasoning_content（多提供商兼容）
+        # Anthropic Claude 使用 reasoning_content 字段
+        # OpenAI o1/o3 使用 reasoning 或 reasoning_content 字段
+        # DeepSeek 使用 reasoning_content 字段
+        # 优先使用 reasoning_content，其次 reasoning
+        reasoning_content = msg_data.get("reasoning_content") or msg_data.get("reasoning")
+
         tool_calls = []
         if msg_data.get("tool_calls"):
             tool_calls = self._parse_tool_calls(msg_data["tool_calls"])
@@ -230,6 +253,7 @@ class LLMClient:
 
         return LLMResponse(
             content=content,
+            reasoning_content=reasoning_content,
             model=data.get("model", self.config.model),
             finish_reason=choice.get("finish_reason"),
             tool_calls=tool_calls,
@@ -260,6 +284,11 @@ class LLMClient:
             "max_tokens": self.config.max_tokens,
             "stream": True,
         }
+
+        if self.config.reasoning_effort is not None:
+            body["reasoning_effort"] = self.config.reasoning_effort
+        if self.config.thinking_budget is not None:
+            body["thinking_budget"] = self.config.thinking_budget
 
         try:
             async with client.stream("POST", "/chat/completions", json=body) as response:

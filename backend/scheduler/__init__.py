@@ -1,6 +1,7 @@
 """
 Scheduler 模块 - 定时任务调度
 """
+
 from backend.scheduler.cron import (
     EvolutionScheduler,
     get_scheduler,
@@ -11,6 +12,7 @@ from backend.scheduler.evolution import (
     BaseEvolutionTask,
     DailySummaryTask,
     ImportanceReevaluationTask,
+    MemoryConsolidationTask,
     MemoryPruningTask,
     PreferenceLearningTask,
     create_evolution_tasks,
@@ -25,6 +27,7 @@ __all__ = [
     "BaseEvolutionTask",
     "DailySummaryTask",
     "MemoryPruningTask",
+    "MemoryConsolidationTask",
     "PreferenceLearningTask",
     "ImportanceReevaluationTask",
     "create_evolution_tasks",

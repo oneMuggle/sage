@@ -12,27 +12,28 @@ import pathlib
 import re
 
 import pytest
-
-from backend.domain import (
+from sage_core import (
     AgentDecision,
-    AgentError,
     AgentState,
     LLMError,
     LLMErrorType,
-    MaxIterationsError,
     Message,
     Role,
-    SageBaseError,
-    SecurityError,
-    SessionNotFoundError,
     SkillResult,
     SkillSpec,
     ToolCall,
-    ToolCallError,
     ToolResult,
     ToolSpec,
-    ValidationError,
     exceptions as domain_exceptions,
+)
+from sage_core.exceptions import (
+    AgentError,
+    MaxIterationsError,
+    SageBaseError,
+    SecurityError,
+    SessionNotFoundError,
+    ToolCallError,
+    ValidationError,
 )
 
 pytestmark = pytest.mark.unit
@@ -278,6 +279,8 @@ class TestDomainPurity:
         }
         # 允许 domain 内部互相 import
         allowed_internal = "backend.domain"
+        # 允许从 sage_core 导入（核心包提取后）
+        allowed_external = {"sage_core"}
 
         import_re = re.compile(r"^\s*(?:from|import)\s+([\w\.]+)")
         offenders: list[str] = []
@@ -292,6 +295,8 @@ class TestDomainPurity:
                 if mod.startswith(allowed_internal):
                     continue
                 if root in allowed_stdlib:
+                    continue
+                if root in allowed_external:
                     continue
                 offenders.append(f"{py_file.name}: {line.strip()}")
 

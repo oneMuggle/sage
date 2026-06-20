@@ -19,7 +19,6 @@ import {
 } from '@xyflow/react';
 import { useMemo } from 'react';
 import '@xyflow/react/dist/style.css';
-import { describe, it, expect } from 'vitest';
 
 import type { GraphData, GraphSignal } from '../../shared/types/wiki';
 
@@ -60,7 +59,12 @@ const SIGNAL_COLORS: Record<GraphSignal, string> = {
   TypeAffinity: '#94a3b8',
 };
 
-function colorByType(pageType?: string): string {
+/**
+ * @internal
+ * Exported for unit tests in `__tests__/WikiGraphView.test.tsx`.
+ * Not part of the public widget API — do not import from feature/app code.
+ */
+export function colorByType(pageType?: string): string {
   if (!pageType) return TYPE_COLORS.default;
   return TYPE_COLORS[pageType] ?? TYPE_COLORS.default;
 }
@@ -140,7 +144,12 @@ export function WikiGraphView({ data, query, onNodeClick }: WikiGraphViewProps) 
 // 布局 + 边/节点构建
 // ============================================================================
 
-function buildGraph(
+/**
+ * @internal
+ * Exported for unit tests in `__tests__/WikiGraphView.test.tsx`.
+ * Not part of the public widget API — do not import from feature/app code.
+ */
+export function buildGraph(
   data: GraphData,
   query?: string,
 ): { nodes: Node<WikiNodeData>[]; edges: Edge[]; matchedIds: Set<string> } {
@@ -232,77 +241,8 @@ function Legend({ matchedCount, totalCount }: { matchedCount: number; totalCount
   );
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
-
-describe('WikiGraphView helpers', () => {
-  it('colorByType returns default for unknown', () => {
-    expect(colorByType(undefined)).toBe(TYPE_COLORS.default);
-    expect(colorByType('unknown_type')).toBe(TYPE_COLORS.default);
-  });
-
-  it('colorByType returns mapped color', () => {
-    expect(colorByType('source')).toBe(TYPE_COLORS.source);
-    expect(colorByType('entity')).toBe(TYPE_COLORS.entity);
-  });
-
-  it('buildGraph produces nodes and edges from GraphData', () => {
-    const data: GraphData = {
-      nodes: [
-        {
-          id: 'a',
-          label: 'A',
-          page_type: 'source',
-          sources: ['x.pdf'],
-          wikilinks: [],
-        },
-        {
-          id: 'b',
-          label: 'B',
-          page_type: 'concept',
-          sources: [],
-          wikilinks: [],
-        },
-      ],
-      edges: [{ source: 'a', target: 'b', signal: 'DirectLink', weight: 3.0 }],
-    };
-    const { nodes, edges } = buildGraph(data);
-    expect(nodes).toHaveLength(2);
-    expect(edges).toHaveLength(1);
-    expect(nodes[0].data.highlighted).toBe(true);
-  });
-
-  it('buildGraph dims non-matching nodes when query set', () => {
-    const data: GraphData = {
-      nodes: [
-        { id: 'a', label: 'Albert', page_type: 'entity', sources: [], wikilinks: [] },
-        { id: 'b', label: 'Other', page_type: 'entity', sources: [], wikilinks: [] },
-      ],
-      edges: [],
-    };
-    const { nodes, matchedIds } = buildGraph(data, 'albert');
-    expect(matchedIds.has('a')).toBe(true);
-    expect(matchedIds.has('b')).toBe(false);
-    expect(nodes[0].data.highlighted).toBe(true);
-    expect(nodes[1].data.highlighted).toBe(false);
-  });
-
-  it('buildGraph case-insensitive matching', () => {
-    const data: GraphData = {
-      nodes: [{ id: 'a', label: 'ALBERT', page_type: 'entity', sources: [], wikilinks: [] }],
-      edges: [],
-    };
-    const { matchedIds } = buildGraph(data, 'albert');
-    expect(matchedIds.has('a')).toBe(true);
-  });
-
-  it('buildGraph matches by id (file path)', () => {
-    const data: GraphData = {
-      nodes: [{ id: 'wiki/sources/albert.md', label: 'X', sources: [], wikilinks: [] }],
-      edges: [],
-    };
-    const { matchedIds } = buildGraph(data, 'albert');
-    expect(matchedIds.has('wiki/sources/albert.md')).toBe(true);
-  });
-});
+// Tests for colorByType / buildGraph helpers live in
+// ./__tests__/WikiGraphView.test.tsx (co-located test pattern).
+// Do not reintroduce top-level `describe()` blocks in this file — Vite's dep
+// optimizer executes module top-level code in the browser dev server, where
+// vitest's initSuite throws because the test runner config is unavailable.

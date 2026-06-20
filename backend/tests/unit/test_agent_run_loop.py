@@ -9,7 +9,7 @@ agent.run_loop() 状态机测试
 5. LLM 异常透传（不会被吞为 FAILED 事件）
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -477,3 +477,188 @@ async def test_run_loop_handles_multiple_tool_calls_in_one_iteration():
     # 工具被调用 2 次
     assert mock_tool.execute.call_count == 2
     assert events[-1].state == AgentState.DONE
+
+
+# =============================================================================
+# I3: llm_config 透传 — /chat/stream producer 需要 per-request LLM 配置
+# =============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_accepts_llm_config_and_uses_it_when_no_default_client():
+    """agent.llm_client is None 时,run_loop 收到 llm_config 应该用新 client 而不是抛 AgentError。
+
+    背景:后端 /chat/stream producer 把请求体里的 api_key/api_url 装成 llm_config,
+    但原本的 run_loop 签名不接 llm_config,导致 agent 用的是实例化时为 None 的 client。
+    这个测试锁定 run_loop 新增 llm_config 参数的行为。
+    """
+    from backend.core.legacy.llm_client import LLMConfig
+
+    agent = SageAgent()
+    # 模拟"未配置 LLM" 的 agent
+    agent.llm_client = None
+
+    llm_config = {
+        "provider": "custom",
+        "api_key": "sk-test",
+        "base_url": "https://example.com/v1",
+        "model": "test-model",
+        "temperature": 0.5,
+    }
+
+    # spy: 替换 LLMClient 以便观察传进来的 config
+    captured = {}
+
+    def fake_llm_client_factory(config):
+        captured["config"] = config
+        mock_client = MagicMock()
+        mock_client.chat = AsyncMock(return_value=_make_response(content="hi"))
+        return mock_client
+
+    # monkey-patch LLMClient (agent.py 内部引用)
+    with patch("backend.core.legacy.agent.LLMClient", side_effect=fake_llm_client_factory):
+        events = []
+        async for evt in agent.run_loop([{"role": "user", "content": "hi"}], llm_config=llm_config):
+            events.append(evt)
+
+    # 关键断言 1: 用传入的 config 建了 client(不再是 None)
+    assert isinstance(captured["config"], LLMConfig)
+    assert captured["config"].api_key == "sk-test"
+    assert captured["config"].base_url == "https://example.com/v1"
+    assert captured["config"].model == "test-model"
+
+    # 关键断言 2: 跑通了 (没抛 AgentError)
+    assert events[-1].state == AgentState.DONE
+    assert events[-1].content == "hi"
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_restores_original_llm_client_after_llm_config_call():
+    """传入 llm_config 临时替换 client,跑完后必须恢复(不污染 agent 实例)。
+
+    不然多次调用 run_loop(llm_config=...) 会让 agent 状态在请求间泄漏,
+    比如第一次请求改了 base_url,第二次没传 llm_config 也会用错的 client。
+    """
+    agent = SageAgent()
+    # 原始 client(用 MagicMock 模拟)
+    original_client = MagicMock()
+    original_client.chat = AsyncMock(return_value=_make_response(content="orig"))
+    agent.llm_client = original_client
+
+    temp_client = MagicMock()
+    temp_client.chat = AsyncMock(return_value=_make_response(content="temp"))
+
+    def fake_llm_client_factory(config):
+        return temp_client
+
+    with patch("backend.core.legacy.agent.LLMClient", side_effect=fake_llm_client_factory):
+        # 第一次调用: 传 llm_config
+        events1 = []
+        async for evt in agent.run_loop(
+            [{"role": "user", "content": "x"}],
+            llm_config={"provider": "custom", "api_key": "k", "model": "m"},
+        ):
+            events1.append(evt)
+
+        # 跑完后: 应该是 original client 被恢复
+        assert (
+            agent.llm_client is original_client
+        ), f"run_loop 没恢复原始 client: 变成了 {agent.llm_client!r}"
+
+        # 第二次调用: 不传 llm_config
+        events2 = []
+        async for evt in agent.run_loop([{"role": "user", "content": "y"}]):
+            events2.append(evt)
+
+    # 第二次应该用 original client
+    assert events2[-1].content == "orig"
+    original_client.chat.assert_awaited()
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_raises_agent_error_when_no_client_and_no_llm_config():
+    """self.llm_client is None 且调用方没传 llm_config → 仍然抛 AgentError(向后兼容)。
+
+    回归保护:即便加了 llm_config 支持,默认行为不能变 — 没人传 LLM 配置时
+    应该清晰报错,而不是静默退化。
+    """
+    agent = SageAgent()
+    agent.llm_client = None
+
+    async def _consume():
+        async for _ in agent.run_loop([{"role": "user", "content": "x"}]):
+            pass
+
+    with pytest.raises(AgentError, match="LLM 未配置"):
+        await _consume()
+
+
+# =============================================================================
+# Reasoning/Thinking 内容展示测试
+# =============================================================================
+
+
+def _make_response_with_reasoning(
+    content: str = "", reasoning_content: str | None = None, tool_calls: list = None
+) -> LLMResponse:
+    """创建包含 reasoning_content 的 LLM 响应。"""
+    return LLMResponse(
+        content=content,
+        reasoning_content=reasoning_content,
+        tool_calls=tool_calls or [],
+    )
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_yields_reasoning_event_when_llm_returns_reasoning():
+    """LLM 返回 reasoning_content 时，run_loop 应 yield REASONING 事件。"""
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        return_value=_make_response_with_reasoning(
+            content="答案是 42",
+            reasoning_content="让我思考一下：6 * 7 = 42",
+        )
+    )
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "6*7=?"}]):
+        events.append(evt)
+
+    states = [e.state for e in events]
+    # 应该有 REASONING 状态
+    assert AgentState.REASONING in states, f"States: {states}"
+
+    # REASONING 事件应携带 reasoning 内容
+    reasoning_evt = next(e for e in events if e.state == AgentState.REASONING)
+    assert reasoning_evt.reasoning == "让我思考一下：6 * 7 = 42"
+
+    # 最终应有 DONE 状态
+    assert AgentState.DONE in states
+    done_evt = next(e for e in events if e.state == AgentState.DONE)
+    assert done_evt.content == "答案是 42"
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_no_reasoning_event_when_llm_returns_no_reasoning():
+    """LLM 不返回 reasoning_content 时，run_loop 不应 yield REASONING 事件。"""
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        return_value=_make_response_with_reasoning(
+            content="你好",
+            reasoning_content=None,  # 没有 reasoning
+        )
+    )
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "hi"}]):
+        events.append(evt)
+
+    states = [e.state for e in events]
+    # 不应该有 REASONING 状态
+    assert AgentState.REASONING not in states, f"States: {states}"
+
+    # 应该有 THINKING 和 DONE
+    assert AgentState.THINKING in states
+    assert AgentState.DONE in states

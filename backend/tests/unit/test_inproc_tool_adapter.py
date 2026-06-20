@@ -14,10 +14,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from sage_core import ToolResult, ToolSpec
+from sage_core.repositories import ToolPort
 
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
-from backend.domain.tool import ToolResult, ToolSpec
-from backend.ports.tool import ToolPort
 
 pytestmark = pytest.mark.unit
 
@@ -221,10 +221,18 @@ def test_satisfies_tool_port_protocol() -> None:
 
 
 def test_default_registry_is_used_when_none_provided() -> None:
-    """不传 registry 时使用新建的 ``ToolRegistry()``，list_tools 不报错。"""
+    """不传 registry 时使用新建的 ``ToolRegistry()`` 并自动注册内置工具 (含 MCP)。
+
+    drawio MCP 集成后 ``InprocToolAdapter.__init__`` 会在 ``registry is None``
+    分支自动调用 ``register_all_tools()``, 因此 list_tools 不为空。
+    本测试只断言: (a) 不传 registry 也不抛异常, (b) 至少有 builtin 工具被注册。
+    """
     adapter = InprocToolAdapter()
-    # 新建 registry 里没有任何工具，list_tools 应返回空列表
-    assert adapter.list_tools() == []
+    names = {t.name for t in adapter.list_tools()}
+    # 至少包含 builtin 工具 (calculator 永远在, 不依赖 MCP)
+    assert "calculator" in names
+    # web_search 也是 builtin
+    assert "web_search" in names
 
 
 async def test_default_registry_execute_unknown_tool() -> None:

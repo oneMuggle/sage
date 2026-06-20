@@ -7,7 +7,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AgentProfile } from '../../../lib/api';
+import type { AgentProfile } from '../../../shared/api';
 import { AgentCard } from '../AgentCard';
 
 const baseAgent: AgentProfile = {

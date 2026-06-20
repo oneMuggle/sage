@@ -11,14 +11,14 @@
 
 from __future__ import annotations
 
-from backend.domain.compute import (
+from sage_core import (
     ComputeError,
     ComputeErrorType,
     ComputeRequest,
     ComputeResult,
     ComputeSpec,
 )
-from backend.ports.compute import ComputePort  # noqa: F401  (structural typing target)
+from sage_core.repositories import ComputePort  # noqa: F401  (structural typing target)
 
 
 class MockComputeAdapter:

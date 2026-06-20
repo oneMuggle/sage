@@ -23,9 +23,14 @@ pytestmark = pytest.mark.unit
 # ---------------------- 枚举值 & 字符串继承 ----------------------
 
 
-def test_agent_state_enum_has_six_states():
-    """状态机应有 6 个状态:IDLE/THINKING/ACTING/OBSERVING/DONE/FAILED。"""
-    assert len(AgentState) == 6
+def test_agent_state_enum_has_seven_states():
+    """状态机应有 8 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/CONTENT_DELTA/DONE/FAILED。
+
+    CONTENT_DELTA 由 I4 引入,用于流式 LLM 响应 — 每个 token chunk 推一个
+    CONTENT_DELTA 事件,前端 appendContent 累积实现逐字渲染。
+    REASONING 用于携带 LLM 思考/推理过程内容（reasoning_content）。
+    """
+    assert len(AgentState) == 8
 
 
 def test_agent_state_enum_string_inheritance():
@@ -44,8 +49,10 @@ def test_agent_state_enum_string_inheritance():
     [
         (AgentState.IDLE, "idle"),
         (AgentState.THINKING, "thinking"),
+        (AgentState.REASONING, "reasoning"),
         (AgentState.ACTING, "acting"),
         (AgentState.OBSERVING, "observing"),
+        (AgentState.CONTENT_DELTA, "content_delta"),
         (AgentState.DONE, "done"),
         (AgentState.FAILED, "failed"),
     ],
@@ -56,7 +63,16 @@ def test_agent_state_value_matches_string(state, raw):
 
 def test_agent_state_iteration_order():
     """枚举迭代顺序稳定(避免序列化时顺序漂移)。"""
-    expected = ["idle", "thinking", "acting", "observing", "done", "failed"]
+    expected = [
+        "idle",
+        "thinking",
+        "reasoning",
+        "acting",
+        "observing",
+        "content_delta",
+        "done",
+        "failed",
+    ]
     actual = [s.value for s in AgentState]
     assert actual == expected
 

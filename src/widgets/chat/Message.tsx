@@ -1,11 +1,20 @@
-import { Copy, ThumbsUp, ThumbsDown, BookOpen, Check, Wrench } from 'lucide-react';
+import {
+  Copy,
+  ThumbsUp,
+  ThumbsDown,
+  BookOpen,
+  Check,
+  Wrench,
+  Brain,
+  ChevronDown,
+} from 'lucide-react';
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 
-import type { Message as MessageType, ToolCall } from '../../lib/store';
+import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 
 interface MessageProps {
   message: MessageType;
@@ -65,6 +74,34 @@ function CodeBlock({ language, children }: { language?: string; children: string
   );
 }
 
+/** ThinkingPanel - 可折叠的 LLM 思考过程展示面板 */
+function ThinkingPanel({ reasoning }: { reasoning: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="mb-2 border border-border/50 rounded-radius-sm overflow-hidden">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 bg-bg-subtle hover:bg-bg-hover transition-colors text-left"
+        aria-expanded={isExpanded}
+      >
+        <Brain className="w-4 h-4 text-primary" />
+        <span className="text-xs font-medium text-text-secondary">
+          思考过程 ({reasoning.length} 字)
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {isExpanded && (
+        <div className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">
+          {reasoning}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Message({ message, onFeedback, knowledgeRefs, attachments }: MessageProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
@@ -76,7 +113,7 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
   };
 
   return (
-    <div className={`flex gap-3 mb-5 max-w-[720px] ${isUser ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex gap-3 mb-5 w-full ${isUser ? 'flex-row-reverse' : ''}`}>
       {/* 头像 */}
       <div
         className={`w-7 h-7 rounded-radius-sm flex-shrink-0 flex items-center justify-center text-xs font-semibold ${
@@ -87,6 +124,11 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
       </div>
 
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
+        {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
+        {isAssistant && message.reasoning_content && (
+          <ThinkingPanel reasoning={message.reasoning_content} />
+        )}
+
         {/* Knowledge references */}
         {knowledgeRefs && knowledgeRefs.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-1">
@@ -126,7 +168,7 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
         {/* 消息气泡 */}
         <div
           data-error={isError ? 'true' : undefined}
-          className={`px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+          className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
             isUser
               ? 'bg-primary text-text-inverse'
               : isError
@@ -226,7 +268,7 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
                   },
                 }}
               >
-                {message.content}
+                {message.content.replace(/<img\s+[^>]*src=["']data:[^"']*["'][^>]*\/?>/gi, '')}
               </ReactMarkdown>
             </div>
           ) : (
@@ -237,24 +279,47 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
         {/* 工具调用展示（ReAct 模式） */}
         {toolCalls.length > 0 && (
           <div className="mt-2 flex flex-col gap-1.5">
-            {toolCalls.map((tc, idx) => (
-              <div
-                key={`${tc.name}-${idx}`}
-                className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 rounded border border-border bg-bg-subtle text-[12px] font-mono"
-              >
-                <Wrench className="w-3 h-3 text-primary" />
-                <span className="font-semibold text-primary">{tc.name}</span>
-                <span className="text-muted">(</span>
-                <span className="text-text-secondary break-all">{JSON.stringify(tc.args)}</span>
-                <span className="text-muted">)</span>
-                {tc.result !== undefined && tc.result !== '' && (
-                  <>
-                    <span className="text-muted">→</span>
-                    <span className="text-text-primary break-all">{tc.result}</span>
-                  </>
-                )}
-              </div>
-            ))}
+            {toolCalls.map((tc, idx) => {
+              const hasImage = tc.metadata?.imageData;
+              return (
+                <div
+                  key={`${tc.name}-${idx}`}
+                  className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-[12px]"
+                >
+                  {/* Tool call header */}
+                  <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 font-mono">
+                    <Wrench className="w-3 h-3 text-primary shrink-0" />
+                    <span className="font-semibold text-primary">{tc.name}</span>
+                    {!hasImage && (
+                      <>
+                        <span className="text-muted">(</span>
+                        <span className="text-text-secondary break-all">
+                          {JSON.stringify(tc.args)}
+                        </span>
+                        <span className="text-muted">)</span>
+                      </>
+                    )}
+                    {tc.result !== undefined && tc.result !== '' && !hasImage && (
+                      <>
+                        <span className="text-muted">→</span>
+                        <span className="text-text-primary break-all">{tc.result}</span>
+                      </>
+                    )}
+                  </div>
+                  {/* Inline image preview for diagram tools */}
+                  {hasImage && (
+                    <div className="px-2 pb-2">
+                      <img
+                        src={tc.metadata!.imageData}
+                        alt={`Diagram from ${tc.name}`}
+                        className="max-w-full rounded border border-border"
+                        style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

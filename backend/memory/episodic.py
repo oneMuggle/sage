@@ -1,14 +1,18 @@
 """
 Episodic Memory - 情景记忆模块
 基于 SQLite 存储对话历史和事件序列
+
+中文支持：搜索时使用 jieba 分词，将查询拆分为多个词，
+用多个 LIKE 条件 OR 连接，提升中文检索质量。
 """
 
 from __future__ import annotations
-
 import json
 import time
 import uuid
 from typing import Any
+
+from backend.memory.chinese_tokenizer import tokenize
 
 
 class EpisodicMemory:
@@ -101,6 +105,9 @@ class EpisodicMemory:
         """
         搜索情景记忆
 
+        使用 jieba 分词，将查询拆分为多个词，用多个 LIKE 条件 OR 连接，
+        支持中文检索（如搜索 "用户 火锅" 可匹配 "用户喜欢火锅"）。
+
         Args:
             query: 搜索关键词
             limit: 返回数量限制
@@ -113,24 +120,43 @@ class EpisodicMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        sql = """
-            SELECT * FROM memories_episodic
-            WHERE is_valid = 1
-            AND (content LIKE ? OR summary LIKE ?)
-            AND importance >= ?
-        """
-        params = [f"%{query}%", f"%{query}%", min_importance]
+        # 使用 jieba 分词，将查询拆分为多个搜索词
+        tokens = [t.strip() for t in tokenize(query).split() if t.strip()]
 
+        if not tokens:
+            return []
+
+        # 构建 WHERE 子句：每个 token 匹配 content OR summary
+        like_conditions = []
+        params = []
+        for token in tokens:
+            like_conditions.append("(content LIKE ? OR summary LIKE ?)")
+            params.extend([f"%{token}%", f"%{token}%"])
+
+        # 基础条件
+        base_sql = "SELECT * FROM memories_episodic WHERE is_valid = 1"
+        where_parts = [base_sql]
+
+        # 分词 OR 条件
+        where_parts.append(f"AND ({' OR '.join(like_conditions)})")
+
+        # 重要性条件
+        where_parts.append("AND importance >= ?")
+        params.append(min_importance)
+
+        # 记忆类型筛选
         if memory_type:
-            sql += " AND memory_type = ?"
+            where_parts.append("AND memory_type = ?")
             params.append(memory_type)
 
-        sql += " ORDER BY importance DESC, access_count DESC, created_at DESC LIMIT ?"
+        # 排序 + 限制
+        where_parts.append("ORDER BY importance DESC, access_count DESC, created_at DESC LIMIT ?")
         params.append(limit)
 
+        sql = " ".join(where_parts)
         cursor.execute(sql, params)
-        results = []
 
+        results = []
         for row in cursor.fetchall():
             memory = dict(row)
             # 解析标签 JSON

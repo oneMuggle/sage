@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 
-import { invoke } from '../../lib/tauriInvoke';
+import { invoke } from '../../shared/api/desktopInvoke';
 
 // 进化日志类型
 interface EvolutionLog {

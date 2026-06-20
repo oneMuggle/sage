@@ -1,3 +1,3 @@
 export { Chat } from './Chat';
-export { Settings } from './Settings';
+export { Settings } from './settings';
 export { Memory } from './Memory';

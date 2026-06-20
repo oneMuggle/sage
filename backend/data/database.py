@@ -76,11 +76,19 @@ class Database:
                 total_tokens INTEGER,
                 tool_calls TEXT,
                 tool_call_id TEXT,
+                reasoning_content TEXT,
                 created_at INTEGER NOT NULL,
                 latency_ms INTEGER,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
+
+        # 数据库迁移：为已有数据库添加 reasoning_content 列（如果不存在）
+        cursor.execute("PRAGMA table_info(messages)")
+        columns = [row["name"] for row in cursor.fetchall()]
+        if "reasoning_content" not in columns:
+            cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_content TEXT")
+            conn.commit()
 
         # 情景记忆表
         cursor.execute("""
@@ -217,32 +225,11 @@ class Database:
             )
         """)
 
-        # FTS5 同步触发器 - INSERT
-        cursor.execute("""
-            CREATE TRIGGER IF NOT EXISTS memories_semantic_ai AFTER INSERT ON memories_semantic
-            BEGIN
-                INSERT INTO memories_semantic_fts (rowid, content, summary, tags)
-                VALUES (new.rowid, new.content, new.summary, new.tags);
-            END
-        """)
-
-        # FTS5 同步触发器 - DELETE
-        cursor.execute("""
-            CREATE TRIGGER IF NOT EXISTS memories_semantic_ad AFTER DELETE ON memories_semantic
-            BEGIN
-                DELETE FROM memories_semantic_fts WHERE rowid = old.rowid;
-            END
-        """)
-
-        # FTS5 同步触发器 - UPDATE
-        cursor.execute("""
-            CREATE TRIGGER IF NOT EXISTS memories_semantic_au AFTER UPDATE ON memories_semantic
-            BEGIN
-                DELETE FROM memories_semantic_fts WHERE rowid = old.rowid;
-                INSERT INTO memories_semantic_fts (rowid, content, summary, tags)
-                VALUES (new.rowid, new.content, new.summary, new.tags);
-            END
-        """)
+        # FTS5 同步触发器
+        # 注意：由于 contentless FTS5 表在 UPDATE 时可能出现 "database disk image is malformed"
+        # 错误，暂时禁用所有触发器。FTS 索引由 SemanticMemory 方法手动维护。
+        # 当前 search() 使用 LIKE + jieba 而非 FTS5，所以 FTS 索引暂不使用。
+        # 未来升级 FTS5 中文支持时再启用。
 
         # 记忆进化日志表（预留）
         cursor.execute("""
@@ -256,6 +243,23 @@ class Database:
                 reason TEXT,
                 created_at INTEGER NOT NULL
             )
+        """)
+
+        # 工作记忆快照表（持久化 WorkingMemory 的 deque 内容）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS working_memory_snapshot (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                tokens INTEGER NOT NULL DEFAULT 0,
+                timestamp REAL NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_wm_snapshot_session
+            ON working_memory_snapshot(session_id)
         """)
 
         # 创建索引

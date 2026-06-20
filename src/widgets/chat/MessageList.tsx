@@ -1,4 +1,4 @@
-import type { Message as MessageType } from '../../lib/store';
+import type { Message as MessageType } from '../../shared/lib/store';
 
 import { Message } from './Message';
 

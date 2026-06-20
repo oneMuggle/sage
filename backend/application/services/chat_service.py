@@ -23,17 +23,24 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
-from backend.domain.errors import LLMError
-from backend.domain.message import Message, Role, ToolCall
-from backend.ports.llm import LLMPort
-from backend.ports.observability import EventPort, MetricPort
-from backend.ports.skill import SkillPort
-from backend.ports.storage import StoragePort
-from backend.ports.tool import ToolPort
+from sage_core import LLMError, Message, Role, ToolCall
+from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
+
+# Optional memory types (for backward compatibility)
+try:
+    from backend.domain.memory import MemoryContext
+    from backend.ports.memory import MemoryPort
+except ImportError:
+    MemoryPort = None  # type: ignore
+    MemoryContext = None  # type: ignore
+
 from backend.utils.otel import get_tracer
+
+logger = logging.getLogger(__name__)
 
 # 默认拉取的历史消息窗口大小（最新 N 条）
 _DEFAULT_HISTORY_LIMIT = 20
@@ -70,6 +77,7 @@ class ChatService:
         storage: StoragePort,
         metrics: MetricPort,
         events: EventPort,
+        memory: MemoryPort | None = None,  # Optional for backward compatibility
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -77,6 +85,7 @@ class ChatService:
         self.storage = storage
         self.metrics = metrics
         self.events = events
+        self.memory = memory  # MemoryPort for memory integration
         # P3.2: 当前活跃 session 计数（用于 sage_active_sessions gauge）
         self._active_session_count: int = 0
 
@@ -165,12 +174,46 @@ class ChatService:
             {"session_id": session_id, "role": Role.USER.value},
         )
 
+        # 1.5) 检索相关记忆 (Memory Integration)
+        memory_context: MemoryContext | None = None
+        if self.memory:
+            try:
+                memory_context = await self.memory.retrieve(
+                    query=user_message.content,
+                    session_id=session_id,
+                    limit=5,
+                )
+                span.set_attribute("memory.has_memories", memory_context.has_memories)
+            except Exception as e:
+                logger.warning(f"Failed to retrieve memories: {e}")
+                span.set_attribute("memory.error", str(e))
+
         # 2) 拉取历史上下文（用于喂给 LLM）
         history = await self.storage.get_messages(
             session_id,
             limit=_DEFAULT_HISTORY_LIMIT,
         )
         span.set_attribute("history.size", len(history))
+
+        # Inject system prompt (including diagram tool guidance if available)
+        system_content = "你是 Sage，一个智能 AI 助手。"
+        try:
+            from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
+
+            # Check if diagram tools are available in the tool registry
+            if self.tools and any("drawio" in t.name for t in self.tools.list()):
+                system_content += DIAGRAM_TOOL_PROMPT
+        except Exception:
+            pass
+
+        # 2.5) 注入记忆上下文到 system prompt (Memory Integration)
+        if memory_context and memory_context.has_memories:
+            system_content += "\n\n以下是相关的记忆上下文:\n"
+            system_content += memory_context.format()
+
+        # Prepend system message to history
+        system_msg = Message(role=Role.SYSTEM, content=system_content)
+        history = [system_msg] + list(history)
 
         # 3) 调 LLM（单次调用；错误时记 metric + event 后透传）
         # 埋点：LLM 调用计数（9 指标之一）
@@ -184,7 +227,32 @@ class ChatService:
         )
         start = time.monotonic()
         try:
-            response = await self.llm.chat(history)
+            # Build tool schemas for LLM (OpenAI function-calling format)
+            llm_tools = None
+            if self.tools:
+                tool_specs = self.tools.list_tools()
+                logger.info(f"[ChatService] ToolPort.list_tools() returned {len(tool_specs)} tools")
+                if tool_specs:
+                    llm_tools = [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": ts.name,
+                                "description": ts.description,
+                                "parameters": ts.parameters,
+                            },
+                        }
+                        for ts in tool_specs
+                    ]
+                    logger.info(
+                        f"[ChatService] Passing {len(llm_tools)} tools to LLM: {[t['function']['name'] for t in llm_tools]}"
+                    )
+                else:
+                    logger.warning("[ChatService] ToolPort.list_tools() returned empty list!")
+            else:
+                logger.warning("[ChatService] self.tools is None!")
+
+            response = await self.llm.chat(history, tools=llm_tools)
         except LLMError as exc:
             duration = time.monotonic() - start
             # 失败也记直方图，便于看错误率 / 失败延迟分布
@@ -272,7 +340,68 @@ class ChatService:
             span.set_attribute("tokens.prompt", prompt_tokens)
             span.set_attribute("tokens.completion", completion_tokens)
 
+        # 7) 提取并存储记忆 (Memory Integration)
+        if self.memory:
+            try:
+                await self._extract_and_store_memory(
+                    session_id=session_id,
+                    user_message=user_message,
+                    assistant_message=response,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to store memory: {e}")
+                span.set_attribute("memory.store_error", str(e))
+
+            # 8) 压缩工作记忆 (Memory Integration)
+            try:
+                await self.memory.compress(session_id)
+            except Exception as e:
+                logger.warning(f"Failed to compress working memory: {e}")
+                span.set_attribute("memory.compress_error", str(e))
+
         return [user_message, response]
+
+    # ------------------------------------------------------------------ #
+    # 内部辅助：记忆提取与存储 (Memory Integration)
+    # ------------------------------------------------------------------ #
+
+    async def _extract_and_store_memory(
+        self,
+        session_id: str,
+        user_message: Message,
+        assistant_message: Message,
+    ) -> None:
+        """从对话中提取关键信息并存入记忆系统
+
+        使用 LLM 驱动的事实提取（MemoryExtractor），自动检测对话中的
+        关键信息并存储到记忆系统。当 LLM 不可用时降级为关键词提取。
+
+        Args:
+            session_id: 会话 ID
+            user_message: 用户消息
+            assistant_message: 助手消息
+        """
+        if not self.memory:
+            return
+
+        from backend.memory.extractor import MemoryExtractor
+
+        extractor = MemoryExtractor(llm_client=self.llm)
+        facts = await extractor.extract(
+            user_message=user_message.content or "",
+            assistant_message=assistant_message.content or "",
+        )
+
+        for fact in facts:
+            await self.memory.store(
+                content=fact["content"],
+                session_id=session_id,
+                importance=fact.get("importance", 5),
+                tags=fact.get("tags", ["conversation"]),
+            )
+
+        if facts:
+            logger.debug(f"Extracted {len(facts)} facts for session {session_id}")
 
     # ------------------------------------------------------------------ #
     # 内部辅助：执行 tool_calls

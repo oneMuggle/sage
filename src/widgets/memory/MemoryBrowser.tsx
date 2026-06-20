@@ -4,7 +4,11 @@
  */
 import { useState, useEffect } from 'react';
 
-import { memoryApi, Memory } from '../../lib/api';
+import { memoryApi, Memory } from '../../shared/api';
+
+// Constants
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const MEMORY_PAGE_SIZE = 100;
 
 type MemoryFilter = 'all' | 'episodic' | 'semantic';
 
@@ -47,8 +51,7 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
       // For now, show the actual loaded counts
       setStats({
         total: memories.length,
-        thisWeek: memories.filter((m) => Date.now() - m.created_at < 7 * 24 * 60 * 60 * 1000)
-          .length,
+        thisWeek: memories.filter((m) => Date.now() - m.created_at < ONE_WEEK_MS).length,
         episodic: episodic.length,
         semantic: semantic.length,
       });
@@ -62,7 +65,7 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
     setError(null);
     try {
       const type = filterType === 'all' ? undefined : filterType;
-      const results = await memoryApi.getMemories(type, 1, 100);
+      const results = await memoryApi.getMemories(type, 1, MEMORY_PAGE_SIZE);
       setMemories(results);
     } catch (err) {
       const message = err instanceof Error ? err.message : '加载失败';

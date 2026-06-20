@@ -1,7 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { resolveEndpoint } from '../entities/setting/types';
+import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
-import { useStore } from '../lib/store';
+import { useStore } from '../shared/lib/store';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ChatInput, MessageList } from '../widgets/chat';
@@ -11,6 +14,22 @@ export function Chat() {
     useChat();
 
   const { currentSessionId, setCurrentSessionId, createSession } = useStore();
+  const { settings } = useSettings();
+  const navigate = useNavigate();
+  // PR-7: 跟随新消息/流式 token 自动滚到底。依赖同时含 messages.length
+  // 和最后一条消息的 content 长度 — 流式更新时 length 不变但 content 在变。
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastMsg = messages[messages.length - 1];
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages.length, lastMsg?.content]);
+
+  const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
+  const hasConfig =
+    Boolean(chatEndpoint?.baseUrl) && Boolean(settings.modelSelections.chatModel.modelId);
+  const showConfigWarning = !hasConfig;
 
   useEffect(() => {
     if (currentSessionId) {
@@ -60,7 +79,7 @@ export function Chat() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* 页面头部 */}
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
         <h2 className="text-sm font-semibold text-text">对话</h2>
@@ -74,7 +93,7 @@ export function Chat() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
         {isLoading && messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <LoadingState label="正在加载对话..." />
@@ -84,11 +103,30 @@ export function Chat() {
         )}
       </div>
 
+      {showConfigWarning && (
+        <div
+          data-testid="config-warning"
+          className="px-4 py-2 bg-yellow-50 border-t border-yellow-300 text-yellow-900 text-xs flex items-center gap-2"
+        >
+          <span aria-hidden="true">⚠️</span>
+          <span>
+            未配置 API 端点或对话模型，
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className="underline text-yellow-900 hover:text-yellow-700 transition-colors"
+            >
+              前往设置
+            </button>
+          </span>
+        </div>
+      )}
+
       <ChatInput
         onSend={handleSendMessage}
         onInterrupt={interrupt}
         isLoading={isLoading}
-        disabled={false}
+        disabled={!hasConfig}
         placeholder="输入消息..."
       />
     </div>

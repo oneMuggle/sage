@@ -15,15 +15,9 @@ from typing import Any
 
 import pytest
 
-from backend.domain.message import Message, Role
-from backend.domain.skill import SkillResult, SkillSpec
-from backend.domain.tool import ToolResult, ToolSpec
+from sage_core import Message, Role, SkillResult, SkillSpec, ToolResult, ToolSpec
+from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
 from backend.ports import __all__ as ports_all
-from backend.ports.llm import LLMPort
-from backend.ports.observability import EventPort, MetricPort
-from backend.ports.skill import SkillPort
-from backend.ports.storage import StoragePort
-from backend.ports.tool import ToolPort
 
 pytestmark = pytest.mark.unit
 
@@ -271,6 +265,8 @@ def test_ports_only_depend_on_domain() -> None:
         "collections.abc",
     }
     allowed_internal = ("backend.domain", "backend.ports")
+    # 允许从 sage_core 导入（核心包提取后）
+    allowed_external = {"sage_core"}
 
     import_re = re.compile(r"^\s*(?:from|import)\s+([\w\.]+)")
     offenders: list[str] = []
@@ -285,6 +281,8 @@ def test_ports_only_depend_on_domain() -> None:
                 continue
             root = mod.split(".")[0]
             if root in allowed_stdlib:
+                continue
+            if root in allowed_external:
                 continue
             offenders.append(f"{py_file.name}: {line.strip()}")
 

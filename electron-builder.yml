@@ -6,7 +6,7 @@ asarUnpack:
   # Phase 3 will add: '**/node_modules/sharp/**' if we ever embed heavy native modules
 directories:
   output: release/${version}
-  buildResources: build
+  buildResources: resources
 files:
   - dist/**/*
   - dist-electron/**/*
@@ -38,6 +38,7 @@ win:
   artifactName: ${productName}-Setup-${version}.${ext}
 
 nsis:
+  include: build/installer.nsh    # ← NEW: NSIS customInstall macro (bundles VCRedist)
   oneClick: false # Show installer wizard (Win7 UAC friendlier than silent)
   perMachine: false # HKCU install, no admin required
   allowToChangeInstallationDirectory: true
@@ -45,26 +46,48 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Sage
   uninstallDisplayName: Sage ${version}
-  # Win7 prerequisites (documented in README.md, surfaced in installer welcome):
+  # Win7 prerequisites (also surfaced in docs/technical/26-packaging-matrix.md):
   #   1. KB3033929 (SHA-2 code signing support) — Win7 SP1 must have this or
-  #      Sage.exe signed with SHA-2 cert refuses to launch.
-  #   2. KB3140245 (TLS 1.2 default-on for SChannel) — NOT required by Sage
-  #      itself (Electron uses Chromium BoringSSL, Python uses rustls), but
-  #      needed if user wants default IE/Edge legacy to load HTTPS sites.
+  #      Sage.exe signed with SHA-2 cert refuses to launch (Phase 3 signing).
+  #   2. KB3140245 (TLS 1.2, optional) — not required by Sage itself.
   #   3. Win7 SP1 x64 minimum (32-bit Win7 not supported by Electron 21).
+  # VC++ Redistributable: bundled by build/installer.nsh customInstall (no user action).
 
 # macOS: skip for now (focus is Win7 first; can revisit later)
 mac:
   target: null
   identity: null
 
-# Linux: keep simple AppImage for dev convenience
+# Linux: AppImage (universal) + deb (Ubuntu/Debian native)
 linux:
   target:
     - AppImage
+    - deb
   icon: build/icon.png
   category: Office
+  synopsis: Sage — agentic knowledge & chat desktop
+  description: |
+    Sage is a local-first desktop client that combines LLM chat, agent
+    orchestration, and a personal knowledge wiki. Backed by Python +
+    FastAPI for offline-capable AI workflows.
+  maintainer: Sage Team <sage@example.com>
+  vendor: Sage Team
   artifactName: ${productName}-${version}.${ext}
+
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+  packageCategory: utils
+  priority: optional
+  artifactName: sage_${version}_amd64.${ext}
 
 # electron-builder publish config (off by default for Phase 1)
 publish: null

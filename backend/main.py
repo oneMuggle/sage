@@ -2,10 +2,12 @@
 Sage - 记忆型 AI 桌面助手
 FastAPI 后端入口
 """
+
+import asyncio
 import logging
 import os
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 import yaml
@@ -16,16 +18,19 @@ from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
 from backend.adapters.out.compute.subprocess_adapter import SubprocessComputeAdapter
 from backend.adapters.out.event.file_adapter import FileEventAdapter
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+from backend.adapters.out.memory.adapter import MemoryAdapter
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
+from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.hex_routes import get_chat_service, router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.application.services.chat_service import ChatService
 from backend.data.agent_repo import AgentRepository
 from backend.data.database import Database
+from backend.memory import get_memory_manager
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +63,15 @@ def _build_compute_adapter():
 
     adapter_type = ghm_cfg.get("adapter", "subprocess")
     if adapter_type == "subprocess":
+        from backend.adapters.out.compute.subprocess_adapter import (
+            SubprocessComputeAdapter,
+        )
+
         return SubprocessComputeAdapter(ghm_cfg)
     if adapter_type == "http":
+        from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
+
+
         logger.warning(
             "ghm.adapter=http: HttpComputeAdapter 仍是空壳,运行时调用会抛 NotImplementedError"
         )
@@ -68,7 +80,7 @@ def _build_compute_adapter():
 
 
 def _build_chat_service() -> ChatService:
-    """工厂：装配 6 个 ports（5 个生产 adapter + 1 个暂未实现 placeholder）。
+    """工厂：装配 7 个 ports（6 个生产 adapter + 1 个暂未实现 placeholder）。
 
     - llm:     HttpxLLMAdapter（包装既有 LLMClient）
     - tools:   InprocToolAdapter（如启用 ghm，则用 ComputeToolAdapter 包装合并）
@@ -76,12 +88,15 @@ def _build_chat_service() -> ChatService:
     - storage: SqliteStorageAdapter（包装既有 SessionRepository / MessageRepository）
     - metrics: PrometheusMetricAdapter
     - events:  FileEventAdapter（写 audit jsonl）
+    - memory:  MemoryAdapter（包装 MemoryManager，提供三层记忆系统）
 
     装配在每次依赖注入时被调用——单例化由调用方（如 ``app.state``）自行管理。
     """
     inner_tools = InprocToolAdapter()
     compute = _build_compute_adapter()
     if compute is not None:
+        from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
+
         tools = ComputeToolAdapter(compute=compute, inner=inner_tools)
         logger.info(
             "ComputeToolAdapter 已装配,注册 %d 个计算工具",
@@ -90,6 +105,12 @@ def _build_chat_service() -> ChatService:
     else:
         tools = inner_tools
 
+    # 装配 MemoryPort (Memory Integration)
+    # 使用全局单例 MemoryManager，确保 WorkingMemory 跨请求持久存在
+    memory_manager = get_memory_manager()
+    memory_adapter = MemoryAdapter(memory_manager)
+    logger.info("MemoryAdapter 已装配（三层记忆系统：Working/Episodic/Semantic，全局单例）")
+
     return ChatService(
         llm=HttpxLLMAdapter(),
         tools=tools,
@@ -97,6 +118,7 @@ def _build_chat_service() -> ChatService:
         storage=SqliteStorageAdapter(),
         metrics=PrometheusMetricAdapter(),
         events=FileEventAdapter(),
+        memory=memory_adapter,  # MemoryPort for memory integration
     )
 
 
@@ -114,9 +136,18 @@ async def lifespan(app: FastAPI):
     if seeded:
         logger.info("已种子化 %d 个默认 agent (primary/researcher/coder/memory_manager)", seeded)
 
+    # I2: chat 流注册表 — 拆分 /chat/stream 为 create + attach,避免 LLM 被调两次
+    app.state.streams = StreamRegistry()
+    sweeper_task = asyncio.create_task(
+        _periodic_stream_sweeper(app.state.streams), name="chat-stream-sweeper"
+    )
+    logger.info("ChatStreamRegistry 已初始化(后台 sweeper 每 60s 清理孤儿流)")
+
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
     api_mode = os.environ.get("API_MODE", "hex").lower()
     if api_mode == "hex":
+        from backend.api.hex_routes import get_chat_service
+
         app.dependency_overrides[get_chat_service] = _build_chat_service
         app.state.chat_service = _build_chat_service()
         logger.info("Hex 模式：ChatService 已装配（/chat 走 hex_routes，其余走 legacy_routes）")
@@ -126,7 +157,26 @@ async def lifespan(app: FastAPI):
     yield
 
     # 关闭时清理
-    pass
+    sweeper_task.cancel()
+    with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
+        await sweeper_task
+    # 取消所有残留的 producer task
+    if hasattr(app.state, "streams") and app.state.streams is not None:
+        for entry in list(app.state.streams._entries.values()):
+            if entry.task is not None and not entry.task.done():
+                entry.task.cancel()
+
+
+async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
+    """每 60s 清理一次孤儿流(创建后 5 分钟仍未 done/failed 的)。"""
+    try:
+        while True:
+            await asyncio.sleep(interval_s)
+            removed = await registry.sweep_expired(max_age_seconds=300.0)
+            if removed:
+                logger.info("chat-stream sweeper removed %d stale streams", removed)
+    except asyncio.CancelledError:
+        return
 
 
 # 创建 FastAPI 应用
@@ -164,9 +214,17 @@ async def add_request_id_header(request: Request, call_next):
 # - API_MODE=legacy：仅注册 legacy。
 # 通用 LLM 代理（/api/v1/llm/*）在两种模式下都注册 — 浏览器到 LLM 的
 # 测试连接 / 拉取模型调用都走它，与 API_MODE 无关（见 llm_proxy_routes.py）。
+#
+# === PG-A1 GREEN-2 临时变更（2026-06-13） ===
+# 默认 API_MODE 从 "hex" 改为 "legacy"。原因:hex_routes 新增了 6 个
+# sessions 端点（PG-A1 端点迁移），但本 PR 不装配 SessionService DI。
+# 若保持默认 hex，新 6 端点会拦截 /sessions 流量并因 DI 缺失而 500，
+# 破坏现有 legacy 集成测试。临时切到 legacy 保证 production 走老路径。
+# 后续 PR 真正装配 SessionService 后，会把默认值改回 "hex"。
+# 跟踪 issue/PR 见 docs/plans/2026-06-13_full-quality-optimization-v2.md。
 app.include_router(llm_proxy_router, prefix="/api/v1")
 
-_API_MODE = os.environ.get("API_MODE", "hex").lower()
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":
     app.include_router(hex_router, prefix="/api/v1")
     app.include_router(legacy_router, prefix="/api/v1")

@@ -4,8 +4,17 @@ API 路由定义
 
 from __future__ import annotations
 
+import asyncio
+
+# I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
+# 让前端能逐字渲染 (避免 LLM 一次返回完整字符串时 "砰一下" 全显示)。
+# 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls (大改),
+# 先用这个 producer 端的 fake stream 解决 90% 的视觉体验。
+_STREAMING_CHUNK_SIZE = 6
+_STREAMING_CHUNK_DELAY_S = 0.04
 import json
 import logging
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -13,12 +22,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, StrictBool
 
 from backend.adapters.out.skill import InprocSkillAdapter
+from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.agent_repo import AgentRepository
 from backend.data.database import get_database
-from backend.data.session_repo import MessageRepository, SessionRepository
-from backend.memory import EpisodicMemory, MemoryManager, SemanticMemory, WorkingMemory
+from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+from backend.memory import get_memory_manager
 from backend.scheduler import get_evolution_logs, get_scheduler
 
 logger = logging.getLogger(__name__)
@@ -58,6 +68,14 @@ class ChatRequest(BaseModel):
     model: str | None = None
     max_context: int | None = None
     temperature: float | None = None
+    # 透传字段:provider 让后端不再硬写,reasoning_effort/thinking_budget
+    # 让上游 LLM 启用 thinking 输出(provider 决定哪种 key 会被接受)
+    # - provider: openai / claude / gemini / deepseek / ollama / custom
+    # - reasoning_effort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
+    # - thinking_budget: Gemini 2.5 OpenAI 兼容模式
+    provider: str | None = None
+    reasoning_effort: str | None = None
+    thinking_budget: int | None = None
 
 
 class MessageResponse(BaseModel):
@@ -392,26 +410,27 @@ def _get_skill_adapter():
     return _skill_adapter_singleton
 
 
-def _skill_to_dict(spec, enabled: bool, usage_count: int) -> dict:
-    """把 SkillSpec + 路由层扩展字段序列化为 dict。"""
-    return {
-        "name": spec.name,
-        "description": spec.description,
-        "triggers": list(spec.triggers),
-        "parameters": dict(spec.parameters),
-        "examples": list(spec.examples),
-        "enabled": enabled,
-        "usage_count": usage_count,
-    }
+def _skill_to_dict(ext: dict, enabled: bool, usage_count: int) -> dict:
+    """把扩展 SkillSpec dict + 路由层 enabled/usage_count 序列化为响应 dict。
+
+    ``ext`` 来自 ``InprocSkillAdapter.list_skills_extended()``,
+    含 ``source / body / base_dir / version`` 等字段 (SKILL.md 时填充, builtin 时不存在)。
+
+    复制一份避免修改 adapter 返回的共享 dict (immutable-ish 风格)。
+    """
+    out = dict(ext)
+    out["enabled"] = enabled
+    out["usage_count"] = usage_count
+    return out
 
 
 @router.get("/skills")
 async def list_skills():
-    """列出所有已注册技能 (含 disabled 与 usage_count)。"""
+    """列出所有已注册技能 (含 disabled 与 usage_count + SKILL.md 扩展字段)。"""
     adapter = _get_skill_adapter()
     return [
-        _skill_to_dict(spec, adapter.is_enabled(spec.name), adapter.usage_count(spec.name))
-        for spec in adapter.list_skills()
+        _skill_to_dict(ext, adapter.is_enabled(ext["name"]), adapter.usage_count(ext["name"]))
+        for ext in adapter.list_skills_extended()
     ]
 
 
@@ -435,10 +454,10 @@ async def toggle_skill(name: str, data: SkillToggle):
             status_code=404,
             detail={"type": "skill_not_found", "message": f"skill '{name}' not found"},
         )
-    # 返回完整 skill dict (与 list 接口一致)
-    spec = next((s for s in adapter.list_skills() if s.name == name), None)
-    assert spec is not None  # set_enabled 已 guard
-    return _skill_to_dict(spec, adapter.is_enabled(name), adapter.usage_count(name))
+    # 返回完整 skill dict (与 list 接口一致) —— 用 list_skills_extended 拿带 source/body 的版本
+    ext = next((e for e in adapter.list_skills_extended() if e["name"] == name), None)
+    assert ext is not None  # set_enabled 已 guard
+    return _skill_to_dict(ext, adapter.is_enabled(name), adapter.usage_count(name))
 
 
 class SkillExecuteRequest(BaseModel):
@@ -478,6 +497,61 @@ async def execute_skill(name: str, data: SkillExecuteRequest):
         "metadata": result.metadata,
         "error": result.error,
     }
+
+
+# ==================== M10: slash command 暴露 ====================
+
+
+class SkillCommandRequest(BaseModel):
+    """``POST /skills/command`` 请求体 (M10)。
+
+    - command: slash command 名 (带或不带 ``/``,如 ``/review`` 或 ``review``)
+    - args: 命令参数列表 (透传给 SkillMdSkill.execute_v2 params['args'])
+    """
+
+    command: str
+    args: list[str] = []
+
+
+@router.post("/skills/command")
+async def execute_slash_command(data: SkillCommandRequest):
+    """执行 slash command (M10)。
+
+    - 200 + SkillResult (success / content / metadata / error)
+      - success=True → content 是 SKILL.md body,供聊天层注入 system prompt
+      - success=False → 内部执行失败(脚本异常等),前端按 success 字段判定
+    - 404 + 结构化 detail — command 未注册 (无 user_invocable 技能匹配)
+    - 422 (FastAPI 自动) — command 缺失或类型错
+
+    设计: chat 层剥离 ``/`` 前缀后 POST 此端点;不需要再走 SkillRegistry.exists()
+    (slash registry 本身就是 user_invocable 技能的子集,索引已构建完成)。
+    """
+    adapter = _get_skill_adapter()
+    try:
+        result = await adapter.execute_command(data.command, data.args)
+    except LookupError as exc:
+        # 命令未注册 → 404 (与 skill_not_found 语义一致)
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "command_not_found", "message": str(exc)},
+        ) from exc
+    return {
+        "success": result.success,
+        "content": result.content,
+        "metadata": result.metadata,
+        "error": result.error,
+    }
+
+
+@router.get("/skills/commands")
+async def list_slash_commands():
+    """列出所有已注册的 slash command (M10)。
+
+    用于前端自动补全 / chat 输入提示。
+    返回命令名列表 (带 ``/`` 前缀,如 ``["/review", "/commit"]``)。
+    """
+    adapter = _get_skill_adapter()
+    return {"commands": adapter.list_slash_commands()}
 
 
 # ==================== 聊天 API ====================
@@ -555,61 +629,220 @@ async def chat(
 
 
 @router.post("/chat/stream")
-async def chat_stream(data: ChatRequest):
-    """流式聊天端点，以 NDJSON 格式逐事件下发 AgentEvent。
+async def chat_stream_create(data: ChatRequest, request: Request):
+    """创建 chat 流 (I2)。
 
-    每个事件是一行独立 JSON 对象：
-    - 正常事件：``{"state": "...", "iteration": n, ...}``
-    - 错误事件：``{"error": {...}, "state": "failed"}``
+    立即返回 ``{"streamId": "..."}``,后台启动 ``agent.run_loop`` 跑一次 LLM,
+    事件入 ``app.state.streams[streamId].queue``。
+
+    Electron 端拿到 streamId 后调 ``GET /chat/stream/{streamId}`` attach 取事件。
+    这样 LLM 只被调一次(原方案 invoke 阶段读首行 + relay 重放 = 两次)。
 
     Args:
-        data: 与 /chat 相同的 ChatRequest 体
+        data: 与原 /chat 相同的 ChatRequest 体
+        request: FastAPI Request,用于访问 app.state
 
     Returns:
-        StreamingResponse，media_type 为 application/x-ndjson
+        ``{"streamId": "<uuid4>"}``
     """
     request_id = str(uuid.uuid4())
+    stream_id = str(uuid.uuid4())
     logger.info(
-        f"[REQ {request_id}] /chat/stream received: "
+        f"[REQ {request_id}] /chat/stream create: "
+        f"streamId={stream_id}, "
         f"session_id={_safe_log_field(data.session_id)}, "
         f"api_key={'***' if data.api_key else 'MISSING'}, "
         f"model={_safe_log_field(data.model or 'default')}"
     )
 
-    async def event_generator():
+    registry: StreamRegistry = request.app.state.streams
+
+    async def producer(entry: StreamEntry) -> None:
+        """后台跑 agent.run_loop,事件入 entry.queue。
+
+        这里把 AgentEvent.to_dict() 在入队时序列化,避免对象跨 task 边界泄漏
+        内部状态(detached Pydantic / cyclic ref 等)。
+        """
         try:
             llm_config = None
             if data.api_key and data.api_url:
                 llm_config = {
-                    "provider": "custom",
+                    # 修: provider 不再硬写,从前端请求透传;
+                    # 默认 "custom" 保留向后兼容(老客户端/无 provider 字段)
+                    "provider": data.provider or "custom",
                     "api_key": data.api_key,
                     "base_url": data.api_url,
                     "model": data.model or "gpt-3.5-turbo",
                     "temperature": data.temperature or 0.7,
                 }
+                # 推理参数:None 时不传,避免污染老 LLM
+                if data.reasoning_effort is not None:
+                    llm_config["reasoning_effort"] = data.reasoning_effort
+                if data.thinking_budget is not None:
+                    llm_config["thinking_budget"] = data.thinking_budget
                 logger.info(
-                    f"[REQ {request_id}] /chat/stream using custom LLM config: "
+                    f"[REQ {request_id}] /chat/stream producer using custom LLM: "
                     f"model={_safe_log_field(llm_config['model'])}"
                 )
 
             agent = SageAgent()
+
+            # Build system prompt with optional diagram tool guidance
+            system_content = "你是 Sage，一个智能 AI 助手。"
+            try:
+                from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
+
+                # Check if diagram MCP tools are registered
+                _registry = getattr(agent, "tool_registry", None)
+                if _registry and _registry.exists("drawio__render_diagram"):
+                    system_content += DIAGRAM_TOOL_PROMPT
+            except Exception:
+                pass  # Graceful fallback if diagram module unavailable
+
             messages = [
-                {"role": "system", "content": "你是 Sage，一个智能 AI 助手。"},
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": data.message},
             ]
-            # 通过 run_loop 产出事件流
-            async for evt in agent.run_loop(messages):
-                yield _ndjson(evt.to_dict())
+            # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
+            # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
+            # session metadata。每个落盘独立 try/except,失败只 logger.warning
+            # 不破坏流。
+            message_repo = MessageRepository()
+            session_repo = SessionRepository()
+            user_now = int(time.time() * 1000)
+            try:
+                message_repo.save(
+                    DbMessage(
+                        id=str(uuid.uuid4()),
+                        session_id=data.session_id,
+                        role="user",
+                        content=data.message,
+                        created_at=user_now,
+                    )
+                )
+            except Exception as db_err:
+                logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
+            done_content: str | None = None
+            done_reasoning: str | None = None
+            async for evt in agent.run_loop(messages, llm_config=llm_config):
+                # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
+                # 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls,
+                # 那是更大的重构;这个 producer 端的 fake stream 给出 90% 视觉效果。
+                if evt.state.value == "done" and evt.content:
+                    done_content = evt.content
+                    content = evt.content
+                    for i in range(0, len(content), _STREAMING_CHUNK_SIZE):
+                        delta = content[i : i + _STREAMING_CHUNK_SIZE]
+                        await entry.queue.put(
+                            {
+                                "state": "content_delta",
+                                "iteration": evt.iteration,
+                                "content": delta,
+                            }
+                        )
+                        await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
+                    # 最终 DONE 事件保留完整 content (前端 finishStream 需要)
+                    await entry.queue.put(evt.to_dict())
+                elif evt.state.value == "reasoning" and evt.reasoning:
+                    # PR-7b: 累积 reasoning 事件,持久化时一起写入 DB
+                    if done_reasoning is None:
+                        done_reasoning = evt.reasoning
+                    else:
+                        done_reasoning += evt.reasoning
+                    # 透传给前端 (原样入队,前端 useChat 累积显示)
+                    await entry.queue.put(evt.to_dict())
+                else:
+                    await entry.queue.put(evt.to_dict())
+
+            # run_loop 正常结束 (DONE) → 持久化 assistant + 更新 session。
+            # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
+            if done_content:
+                assistant_now = int(time.time() * 1000)
+                try:
+                    message_repo.save(
+                        DbMessage(
+                            id=str(uuid.uuid4()),
+                            session_id=data.session_id,
+                            role="assistant",
+                            content=done_content,
+                            reasoning_content=done_reasoning,
+                            created_at=assistant_now,
+                            model=(llm_config.get("model") if llm_config else "local"),
+                        )
+                    )
+                except Exception as db_err:
+                    logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
+                try:
+                    sess = session_repo.get(data.session_id)
+                    if sess is not None:
+                        session_repo.update(
+                            data.session_id,
+                            last_message_at=assistant_now,
+                            message_count=sess.message_count + 2,
+                        )
+                except Exception as db_err:
+                    logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "
                 f"type={e.type.value}, message={e.message}"
             )
-            yield _ndjson({"error": e.to_dict(), "state": "failed"})
-        except Exception as e:
-            logger.exception(f"[REQ {request_id}] /chat/stream unexpected error")
-            yield _ndjson({"error": {"type": "unknown", "message": str(e)}, "state": "failed"})
+            await entry.queue.put({"error": e.to_dict(), "state": "failed"})
+
+    await registry.create(stream_id, queue_maxsize=1000, producer=producer)
+    return {"streamId": stream_id}
+
+
+@router.get("/chat/stream/{stream_id}")
+async def chat_stream_attach(stream_id: str, request: Request):
+    """attach 到已创建的 chat 流 (I2),NDJSON 推送事件。
+
+    从 ``app.state.streams[stream_id].queue`` 拉事件,序列化 NDJSON 返回。
+    多次同时 attach 到同一 streamId 会**共享**queue(广播) — 不会触发新的 LLM 调用。
+    客户端断开时(CancelledError)不取消后台 producer(已消耗的 token 不浪费),
+    producer 跑完后会通过 SENTINEL 关闭此流。
+
+    Args:
+        stream_id: create 端点返回的 streamId
+        request: FastAPI Request
+
+    Returns:
+        StreamingResponse(media_type=application/x-ndjson)
+
+    Raises:
+        HTTPException 404: streamId 不存在或已过期
+    """
+    registry: StreamRegistry = request.app.state.streams
+    entry = registry.get(stream_id)
+    if entry is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"chat stream not found or expired: {stream_id}",
+        )
+    logger.info(f"chat-stream attach: streamId={stream_id} status={entry.status}")
+
+    async def event_generator():
+        try:
+            while True:
+                try:
+                    # 短 timeout 让多消费者场景下能感知 producer done 状态。
+                    # SENTINEL 只入队一次,只有一个 attach 能拿到 — 其余
+                    # attach 必须靠 status 字段判断流是否结束。
+                    event = await asyncio.wait_for(entry.queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:  # noqa: UP041 — Py3.10 中 asyncio.TimeoutError ≠ built-in TimeoutError
+                    # 1s 内没新事件 — 检查 producer 是否已结束
+                    # 注: Python 3.10 中 asyncio.TimeoutError 不等同内置 TimeoutError
+                    if entry.status in ("done", "failed"):
+                        break
+                    continue
+                if event is SENTINEL:
+                    break
+                yield _ndjson(event)
+        except asyncio.CancelledError:
+            # 客户端断开 — 后台 producer 继续跑,队列中未消费的事件留给下次 attach
+            logger.info(f"chat-stream attach cancelled: streamId={stream_id}")
+            return
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
@@ -693,14 +926,7 @@ async def get_evolution_status():
 
 # ==================== 记忆 API ====================
 
-
-def get_memory_manager() -> MemoryManager:
-    """获取记忆管理器实例"""
-    db = get_database()
-    working = WorkingMemory(max_size=20, max_tokens=4000)
-    episodic = EpisodicMemory(db)
-    semantic = SemanticMemory(db)
-    return MemoryManager(working, episodic, semantic)
+# get_memory_manager 从 backend.memory 导入（全局单例）
 
 
 class MemorySearchRequest(BaseModel):

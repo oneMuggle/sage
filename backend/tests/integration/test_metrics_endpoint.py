@@ -18,6 +18,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from prometheus_client import CollectorRegistry
+from sage_core import Message, Role
 
 from backend.adapters.out.event.stdout_adapter import StdoutEventAdapter
 from backend.adapters.out.llm.mock_adapter import MockLLMAdapter
@@ -27,7 +28,6 @@ from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.hex_routes import get_chat_service
 from backend.application.services.chat_service import ChatService
-from backend.domain.message import Message, Role
 from backend.main import app
 
 pytestmark = pytest.mark.integration
@@ -36,7 +36,8 @@ CHAT_PATH = "/api/v1/chat"
 METRICS_PATH = "/api/v1/metrics"
 
 # 仅在 hex 模式下有效
-_API_MODE = os.environ.get("API_MODE", "hex").lower()
+# PG-A1: local default 同步 main.py flip (hex→legacy)
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
 _HEX_ONLY = pytest.mark.skipif(
     _API_MODE != "hex",
     reason=f"本文件测 hex /metrics 行为；当前 API_MODE={_API_MODE!r}（需 hex）",

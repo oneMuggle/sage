@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { type Skill } from '../../lib/api';
+import { type Skill } from '../../shared/api';
 
 import SkillCard from './SkillCard';
 
@@ -29,6 +29,10 @@ const SkillList: React.FC<SkillListProps> = ({ skills, onToggle }) => {
           enabled={skill.enabled}
           usage_count={skill.usage_count}
           onToggle={onToggle}
+          source={skill.source}
+          body={skill.body}
+          version={skill.version}
+          base_dir={skill.base_dir}
         />
       ))}
     </div>

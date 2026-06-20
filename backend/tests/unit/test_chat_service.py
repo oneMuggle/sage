@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sage_core import LLMError, LLMErrorType, Message, Role, ToolCall
 
 from backend.adapters.out.event.stdout_adapter import StdoutEventAdapter
 from backend.adapters.out.llm.mock_adapter import MockLLMAdapter
@@ -12,8 +13,6 @@ from backend.adapters.out.metric.noop_adapter import NoopMetricAdapter
 from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.application.services.chat_service import ChatService
-from backend.domain.errors import LLMError, LLMErrorType
-from backend.domain.message import Message, Role, ToolCall
 
 pytestmark = pytest.mark.unit
 

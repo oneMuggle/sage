@@ -6,9 +6,10 @@ Memory Consolidation Pipeline - 记忆压缩管道
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from backend.core.legacy.llm_client import LLMClient
+if TYPE_CHECKING:
+    from backend.core.legacy.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 

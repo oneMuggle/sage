@@ -11,9 +11,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from sage_core import ComputeRequest
 
 from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
-from backend.domain.compute import ComputeRequest
 
 
 def _make_config() -> dict[str, Any]:

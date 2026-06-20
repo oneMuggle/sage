@@ -27,11 +27,12 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
+from sage_core import LLMError, Message, Role
+from sage_core.exceptions import SessionNotFoundError
 
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.application.services.chat_service import ChatService
-from backend.domain.errors import LLMError
-from backend.domain.message import Message, Role
+from backend.application.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
 
@@ -203,3 +204,133 @@ async def update_settings(
         },
     )
     return SettingsResponse(status="ok", changed_fields=changed_fields)
+
+
+# ============================================================================
+# Sessions CRUD 端点（PG-A1）
+# ============================================================================
+#
+# 历史：本模块原仅暴露 /chat、/metrics、/settings 三个端点；其余
+# (/sessions、/memory、/evolution) 由 legacy_routes 提供。
+# 2026-06-13 起按 docs/plans/2026-06-13_full-quality-optimization-v2.md
+# 的 A1 阶段把 sessions 6 端点迁过来，调用 SessionService。
+#
+# 注意（PG-A1 GREEN-2）：
+# - 本 PR 仅加端点 + 集成测试，**不**在 main.py 装配 SessionService。
+# - main.py 默认 API_MODE 已临时改为 "legacy"（见 main.py 注释），
+#   因此本模块的新 6 端点在 production 默认模式下不被注册，
+#   无回归风险。
+# - 集成测试显式设置 API_MODE=hex 走本模块。
+# - SessionService 真正装配 (dependency_overrides) 在后续 PR 落地，
+#   届时 main.py 的 API_MODE 默认值会从 "legacy" 切回 "hex"。
+#
+
+
+class SessionCreate(BaseModel):
+    """Hex 路径 POST /sessions 请求体。"""
+
+    title: str = "新对话"
+    parent_id: str | None = None
+
+
+class SessionUpdate(BaseModel):
+    """Hex 路径 PATCH /sessions/{id} 请求体(局部更新,字段均可选)。"""
+
+    title: str | None = None
+    is_pinned: bool | None = None
+
+
+# ==================== 依赖注入 ====================
+
+
+def get_session_service() -> SessionService:
+    """工厂:返回一个装配好的 ``SessionService``。
+
+    默认实现抛 ``NotImplementedError``——``main.py`` 必须通过
+    ``app.dependency_overrides[get_session_service] = lambda: real_svc``
+    注入真实实例;测试可在 conftest 或用例里替换为 mock 实例。
+    """
+    raise NotImplementedError(
+        "get_session_service() must be overridden via app.dependency_overrides"
+    )
+
+
+# ==================== 会话 API ====================
+
+
+@router.post("/sessions", response_model=dict)
+async def create_session(
+    data: SessionCreate,
+    svc: SessionService = Depends(get_session_service),
+) -> dict:
+    """Hex 路径 POST /sessions:创建并返回完整 dict(匹配 legacy 契约)。
+
+    错误处理:
+    - 极端情况(刚创就被外部删):返 500
+    """
+    sid = await svc.create_session(title=data.title)
+    full = await svc.get_session(sid)
+    if full is None:
+        raise HTTPException(
+            status_code=500,
+            detail={"type": "internal", "message": "session created but not retrievable"},
+        )
+    return full
+
+
+@router.get("/sessions", response_model=list[dict])
+async def list_sessions(
+    limit: int = 100,
+    offset: int = 0,
+    svc: SessionService = Depends(get_session_service),
+) -> list[dict]:
+    """Hex 路径 GET /sessions:分页列出(底层 storage 不支持分页,service 层切片)。"""
+    return await svc.list_sessions(limit=limit, offset=offset)
+
+
+@router.get("/sessions/{session_id}", response_model=dict)
+async def get_session(
+    session_id: str,
+    svc: SessionService = Depends(get_session_service),
+) -> dict:
+    """Hex 路径 GET /sessions/{id}:单个会话;不存在返 404。"""
+    result = await svc.get_session(session_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return result
+
+
+@router.patch("/sessions/{session_id}", response_model=dict)
+async def update_session(
+    session_id: str,
+    data: SessionUpdate,
+    svc: SessionService = Depends(get_session_service),
+) -> dict:
+    """Hex 路径 PATCH /sessions/{id}:局部更新;会话不存在返 404。"""
+    try:
+        return await svc.update_session(session_id, title=data.title, is_pinned=data.is_pinned)
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    svc: SessionService = Depends(get_session_service),
+) -> dict:
+    """Hex 路径 DELETE /sessions/{id}:成功返 {"status": "ok"};不存在 404。"""
+    ok = await svc.delete_session(session_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return {"status": "ok"}
+
+
+@router.get("/sessions/{session_id}/messages", response_model=list[dict])
+async def list_messages(
+    session_id: str,
+    limit: int = 100,
+    offset: int = 0,
+    svc: SessionService = Depends(get_session_service),
+) -> list[dict]:
+    """Hex 路径 GET /sessions/{id}/messages:列出会话消息(转 dict)。"""
+    return await svc.list_messages(session_id, limit=limit, offset=offset)

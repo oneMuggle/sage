@@ -685,6 +685,100 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
         conn.commit()
 
 
+class MemoryConsolidationTask(BaseEvolutionTask):
+    """
+    记忆整合任务（"做梦"）— 借鉴 Letta 的 sleep-time compute
+
+    功能（定期运行，例如每周日凌晨）:
+    1. 识别高频访问的情景记忆 → 提升为语义记忆
+    2. 识别重复/相似的记忆 → 合并为一条
+    3. 降低长期未访问记忆的重要性
+
+    类似人脑在睡眠期间整合记忆的过程。
+    """
+
+    def __init__(self, db=None, memory_manager=None, config: dict = None):
+        super().__init__(db, memory_manager)
+        self.config = config or {}
+        self.promotion_threshold = self.config.get("promotion_access_count", 5)
+        self.decay_days = self.config.get("decay_days", 30)
+
+    async def run_async(self):
+        """执行记忆整合"""
+        logger.info("开始执行记忆整合任务（做梦）...")
+
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        total_consolidated = 0
+
+        # 1. 提升高频访问的情景记忆为语义记忆
+        cursor.execute(
+            """
+            SELECT id, content, summary, tags, importance
+            FROM memories_episodic
+            WHERE is_valid = 1
+            AND access_count >= ?
+            AND memory_type != 'summary'
+        """,
+            [self.promotion_threshold],
+        )
+
+        promoted = 0
+        for row in cursor.fetchall():
+            memory = dict(row)
+            # 检查语义记忆中是否已有相似内容
+            existing = self.memory_manager.semantic.search(query=memory["content"][:50], limit=3)
+            already_exists = any(
+                e.get("content", "")[:50] == memory["content"][:50] for e in existing
+            )
+            if not already_exists:
+                self.memory_manager.semantic.save(
+                    content=memory["content"],
+                    summary=memory.get("summary"),
+                    tags=_safe_json_loads(memory.get("tags", "[]")),
+                )
+                promoted += 1
+
+        total_consolidated += promoted
+        logger.info(f"提升高频记忆到语义记忆: {promoted} 条")
+
+        # 2. 降低长期未访问记忆的重要性
+        decay_cutoff = int(time.time()) - self.decay_days * 24 * 3600
+        cursor.execute(
+            """
+            UPDATE memories_episodic
+            SET importance = MAX(1, importance - 1)
+            WHERE is_valid = 1
+            AND (accessed_at IS NULL OR accessed_at < ?)
+            AND created_at < ?
+            AND importance > 1
+        """,
+            [decay_cutoff, decay_cutoff],
+        )
+        decayed = cursor.rowcount
+        total_consolidated += decayed
+        logger.info(f"降低未访问记忆重要性: {decayed} 条")
+
+        conn.commit()
+        logger.info(f"记忆整合完成，共处理 {total_consolidated} 条记忆")
+
+        return {
+            "promoted": promoted,
+            "decayed": decayed,
+            "total": total_consolidated,
+        }
+
+
+def _safe_json_loads(s: str) -> list:
+    """安全地解析 JSON 字符串"""
+    import json
+
+    try:
+        return json.loads(s) if s else []
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
 def create_evolution_tasks(config: dict = None) -> dict[str, BaseEvolutionTask]:
     """
     创建所有进化任务
@@ -718,6 +812,21 @@ def create_evolution_tasks(config: dict = None) -> dict[str, BaseEvolutionTask]:
     if config.get("importance_reevaluation", {}).get("enabled", True):
         tasks["importance_reevaluation"] = ImportanceReevaluationTask(
             db=db, config=config.get("importance_reevaluation", {})
+        )
+
+    # 记忆整合任务（"做梦"）— 默认启用，每周运行
+    if config.get("memory_consolidation", {}).get("enabled", True):
+        mm = None
+        try:
+            from backend.memory.registry import get_memory_manager
+
+            mm = get_memory_manager()
+        except Exception:
+            pass
+        tasks["memory_consolidation"] = MemoryConsolidationTask(
+            db=db,
+            memory_manager=mm,
+            config=config.get("memory_consolidation", {}),
         )
 
     return tasks

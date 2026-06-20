@@ -1,0 +1,79 @@
+[package]
+name = "sage"
+version = "0.1.1"
+description = "记忆型 AI 桌面助手"
+authors = ["Sage Team"]
+license = "MIT"
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "sage_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+# Tauri 2.1.x 配套 build script (Win7 + Rust 1.77.2 兼容)
+# 2.0.3 是 tauri-v2.1.1 tag 时 monorepo 内 tauri-build 的实际版本, 配合 [patch.crates-io] 使用
+tauri-build = { version = "=2.0.3", features = [] }
+# 严格上限 < 2.4.1 触发 cargo 版本统一, 阻止 tauri-winres → embed-resource 3.x → toml 1.0
+embed-resource = ">=2.1, <2.4.1"
+
+[dependencies]
+# === Tauri 2.1.1 矩阵 (Win7 + Rust 1.77.2 兼容) ===
+# 详见 docs/technical/ 中"Win7 兼容性"章节
+# - Tauri 2.2+ tauri-utils 引入 toml 0.9 (要 edition2024 → Rust 1.85+)
+# - 必须严格 pin tauri-utils, 否则 ^ resolver 拉 2.9.x 仍会带 toml 1.0
+# - tauri-runtime-wry 必须锁 = 2.2.0, 否则 ^2.2 拉 2.3.0 → webview2-com 0.34
+#   与 tauri 2.1.1 直接依赖的 webview2-com 0.33 类型冲突 (E0308)
+# - tauri-runtime 必须锁 = 2.2.0, 否则 ^2.2 拉 2.3.0 给 WindowDispatch trait
+#   加 badge/overlay 方法, tauri-runtime-wry 2.2.0 没实现 (E0046)
+# 版本号匹配 fork 的 tauri-v2.1.1 tag (含 CVE-2026-42184 patch)
+tauri = "=2.1.1"
+tauri-utils = "=2.1.0"
+tauri-runtime = "=2.2.0"
+tauri-runtime-wry = "=2.2.0"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = ">=1, <1.39", features = ["full"] }
+reqwest = { version = "0.11", features = ["json", "stream", "rustls-tls"], default-features = false }
+# PR-6: Stream/StreamExt 给 post_stream 用,锁 < 0.3.35 避免拉 edition2024 链路
+futures-util = { version = ">=0.3, <0.3.35", default-features = false, features = ["std"] }
+chrono = { version = ">=0.4, <0.4.39", features = ["serde"] }
+# uuid 1.13+ → getrandom 0.3.x → wasip2 (Rust 1.87+); 锁 < 1.13 保留 getrandom 0.2.x
+uuid = { version = ">=1.0, <1.13", features = ["v4", "serde"] }
+# 强制所有 hashbrown 走 0.14.x，避免 0.15+ (需要 edition2024) 被拉入
+hashbrown = ">=0.14, <0.15"
+# ahash 0.8.12+ 使用 hashbrown 0.15+
+ahash = ">=0.8, <0.8.12"
+# 阻止 indexmap 2.3+ (使用 hashbrown 0.15+ → edition2024) 被拉入
+indexmap = ">=1.9, <2.3"
+# 阻止 ignore/globset 最新版 (需要 edition2024) 被拉入
+ignore = ">=0.4, <0.4.23"
+globset = ">=0.4, <0.4.16"
+# zeroize 1.9.0 切到 edition2024 (Rust 1.85+), Win7 1.77.2 toolchain 不能解析。
+# 与 hashbrown/ahash/indexmap 同款阻断；lockfile 显式锁 1.8.x
+zeroize = ">=1.5, <1.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sha2 = "0.10.9"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+# === [patch.crates-io]: CVE-2026-42184 (GHSA-7gmj-67g7-phm9) backport ===
+# 将所有 tauri-* crate 替换为 fork 的 v2.1.1-win7-cve-patched 分支
+# 该分支 = tauri-v2.1.1 tag + cherry-pick upstream commit 1b26769f92
+# (PR #15266 "fix(tauri): enforce ACL for remote origins even without AppManifest")
+# - 修复点: crates/tauri/src/webview/mod.rs 增加 `|| !is_local` ACL 守卫
+# - 影响: remote origin (https://evil.com) 无法绕过 ACL 调用自定义命令
+[patch.crates-io]
+tauri = { git = "https://github.com/oneMuggle/tauri", branch = "v2.1.1-win7-cve-patched" }
+tauri-utils = { git = "https://github.com/oneMuggle/tauri", branch = "v2.1.1-win7-cve-patched" }
+tauri-runtime = { git = "https://github.com/oneMuggle/tauri", branch = "v2.1.1-win7-cve-patched" }
+tauri-runtime-wry = { git = "https://github.com/oneMuggle/tauri", branch = "v2.1.1-win7-cve-patched" }
+tauri-build = { git = "https://github.com/oneMuggle/tauri", branch = "v2.1.1-win7-cve-patched" }
+tauri-macros = { git = "https://github.com/oneMuggle/tauri", branch = "v2.1.1-win7-cve-patched" }
+tauri-codegen = { git = "https://github.com/oneMuggle/tauri", branch = "v2.1.1-win7-cve-patched" }

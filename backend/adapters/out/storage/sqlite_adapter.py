@@ -24,13 +24,14 @@ import time
 import uuid
 from typing import Any
 
+from sage_core import Message, Role, ToolCall
+from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
+
 from backend.data.session_repo import (
     Message as _DataMessage,
     MessageRepository,
     SessionRepository,
 )
-from backend.domain.message import Message, Role, ToolCall
-from backend.ports.storage import StoragePort  # noqa: F401  (structural typing target)
 
 _DEFAULT_TITLE = "新对话"
 
@@ -151,9 +152,40 @@ class SqliteStorageAdapter:
             for s in sessions
         ]
 
-    async def delete_session(self, session_id: str) -> None:
-        """按 ID 删除会话（messages 表 ON DELETE CASCADE 同步清理消息）。"""
-        self._sessions.delete(session_id)
+    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+        """按 ID 取单个会话;不存在返 ``None``。"""
+        s = self._sessions.get(session_id)
+        if s is None:
+            return None
+        return {
+            "id": s.id,
+            "title": s.title,
+            "message_count": s.message_count,
+            "created_at": s.created_at,
+            "updated_at": s.updated_at,
+            "is_pinned": bool(s.is_pinned),
+        }
+
+    async def update_session(self, session_id: str, **fields: Any) -> int:
+        """局部更新;返受影响行数(0=不存在,1=已更新)。
+
+        ``is_pinned`` 字段是 bool,持久化层需要 0/1 int,这里做转换。
+        其他字段(如 ``title``)原样转发。
+        """
+        kwargs: dict[str, Any] = {}
+        if "title" in fields and fields["title"] is not None:
+            kwargs["title"] = fields["title"]
+        if "is_pinned" in fields and fields["is_pinned"] is not None:
+            kwargs["is_pinned"] = 1 if fields["is_pinned"] else 0
+        if not kwargs:
+            # 没有任何字段要更新:走一遍 get 让调用方拿到当前快照,但返 1
+            # (语义:会话存在,所以"更新请求"被受理;若不存在,get 返 None)
+            return 1 if self._sessions.get(session_id) is not None else 0
+        return 1 if self._sessions.update(session_id, **kwargs) else 0
+
+    async def delete_session(self, session_id: str) -> int:
+        """按 ID 删除会话;返受影响行数(0=不存在,1=已删除)。"""
+        return 1 if self._sessions.delete(session_id) else 0
 
     # ----- 消息 -----
 

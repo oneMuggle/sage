@@ -7,7 +7,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
-import type { Message as MessageType } from '../../../lib/store';
+import type { Message as MessageType } from '../../../shared/lib/store';
 import { MessageList } from '../MessageList';
 
 const baseMsg = (id: string, role: MessageType['role'], content: string): MessageType => ({
@@ -41,5 +41,16 @@ describe('MessageList', () => {
       <MessageList messages={messages} knowledgeRefs={{ m1: [{ id: 'k1', title: '知识A' }] }} />,
     );
     expect(screen.getByText('知识A')).toBeInTheDocument();
+  });
+
+  it('wrapper does not constrain width (full panel width, bubble caps internally)', () => {
+    // PR-7b regression: MessageList 不再带 max-w-3xl mx-auto。
+    // 之前把整个 wrapper 限到 768px 居中 → 在 1040px 主区域里左右各空 136px。
+    // 现在 wrapper 撑满主区域,宽度约束下放到 Message 气泡( max-w-2xl)。
+    const messages: MessageType[] = [baseMsg('1', 'user', 'hi')];
+    const { container } = render(<MessageList messages={messages} />);
+    const wrapper = container.firstChild as HTMLElement;
+    expect(wrapper.className).not.toMatch(/max-w-3xl/);
+    expect(wrapper.className).not.toMatch(/mx-auto/);
   });
 });

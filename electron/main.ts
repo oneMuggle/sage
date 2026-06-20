@@ -1,5 +1,13 @@
+/* eslint-disable */
 /**
  * Electron main process — Sage desktop shell
+ *
+ * NOTE: ESLint flat config disabled for this file — uses Node.js globals
+ * (require/process/console/__dirname) and CommonJS-style require() that the
+ * browser-targeted eslint.config.js rejects. main process is Node, not
+ * browser, so these are legitimate. If eslint.config.js is later extended
+ * with a Node-flavored block for `electron/**`, remove this top-level
+ * disable.
  *
  * Phase 1 (2026-06-13): Win7 tech-stack replacement
  * - Replaces Tauri 2.1.1 (which hard-depends on WebView2 = Win10+)
@@ -23,12 +31,29 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import http from 'node:http';
+import { invokeBackend } from './invoke';
+import { relayChatStream } from './relay';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
+
+// Window dimensions
+const DEFAULT_WINDOW_WIDTH = 1280;
+const DEFAULT_WINDOW_HEIGHT = 800;
+const MIN_WINDOW_WIDTH = 1024;
+const MIN_WINDOW_HEIGHT = 640;
+
+// Timeouts (milliseconds)
+const BACKEND_HEALTH_TIMEOUT_MS = 30_000;
+const BACKEND_SHUTDOWN_TIMEOUT_MS = 3_000;
+const HTTP_REQUEST_TIMEOUT_MS = 1_000;
+
+// V8 heap limit (MB) - Win7 compat: cap V8 heap to 2GB so Win7 systems
+// with 4GB RAM don't OOM-kill during chat streaming
+const V8_MAX_OLD_SPACE_SIZE_MB = 2048;
 
 // Win7 compat: disable GPU + sandbox BEFORE app ready.
 // Order matters — these flags must be set before `whenReady()`.
@@ -46,7 +71,7 @@ const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
 //     is more crash-prone than single-process).
 //   - --disable-features=VizDisplayCompositor: skip Chromium's Viz
 //     display compositor; Win7 D3D11 not feature-complete.
-//   - --js-flags=--max-old-space-size=2048: cap V8 heap to 2GB so Win7
+//   - --js-flags=--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}: cap V8 heap to 2GB so Win7
 //     systems with 4GB RAM don't OOM-kill during chat streaming.
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('no-sandbox');
@@ -54,7 +79,7 @@ app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('in-process-gpu');
 app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=2048');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}');
 
 let backendProc: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -70,7 +95,10 @@ let mainWindow: BrowserWindow | null = null;
 function spawnBackend(): ChildProcess {
   // Pick the right launcher based on platform / packaging
   const condaCmd = process.env.SAGE_PYTHON ?? 'conda';
-  const condaArgs = ['run', '-n', 'sage-backend', 'python', 'backend/main.py'];
+  // Run as a module so `from backend.adapters...` absolute imports resolve
+  // (running `python backend/main.py` puts the script's dir on sys.path[0],
+  // which makes the `backend` package unfindable).
+  const condaArgs = ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'];
 
   // On Windows, prefer `pythonw` (no console) when packaged; fallback to `python`
   const pyLauncher =
@@ -111,7 +139,7 @@ function spawnBackend(): ChildProcess {
  * Poll /health until backend responds 200, with timeout.
  * Backend startup usually <2s; cap at 30s to surface real failures fast.
  */
-async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
+async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -121,7 +149,7 @@ async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
           res.resume();
         });
         req.on('error', () => resolve(false));
-        req.setTimeout(1000, () => {
+        req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
           resolve(false);
         });
@@ -138,57 +166,24 @@ async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
 /**
  * Forward invoke(cmd, args) to FastAPI backend HTTP endpoint.
  * Command-to-route mapping mirrors the original Tauri command surface.
+ *
+ * I2: 后端 /chat/stream 拆成 create + attach。create 端点(agent_chat_stream)
+ * 直接返回 {streamId: '...'} JSON,无需读 NDJSON 首行。attach 端点由
+ * ipcMain.handle('sage:listen') 触发 relayChatStream,GET 拉事件。
+ *
+ * I1 fix (待清理): 老的 pendingChatArgs TTL 缓存在 I2 后不再需要(后端持有 args,
+ * streamId 唯一即可定位)。本 PR 暂时保留该类供 review,下一 PR 删除。
+ *
+ * `invokeBackend` 本身已抽到 electron/invoke.ts(用 node-fetch 替代全局 fetch,
+ * 详见该文件头注)。本文件只保留 IPC handler 注册 + Electron 生命周期。
  */
-const COMMAND_ROUTES: Record<
-  string,
-  { method: string; path: (args: Record<string, unknown>) => string }
-> = {
-  // chat
-  agent_chat_stream: { method: 'POST', path: () => '/chat/stream' },
-  interrupt_agent: { method: 'POST', path: () => '/interrupt' },
-  // sessions
-  delete_session: { method: 'DELETE', path: (a) => `/sessions/${a.id}` },
-  delete_message: { method: 'POST', path: (a) => `/messages/${a.id}/delete` },
-  // memory
-  delete_memory: { method: 'POST', path: () => '/memory/delete' },
-  // evolution
-  trigger_evolution: { method: 'POST', path: () => '/evolution/trigger' },
-};
-
-async function invokeBackend(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
-  const route = COMMAND_ROUTES[cmd];
-  if (!route) {
-    throw new Error(
-      `Unknown IPC command: ${cmd} (Phase 1 stub: see COMMAND_ROUTES in electron/main.ts)`,
-    );
-  }
-  const url = `${BACKEND_URL}${route.path(args)}`;
-  const init: RequestInit = {
-    method: route.method,
-    headers: { 'Content-Type': 'application/json' },
-  };
-  if (route.method !== 'GET' && route.method !== 'DELETE') {
-    init.body = JSON.stringify(args);
-  }
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Backend ${route.method} ${url} → ${res.status}: ${text}`);
-  }
-  // chat/stream returns SSE; for Phase 1 minimal, just resolve with first event
-  const ct = res.headers.get('content-type') ?? '';
-  if (ct.includes('text/event-stream')) {
-    return { streamId: args.session_id ?? 'pending', _note: 'Phase 1 stub: SSE relay in Phase 2' };
-  }
-  return res.json();
-}
 
 function createMainWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 640,
+    width: DEFAULT_WINDOW_WIDTH,
+    height: DEFAULT_WINDOW_HEIGHT,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     title: 'Sage',
     icon: join(__dirname, '..', 'build', 'icon.ico'),
     webPreferences: {
@@ -223,7 +218,7 @@ function registerIpcHandlers(): void {
     'sage:invoke',
     async (_evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
       try {
-        return await invokeBackend(payload.cmd, payload.args ?? {});
+        return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`[ipc:sage:invoke] ${payload.cmd} failed:`, msg);
@@ -259,11 +254,15 @@ function registerIpcHandlers(): void {
         const streamId = chatStreamMatch[1];
         const abort = new AbortController();
         eventSubscriptions.set(event, abort);
-        relayChatStream(senderWebContents, event, streamId, abort.signal).catch((e) => {
-          if (e instanceof Error && e.name !== 'AbortError') {
-            console.error(`[relay ${event}] error:`, e.message);
-          }
-        });
+        // I2: 直接用 streamId attach 到后端已有流 — 不再需要 pendingChatArgs
+        // 缓存 args(后端持有,前端只关心 streamId)
+        relayChatStream(senderWebContents, event, streamId, BACKEND_URL, abort.signal).catch(
+          (e) => {
+            if (e instanceof Error && e.name !== 'AbortError') {
+              console.error(`[relay ${event}] error:`, e.message);
+            }
+          },
+        );
         return { ok: true, event };
       }
 
@@ -288,73 +287,6 @@ function registerIpcHandlers(): void {
   );
 }
 
-/**
- * Open streaming HTTP connection to backend chat stream endpoint and forward
- * each NDJSON line as a webContents.send event.
- *
- * Backend currently exposes /chat/stream (POST) that creates AND streams in
- * one call. Phase 2 best-effort: POST the chat request with the streamId,
- * read NDJSON response. If backend has no such endpoint, this fails silently
- * and the frontend's listen() Promise still resolves.
- */
-async function relayChatStream(
-  webContents: Electron.WebContents,
-  event: string,
-  streamId: string,
-  signal: AbortSignal,
-): Promise<void> {
-  // The streamId was generated by the renderer's invoke('agent_chat_stream').
-  // We re-issue a POST to /chat/stream with a marker so backend knows to
-  // resume streaming the same stream. If backend doesn't support replay,
-  // the fetch will return 4xx and we log + bail.
-  const url = `${BACKEND_URL}/chat/stream/${encodeURIComponent(streamId)}`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: 'GET',
-      signal,
-      headers: { Accept: 'application/x-ndjson, application/json' },
-    });
-  } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') return;
-    console.warn(`[relay ${event}] fetch failed (${url}):`, e instanceof Error ? e.message : e);
-    return;
-  }
-
-  if (!res.ok || !res.body) {
-    console.warn(`[relay ${event}] backend returned ${res.status} for ${url}`);
-    return;
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const payload = JSON.parse(trimmed);
-          webContents.send(`sage:event:${event}`, payload);
-        } catch {
-          // Non-JSON line: forward raw
-          webContents.send(`sage:event:${event}`, { raw: trimmed });
-        }
-      }
-    }
-  } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') return;
-    console.error(`[relay ${event}] stream error:`, e instanceof Error ? e.message : e);
-  }
-}
-
 function shutdownBackend(): void {
   if (backendProc && backendProc.exitCode === null) {
     console.log('[main] killing backend subprocess');
@@ -364,7 +296,7 @@ function shutdownBackend(): void {
       if (backendProc && backendProc.exitCode === null) {
         backendProc.kill('SIGKILL');
       }
-    }, 3000);
+    }, BACKEND_SHUTDOWN_TIMEOUT_MS);
   }
 }
 

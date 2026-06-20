@@ -2,6 +2,7 @@
 import { Send, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 
+import { resolveEndpoint } from '../../entities/setting/types';
 import { useWikiStore } from '../../entities/wiki/store';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useWikiChatStream } from '../../features/wiki/useWikiChatStream';
@@ -24,11 +25,14 @@ export function WikiChat() {
   const [streamId, setStreamId] = useState<string | null>(null);
   const stream = useWikiChatStream(streamId);
 
-  const activeEp = settings.settings.endpoints.find((e) => e.isActive);
-  const chatModel = settings.settings.modelSelections.chatModelId;
+  const chatEndpoint = resolveEndpoint(
+    settings.settings.modelSelections.chatModel,
+    settings.settings.endpoints,
+  );
+  const chatModelId = settings.settings.modelSelections.chatModel.modelId;
 
   const handleSend = async () => {
-    if (!project || !input.trim() || !activeEp || !chatModel) return;
+    if (!project || !input.trim() || !chatEndpoint || !chatModelId) return;
 
     const userMessage: ChatMessage = { role: 'user', content: input.trim() };
     setMessages((prev) => [...prev, userMessage]);
@@ -43,11 +47,11 @@ export function WikiChat() {
       const response = await wikiChat(
         query,
         project.path,
-        activeEp.baseUrl,
-        activeEp.apiKey,
-        chatModel,
-        activeEp.baseUrl, // 复用 chat 端点作为 embedding 端点(MVP)
-        activeEp.apiKey,
+        chatEndpoint.baseUrl,
+        chatEndpoint.apiKey,
+        chatModelId,
+        chatEndpoint.baseUrl, // 复用 chat 端点作为 embedding 端点(MVP)
+        chatEndpoint.apiKey,
         'text-embedding-3-small', // 默认 embedding 模型
       );
 
@@ -174,12 +178,12 @@ export function WikiChat() {
               }
             }}
             placeholder="输入你的问题..."
-            disabled={loading || !activeEp || !chatModel}
+            disabled={loading || !chatEndpoint || !chatModelId}
             className="flex-1 rounded-md border border-border bg-bg-muted px-3 py-2 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 text-text disabled:opacity-50"
           />
           <button
             onClick={handleSend}
-            disabled={loading || !input.trim() || !activeEp || !chatModel}
+            disabled={loading || !input.trim() || !chatEndpoint || !chatModelId}
             className="px-3 py-2 bg-primary text-text-inverse rounded-md hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="h-4 w-4" />

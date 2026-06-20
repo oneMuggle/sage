@@ -20,6 +20,10 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sage_core import (
+    ComputeErrorType,
+    ComputeRequest,
+)
 
 from backend.adapters.out.compute._resolver import (
     ExecutableNotFoundError,
@@ -31,10 +35,6 @@ from backend.adapters.out.compute.subprocess_adapter import (
     _params_to_args,
     _parse_failure,
     _parse_success,
-)
-from backend.domain.compute import (
-    ComputeErrorType,
-    ComputeRequest,
 )
 
 # ---------- 通用 fixtures ----------

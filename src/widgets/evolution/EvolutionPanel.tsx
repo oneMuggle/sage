@@ -4,7 +4,10 @@
  */
 import React, { useEffect, useState } from 'react';
 
-import { invoke } from '../../lib/tauriInvoke';
+import { invoke } from '../../shared/api/desktopInvoke';
+
+// Constants
+const STATUS_POLL_INTERVAL_MS = 60_000; // 每分钟刷新一次
 
 // 任务状态类型
 interface TaskStatus {
@@ -43,7 +46,7 @@ export const EvolutionPanel: React.FC = () => {
   useEffect(() => {
     fetchStatus();
     // 每分钟刷新一次
-    const interval = setInterval(fetchStatus, 60000);
+    const interval = setInterval(fetchStatus, STATUS_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 

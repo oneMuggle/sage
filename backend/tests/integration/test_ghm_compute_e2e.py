@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sage_core import Message, Role, ToolCall
 
 from backend.adapters.out.compute.subprocess_adapter import SubprocessComputeAdapter
 from backend.adapters.out.event.stdout_adapter import StdoutEventAdapter
@@ -28,7 +29,6 @@ from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.hex_routes import get_chat_service
 from backend.application.services.chat_service import ChatService
-from backend.domain.message import Message, Role, ToolCall
 from backend.main import app
 
 pytestmark = pytest.mark.integration
@@ -36,7 +36,8 @@ pytestmark = pytest.mark.integration
 CHAT_PATH = "/api/v1/chat"
 
 # 仅在 hex 模式 + ghm 可用时跑
-_API_MODE = os.environ.get("API_MODE", "hex").lower()
+# PG-A1: local default 同步 main.py flip (hex→legacy)
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
 
 _GHM_PYTHON = os.environ.get(
     "GHM_PYTHON",

@@ -175,3 +175,100 @@ async def test_execute_skill_args_wrong_type_returns_422(client, reset_skill_ada
         json={"action": "", "args": "not-a-dict"},
     )
     assert resp.status_code == 422
+
+
+# ========== M10: slash command 端点 ==========
+
+
+@pytest.mark.asyncio()
+async def test_slash_command_returns_skill_body(client, reset_skill_adapter):
+    """POST /skills/command 触发 user_invocable 技能 → 返回 SKILL.md body。"""
+    from pathlib import Path
+
+    from backend.skills.skill_md.skill import DispatchMode, SkillMdDocument, SkillMdSkill
+
+    # 注入一个 user_invocable 的 SKILL.md 技能
+    adapter = _get_skill_adapter_singleton()
+    skill_doc = SkillMdDocument(
+        name="my-review",
+        description="Review",
+        body="You are a careful reviewer.",
+        base_dir=Path("/tmp/skills/my-review"),
+        dispatch=DispatchMode(
+            user_invocable=True,
+            user_invocable_name="/review",
+        ),
+    )
+    adapter._registry.register(SkillMdSkill(skill_doc, base_dir=skill_doc.base_dir))
+    # 重建 slash registry (绕开 reload)
+    from backend.skills.skill_md.slash_registry import SlashCommandRegistry
+
+    adapter._slash_registry = SlashCommandRegistry.from_registry(adapter._registry)
+
+    resp = await client.post(
+        f"{PREFIX}/skills/command",
+        json={"command": "/review", "args": []},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert "reviewer" in body["content"]
+
+
+@pytest.mark.asyncio()
+async def test_slash_command_unknown_returns_404(client, reset_skill_adapter):
+    """未注册的 command → 404 + command_not_found。"""
+    resp = await client.post(
+        f"{PREFIX}/skills/command",
+        json={"command": "/unknown", "args": []},
+    )
+    assert resp.status_code == 404
+    detail = resp.json()["detail"]
+    assert detail["type"] == "command_not_found"
+
+
+@pytest.mark.asyncio()
+async def test_slash_command_missing_command_field_returns_422(client, reset_skill_adapter):
+    """缺 command 字段 → 422 (Pydantic 自动)."""
+    resp = await client.post(
+        f"{PREFIX}/skills/command",
+        json={"args": []},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio()
+async def test_list_slash_commands_returns_registered(client, reset_skill_adapter):
+    """GET /skills/commands → 返回已注册的命令列表。"""
+    from pathlib import Path
+
+    from backend.skills.skill_md.skill import DispatchMode, SkillMdDocument, SkillMdSkill
+    from backend.skills.skill_md.slash_registry import SlashCommandRegistry
+
+    adapter = _get_skill_adapter_singleton()
+    for cmd_name, slash_name in [("review", "/review"), ("commit", "/commit")]:
+        doc = SkillMdDocument(
+            name=cmd_name,
+            description=cmd_name,
+            body="body",
+            base_dir=Path(f"/tmp/skills/{cmd_name}"),
+            dispatch=DispatchMode(user_invocable=True, user_invocable_name=slash_name),
+        )
+        adapter._registry.register(SkillMdSkill(doc, base_dir=doc.base_dir))
+    adapter._slash_registry = SlashCommandRegistry.from_registry(adapter._registry)
+
+    resp = await client.get(f"{PREFIX}/skills/commands")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body["commands"]) >= {"/review", "/commit"}
+
+
+def _get_skill_adapter_singleton():
+    """获取路由层持有的 InprocSkillAdapter 单例 (测试辅助).
+
+    调用 ``_get_skill_adapter()`` 触发 lazy init — 直接读模块级变量
+    在 ``reset_skill_adapter`` fixture 后会是 None。
+    """
+    import backend.api.legacy_routes as routes_module
+
+    return routes_module._get_skill_adapter()
