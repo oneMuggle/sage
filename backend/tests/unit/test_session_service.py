@@ -18,7 +18,7 @@ import pytest
 from backend.adapters.out.metric.noop_adapter import NoopMetricAdapter
 from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 from backend.application.services.session_service import SessionService
-from backend.domain import SessionNotFoundError
+from sage_core.exceptions import SessionNotFoundError
 
 pytestmark = pytest.mark.unit
 
@@ -179,7 +179,7 @@ class TestListMessages:
 
     async def test_returns_persisted_messages(self, svc, storage):
         sid = await svc.create_session(title="chat")
-        from backend.domain.message import Message, Role
+        from sage_core import Message, Role
 
         await storage.append_message(sid, Message(role=Role.USER, content="hi"))
         await storage.append_message(sid, Message(role=Role.ASSISTANT, content="hello"))

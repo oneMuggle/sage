@@ -7,7 +7,7 @@
 
 from typing import Any, Protocol
 
-from backend.domain.tool import ToolResult, ToolSpec
+from sage_core import ToolResult, ToolSpec
 
 
 class ToolPort(Protocol):

@@ -6,7 +6,7 @@
 
 from typing import Any, Protocol
 
-from backend.domain.skill import SkillResult, SkillSpec
+from sage_core import SkillResult, SkillSpec
 
 
 class SkillPort(Protocol):

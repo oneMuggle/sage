@@ -23,8 +23,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.domain.tool import ToolResult, ToolSpec
-from backend.ports.tool import ToolPort  # noqa: F401  (structural typing target)
+from sage_core import ToolResult, ToolSpec
+from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
 from backend.tools.registry import ToolRegistry as _ToolRegistry
 
 

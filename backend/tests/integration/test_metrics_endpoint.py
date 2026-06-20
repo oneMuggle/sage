@@ -26,7 +26,7 @@ from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.hex_routes import get_chat_service
 from backend.application.services.chat_service import ChatService
-from backend.domain.message import Message, Role
+from sage_core import Message, Role
 from backend.main import app
 
 pytestmark = pytest.mark.integration

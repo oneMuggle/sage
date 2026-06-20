@@ -12,7 +12,7 @@
 
 from typing import Protocol, runtime_checkable
 
-from backend.domain.compute import ComputeRequest, ComputeResult, ComputeSpec
+from sage_core import ComputeRequest, ComputeResult, ComputeSpec
 
 
 @runtime_checkable

@@ -11,27 +11,29 @@ import json
 
 import pytest
 
-from backend.domain import (
+from sage_core import (
     AgentDecision,
-    AgentError,
     AgentState,
     LLMError,
     LLMErrorType,
-    MaxIterationsError,
     Message,
     Role,
-    SageBaseError,
-    SecurityError,
-    SessionNotFoundError,
     SkillResult,
     SkillSpec,
     ToolCall,
-    ToolCallError,
     ToolResult,
     ToolSpec,
-    ValidationError,
-    exceptions as domain_exceptions,
 )
+from sage_core.exceptions import (
+    AgentError,
+    MaxIterationsError,
+    SageBaseError,
+    SecurityError,
+    SessionNotFoundError,
+    ToolCallError,
+    ValidationError,
+)
+from sage_core import exceptions as domain_exceptions
 
 pytestmark = pytest.mark.unit
 

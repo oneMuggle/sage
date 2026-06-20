@@ -8,7 +8,7 @@
 
 from typing import Any, Protocol
 
-from backend.domain.message import Message
+from sage_core import Message
 
 
 class StoragePort(Protocol):

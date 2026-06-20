@@ -20,13 +20,13 @@ from backend.adapters.out.tool.compute_tool_adapter import (
     ComputeToolAdapter,
     _compute_result_to_tool_result,
 )
-from backend.domain.compute import (
+from sage_core import (
     ComputeError,
     ComputeErrorType,
     ComputeResult,
     ComputeSpec,
 )
-from backend.domain.tool import ToolResult, ToolSpec
+from sage_core import ToolResult, ToolSpec
 
 # ---------- inner ToolPort 假实现(仅满足结构化协议) ----------
 

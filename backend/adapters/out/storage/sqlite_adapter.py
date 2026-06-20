@@ -29,8 +29,8 @@ from backend.data.session_repo import (
     MessageRepository,
     SessionRepository,
 )
-from backend.domain.message import Message, Role, ToolCall
-from backend.ports.storage import StoragePort  # noqa: F401  (structural typing target)
+from sage_core import Message, Role, ToolCall
+from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
 
 _DEFAULT_TITLE = "新对话"
 

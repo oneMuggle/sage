@@ -27,13 +27,13 @@ import logging
 import time
 from typing import Any
 
-from backend.domain.errors import LLMError
-from backend.domain.message import Message, Role, ToolCall
-from backend.ports.llm import LLMPort
-from backend.ports.observability import EventPort, MetricPort
-from backend.ports.skill import SkillPort
-from backend.ports.storage import StoragePort
-from backend.ports.tool import ToolPort
+from sage_core import LLMError
+from sage_core import Message, Role, ToolCall
+from sage_core.repositories import LLMPort
+from sage_core.repositories import EventPort, MetricPort
+from sage_core.repositories import SkillPort
+from sage_core.repositories import StoragePort
+from sage_core.repositories import ToolPort
 from backend.utils.otel import get_tracer
 
 logger = logging.getLogger(__name__)

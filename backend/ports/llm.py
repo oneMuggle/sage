@@ -14,7 +14,7 @@
 from collections.abc import AsyncIterator
 from typing import Any, Protocol
 
-from backend.domain.message import Message
+from sage_core import Message
 
 
 class LLMPort(Protocol):

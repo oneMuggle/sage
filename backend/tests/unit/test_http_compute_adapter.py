@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
-from backend.domain.compute import ComputeRequest
+from sage_core import ComputeRequest
 
 
 def _make_config() -> dict[str, Any]:
