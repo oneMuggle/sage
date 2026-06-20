@@ -88,7 +88,7 @@ jobs:
       - name: Install dev tools
         shell: bash -el {0}
         run: |
-          conda run -n sage-backend pip install -r backend/requirements.txt
+          cd backend && conda run -n sage-backend pip install -r requirements.txt
           conda run -n sage-backend pip install ruff mypy import-linter
 
       - name: Ruff check
