@@ -14,10 +14,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
-from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort
+
+from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 
 pytestmark = pytest.mark.unit
 

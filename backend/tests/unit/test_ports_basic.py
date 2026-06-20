@@ -12,15 +12,8 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-
-from sage_core import Message, Role
-from sage_core import SkillResult, SkillSpec
-from sage_core import ToolResult, ToolSpec
-from sage_core.repositories import LLMPort
-from sage_core.repositories import EventPort, MetricPort
-from sage_core.repositories import SkillPort
-from sage_core.repositories import StoragePort
-from sage_core.repositories import ToolPort
+from sage_core import Message, Role, SkillResult, SkillSpec, ToolResult, ToolSpec
+from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
 
 pytestmark = pytest.mark.unit
 

@@ -29,11 +29,6 @@ from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any
 
-from backend.adapters.out.compute._resolver import (
-    ExecutableNotFoundError,
-    ExecutableResolver,
-    ResolvedExecutable,
-)
 from sage_core import (
     ComputeError,
     ComputeErrorType,
@@ -42,6 +37,12 @@ from sage_core import (
     ComputeSpec,
 )
 from sage_core.repositories import ComputePort  # noqa: F401  (structural typing target)
+
+from backend.adapters.out.compute._resolver import (
+    ExecutableNotFoundError,
+    ExecutableResolver,
+    ResolvedExecutable,
+)
 
 logger = logging.getLogger(__name__)
 

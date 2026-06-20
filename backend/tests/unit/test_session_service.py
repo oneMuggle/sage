@@ -14,11 +14,11 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+from sage_core.exceptions import SessionNotFoundError
 
 from backend.adapters.out.metric.noop_adapter import NoopMetricAdapter
 from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 from backend.application.services.session_service import SessionService
-from sage_core.exceptions import SessionNotFoundError
 
 pytestmark = pytest.mark.unit
 
