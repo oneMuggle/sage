@@ -3,6 +3,7 @@
  */
 
 import { useSettings } from '../../features/manage-settings/useSettings';
+
 import { SettingRow, Toggle } from './components';
 
 export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {

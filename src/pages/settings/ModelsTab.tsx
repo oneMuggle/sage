@@ -5,6 +5,7 @@
 import { clsx } from 'clsx';
 
 import type { DiscoveredModel, ModelSelection } from '../../entities/setting/types';
+
 import type { EndpointsTabProps } from './components';
 import { SettingRow } from './components';
 

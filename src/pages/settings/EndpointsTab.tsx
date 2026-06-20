@@ -10,6 +10,7 @@ import {
   type ConnectionTestResult,
   testEndpointConnection,
 } from '../../features/manage-endpoints/api';
+
 import type { EndpointsTabProps } from './components';
 
 export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {

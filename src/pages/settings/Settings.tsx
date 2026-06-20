@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { EvolutionLog } from '../../widgets/evolution/EvolutionLog';
 import { EvolutionPanel } from '../../widgets/evolution/EvolutionPanel';
+
 import { EndpointsTab } from './EndpointsTab';
 import { GeneralTab } from './GeneralTab';
 import { MemoryTab } from './MemoryTab';

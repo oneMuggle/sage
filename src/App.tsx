@@ -1,10 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+import { Settings } from './pages';
 import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
 import { Knowledge } from './pages/Knowledge';
 import { Memory } from './pages/Memory';
-import { Settings } from './pages';
 import Skills from './pages/Skills';
 import { Layout } from './widgets/layout';
 
