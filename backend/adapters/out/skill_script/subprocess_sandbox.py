@@ -114,7 +114,7 @@ class SubprocessSandboxAdapter:
                 process.communicate(input=req.stdin_data),
                 timeout=timeout,
             )
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             # 超时: kill 子进程
             # 注: Python 3.10 中 asyncio.wait_for 抛出 asyncio.TimeoutError，
             # 而 Python 3.11+ 中它抛出内置 TimeoutError，因此需要同时捕获两者
