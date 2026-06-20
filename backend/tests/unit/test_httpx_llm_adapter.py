@@ -19,11 +19,11 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sage_core import Message, Role, ToolCall
+from sage_core.repositories import LLMPort
 
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
 from backend.core.legacy.llm_client import LLMConfig, LLMResponse, LLMToolCall
-from sage_core import Message, Role, ToolCall
-from sage_core.repositories import LLMPort
 
 pytestmark = pytest.mark.unit
 

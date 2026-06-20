@@ -26,10 +26,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sage_core.exceptions import SessionNotFoundError
 from sage_core import Message
-from sage_core.repositories import EventPort, MetricPort
-from sage_core.repositories import StoragePort
+from sage_core.exceptions import SessionNotFoundError
+from sage_core.repositories import EventPort, MetricPort, StoragePort
+
 from backend.utils.otel import get_tracer
 
 # 9 指标之一(与 chat_service.py 的 _ACTIVE_SESSIONS_METRIC 保持同源)
@@ -48,9 +48,7 @@ def _message_to_dict(m: Message) -> dict[str, Any]:
     return {
         "role": m.role.value,
         "content": m.content,
-        "tool_calls": [
-            {"name": tc.name, "args": tc.args, "id": tc.id} for tc in m.tool_calls
-        ],
+        "tool_calls": [{"name": tc.name, "args": tc.args, "id": tc.id} for tc in m.tool_calls],
         "tool_call_id": m.tool_call_id,
     }
 

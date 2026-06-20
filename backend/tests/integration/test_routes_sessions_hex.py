@@ -51,9 +51,7 @@ async def hex_sessions_client():
     saved_override = app.dependency_overrides.get(get_session_service)
     app.dependency_overrides[get_session_service] = lambda: fake_svc
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac, fake_svc
     finally:
         if saved_override is not None:
@@ -151,9 +149,7 @@ async def test_patch_session_updates_title(hex_sessions_client):
 async def test_patch_session_404_when_missing(hex_sessions_client):
     """PATCH 不存在会话返 404。"""
     ac, _ = hex_sessions_client
-    resp = await ac.patch(
-        f"{PREFIX}/sessions/nonexistent-id", json={"title": "x"}
-    )
+    resp = await ac.patch(f"{PREFIX}/sessions/nonexistent-id", json={"title": "x"})
     assert resp.status_code == 404
 
 
@@ -220,9 +216,7 @@ async def test_get_messages_returns_dicts(hex_sessions_client):
     # 通过 service 直接追加消息(hex 端点没有 POST message 端点,
     # 那属于后续 PR;此处用 storage 走真实路径覆盖)
     await fake_svc.storage.append_message(sid, Message(role=Role.USER, content="hi"))
-    await fake_svc.storage.append_message(
-        sid, Message(role=Role.ASSISTANT, content="hello")
-    )
+    await fake_svc.storage.append_message(sid, Message(role=Role.ASSISTANT, content="hello"))
     resp = await ac.get(f"{PREFIX}/sessions/{sid}/messages")
     assert resp.status_code == 200
     msgs = resp.json()

@@ -25,6 +25,7 @@ from typing import Any
 
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
+
 from backend.tools.registry import ToolRegistry as _ToolRegistry
 
 

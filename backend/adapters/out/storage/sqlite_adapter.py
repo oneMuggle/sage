@@ -24,13 +24,14 @@ import time
 import uuid
 from typing import Any
 
+from sage_core import Message, Role, ToolCall
+from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
+
 from backend.data.session_repo import (
     Message as _DataMessage,
     MessageRepository,
     SessionRepository,
 )
-from sage_core import Message, Role, ToolCall
-from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
 
 _DEFAULT_TITLE = "新对话"
 

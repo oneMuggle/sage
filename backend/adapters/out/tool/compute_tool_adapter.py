@@ -25,10 +25,11 @@ import json
 import logging
 from typing import Any
 
-from sage_core import ComputeRequest, ComputeResult
-from sage_core import ToolResult, ToolSpec
-from sage_core.repositories import ComputePort
-from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
+from sage_core import ComputeRequest, ComputeResult, ToolResult, ToolSpec
+from sage_core.repositories import (
+    ComputePort,
+    ToolPort,  # noqa: F401  (structural typing target)
+)
 
 logger = logging.getLogger(__name__)
 

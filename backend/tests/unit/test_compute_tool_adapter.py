@@ -14,19 +14,20 @@ import json
 from typing import Any
 
 import pytest
+from sage_core import (
+    ComputeError,
+    ComputeErrorType,
+    ComputeResult,
+    ComputeSpec,
+    ToolResult,
+    ToolSpec,
+)
 
 from backend.adapters.out.compute.mock_adapter import MockComputeAdapter
 from backend.adapters.out.tool.compute_tool_adapter import (
     ComputeToolAdapter,
     _compute_result_to_tool_result,
 )
-from sage_core import (
-    ComputeError,
-    ComputeErrorType,
-    ComputeResult,
-    ComputeSpec,
-)
-from sage_core import ToolResult, ToolSpec
 
 # ---------- inner ToolPort 假实现(仅满足结构化协议) ----------
 

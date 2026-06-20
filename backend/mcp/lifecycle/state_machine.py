@@ -9,7 +9,6 @@
 """
 
 from enum import Enum
-from typing import Set
 
 
 class MCPState(str, Enum):
@@ -29,7 +28,7 @@ class MCPState(str, Enum):
 
 
 # 合法的状态转换
-VALID_TRANSITIONS: dict[MCPState, Set[MCPState]] = {
+VALID_TRANSITIONS: dict[MCPState, set[MCPState]] = {
     MCPState.CREATED: {MCPState.INITIALIZING},
     MCPState.INITIALIZING: {MCPState.READY, MCPState.SHUTDOWN},
     MCPState.READY: {MCPState.RUNNING, MCPState.SHUTDOWN},

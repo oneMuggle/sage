@@ -20,8 +20,9 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-from backend.core.legacy.llm_client import LLMClient as _LLMClient, LLMConfig, LLMResponse
 from sage_core import Message, Role, ToolCall
+
+from backend.core.legacy.llm_client import LLMClient as _LLMClient, LLMConfig, LLMResponse
 from backend.utils.otel import get_tracer
 
 logger = logging.getLogger(__name__)
