@@ -32,8 +32,8 @@ from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, St
 
 # Optional memory types (for backward compatibility)
 try:
-    from backend.ports.memory import MemoryPort
     from backend.domain.memory import MemoryContext
+    from backend.ports.memory import MemoryPort
 except ImportError:
     MemoryPort = None  # type: ignore
     MemoryContext = None  # type: ignore

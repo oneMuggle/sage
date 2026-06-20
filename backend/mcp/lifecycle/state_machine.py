@@ -44,9 +44,7 @@ class StateTransitionError(Exception):
     def __init__(self, from_state: MCPState, to_state: MCPState):
         self.from_state = from_state
         self.to_state = to_state
-        super().__init__(
-            f"非法状态转换: {from_state.value} → {to_state.value}"
-        )
+        super().__init__(f"非法状态转换: {from_state.value} → {to_state.value}")
 
 
 class MCPStateMachine:

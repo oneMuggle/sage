@@ -90,9 +90,7 @@ class MCPLifecycleManager:
         启动健康检查任务，转换到 RUNNING 状态。
         """
         if self._state_machine.state != MCPState.READY:
-            raise MCPNotReadyError(
-                f"MCP 服务未就绪，当前状态: {self._state_machine.state.value}"
-            )
+            raise MCPNotReadyError(f"MCP 服务未就绪，当前状态: {self._state_machine.state.value}")
 
         logger.info("启动 MCP 服务...")
 
@@ -110,9 +108,7 @@ class MCPLifecycleManager:
         转换到 PAUSED 状态。
         """
         if self._state_machine.state != MCPState.RUNNING:
-            raise MCPServiceError(
-                f"MCP 服务未运行，当前状态: {self._state_machine.state.value}"
-            )
+            raise MCPServiceError(f"MCP 服务未运行，当前状态: {self._state_machine.state.value}")
 
         logger.info("暂停 MCP 服务...")
 
@@ -130,9 +126,7 @@ class MCPLifecycleManager:
         转换到 RUNNING 状态。
         """
         if self._state_machine.state != MCPState.PAUSED:
-            raise MCPServiceError(
-                f"MCP 服务未暂停，当前状态: {self._state_machine.state.value}"
-            )
+            raise MCPServiceError(f"MCP 服务未暂停，当前状态: {self._state_machine.state.value}")
 
         logger.info("恢复 MCP 服务...")
 
@@ -203,8 +197,7 @@ class MCPLifecycleManager:
             return
 
         self._health_check_task = asyncio.create_task(
-            self._health_check_loop(),
-            name="mcp-health-check"
+            self._health_check_loop(), name="mcp-health-check"
         )
         logger.debug("健康检查任务已启动")
 
