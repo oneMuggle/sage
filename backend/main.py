@@ -7,7 +7,7 @@ import asyncio
 import logging
 import os
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -154,10 +154,8 @@ async def lifespan(app: FastAPI):
 
     # 关闭时清理
     sweeper_task.cancel()
-    try:
+    with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
         await sweeper_task
-    except (asyncio.CancelledError, Exception):  # noqa: BLE001
-        pass
     # 取消所有残留的 producer task
     if hasattr(app.state, "streams") and app.state.streams is not None:
         for entry in list(app.state.streams._entries.values()):
