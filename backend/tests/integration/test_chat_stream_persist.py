@@ -33,7 +33,7 @@ CHAT_STREAM_PATH = "/api/v1/chat/stream"
 SESSIONS_PATH = "/api/v1/sessions"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_streaming_chat_persists_user_and_assistant_messages(client):
     """一次成功 chat 后,messages 表里应该有 user + assistant 两行。"""
     # 1. 建一个 session
@@ -83,7 +83,7 @@ async def test_streaming_chat_persists_user_and_assistant_messages(client):
     assert asst_msg.content == "这是 assistant 真实回答"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_streaming_chat_updates_session_metadata(client):
     """chat 完成后 session.last_message_at 应当被更新, message_count 应为 2。"""
     create_sess = await client.post(SESSIONS_PATH, json={"title": "PR-7 session update"})
@@ -121,7 +121,7 @@ async def test_streaming_chat_updates_session_metadata(client):
     ), f"last_message_at={sess.last_message_at}, expected positive ms timestamp"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_message_save_failure_does_not_break_stream(client):
     """持久化抛错时,流应该正常完成 (try/except 隔离),不 500。"""
     create_sess = await client.post(SESSIONS_PATH, json={"title": "PR-7 failure isolation"})
@@ -165,7 +165,7 @@ async def test_message_save_failure_does_not_break_stream(client):
 # =============================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_streaming_chat_persists_reasoning_content(client):
     """一次带 reasoning 的 chat 后,assistant 消息的 reasoning_content 被写入 DB。"""
     create_sess = await client.post(SESSIONS_PATH, json={"title": "PR-7b reasoning"})
@@ -219,7 +219,7 @@ async def test_streaming_chat_persists_reasoning_content(client):
     assert asst_msg.content == "这是 assistant 回答"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_streaming_chat_without_reasoning_has_null_reasoning_content(client):
     """不带 reasoning 的 chat,assistant 消息的 reasoning_content 应该是 None。"""
     create_sess = await client.post(SESSIONS_PATH, json={"title": "PR-7b no reasoning"})

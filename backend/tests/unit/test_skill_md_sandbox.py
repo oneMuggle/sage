@@ -396,7 +396,7 @@ def test_adapter_handles_subprocess_exception(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_adapter_real_subprocess_success(tmp_path):
     """真实 subprocess: 执行简单 print 脚本。"""
     adapter = SubprocessSandboxAdapter()
@@ -411,7 +411,7 @@ async def test_adapter_real_subprocess_success(tmp_path):
     assert "hello world" in result.stdout
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_adapter_real_subprocess_failure(tmp_path):
     """真实 subprocess: 执行抛异常的脚本。"""
     adapter = SubprocessSandboxAdapter()
@@ -425,7 +425,7 @@ async def test_adapter_real_subprocess_failure(tmp_path):
     assert result.exit_code == 2
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_adapter_real_subprocess_with_args(tmp_path):
     """真实 subprocess: 传递参数。"""
     adapter = SubprocessSandboxAdapter()
@@ -445,7 +445,7 @@ async def test_adapter_real_subprocess_with_args(tmp_path):
     assert "hello world" in result.stdout
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_adapter_real_subprocess_stdin(tmp_path):
     """真实 subprocess: 传递 stdin。"""
     adapter = SubprocessSandboxAdapter()
@@ -465,7 +465,7 @@ async def test_adapter_real_subprocess_stdin(tmp_path):
     assert "got: hello stdin" in result.stdout
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_adapter_real_subprocess_env_filter(tmp_path):
     """真实 subprocess: 敏感环境变量被过滤。"""
     adapter = SubprocessSandboxAdapter()

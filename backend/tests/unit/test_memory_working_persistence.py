@@ -12,7 +12,7 @@ from backend.memory.working import WorkingMemory
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_db() -> Database:
     """创建临时数据库用于测试"""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:

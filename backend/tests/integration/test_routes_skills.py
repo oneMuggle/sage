@@ -180,7 +180,7 @@ async def test_execute_skill_args_wrong_type_returns_422(client, reset_skill_ada
 # ========== M10: slash command 端点 ==========
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_slash_command_returns_skill_body(client, reset_skill_adapter):
     """POST /skills/command 触发 user_invocable 技能 → 返回 SKILL.md body。"""
     from pathlib import Path
@@ -215,7 +215,7 @@ async def test_slash_command_returns_skill_body(client, reset_skill_adapter):
     assert "reviewer" in body["content"]
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_slash_command_unknown_returns_404(client, reset_skill_adapter):
     """未注册的 command → 404 + command_not_found。"""
     resp = await client.post(
@@ -227,7 +227,7 @@ async def test_slash_command_unknown_returns_404(client, reset_skill_adapter):
     assert detail["type"] == "command_not_found"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_slash_command_missing_command_field_returns_422(client, reset_skill_adapter):
     """缺 command 字段 → 422 (Pydantic 自动)."""
     resp = await client.post(
@@ -237,7 +237,7 @@ async def test_slash_command_missing_command_field_returns_422(client, reset_ski
     assert resp.status_code == 422
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_list_slash_commands_returns_registered(client, reset_skill_adapter):
     """GET /skills/commands → 返回已注册的命令列表。"""
     from pathlib import Path

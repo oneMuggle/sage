@@ -176,7 +176,7 @@ def test_resolve_multiple_slashes_normalized():
 # =====================================================================
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_execute_command_returns_skill_body():
     """execute_command → 调 SkillMdSkill.execute_v2 (v1 body fallback 路径)。
 
@@ -201,7 +201,7 @@ async def test_execute_command_returns_skill_body():
     assert "reviewer" in str(result.content)
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_execute_command_unknown_command_raises():
     """execute_command 对未知命令 → 抛 LookupError (路由层转 404)。"""
     registry = SkillRegistry()

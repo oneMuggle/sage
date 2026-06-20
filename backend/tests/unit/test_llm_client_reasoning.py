@@ -34,7 +34,7 @@ class TestLLMResponseReasoning:
 class TestLLMClientReasoningParsing:
     """Test LLMClient.chat() reasoning_content extraction from various providers."""
 
-    @pytest.fixture()
+    @pytest.fixture
     def llm_client(self):
         """Create a test LLM client."""
         config = LLMConfig(
@@ -45,7 +45,7 @@ class TestLLMClientReasoningParsing:
         )
         return LLMClient(config)
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_parse_reasoning_content_from_openai_format(self, llm_client):
         """Should extract reasoning_content from OpenAI-format response."""
         mock_response_data = {
@@ -77,7 +77,7 @@ class TestLLMClientReasoningParsing:
             assert result.content == "The answer is 42."
             assert result.reasoning_content == "Let me calculate: 6 * 7 = 42."
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_parse_reasoning_from_anthropic_format(self, llm_client):
         """Should extract reasoning from Anthropic-format response (using 'reasoning' key)."""
         mock_response_data = {
@@ -108,7 +108,7 @@ class TestLLMClientReasoningParsing:
 
             assert result.reasoning_content == "I need to consider multiple factors here..."
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_reasoning_content_none_when_not_present(self, llm_client):
         """Should set reasoning_content to None when not in response."""
         mock_response_data = {
@@ -139,7 +139,7 @@ class TestLLMClientReasoningParsing:
             assert result.content == "Hello!"
             assert result.reasoning_content is None
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_reasoning_content_prefers_reasoning_content_over_reasoning(self, llm_client):
         """Should prefer 'reasoning_content' over 'reasoning' when both present."""
         mock_response_data = {
@@ -171,7 +171,7 @@ class TestLLMClientReasoningParsing:
 
             assert result.reasoning_content == "Primary reasoning"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_reasoning_content_with_long_thinking(self, llm_client):
         """Should handle very long reasoning_content (multi-paragraph thinking)."""
         long_reasoning = """

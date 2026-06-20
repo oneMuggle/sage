@@ -21,7 +21,7 @@ def _make_event(state: str, content: str | None = None) -> dict:
     return {"state": state, "iteration": 0, "content": content}
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_create_stores_entry_with_pending_status():
     reg = StreamRegistry()
     entry = await reg.create("sid-1", queue_maxsize=10)
@@ -34,7 +34,7 @@ async def test_create_stores_entry_with_pending_status():
     assert reg.size() == 1
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_create_with_producer_starts_task():
     reg = StreamRegistry()
 
@@ -47,13 +47,13 @@ async def test_create_with_producer_starts_task():
     await entry.task
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_get_returns_none_for_unknown_stream_id():
     reg = StreamRegistry()
     assert reg.get("nope") is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_get_returns_the_entry_just_created():
     reg = StreamRegistry()
     created = await reg.create("sid-1", queue_maxsize=10)
@@ -61,7 +61,7 @@ async def test_get_returns_the_entry_just_created():
     assert fetched is created
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_pop_removes_entry_immediately():
     reg = StreamRegistry()
     await reg.create("sid-1", queue_maxsize=10)
@@ -70,13 +70,13 @@ async def test_pop_removes_entry_immediately():
     assert reg.size() == 0
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_pop_returns_false_for_unknown_id():
     reg = StreamRegistry()
     assert reg.pop("nope") is False
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_producer_task_actually_runs_and_emits_done_sentinel():
     """create() 接收一个 producer 协程,registry 启动它并入队 sentinel。"""
     reg = StreamRegistry()
@@ -105,7 +105,7 @@ async def test_producer_task_actually_runs_and_emits_done_sentinel():
     assert events[1]["state"] == "done"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_producer_exception_marks_entry_failed():
     reg = StreamRegistry()
 
@@ -122,7 +122,7 @@ async def test_producer_exception_marks_entry_failed():
     assert entry.status == "failed"
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_pop_if_done_removes_entry_after_grace_period():
     reg = StreamRegistry()
     entry = await reg.create("sid-1", queue_maxsize=10)
@@ -132,7 +132,7 @@ async def test_pop_if_done_removes_entry_after_grace_period():
     assert reg.get("sid-1") is None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_pop_if_done_does_not_remove_running_stream():
     reg = StreamRegistry()
     await reg.create("sid-1", queue_maxsize=10)
@@ -141,7 +141,7 @@ async def test_pop_if_done_does_not_remove_running_stream():
     assert reg.get("sid-1") is not None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_sweep_expired_removes_stale_entries():
     reg = StreamRegistry()
     old_entry = await reg.create("old", queue_maxsize=10)
@@ -155,7 +155,7 @@ async def test_sweep_expired_removes_stale_entries():
     assert reg.get("fresh") is not None
 
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test_queue_maxsize_bounds_memory():
     """队列应有界 — 不会无限增长。"""
     reg = StreamRegistry()

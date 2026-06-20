@@ -63,7 +63,7 @@ class TestHashEmbedder:
 # ==================== VectorStore 测试 ====================
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_db():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db = Database(f.name)
@@ -72,7 +72,7 @@ def tmp_db():
         db.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def store(tmp_db):
     return VectorStore(tmp_db, HashEmbedder(dimensions=128))
 

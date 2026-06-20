@@ -92,7 +92,9 @@ def _build_chat_service() -> ChatService:
     inner_tools = InprocToolAdapter()
     compute = _build_compute_adapter()
     if compute is not None:
-        from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter  # noqa: PLC0415
+        from backend.adapters.out.tool.compute_tool_adapter import (
+            ComputeToolAdapter,  # noqa: PLC0415
+        )
 
         tools = ComputeToolAdapter(compute=compute, inner=inner_tools)
         logger.info(
