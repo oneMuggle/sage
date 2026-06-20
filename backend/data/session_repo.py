@@ -193,7 +193,8 @@ class Message:
             provider=row["provider"],
             tool_calls=row["tool_calls"],
             tool_call_id=row["tool_call_id"],
-            reasoning_content=row["reasoning_content"] if "reasoning_content" in row.keys() else None,  # noqa: SIM118
+            reasoning_content=row["reasoning_content"] if "reasoning_content" in row.keys()  # noqa: SIM118
+            else None,
         )
 
     def to_dict(self) -> dict[str, Any]:

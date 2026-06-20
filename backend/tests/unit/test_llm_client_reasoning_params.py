@@ -62,7 +62,7 @@ def _read_request_body(route_call) -> dict:
     return json.loads(raw.decode())
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_forwards_reasoning_effort_to_request_body():
     """reasoning_effort 非 None 时,出现在 POST /chat/completions 的 body 里。"""
     with respx.mock(
@@ -91,7 +91,7 @@ async def test_chat_forwards_reasoning_effort_to_request_body():
         assert "thinking_budget" not in body
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_forwards_thinking_budget_to_request_body():
     """thinking_budget 非 None 时,出现在 POST /chat/completions 的 body 里。"""
     with respx.mock(
@@ -119,7 +119,7 @@ async def test_chat_forwards_thinking_budget_to_request_body():
         assert "reasoning_effort" not in body
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_does_not_inject_reasoning_params_when_none():
     """两个推理参数都是 None 时,body 里不应该出现这两个 key,避免污染老 LLM。"""
     with respx.mock(
@@ -147,7 +147,7 @@ async def test_chat_does_not_inject_reasoning_params_when_none():
         assert "thinking_budget" not in body
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_can_send_both_params_simultaneously():
     """两个参数可以同时存在 — 由上游 provider 决定接受哪个。"""
     with respx.mock(
@@ -180,7 +180,7 @@ async def test_chat_can_send_both_params_simultaneously():
 # ============================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_stream_forwards_reasoning_params_to_request_body():
     """chat_stream() 同样把 reasoning_effort/thinking_budget 写进 body。"""
     with respx.mock(base_url="https://api.deepseek.com", assert_all_called=False) as mock:

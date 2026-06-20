@@ -69,7 +69,7 @@ def test_script_runner_with_allowed_roots():
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_happy_path(tmp_path):
     """完整 happy path: 校验 → 确认 → 沙箱 → SkillResult 成功。"""
     # 设置技能目录
@@ -127,7 +127,7 @@ async def test_script_runner_happy_path(tmp_path):
     assert req.args == ()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_with_args(tmp_path):
     """ScriptRunner 传递 args 给沙箱。"""
     scripts_dir = tmp_path / "scripts"
@@ -166,7 +166,7 @@ async def test_script_runner_with_args(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_rejects_traversal(tmp_path):
     """ScriptRunner 拒绝路径遍历（../ 跳出 allowed_roots）。"""
     base = tmp_path / "skills"
@@ -198,7 +198,7 @@ async def test_script_runner_rejects_traversal(tmp_path):
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_rejects_script_not_in_base_dir(tmp_path):
     """ScriptRunner 拒绝不在 base_dir 内的脚本。"""
     base = tmp_path / "skills"
@@ -235,7 +235,7 @@ async def test_script_runner_rejects_script_not_in_base_dir(tmp_path):
     sandbox.run.assert_not_called()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_accepts_script_in_nested_subdir(tmp_path):
     """ScriptRunner 接受嵌套子目录中的脚本。"""
     base = tmp_path / "skills"
@@ -276,7 +276,7 @@ async def test_script_runner_accepts_script_in_nested_subdir(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_user_declined_returns_error(tmp_path):
     """用户拒绝 → success=False，不执行沙箱。"""
     scripts_dir = tmp_path / "scripts"
@@ -312,7 +312,7 @@ async def test_script_runner_user_declined_returns_error(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_sandbox_failure_returns_error(tmp_path):
     """沙箱失败（exit_code != 0）→ success=False。"""
     scripts_dir = tmp_path / "scripts"
@@ -346,7 +346,7 @@ async def test_script_runner_sandbox_failure_returns_error(tmp_path):
     assert result.metadata["exit_code"] == 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_sandbox_timeout_returns_error(tmp_path):
     """沙箱超时 → success=False, timed_out=True。"""
     scripts_dir = tmp_path / "scripts"
@@ -387,7 +387,7 @@ async def test_script_runner_sandbox_timeout_returns_error(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_sandbox_exception_does_not_propagate(tmp_path):
     """沙箱抛异常 → 收敛为 success=False，不向上传播。"""
     scripts_dir = tmp_path / "scripts"
@@ -414,7 +414,7 @@ async def test_script_runner_sandbox_exception_does_not_propagate(tmp_path):
     assert "sandbox crashed" in result.error or "exception" in result.error.lower()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_confirmer_exception_does_not_propagate(tmp_path):
     """confirmer 抛异常 → 收敛为 success=False（默认拒绝）。"""
     scripts_dir = tmp_path / "scripts"
@@ -446,7 +446,7 @@ async def test_script_runner_confirmer_exception_does_not_propagate(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_path_validation_before_confirmation(tmp_path):
     """路径校验失败时，不应调用 confirmer (短路优化)。"""
     base = tmp_path / "skills"
@@ -475,7 +475,7 @@ async def test_script_runner_path_validation_before_confirmation(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_metadata_includes_execution_info(tmp_path):
     """SkillResult.metadata 包含完整执行信息。"""
     scripts_dir = tmp_path / "scripts"
@@ -521,7 +521,7 @@ async def test_script_runner_metadata_includes_execution_info(tmp_path):
 # =====================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_script_runner_nonexistent_script(tmp_path):
     """脚本不存在 → success=False，不执行沙箱。"""
     base = tmp_path / "skills"

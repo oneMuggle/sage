@@ -484,7 +484,7 @@ async def test_run_loop_handles_multiple_tool_calls_in_one_iteration():
 # =============================================================================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_accepts_llm_config_and_uses_it_when_no_default_client():
     """agent.llm_client is None 时,run_loop 收到 llm_config 应该用新 client 而不是抛 AgentError。
 
@@ -532,7 +532,7 @@ async def test_run_loop_accepts_llm_config_and_uses_it_when_no_default_client():
     assert events[-1].content == "hi"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_restores_original_llm_client_after_llm_config_call():
     """传入 llm_config 临时替换 client,跑完后必须恢复(不污染 agent 实例)。
 
@@ -575,7 +575,7 @@ async def test_run_loop_restores_original_llm_client_after_llm_config_call():
     original_client.chat.assert_awaited()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_raises_agent_error_when_no_client_and_no_llm_config():
     """self.llm_client is None 且调用方没传 llm_config → 仍然抛 AgentError(向后兼容)。
 
@@ -609,7 +609,7 @@ def _make_response_with_reasoning(
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_yields_reasoning_event_when_llm_returns_reasoning():
     """LLM 返回 reasoning_content 时，run_loop 应 yield REASONING 事件。"""
     agent = SageAgent()
@@ -639,7 +639,7 @@ async def test_run_loop_yields_reasoning_event_when_llm_returns_reasoning():
     assert done_evt.content == "答案是 42"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_run_loop_no_reasoning_event_when_llm_returns_no_reasoning():
     """LLM 不返回 reasoning_content 时，run_loop 不应 yield REASONING 事件。"""
     agent = SageAgent()
