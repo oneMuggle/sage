@@ -17,6 +17,25 @@ export default defineConfig({
       ignored: ['**/src-tauri/**', '**/archive/**', '**/dist-electron/**'],
     },
   },
+  build: {
+    target: 'es2020',
+    chunkSizeWarningLimit: 500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-query': ['@tanstack/react-query'],
+          'vendor-ui': ['@headlessui/react', 'sonner', 'lucide-react'],
+          'vendor-flow': ['@xyflow/react'],
+          'vendor-markdown': ['react-markdown', 'remark-gfm', 'react-syntax-highlighter'],
+          'vendor-state': ['zustand'],
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

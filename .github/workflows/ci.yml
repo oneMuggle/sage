@@ -41,7 +41,7 @@ jobs:
         shell: bash -el {0}
         run: |
           conda run -n sage-backend-py38 pip install -r backend/requirements-py38.txt
-          conda run -n sage-backend-py38 pip install ruff mypy import-linter
+          conda run -n sage-backend-py38 pip install -r backend/requirements-dev.txt
 
       - name: Ruff check
         shell: bash -el {0}
@@ -79,7 +79,7 @@ jobs:
           channels: conda-forge
 
       - name: Cache pip
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
@@ -143,11 +143,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '25'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --force --force
 
       - name: Lint
         run: npm run lint
@@ -190,7 +190,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '25'
+          node-version: '22'
           cache: 'npm'
 
       - name: Cache electron-builder downloads
@@ -220,7 +220,7 @@ jobs:
             libasound2t64
 
       - name: Install npm dependencies
-        run: npm ci
+        run: npm ci --force
 
       - name: Build frontend + Electron
         run: npm run electron:build
@@ -269,11 +269,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '25'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install npm dependencies
-        run: npm ci
+        run: npm ci --force
 
       - name: Build frontend + Electron
         run: npm run electron:build

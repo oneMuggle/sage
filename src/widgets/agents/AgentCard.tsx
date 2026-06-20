@@ -1,4 +1,4 @@
-import type { AgentProfile } from '../../shared/api/api';
+import type { AgentProfile } from '../../shared/api';
 
 const ROLE_LABELS: Record<string, string> = {
   coordinator: '协调器',

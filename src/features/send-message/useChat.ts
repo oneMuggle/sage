@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { resolveEndpoint } from '../../entities/setting/types';
-import { ApiException, type AgentEvent, type ChatConfig } from '../../shared/api/api';
+import { ApiException, type AgentEvent, type ChatConfig } from '../../shared/api';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
 import { chatApi, useStore, type Message, type ToolCall } from '../../shared/lib/store';

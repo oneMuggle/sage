@@ -2,8 +2,8 @@ import { create } from 'zustand';
 
 import { invoke } from '../api/desktopInvoke';
 
-// Re-export API modules from api.ts for convenience
-export { sessionApi, messageApi, chatApi, memoryApi } from '../api/api';
+// Re-export API modules for convenience
+export { sessionApi, messageApi, chatApi, memoryApi } from '../api';
 
 // ==================== 类型定义 ====================
 
@@ -175,7 +175,7 @@ export const useStore = create<StoreState>((set, _get) => ({
 // 注意: 实际的懒加载组件在各自页面文件中
 
 export const LazyChat = () => import('../../pages/Chat');
-export const LazySettings = () => import('../../pages/Settings');
+export const LazySettings = () => import('../../pages');
 export const LazyMemory = () => import('../../pages/Memory');
 export const LazySkills = () => import('../../pages/Skills');
 export const LazyKnowledge = () => import('../../pages/Knowledge');

@@ -1,7 +1,7 @@
 import { Plus, Download } from 'lucide-react';
 import { useState } from 'react';
 
-import { memoryApi } from '../shared/api/api';
+import { memoryApi } from '../shared/api';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { MemoryBrowser, NewMemoryModal } from '../widgets/memory';
 

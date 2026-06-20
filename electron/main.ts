@@ -40,6 +40,21 @@ const BACKEND_HEALTH = `${BACKEND_URL}/health`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
 
+// Window dimensions
+const DEFAULT_WINDOW_WIDTH = 1280;
+const DEFAULT_WINDOW_HEIGHT = 800;
+const MIN_WINDOW_WIDTH = 1024;
+const MIN_WINDOW_HEIGHT = 640;
+
+// Timeouts (milliseconds)
+const BACKEND_HEALTH_TIMEOUT_MS = 30_000;
+const BACKEND_SHUTDOWN_TIMEOUT_MS = 3_000;
+const HTTP_REQUEST_TIMEOUT_MS = 1_000;
+
+// V8 heap limit (MB) - Win7 compat: cap V8 heap to 2GB so Win7 systems
+// with 4GB RAM don't OOM-kill during chat streaming
+const V8_MAX_OLD_SPACE_SIZE_MB = 2048;
+
 // Win7 compat: disable GPU + sandbox BEFORE app ready.
 // Order matters — these flags must be set before `whenReady()`.
 //
@@ -56,7 +71,7 @@ const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
 //     is more crash-prone than single-process).
 //   - --disable-features=VizDisplayCompositor: skip Chromium's Viz
 //     display compositor; Win7 D3D11 not feature-complete.
-//   - --js-flags=--max-old-space-size=2048: cap V8 heap to 2GB so Win7
+//   - --js-flags=--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}: cap V8 heap to 2GB so Win7
 //     systems with 4GB RAM don't OOM-kill during chat streaming.
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('no-sandbox');
@@ -64,7 +79,7 @@ app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('in-process-gpu');
 app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=2048');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}');
 
 let backendProc: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -124,7 +139,7 @@ function spawnBackend(): ChildProcess {
  * Poll /health until backend responds 200, with timeout.
  * Backend startup usually <2s; cap at 30s to surface real failures fast.
  */
-async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
+async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -134,7 +149,7 @@ async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
           res.resume();
         });
         req.on('error', () => resolve(false));
-        req.setTimeout(1000, () => {
+        req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
           resolve(false);
         });
@@ -165,10 +180,10 @@ async function waitForBackend(timeoutMs = 30_000): Promise<boolean> {
 
 function createMainWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 640,
+    width: DEFAULT_WINDOW_WIDTH,
+    height: DEFAULT_WINDOW_HEIGHT,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     title: 'Sage',
     icon: join(__dirname, '..', 'build', 'icon.ico'),
     webPreferences: {
@@ -281,7 +296,7 @@ function shutdownBackend(): void {
       if (backendProc && backendProc.exitCode === null) {
         backendProc.kill('SIGKILL');
       }
-    }, 3000);
+    }, BACKEND_SHUTDOWN_TIMEOUT_MS);
   }
 }
 

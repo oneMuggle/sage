@@ -1,4 +1,4 @@
-import type { AgentProfile, AgentUpdate } from '../../shared/api/api';
+import type { AgentProfile, AgentUpdate } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 
 interface EditAgentFormProps {

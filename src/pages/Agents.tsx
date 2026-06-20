@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-import { agentsApi, type AgentProfile, type AgentUpdate } from '../shared/api/api';
+import { agentsApi, type AgentProfile, type AgentUpdate } from '../shared/api';
 import { Button } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';

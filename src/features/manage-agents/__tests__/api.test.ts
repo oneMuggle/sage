@@ -25,7 +25,7 @@ vi.mock('../../../shared/api/desktopInvoke', () => ({
 }));
 
 // Import after mock setup so the shim is replaced.
-import { agentsApi, type AgentProfile, type AgentUpdate } from '../../../shared/api/api';
+import { agentsApi, type AgentProfile, type AgentUpdate } from '../../../shared/api';
 
 const SAMPLE_AGENT: AgentProfile = {
   id: 'coder',

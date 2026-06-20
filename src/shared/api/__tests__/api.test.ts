@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import * as ApiModule from '../api';
+import * as ApiModule from '../index';
 
 describe('src/shared/api structural exports', () => {
   it('exports the 7 API objects', () => {

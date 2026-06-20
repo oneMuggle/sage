@@ -1,0 +1,18 @@
+# Sage 后端 - 开发/测试依赖
+# 安装: pip install -r requirements-dev.txt
+# 本文件包含生产依赖 + 开发/测试工具
+
+# 包含生产依赖
+-r requirements.txt
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==5.0.0
+respx==0.21.1
+
+# Quality
+ruff==0.4.4
+mypy==1.8.0
+import-linter==2.11
+types-PyYAML==6.0.12.20240311
