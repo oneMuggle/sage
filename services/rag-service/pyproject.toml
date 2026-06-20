@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sage-rag-service"
+version = "0.1.0"
+description = "Sage RAG 服务 - 独立记忆检索服务"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Sage Team", email = "team@sage.dev"}
+]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "pydantic>=2.5.0",
+]
+
+[project.scripts]
+sage-rag = "main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["api*", "core*"]

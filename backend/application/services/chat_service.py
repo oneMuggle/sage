@@ -37,6 +37,7 @@ try:
 except ImportError:
     MemoryPort = None  # type: ignore
     MemoryContext = None  # type: ignore
+
 from backend.utils.otel import get_tracer
 
 logger = logging.getLogger(__name__)
