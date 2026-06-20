@@ -14,17 +14,14 @@ import yaml
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
-from backend.adapters.out.compute.subprocess_adapter import SubprocessComputeAdapter
 from backend.adapters.out.event.file_adapter import FileEventAdapter
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
 from backend.adapters.out.memory.adapter import MemoryAdapter
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
-from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.chat_stream_registry import StreamRegistry
-from backend.api.hex_routes import get_chat_service, router as hex_router
+from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.application.services.chat_service import ChatService
@@ -63,13 +60,13 @@ def _build_compute_adapter():
 
     adapter_type = ghm_cfg.get("adapter", "subprocess")
     if adapter_type == "subprocess":
-        from backend.adapters.out.compute.subprocess_adapter import (
+        from backend.adapters.out.compute.subprocess_adapter import (  # noqa: PLC0415
             SubprocessComputeAdapter,
         )
 
         return SubprocessComputeAdapter(ghm_cfg)
     if adapter_type == "http":
-        from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
+        from backend.adapters.out.compute.http_adapter import HttpComputeAdapter  # noqa: PLC0415
 
 
         logger.warning(
@@ -95,7 +92,7 @@ def _build_chat_service() -> ChatService:
     inner_tools = InprocToolAdapter()
     compute = _build_compute_adapter()
     if compute is not None:
-        from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter
+        from backend.adapters.out.tool.compute_tool_adapter import ComputeToolAdapter  # noqa: PLC0415
 
         tools = ComputeToolAdapter(compute=compute, inner=inner_tools)
         logger.info(
