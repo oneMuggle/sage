@@ -107,6 +107,12 @@ function spawnBackend(): ChildProcess {
       ? join(process.resourcesPath, 'python', 'python.exe')
       : null;
 
+  // Resolve SAGE_DB_PATH once so both packaged and dev spawn paths share it.
+  // Backend prefers this env var; falls back to a per-user writable location
+  // (Electron's userData dir) so dev + packaged write to the same DB.
+  const sageDbPath =
+    process.env.SAGE_DB_PATH ?? join(app.getPath('userData'), 'sage.db');
+
   let proc: ChildProcess;
   if (pyLauncher) {
     // Packaged Win: launch bundled Python directly
@@ -114,6 +120,7 @@ function spawnBackend(): ChildProcess {
       pyLauncher,
       ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)],
       {
+        env: { ...process.env, SAGE_DB_PATH: sageDbPath },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       },
@@ -121,6 +128,7 @@ function spawnBackend(): ChildProcess {
   } else {
     // Dev: delegate to conda
     proc = spawn(condaCmd, condaArgs, {
+      env: { ...process.env, SAGE_DB_PATH: sageDbPath },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
