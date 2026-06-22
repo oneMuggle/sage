@@ -114,9 +114,7 @@ class MemorySaveTool(BaseTool):
             return ToolResult(success=False, error="记忆管理器未初始化")
 
         try:
-            self.memory.remember(
-                content, {"importance": importance, "memory_type": memory_type}
-            )
+            self.memory.remember(content, {"importance": importance, "memory_type": memory_type})
 
             return ToolResult(
                 success=True,

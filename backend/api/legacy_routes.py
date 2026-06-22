@@ -724,7 +724,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
                         if memory_parts:
                             system_content += "\n\n【用户相关记忆】\n" + "\n".join(memory_parts)
-                            logger.info(f"[REQ {request_id}] 已注入记忆到上下文: {len(memory_parts)} 条")
+                            logger.info(
+                                f"[REQ {request_id}] 已注入记忆到上下文: {len(memory_parts)} 条"
+                            )
                 except Exception as e:
                     logger.warning(f"[REQ {request_id}] 记忆搜索失败: {e}")
 
