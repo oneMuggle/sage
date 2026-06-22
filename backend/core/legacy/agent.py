@@ -263,9 +263,7 @@ class SageAgent:
             if message and len(message.strip()) > 2:
                 try:
                     logger.info(f"开始搜索记忆，查询: {message[:50]}")
-                    relevant_memories = self.memory_manager.search_memories(
-                        query=message, limit=5
-                    )
+                    relevant_memories = self.memory_manager.search_memories(query=message, limit=5)
                     logger.info(f"搜索结果数量: {len(relevant_memories)}")
 
                     # 如果搜索无结果，回退到获取最近的记忆
