@@ -9,6 +9,12 @@ from httpx import AsyncClient
 from backend.api.hex_routes import get_chat_service
 from backend.main import app
 
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
+_HEX_ONLY = pytest.mark.skipif(
+    _API_MODE != "hex",
+    reason=f"本文件测 hex 端点 /settings；当前 API_MODE={_API_MODE!r}（需 hex）",
+)
+
 
 # PG3.2: brief 的 PUT 端点依赖 svc.events.emit，需 DI 注入 ChatService。
 # 现有项目测试惯例：conftest 不触发 FastAPI lifespan，需手动 override DI。
@@ -46,6 +52,7 @@ def _hex_di_override():
 
 
 @pytest.mark.asyncio
+@_HEX_ONLY
 async def test_get_settings_returns_null_when_no_data():
     async with AsyncClient(app=app, base_url="http://test") as ac:
         resp = await ac.get("/api/v1/settings")
@@ -54,6 +61,7 @@ async def test_get_settings_returns_null_when_no_data():
 
 
 @pytest.mark.asyncio
+@_HEX_ONLY
 async def test_put_settings_persists_and_get_returns():
     async with AsyncClient(app=app, base_url="http://test") as ac:
         payload = {
