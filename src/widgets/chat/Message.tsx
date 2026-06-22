@@ -8,7 +8,7 @@ import {
   Brain,
   ChevronDown,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -21,6 +21,9 @@ interface MessageProps {
   onFeedback?: (messageId: string, feedback: 'up' | 'down') => void;
   knowledgeRefs?: { id: string; title: string }[];
   attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
+  // 流式状态（用于 ThinkingPanel 三模式判断）
+  isStreaming?: boolean;
+  reasoningComplete?: boolean;
 }
 
 /** Code block renderer with syntax highlighting + copy button */
@@ -74,35 +77,83 @@ function CodeBlock({ language, children }: { language?: string; children: string
   );
 }
 
-/** ThinkingPanel - 可折叠的 LLM 思考过程展示面板 */
-function ThinkingPanel({ reasoning }: { reasoning: string }) {
+/** ThinkingPanel - LLM 思考过程展示面板（三模式）
+ * - 流式中 (isStreaming + !reasoningComplete): 展开 + 光标闪烁 + "思考中…" 脉冲标题
+ * - 刚完成 (isStreaming + reasoningComplete): 光标消失 → 1.5s 后自动折叠
+ * - 历史消息 (!isStreaming): 默认折叠（向后兼容）
+ */
+function ThinkingPanel({
+  reasoning,
+  isStreaming = false,
+  reasoningComplete = false,
+}: {
+  reasoning: string;
+  isStreaming?: boolean;
+  reasoningComplete?: boolean;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const userTouchedRef = useRef(false);
+
+  // 流式模式: 自动展开；历史模式: 默认折叠
+  useEffect(() => {
+    if (isStreaming) {
+      setIsExpanded(true);
+    } else if (!userTouchedRef.current) {
+      setIsExpanded(false);
+    }
+  }, [isStreaming]);
+
+  // 完成后 1.5s 自动折叠（除非用户手动操作过）
+  useEffect(() => {
+    if (isStreaming && reasoningComplete && !userTouchedRef.current) {
+      const timer = setTimeout(() => setIsExpanded(false), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, reasoningComplete]);
+
+  const handleToggle = () => {
+    userTouchedRef.current = true;
+    setIsExpanded((v) => !v);
+  };
+
+  const showCursor = isStreaming && !reasoningComplete;
+  const headerText = showCursor ? '思考中…' : `思考过程 (${reasoning.length} 字)`;
 
   return (
-    <div className="mb-2 border border-border/50 rounded-radius-sm overflow-hidden">
+    <div className="mb-2 border border-role-purple/20 border-l-[3px] border-l-role-purple rounded-radius-sm overflow-hidden bg-role-purple/5">
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-bg-subtle hover:bg-bg-hover transition-colors text-left"
+        onClick={handleToggle}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-role-purple/10 transition-colors text-left"
         aria-expanded={isExpanded}
       >
-        <Brain className="w-4 h-4 text-primary" />
-        <span className="text-xs font-medium text-text-secondary">
-          思考过程 ({reasoning.length} 字)
+        <Brain className="w-4 h-4 text-role-purple" />
+        <span
+          className={`text-xs font-medium text-role-purple-text ${showCursor ? 'animate-pulse' : ''}`}
+        >
+          {headerText}
         </span>
         <ChevronDown
-          className={`w-4 h-4 ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 ml-auto text-role-purple transition-transform ${isExpanded ? 'rotate-180' : ''}`}
         />
       </button>
       {isExpanded && (
-        <div className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">
+        <div className="px-3 py-2 border-t border-role-purple/20 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap font-mono">
           {reasoning}
+          {showCursor && <span className="thinking-cursor">▌</span>}
         </div>
       )}
     </div>
   );
 }
 
-export function Message({ message, onFeedback, knowledgeRefs, attachments }: MessageProps) {
+export function Message({
+  message,
+  onFeedback,
+  knowledgeRefs,
+  attachments,
+  isStreaming = false,
+  reasoningComplete = false,
+}: MessageProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const isError = message.content?.startsWith('[错误') ?? false;
@@ -126,7 +177,11 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
         {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
         {isAssistant && message.reasoning_content && (
-          <ThinkingPanel reasoning={message.reasoning_content} />
+          <ThinkingPanel
+            reasoning={message.reasoning_content}
+            isStreaming={isStreaming}
+            reasoningComplete={reasoningComplete}
+          />
         )}
 
         {/* Knowledge references */}

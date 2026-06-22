@@ -1,8 +1,21 @@
 /**
  * 解析 NDJSON 流式响应
+ *
+ * NOTE: 此文件为历史遗留副本,主程序已迁移至 ./types.ts。
+ * 保留此类型定义仅为向后兼容,新代码应 import from './types'。
  */
 
-export type AgentState = 'idle' | 'thinking' | 'acting' | 'observing' | 'done' | 'failed';
+export type AgentState =
+  | 'idle'
+  | 'thinking'
+  | 'reasoning'
+  | 'reasoning_delta'
+  | 'reasoning_done'
+  | 'acting'
+  | 'observing'
+  | 'content_delta'
+  | 'done'
+  | 'failed';
 
 export interface ToolCallRequestFE {
   id: string;
@@ -23,6 +36,7 @@ export interface AgentEvent {
   state: AgentState;
   iteration: number;
   content?: string;
+  reasoning?: string;
   tool_call?: ToolCallRequestFE;
   tool_result?: ToolCallResultFE;
   error?: string;

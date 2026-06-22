@@ -55,15 +55,7 @@ class MemorySearchTool(BaseTool):
 
         try:
             # 调用记忆管理器的搜索功能
-            import asyncio  # noqa: PLC0415
-
-            loop = asyncio.new_event_loop()
-            try:
-                results = loop.run_until_complete(
-                    self.memory.remember(query=query, context={"memory_type_filter": memory_type})
-                )
-            finally:
-                loop.close()
+            results = self.memory.remember(query=query, context={"memory_type_filter": memory_type})
 
             return ToolResult(
                 success=True,
@@ -122,17 +114,9 @@ class MemorySaveTool(BaseTool):
             return ToolResult(success=False, error="记忆管理器未初始化")
 
         try:
-            import asyncio  # noqa: PLC0415
-
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(
-                    self.memory.remember(
-                        content, {"importance": importance, "memory_type": memory_type}
-                    )
-                )
-            finally:
-                loop.close()
+            self.memory.remember(
+                content, {"importance": importance, "memory_type": memory_type}
+            )
 
             return ToolResult(
                 success=True,

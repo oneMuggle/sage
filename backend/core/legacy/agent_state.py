@@ -19,6 +19,9 @@ class AgentState(str, Enum):  # noqa: UP042 — Python 3.10 不支持 StrEnum，
     # REASONING: 携带 LLM 思考/推理过程内容（reasoning_content）
     # 区别于 THINKING（仅表示"LLM 正在思考"阶段标记）
     REASONING = "reasoning"
+    # 流式 reasoning 分块事件（fake streaming，与 content_delta 模式一致）
+    REASONING_DELTA = "reasoning_delta"
+    REASONING_DONE = "reasoning_done"
     ACTING = "acting"
     OBSERVING = "observing"
     # I4: 流式 LLM 响应时,每个 token chunk 推一个 CONTENT_DELTA 事件,

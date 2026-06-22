@@ -5,6 +5,7 @@ LLM Client - 大语言模型客户端
 
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
@@ -108,8 +109,14 @@ class LLMClient:
                 headers["Authorization"] = f"Bearer {self.config.api_key}"
             headers.update(self.config.extra_headers)
 
+            # 自动补全 /v1: 大多数 OpenAI 兼容 API 需要 /v1/chat/completions
+            # 如果用户没加,自动补上,避免 404
+            base_url = self.config.base_url
+            if base_url and not base_url.rstrip("/").endswith("/v1"):
+                base_url = base_url.rstrip("/") + "/v1"
+
             self._client = httpx.AsyncClient(
-                base_url=self.config.base_url,
+                base_url=base_url,
                 headers=headers,
                 timeout=httpx.Timeout(self.config.timeout),
             )
@@ -239,11 +246,20 @@ class LLMClient:
         content = msg_data.get("content", "")
 
         # 提取 reasoning_content（多提供商兼容）
-        # Anthropic Claude 使用 reasoning_content 字段
-        # OpenAI o1/o3 使用 reasoning 或 reasoning_content 字段
-        # DeepSeek 使用 reasoning_content 字段
-        # 优先使用 reasoning_content，其次 reasoning
+        # - Anthropic Claude 使用 reasoning_content 字段
+        # - OpenAI o1/o3 使用 reasoning 或 reasoning_content 字段
+        # - DeepSeek 使用 reasoning_content 字段
+        # - MiniMax 使用 <think>...</think> 标签嵌入在 content 中
+        # 优先使用 reasoning_content，其次 reasoning，最后从 content 提取
         reasoning_content = msg_data.get("reasoning_content") or msg_data.get("reasoning")
+
+        # 如果没有独立的 reasoning 字段，尝试从 content 中提取 <think>...</think> 标签
+        if not reasoning_content and content:
+            think_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
+            if think_match:
+                reasoning_content = think_match.group(1).strip()
+                # 从 content 中移除 thinking 部分，只保留正式回答
+                content = re.sub(r"<think>.*?</think>\s*", "", content, flags=re.DOTALL).strip()
 
         tool_calls = []
         if msg_data.get("tool_calls"):

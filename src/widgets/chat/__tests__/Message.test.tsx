@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import type { Message as MessageType } from '../../../shared/lib/store';
 import { Message } from '../Message';
@@ -146,5 +146,109 @@ describe('ThinkingPanel', () => {
     fireEvent.click(button!);
     // 展开后：思考内容可见
     expect(container.textContent).toContain('这是思考内容');
+  });
+
+  describe('ThinkingPanel three modes', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('streaming mode: auto-expands and shows cursor', () => {
+      const msg: MessageType = {
+        id: '1',
+        session_id: 's',
+        role: 'assistant',
+        content: '🤔 思考中…',
+        created_at: 0,
+        reasoning_content: '分析中',
+      };
+      const { container } = render(
+        <Message message={msg} isStreaming={true} reasoningComplete={false} />,
+      );
+      // 流式模式：面板自动展开
+      expect(container.textContent).toContain('分析中');
+      // 显示"思考中…" 标题（脉冲）
+      expect(container.textContent).toContain('思考中…');
+      // 显示光标
+      expect(container.textContent).toContain('▌');
+    });
+
+    it('completed mode: auto-collapses after 1.5s', () => {
+      const msg: MessageType = {
+        id: '1',
+        session_id: 's',
+        role: 'assistant',
+        content: '🤔 思考中…',
+        created_at: 0,
+        reasoning_content: '完整思考内容',
+      };
+      const { container, rerender } = render(
+        <Message message={msg} isStreaming={true} reasoningComplete={false} />,
+      );
+      // 初始：展开状态（reasoning 内容可见）
+      expect(container.textContent).toContain('完整思考内容');
+
+      // reasoning 完成
+      rerender(<Message message={msg} isStreaming={true} reasoningComplete={true} />);
+      // 刚完成时仍然展开（光标消失，但未到 1.5s）
+      expect(container.textContent).toContain('完整思考内容');
+      // 光标应消失
+      expect(container.textContent).not.toContain('▌');
+
+      // 推进 1.5s → 自动折叠
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      // 折叠后内容不可见，但标题显示字数
+      expect(container.textContent).toContain('思考过程 (6 字)');
+    });
+
+    it('historical mode: default collapsed (backward compat)', () => {
+      const msg: MessageType = {
+        id: '1',
+        session_id: 's',
+        role: 'assistant',
+        content: '历史回答',
+        created_at: 0,
+        reasoning_content: '历史思考',
+      };
+      // 不传 isStreaming（历史消息）
+      const { container } = render(<Message message={msg} />);
+      // 默认折叠
+      expect(container.textContent).not.toContain('历史思考');
+      expect(container.textContent).toContain('思考过程 (4 字)');
+    });
+
+    it('user can manually toggle (overrides auto behavior)', () => {
+      const msg: MessageType = {
+        id: '1',
+        session_id: 's',
+        role: 'assistant',
+        content: '🤔 思考中…',
+        created_at: 0,
+        reasoning_content: '思考内容',
+      };
+      // 流式模式 → 自动展开
+      const { container, rerender } = render(
+        <Message message={msg} isStreaming={true} reasoningComplete={false} />,
+      );
+      expect(container.textContent).toContain('思考内容');
+
+      // 用户手动折叠
+      const button = container.querySelector('button');
+      fireEvent.click(button!);
+      expect(container.textContent).not.toContain('思考内容');
+
+      // reasoning 完成后，用户手动操作应被保留（不再自动折叠）
+      rerender(<Message message={msg} isStreaming={true} reasoningComplete={true} />);
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      // 仍然保持折叠（用户手动折叠的状态）
+      expect(container.textContent).not.toContain('思考内容');
+    });
   });
 });

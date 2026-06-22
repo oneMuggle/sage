@@ -60,6 +60,28 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
 
   // memory
+  get_memories: {
+    method: 'GET',
+    path: (a) => {
+      const memoryType = a?.memoryType ? `&type=${encodeURIComponent(String(a.memoryType))}` : '';
+      const page = (a?.page as number) ?? 1;
+      const pageSize = (a?.pageSize as number) ?? 20;
+      return `/api/v1/memory/list?${memoryType}page=${page}&page_size=${pageSize}`.replace(
+        '?&',
+        '?',
+      );
+    },
+  },
+  search_memory: {
+    method: 'GET',
+    path: (a) => {
+      const query = encodeURIComponent(String(a.query || ''));
+      const memoryType = a?.memoryType ? `&type=${encodeURIComponent(String(a.memoryType))}` : '';
+      const limit = (a?.limit as number) ?? 20;
+      return `/api/v1/memory/search?query=${query}${memoryType}&limit=${limit}`;
+    },
+  },
+  save_memory: { method: 'POST', path: () => '/api/v1/memory/save' },
   delete_memory: { method: 'POST', path: () => '/api/v1/memory/delete' },
 
   // evolution

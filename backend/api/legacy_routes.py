@@ -699,6 +699,35 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception:
                 pass  # Graceful fallback if diagram module unavailable
 
+            # 注入记忆上下文：根据用户问题搜索相关记忆
+            if data.message and len(data.message.strip()) > 2:
+                try:
+                    memory_manager = get_memory_manager()
+                    logger.info(f"[REQ {request_id}] 开始搜索记忆，查询: {data.message[:50]}")
+
+                    # 尝试根据用户问题搜索相关记忆
+                    relevant_memories = memory_manager.search_memories(query=data.message, limit=5)
+                    logger.info(f"[REQ {request_id}] 搜索结果数量: {len(relevant_memories)}")
+
+                    # 如果搜索无结果，回退到获取最近的记忆
+                    if not relevant_memories:
+                        logger.info(f"[REQ {request_id}] 搜索无结果，回退获取最近记忆")
+                        relevant_memories = memory_manager.episodic.get_recent(limit=3)
+                        logger.info(f"[REQ {request_id}] 最近记忆数量: {len(relevant_memories)}")
+
+                    if relevant_memories:
+                        memory_parts = []
+                        for mem in relevant_memories:
+                            content = mem.get("content", mem.get("summary", ""))
+                            if content:
+                                memory_parts.append(f"- {content}")
+
+                        if memory_parts:
+                            system_content += "\n\n【用户相关记忆】\n" + "\n".join(memory_parts)
+                            logger.info(f"[REQ {request_id}] 已注入记忆到上下文: {len(memory_parts)} 条")
+                except Exception as e:
+                    logger.warning(f"[REQ {request_id}] 记忆搜索失败: {e}")
+
             messages = [
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": data.message},
@@ -750,8 +779,27 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         done_reasoning = evt.reasoning
                     else:
                         done_reasoning += evt.reasoning
-                    # 透传给前端 (原样入队,前端 useChat 累积显示)
-                    await entry.queue.put(evt.to_dict())
+                    # 流式 reasoning: 把完整文本切块发送,实现逐字显示效果
+                    # 与 done content 的 fake streaming 逻辑一致
+                    full_reasoning = evt.reasoning
+                    for i in range(0, len(full_reasoning), _STREAMING_CHUNK_SIZE):
+                        delta = full_reasoning[i : i + _STREAMING_CHUNK_SIZE]
+                        await entry.queue.put(
+                            {
+                                "state": "reasoning_delta",
+                                "iteration": evt.iteration,
+                                "reasoning": delta,
+                            }
+                        )
+                        await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
+                    # 发送 reasoning_done 事件,标记思考完成
+                    await entry.queue.put(
+                        {
+                            "state": "reasoning_done",
+                            "iteration": evt.iteration,
+                            "reasoning": full_reasoning,
+                        }
+                    )
                 else:
                     await entry.queue.put(evt.to_dict())
 

@@ -283,3 +283,21 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-border-hover);
 }
+
+/* ThinkingPanel 光标闪烁动画 */
+@keyframes thinking-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.thinking-cursor {
+  display: inline-block;
+  animation: thinking-blink 0.8s step-end infinite;
+  color: rgb(var(--color-role-purple-rgb));
+  font-weight: bold;
+}

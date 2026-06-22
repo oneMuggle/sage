@@ -10,8 +10,17 @@ import { LoadingState } from '../shared/ui/LoadingState';
 import { ChatInput, MessageList } from '../widgets/chat';
 
 export function Chat() {
-  const { messages, isLoading, error, clearError, sendMessage, interrupt, loadMessages } =
-    useChat();
+  const {
+    messages,
+    isLoading,
+    error,
+    clearError,
+    sendMessage,
+    interrupt,
+    loadMessages,
+    streamingMessageId,
+    reasoningComplete,
+  } = useChat();
 
   const { currentSessionId, setCurrentSessionId, createSession } = useStore();
   const { settings } = useSettings();
@@ -99,7 +108,11 @@ export function Chat() {
             <LoadingState label="正在加载对话..." />
           </div>
         ) : (
-          <MessageList messages={messages} />
+          <MessageList
+            messages={messages}
+            streamingMessageId={streamingMessageId}
+            reasoningComplete={reasoningComplete}
+          />
         )}
       </div>
 

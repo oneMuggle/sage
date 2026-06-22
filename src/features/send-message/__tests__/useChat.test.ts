@@ -541,4 +541,148 @@ describe('useChat', () => {
     expect(final?.content).toBe('答案是 2');
     expect(result.current.isLoading).toBe(false);
   });
+
+  it('accumulates reasoning_delta chunks and sets reasoningComplete on reasoning_done', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-reasoning' });
+
+    let capturedCb:
+      | ((e: {
+          payload: { state: string; iteration: number; reasoning?: string; content?: string };
+        }) => void)
+      | null = null;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: { state: string; iteration: number; reasoning?: string; content?: string };
+        }) => void,
+      ) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('思考题') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(capturedCb).not.toBeNull();
+
+    // 模拟 producer: thinking → reasoning_delta × 3 → reasoning_done → content_delta → done
+    act(() => {
+      capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
+    });
+    // reasoning_complete 初始应为 false
+    expect(result.current.reasoningComplete).toBe(false);
+
+    act(() => {
+      capturedCb!({ payload: { state: 'reasoning_delta', iteration: 0, reasoning: '让我' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'reasoning_delta', iteration: 0, reasoning: '分析' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'reasoning_delta', iteration: 0, reasoning: '问题' } });
+    });
+
+    // reasoning_delta 累积到 reasoning_content（通过 derivedMessages）
+    await waitFor(() => {
+      const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(assistantMsg?.reasoning_content).toBe('让我分析问题');
+    });
+
+    // reasoning_delta 期间，content 应保持占位符
+    const duringReasoning = result.current.messages.find((m) => m.role === 'assistant');
+    expect(duringReasoning?.content).toBe('🤔 思考中…');
+    expect(result.current.reasoningComplete).toBe(false);
+
+    // reasoning_done 设置 reasoningComplete = true
+    act(() => {
+      capturedCb!({
+        payload: { state: 'reasoning_done', iteration: 0, reasoning: '让我分析问题' },
+      });
+    });
+    expect(result.current.reasoningComplete).toBe(true);
+
+    // content_delta 应替换初始占位符（不是追加到 "🤔 思考中…" 后面）
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '答案是' } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: ' 42' } });
+    });
+
+    await waitFor(() => {
+      const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(assistantMsg?.content).toBe('答案是 42');
+      // reasoning_content 应保留
+      expect(assistantMsg?.reasoning_content).toBe('让我分析问题');
+    });
+
+    // 最终 store 中 reasoning_content 也保留
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 1, content: '答案是 42' } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+    expect(result.current.reasoningComplete).toBe(false); // streaming 结束，重置
+  });
+
+  it('handles legacy reasoning event (backward compat) by setting reasoningComplete', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-legacy' });
+
+    let capturedCb:
+      | ((e: {
+          payload: { state: string; iteration: number; reasoning?: string; content?: string };
+        }) => void)
+      | null = null;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: { state: string; iteration: number; reasoning?: string; content?: string };
+        }) => void,
+      ) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('hi') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // 旧 backend 直接发 reasoning 事件（无 delta）
+    act(() => {
+      capturedCb!({ payload: { state: 'reasoning', iteration: 0, reasoning: '完整思考内容' } });
+    });
+
+    // 旧 reasoning 事件也应设置 reasoningComplete
+    expect(result.current.reasoningComplete).toBe(true);
+
+    await waitFor(() => {
+      const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(assistantMsg?.reasoning_content).toBe('完整思考内容');
+    });
+
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 0, content: '回答' } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+  });
 });
