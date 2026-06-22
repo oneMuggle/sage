@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { Settings } from './pages';
@@ -7,8 +8,18 @@ import { Knowledge } from './pages/Knowledge';
 import { Memory } from './pages/Memory';
 import Skills from './pages/Skills';
 import { Layout } from './widgets/layout';
+import { useStore } from './shared/lib/store';
+import { loadCurrentSessionId } from './entities/session/storage';
 
 function App() {
+  useEffect(() => {
+    loadCurrentSessionId().then((id) => {
+      if (id) {
+        useStore.getState().setCurrentSessionId(id);
+      }
+    });
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
