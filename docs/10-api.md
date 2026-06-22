@@ -646,4 +646,18 @@ await invoke('save_memory', {
 
 ---
 
+## 10.7 Settings 端点（PG3.2+，2026-06-22）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/settings` | 读取持久化 AppSettings；无则返回 `{data: null}` |
+| PUT | `/api/v1/settings` | 持久化 + emit `settings_changed` 审计（api_key 不进 payload） |
+| GET | `/api/v1/preferences/{key}` | 通用 KV 读取（白名单限定 key） |
+| PUT | `/api/v1/preferences/{key}` | 通用 KV 写入（白名单限定 key） |
+
+白名单 keys：`app_settings` / `theme_mode` / `current_session_id`。
+非白名单 key 返回 400。
+
+---
+
 _文档版本: v1.0_
