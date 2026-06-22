@@ -1,5 +1,4 @@
 """GET/PUT /settings 端点集成测试"""
-import json
 import os
 from unittest.mock import MagicMock
 
@@ -9,18 +8,26 @@ from httpx import AsyncClient
 from backend.api.hex_routes import get_chat_service
 from backend.main import app
 
+# 本文件专门测 hex 路径;legacy 模式下 settings 端点不被注册
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
+pytestmark = pytest.mark.skipif(
+    _API_MODE != "hex",
+    reason=f"本文件测 hex 路径 settings 端点;当前 API_MODE={_API_MODE!r}(需 hex)",
+)
+
 
 # PG3.2: brief 的 PUT 端点依赖 svc.events.emit，需 DI 注入 ChatService。
 # 现有项目测试惯例：conftest 不触发 FastAPI lifespan，需手动 override DI。
 # 装配最简 ChatService mock（含 events.emit 占位）让端到端跑通。
 @pytest.fixture(autouse=True)
 def _hex_di_override():
+    from sage_core import Message, Role
+
     from backend.adapters.out.llm.mock_adapter import MockLLMAdapter
     from backend.adapters.out.metric.noop_adapter import NoopMetricAdapter
     from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
     from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
     from backend.application.services.chat_service import ChatService
-    from sage_core import Message, Role
 
     mock_tool = MagicMock()
     mock_tool.execute.return_value = MagicMock(success=True, output="ok", error=None)
@@ -45,7 +52,7 @@ def _hex_di_override():
         app.dependency_overrides.pop(get_chat_service, None)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_get_settings_returns_null_when_no_data():
     async with AsyncClient(app=app, base_url="http://test") as ac:
         resp = await ac.get("/api/v1/settings")
@@ -53,7 +60,7 @@ async def test_get_settings_returns_null_when_no_data():
     assert resp.json() is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_put_settings_persists_and_get_returns():
     async with AsyncClient(app=app, base_url="http://test") as ac:
         payload = {

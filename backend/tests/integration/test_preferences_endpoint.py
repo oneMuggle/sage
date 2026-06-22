@@ -1,11 +1,20 @@
 """GET/PUT /preferences/{key} 通用 KV 端点集成测试"""
+import os
+
 import pytest
 from httpx import AsyncClient
 
 from backend.main import app
 
+# 本文件专门测 hex 路径;legacy 模式下 preferences 端点不被注册
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
+pytestmark = pytest.mark.skipif(
+    _API_MODE != "hex",
+    reason=f"本文件测 hex 路径 preferences 端点;当前 API_MODE={_API_MODE!r}(需 hex)",
+)
 
-@pytest.mark.asyncio
+
+@pytest.mark.asyncio()
 async def test_get_preference_returns_value():
     async with AsyncClient(app=app, base_url="http://test") as ac:
         # 先 set
@@ -16,7 +25,7 @@ async def test_get_preference_returns_value():
     assert resp.json()["value"] == "dark"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_get_preference_returns_null_when_missing():
     async with AsyncClient(app=app, base_url="http://test") as ac:
         # current_session_id 在 KEYS 白名单内但测试中未写入过
@@ -25,14 +34,14 @@ async def test_get_preference_returns_null_when_missing():
     assert resp.json()["value"] is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_get_preference_rejects_non_whitelisted_key():
     async with AsyncClient(app=app, base_url="http://test") as ac:
         resp = await ac.get("/api/v1/preferences/evil_key")
     assert resp.status_code == 400
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_put_preference_rejects_non_whitelisted_key():
     async with AsyncClient(app=app, base_url="http://test") as ac:
         resp = await ac.put("/api/v1/preferences/evil_key", json={"value": "x"})
