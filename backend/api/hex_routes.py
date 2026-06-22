@@ -225,6 +225,45 @@ async def get_settings() -> dict | None:
     return SettingsRepository().get_json("app_settings")
 
 
+# ==================== 通用 KV /preferences/{key} 端点（白名单） ====================
+#
+# 用于替代前端的 localStorage 主题/会话 id 存储，仅暴露白名单内的 key。
+# 非白名单 key 返回 400，避免 preferences 表被任意写入污染。
+
+
+class PreferenceItem(BaseModel):
+    """通用 KV /preferences/{key} 请求/响应体。"""
+
+    value: str | None = None
+    value_type: str = "string"
+    category: str = "general"
+
+
+@router.get("/preferences/{key}", response_model=PreferenceItem)
+async def get_preference(key: str) -> PreferenceItem:
+    """通用 KV 读取（白名单限定 key）。"""
+    from backend.data.settings_repo import SettingsRepository
+
+    if key not in SettingsRepository.KEYS:
+        raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
+    val = SettingsRepository().get(key)
+    return PreferenceItem(value=val)
+
+
+@router.put("/preferences/{key}", response_model=PreferenceItem)
+async def put_preference(key: str, item: PreferenceItem) -> PreferenceItem:
+    """通用 KV 写入（白名单限定 key）。"""
+    from backend.data.settings_repo import SettingsRepository
+
+    if key not in SettingsRepository.KEYS:
+        raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
+    if item.value is not None:
+        SettingsRepository().set(
+            key, item.value, value_type=item.value_type, category=item.category
+        )
+    return item
+
+
 # ============================================================================
 # Sessions CRUD 端点（PG-A1）
 # ============================================================================
