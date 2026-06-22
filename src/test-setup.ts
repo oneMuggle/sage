@@ -46,3 +46,22 @@ function installInMemoryStorage(key: 'localStorage' | 'sessionStorage'): void {
 
 installInMemoryStorage('localStorage');
 installInMemoryStorage('sessionStorage');
+
+/**
+ * jsdom 不实现 window.matchMedia，但 ThemeProvider / useTheme 依赖它探测
+ * 系统颜色方案。提供一个最小桩：默认不匹配 dark，且支持 addEventListener
+ * （ThemeProvider 在 mount 时挂监听器）。
+ */
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  const stub = (query: string): MediaQueryList => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  });
+  Object.defineProperty(window, 'matchMedia', { configurable: true, value: stub });
+}
