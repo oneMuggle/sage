@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLoad = vi.fn();
 const mockSave = vi.fn();
@@ -10,8 +10,8 @@ vi.mock('../../../entities/setting/storage', () => ({
   resetSettings: (...args: unknown[]) => mockReset(...args),
 }));
 
-import { useSettings } from '../useSettings';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
+import { useSettings } from '../useSettings';
 
 describe('useSettings (async)', () => {
   beforeEach(() => {
