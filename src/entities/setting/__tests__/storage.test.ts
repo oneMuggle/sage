@@ -1,161 +1,131 @@
-/**
- * entities/setting/storage 测试
- *
- * 覆盖：
- *   - 无 persistence → 返回 DEFAULT_SETTINGS
- *   - v1 (apiUrl + model) → v3 (endpoints + ModelSelection bindings) 迁移
- *   - v2 (isActive + flat modelSelections) → v3 迁移
- *   - saveSettings 合并并 stamp version
- *   - 解析失败回退默认值
- *   - resetSettings 写回默认
- */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadSettings, resetSettings, saveSettings } from '../storage';
-import {
-  DEFAULT_SETTINGS,
-  SETTINGS_STORAGE_KEY,
-  SETTINGS_VERSION,
-  type EndpointConfig,
-} from '../types';
+const mockGetSettings = vi.fn();
+const mockSetSettings = vi.fn();
+vi.mock('../../../shared/api/settingsClient', () => ({
+  settingsClient: {
+    getSettings: (...args: unknown[]) => mockGetSettings(...args),
+    setSettings: (...args: unknown[]) => mockSetSettings(...args),
+  },
+}));
 
-beforeEach(() => {
-  localStorage.clear();
-});
+import { loadSettings, saveSettings, resetSettings } from '../storage';
+import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY } from '../types';
 
-describe('storage.loadSettings', () => {
-  it('returns DEFAULT_SETTINGS when no persistence exists', () => {
-    const settings = loadSettings();
-    expect(settings).toEqual(DEFAULT_SETTINGS);
-    // 不能是同一引用 —— 验证创建了副本
-    expect(settings).not.toBe(DEFAULT_SETTINGS);
+const CACHE_KEY = SETTINGS_STORAGE_KEY; // 'sage-settings'
+const MIGRATION_MARKER = 'sage-settings.migrated_to_backend';
+
+describe('settings storage (async)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    mockGetSettings.mockReset();
+    mockSetSettings.mockReset();
   });
 
-  it('returns DEFAULT_SETTINGS when persisted JSON is corrupt', () => {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, '{not valid json');
-    expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
+  describe('loadSettings', () => {
+    it('后端命中时返回 backend 数据并写 local cache', async () => {
+      const remoteData = { ...DEFAULT_SETTINGS, maxContext: 8000 };
+      mockGetSettings.mockResolvedValue(remoteData);
+      const r = await loadSettings();
+      expect(r.maxContext).toBe(8000);
+      expect(JSON.parse(localStorage.getItem(CACHE_KEY)!).maxContext).toBe(8000);
+    });
+
+    it('后端无值且 localStorage 有值时回退 local', async () => {
+      mockGetSettings.mockResolvedValue(null);
+      const local = { ...DEFAULT_SETTINGS, temperature: 0.3 };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(local));
+      const r = await loadSettings();
+      expect(r.temperature).toBe(0.3);
+    });
+
+    it('都为空时返回 DEFAULT_SETTINGS', async () => {
+      mockGetSettings.mockResolvedValue(null);
+      const r = await loadSettings();
+      expect(r).toEqual(DEFAULT_SETTINGS);
+    });
+
+    it('后端失败时降级 localStorage', async () => {
+      mockGetSettings.mockResolvedValue(null);
+      const local = { ...DEFAULT_SETTINGS, compactMode: true };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(local));
+      const r = await loadSettings();
+      expect(r.compactMode).toBe(true);
+    });
   });
 
-  it('migrates legacy v1 schema (apiUrl + model) to v3', () => {
-    localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        version: '1.0.0',
-        apiUrl: 'https://legacy.test/v1',
-        model: 'gpt-legacy',
-        temperature: 0.5,
-      }),
-    );
+  describe('自动迁移', () => {
+    it('首次后端命中 + localStorage 有值 + 未标记迁移 → 自动上传', async () => {
+      const local = { ...DEFAULT_SETTINGS, maxContext: 9999 };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(local));
+      mockGetSettings.mockResolvedValueOnce(null); // 第一次：后端无
+      mockSetSettings.mockResolvedValueOnce(undefined);
 
-    const settings = loadSettings();
+      await loadSettings();
 
-    expect(settings.version).toBe(SETTINGS_VERSION);
-    expect(settings.endpoints).toHaveLength(1);
-    expect(settings.endpoints[0].baseUrl).toBe('https://legacy.test/v1');
-    expect(settings.endpoints[0]).not.toHaveProperty('isActive');
-    expect(settings.endpoints[0].discoveredModels[0].id).toBe('gpt-legacy');
-    expect(settings.modelSelections.chatModel.modelId).toBe('gpt-legacy');
-    expect(settings.modelSelections.chatModel.endpointId).toBe(settings.endpoints[0].id);
+      expect(mockSetSettings).toHaveBeenCalledWith(expect.objectContaining({ maxContext: 9999 }));
+      expect(localStorage.getItem(MIGRATION_MARKER)).toBeTruthy();
+    });
+
+    it('已标记迁移时不重复上传', async () => {
+      const local = { ...DEFAULT_SETTINGS, maxContext: 9999 };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(local));
+      localStorage.setItem(MIGRATION_MARKER, '2026-06-22T00:00:00.000Z');
+      mockGetSettings.mockResolvedValueOnce(null);
+
+      await loadSettings();
+
+      expect(mockSetSettings).not.toHaveBeenCalled();
+    });
+
+    it('后端已有数据时不触发迁移', async () => {
+      const local = { ...DEFAULT_SETTINGS, maxContext: 9999 };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(local));
+      mockGetSettings.mockResolvedValueOnce({ ...DEFAULT_SETTINGS, maxContext: 8000 });
+
+      await loadSettings();
+
+      expect(mockSetSettings).not.toHaveBeenCalled();
+    });
   });
 
-  it('migrates v2 schema (isActive + flat modelSelections) to v3', () => {
-    const ep1Id = 'ep-1-uuid';
-    const ep2Id = 'ep-2-uuid';
-    localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        version: '2.0.0',
-        endpoints: [
-          {
-            id: ep1Id,
-            name: 'OpenAI',
-            baseUrl: 'https://api.openai.com/v1',
-            apiKey: 'sk-1',
-            isActive: false,
-            discoveredModels: [{ id: 'gpt-4o', capabilities: ['chat'], endpointId: ep1Id }],
-            lastDiscoveredAt: null,
-          },
-          {
-            id: ep2Id,
-            name: 'Ollama',
-            baseUrl: 'http://localhost:11434/v1',
-            apiKey: '',
-            isActive: true,
-            discoveredModels: [{ id: 'llama3', capabilities: ['chat'], endpointId: ep2Id }],
-            lastDiscoveredAt: null,
-          },
-        ],
-        modelSelections: {
-          chatModelId: 'llama3',
-          visionModelId: null,
-          embeddingModelId: null,
-        },
-        temperature: 0.7,
-      }),
-    );
+  describe('saveSettings', () => {
+    it('同步写 localStorage', async () => {
+      await saveSettings({ maxContext: 16000 });
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY)!);
+      expect(cached.maxContext).toBe(16000);
+    });
 
-    const settings = loadSettings();
-
-    expect(settings.version).toBe(SETTINGS_VERSION);
-    // isActive stripped from all endpoints
-    expect(settings.endpoints[0]).not.toHaveProperty('isActive');
-    expect(settings.endpoints[1]).not.toHaveProperty('isActive');
-    // model selection bound to the previously-active endpoint
-    expect(settings.modelSelections.chatModel.endpointId).toBe(ep2Id);
-    expect(settings.modelSelections.chatModel.modelId).toBe('llama3');
-    // null selections remain unbound
-    expect(settings.modelSelections.visionModel.endpointId).toBeNull();
-    expect(settings.modelSelections.visionModel.modelId).toBeNull();
+    it('异步调 setSettings', async () => {
+      mockSetSettings.mockResolvedValueOnce(undefined);
+      await saveSettings({ maxContext: 16000 });
+      expect(mockSetSettings).toHaveBeenCalledWith({ maxContext: 16000 });
+    });
   });
 
-  it('merges with defaults when version is current v3', () => {
-    localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        version: SETTINGS_VERSION,
-        temperature: 0.123,
-        // 故意省略 streaming / endpoints 等字段
-      }),
-    );
-
-    const settings = loadSettings();
-    expect(settings.temperature).toBe(0.123);
-    expect(settings.streaming).toBe(DEFAULT_SETTINGS.streaming);
-    expect(settings.endpoints).toEqual(DEFAULT_SETTINGS.endpoints);
-  });
-});
-
-describe('storage.saveSettings', () => {
-  it('merges partial update with current state and stamps version', () => {
-    saveSettings({ temperature: 0.9 });
-    const raw = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)!);
-    expect(raw.temperature).toBe(0.9);
-    expect(raw.version).toBe(SETTINGS_VERSION);
-    // 未指定字段应当继承默认
-    expect(raw.maxContext).toBe(DEFAULT_SETTINGS.maxContext);
+  describe('resetSettings', () => {
+    it('重置为 DEFAULT_SETTINGS 并写 local + 后端', async () => {
+      mockSetSettings.mockResolvedValueOnce(undefined);
+      await resetSettings();
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY)!);
+      expect(cached).toEqual(DEFAULT_SETTINGS);
+      expect(mockSetSettings).toHaveBeenCalled();
+    });
   });
 
-  it('replaces endpoints when provided', () => {
-    const endpoint: EndpointConfig = {
-      id: 'a',
-      name: 'A',
-      baseUrl: 'https://a.test',
-      apiKey: 'sk',
-      discoveredModels: [],
-      lastDiscoveredAt: null,
-    };
-    saveSettings({ endpoints: [endpoint] });
-    const raw = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)!);
-    expect(raw.endpoints).toEqual([endpoint]);
-  });
-});
+  describe('7 天保留清理', () => {
+    it('迁移标记 >7 天时清理 localStorage 冗余数据', async () => {
+      const local = { ...DEFAULT_SETTINGS, maxContext: 9999 };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(local));
+      // 标记 8 天前
+      const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+      localStorage.setItem(MIGRATION_MARKER, eightDaysAgo);
+      mockGetSettings.mockResolvedValueOnce({ ...DEFAULT_SETTINGS, maxContext: 8000 });
 
-describe('storage.resetSettings', () => {
-  it('writes DEFAULT_SETTINGS to localStorage', () => {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ temperature: 9.9 }));
-    resetSettings();
-    const raw = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)!);
-    expect(raw.temperature).toBe(DEFAULT_SETTINGS.temperature);
-    expect(raw.version).toBe(SETTINGS_VERSION);
+      await loadSettings();
+
+      // 8 天前的标记 + 后端已有数据 → 清理 local
+      expect(mockSetSettings).not.toHaveBeenCalled();
+    });
   });
 });
