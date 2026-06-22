@@ -75,6 +75,7 @@ class AgentEvent:
     tool_call: ToolCallRequest | None = None
     tool_result: ToolCallResult | None = None
     error: str | None = None
+    agent_id: str | None = None  # 当前执行 agent 的 ID(供前端显示"当前处理 agent")
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为 JSON 友好的字典。"""
@@ -92,4 +93,6 @@ class AgentEvent:
             d["tool_result"] = self.tool_result.to_dict()
         if self.error is not None:
             d["error"] = self.error
+        if self.agent_id is not None:
+            d["agent_id"] = self.agent_id
         return d
