@@ -1456,7 +1456,6 @@ import {
   SETTINGS_STORAGE_KEY,
   SETTINGS_VERSION,
 } from './types';
-import type { EndpointConfig, ModelSelection } from './types';
 
 const CACHE_KEY = SETTINGS_STORAGE_KEY;
 const MIGRATION_MARKER = 'sage-settings.migrated_to_backend';
@@ -1594,65 +1593,10 @@ export function loadSettingsSync(): AppSettings {
   return mergeWithDefaults(readLocalCacheSync() ?? {});
 }
 
-// 保留 v1/v2 迁移函数以备后端返回老数据时使用
-export function migrateFromV1(parsed: Record<string, unknown>): AppSettings {
-  const v1ApiUrl = (parsed.apiUrl as string) ?? '';
-  const v1Model = (parsed.model as string) ?? '';
-  const endpointId = v1ApiUrl ? crypto.randomUUID() : '';
-  const endpoint: EndpointConfig = v1ApiUrl
-    ? {
-        id: endpointId,
-        name: '默认端点',
-        baseUrl: v1ApiUrl,
-        apiKey: '',
-        discoveredModels: v1Model ? [{ id: v1Model, capabilities: ['chat'], endpointId }] : [],
-        lastDiscoveredAt: null,
-      }
-    : { id: '', name: '', baseUrl: '', apiKey: '', discoveredModels: [], lastDiscoveredAt: null };
-  const chatModel: ModelSelection = v1Model
-    ? { endpointId: endpointId || null, modelId: v1Model }
-    : { endpointId: null, modelId: null };
-  return {
-    ...DEFAULT_SETTINGS,
-    endpoints: endpoint.baseUrl ? [endpoint] : [],
-    modelSelections: {
-      chatModel,
-      visionModel: { endpointId: null, modelId: null },
-      embeddingModel: { endpointId: null, modelId: null },
-    },
-    version: SETTINGS_VERSION,
-  };
-}
-
-export function migrateFromV2(parsed: Record<string, unknown>): AppSettings {
-  const oldEndpoints = (parsed.endpoints as Array<Record<string, unknown>>) ?? [];
-  const oldSelections = (parsed.modelSelections as Record<string, unknown>) ?? {};
-  const activeEp = oldEndpoints.find((ep) => ep.isActive === true);
-  const activeEndpointId = (activeEp?.id as string) ?? null;
-  const endpoints: EndpointConfig[] = oldEndpoints.map((ep) => ({
-    id: ep.id as string,
-    name: (ep.name as string) ?? '',
-    baseUrl: (ep.baseUrl as string) ?? '',
-    apiKey: (ep.apiKey as string) ?? '',
-    discoveredModels: (ep.discoveredModels as EndpointConfig['discoveredModels']) ?? [],
-    lastDiscoveredAt: (ep.lastDiscoveredAt as number | null) ?? null,
-  }));
-  const toModelSelection = (modelId: unknown): ModelSelection => {
-    const id = (modelId as string) ?? null;
-    return id ? { endpointId: activeEndpointId, modelId: id } : { endpointId: null, modelId: null };
-  };
-  return {
-    ...DEFAULT_SETTINGS,
-    ...(parsed as Partial<AppSettings>),
-    endpoints,
-    modelSelections: {
-      chatModel: toModelSelection(oldSelections.chatModelId),
-      visionModel: toModelSelection(oldSelections.visionModelId),
-      embeddingModel: toModelSelection(oldSelections.embeddingModelId),
-    },
-    version: SETTINGS_VERSION,
-  };
-}
+// 注：原 migrateFromV1 / migrateFromV2 函数在新架构下不再需要：
+// 后端只存 v3 格式；前端 localStorage 中的 v1/v2 数据由后端首次读 + 旧
+// 客户端链路完成迁移后，本地不再有旧格式。YAGNI — 删。
+// 如未来后端需回滚兼容老数据，再从 git history 恢复。
 ```
 
 - [ ] **Step 4: 跑测试确认通过**
@@ -1858,6 +1802,7 @@ updateSettings / resetSettings 改 async Promise 返回。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { ThemeProvider } from '../ThemeProvider';
+import { useTheme } from '../useTheme';
 
 const mockLoad = vi.fn();
 const mockSave = vi.fn();
@@ -1902,7 +1847,6 @@ describe('ThemeProvider async init', () => {
   it('保存主题时调 saveTheme', async () => {
     mockLoad.mockResolvedValue('light');
     mockSave.mockResolvedValue(undefined);
-    const { useTheme } = await import('../useTheme');
     const TestConsumer = () => {
       const { setMode } = useTheme();
       return <button onClick={() => setMode('dark')}>change</button>;
