@@ -106,6 +106,46 @@ describe('COMMAND_ROUTES', () => {
   });
 });
 
+describe('settings & preferences IPC routes', () => {
+  it('has get_settings route', () => {
+    expect(COMMAND_ROUTES.get_settings).toBeDefined();
+    expect(COMMAND_ROUTES.get_settings.method).toBe('GET');
+    expect(COMMAND_ROUTES.get_settings.path({})).toBe('/api/v1/settings');
+  });
+
+  it('has set_settings route', () => {
+    expect(COMMAND_ROUTES.set_settings).toBeDefined();
+    expect(COMMAND_ROUTES.set_settings.method).toBe('PUT');
+    expect(COMMAND_ROUTES.set_settings.path({})).toBe('/api/v1/settings');
+  });
+
+  it('has get_preference route with key encoding', () => {
+    const r = COMMAND_ROUTES.get_preference;
+    expect(r.method).toBe('GET');
+    expect(r.path({ key: 'theme_mode' })).toBe('/api/v1/preferences/theme_mode');
+    expect(r.path({ key: 'has space' })).toBe('/api/v1/preferences/has%20space');
+  });
+
+  it('has set_preference route with key encoding', () => {
+    const r = COMMAND_ROUTES.set_preference;
+    expect(r.method).toBe('PUT');
+    expect(r.path({ key: 'current_session_id' })).toBe(
+      '/api/v1/preferences/current_session_id',
+    );
+  });
+
+  it('all settings/preference paths have /api/v1 prefix', () => {
+    // 防止漏前缀导致 404
+    const paths = [
+      COMMAND_ROUTES.get_settings.path({}),
+      COMMAND_ROUTES.set_settings.path({}),
+      COMMAND_ROUTES.get_preference.path({ key: 'theme_mode' }),
+      COMMAND_ROUTES.set_preference.path({ key: 'theme_mode' }),
+    ];
+    paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\//));
+  });
+});
+
 describe('UnknownIpcCommandError', () => {
   it('names the offending command and references the source of truth', () => {
     const err = new UnknownIpcCommandError('foo_bar');
