@@ -56,9 +56,7 @@ function cleanupLocalCacheIfExpired(): void {
   }
 }
 
-async function maybeAutoMigrate(remote: AppSettings | null): Promise<void> {
-  if (remote) return; // 后端有数据，无需迁移
-
+async function maybeAutoMigrate(): Promise<void> {
   const local = readLocalCacheSync();
   if (!local) return; // local 也没有，跳过
 
@@ -106,7 +104,7 @@ export async function loadSettings(): Promise<AppSettings> {
     writeLocalCacheSync(merged);
     return merged;
   }
-  await maybeAutoMigrate(null);
+  await maybeAutoMigrate();
   const local = readLocalCacheSync();
   return mergeWithDefaults(local ?? {});
 }
@@ -141,12 +139,6 @@ export async function resetSettings(): Promise<void> {
   } catch {
     // 静默
   }
-}
-
-// 旧同步签名保留为 fallback（@deprecated；新代码用 async 版本）
-/** @deprecated use loadSettings() async */
-export function loadSettingsSync(): AppSettings {
-  return mergeWithDefaults(readLocalCacheSync() ?? {});
 }
 
 // 注：原 migrateFromV1 / migrateFromV2 函数在新架构下不再需要：

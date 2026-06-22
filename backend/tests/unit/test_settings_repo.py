@@ -1,4 +1,5 @@
 """settings_repo 单元测试"""
+
 import json
 from unittest.mock import MagicMock
 
@@ -56,8 +57,19 @@ def test_set_inserts_new_row(mock_db):
     conn.execute.return_value.fetchone.return_value = None
     repo = SettingsRepository(db=db)
     repo.set("theme_mode", "dark", value_type="string", category="ui")
-    # 至少调用了 1 次 SELECT + 1 次 INSERT
-    assert conn.execute.call_count >= 2
+    # 验证调用序列：SELECT 存在性检查 + INSERT
+    assert conn.execute.call_count == 2
+    # First call is SELECT existence check
+    select_call = conn.execute.call_args_list[0]
+    assert "SELECT" in str(select_call)
+    assert "theme_mode" in str(select_call)
+    # Second call is INSERT
+    insert_call = conn.execute.call_args_list[1]
+    assert "INSERT" in str(insert_call)
+    assert "theme_mode" in str(insert_call)
+    assert "dark" in str(insert_call)
+    assert "string" in str(insert_call)
+    assert "ui" in str(insert_call)
     conn.commit.assert_called()
 
 
@@ -67,6 +79,16 @@ def test_set_updates_existing_row(mock_db):
     conn.execute.return_value.fetchone.return_value = {"key": "theme_mode"}
     repo = SettingsRepository(db=db)
     repo.set("theme_mode", "dark")
+    # 验证调用序列：SELECT 存在性检查 + UPDATE
+    assert conn.execute.call_count == 2
+    # First call is SELECT existence check
+    select_call = conn.execute.call_args_list[0]
+    assert "SELECT" in str(select_call)
+    # Second call is UPDATE
+    update_call = conn.execute.call_args_list[1]
+    assert "UPDATE" in str(update_call)
+    assert "theme_mode" in str(update_call)
+    assert "dark" in str(update_call)
     conn.commit.assert_called()
 
 
