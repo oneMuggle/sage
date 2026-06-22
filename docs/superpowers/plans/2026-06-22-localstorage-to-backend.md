@@ -159,8 +159,9 @@ def test_set_json_serializes(mock_db):
     conn.execute.return_value.fetchone.return_value = None
     repo = SettingsRepository(db=db)
     repo.set_json("app_settings", {"x": 1}, category="general")
-    # 验证 execute 中有 JSON 字符串
-    args = conn.execute.call_args_list[0]
+    # call_args_list[0] = SELECT 存在性检查
+    # call_args_list[1] = INSERT（JSON 字符串在这里）
+    args = conn.execute.call_args_list[1]
     assert json.dumps({"x": 1}) in str(args)
 
 
@@ -174,9 +175,9 @@ def test_delete_removes_row(mock_db):
 
 def test_list_by_category(mock_db):
     db, conn = mock_db
+    # mock 模拟 SQL 已按 category 过滤后的结果（实现里 SQL 含 WHERE category = ?）
     conn.execute.return_value.fetchall.return_value = [
         {"key": "theme_mode", "value": "dark"},
-        {"key": "app_settings", "value": "{}"},
     ]
     repo = SettingsRepository(db=db)
     result = repo.list_by_category("ui")
