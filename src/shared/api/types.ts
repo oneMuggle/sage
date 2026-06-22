@@ -51,7 +51,9 @@ export interface ChatResponse {
 export type AgentState =
   | 'idle'
   | 'thinking'
-  | 'reasoning' // 新增：携带 LLM 思考/推理过程内容
+  | 'reasoning' // 携带 LLM 思考/推理过程内容（兼容旧事件）
+  | 'reasoning_delta' // 流式 reasoning 分块（fake streaming）
+  | 'reasoning_done' // reasoning 完成标记
   | 'acting'
   | 'observing'
   | 'content_delta'

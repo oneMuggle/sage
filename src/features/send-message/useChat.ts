@@ -50,7 +50,8 @@ export function useChat() {
   const [streaming, setStreaming] = useState<{
     messageId: string;
     content: string;
-    reasoning: string; // 新增：累积的 LLM 思考/推理过程
+    reasoning: string; // 累积的 LLM 思考/推理过程
+    reasoningComplete: boolean; // reasoning 是否已完成（用于 ThinkingPanel 自动折叠）
     state: AgentEvent['state'] | null;
   } | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
@@ -149,6 +150,7 @@ export function useChat() {
         messageId: assistantId,
         content: '🤔 思考中…',
         reasoning: '',
+        reasoningComplete: false,
         state: 'thinking',
       });
       // 重置 reasoning ref
@@ -169,13 +171,30 @@ export function useChat() {
         provider: inferProviderFromBaseUrl(chatEndpoint.baseUrl),
       };
 
+      // 占位符检测: 初始 "🤔 思考中…" 是消息创建时的占位,第一个真实 content_delta 应替换它
+      // 注意: 中间态占位符 (🔧/👀) 应保留 + 追加 (见 test: "no double-prefix bug")
+      const INITIAL_PLACEHOLDER = '🤔 思考中…';
+      const isFirstContentDelta = (): boolean =>
+        streamingContentRef.current === INITIAL_PLACEHOLDER;
+
       const appendContent = (next: string): void => {
         // I5: 流式逐字 — 之前是覆盖 (ref = next), 现在追加 (ref += next),
         // 让 CONTENT_DELTA 事件累积成完整回答
-        streamingContentRef.current = streamingContentRef.current + next;
-        setStreaming((prev) =>
-          prev && prev.messageId === assistantId ? { ...prev, content: prev.content + next } : prev,
-        );
+        // 修复: 如果当前内容是初始占位符 "🤔 思考中…", 替换而非追加
+        // (中间态占位符如 "👀 观察结果…" 应保留 + 追加, 提供视觉上下文)
+        if (isFirstContentDelta()) {
+          streamingContentRef.current = next;
+          setStreaming((prev) =>
+            prev && prev.messageId === assistantId ? { ...prev, content: next } : prev,
+          );
+        } else {
+          streamingContentRef.current = streamingContentRef.current + next;
+          setStreaming((prev) =>
+            prev && prev.messageId === assistantId
+              ? { ...prev, content: prev.content + next }
+              : prev,
+          );
+        }
       };
 
       // I5-2: 中间态 (thinking/acting/observing) 的 uiText 应"覆盖"而非"追加"，
@@ -246,11 +265,27 @@ export function useChat() {
           {
             onEvent: (evt) => {
               // 处理 reasoning 事件：累积 reasoning 内容
-              if (evt.state === 'reasoning' && evt.reasoning) {
+              // - reasoning: 旧 backend 一次性发完整 reasoning → 累积 + 设 complete
+              // - reasoning_delta: 流式分块 → 仅累积
+              // - reasoning_done: 标记完成（触发 ThinkingPanel 自动折叠）
+              if ((evt.state === 'reasoning' || evt.state === 'reasoning_delta') && evt.reasoning) {
                 streamingReasoningRef.current = streamingReasoningRef.current + evt.reasoning;
                 setStreaming((prev) =>
                   prev && prev.messageId === assistantId
-                    ? { ...prev, reasoning: streamingReasoningRef.current }
+                    ? {
+                        ...prev,
+                        reasoning: streamingReasoningRef.current,
+                        // 旧 reasoning 事件直接设 complete（一次性完整内容）
+                        reasoningComplete:
+                          evt.state === 'reasoning' ? true : prev.reasoningComplete,
+                      }
+                    : prev,
+                );
+              }
+              if (evt.state === 'reasoning_done') {
+                setStreaming((prev) =>
+                  prev && prev.messageId === assistantId
+                    ? { ...prev, reasoningComplete: true }
                     : prev,
                 );
               }
@@ -292,9 +327,13 @@ export function useChat() {
               // - content_delta + done.content 触发 appendContent 追加 (累积真实回答)
               // - thinking/acting/observing 的 uiText 触发 replaceContent 覆盖
               //   (切换中间态占位, 避免 "🤔 思考中…🤔 思考中…" 重复前缀)
-              // - reasoning 事件已在上面处理，不触发 content 更新
-              if (evt.state === 'reasoning') {
-                // reasoning 事件不更新 content，仅更新 state
+              // - reasoning / reasoning_delta / reasoning_done 已在上面处理，不触发 content 更新
+              if (
+                evt.state === 'reasoning' ||
+                evt.state === 'reasoning_delta' ||
+                evt.state === 'reasoning_done'
+              ) {
+                // reasoning 系列事件不更新 content，仅更新 state
                 setStreaming((prev) =>
                   prev && prev.messageId === assistantId ? { ...prev, state: evt.state } : prev,
                 );
@@ -371,5 +410,8 @@ export function useChat() {
     sendMessage,
     interrupt,
     loadMessages: loadMessagesCallback,
+    // 流式状态暴露给 UI（用于 ThinkingPanel 三模式判断）
+    streamingMessageId: streaming?.messageId ?? null,
+    reasoningComplete: streaming?.reasoningComplete ?? false,
   };
 }

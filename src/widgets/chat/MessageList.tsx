@@ -6,9 +6,18 @@ interface MessageListProps {
   messages: MessageType[];
   knowledgeRefs?: Record<string, { id: string; title: string }[]>;
   attachments?: Record<string, { name: string; size: number; type: string; dataUrl?: string }[]>;
+  // 流式状态（用于 ThinkingPanel 三模式判断）
+  streamingMessageId?: string | null;
+  reasoningComplete?: boolean;
 }
 
-export function MessageList({ messages, knowledgeRefs, attachments }: MessageListProps) {
+export function MessageList({
+  messages,
+  knowledgeRefs,
+  attachments,
+  streamingMessageId,
+  reasoningComplete = false,
+}: MessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted">
@@ -26,6 +35,8 @@ export function MessageList({ messages, knowledgeRefs, attachments }: MessageLis
           message={message}
           knowledgeRefs={knowledgeRefs?.[message.id]}
           attachments={attachments?.[message.id]}
+          isStreaming={message.id === streamingMessageId}
+          reasoningComplete={message.id === streamingMessageId ? reasoningComplete : false}
         />
       ))}
     </div>

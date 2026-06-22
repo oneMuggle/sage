@@ -161,6 +161,11 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
 
     # 3. 重建上游 URL(保留查询串,去掉上游末尾斜杠避免双斜杠)
     base = provider_url.rstrip("/")
+    # 修复: 如果 baseUrl 已含 /v1 路径(如 https://api.openai.com/v1),而前端又发了
+    # /v1/models 这种 OpenAI 兼容路径,会导致 /v1/v1/models 重复拼接 404。
+    # 自动检测并剥离 path 中重复的 /v1 前缀。
+    if base.endswith("/v1") and normalized.startswith("/v1"):
+        normalized = normalized[3:] or "/"
     qs = request.url.query
     upstream_url = f"{base}{normalized}"
     if qs:

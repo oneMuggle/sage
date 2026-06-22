@@ -259,6 +259,34 @@ class SageAgent:
             # 对话前：获取记忆上下文
             memory_context = self.memory_manager.get_context(limit=10)
 
+            # 根据用户问题进行记忆搜索，增强上下文
+            if message and len(message.strip()) > 2:
+                try:
+                    logger.info(f"开始搜索记忆，查询: {message[:50]}")
+                    relevant_memories = self.memory_manager.search_memories(
+                        query=message, limit=5
+                    )
+                    logger.info(f"搜索结果数量: {len(relevant_memories)}")
+
+                    # 如果搜索无结果，回退到获取最近的记忆
+                    if not relevant_memories:
+                        logger.info("搜索无结果，回退获取最近记忆")
+                        relevant_memories = self.memory_manager.episodic.get_recent(limit=3)
+                        logger.info(f"最近记忆数量: {len(relevant_memories)}")
+
+                    if relevant_memories:
+                        memory_parts = []
+                        for mem in relevant_memories:
+                            content = mem.get("content", mem.get("summary", ""))
+                            if content:
+                                memory_parts.append(f"- {content}")
+
+                        if memory_parts:
+                            memory_context += "\n\n【相关记忆】\n" + "\n".join(memory_parts)
+                            logger.info(f"已注入记忆到上下文: {len(memory_parts)} 条")
+                except Exception as e:
+                    logger.warning(f"记忆搜索失败: {e}")
+
             # 将用户消息添加到工作记忆
             self.memory_manager.add_to_working("user", message)
 

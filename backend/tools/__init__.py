@@ -21,6 +21,10 @@ def register_all_tools(registry: ToolRegistry) -> None:
     Args:
         registry: 工具注册表
     """
+    from backend.memory import get_memory_manager
+
+    memory_manager = get_memory_manager()
+
     registry.register(TerminalTool())
     registry.register(ReadFileTool())
     registry.register(WriteFileTool())
@@ -28,8 +32,8 @@ def register_all_tools(registry: ToolRegistry) -> None:
     registry.register(WebSearchTool())
     registry.register(WebFetchTool())
     registry.register(CalculatorTool())
-    registry.register(MemorySearchTool())
-    registry.register(MemorySaveTool())
+    registry.register(MemorySearchTool(memory_manager))
+    registry.register(MemorySaveTool(memory_manager))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
