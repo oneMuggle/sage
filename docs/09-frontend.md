@@ -982,4 +982,21 @@ export default i18n;
 
 ---
 
+## 配置存储（2026-06-22 起）
+
+Sage 前端配置（settings / theme / current_session_id）从 localStorage 迁移至
+后端 SQLite `preferences` 表。三处 localStorage 仍保留作为离线缓存兜底。
+
+**加载策略**：后端 → localStorage → DEFAULT
+**写入策略**：同步写 cache + 异步推后端（5s 超时）
+**迁移策略**：首次后端无值 + localStorage 有数据 + 未标记 → 自动上传
+
+相关代码：
+- 前端：`src/entities/setting/storage.ts`、`src/entities/theme/storage.ts`、
+  `src/entities/session/storage.ts`、`src/shared/api/settingsClient.ts`
+- 后端：`backend/data/settings_repo.py`、`backend/api/hex_routes.py`
+- Electron IPC：`electron/commands.ts`（4 条新路由）
+
+---
+
 _文档版本: v1.0_

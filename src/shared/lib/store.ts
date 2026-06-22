@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import { saveCurrentSessionId } from '../../entities/session/storage';
+
 import { invoke } from '../api/desktopInvoke';
 
 // Re-export API modules for convenience
@@ -70,18 +72,10 @@ interface StoreState {
 
 // ==================== Zustand Store ====================
 
-const SESSION_STORAGE_KEY = 'sage-current-session-id';
-
 export const useStore = create<StoreState>((set, _get) => ({
   // 初始状态
   sessions: [],
-  currentSessionId: (() => {
-    try {
-      return localStorage.getItem(SESSION_STORAGE_KEY);
-    } catch {
-      return null;
-    }
-  })(),
+  currentSessionId: null,
   messages: [],
   isLoading: false,
 
@@ -97,16 +91,8 @@ export const useStore = create<StoreState>((set, _get) => ({
 
   // 设置当前会话
   setCurrentSessionId: (id) => {
-    try {
-      if (id) {
-        localStorage.setItem(SESSION_STORAGE_KEY, id);
-      } else {
-        localStorage.removeItem(SESSION_STORAGE_KEY);
-      }
-    } catch {
-      // Silently fail
-    }
     set({ currentSessionId: id });
+    void saveCurrentSessionId(id);
   },
 
   // 创建会话

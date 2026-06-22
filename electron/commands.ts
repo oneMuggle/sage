@@ -64,6 +64,18 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
 
   // evolution
   trigger_evolution: { method: 'POST', path: () => '/api/v1/evolution/trigger' },
+
+  // settings & preferences
+  get_settings: { method: 'GET', path: () => '/api/v1/settings' },
+  set_settings: { method: 'PUT', path: () => '/api/v1/settings' },
+  get_preference: {
+    method: 'GET',
+    path: (a) => `/api/v1/preferences/${encodeURIComponent(String(a.key))}`,
+  },
+  set_preference: {
+    method: 'PUT',
+    path: (a) => `/api/v1/preferences/${encodeURIComponent(String(a.key))}`,
+  },
 };
 
 export class UnknownIpcCommandError extends Error {

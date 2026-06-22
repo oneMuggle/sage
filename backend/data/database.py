@@ -2,7 +2,7 @@
 数据库连接和初始化
 SQLite 实现
 """
-
+import os
 import sqlite3
 from pathlib import Path
 
@@ -12,11 +12,15 @@ class Database:
 
     def __init__(self, db_path: str | None = None):
         if db_path is None:
-            # 默认路径：项目根目录下的 data/sage.db
-            base_dir = Path(__file__).parent.parent.parent
-            data_dir = base_dir / "data"
-            data_dir.mkdir(exist_ok=True)
-            db_path = str(data_dir / "sage.db")
+            env_path = os.environ.get("SAGE_DB_PATH")
+            if env_path:
+                db_path = env_path
+            else:
+                # 默认路径：项目根目录下的 data/sage.db
+                base_dir = Path(__file__).parent.parent.parent
+                data_dir = base_dir / "data"
+                data_dir.mkdir(exist_ok=True)
+                db_path = str(data_dir / "sage.db")
 
         self.db_path = db_path
         self._connection: sqlite3.Connection | None = None
