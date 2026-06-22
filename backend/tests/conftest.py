@@ -46,7 +46,10 @@ def setup_test_db(tmp_db_path):
     reset_memory_manager()
 
     yield db_mod._db
-    db_mod._db.close()
+    # test_db_path 用 importlib.reload 重建模块后 _db 会被重置为 None；
+    # 守 None 防 AttributeError
+    if db_mod._db is not None:
+        db_mod._db.close()
     db_mod._db = None
     # 测试结束后也重置 MemoryManager
     reset_memory_manager()
