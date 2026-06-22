@@ -213,35 +213,62 @@ async def test_aggregate_results_handles_missing_subtask_description():
 
 @pytest.mark.asyncio()
 async def test_execute_multi_step_dispatches_each_subtask_and_aggregates():
-    """多步端到端:decompose → 多个 _execute_agent_task → aggregate。"""
+    """多步端到端:decompose → 多个 _execute_agent_task (并行) → aggregate。"""
+    from unittest.mock import patch
+
+    from backend.core.legacy.agent_state import AgentEvent, AgentState
+    from backend.core.legacy.llm_client import LLMConfig
+
     llm = MagicMock()
+    # 给 mock LLM 设置真实 LLMConfig (避免 isinstance 检查失败)
+    llm.config = LLMConfig(
+        provider="custom",
+        api_key="test-key",
+        base_url="https://example.com/v1",
+        model="test-model",
+    )
     # 1) decompose 返回 2 个子任务
-    # 2-3) 每个子任务调 _run_agent_llm
-    # 4) aggregate 调 LLM
+    # 2) aggregate 调 LLM (子任务执行已改为调 SageAgent.run_loop, 被 mock)
     llm.chat = AsyncMock(
         side_effect=[
             _make_response(
                 content='[{"intent": "research", "description": "search A"}, '
                 '{"intent": "coding", "description": "code B"}]'
             ),
-            _make_response(content="A-result"),
-            _make_response(content="B-result"),
             _make_response(content="merged final"),
         ]
     )
     orch = _orch_with_llm(llm)
 
-    result = await orch._execute_multi_step("sess-MS1", "do A and B", history=None)
+    def mock_sage_agent_factory(agent_id=None, **kwargs):
+        mock_instance = MagicMock()
+        if agent_id == "researcher":
+
+            async def researcher_loop(*args, **kwargs):
+                yield AgentEvent(
+                    state=AgentState.DONE, iteration=0, content="A-result", agent_id="researcher"
+                )
+
+            mock_instance.run_loop = researcher_loop
+        else:
+
+            async def coder_loop(*args, **kwargs):
+                yield AgentEvent(
+                    state=AgentState.DONE, iteration=0, content="B-result", agent_id="coder"
+                )
+
+            mock_instance.run_loop = coder_loop
+        mock_instance.profile = {"system_prompt": "test", "max_iterations": 5}
+        return mock_instance
+
+    with patch("backend.core.legacy.agent.SageAgent", side_effect=mock_sage_agent_factory):
+        result = await orch._execute_multi_step("sess-MS1", "do A and B", history=None)
 
     assert result["agent_id"] == "multi_step"
     assert result["response"] == "merged final"
     assert len(result["subtasks"]) == 2
-    # 第一个子任务 → researcher
     assert result["subtasks"][0]["result"]["agent_id"] == "researcher"
-    # 第二个子任务 → coder
     assert result["subtasks"][1]["result"]["agent_id"] == "coder"
-    # 黑板应记录所有 task + result
-    # task 用 target_agent=agent_id 发布 → 按 agent_id 订阅
     researcher_tasks = orch.blackboard.subscribe(
         agent_name="researcher", session_id="sess-MS1", message_type="task", limit=5
     )
@@ -250,7 +277,6 @@ async def test_execute_multi_step_dispatches_each_subtask_and_aggregates():
     )
     assert len(researcher_tasks) == 1
     assert len(coder_tasks) == 1
-    # result 用 target_agent=orchestrator 发布 → 订阅 orchestrator
     orch_results = orch.blackboard.subscribe(
         agent_name="orchestrator", session_id="sess-MS1", message_type="result", limit=10
     )

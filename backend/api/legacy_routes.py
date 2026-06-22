@@ -43,6 +43,27 @@ def _safe_log_field(value: object, max_length: int = 64) -> str:
     return s[:max_length]
 
 
+def _should_use_orchestrator(message: str) -> bool:
+    """启发式分流：多步骤/复杂任务走编排器，简单消息走单 agent。
+
+    判定规则 (满足任一即走 orchestrator):
+    - 消息包含多步骤关键词 (对比/比较/总结并/然后/接着/分析/multi)
+    - 消息长度 > 200 字
+
+    Args:
+        message: 用户消息
+
+    Returns:
+        True 表示应走 AgentOrchestrator, False 表示走单 SageAgent
+    """
+    keywords = ["对比", "比较", "总结", "然后", "接着", "分析", "multi"]
+    if any(kw in message for kw in keywords):
+        return True
+    if len(message) > 200:
+        return True
+    return False
+
+
 # ==================== Pydantic 模型 ====================
 
 
@@ -567,6 +588,9 @@ async def chat(
 ):
     """发送聊天消息。
 
+    阶段 2: 根据消息复杂度分流 — 简单消息走单 SageAgent, 复杂消息走 AgentOrchestrator。
+    分流逻辑由 _should_use_orchestrator() 决定。
+
     错误处理：
     - LLMError: 返回 HTTP 200 + 结构化 error 字段
     - 其他未预期错误: 返回 HTTP 200 + 通用 unknown 错误
@@ -593,8 +617,48 @@ async def chat(
                 f"[REQ {request_id}] using custom LLM config: model={_safe_log_field(llm_config['model'])}"
             )
 
-        agent = SageAgent()
-        result = await agent.chat(data.session_id, data.message, llm_config=llm_config)
+        # 阶段 2: 分流 — 复杂消息走 orchestrator, 简单消息走单 agent
+        if _should_use_orchestrator(data.message):
+            logger.info(f"[REQ {request_id}] /chat routing through AgentOrchestrator")
+            from backend.core.legacy.llm_client import LLMClient, LLMConfig
+            from backend.core.legacy.orchestrator import AgentOrchestrator
+
+            orch_llm_client = LLMClient(LLMConfig(**llm_config)) if llm_config else None
+            orchestrator = AgentOrchestrator(llm_client=orch_llm_client)
+            orch_result = await orchestrator.process_request(
+                session_id=data.session_id,
+                user_message=data.message,
+            )
+            # 适配 orchestrator 返回格式到 ChatResponse 形态
+            assistant_now = int(time.time() * 1000)
+            result = {
+                "message": {
+                    "id": str(uuid.uuid4()),
+                    "session_id": data.session_id,
+                    "role": "assistant",
+                    "content": orch_result.get("response", ""),
+                    "created_at": assistant_now,
+                    "model": llm_config.get("model") if llm_config else "local",
+                },
+                "session": None,  # orchestrator 暂不更新 session (后续迭代)
+            }
+            # 持久化 assistant 消息
+            try:
+                MessageRepository().save(
+                    DbMessage(
+                        id=result["message"]["id"],
+                        session_id=data.session_id,
+                        role="assistant",
+                        content=result["message"]["content"],
+                        created_at=assistant_now,
+                        model=result["message"]["model"],
+                    )
+                )
+            except Exception as db_err:
+                logger.warning(f"[REQ {request_id}] orchestrator 助手消息持久化失败: {db_err}")
+        else:
+            agent = SageAgent()
+            result = await agent.chat(data.session_id, data.message, llm_config=llm_config)
 
         # agent.chat() may return a structured error dict (Task 6 refactor) instead of raising
         if isinstance(result, dict) and result.get("error"):
