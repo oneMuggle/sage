@@ -1,72 +1,65 @@
-/**
- * useSettings hook 测试
- *
- * 验证：
- *   - 初始 settings 来自 localStorage（无值时回退到 DEFAULT_SETTINGS）
- *   - updateSettings 合并 partial 并 persist 到 localStorage
- *   - resetSettings 写回 DEFAULT_SETTINGS
- *   - 在同一测试运行中、新 hook 实例能读到上一次的 persist
- */
-import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook, act, waitFor } from '@testing-library/react';
 
-import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY } from '../../../entities/setting/types';
+const mockLoad = vi.fn();
+const mockSave = vi.fn();
+const mockReset = vi.fn();
+vi.mock('../../../entities/setting/storage', () => ({
+  loadSettings: (...args: unknown[]) => mockLoad(...args),
+  saveSettings: (...args: unknown[]) => mockSave(...args),
+  resetSettings: (...args: unknown[]) => mockReset(...args),
+}));
+
 import { useSettings } from '../useSettings';
+import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 
-beforeEach(() => {
-  localStorage.clear();
-});
-
-describe('useSettings', () => {
-  it('initial state falls back to DEFAULT_SETTINGS when no persistence exists', () => {
-    const { result } = renderHook(() => useSettings());
-
-    expect(result.current.settings.streaming).toBe(DEFAULT_SETTINGS.streaming);
-    expect(result.current.settings.maxContext).toBe(DEFAULT_SETTINGS.maxContext);
-    expect(result.current.settings.endpoints).toEqual([]);
+describe('useSettings (async)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    mockLoad.mockReset();
+    mockSave.mockReset();
+    mockReset.mockReset();
   });
 
-  it('updateSettings merges partial and persists to localStorage', () => {
+  it('初始时 isLoading=true，settings 是 DEFAULT_SETTINGS', async () => {
+    mockLoad.mockResolvedValue(DEFAULT_SETTINGS);
     const { result } = renderHook(() => useSettings());
-
-    act(() => {
-      result.current.updateSettings({ temperature: 0.42, maxContext: 8192 });
-    });
-
-    expect(result.current.settings.temperature).toBe(0.42);
-    expect(result.current.settings.maxContext).toBe(8192);
-
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    expect(raw).not.toBeNull();
-    const parsed = JSON.parse(raw!) as { temperature: number; maxContext: number };
-    expect(parsed.temperature).toBe(0.42);
-    expect(parsed.maxContext).toBe(8192);
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.settings).toEqual(DEFAULT_SETTINGS);
   });
 
-  it('new hook instance picks up previously persisted settings', () => {
-    const first = renderHook(() => useSettings());
-    act(() => {
-      first.result.current.updateSettings({ compactMode: true });
-    });
-
-    // 第二个 hook 实例（模拟跨页面 / 重新 mount）应当从 localStorage 读到 compactMode=true
-    const second = renderHook(() => useSettings());
-    expect(second.result.current.settings.compactMode).toBe(true);
+  it('loadSettings 完成后 isLoading=false，settings 是 loaded 值', async () => {
+    mockLoad.mockResolvedValue({ ...DEFAULT_SETTINGS, maxContext: 8000 });
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.settings.maxContext).toBe(8000);
   });
 
-  it('resetSettings restores defaults and overwrites localStorage', () => {
+  it('updateSettings 合并 partial 并 setSettings + persist', async () => {
+    mockLoad.mockResolvedValue(DEFAULT_SETTINGS);
+    mockSave.mockResolvedValue(undefined);
     const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    act(() => {
-      result.current.updateSettings({ temperature: 1.5, compactMode: true });
-    });
-    expect(result.current.settings.temperature).toBe(1.5);
-
-    act(() => {
-      result.current.resetSettings();
+    await act(async () => {
+      await result.current.updateSettings({ maxContext: 16000 });
     });
 
-    expect(result.current.settings.temperature).toBe(DEFAULT_SETTINGS.temperature);
-    expect(result.current.settings.compactMode).toBe(DEFAULT_SETTINGS.compactMode);
+    expect(result.current.settings.maxContext).toBe(16000);
+    expect(mockSave).toHaveBeenCalledWith({ maxContext: 16000 });
+  });
+
+  it('resetSettings 还原为默认值', async () => {
+    mockLoad.mockResolvedValue({ ...DEFAULT_SETTINGS, maxContext: 9999 });
+    mockReset.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.resetSettings();
+    });
+
+    expect(result.current.settings).toEqual(DEFAULT_SETTINGS);
+    expect(mockReset).toHaveBeenCalled();
   });
 });
