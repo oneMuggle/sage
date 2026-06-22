@@ -85,6 +85,8 @@ export interface AgentEvent {
   tool_call?: AgentToolCall;
   tool_result?: AgentToolResult;
   error?: string;
+  /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
+  agent_id?: string;
 }
 
 // ==================== 错误类型定义 ====================

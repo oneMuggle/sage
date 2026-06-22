@@ -7,11 +7,19 @@ import { useChat } from '../features/send-message/useChat';
 import { useStore } from '../shared/lib/store';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
-import { ChatInput, MessageList } from '../widgets/chat';
+import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
 
 export function Chat() {
-  const { messages, isLoading, error, clearError, sendMessage, interrupt, loadMessages } =
-    useChat();
+  const {
+    messages,
+    isLoading,
+    error,
+    clearError,
+    sendMessage,
+    interrupt,
+    loadMessages,
+    currentAgentId, // 阶段 4: 当前流式处理中的 agent ID
+  } = useChat();
 
   const { currentSessionId, setCurrentSessionId, createSession } = useStore();
   const { settings } = useSettings();
@@ -102,6 +110,9 @@ export function Chat() {
           <MessageList messages={messages} />
         )}
       </div>
+
+      {/* 阶段 4: 流式处理时显示当前活跃 agent */}
+      <ActiveAgentIndicator agentId={currentAgentId} />
 
       {showConfigWarning && (
         <div
