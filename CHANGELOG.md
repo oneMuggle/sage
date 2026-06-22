@@ -17,6 +17,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - F. 安全审计入 CI(npm/pip audit + gitleaks + electronegativity)
   - G. onboarding 一键脚本 + ADR 起步
 
+## [v0.2.0] - 2026-06-22
+
+### Added
+- **feat(agent): 接通 Agent Profile 到运行时 (#48)** — SageAgent 接受 `agent_id` 参数，运行时从 SQLite 读最新 profile，消费 `system_prompt` / `max_iterations` / `enabled` 字段
+- **feat(orchestrator): 接入 AgentOrchestrator 到生产** — `/chat` 路由根据消息复杂度（关键词 + 长度）分流，复杂消息走 `AgentOrchestrator.process_request`
+- **perf(orchestrator): `asyncio.gather` 并行子任务** — `_execute_multi_step` 用 `asyncio.gather(return_exceptions=True)` 替代串行执行，结果顺序与输入一致，错误隔离
+- **feat(ui): ActiveAgentIndicator 组件** — 流式聊天时显示"🤖 当前处理 agent: xxx"，3 秒无更新后淡出
+- **feat(agent): get_enabled_agent() 工具函数** — 从 SQLite 读启用 agent 的 profile dict（disabled/missing 返回 None）
+- **feat(agent): AgentEvent.agent_id 字段** — 透传当前活跃 agent ID 到前端
+- **feat(backend): localStorage → SQLite 配置存储迁移 (#46)** — settings 持久化到后端 preferences 表，前端 localStorage 兜底缓存 + 7 天过期清理
+- **feat(backend): SAGE_DB_PATH env var** — 支持 packaged Electron 后端子进程用独立 DB 路径
+- **feat(backend): SettingsRepository on preferences table** — 通用 KV 存储，KEYS 白名单限定可写 key
+- **feat(backend): GET/PUT /preferences/{key}** — theme & session id 持久化
+- **feat(electron): 4 IPC routes for settings & preferences** — Electron 端透传
+- **feat(electron): set SAGE_DB_PATH for backend subprocess** — Electron 启动后端时设 DB 路径
+- **feat(frontend): async settings storage with auto-migration + 7d cleanup** — 自动迁移 + 缓存过期
+- **feat(frontend): theme storage + session storage dual-write** — 本地缓存 + 后端同步
+- **feat(frontend): useStore.currentSessionId / ThemeProvider / useSettings async init** — 异步初始化避免启动竞态
+- **feat(frontend): settingsClient IPC wrapper with 5s timeout** — 统一 IPC 客户端
+- **fix(ci): 多个 CI 修复** — 从 backend 目录安装依赖、requirements.txt、sage_core 包
+- **fix(backend): conftest teardown 守卫 importlib.reload residue**
+- **fix(backend): skip pre-existing broken tests (SessionService DI not wired)**
+- **fix(frontend): useChat tests wait for useSettings async load**
+- **fix(frontend): settingsClient ipcCall type — object → Record<string, unknown>**
+- **fix: main 分支 pre-existing TypeScript 错误** — `saveSettings` 显式 `as AppSettings` 类型断言
+
+### Changed
+- **fix(frontend): main 分支 pre-existing lint 错误** — `import/order` 自动修复（App.tsx / ThemeProvider.tsx / store.ts 等）
+- **test(integration): hex-only 测试加 @_HEX_ONLY skip** — `/preferences/{key}` / `/settings` 端点在 legacy 模式不注册，hex 模式才跑
+
 ## [v0.1.2] - 2026-06-15
 
 ### Added
