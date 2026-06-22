@@ -23,6 +23,7 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProviderProps) {
   const [mode, setModeState] = useState<ThemeMode>(defaultMode);
+  const [isLoading, setIsLoading] = useState(true);
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() => resolveSystemTheme());
 
   useEffect(() => {
@@ -36,11 +37,13 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
   }, []);
 
   useEffect(() => {
-    loadTheme().then((m) => {
-      if (m && VALID_MODES.includes(m)) {
-        setModeState(m);
-      }
-    });
+    loadTheme()
+      .then((m) => {
+        if (m && VALID_MODES.includes(m)) {
+          setModeState(m);
+        }
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const resolved: 'light' | 'dark' = mode === 'system' ? systemTheme : mode;
@@ -55,6 +58,8 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
   };
 
   return (
-    <ThemeContext.Provider value={{ mode, resolved, setMode }}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={{ mode, resolved, setMode, isLoading }}>
+      {children}
+    </ThemeContext.Provider>
   );
 }

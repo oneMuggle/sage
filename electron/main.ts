@@ -28,8 +28,8 @@
  */
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { spawn, ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import http from 'node:http';
 import { invokeBackend } from './invoke';
 import { relayChatStream } from './relay';
@@ -112,6 +112,9 @@ function spawnBackend(): ChildProcess {
   // (Electron's userData dir) so dev + packaged write to the same DB.
   const sageDbPath =
     process.env.SAGE_DB_PATH ?? join(app.getPath('userData'), 'sage.db');
+
+  // 显式创建 parent 目录，避免 Win7 首次启动时 userData 不存在导致 backend 启动失败
+  mkdirSync(dirname(sageDbPath), { recursive: true });
 
   let proc: ChildProcess;
   if (pyLauncher) {

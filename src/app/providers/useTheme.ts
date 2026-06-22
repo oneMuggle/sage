@@ -6,6 +6,8 @@ interface ThemeContextValue {
   mode: ThemeMode;
   resolved: 'light' | 'dark';
   setMode: (mode: ThemeMode) => void;
+  /** 异步加载主题偏好期间为 true，加载完成后为 false */
+  isLoading: boolean;
 }
 
 export const ThemeContext = createContext<ThemeContextValue | null>(null);
