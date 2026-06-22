@@ -6,6 +6,7 @@
  * 迁移策略：首次后端无值 + localStorage 有值 + 未标记迁移 → 自动上传
  */
 import { settingsClient } from '../../shared/api/settingsClient';
+
 import {
   AppSettings,
   DEFAULT_SETTINGS,
@@ -116,13 +117,14 @@ export async function loadSettings(): Promise<AppSettings> {
  */
 export async function saveSettings(partial: Partial<AppSettings>): Promise<void> {
   const current = readLocalCacheSync() ?? DEFAULT_SETTINGS;
-  const merged: AppSettings = {
+  // Partial 展开后所有字段 T|undefined，但 current 提供兜底，所以断言为完整 AppSettings
+  const merged = {
     ...current,
     ...partial,
     endpoints: partial.endpoints ?? current.endpoints,
     modelSelections: partial.modelSelections ?? current.modelSelections,
     version: SETTINGS_VERSION,
-  };
+  } as AppSettings;
   writeLocalCacheSync(merged);
   try {
     await settingsClient.setSettings(partial);
