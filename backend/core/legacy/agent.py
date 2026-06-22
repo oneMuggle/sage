@@ -157,11 +157,34 @@ class SageAgent:
     - 维护上下文
     """
 
-    def __init__(self, llm_config: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        llm_config: dict[str, Any] | None = None,
+        agent_id: str | None = None,
+    ):
         self.session_repo = SessionRepository()
         self.message_repo = MessageRepository()
         self._interrupted = False
         self._current_session_id: str | None = None
+
+        # 加载 agent profile (阶段 1: Profile → 运行时)
+        # 从 SQLite 读最新版本, 用户刚 PATCH 的 enabled/system_prompt 立即生效
+        # agent_id 不存在 / 已禁用 → self.profile = None → 保持默认行为(向后兼容)
+        self.profile: dict[str, Any] | None = None
+        self.agent_id: str | None = None
+        if agent_id:
+            from backend.agents.profiles import get_enabled_agent
+
+            loaded = get_enabled_agent(agent_id)
+            if loaded is not None:
+                self.profile = loaded
+                self.agent_id = agent_id
+                logger.info(f"Agent profile loaded: id={agent_id}, role={loaded.get('role')}")
+            else:
+                logger.warning(
+                    f"Agent profile not available for id={agent_id} "
+                    "(disabled or missing), falling back to default"
+                )
 
         # 初始化查询缓存 (TTL=5分钟)
         self._cache = QueryCache(ttl=300, max_size=100)
@@ -403,7 +426,11 @@ class SageAgent:
         Returns:
             LLMResponse：包含 content 和 tool_calls（透传不被吞没）
         """
-        system_prompt = "你是 Sage，一个智能 AI 助手。"
+        # 阶段 1: 优先从 profile 读 system_prompt, 否则用默认
+        if self.profile and self.profile.get("system_prompt"):
+            system_prompt = self.profile["system_prompt"]
+        else:
+            system_prompt = "你是 Sage，一个智能 AI 助手。"
         if memory_context:
             system_prompt += "\n\n以下是相关的记忆上下文：\n" + memory_context
 
@@ -418,7 +445,7 @@ class SageAgent:
     async def run_loop(
         self,
         messages: list[dict[str, Any]],
-        max_iterations: int = 5,
+        max_iterations: int | None = None,
         llm_config: dict[str, Any] | None = None,
     ):
         """ReAct 主循环。
@@ -427,19 +454,28 @@ class SageAgent:
 
         Args:
             messages: 完整消息历史（含 system/user/assistant/tool），会被就地修改
-            max_iterations: 最大循环次数，防止死循环
+            max_iterations: 最大循环次数，防止死循环。None 时取 profile.max_iterations
+                (若 profile 也不存在, 兜底 5)。显式传入的 int 覆盖 profile 值。
             llm_config: 可选的动态 LLM 配置(覆盖初始化时的配置),允许调用方
                 在 agent 实例没有默认 LLM 时通过 per-request 配置运行。
                 如果同时存在 self.llm_client,会临时覆盖并在循环结束后恢复。
 
         Yields:
-            AgentEvent:状态机事件,前端通过流式响应(NDJSON)接收
+            AgentEvent:状态机事件,前端通过流式响应(NDJSON)接收。每个事件携带
+                ``agent_id`` 字段(来自构造时传入的 agent_id, 供前端显示"当前处理 agent")。
 
         Raises:
             AgentError: 既没有 self.llm_client 也没传 llm_config 时
         """
         if self.llm_client is None and not llm_config:
             raise AgentError("LLM 未配置,无法运行 Agent 循环")
+
+        # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 5
+        effective_max_iterations = (
+            max_iterations
+            if max_iterations is not None
+            else (self.profile.get("max_iterations", 5) if self.profile else 5)
+        )
 
         # 如果传入了动态 LLM 配置,临时覆盖
         original_llm_client = self.llm_client
@@ -454,8 +490,8 @@ class SageAgent:
             )
 
         try:
-            for i in range(max_iterations):
-                yield AgentEvent(state=AgentState.THINKING, iteration=i)
+            for i in range(effective_max_iterations):
+                yield AgentEvent(state=AgentState.THINKING, iteration=i, agent_id=self.agent_id)
 
                 # Pass available tools to LLM so it can call them
                 available_tools = self.get_available_tools()
@@ -470,6 +506,7 @@ class SageAgent:
                         state=AgentState.REASONING,
                         iteration=i,
                         reasoning=response.reasoning_content,
+                        agent_id=self.agent_id,
                     )
 
                 if not response.tool_calls:
@@ -483,6 +520,7 @@ class SageAgent:
                         state=AgentState.DONE,
                         iteration=i,
                         content=response.content,
+                        agent_id=self.agent_id,
                     )
                     return
 
@@ -515,7 +553,12 @@ class SageAgent:
                         args = {}
 
                     tool_req = ToolCallRequest(id=tc.id, name=tc.name, arguments=args)
-                    yield AgentEvent(state=AgentState.ACTING, iteration=i, tool_call=tool_req)
+                    yield AgentEvent(
+                        state=AgentState.ACTING,
+                        iteration=i,
+                        tool_call=tool_req,
+                        agent_id=self.agent_id,
+                    )
 
                     is_error = False
                     result_content = ""
@@ -550,6 +593,7 @@ class SageAgent:
                         iteration=i,
                         tool_call=tool_req,
                         tool_result=tool_result,
+                        agent_id=self.agent_id,
                     )
 
                     messages.append(
@@ -562,8 +606,9 @@ class SageAgent:
 
             yield AgentEvent(
                 state=AgentState.FAILED,
-                iteration=max_iterations,
+                iteration=effective_max_iterations,
                 error="max_iterations_exceeded",
+                agent_id=self.agent_id,
             )
         finally:
             # 恢复 agent 实例的原始 LLM client / config(不污染跨请求状态)

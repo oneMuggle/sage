@@ -125,3 +125,24 @@ def get_agent(agent_id: str) -> AgentProfile | None:
 def list_agents() -> list[AgentProfile]:
     """列出所有已注册的 Agent"""
     return list(get_agent_registry().values())
+
+
+def get_enabled_agent(agent_id: str) -> dict[str, Any] | None:
+    """从 SQLite 获取启用的 agent profile（运行时读取最新版本）。
+
+    返回 agent dict（与 ``AgentRepository.get()`` 同形态），或：
+    - agent 不存在 → None
+    - agent 已禁用 → None
+
+    设计意图: 让 SageAgent / Orchestrator 在运行时总是读 SQLite
+    (用户刚 PATCH 的 enabled / system_prompt 立即生效), 而不是内存注册表。
+    """
+    # 延迟 import: 避免 profiles.py (application 层) 在 import 时 eager import data 层
+    from backend.data.agent_repo import AgentRepository
+
+    profile = AgentRepository().get(agent_id)
+    if profile is None:
+        return None
+    if not profile.get("enabled", True):
+        return None
+    return profile

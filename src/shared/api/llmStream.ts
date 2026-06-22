@@ -26,6 +26,8 @@ export interface AgentEvent {
   tool_call?: ToolCallRequestFE;
   tool_result?: ToolCallResultFE;
   error?: string;
+  /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
+  agent_id?: string;
 }
 
 export async function* parseNDJSONStream(

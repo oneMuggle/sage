@@ -52,6 +52,8 @@ export function useChat() {
     content: string;
     reasoning: string; // 新增：累积的 LLM 思考/推理过程
     state: AgentEvent['state'] | null;
+    /** 阶段 4: 当前执行 agent 的 ID */
+    currentAgentId: string | null;
   } | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
   const { settings } = useSettings();
@@ -150,6 +152,7 @@ export function useChat() {
         content: '🤔 思考中…',
         reasoning: '',
         state: 'thinking',
+        currentAgentId: null, // 阶段 4: 初始化 agentId
       });
       // 重置 reasoning ref
       streamingReasoningRef.current = '';
@@ -245,6 +248,15 @@ export function useChat() {
           content,
           {
             onEvent: (evt) => {
+              // 阶段 4: 累积 agent_id (供前端显示"当前处理 agent")
+              if (evt.agent_id) {
+                setStreaming((prev) =>
+                  prev && prev.messageId === assistantId
+                    ? { ...prev, currentAgentId: evt.agent_id ?? null }
+                    : prev,
+                );
+              }
+
               // 处理 reasoning 事件：累积 reasoning 内容
               if (evt.state === 'reasoning' && evt.reasoning) {
                 streamingReasoningRef.current = streamingReasoningRef.current + evt.reasoning;
@@ -371,5 +383,7 @@ export function useChat() {
     sendMessage,
     interrupt,
     loadMessages: loadMessagesCallback,
+    /** 阶段 4: 当前流式处理中的 agent ID (供 UI 显示"当前处理 agent") */
+    currentAgentId: streaming?.currentAgentId ?? null,
   };
 }

@@ -3,13 +3,14 @@ Agent Orchestrator - 多Agent协作编排
 基于 Supervisor + Shared Blackboard 模式
 """
 
+import asyncio
 import json
 import logging
 import time
 from enum import Enum
 from typing import Any
 
-from backend.agents.profiles import AgentProfile, get_agent
+from backend.agents.profiles import AgentProfile
 from backend.core.legacy.llm_client import LLMClient
 from backend.data.blackboard_repo import BlackboardRepo
 
@@ -166,6 +167,9 @@ class AgentOrchestrator:
         """
         执行单个 Agent 任务
 
+        阶段 2: 改为调用真实 SageAgent.run_loop (不再直接调 LLM),
+        让 profile 的 system_prompt / tools / max_iterations 真正生效。
+
         Args:
             session_id: 会话 ID
             agent_id: Agent ID
@@ -175,9 +179,28 @@ class AgentOrchestrator:
         Returns:
             Agent 执行结果
         """
-        agent = get_agent(agent_id)
-        if not agent:
-            return {"error": f"Agent not found: {agent_id}", "agent_id": agent_id}
+        from backend.core.legacy.agent import SageAgent
+
+        # 从 orchestrator 的 llm_client 提取 config dict 传给 SageAgent
+        # (SageAgent 接受 llm_config dict, 不接受 LLMClient 实例)
+        # 注意: 测试场景下 llm_client 可能是 MagicMock, 需要检查属性是否为真实字符串
+        llm_config_dict = None
+        if self.llm_client and hasattr(self.llm_client, "config"):
+            cfg = self.llm_client.config
+            base_url = getattr(cfg, "base_url", None)
+            # 只提取真实字符串配置, 跳过 MagicMock 等测试对象
+            if isinstance(base_url, str) or base_url is None:
+                llm_config_dict = {
+                    "provider": getattr(cfg, "provider", "custom"),
+                    "api_key": getattr(cfg, "api_key", None),
+                    "base_url": base_url,
+                    "model": getattr(cfg, "model", "gpt-3.5-turbo"),
+                    "temperature": getattr(cfg, "temperature", 0.7),
+                }
+
+        # 检查 agent 是否存在且启用 (通过 SageAgent 内部 get_enabled_agent)
+        # 如果禁用/不存在, SageAgent(agent_id=...) 会 profile=None 回退默认
+        agent = SageAgent(agent_id=agent_id, llm_config=llm_config_dict)
 
         # 发布任务到黑板
         task_id = self.blackboard.publish(
@@ -194,8 +217,31 @@ class AgentOrchestrator:
 
         logger.info(f"任务发布: {agent_id} (task_id={task_id})")
 
-        # 获取 Agent 回复 (简化实现: 直接通过 LLM)
-        response = await self._run_agent_llm(agent, message, history)
+        # 构造 messages 列表 (system prompt 由调用方构造, run_loop 不修改)
+        system_prompt = (
+            agent.profile.get("system_prompt", "你是 Sage，一个智能 AI 助手。")
+            if agent.profile
+            else "你是 Sage，一个智能 AI 助手。"
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message},
+        ]
+
+        # 调用真实 SageAgent.run_loop, 收集事件流
+        response_parts = []
+        try:
+            async for evt in agent.run_loop(messages):
+                # 收集 DONE 事件的 content 作为最终响应
+                if evt.state.value == "done" and evt.content:
+                    response_parts.append(evt.content)
+                elif evt.state.value == "failed" and evt.error:
+                    response_parts.append(f"[Agent failed: {evt.error}]")
+        except Exception as e:
+            logger.error(f"Agent run_loop 失败 ({agent_id}): {e}")
+            response_parts.append(f"[Agent error: {e}]")
+
+        response = "\n".join(response_parts) if response_parts else "[无响应]"
 
         # 发布结果到黑板
         self.blackboard.publish(
@@ -218,7 +264,8 @@ class AgentOrchestrator:
         """
         执行多步骤任务
 
-        顺序执行: 拆解子任务 → 分发 → 聚合
+        阶段 3: 用 asyncio.gather 并行执行子任务 (而非串行),
+        错误隔离 — 单个子任务失败不影响其他。
 
         Args:
             session_id: 会话 ID
@@ -232,20 +279,46 @@ class AgentOrchestrator:
         subtasks = await self._decompose_task(message)
         logger.info(f"多步骤任务拆解: {len(subtasks)} 个子任务")
 
-        results = []
+        if not subtasks:
+            # 边界: 空子任务列表直接调 aggregate (保持行为一致)
+            final_response = await self._aggregate_results(message, [])
+            return {
+                "agent_id": "multi_step",
+                "response": final_response,
+                "subtasks": [],
+            }
+
+        # 2. 并行执行所有子任务 (asyncio.gather + return_exceptions=True)
+        tasks = []
         for subtask in subtasks:
             agent_id = self._select_agent(Intent(subtask.get("intent", "general")))
-            result = await self._execute_agent_task(
-                session_id, agent_id, subtask["description"], history
-            )
-            results.append(
-                {
-                    "subtask": subtask,
-                    "result": result,
-                }
+            tasks.append(
+                self._execute_agent_task(session_id, agent_id, subtask["description"], history)
             )
 
-        # 2. 聚合结果
+        results_or_errors = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 3. 错误隔离: 单个子任务失败不影响其他
+        results = []
+        for subtask, result in zip(subtasks, results_or_errors, strict=False):
+            if isinstance(result, Exception):
+                logger.error(f"子任务失败 ({subtask.get('description', '?')}): {result}")
+                results.append(
+                    {
+                        "subtask": subtask,
+                        "result": {
+                            "agent_id": self._select_agent(
+                                Intent(subtask.get("intent", "general"))
+                            ),
+                            "response": f"[子任务失败: {result}]",
+                            "error": str(result),
+                        },
+                    }
+                )
+            else:
+                results.append({"subtask": subtask, "result": result})
+
+        # 4. 聚合结果
         final_response = await self._aggregate_results(message, results)
 
         return {
