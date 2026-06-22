@@ -12,7 +12,10 @@ import { useStore } from '../../../shared/lib/store';
 import { useChat } from '../useChat';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
-const invokeMock = vi.fn();
+// 默认 mockResolvedValue(undefined) 让未 mock 的 IPC 调用（如 useSettings
+// 异步触发的 get_settings）也能 resolve 到 undefined，避免 Promise 挂死
+// 阻塞 useChat 后续流程。具体 cmd 的 mock 通过 mockResolvedValueOnce 覆盖。
+const invokeMock = vi.fn().mockResolvedValue(undefined);
 const listenMock = vi.fn();
 vi.mock('../../../shared/api/desktopInvoke', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
@@ -22,6 +25,26 @@ vi.mock('../../../shared/api/desktopEvent', () => ({
 }));
 
 const VALID_SESSION_ID = '11111111-2222-3333-4444-555555555555';
+
+/**
+ * useSettings 现在 async；renderHook 之后 settings 还在 loading。
+ * 在测试里调 sendMessage 前等 get_settings invoke 完成 + React state setter flush，
+ * 否则 useSettings 还是 DEFAULT_SETTINGS，useChat 会误判无 endpoint。
+ *
+ * 仅等到 get_settings 被调用还不够 — settingsClient.getSettings() 的 mockResolvedValue
+ * resolve 后, useSettings 的 .then 才会 setSettings, 这个 setter 又触发 React re-render。
+ * 三步之间有 microtask gap, 用 act flush 确保 React commit 完成。
+ */
+async function waitForSettingsLoaded(): Promise<void> {
+  await waitFor(() => {
+    expect(invokeMock).toHaveBeenCalledWith('get_settings', {});
+  });
+  // flush useSettings 的 .then(setSettings) + React re-render
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
 
 function seedActiveEndpoint(): void {
   const payload = {
@@ -52,6 +75,10 @@ function seedActiveEndpoint(): void {
     version: SETTINGS_VERSION,
   };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+  // 标记已迁移 → loadSettings() 不会触发 set_settings 自动上传
+  // (否则 mockResolvedValueOnce 会被 set_settings 消费掉,
+  //  agent_chat_stream 拿到默认 undefined,chatStream 解构 streamId 报错)
+  localStorage.setItem('sage-settings.migrated_to_backend', new Date().toISOString());
 }
 
 /** PR-7a: 同 seedActiveEndpoint,但 baseUrl 自由指定(测 provider 推导)。 */
@@ -82,10 +109,16 @@ function seedActiveEndpointWithUrl(baseUrl: string): void {
     version: SETTINGS_VERSION,
   };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+  // 标记已迁移 (原因同上)
+  localStorage.setItem('sage-settings.migrated_to_backend', new Date().toISOString());
 }
 
 beforeEach(() => {
   invokeMock.mockReset();
+  listenMock.mockReset();
+  // useSettings 异步加载会先调 get_settings；提前 mock 避免它消费测试的
+  // mockResolvedValueOnce（后者针对 agent_chat_stream 等具体 cmd）
+  invokeMock.mockResolvedValueOnce({ data: null });
   localStorage.clear();
   useStore.setState({
     sessions: [],
@@ -113,12 +146,15 @@ describe('useChat', () => {
     // 没有 seed 设置，等同于无 active endpoint
     const { result } = renderHook(() => useChat());
 
+    await waitForSettingsLoaded();
+
     await act(async () => {
       await result.current.sendMessage('hello');
     });
 
     expect(result.current.error).toMatch(/未配置 API 地址/);
-    expect(invokeMock).not.toHaveBeenCalled();
+    // useSettings 异步加载会调 get_settings；断言 agent_chat_stream 没被调
+    expect(invokeMock).not.toHaveBeenCalledWith('agent_chat_stream');
 
     // 关键:即使 settings 缺失,user 消息也必须进 store (fix for swallowed input)
     const userMsg = result.current.messages.find((m) => m.role === 'user');
@@ -129,7 +165,7 @@ describe('useChat', () => {
   it('appends user + assistant message on successful chat', async () => {
     seedActiveEndpoint();
     // PR-6: useChat 改走 chatStream
-    invokeMock.mockResolvedValueOnce('stream-1');
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-1' });
     listenMock.mockImplementationOnce(
       async (
         _name: string,
@@ -144,6 +180,8 @@ describe('useChat', () => {
     );
 
     const { result } = renderHook(() => useChat());
+
+    await waitForSettingsLoaded();
 
     await act(async () => {
       await result.current.sendMessage('ping');
@@ -188,6 +226,8 @@ describe('useChat', () => {
 
     const { result } = renderHook(() => useChat());
 
+    await waitForSettingsLoaded();
+
     await act(async () => {
       await result.current.sendMessage('hello');
     });
@@ -209,6 +249,8 @@ describe('useChat', () => {
     });
 
     const { result } = renderHook(() => useChat());
+
+    await waitForSettingsLoaded();
 
     await act(async () => {
       await result.current.sendMessage('hello');
@@ -233,11 +275,15 @@ describe('useChat', () => {
 
     const { result } = renderHook(() => useChat());
 
+    await waitForSettingsLoaded();
+
     await act(async () => {
       await result.current.sendMessage('hello');
     });
 
-    const [, args] = invokeMock.mock.calls[0];
+    // useSettings 异步加载先调 get_settings (mock.calls[0])，
+    // 第二个 invoke 才是 agent_chat_stream
+    const [, args] = invokeMock.mock.calls[1];
     // api.ts 用 `config?.provider ?? null` 转 null,后端收到 null
     // 在 ChatRequest Optional 校验下走默认 "custom"
     expect(args.provider).toBeNull();
@@ -266,6 +312,8 @@ describe('useChat', () => {
     );
 
     const { result } = renderHook(() => useChat());
+
+    await waitForSettingsLoaded();
 
     // 启动 sendMessage 但不 await 完(让 finally 跑)
     let sendPromise: Promise<void>;
@@ -316,6 +364,8 @@ describe('useChat', () => {
     listenMock.mockResolvedValueOnce(cancelSpy);
 
     const { result } = renderHook(() => useChat());
+
+    await waitForSettingsLoaded();
 
     // 触发 sendMessage, 让 invoke + listen microtask 都跑完
     // chatStream 内部 listen 的 await resolve 后, sendMessage 同步设置
@@ -406,6 +456,8 @@ describe('useChat', () => {
 
     const { result } = renderHook(() => useChat());
 
+    await waitForSettingsLoaded();
+
     let sendPromise: Promise<void>;
     await act(async () => {
       sendPromise = result.current.sendMessage('你好') as unknown as Promise<void>;
@@ -481,6 +533,8 @@ describe('useChat', () => {
     );
 
     const { result } = renderHook(() => useChat());
+
+    await waitForSettingsLoaded();
 
     let sendPromise: Promise<void>;
     await act(async () => {
