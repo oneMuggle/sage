@@ -15,7 +15,7 @@ export const LOAD_TIMEOUT_MS = 5000;
 
 export type PreferenceKey = 'app_settings' | 'theme_mode' | 'current_session_id';
 
-async function ipcCall<T>(cmd: string, args?: object): Promise<T | null> {
+async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
     return await Promise.race([
       invoke<T>(cmd, args ?? {}),
