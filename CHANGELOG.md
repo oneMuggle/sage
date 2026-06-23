@@ -7,18 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-06-23
+
 ### Added
-- **feat(ci)**: 双轨 release workflow (main → Win10+/Linux/macOS, LTS → Win7 SP1)
-  - main release 产物: `Sage-Setup-${version}-win10.exe` (Windows), `sage_${version}_amd64.deb`, `Sage-${version}.AppImage`
+- **feat(chat): 实时显示工具调用、思考过程和 agent 编排 (#57)**
+  - P0: `streamingToolCalls` 升级为 `useState` + ref 镜像，acting/observing 事件立即渲染，不再等流结束
+  - P1: ThinkingPanel 流式自动展开，`useEffect` 监听 `isStreaming` 变化
+  - P2: ActiveAgentIndicator 显示"第 N 轮 · agent 名 · 阶段图标 (lucide)"，新增 `src/shared/lib/agentStateMapping.ts` 作为单一真相源
+  - 附带修复: setTimeout 泄漏 / 不可变更新 / `ToolCall.id` 字段 / `interrupt()` finishStream / cancel-prev 同时停后端 / `Message` React.memo + 自定义比较函数
+- **feat(ci): 双轨 release workflow (main → Win10+/Linux, LTS → Win7 SP1)**
+  - main release 产物: `Sage-Setup-${version}-win10.exe` / `sage_${version}_amd64.deb` / `Sage-${version}.AppImage`
   - LTS release 产物: `Sage-Setup-${version}-win7.exe` (Windows 7 SP1 x64 only, tag 形如 `v*-lts`)
   - 新 workflow: `.github/workflows/release-win7.yml` (在 `release/win7` 分支)
-  - electron-builder.yml: `win.artifactName` 用 `${env.ARTIFACT_SUFFIX}` 占位
-  - Win7 用户引导: 文档化的独立 release 入口
+  - `electron-builder.yml`: `win.artifactName` 用 `${env.ARTIFACT_SUFFIX}` 占位
 
 ### Changed
 - **docs(technical)**: `21-win7-lts.md` 加 §9 Release 工作流；`26-packaging-matrix.md` §1/§2 拆 Win7/Win10+；`20-electron.md` §5 加 LTS 提示
 - **docs(README)**: §"双轨发布" 表格加具体下载入口；Q4 重写
 - **docs(user-manual)**: `01-desktop.md` §1.1/§1.2 拆 Win7 LTS 子节
+
+### Fixed
+- **fix(lint): 排除 dist-electron 扫描 + 修复 4 个 warnings (#59)** — `package.json` lint 脚本加 `--ignore-pattern dist-electron`，修复 WikiGraphView / Sidebar / MemoryBrowser 的 eslint warnings，删除 stale plan 文档
+- **fix: expose agent list to LLM and add settings endpoints to legacy mode**
+- **fix(ci): add ARTIFACT_SUFFIX to ci.yml Windows build step**
+- **fix(ci): add trailing newline + fix artifact name in release notes**
+- **fix(backend): auto-fix ruff lint errors in integration tests (#52)**
 
 ### 计划中
 - 跟踪 [`docs/plans/2026-06-13_full-quality-optimization-v2.md`](./plans/2026-06-13_full-quality-optimization-v2.md) 7 方向 A-G
@@ -115,7 +128,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - 完善 GitHub Actions Windows 构建配置(`.github/workflows/ci.yml` + `release.yml` + `src-tauri/tauri.conf.json`)
 
-[Unreleased]: https://github.com/oneMuggle/sage/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/oneMuggle/sage/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/oneMuggle/sage/compare/v0.2.0...v0.3.0
+[v0.2.0]: https://github.com/oneMuggle/sage/compare/v0.1.2...v0.2.0
 [v0.1.2]: https://github.com/oneMuggle/sage/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/oneMuggle/sage/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/oneMuggle/sage/releases/tag/v0.1.0
