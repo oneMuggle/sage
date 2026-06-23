@@ -116,13 +116,13 @@ export async function loadSettings(): Promise<AppSettings> {
  */
 export async function saveSettings(partial: Partial<AppSettings>): Promise<void> {
   const current = readLocalCacheSync() ?? DEFAULT_SETTINGS;
-  const merged: AppSettings = {
+  const merged = {
     ...current,
     ...partial,
     endpoints: partial.endpoints ?? current.endpoints,
     modelSelections: partial.modelSelections ?? current.modelSelections,
     version: SETTINGS_VERSION,
-  };
+  } as AppSettings;
   writeLocalCacheSync(merged);
   try {
     await settingsClient.setSettings(partial);
