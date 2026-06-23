@@ -85,7 +85,7 @@ jobs:
 
             | File | Notes |
             | --- | --- |
-            | `Sage-Setup-*.win7.exe` | NSIS, x64, VCRedist bundled |
+            | `Sage-Setup-*-win7.exe` | NSIS, x64, VCRedist bundled |
 
             ### Win7 前置
 
