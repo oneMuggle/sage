@@ -429,7 +429,9 @@ class SageAgent:
         Returns:
             LLMResponse：包含 content 和 tool_calls（透传不被吞没）
         """
-        system_prompt = "你是 Sage，一个智能 AI 助手。"
+        from backend.agents.profiles import build_system_base
+
+        system_prompt = build_system_base()
         if memory_context:
             system_prompt += "\n\n以下是相关的记忆上下文：\n" + memory_context
 
