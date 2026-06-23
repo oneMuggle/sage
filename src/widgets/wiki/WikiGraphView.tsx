@@ -77,6 +77,7 @@ const MAX_NODE_SIZE = 80;
  * Exported for unit tests in `__tests__/WikiGraphView.test.tsx`.
  * Not part of the public widget API — do not import from feature/app code.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function colorByType(pageType?: string): string {
   if (!pageType) return TYPE_COLORS.default;
   return TYPE_COLORS[pageType] ?? TYPE_COLORS.default;
@@ -269,6 +270,7 @@ export function WikiGraphView({ data, query, onNodeClick }: WikiGraphViewProps) 
  * Exported for unit tests in `__tests__/WikiGraphView.test.tsx`.
  * Not part of the public widget API — do not import from feature/app code.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function buildGraph(
   data: GraphData,
   query?: string,
