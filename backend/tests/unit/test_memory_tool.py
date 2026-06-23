@@ -1,6 +1,6 @@
 """memory_tool 单元测试：MemorySearchTool / MemorySaveTool
 
-使用一个 fake memory manager (含 async remember) 替代真实记忆系统。
+使用一个 fake memory manager 替代真实记忆系统。
 """
 
 import pytest
@@ -11,14 +11,14 @@ pytestmark = pytest.mark.unit
 
 
 class _FakeMemoryManager:
-    """简化的 async 记忆管理器：记录每次 remember 调用并按需返回结果。"""
+    """简化的记忆管理器：记录每次 remember 调用并按需返回结果。"""
 
     def __init__(self, remember_return=None, raise_exc: Exception | None = None):
         self._return = remember_return if remember_return is not None else []
         self._raise = raise_exc
         self.calls: list[tuple] = []
 
-    async def remember(self, *args, **kwargs):
+    def remember(self, *args, **kwargs):
         self.calls.append((args, kwargs))
         if self._raise:
             raise self._raise
