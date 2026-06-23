@@ -132,7 +132,7 @@ async def test_sage_agent_call_llm_uses_profile_system_prompt():
 
 @pytest.mark.asyncio()
 async def test_sage_agent_call_llm_default_system_prompt_when_no_agent_id():
-    """无 agent_id 时, _call_llm 保持默认 '你是 Sage，一个智能 AI 助手。' 提示。"""
+    """无 agent_id 时, _call_llm 使用 build_system_base() 构建默认提示（含 agent 列表）。"""
     agent = SageAgent()
     agent.llm_client = MagicMock()
 
@@ -148,7 +148,9 @@ async def test_sage_agent_call_llm_default_system_prompt_when_no_agent_id():
 
     first_msg = captured_messages["messages"][0]
     assert first_msg["role"] == "system"
-    assert first_msg["content"] == "你是 Sage，一个智能 AI 助手。"
+    # 默认 system prompt 以身份开头，并包含 agent 列表
+    assert first_msg["content"].startswith("你是 Sage，一个智能 AI 助手。")
+    assert "可用 Agent" in first_msg["content"]
 
 
 @pytest.mark.asyncio()

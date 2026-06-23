@@ -146,3 +146,18 @@ def get_enabled_agent(agent_id: str) -> dict[str, Any] | None:
     if not profile.get("enabled", True):
         return None
     return profile
+
+
+def format_agents_for_prompt() -> str:
+    """格式化已启用 Agent 列表，供注入 system prompt。"""
+    agents = [a for a in list_agents() if a.enabled]
+    if not agents:
+        return ""
+    lines = [f"- {a.name} ({a.id}): {a.description or a.role}" for a in agents]
+    return "\n\n你可以向用户介绍以下可用 Agent：\n" + "\n".join(lines)
+
+
+def build_system_base() -> str:
+    """构建 system prompt 基础部分（身份 + agent 列表）。"""
+    base = "你是 Sage，一个智能 AI 助手。"
+    return base + format_agents_for_prompt()

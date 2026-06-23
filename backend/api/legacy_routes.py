@@ -578,6 +578,88 @@ async def list_slash_commands():
     return {"commands": adapter.list_slash_commands()}
 
 
+# ==================== Settings & Preferences API ====================
+#
+# 这些端点在 hex_routes 中也有定义。legacy 模式下 hex_routes 不注册，
+# 但 Electron 前端需要 /settings 和 /preferences/{key} 来加载配置，
+# 因此在 legacy_routes 中也提供，确保两种 API_MODE 下都能工作。
+
+
+from pydantic import ConfigDict as _ConfigDict
+
+
+class LegacySettingsRequest(BaseModel):
+    """PUT /settings 请求体（legacy 路径）。所有字段可选。"""
+
+    model_config = _ConfigDict(extra="allow")
+
+    api_base_url: str | None = None
+    api_key: str | None = None  # noqa: S105
+    model: str | None = None
+
+
+class LegacySettingsResponse(BaseModel):
+    """PUT /settings 响应体。"""
+
+    status: str = "ok"
+    changed_fields: list[str] = []
+
+
+class LegacyPreferenceItem(BaseModel):
+    """GET/PUT /preferences/{key} 请求/响应体。"""
+
+    value: str | None = None
+    value_type: str = "string"
+    category: str = "general"
+
+
+@router.get("/settings")
+async def legacy_get_settings() -> dict | None:
+    """读取持久化的 settings；不存在返回 null。"""
+    from backend.data.settings_repo import SettingsRepository
+
+    return SettingsRepository().get_json("app_settings")
+
+
+@router.put("/settings", response_model=LegacySettingsResponse)
+async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse:
+    """持久化 settings 到 preferences 表。"""
+    from backend.data.settings_repo import SettingsRepository
+
+    payload = req.model_dump(exclude_none=True)
+    SettingsRepository().set_json("app_settings", payload, category="general")
+    changed_fields = [k for k in payload if k != "api_key"]
+    if "api_key" in payload:
+        changed_fields.append("api_key")
+    logger.info(f"[LEGACY] /settings updated: changed={changed_fields}")
+    return LegacySettingsResponse(status="ok", changed_fields=changed_fields)
+
+
+@router.get("/preferences/{key}", response_model=LegacyPreferenceItem)
+async def legacy_get_preference(key: str) -> LegacyPreferenceItem:
+    """通用 KV 读取（白名单限定 key）。"""
+    from backend.data.settings_repo import SettingsRepository
+
+    if key not in SettingsRepository.KEYS:
+        raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
+    val = SettingsRepository().get(key)
+    return LegacyPreferenceItem(value=val)
+
+
+@router.put("/preferences/{key}", response_model=LegacyPreferenceItem)
+async def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPreferenceItem:
+    """通用 KV 写入（白名单限定 key）。"""
+    from backend.data.settings_repo import SettingsRepository
+
+    if key not in SettingsRepository.KEYS:
+        raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
+    if item.value is not None:
+        SettingsRepository().set(
+            key, item.value, value_type=item.value_type, category=item.category
+        )
+    return item
+
+
 # ==================== 聊天 API ====================
 
 
@@ -755,7 +837,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             agent = SageAgent()
 
             # Build system prompt with optional diagram tool guidance
-            system_content = "你是 Sage，一个智能 AI 助手。"
+            from backend.agents.profiles import build_system_base
+
+            system_content = build_system_base()
             try:
                 from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
 
