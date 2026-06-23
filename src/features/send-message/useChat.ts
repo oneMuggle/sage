@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { resolveEndpoint } from '../../entities/setting/types';
 import { ApiException, type AgentEvent, type ChatConfig } from '../../shared/api';
+import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
 import { chatApi, useStore, type Message, type ToolCall } from '../../shared/lib/store';
@@ -27,21 +28,6 @@ function inferProviderFromBaseUrl(baseUrl: string | undefined): string | undefin
   return undefined;
 }
 
-/** 把后端 AgentState 映射到 UI 中间态文本 (PR-6) */
-function agentStateToUiText(state: AgentEvent['state'], toolName?: string): string | null {
-  switch (state) {
-    case 'thinking':
-      return '🤔 思考中…';
-    case 'acting':
-      return toolName ? `🔧 调工具 ${toolName}…` : '🔧 行动中…';
-    case 'observing':
-      return '👀 观察结果…';
-    case 'failed':
-      return '❌ 失败';
-    default:
-      return null;
-  }
-}
 
 export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
@@ -54,15 +40,23 @@ export function useChat() {
     state: AgentEvent['state'] | null;
     /** 阶段 4: 当前执行 agent 的 ID */
     currentAgentId: string | null;
+    /** P2: 当前 ReAct 迭代轮次 */
+    iteration: number;
   } | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
   const { settings } = useSettings();
   const loadingRef = useRef(false);
   const cancelRef = useRef<(() => void) | null>(null);
+  // HIGH-4 修复: finishStream 是 sendMessage 闭包内的函数,interrupt() 无法直接调用
+  // 用 ref 把 finishStream 暴露出去,让 interrupt 也能触发清理流程
+  const finishStreamRef = useRef<(() => void) | null>(null);
   // PR-6: ref 镜像 streaming.content, finally 写回 store 时同步读 (避免依赖 React state)
   const streamingContentRef = useRef<string>('');
   // 新增：ref 镜像 streaming.reasoning
   const streamingReasoningRef = useRef<string>('');
+  // P0: 实时工具调用 — state 驱动 UI 渲染，ref 镜像供 finishStream 读取最新值
+  const [streamingToolCalls, setStreamingToolCalls] = useState<ToolCall[]>([]);
+  const streamingToolCallsRef = useRef<ToolCall[]>([]);
 
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
 
@@ -70,14 +64,26 @@ export function useChat() {
    * 派生 messages: 当 streaming 时, 替换 store.messages 中对应 id 的 content 和 reasoning_content
    * — widget 看到的最后一条 assistant 消息会"长出"内容
    */
+  // MEDIUM-6: 提取 streaming 中实际用到的字段到局部变量,便于 useMemo 细粒度 deps
+  const streamingMessageId = streaming?.messageId ?? null;
+  const streamingContent = streaming?.content ?? '';
+  const streamingReasoning = streaming?.reasoning ?? '';
+
   const derivedMessages = useMemo<Message[]>(() => {
-    if (!streaming) return messages;
+    if (!streamingMessageId) return messages;
     return messages.map((m) =>
-      m.id === streaming.messageId
-        ? { ...m, content: streaming.content, reasoning_content: streaming.reasoning || undefined }
+      m.id === streamingMessageId
+        ? {
+            ...m,
+            content: streamingContent,
+            reasoning_content: streamingReasoning || undefined,
+            tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+          }
         : m,
     );
-  }, [messages, streaming]);
+    // MEDIUM-6: 拆细 deps — 仅依赖 streaming 中实际用到的字段,
+    // 避免 currentAgentId/iteration/state 等无关变化触发 messages 数组重建
+  }, [messages, streamingMessageId, streamingContent, streamingReasoning, streamingToolCalls]);
 
   const sendMessage = useCallback(
     async (content: string, sessionId?: string) => {
@@ -93,6 +99,11 @@ export function useChat() {
           /* ignore */
         }
         cancelRef.current = null;
+        // MEDIUM-1: 同时通知后端中断正在跑的 stream,避免 cancel 只 unlisten 前端
+        // 而后端继续消耗 LLM token。fire-and-forget — interrupt 失败不影响新消息发送
+        chatApi.interrupt().catch(() => {
+          /* Interrupt failures are non-critical */
+        });
       }
 
       // 即使 settings 缺失,user 消息也必须先 addMessage 再校验失败返回 —
@@ -153,12 +164,14 @@ export function useChat() {
         reasoning: '',
         state: 'thinking',
         currentAgentId: null, // 阶段 4: 初始化 agentId
+        iteration: 0, // P2: 初始化迭代轮次
       });
       // 重置 reasoning ref
       streamingReasoningRef.current = '';
 
-      // Accumulate tool calls during streaming
-      const streamingToolCalls: ToolCall[] = [];
+      // P0: 重置实时工具调用 state + ref (每次 sendMessage 清空上一轮)
+      streamingToolCallsRef.current = [];
+      setStreamingToolCalls([]);
 
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
@@ -225,21 +238,35 @@ export function useChat() {
         finished = true;
         // 优先用 done 事件自带的完整 content (避免混入 thinking 占位符)
         // 退回到 streamingContentRef (向后兼容旧的非流式 done 事件)
-        const finalContent = lastDoneContent ?? streamingContentRef.current;
+        let finalContent = lastDoneContent ?? streamingContentRef.current;
         const finalReasoning = streamingReasoningRef.current;
-        if (finalContent || finalReasoning || streamingToolCalls.length > 0) {
+        const finalToolCalls = streamingToolCallsRef.current;
+        // MEDIUM-2: 若 LLM 没返回任何 content (后端只发 thinking 但没 done.content),
+        // 占位符 '🤔 思考中…' 会留在 store。fallback 到错误文案让用户看到明确失败
+        if (!finalContent && !finalReasoning && finalToolCalls.length === 0) {
+          finalContent = '[错误: 模型未返回任何内容]';
+        } else if (finalContent === '🤔 思考中…' && !finalReasoning && finalToolCalls.length === 0) {
+          finalContent = '[错误: 模型未返回任何内容]';
+        }
+        if (finalContent || finalReasoning || finalToolCalls.length > 0) {
           updateMessage(assistantId, {
             content: finalContent,
             reasoning_content: finalReasoning || undefined,
-            tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+            tool_calls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
           });
         }
         streamingContentRef.current = '';
         streamingReasoningRef.current = '';
+        streamingToolCallsRef.current = [];
+        setStreamingToolCalls([]);
         setStreaming(null);
         cancelRef.current = null;
         resetLoading();
+        // HIGH-4: 清空 ref 让 interrupt 知道当前 stream 已结束
+        finishStreamRef.current = null;
       };
+      // HIGH-4: 注册 finishStream 到 ref 供 interrupt 调用
+      finishStreamRef.current = finishStream;
 
       try {
         // 解构 cancel 用于下次 sendMessage 时取消 (cancel-prev)
@@ -248,11 +275,15 @@ export function useChat() {
           content,
           {
             onEvent: (evt) => {
-              // 阶段 4: 累积 agent_id (供前端显示"当前处理 agent")
-              if (evt.agent_id) {
+              // 阶段 4: 累积 agent_id + 迭代轮次 (供前端显示"当前处理 agent")
+              if (evt.agent_id || evt.iteration) {
                 setStreaming((prev) =>
                   prev && prev.messageId === assistantId
-                    ? { ...prev, currentAgentId: evt.agent_id ?? null }
+                    ? {
+                        ...prev,
+                        currentAgentId: evt.agent_id ?? prev.currentAgentId,
+                        iteration: evt.iteration ?? prev.iteration,
+                      }
                     : prev,
                 );
               }
@@ -267,7 +298,7 @@ export function useChat() {
                 );
               }
 
-              // Collect tool calls during streaming
+              // P0: 实时工具调用 — acting 事件到达时立即更新 state + ref
               if (evt.state === 'acting' && evt.tool_call) {
                 const tc = evt.tool_call;
                 let args: Record<string, unknown> = {};
@@ -276,30 +307,52 @@ export function useChat() {
                 } catch {
                   // ignore parse errors
                 }
-                streamingToolCalls.push({
+                // HIGH-3: 记录 tool_call.id,供 observing 用 id 精确匹配 (而非按 index 错配)
+                const newTc: ToolCall = {
+                  id: tc.id,
                   name: tc.function.name,
                   args,
-                });
+                };
+                streamingToolCallsRef.current = [...streamingToolCallsRef.current, newTc];
+                setStreamingToolCalls([...streamingToolCallsRef.current]);
               }
+              // P0: observing 事件到达时按 tool_call_id 精确匹配并更新 result
               if (evt.state === 'observing' && evt.tool_result) {
                 const tr = evt.tool_result;
-                // Find the matching tool call (by matching tool_call_id to the last acting event)
-                const lastTc = streamingToolCalls[streamingToolCalls.length - 1];
-                if (lastTc) {
-                  lastTc.result = tr.content;
-                  // Try to parse JSON result to extract metadata (e.g., image data from MCP tools)
+                // HIGH-3: 用 tr.tool_call_id 查找匹配项;fallback 到最后一个 (兼容无 id 场景)
+                const targetId = tr.tool_call_id;
+                const targetIdx = targetId
+                  ? streamingToolCallsRef.current.findIndex((t) => t.id === targetId)
+                  : streamingToolCallsRef.current.length - 1;
+                const targetTc = targetIdx >= 0 ? streamingToolCallsRef.current[targetIdx] : null;
+                if (targetTc) {
+                  // HIGH-2: 不可变更新 — 创建新对象而非原地 mutation,避免 React.memo 浅比较失效
+                  let metadata = targetTc.metadata;
                   try {
                     const parsed = JSON.parse(tr.content);
                     if (parsed && typeof parsed === 'object' && parsed.metadata) {
-                      lastTc.metadata = parsed.metadata;
+                      metadata = parsed.metadata;
                     }
                   } catch {
                     // Not JSON, ignore
                   }
+                  const newTc: ToolCall = {
+                    ...targetTc,
+                    result: tr.content,
+                    metadata,
+                  };
+                  // 数组也新建 (targetIdx 处替换,其余共享引用保持稳定)
+                  const updated = [
+                    ...streamingToolCallsRef.current.slice(0, targetIdx),
+                    newTc,
+                    ...streamingToolCallsRef.current.slice(targetIdx + 1),
+                  ];
+                  streamingToolCallsRef.current = updated;
+                  setStreamingToolCalls(updated);
                 }
               }
 
-              const uiText = agentStateToUiText(evt.state, evt.tool_call?.function.name);
+              const uiText = agentStateToText(evt.state, evt.tool_call?.function.name);
               // 累积策略 (I5: 流式逐字):
               // - content_delta + done.content 触发 appendContent 追加 (累积真实回答)
               // - thinking/acting/observing 的 uiText 触发 replaceContent 覆盖
@@ -364,6 +417,11 @@ export function useChat() {
     } catch {
       // Interrupt failures are non-critical
     }
+    // HIGH-4: 触发 finishStream() 清理 streaming overlay
+    // (之前 interrupt 只调了 cancel + 后端 interrupt,没有清 setStreaming(null),
+    //  导致用户看到 '🤔 思考中…' 占位符永远不消失、ActiveAgentIndicator 不消失、
+    //  isLoading 不重置、streamingToolCallsRef 持有陈旧数据)
+    finishStreamRef.current?.();
   }, []);
 
   const loadMessagesCallback = useCallback(
@@ -385,5 +443,11 @@ export function useChat() {
     loadMessages: loadMessagesCallback,
     /** 阶段 4: 当前流式处理中的 agent ID (供 UI 显示"当前处理 agent") */
     currentAgentId: streaming?.currentAgentId ?? null,
+    /** P1/P2: 当前正在流式输出的消息 ID (供 Message 组件判断 isStreaming) */
+    streamingMessageId: streaming?.messageId ?? null,
+    /** P2: 当前 ReAct 迭代轮次 */
+    iteration: streaming?.iteration ?? 0,
+    /** P2: 当前流式状态 (供 ActiveAgentIndicator 显示阶段) */
+    streamingState: streaming?.state ?? null,
   };
 }

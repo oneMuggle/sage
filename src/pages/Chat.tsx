@@ -19,20 +19,32 @@ export function Chat() {
     interrupt,
     loadMessages,
     currentAgentId, // 阶段 4: 当前流式处理中的 agent ID
+    streamingMessageId, // P1: 当前流式消息 ID
+    iteration, // P2: ReAct 迭代轮次
+    streamingState, // P2: 当前流式状态
   } = useChat();
 
   const { currentSessionId, setCurrentSessionId, createSession } = useStore();
   const { settings } = useSettings();
   const navigate = useNavigate();
-  // PR-7: 跟随新消息/流式 token 自动滚到底。依赖同时含 messages.length
-  // 和最后一条消息的 content 长度 — 流式更新时 length 不变但 content 在变。
+  // LOW-1: 跟随新消息/流式 token 自动滚到底。
+  // 必须用 derivedMessages 而非 messages —— 流式 override 只在 derivedMessages 里,
+  // 原 messages 中最后一条仍是占位符 '🤔 思考中…'。
+  // 依赖:消息条数 + 最后一条 content + reasoning + tool_call 数 — 任一变化都触发滚动。
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMsg = messages[messages.length - 1];
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages.length, lastMsg?.content]);
+  }, [
+    messages.length,
+    lastMsg?.content,
+    lastMsg?.reasoning_content,
+    lastMsg?.tool_calls?.length,
+    // streamingMessageId 变化时也需要滚 (新 stream 开始)
+    streamingMessageId,
+  ]);
 
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const hasConfig =
@@ -107,12 +119,16 @@ export function Chat() {
             <LoadingState label="正在加载对话..." />
           </div>
         ) : (
-          <MessageList messages={messages} />
+          <MessageList messages={messages} streamingMessageId={streamingMessageId} />
         )}
       </div>
 
-      {/* 阶段 4: 流式处理时显示当前活跃 agent */}
-      <ActiveAgentIndicator agentId={currentAgentId} />
+      {/* 阶段 4 + P2: 流式处理时显示当前活跃 agent + 迭代轮次 + 阶段 */}
+      <ActiveAgentIndicator
+        agentId={currentAgentId}
+        iteration={iteration}
+        streamingState={streamingState}
+      />
 
       {showConfigWarning && (
         <div
