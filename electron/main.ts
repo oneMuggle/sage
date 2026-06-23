@@ -110,8 +110,7 @@ function spawnBackend(): ChildProcess {
   // Resolve SAGE_DB_PATH once so both packaged and dev spawn paths share it.
   // Backend prefers this env var; falls back to a per-user writable location
   // (Electron's userData dir) so dev + packaged write to the same DB.
-  const sageDbPath =
-    process.env.SAGE_DB_PATH ?? join(app.getPath('userData'), 'sage.db');
+  const sageDbPath = process.env.SAGE_DB_PATH ?? join(app.getPath('userData'), 'sage.db');
 
   let proc: ChildProcess;
   if (pyLauncher) {
