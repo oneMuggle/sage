@@ -196,7 +196,9 @@ class ChatService:
         span.set_attribute("history.size", len(history))
 
         # Inject system prompt (including diagram tool guidance if available)
-        system_content = "你是 Sage，一个智能 AI 助手。"
+        from backend.agents.profiles import build_system_base
+
+        system_content = build_system_base()
         try:
             from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
 

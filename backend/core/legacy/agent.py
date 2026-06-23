@@ -430,7 +430,8 @@ class SageAgent:
         if self.profile and self.profile.get("system_prompt"):
             system_prompt = self.profile["system_prompt"]
         else:
-            system_prompt = "你是 Sage，一个智能 AI 助手。"
+            from backend.agents.profiles import build_system_base
+            system_prompt = build_system_base()
         if memory_context:
             system_prompt += "\n\n以下是相关的记忆上下文：\n" + memory_context
 
