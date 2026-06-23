@@ -55,7 +55,7 @@ export function Sidebar() {
       .catch(() => {
         setConnectionStatus('error');
       });
-  }, [chatEndpoint?.baseUrl, chatEndpoint?.apiKey]);
+  }, [chatEndpoint?.baseUrl, chatEndpoint?.apiKey, settings.modelSelections.chatModel.modelId]);
 
   const handleNewSession = async () => {
     const sessionId = await createSession();
