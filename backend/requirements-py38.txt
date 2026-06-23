@@ -17,6 +17,8 @@ pydantic==1.10.13    # 1.x 最后版本, 2.x 要求 3.9+
 
 # Database
 # sqlite3 is built-in
+jieba>=0.42.1
+sqlite-vec>=0.1.9
 
 # HTTP
 httpx==0.26.0
