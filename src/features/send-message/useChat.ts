@@ -54,6 +54,8 @@ export function useChat() {
     state: AgentEvent['state'] | null;
     /** 阶段 4: 当前执行 agent 的 ID */
     currentAgentId: string | null;
+    /** P2: 当前 ReAct 迭代轮次 */
+    iteration: number;
   } | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
   const { settings } = useSettings();
@@ -63,6 +65,9 @@ export function useChat() {
   const streamingContentRef = useRef<string>('');
   // 新增：ref 镜像 streaming.reasoning
   const streamingReasoningRef = useRef<string>('');
+  // P0: 实时工具调用 — state 驱动 UI 渲染，ref 镜像供 finishStream 读取最新值
+  const [streamingToolCalls, setStreamingToolCalls] = useState<ToolCall[]>([]);
+  const streamingToolCallsRef = useRef<ToolCall[]>([]);
 
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
 
@@ -74,10 +79,15 @@ export function useChat() {
     if (!streaming) return messages;
     return messages.map((m) =>
       m.id === streaming.messageId
-        ? { ...m, content: streaming.content, reasoning_content: streaming.reasoning || undefined }
+        ? {
+            ...m,
+            content: streaming.content,
+            reasoning_content: streaming.reasoning || undefined,
+            tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+          }
         : m,
     );
-  }, [messages, streaming]);
+  }, [messages, streaming, streamingToolCalls]);
 
   const sendMessage = useCallback(
     async (content: string, sessionId?: string) => {
@@ -153,12 +163,14 @@ export function useChat() {
         reasoning: '',
         state: 'thinking',
         currentAgentId: null, // 阶段 4: 初始化 agentId
+        iteration: 0, // P2: 初始化迭代轮次
       });
       // 重置 reasoning ref
       streamingReasoningRef.current = '';
 
-      // Accumulate tool calls during streaming
-      const streamingToolCalls: ToolCall[] = [];
+      // P0: 重置实时工具调用 state + ref (每次 sendMessage 清空上一轮)
+      streamingToolCallsRef.current = [];
+      setStreamingToolCalls([]);
 
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
@@ -227,15 +239,18 @@ export function useChat() {
         // 退回到 streamingContentRef (向后兼容旧的非流式 done 事件)
         const finalContent = lastDoneContent ?? streamingContentRef.current;
         const finalReasoning = streamingReasoningRef.current;
-        if (finalContent || finalReasoning || streamingToolCalls.length > 0) {
+        const finalToolCalls = streamingToolCallsRef.current;
+        if (finalContent || finalReasoning || finalToolCalls.length > 0) {
           updateMessage(assistantId, {
             content: finalContent,
             reasoning_content: finalReasoning || undefined,
-            tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+            tool_calls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
           });
         }
         streamingContentRef.current = '';
         streamingReasoningRef.current = '';
+        streamingToolCallsRef.current = [];
+        setStreamingToolCalls([]);
         setStreaming(null);
         cancelRef.current = null;
         resetLoading();
@@ -248,11 +263,15 @@ export function useChat() {
           content,
           {
             onEvent: (evt) => {
-              // 阶段 4: 累积 agent_id (供前端显示"当前处理 agent")
-              if (evt.agent_id) {
+              // 阶段 4: 累积 agent_id + 迭代轮次 (供前端显示"当前处理 agent")
+              if (evt.agent_id || evt.iteration) {
                 setStreaming((prev) =>
                   prev && prev.messageId === assistantId
-                    ? { ...prev, currentAgentId: evt.agent_id ?? null }
+                    ? {
+                        ...prev,
+                        currentAgentId: evt.agent_id ?? prev.currentAgentId,
+                        iteration: evt.iteration ?? prev.iteration,
+                      }
                     : prev,
                 );
               }
@@ -267,7 +286,7 @@ export function useChat() {
                 );
               }
 
-              // Collect tool calls during streaming
+              // P0: 实时工具调用 — acting 事件到达时立即更新 state + ref
               if (evt.state === 'acting' && evt.tool_call) {
                 const tc = evt.tool_call;
                 let args: Record<string, unknown> = {};
@@ -276,15 +295,15 @@ export function useChat() {
                 } catch {
                   // ignore parse errors
                 }
-                streamingToolCalls.push({
-                  name: tc.function.name,
-                  args,
-                });
+                const newTc: ToolCall = { name: tc.function.name, args };
+                streamingToolCallsRef.current = [...streamingToolCallsRef.current, newTc];
+                setStreamingToolCalls([...streamingToolCallsRef.current]);
               }
+              // P0: observing 事件到达时更新最后一个工具调用的 result
               if (evt.state === 'observing' && evt.tool_result) {
                 const tr = evt.tool_result;
-                // Find the matching tool call (by matching tool_call_id to the last acting event)
-                const lastTc = streamingToolCalls[streamingToolCalls.length - 1];
+                const updated = [...streamingToolCallsRef.current];
+                const lastTc = updated[updated.length - 1];
                 if (lastTc) {
                   lastTc.result = tr.content;
                   // Try to parse JSON result to extract metadata (e.g., image data from MCP tools)
@@ -296,6 +315,8 @@ export function useChat() {
                   } catch {
                     // Not JSON, ignore
                   }
+                  streamingToolCallsRef.current = updated;
+                  setStreamingToolCalls([...updated]);
                 }
               }
 
@@ -385,5 +406,11 @@ export function useChat() {
     loadMessages: loadMessagesCallback,
     /** 阶段 4: 当前流式处理中的 agent ID (供 UI 显示"当前处理 agent") */
     currentAgentId: streaming?.currentAgentId ?? null,
+    /** P1/P2: 当前正在流式输出的消息 ID (供 Message 组件判断 isStreaming) */
+    streamingMessageId: streaming?.messageId ?? null,
+    /** P2: 当前 ReAct 迭代轮次 */
+    iteration: streaming?.iteration ?? 0,
+    /** P2: 当前流式状态 (供 ActiveAgentIndicator 显示阶段) */
+    streamingState: streaming?.state ?? null,
   };
 }

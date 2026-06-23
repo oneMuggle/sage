@@ -19,6 +19,9 @@ export function Chat() {
     interrupt,
     loadMessages,
     currentAgentId, // 阶段 4: 当前流式处理中的 agent ID
+    streamingMessageId, // P1: 当前流式消息 ID
+    iteration, // P2: ReAct 迭代轮次
+    streamingState, // P2: 当前流式状态
   } = useChat();
 
   const { currentSessionId, setCurrentSessionId, createSession } = useStore();
@@ -107,12 +110,16 @@ export function Chat() {
             <LoadingState label="正在加载对话..." />
           </div>
         ) : (
-          <MessageList messages={messages} />
+          <MessageList messages={messages} streamingMessageId={streamingMessageId} />
         )}
       </div>
 
-      {/* 阶段 4: 流式处理时显示当前活跃 agent */}
-      <ActiveAgentIndicator agentId={currentAgentId} />
+      {/* 阶段 4 + P2: 流式处理时显示当前活跃 agent + 迭代轮次 + 阶段 */}
+      <ActiveAgentIndicator
+        agentId={currentAgentId}
+        iteration={iteration}
+        streamingState={streamingState}
+      />
 
       {showConfigWarning && (
         <div
