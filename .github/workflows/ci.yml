@@ -241,6 +241,10 @@ jobs:
 
       - name: Package (Windows NSIS)
         if: matrix.os == 'windows-latest'
+        env:
+          # CI validation only — use placeholder suffix.
+          # Release workflows (release.yml / release-win7.yml) use -win10 / -win7.
+          ARTIFACT_SUFFIX: ci
         run: npx electron-builder --win --publish never
 
       - name: Upload build artifact

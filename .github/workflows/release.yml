@@ -2,6 +2,10 @@
 #
 # 触发条件: push tag 形如 v* (如 v0.2.0, v1.0.0-beta.1)
 #
+# ⚠️ Win7 LTS 专用 installer 改由 release-win7.yml 在 release/win7 分支产出
+#    tag 格式: v*-lts (如 v0.2.0-lts)
+#    下载入口: https://github.com/oneMuggle/sage/releases?q=tag%3Av0.2.0-lts
+#
 # 工作流:
 #   1. checkout 代码
 #   2. setup Node.js + cache npm + electron-builder downloads
@@ -10,13 +14,12 @@
 #   5. electron-builder 跨平台构建 (linux AppImage/deb + windows NSIS)
 #   6. 上传产物到 GitHub Release (由本次 push tag 自动创建)
 #
-# 产物格式 (来自 electron-builder.yml):
-#   - Sage-${version}.AppImage       (Linux)
-#   - sage_${version}_amd64.deb      (Linux Debian)
-#   - Sage-Setup-${version}.exe      (Windows NSIS)
+# 产物格式 (来自 electron-builder.yml, env.ARTIFACT_SUFFIX 由 workflow 设置):
+#   - Sage-${version}.AppImage              (Linux)
+#   - sage_${version}_amd64.deb             (Linux Debian)
+#   - Sage-Setup-${version}-win10.exe       (Windows NSIS, Win10+ only)
 #
-# macOS 当前不构建 (electron-builder.yml mac.target: null)
-# 后续要支持时, 在 matrix.os 加 macos-latest 即可
+# Win7 用户请改用 release-win7.yml 的 LTS release。
 #
 # 失败处理: tag push 后 workflow 失败, 需人工:
 #   1. git tag -d v<X.Y.Z> && git push origin :v<X.Y.Z>  # 删除坏 tag
@@ -35,6 +38,8 @@ permissions:
 jobs:
   build:
     name: Build (${{ matrix.os }})
+    # Skip LTS-suffixed tags — those go to release-win7.yml
+    if: "!contains(github.ref_name, '-lts')"
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +48,12 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     runs-on: ${{ matrix.os }}
+
+    # Default suffix — empty placeholder.
+    # ⚠️ MUST be overridden by any step that uses ${env.ARTIFACT_SUFFIX}
+    # in electron-builder.yml artifactName. Windows job overrides below.
+    env:
+      ARTIFACT_SUFFIX: ''
 
     steps:
       - name: Checkout
@@ -97,6 +108,9 @@ jobs:
 
       - name: Build Windows (NSIS installer)
         if: matrix.os == 'windows-latest'
+        env:
+          # Override default; produces Sage-Setup-${version}-win10.exe
+          ARTIFACT_SUFFIX: win10
         run: npx electron-builder --win nsis --publish never
 
       - name: Upload artifacts to GitHub Release
@@ -106,7 +120,7 @@ jobs:
           files: |
             release/*/Sage-*.AppImage
             release/*/sage_*_amd64.deb
-            release/*/Sage-Setup-*.exe
+            release/*/Sage-Setup-*-win10.exe
           # draft: true (本次发布先 draft, 人工审核后再 publish)
           # 与 v0.1.2 流程一致: gh release create v0.1.2 --draft
           draft: true

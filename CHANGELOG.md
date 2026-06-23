@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **feat(ci)**: 双轨 release workflow (main → Win10+/Linux/macOS, LTS → Win7 SP1)
+  - main release 产物: `Sage-Setup-${version}-win10.exe` (Windows), `sage_${version}_amd64.deb`, `Sage-${version}.AppImage`
+  - LTS release 产物: `Sage-Setup-${version}-win7.exe` (Windows 7 SP1 x64 only, tag 形如 `v*-lts`)
+  - 新 workflow: `.github/workflows/release-win7.yml` (在 `release/win7` 分支)
+  - electron-builder.yml: `win.artifactName` 用 `${env.ARTIFACT_SUFFIX}` 占位
+  - Win7 用户引导: 文档化的独立 release 入口
+
+### Changed
+- **docs(technical)**: `21-win7-lts.md` 加 §9 Release 工作流；`26-packaging-matrix.md` §1/§2 拆 Win7/Win10+；`20-electron.md` §5 加 LTS 提示
+- **docs(README)**: §"双轨发布" 表格加具体下载入口；Q4 重写
+- **docs(user-manual)**: `01-desktop.md` §1.1/§1.2 拆 Win7 LTS 子节
+
 ### 计划中
 - 跟踪 [`docs/plans/2026-06-13_full-quality-optimization-v2.md`](./plans/2026-06-13_full-quality-optimization-v2.md) 7 方向 A-G
   - A. 六边形迁移收口(剩 A2 memory / A3 evolution / A4 skills / A5 agents / A6 wiki / A7 llm-proxy)

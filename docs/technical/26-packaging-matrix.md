@@ -5,25 +5,36 @@
 
 ## 1. 平台覆盖矩阵
 
-| 平台 | 最低版本 | 架构 | 产物 | CI 构建 runner |
-|---|---|---|---|---|
-| Windows | 7 SP1 | x64 | `Sage-Setup-${version}.exe`(NSIS,含 VCRedist bundling) | `windows-latest` |
-| Windows | 10 | x64 | 同上 | 同上 |
-| Windows | 11 | x64 | 同上 | 同上 |
-| Ubuntu | 20.04+ | amd64 | `sage_${version}_amd64.deb`(原生 deb) | `ubuntu-latest` |
-| Linux 通用 | glibc 2.28+ | x64 | `Sage-${version}.AppImage` | `ubuntu-latest` |
-| macOS | — | — | **暂不支持**(`mac.target: null`) | — |
+| 平台 | 最低版本 | 架构 | 产物 | Release 入口 | CI 构建 runner |
+|---|---|---|---|---|---|
+| Windows (main) | 10 1809+ | x64 | `Sage-Setup-${version}-win10.exe` (NSIS, 含 VCRedist) | main release | `release.yml` (main branch) |
+| Windows 11 | 10 | x64 | 同上 | main release | 同上 |
+| **Windows 7 SP1 (LTS)** | 7 SP1 | x64 | `Sage-Setup-${version}-win7.exe` (NSIS, 含 VCRedist) | LTS release (`v*-lts` tag) | `release-win7.yml` (`release/win7` branch) |
+| Ubuntu | 20.04+ | amd64 | `sage_${version}_amd64.deb` (原生 deb) | main release | `release.yml` (main branch) |
+| Linux 通用 | glibc 2.28+ | x64 | `Sage-${version}.AppImage` | main release | `release.yml` (main branch) |
+| macOS | — | — | **暂不支持** (`mac.target: null`) | — | — |
 
 **架构限制(本期不支持):** 32-bit Windows · ARM Windows · ARM Linux · 任何 macOS。
 
 ## 2. 用户侧安装
 
-### Windows 7 SP1 / 10 / 11
+### Windows 10 / 11 (main release)
 
-1. 下载 `Sage-Setup-${version}.exe`
-2. 双击运行,按向导安装(默认 HKCU,无需管理员权限)
-3. 安装阶段会**静默装** VC++ 2015-2022 Redistributable(已装会跳过)
-4. Win7 SP1 用户需提前装 **KB3033929**(SHA-2 代码签名,Phase 3 启用签名后强依赖)
+1. 从 main release 页面下载 `Sage-Setup-${version}-win10.exe`
+2. 双击运行, 按向导安装 (默认 HKCU, 无需管理员权限)
+3. 安装阶段会**静默装** VC++ 2015-2022 Redistributable (已装会跳过)
+4. 不支持 Windows 7 (main release 不再含 Win7 兼容代码路径)
+
+### Windows 7 SP1 (LTS release)
+
+1. 从 LTS release 页面 (tag 形如 `v*-lts`) 下载 `Sage-Setup-${version}-win7.exe`
+2. **前置**: 装 **KB3033929** (SHA-2 代码签名, 2016 年发布) — Win7 SP1 必装
+3. 双击 `Sage-Setup-${version}-win7.exe` 运行安装
+4. 安装阶段静默装 VC++ 2015-2022 Redistributable
+5. 启动 Sage 前确认桌面快捷方式 (`Sage.lnk`) 存在
+6. **x64 only** — Electron 21 不支持 Win7 32-bit
+
+LTS release 由 `release/win7` 分支的 `release-win7.yml` workflow 产出, 详见 [`21-win7-lts.md` §9](./21-win7-lts.md)。
 
 ### Ubuntu 20.04+ / Debian / Mint
 
