@@ -1,7 +1,6 @@
 """SAGE_DB_PATH 环境变量集成测试"""
 
 
-
 def test_db_path_from_env(monkeypatch, tmp_path):
     target = tmp_path / "custom-sage.db"
     monkeypatch.setenv("SAGE_DB_PATH", str(target))
@@ -9,6 +8,7 @@ def test_db_path_from_env(monkeypatch, tmp_path):
     import importlib
 
     from backend.data import database
+
     importlib.reload(database)
     db = database.Database()
     assert db.db_path == str(target)
@@ -22,6 +22,7 @@ def test_db_path_default_when_no_env(monkeypatch):
     import importlib
 
     from backend.data import database
+
     importlib.reload(database)
     db = database.Database()
     # 默认路径包含 'sage.db'

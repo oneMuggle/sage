@@ -6,12 +6,8 @@
  * 迁移策略：首次后端无值 + localStorage 有值 + 未标记迁移 → 自动上传
  */
 import { settingsClient } from '../../shared/api/settingsClient';
-import {
-  AppSettings,
-  DEFAULT_SETTINGS,
-  SETTINGS_STORAGE_KEY,
-  SETTINGS_VERSION,
-} from './types';
+
+import { AppSettings, DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from './types';
 
 const CACHE_KEY = SETTINGS_STORAGE_KEY;
 const MIGRATION_MARKER = 'sage-settings.migrated_to_backend';

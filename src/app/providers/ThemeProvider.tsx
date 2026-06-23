@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { loadTheme, saveTheme } from '../../entities/theme/storage';
+
 import { ThemeContext, type ThemeMode } from './useTheme';
 
 const VALID_MODES: ReadonlyArray<ThemeMode> = ['light', 'dark', 'system'];
