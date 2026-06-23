@@ -116,11 +116,21 @@ function spawnBackend(): ChildProcess {
   let proc: ChildProcess;
   if (pyLauncher) {
     // Packaged Win: launch bundled Python directly
+    // Set PYTHONPATH to include backend and sage-core from resources
+    const pythonPath = [
+      join(process.resourcesPath, 'backend'),
+      join(process.resourcesPath, 'sage-core'),
+    ].join(process.platform === 'win32' ? ';' : ':');
+
     proc = spawn(
       pyLauncher,
       ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)],
       {
-        env: { ...process.env, SAGE_DB_PATH: sageDbPath },
+        env: {
+          ...process.env,
+          SAGE_DB_PATH: sageDbPath,
+          PYTHONPATH: pythonPath,
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       },

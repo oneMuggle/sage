@@ -20,10 +20,26 @@ files:
   - "!**/*.map"
   - "!**/.DS_Store"
 extraResources:
-  # Phase 3: bundle Python interpreter + sage-backend conda env here
-  # from: python/
-  # to: python/
-  # For Phase 1, backend runs via host conda (dev) only.
+  # Python 3.8 embedded runtime + backend for Win7 LTS
+  # Bundled by scripts/bundle-python.ps1 before build
+  - from: "resources/python"
+    to: "python"
+    filter:
+      - "**/*"
+      - "!**/__pycache__"
+      - "!**/*.pyc"
+  - from: "resources/backend"
+    to: "backend"
+    filter:
+      - "**/*"
+      - "!**/__pycache__"
+      - "!**/*.pyc"
+  - from: "resources/sage-core"
+    to: "sage-core"
+    filter:
+      - "**/*"
+  - from: "resources/start-backend.bat"
+    to: "start-backend.bat"
 
 # Win7 + Win10/11 NSIS installer (electron-builder 24.x)
 win:

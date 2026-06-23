@@ -57,6 +57,10 @@ jobs:
       - name: Install npm dependencies
         run: npm ci --force
 
+      - name: Bundle Python backend (Win7 LTS)
+        shell: pwsh
+        run: pwsh scripts/bundle-python.ps1
+
       - name: Build frontend + Electron
         run: npm run electron:build
 
