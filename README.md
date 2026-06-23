@@ -26,22 +26,25 @@ Sage 遵循 4 个核心设计原则：
 
 ## 🪟 双轨发布
 
-Sage 维护**两条独立分支**，分别针对不同平台：
+Sage 维护**两条独立的 GitHub Release 通道**，分别针对不同平台：
 
-| 分支               | 目标平台                                  | Electron       | Python              | Chromium                  | 状态                   |
-| ------------------ | ----------------------------------------- | -------------- | ------------------- | ------------------------- | ---------------------- |
-| **`main`**         | Win10+ / macOS / Linux                    | 21.4.4         | 3.11+               | 106                       | ✅ 主线持续迭代        |
-| **`release/win7`** | **Windows 7 SP1 x64**（**完全离线**部署） | 21.4.4（冻结） | 3.8（最后兼容版本） | 106（官方 fallback 机制） | ⚠️ 长期维护，仅 hotfix |
+| 通道        | 触发分支       | 目标平台                                  | 产物                                                          | Electron       | Python  | 状态                   |
+| ----------- | -------------- | ----------------------------------------- | ------------------------------------------------------------- | -------------- | ------- | ---------------------- |
+| **main release**   | `main`         | Win10+ / Linux / macOS (Phase 3+)         | `Sage-Setup-${version}-win10.exe` / `sage_${version}_amd64.deb` / `Sage-${version}.AppImage` | 21.4.4         | 3.11+   | ✅ 主线持续迭代        |
+| **LTS release**    | `release/win7` | **Windows 7 SP1 x64**（完全离线部署）     | `Sage-Setup-${version}-win7.exe`                               | 21.4.4 (冻结)  | 3.8     | ⚠️ 长期维护, 仅 hotfix, 2027-12-13 EOL |
 
-**如何选择？**
+**下载入口**:
 
-- 普通用户：使用 `main` 分支，享受最新功能。
-- **Win7 用户**（内网/无网/老硬件）：使用 `release/win7` 分支。下载方式见各分支的 [GitHub Releases](https://github.com/your-repo/sage/releases) 页面。
+- **普通用户 (Win10+/Linux/macOS)**:  https://github.com/oneMuggle/sage/releases/latest
+- **Win7 SP1 x64 用户**: https://github.com/oneMuggle/sage/releases?q=tag%3Av*-lts (tag 形如 `v0.2.0-lts`)
 
-**为什么需要两条分支？**
-Electron 21.4.4 内嵌 Chromium 106，对 Windows 7 仍有官方支持（Electron ≥22 起官方停止 Win7 支持）。Electron 21.4.4 是最后支持 Win7 的稳定版本，因此 Win7 用户需要独立的维护分支。
+**为什么需要两条通道？**
 
-详细同步策略和风险说明见 [`release/win7` 分支的 BRANCH_NOTES.md](https://github.com/your-repo/sage/blob/release/win7/BRANCH_NOTES.md)。
+- main release 已经移除了 Win7 特定兼容代码路径（Chromium 启动开关等），产物不再支持 Win7
+- LTS release 锁在 Electron 21.4.4 + Python 3.8，单独维护 Win7 SP1 x64
+- 两条通道独立迭代：main 后续可升 Electron 28+/32+，LTS 维持冻结
+
+详细同步策略和风险说明见 [`release/win7` 分支的 BRANCH_NOTES.md](https://github.com/oneMuggle/sage/blob/release/win7/BRANCH_NOTES.md) 和 [`docs/technical/21-win7-lts.md`](./docs/technical/21-win7-lts.md)。
 
 ## 核心功能
 
@@ -320,11 +323,15 @@ pip show chromadb
 python -c "from memory import init_memory; init_memory()"
 ```
 
-### Q4: Windows 7 下无法运行
+### Q4: Windows 7 下无法运行 / 哪里下载 Win7 版
 
-**A**: 当前 `main` 分支（Electron 21.4.4）支持 Win7。Win10+ 用户使用 `main`；纯 Win7 用户请使用 `release/win7` 分支。如遇到具体问题，确保已安装以下依赖：
+**A**:
 
-- Visual C++ Redistributable (Electron 21 仍需要)
+- **main release (`Sage-Setup-${version}-win10.exe`) 已不再支持 Win7**（自 2026-06-23 起）
+- **Win7 SP1 x64 用户**请从 LTS release 下载 `Sage-Setup-${version}-win7.exe`：
+  https://github.com/oneMuggle/sage/releases?q=tag%3Av*-lts
+- 前置条件: 装 **KB3033929** (SHA-2 代码签名, 2016 年发布)；x64 only
+- 详细: [`docs/technical/21-win7-lts.md` §6](./docs/technical/21-win7-lts.md) 风险声明
 
 ### Q5: 构建产物巨大
 

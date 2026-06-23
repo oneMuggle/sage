@@ -5,36 +5,43 @@
 
 ## 1.1 系统要求
 
-| 系统 | 最低 | 推荐 | 备注 |
-|------|------|------|------|
-| Windows 11 | ✅ | ✅ | 默认 WebView2 已装 |
-| Windows 10 | ✅ | ✅ | 1809+ 含 WebView2 |
-| **Windows 7** | ⚠️ 需 embedBootstrapper | ⚠️ x64 only | **x86 兼容性已知问题**（issue #11381） |
-| macOS 12+ | ✅ | ✅ | Monterey 起 |
-| Ubuntu 22.04+ | ✅ | ✅ | GTK + WebKitGTK 4.1 |
+| 系统 | 最低 | 推荐 | 备注 | 下载来源 |
+|------|------|------|------|---------|
+| Windows 11 | ✅ | ✅ | 默认 WebView2 已装 | main release |
+| Windows 10 | ✅ | ✅ | 1809+ 含 WebView2 | main release |
+| **Windows 7 SP1 x64** | ⚠️ LTS only | ⚠️ x64 only | main release 不再支持; KB3033929 必需 | **LTS release** (`v*-lts` tag) |
+| macOS 12+ | ⏳ Phase 3 | ⏳ Phase 3 | 暂未发布 | — |
+| Ubuntu 22.04+ | ✅ | ✅ | GTK + WebKitGTK 4.1 | main release |
+| Linux 通用 (glibc 2.28+) | ✅ | ✅ | AppImage 通用 | main release |
 
 ## 1.2 安装 Windows
 
-### 1.2.1 正常安装
+### 1.2.1 Windows 10 / 11 安装 (main release)
 
-1. 下载 `sage_0.1.0_x64-setup.exe`
-2. 双击运行
-3. 按提示完成安装
-4. WebView2 自动检测（Win10 1809+ / Win11 预装）
+1. 从 main release 页面下载 `Sage-Setup-${version}-win10.exe`
+2. 双击运行, 按向导安装 (默认 HKCU, 无需管理员权限)
+3. 安装阶段静默装 VC++ 2015-2022 Redistributable (已装会跳过)
+4. 桌面出现 Sage 快捷方式, 双击启动
 
-### 1.2.2 Windows 7 安装
+**入口**: https://github.com/oneMuggle/sage/releases/latest
 
-Win7 系统不预装 WebView2 runtime，需要 embedBootstrapper 模式：
+### 1.2.2 Windows 7 SP1 安装 (LTS release)
 
-1. 下载 `sage_0.1.0_x64-setup.exe`（构建时已含 WebView2 bootstrapper，约 +1.8MB）
-2. 双击运行
-3. 安装器自动检测并安装 WebView2
-4. 安装完成后启动 Sage
+> ⚠️ **2026-06-23 起**: main release 不再支持 Win7。Win7 用户请下载 LTS release。
 
-**已知问题**（issue #11381）：
-- Windows 7 **x86 (32-bit)** 上可能因 `tao` 库异常而崩溃
-- 推荐 Win7 用户使用 **x64 (64-bit)** 版本
-- x86 兼容性需要 rust 1.77.2 + 特定依赖降级（社区 workaround）
+1. **前置**: 装 **KB3033929** (SHA-2 代码签名, 2016 年发布) — Win7 SP1 必装, 否则 Sage.exe 启动被拒
+2. 从 LTS release 页面下载 `Sage-Setup-${version}-win7.exe`:
+   https://github.com/oneMuggle/sage/releases?q=tag%3Av*-lts
+3. 双击 `.exe` 运行安装 (NSIS, HKCU, 无需管理员)
+4. 安装阶段静默装 VC++ 2015-2022 Redistributable
+5. 桌面出现 Sage 快捷方式, 双击启动
+6. **x64 only** — Electron 21 不支持 Win7 32-bit
+
+**已知限制**（基于 EOL 技术栈 Electron 21.4.4 + Chromium 106）:
+
+- 不保证 Win7 GPU 驱动兼容, 启动时已禁用硬件加速 (`--disable-gpu`)
+- 7 个 Chromium 启动开关在 `electron/main.ts` 行内注释完整记录
+- 详见 [`../technical/21-win7-lts.md` §6 风险声明](../technical/21-win7-lts.md)
 
 ### 1.2.3 验证安装
 
