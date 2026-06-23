@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { resolveEndpoint } from '../../entities/setting/types';
 import { ApiException, type AgentEvent, type ChatConfig } from '../../shared/api';
+import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
 import { chatApi, useStore, type Message, type ToolCall } from '../../shared/lib/store';
@@ -27,21 +28,6 @@ function inferProviderFromBaseUrl(baseUrl: string | undefined): string | undefin
   return undefined;
 }
 
-/** 把后端 AgentState 映射到 UI 中间态文本 (PR-6) */
-function agentStateToUiText(state: AgentEvent['state'], toolName?: string): string | null {
-  switch (state) {
-    case 'thinking':
-      return '🤔 思考中…';
-    case 'acting':
-      return toolName ? `🔧 调工具 ${toolName}…` : '🔧 行动中…';
-    case 'observing':
-      return '👀 观察结果…';
-    case 'failed':
-      return '❌ 失败';
-    default:
-      return null;
-  }
-}
 
 export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
@@ -78,19 +64,26 @@ export function useChat() {
    * 派生 messages: 当 streaming 时, 替换 store.messages 中对应 id 的 content 和 reasoning_content
    * — widget 看到的最后一条 assistant 消息会"长出"内容
    */
+  // MEDIUM-6: 提取 streaming 中实际用到的字段到局部变量,便于 useMemo 细粒度 deps
+  const streamingMessageId = streaming?.messageId ?? null;
+  const streamingContent = streaming?.content ?? '';
+  const streamingReasoning = streaming?.reasoning ?? '';
+
   const derivedMessages = useMemo<Message[]>(() => {
-    if (!streaming) return messages;
+    if (!streamingMessageId) return messages;
     return messages.map((m) =>
-      m.id === streaming.messageId
+      m.id === streamingMessageId
         ? {
             ...m,
-            content: streaming.content,
-            reasoning_content: streaming.reasoning || undefined,
+            content: streamingContent,
+            reasoning_content: streamingReasoning || undefined,
             tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
           }
         : m,
     );
-  }, [messages, streaming, streamingToolCalls]);
+    // MEDIUM-6: 拆细 deps — 仅依赖 streaming 中实际用到的字段,
+    // 避免 currentAgentId/iteration/state 等无关变化触发 messages 数组重建
+  }, [messages, streamingMessageId, streamingContent, streamingReasoning, streamingToolCalls]);
 
   const sendMessage = useCallback(
     async (content: string, sessionId?: string) => {
@@ -106,6 +99,11 @@ export function useChat() {
           /* ignore */
         }
         cancelRef.current = null;
+        // MEDIUM-1: 同时通知后端中断正在跑的 stream,避免 cancel 只 unlisten 前端
+        // 而后端继续消耗 LLM token。fire-and-forget — interrupt 失败不影响新消息发送
+        chatApi.interrupt().catch(() => {
+          /* Interrupt failures are non-critical */
+        });
       }
 
       // 即使 settings 缺失,user 消息也必须先 addMessage 再校验失败返回 —
@@ -240,9 +238,16 @@ export function useChat() {
         finished = true;
         // 优先用 done 事件自带的完整 content (避免混入 thinking 占位符)
         // 退回到 streamingContentRef (向后兼容旧的非流式 done 事件)
-        const finalContent = lastDoneContent ?? streamingContentRef.current;
+        let finalContent = lastDoneContent ?? streamingContentRef.current;
         const finalReasoning = streamingReasoningRef.current;
         const finalToolCalls = streamingToolCallsRef.current;
+        // MEDIUM-2: 若 LLM 没返回任何 content (后端只发 thinking 但没 done.content),
+        // 占位符 '🤔 思考中…' 会留在 store。fallback 到错误文案让用户看到明确失败
+        if (!finalContent && !finalReasoning && finalToolCalls.length === 0) {
+          finalContent = '[错误: 模型未返回任何内容]';
+        } else if (finalContent === '🤔 思考中…' && !finalReasoning && finalToolCalls.length === 0) {
+          finalContent = '[错误: 模型未返回任何内容]';
+        }
         if (finalContent || finalReasoning || finalToolCalls.length > 0) {
           updateMessage(assistantId, {
             content: finalContent,
@@ -347,7 +352,7 @@ export function useChat() {
                 }
               }
 
-              const uiText = agentStateToUiText(evt.state, evt.tool_call?.function.name);
+              const uiText = agentStateToText(evt.state, evt.tool_call?.function.name);
               // 累积策略 (I5: 流式逐字):
               // - content_delta + done.content 触发 appendContent 追加 (累积真实回答)
               // - thinking/acting/observing 的 uiText 触发 replaceContent 覆盖

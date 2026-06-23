@@ -1,6 +1,11 @@
+import { Brain, Eye, Pencil, Wrench } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { AgentEvent } from '../../shared/api';
+import {
+  agentStateToPhase,
+  type PhaseIconName,
+} from '../../shared/lib/agentStateMapping';
 
 interface ActiveAgentIndicatorProps {
   /** 当前活跃 agent 的 ID (null 表示无流式处理) */
@@ -10,6 +15,15 @@ interface ActiveAgentIndicatorProps {
   /** P2: 当前流式状态 */
   streamingState?: AgentEvent['state'] | null;
 }
+
+const PHASE_ICON: Record<PhaseIconName, React.ComponentType<{ className?: string }>> = {
+  Brain,
+  Wrench,
+  Eye,
+  Pencil,
+  // Loader2 暂未用,留接口
+  Loader2: Wrench,
+};
 
 /**
  * 阶段 4 + P2: 聊天流式处理时显示"当前处理 agent + 迭代轮次 + 阶段"的指示器。
@@ -72,8 +86,12 @@ export function ActiveAgentIndicator({
             ? '记忆管理'
             : displayedAgentId || '';
 
-  // P2: 流式阶段图标 + 文本
-  const phaseInfo = getPhaseInfo(streamingState);
+  // P2: 流式阶段图标 + 文本 (从共享模块获取,UI 层渲染 lucide 图标)
+  const phaseInfo = agentStateToPhase(streamingState);
+
+  // LOW-2: 单轮 LLM 调用显示 '第 1 轮' 是噪音,只在有 ReAct 循环(iteration > 0)
+  // 或多轮的情况下才显示迭代轮次
+  const showIteration = iteration > 0;
 
   return (
     <div
@@ -85,20 +103,24 @@ export function ActiveAgentIndicator({
     >
       {(displayedAgentId || streamingState) && (
         <span className="text-muted flex items-center gap-1.5">
-          {streamingState && iteration >= 0 && (
-            <span className="text-primary font-medium">第 {iteration + 1} 轮</span>
+          {streamingState && showIteration && (
+            <span className="text-primary font-medium">第 {iteration} 轮</span>
           )}
           {displayedAgentId && (
             <>
-              {streamingState && <span className="text-border">·</span>}
+              {streamingState && showIteration && <span className="text-border">·</span>}
               <span className="font-medium text-text">{agentLabel}</span>
             </>
           )}
           {phaseInfo && (
             <>
               <span className="text-border">·</span>
-              <span>
-                {phaseInfo.icon} {phaseInfo.label}
+              <span className="flex items-center gap-1">
+                {(() => {
+                  const Icon = PHASE_ICON[phaseInfo.iconName];
+                  return <Icon className="w-3.5 h-3.5 text-muted" />;
+                })()}
+                {phaseInfo.label}
               </span>
             </>
           )}
@@ -106,22 +128,4 @@ export function ActiveAgentIndicator({
       )}
     </div>
   );
-}
-
-/** P2: 根据流式状态返回阶段图标和文本 */
-function getPhaseInfo(state: AgentEvent['state'] | null): { icon: string; label: string } | null {
-  switch (state) {
-    case 'thinking':
-      return { icon: '🤔', label: '思考中' };
-    case 'reasoning':
-      return { icon: '🧠', label: '推理中' };
-    case 'acting':
-      return { icon: '🔧', label: '执行工具' };
-    case 'observing':
-      return { icon: '👀', label: '观察结果' };
-    case 'content_delta':
-      return { icon: '✍️', label: '生成回答' };
-    default:
-      return null;
-  }
 }
