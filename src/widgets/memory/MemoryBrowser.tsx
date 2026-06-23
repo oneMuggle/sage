@@ -2,7 +2,7 @@
  * MemoryBrowser - 记忆浏览器组件
  * 显示记忆列表，支持筛选和统计
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import { memoryApi, Memory } from '../../shared/api';
 
@@ -36,31 +36,7 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
   const [stats, setStats] = useState({ total: 0, thisWeek: 0, episodic: 0, semantic: 0 });
 
   // 加载记忆
-  useEffect(() => {
-    loadMemories();
-    loadStats();
-  }, [filterType]);
-
-  const loadStats = async () => {
-    try {
-      const [episodic, semantic] = await Promise.all([
-        memoryApi.getMemories('episodic', 1, 1),
-        memoryApi.getMemories('semantic', 1, 1),
-      ]);
-      // We can't get exact counts without a stats endpoint, but we can estimate
-      // For now, show the actual loaded counts
-      setStats({
-        total: memories.length,
-        thisWeek: memories.filter((m) => Date.now() - m.created_at < ONE_WEEK_MS).length,
-        episodic: episodic.length,
-        semantic: semantic.length,
-      });
-    } catch {
-      // Stats unavailable
-    }
-  };
-
-  const loadMemories = async () => {
+  const loadMemories = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -74,7 +50,35 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterType]);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const [episodic, semantic] = await Promise.all([
+        memoryApi.getMemories('episodic', 1, 1),
+        memoryApi.getMemories('semantic', 1, 1),
+      ]);
+      // Compute stats from current memories via functional setState to avoid
+      // depending on the `memories` state variable (which would cause a
+      // useEffect re-run loop).
+      setMemories((currentMemories) => {
+        setStats({
+          total: currentMemories.length,
+          thisWeek: currentMemories.filter((m) => Date.now() - m.created_at < ONE_WEEK_MS).length,
+          episodic: episodic.length,
+          semantic: semantic.length,
+        });
+        return currentMemories;
+      });
+    } catch {
+      // Stats unavailable
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMemories();
+    loadStats();
+  }, [loadMemories, loadStats]);
 
   return (
     <div>
