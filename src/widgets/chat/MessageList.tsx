@@ -6,9 +6,16 @@ interface MessageListProps {
   messages: MessageType[];
   knowledgeRefs?: Record<string, { id: string; title: string }[]>;
   attachments?: Record<string, { name: string; size: number; type: string; dataUrl?: string }[]>;
+  /** P1: 当前正在流式输出的消息 ID (用于 ThinkingPanel 自动展开) */
+  streamingMessageId?: string | null;
 }
 
-export function MessageList({ messages, knowledgeRefs, attachments }: MessageListProps) {
+export function MessageList({
+  messages,
+  knowledgeRefs,
+  attachments,
+  streamingMessageId,
+}: MessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted">
@@ -26,6 +33,7 @@ export function MessageList({ messages, knowledgeRefs, attachments }: MessageLis
           message={message}
           knowledgeRefs={knowledgeRefs?.[message.id]}
           attachments={attachments?.[message.id]}
+          isStreaming={message.id === streamingMessageId}
         />
       ))}
     </div>

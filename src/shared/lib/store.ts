@@ -22,6 +22,8 @@ export interface Session {
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
 export interface ToolCall {
+  /** 后端 tool_call.id, 用于 observing 事件精确匹配 (HIGH-3 修复) */
+  id?: string;
   name: string;
   args: Record<string, unknown>;
   result?: string;

@@ -8,7 +8,8 @@ import {
   Brain,
   ChevronDown,
 } from 'lucide-react';
-import { useState } from 'react';
+import { memo } from 'react';
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -21,6 +22,8 @@ interface MessageProps {
   onFeedback?: (messageId: string, feedback: 'up' | 'down') => void;
   knowledgeRefs?: { id: string; title: string }[];
   attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
+  /** P1: 该消息是否正在流式输出 (用于 ThinkingPanel 自动展开) */
+  isStreaming?: boolean;
 }
 
 /** Code block renderer with syntax highlighting + copy button */
@@ -74,9 +77,16 @@ function CodeBlock({ language, children }: { language?: string; children: string
   );
 }
 
-/** ThinkingPanel - 可折叠的 LLM 思考过程展示面板 */
-function ThinkingPanel({ reasoning }: { reasoning: string }) {
+/** ThinkingPanel - 可折叠的 LLM 思考过程展示面板
+ *  P1: 流式 reasoning 时自动展开 (isStreaming=true)
+ */
+function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStreaming?: boolean }) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // P1 fix: 当 isStreaming 变为 true 时自动展开 (useState 只读初始值,需 useEffect 同步)
+  useEffect(() => {
+    if (isStreaming) setIsExpanded(true);
+  }, [isStreaming]);
 
   return (
     <div className="mb-2 border border-border/50 rounded-radius-sm overflow-hidden">
@@ -102,7 +112,16 @@ function ThinkingPanel({ reasoning }: { reasoning: string }) {
   );
 }
 
-export function Message({ message, onFeedback, knowledgeRefs, attachments }: MessageProps) {
+// MEDIUM-5: React.memo 包装,自定义比较函数避免 ReactMarkdown 重解析
+// - 仅当 message 引用变、isStreaming 变化、knowledgeRefs/attachments 引用变时才重渲染
+// - 在每个 content_delta 触发 N 条历史消息重渲染的场景下,这是关键优化
+function MessageComponent({
+  message,
+  onFeedback,
+  knowledgeRefs,
+  attachments,
+  isStreaming,
+}: MessageProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const isError = message.content?.startsWith('[错误') ?? false;
@@ -126,7 +145,7 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
       <div className={`flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
         {/* ThinkingPanel - LLM 思考过程展示（仅 assistant 消息且有 reasoning_content 时） */}
         {isAssistant && message.reasoning_content && (
-          <ThinkingPanel reasoning={message.reasoning_content} />
+          <ThinkingPanel reasoning={message.reasoning_content} isStreaming={isStreaming} />
         )}
 
         {/* Knowledge references */}
@@ -366,3 +385,15 @@ export function Message({ message, onFeedback, knowledgeRefs, attachments }: Mes
     </div>
   );
 }
+
+export const Message = memo(MessageComponent, (prev, next) => {
+  // 自定义比较:仅当 message 对象引用变化 / isStreaming 变化 / 关联数据变化时重渲染
+  // ReactMarkdown 和 Prism SyntaxHighlighter 很重,跳过能显著降低 token 级重渲染成本
+  return (
+    prev.message === next.message &&
+    prev.isStreaming === next.isStreaming &&
+    prev.onFeedback === next.onFeedback &&
+    prev.knowledgeRefs === next.knowledgeRefs &&
+    prev.attachments === next.attachments
+  );
+});
