@@ -1,9 +1,5 @@
 """SAGE_DB_PATH 环境变量集成测试"""
-import os
-import tempfile
-from pathlib import Path
 
-import pytest
 
 
 def test_db_path_from_env(monkeypatch, tmp_path):
@@ -11,6 +7,7 @@ def test_db_path_from_env(monkeypatch, tmp_path):
     monkeypatch.setenv("SAGE_DB_PATH", str(target))
     # 重新导入以触发 __init__ 重读
     import importlib
+
     from backend.data import database
     importlib.reload(database)
     db = database.Database()
@@ -23,6 +20,7 @@ def test_db_path_from_env(monkeypatch, tmp_path):
 def test_db_path_default_when_no_env(monkeypatch):
     monkeypatch.delenv("SAGE_DB_PATH", raising=False)
     import importlib
+
     from backend.data import database
     importlib.reload(database)
     db = database.Database()
