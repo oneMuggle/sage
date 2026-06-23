@@ -61,6 +61,9 @@ export function useChat() {
   const { settings } = useSettings();
   const loadingRef = useRef(false);
   const cancelRef = useRef<(() => void) | null>(null);
+  // HIGH-4 修复: finishStream 是 sendMessage 闭包内的函数,interrupt() 无法直接调用
+  // 用 ref 把 finishStream 暴露出去,让 interrupt 也能触发清理流程
+  const finishStreamRef = useRef<(() => void) | null>(null);
   // PR-6: ref 镜像 streaming.content, finally 写回 store 时同步读 (避免依赖 React state)
   const streamingContentRef = useRef<string>('');
   // 新增：ref 镜像 streaming.reasoning
@@ -254,7 +257,11 @@ export function useChat() {
         setStreaming(null);
         cancelRef.current = null;
         resetLoading();
+        // HIGH-4: 清空 ref 让 interrupt 知道当前 stream 已结束
+        finishStreamRef.current = null;
       };
+      // HIGH-4: 注册 finishStream 到 ref 供 interrupt 调用
+      finishStreamRef.current = finishStream;
 
       try {
         // 解构 cancel 用于下次 sendMessage 时取消 (cancel-prev)
@@ -295,28 +302,48 @@ export function useChat() {
                 } catch {
                   // ignore parse errors
                 }
-                const newTc: ToolCall = { name: tc.function.name, args };
+                // HIGH-3: 记录 tool_call.id,供 observing 用 id 精确匹配 (而非按 index 错配)
+                const newTc: ToolCall = {
+                  id: tc.id,
+                  name: tc.function.name,
+                  args,
+                };
                 streamingToolCallsRef.current = [...streamingToolCallsRef.current, newTc];
                 setStreamingToolCalls([...streamingToolCallsRef.current]);
               }
-              // P0: observing 事件到达时更新最后一个工具调用的 result
+              // P0: observing 事件到达时按 tool_call_id 精确匹配并更新 result
               if (evt.state === 'observing' && evt.tool_result) {
                 const tr = evt.tool_result;
-                const updated = [...streamingToolCallsRef.current];
-                const lastTc = updated[updated.length - 1];
-                if (lastTc) {
-                  lastTc.result = tr.content;
-                  // Try to parse JSON result to extract metadata (e.g., image data from MCP tools)
+                // HIGH-3: 用 tr.tool_call_id 查找匹配项;fallback 到最后一个 (兼容无 id 场景)
+                const targetId = tr.tool_call_id;
+                const targetIdx = targetId
+                  ? streamingToolCallsRef.current.findIndex((t) => t.id === targetId)
+                  : streamingToolCallsRef.current.length - 1;
+                const targetTc = targetIdx >= 0 ? streamingToolCallsRef.current[targetIdx] : null;
+                if (targetTc) {
+                  // HIGH-2: 不可变更新 — 创建新对象而非原地 mutation,避免 React.memo 浅比较失效
+                  let metadata = targetTc.metadata;
                   try {
                     const parsed = JSON.parse(tr.content);
                     if (parsed && typeof parsed === 'object' && parsed.metadata) {
-                      lastTc.metadata = parsed.metadata;
+                      metadata = parsed.metadata;
                     }
                   } catch {
                     // Not JSON, ignore
                   }
+                  const newTc: ToolCall = {
+                    ...targetTc,
+                    result: tr.content,
+                    metadata,
+                  };
+                  // 数组也新建 (targetIdx 处替换,其余共享引用保持稳定)
+                  const updated = [
+                    ...streamingToolCallsRef.current.slice(0, targetIdx),
+                    newTc,
+                    ...streamingToolCallsRef.current.slice(targetIdx + 1),
+                  ];
                   streamingToolCallsRef.current = updated;
-                  setStreamingToolCalls([...updated]);
+                  setStreamingToolCalls(updated);
                 }
               }
 
@@ -385,6 +412,11 @@ export function useChat() {
     } catch {
       // Interrupt failures are non-critical
     }
+    // HIGH-4: 触发 finishStream() 清理 streaming overlay
+    // (之前 interrupt 只调了 cancel + 后端 interrupt,没有清 setStreaming(null),
+    //  导致用户看到 '🤔 思考中…' 占位符永远不消失、ActiveAgentIndicator 不消失、
+    //  isLoading 不重置、streamingToolCallsRef 持有陈旧数据)
+    finishStreamRef.current?.();
   }, []);
 
   const loadMessagesCallback = useCallback(

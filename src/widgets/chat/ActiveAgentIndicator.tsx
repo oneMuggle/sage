@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { AgentEvent } from '../../shared/api';
 
@@ -25,21 +25,38 @@ export function ActiveAgentIndicator({
 }: ActiveAgentIndicatorProps) {
   const [visible, setVisible] = useState(false);
   const [displayedAgentId, setDisplayedAgentId] = useState<string | null>(null);
+  // P2 修复: 跟踪所有 setTimeout 句柄,在 effect cleanup 中一并清除
+  // (之前只清 outer 3s timer,inner 300ms timer 会泄漏,导致新 stream
+  // 启动后 inner timer 触发,把 displayedAgentId 清掉)
+  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   useEffect(() => {
     // P2: 有任何流式活动时显示 (streamingState 非 null 即有活动)
     // 向后兼容:agentId 非 null 也触发显示
     if (agentId || streamingState) {
-      if (agentId) setDisplayedAgentId(agentId);
+      // LOW fix: 仅当 agentId 实际变化时才 setState,避免每个 content_delta 触发浪费渲染
+      setDisplayedAgentId((prev) => (agentId && agentId !== prev ? agentId : prev));
       setVisible(true);
     } else {
       // 延迟 3 秒后淡出
-      const timer = setTimeout(() => {
+      // capture ref locally (lint: react-hooks/exhaustive-deps)
+      const timers = timersRef.current;
+      const outer = setTimeout(() => {
+        timers.delete(outer);
         setVisible(false);
         // 再延迟 300ms (淡出动画时长) 后清空显示
-        setTimeout(() => setDisplayedAgentId(null), 300);
+        const inner = setTimeout(() => {
+          timers.delete(inner);
+          setDisplayedAgentId(null);
+        }, 300);
+        timers.add(inner);
       }, 3000);
-      return () => clearTimeout(timer);
+      timers.add(outer);
+      return () => {
+        // cleanup: 清掉所有未触发的 timer
+        timers.forEach((t) => clearTimeout(t));
+        timers.clear();
+      };
     }
   }, [agentId, streamingState]);
 
