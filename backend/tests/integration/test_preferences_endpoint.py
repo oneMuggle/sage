@@ -13,7 +13,7 @@ _HEX_ONLY = pytest.mark.skipif(
 )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_get_preference_returns_value():
     async with AsyncClient(app=app, base_url="http://test") as ac:
@@ -25,7 +25,7 @@ async def test_get_preference_returns_value():
     assert resp.json()["value"] == "dark"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_get_preference_returns_null_when_missing():
     async with AsyncClient(app=app, base_url="http://test") as ac:
@@ -35,7 +35,7 @@ async def test_get_preference_returns_null_when_missing():
     assert resp.json()["value"] is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_get_preference_rejects_non_whitelisted_key():
     async with AsyncClient(app=app, base_url="http://test") as ac:
@@ -43,7 +43,7 @@ async def test_get_preference_rejects_non_whitelisted_key():
     assert resp.status_code == 400
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_put_preference_rejects_non_whitelisted_key():
     async with AsyncClient(app=app, base_url="http://test") as ac:

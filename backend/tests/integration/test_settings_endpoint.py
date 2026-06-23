@@ -1,5 +1,4 @@
 """GET/PUT /settings 端点集成测试"""
-import json
 import os
 from unittest.mock import MagicMock
 
@@ -21,12 +20,13 @@ _HEX_ONLY = pytest.mark.skipif(
 # 装配最简 ChatService mock（含 events.emit 占位）让端到端跑通。
 @pytest.fixture(autouse=True)
 def _hex_di_override():
+    from sage_core import Message, Role
+
     from backend.adapters.out.llm.mock_adapter import MockLLMAdapter
     from backend.adapters.out.metric.noop_adapter import NoopMetricAdapter
     from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
     from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
     from backend.application.services.chat_service import ChatService
-    from sage_core import Message, Role
 
     mock_tool = MagicMock()
     mock_tool.execute.return_value = MagicMock(success=True, output="ok", error=None)
@@ -51,7 +51,7 @@ def _hex_di_override():
         app.dependency_overrides.pop(get_chat_service, None)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_get_settings_returns_null_when_no_data():
     async with AsyncClient(app=app, base_url="http://test") as ac:
@@ -60,7 +60,7 @@ async def test_get_settings_returns_null_when_no_data():
     assert resp.json() is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_put_settings_persists_and_get_returns():
     async with AsyncClient(app=app, base_url="http://test") as ac:
