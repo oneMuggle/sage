@@ -1,0 +1,104 @@
+# Release LTS Workflow — Windows 7 LTS 维护分支专用
+#
+# 触发: push tag v*-lts (如 v0.2.0-lts) 到 release/win7 分支
+# 目标: Windows 7 SP1 x64 only (Electron 21.4.4 冻结)
+#
+# 与 release.yml 差异:
+#   - 触发条件:  tag 含 '-lts' 后缀
+#   - 产物:      仅 Windows NSIS, artifactName 用 -win7 后缀
+#   - 不构建:    Linux / macOS (Win7 LTS 不覆盖)
+#   - EOL:       2027-12-13 归档, 届时删除本 workflow + release/win7 分支
+#
+# 详见 docs/technical/21-win7-lts.md §2 LTS 策略 + §9 Release 工作流
+
+name: Release (Win7 LTS)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # 必需: gh release upload 需要 write 权限
+
+jobs:
+  build-windows:
+    name: Build Windows (Win7 LTS)
+    # Only act on LTS-suffixed tags; non-LTS tags skip this job entirely
+    if: "contains(github.ref_name, '-lts')"
+
+    runs-on: windows-latest
+
+    env:
+      # Force -win7 suffix via electron-builder.yml artifactName placeholder
+      ARTIFACT_SUFFIX: win7
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Cache electron-builder downloads (LTS namespace)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          # -lts suffix prevents cache collision with main release
+          key: ${{ runner.os }}-electron-lts-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-lts-
+
+      - name: Install npm dependencies
+        run: npm ci --force
+
+      - name: Build frontend + Electron
+        run: npm run electron:build
+
+      - name: Fetch VC++ Redistributable (Windows)
+        shell: pwsh
+        run: pwsh scripts/fetch-vcredist.ps1
+
+      - name: Build Windows NSIS (Win7 LTS, env.ARTIFACT_SUFFIX=win7)
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Upload to LTS GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Use the original tag (e.g. v0.2.0-lts) as the release identifier,
+          # so it becomes a separate release page from main's v0.2.0
+          tag_name: ${{ github.ref_name }}
+          files: |
+            release/*/Sage-Setup-*-win7.exe
+          body: |
+            ## Sage ${{ github.ref_name }} (Win7 LTS) — Windows 7 SP1 x64 ONLY
+
+            > ⚠️ **此版本专为 Windows 7 SP1 x64 设计**。
+            > Win10+ 用户请改用 [main release](https://github.com/${{ github.repository }}/releases)。
+
+            ### Downloads
+
+            | File | Notes |
+            | --- | --- |
+            | `Sage-Setup-*.win7.exe` | NSIS, x64, VCRedist bundled |
+
+            ### Win7 前置
+
+            - **KB3033929** (SHA-2 代码签名支持, 2016 年发布) — Win7 SP1 必装, 否则 Sage.exe 启动被拒
+            - x64 only (Electron 21 不支持 Win7 32-bit)
+
+            ### 风险声明
+
+            ⚠️ 本分支基于 EOL 技术栈 (Electron 21.4.4 + Python 3.8 + Chromium 106)。
+            详见 [`docs/technical/21-win7-lts.md`](https://github.com/${{ github.repository }}/blob/release/win7/docs/technical/21-win7-lts.md) §6。
+          # draft: true — 人工 review release notes 后再 publish
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
