@@ -101,3 +101,47 @@ NSIS 安装包内含 `vc_redist.x64.exe`(由 `build/installer.nsh` customInstall
 `Installing Microsoft Visual C++ 2015-2022 Redistributable (x64)...`
 
 详见 [`26-packaging-matrix.md`](./26-packaging-matrix.md)§2。
+
+## 9. Release 工作流
+
+`release/win7` 分支的 release 由 **`.github/workflows/release-win7.yml`** 触发，独立于 main。
+
+| 项              | 值                                                                                |
+| --------------- | --------------------------------------------------------------------------------- |
+| 触发 tag        | `v*-lts`（如 `v0.2.0-lts`）                                                       |
+| Runner          | `windows-latest` (cross-build, 同 main)                                           |
+| 产物            | `Sage-Setup-${version}-win7.exe` (NSIS, x64)                                      |
+| Release 入口    | https://github.com/oneMuggle/sage/releases?q=tag%3Av*-lts                          |
+| Release 状态    | draft（人工 review 后 publish）                                                   |
+| 与 main 共用    | electron-builder.yml / build/installer.nsh / scripts/fetch-vcredist.ps1           |
+| EOL 动作        | 2027-12-13 后 `git push origin --delete release/win7` + 删 `release-win7.yml`      |
+
+### 9.1 触发步骤
+
+1. 切到 `release/win7` 分支: `git switch release/win7`
+2. 拉 main 的最新 commit: `git fetch origin main && git rebase origin/main`（如有冲突手动解决）
+3. 决定版本号: 通常 cherry-pick N 个 commit 后 bump patch 号（如 `0.2.0` → `0.2.0-lts` 或 `0.2.1-lts`）
+4. 打 tag: `git tag -a v0.2.1-lts -m "v0.2.1-lts — Win7 patch: ..."`
+5. push tag: `git push origin v0.2.1-lts`
+6. 监控 Actions: `gh run watch`
+7. CI 通过后到 GitHub Releases 找到 draft，**人工 review release notes** 后 publish
+
+### 9.2 失败处理
+
+| 失败位置                          | 处理                                                                       |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| Win7 烟测未通过                   | 不 publish；hotfix 修；重新打 tag (`v0.2.2-lts`)                          |
+| NSIS 产物里没有 win7 后缀         | 检查 release-win7.yml 的 `env.ARTIFACT_SUFFIX` 是否正确设为 `win7`         |
+| Release 误发到 main channel       | 删 release + 删 tag：`gh release delete v0.2.0-lts && git push origin :v0.2.0-lts` |
+
+### 9.3 与 main release 的对比
+
+| 维度         | main release                | LTS release                 |
+| ------------ | --------------------------- | --------------------------- |
+| 触发 branch  | `main`                      | `release/win7`              |
+| 触发 tag     | `v*` (排除 `*-lts`)         | `v*-lts`                    |
+| Workflow     | `release.yml`               | `release-win7.yml`          |
+| 平台         | Linux / Windows NSIS / macOS (Phase 3+) | Windows NSIS only          |
+| 产物后缀     | `-win10` (Windows)          | `-win7` (Windows)           |
+| 频率         | 每次 main 发版              | 仅 Win7 特定 patch 时       |
+| EOL          | 持续                        | 2027-12-13                  |
