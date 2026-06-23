@@ -1,4 +1,3 @@
-/* eslint-disable */
 /**
  * Electron main process — Sage desktop shell
  *
