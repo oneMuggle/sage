@@ -1,8 +1,9 @@
 // Right Panel - 右侧面板（文件预览 + 研究面板）
 import { X } from 'lucide-react';
 
-import { useWikiStore } from '../../entities/wiki/store';
 import { useResearchStore } from '../../entities/wiki/research-store';
+import { useWikiStore } from '../../entities/wiki/store';
+
 import { MarkdownPreview } from './MarkdownPreview';
 
 export function RightPanel() {

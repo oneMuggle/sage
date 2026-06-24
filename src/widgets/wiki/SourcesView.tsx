@@ -3,6 +3,7 @@ import { FolderPlus, Upload } from 'lucide-react';
 import { useState } from 'react';
 
 import { mockSourcesTree } from '../../entities/wiki/mock-data';
+
 import { SourcesTree } from './SourcesTree';
 
 export function SourcesView() {

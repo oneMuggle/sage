@@ -2,8 +2,9 @@
 import { Globe, Loader2, Save, Send, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
-import { useResearchStore } from '../../entities/wiki/research-store';
 import { mockResearchTasks } from '../../entities/wiki/mock-data';
+import { useResearchStore } from '../../entities/wiki/research-store';
+
 import { MarkdownPreview } from './MarkdownPreview';
 
 export function ResearchPanel() {
