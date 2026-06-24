@@ -212,7 +212,6 @@ def _build_adapter_with_mocked_client() -> tuple[HttpxLLMAdapter, AsyncMock]:
         MockClient.return_value = MagicMock()
         adapter = HttpxLLMAdapter(
             base_url="https://api.example.com/v1",
-
             use_proxy=False,
             api_key="test",
         )
@@ -325,7 +324,6 @@ async def test_chat_stream_yields_chunks_from_underlying_client():
     """``chat_stream`` 透传底层 async generator 的 chunk。"""
     adapter = HttpxLLMAdapter(
         base_url="https://api.example.com/v1",
-
         api_key="test-key",
     )
 
@@ -348,7 +346,6 @@ async def test_chat_stream_converts_domain_messages_to_dicts():
     """``chat_stream`` 把 domain 消息转为 dict 再传给 LLMClient。"""
     adapter = HttpxLLMAdapter(
         base_url="https://api.example.com/v1",
-
         api_key="test-key",
     )
 
@@ -393,7 +390,6 @@ async def test_chat_stream_via_real_mock_fixture_yields_chunks():
     """端到端：用 P0 mock fixture + httpx ``stream`` mock 走完 stream 路径。"""
     adapter = HttpxLLMAdapter(
         base_url="https://api.example.com/v1",
-
         api_key="test-key",
     )
 
@@ -439,7 +435,6 @@ async def test_aclose_delegates_to_underlying_llmclient():
     """``aclose`` 调用 ``LLMClient.close``。"""
     adapter = HttpxLLMAdapter(
         base_url="https://api.example.com/v1",
-
         api_key="test-key",
     )
     adapter._client.close = AsyncMock()  # type: ignore[method-assign]
@@ -458,7 +453,6 @@ def test_adapter_exposes_chat_and_chat_stream_methods():
         MockClient.return_value = MagicMock()
         adapter = HttpxLLMAdapter(
             base_url="https://api.example.com/v1",
-
             use_proxy=False,
             api_key="test",
         )
