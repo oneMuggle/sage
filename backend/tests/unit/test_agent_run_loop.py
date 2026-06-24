@@ -9,6 +9,8 @@ agent.run_loop() 状态机测试
 5. LLM 异常透传（不会被吞为 FAILED 事件）
 """
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

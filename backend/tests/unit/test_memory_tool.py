@@ -3,6 +3,8 @@
 使用一个 fake memory manager (含 async remember) 替代真实记忆系统。
 """
 
+from __future__ import annotations
+
 import pytest
 
 from backend.tools.memory_tool import MemorySaveTool, MemorySearchTool

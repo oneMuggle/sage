@@ -15,8 +15,14 @@ fastapi==0.85.0      # py38 兼容 (与 pydantic 1.x 配)
 uvicorn==0.20.0      # py38 兼容
 pydantic==1.10.13    # 1.x 最后版本, 2.x 要求 3.9+
 
+# Sage Core (零外部依赖的领域模型)
+# pip 24+ 不接受 -e ../packages/sage-core，用 ./packages/sage-core
+-e ./packages/sage-core
+
 # Database
 # sqlite3 is built-in
+jieba>=0.42.1
+sqlite-vec>=0.1.9
 
 # HTTP
 httpx==0.26.0

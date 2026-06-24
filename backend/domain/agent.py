@@ -4,6 +4,8 @@
 不允许引入 fastapi / pydantic / httpx 或任何项目内部模块。
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -20,11 +22,11 @@ class AgentState(str, Enum):
     FAILED = "failed"
 
     @classmethod
-    def initial(cls) -> "AgentState":
+    def initial(cls) -> AgentState:
         """返回初始状态。"""
         return cls.IDLE
 
-    def can_transition_to(self, other: "AgentState") -> bool:
+    def can_transition_to(self, other: AgentState) -> bool:
         """检查从当前状态到 ``other`` 的迁移是否合法。
 
         合法迁移：

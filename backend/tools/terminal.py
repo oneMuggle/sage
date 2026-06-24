@@ -1,6 +1,9 @@
 """
 终端工具 - 执行 Shell 命令
 """
+
+from __future__ import annotations
+
 import shlex
 import subprocess
 
@@ -36,21 +39,12 @@ class TerminalTool(BaseTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "要执行的命令"
-                    },
-                    "cwd": {
-                        "type": "string",
-                        "description": "工作目录 (可选)"
-                    },
-                    "timeout": {
-                        "type": "number",
-                        "description": "超时时间(秒)，默认 30"
-                    }
+                    "command": {"type": "string", "description": "要执行的命令"},
+                    "cwd": {"type": "string", "description": "工作目录 (可选)"},
+                    "timeout": {"type": "number", "description": "超时时间(秒)，默认 30"},
                 },
-                "required": ["command"]
-            }
+                "required": ["command"],
+            },
         )
 
     def _is_dangerous(self, command: str) -> bool:
@@ -91,10 +85,7 @@ class TerminalTool(BaseTool):
         """
         # 安全检查
         if self._is_dangerous(command):
-            return ToolResult(
-                success=False,
-                error="危险命令被拒绝: 不允许执行可能破坏系统的命令"
-            )
+            return ToolResult(success=False, error="危险命令被拒绝: 不允许执行可能破坏系统的命令")
 
         try:
             # 使用 shlex 分割命令（更安全）
@@ -108,16 +99,13 @@ class TerminalTool(BaseTool):
                     shell=True,
                     capture_output=True,
                     text=True,
-                    timeout=timeout, check=False
+                    timeout=timeout,
+                    check=False,
                 )
             else:
                 # Unix 命令
                 result = subprocess.run(
-                    cmd_list,
-                    cwd=cwd,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout, check=False
+                    cmd_list, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False
                 )
 
             success = result.returncode == 0
@@ -128,18 +116,14 @@ class TerminalTool(BaseTool):
                 content={
                     "returncode": result.returncode,
                     "stdout": result.stdout,
-                    "stderr": result.stderr
-                } if success else None,
-                error=error
+                    "stderr": result.stderr,
+                }
+                if success
+                else None,
+                error=error,
             )
 
         except subprocess.TimeoutExpired:
-            return ToolResult(
-                success=False,
-                error=f"命令执行超时 ({timeout}秒)"
-            )
+            return ToolResult(success=False, error=f"命令执行超时 ({timeout}秒)")
         except Exception as e:
-            return ToolResult(
-                success=False,
-                error=f"执行错误: {str(e)}"
-            )
+            return ToolResult(success=False, error=f"执行错误: {str(e)}")

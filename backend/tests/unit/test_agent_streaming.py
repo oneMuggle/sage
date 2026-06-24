@@ -15,6 +15,8 @@ Agent / LLMClient 流式响应边界测试 (PG1.1 - Task 1.1.3)
 这些测试只覆盖流式路径中"易出 bug 的边界",不重复 `test_agent_run_loop.py` 的内容。
 """
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

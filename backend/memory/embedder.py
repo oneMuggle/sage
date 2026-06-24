@@ -7,6 +7,8 @@
 - (未来) ModelEmbedder: 基于 sentence-transformers 等 ML 模型，语义更准确
 """
 
+from __future__ import annotations
+
 import hashlib
 import math
 import struct

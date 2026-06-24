@@ -5,6 +5,8 @@
 也可能桥接远程 MCP 工具服务（后续可扩展）。
 """
 
+from __future__ import annotations
+
 from typing import Any, Protocol
 
 from sage_core import ToolResult, ToolSpec

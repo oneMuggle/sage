@@ -2,6 +2,9 @@
 Skill Hot-Loader - Skill热加载系统
 从文件系统动态加载 BaseSkill 子类，支持热更新
 """
+
+from __future__ import annotations
+
 import importlib
 import importlib.util
 import logging
@@ -81,8 +84,7 @@ class SkillHotLoader:
             found = False
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if (isinstance(attr, type) and issubclass(attr, BaseSkill)
-                        and attr is not BaseSkill):
+                if isinstance(attr, type) and issubclass(attr, BaseSkill) and attr is not BaseSkill:
                     try:
                         instance = attr()
                         self.registry.register(instance)
@@ -150,5 +152,6 @@ class SkillHotLoader:
     def _compute_hash(file_path: str) -> str:
         """计算文件哈希"""
         import hashlib
+
         with open(file_path, "rb") as f:
             return hashlib.md5(f.read()).hexdigest()

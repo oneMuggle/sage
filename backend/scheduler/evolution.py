@@ -3,6 +3,8 @@
 包含每日摘要、记忆修剪、偏好学习、重要性重评估等任务
 """
 
+from __future__ import annotations
+
 import logging
 import time
 import uuid

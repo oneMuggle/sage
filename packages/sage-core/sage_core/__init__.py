@@ -9,6 +9,8 @@
 - 异常（exceptions）
 """
 
+from __future__ import annotations
+
 __version__ = "0.1.0"
 
 # 导出核心实体

@@ -1,6 +1,9 @@
 """
 旅行规划技能 - 规划旅行行程、推荐景点餐厅
 """
+
+from __future__ import annotations
+
 from typing import Any
 
 from ..base import BaseSkill, SkillResult, SkillSchema
@@ -17,30 +20,17 @@ class TravelSkill(BaseSkill):
             parameters={
                 "type": "object",
                 "properties": {
-                    "destination": {
-                        "type": "string",
-                        "description": "目的地"
-                    },
-                    "days": {
-                        "type": "integer",
-                        "description": "天数",
-                        "default": 3
-                    },
-                    "budget": {
-                        "type": "string",
-                        "description": "预算水平: low, medium, high"
-                    },
+                    "destination": {"type": "string", "description": "目的地"},
+                    "days": {"type": "integer", "description": "天数", "default": 3},
+                    "budget": {"type": "string", "description": "预算水平: low, medium, high"},
                     "style": {
                         "type": "string",
-                        "description": "旅行风格: sightseeing, foodie, relax, adventure"
-                    }
+                        "description": "旅行风格: sightseeing, foodie, relax, adventure",
+                    },
                 },
-                "required": ["destination"]
+                "required": ["destination"],
             },
-            examples=[
-                "帮我规划一个北京三日游",
-                "去日本旅行有什么推荐"
-            ]
+            examples=["帮我规划一个北京三日游", "去日本旅行有什么推荐"],
         )
 
     def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
@@ -66,8 +56,8 @@ class TravelSkill(BaseSkill):
                     "days": days,
                     "budget": budget,
                     "style": style,
-                    "mock": True
-                }
+                    "mock": True,
+                },
             )
 
         try:
@@ -78,14 +68,11 @@ class TravelSkill(BaseSkill):
                     "destination": destination,
                     "days": days,
                     "budget": budget,
-                    "style": style
-                }
+                    "style": style,
+                },
             )
         except Exception as e:
-            return SkillResult(
-                success=False,
-                error=f"旅行规划失败: {str(e)}"
-            )
+            return SkillResult(success=False, error=f"旅行规划失败: {str(e)}")
 
     def _build_prompt(self, destination: str, days: int, budget: str, style: str) -> str:
         """构建旅行规划提示"""
@@ -93,13 +80,9 @@ class TravelSkill(BaseSkill):
             "sightseeing": "观光游览",
             "foodie": "美食探索",
             "relax": "休闲放松",
-            "adventure": "冒险体验"
+            "adventure": "冒险体验",
         }
-        budget_map = {
-            "low": "经济实惠",
-            "medium": "中等消费",
-            "high": "高端奢华"
-        }
+        budget_map = {"low": "经济实惠", "medium": "中等消费", "high": "高端奢华"}
 
         return f"""请为以下条件规划一份{days}天的{destination}旅行行程:
 - 预算: {budget_map.get(budget, '中等消费')}
@@ -111,7 +94,9 @@ class TravelSkill(BaseSkill):
 3. 交通建议
 4. 注意事项"""
 
-    def _generate_mock_travel_plan(self, destination: str, days: int, budget: str, style: str) -> str:
+    def _generate_mock_travel_plan(
+        self, destination: str, days: int, budget: str, style: str
+    ) -> str:
         """生成模拟旅行计划（当没有 LLM 时）"""
         plans = {
             1: """
@@ -164,7 +149,7 @@ class TravelSkill(BaseSkill):
 - 餐饮: 每天约 100-300 元
 - 交通: 市内公共交通或打车约 50-100 元/天
 - 门票: 景点门票约 200-500 元/天
-"""
+""",
         }
 
         plan = plans.get(days, plans[3])

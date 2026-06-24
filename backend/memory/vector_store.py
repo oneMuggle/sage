@@ -4,6 +4,8 @@
 实现向量相似度搜索（余弦距离），与现有 SQLite 数据库无缝融合。
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 

@@ -3,6 +3,8 @@ SageAgent - 核心对话引擎
 基于 ReAct 模式的 Agent 实现
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
@@ -431,6 +433,7 @@ class SageAgent:
             system_prompt = self.profile["system_prompt"]
         else:
             from backend.agents.profiles import build_system_base
+
             system_prompt = build_system_base()
         if memory_context:
             system_prompt += "\n\n以下是相关的记忆上下文：\n" + memory_context

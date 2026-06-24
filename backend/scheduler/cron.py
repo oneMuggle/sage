@@ -2,6 +2,9 @@
 进化任务调度器
 基于 time.sleep 的简单定时调度实现，兼容 Win7
 """
+
+from __future__ import annotations
+
 import logging
 import threading
 import time
@@ -44,7 +47,7 @@ class EvolutionScheduler:
         schedule: str = "daily",
         hour: int = 3,
         minute: int = 0,
-        day_of_week: int = None  # 0=周一, 6=周日
+        day_of_week: int = None,  # 0=周一, 6=周日
     ) -> None:
         """
         添加进化任务
@@ -65,7 +68,7 @@ class EvolutionScheduler:
             "minute": minute,
             "day_of_week": day_of_week,
             "last_run": None,
-            "next_run": None
+            "next_run": None,
         }
 
         # 计算下次执行时间
@@ -204,6 +207,7 @@ class EvolutionScheduler:
         try:
             # 判断是 async 函数还是普通函数
             import asyncio
+
             if asyncio.iscoroutinefunction(task):
                 # 创建新的事件循环来运行 async 函数
                 loop = asyncio.new_event_loop()
@@ -245,7 +249,7 @@ class EvolutionScheduler:
                 "schedule": t["schedule"],
                 "last_run": t["last_run"].isoformat() if t["last_run"] else None,
                 "next_run": t["next_run"].isoformat() if t["next_run"] else None,
-                "running": self.running
+                "running": self.running,
             }
             for t in self.tasks
         ]

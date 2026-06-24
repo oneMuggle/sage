@@ -5,6 +5,8 @@
 由 backend / 其他适配包提供。
 """
 
+from __future__ import annotations
+
 from sage_core.repositories.compute import ComputePort
 from sage_core.repositories.llm import LLMPort
 from sage_core.repositories.observability import EventPort, MetricPort

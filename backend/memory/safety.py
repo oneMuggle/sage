@@ -9,6 +9,8 @@
 - 持久化攻击（试图通过记忆影响未来会话的行为）
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass

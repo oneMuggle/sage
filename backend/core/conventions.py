@@ -3,6 +3,8 @@ Convention Manager - 惯例管理
 从交互模式中提取、评估和激活行为惯例
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import time

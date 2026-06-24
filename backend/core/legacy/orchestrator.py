@@ -3,6 +3,8 @@ Agent Orchestrator - 多Agent协作编排
 基于 Supervisor + Shared Blackboard 模式
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging

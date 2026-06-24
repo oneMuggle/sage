@@ -9,6 +9,8 @@
 - rank_i: 结果在第 i 路检索中的排名（1-based）
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 

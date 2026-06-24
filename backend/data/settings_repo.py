@@ -2,6 +2,9 @@
 
 基于 preferences 表的 KV 存储。模块级 KEYS 白名单限定可写入的 key。
 """
+
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -12,11 +15,13 @@ from backend.data.database import Database, get_database
 class SettingsRepository:
     """preferences 表的 KV 仓储。"""
 
-    KEYS: frozenset[str] = frozenset({
-        "app_settings",
-        "theme_mode",
-        "current_session_id",
-    })
+    KEYS: frozenset[str] = frozenset(
+        {
+            "app_settings",
+            "theme_mode",
+            "current_session_id",
+        }
+    )
 
     def __init__(self, db: Database | None = None):
         self.db = db or get_database()
@@ -27,9 +32,7 @@ class SettingsRepository:
     def get(self, key: str) -> str | None:
         if key not in self.KEYS:
             return None
-        row = self._conn().execute(
-            "SELECT value FROM preferences WHERE key = ?", (key,)
-        ).fetchone()
+        row = self._conn().execute("SELECT value FROM preferences WHERE key = ?", (key,)).fetchone()
         return row["value"] if row else None
 
     def get_json(self, key: str) -> Any | None:
@@ -52,9 +55,7 @@ class SettingsRepository:
             raise ValueError(f"key {key!r} not in whitelist")
         now = int(time.time() * 1000)
         conn = self._conn()
-        existing = conn.execute(
-            "SELECT key FROM preferences WHERE key = ?", (key,)
-        ).fetchone()
+        existing = conn.execute("SELECT key FROM preferences WHERE key = ?", (key,)).fetchone()
         if existing:
             conn.execute(
                 """UPDATE preferences
@@ -82,7 +83,9 @@ class SettingsRepository:
         conn.commit()
 
     def list_by_category(self, category: str) -> dict[str, str]:
-        rows = self._conn().execute(
-            "SELECT key, value FROM preferences WHERE category = ?", (category,)
-        ).fetchall()
+        rows = (
+            self._conn()
+            .execute("SELECT key, value FROM preferences WHERE category = ?", (category,))
+            .fetchall()
+        )
         return {row["key"]: row["value"] for row in rows}

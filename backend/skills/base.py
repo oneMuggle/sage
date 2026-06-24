@@ -2,6 +2,9 @@
 技能系统基类
 定义技能的基础接口和数据结构
 """
+
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -10,6 +13,7 @@ from typing import Any
 @dataclass
 class SkillSchema:
     """技能 Schema - 定义技能的元数据"""
+
     name: str  # 技能名称
     description: str  # 技能描述
     triggers: list[str] = field(default_factory=list)  # 触发关键词列表
@@ -20,6 +24,7 @@ class SkillSchema:
 @dataclass
 class SkillResult:
     """技能执行结果"""
+
     content: Any = None  # 返回内容
     metadata: dict[str, Any] = field(default_factory=dict)  # 元数据
     success: bool = True  # 是否成功
@@ -27,11 +32,7 @@ class SkillResult:
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典格式"""
-        result = {
-            "success": self.success,
-            "content": self.content,
-            "metadata": self.metadata
-        }
+        result = {"success": self.success, "content": self.content, "metadata": self.metadata}
         if self.error:
             result["error"] = self.error
         return result

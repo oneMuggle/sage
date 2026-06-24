@@ -11,6 +11,8 @@
 - ``chat_stream``  流式对话；逐 token 返回字符串 delta。
 """
 
+from __future__ import annotations
+
 from collections.abc import AsyncIterator
 from typing import Any, Protocol
 

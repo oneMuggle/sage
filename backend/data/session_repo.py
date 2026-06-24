@@ -3,6 +3,8 @@
 负责会话的 CRUD 操作
 """
 
+from __future__ import annotations
+
 import json
 import time
 import uuid
@@ -30,7 +32,7 @@ class Session:
     parent_id: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "Session":
+    def from_row(cls, row) -> Session:
         return cls(
             id=row["id"],
             title=row["title"],
@@ -182,7 +184,7 @@ class Message:
     reasoning_content: str | None = None  # LLM 思考/推理过程
 
     @classmethod
-    def from_row(cls, row) -> "Message":
+    def from_row(cls, row) -> Message:
         return cls(
             id=row["id"],
             session_id=row["session_id"],
@@ -193,7 +195,7 @@ class Message:
             provider=row["provider"],
             tool_calls=row["tool_calls"],
             tool_call_id=row["tool_call_id"],
-            reasoning_content=row["reasoning_content"] if "reasoning_content" in row.keys() else None,  # noqa: SIM118
+            reasoning_content=row.get("reasoning_content"),
         )
 
     def to_dict(self) -> dict[str, Any]:

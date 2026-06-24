@@ -2,6 +2,9 @@
 工具注册表
 管理所有可用工具的注册和获取
 """
+
+from __future__ import annotations
+
 import builtins
 import logging
 from typing import Any
@@ -93,11 +96,13 @@ class ToolRegistry:
         """
         result = []
         for tool in self._tools.values():
-            result.append({
-                "name": tool.schema.name,
-                "description": tool.schema.description,
-                "parameters": tool.schema.parameters
-            })
+            result.append(
+                {
+                    "name": tool.schema.name,
+                    "description": tool.schema.description,
+                    "parameters": tool.schema.parameters,
+                }
+            )
         return result
 
     def exists(self, name: str) -> bool:

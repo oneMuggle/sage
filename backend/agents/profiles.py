@@ -1,6 +1,9 @@
 """
 Agent Profiles - Agent 角色定义和配置
 """
+
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -8,6 +11,7 @@ from typing import Any
 @dataclass
 class AgentModelConfig:
     """Agent 使用的 LLM 模型配置"""
+
     model: str = "gpt-3.5-turbo"
     temperature: float = 0.7
     max_tokens: int = 4096
@@ -16,6 +20,7 @@ class AgentModelConfig:
 @dataclass
 class AgentProfile:
     """Agent 角色档案"""
+
     id: str
     name: str
     role: str  # "coordinator" | "researcher" | "coder" | "memory_manager"
@@ -43,7 +48,7 @@ class AgentProfile:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentProfile":
+    def from_dict(cls, data: dict[str, Any]) -> AgentProfile:
         """从字典创建"""
         model_data = data.pop("model_config", {})
         model_config = AgentModelConfig(**model_data) if model_data else AgentModelConfig()

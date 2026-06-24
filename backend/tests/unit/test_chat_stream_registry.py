@@ -7,6 +7,8 @@ StreamRegistry 单元测试
 - 边界:未知 streamId、过期 stream、并发 pop_if_done
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 

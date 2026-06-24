@@ -4,6 +4,8 @@
 真正的 ``BaseTool`` 抽象与实现保留在 ``backend.tools`` 中。
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 

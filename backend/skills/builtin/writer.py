@@ -1,6 +1,9 @@
 """
 写作技能 - 根据要求生成各类文本
 """
+
+from __future__ import annotations
+
 from typing import Any
 
 from ..base import BaseSkill, SkillResult, SkillSchema
@@ -20,30 +23,24 @@ class WriterSkill(BaseSkill):
                     "type": {
                         "type": "string",
                         "enum": ["article", "email", "report", "social", "other"],
-                        "description": "文章类型"
+                        "description": "文章类型",
                     },
-                    "topic": {
-                        "type": "string",
-                        "description": "主题或话题"
-                    },
+                    "topic": {"type": "string", "description": "主题或话题"},
                     "style": {
                         "type": "string",
                         "description": "写作风格",
-                        "default": "professional"
+                        "default": "professional",
                     },
                     "length": {
                         "type": "string",
                         "enum": ["short", "medium", "long"],
                         "description": "文章长度",
-                        "default": "medium"
-                    }
+                        "default": "medium",
+                    },
                 },
-                "required": ["type", "topic"]
+                "required": ["type", "topic"],
             },
-            examples=[
-                "写一封商务邮件",
-                "帮我写一篇关于 AI 的文章"
-            ]
+            examples=["写一封商务邮件", "帮我写一篇关于 AI 的文章"],
         )
 
     def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
@@ -65,8 +62,8 @@ class WriterSkill(BaseSkill):
                     "topic": topic,
                     "length": length,
                     "style": style,
-                    "mock": True
-                }
+                    "mock": True,
+                },
             )
 
         # 构建写作提示
@@ -78,41 +75,23 @@ class WriterSkill(BaseSkill):
 
             return SkillResult(
                 content=result,
-                metadata={
-                    "type": article_type,
-                    "topic": topic,
-                    "length": length,
-                    "style": style
-                }
+                metadata={"type": article_type, "topic": topic, "length": length, "style": style},
             )
         except Exception as e:
-            return SkillResult(
-                success=False,
-                error=f"写作失败: {str(e)}"
-            )
+            return SkillResult(success=False, error=f"写作失败: {str(e)}")
 
-    def _build_prompt(
-        self,
-        article_type: str,
-        topic: str,
-        length: str,
-        style: str
-    ) -> str:
+    def _build_prompt(self, article_type: str, topic: str, length: str, style: str) -> str:
         """构建写作提示"""
-        length_map = {
-            "short": "100-200 字",
-            "medium": "500-800 字",
-            "long": "1500-2000 字"
-        }
+        length_map = {"short": "100-200 字", "medium": "500-800 字", "long": "1500-2000 字"}
 
         prompts = {
             "article": f"请撰写一篇关于「{topic}」的{length_map[length]}文章，"
-                      f"语气{style}，结构清晰，有理有据。",
+            f"语气{style}，结构清晰，有理有据。",
             "email": f"请撰写一封关于「{topic}」的商务邮件，语气{style}，格式规范。",
             "report": f"请撰写一份关于「{topic}」的分析报告，"
-                     f"约{length_map[length]}，{style}风格，包含数据和结论。",
+            f"约{length_map[length]}，{style}风格，包含数据和结论。",
             "social": f"请为社交媒体撰写一条关于「{topic}」的帖子，"
-                     f"约100字，语气{style}，有吸引力。",
+            f"约100字，语气{style}，有吸引力。",
         }
 
         return prompts.get(article_type, prompts["article"])

@@ -4,6 +4,8 @@
 权威定义。
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 

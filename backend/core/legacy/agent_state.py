@@ -5,6 +5,8 @@ Agent 状态机与事件流定义
 事件流通过 FastAPI 流式响应(NDJSON)下发到前端。
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass
 from enum import Enum

@@ -4,6 +4,8 @@
 当 LLM 不可用时，降级为基于关键词的简单提取。
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from typing import Any

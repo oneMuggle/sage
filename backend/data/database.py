@@ -2,6 +2,9 @@
 数据库连接和初始化
 SQLite 实现
 """
+
+from __future__ import annotations
+
 import os
 import sqlite3
 from pathlib import Path

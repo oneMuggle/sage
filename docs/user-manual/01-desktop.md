@@ -7,8 +7,8 @@
 
 | 系统 | 最低 | 推荐 | 备注 | 下载来源 |
 |------|------|------|------|---------|
-| Windows 11 | ✅ | ✅ | 默认 WebView2 已装 | main release |
-| Windows 10 | ✅ | ✅ | 1809+ 含 WebView2 | main release |
+| Windows 11 | ✅ | ✅ | Electron 内置 Chromium 106 | main release |
+| Windows 10 | ✅ | ✅ | 1809+ (Electron 内置 Chromium) | main release |
 | **Windows 7 SP1 x64** | ⚠️ LTS only | ⚠️ x64 only | main release 不再支持; KB3033929 必需 | **LTS release** (`v*-lts` tag) |
 | macOS 12+ | ⏳ Phase 3 | ⏳ Phase 3 | 暂未发布 | — |
 | Ubuntu 22.04+ | ✅ | ✅ | GTK + WebKitGTK 4.1 | main release |
@@ -100,10 +100,6 @@ chmod +x sage_0.1.0_x86_64.AppImage
 | Linux | `~/.config/Sage/settings.json` |
 
 ## 1.6 常见问题
-
-### Q: 启动报「缺少 WebView2」
-
-A: Win7 / 早期 Win10。运行 `MicrosoftEdgeWebview2Setup.exe`（Sage 安装包已含），或从微软官网下载。
 
 ### Q: 启动报「端口被占用」
 

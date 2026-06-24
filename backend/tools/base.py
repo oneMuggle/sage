@@ -2,6 +2,9 @@
 工具系统基类
 定义工具的基础接口和数据结构
 """
+
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -10,6 +13,7 @@ from typing import Any
 @dataclass
 class ToolSchema:
     """工具 Schema - 定义工具的元数据"""
+
     name: str  # 工具名称
     description: str  # 工具描述
     parameters: dict[str, Any] = field(default_factory=dict)  # JSON Schema 格式参数
@@ -18,6 +22,7 @@ class ToolSchema:
 @dataclass
 class ToolResult:
     """工具执行结果"""
+
     success: bool  # 是否成功
     content: Any = None  # 返回内容
     error: str | None = None  # 错误信息

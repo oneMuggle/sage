@@ -10,6 +10,8 @@ SkillRegistry 单元测试
 - execute 无匹配返回 None
 """
 
+from __future__ import annotations
+
 from typing import Any
 from unittest.mock import Mock
 

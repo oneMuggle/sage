@@ -9,6 +9,8 @@
 中单独定义 pydantic 模型并与本模块互转。
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any

@@ -3,6 +3,8 @@
 提供对独立 RAG 服务的 HTTP 客户端封装。
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 

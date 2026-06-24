@@ -3,6 +3,8 @@
 六边形架构中的记忆端口协议,定义记忆系统的接口。
 """
 
+from __future__ import annotations
+
 from typing import Protocol
 
 from backend.domain.memory import MemoryContext
