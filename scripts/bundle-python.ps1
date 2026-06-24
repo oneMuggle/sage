@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 # All 3.8.x share the same ABI (python38.dll); Python code is fully compatible.
 $PythonVersion = "3.8.10"
 $PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
-$GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"
+$GetPipUrl = "https://bootstrap.pypa.io/pip/3.8/get-pip.py"
 $ResourcesDir = Join-Path $PSScriptRoot "..\resources"
 $PythonDir = Join-Path $ResourcesDir "python"
 $BackendDir = Join-Path $ResourcesDir "backend"
