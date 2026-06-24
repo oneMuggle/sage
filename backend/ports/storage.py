@@ -6,6 +6,8 @@
 仅用于测试）实现。
 """
 
+from __future__ import annotations
+
 from typing import Any, Protocol
 
 from sage_core import Message

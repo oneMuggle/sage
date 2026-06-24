@@ -4,6 +4,8 @@
 集成向量检索：store() 自动生成 embedding，retrieve() 包含向量搜索结果。
 """
 
+from __future__ import annotations
+
 import logging
 
 from backend.domain.memory import MemoryContext

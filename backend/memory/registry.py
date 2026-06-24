@@ -4,6 +4,8 @@
 所有需要 MemoryManager 的地方（legacy_routes、main.py、evolution）都通过此模块获取同一实例。
 """
 
+from __future__ import annotations
+
 import logging
 
 from backend.data.database import get_database

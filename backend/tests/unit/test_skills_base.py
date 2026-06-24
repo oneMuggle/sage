@@ -10,6 +10,8 @@ Skill 基类单元测试
 - __repr__ 输出
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 import pytest

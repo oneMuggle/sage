@@ -6,6 +6,8 @@ Episodic Memory - 情景记忆模块
 用多个 LIKE 条件 OR 连接，提升中文检索质量。
 """
 
+from __future__ import annotations
+
 import json
 import time
 import uuid

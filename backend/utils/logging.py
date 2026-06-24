@@ -3,11 +3,12 @@ Sage 日志配置模块
 使用 Python 标准库 logging，支持文件和控制台输出
 """
 
+from __future__ import annotations
+
 import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from opentelemetry import trace
 
@@ -74,7 +75,7 @@ class SageLogger:
     单例模式，统一管理日志配置
     """
 
-    _instance: Optional["SageLogger"] = None
+    _instance: SageLogger | None = None
     _initialized: bool = False
 
     def __new__(cls):

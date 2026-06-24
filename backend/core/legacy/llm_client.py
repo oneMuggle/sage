@@ -3,6 +3,8 @@ LLM Client - 大语言模型客户端
 支持 OpenAI-compatible API 协议，兼容多种提供商
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import time

@@ -2,6 +2,8 @@
 API 路由定义
 """
 
+from __future__ import annotations
+
 import asyncio
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,

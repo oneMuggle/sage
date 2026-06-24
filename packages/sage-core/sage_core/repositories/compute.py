@@ -10,6 +10,8 @@
 参见 ``backend.domain.compute`` 中的数据模型。
 """
 
+from __future__ import annotations
+
 from typing import Protocol, runtime_checkable
 
 from sage_core import ComputeRequest, ComputeResult, ComputeSpec

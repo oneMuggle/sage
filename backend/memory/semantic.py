@@ -7,6 +7,8 @@ Semantic Memory - 语义记忆模块
 FTS5 索引 tokenized_content 而非原始 content，使中文搜索生效。
 """
 
+from __future__ import annotations
+
 import json
 import time
 import uuid

@@ -4,6 +4,8 @@
 不允许引入 fastapi / pydantic / httpx 或任何项目内部模块。
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any

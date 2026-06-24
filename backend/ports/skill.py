@@ -4,6 +4,8 @@
 通常由一组工具调用 + 提示词模板组成。本接口用于发现和触发技能。
 """
 
+from __future__ import annotations
+
 from typing import Any, Protocol
 
 from sage_core import SkillResult, SkillSpec

@@ -1,6 +1,9 @@
 """
 搜索技能 - 网络搜索并整理结果
 """
+
+from __future__ import annotations
+
 from typing import Any
 
 from ..base import BaseSkill, SkillResult, SkillSchema
@@ -17,22 +20,12 @@ class SearchSkill(BaseSkill):
             parameters={
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "搜索查询"
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "结果数量",
-                        "default": 5
-                    }
+                    "query": {"type": "string", "description": "搜索查询"},
+                    "limit": {"type": "integer", "description": "结果数量", "default": 5},
                 },
-                "required": ["query"]
+                "required": ["query"],
             },
-            examples=[
-                "帮我搜索一下 Python 异步编程",
-                "查一下 ChatGPT 最新消息"
-            ]
+            examples=["帮我搜索一下 Python 异步编程", "查一下 ChatGPT 最新消息"],
         )
 
     def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
@@ -45,10 +38,7 @@ class SearchSkill(BaseSkill):
         web_search = tools.get("web_search")
 
         if web_search is None:
-            return SkillResult(
-                success=False,
-                error="搜索工具不可用"
-            )
+            return SkillResult(success=False, error="搜索工具不可用")
 
         # 执行搜索
         result = web_search.execute(query=query, limit=limit)
@@ -58,16 +48,10 @@ class SearchSkill(BaseSkill):
             formatted = self._format_results(result.content.get("results", []))
             return SkillResult(
                 content=formatted,
-                metadata={
-                    "query": query,
-                    "count": len(result.content.get("results", []))
-                }
+                metadata={"query": query, "count": len(result.content.get("results", []))},
             )
 
-        return SkillResult(
-            success=False,
-            error=result.error or "搜索失败"
-        )
+        return SkillResult(success=False, error=result.error or "搜索失败")
 
     def _format_results(self, results: list[dict]) -> str:
         """格式化搜索结果"""

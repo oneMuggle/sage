@@ -16,6 +16,8 @@
 所以实际挂载路径是 /api/v1/chat/stream 和 /api/v1/chat/stream/{id}。
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import json

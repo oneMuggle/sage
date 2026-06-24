@@ -1,6 +1,9 @@
 """
 编程技能 - 代码编写、调试、解释
 """
+
+from __future__ import annotations
+
 from typing import Any
 
 from ..base import BaseSkill, SkillResult, SkillSchema
@@ -20,28 +23,21 @@ class CoderSkill(BaseSkill):
                     "action": {
                         "type": "string",
                         "enum": ["write", "explain", "debug", "review", "refactor"],
-                        "description": "操作类型"
+                        "description": "操作类型",
                     },
                     "language": {
                         "type": "string",
-                        "description": "编程语言，如 python, javascript"
+                        "description": "编程语言，如 python, javascript",
                     },
                     "code": {
                         "type": "string",
-                        "description": "代码内容 (explain/debug/review 时需要)"
+                        "description": "代码内容 (explain/debug/review 时需要)",
                     },
-                    "requirement": {
-                        "type": "string",
-                        "description": "需求描述 (write 时需要)"
-                    }
+                    "requirement": {"type": "string", "description": "需求描述 (write 时需要)"},
                 },
-                "required": ["action"]
+                "required": ["action"],
             },
-            examples=[
-                "帮我写一个 Python 快速排序",
-                "解释一下这段代码",
-                "debug 这段 JavaScript"
-            ]
+            examples=["帮我写一个 Python 快速排序", "解释一下这段代码", "debug 这段 JavaScript"],
         )
 
     def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
@@ -66,37 +62,21 @@ class CoderSkill(BaseSkill):
         elif action == "refactor":
             prompt = f"请重构以下 {language} 代码:\n```{language}\n{code}\n```"
         else:
-            return SkillResult(
-                success=False,
-                error=f"未知操作: {action}"
-            )
+            return SkillResult(success=False, error=f"未知操作: {action}")
 
         # 如果没有 LLM，使用模拟结果
         if llm is None:
             return SkillResult(
                 success=True,
                 content=self._generate_mock_result(action, language, code, requirement),
-                metadata={
-                    "action": action,
-                    "language": language,
-                    "mock": True
-                }
+                metadata={"action": action, "language": language, "mock": True},
             )
 
         try:
             result = llm.complete(prompt)
-            return SkillResult(
-                content=result,
-                metadata={
-                    "action": action,
-                    "language": language
-                }
-            )
+            return SkillResult(content=result, metadata={"action": action, "language": language})
         except Exception as e:
-            return SkillResult(
-                success=False,
-                error=f"代码生成失败: {str(e)}"
-            )
+            return SkillResult(success=False, error=f"代码生成失败: {str(e)}")
 
     def _generate_mock_result(self, action: str, language: str, code: str, requirement: str) -> str:
         """生成模拟结果（当没有 LLM 时）"""

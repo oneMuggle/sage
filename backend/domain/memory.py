@@ -3,6 +3,8 @@
 记忆系统的领域模型,用于六边形架构中的记忆上下文传递。
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 

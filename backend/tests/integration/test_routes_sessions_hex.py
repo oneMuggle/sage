@@ -8,6 +8,8 @@ DI 装配:用 ``hex_sessions_client`` fixture override  ``get_session_service``
 其它测试。
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

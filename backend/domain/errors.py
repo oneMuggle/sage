@@ -8,6 +8,8 @@
 迁出到 ``core/legacy/`` 后删除。
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any

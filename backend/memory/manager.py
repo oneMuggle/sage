@@ -2,6 +2,9 @@
 Memory Manager - 记忆管理器
 统一管理三层记忆系统
 """
+
+from __future__ import annotations
+
 import contextlib
 import logging
 from typing import Any
@@ -24,12 +27,7 @@ class MemoryManager:
     4. 记忆重要性评估
     """
 
-    def __init__(
-        self,
-        working: WorkingMemory,
-        episodic: EpisodicMemory,
-        semantic: SemanticMemory
-    ):
+    def __init__(self, working: WorkingMemory, episodic: EpisodicMemory, semantic: SemanticMemory):
         """
         初始化记忆管理器
 
@@ -67,7 +65,7 @@ class MemoryManager:
             importance=importance,
             metadata=metadata,
             session_id=session_id,
-            memory_type=memory_type
+            memory_type=memory_type,
         )
 
     def memorize(
@@ -76,7 +74,7 @@ class MemoryManager:
         memory_type: str = "auto",
         importance: int = 5,
         tags: list[str] | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> str | None:
         """
         通用记忆存储接口
@@ -96,28 +94,17 @@ class MemoryManager:
             memory_type = self._classify_memory_type(content, importance)
 
         if memory_type == "working":
-            self.working.add({
-                "role": "system",
-                "content": content
-            })
+            self.working.add({"role": "system", "content": content})
             return None
 
         elif memory_type == "episodic":
             meta = metadata or {}
             if tags:
                 meta["tags"] = tags
-            return self.episodic.save(
-                content=content,
-                importance=importance,
-                metadata=meta
-            )
+            return self.episodic.save(content=content, importance=importance, metadata=meta)
 
         elif memory_type == "semantic":
-            return self.semantic.save(
-                content=content,
-                summary=None,
-                tags=tags
-            )
+            return self.semantic.save(content=content, summary=None, tags=tags)
 
         else:
             logger.warning(f"未知的记忆类型: {memory_type}")
@@ -146,10 +133,7 @@ class MemoryManager:
         return "episodic"
 
     def recall(
-        self,
-        query: str,
-        limit: int = 5,
-        memory_types: list[str] | None = None
+        self, query: str, limit: int = 5, memory_types: list[str] | None = None
     ) -> dict[str, list[dict[str, Any]]]:
         """
         检索记忆
@@ -162,11 +146,7 @@ class MemoryManager:
         Returns:
             包含各类记忆检索结果的字典
         """
-        results = {
-            "working": [],
-            "episodic": [],
-            "semantic": []
-        }
+        results = {"working": [], "episodic": [], "semantic": []}
 
         # 确定要检索的类型
         if memory_types is None:
@@ -187,17 +167,11 @@ class MemoryManager:
 
         # 情景记忆 - SQLite LIKE 搜索
         if "episodic" in memory_types:
-            results["episodic"] = self.episodic.search(
-                query=query,
-                limit=limit
-            )
+            results["episodic"] = self.episodic.search(query=query, limit=limit)
 
         # 语义记忆 - FTS5 全文搜索
         if "semantic" in memory_types:
-            results["semantic"] = self.semantic.search(
-                query=query,
-                limit=limit
-            )
+            results["semantic"] = self.semantic.search(query=query, limit=limit)
 
         return results
 
@@ -264,10 +238,7 @@ class MemoryManager:
             self.episodic.save(
                 content=f"对话摘要: {summary}",
                 importance=5,
-                metadata={
-                    "source": "auto_compress",
-                    "message_count": len(messages)
-                }
+                metadata={"source": "auto_compress", "message_count": len(messages)},
             )
 
             # 清空工作记忆
@@ -285,16 +256,10 @@ class MemoryManager:
             role: 角色 (user/assistant/system)
             content: 消息内容
         """
-        self.working.add({
-            "role": role,
-            "content": content
-        })
+        self.working.add({"role": role, "content": content})
 
     def search_memories(
-        self,
-        query: str,
-        memory_type: str | None = None,
-        limit: int = 10
+        self, query: str, memory_type: str | None = None, limit: int = 10
     ) -> list[dict[str, Any]]:
         """
         搜索记忆的统一接口
@@ -355,14 +320,10 @@ class MemoryManager:
         stats = {
             "working": {
                 "message_count": len(self.working.messages),
-                "total_tokens": self.working.total_tokens
+                "total_tokens": self.working.total_tokens,
             },
-            "episodic": {
-                "total": 0
-            },
-            "semantic": {
-                "total": 0
-            }
+            "episodic": {"total": 0},
+            "semantic": {"total": 0},
         }
 
         with contextlib.suppress(Exception):

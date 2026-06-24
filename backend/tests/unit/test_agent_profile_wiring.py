@@ -11,6 +11,8 @@ SageAgent profile 接通测试（阶段 1）
 7. AgentEvent 携带 agent_id 字段（为阶段 4 预留）
 """
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

@@ -5,6 +5,8 @@
 - ``EventPort`` ：业务事件（用于审计、调试、外部 hook）。
 """
 
+from __future__ import annotations
+
 from typing import Any, Protocol
 
 

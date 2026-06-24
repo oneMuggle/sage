@@ -8,6 +8,8 @@
 - 资源清理
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import AsyncIterator
@@ -235,7 +237,7 @@ class MCPLifecycleManager:
         logger.debug(f"注册资源: {resource}")
 
     @asynccontextmanager
-    async def lifespan(self) -> AsyncIterator["MCPLifecycleManager"]:
+    async def lifespan(self) -> AsyncIterator[MCPLifecycleManager]:
         """生命周期上下文管理器。
 
         使用示例：

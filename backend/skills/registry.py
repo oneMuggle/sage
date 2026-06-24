@@ -2,6 +2,9 @@
 技能注册表
 管理所有可用技能的注册、匹配和执行
 """
+
+from __future__ import annotations
+
 import builtins
 import logging
 
@@ -130,10 +133,7 @@ class SkillRegistry:
             return skill.execute(params, context)
         except Exception as e:
             logger.error(f"技能执行失败: {skill.name}, error: {str(e)}")
-            return SkillResult(
-                success=False,
-                error=f"技能执行失败: {str(e)}"
-            )
+            return SkillResult(success=False, error=f"技能执行失败: {str(e)}")
 
     def exists(self, name: str) -> bool:
         """

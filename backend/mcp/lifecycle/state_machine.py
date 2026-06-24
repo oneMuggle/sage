@@ -8,6 +8,8 @@
                                   SHUTDOWN
 """
 
+from __future__ import annotations
+
 from enum import Enum
 
 
@@ -22,7 +24,7 @@ class MCPState(str, Enum):
     SHUTDOWN = "shutdown"
 
     @classmethod
-    def initial(cls) -> "MCPState":
+    def initial(cls) -> MCPState:
         """返回初始状态。"""
         return cls.CREATED
 

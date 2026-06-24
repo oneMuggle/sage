@@ -22,15 +22,16 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
 
 # 当 Queue.get() 收到此 sentinel,attach 端点就关闭 NDJSON 流。
 # 必须是单例(用 `is` 比较),不能是 None 或 dict(None) 等可能的合法事件值。
 SENTINEL: Any = object()
 
-ProducerFn = Callable[["StreamEntry"], Awaitable[None]]
+# Python 3.8 不支持 typing.Callable/Awaitable[] subscript
+# ProducerFn 在 codebase 中只用作类型提示，使用 Any 兜底
+ProducerFn = Callable[..., Any]
 
 
 @dataclass

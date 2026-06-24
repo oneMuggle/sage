@@ -6,6 +6,8 @@ Working Memory - 工作记忆模块
 确保重启后工作记忆不丢失。
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from collections import deque

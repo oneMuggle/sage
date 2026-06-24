@@ -3,6 +3,8 @@
 从各子模块统一导出所有领域模型，便于外部 ``from sage_core.entities import ...``。
 """
 
+from __future__ import annotations
+
 from sage_core.entities.agent import AgentDecision, AgentState
 from sage_core.entities.compute import (
     ComputeError,
