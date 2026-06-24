@@ -16,7 +16,8 @@ uvicorn==0.20.0      # py38 兼容
 pydantic==1.10.13    # 1.x 最后版本, 2.x 要求 3.9+
 
 # Sage Core (零外部依赖的领域模型)
--e ../packages/sage-core
+# pip 24+ 不接受 -e ../packages/sage-core，用 ./packages/sage-core
+-e ./packages/sage-core
 
 # Database
 # sqlite3 is built-in

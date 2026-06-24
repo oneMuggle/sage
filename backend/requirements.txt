@@ -7,7 +7,8 @@ uvicorn==0.27.0
 pydantic==2.5.0
 
 # Sage Core (零外部依赖的领域模型)
--e ../packages/sage-core
+# pip 24+ 不接受 -e ../packages/sage-core，用 ./packages/sage-core
+-e ./packages/sage-core
 
 # Database
 # sqlite3 is built-in
