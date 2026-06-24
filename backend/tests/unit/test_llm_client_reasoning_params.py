@@ -26,6 +26,7 @@ def _make_config(**overrides) -> LLMConfig:
         "api_key": "test-key",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "model": "gemini-2.5-flash",
+        "use_proxy": False,  # 测试模式：直连上游，方便 mock
     }
     defaults.update(overrides)
     return LLMConfig(**defaults)
@@ -198,6 +199,7 @@ async def test_chat_stream_forwards_reasoning_params_to_request_body():
                 base_url="https://api.deepseek.com/v1",
                 model="deepseek-reasoner",
                 reasoning_effort="high",
+                use_proxy=False,
             )
         )
         async for _ in client.chat_stream([{"role": "user", "content": "hi"}]):
