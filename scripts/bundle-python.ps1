@@ -10,11 +10,11 @@
 $ErrorActionPreference = "Stop"
 
 # Configuration
-# Python 3.8 embeddable is self-hosted on GitHub releases because python.org
-# removed all 3.8.x downloads after Python 3.8 EOL (2024-10).
-# See: https://github.com/oneMuggle/sage/releases/tag/python-embed-assets
-$PythonVersion = "3.8.20"
-$PythonUrl = "https://github.com/oneMuggle/sage/releases/download/python-embed-assets/python-$PythonVersion-embed-amd64.zip"
+# Python 3.8.11+ embeddable was removed from python.org after 3.8 EOL (2024-10).
+# 3.8.10 (the 3.8 baseline, 2020-05) is the newest embed still hosted on python.org.
+# All 3.8.x share the same ABI (python38.dll); Python code is fully compatible.
+$PythonVersion = "3.8.10"
+$PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
 $GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"
 $ResourcesDir = Join-Path $PSScriptRoot "..\resources"
 $PythonDir = Join-Path $ResourcesDir "python"
