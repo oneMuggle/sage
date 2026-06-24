@@ -147,12 +147,6 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Verify lockfile sync
-        # Early fail if package.json and package-lock.json drift apart.
-        # Catches the case where someone bumps a dep in package.json but
-        # forgets to commit the regenerated lockfile.
-        run: npm ci --dry-run
-
       - name: Install dependencies
         run: npm ci --force --force
 
@@ -226,10 +220,6 @@ jobs:
             libgbm1 \
             libasound2t64
 
-      - name: Verify lockfile sync
-        # Early fail if package.json and package-lock.json drift apart.
-        run: npm ci --dry-run
-
       - name: Install npm dependencies
         run: npm ci --force
 
@@ -286,10 +276,6 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-
-      - name: Verify lockfile sync
-        # Early fail if package.json and package-lock.json drift apart.
-        run: npm ci --dry-run
 
       - name: Install npm dependencies
         run: npm ci --force

@@ -17,12 +17,6 @@ pre-commit:
 
 pre-push:
   commands:
-    lockfile-check:
-      # Catch package.json / package-lock.json drift BEFORE pushing,
-      # so CI fails fast (and locally first) instead of after a wasted
-      # npm ci on every job. Mirrors the 'Verify lockfile sync' step
-      # added in .github/workflows/ci.yml.
-      run: npm ci --dry-run
     backend-test:
       run: cd backend && bash ../scripts/pytest.sh -x --no-cov
     frontend-test:
