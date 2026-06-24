@@ -10,9 +10,9 @@ import {
   MessageCircle,
 } from 'lucide-react';
 
-import { useWikiStore } from '../../entities/wiki/store';
-import { useReviewStore } from '../../entities/wiki/review-store';
 import { useResearchStore } from '../../entities/wiki/research-store';
+import { useReviewStore } from '../../entities/wiki/review-store';
+import { useWikiStore } from '../../entities/wiki/store';
 import type { WikiView } from '../../shared/types/wiki';
 
 const NAV_ITEMS: { view: WikiView; icon: React.ElementType; label: string }[] = [

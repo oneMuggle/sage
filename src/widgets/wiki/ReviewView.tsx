@@ -2,8 +2,9 @@
 import { CheckCircle2, Filter } from 'lucide-react';
 import { useState } from 'react';
 
-import { useReviewStore } from '../../entities/wiki/review-store';
 import { mockReviewItems } from '../../entities/wiki/mock-data';
+import { useReviewStore } from '../../entities/wiki/review-store';
+
 import { ReviewItemCard } from './ReviewItemCard';
 
 export function ReviewView() {

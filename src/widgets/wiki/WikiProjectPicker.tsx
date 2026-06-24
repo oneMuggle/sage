@@ -2,17 +2,17 @@
 import { FolderPlus, FolderOpen, X, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
-import { useWikiStore } from '../../entities/wiki/store';
-import { useLintStore } from '../../entities/wiki/lint-store';
-import { useReviewStore } from '../../entities/wiki/review-store';
 import { useActivityStore } from '../../entities/wiki/activity-store';
-import { useResearchStore } from '../../entities/wiki/research-store';
+import { useLintStore } from '../../entities/wiki/lint-store';
 import {
   mockActivities,
   mockLintItems,
   mockResearchTasks,
   mockReviewItems,
 } from '../../entities/wiki/mock-data';
+import { useResearchStore } from '../../entities/wiki/research-store';
+import { useReviewStore } from '../../entities/wiki/review-store';
+import { useWikiStore } from '../../entities/wiki/store';
 import { createWikiProject, openWikiProject } from '../../shared/api-client/wiki';
 import type { FileNode, GraphData, WikiProject } from '../../shared/types/wiki';
 

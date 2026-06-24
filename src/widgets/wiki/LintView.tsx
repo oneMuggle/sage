@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { useLintStore } from '../../entities/wiki/lint-store';
 import { mockLintItems } from '../../entities/wiki/mock-data';
+
 import { LintItemCard } from './LintItemCard';
 
 export function LintView() {

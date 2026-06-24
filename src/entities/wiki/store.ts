@@ -122,13 +122,11 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
 
 // HMR 支持：防止 Vite 热更新时创建多个 store 实例
 declare global {
-  // eslint-disable-next-line no-var
   var __sageWikiStore: typeof useWikiStore | undefined;
 }
 
 // HMR 支持：防止 Vite 热更新时创建多个 store 实例
 declare global {
-  // eslint-disable-next-line no-var
   var __sageWikiStore: typeof useWikiStore | undefined;
 }
 
