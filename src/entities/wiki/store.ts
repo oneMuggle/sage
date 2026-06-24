@@ -119,3 +119,22 @@ export const useWikiStore = create<WikiStoreState>((set, get) => ({
   },
   setGraphQuery: (q) => set({ graphQuery: q }),
 }));
+
+// HMR 支持：防止 Vite 热更新时创建多个 store 实例
+declare global {
+  // eslint-disable-next-line no-var
+  var __sageWikiStore: typeof useWikiStore | undefined;
+}
+
+// HMR 支持：防止 Vite 热更新时创建多个 store 实例
+declare global {
+  // eslint-disable-next-line no-var
+  var __sageWikiStore: typeof useWikiStore | undefined;
+}
+
+if (import.meta.hot) {
+  if (globalThis.__sageWikiStore) {
+    globalThis.__sageWikiStore.setState(useWikiStore.getState());
+  }
+  globalThis.__sageWikiStore = useWikiStore;
+}

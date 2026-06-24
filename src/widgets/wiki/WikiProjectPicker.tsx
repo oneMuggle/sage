@@ -1,9 +1,172 @@
 // Wiki Project Picker - Create or open a wiki project
-import { FolderPlus, FolderOpen, X } from 'lucide-react';
+import { FolderPlus, FolderOpen, X, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import { useWikiStore } from '../../entities/wiki/store';
+import { useLintStore } from '../../entities/wiki/lint-store';
+import { useReviewStore } from '../../entities/wiki/review-store';
+import { useActivityStore } from '../../entities/wiki/activity-store';
+import { useResearchStore } from '../../entities/wiki/research-store';
+import {
+  mockActivities,
+  mockLintItems,
+  mockResearchTasks,
+  mockReviewItems,
+} from '../../entities/wiki/mock-data';
 import { createWikiProject, openWikiProject } from '../../shared/api-client/wiki';
+import type { FileNode, GraphData, WikiProject } from '../../shared/types/wiki';
+
+// 演示模式用的模拟数据
+const mockFileTree: FileNode[] = [
+  {
+    name: 'wiki',
+    path: 'wiki',
+    is_dir: true,
+    children: [
+      {
+        name: 'entities',
+        path: 'wiki/entities',
+        is_dir: true,
+        children: [
+          { name: 'api.md', path: 'wiki/entities/api.md', is_dir: false },
+          { name: 'user.md', path: 'wiki/entities/user.md', is_dir: false },
+          { name: 'graphql.md', path: 'wiki/entities/graphql.md', is_dir: false },
+        ],
+      },
+      {
+        name: 'concepts',
+        path: 'wiki/concepts',
+        is_dir: true,
+        children: [
+          { name: 'auth.md', path: 'wiki/concepts/auth.md', is_dir: false },
+          { name: 'rest.md', path: 'wiki/concepts/rest.md', is_dir: false },
+        ],
+      },
+      {
+        name: 'guides',
+        path: 'wiki/guides',
+        is_dir: true,
+        children: [{ name: 'api-guide.md', path: 'wiki/guides/api-guide.md', is_dir: false }],
+      },
+    ],
+  },
+];
+
+const mockFileContent = `# API 文档
+
+## 概述
+
+这是一个 **API 文档** 示例页面，演示 Wiki 编辑器。
+
+## 功能
+
+- 📄 Markdown 预览
+- ✏️ 编辑模式
+- 💾 保存文件
+- 🔗 Wiki 链接支持
+
+## 代码示例
+
+\`\`\`typescript
+function hello(name: string) {
+  return \`Hello, \${name}!\`;
+}
+\`\`\`
+
+## 相关页面
+
+- [[api-entities|API 实体]]
+- [[auth|认证]]
+- [[rest|REST API]]
+
+> 这是演示模式，无需后端
+`;
+
+// 图谱演示数据
+const mockGraphData: GraphData = {
+  nodes: [
+    {
+      id: 'wiki/entities/api.md',
+      label: 'api.md',
+      page_type: 'entity',
+      sources: ['raw/sources/api-docs/rest-api.pdf'],
+      wikilinks: ['wiki/concepts/auth.md', 'wiki/concepts/rest.md'],
+    },
+    {
+      id: 'wiki/entities/user.md',
+      label: 'user.md',
+      page_type: 'entity',
+      sources: [],
+      wikilinks: ['wiki/entities/api.md'],
+    },
+    {
+      id: 'wiki/entities/graphql.md',
+      label: 'graphql.md',
+      page_type: 'entity',
+      sources: ['raw/sources/api-docs/graphql-spec.md'],
+      wikilinks: ['wiki/concepts/rest.md'],
+    },
+    {
+      id: 'wiki/concepts/auth.md',
+      label: 'auth.md',
+      page_type: 'concept',
+      sources: [],
+      wikilinks: ['wiki/entities/api.md', 'wiki/guides/api-guide.md'],
+    },
+    {
+      id: 'wiki/concepts/rest.md',
+      label: 'rest.md',
+      page_type: 'concept',
+      sources: [],
+      wikilinks: ['wiki/entities/api.md', 'wiki/entities/graphql.md'],
+    },
+    {
+      id: 'wiki/guides/api-guide.md',
+      label: 'api-guide.md',
+      page_type: 'guide',
+      sources: [],
+      wikilinks: ['wiki/concepts/auth.md', 'wiki/entities/api.md'],
+    },
+  ],
+  edges: [
+    {
+      source: 'wiki/entities/api.md',
+      target: 'wiki/concepts/auth.md',
+      signal: 'DirectLink',
+      weight: 1.0,
+    },
+    {
+      source: 'wiki/entities/api.md',
+      target: 'wiki/concepts/rest.md',
+      signal: 'DirectLink',
+      weight: 1.0,
+    },
+    {
+      source: 'wiki/entities/graphql.md',
+      target: 'wiki/concepts/rest.md',
+      signal: 'DirectLink',
+      weight: 1.0,
+    },
+    {
+      source: 'wiki/concepts/auth.md',
+      target: 'wiki/guides/api-guide.md',
+      signal: 'DirectLink',
+      weight: 1.0,
+    },
+    {
+      source: 'wiki/entities/api.md',
+      target: 'wiki/entities/user.md',
+      signal: 'SourceOverlap',
+      weight: 0.6,
+    },
+    {
+      source: 'wiki/entities/api.md',
+      target: 'wiki/entities/graphql.md',
+      signal: 'TypeAffinity',
+      weight: 0.8,
+    },
+  ],
+};
 
 export function WikiProjectPicker() {
   const [mode, setMode] = useState<'menu' | 'create' | 'open'>('menu');
@@ -13,8 +176,11 @@ export function WikiProjectPicker() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const setProject = useWikiStore((s) => s.setProject);
   const setErrorGlobal = useWikiStore((s) => s.setError);
+  const setLintItems = useLintStore((s) => s.setItems);
+  const setReviewItems = useReviewStore((s) => s.setItems);
+  const setActivities = useActivityStore((s) => s.setItems);
+  const setResearchTasks = useResearchStore((s) => s.setTasks);
 
   const handleCreate = async () => {
     if (!name.trim() || !basePath.trim()) {
@@ -25,7 +191,14 @@ export function WikiProjectPicker() {
     setError(null);
     try {
       const project = await createWikiProject(name.trim(), basePath.trim());
-      setProject(project);
+      // 设置项目时同时填充文件树（setProject 会重置 fileTree）
+      useWikiStore.setState({
+        project,
+        fileTree: mockFileTree,
+        selectedFile: 'wiki/entities/api.md',
+        fileContent: mockFileContent,
+        graphData: mockGraphData,
+      });
     } catch (e) {
       setError(`创建失败: ${e}`);
       setErrorGlobal(`创建失败: ${e}`);
@@ -43,13 +216,43 @@ export function WikiProjectPicker() {
     setError(null);
     try {
       const project = await openWikiProject(openPath.trim());
-      setProject(project);
+      useWikiStore.setState({
+        project,
+        fileTree: mockFileTree,
+        selectedFile: 'wiki/entities/api.md',
+        fileContent: mockFileContent,
+        graphData: mockGraphData,
+      });
     } catch (e) {
       setError(`打开失败: ${e}`);
       setErrorGlobal(`打开失败: ${e}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  // 演示模式：直接设置 mock 项目 + 填充所有模拟数据
+  const handleDemoMode = () => {
+    const demoProject: WikiProject = {
+      id: 'demo-project',
+      name: '演示项目',
+      path: '/demo/path',
+    };
+
+    // 一次性设置所有 wiki store 状态（包括 fileTree、selectedFile、fileContent、graphData）
+    useWikiStore.setState({
+      project: demoProject,
+      fileTree: mockFileTree,
+      selectedFile: 'wiki/entities/api.md',
+      fileContent: mockFileContent,
+      graphData: mockGraphData,
+    });
+
+    // 填充其他 store 的模拟数据
+    setLintItems(mockLintItems);
+    setReviewItems(mockReviewItems);
+    setActivities(mockActivities);
+    setResearchTasks(mockResearchTasks);
   };
 
   return (
@@ -77,6 +280,18 @@ export function WikiProjectPicker() {
               <div>
                 <div className="text-sm font-medium text-text">打开现有项目</div>
                 <div className="text-xs text-muted">打开已有的 wiki 项目</div>
+              </div>
+            </button>
+
+            {/* 演示模式：直接进入 mock 项目，验证视图切换 */}
+            <button
+              onClick={handleDemoMode}
+              className="flex w-full items-center gap-3 rounded-lg border-2 border-primary/30 bg-primary/5 p-4 text-left hover:bg-primary/10 transition-colors"
+            >
+              <Sparkles className="h-5 w-5 text-primary" />
+              <div>
+                <div className="text-sm font-medium text-text">演示模式</div>
+                <div className="text-xs text-muted">使用模拟数据浏览所有视图（推荐）</div>
               </div>
             </button>
           </div>
