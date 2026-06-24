@@ -1,3 +1,7 @@
+# ruff: noqa: UP006, UP007, UP035 — pydantic v1 + Python 3.8 兼容：
+# pydantic v1 resolve_annotations 用 eval() 处理 forward refs，
+# eval 在 Python 3.8 上无法解析 PEP 585 (list[X]) 和 PEP 604 (X | Y)，
+# 所以本文件保留 typing.List/Optional/Union 写法
 """新六边形 API 路由 — 调用 ChatService。
 
 本模块是 P2 末的双轨：与 legacy_routes.py 并存。
@@ -24,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -70,17 +75,17 @@ class SettingsRequest(BaseModel):
 
     model_config = {"extra": "allow"}
 
-    api_base_url: str | None = None
-    api_key: str | None = None  # noqa: S105 — 字段名占位；不存储
-    model: str | None = None
+    api_base_url: Optional[str] = None
+    api_key: Optional[str] = None  # noqa: S105 — 字段名占位；不存储
+    model: Optional[str] = None
 
 
 class SettingsResponse(BaseModel):
     """Hex 路径的 PUT /settings 响应体。"""
 
     status: str = "ok"
-    changed_fields: list[str] = []
-    data: dict | None = None  # GET 时填这里
+    changed_fields: List[str] = []
+    data: Optional[dict] = None  # GET 时填这里
 
 
 # ==================== 依赖注入 ====================
@@ -234,7 +239,7 @@ async def get_settings() -> dict | None:
 class PreferenceItem(BaseModel):
     """通用 KV /preferences/{key} 请求/响应体。"""
 
-    value: str | None = None
+    value: Optional[str] = None
     value_type: str = "string"
     category: str = "general"
 
@@ -288,14 +293,14 @@ class SessionCreate(BaseModel):
     """Hex 路径 POST /sessions 请求体。"""
 
     title: str = "新对话"
-    parent_id: str | None = None
+    parent_id: Optional[str] = None
 
 
 class SessionUpdate(BaseModel):
     """Hex 路径 PATCH /sessions/{id} 请求体(局部更新,字段均可选)。"""
 
-    title: str | None = None
-    is_pinned: bool | None = None
+    title: Optional[str] = None
+    is_pinned: Optional[bool] = None
 
 
 # ==================== 依赖注入 ====================
@@ -336,12 +341,12 @@ async def create_session(
     return full
 
 
-@router.get("/sessions", response_model=list[dict])
+@router.get("/sessions", response_model=List[dict])
 async def list_sessions(
     limit: int = 100,
     offset: int = 0,
     svc: SessionService = Depends(get_session_service),
-) -> list[dict]:
+) -> List[dict]:
     """Hex 路径 GET /sessions:分页列出(底层 storage 不支持分页,service 层切片)。"""
     return await svc.list_sessions(limit=limit, offset=offset)
 
@@ -383,12 +388,12 @@ async def delete_session(
     return {"status": "ok"}
 
 
-@router.get("/sessions/{session_id}/messages", response_model=list[dict])
+@router.get("/sessions/{session_id}/messages", response_model=List[dict])
 async def list_messages(
     session_id: str,
     limit: int = 100,
     offset: int = 0,
     svc: SessionService = Depends(get_session_service),
-) -> list[dict]:
+) -> List[dict]:
     """Hex 路径 GET /sessions/{id}/messages:列出会话消息(转 dict)。"""
     return await svc.list_messages(session_id, limit=limit, offset=offset)

@@ -1,7 +1,10 @@
+# ruff: noqa: UP006, UP007, UP035 — pydantic v1 + Python 3.8 兼容：
+# pydantic v1 resolve_annotations 用 eval() 处理 forward refs，
+# eval 在 Python 3.8 上无法解析 PEP 585 (list[X]) 和 PEP 604 (X | Y)，
+# 所以本文件保留 typing.List/Optional/Union 写法
 """
 API 路由定义
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -16,6 +19,7 @@ import json
 import logging
 import time
 import uuid
+from typing import List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -71,30 +75,41 @@ def _should_use_orchestrator(message: str) -> bool:
 
 class SessionCreate(BaseModel):
     title: str = "新对话"
-    parent_id: str | None = None
+    parent_id: Optional[str] = None
+
 
 
 class SessionUpdate(BaseModel):
-    title: str | None = None
-    is_pinned: bool | None = None
+    title: Optional[str] = None
+
+    is_pinned: Optional[bool] = None
+
 
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    api_key: str | None = None
-    api_url: str | None = None
-    model: str | None = None
-    max_context: int | None = None
-    temperature: float | None = None
+    api_key: Optional[str] = None
+
+    api_url: Optional[str] = None
+
+    model: Optional[str] = None
+
+    max_context: Optional[int] = None
+
+    temperature: Optional[float] = None
+
     # 透传字段:provider 让后端不再硬写,reasoning_effort/thinking_budget
     # 让上游 LLM 启用 thinking 输出(provider 决定哪种 key 会被接受)
     # - provider: openai / claude / gemini / deepseek / ollama / custom
     # - reasoning_effort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
     # - thinking_budget: Gemini 2.5 OpenAI 兼容模式
-    provider: str | None = None
-    reasoning_effort: str | None = None
-    thinking_budget: int | None = None
+    provider: Optional[str] = None
+
+    reasoning_effort: Optional[str] = None
+
+    thinking_budget: Optional[int] = None
+
 
 
 class MessageResponse(BaseModel):
@@ -103,8 +118,10 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: int
-    model: str | None = None
-    tool_calls: str | None = None
+    model: Optional[str] = None
+
+    tool_calls: Optional[str] = None
+
 
 
 class ChatErrorInfo(BaseModel):
@@ -115,16 +132,21 @@ class ChatErrorInfo(BaseModel):
 
     type: str
     message: str
-    status_code: int | None = None
-    retry_after: int | None = None
+    status_code: Optional[int] = None
+
+    retry_after: Optional[int] = None
+
 
 
 class ChatResponse(BaseModel):
     """聊天响应：成功时含 message+session，失败时含 error+null message。"""
 
-    message: MessageResponse | None = None
-    session: dict | None = None
-    error: ChatErrorInfo | None = None
+    message: Optional[MessageResponse] = None
+
+    session: Optional[dict] = None
+
+    error: Optional[ChatErrorInfo] = None
+
 
 
 class TriggerEvolutionRequest(BaseModel):
@@ -139,15 +161,21 @@ class EvolutionLogResponse(BaseModel):
     id: str
     evolution_type: str
     description: str
-    before_state: str | None = None
-    after_state: str | None = None
+    before_state: Optional[str] = None
+
+    after_state: Optional[str] = None
+
     trigger_type: str
-    trigger_condition: str | None = None
+    trigger_condition: Optional[str] = None
+
     status: str
-    error_message: str | None = None
-    tokens_used: int | None = None
+    error_message: Optional[str] = None
+
+    tokens_used: Optional[int] = None
+
     created_at: int
-    completed_at: int | None = None
+    completed_at: Optional[int] = None
+
 
 
 class EvolutionStatusResponse(BaseModel):
@@ -155,8 +183,10 @@ class EvolutionStatusResponse(BaseModel):
 
     name: str
     schedule: str
-    last_run: str | None = None
-    next_run: str | None = None
+    last_run: Optional[str] = None
+
+    next_run: Optional[str] = None
+
     running: bool
 
 
@@ -176,7 +206,7 @@ class AgentToggle(BaseModel):
 
     注: 用 ``StrictBool`` 而非 ``bool`` — Pydantic v2 默认 lax 模式会把
     "yes"/"1"/1 等强转 True, 在 API 边界宁可 422 也不要静默转换。前端
-    TypeScript 永远传真 bool, 严格模式不会误伤。
+    Type[Script 永远传真 bool, 严格模式不会误伤。
     """
 
     enabled: StrictBool
@@ -193,15 +223,24 @@ class AgentUpdate(BaseModel):
     # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
     model_config = {"protected_namespaces": ()}
 
-    name: str | None = None
-    role: str | None = None  # 校验放在路由层 (依赖 Pydantic Literal 不直观)
-    system_prompt: str | None = None
-    tools: list[str] | None = None
-    memory_access: list[str] | None = None
-    model_config_data: dict | None = None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
-    max_iterations: int | None = None  # 路由层校验 1..50
-    enabled: bool | None = None
-    description: str | None = None
+    name: Optional[str] = None
+
+    role: Union[str, None] = None  # 校验放在路由层 (依赖 Pydantic Literal 不直观)
+
+    system_prompt: Optional[str] = None
+
+    tools: Optional[List[str]] = None
+
+    memory_access: Optional[List[str]] = None
+
+    model_config_data: Union[dict, None] = None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
+
+    max_iterations: Optional[int] = None  # 路由层校验 1..50
+
+    enabled: Optional[bool] = None
+
+    description: Optional[str] = None
+
 
 
 # ==================== 依赖注入 ====================
@@ -225,7 +264,7 @@ async def create_session(data: SessionCreate, repo: SessionRepository = Depends(
     return session.to_dict()
 
 
-@router.get("/sessions", response_model=list[dict])
+@router.get("/sessions", response_model=List[dict])
 async def list_sessions(
     limit: int = 100, offset: int = 0, repo: SessionRepository = Depends(get_session_repo)
 ):
@@ -423,7 +462,7 @@ async def toggle_agent(agent_id: str, data: AgentToggle):
 
 # 进程内单例: adapter 自身带 enabled / usage_count 内存状态,
 # 模块级 cache 让多个请求共享同一份,避免 toggle 后状态错位。
-_skill_adapter_singleton: object | None = None
+_skill_adapter_singleton: Optional[object] = None
 
 
 def _get_skill_adapter():
@@ -536,7 +575,7 @@ class SkillCommandRequest(BaseModel):
     """
 
     command: str
-    args: list[str] = []
+    args: List[str] = []
 
 
 @router.post("/skills/command")
@@ -595,28 +634,32 @@ class LegacySettingsRequest(BaseModel):
 
     model_config = _ConfigDict(extra="allow")
 
-    api_base_url: str | None = None
-    api_key: str | None = None  # noqa: S105
-    model: str | None = None
+    api_base_url: Optional[str] = None
+
+    api_key: Optional[str] = None  # noqa: S105
+
+    model: Optional[str] = None
+
 
 
 class LegacySettingsResponse(BaseModel):
     """PUT /settings 响应体。"""
 
     status: str = "ok"
-    changed_fields: list[str] = []
+    changed_fields: List[str] = []
 
 
 class LegacyPreferenceItem(BaseModel):
     """GET/PUT /preferences/{key} 请求/响应体。"""
 
-    value: str | None = None
+    value: Optional[str] = None
+
     value_type: str = "string"
     category: str = "general"
 
 
 @router.get("/settings")
-async def legacy_get_settings() -> dict | None:
+async def legacy_get_settings() -> Optional[dict]:
     """读取持久化的 settings；不存在返回 null。"""
     from backend.data.settings_repo import SettingsRepository
 
@@ -876,8 +919,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
-            done_content: str | None = None
-            done_reasoning: str | None = None
+            done_content: Optional[str] = None
+
+            done_reasoning: Optional[str] = None
+
             async for evt in agent.run_loop(messages, llm_config=llm_config):
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
                 # 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls,
@@ -1022,7 +1067,7 @@ async def interrupt(agent: SageAgent = Depends(get_agent)):
 # ==================== 消息 API ====================
 
 
-@router.get("/sessions/{session_id}/messages", response_model=list[dict])
+@router.get("/sessions/{session_id}/messages", response_model=List[dict])
 async def get_messages(session_id: str, limit: int = 100, offset: int = 0):
     """获取会话消息"""
     repo = MessageRepository()
@@ -1033,7 +1078,7 @@ async def get_messages(session_id: str, limit: int = 100, offset: int = 0):
 # ==================== 进化系统 API ====================
 
 
-@router.get("/evolution/logs", response_model=list[EvolutionLogResponse])
+@router.get("/evolution/logs", response_model=List[EvolutionLogResponse])
 async def list_evolution_logs(limit: int = 50, offset: int = 0):
     """获取进化日志列表"""
     try:
@@ -1067,7 +1112,7 @@ async def trigger_evolution(data: TriggerEvolutionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/evolution/status", response_model=list[EvolutionStatusResponse])
+@router.get("/evolution/status", response_model=List[EvolutionStatusResponse])
 async def get_evolution_status():
     """获取进化任务状态"""
     try:
@@ -1084,7 +1129,8 @@ async def get_evolution_status():
 
 class MemorySearchRequest(BaseModel):
     query: str
-    memory_type: str | None = None
+    memory_type: Optional[str] = None
+
     limit: int = 20
 
 
@@ -1092,7 +1138,7 @@ class MemorySaveRequest(BaseModel):
     content: str
     memory_type: str = "episodic"
     importance: int = 5
-    tags: list[str] = []
+    tags: List[str] = []
 
 
 class MemoryDeleteRequest(BaseModel):
@@ -1100,7 +1146,7 @@ class MemoryDeleteRequest(BaseModel):
 
 
 @router.get("/memory/search")
-async def search_memory(query: str, limit: int = 20, type: str | None = None):
+async def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
     """搜索记忆"""
     try:
         mm = get_memory_manager()
@@ -1142,7 +1188,7 @@ async def delete_memory(data: MemoryDeleteRequest):
 
 
 @router.get("/memory/list")
-async def list_memories(page: int = 1, page_size: int = 20, type: str | None = None):
+async def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] = None):
     """获取记忆列表"""
     try:
         mm = get_memory_manager()
