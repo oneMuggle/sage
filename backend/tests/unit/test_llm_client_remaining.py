@@ -30,12 +30,21 @@ pytestmark = pytest.mark.unit
 
 
 def _make_config(**overrides) -> LLMConfig:
-    """构造测试用 LLMConfig（与 P0 mock fixture 的 base_url 对齐）。"""
+    """构造测试用 LLMConfig（与 P0 mock fixture 的 base_url 对齐）。
+
+    v2: 默认 ``use_proxy=False``,让 LLMClient 直连上游,respx 直接拦截上游调用。
+    这样 fixture 不需要知道 proxy URL 是什么,保持简洁。proxy 行为有单独测试覆盖。
+
+    base_url 不带 ``/v1`` 是因为 v2 改造后 LLMClient 路径已变为
+    ``/v1/chat/completions``(因为它现在默认走 proxy,在 proxy URL 上拼这个路径;
+    use_proxy=False 模式下路径仍是 ``/v1/chat/completions``)。
+    """
     defaults = {
         "provider": "openai",
         "api_key": "test-key",
-        "base_url": "https://api.example.com/v1",
+        "base_url": "https://api.example.com",
         "model": "gpt-3.5-turbo",
+        "use_proxy": False,
     }
     defaults.update(overrides)
     return LLMConfig(**defaults)
@@ -564,5 +573,101 @@ def test_to_dict_exports_config_subset():
         "temperature": 0.3,
         "max_tokens": 2048,
     }
-    # 不应包含 api_key
-    assert "api_key" not in d
+
+
+# ============================================================================
+# v2: LLM proxy 行为
+# ============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_proxy_default_routes_through_backend():
+    """v2: 默认 ``use_proxy=True`` 时,_get_client 把请求发到本机 backend proxy,
+    并把 base_url(用户填的真实上游)放在 ``X-LLM-Provider-Url`` header。
+    """
+    config = LLMConfig(
+        base_url="https://api.minimaxi.com/",
+        api_key="sk-test",
+        model="minimax-m3",
+        # 不传 use_proxy → 默认 True
+    )
+    captured: dict = {}
+
+    def fake_init(self, *args, **kwargs):
+        """拦截 httpx.AsyncClient.__init__ 抓取 base_url 和 headers。"""
+        captured["base_url"] = kwargs.get("base_url") or (
+            args[0] if args else None
+        )
+        captured["init_headers"] = dict(kwargs.get("headers", {}))
+
+        # 阻止真实网络:抛错让测试快速失败(下面还会再 patch post)
+        raise RuntimeError("STOP_AT_INIT")
+
+    from unittest.mock import patch
+
+    with patch.object(httpx.AsyncClient, "__init__", new=fake_init):
+        client = LLMClient(config)
+        with pytest.raises(RuntimeError, match="STOP_AT_INIT"):
+            await client.chat([{"role": "user", "content": "hi"}])
+
+    # httpx base_url 指向本机 proxy
+    assert captured["base_url"] == "http://127.0.0.1:8765/api/v1/llm"
+    # 真实上游 URL 应在 X-LLM-Provider-Url header
+    assert captured["init_headers"]["X-LLM-Provider-Url"] == "https://api.minimaxi.com/"
+    # 鉴权仍透传
+    assert captured["init_headers"]["Authorization"] == "Bearer sk-test"
+
+
+@pytest.mark.asyncio()
+async def test_use_proxy_false_bypasses_proxy():
+    """v2: ``use_proxy=False`` 时,LLMClient 直连 base_url(单测场景),不走 proxy,
+    也不发 X-LLM-Provider-Url header。"""
+    import os
+
+    os.environ.pop("BACKEND_URL", None)
+    config = LLMConfig(
+        base_url="https://api.example.com/",
+        api_key="test-key",
+        use_proxy=False,
+    )
+    captured: dict = {}
+
+    def fake_init(self, *args, **kwargs):
+        captured["base_url"] = kwargs.get("base_url") or (
+            args[0] if args else None
+        )
+        captured["init_headers"] = dict(kwargs.get("headers", {}))
+        raise RuntimeError("STOP_AT_INIT")
+
+    from unittest.mock import patch
+
+    with patch.object(httpx.AsyncClient, "__init__", new=fake_init):
+        client = LLMClient(config)
+        with pytest.raises(RuntimeError, match="STOP_AT_INIT"):
+            await client.chat([{"role": "user", "content": "hi"}])
+
+    # 直连上游,base_url 应该是用户填的真实 URL
+    assert captured["base_url"] == "https://api.example.com/"
+    # 不应发 X-LLM-Provider-Url(因为没走 proxy)
+    assert "X-LLM-Provider-Url" not in captured["init_headers"]
+    # 鉴权仍透传
+    assert captured["init_headers"]["Authorization"] == "Bearer test-key"
+
+
+@pytest.mark.asyncio()
+async def test_backend_url_from_env():
+    """v2: backend_url 默认从 ``BACKEND_URL`` 环境变量读取。"""
+    import os
+
+    os.environ["BACKEND_URL"] = "http://192.168.1.10:9999"
+    try:
+        config = LLMConfig(base_url="https://api.example.com/")
+        assert config.backend_url == "http://192.168.1.10:9999"
+    finally:
+        del os.environ["BACKEND_URL"]
+
+
+def test_use_proxy_default_true():
+    """v2: use_proxy 默认 True(LLMClient 走 proxy 是默认行为)。"""
+    config = LLMConfig()
+    assert config.use_proxy is True

@@ -24,16 +24,21 @@ from __future__ import annotations
 
 import logging
 import posixpath
+from collections.abc import AsyncIterator
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 # 透传请求 / 响应头时需过滤的 hop-by-hop 头(RFC 7230 §6.1)
+# 额外过滤 content-encoding: 即使 proxy 向上游发 Accept-Encoding: identity,
+# 某些上游仍可能返回 Content-Encoding: gzip。如果不把这个 header 过滤掉,
+# httpx 客户端会尝试解压响应,导致 zlib.error: Error -3 while decompressing data。
 HOP_BY_HOP_HEADERS: frozenset[str] = frozenset(
     {
         "host",
@@ -46,6 +51,7 @@ HOP_BY_HOP_HEADERS: frozenset[str] = frozenset(
         "transfer-encoding",
         "upgrade",
         "content-length",
+        "content-encoding",  # v2: 防止 httpx 尝试解压已处理的响应
     }
 )
 
@@ -172,19 +178,43 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
         await request.body() if request.method in {"POST", "PUT", "PATCH"} else None
     )
 
+    # v2: 检测是否是 SSE/streaming 请求 — `LLMClient.chat_stream` 现在也走 proxy,
+    # 需要把上游 chunked 响应原样回传给浏览器/调用方,不能一次性 read body。
+    # 触发条件(任一):
+    #   1. Accept 头含 text/event-stream (SSE 标准)
+    #   2. query string `stream=true` (OpenAI 流式 chat completion 约定)
+    accept = request.headers.get("accept", "")
+    is_streaming = (
+        "text/event-stream" in accept.lower()
+        or request.query_params.get("stream") == "true"
+    )
+
     # 5. 代理请求
     logger.info(
-        "llm_proxy: %s %s -> %s",
+        f"[DEBUG] llm_proxy: {request.method} {request.url.path} -> {upstream_url}"
+        f"{'' if not is_streaming else ' (streaming)'}"
+        f", headers: X-LLM-Provider-Url={provider_url}, Accept-Encoding={request.headers.get('accept-encoding', 'not set')}"
+    )
+    logger.info(
+        "llm_proxy: %s %s -> %s%s",
         request.method,
         request.url.path,
         _safe_url_for_log(upstream_url),
+        " (streaming)" if is_streaming else "",
     )
+
+    if is_streaming:
+        return await _proxy_streaming(upstream_url, request.method, fwd_headers, body)
+
+    # 非流式路径：也需要强制 Accept-Encoding: identity，避免上游返回压缩响应
+    # 导致 httpx 自动解压时出错（Error -3 while decompressing data: incorrect header check）
+    non_streaming_headers = {**fwd_headers, "Accept-Encoding": "identity"}
     async with httpx.AsyncClient(timeout=httpx.Timeout(PROXY_TIMEOUT_SECONDS)) as client:
         try:
             upstream_resp = await client.request(
                 method=request.method,
                 url=upstream_url,
-                headers=fwd_headers,
+                headers=non_streaming_headers,
                 content=body,
             )
         except httpx.TimeoutException as exc:
@@ -231,3 +261,112 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
         status_code=upstream_resp.status_code,
         headers=resp_headers,
     )
+
+
+async def _proxy_streaming(
+    upstream_url: str,
+    method: str,
+    fwd_headers: dict[str, str],
+    body: bytes | None,
+) -> StreamingResponse:
+    """v2: SSE/chunked 流式透传。
+
+    与非流式分支不同,这里用 ``httpx.AsyncClient.stream()`` 拿到 response 后,
+    立刻起一个 async generator 逐 chunk 读 + 逐 chunk yield 给 FastAPI。
+    这样上游 chunked 响应能即时回传给调用方,而不是等整条响应读完才返回。
+
+    错误模型保持与非流式一致(超时/连接错误 → 504/502),但因为响应头已发出,
+    一旦开始 yield 就不能再改 status code,所以错误处理采用"在第一个 chunk
+    之前抛 HTTPException"的策略。如果上游在第一个 chunk 后断开,客户端会看到
+    截断的流(由调用方决定如何处理)。
+
+    Args:
+        upstream_url: 完整的上游 URL(已包含路径 + 查询串)。
+        method: HTTP 方法(POST/GET 等)。
+        fwd_headers: 已过滤 hop-by-hop 的转发头。
+        body: POST/PUT/PATCH 的 request body;GET/DELETE 为 None。
+    """
+    # 上游先建流,确认状态码 + 头信息可用,再交给 generator yield。
+    # 若上游一上来就 4xx/5xx,直接抛对应 HTTPException 让 FastAPI 序列化 detail。
+    #
+    # Accept-Encoding: identity — httpx 默认会加 ``Accept-Encoding: gzip, deflate``,
+    # 但 SSE 流式响应的 gzip 压缩会让 chunk 边界破坏(a line 可能跨 gzip block),
+    # httpx aiter_bytes 自动解压时会抛 ``zlib.error: Error -3 ... incorrect
+    # header check``(实测:minimaxi 在某些代理下会响应压缩)。显式 identity 让上游
+    # 返回未压缩字节流,SSE 解析才能稳。
+    async with httpx.AsyncClient(timeout=httpx.Timeout(PROXY_TIMEOUT_SECONDS)) as client:
+        try:
+            # 强制 Accept-Encoding: identity — 流式场景下上游的 gzip/deflate
+            # 会让 chunk 边界破坏(httpx 的 aiter_lines 在解压时抛
+            # ``zlib.error: Error -3 ... incorrect header check``)。
+            # 显式 identity 让上游返回未压缩字节流,SSE 解析才稳。
+            # 注意:不能仅在 client 默认头上设 identity,因为 fwd_headers 会覆盖;
+            # 必须在每个请求的 headers 里显式覆盖。
+            req_headers = {**fwd_headers, "Accept-Encoding": "identity"}
+            req_ctx = client.stream(
+                method=method,
+                url=upstream_url,
+                headers=req_headers,
+                content=body,
+            )
+            upstream_resp = await req_ctx.__aenter__()
+        except httpx.TimeoutException as exc:
+            raise HTTPException(
+                status_code=504,
+                detail={
+                    "type": "upstream_timeout",
+                    "message": f"Upstream timeout after {PROXY_TIMEOUT_SECONDS}s: {exc!s}",
+                },
+            ) from exc
+        except httpx.ConnectError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "type": "upstream_unreachable",
+                    "message": f"Cannot connect to upstream: {exc!s}",
+                },
+            ) from exc
+        except httpx.TransportError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "type": "upstream_transport_error",
+                    "message": f"Upstream transport error: {exc!s}",
+                },
+            ) from exc
+
+        if not upstream_resp.is_success:
+            # 上游 4xx/5xx:还没 yield 任何 chunk,可以直接抛 HTTPException 把
+            # 错误体交给 FastAPI(调用方拿到的还是 JSON,不是 SSE)。
+            # 透传上游状态码 + body,detail 字段保持非流式分支一致。
+            text = (await upstream_resp.aread()).decode("utf-8", errors="replace")
+            await req_ctx.__aexit__(None, None, None)
+            raise HTTPException(
+                status_code=upstream_resp.status_code,
+                detail={
+                    "type": "upstream_error",
+                    "message": f"Upstream returned {upstream_resp.status_code}: {text[:200]}",
+                },
+            )
+
+        # 上游 2xx:流式转发
+        resp_headers = _filter_response_headers(upstream_resp.headers)
+
+        async def stream_iter() -> AsyncIterator[bytes]:
+            try:
+                # 用 aiter_raw 而不是 aiter_bytes:后者在 Content-Encoding: gzip
+                # 时会自动解压,但 SSE 流边界和 gzip block 边界通常不一致,
+                # 会破坏 ``data: {...}\\n\\n`` 行的完整性,导致下游解析失败。
+                # aiter_raw 透传原始字节,把解压责任交给调用方(httpx 客户端)。
+                async for chunk in upstream_resp.aiter_raw():
+                    yield chunk
+            finally:
+                # generator 退出(客户端断开 / 自然结束 / 异常)都关掉上游流,
+                # 释放 httpx 连接 — 避免 leak。
+                await req_ctx.__aexit__(None, None, None)
+
+        return StreamingResponse(
+            stream_iter(),
+            status_code=upstream_resp.status_code,
+            headers=resp_headers,
+        )

@@ -41,6 +41,7 @@ def test_constructor_passes_kwargs_to_llmconfig():
             provider="openai",
             api_key="sk-test",
             base_url="https://api.example.com/v1",
+            use_proxy=False,
             model="gpt-4o-mini",
             temperature=0.2,
         )
@@ -61,7 +62,7 @@ def test_constructor_uses_llmconfig_defaults_when_kwargs_minimal():
     """只提供 base_url 时, 其他字段取 ``LLMConfig`` 默认值。"""
     with patch("backend.adapters.out.llm.httpx_adapter._LLMClient") as MockClient:
         MockClient.return_value = MagicMock()
-        HttpxLLMAdapter(base_url="https://api.example.com/v1")
+        HttpxLLMAdapter(base_url="https://api.example.com/v1", use_proxy=False)
     config = MockClient.call_args.args[0]
     assert config.provider == "openai"  # LLMConfig 默认
     assert config.model == "gpt-3.5-turbo"  # LLMConfig 默认
@@ -211,6 +212,8 @@ def _build_adapter_with_mocked_client() -> tuple[HttpxLLMAdapter, AsyncMock]:
         MockClient.return_value = MagicMock()
         adapter = HttpxLLMAdapter(
             base_url="https://api.example.com/v1",
+
+            use_proxy=False,
             api_key="test",
         )
     chat_mock = AsyncMock(return_value=LLMResponse(content="hi back", model="m"))
@@ -298,9 +301,12 @@ async def test_chat_converts_response_with_tool_calls_to_domain():
 async def test_chat_via_real_mock_fixture_returns_domain_message(mock_llm_ok):
     """端到端：使用 P0 的 ``mock_llm_ok`` 走完真实 HTTP mock 路径, 拿到 ``domain.Message``。"""
     adapter = HttpxLLMAdapter(
-        base_url="https://api.example.com/v1",
+        # v2: base_url 不带 /v1,因为 LLMClient 现在路径是 /v1/chat/completions
+        base_url="https://api.example.com",
         api_key="test-key",
         model="gpt-3.5-turbo",
+        # v2: mock fixture mock 上游 URL,不走 proxy
+        use_proxy=False,
     )
     reply = await adapter.chat([Message(role=Role.USER, content="hi")])
     assert reply.role == Role.ASSISTANT
@@ -319,6 +325,7 @@ async def test_chat_stream_yields_chunks_from_underlying_client():
     """``chat_stream`` 透传底层 async generator 的 chunk。"""
     adapter = HttpxLLMAdapter(
         base_url="https://api.example.com/v1",
+
         api_key="test-key",
     )
 
@@ -341,6 +348,7 @@ async def test_chat_stream_converts_domain_messages_to_dicts():
     """``chat_stream`` 把 domain 消息转为 dict 再传给 LLMClient。"""
     adapter = HttpxLLMAdapter(
         base_url="https://api.example.com/v1",
+
         api_key="test-key",
     )
 
@@ -385,6 +393,7 @@ async def test_chat_stream_via_real_mock_fixture_yields_chunks():
     """端到端：用 P0 mock fixture + httpx ``stream`` mock 走完 stream 路径。"""
     adapter = HttpxLLMAdapter(
         base_url="https://api.example.com/v1",
+
         api_key="test-key",
     )
 
@@ -430,6 +439,7 @@ async def test_aclose_delegates_to_underlying_llmclient():
     """``aclose`` 调用 ``LLMClient.close``。"""
     adapter = HttpxLLMAdapter(
         base_url="https://api.example.com/v1",
+
         api_key="test-key",
     )
     adapter._client.close = AsyncMock()  # type: ignore[method-assign]
@@ -448,6 +458,8 @@ def test_adapter_exposes_chat_and_chat_stream_methods():
         MockClient.return_value = MagicMock()
         adapter = HttpxLLMAdapter(
             base_url="https://api.example.com/v1",
+
+            use_proxy=False,
             api_key="test",
         )
     assert hasattr(adapter, "chat")

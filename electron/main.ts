@@ -107,9 +107,16 @@ function spawnBackend(): ChildProcess {
       : null;
 
   // Resolve SAGE_DB_PATH once so both packaged and dev spawn paths share it.
-  // Backend prefers this env var; falls back to a per-user writable location
-  // (Electron's userData dir) so dev + packaged write to the same DB.
-  const sageDbPath = process.env.SAGE_DB_PATH ?? join(app.getPath('userData'), 'sage.db');
+  // Backend prefers this env var; falls back to:
+  //   - Dev (running from repo): <repo>/data/sage.db (project-local DB so
+  //     developers see their existing session history during `npm run electron:dev`).
+  //   - Packaged app: userData/sage.db (per-user writable location).
+  // SAGE_DB_PATH env var always wins (for CI / override scenarios).
+  const sageDbPath =
+    process.env.SAGE_DB_PATH ??
+    (app.isPackaged
+      ? join(app.getPath('userData'), 'sage.db')
+      : join(process.cwd(), 'data', 'sage.db'));
 
   let proc: ChildProcess;
   if (pyLauncher) {

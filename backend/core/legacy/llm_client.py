@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from collections.abc import AsyncGenerator
@@ -85,6 +86,18 @@ class LLMConfig:
     reasoning_effort: str | None = None  # OpenAI o1/o3/5: "low" | "medium" | "high"
     thinking_budget: int | None = None  # Gemini 2.5: 思考 token 上限,0 关闭,-1 动态
     extra_headers: dict[str, str] = field(default_factory=dict)
+    # === v2: LLM proxy 路由 ===
+    # 为统一「测试连接」与「chat」两条路径的 baseUrl 解析规则（避免 baseUrl 是否
+    # 包含 `/v1` 后缀的二义性），所有 LLM HTTP 调用现在走本机 FastAPI 上的
+    # `/api/v1/llm/*` 反向代理。`base_url` 仍然是用户填的真实上游 URL（用于
+    # 构造 `X-LLM-Provider-Url` header），`backend_url` 是本机后端地址（默认
+    # 从环境变量 `BACKEND_URL` 读取，否则 `http://127.0.0.1:8765`）。
+    # 当 `use_proxy=False` 时，绕过 proxy 直连上游 — 仅用于单测（respx mock
+    # 直接拦截上游调用，简化 fixture）。
+    backend_url: str = field(
+        default_factory=lambda: os.environ.get("BACKEND_URL", "http://127.0.0.1:8765")
+    )
+    use_proxy: bool = True
 
 
 class LLMClient:
@@ -106,17 +119,28 @@ class LLMClient:
         self._client: httpx.AsyncClient | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
-        """获取或创建 HTTP 客户端"""
+        """获取或创建 HTTP 客户端
+
+        v2: 默认走本机 LLM proxy (`<backend_url>/api/v1/llm`),把真实上游 URL
+        通过 `X-LLM-Provider-Url` header 注入,与前端"测试连接"走同一通路。
+        单测场景下 `LLMConfig(use_proxy=False)` 切回直连上游,保持 fixture 简洁。
+        """
         if self._client is None or self._client.is_closed:
-            headers = {
-                "Content-Type": "application/json",
-            }
+            headers: dict[str, str] = {"Content-Type": "application/json"}
+
+            if self.config.use_proxy:
+                backend = (self.config.backend_url or "http://127.0.0.1:8765").rstrip("/")
+                client_base_url = f"{backend}/api/v1/llm"
+                headers["X-LLM-Provider-Url"] = self.config.base_url
+            else:
+                client_base_url = self.config.base_url
+
             if self.config.api_key:
                 headers["Authorization"] = f"Bearer {self.config.api_key}"
             headers.update(self.config.extra_headers)
 
             self._client = httpx.AsyncClient(
-                base_url=self.config.base_url,
+                base_url=client_base_url,
                 headers=headers,
                 timeout=httpx.Timeout(self.config.timeout),
             )
@@ -226,7 +250,7 @@ class LLMClient:
         start_time = time.time()
 
         try:
-            response = await client.post("/chat/completions", json=body)
+            response = await client.post("/v1/chat/completions", json=body)
             response.raise_for_status()
             data = response.json()
         except httpx.TimeoutException as e:
@@ -335,7 +359,7 @@ class LLMClient:
             body["thinking_budget"] = self.config.thinking_budget
 
         try:
-            async with client.stream("POST", "/chat/completions", json=body) as response:
+            async with client.stream("POST", "/v1/chat/completions", json=body) as response:
                 response.raise_for_status()
 
                 async for line in response.aiter_lines():
