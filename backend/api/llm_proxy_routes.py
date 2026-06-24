@@ -185,7 +185,8 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
     #   2. query string `stream=true` (OpenAI 流式 chat completion 约定)
     accept = request.headers.get("accept", "")
     is_streaming = (
-        "text/event-stream" in accept.lower() or request.query_params.get("stream") == "true"
+        "text/event-stream" in accept.lower()
+        or request.query_params.get("stream") == "true"
     )
 
     # 5. 代理请求
