@@ -68,7 +68,7 @@ async def test_chat_forwards_reasoning_effort_to_request_body():
     with respx.mock(
         base_url="https://generativelanguage.googleapis.com", assert_all_called=False
     ) as mock:
-        route = mock.post("/v1beta/openai/chat/completions").mock(
+        route = mock.post("/v1beta/openai/v1/chat/completions").mock(
             return_value=Response(
                 200,
                 json={
@@ -97,7 +97,7 @@ async def test_chat_forwards_thinking_budget_to_request_body():
     with respx.mock(
         base_url="https://generativelanguage.googleapis.com", assert_all_called=False
     ) as mock:
-        route = mock.post("/v1beta/openai/chat/completions").mock(
+        route = mock.post("/v1beta/openai/v1/chat/completions").mock(
             return_value=Response(
                 200,
                 json={
@@ -125,7 +125,7 @@ async def test_chat_does_not_inject_reasoning_params_when_none():
     with respx.mock(
         base_url="https://generativelanguage.googleapis.com", assert_all_called=False
     ) as mock:
-        route = mock.post("/v1beta/openai/chat/completions").mock(
+        route = mock.post("/v1beta/openai/v1/chat/completions").mock(
             return_value=Response(
                 200,
                 json={
@@ -153,7 +153,7 @@ async def test_chat_can_send_both_params_simultaneously():
     with respx.mock(
         base_url="https://generativelanguage.googleapis.com", assert_all_called=False
     ) as mock:
-        route = mock.post("/v1beta/openai/chat/completions").mock(
+        route = mock.post("/v1beta/openai/v1/chat/completions").mock(
             return_value=Response(
                 200,
                 json={
@@ -184,7 +184,7 @@ async def test_chat_can_send_both_params_simultaneously():
 async def test_chat_stream_forwards_reasoning_params_to_request_body():
     """chat_stream() 同样把 reasoning_effort/thinking_budget 写进 body。"""
     with respx.mock(base_url="https://api.deepseek.com", assert_all_called=False) as mock:
-        route = mock.post("/v1/chat/completions").mock(
+        route = mock.post("/v1/v1/chat/completions").mock(
             return_value=Response(
                 200,
                 content=b'data: {"id":"x","choices":[{"index":0,"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n',
