@@ -146,7 +146,16 @@ export const chatApi = {
         }
         if (payload.state === 'done' || payload.state === 'failed') {
           if (payload.state === 'failed' && payload.error && handlers.onError) {
-            handlers.onError(new Error(payload.error));
+            // payload.error 可能是后端 LLMError.to_dict() 返回的 dict
+            // (含 type/message/status_code),不能直接 new Error(dict)
+            // (那会让 message 变成 "[object Object]")。
+            // 提取 message 字符串,fallback 到 JSON.stringify 兜底。
+            const errPayload = payload.error;
+            const errMsg =
+              typeof errPayload === 'string'
+                ? errPayload
+                : ((errPayload as { message?: string }).message ?? JSON.stringify(errPayload));
+            handlers.onError(new Error(errMsg));
           }
           finishOnce(() => handlers.onDone?.());
         }

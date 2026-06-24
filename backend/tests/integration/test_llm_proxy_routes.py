@@ -282,3 +282,135 @@ async def test_nested_path_normalized(client):
     assert route.called
     # normpath 之后应是 /v1/models
     assert route.calls[0].request.url.path == "/v1/models"
+
+
+# ============================================================================
+# v2: SSE 流式透传
+# ============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_streaming_detected_by_accept_header_routes_to_streaming(client):
+    """v2: ``Accept: text/event-stream`` 应触发流式分支,proxy 走 httpx.stream().
+
+    由于 respx mock 上游返回的是一次性 Response 而不是真正的 stream,
+    这里只验证 proxy 不抛错 + 调用了上游 + 把响应字节级透传(此时上游
+    Response 一次性读完,StreamingResponse 也是一次性 yield 整段内容)。
+    """
+    sent_body = {
+        "model": "llama3",
+        "messages": [{"role": "user", "content": "Hi"}],
+        "stream": True,
+    }
+    chunks = b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n'
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                200,
+                content=chunks,
+                headers={"content-type": "text/event-stream"},
+            )
+        )
+        resp = await client.post(
+            f"{PROXY_BASE}/v1/chat/completions",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "Accept": "text/event-stream",
+                "Content-Type": "application/json",
+            },
+            content=json.dumps(sent_body).encode(),
+        )
+
+    assert resp.status_code == 200
+    assert route.called
+    # 字节级透传(因为上游一次性返回,StreamingResponse 也是一次性 yield)
+    assert resp.content == chunks
+
+
+@pytest.mark.asyncio()
+async def test_streaming_detected_by_query_param_routes_to_streaming(client):
+    """v2: query string ``?stream=true`` 应触发流式分支(OpenAI 流式约定)."""
+    sent_body = {
+        "model": "llama3",
+        "messages": [{"role": "user", "content": "Hi"}],
+        "stream": True,
+    }
+    chunks = b'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n'
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                200,
+                content=chunks,
+                headers={"content-type": "application/json"},
+            )
+        )
+        resp = await client.post(
+            f"{PROXY_BASE}/v1/chat/completions?stream=true",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "Content-Type": "application/json",
+            },
+            content=json.dumps(sent_body).encode(),
+        )
+
+    assert resp.status_code == 200
+    assert route.called
+    assert resp.content == chunks
+
+
+@pytest.mark.asyncio()
+async def test_streaming_upstream_error_returns_status_code(client):
+    """v2: 流式分支遇到上游 4xx/5xx,应在 yield 任何 chunk 之前抛 HTTPException,
+    让调用方拿到正确的 status code(不是 200)。"""
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                401,
+                content=b'{"error":{"message":"Invalid API key"}}',
+                headers={"content-type": "application/json"},
+            )
+        )
+        resp = await client.post(
+            f"{PROXY_BASE}/v1/chat/completions",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "Accept": "text/event-stream",
+                "Content-Type": "application/json",
+            },
+            content=b'{"model":"x","messages":[],"stream":true}',
+        )
+
+    assert resp.status_code == 401
+    detail = resp.json()["detail"]
+    assert detail["type"] == "upstream_error"
+    assert "401" in detail["message"]
+
+
+@pytest.mark.asyncio()
+async def test_non_streaming_path_unchanged(client):
+    """回归门禁: 非流式请求(Accept: application/json, 无 stream=true)
+    仍然走原有非流式分支 — 不会被误判成 streaming。
+    """
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                200,
+                json={
+                    "id": "x",
+                    "choices": [{"message": {"role": "assistant", "content": "Hi"}}],
+                },
+            )
+        )
+        resp = await client.post(
+            f"{PROXY_BASE}/v1/chat/completions",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            content=b'{"model":"x","messages":[{"role":"user","content":"hi"}]}',
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["choices"][0]["message"]["content"] == "Hi"
+    assert route.called

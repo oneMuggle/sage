@@ -668,11 +668,22 @@ async def legacy_get_settings() -> Optional[dict]:
 
 @router.put("/settings", response_model=LegacySettingsResponse)
 async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse:
-    """持久化 settings 到 preferences 表。"""
+    """持久化 settings 到 preferences 表。
+
+    v3.1 修复：合并而非覆盖。
+    LegacySettingsRequest 只有 api_base_url/api_key/model 三个字段，
+    如果直接替换，会丢失 endpoints、model_selections 等其他数据。
+    修复策略：先读现有 settings，再把请求字段 merge 进去。
+    """
     from backend.data.settings_repo import SettingsRepository
 
+    repo = SettingsRepository()
+    # 先读现有 settings
+    existing = repo.get_json("app_settings") or {}
+    # 合并请求字段（排除 None）
     payload = req.model_dump(exclude_none=True)
-    SettingsRepository().set_json("app_settings", payload, category="general")
+    merged = {**existing, **payload}
+    repo.set_json("app_settings", merged, category="general")
     changed_fields = [k for k in payload if k != "api_key"]
     if "api_key" in payload:
         changed_fields.append("api_key")

@@ -240,4 +240,8 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("PYTHON_BACKEND_PORT", "8765"))
+    # v2: 把本机后端地址注入环境变量,让 backend.core.legacy.llm_client.LLMConfig
+    # 知道走哪个 proxy URL(默认 http://127.0.0.1:8765,所以在大多数情况下是
+    # no-op,但允许 dev/CI 通过环境变量覆盖)。
+    os.environ.setdefault("BACKEND_URL", f"http://127.0.0.1:{port}")
     uvicorn.run(app, host="127.0.0.1", port=port)

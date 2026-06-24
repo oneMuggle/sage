@@ -7,12 +7,7 @@
  */
 import { settingsClient } from '../../shared/api/settingsClient';
 
-import {
-  AppSettings,
-  DEFAULT_SETTINGS,
-  SETTINGS_STORAGE_KEY,
-  SETTINGS_VERSION,
-} from './types';
+import { AppSettings, DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from './types';
 
 const CACHE_KEY = SETTINGS_STORAGE_KEY;
 const MIGRATION_MARKER = 'sage-settings.migrated_to_backend';
@@ -97,13 +92,21 @@ function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
 /**
  * 加载 settings：后端 → localStorage → DEFAULT_SETTINGS
  * 首次加载会触发自动迁移
+ *
+ * 合并策略（v3.1 修复数据丢失 bug）：
+ *   - 后端返回部分数据时（如只有 model_selections 没有 endpoints），
+ *     先和 localStorage 缓存合并（保留本地已有的 endpoints），
+ *     再和 DEFAULT_SETTINGS 合并（补全缺失字段）。
+ *   - 避免「后端缺字段 → 覆盖本地完整数据 → 数据丢失」的问题。
  */
 export async function loadSettings(): Promise<AppSettings> {
   cleanupLocalCacheIfExpired();
 
   const remote = await settingsClient.getSettings();
   if (remote) {
-    const merged = mergeWithDefaults(remote);
+    // 先和 local cache 合并（保留本地已有但后端缺失的字段，如 endpoints）
+    const local = readLocalCacheSync() ?? {};
+    const merged = mergeWithDefaults({ ...local, ...remote });
     writeLocalCacheSync(merged);
     return merged;
   }

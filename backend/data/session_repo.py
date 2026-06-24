@@ -195,7 +195,7 @@ class Message:
             provider=row["provider"],
             tool_calls=row["tool_calls"],
             tool_call_id=row["tool_call_id"],
-            reasoning_content=row.get("reasoning_content"),
+            reasoning_content=row["reasoning_content"],
         )
 
     def to_dict(self) -> dict[str, Any]:

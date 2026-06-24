@@ -60,6 +60,20 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
 
   // memory
+  get_memories: {
+    method: 'GET',
+    path: (a) => {
+      const page = (a?.page as number) ?? 1;
+      const pageSize = (a?.pageSize as number) ?? 20;
+      const memoryType = a?.memoryType as string | null;
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      if (memoryType) params.set('type', memoryType);
+      return `/api/v1/memory/list?${params.toString()}`;
+    },
+  },
   delete_memory: { method: 'POST', path: () => '/api/v1/memory/delete' },
 
   // evolution

@@ -230,13 +230,88 @@ DevTools Network 面板应能看到:
 
 ---
 
-## v2 路线图(本期不做)
+## v2 路线图(本期状态)
 
-- **SSE 流式透传**:`/v1/chat/completions` 的 `stream=true` 需要 `StreamingResponse` + 异步迭代;
-  复杂度高;当前用户场景是「测试连接」非流;`useChat` 走另一条路
+- ✅ **SSE 流式透传**(`2026-06-24`)：`_proxy_streaming()` 用 `httpx.AsyncClient.stream()`
+  + `StreamingResponse` 把上游 chunked 响应原样回传;触发条件 `Accept: text/event-stream`
+  或 query string `stream=true`;`useChat` 主对话现在也走本代理(见下面「LLM 主对话改走代理」)。
 - **per-endpoint provider URL 存进 `EndpointConfig`**:目前通过 header 传;
   若日后需 server 重启后恢复多端点,再升级
 - **请求体大小限制 / 限流**:60s timeout 已够,先不做
+
+---
+
+## LLM 主对话改走代理(v2, 2026-06-24)
+
+### 动机
+
+v1 时代 `LLMClient`(`backend/core/legacy/llm_client.py`)直接拼
+`{base_url}/chat/completions` 直连上游,这条路径与「测试连接」走代理的 baseUrl
+解析规则**互斥**：
+
+| baseUrl | 测试连接(proxy 拼 `/v1/models`) | Chat(直连 `/chat/completions`) |
+|---|---|---|
+| `https://api.minimaxi.com/` | ✅ 拼成 `/v1/models` | ❌ 直连 `/chat/completions` (404) |
+| `https://api.minimaxi.com/v1` | ❌ 拼成 `/v1/v1/models` (双 v1, 404) | ✅ 直连 `/v1/chat/completions` |
+
+同一个 baseUrl 配置不可能同时让两边都通;用户必须知道要走哪条规则。
+
+### 方案
+
+让 `LLMClient` 也走本机代理,把真实上游 URL 通过 `X-LLM-Provider-Url` header 注入:
+
+```python
+# backend/core/legacy/llm_client.py
+def _get_client(self) -> httpx.AsyncClient:
+    if self.config.use_proxy:
+        backend = (self.config.backend_url or "http://127.0.0.1:8765").rstrip("/")
+        client_base_url = f"{backend}/api/v1/llm"
+        headers["X-LLM-Provider-Url"] = self.config.base_url
+    else:
+        client_base_url = self.config.base_url
+    ...
+```
+
+路径从 `/chat/completions` 改为 `/v1/chat/completions`,因为 base_url 现在指向
+proxy(不带 /v1),完整 URL 由 proxy 拼成 `<provider_url>/v1/chat/completions`。
+
+### `LLMConfig` 新增字段
+
+| 字段 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `backend_url` | `str` | `os.environ["BACKEND_URL"]` 或 `http://127.0.0.1:8765` | 本机后端地址,用于拼 proxy URL |
+| `use_proxy` | `bool` | `True` | 是否走 proxy。单测可设 `False` 直连上游,简化 respx fixture |
+
+### `backend/main.py` 注入
+
+```python
+os.environ.setdefault("BACKEND_URL", f"http://127.0.0.1:{port}")
+```
+
+确保 `LLMConfig` 默认值能拿到正确的本机后端地址。
+
+### SSE 流式支持
+
+`_proxy_streaming()` 检测条件:
+- `Accept` 头含 `text/event-stream` (SSE 标准)
+- 或 query string `stream=true` (OpenAI 流式约定)
+
+错误处理: 上游 4xx/5xx 在 yield 任何 chunk 之前抛 `HTTPException`,调用方拿到正确的
+status code + body;yield 之后断开由调用方决定如何处理。
+
+### 兼容性影响(breaking change)
+
+- **现有用户的 baseUrl 配置**(带 `/v1`):改后 chat 调用会请求 `/v1/v1/chat/completions` → 404。
+  release notes 必须说明;可考虑加迁移代码去掉末尾 `/v1`。
+- **单测**:fixture mock 上游 URL;`_make_config()` 默认 `use_proxy=False` 保持原行为。
+
+### 相关文件
+
+- `backend/core/legacy/llm_client.py` (LLMClient + LLMConfig)
+- `backend/api/llm_proxy_routes.py` (proxy + `_proxy_streaming`)
+- `backend/main.py` (BACKEND_URL 注入)
+- `backend/tests/unit/test_llm_client_remaining.py` (proxy 行为测试)
+- `backend/tests/integration/test_llm_proxy_routes.py` (SSE 透传测试)
 
 ---
 
