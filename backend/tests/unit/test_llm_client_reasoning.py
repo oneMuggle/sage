@@ -215,3 +215,215 @@ After careful analysis, I conclude that the best approach is...
 
             assert result.reasoning_content == long_reasoning
             assert len(result.reasoning_content) > 100
+
+
+class TestLLMClientThinkTagParsing:
+    """Test LLMClient.chat() <think>...
+</think>
+
+` 标签解析逻辑."""
+
+    @pytest.fixture()
+    def llm_client(self):
+        """Create a test LLM client."""
+        config = LLMConfig(
+            provider="openai",
+            api_key="test-key",
+            base_url="https://api.test.com/v1",
+            model="gpt-4",
+        )
+        return LLMClient(config)
+
+    @pytest.mark.asyncio()
+    async def test_extract_think_tag_from_content(self, llm_client):
+        """Should extract <think>...
+</think>
+
+` content to reasoning_content and clean content."""
+        mock_response_data = {
+            "id": "chatcmpl-test",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "<think>这是思考过程</think>这是最终回答",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        }
+
+        with patch.object(llm_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            result = await llm_client.chat([{"role": "user", "content": "Test"}])
+
+            assert result.reasoning_content == "这是思考过程"
+            assert result.content == "这是最终回答"
+
+    @pytest.mark.asyncio()
+    async def test_no_think_tag(self, llm_client):
+        """Should not modify content when no <think> tag present."""
+        mock_response_data = {
+            "id": "chatcmpl-test",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "这是普通回答",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
+        }
+
+        with patch.object(llm_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            result = await llm_client.chat([{"role": "user", "content": "Test"}])
+
+            assert result.reasoning_content is None
+            assert result.content == "这是普通回答"
+
+    @pytest.mark.asyncio()
+    async def test_multiple_think_tags(self, llm_client):
+        """Should concatenate multiple <think> tags and clean content."""
+        mock_response_data = {
+            "id": "chatcmpl-test",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "<think>第一次思考</think>中间内容<think>第二次思考</think>最终回答",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
+        }
+
+        with patch.object(llm_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            result = await llm_client.chat([{"role": "user", "content": "Test"}])
+
+            assert "第一次思考" in result.reasoning_content
+            assert "第二次思考" in result.reasoning_content
+            assert result.content == "中间内容最终回答"
+
+    @pytest.mark.asyncio()
+    async def test_unclosed_think_tag(self, llm_client):
+        """Should ignore unclosed <think> tag."""
+        mock_response_data = {
+            "id": "chatcmpl-test",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "<think>这是思考内容没有闭合标签",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
+        }
+
+        with patch.object(llm_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            result = await llm_client.chat([{"role": "user", "content": "Test"}])
+
+            assert result.reasoning_content is None
+            assert result.content == "<think>这是思考内容没有闭合标签"
+
+    @pytest.mark.asyncio()
+    async def test_think_tag_with_newlines(self, llm_client):
+        """Should handle <think> tags with newlines."""
+        mock_response_data = {
+            "id": "chatcmpl-test",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "<think>\n第一行思考\n第二行思考\n</think>这是回答",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
+        }
+
+        with patch.object(llm_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            result = await llm_client.chat([{"role": "user", "content": "Test"}])
+
+            assert "第一行思考" in result.reasoning_content
+            assert "第二行思考" in result.reasoning_content
+            assert result.content == "这是回答"
+
+    @pytest.mark.asyncio()
+    async def test_think_tag_with_existing_reasoning_content(self, llm_client):
+        """Should prefer reasoning_content field over <think> tag when both present."""
+        mock_response_data = {
+            "id": "chatcmpl-test",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "<think>这是 content 中的思考</think>这是回答",
+                        "reasoning_content": "这是字段中的思考",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
+        }
+
+        with patch.object(llm_client, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            result = await llm_client.chat([{"role": "user", "content": "Test"}])
+
+            # Should use reasoning_content field, not parse <think> tag
+            assert result.reasoning_content == "这是字段中的思考"
+            # But should still clean <think> tags from content
+            assert result.content == "这是回答"

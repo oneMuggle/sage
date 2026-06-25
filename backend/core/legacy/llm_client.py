@@ -149,6 +149,37 @@ class LLMClient:
             )
         return result
 
+    @staticmethod
+    def _extract_think_tags(content: str) -> tuple[str | None, str]:
+        """
+        从 content 中提取 <think>...</think> 标签内容。
+
+        Args:
+            content: LLM 输出的原始内容
+
+        Returns:
+            (reasoning_content, clean_content) 元组
+            - reasoning_content: 提取的思考内容，无标签则为 None
+            - clean_content: 移除 <think> 标签后的内容
+        """
+        import re
+
+        # 匹配所有 <think>...</think> 标签（支持多行）
+        think_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+        matches = think_pattern.findall(content)
+
+        if not matches:
+            # 没有 <think> 标签
+            return None, content
+
+        # 合并所有思考内容
+        reasoning = "".join(matches)
+
+        # 从 content 中移除所有 <think> 标签
+        clean_content = think_pattern.sub("", content)
+
+        return reasoning, clean_content
+
     async def chat(
         self,
         messages: list[dict[str, Any]],
@@ -246,6 +277,16 @@ class LLMClient:
         # DeepSeek 使用 reasoning_content 字段
         # 优先使用 reasoning_content，其次 reasoning
         reasoning_content = msg_data.get("reasoning_content") or msg_data.get("reasoning")
+
+        # 某些 LLM 提供商（如 DeepSeek）会把思考内容用 <think> 标签包裹在 content 中
+        # 始终清理 content 中的 <think> 标签，无论 reasoning_content 字段是否存在
+        if content:
+            parsed_reasoning, parsed_content = self._extract_think_tags(content)
+            # 如果 reasoning_content 字段为空，使用解析出的思考内容
+            if not reasoning_content and parsed_reasoning is not None:
+                reasoning_content = parsed_reasoning
+            # 更新 content（移除 <think> 标签）
+            content = parsed_content
 
         tool_calls = []
         if msg_data.get("tool_calls"):
