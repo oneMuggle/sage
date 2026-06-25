@@ -15,11 +15,22 @@ export interface ValidationResult {
 }
 
 const ALLOWED_VARS: ReadonlySet<string> = new Set([
-  '--bg-base', '--bg-1', '--bg-2', '--bg-3', '--bg-4', '--bg-5',
-  '--text-primary', '--text-secondary', '--text-muted',
-  '--primary', '--primary-hover',
+  '--bg-base',
+  '--bg-1',
+  '--bg-2',
+  '--bg-3',
+  '--bg-4',
+  '--bg-5',
+  '--text-primary',
+  '--text-secondary',
+  '--text-muted',
+  '--primary',
+  '--primary-hover',
   '--border-base',
-  '--success', '--error', '--warning', '--info',
+  '--success',
+  '--error',
+  '--warning',
+  '--info',
 ]);
 
 /**

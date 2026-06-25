@@ -2,6 +2,8 @@
  * 主题预设 — 每个主题包含完整的亮色 + 暗色配色
  */
 
+import { findDecorativeThemeById } from './decorative-presets';
+
 /** 主题颜色集合 */
 export interface ThemeColors {
   primary: string;
@@ -400,9 +402,9 @@ export const themePresets: ThemePreset[] = [
   },
 ];
 
-/** 根据 id 获取主题预设 */
+/** 根据 id 获取主题预设（基础 + 装饰） */
 export function getThemeById(id: string): ThemePreset | undefined {
-  return themePresets.find((t) => t.id === id);
+  return themePresets.find((t) => t.id === id) ?? findDecorativeThemeById(id);
 }
 
 /** 默认主题 id */

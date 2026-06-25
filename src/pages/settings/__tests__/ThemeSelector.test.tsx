@@ -31,6 +31,25 @@ vi.mock('../../../features/theme/CssThemeModal', () => ({
   },
 }));
 
+// Mock ThemeGallery
+vi.mock('../../../features/theme/ThemeGallery', () => ({
+  ThemeGallery: () => <div data-testid="theme-gallery">ThemeGallery</div>,
+}));
+
+// Mock useI18n
+vi.mock('../../../shared/lib/i18n', () => ({
+  useI18n: () => ({
+    t: (key: string) => {
+      const translations: Record<string, string> = {
+        'settings.section.theme': '主题',
+        'theme.gallery.section_basic': '基础主题',
+        'theme.gallery.section_decorative': '装饰主题',
+      };
+      return translations[key] ?? key;
+    },
+  }),
+}));
+
 // Mock confirm
 window.confirm = vi.fn(() => true);
 
@@ -49,13 +68,11 @@ describe('ThemeSelector', () => {
     });
   });
 
-  it('renders preset themes', () => {
+  it('renders ThemeGallery for preset themes', () => {
     render(<ThemeSelector />);
 
-    expect(screen.getByText('内置主题')).toBeInTheDocument();
-    expect(screen.getByText('Indigo')).toBeInTheDocument();
-    expect(screen.getByText('Sage Green')).toBeInTheDocument();
-    expect(screen.getByText('Deep Ocean')).toBeInTheDocument();
+    expect(screen.getByTestId('theme-gallery')).toBeInTheDocument();
+    expect(screen.getByText('主题')).toBeInTheDocument();
   });
 
   it('renders "New Custom" button', () => {
@@ -202,23 +219,10 @@ describe('ThemeSelector', () => {
     expect(themeName).toHaveClass('text-primary');
   });
 
-  it('calls setPresetId when clicking a preset theme', () => {
-    const mockSetPresetId = vi.fn();
-
-    mockUseTheme.mockReturnValue({
-      presetId: 'indigo',
-      setPresetId: mockSetPresetId,
-      resolved: 'light',
-      cssThemes: [],
-      activeSource: { kind: 'preset', id: 'indigo' },
-      setActiveCssTheme: vi.fn(),
-      refreshCssThemes: vi.fn().mockResolvedValue(undefined),
-    });
-
+  it('ThemeGallery handles preset switching (delegated)', () => {
+    // Preset switching is now handled by ThemeGallery component
+    // which has its own tests for this behavior
     render(<ThemeSelector />);
-
-    fireEvent.click(screen.getByText('Sage Green'));
-
-    expect(mockSetPresetId).toHaveBeenCalledWith('sage-green');
+    expect(screen.getByTestId('theme-gallery')).toBeInTheDocument();
   });
 });

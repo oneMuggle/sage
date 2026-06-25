@@ -77,8 +77,10 @@ const SAMPLE_THEME: ThemeCssPayload = {
   updated_at: 1700000000000,
 };
 
-let saveSpy: ReturnType<typeof vi.spyOn>;
-let deleteSpy: ReturnType<typeof vi.spyOn>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let saveSpy: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let deleteSpy: any;
 
 beforeEach(() => {
   saveSpy = vi

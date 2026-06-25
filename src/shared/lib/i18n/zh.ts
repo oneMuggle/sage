@@ -88,6 +88,20 @@ export const zh = {
   'settings.section.chat': '对话',
   'settings.section.data': '数据',
 
+  // ─── 装饰主题 ─────────────────────
+  'theme.name.mint_blue': '薄荷蓝',
+  'theme.name.sakura': '樱花粉',
+  'theme.name.cyber_neon': 'Cyber Neon',
+  'theme.name.midnight_amber': '深夜琥珀',
+  'theme.name.parchment': '羊皮纸',
+  'theme.desc.mint_blue': '清新的薄荷绿色调，温和不刺眼',
+  'theme.desc.sakura': '温柔的樱花粉色，浪漫春日感',
+  'theme.desc.cyber_neon': '霓虹紫粉，未来科技感',
+  'theme.desc.midnight_amber': '深色背景配琥珀高亮，长时间阅读友好',
+  'theme.desc.parchment': '复古羊皮纸纹理，文学与写作场景',
+  'theme.gallery.section_basic': '基础主题',
+  'theme.gallery.section_decorative': '装饰主题',
+
   // ─── 通用 ─────────────────────────
   'common.skip_to_content': '跳到主内容',
   'common.delete': '删除',

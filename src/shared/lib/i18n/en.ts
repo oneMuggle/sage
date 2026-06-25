@@ -88,6 +88,20 @@ export const en: Record<TranslationKey, string> = {
   'settings.section.chat': 'Chat',
   'settings.section.data': 'Data',
 
+  // ─── Decorative themes ───────────
+  'theme.name.mint_blue': 'Mint Blue',
+  'theme.name.sakura': 'Sakura',
+  'theme.name.cyber_neon': 'Cyber Neon',
+  'theme.name.midnight_amber': 'Midnight Amber',
+  'theme.name.parchment': 'Parchment',
+  'theme.desc.mint_blue': 'Refreshing mint green tones, gentle on the eyes',
+  'theme.desc.sakura': 'Soft cherry blossom pink, spring romance',
+  'theme.desc.cyber_neon': 'Neon purple and pink, futuristic vibe',
+  'theme.desc.midnight_amber': 'Dark background with amber highlights, easy on the eyes for long reads',
+  'theme.desc.parchment': 'Vintage parchment texture, ideal for writing',
+  'theme.gallery.section_basic': 'Basic',
+  'theme.gallery.section_decorative': 'Decorative',
+
   // ─── Common ───────────────────────
   'common.skip_to_content': 'Skip to content',
   'common.delete': 'Delete',
