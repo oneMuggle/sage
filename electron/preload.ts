@@ -16,6 +16,7 @@
  *                              unavailable on Win7 without UAC workaround)
  */
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
 
 /** UnlistenFn signature mirrors Tauri 2.x for drop-in Phase 2 compatibility. */
 export type UnlistenFn = () => void;
@@ -53,6 +54,17 @@ const electronAPI = {
     return Promise.resolve(unlisten);
   },
 
+  /**
+   * Phase 5: Window controls bridge for custom titlebar.
+   * Delegates to main process IPC handlers (sage:window-controls:*).
+   */
+  windowControls: {
+    minimize: () => ipcRenderer.invoke('sage:window-controls:minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('sage:window-controls:toggle-maximize'),
+    close: () => ipcRenderer.invoke('sage:window-controls:close'),
+    capturePage: () => ipcRenderer.invoke('sage:window-controls:capture-page') as Promise<string>,
+    isMaximized: () => ipcRenderer.invoke('sage:window-controls:is-maximized') as Promise<boolean>,
+  } satisfies WindowControlsBridge,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
