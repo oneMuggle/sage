@@ -107,4 +107,13 @@ export const en: Record<TranslationKey, string> = {
   'time.yesterday': 'Yesterday',
   'time.this_week': 'This Week',
   'time.earlier': 'Earlier',
+
+  // ─── Sidebar sections ─────────────
+  'sider.section.conversations': 'Conversations',
+  'sider.section.cron': 'Scheduled Tasks',
+  'sider.section.project': 'Projects',
+  'sider.section.team': 'Team',
+  'sider.drag_handle': 'Drag to reorder',
+  'sider.collapse': 'Collapse',
+  'sider.expand': 'Expand',
 };

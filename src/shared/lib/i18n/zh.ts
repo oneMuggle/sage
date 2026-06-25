@@ -107,6 +107,15 @@ export const zh = {
   'time.yesterday': '昨天',
   'time.this_week': '本周',
   'time.earlier': '更早',
+
+  // ─── 侧边栏分组 ─────────────────────
+  'sider.section.conversations': '会话',
+  'sider.section.cron': '定时任务',
+  'sider.section.project': '项目',
+  'sider.section.team': '团队',
+  'sider.drag_handle': '拖拽排序',
+  'sider.collapse': '折叠',
+  'sider.expand': '展开',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
