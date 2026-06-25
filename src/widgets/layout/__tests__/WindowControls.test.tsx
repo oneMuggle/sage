@@ -1,8 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { WindowControls } from '../WindowControls';
+
 import type { WindowControlsBridge } from '../../../shared/api/windowControlsClient';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { WindowControls } from '../WindowControls';
 
 function renderWithI18n(ui: React.ReactElement) {
   return render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
@@ -66,7 +67,7 @@ describe('WindowControls', () => {
     fireEvent.click(minimizeBtn);
 
     // Wait for async operations
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     // Should log warning but not throw
     expect(consoleWarnSpy).toHaveBeenCalled();

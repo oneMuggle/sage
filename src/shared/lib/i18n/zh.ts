@@ -130,6 +130,11 @@ export const zh = {
   'sider.drag_handle': '拖拽排序',
   'sider.collapse': '折叠',
   'sider.expand': '展开',
+
+  // ─── 标题栏 ──────────────────────────
+  'titlebar.minimize': '最小化',
+  'titlebar.maximize': '最大化',
+  'titlebar.close': '关闭',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

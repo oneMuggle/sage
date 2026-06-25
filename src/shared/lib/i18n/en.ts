@@ -97,7 +97,8 @@ export const en: Record<TranslationKey, string> = {
   'theme.desc.mint_blue': 'Refreshing mint green tones, gentle on the eyes',
   'theme.desc.sakura': 'Soft cherry blossom pink, spring romance',
   'theme.desc.cyber_neon': 'Neon purple and pink, futuristic vibe',
-  'theme.desc.midnight_amber': 'Dark background with amber highlights, easy on the eyes for long reads',
+  'theme.desc.midnight_amber':
+    'Dark background with amber highlights, easy on the eyes for long reads',
   'theme.desc.parchment': 'Vintage parchment texture, ideal for writing',
   'theme.gallery.section_basic': 'Basic',
   'theme.gallery.section_decorative': 'Decorative',
@@ -130,4 +131,9 @@ export const en: Record<TranslationKey, string> = {
   'sider.drag_handle': 'Drag to reorder',
   'sider.collapse': 'Collapse',
   'sider.expand': 'Expand',
+
+  // ─── Titlebar ─────────────────────
+  'titlebar.minimize': 'Minimize',
+  'titlebar.maximize': 'Maximize',
+  'titlebar.close': 'Close',
 };
