@@ -79,7 +79,7 @@ describe('NavHistoryProvider', () => {
             <Route path="*" element={<Capture />} />
           </Routes>
         </NavHistoryProvider>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     // After 55 navigations, canForward should be false (we're at the end)
@@ -87,5 +87,48 @@ describe('NavHistoryProvider', () => {
     expect(captured).not.toBeNull();
     expect(captured!.canBack).toBe(true);
     expect(captured!.canForward).toBe(false);
+  });
+
+  it('back() at cursor=0 is a no-op', () => {
+    let captured: NavHistoryContextValue | null = null;
+    const Capture = () => {
+      const ctx = useContext(NavHistoryContext);
+      captured = ctx;
+      return null;
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <NavHistoryProvider>
+          <Capture />
+        </NavHistoryProvider>
+      </MemoryRouter>
+    );
+
+    expect(captured).not.toBeNull();
+    expect(captured!.canBack).toBe(false);
+    // Calling back() should not throw
+    expect(() => captured!.back()).not.toThrow();
+  });
+
+  it('forward() at end of stack is a no-op', () => {
+    let captured: NavHistoryContextValue | null = null;
+    const Capture = () => {
+      const ctx = useContext(NavHistoryContext);
+      captured = ctx;
+      return null;
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/a', '/b']} initialIndex={1}>
+        <NavHistoryProvider>
+          <Capture />
+        </NavHistoryProvider>
+      </MemoryRouter>
+    );
+
+    expect(captured).not.toBeNull();
+    expect(captured!.canForward).toBe(false);
+    expect(() => captured!.forward()).not.toThrow();
   });
 });
