@@ -966,8 +966,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             }
                         )
                         await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
-                    # 最终 reasoning 事件保留完整内容 (前端需要)
-                    await entry.queue.put(evt.to_dict())
+                    # 最终 reasoning 事件携带累积全量 (而非单次 evt.reasoning)。
+                    # 这样: 持久化、最终事件、前端累积 三者 reasoning 文本一致,
+                    # 不依赖前端每个 delta 都没丢。
+                    final_reasoning_event = evt.to_dict()
+                    final_reasoning_event["reasoning"] = done_reasoning
+                    await entry.queue.put(final_reasoning_event)
                 else:
                     await entry.queue.put(evt.to_dict())
 
