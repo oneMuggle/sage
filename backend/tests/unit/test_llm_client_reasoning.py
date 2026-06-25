@@ -219,9 +219,9 @@ After careful analysis, I conclude that the best approach is...
 
 class TestLLMClientThinkTagParsing:
     """Test LLMClient.chat() <think>...
-</think>
+    </think>
 
-` 标签解析逻辑."""
+    ` 标签解析逻辑."""
 
     @pytest.fixture()
     def llm_client(self):
@@ -237,9 +237,9 @@ class TestLLMClientThinkTagParsing:
     @pytest.mark.asyncio()
     async def test_extract_think_tag_from_content(self, llm_client):
         """Should extract <think>...
-</think>
+        </think>
 
-` content to reasoning_content and clean content."""
+        ` content to reasoning_content and clean content."""
         mock_response_data = {
             "id": "chatcmpl-test",
             "model": "gpt-4",
