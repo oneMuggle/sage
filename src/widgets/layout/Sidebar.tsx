@@ -6,8 +6,18 @@ import { Link, useLocation } from 'react-router-dom';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { useStore } from '../../shared/lib/store';
-import { VirtualSessionList } from '../session/VirtualSessionList';
+import {
+  ConversationsSection,
+  CronJobSection,
+  ProjectSection,
+  TeamSection,
+  useSiderSections,
+} from '../sidebar';
+
+const SECTION_KEYS = ['conversations', 'cron', 'project', 'team'] as const;
+const SESSION_ORDER_KEY = 'sage:sider:order:v1';
 
 // 导航项配置
 const navItems = [
@@ -38,6 +48,14 @@ export function Sidebar({ width = 240 }: SidebarProps) {
   >('not-configured');
   const [latency, setLatency] = useState<number | null>(null);
 
+  const { order: sectionOrder, collapsed, toggleCollapsed } = useSiderSections(SECTION_KEYS);
+  const { orderedItems, reorder } = useStoredSiderOrder({
+    storageKey: SESSION_ORDER_KEY,
+    items: sessions,
+    getId: (s) => s.id,
+  });
+  const orderedSessionIds = orderedItems.map((s) => s.id);
+
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
@@ -64,6 +82,46 @@ export function Sidebar({ width = 240 }: SidebarProps) {
   const handleNewSession = async () => {
     const sessionId = await createSession();
     setCurrentSessionId(sessionId);
+  };
+
+  const renderSection = (key: string) => {
+    const isCollapsed = collapsed.has(key);
+
+    switch (key) {
+      case 'conversations':
+        return (
+          <ConversationsSection
+            sessions={orderedItems}
+            order={orderedSessionIds}
+            currentSessionId={currentSessionId}
+            collapsed={isCollapsed}
+            onToggleCollapsed={() => toggleCollapsed(key)}
+            onSelect={(id) => {
+              setCurrentSessionId(id);
+              if (location.pathname !== '/chat') {
+                window.location.href = '/chat';
+              }
+            }}
+            onDelete={(id) => deleteSession(id)}
+            onNewSession={handleNewSession}
+            onOrderChange={(newOrder) => {
+              const oldIndex = orderedSessionIds.indexOf(String(newOrder[0]));
+              const newIndex = newOrder.indexOf(String(newOrder[0]));
+              if (oldIndex !== -1 && newIndex !== -1) {
+                reorder(oldIndex, newIndex);
+              }
+            }}
+          />
+        );
+      case 'cron':
+        return <CronJobSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />;
+      case 'project':
+        return <ProjectSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />;
+      case 'team':
+        return <TeamSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />;
+      default:
+        return null;
+    }
   };
 
   return (
@@ -101,27 +159,10 @@ export function Sidebar({ width = 240 }: SidebarProps) {
           );
         })}
 
-        {/* 最近对话 */}
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted px-3 pt-4 pb-2">
-          最近对话
-        </div>
-        <button
-          onClick={handleNewSession}
-          className="w-full text-left px-3 py-1.5 rounded-radius-sm transition-colors text-xs text-text-secondary hover:bg-bg-hover flex items-center gap-2"
-        >
-          + 新对话
-        </button>
-        <VirtualSessionList
-          sessions={sessions}
-          currentSessionId={currentSessionId}
-          onSelect={(id) => {
-            setCurrentSessionId(id);
-            if (location.pathname !== '/chat') {
-              window.location.href = '/chat';
-            }
-          }}
-          onDelete={(id) => deleteSession(id)}
-        />
+        {/* 可折叠分组 */}
+        {sectionOrder.map((key) => (
+          <div key={key}>{renderSection(key)}</div>
+        ))}
       </nav>
 
       {/* 底部状态栏 */}
