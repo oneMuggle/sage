@@ -27,8 +27,8 @@ describe('colorByType', () => {
   });
 
   it('returns mapped color for known pageType', () => {
-    expect(colorByType('source')).toBe('#3b82f6');
-    expect(colorByType('entity')).toBe('#8b5cf6');
+    expect(colorByType('source')).toBe('#fb923c');
+    expect(colorByType('entity')).toBe('#60a5fa');
   });
 });
 
