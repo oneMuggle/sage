@@ -1,7 +1,7 @@
 // src/app/providers/__tests__/NavHistoryProvider.test.tsx
 import { render } from '@testing-library/react';
-import { useContext } from 'react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { useContext, useEffect } from 'react';
+import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 
 import {
@@ -72,18 +72,30 @@ describe('NavHistoryProvider', () => {
       return null;
     };
 
+    // MemoryRouter initialEntries does NOT trigger navigation events,
+    // so NavHistoryProvider never sees the intermediate paths.
+    // Use a Navigator component to drive navigate() through all paths.
+    const Navigator = () => {
+      const navigate = useNavigate();
+      useEffect(() => {
+        for (let i = 1; i < paths.length; i++) {
+          navigate(paths[i]);
+        }
+      }, [navigate]);
+      return null;
+    };
+
     render(
-      <MemoryRouter initialEntries={paths} initialIndex={0}>
+      <MemoryRouter initialEntries={['/path-0']}>
         <NavHistoryProvider>
-          <Routes>
-            <Route path="*" element={<Capture />} />
-          </Routes>
+          <Navigator />
+          <Capture />
         </NavHistoryProvider>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    // After 55 navigations, canForward should be false (we're at the end)
-    // canBack should be true (we have history to go back)
+    // After 55 navigations, canBack should be true (we have history to go back)
+    // canForward should be false (we're at the end of the stack)
     expect(captured).not.toBeNull();
     expect(captured!.canBack).toBe(true);
     expect(captured!.canForward).toBe(false);
