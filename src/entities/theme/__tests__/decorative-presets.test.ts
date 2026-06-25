@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { decorativePresets, findDecorativeThemeById } from '../decorative-presets';
 
 describe('decorative-presets', () => {
@@ -45,12 +46,28 @@ describe('decorative-presets', () => {
 
   it('颜色对象包含所有 ThemeColors 字段', () => {
     const requiredKeys = [
-      'primary', 'primaryHover', 'secondary', 'accent',
-      'bg', 'bgMuted', 'bgSubtle', 'bgHover', 'bgActive',
-      'surface', 'surfaceElevated',
-      'text', 'textSecondary', 'textMuted', 'textInverse',
-      'border', 'borderHover',
-      'success', 'error', 'warning', 'info', 'overlay',
+      'primary',
+      'primaryHover',
+      'secondary',
+      'accent',
+      'bg',
+      'bgMuted',
+      'bgSubtle',
+      'bgHover',
+      'bgActive',
+      'surface',
+      'surfaceElevated',
+      'text',
+      'textSecondary',
+      'textMuted',
+      'textInverse',
+      'border',
+      'borderHover',
+      'success',
+      'error',
+      'warning',
+      'info',
+      'overlay',
     ];
     for (const theme of decorativePresets) {
       for (const key of requiredKeys) {

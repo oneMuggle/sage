@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+
 import { ThemeCover } from '../ThemeCover';
 
 describe('ThemeCover', () => {
@@ -12,7 +13,12 @@ describe('ThemeCover', () => {
 
   it('加载失败时显示渐变色降级', () => {
     render(
-      <ThemeCover src="/covers/broken.svg" alt="broken" gradientFrom="#ff0000" gradientTo="#0000ff" />,
+      <ThemeCover
+        src="/covers/broken.svg"
+        alt="broken"
+        gradientFrom="#ff0000"
+        gradientTo="#0000ff"
+      />,
     );
     const img = screen.getByRole('img');
     fireEvent.error(img);

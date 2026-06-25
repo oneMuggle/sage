@@ -7,20 +7,15 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { useTheme } from '../../app/providers/useTheme';
-import { ThemeGallery } from '../../features/theme/ThemeGallery';
 import { CssThemeModal } from '../../features/theme/CssThemeModal';
-import { themeCssClient } from '../../shared/api/themeCssClient';
+import { ThemeGallery } from '../../features/theme/ThemeGallery';
 import type { ThemeCssPayload } from '../../features/theme/themeCssTypes';
+import { themeCssClient } from '../../shared/api/themeCssClient';
 import { useI18n } from '../../shared/lib/i18n';
 
 export function ThemeSelector() {
   const { t } = useI18n();
-  const {
-    cssThemes,
-    activeSource,
-    setActiveCssTheme,
-    refreshCssThemes,
-  } = useTheme();
+  const { cssThemes, activeSource, setActiveCssTheme, refreshCssThemes } = useTheme();
   const [modalOpen, setModalOpen] = useState(false);
 
   function handleNewTheme() {

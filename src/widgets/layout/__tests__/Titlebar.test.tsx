@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react';
-import { Titlebar } from '../Titlebar';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Mock } from 'vitest';
+
+
+import { Titlebar } from '../Titlebar';
 import * as windowControlsClient from '../../../shared/api/windowControlsClient';
 
 // Mock dependencies

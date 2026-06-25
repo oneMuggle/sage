@@ -135,6 +135,17 @@ export const zh = {
   'titlebar.minimize': '最小化',
   'titlebar.maximize': '最大化',
   'titlebar.close': '关闭',
+
+  // ─── 反馈 ──────────────────────────
+  'feedback.button': '反馈',
+  'feedback.title': '发送反馈',
+  'feedback.screenshot': '截图预览',
+  'feedback.description': '描述',
+  'feedback.description_placeholder': '请描述您的问题或建议...',
+  'feedback.email': '邮箱（可选）',
+  'feedback.email_placeholder': 'your@email.com',
+  'feedback.submit': '提交',
+  'feedback.success': '感谢您的反馈！',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

@@ -136,4 +136,15 @@ export const en: Record<TranslationKey, string> = {
   'titlebar.minimize': 'Minimize',
   'titlebar.maximize': 'Maximize',
   'titlebar.close': 'Close',
+
+  // ─── Feedback ─────────────────────
+  'feedback.button': 'Feedback',
+  'feedback.title': 'Send Feedback',
+  'feedback.screenshot': 'Screenshot Preview',
+  'feedback.description': 'Description',
+  'feedback.description_placeholder': 'Please describe your issue or suggestion...',
+  'feedback.email': 'Email (optional)',
+  'feedback.email_placeholder': 'your@email.com',
+  'feedback.submit': 'Submit',
+  'feedback.success': 'Thank you for your feedback!',
 };

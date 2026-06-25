@@ -1,4 +1,5 @@
 import { detectPlatform, isElectronDesktop } from '../../shared/api/windowControlsClient';
+import { FeedbackButton } from '../../features/feedback';
 
 import { TitlebarActions } from './TitlebarActions';
 import { WindowControls } from './WindowControls';
@@ -18,8 +19,9 @@ export function Titlebar() {
   // Web mode: no titlebar controls, just navigation
   if (!isDesktop) {
     return (
-      <div className="flex items-center px-4 h-10 border-b border-border bg-bg-subtle">
+      <div className="flex items-center justify-between px-4 h-10 border-b border-border bg-bg-subtle">
         <TitlebarActions />
+        <FeedbackButton />
       </div>
     );
   }
@@ -29,6 +31,7 @@ export function Titlebar() {
     return (
       <div className="flex items-center justify-between px-4 h-10 border-b border-border bg-bg-subtle pt-7">
         <TitlebarActions />
+        <FeedbackButton />
       </div>
     );
   }
@@ -37,7 +40,10 @@ export function Titlebar() {
   return (
     <div className="flex items-center justify-between px-4 h-9 border-b border-border bg-bg-subtle">
       <TitlebarActions />
-      <WindowControls />
+      <div className="flex items-center">
+        <FeedbackButton />
+        <WindowControls />
+      </div>
     </div>
   );
 }

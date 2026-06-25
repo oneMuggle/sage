@@ -4,11 +4,13 @@
  * 网格展示 11 套主题（6 基础 + 5 装饰），点击切换主题。
  */
 import { clsx } from 'clsx';
+
 import { useTheme } from '../../app/providers/useTheme';
-import { themePresets } from '../../entities/theme/presets';
 import { decorativePresets } from '../../entities/theme/decorative-presets';
-import { ThemeCover } from './ThemeCover';
+import { themePresets } from '../../entities/theme/presets';
 import { useI18n } from '../../shared/lib/i18n';
+
+import { ThemeCover } from './ThemeCover';
 
 export function ThemeGallery() {
   const { presetId, setPresetId } = useTheme();
