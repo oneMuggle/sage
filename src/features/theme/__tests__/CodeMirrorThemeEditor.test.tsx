@@ -16,9 +16,7 @@ import { CodeMirrorThemeEditor } from '../CodeMirrorThemeEditor';
 
 describe('CodeMirrorThemeEditor', () => {
   it('renders with initial value', () => {
-    render(
-      <CodeMirrorThemeEditor value=":root { --bg-base: #fff; }" onChange={() => {}} />
-    );
+    render(<CodeMirrorThemeEditor value=":root { --bg-base: #fff; }" onChange={() => {}} />);
     expect(screen.getByTestId('cm-editor')).toBeInTheDocument();
   });
 
@@ -28,15 +26,13 @@ describe('CodeMirrorThemeEditor', () => {
         value=""
         onChange={() => {}}
         error='Variable "--evil" is not allowed'
-      />
+      />,
     );
     expect(screen.getByTestId('cm-editor')).toBeInTheDocument();
   });
 
   it('does not crash with readOnly=true', () => {
-    render(
-      <CodeMirrorThemeEditor value=":root {}" onChange={() => {}} readOnly />
-    );
+    render(<CodeMirrorThemeEditor value=":root {}" onChange={() => {}} readOnly />);
     expect(screen.getByTestId('cm-editor')).toBeInTheDocument();
   });
 

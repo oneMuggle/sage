@@ -38,14 +38,14 @@ def sample_payload() -> dict:
 
 
 class TestSaveTheme:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_save_returns_id(self, theme_client, sample_payload: dict) -> None:
         resp = await theme_client.post("/api/theme/save", json=sample_payload)
         assert resp.status_code == 200
         data = resp.json()
         assert data["id"] == sample_payload["id"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_save_validates_payload(self, theme_client) -> None:
         bad = {"id": "x", "name": "y", "css": "z", "appearance": "sepia"}
         resp = await theme_client.post("/api/theme/save", json=bad)
@@ -53,13 +53,13 @@ class TestSaveTheme:
 
 
 class TestListThemes:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_list_empty(self, theme_client) -> None:
         resp = await theme_client.get("/api/theme/list")
         assert resp.status_code == 200
         assert resp.json() == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_list_returns_saved(
         self, theme_client, sample_payload: dict
     ) -> None:
@@ -72,7 +72,7 @@ class TestListThemes:
 
 
 class TestDeleteTheme:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_delete_existing(
         self, theme_client, sample_payload: dict
     ) -> None:
@@ -83,7 +83,7 @@ class TestDeleteTheme:
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_delete_missing(self, theme_client) -> None:
         resp = await theme_client.post(
             "/api/theme/delete", json={"id": "nonexistent"}
@@ -93,7 +93,7 @@ class TestDeleteTheme:
 
 
 class TestGetTheme:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_get_existing(
         self, theme_client, sample_payload: dict
     ) -> None:
@@ -103,7 +103,7 @@ class TestGetTheme:
         data = resp.json()
         assert data["name"] == "Test Theme"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_get_missing_returns_404(self, theme_client) -> None:
         resp = await theme_client.get("/api/theme/get/nonexistent")
         assert resp.status_code == 404

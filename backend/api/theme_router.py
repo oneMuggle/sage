@@ -14,9 +14,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["theme"])
 
-_storage = ThemeStorage(
-    storage_dir=Path(__file__).resolve().parent.parent / "data" / "themes"
-)
+_storage = ThemeStorage(storage_dir=Path(__file__).resolve().parent.parent / "data" / "themes")
 
 
 class ThemeCssPayload(BaseModel):

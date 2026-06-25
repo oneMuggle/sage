@@ -5,8 +5,8 @@ vi.mock('../desktopInvoke', () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
-import { themeCssClient } from '../themeCssClient';
 import type { ThemeCssPayload } from '../../../features/theme/themeCssTypes';
+import { themeCssClient } from '../themeCssClient';
 
 const validPayload: ThemeCssPayload = {
   id: '550e8400-e29b-41d4-a716-446655440000',

@@ -6,8 +6,8 @@
  */
 
 import { css } from '@codemirror/lang-css';
-import CodeMirror from '@uiw/react-codemirror';
 import type { Extension } from '@codemirror/state';
+import CodeMirror from '@uiw/react-codemirror';
 import { useMemo } from 'react';
 
 interface CodeMirrorThemeEditorProps {
