@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import {
   areSiderOrdersEqual,
@@ -34,7 +34,10 @@ function readSectionsState(defaultOrder: readonly string[]): SiderSectionsState 
       ? obj.collapsed.filter((x): x is string => typeof x === 'string')
       : [];
     const reconciled = reconcileStoredSiderOrder(storedOrder, [...defaultOrder]);
-    return { order: reconciled, collapsed: storedCollapsed };
+    // 过滤掉不在 defaultOrder 中的 collapsed keys
+    const defaultSet = new Set(defaultOrder);
+    const filteredCollapsed = storedCollapsed.filter((key) => defaultSet.has(key));
+    return { order: reconciled, collapsed: filteredCollapsed };
   } catch {
     return fallback;
   }
@@ -57,6 +60,8 @@ export interface UseSiderSectionsResult {
 
 export function useSiderSections(defaultOrder: readonly string[]): UseSiderSectionsResult {
   const [state, setState] = useState<SiderSectionsState>(() => readSectionsState(defaultOrder));
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const toggleCollapsed = useCallback((key: string) => {
     setState((prev) => {
@@ -71,6 +76,10 @@ export function useSiderSections(defaultOrder: readonly string[]): UseSiderSecti
   }, []);
 
   const reorderSections = useCallback((from: number, to: number) => {
+    const order = stateRef.current.order;
+    if (from < 0 || from >= order.length || to < 0 || to >= order.length) {
+      throw new Error(`reorderSections: index out of range (from=${from}, to=${to}, len=${order.length})`);
+    }
     setState((prev) => {
       const nextOrder = reorderSiderIds(prev.order, from, to);
       if (areSiderOrdersEqual(prev.order, nextOrder)) return prev;
