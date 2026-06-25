@@ -60,9 +60,7 @@ class TestListThemes:
         assert resp.json() == []
 
     @pytest.mark.asyncio()
-    async def test_list_returns_saved(
-        self, theme_client, sample_payload: dict
-    ) -> None:
+    async def test_list_returns_saved(self, theme_client, sample_payload: dict) -> None:
         await theme_client.post("/api/theme/save", json=sample_payload)
         resp = await theme_client.get("/api/theme/list")
         assert resp.status_code == 200
@@ -73,30 +71,22 @@ class TestListThemes:
 
 class TestDeleteTheme:
     @pytest.mark.asyncio()
-    async def test_delete_existing(
-        self, theme_client, sample_payload: dict
-    ) -> None:
+    async def test_delete_existing(self, theme_client, sample_payload: dict) -> None:
         await theme_client.post("/api/theme/save", json=sample_payload)
-        resp = await theme_client.post(
-            "/api/theme/delete", json={"id": sample_payload["id"]}
-        )
+        resp = await theme_client.post("/api/theme/delete", json={"id": sample_payload["id"]})
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
 
     @pytest.mark.asyncio()
     async def test_delete_missing(self, theme_client) -> None:
-        resp = await theme_client.post(
-            "/api/theme/delete", json={"id": "nonexistent"}
-        )
+        resp = await theme_client.post("/api/theme/delete", json={"id": "nonexistent"})
         assert resp.status_code == 200
         assert resp.json()["ok"] is False
 
 
 class TestGetTheme:
     @pytest.mark.asyncio()
-    async def test_get_existing(
-        self, theme_client, sample_payload: dict
-    ) -> None:
+    async def test_get_existing(self, theme_client, sample_payload: dict) -> None:
         await theme_client.post("/api/theme/save", json=sample_payload)
         resp = await theme_client.get(f"/api/theme/get/{sample_payload['id']}")
         assert resp.status_code == 200

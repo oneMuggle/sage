@@ -7,10 +7,14 @@ import {
   saveTheme,
   saveThemePreset,
 } from '../../entities/theme/storage';
+import { injectPersistedStyle } from '../../features/theme/backgroundInjector';
+import type { ThemeCssPayload } from '../../features/theme/themeCssTypes';
+import { themeCssClient } from '../../shared/api/themeCssClient';
 
-import { ThemeContext, type ThemeMode } from './useTheme';
+import { ThemeContext, type ActiveThemeSource, type ThemeMode } from './useTheme';
 
 const VALID_MODES: ReadonlyArray<ThemeMode> = ['light', 'dark', 'system'];
+const ACTIVE_CSS_THEME_KEY = 'sage-active-css-theme';
 
 function resolveSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'light';
@@ -62,7 +66,7 @@ function resetThemeColors(): void {
 }
 
 /** 应用主题预设 + 亮/暗模式 */
-function applyTheme(resolved: 'light' | 'dark', presetId: string): void {
+function applyPresetTheme(resolved: 'light' | 'dark', presetId: string): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   root.classList.toggle('dark', resolved === 'dark');
@@ -85,6 +89,11 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
   const [mode, setModeState] = useState<ThemeMode>(defaultMode);
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() => resolveSystemTheme());
   const [presetId, setPresetIdState] = useState(DEFAULT_THEME_ID);
+  const [cssThemes, setCssThemes] = useState<ThemeCssPayload[]>([]);
+  const [activeSource, setActiveSource] = useState<ActiveThemeSource>({
+    kind: 'preset',
+    id: DEFAULT_THEME_ID,
+  });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -109,11 +118,43 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
     });
   }, []);
 
+  // 加载 CSS 主题并注入 <style> 标签
+  const loadCssThemes = useCallback(async () => {
+    try {
+      const themes = await themeCssClient.list();
+      setCssThemes(themes);
+      for (const theme of themes) {
+        injectPersistedStyle(theme.id, theme.css);
+      }
+    } catch (error) {
+      console.warn('[ThemeProvider] Failed to load CSS themes:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCssThemes();
+  }, [loadCssThemes]);
+
+  // 恢复激活的 CSS 主题（从 localStorage）
+  useEffect(() => {
+    try {
+      const savedCssThemeId = localStorage.getItem(ACTIVE_CSS_THEME_KEY);
+      if (savedCssThemeId && cssThemes.some((t) => t.id === savedCssThemeId)) {
+        setActiveSource({ kind: 'css', id: savedCssThemeId });
+      }
+    } catch {
+      // localStorage 不可用时忽略
+    }
+  }, [cssThemes]);
+
   const resolved: 'light' | 'dark' = mode === 'system' ? systemTheme : mode;
 
   useEffect(() => {
-    applyTheme(resolved, presetId);
-  }, [resolved, presetId]);
+    if (activeSource.kind === 'preset') {
+      applyPresetTheme(resolved, activeSource.id);
+    }
+    // CSS 主题的 <style> 标签已注入，浏览器自动应用
+  }, [resolved, activeSource]);
 
   const setMode = useCallback((next: ThemeMode): void => {
     setModeState(next);
@@ -123,11 +164,46 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
   const setPresetId = useCallback((id: string): void => {
     if (!getThemeById(id)) return;
     setPresetIdState(id);
+    setActiveSource({ kind: 'preset', id });
+    try {
+      localStorage.removeItem(ACTIVE_CSS_THEME_KEY);
+    } catch {
+      // ignore
+    }
     void saveThemePreset(id);
   }, []);
 
+  const setActiveCssTheme = useCallback(
+    (id: string): void => {
+      if (!cssThemes.some((t) => t.id === id)) return;
+      setActiveSource({ kind: 'css', id });
+      try {
+        localStorage.setItem(ACTIVE_CSS_THEME_KEY, id);
+      } catch {
+        // ignore
+      }
+    },
+    [cssThemes],
+  );
+
+  const refreshCssThemes = useCallback(async (): Promise<void> => {
+    await loadCssThemes();
+  }, [loadCssThemes]);
+
   return (
-    <ThemeContext.Provider value={{ mode, resolved, setMode, presetId, setPresetId }}>
+    <ThemeContext.Provider
+      value={{
+        mode,
+        resolved,
+        setMode,
+        presetId,
+        setPresetId,
+        cssThemes,
+        activeSource,
+        setActiveCssTheme,
+        refreshCssThemes,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );
