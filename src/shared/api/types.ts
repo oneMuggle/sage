@@ -52,6 +52,7 @@ export type AgentState =
   | 'idle'
   | 'thinking'
   | 'reasoning' // 新增：携带 LLM 思考/推理过程内容
+  | 'reasoning_delta' // 新增：reasoning 增量事件（流式输出）
   | 'acting'
   | 'observing'
   | 'content_delta'

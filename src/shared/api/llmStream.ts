@@ -2,7 +2,16 @@
  * 解析 NDJSON 流式响应
  */
 
-export type AgentState = 'idle' | 'thinking' | 'acting' | 'observing' | 'done' | 'failed';
+export type AgentState =
+  | 'idle'
+  | 'thinking'
+  | 'reasoning'
+  | 'reasoning_delta'
+  | 'acting'
+  | 'observing'
+  | 'content_delta'
+  | 'done'
+  | 'failed';
 
 export interface ToolCallRequestFE {
   id: string;

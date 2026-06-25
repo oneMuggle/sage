@@ -28,7 +28,6 @@ function inferProviderFromBaseUrl(baseUrl: string | undefined): string | undefin
   return undefined;
 }
 
-
 export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -245,7 +244,11 @@ export function useChat() {
         // 占位符 '🤔 思考中…' 会留在 store。fallback 到错误文案让用户看到明确失败
         if (!finalContent && !finalReasoning && finalToolCalls.length === 0) {
           finalContent = '[错误: 模型未返回任何内容]';
-        } else if (finalContent === '🤔 思考中…' && !finalReasoning && finalToolCalls.length === 0) {
+        } else if (
+          finalContent === '🤔 思考中…' &&
+          !finalReasoning &&
+          finalToolCalls.length === 0
+        ) {
           finalContent = '[错误: 模型未返回任何内容]';
         }
         if (finalContent || finalReasoning || finalToolCalls.length > 0) {
@@ -288,8 +291,8 @@ export function useChat() {
                 );
               }
 
-              // 处理 reasoning 事件：累积 reasoning 内容
-              if (evt.state === 'reasoning' && evt.reasoning) {
+              // 处理 reasoning 事件：累积 reasoning 内容（支持完整事件和增量事件）
+              if ((evt.state === 'reasoning' || evt.state === 'reasoning_delta') && evt.reasoning) {
                 streamingReasoningRef.current = streamingReasoningRef.current + evt.reasoning;
                 setStreaming((prev) =>
                   prev && prev.messageId === assistantId
