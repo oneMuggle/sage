@@ -1,12 +1,4 @@
-import {
-  Copy,
-  ThumbsUp,
-  ThumbsDown,
-  BookOpen,
-  Wrench,
-  Brain,
-  ChevronDown,
-} from 'lucide-react';
+import { Copy, ThumbsUp, ThumbsDown, BookOpen, Wrench, Brain, ChevronDown } from 'lucide-react';
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';

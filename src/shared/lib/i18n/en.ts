@@ -98,6 +98,10 @@ export const en: Record<TranslationKey, string> = {
   'common.error': 'Error',
   'common.retry': 'Retry',
 
+  // ─── Navigation ─────────────────────
+  'nav.back': 'Back',
+  'nav.forward': 'Forward',
+
   // ─── Time groups ──────────────────
   'time.today': 'Today',
   'time.yesterday': 'Yesterday',

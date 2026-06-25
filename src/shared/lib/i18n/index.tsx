@@ -38,9 +38,7 @@ export function I18nProvider({ children, defaultLocale = 'zh' }: I18nProviderPro
     [locale],
   );
 
-  return (
-    <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>
-  );
+  return <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>;
 }
 
 export function useI18n(): I18nContextValue {

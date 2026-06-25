@@ -91,7 +91,7 @@ describe('NavHistoryProvider', () => {
           <Navigator />
           <Capture />
         </NavHistoryProvider>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     // After 55 navigations, canBack should be true (we have history to go back)
@@ -114,7 +114,7 @@ describe('NavHistoryProvider', () => {
         <NavHistoryProvider>
           <Capture />
         </NavHistoryProvider>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(captured).not.toBeNull();
@@ -136,7 +136,7 @@ describe('NavHistoryProvider', () => {
         <NavHistoryProvider>
           <Capture />
         </NavHistoryProvider>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(captured).not.toBeNull();
