@@ -2628,7 +2628,7 @@ git commit -m "feat(sider): add placeholder CronJob/Project/Team sections"
 - Consumes: all public sidebar components / hooks
 - Produces: a barrel re-export
 
-- [ ] **Step 1: Create the file**
+- [x] **Step 1: Create the file**
 
 Create `src/widgets/sidebar/index.ts`:
 
@@ -2641,7 +2641,7 @@ export { SiderSection } from './SiderSection';
 export { useSiderSections, SIDER_SECTIONS_STORAGE_KEY } from './useSiderSections';
 ```
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 ```bash
 cd /home/fz/project/sage
@@ -2650,7 +2650,7 @@ npx tsc --noEmit
 
 Expected: exit 0.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /home/fz/project/sage
@@ -2673,7 +2673,7 @@ git commit -m "feat(sider): add sidebar barrel index"
 
 > **Naming note:** there is a name collision: the file `widgets/sidebar/SiderSection.tsx` exports a generic section container component. To avoid confusion, this task defines a local `SectionDescriptor` interface (the planning-spec shape) and keeps the component import named `SiderSection`. The two live at different abstraction levels (component vs. descriptor) and are documented as such.
 
-- [ ] **Step 1: Read the existing file**
+- [x] **Step 1: Read the existing file**
 
 ```bash
 cat /home/fz/project/sage/src/widgets/layout/Sidebar.tsx
@@ -2681,7 +2681,7 @@ cat /home/fz/project/sage/src/widgets/layout/Sidebar.tsx
 
 Expected: matches the existing 150-line file (with `navItems`, `handleNewSession`, `<VirtualSessionList>`).
 
-- [ ] **Step 2: Replace the file**
+- [x] **Step 2: Replace the file**
 
 Replace `src/widgets/layout/Sidebar.tsx` with:
 
@@ -2911,7 +2911,7 @@ export function Sidebar({ width = 240 }: SidebarProps) {
 }
 ```
 
-- [ ] **Step 3: Type-check**
+- [x] **Step 3: Type-check**
 
 ```bash
 cd /home/fz/project/sage
@@ -2920,7 +2920,7 @@ npx tsc --noEmit
 
 Expected: exit 0.
 
-- [ ] **Step 4: Run the full test suite to confirm no regression**
+- [x] **Step 4: Run the full test suite to confirm no regression**
 
 ```bash
 cd /home/fz/project/sage
@@ -2929,7 +2929,7 @@ npx vitest run
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/fz/project/sage
@@ -2950,7 +2950,7 @@ git commit -m "refactor(sider): render sections array via useSiderSections + use
 - Consumes: the `ConversationsSection` + `useSiderSections` + `useStoredSiderOrder` stack (via a small integration wrapper that mirrors the Sidebar's section-rendering logic for two sections)
 - Produces: a test that verifies the persistence contract: a section collapse toggle writes to localStorage, and a re-mount of the same harness reads the collapsed state back.
 
-- [ ] **Step 1: Create the integration test**
+- [x] **Step 1: Create the integration test**
 
 Create `src/widgets/sidebar/__tests__/sections-integration.test.tsx`:
 
@@ -3109,7 +3109,7 @@ describe('sider sections integration', () => {
 
 > **Note on drag simulation:** simulating a real dnd-kit drag with pointer events in jsdom is fragile and noisy. This integration test verifies the **contract** — `setOrder` / `toggleCollapsed` -> localStorage -> next render — by going through the storage layer directly. The unit tests in Tasks 8, 17, 23 cover the individual hooks and components; this test wires the section + session level together.
 
-- [ ] **Step 2: Run, expect PASS**
+- [x] **Step 2: Run, expect PASS**
 
 ```bash
 cd /home/fz/project/sage
@@ -3118,7 +3118,7 @@ npx vitest run src/widgets/sidebar/__tests__/sections-integration.test.tsx
 
 Expected: all tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /home/fz/project/sage
@@ -3132,7 +3132,7 @@ git commit -m "test(sider): integration test for section + session order persist
 
 **Files:** None (verification only)
 
-- [ ] **Step 1: Type-check the entire project**
+- [x] **Step 1: Type-check the entire project**
 
 ```bash
 cd /home/fz/project/sage
@@ -3141,7 +3141,7 @@ npx tsc --noEmit
 
 Expected: exit 0. Fix any errors before continuing.
 
-- [ ] **Step 2: Lint the entire project**
+- [x] **Step 2: Lint the entire project**
 
 ```bash
 cd /home/fz/project/sage
@@ -3150,7 +3150,7 @@ npm run lint
 
 Expected: no errors (warnings OK). Fix any lint errors — the most common will be `react-hooks/exhaustive-deps` warnings around the `useEffect` block in `useStoredSiderOrder.ts`. The `currentItems` reference is intentionally the only dep (we don't want to re-run reconciliation when `order` itself changes, since the user drives that via `setOrder`).
 
-- [ ] **Step 3: Run all unit + component tests with coverage**
+- [x] **Step 3: Run all unit + component tests with coverage**
 
 ```bash
 cd /home/fz/project/sage
@@ -3166,7 +3166,7 @@ Expected:
 
 If any file is below threshold, write additional targeted tests in the same `__tests__/` directory and re-run.
 
-- [ ] **Step 4: Run Prettier check**
+- [x] **Step 4: Run Prettier check**
 
 ```bash
 cd /home/fz/project/sage
@@ -3182,7 +3182,7 @@ npm run format
 
 then re-run the full vitest suite to confirm nothing broke.
 
-- [ ] **Step 5: Final commit if format changes**
+- [x] **Step 5: Final commit if format changes**
 
 ```bash
 cd /home/fz/project/sage
