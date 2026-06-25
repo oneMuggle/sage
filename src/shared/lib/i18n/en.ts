@@ -147,4 +147,18 @@ export const en: Record<TranslationKey, string> = {
   'feedback.email_placeholder': 'your@email.com',
   'feedback.submit': 'Submit',
   'feedback.success': 'Thank you for your feedback!',
+
+  // ─── @File mention ────────────────
+  'chat.atFile.searching': 'Searching…',
+  'chat.atFile.empty': 'No files found',
+  'chat.atFile.timeout': 'Search timeout',
+  'chat.atFile.error': 'Search failed',
+  'chat.atFile.retry': 'Retry',
+
+  // ─── /btw side question ───────────
+  'chat.btw.title': 'By the way…',
+  'chat.btw.placeholder': 'Ask while main task runs…',
+  'chat.btw.loading': 'Thinking…',
+  'chat.btw.error': 'Failed to load',
+  'chat.btw.close': 'Close',
 };
