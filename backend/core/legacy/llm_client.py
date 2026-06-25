@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
@@ -17,6 +19,10 @@ import httpx
 from backend.core.errors import LLMError, LLMErrorType
 
 logger = logging.getLogger(__name__)
+
+# 预编译：提取 LLM 输出中的 <think>...</think> 推理块。
+# 部分 provider（如 DeepSeek）把推理内容用此标签包裹在 content 字段中。
+THINK_TAG_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 
 @dataclass
@@ -162,11 +168,7 @@ class LLMClient:
             - reasoning_content: 提取的思考内容，无标签则为 None
             - clean_content: 移除 <think> 标签后的内容
         """
-        import re
-
-        # 匹配所有 <think>...</think> 标签（支持多行）
-        think_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-        matches = think_pattern.findall(content)
+        matches = THINK_TAG_RE.findall(content)
 
         if not matches:
             # 没有 <think> 标签
@@ -176,7 +178,7 @@ class LLMClient:
         reasoning = "".join(matches)
 
         # 从 content 中移除所有 <think> 标签
-        clean_content = think_pattern.sub("", content)
+        clean_content = THINK_TAG_RE.sub("", content)
 
         return reasoning, clean_content
 

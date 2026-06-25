@@ -361,8 +361,10 @@ export function useChat() {
               // - thinking/acting/observing 的 uiText 触发 replaceContent 覆盖
               //   (切换中间态占位, 避免 "🤔 思考中…🤔 思考中…" 重复前缀)
               // - reasoning 事件已在上面处理，不触发 content 更新
-              if (evt.state === 'reasoning') {
-                // reasoning 事件不更新 content，仅更新 state
+              if (evt.state === 'reasoning' || evt.state === 'reasoning_delta') {
+                // reasoning 事件不更新 content，仅更新 state。
+                // reasoning_delta 复用同一处理,避免依赖 producer 必须以
+                // 完整 reasoning 事件收尾的顺序不变式。
                 setStreaming((prev) =>
                   prev && prev.messageId === assistantId ? { ...prev, state: evt.state } : prev,
                 );
