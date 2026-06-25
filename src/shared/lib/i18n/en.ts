@@ -109,4 +109,9 @@ export const en: Record<TranslationKey, string> = {
   'welcome.quick.webui': 'WebUI',
   'welcome.quick.webui_desc': 'Open in browser',
   'welcome.quick.webui_unavailable': 'Unavailable',
+
+  // ─── Titlebar ──────────────────────────
+  'titlebar.minimize': 'Minimize',
+  'titlebar.maximize': 'Maximize',
+  'titlebar.close': 'Close',
 };

@@ -1,6 +1,6 @@
-import { useI18n } from '../../shared/lib/i18n';
 import type { WindowControlsBridge } from '../../shared/api/windowControlsClient';
 import { windowControls } from '../../shared/api/windowControlsClient';
+import { useI18n } from '../../shared/lib/i18n';
 
 export interface WindowControlsProps {
   bridge?: WindowControlsBridge;
@@ -53,7 +53,15 @@ export function WindowControls({ bridge }: WindowControlsProps) {
         aria-label={t('titlebar.maximize')}
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-          <rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1" />
+          <rect
+            x="2"
+            y="2"
+            width="8"
+            height="8"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+          />
         </svg>
       </button>
       <button

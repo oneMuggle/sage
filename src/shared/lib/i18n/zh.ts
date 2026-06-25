@@ -108,6 +108,11 @@ export const zh = {
   'welcome.quick.webui': 'WebUI',
   'welcome.quick.webui_desc': '在浏览器中打开',
   'welcome.quick.webui_unavailable': 'Unavailable',
+
+  // ─── 标题栏 ──────────────────────────
+  'titlebar.minimize': '最小化',
+  'titlebar.maximize': '最大化',
+  'titlebar.close': '关闭',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
