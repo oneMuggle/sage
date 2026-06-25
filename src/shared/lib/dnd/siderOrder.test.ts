@@ -68,7 +68,12 @@ describe('reconcileStoredSiderOrder', () => {
   });
 
   it('appends new ids to end', () => {
-    expect(reconcileStoredSiderOrder(['a', 'b'], ['a', 'b', 'c', 'd'])).toEqual(['a', 'b', 'c', 'd']);
+    expect(reconcileStoredSiderOrder(['a', 'b'], ['a', 'b', 'c', 'd'])).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+    ]);
   });
 
   it('removes missing ids', () => {
