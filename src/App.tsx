@@ -11,6 +11,7 @@ import { Orchestration } from './pages/Orchestration';
 import { ScheduledTasks } from './pages/ScheduledTasks';
 import Skills from './pages/Skills';
 import { Welcome } from './pages/Welcome';
+import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { useStore } from './shared/lib/store';
 import { Layout } from './widgets/layout';
 
@@ -34,20 +35,22 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/chat" replace />} />
-          <Route path="welcome" element={<Welcome />} />
-          <Route path="chat" element={<ChatRoute />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="memory" element={<Memory />} />
-          <Route path="agents" element={<Agents />} />
-          <Route path="skills" element={<Skills />} />
-          <Route path="knowledge" element={<Knowledge />} />
-          <Route path="scheduled" element={<ScheduledTasks />} />
-          <Route path="orchestration" element={<Orchestration />} />
-        </Route>
-      </Routes>
+      <NavHistoryProvider>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Navigate to="/chat" replace />} />
+            <Route path="welcome" element={<Welcome />} />
+            <Route path="chat" element={<ChatRoute />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="memory" element={<Memory />} />
+            <Route path="agents" element={<Agents />} />
+            <Route path="skills" element={<Skills />} />
+            <Route path="knowledge" element={<Knowledge />} />
+            <Route path="scheduled" element={<ScheduledTasks />} />
+            <Route path="orchestration" element={<Orchestration />} />
+          </Route>
+        </Routes>
+      </NavHistoryProvider>
     </BrowserRouter>
   );
 }
