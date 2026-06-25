@@ -1,4 +1,5 @@
 import { useState } from 'react';
+
 import { useI18n } from '../../shared/lib/i18n';
 
 interface FeedbackModalProps {
@@ -48,9 +49,7 @@ export function FeedbackModal({ isOpen, onClose, screenshot }: FeedbackModalProp
           <form onSubmit={handleSubmit} className="space-y-4">
             {screenshot && (
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  {t('feedback.screenshot')}
-                </label>
+                <label className="block text-sm font-medium mb-2">{t('feedback.screenshot')}</label>
                 <div className="border border-border rounded p-2 bg-bg-muted">
                   <img
                     src={`data:image/png;base64,${screenshot}`}

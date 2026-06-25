@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { useI18n } from '../../shared/lib/i18n';
+
 import { windowControls } from '../../shared/api/windowControlsClient';
+import { useI18n } from '../../shared/lib/i18n';
+
 import { FeedbackModal } from './FeedbackModal';
 
 export function FeedbackButton() {

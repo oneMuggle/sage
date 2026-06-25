@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { FeedbackModal } from '../FeedbackModal';
 
 // Mock dependencies
@@ -33,9 +34,7 @@ describe('FeedbackModal', () => {
   });
 
   it('returns null when isOpen is false', () => {
-    const { container } = render(
-      <FeedbackModal isOpen={false} onClose={mockOnClose} />
-    );
+    const { container } = render(<FeedbackModal isOpen={false} onClose={mockOnClose} />);
     expect(container.firstChild).toBeNull();
   });
 
@@ -72,7 +71,8 @@ describe('FeedbackModal', () => {
   });
 
   it('renders screenshot preview when screenshot prop is provided', () => {
-    const testScreenshot = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const testScreenshot =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
     render(<FeedbackModal isOpen={true} onClose={mockOnClose} screenshot={testScreenshot} />);
 
     expect(screen.getByText('截图预览')).toBeInTheDocument();
@@ -172,7 +172,8 @@ describe('FeedbackModal', () => {
   });
 
   it('submits form with screenshot data when provided', async () => {
-    const testScreenshot = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const testScreenshot =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
     render(<FeedbackModal isOpen={true} onClose={mockOnClose} screenshot={testScreenshot} />);
 
     const textarea = screen.getByPlaceholderText('请描述您的问题或建议...');

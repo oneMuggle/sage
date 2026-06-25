@@ -1,5 +1,5 @@
-import { detectPlatform, isElectronDesktop } from '../../shared/api/windowControlsClient';
 import { FeedbackButton } from '../../features/feedback';
+import { detectPlatform, isElectronDesktop } from '../../shared/api/windowControlsClient';
 
 import { TitlebarActions } from './TitlebarActions';
 import { WindowControls } from './WindowControls';

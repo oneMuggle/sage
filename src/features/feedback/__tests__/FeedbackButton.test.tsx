@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FeedbackButton } from '../FeedbackButton';
+
 import * as windowControlsClient from '../../../shared/api/windowControlsClient';
+import { FeedbackButton } from '../FeedbackButton';
 
 // Mock dependencies
 vi.mock('../../../shared/api/windowControlsClient', () => ({
@@ -31,7 +32,9 @@ vi.mock('../../../shared/lib/i18n', () => ({
 }));
 
 describe('FeedbackButton', () => {
-  const mockCapturePage = windowControlsClient.windowControls.capturePage as ReturnType<typeof vi.fn>;
+  const mockCapturePage = windowControlsClient.windowControls.capturePage as ReturnType<
+    typeof vi.fn
+  >;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -75,10 +78,7 @@ describe('FeedbackButton', () => {
       expect(mockCapturePage).toHaveBeenCalled();
     });
 
-    expect(console.error).toHaveBeenCalledWith(
-      'Failed to capture screenshot:',
-      expect.any(Error)
-    );
+    expect(console.error).toHaveBeenCalledWith('Failed to capture screenshot:', expect.any(Error));
 
     // Modal should still open even if capture fails
     expect(screen.getByText('发送反馈')).toBeInTheDocument();
