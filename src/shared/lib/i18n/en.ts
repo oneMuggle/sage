@@ -114,4 +114,13 @@ export const en: Record<TranslationKey, string> = {
   'titlebar.minimize': 'Minimize',
   'titlebar.maximize': 'Maximize',
   'titlebar.close': 'Close',
+  // ─── Navigation ─────────────────────
+  'nav.back': 'Back',
+  'nav.forward': 'Forward',
+
+  // ─── Time groups ──────────────────
+  'time.today': 'Today',
+  'time.yesterday': 'Yesterday',
+  'time.this_week': 'This Week',
+  'time.earlier': 'Earlier',
 };
