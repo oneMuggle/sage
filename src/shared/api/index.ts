@@ -12,6 +12,7 @@ export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
 export { sessionApi } from './sessionApi';
 export { skillsApi } from './skillsApi';
+export { themeCssClient } from './themeCssClient';
 
 // 类型定义
 export type {
