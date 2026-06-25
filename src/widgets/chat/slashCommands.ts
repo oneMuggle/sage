@@ -77,9 +77,7 @@ export const slashCommands: SlashCommand[] = [
 export function filterCommands(query: string): SlashCommand[] {
   const lower = query.toLowerCase();
   return slashCommands.filter(
-    (cmd) =>
-      cmd.name.toLowerCase().includes(lower) ||
-      cmd.label.toLowerCase().includes(lower),
+    (cmd) => cmd.name.toLowerCase().includes(lower) || cmd.label.toLowerCase().includes(lower),
   );
 }
 

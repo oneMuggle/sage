@@ -58,7 +58,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       open={open}
       onOpenChange={onOpenChange}
       label="命令面板"
-      className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-lg bg-surface border border-border rounded-radius-lg shadow-xl overflow-hidden z-50"
+      className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-lg bg-surface border border-border rounded-radius-lg shadow-xl overflow-hidden z-50 animate-cmdk-enter"
       shouldFilter={true}
     >
       <div className="flex items-center border-b border-border px-3">

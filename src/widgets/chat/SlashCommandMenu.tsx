@@ -12,7 +12,7 @@ export function SlashCommandMenu({ commands, selectedIndex, onSelect }: SlashCom
   if (commands.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-0 mb-1 w-64 bg-surface border border-border rounded-radius-md shadow-lg overflow-hidden z-50">
+    <div className="absolute bottom-full left-0 mb-1 w-64 bg-surface border border-border rounded-radius-md shadow-lg overflow-hidden z-50 animate-popup-enter">
       {commands.map((cmd, i) => {
         const Icon = cmd.icon;
         return (

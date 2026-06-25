@@ -140,9 +140,7 @@ export function ChatInput({
       }
 
       if (cmd.mode === 'help') {
-        const helpText = slashCommands
-          .map((c) => `/${c.name} — ${c.description}`)
-          .join('\n');
+        const helpText = slashCommands.map((c) => `/${c.name} — ${c.description}`).join('\n');
         setValue('');
         onSend(`可用命令列表：\n${helpText}`);
         return;

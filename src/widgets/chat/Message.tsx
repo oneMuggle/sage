@@ -132,7 +132,7 @@ function MessageComponent({
   };
 
   return (
-    <div className={`flex gap-3 mb-5 w-full ${isUser ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex gap-3 mb-5 w-full animate-message-enter ${isUser ? 'flex-row-reverse' : ''}`}>
       {/* 头像 */}
       <div
         className={`w-7 h-7 rounded-radius-sm flex-shrink-0 flex items-center justify-center text-xs font-semibold ${
