@@ -8,15 +8,18 @@
 
 参考 `/home/fz/project/AionUi` 的桌面 AI 应用设计实践，针对 sage 项目（Electron + React + FastAPI）提出 UI/UX 借鉴方案。
 
-调研发现 sage 与 AionUi 架构高度相似（均为 FSD：app/entities/features/pages/shared/widgets），因此借鉴成本低。sage 已有 6 套主题预设、slash 命令、命令面板、虚拟列表、Shiki 高亮、i18n 基础设施，但缺少：
+调研发现 sage 与 AionUi 架构高度相似（均为 FSD：app/entities/features/pages/shared/widgets），因此借鉴成本低。sage 已有 6 套主题预设、slash 命令、命令面板、虚拟列表、Shiki 高亮、i18n 基础设施、置顶会话，但缺少：
 
 1. 自定义 CSS 主题编辑器（AionUi 差异化亮点）
-2. 可拖拽侧边栏（AionUi 高频交互）
+2. 可拖拽侧边栏 + 分组结构（AionUi 高频交互）
 3. 导航历史栈（AionUi 浏览器化体验）
 4. 自定义标题栏 + 反馈入口
 5. /btw 补充消息面板、@文件提及
+6. **新会话欢迎屏**（居中大输入 + 推荐助手 + 快速操作）
+7. **定时任务**（cron jobs，到点自动发送消息）
+8. **侧边栏分组**（Team / Cron / Project / Conversation 分组标签）
 
-目标：在不破坏 sage 现有 FSD 架构的前提下，分 6 个 Phase 引入上述特性。
+目标：在不破坏 sage 现有 FSD 架构的前提下，分 8 个 Phase 引入上述特性。
 
 ## 2. 范围
 
@@ -37,19 +40,29 @@ App 层（providers/）
 ├── ThemeProvider（现有，扩展支持 CSS 主题）
 ├── LayoutProvider（Phase 2 新建）
 ├── NavHistoryProvider（Phase 1 新建）
-└── TitlebarProvider（Phase 5 新建）
+├── TitlebarProvider（Phase 5 新建）
+└── WelcomeRouter（Phase 7 新建：路由决定渲染 Welcome / Chat）
 
 Widgets 层
 ├── Titlebar（Phase 5 新建）
-├── Sidebar（Phase 2 增强拖拽）
+├── Sidebar（Phase 2 增强：拖拽 + 分组结构）
 ├── ThemeEditor（Phase 3 新建）
-└── ChatInput（Phase 6 增强 @/btw）
+├── ChatInput（Phase 6 增强 @/btw）
+└── welcome/（Phase 7 新建：WelcomeHero / InputCard / Recommendations / QuickActions）
 
 Entities 层
 ├── theme/（扩展：storage 增加 css 字段）
 ├── layout/（Phase 2 新建）
 ├── nav-history/（Phase 1 新建）
-└── chat/btwState/（Phase 6 新建）
+├── chat/btwState/（Phase 6 新建）
+├── welcome/recommendations（Phase 7 新建：助手卡片数据）
+└── scheduled/taskStore（Phase 8 新建：Zustand store）
+
+Pages 层
+├── Chat.tsx（现有）
+├── Settings/*（现有）
+├── Welcome.tsx（Phase 7 新建）
+└── ScheduledTasks.tsx（Phase 8 新建）
 
 Shared 层
 ├── lib/i18n/（现有）
@@ -57,7 +70,9 @@ Shared 层
 └── lib/codemirror-config/（Phase 3 新建）
 
 Backend（Python）
-└── api/theme_router.py（Phase 3 新增：CSS 主题 CRUD）
+├── api/theme_router.py（Phase 3 新增：CSS 主题 CRUD）
+├── api/scheduled_router.py（Phase 8 新增：定时任务 CRUD）
+└── services/scheduler.py（Phase 8 新增：APScheduler 集成）
 ```
 
 ### 核心架构原则
@@ -123,16 +138,25 @@ interface NavHistoryContextValue {
 
 ---
 
-### Phase 2 — 拖拽侧边栏
+### Phase 2 — 拖拽侧边栏 + 分组结构（升级版）
+
+**核心目标：** 不仅支持拖拽重排会话，还引入"分组"作为侧边栏的第一公民。
 
 **新增文件：**
 - `src/shared/lib/dnd/sortableItem.ts` — `<SortableSessionItem>` 封装
 - `src/shared/lib/dnd/useStoredSiderOrder.ts` — 排序状态读取/写入/调和
 - `src/widgets/session/SortableSessionList.tsx` — DnD 包装层
+- `src/widgets/sidebar/SiderSection.tsx` — 通用分组组件（标题 + 折叠 + 拖拽手柄）
+- `src/widgets/sidebar/sections/ConversationsSection.tsx` — 会话分组（升级原 SessionList）
+- `src/widgets/sidebar/sections/CronJobSection.tsx` — 定时任务分组（Phase 8 实现）
+- `src/widgets/sidebar/sections/ProjectSection.tsx` — 项目分组
+- `src/widgets/sidebar/sections/TeamSection.tsx` — 团队分组
+- `src/widgets/sidebar/useSiderSections.ts` — 分组排序/折叠持久化
 
 **修改文件：**
 - `src/widgets/session/SessionItem.tsx` — 拖拽手柄 + useSortable
 - `src/widgets/session/VirtualSessionList.tsx` — 与虚拟列表协同
+- `src/widgets/sidebar/Sidebar.tsx` — 用 sections 数组渲染，替代硬编码
 - `package.json` — 新增 `@dnd-kit/*` 依赖
 
 **数据流：**
@@ -149,7 +173,45 @@ interface NavHistoryContextValue {
   handleDragEnd → arrayMove → setStoredOrder → writeStoredSiderOrder
 ```
 
-**存储键：** `sage:sider:order:v1`
+**侧边栏分组结构：**
+```typescript
+interface SiderSection {
+  key: string;            // 'conversations' | 'cron' | 'project' | 'team'
+  label: string;          // i18n label
+  icon: LucideIcon;
+  order: number;          // 可拖拽排序
+  collapsed: boolean;     // 折叠状态持久化
+  trailing?: ReactNode;   // "+" 按钮
+  render: () => ReactNode; // 渲染该分组的 items
+}
+
+interface SiderConfig {
+  order: string[];           // section keys 顺序
+  collapsed: string[];       // 已折叠的 section keys
+}
+```
+
+**视觉示意：**
+```
+┌─ Sider ────────────────┐
+│ ▼ 💬 会话       [+ 新建]│
+│   ⋮⋮ 写代码草稿       │  ← 可拖
+│   ⋮⋮ 读书笔记         │
+│                          │
+│ ▶ ⏰ 定时任务     [+]   │  ← 已折叠
+│                          │
+│ ▼ 📁 项目              │
+│   • Sage 核心           │
+│   • AionUi 借鉴         │
+│                          │
+│ ▼ 🤝 团队              │
+│   • 默认团队           │
+└──────────────────────────┘
+```
+
+**存储键：**
+- 会话排序：`sage:sider:order:v1`
+- 分组配置：`sage:sider:sections:v1`（order + collapsed）
 
 **依赖：** `@dnd-kit/core`、`@dnd-kit/sortable`、`@dnd-kit/utilities`
 
@@ -310,6 +372,169 @@ interface BtwState {
 }
 ```
 
+---
+
+### Phase 7 — 新会话欢迎屏（Welcome Screen）
+
+**借鉴来源：** AionUi `pages/guid/GuidPage.tsx` + `QuickActionButtons.tsx`
+
+**UX 目标：**
+- 用户点击"新建会话" → 看到居中的大输入框（而非底部小输入框）
+- 输入框下方展示"推荐助手卡片"，点击后填入输入框
+- 底部一行快速操作：反馈 / GitHub / WebUI
+- 输入框占位符用打字机动画轮播提示
+- 头像 + 标题的 hero header
+
+**新增文件：**
+- `src/pages/Welcome.tsx` — 欢迎屏主组件
+- `src/widgets/welcome/WelcomeHero.tsx` — 标题 + 头像 + 返回按钮
+- `src/widgets/welcome/WelcomeInputCard.tsx` — 居中大输入框（包装 ChatInput）
+- `src/widgets/welcome/AssistantRecommendations.tsx` — 推荐助手卡片网格
+- `src/widgets/welcome/QuickActionBar.tsx` — 反馈 / GitHub / WebUI 快速操作
+- `src/features/welcome/useTypewriterPlaceholder.ts` — 打字机占位符 hook
+- `src/entities/welcome/recommendations.ts` — 推荐助手数据
+
+**修改文件：**
+- `src/pages/Chat.tsx` — 无 currentSessionId 时渲染 `<Welcome />` 而非空 Chat
+- `src/App.tsx` — 增加 `/welcome` 路由
+- `src/widgets/sidebar/Sidebar.tsx` — "新建会话" 跳转 `/welcome`
+- `src/widgets/chat/ChatInput.tsx` — 抽出可复用的 `<InputCard />`，welcome 与 chat 共用
+
+**视觉示意：**
+```
+┌────────────────────────────────────────────────────────────┐
+│                                                            │
+│              ┌──────────────────────┐                     │
+│              │  🤖 你好，我是 Claude  │  ← Hero 头像+标题  │
+│              │  有什么可以帮你的？   │  ← typewriter       │
+│              └──────────────────────┘                     │
+│                                                            │
+│       ┌──────────────────────────────────────┐             │
+│       │                                      │             │
+│       │  [type here...]              [Send]  │             │
+│       │                                      │             │
+│       │  [📎]  [🎤]  [@]  [/]                │             │
+│       └──────────────────────────────────────┘             │
+│                                                            │
+│       ┌──────────┐  ┌──────────┐  ┌──────────┐            │
+│       │ 📝 Code  │  │ 🔍 搜索  │  │ 💡 创意  │  ← 助手卡片 │
+│       │ 帮我写...│  │ 查找...  │  │ 脑暴...  │            │
+│       └──────────┘  └──────────┘  └──────────┘            │
+│                                                            │
+│              💬 反馈   ⭐ GitHub   🌐 WebUI                │
+└────────────────────────────────────────────────────────────┘
+```
+
+**数据流：**
+```
+用户点击"新建会话"
+    ↓
+navigate('/welcome')
+    ↓
+<Welcome /> 渲染
+    ├─ useTypewriterPlaceholder(['帮我写代码...', '解释这段...', ...])
+    ├─ 渲染 AssistantRecommendations（从 entities/welcome 读取）
+    └─ 输入框输入 → 按 Enter 触发 sendMessage
+        ├─ 创建新 session
+        ├─ 切换到 /chat/:sessionId
+        └─ 隐藏 Welcome
+```
+
+**核心类型：**
+```typescript
+interface AssistantRecommendation {
+  id: string;
+  title: string;
+  prompt: string;        // 点击后填入输入框
+  icon: string;          // lucide-react icon name
+  gradient: string;      // tailwind gradient class
+}
+
+interface QuickAction {
+  id: 'feedback' | 'github' | 'webui' | 'docs';
+  icon: ReactNode;
+  labelKey: string;      // i18n key
+  onClick: () => void;
+  badge?: { text: string; variant: 'success' | 'warning' | 'error' };
+}
+```
+
+**视觉聚焦设计原则：**
+1. **空间分配**：欢迎屏占满视口，输入框垂直居中（top: 40%）
+2. **微动画**：输入框聚焦时阴影呼吸（2s 周期）；推荐卡片 hover 时上浮 2px + 阴影加深；打字机 50ms/字
+3. **色彩节奏**：hero 标题用主题色 `--text-primary`，占位符用 `--text-tertiary`
+4. **聚焦引导**：默认 `autofocus` 输入框；推荐卡片 Tab 键可循环
+5. **降级处理**：移动端欢迎屏简化为单列布局
+
+**依赖：** 无新增 npm 包（lucide-react 已有）
+
+---
+
+### Phase 8 — 定时任务（Scheduled Tasks / Cron Jobs）
+
+**借鉴来源：** AionUi `pages/cron/` + `Sider/CronJobSiderSection.tsx`
+
+**UX 目标：**
+- 用户设置一次性或周期性的"提醒"或"自动化任务"
+- 在侧边栏"Cron Jobs"分组显示（Phase 2 的 SiderSection 复用）
+- 到点自动发送消息到指定会话
+- 支持：执行一次 / 每小时 / 每天 / 每周 / 自定义 cron
+
+**新增文件：**
+- `src/pages/ScheduledTasks.tsx` — 任务列表 + 创建表单
+- `src/features/scheduled/CreateTaskModal.tsx` — 创建任务弹窗
+- `src/features/scheduled/CronExpressionPicker.tsx` — Cron 表达式可视化选择
+- `src/entities/scheduled/taskStore.ts` — Zustand store
+- `src/shared/api/scheduledClient.ts` — IPC 客户端
+
+**后端（Python）：**
+- `backend/api/scheduled_router.py` — CRUD
+- `backend/services/scheduler.py` — APScheduler 集成
+- `backend/data/scheduled_tasks.json` — 任务持久化
+
+**修改文件：**
+- `src/widgets/sidebar/sections/CronJobSection.tsx` — 渲染任务列表
+- `src/widgets/chat/ChatInput.tsx` — 输入框旁增加"定时"按钮
+
+**视觉示意：**
+
+创建任务 Modal：
+```
+┌─ 新建定时任务 ──────────────┐
+│ 名称: [每日早报_____]       │
+│ 类型: ○ 一次性  ● 周期     │
+│ 周期: [每天]  [08:00]      │
+│ 会话: [选择会话▼]          │
+│ 内容: [自动发送的内容...]   │
+│                              │
+│ [取消]              [创建] │
+└──────────────────────────────┘
+```
+
+**核心类型：**
+```typescript
+interface ScheduledTask {
+  id: string;
+  name: string;
+  type: 'once' | 'recurring';
+  schedule: {
+    kind: 'once';
+    at: number;          // timestamp
+  } | {
+    kind: 'recurring';
+    cron: string;         // "0 8 * * *"
+  };
+  sessionId: string;
+  content: string;
+  enabled: boolean;
+  lastRun?: number;
+  nextRun?: number;
+  createdAt: number;
+}
+```
+
+**依赖：** 后端 APScheduler，前端无新增 npm 包
+
 ## 5. 错误处理
 
 ### Phase 1 — 导航历史栈
@@ -355,6 +580,24 @@ interface BtwState {
 - 流式中断：自动重连 1 次，仍失败则标记 error
 - 多个 /btw 同时打开：第二次自动关闭前一个
 - btw 加载中 Esc：关闭 overlay，不取消主请求
+
+### Phase 7 — 新会话欢迎屏
+- typewriter 组件卸载时清理 setInterval（避免内存泄漏）
+- 推荐卡片点击 → session 创建失败 → Toast 提示并停留在欢迎屏
+- WebUI 状态查询失败：显示 "Unavailable" badge，不阻塞交互
+- 输入框 Enter 触发 → 无内容时早返回（trim 后空字符串）
+- 路由切换时：Welcome / Chat 互转，sessionId 必须存在才能进 Chat
+- 推荐卡片 prompt 注入失败：toast 提示并 focus 输入框
+- 自动聚焦失败（如浏览器权限）：手动 focus，不抛错
+
+### Phase 8 — 定时任务
+- Cron 表达式无效：行内红字提示（实时校验）
+- 后端 scheduler 未启动：任务显示 "paused" 状态，红色 badge
+- 任务执行失败：在对应会话中插入错误消息，任务保持 enabled
+- 到点时 session 不存在：跳过本次，console.warn，下次继续
+- 一次性任务完成后自动 disabled，下次不再触发
+- 周期任务 nextRun 计算失败：禁用任务，提示用户重新创建
+- 时区处理：所有时间戳按用户本地时区展示（修复 AionUi 的 timezone bug）
 
 ### 通用原则
 1. 永不 throw 到 UI
@@ -405,6 +648,23 @@ interface BtwState {
 **Component Tests（BtwOverlay 5 个）：** 渲染 question、loading spinner、answer 流式、Esc、error 态
 **E2E（2 个）：** @文件插入、/btw 完整流程
 
+### Phase 7 — 新会话欢迎屏
+**Unit Tests（useTypewriterPlaceholder 5 个）：** 字符串数组循环、字符递增、卸载清理、空数组、单一字符串
+**Component Tests（WelcomeHero 3 个）：** 头像渲染、标题 i18n、返回按钮
+**Component Tests（AssistantRecommendations 4 个）：** 渲染所有卡片、点击触发 prompt 注入、hover 效果、缺失 icon 降级
+**Component Tests（QuickActionBar 3 个）：** 反馈按钮、GitHub 链接、WebUI 状态 badge
+**Component Tests（Welcome 5 个）：** 默认 autofocus、Enter 触发创建、路由切换、typewriter 动画
+**E2E（2 个）：** 点击"新建会话" → 看到欢迎屏 → 输入 → 跳转 Chat；点击推荐卡片 → 输入框填充提示词
+
+### Phase 8 — 定时任务
+**Unit Tests（cron 校验 4 个）：** 有效表达式、无效表达式、边界值（如 `0 0 29 2 *`）、时区
+**Component Tests（CronExpressionPicker 4 个）：** 选择预设、自定义输入、实时校验、错误提示
+**Component Tests（CreateTaskModal 5 个）：** 创建流程、字段验证、取消、编辑模式、删除
+**Component Tests（CronJobSection 3 个）：** 任务列表、空状态、状态 badge
+**Integration Tests（scheduledClient 5 个）：** CRUD、超时、错误处理
+**后端 Tests（scheduler.py 6 个）：** 启动/停止、添加任务、到点触发、时区、错误恢复、并发
+**E2E（3 个）：** 创建一次性任务（设置 30 秒后）→ 到点自动发送；创建周期任务 → 修改/禁用/删除；时区切换验证
+
 ### Mock 策略
 
 | 类型 | Mock 方式 |
@@ -425,6 +685,8 @@ interface BtwState {
 | Phase 4 | ThemeGallery: 85% | ≥ 82% |
 | Phase 5 | windowControlsClient: 90% | ≥ 83% |
 | Phase 6 | useAtFileQuery/useBtwCommand: 95% | ≥ 85% |
+| Phase 7 | useTypewriterPlaceholder: 95% | ≥ 85% |
+| Phase 8 | scheduler.py: 95% | ≥ 85% |
 
 ## 7. 风险与依赖
 
@@ -438,6 +700,11 @@ interface BtwState {
 | 流式 btw 中断 | 低 | AbortController + 自动重连 |
 | 平台差异（macOS vs Windows 标题栏） | 低 | 平台检测 + 分支渲染 |
 | Electron 版本约束（sage 用 21.4.4） | 中 | Phase 5 需确认 webContents.capturePage 在 21.x 可用 |
+| **欢迎屏与现有 Chat 路由冲突** | 中 | Phase 7 引入 WelcomeRouter 决策；空 sessionId 走 Welcome |
+| **打字机动画性能** | 低 | 卸载清理 + 移动端降级（关闭动画） |
+| **APScheduler 与现有后端进程冲突** | 中 | Phase 8 后端 scheduler 进程独立；任务持久化用 JSON 文件 |
+| **定时任务时区 bug** | 高 | AionUi 已知有 timezone 问题；sage 强制统一用本地时区 + UTC 双轨 |
+| **侧边栏分组顺序冲突** | 低 | Phase 2 用单一存储 key + 调和算法 |
 
 ### 依赖
 
@@ -460,13 +727,15 @@ interface BtwState {
 按价值/成本比排序：
 
 1. **Phase 1**（导航历史栈） — 1 周，架构基础，零风险
-2. **Phase 2**（拖拽侧边栏） — 1.5 周，复用 Phase 1 Context 模式
+2. **Phase 2**（拖拽侧边栏 + 分组结构） — 1.5 周，复用 Phase 1 Context 模式
 3. **Phase 3**（CSS 主题编辑器） — 2-3 周，核心差异化，安全重点
 4. **Phase 4**（装饰性主题） — 1 周，复用 Phase 3 存储
 5. **Phase 5**（自定义标题栏） — 1.5 周，平台适配工作量大
-6. **Phase 6**（@文件 + /btw） — 2-3 周，Stretch 阶段，可拆分
+6. **Phase 7**（新会话欢迎屏） — 1.5-2 周，高价值第一眼体验，可与 Phase 1-2 并行
+7. **Phase 6**（@文件 + /btw） — 2-3 周，Stretch 阶段，可拆分
+8. **Phase 8**（定时任务） — 2 周，依赖 APScheduler 后端集成
 
-**总预估：** 9-11 周（6 个 Phase，含测试与文档）
+**总预估：** 13-15 周（8 个 Phase，含测试与文档）
 
 每个 Phase 独立可发布，回滚成本低。
 
