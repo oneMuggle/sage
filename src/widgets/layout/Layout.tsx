@@ -5,6 +5,7 @@ import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 
 import { ResizeDivider } from './ResizeDivider';
 import { Sidebar } from './Sidebar';
+import { TitlebarActions } from './TitlebarActions';
 
 export function Layout() {
   const { width, onMouseDown } = useResizableSidebar();
@@ -62,10 +63,15 @@ export function Layout() {
         </>
       )}
 
-      {/* 主内容区 */}
-      <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
-        <Outlet />
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 顶部标题栏（导航操作） */}
+        <div className="flex items-center px-4 h-10 border-b border-border bg-bg-subtle">
+          <TitlebarActions />
+        </div>
+        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }
