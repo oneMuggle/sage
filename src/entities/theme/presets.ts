@@ -35,6 +35,10 @@ export interface ThemePreset {
   description: string;
   colors: ThemeColors;
   darkColors: ThemeColors;
+  /** 可选：自定义 CSS（CSS 主题用） */
+  css?: string;
+  /** 可选：封面图 data URL（CSS 主题用） */
+  cover?: string;
 }
 
 // ─── Indigo (默认) ───────────────────────────
