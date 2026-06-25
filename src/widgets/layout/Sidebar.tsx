@@ -17,7 +17,11 @@ const navItems = [
   { path: '/settings', label: '设置', icon: Settings },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  width?: number;
+}
+
+export function Sidebar({ width = 240 }: SidebarProps) {
   const location = useLocation();
   const {
     sessions,
@@ -63,7 +67,10 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-60 h-screen bg-surface border-r border-border flex flex-col flex-shrink-0">
+    <aside
+      style={{ width: `${width}px` }}
+      className="h-screen bg-surface border-r border-border flex flex-col flex-shrink-0"
+    >
       {/* Logo 区域 */}
       <div className="h-12 flex items-center px-4 border-b border-border">
         <div className="w-6 h-6 bg-primary rounded-sm flex items-center justify-center text-text-inverse font-bold text-xs mr-2.5">

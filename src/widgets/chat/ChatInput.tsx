@@ -1,10 +1,12 @@
 import { Send, Square, Image, Paperclip, BookOpen } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 
 import { FileAttachment } from './FileAttachment';
 import { KnowledgeChip } from './KnowledgeChip';
+import { SlashCommandMenu } from './SlashCommandMenu';
+import { commandToPrompt, filterCommands, type SlashCommand } from './slashCommands';
 
 interface ChatInputProps {
   onSend: (
@@ -16,6 +18,7 @@ interface ChatInputProps {
     },
   ) => void;
   onInterrupt?: () => void;
+  onClear?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -33,6 +36,7 @@ const KNOWLEDGE_DOCS = [
 export function ChatInput({
   onSend,
   onInterrupt,
+  onClear,
   isLoading = false,
   disabled = false,
   placeholder = '输入消息...',
@@ -40,6 +44,9 @@ export function ChatInput({
   const [value, setValue] = useState('');
   const [knowledgeRefs, setKnowledgeRefs] = useState<{ id: string; title: string }[]>([]);
   const [showKnowledgeSelector, setShowKnowledgeSelector] = useState(false);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const {
@@ -68,6 +75,31 @@ export function ChatInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Slash 菜单打开时拦截键盘事件
+    if (slashMenuOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => (prev + 1) % slashCommands.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => (prev - 1 + slashCommands.length) % slashCommands.length);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (slashCommands[slashSelectedIndex]) {
+          handleSlashSelect(slashCommands[slashSelectedIndex]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashMenuOpen(false);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -75,11 +107,56 @@ export function ChatInput({
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setValue(e.target.value);
+    const newValue = e.target.value;
+    setValue(newValue);
     const ta = e.target;
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+
+    // 检测 slash 命令
+    if (newValue.startsWith('/')) {
+      const query = newValue.slice(1).split(/\s/)[0] ?? '';
+      const filtered = filterCommands(query);
+      if (filtered.length > 0) {
+        setSlashCommands(filtered);
+        setSlashSelectedIndex(0);
+        setSlashMenuOpen(true);
+      } else {
+        setSlashMenuOpen(false);
+      }
+    } else {
+      setSlashMenuOpen(false);
+    }
   };
+
+  const handleSlashSelect = useCallback(
+    (cmd: SlashCommand) => {
+      setSlashMenuOpen(false);
+
+      if (cmd.mode === 'clear') {
+        setValue('');
+        onClear?.();
+        return;
+      }
+
+      if (cmd.mode === 'help') {
+        const helpText = slashCommands
+          .map((c) => `/${c.name} — ${c.description}`)
+          .join('\n');
+        setValue('');
+        onSend(`可用命令列表：\n${helpText}`);
+        return;
+      }
+
+      // prompt 模式：提取参数并转为提示词
+      const parts = value.split(/\s+/);
+      const args = parts.slice(1).join(' ');
+      const prompt = commandToPrompt(cmd, args);
+      setValue('');
+      onSend(prompt);
+    },
+    [value, onSend, onClear, slashCommands],
+  );
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
@@ -166,6 +243,13 @@ export function ChatInput({
 
       <div className="flex items-end gap-2">
         <div className="flex-1 relative">
+          {slashMenuOpen && (
+            <SlashCommandMenu
+              commands={slashCommands}
+              selectedIndex={slashSelectedIndex}
+              onSelect={handleSlashSelect}
+            />
+          )}
           <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
             <textarea
               ref={textareaRef}
