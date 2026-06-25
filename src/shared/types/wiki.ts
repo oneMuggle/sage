@@ -42,7 +42,61 @@ export interface WikiChatResponse {
   citations: string[];
 }
 
-export type WikiView = 'browser' | 'search' | 'chat' | 'graph';
+export type WikiView = 'browser' | 'search' | 'chat' | 'graph' | 'lint' | 'review' | 'sources';
+
+// Lint 检查项
+export interface LintItem {
+  id: string;
+  type: 'orphan' | 'broken-link' | 'no-outlinks' | 'semantic';
+  severity: 'warning' | 'info';
+  page: string;
+  message: string;
+  suggestion?: string;
+}
+
+// Review 审核项
+export interface ReviewItem {
+  id: string;
+  type: 'contradiction' | 'duplicate' | 'missing-page' | 'confirm' | 'suggestion';
+  title: string;
+  description: string;
+  affectedPages: string[];
+  resolved: boolean;
+  actions: ReviewAction[];
+}
+
+export interface ReviewAction {
+  id: string;
+  label: string;
+  type: 'research' | 'open' | 'create' | 'dismiss' | 'delete';
+}
+
+// Activity 活动项
+export interface ActivityItem {
+  id: string;
+  type: 'ingest' | 'lint' | 'query';
+  status: 'running' | 'done' | 'error';
+  startedAt: number;
+  completedAt?: number;
+  filesWritten?: string[];
+  error?: string;
+}
+
+// Research 研究任务
+export interface ResearchTask {
+  id: string;
+  topic: string;
+  status: 'queued' | 'searching' | 'synthesizing' | 'done' | 'error';
+  webResults: WebResult[];
+  synthesis: string;
+  savedPath?: string;
+}
+
+export interface WebResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
 
 export type GraphSignal = 'DirectLink' | 'SourceOverlap' | 'TypeAffinity';
 

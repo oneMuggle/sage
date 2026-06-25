@@ -28,7 +28,6 @@ function inferProviderFromBaseUrl(baseUrl: string | undefined): string | undefin
   return undefined;
 }
 
-
 export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -245,7 +244,11 @@ export function useChat() {
         // 占位符 '🤔 思考中…' 会留在 store。fallback 到错误文案让用户看到明确失败
         if (!finalContent && !finalReasoning && finalToolCalls.length === 0) {
           finalContent = '[错误: 模型未返回任何内容]';
-        } else if (finalContent === '🤔 思考中…' && !finalReasoning && finalToolCalls.length === 0) {
+        } else if (
+          finalContent === '🤔 思考中…' &&
+          !finalReasoning &&
+          finalToolCalls.length === 0
+        ) {
           finalContent = '[错误: 模型未返回任何内容]';
         }
         if (finalContent || finalReasoning || finalToolCalls.length > 0) {
@@ -288,8 +291,8 @@ export function useChat() {
                 );
               }
 
-              // 处理 reasoning 事件：累积 reasoning 内容
-              if (evt.state === 'reasoning' && evt.reasoning) {
+              // 处理 reasoning 事件：累积 reasoning 内容（支持完整事件和增量事件）
+              if ((evt.state === 'reasoning' || evt.state === 'reasoning_delta') && evt.reasoning) {
                 streamingReasoningRef.current = streamingReasoningRef.current + evt.reasoning;
                 setStreaming((prev) =>
                   prev && prev.messageId === assistantId
@@ -358,8 +361,10 @@ export function useChat() {
               // - thinking/acting/observing 的 uiText 触发 replaceContent 覆盖
               //   (切换中间态占位, 避免 "🤔 思考中…🤔 思考中…" 重复前缀)
               // - reasoning 事件已在上面处理，不触发 content 更新
-              if (evt.state === 'reasoning') {
-                // reasoning 事件不更新 content，仅更新 state
+              if (evt.state === 'reasoning' || evt.state === 'reasoning_delta') {
+                // reasoning 事件不更新 content，仅更新 state。
+                // reasoning_delta 复用同一处理,避免依赖 producer 必须以
+                // 完整 reasoning 事件收尾的顺序不变式。
                 setStreaming((prev) =>
                   prev && prev.messageId === assistantId ? { ...prev, state: evt.state } : prev,
                 );

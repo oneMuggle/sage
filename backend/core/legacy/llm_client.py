@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
@@ -18,6 +19,10 @@ import httpx
 from backend.core.errors import LLMError, LLMErrorType
 
 logger = logging.getLogger(__name__)
+
+# 预编译：提取 LLM 输出中的 <think>...</think> 推理块。
+# 部分 provider（如 DeepSeek）把推理内容用此标签包裹在 content 字段中。
+THINK_TAG_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 
 @dataclass
@@ -173,6 +178,33 @@ class LLMClient:
             )
         return result
 
+    @staticmethod
+    def _extract_think_tags(content: str) -> tuple[str | None, str]:
+        """
+        从 content 中提取 <think>...</think> 标签内容。
+
+        Args:
+            content: LLM 输出的原始内容
+
+        Returns:
+            (reasoning_content, clean_content) 元组
+            - reasoning_content: 提取的思考内容，无标签则为 None
+            - clean_content: 移除 <think> 标签后的内容
+        """
+        matches = THINK_TAG_RE.findall(content)
+
+        if not matches:
+            # 没有 <think> 标签
+            return None, content
+
+        # 合并所有思考内容
+        reasoning = "".join(matches)
+
+        # 从 content 中移除所有 <think> 标签
+        clean_content = THINK_TAG_RE.sub("", content)
+
+        return reasoning, clean_content
+
     async def chat(
         self,
         messages: list[dict[str, Any]],
@@ -270,6 +302,16 @@ class LLMClient:
         # DeepSeek 使用 reasoning_content 字段
         # 优先使用 reasoning_content，其次 reasoning
         reasoning_content = msg_data.get("reasoning_content") or msg_data.get("reasoning")
+
+        # 某些 LLM 提供商（如 DeepSeek）会把思考内容用 <think> 标签包裹在 content 中
+        # 始终清理 content 中的 <think> 标签，无论 reasoning_content 字段是否存在
+        if content:
+            parsed_reasoning, parsed_content = self._extract_think_tags(content)
+            # 如果 reasoning_content 字段为空，使用解析出的思考内容
+            if not reasoning_content and parsed_reasoning is not None:
+                reasoning_content = parsed_reasoning
+            # 更新 content（移除 <think> 标签）
+            content = parsed_content
 
         tool_calls = []
         if msg_data.get("tool_calls"):

@@ -953,8 +953,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         done_reasoning = evt.reasoning
                     else:
                         done_reasoning += evt.reasoning
-                    # 透传给前端 (原样入队,前端 useChat 累积显示)
-                    await entry.queue.put(evt.to_dict())
+                    # 流式输出 reasoning: 拆成小块逐个入队,模拟逐字显示效果
+                    reasoning = evt.reasoning
+                    for i in range(0, len(reasoning), _STREAMING_CHUNK_SIZE):
+                        delta = reasoning[i : i + _STREAMING_CHUNK_SIZE]
+                        await entry.queue.put(
+                            {
+                                "state": "reasoning_delta",
+                                "iteration": evt.iteration,
+                                "reasoning": delta,
+                                "agent_id": evt.agent_id,
+                            }
+                        )
+                        await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
+                    # 最终 reasoning 事件携带累积全量 (而非单次 evt.reasoning)。
+                    # 这样: 持久化、最终事件、前端累积 三者 reasoning 文本一致,
+                    # 不依赖前端每个 delta 都没丢。
+                    final_reasoning_event = evt.to_dict()
+                    final_reasoning_event["reasoning"] = done_reasoning
+                    await entry.queue.put(final_reasoning_event)
                 else:
                     await entry.queue.put(evt.to_dict())
 
