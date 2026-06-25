@@ -69,19 +69,16 @@ export function useStoredSiderOrder<T>({
   const orderedItems = useMemo(() => {
     const itemsWithId = items.map((item, i) => ({
       item,
-      id: currentIds[i] ?? getId(item),
+      id: currentIds[i],
     }));
     const sorted = sortSiderItemsByStoredOrder(itemsWithId, order);
     return sorted.map((entry) => entry.item);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, order, idsKey]);
 
-  const reorder = useCallback(
-    (fromIndex: number, toIndex: number) => {
-      setOrder((prev) => reorderSiderIds(prev, fromIndex, toIndex));
-    },
-    [],
-  );
+  const reorder = useCallback((fromIndex: number, toIndex: number) => {
+    setOrder((prev) => reorderSiderIds(prev, fromIndex, toIndex));
+  }, []);
 
   const resetOrder = useCallback(() => {
     setOrder(prevIdsRef.current);
