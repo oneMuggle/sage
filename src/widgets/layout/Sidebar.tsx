@@ -7,7 +7,7 @@ import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useStore } from '../../shared/lib/store';
-import { SessionItem } from '../session/SessionItem';
+import { VirtualSessionList } from '../session/VirtualSessionList';
 
 // 导航项配置
 const navItems = [
@@ -111,22 +111,17 @@ export function Sidebar({ width = 240 }: SidebarProps) {
         >
           + 新对话
         </button>
-        <div className="overflow-y-auto max-h-[calc(100vh-320px)]">
-          {sessions.map((session) => (
-            <SessionItem
-              key={session.id}
-              session={session}
-              isActive={session.id === currentSessionId}
-              onSelect={() => {
-                setCurrentSessionId(session.id);
-                if (location.pathname !== '/chat') {
-                  window.location.href = '/chat';
-                }
-              }}
-              onDelete={() => deleteSession(session.id)}
-            />
-          ))}
-        </div>
+        <VirtualSessionList
+          sessions={sessions}
+          currentSessionId={currentSessionId}
+          onSelect={(id) => {
+            setCurrentSessionId(id);
+            if (location.pathname !== '/chat') {
+              window.location.href = '/chat';
+            }
+          }}
+          onDelete={(id) => deleteSession(id)}
+        />
       </nav>
 
       {/* 底部状态栏 */}

@@ -28,6 +28,7 @@
   "dependencies": {
     "@headlessui/react": "^1.7.17",
     "@tanstack/react-query": "^5.101.0",
+    "@tanstack/react-virtual": "^3.14.3",
     "@xyflow/react": "^12.11.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
@@ -41,6 +42,7 @@
     "react-router-dom": "^6.20.0",
     "react-syntax-highlighter": "^15.6.6",
     "remark-gfm": "^4.0.1",
+    "shiki": "^4.3.0",
     "sonner": "^2.0.7",
     "zustand": "^4.4.7"
   },

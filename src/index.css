@@ -328,6 +328,28 @@ body {
   }
 }
 
+/* Shiki 代码块样式 */
+.shiki-code pre {
+  margin: 0 !important;
+  padding: 12px !important;
+  border-radius: 0 0 6px 6px;
+  background: #282c34 !important;
+}
+
+.shiki-code .shiki,
+.shiki-code code {
+  background: transparent !important;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 暗色模式下使用 shiki 暗色主题 */
+[data-theme='dark'] .shiki[data-theme='light'],
+[data-theme='light'] .shiki[data-theme='dark'] {
+  display: none;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

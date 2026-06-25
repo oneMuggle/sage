@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { getThemeById, DEFAULT_THEME_ID, type ThemeColors } from '../../entities/theme/presets';
-import { loadTheme, loadThemePreset, saveTheme, saveThemePreset } from '../../entities/theme/storage';
+import {
+  loadTheme,
+  loadThemePreset,
+  saveTheme,
+  saveThemePreset,
+} from '../../entities/theme/storage';
 
 import { ThemeContext, type ThemeMode } from './useTheme';
 
@@ -110,22 +115,16 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
     applyTheme(resolved, presetId);
   }, [resolved, presetId]);
 
-  const setMode = useCallback(
-    (next: ThemeMode): void => {
-      setModeState(next);
-      void saveTheme(next);
-    },
-    [],
-  );
+  const setMode = useCallback((next: ThemeMode): void => {
+    setModeState(next);
+    void saveTheme(next);
+  }, []);
 
-  const setPresetId = useCallback(
-    (id: string): void => {
-      if (!getThemeById(id)) return;
-      setPresetIdState(id);
-      void saveThemePreset(id);
-    },
-    [],
-  );
+  const setPresetId = useCallback((id: string): void => {
+    if (!getThemeById(id)) return;
+    setPresetIdState(id);
+    void saveThemePreset(id);
+  }, []);
 
   return (
     <ThemeContext.Provider value={{ mode, resolved, setMode, presetId, setPresetId }}>
