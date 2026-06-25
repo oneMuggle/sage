@@ -127,11 +127,25 @@ export const zh = {
   'nav.back': '后退',
   'nav.forward': '前进',
 
-  // ─── 时间分组 ─────────────────────
+// ─── 时间分组 ─────────────────────
   'time.today': '今天',
   'time.yesterday': '昨天',
   'time.this_week': '本周',
   'time.earlier': '更早',
+
+  // ─── @文件提及 ─────────────────────
+  'chat.atFile.searching': '搜索中…',
+  'chat.atFile.empty': '未找到文件',
+  'chat.atFile.timeout': '搜索超时',
+  'chat.atFile.error': '搜索失败',
+  'chat.atFile.retry': '重试',
+
+  // ─── /btw 补充消息 ────────────────
+  'chat.btw.title': '补充问题',
+  'chat.btw.placeholder': '在主任务运行时提问…',
+  'chat.btw.loading': '思考中…',
+  'chat.btw.error': '加载失败',
+  'chat.btw.close': '关闭',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
