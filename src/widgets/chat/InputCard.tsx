@@ -1,4 +1,4 @@
-import { BookOpen, Image, Paperclip, Send, Square } from 'lucide-react';
+import { BookOpen, Clock, Image, Paperclip, Send, Square } from 'lucide-react';
 import type React from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
@@ -36,6 +36,7 @@ export interface InputCardProps {
   disabled?: boolean;
   isLoading?: boolean;
   onInterrupt?: () => void;
+  onSchedule?: () => void;
   autoFocus?: boolean;
 
   // Attachments
@@ -82,6 +83,7 @@ export function InputCard({
   disabled = false,
   isLoading = false,
   onInterrupt,
+  onSchedule,
   autoFocus = false,
   files = [],
   images = [],
@@ -246,6 +248,16 @@ export function InputCard({
                   onClick={() => onToggleKnowledgeSelector(!showKnowledgeSelector)}
                 >
                   <BookOpen className="w-4 h-4" />
+                </button>
+              )}
+              {onSchedule && (
+                <button
+                  type="button"
+                  className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
+                  title="定时"
+                  onClick={onSchedule}
+                >
+                  <Clock className="w-4 h-4" />
                 </button>
               )}
             </div>
