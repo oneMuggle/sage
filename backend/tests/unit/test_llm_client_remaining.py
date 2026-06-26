@@ -595,9 +595,7 @@ async def test_proxy_default_routes_through_backend():
 
     def fake_init(self, *args, **kwargs):
         """拦截 httpx.AsyncClient.__init__ 抓取 base_url 和 headers。"""
-        captured["base_url"] = kwargs.get("base_url") or (
-            args[0] if args else None
-        )
+        captured["base_url"] = kwargs.get("base_url") or (args[0] if args else None)
         captured["init_headers"] = dict(kwargs.get("headers", {}))
 
         # 阻止真实网络:抛错让测试快速失败(下面还会再 patch post)
@@ -633,9 +631,7 @@ async def test_use_proxy_false_bypasses_proxy():
     captured: dict = {}
 
     def fake_init(self, *args, **kwargs):
-        captured["base_url"] = kwargs.get("base_url") or (
-            args[0] if args else None
-        )
+        captured["base_url"] = kwargs.get("base_url") or (args[0] if args else None)
         captured["init_headers"] = dict(kwargs.get("headers", {}))
         raise RuntimeError("STOP_AT_INIT")
 
