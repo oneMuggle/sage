@@ -98,10 +98,8 @@ def _create_wiki_structure(project_path: Path) -> None:
     overview_file = project_path / "wiki" / "overview.md"
     if not overview_file.exists():
         overview_file.write_text(
-            f"# {project_path.name}\n\n"
-            f"创建于 {datetime.now(tz=timezone.utc).isoformat()}\n\n",  # noqa: DTZ011, UP017
-            "## 概述\n\n"
-            "这是一个新的 Wiki 项目。开始添加源文档来构建知识库。\n",
+            f"# {project_path.name}\n\n" f"创建于 {datetime.now(tz=timezone.utc).isoformat()}\n\n",  # noqa: DTZ011, UP017
+            "## 概述\n\n" "这是一个新的 Wiki 项目。开始添加源文档来构建知识库。\n",
             encoding="utf-8",
         )
 
@@ -109,10 +107,8 @@ def _create_wiki_structure(project_path: Path) -> None:
     index_file = project_path / "wiki" / "index.md"
     if not index_file.exists():
         index_file.write_text(
-            f"# Wiki 索引\n\n"
-            f"自动生成于 {datetime.now(tz=timezone.utc).isoformat()}\n\n",  # noqa: DTZ011, UP017
-            "## 页面\n\n"
-            "_暂无页面_\n",
+            f"# Wiki 索引\n\n" f"自动生成于 {datetime.now(tz=timezone.utc).isoformat()}\n\n",  # noqa: DTZ011, UP017
+            "## 页面\n\n" "_暂无页面_\n",
             encoding="utf-8",
         )
 
