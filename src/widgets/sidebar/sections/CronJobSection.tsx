@@ -1,33 +1,34 @@
 import { CalendarClock, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 import { useScheduledTaskStore } from '../../../entities/scheduled/taskStore';
 import { describeSchedule } from '../../../features/scheduled/cronValidator';
 import { useI18n } from '../../../shared/lib/i18n';
+import { SiderSection } from '../SiderSection';
 
-export function CronJobSection() {
+interface CronJobSectionProps {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+export function CronJobSection({ collapsed, onToggleCollapsed }: CronJobSectionProps) {
   const { t, locale } = useI18n();
   const tasks = useScheduledTaskStore((s) => s.tasks);
   const load = useScheduledTaskStore((s) => s.load);
-  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   return (
-    <div className="mt-1 px-1" data-testid="cron-section">
-      <div className="flex items-center justify-between px-2 py-1">
-        <button
-          type="button"
-          onClick={() => setCollapsed((c) => !c)}
-          className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted hover:text-text-secondary"
-        >
-          <CalendarClock className="w-3.5 h-3.5" />
-          <span>{t('scheduled.title')}</span>
-          <span className="ml-1 text-text-secondary">{tasks.length}</span>
-        </button>
+    <SiderSection
+      sectionKey="cron"
+      label={t('scheduled.title')}
+      icon={CalendarClock}
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
+      trailing={
         <Link
           to="/scheduled"
           title={t('scheduled.create')}
@@ -36,9 +37,8 @@ export function CronJobSection() {
         >
           <Plus className="w-3.5 h-3.5" />
         </Link>
-      </div>
-
-      {!collapsed && (
+      }
+      render={() => (
         <ul className="flex flex-col" data-testid="cron-task-list">
           {tasks.length === 0 && (
             <li className="text-[11px] text-muted px-2 py-1 italic">{t('scheduled.empty')}</li>
@@ -66,6 +66,6 @@ export function CronJobSection() {
           ))}
         </ul>
       )}
-    </div>
+    />
   );
 }

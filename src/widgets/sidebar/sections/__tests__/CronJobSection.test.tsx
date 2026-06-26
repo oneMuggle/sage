@@ -22,23 +22,25 @@ vi.mock('../../../entities/scheduled/taskStore', () => {
 import { I18nProvider } from '../../../../shared/lib/i18n';
 import { CronJobSection } from '../CronJobSection';
 
+const noop = () => {};
+
 describe('CronJobSection', () => {
   it('renders the section title and empty hint when no tasks', () => {
     render(
       <MemoryRouter>
         <I18nProvider>
-          <CronJobSection />
+          <CronJobSection collapsed={false} onToggleCollapsed={noop} />
         </I18nProvider>
       </MemoryRouter>,
     );
-    expect(screen.getByTestId('cron-section')).toBeTruthy();
+    expect(screen.getByTestId('cron-task-list')).toBeTruthy();
   });
 
   it('renders a link to the /scheduled page', () => {
     render(
       <MemoryRouter>
         <I18nProvider>
-          <CronJobSection />
+          <CronJobSection collapsed={false} onToggleCollapsed={noop} />
         </I18nProvider>
       </MemoryRouter>,
     );

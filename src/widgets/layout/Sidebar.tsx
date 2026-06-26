@@ -38,7 +38,6 @@ export function Sidebar({ width = 240 }: SidebarProps) {
     sessions,
     currentSessionId,
     setCurrentSessionId,
-    createSession,
     loadSessions,
     deleteSession,
   } = useStore();
@@ -115,7 +114,9 @@ export function Sidebar({ width = 240 }: SidebarProps) {
           />
         );
       case 'cron':
-        return <CronJobSection />;
+        return (
+          <CronJobSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
+        );
       case 'project':
         return (
           <ProjectSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
