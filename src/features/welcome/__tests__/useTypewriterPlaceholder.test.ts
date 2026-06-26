@@ -16,9 +16,7 @@ describe('useTypewriterPlaceholder', () => {
   });
 
   it('starts with the first character of the first phrase', () => {
-    const { result } = renderHook(() =>
-      useTypewriterPlaceholder(['hello world', 'second phrase']),
-    );
+    const { result } = renderHook(() => useTypewriterPlaceholder(['hello world', 'second phrase']));
     expect(result.current.current).toBe('h');
     expect(result.current.isTyping).toBe(true);
   });
