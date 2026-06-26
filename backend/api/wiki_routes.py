@@ -32,6 +32,220 @@ router = APIRouter(prefix="/wiki", tags=["wiki"])
 
 
 # ============================================================================
+# Project Management
+# ============================================================================
+
+
+class CreateProjectRequest(BaseModel):
+    """创建 Wiki 项目请求。"""
+
+    name: str
+    base_path: str  # 项目根目录的绝对路径
+
+
+class OpenProjectRequest(BaseModel):
+    """打开 Wiki 项目请求。"""
+
+    path: str  # 项目根目录的绝对路径
+
+
+class ProjectInfo(BaseModel):
+    """项目信息。"""
+
+    id: str
+    name: str
+    path: str
+    created_at: str
+    has_content: bool
+
+
+def _create_wiki_structure(project_path: Path) -> None:
+    """创建 Wiki 项目的标准目录结构。
+
+    Args:
+        project_path: 项目根目录
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    project_path.mkdir(parents=True, exist_ok=True)
+
+    # 创建标准目录
+    (project_path / "raw" / "sources").mkdir(parents=True, exist_ok=True)
+    (project_path / "raw" / "assets").mkdir(parents=True, exist_ok=True)
+    (project_path / "wiki" / "entities").mkdir(parents=True, exist_ok=True)
+    (project_path / "wiki" / "concepts").mkdir(parents=True, exist_ok=True)
+    (project_path / "wiki" / "sources").mkdir(parents=True, exist_ok=True)
+    (project_path / "wiki" / "queries").mkdir(parents=True, exist_ok=True)
+    (project_path / ".llm-wiki").mkdir(parents=True, exist_ok=True)
+
+    # 创建 schema.md
+    schema_file = project_path / "wiki" / "schema.md"
+    if not schema_file.exists():
+        schema_file.write_text(
+            "# Schema\n\n"
+            "本项目的 Wiki 结构定义。\n\n"
+            "## 目录结构\n\n"
+            "- `raw/sources/` - 原始文档（不可变）\n"
+            "- `raw/assets/` - 附件资源\n"
+            "- `wiki/entities/` - 实体页面\n"
+            "- `wiki/concepts/` - 概念页面\n"
+            "- `wiki/sources/` - 源文档摘要页面\n"
+            "- `wiki/queries/` - 查询结果页面\n",
+            encoding="utf-8",
+        )
+
+    # 创建 overview.md
+    overview_file = project_path / "wiki" / "overview.md"
+    if not overview_file.exists():
+        overview_file.write_text(
+            f"# {project_path.name}\n\n"
+            f"创建于 {datetime.now(tz=timezone.utc).isoformat()}\n\n"
+            "## 概述\n\n"
+            "这是一个新的 Wiki 项目。开始添加源文档来构建知识库。\n",
+            encoding="utf-8",
+        )
+
+    # 创建 index.md
+    index_file = project_path / "wiki" / "index.md"
+    if not index_file.exists():
+        index_file.write_text(
+            f"# Wiki 索引\n\n"
+            f"自动生成于 {datetime.now(tz=timezone.utc).isoformat()}\n\n"
+            "## 页面\n\n"
+            "_暂无页面_\n",
+            encoding="utf-8",
+        )
+
+
+@router.post("/project/create")
+async def create_project(req: CreateProjectRequest) -> ProjectInfo:
+    """创建新的 Wiki 项目。
+
+    Args:
+        req: 创建项目请求
+
+    Returns:
+        ProjectInfo: 项目信息
+    """
+    from datetime import datetime, timezone
+    import uuid
+
+    project_path = Path(req.base_path).expanduser().resolve()
+
+    if not project_path.exists():
+        try:
+            _create_wiki_structure(project_path)
+        except Exception as e:
+            logger.error(f"创建项目失败: {e}")
+            raise HTTPException(status_code=500, detail=f"创建项目失败: {e}")
+    elif not (project_path / "wiki").exists():
+        # 路径存在但不是 Wiki 项目，创建目录结构
+        _create_wiki_structure(project_path)
+
+    # 生成项目 ID
+    project_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(project_path)))
+
+    return ProjectInfo(
+        id=project_id,
+        name=req.name,
+        path=str(project_path),
+        created_at=datetime.now(tz=timezone.utc).isoformat(),
+        has_content=False,
+    )
+
+
+@router.post("/project/open")
+async def open_project(req: OpenProjectRequest) -> ProjectInfo:
+    """打开现有的 Wiki 项目。
+
+    Args:
+        req: 打开项目请求
+
+    Returns:
+        ProjectInfo: 项目信息
+
+    Raises:
+        HTTPException: 如果项目不存在或不是有效的 Wiki 项目
+    """
+    from datetime import datetime, timezone
+    import uuid
+
+    project_path = Path(req.path).expanduser().resolve()
+
+    if not project_path.exists():
+        raise HTTPException(status_code=404, detail="项目路径不存在")
+
+    if not (project_path / "wiki").exists():
+        raise HTTPException(status_code=400, detail="不是一个有效的 Wiki 项目（缺少 wiki/ 目录）")
+
+    # 生成项目 ID
+    project_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(project_path)))
+
+    # 检查是否有内容
+    has_content = False
+    wiki_dir = project_path / "wiki"
+    for md_file in wiki_dir.rglob("*.md"):
+        if md_file.name not in ("index.md", "schema.md", "overview.md"):
+            has_content = True
+            break
+
+    return ProjectInfo(
+        id=project_id,
+        name=project_path.name,
+        path=str(project_path),
+        created_at=datetime.now(tz=timezone.utc).isoformat(),
+        has_content=has_content,
+    )
+
+
+@router.get("/project/list")
+async def list_projects(base_path: str = "") -> list[ProjectInfo]:
+    """列出指定目录下的 Wiki 项目。
+
+    Args:
+        base_path: 父目录路径（可选）
+
+    Returns:
+        list[ProjectInfo]: 项目列表
+    """
+    from datetime import datetime, timezone
+    import uuid
+
+    if not base_path:
+        return []
+
+    base = Path(base_path).expanduser().resolve()
+    if not base.exists():
+        return []
+
+    projects = []
+    for item in base.iterdir():
+        if not item.is_dir():
+            continue
+        if not (item / "wiki").exists():
+            continue
+
+        project_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(item)))
+        has_content = any(
+            md.name not in ("index.md", "schema.md", "overview.md")
+            for md in (item / "wiki").rglob("*.md")
+        )
+
+        projects.append(
+            ProjectInfo(
+                id=project_id,
+                name=item.name,
+                path=str(item),
+                created_at=datetime.now(tz=timezone.utc).isoformat(),
+                has_content=has_content,
+            )
+        )
+
+    return projects
+
+
+# ============================================================================
 # Request/Response Models
 # ============================================================================
 

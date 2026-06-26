@@ -13,7 +13,11 @@ import {
 import { useResearchStore } from '../../entities/wiki/research-store';
 import { useReviewStore } from '../../entities/wiki/review-store';
 import { useWikiStore } from '../../entities/wiki/store';
-import { createWikiProject, openWikiProject } from '../../shared/api-client/wiki';
+import {
+  createWikiProject,
+  openWikiProject,
+  wikiListDirectory,
+} from '../../shared/api-client/wiki';
 import type { FileNode, GraphData, WikiProject } from '../../shared/types/wiki';
 
 // 演示模式用的模拟数据
@@ -191,13 +195,14 @@ export function WikiProjectPicker() {
     setError(null);
     try {
       const project = await createWikiProject(name.trim(), basePath.trim());
-      // 设置项目时同时填充文件树（setProject 会重置 fileTree）
+      // 从后端获取真实的文件树
+      const tree = await wikiListDirectory('', project.path);
       useWikiStore.setState({
         project,
-        fileTree: mockFileTree,
-        selectedFile: 'wiki/entities/api.md',
-        fileContent: mockFileContent,
-        graphData: mockGraphData,
+        fileTree: tree,
+        selectedFile: null,
+        fileContent: '',
+        graphData: null,
       });
     } catch (e) {
       setError(`创建失败: ${e}`);
@@ -216,12 +221,14 @@ export function WikiProjectPicker() {
     setError(null);
     try {
       const project = await openWikiProject(openPath.trim());
+      // 从后端获取真实的文件树
+      const tree = await wikiListDirectory('', project.path);
       useWikiStore.setState({
         project,
-        fileTree: mockFileTree,
-        selectedFile: 'wiki/entities/api.md',
-        fileContent: mockFileContent,
-        graphData: mockGraphData,
+        fileTree: tree,
+        selectedFile: null,
+        fileContent: '',
+        graphData: null,
       });
     } catch (e) {
       setError(`打开失败: ${e}`);
