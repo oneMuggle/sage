@@ -57,9 +57,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
  * reasoning_delta 复用 reasoning 的展示,因为 UI 上对用户没有区别(都是
  * 思考内容在累积)。content_delta 复用 content 的最终展示。
  */
-export function agentStateToPhase(
-  state: AgentState | null | undefined,
-): PhaseDisplay | null {
+export function agentStateToPhase(state: AgentState | null | undefined): PhaseDisplay | null {
   if (state == null) return null;
   switch (state) {
     case 'thinking':

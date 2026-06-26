@@ -5,6 +5,7 @@
 """
 API 路由定义
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -78,12 +79,10 @@ class SessionCreate(BaseModel):
     parent_id: Optional[str] = None
 
 
-
 class SessionUpdate(BaseModel):
     title: Optional[str] = None
 
     is_pinned: Optional[bool] = None
-
 
 
 class ChatRequest(BaseModel):
@@ -111,7 +110,6 @@ class ChatRequest(BaseModel):
     thinking_budget: Optional[int] = None
 
 
-
 class MessageResponse(BaseModel):
     id: str
     session_id: str
@@ -121,7 +119,6 @@ class MessageResponse(BaseModel):
     model: Optional[str] = None
 
     tool_calls: Optional[str] = None
-
 
 
 class ChatErrorInfo(BaseModel):
@@ -137,7 +134,6 @@ class ChatErrorInfo(BaseModel):
     retry_after: Optional[int] = None
 
 
-
 class ChatResponse(BaseModel):
     """聊天响应：成功时含 message+session，失败时含 error+null message。"""
 
@@ -146,7 +142,6 @@ class ChatResponse(BaseModel):
     session: Optional[dict] = None
 
     error: Optional[ChatErrorInfo] = None
-
 
 
 class TriggerEvolutionRequest(BaseModel):
@@ -175,7 +170,6 @@ class EvolutionLogResponse(BaseModel):
 
     created_at: int
     completed_at: Optional[int] = None
-
 
 
 class EvolutionStatusResponse(BaseModel):
@@ -233,14 +227,15 @@ class AgentUpdate(BaseModel):
 
     memory_access: Optional[List[str]] = None
 
-    model_config_data: Union[dict, None] = None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
+    model_config_data: Union[dict, None] = (
+        None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
+    )
 
     max_iterations: Optional[int] = None  # 路由层校验 1..50
 
     enabled: Optional[bool] = None
 
     description: Optional[str] = None
-
 
 
 # ==================== 依赖注入 ====================
@@ -639,7 +634,6 @@ class LegacySettingsRequest(BaseModel):
     api_key: Optional[str] = None  # noqa: S105
 
     model: Optional[str] = None
-
 
 
 class LegacySettingsResponse(BaseModel):
