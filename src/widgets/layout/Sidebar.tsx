@@ -34,13 +34,8 @@ interface SidebarProps {
 export function Sidebar({ width = 240 }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const {
-    sessions,
-    currentSessionId,
-    setCurrentSessionId,
-    loadSessions,
-    deleteSession,
-  } = useStore();
+  const { sessions, currentSessionId, setCurrentSessionId, loadSessions, deleteSession } =
+    useStore();
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const [connectionStatus, setConnectionStatus] = useState<
