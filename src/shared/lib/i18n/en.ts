@@ -163,7 +163,7 @@ export const en: Record<TranslationKey, string> = {
   'chat.btw.close': 'Close',
 
   // ─── Welcome screen ──────────────
-  'welcome.hero.greeting': "Hi, I'm Claude",
+  'welcome.hero.greeting': "Hi, I'm Sage",
   'welcome.hero.subtitle': 'How can I help you today?',
   'welcome.hero.back': 'Back',
   'welcome.input.placeholder': 'Type a message, press Enter to send',

@@ -53,7 +53,7 @@ function renderWelcome() {
 describe('Welcome page', () => {
   it('renders hero, input card, recommendations and quick action bar', () => {
     renderWelcome();
-    expect(screen.getByText(/你好，我是 Claude/)).toBeInTheDocument();
+    expect(screen.getByText(/你好，我是 Sage/)).toBeInTheDocument();
     expect(screen.getByTestId('welcome-input-card')).toBeInTheDocument();
     expect(screen.getAllByTestId('recommendation-card')).toHaveLength(3);
     expect(screen.getByRole('toolbar', { name: /quick actions/ })).toBeInTheDocument();

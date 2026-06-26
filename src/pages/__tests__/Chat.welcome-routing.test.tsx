@@ -88,7 +88,7 @@ describe('Chat / Welcome routing — sessionId gating', () => {
         <AppRouter />
       </I18nProvider>,
     );
-    expect(screen.getByText(/你好，我是 Claude/)).toBeInTheDocument();
+    expect(screen.getByText(/你好，我是 Sage/)).toBeInTheDocument();
   });
 
   it('shows chat normally when currentSessionId is set', () => {

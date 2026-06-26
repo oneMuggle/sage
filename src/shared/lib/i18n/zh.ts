@@ -162,7 +162,7 @@ export const zh = {
   'chat.btw.close': '关闭',
 
   // ─── 欢迎屏 ────────────────────────
-  'welcome.hero.greeting': '你好，我是 Claude',
+  'welcome.hero.greeting': '你好，我是 Sage',
   'welcome.hero.subtitle': '有什么可以帮你的？',
   'welcome.hero.back': '返回',
   'welcome.input.placeholder': '输入消息，Enter 发送',
