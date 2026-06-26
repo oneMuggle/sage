@@ -110,7 +110,7 @@ async def ingest_source(
     # Step 4: LLM 写入 (45% → 70%)
     _report("step2_write", 45, "Step 2: 写入 Wiki 页面")
     slug = _slugify(filename)
-    today = datetime.now(tz=timezone.utc).date().isoformat()
+    today = datetime.now(tz=timezone.utc).date().isoformat()  # noqa: DTZ011, UP017
     tags_csv = ", ".join(analysis.tags)
     related_links = " ".join(f"[[{topic}]]" for topic in analysis.related_topics[:8])
 
