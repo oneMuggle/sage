@@ -269,6 +269,103 @@ class Database:
             ON working_memory_snapshot(session_id)
         """)
 
+        # ==================== 多智能体协调层表 ====================
+        # Phase 1: 任务/Lane/Team/事件 持久化
+
+        # 任务表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS orchestration_tasks (
+                task_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'created',
+                priority INTEGER NOT NULL DEFAULT 0,
+                executor_type TEXT NOT NULL DEFAULT 'agent',
+                parameters TEXT NOT NULL DEFAULT '{}',
+                packet TEXT,
+                blocks TEXT NOT NULL DEFAULT '[]',
+                blocked_by TEXT NOT NULL DEFAULT '[]',
+                result TEXT,
+                created_at INTEGER NOT NULL,
+                started_at INTEGER,
+                completed_at INTEGER,
+                team_id TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_orch_tasks_status
+            ON orchestration_tasks(status)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_orch_tasks_team
+            ON orchestration_tasks(team_id)
+        """)
+
+        # Lane 表（执行单元）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS orchestration_lanes (
+                lane_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                agent_id TEXT,
+                status TEXT NOT NULL DEFAULT 'created',
+                created_at INTEGER NOT NULL,
+                started_at INTEGER,
+                completed_at INTEGER,
+                worktree TEXT,
+                heartbeat TEXT,
+                error TEXT,
+                FOREIGN KEY (task_id) REFERENCES orchestration_tasks(task_id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_orch_lanes_task
+            ON orchestration_lanes(task_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_orch_lanes_status
+            ON orchestration_lanes(status)
+        """)
+
+        # Lane 事件表（生命周期事件流）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS orchestration_lane_events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                lane_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                agent_id TEXT,
+                timestamp INTEGER NOT NULL,
+                provenance TEXT NOT NULL DEFAULT 'LiveLane',
+                metadata TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY (lane_id) REFERENCES orchestration_lanes(lane_id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_orch_events_lane
+            ON orchestration_lane_events(lane_id, timestamp)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_orch_events_task
+            ON orchestration_lane_events(task_id)
+        """)
+
+        # Team 表（工作流分组）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS orchestration_teams (
+                team_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                task_ids TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'created',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_orch_teams_status
+            ON orchestration_teams(status)
+        """)
+
         # 创建索引
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC)"
