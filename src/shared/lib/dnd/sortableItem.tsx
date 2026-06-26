@@ -20,15 +20,12 @@ interface SortableSessionItemProps {
  *
  * 必须在 <DndContext> + <SortableContext> 内使用。
  */
-export function SortableSessionItem({
-  id,
-  label,
-  disabled,
-  children,
-}: SortableSessionItemProps) {
+export function SortableSessionItem({ id, label, disabled, children }: SortableSessionItemProps) {
   const { t } = useI18n();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id, disabled });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled,
+  });
 
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -37,7 +34,7 @@ export function SortableSessionItem({
   };
 
   return (
-    <div ref={setNodeRef} style={style} aria-label={label}>
+    <div ref={setNodeRef} style={style} aria-label={label} className="flex items-center">
       <button
         type="button"
         {...attributes}
