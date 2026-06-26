@@ -1,11 +1,11 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   defaultRecommendations,
   type AssistantRecommendation,
 } from '../../../entities/welcome/recommendations';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { AssistantRecommendations } from '../AssistantRecommendations';
 
 function renderWithI18n(ui: React.ReactNode) {
@@ -15,10 +15,7 @@ function renderWithI18n(ui: React.ReactNode) {
 describe('AssistantRecommendations', () => {
   it('renders all provided recommendations', () => {
     renderWithI18n(
-      <AssistantRecommendations
-        recommendations={defaultRecommendations}
-        onSelect={vi.fn()}
-      />,
+      <AssistantRecommendations recommendations={defaultRecommendations} onSelect={vi.fn()} />,
     );
     // Use heading role to disambiguate title from description
     expect(screen.getByRole('button', { name: /写代码/ })).toBeInTheDocument();
@@ -28,10 +25,7 @@ describe('AssistantRecommendations', () => {
 
   it('renders a card for each recommendation (count matches)', () => {
     renderWithI18n(
-      <AssistantRecommendations
-        recommendations={defaultRecommendations}
-        onSelect={vi.fn()}
-      />,
+      <AssistantRecommendations recommendations={defaultRecommendations} onSelect={vi.fn()} />,
     );
     const cards = screen.getAllByTestId('recommendation-card');
     expect(cards).toHaveLength(3);
@@ -40,10 +34,7 @@ describe('AssistantRecommendations', () => {
   it('calls onSelect with the clicked recommendation', () => {
     const onSelect = vi.fn();
     renderWithI18n(
-      <AssistantRecommendations
-        recommendations={defaultRecommendations}
-        onSelect={onSelect}
-      />,
+      <AssistantRecommendations recommendations={defaultRecommendations} onSelect={onSelect} />,
     );
     const codeCard = screen.getAllByTestId('recommendation-card')[0]!;
     fireEvent.click(codeCard);
@@ -52,9 +43,7 @@ describe('AssistantRecommendations', () => {
   });
 
   it('renders nothing when recommendations is empty', () => {
-    renderWithI18n(
-      <AssistantRecommendations recommendations={[]} onSelect={vi.fn()} />,
-    );
+    renderWithI18n(<AssistantRecommendations recommendations={[]} onSelect={vi.fn()} />);
     expect(screen.queryByTestId('recommendation-card')).not.toBeInTheDocument();
   });
 
@@ -68,9 +57,7 @@ describe('AssistantRecommendations', () => {
         gradient: 'bg-gradient-to-r from-red-500 to-pink-500',
       },
     ];
-    renderWithI18n(
-      <AssistantRecommendations recommendations={broken} onSelect={vi.fn()} />,
-    );
+    renderWithI18n(<AssistantRecommendations recommendations={broken} onSelect={vi.fn()} />);
     // i18n key fallback returns the key itself
     expect(screen.getByText('welcome.rec.broken.title')).toBeInTheDocument();
   });

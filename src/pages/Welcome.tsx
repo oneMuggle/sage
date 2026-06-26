@@ -100,11 +100,7 @@ export function Welcome() {
       <div className="flex-1 flex flex-col items-center justify-start pt-[10vh] px-4 pb-8 gap-6">
         <WelcomeHero onBack={() => navigate(-1)} />
 
-        <WelcomeInputCard
-          initialValue={prefill}
-          placeholder={placeholder}
-          onSend={handleSubmit}
-        />
+        <WelcomeInputCard initialValue={prefill} placeholder={placeholder} onSend={handleSubmit} />
 
         <AssistantRecommendations
           recommendations={defaultRecommendations}

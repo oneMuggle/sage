@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import { InputCard } from '../chat/InputCard';
 import { useTypewriterPlaceholder } from '../../features/welcome/useTypewriterPlaceholder';
+import { InputCard } from '../chat/InputCard';
 
 interface WelcomeInputCardProps {
   placeholder?: string;
@@ -20,9 +20,7 @@ export function WelcomeInputCard({
 }: WelcomeInputCardProps) {
   const [value, setValue] = useState(initialValue);
 
-  const { current: typewriterText } = useTypewriterPlaceholder(
-    typewriterPhrases ?? [''],
-  );
+  const { current: typewriterText } = useTypewriterPlaceholder(typewriterPhrases ?? ['']);
 
   useEffect(() => {
     setValue(initialValue);
@@ -40,7 +38,7 @@ export function WelcomeInputCard({
   };
 
   const effectivePlaceholder =
-    typewriterPhrases && typewriterPhrases.length > 0 ? typewriterText : placeholder ?? '';
+    typewriterPhrases && typewriterPhrases.length > 0 ? typewriterText : (placeholder ?? '');
 
   return (
     <div className="w-full max-w-2xl mx-auto" data-testid="welcome-input-card">

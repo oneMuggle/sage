@@ -1,7 +1,7 @@
 import { clsx } from 'clsx';
 import { MessageSquare, Settings, Brain, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
@@ -33,6 +33,7 @@ interface SidebarProps {
 
 export function Sidebar({ width = 240 }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const {
     sessions,
     currentSessionId,
@@ -79,9 +80,9 @@ export function Sidebar({ width = 240 }: SidebarProps) {
       });
   }, [chatEndpoint?.baseUrl, chatEndpoint?.apiKey, settings.modelSelections.chatModel.modelId]);
 
-  const handleNewSession = async () => {
-    const sessionId = await createSession();
-    setCurrentSessionId(sessionId);
+  const handleNewSession = () => {
+    // Phase 7: 新建会话跳转到欢迎屏，由用户在欢迎屏输入后再创建 session
+    navigate('/welcome');
   };
 
   const renderSection = (key: string) => {
@@ -114,11 +115,15 @@ export function Sidebar({ width = 240 }: SidebarProps) {
           />
         );
       case 'cron':
-        return <CronJobSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />;
+        return <CronJobSection />;
       case 'project':
-        return <ProjectSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />;
+        return (
+          <ProjectSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
+        );
       case 'team':
-        return <TeamSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />;
+        return (
+          <TeamSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
+        );
       default:
         return null;
     }

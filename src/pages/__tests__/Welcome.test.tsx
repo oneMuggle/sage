@@ -24,9 +24,7 @@ beforeEach(() => {
   createSessionMock.mockResolvedValue('new-session-id');
   setCurrentSessionIdMock.mockReset();
   // Partial store state for testing; cast through unknown to satisfy eslint no-explicit-any
-  const setState = useStore.setState as unknown as (
-    partial: Record<string, unknown>
-  ) => void;
+  const setState = useStore.setState as unknown as (partial: Record<string, unknown>) => void;
   setState({
     currentSessionId: null,
     sessions: [],
@@ -38,9 +36,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  const setState = useStore.setState as unknown as (
-    partial: Record<string, unknown>
-  ) => void;
+  const setState = useStore.setState as unknown as (partial: Record<string, unknown>) => void;
   setState({ currentSessionId: null, sessions: [] });
 });
 

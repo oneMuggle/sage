@@ -48,9 +48,7 @@ describe('QuickActionBar', () => {
 
   it('invokes onClick when action button is clicked', () => {
     const onClick = vi.fn();
-    renderWithI18n(
-      <QuickActionBar actions={[{ ...sampleActions[0]!, onClick }]} />,
-    );
+    renderWithI18n(<QuickActionBar actions={[{ ...sampleActions[0]!, onClick }]} />);
     fireEvent.click(screen.getByText(/反馈/));
     expect(onClick).toHaveBeenCalledTimes(1);
   });

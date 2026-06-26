@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { clsx } from 'clsx';
+import type { ReactNode } from 'react';
 
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
