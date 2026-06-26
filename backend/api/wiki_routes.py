@@ -6,7 +6,7 @@
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -65,8 +65,7 @@ def _create_wiki_structure(project_path: Path) -> None:
     Args:
         project_path: 项目根目录
     """
-    import uuid
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     project_path.mkdir(parents=True, exist_ok=True)
 
@@ -128,8 +127,8 @@ async def create_project(req: CreateProjectRequest) -> ProjectInfo:
     Returns:
         ProjectInfo: 项目信息
     """
-    from datetime import datetime, timezone
     import uuid
+    from datetime import datetime
 
     project_path = Path(req.base_path).expanduser().resolve()
 
@@ -168,8 +167,8 @@ async def open_project(req: OpenProjectRequest) -> ProjectInfo:
     Raises:
         HTTPException: 如果项目不存在或不是有效的 Wiki 项目
     """
-    from datetime import datetime, timezone
     import uuid
+    from datetime import datetime
 
     project_path = Path(req.path).expanduser().resolve()
 
@@ -209,8 +208,8 @@ async def list_projects(base_path: str = "") -> list[ProjectInfo]:
     Returns:
         list[ProjectInfo]: 项目列表
     """
-    from datetime import datetime, timezone
     import uuid
+    from datetime import datetime
 
     if not base_path:
         return []
