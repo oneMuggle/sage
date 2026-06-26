@@ -23,6 +23,7 @@ from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
+from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.theme_router import router as theme_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
@@ -312,6 +313,7 @@ async def add_request_id_header(request: Request, call_next):
 # 跟踪 issue/PR 见 docs/plans/2026-06-13_full-quality-optimization-v2.md。
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/theme")
+app.include_router(build_orchestration_router(), prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":

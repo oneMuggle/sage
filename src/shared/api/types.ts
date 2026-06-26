@@ -268,3 +268,98 @@ export interface UpdateTaskInput {
   name?: string;
   enabled?: boolean;
 }
+
+// ============================================================================
+// Multi-agent orchestration types (Phase 4)
+// ============================================================================
+
+export type LaneStatus =
+  | 'created'
+  | 'ready'
+  | 'running'
+  | 'blocked'
+  | 'succeeded'
+  | 'failed'
+  | 'stopped'
+  | 'cancelled';
+
+export type HeartbeatStatus = 'healthy' | 'stalled' | 'transport_dead';
+
+export type TaskStatus = 'created' | 'running' | 'blocked' | 'completed' | 'failed' | 'stopped';
+
+export type TeamStatus = 'created' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export type LaneEventType =
+  | 'lane.started'
+  | 'lane.ready'
+  | 'lane.running'
+  | 'lane.blocked'
+  | 'lane.succeeded'
+  | 'lane.failed'
+  | 'lane.stopped'
+  | 'lane.commit.created'
+  | 'lane.pr.opened'
+  | 'lane.merged';
+
+export type EventProvenance = 'LiveLane' | 'Recovery' | 'Retry' | 'Heartbeat' | 'Manual';
+
+export interface LaneHeartbeat {
+  last_ping_at: number;
+  transport_alive: boolean;
+  status: HeartbeatStatus;
+}
+
+export interface Lane {
+  lane_id: string;
+  task_id: string;
+  agent_id: string | null;
+  status: LaneStatus;
+  created_at: number;
+  started_at: number | null;
+  completed_at: number | null;
+  worktree: string | null;
+  heartbeat: LaneHeartbeat | null;
+  error: string | null;
+  permission_preset: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface Task {
+  task_id: string;
+  name: string;
+  description: string;
+  task_type: string;
+  status: TaskStatus;
+  priority: number;
+  team_id: string | null;
+  created_at: number;
+  started_at: number | null;
+  completed_at: number | null;
+}
+
+export interface Team {
+  team_id: string;
+  name: string;
+  task_ids: string[];
+  status: TeamStatus;
+  created_at: number;
+  updated_at: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface LaneEvent {
+  event_id: string;
+  event_type: LaneEventType;
+  lane_id: string;
+  task_id: string;
+  agent_id: string | null;
+  timestamp: number;
+  provenance: EventProvenance;
+  metadata: Record<string, unknown>;
+}
+
+export interface LaneBoardGroup {
+  active: Lane[];
+  blocked: Lane[];
+  finished: Lane[];
+}
