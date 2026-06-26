@@ -11,12 +11,37 @@ import type {
 
 // ==================== Project API ====================
 
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  path: string;
+  created_at: string;
+  has_content: boolean;
+}
+
 export async function createWikiProject(name: string, basePath: string): Promise<WikiProject> {
-  return invoke<WikiProject>('create_wiki_project', { name, basePath });
+  const result = await httpPost<ProjectInfo>('/wiki/project/create', {
+    name,
+    base_path: basePath,
+  });
+  return {
+    id: result.id,
+    name: result.name,
+    path: result.path,
+  };
 }
 
 export async function openWikiProject(path: string): Promise<WikiProject> {
-  return invoke<WikiProject>('open_wiki_project', { path });
+  const result = await httpPost<ProjectInfo>('/wiki/project/open', { path });
+  return {
+    id: result.id,
+    name: result.name,
+    path: result.path,
+  };
+}
+
+export async function listWikiProjects(basePath: string): Promise<ProjectInfo[]> {
+  return httpGet<ProjectInfo[]>('/wiki/project/list', { base_path: basePath });
 }
 
 // ==================== File API ====================
