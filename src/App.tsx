@@ -8,10 +8,20 @@ import { Chat } from './pages/Chat';
 import { Knowledge } from './pages/Knowledge';
 import { Memory } from './pages/Memory';
 import Skills from './pages/Skills';
+import { Welcome } from './pages/Welcome';
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
+
+// Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
+function ChatRoute() {
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  if (!currentSessionId) {
+    return <Navigate to="/welcome" replace />;
+  }
+  return <Chat />;
+}
 
 function App() {
   const [commandOpen, setCommandOpen] = useState(false);
@@ -42,7 +52,8 @@ function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/chat" replace />} />
-            <Route path="chat" element={<Chat />} />
+            <Route path="welcome" element={<Welcome />} />
+            <Route path="chat" element={<ChatRoute />} />
             <Route path="settings" element={<Settings />} />
             <Route path="memory" element={<Memory />} />
             <Route path="agents" element={<Agents />} />

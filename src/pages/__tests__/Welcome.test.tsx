@@ -17,25 +17,31 @@ vi.mock('sonner', () => ({
 
 const createSessionMock = vi.fn();
 const setCurrentSessionIdMock = vi.fn();
-const originalSetState = useStore.setState;
 
 beforeEach(() => {
   toastError.mockReset();
   createSessionMock.mockReset();
   createSessionMock.mockResolvedValue('new-session-id');
   setCurrentSessionIdMock.mockReset();
-  useStore.setState({
+  // Partial store state for testing; cast through unknown to satisfy eslint no-explicit-any
+  const setState = useStore.setState as unknown as (
+    partial: Record<string, unknown>
+  ) => void;
+  setState({
     currentSessionId: null,
     sessions: [],
-    createSession: createSessionMock as unknown as () => Promise<string>,
+    createSession: createSessionMock,
     setCurrentSessionId: setCurrentSessionIdMock,
     loadSessions: vi.fn(),
     loadMessages: vi.fn(),
-  } as never);
+  });
 });
 
 afterEach(() => {
-  useStore.setState(originalSetState);
+  const setState = useStore.setState as unknown as (
+    partial: Record<string, unknown>
+  ) => void;
+  setState({ currentSessionId: null, sessions: [] });
 });
 
 function renderWelcome() {
