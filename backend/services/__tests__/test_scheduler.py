@@ -1,4 +1,5 @@
 """Tests for backend.services.scheduler — APScheduler wrapper + persistence."""
+
 from __future__ import annotations
 
 import json
@@ -34,7 +35,9 @@ def session_repo() -> MagicMock:
 
 
 @pytest.fixture()
-def scheduler(store_path: Path, message_repo: MagicMock, session_repo: MagicMock) -> SchedulerService:
+def scheduler(
+    store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+) -> SchedulerService:
     return SchedulerService(
         store_path=store_path,
         message_repo=message_repo,
@@ -46,7 +49,9 @@ class TestLoadOnInit:
     def test_returns_empty_list_when_file_missing(self, scheduler: SchedulerService) -> None:
         assert scheduler.list_tasks() == []
 
-    def test_loads_tasks_from_existing_file(self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock) -> None:
+    def test_loads_tasks_from_existing_file(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
         store_path.write_text(
             json.dumps(
                 {
@@ -66,7 +71,9 @@ class TestLoadOnInit:
                 }
             )
         )
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         tasks = svc.list_tasks()
         assert len(tasks) == 1
         assert tasks[0].id == "t-1"
@@ -121,7 +128,9 @@ class TestAddTask:
                 content="x",
             )
 
-    def test_rejects_nonexistent_session(self, scheduler: SchedulerService, session_repo: MagicMock) -> None:
+    def test_rejects_nonexistent_session(
+        self, scheduler: SchedulerService, session_repo: MagicMock
+    ) -> None:
         session_repo.exists.return_value = False
         with pytest.raises(ValidationError):
             scheduler.add_task(
@@ -193,7 +202,9 @@ class TestDeleteTask:
 
 
 class TestRunNow:
-    def test_fires_task_immediately_and_inserts_message(self, scheduler: SchedulerService, message_repo: MagicMock) -> None:
+    def test_fires_task_immediately_and_inserts_message(
+        self, scheduler: SchedulerService, message_repo: MagicMock
+    ) -> None:
         task = scheduler.add_task(
             name="Run now",
             task_type="recurring",
@@ -209,7 +220,9 @@ class TestRunNow:
         assert kwargs["content"] == "manual trigger"
         assert kwargs["created_at"] > 0
 
-    def test_skips_when_session_missing(self, scheduler: SchedulerService, session_repo: MagicMock, message_repo: MagicMock) -> None:
+    def test_skips_when_session_missing(
+        self, scheduler: SchedulerService, session_repo: MagicMock, message_repo: MagicMock
+    ) -> None:
         task = scheduler.add_task(
             name="Ghost session",
             task_type="recurring",
@@ -221,7 +234,9 @@ class TestRunNow:
         scheduler.run_now(task.id)
         message_repo.insert.assert_not_called()
 
-    def test_disables_one_shot_after_firing(self, scheduler: SchedulerService, message_repo: MagicMock) -> None:
+    def test_disables_one_shot_after_firing(
+        self, scheduler: SchedulerService, message_repo: MagicMock
+    ) -> None:
         future_at = int(time.time() * 1000) + 60_000
         task = scheduler.add_task(
             name="One shot",
@@ -249,8 +264,12 @@ class TestLifecycle:
 
 
 class TestAddTaskValidation:
-    def test_empty_name_raises(self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock) -> None:
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+    def test_empty_name_raises(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         with pytest.raises(ValidationError, match="name"):
             svc.add_task(
                 name="",
@@ -260,8 +279,12 @@ class TestAddTaskValidation:
                 content="x",
             )
 
-    def test_empty_content_raises(self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock) -> None:
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+    def test_empty_content_raises(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         with pytest.raises(ValidationError, match="content"):
             svc.add_task(
                 name="ok",
@@ -271,8 +294,12 @@ class TestAddTaskValidation:
                 content="",
             )
 
-    def test_empty_cron_raises(self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock) -> None:
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+    def test_empty_cron_raises(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         with pytest.raises(ValidationError, match="cron"):
             svc.add_task(
                 name="ok",
@@ -284,34 +311,50 @@ class TestAddTaskValidation:
 
 
 class TestLoadEdgeCases:
-    def test_corrupt_json_falls_back(self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock) -> None:
+    def test_corrupt_json_falls_back(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
         store_path.write_text("{not valid json")
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         assert svc.list_tasks() == []
 
-    def test_wrong_schema_version_ignored(self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock) -> None:
+    def test_wrong_schema_version_ignored(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
         store_path.write_text(json.dumps({"version": 99, "tasks": []}))
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         assert svc.list_tasks() == []
 
-    def test_malformed_task_skipped(self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock) -> None:
-        store_path.write_text(json.dumps({
-            "version": 1,
-            "tasks": [
-                {"id": "x", "missing": "fields"},
+    def test_malformed_task_skipped(
+        self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
+    ) -> None:
+        store_path.write_text(
+            json.dumps(
                 {
-                    "id": "good",
-                    "name": "ok",
-                    "type": "recurring",
-                    "schedule": {"kind": "recurring", "cron": "0 8 * * *"},
-                    "session_id": "s",
-                    "content": "x",
-                    "enabled": True,
-                    "created_at": 1,
-                },
-            ],
-        }))
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+                    "version": 1,
+                    "tasks": [
+                        {"id": "x", "missing": "fields"},
+                        {
+                            "id": "good",
+                            "name": "ok",
+                            "type": "recurring",
+                            "schedule": {"kind": "recurring", "cron": "0 8 * * *"},
+                            "session_id": "s",
+                            "content": "x",
+                            "enabled": True,
+                            "created_at": 1,
+                        },
+                    ],
+                }
+            )
+        )
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         tasks = svc.list_tasks()
         assert len(tasks) == 1
         assert tasks[0].id == "good"
@@ -321,7 +364,9 @@ class TestRunNowEdgeCases:
     def test_run_now_recurring_keeps_enabled_and_updates_next(
         self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
     ) -> None:
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         task = svc.add_task(
             name="rec",
             task_type="recurring",
@@ -355,7 +400,9 @@ class TestRunNowEdgeCases:
     def test_run_now_missing_task_raises(
         self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
     ) -> None:
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         with pytest.raises(TaskNotFoundError):
             svc.run_now("nope")
 
@@ -364,7 +411,9 @@ class TestUpdateValidation:
     def test_update_invalid_name_type(
         self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
     ) -> None:
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         task = svc.add_task(
             name="r",
             task_type="recurring",
@@ -380,7 +429,9 @@ class TestGetTaskMissing:
     def test_get_task_missing_raises(
         self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
     ) -> None:
-        svc = SchedulerService(store_path=store_path, message_repo=message_repo, session_repo=session_repo)
+        svc = SchedulerService(
+            store_path=store_path, message_repo=message_repo, session_repo=session_repo
+        )
         with pytest.raises(TaskNotFoundError):
             svc.get_task("nope")
 
@@ -390,6 +441,7 @@ class TestGlobalService:
         self, store_path: Path, message_repo: MagicMock, session_repo: MagicMock
     ) -> None:
         from backend.services import scheduler as mod
+
         mod._global_service = None
         try:
             svc = mod.init_scheduler_service(

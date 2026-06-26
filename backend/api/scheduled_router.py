@@ -4,6 +4,7 @@ Mount under ``/api/v1`` from ``backend/main.py``. Service dependency is injected
 via a ``get_service`` callable so tests can supply an isolated instance with
 mocked repos.
 """
+
 from __future__ import annotations
 
 import logging
@@ -105,7 +106,9 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
         return [_task_to_dict(t) for t in svc.list_tasks()]
 
     @router.post("/scheduled/tasks", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
-    def create_task(payload: CreateTaskIn, svc: SchedulerService = Depends(service_dep)) -> dict[str, Any]:
+    def create_task(
+        payload: CreateTaskIn, svc: SchedulerService = Depends(service_dep)
+    ) -> dict[str, Any]:
         try:
             schedule_dict = _schedule_in_to_dict(payload.schedule)
         except ValueError as exc:
@@ -140,7 +143,11 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.delete("/scheduled/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+    @router.delete(
+        "/scheduled/tasks/{task_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+        response_class=Response,
+    )
     def delete_task(task_id: str, svc: SchedulerService = Depends(service_dep)) -> Response:
         try:
             svc.delete_task(task_id)
