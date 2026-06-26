@@ -4,14 +4,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../ThemeProvider';
 import { useTheme } from '../useTheme';
 
-const { mockLoad, mockSave } = vi.hoisted(() => ({
+const { mockLoad, mockSave, mockLoadPreset, mockSavePreset } = vi.hoisted(() => ({
   mockLoad: vi.fn(),
   mockSave: vi.fn(),
+  mockLoadPreset: vi.fn(),
+  mockSavePreset: vi.fn(),
 }));
 
 vi.mock('../../../entities/theme/storage', () => ({
   loadTheme: (...args: unknown[]) => mockLoad(...args),
   saveTheme: (...args: unknown[]) => mockSave(...args),
+  loadThemePreset: (...args: unknown[]) => mockLoadPreset(...args),
+  saveThemePreset: (...args: unknown[]) => mockSavePreset(...args),
 }));
 
 describe('ThemeProvider async init', () => {
@@ -20,6 +24,10 @@ describe('ThemeProvider async init', () => {
     document.documentElement.classList.remove('dark');
     mockLoad.mockReset();
     mockSave.mockReset();
+    mockLoadPreset.mockReset();
+    mockSavePreset.mockReset();
+    mockLoadPreset.mockResolvedValue(null);
+    mockSavePreset.mockResolvedValue(undefined);
   });
 
   it('useEffect 触发 loadTheme 并 apply 到 <html>', async () => {

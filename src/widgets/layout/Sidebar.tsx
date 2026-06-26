@@ -1,38 +1,56 @@
 import { clsx } from 'clsx';
-import { MessageSquare, Settings, Brain, BookOpen } from 'lucide-react';
+import { MessageSquare, Settings, Brain, BookOpen, Network } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { useStore } from '../../shared/lib/store';
-import { SessionItem } from '../session/SessionItem';
+import {
+  ConversationsSection,
+  CronJobSection,
+  ProjectSection,
+  TeamSection,
+  useSiderSections,
+} from '../sidebar';
+
+const SECTION_KEYS = ['conversations', 'cron', 'project', 'team'] as const;
+const SESSION_ORDER_KEY = 'sage:sider:order:v1';
 
 // 导航项配置
 const navItems = [
   { path: '/chat', label: '对话', icon: MessageSquare },
   { path: '/memory', label: '记忆', icon: Brain },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
+  { path: '/orchestration', label: '编排', icon: Network },
   { path: '/settings', label: '设置', icon: Settings },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  width?: number;
+}
+
+export function Sidebar({ width = 240 }: SidebarProps) {
   const location = useLocation();
-  const {
-    sessions,
-    currentSessionId,
-    setCurrentSessionId,
-    createSession,
-    loadSessions,
-    deleteSession,
-  } = useStore();
+  const navigate = useNavigate();
+  const { sessions, currentSessionId, setCurrentSessionId, loadSessions, deleteSession } =
+    useStore();
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const [connectionStatus, setConnectionStatus] = useState<
     'connected' | 'not-configured' | 'error'
   >('not-configured');
   const [latency, setLatency] = useState<number | null>(null);
+
+  const { order: sectionOrder, collapsed, toggleCollapsed } = useSiderSections(SECTION_KEYS);
+  const { orderedItems, reorder } = useStoredSiderOrder({
+    storageKey: SESSION_ORDER_KEY,
+    items: sessions,
+    getId: (s) => s.id,
+  });
+  const orderedSessionIds = orderedItems.map((s) => s.id);
 
   useEffect(() => {
     loadSessions();
@@ -57,13 +75,62 @@ export function Sidebar() {
       });
   }, [chatEndpoint?.baseUrl, chatEndpoint?.apiKey, settings.modelSelections.chatModel.modelId]);
 
-  const handleNewSession = async () => {
-    const sessionId = await createSession();
-    setCurrentSessionId(sessionId);
+  const handleNewSession = () => {
+    // Phase 7: 新建会话跳转到欢迎屏，由用户在欢迎屏输入后再创建 session
+    navigate('/welcome');
+  };
+
+  const renderSection = (key: string) => {
+    const isCollapsed = collapsed.has(key);
+
+    switch (key) {
+      case 'conversations':
+        return (
+          <ConversationsSection
+            sessions={orderedItems}
+            order={orderedSessionIds}
+            currentSessionId={currentSessionId}
+            collapsed={isCollapsed}
+            onToggleCollapsed={() => toggleCollapsed(key)}
+            onSelect={(id) => {
+              setCurrentSessionId(id);
+              if (location.pathname !== '/chat') {
+                window.location.href = '/chat';
+              }
+            }}
+            onDelete={(id) => deleteSession(id)}
+            onNewSession={handleNewSession}
+            onOrderChange={(newOrder) => {
+              const oldIndex = orderedSessionIds.indexOf(String(newOrder[0]));
+              const newIndex = newOrder.indexOf(String(newOrder[0]));
+              if (oldIndex !== -1 && newIndex !== -1) {
+                reorder(oldIndex, newIndex);
+              }
+            }}
+          />
+        );
+      case 'cron':
+        return (
+          <CronJobSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
+        );
+      case 'project':
+        return (
+          <ProjectSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
+        );
+      case 'team':
+        return (
+          <TeamSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
+        );
+      default:
+        return null;
+    }
   };
 
   return (
-    <aside className="w-60 h-screen bg-surface border-r border-border flex flex-col flex-shrink-0">
+    <aside
+      style={{ width: `${width}px` }}
+      className="h-screen bg-surface border-r border-border flex flex-col flex-shrink-0"
+    >
       {/* Logo 区域 */}
       <div className="h-12 flex items-center px-4 border-b border-border">
         <div className="w-6 h-6 bg-primary rounded-sm flex items-center justify-center text-text-inverse font-bold text-xs mr-2.5">
@@ -94,32 +161,10 @@ export function Sidebar() {
           );
         })}
 
-        {/* 最近对话 */}
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted px-3 pt-4 pb-2">
-          最近对话
-        </div>
-        <button
-          onClick={handleNewSession}
-          className="w-full text-left px-3 py-1.5 rounded-radius-sm transition-colors text-xs text-text-secondary hover:bg-bg-hover flex items-center gap-2"
-        >
-          + 新对话
-        </button>
-        <div className="overflow-y-auto max-h-[calc(100vh-320px)]">
-          {sessions.map((session) => (
-            <SessionItem
-              key={session.id}
-              session={session}
-              isActive={session.id === currentSessionId}
-              onSelect={() => {
-                setCurrentSessionId(session.id);
-                if (location.pathname !== '/chat') {
-                  window.location.href = '/chat';
-                }
-              }}
-              onDelete={() => deleteSession(session.id)}
-            />
-          ))}
-        </div>
+        {/* 可折叠分组 */}
+        {sectionOrder.map((key) => (
+          <div key={key}>{renderSection(key)}</div>
+        ))}
       </nav>
 
       {/* 底部状态栏 */}

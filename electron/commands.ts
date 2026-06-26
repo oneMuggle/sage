@@ -90,6 +90,32 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'PUT',
     path: (a) => `/api/v1/preferences/${encodeURIComponent(String(a.key))}`,
   },
+
+  // orchestration (Phase 4: multi-agent coordination)
+  orchestration_list_lanes: {
+    method: 'GET',
+    path: (a) => {
+      const params = (a?.params as Record<string, unknown>) ?? {};
+      const search = new URLSearchParams();
+      if (params.status) search.set('status', String(params.status));
+      if (params.team_id) search.set('team_id', String(params.team_id));
+      if (params.limit) search.set('limit', String(params.limit));
+      const qs = search.toString();
+      return `/api/v1/orchestration/lanes${qs ? `?${qs}` : ''}`;
+    },
+  },
+  orchestration_get_lane: {
+    method: 'GET',
+    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}`,
+  },
+  orchestration_list_lane_events: {
+    method: 'GET',
+    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/events`,
+  },
+  orchestration_cancel_lane: {
+    method: 'POST',
+    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/cancel`,
+  },
 };
 
 export class UnknownIpcCommandError extends Error {

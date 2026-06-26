@@ -57,6 +57,24 @@ vi.mock('../../shared/lib/hooks/useFileUpload', () => ({
   }),
 }));
 
+vi.mock('../../features/chat', () => ({
+  BtwOverlay: () => null,
+  useBtwCommand: () => ({
+    open: vi.fn(),
+    close: vi.fn(),
+    isOpen: false,
+    question: '',
+    answer: '',
+    isLoading: false,
+  }),
+  useAtFileQuery: () => ({
+    query: null,
+    startIdx: 0,
+    endIdx: 0,
+  }),
+}));
+
+import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import { Chat } from '../Chat';
 
@@ -116,7 +134,9 @@ describe('Chat — auto-scroll to bottom on new message', () => {
 
     const { container, rerender } = render(
       <MemoryRouter>
-        <Chat />
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
       </MemoryRouter>,
     );
     const scrollEl = container.querySelector('.overflow-y-auto') as HTMLDivElement;
@@ -146,7 +166,9 @@ describe('Chat — auto-scroll to bottom on new message', () => {
 
     rerender(
       <MemoryRouter>
-        <Chat />
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
       </MemoryRouter>,
     );
 
@@ -169,7 +191,9 @@ describe('Chat — auto-scroll to bottom on new message', () => {
 
     const { container, rerender } = render(
       <MemoryRouter>
-        <Chat />
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
       </MemoryRouter>,
     );
     const scrollEl = container.querySelector('.overflow-y-auto') as HTMLDivElement;
@@ -196,7 +220,9 @@ describe('Chat — auto-scroll to bottom on new message', () => {
 
     rerender(
       <MemoryRouter>
-        <Chat />
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
       </MemoryRouter>,
     );
 

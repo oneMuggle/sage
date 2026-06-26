@@ -28,6 +28,8 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
     <div
       role="button"
       tabIndex={0}
+      data-testid="session-item"
+      data-session-id={session.id}
       aria-label={`选择会话 ${session.title}`}
       aria-pressed={isActive}
       onClick={onSelect}
