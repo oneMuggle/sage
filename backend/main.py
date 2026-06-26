@@ -22,10 +22,16 @@ from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
+from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
+from backend.data.session_repo import MessageRepository, SessionRepository
 from backend.memory import get_memory_manager
+from backend.services.scheduler import (
+    get_scheduler_service,
+    init_scheduler_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +146,21 @@ async def lifespan(app: FastAPI):
     )
     logger.info("ChatStreamRegistry 已初始化(后台 sweeper 每 60s 清理孤儿流)")
 
+    # Phase 8: scheduled tasks service — load JSON, start APScheduler
+    from pathlib import Path
+
+    store_path = Path("backend/data/scheduled_tasks.json")
+    scheduler_service = init_scheduler_service(
+        store_path=store_path,
+        message_repo=MessageRepository(),
+        session_repo=SessionRepository(),
+    )
+    scheduler_service.start()
+    app.state.scheduler = scheduler_service
+    logger.info(
+        "SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks())
+    )
+
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
     api_mode = os.environ.get("API_MODE", "hex").lower()
     if api_mode == "hex":
@@ -162,6 +183,10 @@ async def lifespan(app: FastAPI):
         for entry in list(app.state.streams._entries.values()):
             if entry.task is not None and not entry.task.done():
                 entry.task.cancel()
+
+    # Phase 8: stop APScheduler cleanly so jobs do not fire after shutdown
+    if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
+        app.state.scheduler.shutdown()
 
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
@@ -230,6 +255,9 @@ elif _API_MODE == "legacy":
     app.include_router(legacy_router, prefix="/api/v1")
 else:
     raise ValueError(f"API_MODE must be 'hex' or 'legacy', got: {_API_MODE!r}")
+
+# Phase 8: scheduled tasks — mounted for both API modes (independent feature)
+app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
 
 
 @app.get("/health")
