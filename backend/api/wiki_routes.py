@@ -99,7 +99,7 @@ def _create_wiki_structure(project_path: Path) -> None:
     if not overview_file.exists():
         overview_file.write_text(
             f"# {project_path.name}\n\n"
-            f"创建于 {datetime.now(tz=timezone.utc).isoformat()}\n\n"
+            f"创建于 {datetime.now(tz=timezone.utc).isoformat()}\n\n",  # noqa: DTZ011, UP017
             "## 概述\n\n"
             "这是一个新的 Wiki 项目。开始添加源文档来构建知识库。\n",
             encoding="utf-8",
@@ -110,7 +110,7 @@ def _create_wiki_structure(project_path: Path) -> None:
     if not index_file.exists():
         index_file.write_text(
             f"# Wiki 索引\n\n"
-            f"自动生成于 {datetime.now(tz=timezone.utc).isoformat()}\n\n"
+            f"自动生成于 {datetime.now(tz=timezone.utc).isoformat()}\n\n",  # noqa: DTZ011, UP017
             "## 页面\n\n"
             "_暂无页面_\n",
             encoding="utf-8",
@@ -149,7 +149,7 @@ async def create_project(req: CreateProjectRequest) -> ProjectInfo:
         id=project_id,
         name=req.name,
         path=str(project_path),
-        created_at=datetime.now(tz=timezone.utc).isoformat(),
+        created_at=datetime.now(tz=timezone.utc).isoformat(),  # noqa: DTZ011, UP017
         has_content=False,
     )
 
@@ -193,7 +193,7 @@ async def open_project(req: OpenProjectRequest) -> ProjectInfo:
         id=project_id,
         name=project_path.name,
         path=str(project_path),
-        created_at=datetime.now(tz=timezone.utc).isoformat(),
+        created_at=datetime.now(tz=timezone.utc).isoformat(),  # noqa: DTZ011, UP017
         has_content=has_content,
     )
 
@@ -236,7 +236,7 @@ async def list_projects(base_path: str = "") -> list[ProjectInfo]:
                 id=project_id,
                 name=item.name,
                 path=str(item),
-                created_at=datetime.now(tz=timezone.utc).isoformat(),
+                created_at=datetime.now(tz=timezone.utc).isoformat(),  # noqa: DTZ011, UP017
                 has_content=has_content,
             )
         )
