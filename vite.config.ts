@@ -36,6 +36,18 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    // Exclude windowControlsClient from pre-bundling to prevent
+    // CommonJS transformation that breaks ES module imports in
+    // Electron renderer process
+    exclude: ['src/shared/api/windowControlsClient.ts'],
+    include: [],
+  },
+  esbuild: {
+    // Force ES module format to prevent CommonJS transformation
+    // that breaks ES module imports in Electron renderer process
+    format: 'esm',
+  },
   test: {
     environment: 'jsdom',
     globals: true,
