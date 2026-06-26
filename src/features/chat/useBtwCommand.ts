@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+
 import { useBtwState } from '../../entities/chat/btwState';
 import { useChat } from '../send-message/useChat';
 
@@ -17,7 +18,7 @@ export function useBtwCommand() {
       useBtwState.getState().open(question);
       askBtw(question);
     },
-    [askBtw]
+    [askBtw],
   );
 
   const close = useCallback(() => {

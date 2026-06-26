@@ -1,9 +1,7 @@
 // src/features/chat/AtFileMenu.tsx
 import { useState, useEffect, useRef } from 'react';
-import {
-  fileSearchClient,
-  FileSearchTimeoutError,
-} from '../../shared/api/fileSearchClient';
+
+import { fileSearchClient, FileSearchTimeoutError } from '../../shared/api/fileSearchClient';
 import { useI18n } from '../../shared/lib/i18n';
 
 interface FileSearchResult {
@@ -118,9 +116,7 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
         zIndex: 1000,
       }}
     >
-      {isLoading && (
-        <div className="at-file-menu__loading">{t('chat.atFile.searching')}</div>
-      )}
+      {isLoading && <div className="at-file-menu__loading">{t('chat.atFile.searching')}</div>}
 
       {error === 'timeout' && (
         <div className="at-file-menu__error">
@@ -132,9 +128,7 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
       )}
 
       {error && error !== 'timeout' && (
-        <div className="at-file-menu__error">
-          {t('chat.atFile.error')}
-        </div>
+        <div className="at-file-menu__error">{t('chat.atFile.error')}</div>
       )}
 
       {!isLoading && !error && results.length === 0 && (

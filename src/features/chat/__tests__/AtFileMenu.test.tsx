@@ -1,6 +1,7 @@
 // src/features/chat/__tests__/AtFileMenu.test.tsx
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { AtFileMenu } from '../AtFileMenu';
 
 // Mock i18n hook
@@ -31,15 +32,13 @@ describe('AtFileMenu', () => {
   });
 
   it('renders null when query is null', () => {
-    const { container } = render(
-      <AtFileMenu query={null} onSelect={vi.fn()} onClose={vi.fn()} />
-    );
+    const { container } = render(<AtFileMenu query={null} onSelect={vi.fn()} onClose={vi.fn()} />);
     expect(container.firstChild).toBeNull();
   });
 
   it('renders loading state initially', () => {
     searchMock.mockImplementation(
-      () => new Promise(() => {}) // Never resolves
+      () => new Promise(() => {}), // Never resolves
     );
     render(<AtFileMenu query="foo" onSelect={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByText(/搜索中/)).toBeInTheDocument();
@@ -77,9 +76,7 @@ describe('AtFileMenu', () => {
   });
 
   it('shows retry button on timeout error', async () => {
-    const { FileSearchTimeoutError } = await import(
-      '../../../shared/api/fileSearchClient'
-    );
+    const { FileSearchTimeoutError } = await import('../../../shared/api/fileSearchClient');
     searchMock.mockRejectedValueOnce(new FileSearchTimeoutError('slow'));
     render(<AtFileMenu query="slow" onSelect={vi.fn()} onClose={vi.fn()} />);
     await waitFor(() => {

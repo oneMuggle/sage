@@ -47,9 +47,7 @@ export function BtwOverlay() {
     >
       {/* 头部 */}
       <div className="flex items-center justify-between p-3 border-b border-border">
-        <span className="text-sm font-medium text-text">
-          {t('chat.btw.title')}
-        </span>
+        <span className="text-sm font-medium text-text">{t('chat.btw.title')}</span>
         <button
           data-testid="btw-close"
           onClick={close}
@@ -69,17 +67,12 @@ export function BtwOverlay() {
       {/* 答案区域 */}
       <div className="flex-1 overflow-y-auto p-3" style={{ minHeight: '100px' }}>
         {isLoading && !answer && (
-          <div
-            data-testid="btw-loading"
-            className="flex items-center gap-2 text-sm text-muted"
-          >
+          <div data-testid="btw-loading" className="flex items-center gap-2 text-sm text-muted">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span>{t('chat.btw.loading')}</span>
           </div>
         )}
-        {answer && (
-          <div className="text-sm text-text whitespace-pre-wrap">{answer}</div>
-        )}
+        {answer && <div className="text-sm text-text whitespace-pre-wrap">{answer}</div>}
       </div>
     </div>
   );

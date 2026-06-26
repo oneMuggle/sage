@@ -1,6 +1,7 @@
 import { Send, Square, Image, Paperclip, BookOpen } from 'lucide-react';
 import { useState, useRef, useCallback } from 'react';
 
+import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 
 import { FileAttachment } from './FileAttachment';
@@ -42,12 +43,17 @@ export function ChatInput({
   placeholder = '输入消息...',
 }: ChatInputProps) {
   const [value, setValue] = useState('');
+  const [cursorPos, setCursorPos] = useState(0);
   const [knowledgeRefs, setKnowledgeRefs] = useState<{ id: string; title: string }[]>([]);
   const [showKnowledgeSelector, setShowKnowledgeSelector] = useState(false);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Phase 6: @文件提及 + /btw 补充消息
+  const btw = useBtwCommand();
+  const atQuery = useAtFileQuery(value, cursorPos);
 
   const {
     files,
@@ -109,9 +115,18 @@ export function ChatInput({
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     setValue(newValue);
+    setCursorPos(e.target.selectionStart ?? newValue.length);
     const ta = e.target;
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+
+    // Phase 6: /btw 拦截（优先级高于普通 slash 命令）
+    const btwMatch = newValue.match(/^\/btw\s+(.+)$/);
+    if (btwMatch) {
+      btw.open(btwMatch[1]);
+      setValue('');
+      return;
+    }
 
     // 检测 slash 命令
     if (newValue.startsWith('/')) {
@@ -248,12 +263,30 @@ export function ChatInput({
               onSelect={handleSlashSelect}
             />
           )}
+          {atQuery.query !== null && (
+            <AtFileMenu
+              query={atQuery.query}
+              onSelect={(path) => {
+                const newValue =
+                  value.slice(0, atQuery.startIdx) + '@' + path + ' ' + value.slice(atQuery.endIdx);
+                setValue(newValue);
+                setCursorPos(atQuery.startIdx + 1 + path.length + 1);
+              }}
+              onClose={() => {
+                const newValue = value.slice(0, atQuery.startIdx) + value.slice(atQuery.endIdx);
+                setValue(newValue);
+                setCursorPos(atQuery.startIdx);
+              }}
+            />
+          )}
           <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
             <textarea
               ref={textareaRef}
               value={value}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
+              onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
+              onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               placeholder={placeholder}
               disabled={disabled}
               rows={1}

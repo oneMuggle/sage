@@ -1,7 +1,6 @@
 // src/features/chat/__tests__/useAtFileQuery.test.tsx
-import { describe, expect, it } from 'vitest';
-
 import { renderHook } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 
 import { useAtFileQuery } from '../useAtFileQuery';
 

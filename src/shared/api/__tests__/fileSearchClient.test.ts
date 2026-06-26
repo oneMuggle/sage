@@ -38,10 +38,15 @@ describe('fileSearchClient', () => {
 
   it('search() rejects with timeout error when invoke takes > 3s', async () => {
     vi.useFakeTimers();
-    invokeMock.mockImplementation(() => new Promise(() => {/* never resolve */}));
+    invokeMock.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* never resolve */
+        }),
+    );
     const p = fileSearchClient.search('slow');
     // Attach catch handler immediately to prevent unhandled rejection
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
+
     p.catch(() => {});
     // Advance timers FIRST, then await the rejection
     await vi.advanceTimersByTimeAsync(3001);
@@ -50,7 +55,12 @@ describe('fileSearchClient', () => {
 
   it('search() can be aborted via AbortSignal before timeout', async () => {
     const externalAbort = new AbortController();
-    invokeMock.mockImplementation(() => new Promise<FileSearchResult[]>(() => {/* pending */}));
+    invokeMock.mockImplementation(
+      () =>
+        new Promise<FileSearchResult[]>(() => {
+          /* pending */
+        }),
+    );
     const p = fileSearchClient.search('q', { signal: externalAbort.signal });
     externalAbort.abort();
     await expect(p).rejects.toThrow(/aborted/i);

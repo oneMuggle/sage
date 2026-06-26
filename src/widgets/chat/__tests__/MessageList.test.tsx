@@ -5,10 +5,14 @@
  * - 透传 knowledgeRefs/attachments 到 Message
  */
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
-
+import { describe, it, expect, vi } from 'vitest';
 import type { Message as MessageType } from '../../../shared/lib/store';
 import { MessageList } from '../MessageList';
+
+// Mock BtwOverlay to avoid I18nProvider context issues
+vi.mock('../../../features/chat', () => ({
+  BtwOverlay: () => null,
+}));
 
 const baseMsg = (id: string, role: MessageType['role'], content: string): MessageType => ({
   id,

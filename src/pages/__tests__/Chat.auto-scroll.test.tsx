@@ -57,6 +57,23 @@ vi.mock('../../shared/lib/hooks/useFileUpload', () => ({
   }),
 }));
 
+vi.mock('../../features/chat', () => ({
+  BtwOverlay: () => null,
+  useBtwCommand: () => ({
+    open: vi.fn(),
+    close: vi.fn(),
+    isOpen: false,
+    question: '',
+    answer: '',
+    isLoading: false,
+  }),
+  useAtFileQuery: () => ({
+    query: null,
+    startIdx: 0,
+    endIdx: 0,
+  }),
+}));
+
 import { useStore } from '../../shared/lib/store';
 import { Chat } from '../Chat';
 
