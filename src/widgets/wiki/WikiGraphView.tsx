@@ -37,12 +37,15 @@ interface WikiNodeData extends Record<string, unknown> {
   highlighted: boolean;
   hovered: boolean;
   isNeighbor: boolean;
+  customColor?: string;
 }
 
 interface WikiGraphViewProps {
   data: GraphData;
   query?: string;
   onNodeClick?: (pagePath: string) => void;
+  /** 自定义节点颜色函数（可选） */
+  nodeColorFn?: (node: { id: string; data?: Record<string, unknown> }) => string;
 }
 
 // ============================================================================
@@ -95,7 +98,7 @@ function nodeSizeByLinks(wikilinkCount: number, maxLinks: number): number {
 
 function WikiNode({ data }: NodeProps<Node<WikiNodeData>>) {
   const d = data;
-  const color = colorByType(d.pageType);
+  const color = d.customColor || colorByType(d.pageType);
   const size = nodeSizeByLinks(d.wikilinkCount, 10); // 简化：假设 maxLinks=10
   const isActive = d.highlighted && (d.hovered || d.isNeighbor);
 
@@ -158,14 +161,14 @@ function circularLayout(nodeCount: number): Map<string, { x: number; y: number }
 // 组件
 // ============================================================================
 
-export function WikiGraphView({ data, query, onNodeClick }: WikiGraphViewProps) {
+export function WikiGraphView({ data, query, onNodeClick, nodeColorFn }: WikiGraphViewProps) {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   const {
     nodes: initialNodes,
     edges: initialEdges,
     matchedIds,
-  } = useMemo(() => buildGraph(data, query), [data, query]);
+  } = useMemo(() => buildGraph(data, query, nodeColorFn), [data, query, nodeColorFn]);
 
   // 计算当前悬停节点的邻居
   const currentNeighborIds = useMemo(() => {
@@ -274,6 +277,7 @@ export function WikiGraphView({ data, query, onNodeClick }: WikiGraphViewProps) 
 export function buildGraph(
   data: GraphData,
   query?: string,
+  nodeColorFn?: (node: { id: string; data?: Record<string, unknown> }) => string,
 ): {
   nodes: Node<WikiNodeData>[];
   edges: Edge[];
@@ -292,20 +296,24 @@ export function buildGraph(
   // 圆形布局
   const positions = circularLayout(data.nodes.length);
 
-  const nodes: Node<WikiNodeData>[] = data.nodes.map((n, i) => ({
-    id: n.id,
-    type: 'wiki',
-    data: {
-      label: n.label,
-      pageType: n.page_type,
-      sourceCount: n.sources.length,
-      wikilinkCount: linkCounts.get(n.id) ?? n.wikilinks.length,
-      highlighted: matchedIds.size === 0 || matchedIds.has(n.id),
-      hovered: false,
-      isNeighbor: false,
-    },
-    position: positions.get(`node-${i}`) ?? { x: 0, y: 0 },
-  }));
+  const nodes: Node<WikiNodeData>[] = data.nodes.map((n, i) => {
+    const color = nodeColorFn ? nodeColorFn({ id: n.id }) : colorByType(n.page_type);
+    return {
+      id: n.id,
+      type: 'wiki',
+      data: {
+        label: n.label,
+        pageType: n.page_type,
+        sourceCount: n.sources.length,
+        wikilinkCount: linkCounts.get(n.id) ?? n.wikilinks.length,
+        highlighted: matchedIds.size === 0 || matchedIds.has(n.id),
+        hovered: false,
+        isNeighbor: false,
+        customColor: color,
+      },
+      position: positions.get(`node-${i}`) ?? { x: 0, y: 0 },
+    };
+  });
 
   const edges: Edge[] = data.edges.map((e, i) => ({
     id: `${e.source}->${e.target}-${e.signal}-${i}`,

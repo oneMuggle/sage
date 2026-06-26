@@ -25,6 +25,7 @@ from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.theme_router import router as theme_router
+from backend.api.wiki_routes import router as wiki_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
 from backend.data.session_repo import MessageRepository, SessionRepository
@@ -159,6 +160,18 @@ async def lifespan(app: FastAPI):
     scheduler_service.start()
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
+
+    # Wiki MCP Server — 在后台启动 Wiki MCP Server
+    # 注意：MCP Server 通过 stdio 通信，这里只是验证模块可以导入
+    # 实际使用时，用户需要单独启动 MCP Server 进程
+    try:
+        from backend.wiki.mcp_server import server as wiki_mcp_server
+
+        app.state.wiki_mcp_server = wiki_mcp_server
+        logger.info("Wiki MCP Server 模块已加载（7 个工具可用）")
+    except Exception as e:
+        logger.warning(f"Wiki MCP Server 加载失败（非关键）: {e}")
+        app.state.wiki_mcp_server = None
 
     # Phase 2 (multi-agent core): 初始化注册中心 + Planner + Router + HeartbeatMonitor
     from backend.orchestration.lane_registry import LaneRegistry
@@ -314,6 +327,8 @@ async def add_request_id_header(request: Request, call_next):
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/theme")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
+app.include_router(wiki_router, prefix="/api/v1")
+app.include_router(wiki_router, prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":
