@@ -7,6 +7,7 @@ Provides high-level operations for team management:
 - Query teams by status
 - Aggregate task progress
 """
+
 from __future__ import annotations
 
 import uuid
@@ -74,6 +75,10 @@ class TeamRegistry:
         team.remove_task(task_id)
         return self.repo.update(team)
 
+    def update_team(self, team: Team) -> bool:
+        """Update a team in the database."""
+        return self.repo.update(team)
+
     def mark_running(self, team_id: str) -> bool:
         """Transition team to RUNNING state."""
         team = self.repo.get(team_id)
@@ -116,9 +121,7 @@ class TeamRegistry:
         except ValueError:
             return False
 
-    def list_teams(
-        self, status: TeamStatus | None = None, limit: int = 100
-    ) -> list[Team]:
+    def list_teams(self, status: TeamStatus | None = None, limit: int = 100) -> list[Team]:
         """List teams with optional status filter."""
         return self.repo.list(status=status, limit=limit)
 

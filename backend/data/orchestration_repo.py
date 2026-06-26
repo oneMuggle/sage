@@ -9,6 +9,7 @@ Provides SQLite-backed repositories for the multi-agent coordination system:
 
 All repositories follow the same pattern as backend/data/session_repo.py.
 """
+
 from __future__ import annotations
 
 import json
@@ -73,9 +74,7 @@ class TaskRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM orchestration_tasks WHERE task_id = ?", (task_id,)
-        )
+        cursor.execute("SELECT * FROM orchestration_tasks WHERE task_id = ?", (task_id,))
         row = cursor.fetchone()
         return self._row_to_task(row) if row else None
 
@@ -111,9 +110,7 @@ class TaskRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "DELETE FROM orchestration_tasks WHERE task_id = ?", (task_id,)
-        )
+        cursor.execute("DELETE FROM orchestration_tasks WHERE task_id = ?", (task_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -173,8 +170,7 @@ class TaskRepository:
             blocked_by = json.loads(row["blocked_by"])
             # Check if all dependencies are completed
             all_deps_completed = all(
-                dep_id in all_tasks
-                and all_tasks[dep_id]["status"] == TaskStatus.COMPLETED.value
+                dep_id in all_tasks and all_tasks[dep_id]["status"] == TaskStatus.COMPLETED.value
                 for dep_id in blocked_by
             )
             if all_deps_completed:
@@ -225,9 +221,9 @@ class LaneRepository:
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
-                lane.lane_id,
-                lane.task_id,
-                lane.agent_id,
+                str(lane.lane_id),
+                str(lane.task_id) if lane.task_id is not None else None,
+                str(lane.agent_id) if lane.agent_id is not None else None,
                 lane.status.value,
                 lane.created_at,
                 lane.worktree,
@@ -241,9 +237,7 @@ class LaneRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM orchestration_lanes WHERE lane_id = ?", (lane_id,)
-        )
+        cursor.execute("SELECT * FROM orchestration_lanes WHERE lane_id = ?", (lane_id,))
         row = cursor.fetchone()
         return self._row_to_lane(row) if row else None
 
@@ -296,9 +290,7 @@ class LaneRepository:
         )
         return [self._row_to_lane(row) for row in cursor.fetchall()]
 
-    def list_by_status(
-        self, status: LaneStatus, limit: int = 100
-    ) -> list[Lane]:
+    def list_by_status(self, status: LaneStatus, limit: int = 100) -> list[Lane]:
         """List lanes by status."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -311,6 +303,34 @@ class LaneRepository:
             LIMIT ?
             """,
             (status.value, limit),
+        )
+        return [self._row_to_lane(row) for row in cursor.fetchall()]
+
+    def list_by_agent(self, agent_id: str) -> list[Lane]:
+        """List all lanes assigned to an agent."""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT * FROM orchestration_lanes
+            WHERE agent_id = ?
+            ORDER BY created_at ASC
+            """,
+            (agent_id,),
+        )
+        return [self._row_to_lane(row) for row in cursor.fetchall()]
+
+    def list_all(self) -> list[Lane]:
+        """List all lanes."""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT * FROM orchestration_lanes
+            ORDER BY created_at ASC
+            """
         )
         return [self._row_to_lane(row) for row in cursor.fetchall()]
 
@@ -333,9 +353,7 @@ class LaneRepository:
     def _row_to_lane(self, row) -> Lane:
         """Convert a database row to a Lane object."""
         heartbeat_data = json.loads(row["heartbeat"]) if row["heartbeat"] else None
-        heartbeat = (
-            LaneHeartbeat(**heartbeat_data) if heartbeat_data else None
-        )
+        heartbeat = LaneHeartbeat(**heartbeat_data) if heartbeat_data else None
 
         return Lane(
             lane_id=row["lane_id"],
@@ -391,9 +409,7 @@ class TeamRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM orchestration_teams WHERE team_id = ?", (team_id,)
-        )
+        cursor.execute("SELECT * FROM orchestration_teams WHERE team_id = ?", (team_id,))
         row = cursor.fetchone()
         return self._row_to_team(row) if row else None
 
@@ -428,9 +444,7 @@ class TeamRepository:
         conn.commit()
         return cursor.rowcount > 0
 
-    def list(
-        self, status: TeamStatus | None = None, limit: int = 100
-    ) -> list[Team]:
+    def list(self, status: TeamStatus | None = None, limit: int = 100) -> list[Team]:
         """List teams with optional status filter."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -508,9 +522,7 @@ class LaneEventRepository:
         conn.commit()
         return event_id
 
-    def list_by_lane(
-        self, lane_id: str, limit: int = 100, offset: int = 0
-    ) -> list[dict]:
+    def list_by_lane(self, lane_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
         """List events for a lane, ordered by timestamp."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -526,9 +538,7 @@ class LaneEventRepository:
         )
         return [self._row_to_dict(row) for row in cursor.fetchall()]
 
-    def list_by_task(
-        self, task_id: str, limit: int = 100
-    ) -> list[dict]:
+    def list_by_task(self, task_id: str, limit: int = 100) -> list[dict]:
         """List events for a task (across all lanes)."""
         conn = self.db.get_connection()
         cursor = conn.cursor()

@@ -13,6 +13,7 @@ Events are the primary mechanism for:
 - Recovery policy triggers
 - Performance monitoring
 """
+
 from __future__ import annotations
 
 import time
@@ -25,14 +26,15 @@ from backend.data.orchestration_repo import LaneEventRepository
 
 class LaneEvent(str, Enum):
     """Lane lifecycle events."""
+
     # Execution lifecycle
-    STARTED = "lane.started"             # Lane created
-    READY = "lane.ready"                 # Dependencies satisfied, waiting for agent
-    RUNNING = "lane.running"             # Agent started execution
-    BLOCKED = "lane.blocked"             # Blocked (waiting for external condition)
-    SUCCEEDED = "lane.succeeded"         # Successfully completed
-    FAILED = "lane.failed"               # Failed
-    STOPPED = "lane.stopped"             # Cancelled
+    STARTED = "lane.started"  # Lane created
+    READY = "lane.ready"  # Dependencies satisfied, waiting for agent
+    RUNNING = "lane.running"  # Agent started execution
+    BLOCKED = "lane.blocked"  # Blocked (waiting for external condition)
+    SUCCEEDED = "lane.succeeded"  # Successfully completed
+    FAILED = "lane.failed"  # Failed
+    STOPPED = "lane.stopped"  # Cancelled
 
     # Git integration (if supported)
     COMMIT_CREATED = "lane.commit.created"
@@ -42,11 +44,12 @@ class LaneEvent(str, Enum):
 
 class EventProvenance(str, Enum):
     """Event source classification."""
-    LIVE_LANE = "LiveLane"               # Normal execution
-    RECOVERY = "Recovery"                # Recovery from failure
-    RETRY = "Retry"                      # Retry attempt
-    HEARTBEAT = "Heartbeat"              # Heartbeat monitor
-    MANUAL = "Manual"                    # Manual intervention
+
+    LIVE_LANE = "LiveLane"  # Normal execution
+    RECOVERY = "Recovery"  # Recovery from failure
+    RETRY = "Retry"  # Retry attempt
+    HEARTBEAT = "Heartbeat"  # Heartbeat monitor
+    MANUAL = "Manual"  # Manual intervention
 
 
 @dataclass
@@ -63,6 +66,7 @@ class LaneEventPayload:
         provenance: Event source classification
         metadata: Additional event-specific data
     """
+
     event: LaneEvent
     lane_id: str
     task_id: str
@@ -168,9 +172,7 @@ class EventStream:
         """
         return self.repo.list_by_lane(lane_id, limit=limit, offset=offset)
 
-    def get_task_events(
-        self, task_id: str, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    def get_task_events(self, task_id: str, limit: int = 100) -> list[dict[str, Any]]:
         """
         Get all events for a task (across all lanes).
 

@@ -30,49 +30,60 @@ class TaskRegistry:
 
     def create_task(
         self,
-        name: str,
-        description: str,
+        name: str | Task,
+        description: str | None = None,
         blocked_by: list[str] | None = None,
         priority: int = 0,
         executor_type: str = "agent",
         parameters: dict[str, Any] | None = None,
         packet: TaskPacket | None = None,
         team_id: str | None = None,
+        task_type: str = "general",
     ) -> Task:
         """
         Create a new task with optional dependencies.
 
+        Can be called in two ways:
+        1. create_task(task: Task) - pass a pre-constructed Task object
+        2. create_task(name, description, ...) - construct from parameters
+
         Args:
-            name: Task name
-            description: Task description
+            name: Task name or Task object
+            description: Task description (ignored if name is Task)
             blocked_by: List of task IDs that must complete before this task can run
             priority: Higher = more important
             executor_type: "agent" / "tool" / "script"
             parameters: Task-specific parameters
             packet: Advanced configuration (recovery/escalation policies)
             team_id: Optional team association
+            task_type: Task type (general/research/coding/analysis/testing)
 
         Returns:
             Created Task object
         """
-        task_id = f"task-{uuid.uuid4().hex[:12]}"
-        task = Task(
-            task_id=task_id,
-            name=name,
-            description=description,
-            priority=priority,
-            executor_type=executor_type,
-            parameters=parameters or {},
-            packet=packet,
-            blocked_by=blocked_by or [],
-            team_id=team_id,
-        )
+        # Handle both signatures
+        if isinstance(name, Task):
+            task = name
+        else:
+            task_id = f"task-{uuid.uuid4().hex[:12]}"
+            task = Task(
+                task_id=task_id,
+                name=name,
+                description=description or "",
+                task_type=task_type,
+                priority=priority,
+                executor_type=executor_type,
+                parameters=parameters or {},
+                packet=packet,
+                blocked_by=blocked_by or [],
+                team_id=team_id,
+            )
 
         # Persist to database
         self.repo.create(task)
 
         # Update blocking relationships: add this task to the 'blocks' list of dependencies
-        if blocked_by:
+        if task.blocked_by:
             self._update_blocking_relationships(task)
 
         return task

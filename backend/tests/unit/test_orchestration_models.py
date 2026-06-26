@@ -8,6 +8,7 @@ Tests cover:
 - TaskPacket configuration
 - Dependency relationships (blocks/blocked_by)
 """
+
 import pytest
 
 from backend.orchestration.models import (
@@ -140,8 +141,7 @@ class TestTaskPacket:
     def test_escalation_policy(self):
         """EscalationPolicy configuration."""
         policy = EscalationPolicy(
-            after_retries="notify-human",
-            notify_channels=["discord", "email"]
+            after_retries="notify-human", notify_channels=["discord", "email"]
         )
         assert policy.after_retries == "notify-human"
         assert len(policy.notify_channels) == 2

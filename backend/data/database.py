@@ -278,6 +278,7 @@ class Database:
                 task_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
+                task_type TEXT NOT NULL DEFAULT 'general',
                 status TEXT NOT NULL DEFAULT 'created',
                 priority INTEGER NOT NULL DEFAULT 0,
                 executor_type TEXT NOT NULL DEFAULT 'agent',
@@ -314,6 +315,8 @@ class Database:
                 worktree TEXT,
                 heartbeat TEXT,
                 error TEXT,
+                permission_preset TEXT NOT NULL DEFAULT 'implement',
+                metadata TEXT NOT NULL DEFAULT '{}',
                 FOREIGN KEY (task_id) REFERENCES orchestration_tasks(task_id) ON DELETE CASCADE
             )
         """)

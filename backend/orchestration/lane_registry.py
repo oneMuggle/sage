@@ -8,6 +8,7 @@ Provides high-level operations for lane management:
 - Update heartbeats and detect stalls
 - Query lanes by status/task
 """
+
 from __future__ import annotations
 
 import uuid
@@ -157,11 +158,29 @@ class LaneRegistry:
         """List all lanes for a task."""
         return self.repo.list_by_task(task_id)
 
-    def list_lanes_by_status(
-        self, status: LaneStatus, limit: int = 100
-    ) -> list[Lane]:
+    def list_lanes_by_agent(self, agent_id: str) -> list[Lane]:
+        """List all lanes assigned to an agent."""
+        return self.repo.list_by_agent(agent_id)
+
+    def list_lanes_by_status(self, status: LaneStatus, limit: int = 100) -> list[Lane]:
         """List lanes by status."""
         return self.repo.list_by_status(status, limit)
+
+    def list_all_lanes(self) -> list[Lane]:
+        """List all lanes."""
+        return self.repo.list_all()
+
+    def update_lane(self, lane: Lane) -> bool:
+        """Update a lane in the database."""
+        return self.repo.update(lane)
+
+    def update_lane_status(self, lane_id: str, status: LaneStatus) -> bool:
+        """Update lane status."""
+        lane = self.repo.get(lane_id)
+        if not lane:
+            return False
+        lane.status = status
+        return self.repo.update(lane)
 
     def get_stalled_lanes(self, stalled_after_ms: int = 300_000) -> list[Lane]:
         """

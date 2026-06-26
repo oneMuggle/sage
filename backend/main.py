@@ -157,9 +157,70 @@ async def lifespan(app: FastAPI):
     )
     scheduler_service.start()
     app.state.scheduler = scheduler_service
-    logger.info(
-        "SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks())
+    logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
+
+    # Phase 2 (multi-agent core): 初始化注册中心 + Planner + Router + HeartbeatMonitor
+    from backend.orchestration.lane_registry import LaneRegistry
+    from backend.orchestration.task_registry import TaskRegistry
+    from backend.orchestration.team_registry import TeamRegistry
+    from backend.orchestration.planner import Planner
+    from backend.orchestration.router import Router, DispatchStrategy
+    from backend.orchestration.heartbeat import HeartbeatMonitor
+    from backend.orchestration.models import Agent
+
+    class _AgentRegistryAdapter:
+        """薄适配器：将 AgentRepository (返回 dict) 适配为 Router 期望的 list_agents() 接口。"""
+
+        def __init__(self) -> None:
+            self._repo = AgentRepository()
+
+        def list_agents(self) -> list[Agent]:
+            profiles = self._repo.list_all()
+            agents: list[Agent] = []
+            for p in profiles:
+                if not p.get("enabled", True):
+                    continue
+                # 解析 tools 字段为 capabilities（与现有 AgentProfile 字段对齐）
+                tools = p.get("tools", [])
+                if isinstance(tools, str):
+                    try:
+                        import json as _json
+
+                        tools = _json.loads(tools)
+                    except Exception:
+                        tools = []
+                agents.append(
+                    Agent(
+                        agent_id=p["id"],
+                        name=p.get("name", p["id"]),
+                        status="active",
+                        capabilities=list(tools) if tools else [p.get("role", "general")],
+                        max_concurrent_tasks=2,
+                        default_permission="implement",
+                    )
+                )
+            return agents
+
+    app.state.task_registry = TaskRegistry()
+    app.state.lane_registry = LaneRegistry()
+    app.state.team_registry = TeamRegistry()
+    app.state.planner = Planner(
+        task_registry=app.state.task_registry,
+        team_registry=app.state.team_registry,
     )
+    app.state.router = Router(
+        lane_registry=app.state.lane_registry,
+        agent_registry=_AgentRegistryAdapter(),
+        strategy=DispatchStrategy.CAPABILITY_BASED,
+    )
+    app.state.heartbeat_monitor = HeartbeatMonitor(
+        lane_registry=app.state.lane_registry,
+        check_interval=30.0,
+        stalled_after=300.0,
+        dead_after=600.0,
+    )
+    await app.state.heartbeat_monitor.start()
+    logger.info("Multi-agent core 已装配（Planner + Router + HeartbeatMonitor 已启动）")
 
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
     api_mode = os.environ.get("API_MODE", "hex").lower()
@@ -187,6 +248,11 @@ async def lifespan(app: FastAPI):
     # Phase 8: stop APScheduler cleanly so jobs do not fire after shutdown
     if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
         app.state.scheduler.shutdown()
+
+    # Phase 2: stop HeartbeatMonitor background task
+    if hasattr(app.state, "heartbeat_monitor") and app.state.heartbeat_monitor is not None:
+        await app.state.heartbeat_monitor.stop()
+        logger.info("HeartbeatMonitor 已停止")
 
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
