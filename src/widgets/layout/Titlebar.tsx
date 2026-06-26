@@ -29,7 +29,7 @@ export function Titlebar() {
   // macOS: native traffic lights, content offset to y=28
   if (isMac) {
     return (
-      <div className="flex items-center justify-between px-4 h-10 border-b border-border bg-bg-subtle pt-7">
+      <div className="drag flex items-center justify-between px-4 h-10 border-b border-border bg-bg-subtle pt-7">
         <TitlebarActions />
         <FeedbackButton />
       </div>
@@ -38,9 +38,9 @@ export function Titlebar() {
 
   // Windows/Linux: custom titlebar with window controls
   return (
-    <div className="flex items-center justify-between px-4 h-9 border-b border-border bg-bg-subtle">
+    <div className="drag flex items-center justify-between px-4 h-9 border-b border-border bg-bg-subtle">
       <TitlebarActions />
-      <div className="flex items-center">
+      <div className="no-drag flex items-center">
         <FeedbackButton />
         <WindowControls />
       </div>

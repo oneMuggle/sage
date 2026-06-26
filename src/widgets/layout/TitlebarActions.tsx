@@ -16,7 +16,7 @@ export function TitlebarActions() {
   const canForward = history?.canForward ?? false;
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="no-drag flex items-center gap-1">
       <button
         type="button"
         aria-label={t('nav.back')}
