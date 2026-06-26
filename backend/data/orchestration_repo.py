@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from backend.data.database import get_database
@@ -22,11 +23,24 @@ from backend.orchestration.models import (
     Lane,
     LaneHeartbeat,
     LaneStatus,
+    RecoveryPolicy,
     Task,
     TaskStatus,
     Team,
     TeamStatus,
 )
+
+
+def _to_jsonable(obj: Any) -> Any:
+    """Recursively convert dataclass instances to plain dicts for JSON encoding."""
+    if is_dataclass(obj) and not isinstance(obj, type):
+        return {k: _to_jsonable(v) for k, v in asdict(obj).items()}
+    if isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(v) for v in obj]
+    return obj
+
 
 # ============================================================================
 # Task Repository
@@ -59,7 +73,7 @@ class TaskRepository:
                 task.priority,
                 task.executor_type,
                 json.dumps(task.parameters),
-                json.dumps(task.packet.__dict__) if task.packet else None,
+                json.dumps(_to_jsonable(task.packet)) if task.packet else None,
                 json.dumps(task.blocks),
                 json.dumps(task.blocked_by),
                 task.created_at,
@@ -87,7 +101,8 @@ class TaskRepository:
             """
             UPDATE orchestration_tasks
             SET status = ?, priority = ?, parameters = ?, result = ?,
-                started_at = ?, completed_at = ?, blocks = ?, blocked_by = ?
+                started_at = ?, completed_at = ?, blocks = ?, blocked_by = ?,
+                packet = ?
             WHERE task_id = ?
             """,
             (
@@ -99,6 +114,7 @@ class TaskRepository:
                 task.completed_at,
                 json.dumps(task.blocks),
                 json.dumps(task.blocked_by),
+                json.dumps(_to_jsonable(task.packet)) if task.packet else None,
                 task.task_id,
             ),
         )
@@ -180,6 +196,22 @@ class TaskRepository:
 
     def _row_to_task(self, row) -> Task:
         """Convert a database row to a Task object."""
+        from backend.orchestration.models import EscalationPolicy, TaskPacket
+
+        packet_data = json.loads(row["packet"]) if row["packet"] else None
+        packet = None
+        if packet_data:
+            packet = TaskPacket(
+                objective=packet_data.get("objective", ""),
+                scope=packet_data.get("scope", []),
+                acceptance_tests=packet_data.get("acceptance_tests", []),
+                model=packet_data.get("model"),
+                permission_profile=packet_data.get("permission_profile", "workspace-write"),
+                timeout_secs=packet_data.get("timeout_secs", 600),
+                recovery_policy=RecoveryPolicy(**packet_data.get("recovery_policy", {})),
+                escalation_policy=EscalationPolicy(**packet_data.get("escalation_policy", {})),
+            )
+
         return Task(
             task_id=row["task_id"],
             name=row["name"],
@@ -188,6 +220,7 @@ class TaskRepository:
             priority=row["priority"],
             executor_type=row["executor_type"],
             parameters=json.loads(row["parameters"]),
+            packet=packet,
             blocks=json.loads(row["blocks"]),
             blocked_by=json.loads(row["blocked_by"]),
             result=json.loads(row["result"]) if row["result"] else None,

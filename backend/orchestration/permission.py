@@ -49,9 +49,15 @@ class LanePermission:
         if action.action_type in self.denied_tools:
             return False
 
-        # Audit/Explain presets cannot write or execute
+        # Audit/Explain presets cannot write, execute, or run lanes
         if self.preset in (PermissionPreset.AUDIT, PermissionPreset.EXPLAIN):
-            if action.action_type in ("write_file", "delete_file", "execute", "shell"):
+            if action.action_type in (
+                "write_file",
+                "delete_file",
+                "execute",
+                "shell",
+                "execute_lane",
+            ):
                 return False
 
         # Check path restrictions for file operations
