@@ -31,6 +31,7 @@ import {
   recordRecentWikiProject,
   wikiListDirectory,
 } from '../../shared/api-client/wiki';
+import { settingsClient } from '../../shared/api/settingsClient';
 import type {
   FileNode,
   GraphData,
@@ -246,6 +247,7 @@ export function WikiProjectPicker() {
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [checkResult, setCheckResult] = useState<ProjectCheckResponse | null>(null);
+  const [useFolderPicker, setUseFolderPicker] = useState(true);
 
   const setErrorGlobal = useWikiStore((s) => s.setError);
   const setLintItems = useLintStore((s) => s.setItems);
@@ -258,6 +260,23 @@ export function WikiProjectPicker() {
     getRecentWikiProjects()
       .then(setRecents)
       .catch(() => setRecents([]));
+  }, []);
+
+  // 加载 appSettings.wiki.useFolderPicker 特性开关
+  useEffect(() => {
+    let cancelled = false;
+    settingsClient
+      .getSettings()
+      .then((s) => {
+        if (cancelled) return;
+        setUseFolderPicker(s?.wiki?.useFolderPicker ?? true);
+      })
+      .catch(() => {
+        // 降级到默认（开）
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const intent: 'create' | 'open' = mode === 'create' ? 'create' : 'open';
@@ -455,14 +474,16 @@ export function WikiProjectPicker() {
                   className="flex-1 px-3 py-2 border border-border rounded-radius-sm text-sm font-mono bg-surface text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
                   data-testid="path-input"
                 />
-                <button
-                  type="button"
-                  onClick={handleBrowse}
-                  data-testid="browse-btn"
-                  className="px-3 py-2 border border-border rounded-radius-sm text-sm bg-surface hover:bg-surface-hover flex items-center gap-1"
-                >
-                  <FolderSearch size={14} /> 浏览…
-                </button>
+                {useFolderPicker && (
+                  <button
+                    type="button"
+                    onClick={handleBrowse}
+                    data-testid="browse-btn"
+                    className="px-3 py-2 border border-border rounded-radius-sm text-sm bg-surface hover:bg-surface-hover flex items-center gap-1"
+                  >
+                    <FolderSearch size={14} /> 浏览…
+                  </button>
+                )}
               </div>
               <StatusBadge status={checkStatus} result={checkResult} />
             </div>
@@ -501,14 +522,16 @@ export function WikiProjectPicker() {
                   className="flex-1 px-3 py-2 border border-border rounded-radius-sm text-sm font-mono bg-surface text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
                   data-testid="path-input"
                 />
-                <button
-                  type="button"
-                  onClick={handleBrowse}
-                  data-testid="browse-btn"
-                  className="px-3 py-2 border border-border rounded-radius-sm text-sm bg-surface hover:bg-surface-hover flex items-center gap-1"
-                >
-                  <FolderSearch size={14} /> 浏览…
-                </button>
+                {useFolderPicker && (
+                  <button
+                    type="button"
+                    onClick={handleBrowse}
+                    data-testid="browse-btn"
+                    className="px-3 py-2 border border-border rounded-radius-sm text-sm bg-surface hover:bg-surface-hover flex items-center gap-1"
+                  >
+                    <FolderSearch size={14} /> 浏览…
+                  </button>
+                )}
               </div>
               <StatusBadge status={checkStatus} result={checkResult} />
             </div>
