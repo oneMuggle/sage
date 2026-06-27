@@ -88,40 +88,34 @@ describe('getWindowControlsBridge', () => {
     vi.restoreAllMocks();
     // Restore window state
     if (originalWindow) {
-      // @ts-expect-error - resetting for test
       globalThis.window = originalWindow;
     }
   });
 
   it('returns null when window is undefined', () => {
-    // @ts-expect-error - simulating SSR/no window
-    delete globalThis.window;
+    delete (globalThis as { window?: typeof globalThis.window }).window;
     expect(getWindowControlsBridge()).toBeNull();
   });
 
   it('returns null when electronAPI is undefined', () => {
-    // @ts-expect-error - clearing electronAPI
-    window.electronAPI = undefined;
+    (window as { electronAPI?: unknown }).electronAPI = undefined;
     expect(getWindowControlsBridge()).toBeNull();
   });
 
   it('returns null when windowControls is undefined', () => {
-    // @ts-expect-error - partial mock
-    window.electronAPI = {};
+    (window as { electronAPI?: unknown }).electronAPI = {};
     expect(getWindowControlsBridge()).toBeNull();
   });
 
   it('returns electronAPI.windowControls when available', () => {
     const mockBridge = createWebControlsBridge();
-    // @ts-expect-error - partial mock
-    window.electronAPI = { windowControls: mockBridge };
+    (window as { electronAPI?: unknown }).electronAPI = { windowControls: mockBridge };
     expect(getWindowControlsBridge()).toBe(mockBridge);
   });
 
   it('returns electronAPI.windowControls even on Linux UA', () => {
     const mockBridge = createWebControlsBridge();
-    // @ts-expect-error - partial mock
-    window.electronAPI = { windowControls: mockBridge };
+    (window as { electronAPI?: unknown }).electronAPI = { windowControls: mockBridge };
     // UA doesn't matter - if electronAPI exists, use it
     expect(getWindowControlsBridge()).toBe(mockBridge);
   });
@@ -130,9 +124,14 @@ describe('getWindowControlsBridge', () => {
 describe('windowControls singleton', () => {
   it('uses electronAPI.windowControls when available', async () => {
     const mockMinimize = vi.fn().mockResolvedValue(undefined);
-    // @ts-expect-error - partial mock
-    window.electronAPI = {
-      windowControls: { minimize: mockMinimize },
+    (window as { electronAPI?: unknown }).electronAPI = {
+      windowControls: {
+        minimize: mockMinimize,
+        toggleMaximize: vi.fn(),
+        close: vi.fn(),
+        capturePage: vi.fn(),
+        isMaximized: vi.fn(),
+      },
     };
 
     // Re-import to get fresh singleton
@@ -144,8 +143,7 @@ describe('windowControls singleton', () => {
   });
 
   it('falls back to web stub when electronAPI unavailable', async () => {
-    // @ts-expect-error - clearing
-    window.electronAPI = undefined;
+    (window as { electronAPI?: unknown }).electronAPI = undefined;
 
     vi.resetModules();
     const { windowControls: freshSingleton } = await import('../windowControlsClient');

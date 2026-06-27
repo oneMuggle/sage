@@ -160,6 +160,7 @@ export const zh = {
   'chat.btw.loading': '思考中…',
   'chat.btw.error': '加载失败',
   'chat.btw.close': '关闭',
+  'chat.btw.question': '问题',
 
   // ─── 欢迎屏 ────────────────────────
   'welcome.hero.greeting': '你好，我是 Sage',

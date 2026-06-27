@@ -161,6 +161,7 @@ export const en: Record<TranslationKey, string> = {
   'chat.btw.loading': 'Thinking…',
   'chat.btw.error': 'Failed to load',
   'chat.btw.close': 'Close',
+  'chat.btw.question': 'Question',
 
   // ─── Welcome screen ──────────────
   'welcome.hero.greeting': "Hi, I'm Sage",
