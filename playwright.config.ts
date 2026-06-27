@@ -27,6 +27,12 @@ export default defineConfig({
     video: 'off',
     trace: 'retain-on-failure',
   },
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:1420',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30_000,
+  },
   projects: [
     {
       name: 'electron',
@@ -40,24 +46,12 @@ export default defineConfig({
       use: {
         baseURL: 'http://localhost:1420',
       },
-      webServer: {
-        command: 'npm run dev',
-        url: 'http://localhost:1420',
-        reuseExistingServer: !process.env.CI,
-        timeout: 30_000,
-      },
     },
     {
       name: 'e2e-root',
       testDir: './e2e',
       use: {
         baseURL: 'http://localhost:1420',
-      },
-      webServer: {
-        command: 'npm run dev',
-        url: 'http://localhost:1420',
-        reuseExistingServer: !process.env.CI,
-        timeout: 30_000,
       },
     },
   ],
