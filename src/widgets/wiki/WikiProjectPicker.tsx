@@ -23,6 +23,7 @@ import {
 import { useResearchStore } from '../../entities/wiki/research-store';
 import { useReviewStore } from '../../entities/wiki/review-store';
 import { useWikiStore } from '../../entities/wiki/store';
+import { settingsClient } from '../../shared/api/settingsClient';
 import {
   checkWikiProject,
   createWikiProject,
@@ -31,7 +32,6 @@ import {
   recordRecentWikiProject,
   wikiListDirectory,
 } from '../../shared/api-client/wiki';
-import { settingsClient } from '../../shared/api/settingsClient';
 import type {
   FileNode,
   GraphData,
@@ -286,7 +286,7 @@ export function WikiProjectPicker() {
   // 最近项目的父目录作为文件选择器的默认起始路径
   const defaultStartPath = useMemo(() => {
     if (recents.length === 0) return undefined;
-    const parent = recents[0].path.replace(/[^/]+$/, '');
+    const parent = recents[0].path.replace(/[\\/][^\\/]+$/, '');
     return parent || undefined;
   }, [recents]);
 

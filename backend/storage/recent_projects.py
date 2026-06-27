@@ -1,5 +1,8 @@
 """Recent wiki projects store — atomic JSON file under user data dir."""
 
+# Pydantic 2.x only — uses .model_validate() and .model_dump().
+# For cherry-pick to release/win7 (Pydantic 1.x): replace with .parse_obj() and .dict().
+
 from __future__ import annotations
 
 import contextlib
