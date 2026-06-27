@@ -6,6 +6,9 @@ import type {
   IngestResult,
   WikiChatResponse,
   GraphData,
+  ProjectCheckResponse,
+  RecentProject,
+  RecordRecentRequest,
 } from '../types/wiki';
 
 // Backend API base URL
@@ -320,4 +323,22 @@ export async function getWikiInsights(projectPath: string): Promise<InsightsResp
   return httpGet<InsightsResponse>('/wiki/insights', {
     project_path: projectPath,
   });
+}
+
+// ==================== Folder Picker API ====================
+// --- Added 2026-06-27: folder picker support ---
+
+export async function checkWikiProject(
+  path: string,
+  intent: 'create' | 'open',
+): Promise<ProjectCheckResponse> {
+  return httpGet<ProjectCheckResponse>('/wiki/project/check', { path, intent });
+}
+
+export async function getRecentWikiProjects(): Promise<RecentProject[]> {
+  return httpGet<RecentProject[]>('/wiki/recent-projects');
+}
+
+export async function recordRecentWikiProject(req: RecordRecentRequest): Promise<void> {
+  await httpPost<void>('/wiki/recent-projects/record', req);
 }

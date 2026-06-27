@@ -65,6 +65,13 @@ const electronAPI = {
     capturePage: () => ipcRenderer.invoke('sage:window-controls:capture-page') as Promise<string>,
     isMaximized: () => ipcRenderer.invoke('sage:window-controls:is-maximized') as Promise<boolean>,
   } satisfies WindowControlsBridge,
+
+  /**
+   * Phase 6 (2026-06-27): Native folder picker for LLM Wiki.
+   * Returns absolute path string, or null if user cancelled.
+   */
+  selectDirectory: (opts: { intent: 'create' | 'open'; defaultPath?: string }) =>
+    ipcRenderer.invoke('sage:dialog:select-directory', opts) as Promise<string | null>,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
