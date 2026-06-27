@@ -30,6 +30,10 @@ from backend.orchestration.permission import (
     PermissionChecker,
     PermissionPreset,
 )
+from backend.orchestration.report_schema import (
+    ProjectionRef,
+    ReviewReport,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -371,6 +375,71 @@ class LaneExecutor:
             "on_failure": task.packet.recovery_policy.on_failure,
             "max_retries": task.packet.recovery_policy.max_retries,
         }
+
+    # ------------------------------------------------------------------
+    # M2 — Review report submission
+    # ------------------------------------------------------------------
+
+    def submit_with_report(
+        self,
+        lane_id: str,
+        task_id: str,
+        assertions: list,
+        reviewer_id: str = "system",
+    ) -> ReviewReport:
+        """Build a `ReviewReport` v1 and emit a `lane.review.submitted` event.
+
+        This is the M2 hook for the reviewer lane to record structured
+        evidence before declaring a lane `lane.green`. The event payload's
+        metadata carries the report's `canonical_id` and `content_hash` so
+        downstream consumers can re-validate without re-reading the body.
+
+        Args:
+            lane_id: Lane being reviewed.
+            task_id: Task being reviewed.
+            assertions: List of `Assertion` (M1).
+            reviewer_id: Identity of the reviewer (defaults to "system").
+
+        Returns:
+            The constructed `ReviewReport` (already content-hashed and
+            lineage-validated).
+        """
+        canonical_id = f"rep-{lane_id}-{reviewer_id}"
+
+        # Construct with empty lineage first; __post_init__ computes hash;
+        # then we pin the projection's source_hash to that canonical hash.
+        report = ReviewReport(
+            canonical_id=canonical_id,
+            lane_id=lane_id,
+            reviewer_id=reviewer_id,
+            assertions=list(assertions),
+            projection_lineage=[],
+            redaction_provenance={},
+        )
+        report.projection_lineage.append(
+            ProjectionRef(
+                view="ops_full",
+                source_hash=report.content_hash,
+                downgrade_reason=None,
+            )
+        )
+
+        # Emit the typed event for downstream consumers / audit.
+        self.event_recorder.record(
+            LaneEvent.REVIEW_SUBMITTED,
+            lane_id=lane_id,
+            task_id=task_id,
+            agent_id=None,
+            provenance=EventProvenance.LIVE_LANE,
+            metadata={
+                "canonical_id": report.canonical_id,
+                "content_hash": report.content_hash,
+                "reviewer_id": reviewer_id,
+                "schema_version": report.schema_version,
+                "assertion_count": len(report.assertions),
+            },
+        )
+        return report
 
     def _record_event(
         self,
