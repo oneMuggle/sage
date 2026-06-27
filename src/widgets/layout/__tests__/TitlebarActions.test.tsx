@@ -15,7 +15,7 @@ const renderWithProvider = (initialEntries: string[] = ['/']) => {
           <TitlebarActions />
         </NavHistoryProvider>
       </I18nProvider>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 };
 
@@ -37,7 +37,7 @@ const renderWithNavigation = () => {
           <TitlebarActions />
         </NavHistoryProvider>
       </I18nProvider>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 };
 
