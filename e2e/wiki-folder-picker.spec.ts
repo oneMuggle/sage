@@ -18,7 +18,9 @@ test.describe('LLM Wiki folder picker', () => {
   test('browse → fill input → check badge → create success', async ({ page }) => {
     await page.goto('/wiki');
     await page.getByRole('button', { name: /创建新项目/ }).click();
-    await page.evaluate(() => { (window as any).__mockPicked = '/tmp/playwright-wiki'; });
+    await page.evaluate(() => {
+      (window as any).__mockPicked = '/tmp/playwright-wiki';
+    });
     await page.getByTestId('browse-btn').click();
 
     const input = page.getByTestId('path-input');
@@ -29,8 +31,12 @@ test.describe('LLM Wiki folder picker', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          exists: false, writable: false, is_project: false,
-          parent_writable: true, warning: null, error: null,
+          exists: false,
+          writable: false,
+          is_project: false,
+          parent_writable: true,
+          warning: null,
+          error: null,
         }),
       }),
     );
@@ -39,8 +45,11 @@ test.describe('LLM Wiki folder picker', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          id: 'p1', name: 'pw', path: '/tmp/playwright-wiki',
-          created_at: Date.now() / 1000, has_content: false,
+          id: 'p1',
+          name: 'pw',
+          path: '/tmp/playwright-wiki',
+          created_at: Date.now() / 1000,
+          has_content: false,
         }),
       }),
     );
@@ -59,7 +68,9 @@ test.describe('LLM Wiki folder picker', () => {
   test('cancel dialog → input unchanged', async ({ page }) => {
     await page.goto('/wiki');
     await page.getByRole('button', { name: /打开现有项目/ }).click();
-    await page.evaluate(() => { (window as any).__mockPicked = null; });
+    await page.evaluate(() => {
+      (window as any).__mockPicked = null;
+    });
     const input = page.getByTestId('path-input');
     await expect(input).toHaveValue('');
     await page.getByTestId('browse-btn').click();
@@ -71,14 +82,20 @@ test.describe('LLM Wiki folder picker', () => {
       route.fulfill({
         status: 200,
         body: JSON.stringify([
-          { path: '/data/projects/team-handbook/wiki', name: 'team-handbook',
-            opened_at: Date.now() / 1000, intent: 'open' },
+          {
+            path: '/data/projects/team-handbook/wiki',
+            name: 'team-handbook',
+            opened_at: Date.now() / 1000,
+            intent: 'open',
+          },
         ]),
       }),
     );
     await page.goto('/wiki');
     await page.getByRole('button', { name: /打开现有项目/ }).click();
-    await page.evaluate(() => { (window as any).__mockPicked = '/data/projects/team-handbook'; });
+    await page.evaluate(() => {
+      (window as any).__mockPicked = '/data/projects/team-handbook';
+    });
     await page.getByTestId('browse-btn').click();
     const opts = await page.evaluate(() => (window as any).__lastSelectOpts);
     expect(opts.defaultPath).toBe('/data/projects');
