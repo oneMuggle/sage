@@ -289,7 +289,12 @@ export function WikiProjectPicker() {
 
   const handleBrowse = async () => {
     const api = window.electronAPI as
-      | { selectDirectory?: (opts: { intent: 'create' | 'open'; defaultPath?: string }) => Promise<string | null> }
+      | {
+          selectDirectory?: (opts: {
+            intent: 'create' | 'open';
+            defaultPath?: string;
+          }) => Promise<string | null>;
+        }
       | undefined;
     if (!api?.selectDirectory) {
       setError('当前环境不支持文件夹选择器');
@@ -448,6 +453,7 @@ export function WikiProjectPicker() {
                   onChange={(e) => setBasePath(e.target.value)}
                   placeholder="/home/user/wiki-projects"
                   className="flex-1 px-3 py-2 border border-border rounded-radius-sm text-sm font-mono bg-surface text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  data-testid="path-input"
                 />
                 <button
                   type="button"
@@ -493,6 +499,7 @@ export function WikiProjectPicker() {
                   onChange={(e) => setOpenPath(e.target.value)}
                   placeholder="/home/user/wiki-projects/my-wiki"
                   className="flex-1 px-3 py-2 border border-border rounded-radius-sm text-sm font-mono bg-surface text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  data-testid="path-input"
                 />
                 <button
                   type="button"

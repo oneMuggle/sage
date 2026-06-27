@@ -52,7 +52,7 @@ test.describe('LLM Wiki folder picker', () => {
     );
 
     await expect(page.getByTestId('status-ok')).toBeVisible({ timeout: 2000 });
-    await page.getByRole('button', { name: /^创建$/ }).click();
+    await page.getByRole('button', { name: /^创建项目$/ }).click();
     await expect(page).toHaveURL(/\/wiki\/project\//, { timeout: 5000 });
   });
 
