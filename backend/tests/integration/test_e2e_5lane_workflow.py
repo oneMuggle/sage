@@ -318,17 +318,13 @@ class TestFiveLaneEndToEndWorkflow:
             max_schema_version="board@0.9",
         )
         proj3 = snap.project(req3)
-        assert any(
-            "downgrade" in d.lower() for d in proj3.downgrade_for_compatibility
-        )
+        assert any("downgrade" in d.lower() for d in proj3.downgrade_for_compatibility)
 
         # ------------------------------------------------------------------
         # 12. Worker can NOT modify ultragoal
         # ------------------------------------------------------------------
         with pytest.raises(WorkerWriteDenied):
-            guard.update_goal(
-                goal_id="g-5lane", actor="worker-1", status="active"
-            )
+            guard.update_goal(goal_id="g-5lane", actor="worker-1", status="active")
         # Goal still complete (worker was denied)
         assert ultragoal_store.get_goal("g-5lane").status == "complete"
         rejections = ultragoal_store.read_worker_write_rejections()

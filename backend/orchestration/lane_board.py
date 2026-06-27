@@ -49,7 +49,7 @@ class UnsupportedViewError(Exception):  # noqa: N818 — short domain name
 
 # Thresholds (milliseconds). Chosen to match `heartbeat.py` defaults:
 #   stalled_after = 300s, dead_after = 600s.
-FRESH_THRESHOLD_MS = 30_000   # < 30s = fresh
+FRESH_THRESHOLD_MS = 30_000  # < 30s = fresh
 STALE_THRESHOLD_MS = 300_000  # 30s..300s = stale; ≥300s = dead
 
 
@@ -121,14 +121,10 @@ class LaneFreshness:
     ) -> LaneFreshness:
         """Compute freshness from a heartbeat timestamp."""
         if last_heartbeat_at is None:
-            return cls.from_age(
-                lane_id=lane_id, age_ms=None, last_heartbeat_at=None
-            )
+            return cls.from_age(lane_id=lane_id, age_ms=None, last_heartbeat_at=None)
         now = now_ms if now_ms is not None else int(time.time() * 1000)
         age = max(0, now - last_heartbeat_at)
-        return cls.from_age(
-            lane_id=lane_id, age_ms=age, last_heartbeat_at=last_heartbeat_at
-        )
+        return cls.from_age(lane_id=lane_id, age_ms=age, last_heartbeat_at=last_heartbeat_at)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -250,8 +246,7 @@ class LaneBoardSnapshot:
         manifest = CapabilityManifest.default_for_board_v1()
         if request.requested_view not in manifest.projection_views:
             raise UnsupportedViewError(
-                f"requested_view={request.requested_view!r} not in "
-                f"{manifest.projection_views}"
+                f"requested_view={request.requested_view!r} not in " f"{manifest.projection_views}"
             )
 
         downgrade: list[str] = []
@@ -377,9 +372,7 @@ class LaneBoardBuilder:
         all_freshness: list[LaneFreshness] = []
 
         for lane in lanes:
-            status_value = (
-                lane.status.value if hasattr(lane.status, "value") else str(lane.status)
-            )
+            status_value = lane.status.value if hasattr(lane.status, "value") else str(lane.status)
             freshness = self.freshness_for(lane, now_ms=now)
             all_freshness.append(freshness)
             entry = BoardEntry(
@@ -491,4 +484,3 @@ class BoardProjection:
             "downgrade_for_compatibility": list(self.downgrade_for_compatibility),
             "redaction_provenance": dict(self.redaction_provenance),
         }
-

@@ -137,9 +137,7 @@ class TestSubmitWithReport:
 
     def test_empty_assertions_still_valid(self):
         ex = _make_executor()
-        report = ex.submit_with_report(
-            lane_id="lane-1", task_id="task-1", assertions=[]
-        )
+        report = ex.submit_with_report(lane_id="lane-1", task_id="task-1", assertions=[])
         assert report.assertions == []
         assert report.content_hash == report.compute_hash()
 

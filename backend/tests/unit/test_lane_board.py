@@ -111,29 +111,35 @@ class TestLaneFreshness:
 
 class TestFreshnessSummary:
     def test_aggregate_counts(self):
-        s = FreshnessSummary.from_entries([
-            LaneFreshness.from_age(lane_id="l1", age_ms=100),
-            LaneFreshness.from_age(lane_id="l2", age_ms=60_000),
-            LaneFreshness.from_age(lane_id="l3", age_ms=600_000),
-        ])
+        s = FreshnessSummary.from_entries(
+            [
+                LaneFreshness.from_age(lane_id="l1", age_ms=100),
+                LaneFreshness.from_age(lane_id="l2", age_ms=60_000),
+                LaneFreshness.from_age(lane_id="l3", age_ms=600_000),
+            ]
+        )
         assert s.total == 3
         assert s.fresh == 1
         assert s.stale == 1
         assert s.dead == 1
 
     def test_overall_level_worst_of_three(self):
-        s = FreshnessSummary.from_entries([
-            LaneFreshness.from_age(lane_id="l1", age_ms=100),
-            LaneFreshness.from_age(lane_id="l2", age_ms=100),
-            LaneFreshness.from_age(lane_id="l3", age_ms=600_000),
-        ])
+        s = FreshnessSummary.from_entries(
+            [
+                LaneFreshness.from_age(lane_id="l1", age_ms=100),
+                LaneFreshness.from_age(lane_id="l2", age_ms=100),
+                LaneFreshness.from_age(lane_id="l3", age_ms=600_000),
+            ]
+        )
         assert s.overall_level == "dead"
 
     def test_overall_level_stale_when_no_dead(self):
-        s = FreshnessSummary.from_entries([
-            LaneFreshness.from_age(lane_id="l1", age_ms=100),
-            LaneFreshness.from_age(lane_id="l2", age_ms=60_000),
-        ])
+        s = FreshnessSummary.from_entries(
+            [
+                LaneFreshness.from_age(lane_id="l1", age_ms=100),
+                LaneFreshness.from_age(lane_id="l2", age_ms=60_000),
+            ]
+        )
         assert s.overall_level == "stale"
 
 

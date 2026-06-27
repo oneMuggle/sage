@@ -303,9 +303,7 @@ class Router:
         else:
             decisions = []
 
-        approval_decisions = [
-            d for d in decisions if d.kind.value == "approval"
-        ]
+        approval_decisions = [d for d in decisions if d.kind.value == "approval"]
         if approval_decisions:
             if self.token_store is None:
                 return None, events, "token_store_unavailable"

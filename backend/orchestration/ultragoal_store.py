@@ -97,9 +97,7 @@ class Ultragoal:
         if not self.objective or not self.objective.strip():
             raise ValueError("objective must not be empty")
         if self.status not in _VALID_GOAL_STATUSES:
-            raise ValueError(
-                f"status must be one of {_VALID_GOAL_STATUSES}, got {self.status!r}"
-            )
+            raise ValueError(f"status must be one of {_VALID_GOAL_STATUSES}, got {self.status!r}")
         # Acceptance criteria must contain ≥1 non-blank string.
         cleaned = [c for c in self.acceptance_criteria if c and c.strip()]
         if not cleaned:
@@ -151,9 +149,7 @@ class LedgerEntry:
 
     def __post_init__(self) -> None:
         if self.action not in _VALID_LEDGER_ACTIONS:
-            raise ValueError(
-                f"action must be one of {_VALID_LEDGER_ACTIONS}, got {self.action!r}"
-            )
+            raise ValueError(f"action must be one of {_VALID_LEDGER_ACTIONS}, got {self.action!r}")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -434,9 +430,7 @@ class UltragoalStore:
         snapshot = {
             "goals": {gid: g.to_dict() for gid, g in self._goals.items()},
         }
-        (self.persist_dir / "goals.json").write_text(
-            json.dumps(snapshot, sort_keys=True, indent=2)
-        )
+        (self.persist_dir / "goals.json").write_text(json.dumps(snapshot, sort_keys=True, indent=2))
 
     def _persist_ledger_entry(self, entry: LedgerEntry) -> None:
         if self.persist_dir is None:
@@ -600,9 +594,7 @@ class UltragoalGuard:
     ) -> Ultragoal:
         """Convenience: mark goal complete + record a terminal checkpoint."""
         self.assert_can_write(actor, "complete")
-        goal = self.store.update_goal(
-            goal_id=goal_id, actor=actor, status="complete"
-        )
+        goal = self.store.update_goal(goal_id=goal_id, actor=actor, status="complete")
         if evidence:
             self.store.checkpoint(
                 goal_id=goal_id,

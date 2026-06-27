@@ -112,13 +112,9 @@ class TestDispatchWithPolicy:
     @pytest.mark.asyncio()
     async def test_with_policy_engine_emits_retry_event_on_test_failure(self):
         r = _make_router(with_policy=True)
-        ctx = PolicyContext(
-            lane_id="lane-1", task_id="task-1", failure_class="Test", attempt=1
-        )
+        ctx = PolicyContext(lane_id="lane-1", task_id="task-1", failure_class="Test", attempt=1)
         decision, events = await r.dispatch_with_policy(_task(), ctx)
-        retry_events = [
-            e for e in events if e.kind == PolicyDecisionKind.RETRY
-        ]
+        retry_events = [e for e in events if e.kind == PolicyDecisionKind.RETRY]
         assert len(retry_events) == 1
         assert retry_events[0].rule_name == "retry_on_test_failure"
 
@@ -132,9 +128,7 @@ class TestTryDispatchPrivileged:
     @pytest.mark.asyncio()
     async def test_no_token_store_denies_approval_actions(self):
         r = _make_router(with_policy=True, with_token_store=False)
-        ctx = PolicyContext(
-            lane_id="lane-1", task_id="task-1", force_push=True, branch="feat/x"
-        )
+        ctx = PolicyContext(lane_id="lane-1", task_id="task-1", force_push=True, branch="feat/x")
         decision, events, deny_reason = await r.try_dispatch_privileged(
             task=_task(), token_id=None, actor="alice", context=ctx
         )
@@ -155,9 +149,7 @@ class TestTryDispatchPrivileged:
     @pytest.mark.asyncio()
     async def test_force_push_without_token_denied(self):
         r = _make_router(with_policy=True, with_token_store=True)
-        ctx = PolicyContext(
-            lane_id="lane-1", task_id="task-1", force_push=True, branch="feat/x"
-        )
+        ctx = PolicyContext(lane_id="lane-1", task_id="task-1", force_push=True, branch="feat/x")
         decision, events, deny_reason = await r.try_dispatch_privileged(
             task=_task(), token_id=None, actor="alice", context=ctx
         )
