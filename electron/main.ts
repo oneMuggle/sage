@@ -236,7 +236,10 @@ function createMainWindow(): void {
     mainWindow.loadURL(VITE_DEV_URL).catch((e) => console.error('Failed to load Vite dev URL:', e));
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    const indexHtml = join(__dirname, '..', 'dist', 'index.html');
+    // tsconfig.electron.json uses rootDirs: [electron, src], so the compiled
+    // main.js lives at dist-electron/electron/main.js (one extra directory level
+    // vs the legacy rootDir: electron setup). Go up two levels to reach dist/.
+    const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
     mainWindow.loadFile(indexHtml).catch((e) => console.error('Failed to load index.html:', e));
   }
 
