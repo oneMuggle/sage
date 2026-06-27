@@ -14,7 +14,10 @@ import pytest
 import respx
 from httpx import Response
 
-pytestmark = [pytest.mark.integration, pytest.mark.xfail(reason="respx mock 与代理新 httpx 客户端不兼容，预存在问题")]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.xfail(reason="respx mock 与代理新 httpx 客户端不兼容，预存在问题"),
+]
 
 UPSTREAM = "http://upstream.example.com"
 PROXY_BASE = "/api/v1/llm"
