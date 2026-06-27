@@ -32,8 +32,10 @@ pyyaml==6.0.1
 croniter==2.0.1
 networkx>=3.2.0
 
-# MCP (Model Context Protocol)
-mcp>=1.0.0
+# MCP (Model Context Protocol) - 可选依赖
+# 与 httpx==0.26.0 存在 starlette 版本冲突，需要 mcp 时手动安装：
+#   pip install mcp --no-deps
+# 或使用兼容版本：pip install 'mcp<1.0'（需自行测试）
 
 # Vector Index (HNSW)
 hnswlib>=0.8.0
