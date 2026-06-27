@@ -193,7 +193,9 @@ window.electronAPI.selectDirectory({
 | 路径不存在 + 父目录不可写 | `/project/check` | 红色 ✗ | 200 + `{writable:false}` |
 | 路径不存在 + 父目录可写 | `/project/check` | 绿色 ✓ | 200 + `{exists:false, parent_writable:true}` |
 | 路径已存在但无 `wiki/`（create） | `/project/check` | 黄色 ⚠ | 200 + `{warning:"将建立结构"}` |
+| 路径已存在但含 `wiki/`（create） | `/project/check` | 红色 ✗ | 200 + `{error:"已经是 wiki 项目，请用「打开」"}` |
 | 路径已存在但无 `wiki/`（open） | `/project/check` | 红色 ✗ | 200 + `{error:"不是 wiki 项目"}` |
+| 路径存在但是文件（非目录） | `/project/check` | 红色 ✗ | 200 + `{error:"不是目录"}` |
 | 后端预检查超时 / 5xx | fetch catch | 红色 ✗ + 重试 | 不变 |
 | 提交时 backend 报错（磁盘满等） | POST 响应非 2xx | Toast | 不变 |
 | `recent-projects.json` 损坏 | `load_recent` 异常 | 起始位置降级 OS 默认 | 备份为 `.bak` |
@@ -202,7 +204,7 @@ window.electronAPI.selectDirectory({
 
 ## 6. 测试策略
 
-### 6.1 后端 pytest（20 用例）
+### 6.1 后端 pytest（21 用例）
 
 **`tests/unit/test_recent_projects.py`（11）**：
 1. 文件不存在 → `[]`
@@ -220,13 +222,14 @@ window.electronAPI.selectDirectory({
 **`tests/unit/test_project_check.py`（9）**：
 12. create + 不存在 + 父可写 → ok
 13. create + 不存在 + 父不可写 → error
-14. create + 已存在 + 含 wiki/ → warn
-15. open + 不存在 → error
-16. open + 非目录 → error
-17. open + 存在 + 无 wiki/ → error
-18. open + 存在 + 有 wiki/ → ok
-19. intent 缺失/非法 → 422
-20. path 含 `~` → expanduser
+14. create + 已存在 + 含 wiki/ → error（"已经是 wiki 项目"）
+15. create + 存在但是文件 → error
+16. open + 不存在 → error
+17. open + 非目录 → error
+18. open + 存在 + 无 wiki/ → error
+19. open + 存在 + 有 wiki/ → ok
+20. intent 缺失/非法 → 422
+21. path 含 `~` → expanduser
 
 ### 6.2 前端 Vitest（12 用例）
 
