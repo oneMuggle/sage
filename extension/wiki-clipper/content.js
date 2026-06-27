@@ -1,3 +1,5 @@
+/* eslint-disable no-undef */  // chrome API + Readability.js + Turndown.js (loaded via script tags)
+
 // Sage Wiki Clipper - Content Script
 // 在网页上下文中执行，使用 Readability.js 提取内容，Turndown.js 转换为 Markdown
 

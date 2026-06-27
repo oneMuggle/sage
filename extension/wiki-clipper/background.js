@@ -1,3 +1,5 @@
+/* eslint-disable no-undef */  // chrome API + Readability.js + Turndown.js (loaded via script tags)
+
 // Sage Wiki Clipper - Background Service Worker
 // 处理扩展生命周期事件和跨标签页通信
 

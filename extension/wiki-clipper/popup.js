@@ -1,6 +1,8 @@
 // Sage Wiki Clipper - Popup Script
 // 处理用户交互：获取当前页面信息，发送到后端 API
 
+/* eslint-disable no-undef */  // chrome API 是 Chrome 扩展 API
+
 const DEFAULT_API_URL = 'http://127.0.0.1:8765/api/v1';
 
 // DOM 元素
