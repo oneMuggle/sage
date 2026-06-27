@@ -43,6 +43,13 @@ export default defineConfig({
     css: false,
     // Phase 4: exclude Playwright Electron smoke tests (run separately via
     // `npx playwright test tests/electron/smoke.spec.ts`, not Vitest).
-    exclude: ['**/node_modules/**', '**/dist/**', '**/dist-electron/**', 'tests/electron/**'],
+    // Phase 6 (2026-06-27): also exclude ./e2e/ (wiki-folder-picker Playwright spec).
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/dist-electron/**',
+      'tests/electron/**',
+      'e2e/**',
+    ],
   },
 });
