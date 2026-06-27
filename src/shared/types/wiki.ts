@@ -42,7 +42,15 @@ export interface WikiChatResponse {
   citations: string[];
 }
 
-export type WikiView = 'browser' | 'search' | 'chat' | 'graph' | 'lint' | 'review' | 'sources';
+export type WikiView =
+  | 'browser'
+  | 'search'
+  | 'chat'
+  | 'graph'
+  | 'lint'
+  | 'review'
+  | 'sources'
+  | 'insights';
 
 // Lint 检查项
 export interface LintItem {

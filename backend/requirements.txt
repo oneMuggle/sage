@@ -30,3 +30,13 @@ opentelemetry-exporter-otlp-proto-grpc==1.27.0
 python-dotenv==1.0.0
 pyyaml==6.0.1
 croniter==2.0.1
+networkx>=3.2.0
+
+# MCP (Model Context Protocol)
+mcp>=1.0.0
+
+# Vector Index (HNSW)
+hnswlib>=0.8.0
+
+# Scheduled tasks (Phase 8)
+apscheduler==3.10.4

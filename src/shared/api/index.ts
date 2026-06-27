@@ -12,6 +12,14 @@ export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
 export { sessionApi } from './sessionApi';
 export { skillsApi } from './skillsApi';
+export { themeCssClient } from './themeCssClient';
+import * as windowControlsClient from './windowControlsClient';
+export const windowControls = windowControlsClient.windowControls;
+export const getWindowControlsBridge = windowControlsClient.getWindowControlsBridge;
+export const createWebControlsBridge = windowControlsClient.createWebControlsBridge;
+export const detectPlatform = windowControlsClient.detectPlatform;
+export const isElectronDesktop = windowControlsClient.isElectronDesktop;
+export type { Platform, WindowControlsBridge } from './windowControlsClient';
 
 // 类型定义
 export type {

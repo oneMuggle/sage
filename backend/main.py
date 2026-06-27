@@ -22,9 +22,18 @@ from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
+from backend.api.scheduled_router import build_router as build_scheduled_router
+from backend.api.orchestration_router import build_router as build_orchestration_router
+from backend.api.theme_router import router as theme_router
+from backend.api.wiki_routes import router as wiki_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
+from backend.data.session_repo import MessageRepository, SessionRepository
 from backend.memory import get_memory_manager
+from backend.services.scheduler import (
+    get_scheduler_service,
+    init_scheduler_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +148,94 @@ async def lifespan(app: FastAPI):
     )
     logger.info("ChatStreamRegistry 已初始化(后台 sweeper 每 60s 清理孤儿流)")
 
+    # Phase 8: scheduled tasks service — load JSON, start APScheduler
+    from pathlib import Path
+
+    store_path = Path("backend/data/scheduled_tasks.json")
+    scheduler_service = init_scheduler_service(
+        store_path=store_path,
+        message_repo=MessageRepository(),
+        session_repo=SessionRepository(),
+    )
+    scheduler_service.start()
+    app.state.scheduler = scheduler_service
+    logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
+
+    # Wiki MCP Server — 在后台启动 Wiki MCP Server
+    # 注意：MCP Server 通过 stdio 通信，这里只是验证模块可以导入
+    # 实际使用时，用户需要单独启动 MCP Server 进程
+    try:
+        from backend.wiki.mcp_server import server as wiki_mcp_server
+
+        app.state.wiki_mcp_server = wiki_mcp_server
+        logger.info("Wiki MCP Server 模块已加载（7 个工具可用）")
+    except Exception as e:
+        logger.warning(f"Wiki MCP Server 加载失败（非关键）: {e}")
+        app.state.wiki_mcp_server = None
+
+    # Phase 2 (multi-agent core): 初始化注册中心 + Planner + Router + HeartbeatMonitor
+    from backend.orchestration.lane_registry import LaneRegistry
+    from backend.orchestration.task_registry import TaskRegistry
+    from backend.orchestration.team_registry import TeamRegistry
+    from backend.orchestration.planner import Planner
+    from backend.orchestration.router import Router, DispatchStrategy
+    from backend.orchestration.heartbeat import HeartbeatMonitor
+    from backend.orchestration.models import Agent
+
+    class _AgentRegistryAdapter:
+        """薄适配器：将 AgentRepository (返回 dict) 适配为 Router 期望的 list_agents() 接口。"""
+
+        def __init__(self) -> None:
+            self._repo = AgentRepository()
+
+        def list_agents(self) -> list[Agent]:
+            profiles = self._repo.list_all()
+            agents: list[Agent] = []
+            for p in profiles:
+                if not p.get("enabled", True):
+                    continue
+                # 解析 tools 字段为 capabilities（与现有 AgentProfile 字段对齐）
+                tools = p.get("tools", [])
+                if isinstance(tools, str):
+                    try:
+                        import json as _json
+
+                        tools = _json.loads(tools)
+                    except Exception:
+                        tools = []
+                agents.append(
+                    Agent(
+                        agent_id=p["id"],
+                        name=p.get("name", p["id"]),
+                        status="active",
+                        capabilities=list(tools) if tools else [p.get("role", "general")],
+                        max_concurrent_tasks=2,
+                        default_permission="implement",
+                    )
+                )
+            return agents
+
+    app.state.task_registry = TaskRegistry()
+    app.state.lane_registry = LaneRegistry()
+    app.state.team_registry = TeamRegistry()
+    app.state.planner = Planner(
+        task_registry=app.state.task_registry,
+        team_registry=app.state.team_registry,
+    )
+    app.state.router = Router(
+        lane_registry=app.state.lane_registry,
+        agent_registry=_AgentRegistryAdapter(),
+        strategy=DispatchStrategy.CAPABILITY_BASED,
+    )
+    app.state.heartbeat_monitor = HeartbeatMonitor(
+        lane_registry=app.state.lane_registry,
+        check_interval=30.0,
+        stalled_after=300.0,
+        dead_after=600.0,
+    )
+    await app.state.heartbeat_monitor.start()
+    logger.info("Multi-agent core 已装配（Planner + Router + HeartbeatMonitor 已启动）")
+
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
     api_mode = os.environ.get("API_MODE", "hex").lower()
     if api_mode == "hex":
@@ -161,6 +258,15 @@ async def lifespan(app: FastAPI):
         for entry in list(app.state.streams._entries.values()):
             if entry.task is not None and not entry.task.done():
                 entry.task.cancel()
+
+    # Phase 8: stop APScheduler cleanly so jobs do not fire after shutdown
+    if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
+        app.state.scheduler.shutdown()
+
+    # Phase 2: stop HeartbeatMonitor background task
+    if hasattr(app.state, "heartbeat_monitor") and app.state.heartbeat_monitor is not None:
+        await app.state.heartbeat_monitor.stop()
+        logger.info("HeartbeatMonitor 已停止")
 
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
@@ -219,6 +325,10 @@ async def add_request_id_header(request: Request, call_next):
 # 后续 PR 真正装配 SessionService 后，会把默认值改回 "hex"。
 # 跟踪 issue/PR 见 docs/plans/2026-06-13_full-quality-optimization-v2.md。
 app.include_router(llm_proxy_router, prefix="/api/v1")
+app.include_router(theme_router, prefix="/api/theme")
+app.include_router(build_orchestration_router(), prefix="/api/v1")
+app.include_router(wiki_router, prefix="/api/v1")
+app.include_router(wiki_router, prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":
@@ -228,6 +338,9 @@ elif _API_MODE == "legacy":
     app.include_router(legacy_router, prefix="/api/v1")
 else:
     raise ValueError(f"API_MODE must be 'hex' or 'legacy', got: {_API_MODE!r}")
+
+# Phase 8: scheduled tasks — mounted for both API modes (independent feature)
+app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
 
 
 @app.get("/health")

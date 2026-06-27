@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Electron frameless window: drag region for custom titlebar */
+.drag {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* CSS Variables for Theming */
 :root {
   /* Primary */
@@ -263,6 +272,91 @@ body {
   color: var(--color-text);
   margin: 0;
   padding: 0;
+  /* 主题切换时平滑过渡颜色 */
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+
+/* 命令面板进入动画 */
+@keyframes cmdk-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.96) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1) translateY(0);
+  }
+}
+
+/* 消息出现动画 */
+@keyframes message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 弹出菜单进入动画 */
+@keyframes popup-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 动画应用类 */
+.animate-cmdk-enter {
+  animation: cmdk-enter 0.15s ease-out;
+}
+
+.animate-message-enter {
+  animation: message-enter 0.2s ease-out;
+}
+
+.animate-popup-enter {
+  animation: popup-enter 0.12s ease-out;
+}
+
+/* 尊重减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Shiki 代码块样式 */
+.shiki-code pre {
+  margin: 0 !important;
+  padding: 12px !important;
+  border-radius: 0 0 6px 6px;
+  background: #282c34 !important;
+}
+
+.shiki-code .shiki,
+.shiki-code code {
+  background: transparent !important;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 暗色模式下使用 shiki 暗色主题 */
+[data-theme='dark'] .shiki[data-theme='light'],
+[data-theme='light'] .shiki[data-theme='dark'] {
+  display: none;
 }
 
 /* Custom scrollbar */

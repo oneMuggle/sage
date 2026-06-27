@@ -4,6 +4,7 @@
 
 import { useSettings } from '../../features/manage-settings/useSettings';
 
+import { ThemeSelector } from './ThemeSelector';
 import { SettingRow, Toggle } from './components';
 
 export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
@@ -11,6 +12,10 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
 
   return (
     <div className="space-y-6">
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">主题</h3>
+        <ThemeSelector />
+      </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">外观</h3>
         <SettingRow label="紧凑模式" desc="减少间距，在同一屏幕内显示更多内容">

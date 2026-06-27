@@ -1,21 +1,12 @@
-import {
-  Copy,
-  ThumbsUp,
-  ThumbsDown,
-  BookOpen,
-  Check,
-  Wrench,
-  Brain,
-  ChevronDown,
-} from 'lucide-react';
+import { Copy, ThumbsUp, ThumbsDown, BookOpen, Wrench, Brain, ChevronDown } from 'lucide-react';
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
+
+import { ShikiCodeBlock } from './ShikiCodeBlock';
 
 interface MessageProps {
   message: MessageType;
@@ -26,55 +17,14 @@ interface MessageProps {
   isStreaming?: boolean;
 }
 
-/** Code block renderer with syntax highlighting + copy button */
+/** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
 function CodeBlock({ language, children }: { language?: string; children: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(children);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   // Inline code fallback
   if (!language && !children.includes('\n')) {
     return <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-xs font-mono">{children}</code>;
   }
 
-  return (
-    <div className="relative group">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#282c34] rounded-t-md text-xs text-gray-300">
-        <span className="font-mono">{language || 'text'}</span>
-        <button
-          onClick={handleCopy}
-          className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10 text-gray-300 hover:text-white"
-          title="复制代码"
-        >
-          {copied ? (
-            <Check className="w-3.5 h-3.5 text-green-400" />
-          ) : (
-            <Copy className="w-3.5 h-3.5" />
-          )}
-          {copied ? '已复制' : '复制'}
-        </button>
-      </div>
-      <SyntaxHighlighter
-        language={language || 'text'}
-        style={oneDark}
-        customStyle={{
-          margin: 0,
-          borderTopLeftRadius: 0,
-          borderTopRightRadius: 0,
-          fontSize: '12px',
-          lineHeight: '1.5',
-        }}
-        showLineNumbers
-        wrapLongLines
-      >
-        {children.replace(/\n$/, '')}
-      </SyntaxHighlighter>
-    </div>
-  );
+  return <ShikiCodeBlock language={language}>{children}</ShikiCodeBlock>;
 }
 
 /** ThinkingPanel - 可折叠的 LLM 思考过程展示面板
@@ -132,7 +82,9 @@ function MessageComponent({
   };
 
   return (
-    <div className={`flex gap-3 mb-5 w-full ${isUser ? 'flex-row-reverse' : ''}`}>
+    <div
+      className={`flex gap-3 mb-5 w-full animate-message-enter ${isUser ? 'flex-row-reverse' : ''}`}
+    >
       {/* 头像 */}
       <div
         className={`w-7 h-7 rounded-radius-sm flex-shrink-0 flex items-center justify-center text-xs font-semibold ${

@@ -11,10 +11,10 @@
     "isolatedModules": false,
     "types": ["node"],
     "outDir": "dist-electron",
-    "rootDir": "electron",
+    "rootDirs": ["electron", "src"],
     "declaration": false,
     "sourceMap": true
   },
-  "include": ["electron/**/*.ts"],
-  "exclude": ["node_modules", "dist", "dist-electron", "src", "archive"]
+  "include": ["electron/**/*.ts", "src/shared/api/windowControlsClient.ts", "src/shared/types/**/*.ts"],
+  "exclude": ["node_modules", "dist", "dist-electron", "archive"]
 }
