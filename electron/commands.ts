@@ -91,6 +91,38 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/preferences/${encodeURIComponent(String(a.key))}`,
   },
 
+  // scheduled tasks (Phase 8)
+  scheduled_list_tasks: {
+    method: 'GET',
+    path: () => '/api/v1/scheduled/tasks',
+  },
+  scheduled_create_task: {
+    method: 'POST',
+    path: () => '/api/v1/scheduled/tasks',
+  },
+  scheduled_update_task: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/scheduled/tasks/${encodeURIComponent(String(a.id))}`,
+  },
+  scheduled_delete_task: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/scheduled/tasks/${encodeURIComponent(String(a.id))}`,
+  },
+  scheduled_run_task: {
+    method: 'POST',
+    path: (a) => `/api/v1/scheduled/tasks/${encodeURIComponent(String(a.id))}/run`,
+  },
+
+  // custom CSS theme storage (themeCssClient)
+  // Backend theme_router 挂在 /api/theme（不是 /api/v1）
+  theme_list: { method: 'GET', path: () => '/api/theme/list' },
+  theme_save: { method: 'POST', path: () => '/api/theme/save' },
+  theme_get: {
+    method: 'GET',
+    path: (a) => `/api/theme/get/${encodeURIComponent(String(a.id))}`,
+  },
+  theme_delete: { method: 'POST', path: () => '/api/theme/delete' },
+
   // orchestration (Phase 4: multi-agent coordination)
   orchestration_list_lanes: {
     method: 'GET',
