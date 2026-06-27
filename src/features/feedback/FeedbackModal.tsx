@@ -18,7 +18,7 @@ export function FeedbackModal({ isOpen, onClose, screenshot }: FeedbackModalProp
     e.preventDefault();
 
     // Placeholder: log to console (Task 11 will implement backend API)
-    console.log('Feedback submitted:', {
+    console.warn('Feedback submitted:', {
       description,
       email,
       screenshotLength: screenshot?.length ?? 0,

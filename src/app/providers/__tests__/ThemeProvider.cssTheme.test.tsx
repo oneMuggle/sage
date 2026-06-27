@@ -2,6 +2,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { injectPersistedStyle } from '../../../features/theme/backgroundInjector';
+import { themeCssClient } from '../../../shared/api/themeCssClient';
 import { ThemeProvider } from '../ThemeProvider';
 import { useTheme } from '../useTheme';
 
@@ -24,9 +26,6 @@ vi.mock('../../../entities/theme/storage', () => ({
   loadThemePreset: vi.fn().mockResolvedValue(null),
   saveThemePreset: vi.fn().mockResolvedValue(undefined),
 }));
-
-import { themeCssClient } from '../../../shared/api/themeCssClient';
-import { injectPersistedStyle } from '../../../features/theme/backgroundInjector';
 
 const mockedThemeCssClient = vi.mocked(themeCssClient);
 const mockedInjectPersistedStyle = vi.mocked(injectPersistedStyle);

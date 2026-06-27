@@ -13,7 +13,7 @@ export function FeedbackButton() {
   const handleClick = async () => {
     try {
       const capturedScreenshot = await windowControls.capturePage();
-      console.log('Screenshot captured, length:', capturedScreenshot.length);
+      console.warn('Screenshot captured, length:', capturedScreenshot.length);
       setScreenshot(capturedScreenshot);
       setIsOpen(true);
     } catch (error) {

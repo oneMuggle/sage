@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
 
 import { I18nProvider } from '../i18n';
+
 import { SortableSessionItem } from './sortableItem';
 
 describe('SortableSessionItem', () => {

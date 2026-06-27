@@ -1,7 +1,7 @@
-import { GripVertical } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
+import type { CSSProperties, ReactNode } from 'react';
 
 import { useI18n } from '../i18n';
 

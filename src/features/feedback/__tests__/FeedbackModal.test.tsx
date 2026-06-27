@@ -30,7 +30,7 @@ describe('FeedbackModal', () => {
   beforeEach(() => {
     mockOnClose = vi.fn();
     vi.clearAllMocks();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   it('returns null when isOpen is false', () => {
@@ -101,8 +101,8 @@ describe('FeedbackModal', () => {
     fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
     fireEvent.click(submitButton);
 
-    // Check console.log was called with feedback data
-    expect(console.log).toHaveBeenCalledWith('Feedback submitted:', {
+    // Check console.warn was called with feedback data
+    expect(console.warn).toHaveBeenCalledWith('Feedback submitted:', {
       description: 'Test feedback description',
       email: 'test@example.com',
       screenshotLength: 0,
@@ -164,7 +164,7 @@ describe('FeedbackModal', () => {
     fireEvent.change(textarea, { target: { value: 'Feedback without email' } });
     fireEvent.click(submitButton);
 
-    expect(console.log).toHaveBeenCalledWith('Feedback submitted:', {
+    expect(console.warn).toHaveBeenCalledWith('Feedback submitted:', {
       description: 'Feedback without email',
       email: '',
       screenshotLength: 0,
@@ -182,7 +182,7 @@ describe('FeedbackModal', () => {
     fireEvent.change(textarea, { target: { value: 'Feedback with screenshot' } });
     fireEvent.click(submitButton);
 
-    expect(console.log).toHaveBeenCalledWith('Feedback submitted:', {
+    expect(console.warn).toHaveBeenCalledWith('Feedback submitted:', {
       description: 'Feedback with screenshot',
       email: '',
       screenshotLength: testScreenshot.length,

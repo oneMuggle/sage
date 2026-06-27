@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { themeCssValidator } from '../themeCssValidator';
 
 describe('themeCssValidator', () => {

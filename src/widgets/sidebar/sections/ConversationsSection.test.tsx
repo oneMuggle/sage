@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 import { useSiderSections, SIDER_SECTIONS_STORAGE_KEY } from './useSiderSections';
 

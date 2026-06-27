@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { Settings } from './pages';
 import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
 import { Knowledge } from './pages/Knowledge';
 import { Memory } from './pages/Memory';
-import Skills from './pages/Skills';
-import { ScheduledTasks } from './pages/ScheduledTasks';
 import { Orchestration } from './pages/Orchestration';
+import { ScheduledTasks } from './pages/ScheduledTasks';
+import Skills from './pages/Skills';
 import { Welcome } from './pages/Welcome';
-import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
