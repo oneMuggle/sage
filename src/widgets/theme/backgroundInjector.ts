@@ -1,5 +1,5 @@
-import { ALLOWED_CSS_VARS } from '../../shared/types/theme';
 import { parseVars } from '../../shared/lib/theme/cssValidator';
+import { ALLOWED_CSS_VARS } from '../../shared/types/theme';
 
 const ALLOWED_SET: ReadonlySet<string> = new Set(ALLOWED_CSS_VARS);
 

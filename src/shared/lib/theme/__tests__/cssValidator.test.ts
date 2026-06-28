@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ALLOWED_CSS_VARS } from '../../../types/theme';
-import {
-  MAX_LINE_LENGTH,
-  MAX_TOTAL_LENGTH,
-  parseVars,
-  validateCss,
-} from '../cssValidator';
+import { MAX_LINE_LENGTH, MAX_TOTAL_LENGTH, parseVars, validateCss } from '../cssValidator';
 
 // --- 16-var whitelist: each var must be allowed ---
 
