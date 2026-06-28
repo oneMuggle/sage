@@ -13,7 +13,7 @@ import { invoke } from './desktopInvoke';
 
 export const LOAD_TIMEOUT_MS = 5000;
 
-export type PreferenceKey = 'app_settings' | 'theme_mode' | 'current_session_id';
+export type PreferenceKey = 'app_settings' | 'theme_mode' | 'theme_preset' | 'current_session_id';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {

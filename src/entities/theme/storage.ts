@@ -4,6 +4,7 @@
 import { settingsClient } from '../../shared/api/settingsClient';
 
 const CACHE_KEY = 'sage-theme';
+const PRESET_KEY = 'sage-theme-preset';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -31,4 +32,32 @@ export async function saveTheme(mode: ThemeMode): Promise<void> {
     // 静默
   }
   await settingsClient.setPreference('theme_mode', mode, 'ui');
+}
+
+/** 加载主题预设 ID */
+export async function loadThemePreset(): Promise<string | null> {
+  const remote = await settingsClient.getPreference<string>('theme_preset');
+  if (remote) {
+    try {
+      localStorage.setItem(PRESET_KEY, remote);
+    } catch {
+      // 隐私模式等
+    }
+    return remote;
+  }
+  try {
+    return localStorage.getItem(PRESET_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** 保存主题预设 ID */
+export async function saveThemePreset(presetId: string): Promise<void> {
+  try {
+    localStorage.setItem(PRESET_KEY, presetId);
+  } catch {
+    // 静默
+  }
+  await settingsClient.setPreference('theme_preset', presetId, 'ui');
 }
