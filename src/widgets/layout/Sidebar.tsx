@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { MessageSquare, Settings, Brain, BookOpen } from 'lucide-react';
+import { MessageSquare, Settings, Brain, BookOpen, Clock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -14,6 +14,7 @@ const navItems = [
   { path: '/chat', label: '对话', icon: MessageSquare },
   { path: '/memory', label: '记忆', icon: Brain },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
+  { path: '/scheduled', label: '定时任务', icon: Clock },
   { path: '/settings', label: '设置', icon: Settings },
 ];
 

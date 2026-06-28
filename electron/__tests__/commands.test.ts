@@ -188,6 +188,42 @@ describe('theme IPC routes', () => {
   });
 });
 
+describe('scheduled tasks IPC routes', () => {
+  it('has scheduled_list_tasks route', () => {
+    expect(COMMAND_ROUTES.scheduled_list_tasks).toEqual({
+      method: 'GET',
+      path: expect.any(Function),
+    });
+    expect(COMMAND_ROUTES.scheduled_list_tasks.path({})).toBe('/api/v1/scheduled/tasks');
+  });
+
+  it('has scheduled_create_task route', () => {
+    expect(COMMAND_ROUTES.scheduled_create_task.method).toBe('POST');
+    expect(COMMAND_ROUTES.scheduled_create_task.path({})).toBe('/api/v1/scheduled/tasks');
+  });
+
+  it('has scheduled_update_task route with id encoding', () => {
+    expect(COMMAND_ROUTES.scheduled_update_task.method).toBe('PATCH');
+    expect(COMMAND_ROUTES.scheduled_update_task.path({ id: 'task-1' })).toBe(
+      '/api/v1/scheduled/tasks/task-1',
+    );
+  });
+
+  it('has scheduled_delete_task route', () => {
+    expect(COMMAND_ROUTES.scheduled_delete_task.method).toBe('DELETE');
+    expect(COMMAND_ROUTES.scheduled_delete_task.path({ id: 'task-1' })).toBe(
+      '/api/v1/scheduled/tasks/task-1',
+    );
+  });
+
+  it('has scheduled_run_task route', () => {
+    expect(COMMAND_ROUTES.scheduled_run_task.method).toBe('POST');
+    expect(COMMAND_ROUTES.scheduled_run_task.path({ id: 'task-1' })).toBe(
+      '/api/v1/scheduled/tasks/task-1/run',
+    );
+  });
+});
+
 describe('UnknownIpcCommandError', () => {
   it('names the offending command and references the source of truth', () => {
     const err = new UnknownIpcCommandError('foo_bar');

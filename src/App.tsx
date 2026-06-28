@@ -7,6 +7,7 @@ import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
 import { Knowledge } from './pages/Knowledge';
 import { Memory } from './pages/Memory';
+import { ScheduledTasks } from './pages/ScheduledTasks';
 import Skills from './pages/Skills';
 import { useStore } from './shared/lib/store';
 import { Layout } from './widgets/layout';
@@ -31,6 +32,7 @@ function App() {
           <Route path="agents" element={<Agents />} />
           <Route path="skills" element={<Skills />} />
           <Route path="knowledge" element={<Knowledge />} />
+          <Route path="scheduled" element={<ScheduledTasks />} />
         </Route>
       </Routes>
     </BrowserRouter>

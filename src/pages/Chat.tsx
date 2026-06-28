@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
+import { CreateTaskModal } from '../features/scheduled/CreateTaskModal';
 import { useChat } from '../features/send-message/useChat';
 import { useStore } from '../shared/lib/store';
 import { ErrorState } from '../shared/ui/ErrorState';
@@ -27,6 +28,7 @@ export function Chat() {
   const { currentSessionId, setCurrentSessionId, createSession } = useStore();
   const { settings } = useSettings();
   const navigate = useNavigate();
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   // LOW-1: 跟随新消息/流式 token 自动滚到底。
   // 必须用 derivedMessages 而非 messages —— 流式 override 只在 derivedMessages 里,
   // 原 messages 中最后一条仍是占位符 '🤔 思考中…'。
@@ -152,10 +154,18 @@ export function Chat() {
       <ChatInput
         onSend={handleSendMessage}
         onInterrupt={interrupt}
+        onSchedule={() => setScheduleModalOpen(true)}
         isLoading={isLoading}
         disabled={!hasConfig}
         placeholder="输入消息..."
       />
+      {scheduleModalOpen && currentSessionId && (
+        <CreateTaskModal
+          open={scheduleModalOpen}
+          onClose={() => setScheduleModalOpen(false)}
+          sessionId={currentSessionId}
+        />
+      )}
     </div>
   );
 }

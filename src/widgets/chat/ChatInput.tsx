@@ -1,4 +1,4 @@
-import { Send, Square, Image, Paperclip, BookOpen } from 'lucide-react';
+import { Send, Square, Image, Paperclip, BookOpen, Clock } from 'lucide-react';
 import { useState, useRef } from 'react';
 
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
@@ -16,6 +16,7 @@ interface ChatInputProps {
     },
   ) => void;
   onInterrupt?: () => void;
+  onSchedule?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -33,6 +34,7 @@ const KNOWLEDGE_DOCS = [
 export function ChatInput({
   onSend,
   onInterrupt,
+  onSchedule,
   isLoading = false,
   disabled = false,
   placeholder = '输入消息...',
@@ -200,6 +202,16 @@ export function ChatInput({
               >
                 <BookOpen className="w-4 h-4" />
               </button>
+              {onSchedule && (
+                <button
+                  type="button"
+                  onClick={onSchedule}
+                  title="定时"
+                  className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
+                >
+                  <Clock className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
 
