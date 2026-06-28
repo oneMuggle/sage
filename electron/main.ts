@@ -30,6 +30,7 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import http from 'node:http';
+import fetch from 'node-fetch';
 import { invokeBackend } from './invoke';
 import { relayChatStream } from './relay';
 
@@ -308,6 +309,109 @@ function registerIpcHandlers(): void {
       return { ok: true };
     },
   );
+
+  // === Theme IPC handlers (M2 P2) ===
+  // Bridge the 7 P1 backend REST endpoints to the renderer through ipcRenderer.invoke.
+  // Each handler forwards the call to FastAPI on BACKEND_URL and returns the
+  // parsed JSON envelope. On network / HTTP errors we return the same envelope
+  // shape the backend uses ({success:false, error, code}) so the renderer's
+  // themeCssClient sees a uniform contract regardless of failure source.
+  const themeUrl = (path: string): string => `${BACKEND_URL}${path}`;
+
+  const themeBridgeFailed = (e: unknown): {
+    success: false;
+    error: string;
+    code: string;
+  } => ({
+    success: false,
+    error: e instanceof Error ? e.message : String(e),
+    code: 'IPC_BRIDGE_FAILED',
+  });
+
+  ipcMain.handle('theme:list', async () => {
+    try {
+      const resp = await fetch(themeUrl('/api/v1/theme/list'));
+      return (await resp.json()) as unknown;
+    } catch (e) {
+      console.error('[ipc:theme:list] failed:', e);
+      return themeBridgeFailed(e);
+    }
+  });
+
+  ipcMain.handle('theme:get', async (_evt, id: string) => {
+    try {
+      const resp = await fetch(themeUrl(`/api/v1/theme/get/${encodeURIComponent(id)}`));
+      return (await resp.json()) as unknown;
+    } catch (e) {
+      console.error(`[ipc:theme:get] ${id} failed:`, e);
+      return themeBridgeFailed(e);
+    }
+  });
+
+  ipcMain.handle('theme:save', async (_evt, preset: unknown) => {
+    try {
+      const resp = await fetch(themeUrl('/api/v1/theme/save'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(preset),
+      });
+      return (await resp.json()) as unknown;
+    } catch (e) {
+      console.error('[ipc:theme:save] failed:', e);
+      return themeBridgeFailed(e);
+    }
+  });
+
+  ipcMain.handle('theme:delete', async (_evt, id: string) => {
+    try {
+      const resp = await fetch(
+        themeUrl(`/api/v1/theme/delete/${encodeURIComponent(id)}`),
+        { method: 'DELETE' },
+      );
+      return (await resp.json()) as unknown;
+    } catch (e) {
+      console.error(`[ipc:theme:delete] ${id} failed:`, e);
+      return themeBridgeFailed(e);
+    }
+  });
+
+  ipcMain.handle('theme:getActive', async () => {
+    try {
+      const resp = await fetch(themeUrl('/api/v1/theme/active'));
+      return (await resp.json()) as unknown;
+    } catch (e) {
+      console.error('[ipc:theme:getActive] failed:', e);
+      return themeBridgeFailed(e);
+    }
+  });
+
+  ipcMain.handle('theme:saveActive', async (_evt, active: unknown) => {
+    try {
+      const resp = await fetch(themeUrl('/api/v1/theme/active'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(active),
+      });
+      return (await resp.json()) as unknown;
+    } catch (e) {
+      console.error('[ipc:theme:saveActive] failed:', e);
+      return themeBridgeFailed(e);
+    }
+  });
+
+  ipcMain.handle('theme:validate', async (_evt, css: string) => {
+    try {
+      const resp = await fetch(themeUrl('/api/v1/theme/validate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ css }),
+      });
+      return (await resp.json()) as unknown;
+    } catch (e) {
+      console.error('[ipc:theme:validate] failed:', e);
+      return themeBridgeFailed(e);
+    }
+  });
 }
 
 function shutdownBackend(): void {

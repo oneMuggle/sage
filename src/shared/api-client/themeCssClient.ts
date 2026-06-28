@@ -1,25 +1,12 @@
 /**
  * Typed wrapper around window.electronAPI.theme.* IPC calls.
  * Returns ApiResponse<T> envelope; never throws.
+ *
+ * The `theme` field on Window.electronAPI is declared globally in
+ * src/shared/types/electron-api.d.ts (Phase 2 wiring).
  */
 import type { ApiResponse } from '../types/api';
 import type { ActiveTheme, ThemePreset, ThemeValidationResult } from '../types/theme';
-
-declare global {
-  interface Window {
-    electronAPI?: {
-      theme: {
-        list: () => Promise<ApiResponse<ThemePreset[]>>;
-        get: (id: string) => Promise<ApiResponse<ThemePreset>>;
-        save: (preset: ThemePreset) => Promise<ApiResponse<ThemePreset>>;
-        delete: (id: string) => Promise<ApiResponse<{ deleted: string }>>;
-        getActive: () => Promise<ApiResponse<ActiveTheme>>;
-        saveActive: (active: ActiveTheme) => Promise<ApiResponse<ActiveTheme>>;
-        validate: (css: string) => Promise<ApiResponse<ThemeValidationResult>>;
-      };
-    };
-  }
-}
 
 const UNAVAILABLE: ApiResponse<never> = {
   success: false,
@@ -27,7 +14,7 @@ const UNAVAILABLE: ApiResponse<never> = {
   code: 'IPC_UNAVAILABLE',
 };
 
-function ensureAPI(): NonNullable<Window['electronAPI']>['theme'] | null {
+function ensureAPI() {
   if (typeof window === 'undefined' || !window.electronAPI?.theme) {
     return null;
   }
