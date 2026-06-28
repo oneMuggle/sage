@@ -22,19 +22,23 @@ export const en: Record<TranslationKey, string> = {
   'chat.stop': 'Stop',
   'chat.config_warning': 'API endpoint or chat model not configured',
 
-  // ─── Theme (P3 minimum set; P4 will expand) ──
-  'theme.selector.title': 'Theme',
-  'theme.selector.reset': 'Reset to default',
-  'theme.selector.custom': 'Custom CSS',
-  'theme.editor.cancel': 'Cancel',
-  'theme.editor.save': 'Save',
-  'theme.editor.sync_failed': 'Sync failed',
-  'theme.editor.save_failed': 'Save failed',
-  'theme.presets.light.name': 'Light',
-  'theme.presets.dark.name': 'Dark',
-  'theme.presets.ocean.name': 'Ocean',
-  'theme.presets.forest.name': 'Forest',
-  'theme.presets.sunset.name': 'Sunset',
+  // ─── Settings ─────────────────────
+  'settings.section.theme': 'Theme',
+
+  // ─── Theme ───────────────────────
+  'theme.name.mint_blue': 'Mint Blue',
+  'theme.name.sakura': 'Sakura',
+  'theme.name.cyber_neon': 'Cyber Neon',
+  'theme.name.midnight_amber': 'Midnight Amber',
+  'theme.name.parchment': 'Parchment',
+  'theme.desc.mint_blue': 'Refreshing mint green tones, gentle on the eyes',
+  'theme.desc.sakura': 'Soft cherry blossom pink, spring romance',
+  'theme.desc.cyber_neon': 'Neon purple and pink, futuristic vibe',
+  'theme.desc.midnight_amber':
+    'Dark background with amber highlights, easy on the eyes for long reads',
+  'theme.desc.parchment': 'Vintage parchment texture, ideal for writing',
+  'theme.gallery.section_basic': 'Basic',
+  'theme.gallery.section_decorative': 'Decorative',
 
   // ─── Common ───────────────────────
   'common.cancel': 'Cancel',

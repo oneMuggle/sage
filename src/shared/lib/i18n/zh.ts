@@ -4,7 +4,7 @@
  * 翻译键使用点分隔命名空间：sidebar.new_chat, chat.title ...
  * 增加 key 必须先在此文件加，否则 en.ts 无法通过类型检查。
  *
- * 28 个 win7 当前能用的 key（sidebar 4 + chat 6 + theme 12 + common 6）。
+ * 29 个 key（sidebar 4 + chat 6 + theme 12 + settings 1 + common 6）。
  */
 
 export const zh = {
@@ -22,19 +22,22 @@ export const zh = {
   'chat.stop': '停止',
   'chat.config_warning': '未配置 API 端点或对话模型',
 
-  // ─── 主题 (P3 最小集,P4 补齐 cover 描述等) ───
-  'theme.selector.title': '主题',
-  'theme.selector.reset': '重置为默认',
-  'theme.selector.custom': '自定义 CSS',
-  'theme.editor.cancel': '取消',
-  'theme.editor.save': '保存',
-  'theme.editor.sync_failed': '同步失败',
-  'theme.editor.save_failed': '保存失败',
-  'theme.presets.light.name': '明亮',
-  'theme.presets.dark.name': '暗黑',
-  'theme.presets.ocean.name': '海洋',
-  'theme.presets.forest.name': '森林',
-  'theme.presets.sunset.name': '日落',
+  // ─── 设置 ─────────────────────────
+  'settings.section.theme': '主题',
+
+  // ─── 主题 ─────────────────────────
+  'theme.name.mint_blue': '薄荷蓝',
+  'theme.name.sakura': '樱花粉',
+  'theme.name.cyber_neon': 'Cyber Neon',
+  'theme.name.midnight_amber': '深夜琥珀',
+  'theme.name.parchment': '羊皮纸',
+  'theme.desc.mint_blue': '清新的薄荷绿色调，温和不刺眼',
+  'theme.desc.sakura': '温柔的樱花粉色，浪漫春日感',
+  'theme.desc.cyber_neon': '霓虹紫粉，未来科技感',
+  'theme.desc.midnight_amber': '深色背景配琥珀高亮，长时间阅读友好',
+  'theme.desc.parchment': '复古羊皮纸纹理，文学与写作场景',
+  'theme.gallery.section_basic': '基础主题',
+  'theme.gallery.section_decorative': '装饰主题',
 
   // ─── 通用 ─────────────────────────
   'common.cancel': '取消',
