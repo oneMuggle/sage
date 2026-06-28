@@ -25,6 +25,12 @@ from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.api.theme_router import router as theme_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
+from backend.api.scheduled_router import build_router as build_scheduled_router
+from backend.data.session_repo import MessageRepository, SessionRepository
+from backend.services.scheduler import (
+    get_scheduler_service,
+    init_scheduler_service,
+)
 from backend.memory import get_memory_manager
 
 logger = logging.getLogger(__name__)
@@ -126,6 +132,21 @@ async def lifespan(app: FastAPI):
     db.init_db()
     app.state.db = db
 
+    # M3: scheduled tasks service — load JSON, start APScheduler
+    from pathlib import Path
+    store_path = Path("backend/data/scheduled_tasks.json")
+    scheduler_service = init_scheduler_service(
+        store_path=store_path,
+        message_repo=MessageRepository(),
+        session_repo=SessionRepository(),
+    )
+    scheduler_service.start()
+    app.state.scheduler = scheduler_service
+    logger.info(
+        "SchedulerService 已初始化并启动（%d 个任务）",
+        len(scheduler_service.list_tasks()),
+    )
+
     # PR-3: agents 表种子化 (空表时插 4 个默认 agent, 幂等)
     from backend.data.agent_repo import AgentRepository
 
@@ -152,6 +173,10 @@ async def lifespan(app: FastAPI):
         logger.info("Legacy 模式：全部端点走 legacy_routes")
 
     yield
+
+    # M3: stop APScheduler cleanly so jobs do not fire after shutdown
+    if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
+        app.state.scheduler.shutdown()
 
     # 关闭时清理
     sweeper_task.cancel()
@@ -230,6 +255,9 @@ elif _API_MODE == "legacy":
     app.include_router(legacy_router, prefix="/api/v1")
 else:
     raise ValueError(f"API_MODE must be 'hex' or 'legacy', got: {_API_MODE!r}")
+
+# M3: scheduled tasks — mounted for both API modes (independent feature)
+app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
 
 
 @app.get("/health")
