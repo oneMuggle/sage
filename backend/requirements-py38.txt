@@ -51,3 +51,6 @@ ruff==0.4.4
 mypy==1.8.0
 import-linter==2.11
 types-PyYAML==6.0.12.20240311
+
+# Scheduled tasks (M3)
+apscheduler==3.10.4

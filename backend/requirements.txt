@@ -30,3 +30,6 @@ opentelemetry-exporter-otlp-proto-grpc==1.27.0
 python-dotenv==1.0.0
 pyyaml==6.0.1
 croniter==2.0.1
+
+# Scheduled tasks (M3)
+apscheduler==3.10.4
