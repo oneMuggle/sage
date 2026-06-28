@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useLocaleStore } from '../useLocaleStore';
 
@@ -36,10 +36,7 @@ describe('useLocaleStore', () => {
   });
 
   it('reads locale from localStorage on store creation', () => {
-    localStorage.setItem(
-      'sage-locale',
-      JSON.stringify({ state: { locale: 'en' }, version: 1 }),
-    );
+    localStorage.setItem('sage-locale', JSON.stringify({ state: { locale: 'en' }, version: 1 }));
     // 触发 store 重读：直接验证 storage 中的 JSON 格式符合 persist 期望
     const raw = localStorage.getItem('sage-locale');
     const parsed = JSON.parse(raw!);
