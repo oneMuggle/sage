@@ -17,8 +17,8 @@ vi.mock('../backgroundInjector', () => ({
   injectVars: vi.fn(),
 }));
 
-import { ThemeProvider, useTheme } from '../ThemeProvider';
 import * as client from '../../../shared/api-client/themeCssClient';
+import { ThemeProvider, useTheme } from '../ThemeProvider';
 
 const STORAGE_KEY = 'sage.theme.active';
 
@@ -30,21 +30,30 @@ describe('ThemeProvider - 启动序列', () => {
   afterEach(() => localStorage.clear());
 
   it('uses default light preset when localStorage empty', async () => {
-    vi.mocked(client.getActiveTheme).mockResolvedValue({ success: true, data: { presetId: 'light' } });
+    vi.mocked(client.getActiveTheme).mockResolvedValue({
+      success: true,
+      data: { presetId: 'light' },
+    });
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
     expect(result.current.active.presetId).toBe('light');
   });
 
   it('loads from localStorage synchronously on init', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ presetId: 'dark' }));
-    vi.mocked(client.getActiveTheme).mockResolvedValue({ success: true, data: { presetId: 'light' } });
+    vi.mocked(client.getActiveTheme).mockResolvedValue({
+      success: true,
+      data: { presetId: 'light' },
+    });
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
     expect(result.current.active.presetId).toBe('dark');
   });
 
   it('async IPC backfill overrides localStorage if backend differs', async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ presetId: 'dark' }));
-    vi.mocked(client.getActiveTheme).mockResolvedValue({ success: true, data: { presetId: 'ocean' } });
+    vi.mocked(client.getActiveTheme).mockResolvedValue({
+      success: true,
+      data: { presetId: 'ocean' },
+    });
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
     await waitFor(() => {
       expect(result.current.active.presetId).toBe('ocean');
@@ -68,8 +77,14 @@ describe('ThemeProvider - setPreset', () => {
   });
 
   it('updates state + localStorage + calls saveActiveTheme', async () => {
-    vi.mocked(client.getActiveTheme).mockResolvedValue({ success: true, data: { presetId: 'light' } });
-    vi.mocked(client.saveActiveTheme).mockResolvedValue({ success: true, data: { presetId: 'ocean' } });
+    vi.mocked(client.getActiveTheme).mockResolvedValue({
+      success: true,
+      data: { presetId: 'light' },
+    });
+    vi.mocked(client.saveActiveTheme).mockResolvedValue({
+      success: true,
+      data: { presetId: 'ocean' },
+    });
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
     await act(async () => {
       await result.current.setPreset('ocean');
@@ -78,7 +93,10 @@ describe('ThemeProvider - setPreset', () => {
   });
 
   it('keeps UI state on save failure', async () => {
-    vi.mocked(client.getActiveTheme).mockResolvedValue({ success: true, data: { presetId: 'light' } });
+    vi.mocked(client.getActiveTheme).mockResolvedValue({
+      success: true,
+      data: { presetId: 'light' },
+    });
     vi.mocked(client.saveActiveTheme).mockResolvedValue({ success: false, error: '500' });
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
     await act(async () => {
@@ -95,7 +113,10 @@ describe('ThemeProvider - applyCustomCss rollback', () => {
   });
 
   it('rolls back state when save fails', async () => {
-    vi.mocked(client.getActiveTheme).mockResolvedValue({ success: true, data: { presetId: 'ocean' } });
+    vi.mocked(client.getActiveTheme).mockResolvedValue({
+      success: true,
+      data: { presetId: 'ocean' },
+    });
     vi.mocked(client.saveActiveTheme).mockResolvedValue({ success: false, error: '500' });
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
     // Wait for IPC backfill to complete (presetId -> 'ocean') before invoking applyCustomCss,

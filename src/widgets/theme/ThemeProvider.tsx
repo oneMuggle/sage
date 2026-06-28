@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { getActiveTheme, saveActiveTheme } from '../../shared/api-client/themeCssClient';
 import { useI18n } from '../../shared/lib/i18n';

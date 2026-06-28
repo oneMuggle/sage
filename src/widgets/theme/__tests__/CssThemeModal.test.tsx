@@ -20,13 +20,7 @@ vi.mock('../CodeMirrorThemeEditor', () => ({
   }: {
     value: string;
     onChange: (v: string) => void;
-  }) => (
-    <textarea
-      data-testid="cm-mock"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  ),
+  }) => <textarea data-testid="cm-mock" value={value} onChange={(e) => onChange(e.target.value)} />,
 }));
 vi.mock('../../../shared/lib/theme/cssValidator', () => ({
   validateCss: vi.fn((css: string) => {

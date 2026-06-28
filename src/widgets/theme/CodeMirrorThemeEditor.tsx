@@ -1,9 +1,9 @@
-import { useEffect, useRef } from 'react';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { css } from '@codemirror/lang-css';
 import { EditorState } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
+import { useEffect, useRef } from 'react';
 
 interface Props {
   value: string;
