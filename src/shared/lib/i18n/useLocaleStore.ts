@@ -1,9 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-// Locale 类型临时本地定义；Task 4 创建 zh.ts 后会替换为从 './zh' 导入。
-// 这里保持与 spec §4.1 一致：'zh' | 'en'。
-type Locale = 'zh' | 'en';
+import type { Locale } from './zh';
 
 interface LocaleState {
   locale: Locale;
