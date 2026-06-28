@@ -241,9 +241,7 @@ export interface AgentUpdate {
 
 export type ScheduleKind = 'once' | 'recurring';
 
-export type Schedule =
-  | { kind: 'once'; at: number }
-  | { kind: 'recurring'; cron: string };
+export type Schedule = { kind: 'once'; at: number } | { kind: 'recurring'; cron: string };
 
 export interface ScheduledTask {
   id: string;

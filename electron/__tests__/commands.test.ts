@@ -130,9 +130,7 @@ describe('settings & preferences IPC routes', () => {
   it('has set_preference route with key encoding', () => {
     const r = COMMAND_ROUTES.set_preference;
     expect(r.method).toBe('PUT');
-    expect(r.path({ key: 'current_session_id' })).toBe(
-      '/api/v1/preferences/current_session_id',
-    );
+    expect(r.path({ key: 'current_session_id' })).toBe('/api/v1/preferences/current_session_id');
   });
 
   it('all settings/preference paths have /api/v1 prefix', () => {
