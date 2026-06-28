@@ -236,3 +236,37 @@ export interface AgentUpdate {
   enabled?: boolean;
   description?: string;
 }
+
+// ─── Scheduled Tasks (M3) ───────────────────────────────
+
+export type ScheduleKind = 'once' | 'recurring';
+
+export type Schedule =
+  | { kind: 'once'; at: number }
+  | { kind: 'recurring'; cron: string };
+
+export interface ScheduledTask {
+  id: string;
+  name: string;
+  type: ScheduleKind;
+  schedule: Schedule;
+  session_id: string;
+  content: string;
+  enabled: boolean;
+  last_run?: number | null;
+  next_run?: number | null;
+  created_at: number;
+}
+
+export interface CreateTaskInput {
+  name: string;
+  type: ScheduleKind;
+  schedule: Schedule;
+  session_id: string;
+  content: string;
+}
+
+export interface UpdateTaskInput {
+  name?: string;
+  enabled?: boolean;
+}
