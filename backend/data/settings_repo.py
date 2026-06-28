@@ -19,7 +19,6 @@ class SettingsRepository:
         {
             "app_settings",
             "theme_mode",
-            "theme_preset",
             "current_session_id",
         }
     )
