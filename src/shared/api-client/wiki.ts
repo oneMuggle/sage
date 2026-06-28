@@ -1,4 +1,4 @@
-// Wiki API layer - wrappers around Tauri invoke()
+// Wiki API layer - wrappers around Tauri invoke() + HTTP helpers for project API
 import { invoke } from '../../shared/api/desktopInvoke';
 import type {
   WikiProject,
@@ -8,6 +8,49 @@ import type {
   WikiChatResponse,
   GraphData,
 } from '../types/wiki';
+
+// Backend API base URL (for project-level HTTP calls)
+const API_BASE = 'http://127.0.0.1:8765/api/v1';
+
+// Helper function for HTTP POST requests
+async function httpPost<T>(endpoint: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`HTTP ${response.status}: ${error}`);
+  }
+
+  return response.json();
+}
+
+// Helper function for HTTP GET requests
+async function httpGet<T>(
+  endpoint: string,
+  params?: Record<string, string | number | undefined>,
+): Promise<T> {
+  const url = new URL(`${API_BASE}${endpoint}`);
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        url.searchParams.append(key, String(value));
+      }
+    });
+  }
+
+  const response = await fetch(url.toString());
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`HTTP ${response.status}: ${error}`);
+  }
+
+  return response.json();
+}
 
 // ==================== Project API ====================
 
