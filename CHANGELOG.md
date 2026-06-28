@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **feat(M3): Scheduler — 用户定时消息功能 (byte-for-byte port from main)**
+  - Backend: `SchedulerService` (APScheduler 3.10.4 + JSON 持久化,98% coverage) + `scheduled_router` (6 endpoints)
+  - Frontend: `CronExpressionPicker` + `CreateTaskModal` + `ScheduledTasks` 页面 + `taskStore` + `scheduledClient`
+  - 集成: Sidebar Clock 导航项 + ChatInput 定时按钮 + `/scheduled` 路由
+  - Electron: 5 个 IPC routes (`scheduled_list/create/update/delete/run`)
+  - i18n: 58 键 (zh + en 完全对齐)
+  - 测试: backend 1192 tests pass, frontend 399 tests pass
+
 ## [v0.3.0] - 2026-06-23
 
 ### Added
