@@ -4,7 +4,7 @@
  * 翻译键使用点分隔命名空间：sidebar.new_chat, chat.title ...
  * 增加 key 必须先在此文件加，否则 en.ts 无法通过类型检查。
  *
- * 29 个 key（sidebar 4 + chat 6 + theme 12 + settings 1 + common 6）。
+ * 40 个 key（sidebar 4 + chat 6 + theme 12 + settings 1 + scheduled 11 + common 6）。
  */
 
 export const zh = {
@@ -38,6 +38,19 @@ export const zh = {
   'theme.desc.parchment': '复古羊皮纸纹理，文学与写作场景',
   'theme.gallery.section_basic': '基础主题',
   'theme.gallery.section_decorative': '装饰主题',
+
+  // ─── 定时任务 ───────────────────────
+  'scheduled.create': '创建定时任务',
+  'scheduled.edit': '编辑定时任务',
+  'scheduled.field.name': '任务名称',
+  'scheduled.field.type.once': '一次性',
+  'scheduled.field.type.recurring': '周期性',
+  'scheduled.field.cron': 'Cron 表达式',
+  'scheduled.field.at': '执行时间',
+  'scheduled.field.content': '发送内容',
+  'scheduled.field.enabled': '启用',
+  'scheduled.toast.create_fail': '创建失败',
+  'scheduled.toast.update_fail': '更新失败',
 
   // ─── 通用 ─────────────────────────
   'common.cancel': '取消',

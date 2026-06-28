@@ -40,6 +40,19 @@ export const en: Record<TranslationKey, string> = {
   'theme.gallery.section_basic': 'Basic',
   'theme.gallery.section_decorative': 'Decorative',
 
+  // ─── Scheduled Tasks ──────────────
+  'scheduled.create': 'Create Scheduled Task',
+  'scheduled.edit': 'Edit Scheduled Task',
+  'scheduled.field.name': 'Task Name',
+  'scheduled.field.type.once': 'One-time',
+  'scheduled.field.type.recurring': 'Recurring',
+  'scheduled.field.cron': 'Cron Expression',
+  'scheduled.field.at': 'Execution Time',
+  'scheduled.field.content': 'Message content',
+  'scheduled.field.enabled': 'Enabled',
+  'scheduled.toast.create_fail': 'Creation failed',
+  'scheduled.toast.update_fail': 'Update failed',
+
   // ─── Common ───────────────────────
   'common.cancel': 'Cancel',
   'common.confirm': 'Confirm',

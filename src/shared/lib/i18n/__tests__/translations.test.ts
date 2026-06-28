@@ -38,7 +38,7 @@ describe('translations consistency', () => {
     }
   });
 
-  it('zh has exactly 29 keys (M1 16 + M2 theme 12 + P4 gallery 1)', () => {
-    expect(Object.keys(zh).length).toBe(29);
+  it('zh has exactly 40 keys (M1 16 + M2 theme 12 + P4 gallery 1 + M3 scheduled 11)', () => {
+    expect(Object.keys(zh).length).toBe(40);
   });
 });
