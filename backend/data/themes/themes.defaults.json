@@ -1,0 +1,32 @@
+[
+  {
+    "id": "light",
+    "name": "theme.presets.light.name",
+    "description": "theme.presets.light.description",
+    "cover": "/assets/themes/light.png"
+  },
+  {
+    "id": "dark",
+    "name": "theme.presets.dark.name",
+    "description": "theme.presets.dark.description",
+    "cover": "/assets/themes/dark.png"
+  },
+  {
+    "id": "ocean",
+    "name": "theme.presets.ocean.name",
+    "description": "theme.presets.ocean.description",
+    "cover": "/assets/themes/ocean.png"
+  },
+  {
+    "id": "forest",
+    "name": "theme.presets.forest.name",
+    "description": "theme.presets.forest.description",
+    "cover": "/assets/themes/forest.png"
+  },
+  {
+    "id": "sunset",
+    "name": "theme.presets.sunset.name",
+    "description": "theme.presets.sunset.description",
+    "cover": "/assets/themes/sunset.png"
+  }
+]
