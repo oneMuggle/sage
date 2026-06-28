@@ -22,6 +22,20 @@ export const en: Record<TranslationKey, string> = {
   'chat.stop': 'Stop',
   'chat.config_warning': 'API endpoint or chat model not configured',
 
+  // ─── Theme (P3 minimum set; P4 will expand) ──
+  'theme.selector.title': 'Theme',
+  'theme.selector.reset': 'Reset to default',
+  'theme.selector.custom': 'Custom CSS',
+  'theme.editor.cancel': 'Cancel',
+  'theme.editor.save': 'Save',
+  'theme.editor.sync_failed': 'Sync failed',
+  'theme.editor.save_failed': 'Save failed',
+  'theme.presets.light.name': 'Light',
+  'theme.presets.dark.name': 'Dark',
+  'theme.presets.ocean.name': 'Ocean',
+  'theme.presets.forest.name': 'Forest',
+  'theme.presets.sunset.name': 'Sunset',
+
   // ─── Common ───────────────────────
   'common.cancel': 'Cancel',
   'common.confirm': 'Confirm',

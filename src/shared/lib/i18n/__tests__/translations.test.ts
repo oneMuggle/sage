@@ -38,7 +38,7 @@ describe('translations consistency', () => {
     }
   });
 
-  it('zh has exactly 16 keys (M1 scope)', () => {
-    expect(Object.keys(zh).length).toBe(16);
+  it('zh has exactly 28 keys (M1 16 + M2 theme 12)', () => {
+    expect(Object.keys(zh).length).toBe(28);
   });
 });
