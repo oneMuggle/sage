@@ -90,6 +90,16 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'PUT',
     path: (a) => `/api/v1/preferences/${encodeURIComponent(String(a.key))}`,
   },
+
+  // custom CSS theme storage (themeCssClient)
+  // Backend theme_router is mounted at /api/theme (not /api/v1)
+  theme_list: { method: 'GET', path: () => '/api/theme/list' },
+  theme_save: { method: 'POST', path: () => '/api/theme/save' },
+  theme_get: {
+    method: 'GET',
+    path: (a) => `/api/theme/get/${encodeURIComponent(String(a.id))}`,
+  },
+  theme_delete: { method: 'POST', path: () => '/api/theme/delete' },
 };
 
 export class UnknownIpcCommandError extends Error {

@@ -53,19 +53,6 @@ const electronAPI = {
     return Promise.resolve(unlisten);
   },
 
-  // === Theme API (M2 P2) ===
-  // Bridges the 7 P1 backend REST endpoints through ipcRenderer.invoke.
-  // Each call lands in main.ts as ipcMain.handle('theme:*') which forwards
-  // to the FastAPI backend on BACKEND_URL.
-  theme: {
-    list: () => ipcRenderer.invoke('theme:list'),
-    get: (id: string) => ipcRenderer.invoke('theme:get', id),
-    save: (preset: unknown) => ipcRenderer.invoke('theme:save', preset),
-    delete: (id: string) => ipcRenderer.invoke('theme:delete', id),
-    getActive: () => ipcRenderer.invoke('theme:getActive'),
-    saveActive: (active: unknown) => ipcRenderer.invoke('theme:saveActive', active),
-    validate: (css: string) => ipcRenderer.invoke('theme:validate', css),
-  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

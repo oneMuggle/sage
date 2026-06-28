@@ -3,7 +3,6 @@ import { COMMAND_ROUTES, UnknownIpcCommandError } from '../commands';
 
 // Backend mounts legacy_routes under /api/v1 (see backend/main.py:215).
 // All Electron IPC paths MUST match — otherwise every IPC call 404s.
-const API_PREFIX = '/api/v1';
 
 describe('COMMAND_ROUTES', () => {
   it('includes the full session/message/chat surface used by the renderer', () => {
@@ -22,11 +21,13 @@ describe('COMMAND_ROUTES', () => {
     }
   });
 
-  // Guard: every command path MUST start with /api/v1 (matches backend mount).
-  // If a new command is added without the prefix, this test fails — preventing
-  // a class of 404 bugs where the renderer talks to a path the backend doesn't
-  // expose at root.
-  it('all command paths are prefixed with /api/v1', () => {
+  // Guard: every command path MUST start with /api/v1 or /api/theme.
+  // Legacy routes use /api/v1 (matches backend/main.py:215 legacy_router mount).
+  // Theme routes use /api/theme (matches backend/main.py theme_router mount).
+  // If a new command is added without one of these prefixes, this test fails —
+  // preventing a class of 404 bugs where the renderer talks to a path the
+  // backend doesn't expose at root.
+  it('all command paths are prefixed with /api/v1 or /api/theme', () => {
     for (const [cmd, route] of Object.entries(COMMAND_ROUTES)) {
       const samplePath = route.path({
         limit: 1,
@@ -35,8 +36,8 @@ describe('COMMAND_ROUTES', () => {
         streamId: 'x',
         sessionId: 'x',
       });
-      expect(samplePath, `${cmd} path must start with ${API_PREFIX}`).toMatch(
-        new RegExp(`^${API_PREFIX}/`),
+      expect(samplePath, `${cmd} path must start with /api/v1 or /api/theme`).toMatch(
+        /^(\/api\/v1\/|\/api\/theme\/)/,
       );
     }
   });
@@ -143,6 +144,47 @@ describe('settings & preferences IPC routes', () => {
       COMMAND_ROUTES.set_preference.path({ key: 'theme_mode' }),
     ];
     paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\//));
+  });
+});
+
+describe('theme IPC routes', () => {
+  it('has theme_list route (GET /api/theme/list)', () => {
+    const r = COMMAND_ROUTES.theme_list;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({})).toBe('/api/theme/list');
+  });
+
+  it('has theme_save route (POST /api/theme/save)', () => {
+    const r = COMMAND_ROUTES.theme_save;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/theme/save');
+  });
+
+  it('has theme_get route (GET /api/theme/get/{id}) with URL encoding', () => {
+    const r = COMMAND_ROUTES.theme_get;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({ id: 'abc-123' })).toBe('/api/theme/get/abc-123');
+    expect(r.path({ id: 'id/with/slash' })).toBe('/api/theme/get/id%2Fwith%2Fslash');
+  });
+
+  it('has theme_delete route (POST /api/theme/delete)', () => {
+    const r = COMMAND_ROUTES.theme_delete;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/theme/delete');
+  });
+
+  it('all theme paths have /api/theme prefix', () => {
+    const paths = [
+      COMMAND_ROUTES.theme_list.path({}),
+      COMMAND_ROUTES.theme_save.path({}),
+      COMMAND_ROUTES.theme_get.path({ id: 'x' }),
+      COMMAND_ROUTES.theme_delete.path({}),
+    ];
+    paths.forEach((p) => expect(p).toMatch(/^\/api\/theme\//));
   });
 });
 
