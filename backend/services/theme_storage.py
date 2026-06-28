@@ -1,109 +1,84 @@
-"""Atomic JSON persistence for theme presets and active theme (py3.10+, pydantic 2.x)."""
+"""主题存储 — 单文件 JSON 原子读写"""
+
+from __future__ import annotations
+
 import json
 import logging
 import os
 import tempfile
-from datetime import datetime
 from pathlib import Path
-
-from backend.schemas.theme import ActiveTheme, ThemePreset
 
 logger = logging.getLogger(__name__)
 
-DEFAULTS_FILENAME = "themes.defaults.json"
-RUNTIME_FILENAME = "themes.json"
-ACTIVE_FILENAME = "active_theme.json"
+REQUIRED_FIELDS = ("id", "name", "css", "appearance")
+VALID_APPEARANCES = frozenset({"light", "dark"})
 
 
 class ThemeStorage:
-    """File-backed theme store with atomic writes and corruption recovery."""
+    """JSON 文件持久化 — 每主题一个文件 <id>.json"""
 
-    def __init__(self, data_dir: Path) -> None:
-        self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.runtime_path = self.data_dir / RUNTIME_FILENAME
-        self.defaults_path = self.data_dir / DEFAULTS_FILENAME
-        self.active_path = self.data_dir / ACTIVE_FILENAME
+    def __init__(self, storage_dir: Path | str | None = None) -> None:
+        if storage_dir is None:
+            storage_dir = Path(__file__).resolve().parent.parent / "data" / "themes"
+        self._dir = Path(storage_dir)
+        self._dir.mkdir(parents=True, exist_ok=True)
 
-    # ---------- internal ----------
+    def _path(self, theme_id: str) -> Path:
+        return self._dir / f"{theme_id}.json"
 
-    def _ensure_runtime_file(self) -> None:
-        """Seed themes.json from defaults on first run, or recover from corruption."""
-        if self.runtime_path.exists():
-            try:
-                json.loads(self.runtime_path.read_text(encoding="utf-8"))
-                return  # valid file, no action
-            except json.JSONDecodeError:
-                # Corrupted: back up and re-seed
-                backup = self.data_dir / f"themes.json.bak.{datetime.now().isoformat()}"
-                self.runtime_path.rename(backup)
-                logger.error("themes.json corrupted, backed up to %s", backup)
+    def _validate(self, payload: dict) -> None:
+        for field in REQUIRED_FIELDS:
+            if field not in payload:
+                raise ValueError(f"Missing required field: {field!r}")
+        if payload["appearance"] not in VALID_APPEARANCES:
+            raise ValueError(
+                f"Invalid appearance: {payload['appearance']!r}, "
+                f"must be one of {VALID_APPEARANCES}"
+            )
 
-        if not self.defaults_path.exists():
-            # No defaults and no runtime: write empty list
-            self._atomic_write_json(self.runtime_path, [])
-            return
-
-        defaults_raw = json.loads(self.defaults_path.read_text(encoding="utf-8"))
-        self._atomic_write_json(self.runtime_path, defaults_raw)
-
-    def _atomic_write_json(self, path: Path, payload) -> None:
-        """Write JSON atomically: temp file + rename."""
-        dir_name = str(path.parent)
-        # NamedTemporaryFile with delete=False ensures we can rename it
-        fd, tmp_name = tempfile.mkstemp(dir=dir_name, prefix=".tmp_", suffix=".json")
+    def save(self, payload: dict) -> str:
+        """原子写入 payload，返回 id"""
+        self._validate(payload)
+        target = self._path(payload["id"])
+        # 原子写：temp file + rename
+        fd, tmp_path_str = tempfile.mkstemp(dir=self._dir, suffix=".tmp")
+        tmp_path = Path(tmp_path_str)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_name, str(path))
+            tmp_path.replace(target)
         except Exception:
-            # Clean up temp file on any failure
-            try:
-                os.unlink(tmp_name)
-            except OSError:
-                pass
+            if tmp_path.exists():
+                tmp_path.unlink()
             raise
+        return payload["id"]
 
-    # ---------- presets ----------
+    def list(self) -> list[dict]:
+        """列出所有主题，跳过损坏文件（记录 warning）"""
+        results: list[dict] = []
+        for path in self._dir.glob("*.json"):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                results.append(data)
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning("跳过损坏的主题文件 %s: %s", path.name, exc)
+        return results
 
-    def list(self) -> list[ThemePreset]:
-        self._ensure_runtime_file()
-        raw = json.loads(self.runtime_path.read_text(encoding="utf-8"))
-        return [ThemePreset(**item) for item in raw]
-
-    def get(self, theme_id: str) -> ThemePreset | None:
-        for p in self.list():
-            if p.id == theme_id:
-                return p
-        return None
-
-    def save(self, preset: ThemePreset) -> ThemePreset:
-        existing = self.list()
-        # Replace if id exists, else append
-        new_list = [p for p in existing if p.id != preset.id] + [preset]
-        self._atomic_write_json(self.runtime_path, [p.model_dump() for p in new_list])
-        return preset
+    def get(self, theme_id: str) -> dict | None:
+        """按 id 获取主题"""
+        path = self._path(theme_id)
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("读取主题文件失败 %s: %s", path.name, exc)
+            return None
 
     def delete(self, theme_id: str) -> bool:
-        existing = self.list()
-        filtered = [p for p in existing if p.id != theme_id]
-        if len(filtered) == len(existing):
+        """按 id 删除主题，返回是否成功"""
+        path = self._path(theme_id)
+        if not path.exists():
             return False
-        self._atomic_write_json(self.runtime_path, [p.model_dump() for p in filtered])
+        path.unlink()
         return True
-
-    # ---------- active ----------
-
-    def get_active(self) -> ActiveTheme:
-        if not self.active_path.exists():
-            return ActiveTheme(presetId="light")
-        try:
-            raw = json.loads(self.active_path.read_text(encoding="utf-8"))
-            return ActiveTheme(**raw)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            logger.warning("active_theme.json corrupted, returning default")
-            return ActiveTheme(presetId="light")
-
-    def save_active(self, active: ActiveTheme) -> ActiveTheme:
-        self._atomic_write_json(self.active_path, active.model_dump())
-        return active
