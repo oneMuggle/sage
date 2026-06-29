@@ -1,7 +1,7 @@
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { useI18n } from '../i18n';
 
@@ -34,7 +34,7 @@ export function SortableSessionItem({ id, label, disabled, children }: SortableS
   };
 
   return (
-    <div ref={setNodeRef} style={style} aria-label={label}>
+    <div ref={setNodeRef} style={style} aria-label={label} className="flex items-center">
       <button
         type="button"
         {...attributes}
