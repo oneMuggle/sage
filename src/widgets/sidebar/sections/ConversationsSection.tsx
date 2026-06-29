@@ -36,6 +36,7 @@ export function ConversationsSection({
       icon={MessageSquare}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
+      maxHeight="50vh"
       trailing={
         <button
           type="button"

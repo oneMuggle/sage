@@ -11,6 +11,8 @@ interface SiderSectionProps {
   onToggleCollapsed: () => void;
   trailing?: ReactNode;
   render: () => ReactNode;
+  /** 内容区最大高度，超出后滚动。用于限制长列表（如会话）占据空间 */
+  maxHeight?: string;
 }
 
 export function SiderSection({
@@ -21,6 +23,7 @@ export function SiderSection({
   onToggleCollapsed,
   trailing,
   render,
+  maxHeight,
 }: SiderSectionProps) {
   const { t } = useI18n();
   const Chevron = collapsed ? ChevronRight : ChevronDown;
@@ -41,7 +44,14 @@ export function SiderSection({
         </button>
         {trailing && <div className="ml-auto">{trailing}</div>}
       </header>
-      {!collapsed && <div className="px-1">{render()}</div>}
+      {!collapsed && (
+        <div
+          className="px-1"
+          style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}
+        >
+          {render()}
+        </div>
+      )}
     </section>
   );
 }
