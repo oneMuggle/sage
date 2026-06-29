@@ -21,6 +21,16 @@ export const zh = {
   'chat.send': '发送',
   'chat.stop': '停止',
   'chat.config_warning': '未配置 API 端点或对话模型',
+  'chat.config_warning_action': '前往设置',
+  'chat.loading': '正在加载对话...',
+  'chat.welcome': '欢迎使用 Sage',
+  'chat.welcome_sub': '开始一段新对话吧',
+  'chat.hint':
+    'Sage 会记住你的项目信息，无需重复说明上下文 · 支持 Markdown 语法 · 点击知识库按钮多选文档作为上下文引用',
+  'chat.memory_applied': '条记忆已应用',
+  'chat.copy': '复制',
+  'chat.copied': '已复制',
+  'chat.delete_confirm': '确定要删除这个会话吗？',
 
   // ─── 设置 ─────────────────────────
   'settings.section.theme': '主题',
@@ -108,6 +118,20 @@ export const zh = {
   'welcome.quick.webui': 'WebUI',
   'welcome.quick.webui_desc': '在浏览器中打开',
   'welcome.quick.webui_unavailable': 'Unavailable',
+
+  // ─── 标题栏 ──────────────────────────
+  'titlebar.minimize': '最小化',
+  'titlebar.maximize': '最大化',
+  'titlebar.close': '关闭',
+  // ─── 导航 ──────────────────────────
+  'nav.back': '后退',
+  'nav.forward': '前进',
+
+  // ─── 时间分组 ─────────────────────
+  'time.today': '今天',
+  'time.yesterday': '昨天',
+  'time.this_week': '本周',
+  'time.earlier': '更早',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

@@ -202,6 +202,14 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
  */
 
 function createMainWindow(): void {
+  // Platform-specific titlebar configuration:
+  // - macOS: hide traffic light area, custom titlebar from y=28
+  // - Windows/Linux: frameless window with custom titlebar
+  const isMac = process.platform === 'darwin';
+  const titleBarOptions = isMac
+    ? { titleBarStyle: 'hidden' as const, trafficLightPosition: { x: 8, y: 8 } }
+    : { frame: false };
+
   mainWindow = new BrowserWindow({
     width: DEFAULT_WINDOW_WIDTH,
     height: DEFAULT_WINDOW_HEIGHT,
@@ -209,6 +217,7 @@ function createMainWindow(): void {
     minHeight: MIN_WINDOW_HEIGHT,
     title: 'Sage',
     icon: join(__dirname, '..', 'build', 'icon.ico'),
+    ...titleBarOptions,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -227,7 +236,10 @@ function createMainWindow(): void {
     mainWindow.loadURL(VITE_DEV_URL).catch((e) => console.error('Failed to load Vite dev URL:', e));
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    const indexHtml = join(__dirname, '..', 'dist', 'index.html');
+    // tsconfig.electron.json uses rootDirs: [electron, src], so the compiled
+    // main.js lives at dist-electron/electron/main.js (one extra directory level
+    // vs the legacy rootDir: electron setup). Go up two levels to reach dist/.
+    const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
     mainWindow.loadFile(indexHtml).catch((e) => console.error('Failed to load index.html:', e));
   }
 
@@ -308,6 +320,48 @@ function registerIpcHandlers(): void {
       return { ok: true };
     },
   );
+
+  // ─── Phase 5: Window controls IPC handlers ─────────────────────────────
+  // These handlers back the custom titlebar buttons (minimize/maximize/close)
+  // and page capture for feedback screenshots.
+
+  /** Helper: get the BrowserWindow that sent the IPC event. */
+  function getSenderWindow(evt: Electron.IpcMainInvokeEvent): BrowserWindow | null {
+    return BrowserWindow.fromWebContents(evt.sender);
+  }
+
+  ipcMain.handle('sage:window-controls:minimize', (evt) => {
+    const win = getSenderWindow(evt);
+    win?.minimize();
+  });
+
+  ipcMain.handle('sage:window-controls:toggle-maximize', (evt) => {
+    const win = getSenderWindow(evt);
+    if (!win) return;
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+  });
+
+  ipcMain.handle('sage:window-controls:close', (evt) => {
+    const win = getSenderWindow(evt);
+    win?.close();
+  });
+
+  ipcMain.handle('sage:window-controls:is-maximized', (evt) => {
+    const win = getSenderWindow(evt);
+    return win?.isMaximized() ?? false;
+  });
+
+  ipcMain.handle('sage:window-controls:capture-page', async (evt) => {
+    const win = getSenderWindow(evt);
+    if (!win) throw new Error('No sender window');
+    const image = await win.capturePage();
+    // Return base64 PNG (no data URI prefix)
+    return image.toPNG().toString('base64');
+  });
 }
 
 function shutdownBackend(): void {

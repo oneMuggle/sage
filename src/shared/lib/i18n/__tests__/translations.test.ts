@@ -38,7 +38,7 @@ describe('translations consistency', () => {
     }
   });
 
-  it('zh has exactly 83 keys (M1 16 + M2 theme 12 + P4 gallery 1 + M3 scheduled 28 + cron 6 + common 7 + M5 sider 7 + M6 welcome 18)', () => {
-    expect(Object.keys(zh).length).toBe(83);
+  it('zh has exactly 101 keys (M1-M6 83 + M7 nav 2 + M7 nav-time 4 + M9 titlebar 3 + M6 chat incremental 9)', () => {
+    expect(Object.keys(zh).length).toBe(101);
   });
 });

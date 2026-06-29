@@ -12,6 +12,15 @@ export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
 export { sessionApi } from './sessionApi';
 export { skillsApi } from './skillsApi';
+export { themeCssClient } from './themeCssClient';
+export {
+  windowControls,
+  getWindowControlsBridge,
+  createWebControlsBridge,
+  detectPlatform,
+  isElectronDesktop,
+} from './windowControlsClient';
+export type { Platform, WindowControlsBridge } from './windowControlsClient';
 
 // 类型定义
 export type {

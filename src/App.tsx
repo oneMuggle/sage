@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { Settings } from './pages';
 import { Agents } from './pages/Agents';
@@ -34,20 +35,22 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/chat" replace />} />
-          <Route path="welcome" element={<Welcome />} />
-          <Route path="chat" element={<ChatRoute />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="memory" element={<Memory />} />
-          <Route path="agents" element={<Agents />} />
-          <Route path="skills" element={<Skills />} />
-          <Route path="knowledge" element={<Knowledge />} />
-          <Route path="scheduled" element={<ScheduledTasks />} />
-          <Route path="orchestration" element={<Orchestration />} />
-        </Route>
-      </Routes>
+      <NavHistoryProvider>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Navigate to="/chat" replace />} />
+            <Route path="welcome" element={<Welcome />} />
+            <Route path="chat" element={<ChatRoute />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="memory" element={<Memory />} />
+            <Route path="agents" element={<Agents />} />
+            <Route path="skills" element={<Skills />} />
+            <Route path="knowledge" element={<Knowledge />} />
+            <Route path="scheduled" element={<ScheduledTasks />} />
+            <Route path="orchestration" element={<Orchestration />} />
+          </Route>
+        </Routes>
+      </NavHistoryProvider>
     </BrowserRouter>
   );
 }

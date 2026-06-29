@@ -21,6 +21,16 @@ export const en: Record<TranslationKey, string> = {
   'chat.send': 'Send',
   'chat.stop': 'Stop',
   'chat.config_warning': 'API endpoint or chat model not configured',
+  'chat.config_warning_action': 'Go to Settings',
+  'chat.loading': 'Loading conversation...',
+  'chat.welcome': 'Welcome to Sage',
+  'chat.welcome_sub': 'Start a new conversation',
+  'chat.hint':
+    'Sage remembers your project context, no need to repeat · Markdown supported · Click the knowledge base button to attach docs as context',
+  'chat.memory_applied': ' memories applied',
+  'chat.copy': 'Copy',
+  'chat.copied': 'Copied',
+  'chat.delete_confirm': 'Delete this session?',
 
   // ─── Settings ─────────────────────
   'settings.section.theme': 'Theme',
@@ -109,4 +119,18 @@ export const en: Record<TranslationKey, string> = {
   'welcome.quick.webui': 'WebUI',
   'welcome.quick.webui_desc': 'Open in browser',
   'welcome.quick.webui_unavailable': 'Unavailable',
+
+  // ─── Titlebar ──────────────────────────
+  'titlebar.minimize': 'Minimize',
+  'titlebar.maximize': 'Maximize',
+  'titlebar.close': 'Close',
+  // ─── Navigation ─────────────────────
+  'nav.back': 'Back',
+  'nav.forward': 'Forward',
+
+  // ─── Time groups ──────────────────
+  'time.today': 'Today',
+  'time.yesterday': 'Yesterday',
+  'time.this_week': 'This Week',
+  'time.earlier': 'Earlier',
 };

@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Electron frameless window: drag region for custom titlebar */
+.drag {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* CSS Variables for Theming */
 :root {
   /* Primary */

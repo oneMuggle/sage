@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 
 import { Sidebar } from './Sidebar';
+import { Titlebar } from './Titlebar';
 
 export function Layout() {
   return (
@@ -17,9 +18,12 @@ export function Layout() {
       <Sidebar />
 
       {/* 主内容区 */}
-      <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
-        <Outlet />
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Titlebar />
+        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }
