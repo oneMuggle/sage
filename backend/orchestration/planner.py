@@ -285,6 +285,4 @@ Return ONLY valid JSON, no additional text."""
             return False
 
         # Check for cycles
-        return all(
-            task_id in visited or not has_cycle(task_id) for task_id in task_map
-        )
+        return all(task_id in visited or not has_cycle(task_id) for task_id in task_map)
