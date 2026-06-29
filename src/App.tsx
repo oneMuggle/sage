@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { Settings } from './pages';
 import { Agents } from './pages/Agents';
@@ -11,7 +12,6 @@ import { Orchestration } from './pages/Orchestration';
 import { ScheduledTasks } from './pages/ScheduledTasks';
 import Skills from './pages/Skills';
 import { Welcome } from './pages/Welcome';
-import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { useStore } from './shared/lib/store';
 import { Layout } from './widgets/layout';
 
