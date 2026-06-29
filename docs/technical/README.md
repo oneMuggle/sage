@@ -24,6 +24,8 @@
 | 25   | [LLM Wiki 集成 (PR-8)](./25-llm-wiki-integration.md) | 4 LLM provider 抽象 + prompt 模板 + LanceDB RAG + 知识图谱 8 阶段实施                                 |
 | 26   | [跨平台打包矩阵](./26-packaging-matrix.md)            | Win7/10/11 NSIS + VCRedist bundling 与 Ubuntu deb 覆盖,用户安装指南                                  |
 | 27   | [Sider DnD](./27-sider-dnd.md)                        | 侧边栏拖拽排序 + 4 可折叠分组 + localStorage 持久化 + @dnd-kit 集成 (M5)                              |
+| 28   | [Phase 5 Titlebar](./28-phase5-titlebar.md)           | 跨平台自定义标题栏 + Electron IPC windowControls + .drag/.no-drag CSS (M9)                            |
+| 29   | [M7 Nav-history](./29-m7-nav-history.md)               | NavHistoryProvider 路径栈 + cursor + TitlebarActions ↩/→ 按钮 + useNavigationHistory hook (M7)           |
 
 ---
 

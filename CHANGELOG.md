@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **feat(M7): Nav-history — 跨路由前进/后退导航栈 (byte-for-byte port from main)**
+  - `NavHistoryProvider` + `useNavigationHistory` hook: 维护 pathname 栈 + cursor
+    + `MAX_HISTORY=50` 上限 + `skipNextRef` 防止自身 navigate() 触发 effect 重复 push
+    + 暴露 `canBack` / `canForward` / `back` / `forward` context
+  - `TitlebarActions` 组件: 浏览器风格 ◀ ▶ 按钮,根据 context canBack/canForward
+    自动 disabled;外层 `no-drag` 类确保按钮可点击(Electron frameless window)
+  - 集成: `<NavHistoryProvider>` 包裹 `<Routes>` 在 `<BrowserRouter>` 内(必须,
+    因 hook 调用 `useLocation`/`useNavigate`/`useNavigationType`)
+  - i18n: 6 新 keys (`nav.back` / `nav.forward` / `time.today` / `yesterday` /
+    `this_week` / `earlier`)
+  - 测试: 4 新 unit test file 累计 ~12 测试 pass (multi-route + MAX_HISTORY +
+    back/forward no-op + useNavigationHistory)
+  - win7 适配: 保留现有 routes(Welcome / scheduled / orchestration)+ ChatRoute
+    gating fallback
+- **feat(M9): Phase5 Titlebar — 跨平台自定义标题栏 (byte-for-byte port from main)**
+  - `windowControlsClient.ts`: `Platform`/`WindowControlsBridge` interface +
+    `detectPlatform()` + `isElectronDesktop()` + `windowControls` 单例
+  - `WindowControls` component: Win/Linux 显示 minimize / toggleMaximize / close
+    三按钮,mac/Web 返回 null(native traffic lights / 无窗口控制)
+  - `Titlebar` component: 三分支(Web 仅 TitlebarActions / macOS pt-7 给 native
+    traffic lights 留 28px / Win&Linux drag class + TitlebarActions +
+    WindowControls)
+  - Electron IPC: 5 个 `sage:window-controls:*` handlers (minimize /
+    toggle-maximize / close / capture-page / is-maximized) + preload bridge 暴露
+    + main.ts `titleBarStyle` 配置(mac hidden, Win/Linux frameless)
+  - i18n: 3 新 `titlebar.*` keys (minimize/maximize/close)
+  - CSS: `.drag` / `.no-drag` `webkit-app-region` 类让 frameless 标题栏可拖动
+    + 按钮可点击
+  - 测试: 4 新 vitest files (WindowControls 6 + Titlebar 8 + TitlebarActions 4 +
+    windowControlsClient 9)
 - **feat(M6): Welcome — 首次进入应用引导屏 (byte-for-byte port from main)**
   - 7 新组件/hook: `WelcomeHero` / `WelcomeInputCard` / `AssistantRecommendations` /
     `QuickActionBar` / `useTypewriterPlaceholder` / `recommendations` data / `Welcome` page
