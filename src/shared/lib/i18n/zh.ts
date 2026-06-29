@@ -88,6 +88,26 @@ export const zh = {
   'sider.drag_handle': '拖拽排序',
   'sider.collapse': '折叠',
   'sider.expand': '展开',
+
+  // ─── 欢迎屏 ────────────────────────
+  'welcome.hero.greeting': '你好，我是 Sage',
+  'welcome.hero.subtitle': '有什么可以帮你的？',
+  'welcome.hero.back': '返回',
+  'welcome.input.placeholder': '输入消息，Enter 发送',
+  'welcome.rec.title': '推荐助手',
+  'welcome.rec.code.title': '写代码',
+  'welcome.rec.code.desc': '帮我写代码、解释代码、找 Bug',
+  'welcome.rec.search.title': '搜索',
+  'welcome.rec.search.desc': '查找资料、查文档、找答案',
+  'welcome.rec.idea.title': '创意',
+  'welcome.rec.idea.desc': '脑暴点子、起名、写文案',
+  'welcome.quick.feedback': '反馈',
+  'welcome.quick.feedback_desc': '提交问题或建议',
+  'welcome.quick.github': 'GitHub',
+  'welcome.quick.github_desc': '查看源码',
+  'welcome.quick.webui': 'WebUI',
+  'welcome.quick.webui_desc': '在浏览器中打开',
+  'welcome.quick.webui_unavailable': 'Unavailable',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
