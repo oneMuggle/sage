@@ -113,6 +113,35 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/scheduled/tasks/${encodeURIComponent(String(a.id))}/run`,
   },
 
+  // orchestration (Phase 4 — multi-agent coordination)
+  orchestration_list_lanes: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      const p = (a?.params ?? {}) as Record<string, unknown>;
+      if (p.status) params.set('status', String(p.status));
+      if (p.team_id) params.set('team_id', String(p.team_id));
+      if (p.limit) params.set('limit', String(p.limit));
+      const qs = params.toString();
+      return `/api/v1/orchestration/lanes${qs ? `?${qs}` : ''}`;
+    },
+  },
+  orchestration_get_lane: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id ?? a.laneId))}`,
+  },
+  orchestration_list_lane_events: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id ?? a.laneId))}/events`,
+  },
+  orchestration_cancel_lane: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id ?? a.laneId))}/cancel`,
+  },
+
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router is mounted at /api/theme (not /api/v1)
   theme_list: { method: 'GET', path: () => '/api/theme/list' },

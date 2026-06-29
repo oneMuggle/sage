@@ -8,6 +8,7 @@ import { Chat } from './pages/Chat';
 import { Knowledge } from './pages/Knowledge';
 import { Memory } from './pages/Memory';
 import { ScheduledTasks } from './pages/ScheduledTasks';
+import { Orchestration } from './pages/Orchestration';
 import Skills from './pages/Skills';
 import { useStore } from './shared/lib/store';
 import { Layout } from './widgets/layout';
@@ -33,6 +34,7 @@ function App() {
           <Route path="skills" element={<Skills />} />
           <Route path="knowledge" element={<Knowledge />} />
           <Route path="scheduled" element={<ScheduledTasks />} />
+          <Route path="orchestration" element={<Orchestration />} />
         </Route>
       </Routes>
     </BrowserRouter>

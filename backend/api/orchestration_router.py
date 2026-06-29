@@ -7,7 +7,6 @@ to lanes and lane events, plus cancellation endpoint for manual control.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -95,8 +94,8 @@ def build_router() -> APIRouter:
 
     @router.get("/lanes", response_model=list[LaneOut])
     async def list_lanes(
-        status: Optional[LaneStatus] = Query(default=None),
-        team_id: Optional[str] = Query(default=None),
+        status: LaneStatus | None = Query(default=None),
+        team_id: str | None = Query(default=None),
         limit: int = Query(default=100, ge=1, le=500),
     ) -> list[LaneOut]:
         """List lanes with optional filters.
