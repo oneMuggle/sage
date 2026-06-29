@@ -128,8 +128,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
   orchestration_get_lane: {
     method: 'GET',
-    path: (a) =>
-      `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id ?? a.laneId))}`,
+    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id ?? a.laneId))}`,
   },
   orchestration_list_lane_events: {
     method: 'GET',
