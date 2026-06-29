@@ -128,7 +128,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.back': 'Back',
   'nav.forward': 'Forward',
 
-// ─── Time groups ──────────────────
+  // ─── Time groups ──────────────────
   'time.today': 'Today',
   'time.yesterday': 'Yesterday',
   'time.this_week': 'This Week',
@@ -147,4 +147,5 @@ export const en: Record<TranslationKey, string> = {
   'chat.btw.loading': 'Thinking…',
   'chat.btw.error': 'Failed to load',
   'chat.btw.close': 'Close',
+  'chat.btw.question': 'Question',
 };

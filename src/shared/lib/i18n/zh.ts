@@ -127,7 +127,7 @@ export const zh = {
   'nav.back': '后退',
   'nav.forward': '前进',
 
-// ─── 时间分组 ─────────────────────
+  // ─── 时间分组 ─────────────────────
   'time.today': '今天',
   'time.yesterday': '昨天',
   'time.this_week': '本周',
@@ -146,6 +146,7 @@ export const zh = {
   'chat.btw.loading': '思考中…',
   'chat.btw.error': '加载失败',
   'chat.btw.close': '关闭',
+  'chat.btw.question': '问题',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
