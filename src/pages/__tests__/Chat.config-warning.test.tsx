@@ -51,6 +51,7 @@ vi.mock('../../shared/lib/hooks/useFileUpload', () => ({
   }),
 }));
 
+import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import { Chat } from '../Chat';
 
@@ -82,7 +83,9 @@ describe('Chat — config warning banner', () => {
   it('renders the warning banner, the settings link and disables ChatInput', () => {
     render(
       <MemoryRouter>
-        <Chat />
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
       </MemoryRouter>,
     );
 
@@ -128,7 +131,9 @@ describe('Chat — config warning banner', () => {
 
     render(
       <MemoryRouter>
-        <Chat />
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
       </MemoryRouter>,
     );
 
