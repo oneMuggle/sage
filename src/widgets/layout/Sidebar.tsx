@@ -1,7 +1,7 @@
 import { clsx } from 'clsx';
 import { MessageSquare, Settings, Brain, BookOpen, Clock, GitBranch } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
@@ -35,14 +35,9 @@ interface SidebarProps {
 
 export function Sidebar({ width = 240 }: SidebarProps) {
   const location = useLocation();
-  const {
-    sessions,
-    currentSessionId,
-    setCurrentSessionId,
-    createSession,
-    loadSessions,
-    deleteSession,
-  } = useStore();
+  const navigate = useNavigate();
+  const { sessions, currentSessionId, setCurrentSessionId, loadSessions, deleteSession } =
+    useStore();
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const [connectionStatus, setConnectionStatus] = useState<
@@ -81,10 +76,9 @@ export function Sidebar({ width = 240 }: SidebarProps) {
       });
   }, [chatEndpoint?.baseUrl, chatEndpoint?.apiKey, settings.modelSelections.chatModel.modelId]);
 
-  const handleNewSession = async () => {
-    // M5 调整:win7 没有 /welcome 屏,直接创建并跳到 /chat
-    const sessionId = await createSession();
-    setCurrentSessionId(sessionId);
+  const handleNewSession = () => {
+    // M6 还原:main 同款 — 跳到 /welcome 屏,让用户选 agent / 输入
+    navigate('/welcome');
   };
 
   const renderSection = (key: string) => {

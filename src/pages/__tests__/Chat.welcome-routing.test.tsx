@@ -84,14 +84,14 @@ function AppRouter() {
   );
 }
 
-describe.skip('Chat / Welcome routing — sessionId gating', () => {
+describe('Chat / Welcome routing — sessionId gating', () => {
   it('redirects to /welcome when no currentSessionId', () => {
     render(
       <I18nProvider defaultLocale="zh">
         <AppRouter />
       </I18nProvider>,
     );
-    expect(screen.getByText(/你好，我是 Claude/)).toBeInTheDocument();
+    expect(screen.getByText(/你好，我是 Sage/)).toBeInTheDocument();
   });
 
   it('shows chat normally when currentSessionId is set', () => {
