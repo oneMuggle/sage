@@ -46,7 +46,10 @@ test('Electron launches and exposes electronAPI', async () => {
 
   // Wait for first BrowserWindow
   const window = await app!.firstWindow({ timeout: 30_000 });
-  await window.waitForLoadState('domcontentloaded');
+  // Wait for full page load (HTML + scripts + chunks), not just DOMContentLoaded.
+  // dist/ has 300+ vendor chunks (Shiki languages, etc.) — React only mounts after
+  // all <script type="module"> entries resolve.
+  await window.waitForLoadState('load');
 
   // Wait for electronAPI to be exposed by preload (contextBridge.exposeInMainWorld
   // is called synchronously but Playwright's firstWindow may resolve before
@@ -68,8 +71,9 @@ test('Electron launches and exposes electronAPI', async () => {
   });
   expect(hasListen, 'window.electronAPI.listen must be a function').toBe(true);
 
-  // Verify frontend HTML rendered (not blank)
-  const bodyText = await window.locator('body').textContent({ timeout: 5_000 });
+  // Verify frontend HTML rendered (not blank). Give React up to 30s to mount —
+  // production build has 300+ chunks and renders without backend (SAGE_SKIP_BACKEND=1).
+  const bodyText = await window.locator('body').textContent({ timeout: 30_000 });
   expect(bodyText, 'frontend body must have rendered some text').toBeTruthy();
   expect(bodyText!.length, 'frontend body text length > 0').toBeGreaterThan(0);
 
