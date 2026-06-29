@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **feat(M4): Orchestration — 多智能体协调层 (byte-for-byte port from main)**
+  - Backend: 16 文件 `orchestration/` 包 (Planner/Router/Executor/LaneBoard/Heartbeat/Events/Policy/UltragoalStore/ApprovalTokens/ReportSchema/Permission) + `orchestration_router` (4 API endpoints) + `orchestration_repo` (SQLite 4 表 + 7 索引)
+  - Frontend: `Orchestration` 页面 + `LaneBoard` 三列看板 + `laneBoardStore` (Zustand) + `orchestrationClient` (IPC)
+  - 集成: Sidebar `协调` 导航项 (GitBranch) + `/orchestration` 路由 + 4 Electron IPC 通道
+  - 测试: backend 1248 unit tests pass (1 pre-existing main-side failure unrelated to port), frontend 399 tests pass, tsc 0 errors
 - **feat(M3): Scheduler — 用户定时消息功能 (byte-for-byte port from main)**
   - Backend: `SchedulerService` (APScheduler 3.10.4 + JSON 持久化,98% coverage) + `scheduled_router` (6 endpoints)
   - Frontend: `CronExpressionPicker` + `CreateTaskModal` + `ScheduledTasks` 页面 + `taskStore` + `scheduledClient`

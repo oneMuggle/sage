@@ -259,6 +259,10 @@ else:
 # M3: scheduled tasks — mounted for both API modes (independent feature)
 app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
 
+# M4: orchestration — multi-agent coordination layer
+from backend.api.orchestration_router import build_router as build_orchestration_router
+app.include_router(build_orchestration_router(), prefix="/api/v1")
+
 
 @app.get("/health")
 async def health_check():
