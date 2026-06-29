@@ -46,7 +46,7 @@ describe('fileSearchClient', () => {
     );
     const p = fileSearchClient.search('slow');
     // Attach catch handler immediately to prevent unhandled rejection
-     
+
     p.catch(() => {});
     // Advance timers FIRST, then await the rejection
     await vi.advanceTimersByTimeAsync(3001);
