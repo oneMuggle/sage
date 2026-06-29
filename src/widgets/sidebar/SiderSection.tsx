@@ -45,10 +45,7 @@ export function SiderSection({
         {trailing && <div className="ml-auto">{trailing}</div>}
       </header>
       {!collapsed && (
-        <div
-          className="px-1"
-          style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}
-        >
+        <div className="px-1" style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}>
           {render()}
         </div>
       )}

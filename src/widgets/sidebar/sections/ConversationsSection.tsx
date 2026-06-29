@@ -1,7 +1,7 @@
 import { MessageSquare, Plus } from 'lucide-react';
 
-import type { Session } from '../../../shared/lib/store';
 import { useI18n } from '../../../shared/lib/i18n';
+import type { Session } from '../../../shared/lib/store';
 import { SortableSessionList } from '../../session/SortableSessionList';
 import { SiderSection } from '../SiderSection';
 
