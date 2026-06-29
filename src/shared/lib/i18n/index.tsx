@@ -41,12 +41,17 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 interface I18nProviderProps {
   children: ReactNode;
+  /** 测试用：跳过持久化的初始 locale(M5 恢复的 main 测试用 defaultLocale="zh") */
+  defaultLocale?: Locale;
 }
 
-export function I18nProvider({ children }: I18nProviderProps) {
+export function I18nProvider({ children, defaultLocale }: I18nProviderProps) {
   // 精细订阅：只选 locale 和 setLocale，避免 store 其他字段变化触发重渲染
-  const locale = useLocaleStore((s) => s.locale);
+  const storeLocale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
+
+  // 如果传入 defaultLocale,测试场景下覆盖 store 初始值(不写回 store,避免污染)
+  const locale = defaultLocale ?? storeLocale;
 
   const value = useMemo<I18nContextValue>(() => {
     const translations: Record<Locale, Record<string, string>> = { zh, en };
