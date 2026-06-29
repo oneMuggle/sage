@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **feat(M5): Sider DnD — 侧边栏拖拽排序 + 可折叠分组 (byte-for-byte port from main)**
+  - Pure functions: `siderOrder` (reorder/read/write/reconcile/sort/equality, 26 tests)
+  - Hooks: `useStoredSiderOrder` (localStorage 持久化,18 tests) + `useSiderSections` (hydrate/toggle/reorder,12 tests)
+  - Components: `SiderSection` 容器 (可折叠/可重排/统一标题) + `ConversationsSection` (集成 SortableSessionList) + 3 placeholder (CronJob/Project/Team)
+  - Sortable: `SortableSessionItem` (drag handle) + `SortableSessionList` (DndContext + SortableContext + arrayMove)
+  - Sidebar.tsx 重构: 装配 4 个 section + `useStoredSiderOrder` 驱动会话顺序 + 折叠状态持久化
+  - i18n: 7 新 `sider.*` keys (drag_handle/expand/collapse + section labels)
+  - 测试: 56 新 unit tests pass (vitest 464/464 active + 16 M6-deferred skipped)
+  - win7 适配: keep ScheduledTasks + Orchestration 路由 (M3/M4) + 用 createSession() 替代 navigate('/welcome') (M6 尚未实现)
 - **feat(M4): Orchestration — 多智能体协调层 (byte-for-byte port from main)**
   - Backend: 16 文件 `orchestration/` 包 (Planner/Router/Executor/LaneBoard/Heartbeat/Events/Policy/UltragoalStore/ApprovalTokens/ReportSchema/Permission) + `orchestration_router` (4 API endpoints) + `orchestration_repo` (SQLite 4 表 + 7 索引)
   - Frontend: `Orchestration` 页面 + `LaneBoard` 三列看板 + `laneBoardStore` (Zustand) + `orchestrationClient` (IPC)
