@@ -489,9 +489,9 @@ export function useChat() {
           },
           // 使用主 chat 的配置
           {
-            apiKey: chatEndpoint?.apiKey ?? null,
-            apiUrl: chatEndpoint?.baseUrl ?? null,
-            model: settings.modelSelections.chatModel.modelId ?? null,
+            apiKey: chatEndpoint?.apiKey,
+            apiUrl: chatEndpoint?.baseUrl,
+            model: settings.modelSelections.chatModel.modelId ?? undefined,
             maxContext: settings.maxContext,
             temperature: settings.temperature,
             provider: chatEndpoint?.baseUrl
@@ -510,7 +510,7 @@ export function useChat() {
         btwCancelRef.current = cancel;
         setIsBtwStreaming(true);
       } catch (err) {
-        logger.error('askBtw.failed', err);
+        logger.error('askBtw.failed', err instanceof Error ? err.message : String(err));
         useBtwState.getState().setLoading(false);
         setIsBtwStreaming(false);
       }

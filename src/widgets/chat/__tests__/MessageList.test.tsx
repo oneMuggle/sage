@@ -6,6 +6,7 @@
  */
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+
 import type { Message as MessageType } from '../../../shared/lib/store';
 import { MessageList } from '../MessageList';
 

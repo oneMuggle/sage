@@ -255,9 +255,7 @@ export function ChatInput({
                     type="button"
                     onClick={() => toggleKnowledge(doc.id, doc.title)}
                     className={`w-full text-left px-3 py-2 rounded-radius-sm transition-colors ${
-                      selected
-                        ? 'bg-primary text-text-inverse'
-                        : 'hover:bg-bg-hover text-text'
+                      selected ? 'bg-primary text-text-inverse' : 'hover:bg-bg-hover text-text'
                     }`}
                   >
                     <div className="font-medium">{doc.title}</div>

@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useBtwCommand } from '../useBtwCommand';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { useBtwState } from '../../../entities/chat/btwState';
+import { useBtwCommand } from '../useBtwCommand';
 
 // Mock useChat hook
 const mockAskBtw = vi.fn();

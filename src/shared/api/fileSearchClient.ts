@@ -85,10 +85,7 @@ export const fileSearchClient = {
    * 工作区文件模糊搜索, 3s 超时, AbortController 可外部取消
    * 后端命令: workspace_search_files (Phase 6 由后端实现, 此处仅前端桩化测试)
    */
-  async search(
-    query: string,
-    options: FileSearchOptions = {},
-  ): Promise<FileSearchResult[]> {
+  async search(query: string, options: FileSearchOptions = {}): Promise<FileSearchResult[]> {
     const limit = options.limit ?? DEFAULT_LIMIT;
     return invokeWithTimeout<FileSearchResult[]>(
       'workspace_search_files',
