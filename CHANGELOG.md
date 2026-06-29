@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **feat(M8): /btw 补充消息面板 + @文件提及 (byte-for-byte port from main)**
+  - `/btw` 链路: `useBtwCommand` 状态机 hook + `btwState` Zustand store +
+    `BtwOverlay` 浮层组件 + `useChat.askBtw` 方法;支持主对话运行中发补充问题
+    不打断,自动重连 1 次,Esc 关闭(不取消请求)
+  - `@文件提及` 链路: `useAtFileQuery` 解析 `@xxx` 模式 + `fileSearchClient`
+    (3s AbortController) + `AtFileMenu` 浮层(键盘导航 + 超时重试)
+  - 集成: ChatInput 拦截 `/btw ` + `@` 前缀,MessageList 挂载 `<BtwOverlay />`
+  - i18n: 11 新 keys (`chat.atFile.{searching,empty,timeout,error,retry}` +
+    `chat.btw.{title,placeholder,loading,error,close,question}`)
+  - 测试: 7 新 unit test file 累计 +41 测试 pass (btwState + useAtFileQuery +
+    AtFileMenu + useBtwCommand + BtwOverlay + ChatInput.btw + fileSearchClient)
+  - win7 适配: ChatInput 保留 M3 onSchedule,MessageList 不引入 ThinkingPanel;
+    跳过 main 上的 SlashCommandMenu / FeedbackButton(win7 长期不做)
+  - 累计: vitest 585 passed / 8 skipped;i18n 112 keys
+
+### Added
 - **feat(M7): Nav-history — 跨路由前进/后退导航栈 (byte-for-byte port from main)**
   - `NavHistoryProvider` + `useNavigationHistory` hook: 维护 pathname 栈 + cursor
     + `MAX_HISTORY=50` 上限 + `skipNextRef` 防止自身 navigate() 触发 effect 重复 push
