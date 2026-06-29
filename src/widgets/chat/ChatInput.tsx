@@ -282,7 +282,8 @@ export function ChatInput({
             disabled={!value.trim() || disabled}
             className="w-10 h-10 flex items-center justify-center bg-primary text-text-inverse rounded-radius-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
-            <Send className="w-4 h-4" />
+            发送
+            <Send className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
