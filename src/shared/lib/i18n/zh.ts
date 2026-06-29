@@ -79,6 +79,15 @@ export const zh = {
   'common.error': '出错',
   'common.retry': '重试',
   'common.delete': '删除',
+
+  // ─── 侧边栏分组 ─────────────────────
+  'sider.section.conversations': '会话',
+  'sider.section.cron': '定时任务',
+  'sider.section.project': '项目',
+  'sider.section.team': '团队',
+  'sider.drag_handle': '拖拽排序',
+  'sider.collapse': '折叠',
+  'sider.expand': '展开',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
