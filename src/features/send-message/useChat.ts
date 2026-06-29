@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
+import { useBtwState } from '../../entities/chat/btwState';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { ApiException, type AgentEvent, type ChatConfig } from '../../shared/api';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
@@ -56,6 +57,10 @@ export function useChat() {
   // P0: 实时工具调用 — state 驱动 UI 渲染，ref 镜像供 finishStream 读取最新值
   const [streamingToolCalls, setStreamingToolCalls] = useState<ToolCall[]>([]);
   const streamingToolCallsRef = useRef<ToolCall[]>([]);
+
+  // Phase 6: /btw 补充消息状态
+  const [isBtwStreaming, setIsBtwStreaming] = useState(false);
+  const btwCancelRef = useRef<(() => void) | null>(null);
 
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
 
@@ -436,6 +441,83 @@ export function useChat() {
     [loadMessages],
   );
 
+  // Phase 6: /btw 补充消息
+  const askBtw = useCallback(
+    async (question: string) => {
+      // 取消之前的 btw 流
+      if (btwCancelRef.current) {
+        try {
+          btwCancelRef.current();
+        } catch {
+          /* ignore */
+        }
+        btwCancelRef.current = null;
+      }
+
+      // 重置 btw 状态
+      useBtwState.getState().open(question);
+
+      try {
+        const { cancel } = await chatApi.chatStream(
+          '__btw__',
+          question,
+          {
+            onEvent: (evt) => {
+              if (evt.state === 'content_delta' && evt.content) {
+                useBtwState.getState().appendDelta(evt.content);
+              } else if (evt.state === 'done') {
+                if (evt.content) {
+                  useBtwState.getState().appendDelta(evt.content);
+                }
+                setIsBtwStreaming(false);
+                btwCancelRef.current = null;
+              } else if (evt.state === 'failed') {
+                useBtwState.getState().setLoading(false);
+                setIsBtwStreaming(false);
+                btwCancelRef.current = null;
+              }
+            },
+            onError: () => {
+              useBtwState.getState().setLoading(false);
+              setIsBtwStreaming(false);
+              btwCancelRef.current = null;
+            },
+            onDone: () => {
+              setIsBtwStreaming(false);
+              btwCancelRef.current = null;
+            },
+          },
+          // 使用主 chat 的配置
+          {
+            apiKey: chatEndpoint?.apiKey,
+            apiUrl: chatEndpoint?.baseUrl,
+            model: settings.modelSelections.chatModel.modelId ?? undefined,
+            maxContext: settings.maxContext,
+            temperature: settings.temperature,
+            provider: chatEndpoint?.baseUrl
+              ? (() => {
+                  const u = chatEndpoint.baseUrl.toLowerCase();
+                  if (u.includes('generativelanguage.googleapis.com')) return 'gemini';
+                  if (u.includes('api.openai.com')) return 'openai';
+                  if (u.includes('api.deepseek.com')) return 'deepseek';
+                  if (u.includes('anthropic.com')) return 'claude';
+                  return undefined;
+                })()
+              : undefined,
+          },
+        );
+
+        btwCancelRef.current = cancel;
+        setIsBtwStreaming(true);
+      } catch (err) {
+        logger.error('askBtw.failed', err instanceof Error ? err.message : String(err));
+        useBtwState.getState().setLoading(false);
+        setIsBtwStreaming(false);
+      }
+    },
+    [chatEndpoint, settings],
+  );
+
   const clearError = useCallback(() => setError(null), []);
 
   return {
@@ -454,5 +536,9 @@ export function useChat() {
     iteration: streaming?.iteration ?? 0,
     /** P2: 当前流式状态 (供 ActiveAgentIndicator 显示阶段) */
     streamingState: streaming?.state ?? null,
+    /** Phase 6: /btw 补充消息方法 */
+    askBtw,
+    /** Phase 6: /btw 是否正在流式输出 */
+    isBtwStreaming,
   };
 }

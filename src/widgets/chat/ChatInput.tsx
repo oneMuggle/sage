@@ -1,6 +1,7 @@
 import { Send, Square, Image, Paperclip, BookOpen, Clock } from 'lucide-react';
 import { useState, useRef } from 'react';
 
+import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 
 import { FileAttachment } from './FileAttachment';
@@ -28,7 +29,6 @@ const KNOWLEDGE_DOCS = [
   { id: 'deploy-guide', title: '部署指南', desc: 'Windows 环境部署步骤' },
   { id: 'memory-arch', title: '记忆系统架构', desc: '本地存储与同步策略' },
   { id: 'ui-spec', title: 'UI 设计规范', desc: '设计令牌与组件库' },
-  { id: 'test-data', title: '测试数据集', desc: '样本对话和测试用例' },
 ];
 
 export function ChatInput({
@@ -40,9 +40,14 @@ export function ChatInput({
   placeholder = '输入消息...',
 }: ChatInputProps) {
   const [value, setValue] = useState('');
+  const [cursorPos, setCursorPos] = useState(0);
   const [knowledgeRefs, setKnowledgeRefs] = useState<{ id: string; title: string }[]>([]);
   const [showKnowledgeSelector, setShowKnowledgeSelector] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Phase 6 (M8 /btw): @文件提及 + /btw 补充消息
+  const btw = useBtwCommand();
+  const atQuery = useAtFileQuery(value, cursorPos);
 
   const {
     files,
@@ -58,8 +63,8 @@ export function ChatInput({
   } = useFileUpload();
 
   const handleSend = () => {
-    if (!value.trim() || isLoading) return;
-    onSend(value.trim(), {
+    if (!value.trim() || disabled) return;
+    onSend(value, {
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,
       images: images.length > 0 ? images : undefined,
@@ -77,90 +82,77 @@ export function ChatInput({
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setValue(e.target.value);
+    const newValue = e.target.value;
+    setValue(newValue);
+    setCursorPos(e.target.selectionStart ?? newValue.length);
     const ta = e.target;
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+
+    // Phase 6 (M8 /btw): /btw 拦截
+    const btwMatch = newValue.match(/^\/btw\s+(.+)$/);
+    if (btwMatch) {
+      btw.open(btwMatch[1]);
+      setValue('');
+      return;
+    }
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles) return;
-    Array.from(selectedFiles).forEach(addImage);
-    e.target.value = '';
+    Array.from(selectedFiles).forEach((file) => {
+      if (file.type.startsWith('image/')) {
+        addImage(file);
+      } else {
+        addFile(file);
+      }
+    });
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files;
-    if (!selectedFiles) return;
-    Array.from(selectedFiles).forEach(addFile);
-    e.target.value = '';
+  const toggleKnowledge = (id: string, title: string) => {
+    setKnowledgeRefs((prev) => {
+      const exists = prev.find((k) => k.id === id);
+      if (exists) return prev.filter((k) => k.id !== id);
+      return [...prev, { id, title }];
+    });
   };
-
-  const toggleKnowledgeRef = (doc: (typeof KNOWLEDGE_DOCS)[number]) => {
-    setKnowledgeRefs((prev) =>
-      prev.find((r) => r.id === doc.id)
-        ? prev.filter((r) => r.id !== doc.id)
-        : [...prev, { id: doc.id, title: doc.title }],
-    );
-  };
-
-  const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0;
 
   return (
     <div
-      className="p-4 border-t border-border bg-surface relative"
+      className={`border-t border-border p-4 ${isDragOver ? 'bg-bg-hover' : ''}`}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
-      {isDragOver && (
-        <div className="absolute inset-0 bg-primary/10 border-2 border-dashed border-primary rounded-lg flex items-center justify-center z-10">
-          <p className="text-primary font-medium">拖放文件到此处</p>
-        </div>
-      )}
-
-      {images.length > 0 && (
-        <div className="flex gap-2 mb-2">
-          {images.map((img, idx) => (
-            <div
-              key={idx}
-              className="relative w-14 h-14 rounded-radius-sm border border-border overflow-hidden"
-            >
-              {img.dataUrl && (
-                <img src={img.dataUrl} alt="" className="w-full h-full object-cover" />
-              )}
-              <button
-                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-text/80 text-text-inverse flex items-center justify-center text-xs"
-                onClick={() => removeImage(idx)}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
+      {/* 知识库引用 chips */}
       {knowledgeRefs.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {knowledgeRefs.map((ref, idx) => (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {knowledgeRefs.map((k) => (
             <KnowledgeChip
-              key={ref.id}
-              title={ref.title}
-              onRemove={() => setKnowledgeRefs((prev) => prev.filter((_, i) => i !== idx))}
+              key={k.id}
+              title={k.title}
+              onRemove={() => toggleKnowledge(k.id, k.title)}
             />
           ))}
         </div>
       )}
 
-      {files.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {files.map((file, idx) => (
+      {/* 文件附件 */}
+      {(files.length > 0 || images.length > 0) && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {[...files, ...images].map((f, i) => (
             <FileAttachment
-              key={idx}
-              name={file.name}
-              size={file.size}
-              type={file.type}
-              onRemove={() => removeFile(idx)}
+              key={`${f.name}-${i}`}
+              name={f.name}
+              size={f.size}
+              type={f.type}
+              onRemove={() => {
+                if (f.type.startsWith('image/')) {
+                  removeImage(i - files.length);
+                } else {
+                  removeFile(i);
+                }
+              }}
             />
           ))}
         </div>
@@ -168,37 +160,74 @@ export function ChatInput({
 
       <div className="flex items-end gap-2">
         <div className="flex-1 relative">
+          {/* Phase 6 (M8 /btw): @ 文件提及浮层 */}
+          {atQuery.query !== null && (
+            <AtFileMenu
+              query={atQuery.query}
+              onSelect={(path) => {
+                const newValue =
+                  value.slice(0, atQuery.startIdx) + '@' + path + ' ' + value.slice(atQuery.endIdx);
+                setValue(newValue);
+                setCursorPos(atQuery.startIdx + 1 + path.length + 1);
+              }}
+              onClose={() => {
+                const newValue = value.slice(0, atQuery.startIdx) + value.slice(atQuery.endIdx);
+                setValue(newValue);
+                setCursorPos(atQuery.startIdx);
+              }}
+            />
+          )}
           <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
             <textarea
               ref={textareaRef}
               value={value}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
+              onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
+              onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               placeholder={placeholder}
               disabled={disabled}
               rows={1}
-              className="flex-1 resize-none border-none bg-transparent outline-none text-sm text-text disabled:opacity-50 max-h-[200px] placeholder:text-muted"
+              className="flex-1 bg-transparent border-none outline-none resize-none text-text placeholder:text-muted"
+              style={{ maxHeight: '200px' }}
             />
-
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-1">
               <button
+                type="button"
+                onClick={() => document.getElementById('chat-image-input')?.click()}
+                title="图片"
                 className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-                title="插入图片"
-                onClick={() => document.getElementById('chat-input-image')?.click()}
               >
                 <Image className="w-4 h-4" />
               </button>
+              <input
+                id="chat-image-input"
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImageSelect}
+              />
               <button
+                type="button"
+                onClick={() => document.getElementById('chat-file-input')?.click()}
+                title="附件"
                 className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-                title="附加文件"
-                onClick={() => document.getElementById('chat-input-file')?.click()}
               >
                 <Paperclip className="w-4 h-4" />
               </button>
+              <input
+                id="chat-file-input"
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleImageSelect}
+              />
               <button
-                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-                title="引用知识库"
+                type="button"
                 onClick={() => setShowKnowledgeSelector(!showKnowledgeSelector)}
+                title="知识库"
+                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
               >
                 <BookOpen className="w-4 h-4" />
               </button>
@@ -215,93 +244,49 @@ export function ChatInput({
             </div>
           </div>
 
+          {/* 知识库选择器 */}
           {showKnowledgeSelector && (
-            <div className="absolute bottom-full left-0 mb-2 w-72 bg-surface border border-border rounded-radius-md shadow-lg z-20">
-              <div className="p-3">
-                <p className="text-xs font-medium text-text mb-2">引用知识库文档</p>
-                {KNOWLEDGE_DOCS.map((doc) => {
-                  const isSelected = !!knowledgeRefs.find((r) => r.id === doc.id);
-                  return (
-                    <button
-                      key={doc.id}
-                      className={`w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 transition-colors ${
-                        isSelected
-                          ? 'bg-primary/10 text-primary'
-                          : 'hover:bg-bg-hover text-text-secondary'
-                      }`}
-                      onClick={() => toggleKnowledgeRef(doc)}
-                    >
-                      <span
-                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
-                          isSelected ? 'bg-primary border-primary' : 'border-border'
-                        }`}
-                      >
-                        {isSelected && (
-                          <svg
-                            width="8"
-                            height="8"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="white"
-                            strokeWidth="4"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </span>
-                      <div>
-                        <div className="font-medium">{doc.title}</div>
-                        <div className="text-muted">{doc.desc}</div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="absolute bottom-full mb-2 left-0 right-0 max-h-60 overflow-y-auto bg-bg-elevated border border-border rounded-radius-sm shadow-lg p-2 z-10">
+              {KNOWLEDGE_DOCS.map((doc) => {
+                const selected = knowledgeRefs.find((k) => k.id === doc.id);
+                return (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    onClick={() => toggleKnowledge(doc.id, doc.title)}
+                    className={`w-full text-left px-3 py-2 rounded-radius-sm transition-colors ${
+                      selected ? 'bg-primary text-text-inverse' : 'hover:bg-bg-hover text-text'
+                    }`}
+                  >
+                    <div className="font-medium">{doc.title}</div>
+                    <div className="text-xs text-muted">{doc.desc}</div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
-
         {isLoading ? (
           <button
+            type="button"
             onClick={onInterrupt}
             title="停止"
-            className="h-9 px-4 bg-error text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-error/90 transition-colors"
+            className="w-10 h-10 flex items-center justify-center bg-bg-elevated text-text rounded-radius-sm hover:bg-bg-hover transition-colors"
           >
-            <Square className="w-3.5 h-3.5" />
+            <Square className="w-4 h-4" />
           </button>
         ) : (
           <button
+            type="button"
             onClick={handleSend}
-            disabled={(!value.trim() && !hasAttachments) || disabled}
-            className="h-9 px-4 bg-primary text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={!value.trim() || disabled}
+            className="w-10 h-10 flex items-center justify-center bg-primary text-text-inverse rounded-radius-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
             发送
             <Send className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
-
-      <input
-        type="file"
-        id="chat-input-image"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={handleImageSelect}
-      />
-      <input
-        type="file"
-        id="chat-input-file"
-        multiple
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-
-      <p className="text-[11px] text-muted text-center mt-1.5">
-        Sage 会记住你的项目信息，无需重复说明上下文 · 支持 <strong>粗体</strong>、
-        <code className="px-1 py-0.5 bg-bg-subtle rounded text-xs">代码</code>、列表等 Markdown 语法
-        · 点击知识库按钮多选文档作为上下文引用
-      </p>
     </div>
   );
 }

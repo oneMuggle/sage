@@ -1,3 +1,4 @@
+import { BtwOverlay } from '../../features/chat';
 import type { Message as MessageType } from '../../shared/lib/store';
 
 import { Message } from './Message';
@@ -26,16 +27,19 @@ export function MessageList({
   }
 
   return (
-    <div className="p-4 space-y-4">
-      {messages.map((message) => (
-        <Message
-          key={message.id}
-          message={message}
-          knowledgeRefs={knowledgeRefs?.[message.id]}
-          attachments={attachments?.[message.id]}
-          isStreaming={message.id === streamingMessageId}
-        />
-      ))}
-    </div>
+    <>
+      <div className="p-4 space-y-4">
+        {messages.map((message) => (
+          <Message
+            key={message.id}
+            message={message}
+            knowledgeRefs={knowledgeRefs?.[message.id]}
+            attachments={attachments?.[message.id]}
+            isStreaming={message.id === streamingMessageId}
+          />
+        ))}
+      </div>
+      <BtwOverlay />
+    </>
   );
 }
