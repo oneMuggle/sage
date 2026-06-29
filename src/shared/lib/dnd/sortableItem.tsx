@@ -1,7 +1,7 @@
-import { GripVertical } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
+import type { CSSProperties, ReactNode } from 'react';
 
 import { useI18n } from '../i18n';
 
@@ -20,15 +20,12 @@ interface SortableSessionItemProps {
  *
  * 必须在 <DndContext> + <SortableContext> 内使用。
  */
-export function SortableSessionItem({
-  id,
-  label,
-  disabled,
-  children,
-}: SortableSessionItemProps) {
+export function SortableSessionItem({ id, label, disabled, children }: SortableSessionItemProps) {
   const { t } = useI18n();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id, disabled });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled,
+  });
 
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
