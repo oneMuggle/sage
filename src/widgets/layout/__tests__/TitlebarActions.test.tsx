@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { describe, it, expect, vi } from 'vitest';
+
 import { NavHistoryProvider } from '../../../app/providers/NavHistoryProvider';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { TitlebarActions } from '../TitlebarActions';
