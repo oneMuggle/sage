@@ -80,4 +80,13 @@ export const en: Record<TranslationKey, string> = {
   'common.error': 'Error',
   'common.retry': 'Retry',
   'common.delete': 'Delete',
+
+  // ─── Sidebar sections ─────────────
+  'sider.section.conversations': 'Conversations',
+  'sider.section.cron': 'Scheduled Tasks',
+  'sider.section.project': 'Projects',
+  'sider.section.team': 'Team',
+  'sider.drag_handle': 'Drag to reorder',
+  'sider.collapse': 'Collapse',
+  'sider.expand': 'Expand',
 };
