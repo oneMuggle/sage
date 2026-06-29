@@ -23,6 +23,7 @@
 | 24   | [Skills 系统端到端](./24-skills-system.md)           | InprocSkillAdapter + 5 路由 + 4 builtin + SKILL.md v2 (gating/scripts/dispatch/slash command) 端到端可见 |
 | 25   | [LLM Wiki 集成 (PR-8)](./25-llm-wiki-integration.md) | 4 LLM provider 抽象 + prompt 模板 + LanceDB RAG + 知识图谱 8 阶段实施                                 |
 | 26   | [跨平台打包矩阵](./26-packaging-matrix.md)            | Win7/10/11 NSIS + VCRedist bundling 与 Ubuntu deb 覆盖,用户安装指南                                  |
+| 27   | [Sider DnD](./27-sider-dnd.md)                        | 侧边栏拖拽排序 + 4 可折叠分组 + localStorage 持久化 + @dnd-kit 集成 (M5)                              |
 
 ---
 
