@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **feat(M6): Welcome — 首次进入应用引导屏 (byte-for-byte port from main)**
+  - 7 新组件/hook: `WelcomeHero` / `WelcomeInputCard` / `AssistantRecommendations` /
+    `QuickActionBar` / `useTypewriterPlaceholder` / `recommendations` data / `Welcome` page
+  - i18n: 18 新 `welcome.*` keys (hero / input / rec / quick)
+  - 路由: `/welcome` + Chat sessionId gating fallback (无 sessionId → /welcome)
+  - Sidebar `+ 新对话`: M5 临时方案 `createSession()` 还原 main 同款 `navigate('/welcome')`
+  - Chat 接 `location.state.pendingMessage` 自动发送,带 race condition 修复
+    (等 settings + store loading 完成后才发,`pendingSentRef` dedupe,
+    `window.history.replaceState` 清 state 防 refresh 重发)
+  - 测试: 5 新 unit test files + 1 i18n translations test + 激活 2 个 phase 9 skip 测试
+  - win7 适配: `WelcomeInputCard` 行内简单 textarea(避免连带 port main 的 InputCard
+    及其 SlashCommandMenu/slashCommands 依赖); AssistantRecommendations 用
+    `as TranslationKey` 解决模板字面量类型问题
 - **feat(M5): Sider DnD — 侧边栏拖拽排序 + 可折叠分组 (byte-for-byte port from main)**
   - Pure functions: `siderOrder` (reorder/read/write/reconcile/sort/equality, 26 tests)
   - Hooks: `useStoredSiderOrder` (localStorage 持久化,18 tests) + `useSiderSections` (hydrate/toggle/reorder,12 tests)

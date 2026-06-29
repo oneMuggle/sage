@@ -25,8 +25,12 @@ export function Chat() {
     streamingState, // P2: 当前流式状态
   } = useChat();
 
-  const { currentSessionId, setCurrentSessionId, createSession, isLoading: storeLoading } =
-    useStore();
+  const {
+    currentSessionId,
+    setCurrentSessionId,
+    createSession,
+    isLoading: storeLoading,
+  } = useStore();
   const { settings, isLoading: settingsLoading } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
