@@ -13,6 +13,7 @@
 | 05   | [从 builtin 迁移到 SKILL.md](./05-skill-md-migration.md) | 内置技能转 SKILL.md 的路径与限制                                        |
 | 06   | [侧边栏分组与会话排序](./06-sider.md)                  | 4 个可折叠分组 / 会话拖拽重排 / localStorage 持久化 / i18n(M5)       |
 | 07   | [自定义标题栏与前进后退](./07-titlebar.md)           | ↩/→ 浏览器风格导航 + 窗口最小化/最大化/关闭 (M7+M9)                |
+| 08   | [/btw 补充消息 + @文件](./08-btw-at-file.md)       | /btw 浮层补充问题 + @ 工作区文件搜索菜单 (M8)                  |
 
 ---
 
