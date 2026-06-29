@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-06-29
+
 ### Added
 - **feat(M8): /btw 补充消息面板 + @文件提及 (byte-for-byte port from main)**
   - `/btw` 链路: `useBtwCommand` 状态机 hook + `btwState` Zustand store +
@@ -23,7 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     跳过 main 上的 SlashCommandMenu / FeedbackButton(win7 长期不做)
   - 累计: vitest 585 passed / 8 skipped;i18n 112 keys
 
-### Added
 - **feat(M7): Nav-history — 跨路由前进/后退导航栈 (byte-for-byte port from main)**
   - `NavHistoryProvider` + `useNavigationHistory` hook: 维护 pathname 栈 + cursor
     + `MAX_HISTORY=50` 上限 + `skipNextRef` 防止自身 navigate() 触发 effect 重复 push
@@ -88,6 +89,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Electron: 5 个 IPC routes (`scheduled_list/create/update/delete/run`)
   - i18n: 58 键 (zh + en 完全对齐)
   - 测试: backend 1192 tests pass, frontend 399 tests pass
+
+### Fixed
+- **fix(win7): smoke.spec.ts 同步 main 的 waitForLoadState('load') + 30s timeout (#83)**
+  - `tests/electron/smoke.spec.ts` test #1: `waitForLoadState('domcontentloaded')` → `'load'` (等待所有 chunk 加载完毕)
+  - `textContent` timeout 5s → 30s (React 在 300+ vendor chunks 上挂载需时)
+  - 增加注释解释为何需要 full page load + 30s mount window
+  - 消除 win7 CI 潜在脆弱性 — 若 dist/ 体积继续增大或后端启动变慢,5s timeout 会先于 React 挂载触发
+  - CI 验证: Electron smoke (playwright-electron) pass 1m30s,4/4 checks pass
+  - 文件与 origin/main 同文件 `diff` 完全一致 (byte-for-byte 对齐)
+  - vitest 585/8 无回归 (与 M8 收官 baseline 一致)
 
 ## [v0.3.0] - 2026-06-23
 
