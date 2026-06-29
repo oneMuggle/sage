@@ -285,20 +285,9 @@ export type LaneStatus =
 
 export type HeartbeatStatus = 'healthy' | 'stalled' | 'transport_dead';
 
-export type TaskStatus =
-  | 'created'
-  | 'running'
-  | 'blocked'
-  | 'completed'
-  | 'failed'
-  | 'stopped';
+export type TaskStatus = 'created' | 'running' | 'blocked' | 'completed' | 'failed' | 'stopped';
 
-export type TeamStatus =
-  | 'created'
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+export type TeamStatus = 'created' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export type LaneEventType =
   | 'lane.started'
@@ -312,12 +301,7 @@ export type LaneEventType =
   | 'lane.pr.opened'
   | 'lane.merged';
 
-export type EventProvenance =
-  | 'LiveLane'
-  | 'Recovery'
-  | 'Retry'
-  | 'Heartbeat'
-  | 'Manual';
+export type EventProvenance = 'LiveLane' | 'Recovery' | 'Retry' | 'Heartbeat' | 'Manual';
 
 export interface LaneHeartbeat {
   last_ping_at: number;
