@@ -11,7 +11,7 @@ const renderWithI18n = (ui: React.ReactElement) => {
   return render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
 };
 
-describe.skip('WelcomeInputCard', () => {
+describe('WelcomeInputCard', () => {
   it('renders with placeholder', () => {
     renderWithI18n(<WelcomeInputCard placeholder="测试占位符" />);
     expect(screen.getByPlaceholderText('测试占位符')).toBeInTheDocument();
