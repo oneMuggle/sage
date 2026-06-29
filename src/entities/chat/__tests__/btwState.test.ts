@@ -1,5 +1,6 @@
 // src/entities/chat/__tests__/btwState.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { useBtwState } from '../btwState';
 
 describe('useBtwState', () => {
