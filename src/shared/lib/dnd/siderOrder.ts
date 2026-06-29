@@ -50,10 +50,7 @@ export function writeStoredSiderOrder(order: SiderOrder): string {
  *
  * 不修改任何入参,返回新数组。
  */
-export function reconcileStoredSiderOrder(
-  prev: SiderOrder,
-  current: SiderOrder,
-): SiderOrder {
+export function reconcileStoredSiderOrder(prev: SiderOrder, current: SiderOrder): SiderOrder {
   const currentSet = new Set(current);
   const kept: string[] = [];
   for (const id of prev) {
@@ -105,11 +102,7 @@ export function areSiderOrdersEqual(a: SiderOrder, b: SiderOrder): boolean {
  * - from === to 时返回入参的浅拷贝(避免无意义变更)。
  * - 越界索引会抛 Error(由调用方保证)。
  */
-export function reorderSiderIds(
-  order: SiderOrder,
-  from: number,
-  to: number,
-): SiderOrder {
+export function reorderSiderIds(order: SiderOrder, from: number, to: number): SiderOrder {
   if (from < 0 || from >= order.length) {
     throw new Error(`reorderSiderIds: from out of range (${from} / ${order.length})`);
   }
