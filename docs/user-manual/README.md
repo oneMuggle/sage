@@ -11,6 +11,7 @@
 | 03   | [Wiki 知识库](./03-wiki.md)                              | 创建/编辑文档 / 版本管理 / LLM 问答                                      |
 | 04   | [SKILL.md 编写指南](./04-skill-md-authoring.md)          | 自定义技能: frontmatter 字段 / scripts/ 脚本 / gating 条件 / dispatch   |
 | 05   | [从 builtin 迁移到 SKILL.md](./05-skill-md-migration.md) | 内置技能转 SKILL.md 的路径与限制                                        |
+| 06   | [侧边栏分组与会话排序](./06-sider.md)                  | 4 个可折叠分组 / 会话拖拽重排 / localStorage 持久化 / i18n(M5)       |
 
 ---
 
