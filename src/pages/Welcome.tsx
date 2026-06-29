@@ -41,6 +41,7 @@ export function Welcome() {
   const placeholder = typewriterText;
 
   const [prefill, setPrefill] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const handleRecommendationSelect = useCallback((rec: { prompt: string }) => {
     setPrefill(rec.prompt);
@@ -48,17 +49,15 @@ export function Welcome() {
 
   const handleSubmit = useCallback(
     async (value: string) => {
+      setSubmitting(true);
       try {
         const sessionId = await createSession();
         setCurrentSessionId(sessionId);
-        navigate('/chat');
-        // The submitted prompt is the prefill value (already injected via initialValue);
-        // we just need to create a session and route the user to the chat page.
-        // Future enhancement: send the prompt via useChat here.
-        void value;
+        navigate('/chat', { state: { pendingMessage: value } });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         toast.error(`创建会话失败: ${message}`);
+        setSubmitting(false);
       }
     },
     [createSession, setCurrentSessionId, navigate],
@@ -98,12 +97,13 @@ export function Welcome() {
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
       <div className="flex-1 flex flex-col items-center justify-start pt-[10vh] px-4 pb-8 gap-6">
-        <WelcomeHero onBack={() => navigate(-1)} />
+        <WelcomeHero />
 
         <WelcomeInputCard
           initialValue={prefill}
           placeholder={placeholder}
           onSend={handleSubmit}
+          disabled={submitting}
         />
 
         <AssistantRecommendations

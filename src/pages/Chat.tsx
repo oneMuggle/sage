@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
@@ -25,9 +25,12 @@ export function Chat() {
     streamingState, // P2: 当前流式状态
   } = useChat();
 
-  const { currentSessionId, setCurrentSessionId, createSession } = useStore();
-  const { settings } = useSettings();
+  const { currentSessionId, setCurrentSessionId, createSession, isLoading: storeLoading } =
+    useStore();
+  const { settings, isLoading: settingsLoading } = useSettings();
   const navigate = useNavigate();
+  const location = useLocation();
+  const pendingSentRef = useRef(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   // LOW-1: 跟随新消息/流式 token 自动滚到底。
   // 必须用 derivedMessages 而非 messages —— 流式 override 只在 derivedMessages 里,
@@ -58,6 +61,23 @@ export function Chat() {
       loadMessages(currentSessionId);
     }
   }, [currentSessionId, loadMessages]);
+
+  // Auto-send pending message passed from Welcome page via router state
+  const pendingMessage = (location.state as { pendingMessage?: string } | null)?.pendingMessage;
+  useEffect(() => {
+    if (
+      pendingMessage &&
+      currentSessionId &&
+      !pendingSentRef.current &&
+      !settingsLoading &&
+      !storeLoading
+    ) {
+      pendingSentRef.current = true;
+      sendMessage(pendingMessage, currentSessionId);
+      // Clear location state so refresh doesn't re-send
+      window.history.replaceState({}, '');
+    }
+  }, [pendingMessage, currentSessionId, sendMessage, settingsLoading, storeLoading]);
 
   const handleNewSession = async () => {
     const sessionId = await createSession();
