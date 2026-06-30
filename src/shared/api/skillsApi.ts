@@ -40,4 +40,21 @@ export const skillsApi = {
       }
     });
   },
+
+  /**
+   * Path B: fetch user-invocable SKILL.md skill names for the ChatInput slash menu.
+   * Backend returns {commands: ["/name1", "/name2", ...]} where each value is the
+   * skill name with a leading "/". We extract just the array so callers can
+   * render or filter the names directly.
+   */
+  async listSlashCommands(): Promise<string[]> {
+    return withRetry(async () => {
+      try {
+        const result = await invoke<{ commands: string[] }>('list_slash_commands');
+        return result.commands;
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
 };
