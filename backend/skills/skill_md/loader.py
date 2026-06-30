@@ -107,19 +107,25 @@ class SkillMdHotLoader:
     def scan_and_load(self) -> tuple[int, int]:
         """扫描所有 dirs, 加载新 SKILL.md。返回 ``(loaded_count, skipped_count)``。
 
+        支持两种文件形态 (agentskills.io spec):
+          - 形态 A: 子目录形态 <dir>/<name>/SKILL.md (v1 已有)
+          - 形态 B: 单文件形态 <dir>/SKILL.md (Task 5 新增)
+
         skipped_count 包括:
           - builtin 同名冲突
           - parse 失败
           - 验证失败 (缺 name/description, name 不是 slug)
           - 实例化失败 (极少见, 但防御性兜底)
+
+        优先级: builtin 名称 > 子目录形态 > 单文件形态(同 name 时后者 skip)。
         """
         loaded = 0
         skipped = 0
         for d in self._dirs:
             if not d.is_dir():
                 continue
+            # 形态 A: 子目录形态 <dir>/<name>/SKILL.md
             for entry in sorted(d.iterdir()):
-                # 只看子目录(每个 skill 一个目录), 跳过文件/隐藏目录
                 if not entry.is_dir():
                     continue
                 if entry.name.startswith("."):
@@ -136,6 +142,21 @@ class SkillMdHotLoader:
                     logger.warning(
                         "SKILL.md load failed for %s: %s",
                         skill_md,
+                        sanitize_for_logging(str(exc), max_len=200),
+                    )
+                    skipped += 1
+            # 形态 B: 单文件形态 <dir>/SKILL.md (Task 5)
+            root_skill_md = d / "SKILL.md"
+            if root_skill_md.is_file():
+                try:
+                    if self._load_from_path(root_skill_md):
+                        loaded += 1
+                    else:
+                        skipped += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "SKILL.md single-file load failed for %s: %s",
+                        root_skill_md,
                         sanitize_for_logging(str(exc), max_len=200),
                     )
                     skipped += 1
