@@ -6,7 +6,12 @@ import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { InputCard, type KnowledgeDocType } from './InputCard';
-import { commandToPrompt, mergeSlashCommands, type SlashCommand } from './slashCommands';
+import {
+  commandToPrompt,
+  mergeSlashCommands,
+  type DynamicSlashSkill,
+  type SlashCommand,
+} from './slashCommands';
 
 interface ChatInputProps {
   onSend: (
@@ -51,19 +56,28 @@ export function ChatInput({
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   // Path B: dynamic SKILL.md slash command names fetched from the backend.
   // On fetch failure we silently fall back to an empty list (no slash skills).
-  const [dynamicSlashCommands, setDynamicSlashCommands] = useState<string[]>([]);
+  const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
 
   // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
   const atQuery = useAtFileQuery(value, cursorPos);
 
-  // Fetch user-invocable SKILL.md skill names on mount. The list is loaded once;
-  // ChatInput can be re-mounted or the user can click a "refresh" affordance later
-  // if needed (out of scope for Path B).
+  // Fetch SKILL.md skills on mount. Filter to user-invocable ones for slash menu.
+  // The full `description` from the SKILL.md frontmatter is passed through so the
+  // menu can display meaningful descriptions (not just "Skill: <name>").
+  // List is loaded once; re-mount or restart app to pick up new SKILL.md.
   useEffect(() => {
     skillsApi
-      .listSlashCommands()
-      .then(setDynamicSlashCommands)
+      .list()
+      .then((skills) => {
+        const dynamic = skills
+          .filter((s) => s.dispatch?.user_invocable === true)
+          .map((s) => ({
+            commandName: s.dispatch?.user_invocable_name ?? `/${s.name}`,
+            description: s.description,
+          }));
+        setDynamicSlashCommands(dynamic);
+      })
       .catch(() => setDynamicSlashCommands([]));
   }, []);
 

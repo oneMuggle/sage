@@ -87,31 +87,43 @@ export function filterCommands(query: string): SlashCommand[] {
 
 /**
  * Merge static slash commands with dynamically-loaded SKILL.md slash commands.
- *
+/** A SKILL.md-derived slash command with its real description. */
+export interface DynamicSlashSkill {
+  /** Command name as returned by backend (e.g. "/aihot" or "aihot"). */
+  commandName: string;
+  /** Real description from SKILL.md frontmatter (passed through to menu). */
+  description: string;
+}
+
+/**
+ * Merge static slash commands with dynamically-loaded SKILL.md slash commands.
  * SKILL.md commands take priority on name collision (dynamic wins because the
- * user has explicitly loaded that skill from disk). The `dynamic` array entries
- * come from `GET /api/v1/skills/commands` and include a leading "/" (e.g. "/review")
- * which we strip before using as the command name.
+ * user has explicitly loaded that skill from disk). The `dynamic` entries come
+ * from `GET /api/v1/skills` filtered by `dispatch.user_invocable === true` and
+ * may include a leading "/" (e.g. "/aihot") which we strip before using.
  *
- * @param dynamic - Skill names as returned by the backend, e.g. ["/aihot", "/commit"].
+ * @param dynamic - Skill metadata from `skillsApi.list()`, with real description.
  *                  May be empty. Leading slashes are tolerated.
  * @returns Combined list with SKILL.md commands first, followed by static
  *          commands that did not collide.
  */
-export function mergeSlashCommands(dynamic: string[]): SlashCommand[] {
+export function mergeSlashCommands(dynamic: DynamicSlashSkill[]): SlashCommand[] {
   const seen = new Set<string>();
   const result: SlashCommand[] = [];
 
   // Dynamic SKILL.md commands first (higher priority on name collision)
-  for (const cmd of dynamic) {
-    const name = cmd.replace(/^\/+/, ''); // strip all leading / (handles //foo)
+  for (const entry of dynamic) {
+    const name = entry.commandName.replace(/^\/+/, ''); // strip all leading /
     if (!name) continue;
     if (seen.has(name)) continue;
     seen.add(name);
+    // Truncate description to keep the menu compact (~80 chars)
+    const shortDesc =
+      entry.description.length > 80 ? `${entry.description.slice(0, 77)}…` : entry.description;
     result.push({
       name,
-      label: cmd.startsWith('/') ? cmd : `/${name}`,
-      description: `Skill: ${name}`,
+      label: entry.commandName.startsWith('/') ? entry.commandName : `/${name}`,
+      description: shortDesc,
       icon: BookOpen,
       mode: 'skill',
       skillName: name,
