@@ -1,12 +1,30 @@
 import { test, expect } from '@playwright/test';
 
+/**
+ * Mocked window surface injected via addInitScript. The real electronAPI
+ * type lives in src/preload.ts and is too heavy to import here; the E2E
+ * test only needs to read/write a handful of mock fields, so we declare
+ * the minimal shape we actually touch.
+ */
+interface WikiMockWindow {
+  electronAPI?: {
+    selectDirectory: (opts: { defaultPath?: string }) => Promise<string | null>;
+    invoke: () => Promise<null>;
+    listen: () => Promise<() => void>;
+    windowControls: Record<string, unknown>;
+  };
+  __mockPicked?: string | null;
+  __lastSelectOpts?: { defaultPath?: string; [key: string]: unknown };
+}
+
 test.describe('LLM Wiki folder picker', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
-      (window as any).electronAPI = {
-        selectDirectory: async (opts: any) => {
-          (window as any).__lastSelectOpts = opts;
-          return (window as any).__mockPicked ?? null;
+      const w = window as unknown as WikiMockWindow;
+      w.electronAPI = {
+        selectDirectory: async (opts) => {
+          w.__lastSelectOpts = opts;
+          return w.__mockPicked ?? null;
         },
         invoke: async () => null,
         listen: async () => () => {},
@@ -19,7 +37,7 @@ test.describe('LLM Wiki folder picker', () => {
     await page.goto('/wiki');
     await page.getByRole('button', { name: /创建新项目/ }).click();
     await page.evaluate(() => {
-      (window as any).__mockPicked = '/tmp/playwright-wiki';
+      (window as unknown as WikiMockWindow).__mockPicked = '/tmp/playwright-wiki';
     });
     await page.getByTestId('browse-btn').click();
 
@@ -69,7 +87,7 @@ test.describe('LLM Wiki folder picker', () => {
     await page.goto('/wiki');
     await page.getByRole('button', { name: /打开现有项目/ }).click();
     await page.evaluate(() => {
-      (window as any).__mockPicked = null;
+      (window as unknown as WikiMockWindow).__mockPicked = null;
     });
     const input = page.getByTestId('path-input');
     await expect(input).toHaveValue('');
@@ -94,10 +112,10 @@ test.describe('LLM Wiki folder picker', () => {
     await page.goto('/wiki');
     await page.getByRole('button', { name: /打开现有项目/ }).click();
     await page.evaluate(() => {
-      (window as any).__mockPicked = '/data/projects/team-handbook';
+      (window as unknown as WikiMockWindow).__mockPicked = '/data/projects/team-handbook';
     });
     await page.getByTestId('browse-btn').click();
-    const opts = await page.evaluate(() => (window as any).__lastSelectOpts);
-    expect(opts.defaultPath).toBe('/data/projects');
+    const opts = await page.evaluate(() => (window as unknown as WikiMockWindow).__lastSelectOpts);
+    expect(opts!.defaultPath).toBe('/data/projects');
   });
 });
