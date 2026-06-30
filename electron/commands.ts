@@ -142,14 +142,14 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
 
   // custom CSS theme storage (themeCssClient)
-  // Backend theme_router is mounted at /api/theme (not /api/v1)
-  theme_list: { method: 'GET', path: () => '/api/theme/list' },
-  theme_save: { method: 'POST', path: () => '/api/theme/save' },
+  // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)
+  theme_list: { method: 'GET', path: () => '/api/v1/theme/list' },
+  theme_save: { method: 'POST', path: () => '/api/v1/theme/save' },
   theme_get: {
     method: 'GET',
-    path: (a) => `/api/theme/get/${encodeURIComponent(String(a.id))}`,
+    path: (a) => `/api/v1/theme/get/${encodeURIComponent(String(a.id))}`,
   },
-  theme_delete: { method: 'POST', path: () => '/api/theme/delete' },
+  theme_delete: { method: 'POST', path: () => '/api/v1/theme/delete' },
 };
 
 export class UnknownIpcCommandError extends Error {
