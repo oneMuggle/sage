@@ -11,10 +11,18 @@ Routes tasks to appropriate agents based on:
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from backend.orchestration.models import Agent, Lane, LaneStatus, Task
 from backend.orchestration.permission import PermissionPreset
+
+if TYPE_CHECKING:
+    from backend.orchestration.approval_tokens import ApprovalTokenStore
+    from backend.orchestration.policy_engine import (
+        PolicyContext,
+        PolicyDecisionEvent,
+        PolicyEngine,
+    )
 
 
 class DispatchStrategy(str, Enum):
@@ -43,6 +51,8 @@ class Router:
         lane_registry,
         agent_registry,
         strategy: DispatchStrategy = DispatchStrategy.CAPABILITY_BASED,
+        policy_engine: "PolicyEngine | None" = None,
+        token_store: "ApprovalTokenStore | None" = None,
     ):
         """
         Initialize router.
@@ -51,10 +61,18 @@ class Router:
             lane_registry: LaneRegistry for creating/managing lanes
             agent_registry: AgentRegistry for querying available agents
             strategy: Dispatch strategy to use
+            policy_engine: Optional PolicyEngine for typed decision events
+                (M2). When None, `dispatch_with_policy` falls back to plain
+                `route_task` semantics.
+            token_store: Optional ApprovalTokenStore for privileged dispatch
+                (M2). When None, `try_dispatch_privileged` denies any
+                approval-required action with reason "token_store_unavailable".
         """
         self.lane_registry = lane_registry
         self.agent_registry = agent_registry
         self.strategy = strategy
+        self.policy_engine = policy_engine
+        self.token_store = token_store
         self._round_robin_index = 0
 
     async def route_task(self, task: Task) -> RoutingDecision:
@@ -236,3 +254,72 @@ class Router:
             stats["by_status"][status] = stats["by_status"].get(status, 0) + 1
 
         return stats
+
+    # ------------------------------------------------------------------
+    # M2 — policy + approval integration
+    # ------------------------------------------------------------------
+
+    async def dispatch_with_policy(
+        self,
+        task: Task,
+        context: "PolicyContext",
+    ) -> tuple[RoutingDecision, list["PolicyDecisionEvent"]]:
+        """Evaluate the policy context and then dispatch the task.
+
+        When `policy_engine` is None, this is a thin wrapper over `route_task`
+        (returns empty events). When policy_engine is present, decision events
+        are emitted for each matching rule (audit trail); dispatch always
+        proceeds — privileged actions must use `try_dispatch_privileged`.
+        """
+        events: list[PolicyDecisionEvent] = []
+        if self.policy_engine is not None:
+            _, events = self.policy_engine.evaluate_with_events(context)
+        decision = await self.route_task(task)
+        return decision, events
+
+    async def try_dispatch_privileged(
+        self,
+        task: Task,
+        token_id: str | None,
+        actor: str,
+        context: "PolicyContext",
+    ) -> tuple[RoutingDecision | None, list["PolicyDecisionEvent"], str | None]:
+        """Dispatch a task that may require an approval token.
+
+        Algorithm:
+        1. Evaluate policy against the context.
+        2. If any decision has kind=APPROVAL:
+           - `token_store` must be configured, else deny with reason
+             "token_store_unavailable".
+           - `token_id` must be provided, else deny with "token_required".
+           - The token must be consumable for (actor, action, repo, branch),
+             else deny with the token store's `DenyReason`.
+           - On successful consume, dispatch proceeds.
+        3. Otherwise dispatch normally.
+        """
+        events: list[PolicyDecisionEvent] = []
+        if self.policy_engine is not None:
+            decisions, events = self.policy_engine.evaluate_with_events(context)
+        else:
+            decisions = []
+
+        approval_decisions = [d for d in decisions if d.kind.value == "approval"]
+        if approval_decisions:
+            if self.token_store is None:
+                return None, events, "token_store_unavailable"
+            if token_id is None:
+                return None, events, "token_required"
+            result = self.token_store.consume(
+                token_id=token_id,
+                actor=actor,
+                action=context.action or "",
+                repo=context.repo,
+                branch=context.branch,
+                commit=context.commit or None,
+            )
+            if not result.granted:
+                reason = result.reason.value if result.reason else "denied"
+                return None, events, f"token_consume_failed:{reason}"
+
+        decision = await self.route_task(task)
+        return decision, events, None

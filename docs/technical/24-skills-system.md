@@ -397,3 +397,14 @@ curl -X POST http://127.0.0.1:8765/api/v1/skills/command \
 - **路径遍历**: `{baseDir}` 占位符可能被恶意替换到允许根之外。`validate_base_dir` 强制 base_dir 必须在允许根内。
 - **LLM 行为差异**: 同一 SKILL.md 在不同 LLM 下表现可能差异大。建议作者跨模型测试。
 - **Slash command 索引陈旧**: `SlashCommandRegistry` 是不可变快照,registry reload 后需重建 — `InprocSkillAdapter.hot_reload()` 路径会同步重建(M11+ 跟进)。
+
+## 10. SKILL.md Spec Conformance (agentskills.io)
+
+The SKILL.md adapter layer (`backend/skills/skill_md/`) conforms to the [agentskills.io open specification](https://agentskills.io/specification) since 2026-06-29. See `docs/technical/28-skill-md-spec-conformance.md` for full details, including:
+
+- 3 new spec-optional fields (`license`, `compatibility`, `allowed-tools`)
+- Strengthened `name` (≤64 chars) and `description` (≤1024 chars) validation
+- Single-file `<dir>/SKILL.md` form support
+- `name`-vs-parent-dir warning (soft constraint, not blocking)
+
+All changes are forward-compatible: existing SKILL.md files continue to load without modification.

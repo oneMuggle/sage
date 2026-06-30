@@ -66,6 +66,11 @@ class SkillMdDocument:
     dispatch: DispatchMode = field(default_factory=DispatchMode)
     resources: Any | None = None  # ResourceIndex，由 loader 构建
 
+    # agentskills.io spec optional fields (Task 3)
+    license: str | None = None
+    compatibility: str | None = None
+    allowed_tools: tuple[str, ...] = field(default_factory=tuple)
+
 
 class SkillMdSkill(BaseSkill):
     """包装 ``SkillMdDocument`` 为 ``BaseSkill`` 实例。

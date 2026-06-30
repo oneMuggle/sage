@@ -37,6 +37,12 @@ export interface ModelSelections {
   embeddingModel: ModelSelection;
 }
 
+/** Wiki feature flags */
+export interface WikiSettings {
+  /** When true, project create/open shows a native folder picker "Browse" button. Set false to fall back to plain text input. */
+  useFolderPicker: boolean;
+}
+
 /** All application settings */
 export interface AppSettings {
   // General
@@ -55,6 +61,9 @@ export interface AppSettings {
   proxyMode: 'system' | 'custom' | 'direct';
   proxyUrl: string;
   tlsVersion: '1.2' | '1.3';
+
+  // Wiki
+  wiki: WikiSettings;
 
   // Internal
   version: string;
@@ -98,6 +107,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   proxyMode: 'system',
   proxyUrl: 'http://proxy.internal:3128',
   tlsVersion: '1.2',
+
+  // Wiki
+  wiki: {
+    useFolderPicker: true,
+  },
 
   // Internal
   version: SETTINGS_VERSION,

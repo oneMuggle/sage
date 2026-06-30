@@ -41,6 +41,43 @@ class LaneEvent(str, Enum):
     PR_OPENED = "lane.pr.opened"
     MERGED = "lane.merged"
 
+    # Reconciliation events (added in M2)
+    RECONCILED = "lane.reconciled"  # Cross-lane resource conflict resolved
+    SUPERSEDED = "lane.superseded"  # New lane replaced this one (same scope)
+
+    # Branch health (M2 — dual-branch coordination)
+    BRANCH_STALE_AGAINST_MAIN = "branch.stale_against_main"
+    BRANCH_WORKSPACE_MISMATCH = "branch.workspace_mismatch"
+
+    # Ship / provenance (M2 — Director ship gate)
+    SHIP_PREPARED = "ship.prepared"
+    SHIP_COMMITS_SELECTED = "ship.commits_selected"
+    SHIP_MERGED = "ship.merged"
+    SHIP_PUSHED_MAIN = "ship.pushed_main"
+
+    # Review (M2 — executor emits ReviewReport)
+    REVIEW_SUBMITTED = "lane.review.submitted"
+
+
+# Grouping constants — convenience sets for consumers that want to filter
+# by event category without enumerating each member.
+
+BRANCH_EVENTS: frozenset[LaneEvent] = frozenset(
+    {
+        LaneEvent.BRANCH_STALE_AGAINST_MAIN,
+        LaneEvent.BRANCH_WORKSPACE_MISMATCH,
+    }
+)
+
+SHIP_EVENTS: frozenset[LaneEvent] = frozenset(
+    {
+        LaneEvent.SHIP_PREPARED,
+        LaneEvent.SHIP_COMMITS_SELECTED,
+        LaneEvent.SHIP_MERGED,
+        LaneEvent.SHIP_PUSHED_MAIN,
+    }
+)
+
 
 class EventProvenance(str, Enum):
     """Event source classification."""

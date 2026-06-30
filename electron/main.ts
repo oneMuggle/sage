@@ -25,7 +25,7 @@
  *   - --no-sandbox (Win7 SUID-less chrome-sandbox)
  *   - --disable-gpu (compositor fallback)
  */
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -362,6 +362,24 @@ function registerIpcHandlers(): void {
     // Return base64 PNG (no data URI prefix)
     return image.toPNG().toString('base64');
   });
+
+  // Folder picker for LLM Wiki project create/open (added 2026-06-27)
+  ipcMain.handle(
+    'sage:dialog:select-directory',
+    async (evt, opts: { intent: 'create' | 'open'; defaultPath?: string }) => {
+      const win = BrowserWindow.fromWebContents(evt.sender);
+      const properties: ('openDirectory' | 'createDirectory')[] = ['openDirectory'];
+      if (opts?.intent === 'create') properties.push('createDirectory');
+      const result = await dialog.showOpenDialog(win ?? undefined!, {
+        properties,
+        defaultPath: opts?.defaultPath,
+        title: opts?.intent === 'create' ? '选择要创建的项目目录' : '选择要打开的项目目录',
+        buttonLabel: opts?.intent === 'create' ? '在此创建' : '打开',
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0];
+    },
+  );
 }
 
 function shutdownBackend(): void {

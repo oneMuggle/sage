@@ -21,11 +21,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 _FENCE = "---"
 _NAME_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -83,9 +86,13 @@ def _split_frontmatter(text: str) -> tuple[str, str]:
 
 
 def _validate_name(name: Any) -> str:
-    """校验 name 是合法 slug(小写字母/数字/连字符)。"""
+    """校验 name 是合法 slug(小写字母/数字/连字符),长度 1-64 (agentskills.io spec)。"""
     if not isinstance(name, str) or not name:
         raise SkillMdParseError("frontmatter 'name' must be a non-empty string")
+    if not (1 <= len(name) <= 64):
+        raise SkillMdParseError(
+            f"frontmatter 'name' must be 1-64 chars, got {len(name)} chars: {name!r}"
+        )
     if not _NAME_SLUG_RE.match(name):
         raise SkillMdParseError(
             f"frontmatter 'name' must be a slug (lowercase letters/digits/hyphens), got: {name!r}"
@@ -93,9 +100,24 @@ def _validate_name(name: Any) -> str:
     return name
 
 
+# Description 触发关键词 (agentskills.io spec 建议,大小写不敏感)
+_TRIGGER_HINTS = ("use this", "when ", "use ", "用", "何时", "用来")
+
+
 def _validate_description(description: Any) -> str:
+    """校验 description 非空且长度 1-1024 (agentskills.io spec),含触发关键词时静默,否则 warning。"""
     if not isinstance(description, str) or not description:
         raise SkillMdParseError("frontmatter 'description' must be a non-empty string")
+    if not (1 <= len(description) <= 1024):
+        raise SkillMdParseError(
+            f"frontmatter 'description' must be 1-1024 chars, got {len(description)} chars"
+        )
+    if not any(h in description.lower() for h in _TRIGGER_HINTS):
+        logger.warning(
+            "frontmatter 'description' for skill lacks trigger keywords; "
+            "agents may not recognize when to invoke this skill (description=%r)",
+            description[:60],
+        )
     return description
 
 
@@ -162,6 +184,75 @@ def _validate_command_dispatch(command_dispatch: Any) -> str:
     return command_dispatch
 
 
+def _validate_license(license_field: Any) -> str | None:
+    """校验 license 字段（agentskills.io spec, optional）。
+
+    Args:
+        license_field: 来自 YAML 的值（可能为 None）。
+
+    Returns:
+        非空字符串，或 None（字段未提供时）。
+
+    Raises:
+        SkillMdParseError: 提供了 license 但不是非空字符串。
+    """
+    if license_field is None:
+        return None
+    if not isinstance(license_field, str) or not license_field:
+        raise SkillMdParseError(
+            f"frontmatter 'license' must be a non-empty string, got {license_field!r}"
+        )
+    return license_field
+
+
+def _validate_compatibility(compat: Any) -> str | None:
+    """校验 compatibility 字段（agentskills.io spec, optional, ≤500 字符）。
+
+    Args:
+        compat: 来自 YAML 的值（可能为 None）。
+
+    Returns:
+        字符串，或 None（字段未提供时）。
+
+    Raises:
+        SkillMdParseError: 提供了但不是字符串，或长度超过 500 字符。
+    """
+    if compat is None:
+        return None
+    if not isinstance(compat, str):
+        raise SkillMdParseError(
+            f"frontmatter 'compatibility' must be a string, got {type(compat).__name__}"
+        )
+    if len(compat) > 500:
+        raise SkillMdParseError(
+            f"frontmatter 'compatibility' must be <= 500 chars (spec), got {len(compat)} chars"
+        )
+    return compat
+
+
+def _validate_allowed_tools(tools: Any) -> str | None:
+    """校验 allowed-tools 字段（agentskills.io spec, optional, 空格分隔字符串）。
+
+    注：解析为 tuple 由 loader.py Task 4 完成；此处只校验原始字符串类型。
+
+    Args:
+        tools: 来自 YAML 的值（可能为 None）。
+
+    Returns:
+        字符串，或 None（字段未提供时）。
+
+    Raises:
+        SkillMdParseError: 提供了但不是字符串。
+    """
+    if tools is None:
+        return None
+    if not isinstance(tools, str):
+        raise SkillMdParseError(
+            f"frontmatter 'allowed-tools' must be a string, got {type(tools).__name__}"
+        )
+    return tools
+
+
 def parse(text: str) -> tuple[dict[str, Any], str]:
     """解析 SKILL.md 文本, 返回 (frontmatter_dict, body)。
 
@@ -202,6 +293,11 @@ def parse(text: str) -> tuple[dict[str, Any], str]:
     _validate_os(meta.get("os"))
     _validate_always(meta.get("always"))
     _validate_command_dispatch(meta.get("command-dispatch"))
+
+    # agentskills.io spec 可选字段 (Task 2)
+    _validate_license(meta.get("license"))
+    _validate_compatibility(meta.get("compatibility"))
+    _validate_allowed_tools(meta.get("allowed-tools"))
 
     return meta, body
 
