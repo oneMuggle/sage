@@ -1,3 +1,4 @@
+import { Trash2 } from 'lucide-react';
 import React from 'react';
 
 import type { SkillDispatch } from '../../shared/api';
@@ -16,6 +17,8 @@ interface SkillCardProps {
   base_dir?: string;
   // SKILL.md v2 DispatchMode (M9) — builtin 时不传
   dispatch?: SkillDispatch;
+  // PR-A Task 5: 删除回调 — builtin 不传 (由父组件 Skills.tsx 控制)
+  onDelete?: (name: string) => void;
 }
 
 const SkillCard: React.FC<SkillCardProps> = ({
@@ -30,6 +33,7 @@ const SkillCard: React.FC<SkillCardProps> = ({
   version,
   base_dir,
   dispatch,
+  onDelete,
 }) => {
   // M9: 用户可调用的 slash command — 仅在显式声明 user_invocable_name 时渲染,
   // name 回退策略在 chat 层处理 (避免前端做映射)
@@ -117,24 +121,37 @@ const SkillCard: React.FC<SkillCardProps> = ({
           )}
         </div>
 
-        {/* 开关 */}
-        <label className="relative inline-flex items-center cursor-pointer ml-4">
-          <input
-            type="checkbox"
-            className="sr-only peer"
-            checked={enabled}
-            onChange={(e) => onToggle(name, e.target.checked)}
-          />
-          <div
-            className="w-11 h-6 bg-bg-subtle peer-focus:outline-none peer-focus:ring-4
+        {/* 开关 + 删除按钮 (builtin 不显示) */}
+        <div className="flex items-center gap-2 ml-4">
+          {onDelete && source !== 'builtin' && (
+            <button
+              type="button"
+              aria-label={`删除技能 ${name}`}
+              onClick={() => onDelete(name)}
+              className="p-1.5 rounded text-muted hover:text-error hover:bg-error/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={enabled}
+              onChange={(e) => onToggle(name, e.target.checked)}
+            />
+            <div
+              className="w-11 h-6 bg-bg-subtle peer-focus:outline-none peer-focus:ring-4
                        peer-focus:ring-primary/30 rounded-full peer
                        peer-checked:after:translate-x-full peer-checked:after:border-text-inverse
                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
                        after:bg-text-inverse after:border-border after:border after:rounded-full
                        after:h-5 after:w-5 after:transition-all
                        peer-checked:bg-primary"
-          ></div>
-        </label>
+            ></div>
+          </label>
+        </div>
       </div>
     </div>
   );

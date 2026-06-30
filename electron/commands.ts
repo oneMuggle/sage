@@ -164,6 +164,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/execute`,
   },
+  delete_skill: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/delete`,
+  },
 };
 
 export class UnknownIpcCommandError extends Error {
