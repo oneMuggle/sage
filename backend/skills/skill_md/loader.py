@@ -36,6 +36,21 @@ from .validation import sanitize_for_logging
 logger = logging.getLogger(__name__)
 
 
+def _parse_allowed_tools(tools_str: Any) -> tuple[str, ...]:
+    """解析 allowed-tools 字段: 空格分隔字符串 → tuple (去空, 保序)。
+
+    Args:
+        tools_str: 来自 frontmatter 的 raw 值(可能为 None / str / 其他)。
+
+    Returns:
+        元组,如 ``("Bash", "Read", "Write")``。
+        非字符串输入返回空元组(防御性 fallback)。
+    """
+    if not isinstance(tools_str, str):
+        return ()
+    return tuple(part for part in tools_str.split() if part)
+
+
 def discover_skill_md_dirs() -> list[Path]:
     """按优先级返回 SKILL.md 搜索根列表。
 
@@ -166,6 +181,11 @@ class SkillMdHotLoader:
             else [],
         )
 
+        # agentskills.io spec optional fields (Task 4)
+        license_val = meta.get("license")
+        compatibility_val = meta.get("compatibility")
+        allowed_tools_tuple = _parse_allowed_tools(meta.get("allowed-tools"))
+
         doc = SkillMdDocument(
             name=name,
             description=meta.get("description", ""),
@@ -192,7 +212,23 @@ class SkillMdHotLoader:
                 command_dispatch=str(meta.get("command-dispatch", "auto")),
             ),
             resources=None,  # ResourceIndex 后续构建
+            # agentskills.io spec optional fields (Task 4)
+            license=license_val if isinstance(license_val, str) else None,
+            compatibility=compatibility_val if isinstance(compatibility_val, str) else None,
+            allowed_tools=allowed_tools_tuple,
         )
+
+        # agentskills.io spec: name 应匹配父目录名 (Task 4)
+        # 仅 warning,不阻断加载(避免破坏历史 SKILL.md 的命名习惯)
+        parent_name = path.parent.name
+        if name != parent_name:
+            logger.warning(
+                "SKILL.md at %s declares name='%s' but parent dir is '%s'; "
+                "agentskills.io spec recommends name matches parent dir",
+                path,
+                name,
+                parent_name,
+            )
 
         # 评估门控条件 (v2 特性)
         if self._gating_ctx is not None:
