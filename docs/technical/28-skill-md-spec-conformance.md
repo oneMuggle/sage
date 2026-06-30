@@ -1,0 +1,69 @@
+# 28. SKILL.md Spec Conformance (agentskills.io)
+
+> **Status**: Implemented (2026-06-29)
+> **Spec reference**: <https://agentskills.io/specification>
+
+## Overview
+
+`backend/skills/skill_md/` now fully conforms to the agentskills.io open specification, while preserving all 8 sage business extensions. This document describes the alignment, new fields, and migration notes.
+
+## What Changed
+
+### New spec-optional fields
+
+| Field | Type | Constraint | Default |
+|---|---|---|---|
+| `license` | `str` | non-empty (when present) | `None` |
+| `compatibility` | `str` | ≤500 chars | `None` |
+| `allowed-tools` | `str` (space-separated; parsed to tuple by loader) | non-string raises | `()` |
+
+### Strengthened validation
+
+- `name`: 1-64 chars (spec: Max 64 characters) — was 1+ chars (no upper bound)
+- `description`: 1-1024 chars (spec: Max 1024 characters) — was 1+ chars (no upper bound)
+- `description`: warning emitted if no trigger keyword detected (`use this`, `when `, `use `, `用`, `何时`, `用来`)
+
+### New file form
+
+- Single-file form `<dir>/SKILL.md` now supported (was: only `<dir>/<name>/SKILL.md`)
+- Priority: builtin > subdirectory form > single-file form
+
+### Soft constraint (warning, not error)
+
+- `name` should match parent directory name (spec: "Must match the parent directory name"). sage warns but does not block, to preserve historical SKILL.md naming.
+
+## Example: spec-compliant SKILL.md
+
+```yaml
+---
+name: pdf-reader
+description: Use this when the user asks to read or extract text from PDF files
+license: Apache-2.0
+compatibility: Requires Python 3.10+
+metadata:
+  author: sage-team
+  version: 1.0.0
+allowed-tools: Bash Read
+---
+# PDF Reader
+
+This skill reads PDF files using pypdf.
+```
+
+## Migration Notes
+
+- **No migration required** for existing SKILL.md files: all new fields are optional and have backward-compatible defaults.
+- **Strongly recommended**: add `license` and `compatibility` to your SKILL.md for ecosystem interop.
+- **Optional**: rename parent directories to match frontmatter `name` to silence the name-vs-parent warning.
+
+## Future Work (Not in This Spec)
+
+- Wire `allowed-tools` into a tool gateway layer for permission pre-flight checks
+- Add `sage skills lint` CLI to validate SKILL.md against the spec
+- Author tutorial in `docs/user-manual/` for "Writing Your First SKILL.md"
+
+## Related Documents
+
+- `docs/technical/24-skills-system.md` — original skills architecture (now appends "Spec Conformance" subsection)
+- `docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md` — design spec
+- `docs/superpowers/plans/2026-06-29-agentskills-io-spec-conformance.md` — implementation plan

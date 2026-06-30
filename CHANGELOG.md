@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)
 - feat(wiki): gate folder picker Browse button behind `appSettings.wiki.useFolderPicker` (default true; set false to fall back to plain text input — see §8 rollback in plan)
+- feat(skills): conform `backend/skills/skill_md/` to agentskills.io spec
+  - Add optional fields: `license`, `compatibility` (≤500 chars), `allowed-tools`
+  - Strengthen `name` (≤64 chars) and `description` (≤1024 chars) validation
+  - Support single-file `<dir>/SKILL.md` form in loader
+  - Warn (not block) when frontmatter `name` != parent directory name
+  - Emit warning when description lacks trigger keywords
+  - All changes forward-compatible; existing SKILL.md files unaffected
+  - Refs: docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md
 
 ## [v0.3.0] - 2026-06-23
 

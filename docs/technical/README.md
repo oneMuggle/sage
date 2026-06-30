@@ -24,6 +24,7 @@
 | 25   | [LLM Wiki 集成 (PR-8)](./25-llm-wiki-integration.md) | 4 LLM provider 抽象 + prompt 模板 + LanceDB RAG + 知识图谱 8 阶段实施                                 |
 | 26   | [跨平台打包矩阵](./26-packaging-matrix.md)            | Win7/10/11 NSIS + VCRedist bundling 与 Ubuntu deb 覆盖,用户安装指南                                  |
 | 27   | [多 Agent 编排层 (M1 typed 化)](./27-multi-agent-orchestration.md) | 12 条 PolicyEngine 规则 + Report schema v1 + Approval token 8 项校验门（参考 claw-code）               |
+| 28   | [SKILL.md Spec Conformance (agentskills.io)](./28-skill-md-spec-conformance.md) | backend/skills/skill_md/ 全规范对齐:license/compatibility/allowed-tools + 长度校验 + 单文件形态             |
 
 ---
 
