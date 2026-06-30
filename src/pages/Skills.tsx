@@ -1,3 +1,4 @@
+import { RefreshCw } from 'lucide-react';
 import React, { useCallback, useState, useEffect } from 'react';
 
 import { skillsApi, type Skill } from '../shared/api';
@@ -70,7 +71,7 @@ const Skills: React.FC = () => {
     );
   }
 
-  if (loading) {
+  if (loading && skills.length === 0) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
@@ -88,6 +89,16 @@ const Skills: React.FC = () => {
       {/* 页面头部 */}
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
         <h2 className="text-[18px] font-semibold text-text">技能</h2>
+        <button
+          type="button"
+          onClick={loadSkills}
+          disabled={loading}
+          aria-label="刷新技能列表"
+          title="刷新技能列表"
+          className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5">
