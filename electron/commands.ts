@@ -138,6 +138,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/execute`,
   },
 
+  // Path B: list user-invocable SKILL.md slash command names.
+  // Returns {commands: ["/name1", "/name2", ...]} for skills with
+  // user_invocable: true. Used by ChatInput to merge into the slash menu.
+  list_slash_commands: { method: 'GET', path: () => '/api/v1/skills/commands' },
+
   // orchestration (Phase 4: multi-agent coordination)
   orchestration_list_lanes: {
     method: 'GET',

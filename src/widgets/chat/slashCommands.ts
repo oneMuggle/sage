@@ -5,6 +5,7 @@ import {
   FileText,
   Languages,
   Minimize2,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -23,8 +24,11 @@ export interface SlashCommand {
    * - 'prompt': 将命令转为提示词发送给 LLM
    * - 'clear': 清空当前对话
    * - 'help': 显示帮助信息
+   * - 'skill': 作为 SKILL.md skill 执行,返回内容作为用户消息发送
    */
-  mode: 'prompt' | 'clear' | 'help';
+  mode: 'prompt' | 'clear' | 'help' | 'skill';
+  /** 'skill' 模式下需要执行的 SKILL.md 名称（不含 /）。 */
+  skillName?: string;
 }
 
 /** 所有可用的 slash 命令 */
@@ -79,6 +83,49 @@ export function filterCommands(query: string): SlashCommand[] {
   return slashCommands.filter(
     (cmd) => cmd.name.toLowerCase().includes(lower) || cmd.label.toLowerCase().includes(lower),
   );
+}
+
+/**
+ * Merge static slash commands with dynamically-loaded SKILL.md slash commands.
+ *
+ * SKILL.md commands take priority on name collision (dynamic wins because the
+ * user has explicitly loaded that skill from disk). The `dynamic` array entries
+ * come from `GET /api/v1/skills/commands` and include a leading "/" (e.g. "/review")
+ * which we strip before using as the command name.
+ *
+ * @param dynamic - Skill names as returned by the backend, e.g. ["/aihot", "/commit"].
+ *                  May be empty. Leading slashes are tolerated.
+ * @returns Combined list with SKILL.md commands first, followed by static
+ *          commands that did not collide.
+ */
+export function mergeSlashCommands(dynamic: string[]): SlashCommand[] {
+  const seen = new Set<string>();
+  const result: SlashCommand[] = [];
+
+  // Dynamic SKILL.md commands first (higher priority on name collision)
+  for (const cmd of dynamic) {
+    const name = cmd.replace(/^\/+/, ''); // strip all leading / (handles //foo)
+    if (!name) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    result.push({
+      name,
+      label: cmd.startsWith('/') ? cmd : `/${name}`,
+      description: `Skill: ${name}`,
+      icon: BookOpen,
+      mode: 'skill',
+      skillName: name,
+    });
+  }
+
+  // Static commands (skip those already taken by a dynamic command)
+  for (const cmd of slashCommands) {
+    if (seen.has(cmd.name)) continue;
+    seen.add(cmd.name);
+    result.push(cmd);
+  }
+
+  return result;
 }
 
 /** 根据命令名获取命令 */

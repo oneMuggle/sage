@@ -1,11 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
+import { skillsApi } from '../../shared/api';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { InputCard, type KnowledgeDocType } from './InputCard';
-import { commandToPrompt, filterCommands, type SlashCommand } from './slashCommands';
+import { commandToPrompt, mergeSlashCommands, type SlashCommand } from './slashCommands';
 
 interface ChatInputProps {
   onSend: (
@@ -48,10 +49,23 @@ export function ChatInput({
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  // Path B: dynamic SKILL.md slash command names fetched from the backend.
+  // On fetch failure we silently fall back to an empty list (no slash skills).
+  const [dynamicSlashCommands, setDynamicSlashCommands] = useState<string[]>([]);
 
   // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
   const atQuery = useAtFileQuery(value, cursorPos);
+
+  // Fetch user-invocable SKILL.md skill names on mount. The list is loaded once;
+  // ChatInput can be re-mounted or the user can click a "refresh" affordance later
+  // if needed (out of scope for Path B).
+  useEffect(() => {
+    skillsApi
+      .listSlashCommands()
+      .then(setDynamicSlashCommands)
+      .catch(() => setDynamicSlashCommands([]));
+  }, []);
 
   const {
     files,
@@ -92,6 +106,35 @@ export function ChatInput({
         const helpText = slashCommands.map((c) => `/${c.name} — ${c.description}`).join('\n');
         setValue('');
         onSend(`可用命令列表：\n${helpText}`);
+        return;
+      }
+
+      // Path B: SKILL.md skill — invoke via execute API and send returned content.
+      // On failure, fall back to prompt-style execution so the user can still
+      // talk about the skill even if the executor is unavailable.
+      if (cmd.mode === 'skill' && cmd.skillName) {
+        const parts = value.split(/\s+/);
+        const args = parts.slice(1).join(' ');
+        const skillName = cmd.skillName;
+        skillsApi
+          .execute(skillName, { args: { query: args } })
+          .then((result) => {
+            const body =
+              typeof result.content === 'string'
+                ? result.content
+                : `/${skillName} ${args}`.trim();
+            onSend(body);
+            setValue('');
+          })
+          .catch(() => {
+            // Fall back to prompt-style: send the raw "/skill args" as instruction
+            const prompt = commandToPrompt(
+              { ...cmd, mode: 'prompt', name: skillName },
+              args,
+            );
+            onSend(prompt);
+            setValue('');
+          });
         return;
       }
 
@@ -142,7 +185,12 @@ export function ChatInput({
     // 检测 slash 命令
     if (newValue.startsWith('/')) {
       const query = newValue.slice(1).split(/\s/)[0] ?? '';
-      const filtered = filterCommands(query);
+      // Path B: merge static commands with dynamically loaded SKILL.md slash commands.
+      const merged = mergeSlashCommands(dynamicSlashCommands);
+      const lower = query.toLowerCase();
+      const filtered = merged.filter(
+        (cmd) => cmd.name.toLowerCase().includes(lower) || cmd.label.toLowerCase().includes(lower),
+      );
       if (filtered.length > 0) {
         setSlashCommands(filtered);
         setSlashSelectedIndex(0);
