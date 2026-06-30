@@ -325,7 +325,7 @@ async def add_request_id_header(request: Request, call_next):
 # 后续 PR 真正装配 SessionService 后，会把默认值改回 "hex"。
 # 跟踪 issue/PR 见 docs/plans/2026-06-13_full-quality-optimization-v2.md。
 app.include_router(llm_proxy_router, prefix="/api/v1")
-app.include_router(theme_router, prefix="/api/theme")
+app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
