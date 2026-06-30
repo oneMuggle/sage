@@ -137,6 +137,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/execute`,
   },
+  delete_skill: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/delete`,
+  },
 
   // Path B: list user-invocable SKILL.md slash command names.
   // Returns {commands: ["/name1", "/name2", ...]} for skills with
