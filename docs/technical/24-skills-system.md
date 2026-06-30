@@ -440,6 +440,30 @@ PR-A 起,用户可以在 Skills 页面删除一个 SKILL.md 技能。
 
 参见 [design spec §"流 1"](../specs/2026-06-30-skills-management-delete-hotreload-design.md#流-1用户删除-skillmd-技能)。
 
-## 后续(PR-B)
+## 管理:自动刷新(PR-B)
 
-参见 [docs/superpowers/plans/2026-06-30-skills-auto-refresh-pr-b.md](2026-06-30-skills-auto-refresh-pr-b.md) — Skills 页面加 "自动刷新 (10s)" toggle。
+用户可在 Skills 页面启用 "自动刷新 (10s)" 开关，让 UI 反映 SAGE_SKILLS_DIR 下的 SKILL.md 改动。
+
+### 行为
+
+- 默认 OFF
+- 启用后:每 10 秒调 `skillsApi.list()`,结果 diff 并更新页面
+- 失败:toast 提示,**不**关闭 toggle（下一轮再试）
+- 配合 Refresh 按钮和 delete 按钮使用
+
+### 实现位置
+
+- `src/pages/Skills.tsx`:useState `autoRefresh` + useEffect `setInterval`
+- toggle UI 在头部 Refresh 按钮左边
+- 复用 PR #90 `loadSkills()` 路径
+
+### 关闭 toggle 的清理
+
+useEffect cleanup:`window.clearInterval(id)`,避免组件卸载后内存泄漏。
+
+### 不在 PR-B 范围
+
+- ❌ 实时秒级推送(需 WebSocket,不在 spec)
+- ❌ 文件 watcher 后端实现(spec 明确划掉)
+
+参见 [design spec §"流 2"](../specs/2026-06-30-skills-management-delete-hotreload-design.md#流-2用户切换-自动刷新-启用)。
