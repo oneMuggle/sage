@@ -206,6 +206,35 @@ class InprocSkillAdapter:
         """
         return self._slash_registry.list_commands()
 
+    # ========== Skills management: SKILL.md 删除 (PR-A) ==========
+
+    def delete_skill_md(self, name: str) -> dict[str, Any]:
+        """Public API: 物理删除一个 SKILL.md 技能 (委托给 SkillMdDeleter)。
+
+        仅可删 SKILL.md 技能 (source='skillmd')。builtin 拒绝 — 由
+        ``SkillMdDeleter`` 抛 ``BuiltinSkillError``。
+
+        Args:
+            name: 技能名 (匹配 ``^[a-z0-9-]{1,64}$``)。
+
+        Returns:
+            dict: ``{"deleted": True, "name": str, "base_dir": str}``
+
+        Raises:
+            BuiltinSkillError: name 是 builtin (路由层 → 400)
+            SkillMdNotFoundError: name 在 registry 不存在或 base_dir 无目录
+                (路由层 → 404)
+            ValueError: name 非法 或 base_dir 跑出 SAGE_SKILLS_DIR (路由层 → 400)
+            FileNotFoundError: SAGE_SKILLS_DIR 未配置 (路由层 → 500)
+        """
+        # 延迟导入避免循环 (delete.py 依赖 SkillRegistry, 已 import; 这里
+        # 引入 SkillMdDeleter 仅供管理 API 使用,不影响路由热路径)
+        from backend.skills.skill_md.delete import SkillMdDeleter
+
+        deleter = SkillMdDeleter(self._registry)
+        result = deleter.delete(name)
+        return dict(result)
+
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
 
     def list_skills_extended(self) -> list[dict[str, Any]]:
