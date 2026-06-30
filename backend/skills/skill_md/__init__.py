@@ -6,6 +6,12 @@
 """
 
 from .confirm import ConfirmationPort
+from .delete import (
+    BuiltinSkillError,
+    DeleteSkillResult,
+    SkillMdDeleter,
+    SkillMdNotFoundError,
+)
 from .frontmatter import SkillMdParseError, dump, parse, parse_file
 from .gating import GatingContext, GatingResult, build_gating_context, evaluate_gating
 from .loader import (
@@ -35,9 +41,13 @@ from .validation import (
 
 __all__ = [
     "ALLOWED_RESOURCE_DIRS",
+    "BuiltinSkillError",
     "ConfirmationPort",
     "DEFAULT_ENV_DENYLIST",
+    "DeleteSkillResult",
     "SkillMdParseError",
+    "SkillMdDeleter",
+    "SkillMdNotFoundError",
     "dump",
     "parse",
     "parse_file",
