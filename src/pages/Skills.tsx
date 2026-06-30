@@ -13,6 +13,7 @@ const Skills: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
   const loadSkills = useCallback(async () => {
     setLoading(true);
@@ -31,6 +32,17 @@ const Skills: React.FC = () => {
   useEffect(() => {
     loadSkills();
   }, [loadSkills]);
+
+  // PR-B: 自动刷新 toggle — 默认关闭,用户主动启用
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = window.setInterval(() => {
+      loadSkills();
+    }, 10000);
+    return () => window.clearInterval(id);
+    // loadSkills 是 useCallback 包装的, deps 应包含它
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh]);
 
   const handleToggle = async (name: string, enabled: boolean) => {
     setSkills((prev) => prev.map((skill) => (skill.name === name ? { ...skill, enabled } : skill)));
@@ -106,16 +118,30 @@ const Skills: React.FC = () => {
       {/* 页面头部 */}
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
         <h2 className="text-[18px] font-semibold text-text">技能</h2>
-        <button
-          type="button"
-          onClick={loadSkills}
-          disabled={loading}
-          aria-label="刷新技能列表"
-          title="刷新技能列表"
-          className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-checked={autoRefresh}
+              aria-label="自动刷新"
+              checked={autoRefresh}
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+              className="w-4 h-4 accent-primary"
+            />
+            自动刷新 (10s)
+          </label>
+          <button
+            type="button"
+            onClick={loadSkills}
+            disabled={loading}
+            aria-label="刷新技能列表"
+            title="刷新技能列表"
+            className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5">
