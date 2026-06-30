@@ -21,11 +21,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 _FENCE = "---"
 _NAME_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -83,9 +86,13 @@ def _split_frontmatter(text: str) -> tuple[str, str]:
 
 
 def _validate_name(name: Any) -> str:
-    """校验 name 是合法 slug(小写字母/数字/连字符)。"""
+    """校验 name 是合法 slug(小写字母/数字/连字符),长度 1-64 (agentskills.io spec)。"""
     if not isinstance(name, str) or not name:
         raise SkillMdParseError("frontmatter 'name' must be a non-empty string")
+    if not (1 <= len(name) <= 64):
+        raise SkillMdParseError(
+            f"frontmatter 'name' must be 1-64 chars, got {len(name)} chars: {name!r}"
+        )
     if not _NAME_SLUG_RE.match(name):
         raise SkillMdParseError(
             f"frontmatter 'name' must be a slug (lowercase letters/digits/hyphens), got: {name!r}"
@@ -93,9 +100,24 @@ def _validate_name(name: Any) -> str:
     return name
 
 
+# Description 触发关键词 (agentskills.io spec 建议,大小写不敏感)
+_TRIGGER_HINTS = ("use this", "when ", "use ", "用", "何时", "用来")
+
+
 def _validate_description(description: Any) -> str:
+    """校验 description 非空且长度 1-1024 (agentskills.io spec),含触发关键词时静默,否则 warning。"""
     if not isinstance(description, str) or not description:
         raise SkillMdParseError("frontmatter 'description' must be a non-empty string")
+    if not (1 <= len(description) <= 1024):
+        raise SkillMdParseError(
+            f"frontmatter 'description' must be 1-1024 chars, got {len(description)} chars"
+        )
+    if not any(h in description.lower() for h in _TRIGGER_HINTS):
+        logger.warning(
+            "frontmatter 'description' for skill lacks trigger keywords; "
+            "agents may not recognize when to invoke this skill (description=%r)",
+            description[:60],
+        )
     return description
 
 
