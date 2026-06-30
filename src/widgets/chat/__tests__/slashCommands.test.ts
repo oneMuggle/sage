@@ -19,9 +19,7 @@ describe('mergeSlashCommands', () => {
   });
 
   it('prepends a SKILL.md-style command and preserves static commands', () => {
-    const result = mergeSlashCommands([
-      { commandName: '/aihot', description: 'AI HOT 资讯查询' },
-    ]);
+    const result = mergeSlashCommands([{ commandName: '/aihot', description: 'AI HOT 资讯查询' }]);
     const names = result.map((c) => c.name);
     // Dynamic SKILL.md entry comes first; static /search through /compact still present.
     expect(names[0]).toBe('aihot');
@@ -39,9 +37,7 @@ describe('mergeSlashCommands', () => {
     // Backend returns "/search" (a SKILL.md skill with the same name as the
     // static command). Per design, the dynamic SKILL.md command wins because
     // the user explicitly loaded that skill from disk.
-    const result = mergeSlashCommands([
-      { commandName: '/search', description: 'Custom search' },
-    ]);
+    const result = mergeSlashCommands([{ commandName: '/search', description: 'Custom search' }]);
     const searchEntries = result.filter((c) => c.name === 'search');
     expect(searchEntries).toHaveLength(1);
     expect(searchEntries[0].mode).toBe('skill');
@@ -76,9 +72,7 @@ describe('mergeSlashCommands', () => {
   });
 
   it('keeps short description as-is', () => {
-    const result = mergeSlashCommands([
-      { commandName: '/short', description: 'Brief' },
-    ]);
+    const result = mergeSlashCommands([{ commandName: '/short', description: 'Brief' }]);
     expect(result[0].description).toBe('Brief');
   });
 });

@@ -119,9 +119,7 @@ export function mergeSlashCommands(dynamic: DynamicSlashSkill[]): SlashCommand[]
     seen.add(name);
     // Truncate description to keep the menu compact (~80 chars)
     const shortDesc =
-      entry.description.length > 80
-        ? `${entry.description.slice(0, 77)}…`
-        : entry.description;
+      entry.description.length > 80 ? `${entry.description.slice(0, 77)}…` : entry.description;
     result.push({
       name,
       label: entry.commandName.startsWith('/') ? entry.commandName : `/${name}`,

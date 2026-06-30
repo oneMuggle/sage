@@ -6,7 +6,12 @@ import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { InputCard, type KnowledgeDocType } from './InputCard';
-import { commandToPrompt, mergeSlashCommands, type DynamicSlashSkill, type SlashCommand } from './slashCommands';
+import {
+  commandToPrompt,
+  mergeSlashCommands,
+  type DynamicSlashSkill,
+  type SlashCommand,
+} from './slashCommands';
 
 interface ChatInputProps {
   onSend: (
