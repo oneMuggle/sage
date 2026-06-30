@@ -1,5 +1,6 @@
 import { RefreshCw } from 'lucide-react';
 import React, { useCallback, useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 import { skillsApi, type Skill } from '../shared/api';
 import { ErrorState } from '../shared/ui/ErrorState';
@@ -40,6 +41,22 @@ const Skills: React.FC = () => {
         prev.map((skill) => (skill.name === name ? { ...skill, enabled: !enabled } : skill)),
       );
       setError('切换失败');
+    }
+  };
+
+  // PR-A Task 5: 删除技能 (optimistic + rollback + toast)
+  const handleDelete = async (name: string) => {
+    if (!window.confirm(`确定删除 '${name}'?此操作不可撤销。`)) return;
+    // optimistic: 先从 list 里过滤掉
+    const prev = skills;
+    setSkills(skills.filter((s) => s.name !== name));
+    try {
+      await skillsApi.delete(name);
+      toast.success(`已删除 ${name}`);
+    } catch (error) {
+      // 失败: 回滚 + 提示
+      setSkills(prev);
+      toast.error(`删除失败: ${(error as Error).message}`);
     }
   };
 
@@ -140,7 +157,7 @@ const Skills: React.FC = () => {
         </div>
 
         {/* 技能列表 */}
-        <SkillList skills={filteredSkills} onToggle={handleToggle} />
+        <SkillList skills={filteredSkills} onToggle={handleToggle} onDelete={handleDelete} />
       </div>
     </div>
   );
