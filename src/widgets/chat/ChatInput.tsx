@@ -120,18 +120,13 @@ export function ChatInput({
           .execute(skillName, { args: { query: args } })
           .then((result) => {
             const body =
-              typeof result.content === 'string'
-                ? result.content
-                : `/${skillName} ${args}`.trim();
+              typeof result.content === 'string' ? result.content : `/${skillName} ${args}`.trim();
             onSend(body);
             setValue('');
           })
           .catch(() => {
             // Fall back to prompt-style: send the raw "/skill args" as instruction
-            const prompt = commandToPrompt(
-              { ...cmd, mode: 'prompt', name: skillName },
-              args,
-            );
+            const prompt = commandToPrompt({ ...cmd, mode: 'prompt', name: skillName }, args);
             onSend(prompt);
             setValue('');
           });
