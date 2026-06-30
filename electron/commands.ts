@@ -123,6 +123,21 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
   theme_delete: { method: 'POST', path: () => '/api/v1/theme/delete' },
 
+  // skills (PR-7)
+  // src/pages/Skills.tsx calls skillsApi.list() / .toggle() / .execute()
+  // which route through these IPC names. Backend exposes matching endpoints
+  // at backend/api/legacy_routes.py:487-559. Without these entries the
+  // /skills page throws UnknownIpcCommandError.
+  list_skills: { method: 'GET', path: () => '/api/v1/skills' },
+  toggle_skill: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/toggle`,
+  },
+  execute_skill: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/execute`,
+  },
+
   // orchestration (Phase 4: multi-agent coordination)
   orchestration_list_lanes: {
     method: 'GET',
