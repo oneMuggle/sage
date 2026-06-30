@@ -71,6 +71,24 @@ This skill is used for E2E testing of agentskills.io spec conformance.
     });
     page = await app.firstWindow();
     await page.waitForLoadState('load', { timeout: 30000 });
+
+    // Wait for backend to be ready before any test hits /api/v1/skills.
+    // Backend is spawned by the Electron main process on port 8765; the
+    // window may appear before the backend has finished booting, which
+    // previously caused `fetch` to fail with ECONNREFUSED in CI.
+    await expect
+      .poll(
+        async () => {
+          try {
+            const res = await page.request.get(`${BACKEND_URL}/health`);
+            return res.status();
+          } catch {
+            return 0;
+          }
+        },
+        { timeout: 20000, intervals: [500, 1000, 2000] },
+      )
+      .toBe(200);
   });
 
   test.afterAll(async () => {
