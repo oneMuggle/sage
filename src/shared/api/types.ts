@@ -199,6 +199,19 @@ export interface SkillExecuteResult {
   error?: string;
 }
 
+/**
+ * Skill delete result. Returned by `skillsApi.delete(name)`.
+ *
+ * - `deleted`: 永远是 `true`（失败路径通过 throw error 表达）
+ * - `name`: 已删除的 skill 名字
+ * - `base_dir`: 已删除的磁盘路径 (调试/审计用)
+ */
+export interface DeleteSkillResult {
+  deleted: boolean;
+  name: string;
+  base_dir?: string;
+}
+
 // ==================== Agents 类型定义 ====================
 
 export interface AgentProfile {

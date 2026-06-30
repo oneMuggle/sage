@@ -614,6 +614,41 @@ async def list_slash_commands():
     return {"commands": adapter.list_slash_commands()}
 
 
+# ========== PR-A: Skills management - 物理删除 SKILL.md ==========
+
+
+@router.post("/skills/{name}/delete")
+async def delete_skill(name: str):
+    """物理删除一个 SKILL.md 技能 (用户主动管理, PR-A Task 3)。
+
+    - 200 + ``{"deleted": true, "name": ..., "base_dir": ...}``
+    - 400 + detail=str(exc): builtin 不可删 / name 非法 / base_dir 跑出
+      SAGE_SKILLS_DIR
+    - 404 + detail=str(exc): skill 不存在 (registry 或磁盘)
+    - 500 + detail=str(exc): SAGE_SKILLS_DIR 未配置 / 其他文件系统错误
+    """
+    # 延迟导入避免循环 (legacy_routes → inproc → delete → registry → builtin)
+    from backend.skills.skill_md.delete import (
+        BuiltinSkillError,
+        SkillMdNotFoundError,
+    )
+
+    adapter = _get_skill_adapter()
+    try:
+        result = adapter.delete_skill_md(name)
+    except BuiltinSkillError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except SkillMdNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        # name 非法 / base_dir 跑出 SAGE_SKILLS_DIR
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        # SAGE_SKILLS_DIR 未配置 / 其他 fs 错误 — 路由层转 500
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return result
+
+
 # ==================== Settings & Preferences API ====================
 #
 # 这些端点在 hex_routes 中也有定义。legacy 模式下 hex_routes 不注册，

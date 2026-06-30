@@ -7,9 +7,11 @@ import SkillCard from './SkillCard';
 interface SkillListProps {
   skills: Skill[];
   onToggle: (name: string, enabled: boolean) => void;
+  // PR-A Task 5: 删除回调 — 透传给 SkillCard (builtin 内部不显示)
+  onDelete?: (name: string) => void;
 }
 
-const SkillList: React.FC<SkillListProps> = ({ skills, onToggle }) => {
+const SkillList: React.FC<SkillListProps> = ({ skills, onToggle, onDelete }) => {
   if (skills.length === 0) {
     return (
       <div className="text-center py-8">
@@ -33,6 +35,7 @@ const SkillList: React.FC<SkillListProps> = ({ skills, onToggle }) => {
           body={skill.body}
           version={skill.version}
           base_dir={skill.base_dir}
+          onDelete={onDelete}
         />
       ))}
     </div>
