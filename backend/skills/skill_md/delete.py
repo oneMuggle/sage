@@ -54,32 +54,43 @@ class SkillMdDeleter:
         self._registry = registry
         # skills_dir 解析延迟到 delete() 时 (避免 builtin-blocked 路径上
         # 解析失败; 也让 __init__ 在缺 SAGE_SKILLS_DIR 时不抛异常)。
+        # 首次解析后缓存到 self._skills_dir 供路径校验复用。
         self._explicit_skills_dir = skills_dir
+        self._skills_dir: Path | None = None
 
     def _resolve_skills_dir(self) -> Path:
-        """解析 skills_dir: 显式参数 > SAGE_SKILLS_DIR > ./skills > ~/.sage/skills。"""
+        """解析 skills_dir: 显式参数 > SAGE_SKILLS_DIR > ./skills > ~/.sage/skills。
+
+        解析成功后写入 ``self._skills_dir`` 缓存, 供 ``_validate_path_under_skills_dir``
+        复用, 避免每次调用都做 env/expanduser/is_dir 检查。
+        """
         if self._explicit_skills_dir is not None:
-            return self._explicit_skills_dir
+            resolved = self._explicit_skills_dir
+            self._skills_dir = resolved
+            return resolved
         env = os.environ.get("SAGE_SKILLS_DIR", "").strip()
         if env:
             p = Path(env).expanduser().resolve()
             if p.is_dir():
+                self._skills_dir = p
                 return p
         cwd_skills = Path.cwd() / "skills"
         if cwd_skills.is_dir():
-            return cwd_skills.resolve()
+            resolved = cwd_skills.resolve()
+            self._skills_dir = resolved
+            return resolved
         home_skills = Path.home() / ".sage" / "skills"
         if home_skills.is_dir():
-            return home_skills.resolve()
+            resolved = home_skills.resolve()
+            self._skills_dir = resolved
+            return resolved
         raise FileNotFoundError(
             "No SAGE_SKILLS_DIR / ./skills / ~/.sage/skills found; cannot resolve delete target"
         )
 
     def delete(self, name: str) -> DeleteSkillResult:
         if not _SKILL_NAME_RE.match(name):
-            raise ValueError(
-                f"Invalid skill name {name!r}: must match ^[a-z0-9-]{{1,64}}$"
-            )
+            raise ValueError(f"Invalid skill name {name!r}: must match ^[a-z0-9-]{{1,64}}$")
 
         # builtin 检测：registry 里有同名 schema 且不是 SkillMdSkill 实例
         # 此 check 在文件系统解析前 → builtin-blocked 测试不需要 skills_dir。
@@ -90,21 +101,20 @@ class SkillMdDeleter:
 
         skills_dir = self._resolve_skills_dir()
         target = (skills_dir / name).resolve()
-        self._validate_path_under_skills_dir(target, skills_dir)
+        self._validate_path_under_skills_dir(target)
 
         if not target.exists():
-            raise SkillMdNotFoundError(
-                f"SKILL.md skill {name!r} not found at {target}"
-            )
+            raise SkillMdNotFoundError(f"SKILL.md skill {name!r} not found at {target}")
 
-        # Step: 物理删除 + registry 注销。rmtree 失败时不改 registry。
-        shutil.rmtree(target)
+        # Fail-closed order: 先 unregister 再 rmtree。
+        # 若 rmtree 抛 OSError,skill 已不可路由 (no in-process dispatch),
+        # 但仍可能在 disk 上残留 — 下次 hot-reload scan 自动 re-register,
+        # 比 "registry 还在但 disk 已空" 更易检测和恢复。
         if self._registry.exists(name):
             self._registry.unregister(name)
+        shutil.rmtree(target)
 
-        logger.warning(
-            "Deleted SKILL.md skill: name=%s base_dir=%s", name, target
-        )
+        logger.warning("Deleted SKILL.md skill: name=%s base_dir=%s", name, target)
 
         return DeleteSkillResult(
             deleted=True,
@@ -112,13 +122,19 @@ class SkillMdDeleter:
             base_dir=str(target),
         )
 
-    def _validate_path_under_skills_dir(self, target: Path, skills_dir: Path) -> None:
-        """防御性: target 必须在 skills_dir 之下 (或等于)。"""
+    def _validate_path_under_skills_dir(self, target: Path) -> None:
+        """防御性: target 必须在 self._skills_dir 之下 (或等于)。
+
+        依赖 ``_resolve_skills_dir`` 先写入 ``self._skills_dir`` 缓存。
+        """
+        if self._skills_dir is None:
+            # caller 没有走 _resolve_skills_dir — 拒绝删除防 path traversal
+            raise ValueError(f"Refusing to delete {target}: skills_dir not resolved")
         try:
-            target.relative_to(skills_dir.resolve())
+            target.relative_to(self._skills_dir.resolve())
         except ValueError as e:
             raise ValueError(
-                f"Refusing to delete {target}: outside skills_dir {skills_dir}"
+                f"Refusing to delete {target}: outside skills_dir {self._skills_dir}"
             ) from e
 
     def _is_builtin(self, name: str) -> bool:
@@ -136,6 +152,7 @@ class SkillMdDeleter:
             from .skill import SkillMdSkill  # noqa: PLC0415
 
             return not isinstance(instance, SkillMdSkill)
-        except Exception:  # noqa: BLE001
-            # 最保守的兜底: 假设 builtin 在 registry 且没被 register_skill_md 改写
+        except ImportError:
+            # ``from .skill import SkillMdSkill`` 失败时 (循环导入 / refactor
+            # 漏掉 symbol): 仍按 deny-by-default 假设 builtin, 保护用户数据。
             return True

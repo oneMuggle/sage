@@ -7,17 +7,15 @@ name (5) outside skills_dir (6) registry unregister + Task 3 endpoint
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 import pytest
 
-from backend.skills import register_all_skills, SkillRegistry
+from backend.skills import SkillRegistry, register_all_skills
 from backend.skills.skill_md.delete import (
     BuiltinSkillError,
     SkillMdDeleter,
 )
-
 
 SAMPLE_SKILL_MD = """---
 name: web-search
@@ -31,7 +29,7 @@ triggers:
 """
 
 
-@pytest.fixture
+@pytest.fixture()
 def tmp_skills_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create SAGE_SKILLS_DIR with one SKILL.md skill."""
     skill_dir = tmp_path / "web-search"
@@ -41,7 +39,7 @@ def tmp_skills_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-@pytest.fixture
+@pytest.fixture()
 def registry() -> SkillRegistry:
     """Fresh registry with builtin skills loaded."""
     reg = SkillRegistry()
@@ -49,9 +47,7 @@ def registry() -> SkillRegistry:
     return reg
 
 
-def test_delete_skill_md_succeeds(
-    tmp_skills_dir: Path, registry: SkillRegistry
-) -> None:
+def test_delete_skill_md_succeeds(tmp_skills_dir: Path, registry: SkillRegistry) -> None:
     deleter = SkillMdDeleter(registry, skills_dir=tmp_skills_dir)
     # 用 SkillMdDeleter 的简易 API: 直接尝试删
     # 但 SkillMdDeleter 不在 registry 注册 — 注册 step 在 Task 2 才做。
