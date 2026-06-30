@@ -216,6 +216,9 @@ class InprocSkillAdapter:
           - ``body`` (str | None): 仅 SKILL.md 有值, 是 markdown body
           - ``base_dir`` (str | None): 仅 SKILL.md 有值, 是 SKILL.md 所在目录绝对路径
           - ``version`` (str | None): 仅 SKILL.md 有值, 是 frontmatter ``version`` 字段
+          - ``license`` (str | None): agentskills.io spec 字段 (PR-84 后)
+          - ``compatibility`` (str | None): agentskills.io spec 字段 (PR-84 后)
+          - ``allowed_tools`` (list[str]): agentskills.io spec 字段 (PR-84 后)
 
         builtin 技能只输出 SkillSpec 字段, **不** 输出扩展字段 (空 key 省略,
         避免 TS strict optional 报警)。
@@ -242,6 +245,12 @@ class InprocSkillAdapter:
                 item["body"] = doc.body
                 item["base_dir"] = str(doc.base_dir) if doc.base_dir is not None else None
                 item["version"] = doc.version
+                # agentskills.io spec optional fields (PR-84): 让 API consumer
+                # 能看到 SKILL.md frontmatter 的 license / compatibility /
+                # allowed_tools 字段。allowed_tools 是 tuple, 序列化为 list。
+                item["license"] = doc.license
+                item["compatibility"] = doc.compatibility
+                item["allowed_tools"] = list(doc.allowed_tools)
                 # v2 DispatchMode 元数据 (M9): 前端根据 user_invocable / command_dispatch
                 # 决定如何暴露 (slash command / tool mode),disable_model_invocation
                 # 由 chat 层消费 (阻止自动触发),嵌套 dict 形式便于前端 TS 类型推导。

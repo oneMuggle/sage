@@ -178,6 +178,11 @@ export interface Skill {
   scripts?: string[];
   base_dir?: string;
   version?: string;
+  // agentskills.io spec optional fields (PR-84): builtin 永远 None,SKILL.md 才填充。
+  // 后端 list_skills_extended 序列化,tuple → list(JSON-friendly)。
+  license?: string | null;
+  compatibility?: string | null;
+  allowed_tools?: string[];
   // SKILL.md v2 DispatchMode (M9) — builtin 时不存在
   dispatch?: SkillDispatch;
 }
