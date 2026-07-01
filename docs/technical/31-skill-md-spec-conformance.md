@@ -1,4 +1,4 @@
-# 28. SKILL.md Spec Conformance (agentskills.io)
+# 31. SKILL.md Spec Conformance (agentskills.io)
 
 > **Status**: Implemented (2026-06-29)
 > **Spec reference**: <https://agentskills.io/specification>
