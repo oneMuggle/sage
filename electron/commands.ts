@@ -142,14 +142,32 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
 
   // custom CSS theme storage (themeCssClient)
-  // Backend theme_router is mounted at /api/theme (not /api/v1)
-  theme_list: { method: 'GET', path: () => '/api/theme/list' },
-  theme_save: { method: 'POST', path: () => '/api/theme/save' },
+  // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)
+  theme_list: { method: 'GET', path: () => '/api/v1/theme/list' },
+  theme_save: { method: 'POST', path: () => '/api/v1/theme/save' },
   theme_get: {
     method: 'GET',
-    path: (a) => `/api/theme/get/${encodeURIComponent(String(a.id))}`,
+    path: (a) => `/api/v1/theme/get/${encodeURIComponent(String(a.id))}`,
   },
-  theme_delete: { method: 'POST', path: () => '/api/theme/delete' },
+  theme_delete: { method: 'POST', path: () => '/api/v1/theme/delete' },
+  // skills (PR-7) - from PR #85 (8b80d48)
+  // src/pages/Skills.tsx calls skillsApi.list() / .toggle() / .execute()
+  // which route through these IPC names. Backend exposes matching endpoints
+  // at backend/api/legacy_routes.py:487-559. Without these entries the
+  // /skills page throws UnknownIpcCommandError.
+  list_skills: { method: 'GET', path: () => '/api/v1/skills' },
+  toggle_skill: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/toggle`,
+  },
+  execute_skill: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/execute`,
+  },
+  delete_skill: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/delete`,
+  },
 };
 
 export class UnknownIpcCommandError extends Error {

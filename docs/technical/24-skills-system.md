@@ -397,3 +397,73 @@ curl -X POST http://127.0.0.1:8765/api/v1/skills/command \
 - **路径遍历**: `{baseDir}` 占位符可能被恶意替换到允许根之外。`validate_base_dir` 强制 base_dir 必须在允许根内。
 - **LLM 行为差异**: 同一 SKILL.md 在不同 LLM 下表现可能差异大。建议作者跨模型测试。
 - **Slash command 索引陈旧**: `SlashCommandRegistry` 是不可变快照,registry reload 后需重建 — `InprocSkillAdapter.hot_reload()` 路径会同步重建(M11+ 跟进)。
+
+## 10. SKILL.md Spec Conformance (agentskills.io)
+
+The SKILL.md adapter layer (`backend/skills/skill_md/`) conforms to the [agentskills.io open specification](https://agentskills.io/specification) since 2026-06-29. See `docs/technical/31-skill-md-spec-conformance.md` for full details, including:
+
+- 3 new spec-optional fields (`license`, `compatibility`, `allowed-tools`)
+- Strengthened `name` (≤64 chars) and `description` (≤1024 chars) validation
+- Single-file `<dir>/SKILL.md` form support
+- `name`-vs-parent-dir warning (soft constraint, not blocking)
+
+All changes are forward-compatible: existing SKILL.md files continue to load without modification.
+
+## 管理:删除 SKILL.md 技能
+
+PR-A 起,用户可以在 Skills 页面删除一个 SKILL.md 技能。
+
+### 行为
+
+- 操作: Skills 页面 → SkillCard 上 hover → 红色 trash 按钮 → 确认对话框
+- 后端: `POST /api/v1/skills/{name}/delete` → `SkillMdDeleter.delete(name)`
+- 文件操作: `shutil.rmtree(base_dir / name)` (整目录: SKILL.md + assets/ + examples/)
+- Registry: 从 `_SkillRegistry` unregister,影响 `list_skills_extended()` 输出
+
+### 约束
+
+- 仅 `source='skillmd'`(不动 builtin)
+- name 必须 `^[a-z0-9-]{1,64}$`
+- target 必须在 `SAGE_SKILLS_DIR` 之下(防御 `..` 路径遍历)
+- 删除审计: `logger.warning("Deleted SKILL.md skill: %s ...")` 含 base_dir
+
+### 错误响应
+
+| HTTP | 含义 |
+|---|---|
+| 200 | 成功 |
+| 400 | builtin / invalid name / outside skills_dir |
+| 404 | skill not found |
+| 500 | filesystem error (e.g. 权限) |
+
+### 数据流
+
+参见 [design spec §"流 1"](../specs/2026-06-30-skills-management-delete-hotreload-design.md#流-1用户删除-skillmd-技能)。
+
+## 管理:自动刷新(PR-B)
+
+用户可在 Skills 页面启用 "自动刷新 (10s)" 开关，让 UI 反映 SAGE_SKILLS_DIR 下的 SKILL.md 改动。
+
+### 行为
+
+- 默认 OFF
+- 启用后:每 10 秒调 `skillsApi.list()`,结果 diff 并更新页面
+- 失败:toast 提示,**不**关闭 toggle（下一轮再试）
+- 配合 Refresh 按钮和 delete 按钮使用
+
+### 实现位置
+
+- `src/pages/Skills.tsx`:useState `autoRefresh` + useEffect `setInterval`
+- toggle UI 在头部 Refresh 按钮左边
+- 复用 PR #90 `loadSkills()` 路径
+
+### 关闭 toggle 的清理
+
+useEffect cleanup:`window.clearInterval(id)`,避免组件卸载后内存泄漏。
+
+### 不在 PR-B 范围
+
+- ❌ 实时秒级推送(需 WebSocket,不在 spec)
+- ❌ 文件 watcher 后端实现(spec 明确划掉)
+
+参见 [design spec §"流 2"](../specs/2026-06-30-skills-management-delete-hotreload-design.md#流-2用户切换-自动刷新-启用)。

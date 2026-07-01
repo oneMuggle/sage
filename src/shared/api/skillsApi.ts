@@ -3,7 +3,7 @@
  */
 
 import { invoke } from './desktopInvoke';
-import type { Skill, SkillExecuteRequest, SkillExecuteResult } from './types';
+import type { DeleteSkillResult, Skill, SkillExecuteRequest, SkillExecuteResult } from './types';
 import { handleApiError, withRetry } from './utils';
 
 export const skillsApi = {
@@ -35,6 +35,23 @@ export const skillsApi = {
           action: req.action ?? null,
           args: req.args ?? null,
         });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+  /**
+   * 物理删除一个 SKILL.md 技能 (POST /api/v1/skills/{name}/delete)。
+   *
+   * Throws on:
+   * - 400 builtin / invalid name
+   * - 404 missing
+   * - 500 filesystem error
+   */
+  async delete(name: string): Promise<DeleteSkillResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<DeleteSkillResult>('delete_skill', { name });
       } catch (error) {
         throw handleApiError(error);
       }

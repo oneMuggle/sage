@@ -27,6 +27,7 @@
 | 28   | [Phase 5 Titlebar](./28-phase5-titlebar.md)           | 跨平台自定义标题栏 + Electron IPC windowControls + .drag/.no-drag CSS (M9)                            |
 | 29   | [M7 Nav-history](./29-m7-nav-history.md)               | NavHistoryProvider 路径栈 + cursor + TitlebarActions ↩/→ 按钮 + useNavigationHistory hook (M7)           |
 | 30   | [M8 /btw + @文件](./30-m8-btw.md)                     | /btw 补充消息面板 + AtFileMenu 文件搜索 + btwState Zustand + fileSearchClient IPC (M8)                  |
+| 31   | [SKILL.md Spec Conformance (agentskills.io)](./31-skill-md-spec-conformance.md) | backend/skills/skill_md/ 全规范对齐:license/compatibility/allowed-tools + 长度校验 + 单文件形态 |
 
 ---
 

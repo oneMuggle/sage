@@ -36,6 +36,21 @@ from .validation import sanitize_for_logging
 logger = logging.getLogger(__name__)
 
 
+def _parse_allowed_tools(tools_str: Any) -> tuple[str, ...]:
+    """解析 allowed-tools 字段: 空格分隔字符串 → tuple (去空, 保序)。
+
+    Args:
+        tools_str: 来自 frontmatter 的 raw 值(可能为 None / str / 其他)。
+
+    Returns:
+        元组,如 ``("Bash", "Read", "Write")``。
+        非字符串输入返回空元组(防御性 fallback)。
+    """
+    if not isinstance(tools_str, str):
+        return ()
+    return tuple(part for part in tools_str.split() if part)
+
+
 def discover_skill_md_dirs() -> list[Path]:
     """按优先级返回 SKILL.md 搜索根列表。
 
@@ -92,19 +107,25 @@ class SkillMdHotLoader:
     def scan_and_load(self) -> tuple[int, int]:
         """扫描所有 dirs, 加载新 SKILL.md。返回 ``(loaded_count, skipped_count)``。
 
+        支持两种文件形态 (agentskills.io spec):
+          - 形态 A: 子目录形态 <dir>/<name>/SKILL.md (v1 已有)
+          - 形态 B: 单文件形态 <dir>/SKILL.md (Task 5 新增)
+
         skipped_count 包括:
           - builtin 同名冲突
           - parse 失败
           - 验证失败 (缺 name/description, name 不是 slug)
           - 实例化失败 (极少见, 但防御性兜底)
+
+        优先级: builtin 名称 > 子目录形态 > 单文件形态(同 name 时后者 skip)。
         """
         loaded = 0
         skipped = 0
         for d in self._dirs:
             if not d.is_dir():
                 continue
+            # 形态 A: 子目录形态 <dir>/<name>/SKILL.md
             for entry in sorted(d.iterdir()):
-                # 只看子目录(每个 skill 一个目录), 跳过文件/隐藏目录
                 if not entry.is_dir():
                     continue
                 if entry.name.startswith("."):
@@ -121,6 +142,21 @@ class SkillMdHotLoader:
                     logger.warning(
                         "SKILL.md load failed for %s: %s",
                         skill_md,
+                        sanitize_for_logging(str(exc), max_len=200),
+                    )
+                    skipped += 1
+            # 形态 B: 单文件形态 <dir>/SKILL.md (Task 5)
+            root_skill_md = d / "SKILL.md"
+            if root_skill_md.is_file():
+                try:
+                    if self._load_from_path(root_skill_md):
+                        loaded += 1
+                    else:
+                        skipped += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "SKILL.md single-file load failed for %s: %s",
+                        root_skill_md,
                         sanitize_for_logging(str(exc), max_len=200),
                     )
                     skipped += 1
@@ -166,6 +202,11 @@ class SkillMdHotLoader:
             else [],
         )
 
+        # agentskills.io spec optional fields (Task 4)
+        license_val = meta.get("license")
+        compatibility_val = meta.get("compatibility")
+        allowed_tools_tuple = _parse_allowed_tools(meta.get("allowed-tools"))
+
         doc = SkillMdDocument(
             name=name,
             description=meta.get("description", ""),
@@ -192,7 +233,23 @@ class SkillMdHotLoader:
                 command_dispatch=str(meta.get("command-dispatch", "auto")),
             ),
             resources=None,  # ResourceIndex 后续构建
+            # agentskills.io spec optional fields (Task 4)
+            license=license_val if isinstance(license_val, str) else None,
+            compatibility=compatibility_val if isinstance(compatibility_val, str) else None,
+            allowed_tools=allowed_tools_tuple,
         )
+
+        # agentskills.io spec: name 应匹配父目录名 (Task 4)
+        # 仅 warning,不阻断加载(避免破坏历史 SKILL.md 的命名习惯)
+        parent_name = path.parent.name
+        if name != parent_name:
+            logger.warning(
+                "SKILL.md at %s declares name='%s' but parent dir is '%s'; "
+                "agentskills.io spec recommends name matches parent dir",
+                path,
+                name,
+                parent_name,
+            )
 
         # 评估门控条件 (v2 特性)
         if self._gating_ctx is not None:

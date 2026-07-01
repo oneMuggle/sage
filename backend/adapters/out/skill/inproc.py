@@ -206,6 +206,35 @@ class InprocSkillAdapter:
         """
         return self._slash_registry.list_commands()
 
+    # ========== Skills management: SKILL.md 删除 (PR-A) ==========
+
+    def delete_skill_md(self, name: str) -> dict[str, Any]:
+        """Public API: 物理删除一个 SKILL.md 技能 (委托给 SkillMdDeleter)。
+
+        仅可删 SKILL.md 技能 (source='skillmd')。builtin 拒绝 — 由
+        ``SkillMdDeleter`` 抛 ``BuiltinSkillError``。
+
+        Args:
+            name: 技能名 (匹配 ``^[a-z0-9-]{1,64}$``)。
+
+        Returns:
+            dict: ``{"deleted": True, "name": str, "base_dir": str}``
+
+        Raises:
+            BuiltinSkillError: name 是 builtin (路由层 → 400)
+            SkillMdNotFoundError: name 在 registry 不存在或 base_dir 无目录
+                (路由层 → 404)
+            ValueError: name 非法 或 base_dir 跑出 SAGE_SKILLS_DIR (路由层 → 400)
+            FileNotFoundError: SAGE_SKILLS_DIR 未配置 (路由层 → 500)
+        """
+        # 延迟导入避免循环 (delete.py 依赖 SkillRegistry, 已 import; 这里
+        # 引入 SkillMdDeleter 仅供管理 API 使用,不影响路由热路径)
+        from backend.skills.skill_md.delete import SkillMdDeleter
+
+        deleter = SkillMdDeleter(self._registry)
+        result = deleter.delete(name)
+        return dict(result)
+
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
 
     def list_skills_extended(self) -> list[dict[str, Any]]:
@@ -216,6 +245,9 @@ class InprocSkillAdapter:
           - ``body`` (str | None): 仅 SKILL.md 有值, 是 markdown body
           - ``base_dir`` (str | None): 仅 SKILL.md 有值, 是 SKILL.md 所在目录绝对路径
           - ``version`` (str | None): 仅 SKILL.md 有值, 是 frontmatter ``version`` 字段
+          - ``license`` (str | None): agentskills.io spec 字段 (PR-84 后)
+          - ``compatibility`` (str | None): agentskills.io spec 字段 (PR-84 后)
+          - ``allowed_tools`` (list[str]): agentskills.io spec 字段 (PR-84 后)
 
         builtin 技能只输出 SkillSpec 字段, **不** 输出扩展字段 (空 key 省略,
         避免 TS strict optional 报警)。
@@ -242,6 +274,12 @@ class InprocSkillAdapter:
                 item["body"] = doc.body
                 item["base_dir"] = str(doc.base_dir) if doc.base_dir is not None else None
                 item["version"] = doc.version
+                # agentskills.io spec optional fields (PR-84): 让 API consumer
+                # 能看到 SKILL.md frontmatter 的 license / compatibility /
+                # allowed_tools 字段。allowed_tools 是 tuple, 序列化为 list。
+                item["license"] = doc.license
+                item["compatibility"] = doc.compatibility
+                item["allowed_tools"] = list(doc.allowed_tools)
                 # v2 DispatchMode 元数据 (M9): 前端根据 user_invocable / command_dispatch
                 # 决定如何暴露 (slash command / tool mode),disable_model_invocation
                 # 由 chat 层消费 (阻止自动触发),嵌套 dict 形式便于前端 TS 类型推导。

@@ -178,6 +178,11 @@ export interface Skill {
   scripts?: string[];
   base_dir?: string;
   version?: string;
+  // agentskills.io spec optional fields (PR-84): builtin 永远 None,SKILL.md 才填充。
+  // 后端 list_skills_extended 序列化,tuple → list(JSON-friendly)。
+  license?: string | null;
+  compatibility?: string | null;
+  allowed_tools?: string[];
   // SKILL.md v2 DispatchMode (M9) — builtin 时不存在
   dispatch?: SkillDispatch;
 }
@@ -192,6 +197,19 @@ export interface SkillExecuteResult {
   content?: unknown;
   metadata: Record<string, unknown>;
   error?: string;
+}
+
+/**
+ * Skill delete result. Returned by `skillsApi.delete(name)`.
+ *
+ * - `deleted`: 永远是 `true`（失败路径通过 throw error 表达）
+ * - `name`: 已删除的 skill 名字
+ * - `base_dir`: 已删除的磁盘路径 (调试/审计用)
+ */
+export interface DeleteSkillResult {
+  deleted: boolean;
+  name: string;
+  base_dir?: string;
 }
 
 // ==================== Agents 类型定义 ====================

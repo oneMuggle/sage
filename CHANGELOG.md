@@ -89,16 +89,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Electron: 5 个 IPC routes (`scheduled_list/create/update/delete/run`)
   - i18n: 58 键 (zh + en 完全对齐)
   - 测试: backend 1192 tests pass, frontend 399 tests pass
-
-### Fixed
-- **fix(win7): smoke.spec.ts 同步 main 的 waitForLoadState('load') + 30s timeout (#83)**
-  - `tests/electron/smoke.spec.ts` test #1: `waitForLoadState('domcontentloaded')` → `'load'` (等待所有 chunk 加载完毕)
-  - `textContent` timeout 5s → 30s (React 在 300+ vendor chunks 上挂载需时)
-  - 增加注释解释为何需要 full page load + 30s mount window
-  - 消除 win7 CI 潜在脆弱性 — 若 dist/ 体积继续增大或后端启动变慢,5s timeout 会先于 React 挂载触发
-  - CI 验证: Electron smoke (playwright-electron) pass 1m30s,4/4 checks pass
-  - 文件与 origin/main 同文件 `diff` 完全一致 (byte-for-byte 对齐)
-  - vitest 585/8 无回归 (与 M8 收官 baseline 一致)
+- **feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)**
+- **feat(wiki): gate folder picker Browse button behind `appSettings.wiki.useFolderPicker` (default true; set false to fall back to plain text input — see §8 rollback in plan)**
+- **feat(skills): conform `backend/skills/skill_md/` to agentskills.io spec**
+  - Add optional fields: `license`, `compatibility` (≤500 chars), `allowed-tools`
+  - Strengthen `name` (≤64 chars) and `description` (≤1024 chars) validation
+  - Support single-file `<dir>/SKILL.md` form in loader
+  - Warn (not block) when frontmatter `name` != parent directory name
+  - Emit warning when description lacks trigger keywords
+  - All changes forward-compatible; existing SKILL.md files unaffected
+  - Refs: docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md
 
 ## [v0.3.0] - 2026-06-23
 
