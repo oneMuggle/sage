@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.4.1-lts] - 2026-07-01
+
+### Added
+- **feat(win7): skills ecosystem (PR #84-#92) cherry-pick from main (#93)**
+  - **agentskills.io spec conformance** (`backend/skills/skill_md/`):
+    - 3 新 spec-optional fields: `license` / `compatibility` (≤500 chars) / `allowed-tools`
+    - 强化 `name` (≤64 chars) + `description` (≤1024 chars) 校验
+    - 单文件 `<dir>/SKILL.md` 形态支持
+    - Frontmatter `name` ≠ 父目录名时 warn (soft, not block)
+    - 描述缺 trigger 关键词时 warn
+    - 27 新测试,SKILL.md loader 80+ 测试全过
+    - win7 适配: docs 章节重编号 `28-skill-md-spec-conformance.md` → `31-`(28 被 M9 Titlebar 占用)
+  - **3 个 Skills 页面 IPC routes**: `list_skills` / `toggle_skill` / `execute_skill` (`/api/v1/skills/*`)
+  - **list_skills_extended 暴露 spec 字段**: 每条 SKILL.md skill 带 license / compatibility / allowed_tools
+  - **Skills 页 Refresh 按钮** + **10s 自动刷新 toggle**
+  - **SkillMdDeleter + POST /api/v1/skills/{name}/delete** (200/400/404):
+    - 内置 builtin / 名称正则 / 路径遍历防御
+    - fail-closed: 先 `unregister` 再 `rmtree`
+    - 9 backend integration + 8 frontend vitest
+  - **Sidebar 加 /skills 入口** (`Sparkles` 图标, 插入 `/orchestration` 和 `/settings` 之间)
+  - **test(e2e): Sidebar /skills 导航 E2E spec** (3 Playwright 用例,addInitScript 桩化 electronAPI)
+  - **fix(electron+backend): theme IPC 路径同步** `/api/theme` → `/api/v1/theme` (与 IPC 路由一致)
+- 9 backend integration (test_skill_delete.py) + 8 frontend vitest 全过;CI 4/4 ✅;Code review APPROVE (4 LOW 后续清理)
+
+### Fixed
+- **fix(theme): backend theme_router mount prefix** 从 `/api/theme` 统一为 `/api/v1/theme`,消除 `'COMMAND_ROUTES must be prefixed with /api/v1'` guard test 失败
+
+### Known Limitations (永久)
+- **ChatInput SKILL.md slash 集成不可用** (PR #86 #87 跳过): 依赖 win7 M8 同步时删除的 `slashCommands.ts` (win7 长期不做 SlashCommandMenu)。直接通过 `skillsApi.execute()` 调用 SKILL.md skills 仍可用。
+- **Wiki folder picker 不可用**: win7 之前 revert 了 llm-wiki-folder-picker PR。
+
 ## [v0.4.0] - 2026-06-29
 
 ### Added
@@ -89,17 +120,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Electron: 5 个 IPC routes (`scheduled_list/create/update/delete/run`)
   - i18n: 58 键 (zh + en 完全对齐)
   - 测试: backend 1192 tests pass, frontend 399 tests pass
-- **feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)**
-- **feat(wiki): gate folder picker Browse button behind `appSettings.wiki.useFolderPicker` (default true; set false to fall back to plain text input — see §8 rollback in plan)**
-- **feat(skills): conform `backend/skills/skill_md/` to agentskills.io spec**
-  - Add optional fields: `license`, `compatibility` (≤500 chars), `allowed-tools`
-  - Strengthen `name` (≤64 chars) and `description` (≤1024 chars) validation
-  - Support single-file `<dir>/SKILL.md` form in loader
-  - Warn (not block) when frontmatter `name` != parent directory name
-  - Emit warning when description lacks trigger keywords
-  - All changes forward-compatible; existing SKILL.md files unaffected
-  - Refs: docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md
 
+### Fixed
+- **fix(win7): smoke.spec.ts 同步 main 的 waitForLoadState('load') + 30s timeout (#83)**
+  - `tests/electron/smoke.spec.ts` test #1: `waitForLoadState('domcontentloaded')` → `'load'` (等待所有 chunk 加载完毕)
 ## [v0.3.0] - 2026-06-23
 
 ### Added
