@@ -146,43 +146,43 @@ describe('settings & preferences IPC routes', () => {
 });
 
 describe('theme IPC routes', () => {
-  it('has theme_list route (GET /api/theme/list)', () => {
+  it('has theme_list route (GET /api/v1/theme/list)', () => {
     const r = COMMAND_ROUTES.theme_list;
     expect(r).toBeDefined();
     expect(r.method).toBe('GET');
-    expect(r.path({})).toBe('/api/theme/list');
+    expect(r.path({})).toBe('/api/v1/theme/list');
   });
 
-  it('has theme_save route (POST /api/theme/save)', () => {
+  it('has theme_save route (POST /api/v1/theme/save)', () => {
     const r = COMMAND_ROUTES.theme_save;
     expect(r).toBeDefined();
     expect(r.method).toBe('POST');
-    expect(r.path({})).toBe('/api/theme/save');
+    expect(r.path({})).toBe('/api/v1/theme/save');
   });
 
-  it('has theme_get route (GET /api/theme/get/{id}) with URL encoding', () => {
+  it('has theme_get route (GET /api/v1/theme/get/{id}) with URL encoding', () => {
     const r = COMMAND_ROUTES.theme_get;
     expect(r).toBeDefined();
     expect(r.method).toBe('GET');
-    expect(r.path({ id: 'abc-123' })).toBe('/api/theme/get/abc-123');
-    expect(r.path({ id: 'id/with/slash' })).toBe('/api/theme/get/id%2Fwith%2Fslash');
+    expect(r.path({ id: 'abc-123' })).toBe('/api/v1/theme/get/abc-123');
+    expect(r.path({ id: 'id/with/slash' })).toBe('/api/v1/theme/get/id%2Fwith%2Fslash');
   });
 
-  it('has theme_delete route (POST /api/theme/delete)', () => {
+  it('has theme_delete route (POST /api/v1/theme/delete)', () => {
     const r = COMMAND_ROUTES.theme_delete;
     expect(r).toBeDefined();
     expect(r.method).toBe('POST');
-    expect(r.path({})).toBe('/api/theme/delete');
+    expect(r.path({})).toBe('/api/v1/theme/delete');
   });
 
-  it('all theme paths have /api/theme prefix', () => {
+  it('all theme paths have /api/v1/theme prefix', () => {
     const paths = [
       COMMAND_ROUTES.theme_list.path({}),
       COMMAND_ROUTES.theme_save.path({}),
       COMMAND_ROUTES.theme_get.path({ id: 'x' }),
       COMMAND_ROUTES.theme_delete.path({}),
     ];
-    paths.forEach((p) => expect(p).toMatch(/^\/api\/theme\//));
+    paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\/theme\//));
   });
 });
 
