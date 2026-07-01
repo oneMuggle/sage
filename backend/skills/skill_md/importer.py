@@ -19,10 +19,13 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..registry import SkillRegistry
 from .exceptions import NoSkillsDirError
+
+if TYPE_CHECKING:
+    from .loader import SkillMdHotLoader
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +52,7 @@ class SkillMdImporter:
     ) -> None:
         self._registry = registry
         self._explicit_skills_dir = skills_dir
+        self._batch_loader: SkillMdHotLoader | None = None  # lazy-init for batch reuse
 
     async def import_files(self, files: list[UploadedFile]) -> dict[str, list[dict[str, str]]]:
         """逐文件解析 + 写盘 + hot_reload, 聚合结果。
@@ -76,10 +80,12 @@ class SkillMdImporter:
 
             # size cap
             if len(content) > MAX_FILE_SIZE_BYTES:
-                skipped.append({
-                    "name": f.filename or "<unknown>",
-                    "reason": f"file_too_large: {len(content)} > {MAX_FILE_SIZE_BYTES}",
-                })
+                skipped.append(
+                    {
+                        "name": f.filename or "<unknown>",
+                        "reason": f"file_too_large: {len(content)} > {MAX_FILE_SIZE_BYTES}",
+                    }
+                )
                 continue
 
             # parse frontmatter
@@ -167,18 +173,28 @@ class SkillMdImporter:
     def _hot_reload_from_path(self, path: Path) -> None:
         """从单文件路径解析 + 注册到 registry。失败抛异常让调用方处理。
 
+        复用同一 batch 内已构造的 SkillMdHotLoader（首次按需 lazy-init），避免每文件
+        重新构建 loader + 重复 walk dirs。
+
         直接复用 SkillMdHotLoader._load_from_path(),因为:
           - 文件刚写到磁盘, 还没在 _loaded_paths 里
           - hot_reload(name) 内部先 unregister 再 _load_from_path, 这里不需要 unregister
           - _load_from_path 会做完整的 parse + validate + 冲突检查 + register + 记 _loaded_paths + 算 hash
         """
-        from .loader import SkillMdHotLoader
+        if self._batch_loader is None:
+            from .loader import SkillMdHotLoader
 
-        loader = SkillMdHotLoader(self._registry, dirs=[path.parent.parent], gating_ctx=None)
-        loaded = loader._load_from_path(path)
+            self._batch_loader = SkillMdHotLoader(
+                self._registry,
+                dirs=[path.parent.parent],
+                gating_ctx=None,
+            )
+        loaded = self._batch_loader._load_from_path(path)
         if not loaded:
             # _load_from_path 内部已经 log warning, 这里转 raise 让 caller 走 rollback
-            raise RuntimeError(f"failed to register {path} (parse/validation/conflict — see warning)")
+            raise RuntimeError(
+                f"failed to register {path} (parse/validation/conflict — see warning)"
+            )
 
 
 def _strip_md_extension(filename: str) -> str:
@@ -188,24 +204,26 @@ def _strip_md_extension(filename: str) -> str:
     return filename
 
 
-def parse_file_from_bytes(content: bytes, *, fallback_name: str | None = None) -> tuple[dict[str, Any], str]:
+def parse_file_from_bytes(
+    content: bytes, *, fallback_name: str | None = None
+) -> tuple[dict[str, Any], str]:
     """从字节内容解析 frontmatter, 返回 (meta, body)。
 
     与 parse_file(path) 对齐, 但不依赖文件系统。
+
+    用 re.split 切分首尾的 `---` 边界:
+      - 容忍 closing delimiter 缺尾随换行 (真实 SKILL.md 常见)
+      - 容忍 closing delimiter 周围有空白
+      - maxsplit=2 保证 body 部分不丢失其中嵌的 '---' 文本
     """
     import yaml
 
     text = content.decode("utf-8")
-    if not text.startswith("---"):
-        raise ValueError("missing frontmatter delimiter '---'")
-
-    # 找到第二个 '---'
-    end_idx = text.find("\n---", 3)
-    if end_idx == -1:
+    parts = re.split(r"^---\s*\n", text, maxsplit=2, flags=re.MULTILINE)
+    if len(parts) < 3 or parts[0] != "":
         raise ValueError("missing closing frontmatter delimiter '---'")
 
-    fm_text = text[3:end_idx].lstrip("\n")
-    body = text[end_idx + 4 :].lstrip("\n")
+    fm_text, body = parts[1], parts[2]
 
     try:
         meta = yaml.safe_load(fm_text) or {}

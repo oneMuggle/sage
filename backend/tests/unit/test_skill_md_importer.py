@@ -2,6 +2,7 @@
 
 Mirrors test_skill_md_loader.py style: monkeypatch env, use tmp_path, no real fs.
 """
+
 from __future__ import annotations
 
 import textwrap
@@ -46,7 +47,9 @@ def builtin_names(registry: SkillRegistry) -> list[str]:
 
         skill = mock.Mock(spec=BaseSkill)
         skill.name = n
-        skill.schema = SkillSchema(name=n, description=f"builtin {n}", triggers=[], parameters={}, examples=[])
+        skill.schema = SkillSchema(
+            name=n, description=f"builtin {n}", triggers=[], parameters={}, examples=[]
+        )
         skill.execute = mock.Mock(return_value=SkillResult(success=True, content=""))
         registry.register(skill)
     return ["coder", "search", "writer"]
@@ -149,9 +152,7 @@ async def test_import_files_skips_invalid_name(
 # ===== test_import_files_skips_parse_error =====
 
 
-async def test_import_files_skips_parse_error(
-    registry: SkillRegistry, skills_dir: Path
-) -> None:
+async def test_import_files_skips_parse_error(registry: SkillRegistry, skills_dir: Path) -> None:
     """frontmatter without required 'name' → skip with parse_error reason."""
     bad_content = b"---\ndescription: no name here\n---\nbody"
     files = [_make_named_upload("broken", bad_content)]
@@ -292,3 +293,47 @@ async def test_import_files_rejects_oversized_files(
 
     assert result["imported"] == []
     assert result["skipped"][0]["reason"].startswith("file_too_large")
+
+
+# ===== test_import_files_handles_no_trailing_newline_after_frontmatter =====
+
+
+async def test_import_files_handles_no_trailing_newline_after_frontmatter(
+    registry: SkillRegistry, skills_dir: Path
+) -> None:
+    """Real-world SKILL.md files often lack a trailing newline after closing ---.
+
+    Regression for the body-parser off-by-one: parse_file_from_bytes used +4 offset
+    which dropped the first character of the body when no trailing newline followed
+    the closing delimiter.
+    """
+    content = b"---\nname: no-trailing\ndescription: no trailing newline\n---\nBody here"
+    files = [_make_named_upload("no-trailing", content)]
+    importer = SkillMdImporter(registry, skills_dir=skills_dir)
+    result = await importer.import_files(files)
+
+    assert len(result["imported"]) == 1
+    assert result["imported"][0]["name"] == "no-trailing"
+    # Body must start with "Body here", not "ody here" (off-by-one check)
+    written = skills_dir / "no-trailing" / "SKILL.md"
+    assert b"Body here" in written.read_bytes()
+
+
+# ===== test_import_files_uses_one_loader_for_batch =====
+
+
+async def test_import_files_uses_one_loader_for_batch(
+    registry: SkillRegistry, skills_dir: Path
+) -> None:
+    """All files in one batch share a single SkillMdHotLoader instance."""
+    files = [
+        _make_named_upload(f"skill-{i}", _make_skill_md(f"skill-{i}"))
+        for i in range(3)
+    ]
+    importer = SkillMdImporter(registry, skills_dir=skills_dir)
+    await importer.import_files(files)
+
+    # After batch, exactly one loader should have been constructed
+    assert importer._batch_loader is not None
+    # All 3 skills loaded via the same loader
+    assert len(importer._batch_loader._loaded_paths) == 3
