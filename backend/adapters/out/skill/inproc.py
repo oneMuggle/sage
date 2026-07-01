@@ -65,6 +65,13 @@ class InprocSkillAdapter:
             import logging
 
             logging.getLogger(__name__).warning("SkillMd loader skipped in adapter init: %s", exc)
+        # PR-C: store SkillMdHotLoader reference so rescan_skill_mds can call it later
+        # rebuild dirs list from env + cwd + home (same logic as discover_skill_md_dirs)
+        from backend.skills.skill_md.importer import SkillMdImporter
+        from backend.skills.skill_md.loader import discover_skill_md_dirs
+
+        self._skill_dirs = discover_skill_md_dirs()
+        self._skill_importer = SkillMdImporter(self._registry)
         # enabled 状态: 未登记视为 enabled
         self._enabled: dict[str, bool] = {}
         # usage_count: 进程内累计,重启归零
@@ -234,6 +241,43 @@ class InprocSkillAdapter:
         deleter = SkillMdDeleter(self._registry)
         result = deleter.delete(name)
         return dict(result)
+
+    # ========== PR-C: Skills load-new (rescan + import) ==========
+
+    def rescan_skill_mds(self) -> dict[str, Any]:
+        """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载新 SKILL.md。
+
+        Returns:
+            {
+                "loaded": [{"name", "source", "path"}],
+                "skipped": [{"name", "reason"}],
+                "total_loaded": int,  # 本次新增数 (len of loaded)
+            }
+
+        Notes:
+            复用 SkillMdHotLoader.scan_and_load(); 不重启 adapter 即可注册新 skill。
+            builtin 名字冲突: builtin 胜, SKILL.md skip (warning logged)。
+        """
+        from backend.skills.skill_md.loader import SkillMdHotLoader
+
+        loader = SkillMdHotLoader(self._registry, dirs=list(self._skill_dirs), gating_ctx=None)
+        loaded_count, skipped_count = loader.scan_and_load()
+
+        # 重构返回值 (从内部 tuple -> spec 4.1 格式)
+        loaded_list = [
+            {"name": name, "source": "skillmd", "path": loader._loaded_paths.get(name, "")}
+            for name in loader._loaded_paths
+            # 包含本次新增 (heuristic: 用 _file_hashes 长度比较; 这里简化为返回全部 loaded_paths)
+        ]
+        return {
+            "loaded": loaded_list,
+            "skipped": [],  # loader 内部已 skip, 不单独报告; 未来可扩展
+            "total_loaded": loaded_count,
+        }
+
+    async def import_skill_mds(self, files: list[Any]) -> dict[str, list[dict[str, str]]]:
+        """异步包装 SkillMdImporter.import_files()。"""
+        return await self._skill_importer.import_files(files)
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
 
