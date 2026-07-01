@@ -577,15 +577,20 @@ class SkillMdImporter:
             raise NoSkillsDirError(f"Cannot create {user}: {exc}") from exc
 
     def _hot_reload_from_path(self, path: Path) -> None:
-        """从单文件路径解析 + 注册到 registry。失败抛异常让调用方处理。"""
-        meta, body = parse_file(path)
-        name = meta["name"]
-        # 复用 loader 的核心加载逻辑 (避免重复实现)
+        """从单文件路径解析 + 注册到 registry。失败抛异常让调用方处理。
+
+        直接复用 SkillMdHotLoader._load_from_path(),因为:
+          - 文件刚写到磁盘, 还没在 _loaded_paths 里
+          - hot_reload(name) 内部先 unregister 再 _load_from_path, 这里不需要 unregister
+          - _load_from_path 会做完整的 parse + validate + 冲突检查 + register + 记 _loaded_paths + 算 hash
+        """
         from .loader import SkillMdHotLoader
 
         loader = SkillMdHotLoader(self._registry, dirs=[path.parent.parent], gating_ctx=None)
-        # 强制 reload (即使哈希未变)
-        loader.hot_reload(name)
+        loaded = loader._load_from_path(path)
+        if not loaded:
+            # _load_from_path 内部已经 log warning, 这里转 raise 让 caller 走 rollback
+            raise RuntimeError(f"failed to register {path} (parse/validation/conflict — see warning)")
 
 
 def parse_file_from_bytes(content: bytes, *, fallback_name: str | None = None) -> tuple[dict[str, Any], str]:
@@ -1879,6 +1884,8 @@ who want to add new SKILL.md files without restarting the backend:
 - Renderer: `src/shared/api/skillsApi.ts` (extended), `src/pages/Skills.tsx` (2 new IconButtons + handlers)
 
 **Tests:** 36 new cases total (12 unit importer + 10 integration + 6 Electron IPC + 8 component).
+
+**Note for implementers:** the plan contains implementation hints (specifically: `SkillMdImporter._hot_reload_from_path` uses `loader._load_from_path` directly instead of `hot_reload(name)` because the just-written file is not yet in `_loaded_paths`). Follow the code blocks as written; do not "fix" perceived bugs unless tests fail.
 
 **Security notes:**
 - 1MB file size cap (DoS defense)
