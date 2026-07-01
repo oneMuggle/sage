@@ -210,20 +210,27 @@ def parse_file_from_bytes(
     """从字节内容解析 frontmatter, 返回 (meta, body)。
 
     与 parse_file(path) 对齐, 但不依赖文件系统。
-
-    用 re.split 切分首尾的 `---` 边界:
-      - 容忍 closing delimiter 缺尾随换行 (真实 SKILL.md 常见)
-      - 容忍 closing delimiter 周围有空白
-      - maxsplit=2 保证 body 部分不丢失其中嵌的 '---' 文本
+    支持: 闭合 --- 后可有可无换行, body 可为空。
     """
     import yaml
 
     text = content.decode("utf-8")
-    parts = re.split(r"^---\s*\n", text, maxsplit=2, flags=re.MULTILINE)
-    if len(parts) < 3 or parts[0] != "":
+    if not text.startswith("---"):
+        raise ValueError("missing frontmatter delimiter '---'")
+
+    # Find closing delimiter. The closing --- is preceded by a newline
+    # (or is at position 3 if frontmatter is empty). We look for the
+    # first occurrence of "\n---" after the opening delimiter.
+    end_idx = text.find("\n---", 3)
+    if end_idx == -1:
         raise ValueError("missing closing frontmatter delimiter '---'")
 
-    fm_text, body = parts[1], parts[2]
+    fm_text = text[3:end_idx].lstrip("\n")
+    # Skip past "\n---" (4 chars) and any trailing newline.
+    after_delim = end_idx + 4
+    if after_delim < len(text) and text[after_delim] == "\n":
+        after_delim += 1
+    body = text[after_delim:]
 
     try:
         meta = yaml.safe_load(fm_text) or {}

@@ -12,7 +12,7 @@ from unittest import mock
 import pytest
 
 from backend.skills.registry import SkillRegistry
-from backend.skills.skill_md.importer import SkillMdImporter
+from backend.skills.skill_md.importer import SkillMdImporter, parse_file_from_bytes
 
 
 def _make_skill_md(name: str, description: str = "Test skill") -> bytes:
@@ -295,28 +295,51 @@ async def test_import_files_rejects_oversized_files(
     assert result["skipped"][0]["reason"].startswith("file_too_large")
 
 
-# ===== test_import_files_handles_no_trailing_newline_after_frontmatter =====
+# ===== test_parse_file_from_bytes_handles_no_newline_after_closing_delimiter =====
 
 
-async def test_import_files_handles_no_trailing_newline_after_frontmatter(
+def test_parse_file_from_bytes_handles_no_newline_after_closing_delimiter() -> None:
+    """Closing --- directly followed by body content (no newline) must parse OK.
+
+    Tests the importer-level parser directly: the find()-based parser must
+    accept ``---Body`` (closing delimiter immediately followed by body).
+    A naive +4 offset or re.split on ``---`` would either drop the first
+    body char or fail to find the closing fence.
+    """
+    content = b"---\nname: tight\ndescription: tight\n---Body starts immediately"
+    meta, body = parse_file_from_bytes(content)
+
+    assert meta["name"] == "tight"
+    assert meta["description"] == "tight"
+    assert body == "Body starts immediately"
+
+
+# ===== test_import_files_handles_body_with_horizontal_rule =====
+
+
+async def test_import_files_handles_body_with_horizontal_rule(
     registry: SkillRegistry, skills_dir: Path
 ) -> None:
-    """Real-world SKILL.md files often lack a trailing newline after closing ---.
-
-    Regression for the body-parser off-by-one: parse_file_from_bytes used +4 offset
-    which dropped the first character of the body when no trailing newline followed
-    the closing delimiter.
-    """
-    content = b"---\nname: no-trailing\ndescription: no trailing newline\n---\nBody here"
-    files = [_make_named_upload("no-trailing", content)]
+    """Body containing --- (markdown HR) must not be parsed as closing delimiter."""
+    content = (
+        b"---\n"
+        b"name: with-hr\n"
+        b"description: body has hr\n"
+        b"---\n"
+        b"# Section\n"
+        b"\n"
+        b"---\n"  # this is a markdown horizontal rule in the body
+        b"more body\n"
+    )
+    files = [_make_named_upload("with-hr", content)]
     importer = SkillMdImporter(registry, skills_dir=skills_dir)
     result = await importer.import_files(files)
 
     assert len(result["imported"]) == 1
-    assert result["imported"][0]["name"] == "no-trailing"
-    # Body must start with "Body here", not "ody here" (off-by-one check)
-    written = skills_dir / "no-trailing" / "SKILL.md"
-    assert b"Body here" in written.read_bytes()
+    assert result["imported"][0]["name"] == "with-hr"
+    written = skills_dir / "with-hr" / "SKILL.md"
+    assert b"# Section" in written.read_bytes()
+    assert b"more body" in written.read_bytes()
 
 
 # ===== test_import_files_uses_one_loader_for_batch =====
@@ -326,10 +349,7 @@ async def test_import_files_uses_one_loader_for_batch(
     registry: SkillRegistry, skills_dir: Path
 ) -> None:
     """All files in one batch share a single SkillMdHotLoader instance."""
-    files = [
-        _make_named_upload(f"skill-{i}", _make_skill_md(f"skill-{i}"))
-        for i in range(3)
-    ]
+    files = [_make_named_upload(f"skill-{i}", _make_skill_md(f"skill-{i}")) for i in range(3)]
     importer = SkillMdImporter(registry, skills_dir=skills_dir)
     await importer.import_files(files)
 
