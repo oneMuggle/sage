@@ -471,6 +471,7 @@ app.whenReady().then(async () => {
         });
         return;
       }
+      logger.info('main: backend ready', { url: BACKEND_URL });
       createMainWindow();
       buildApplicationMenu();
       return;
