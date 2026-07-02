@@ -11,6 +11,7 @@
  */
 
 import type { WindowControlsBridge } from '../api/windowControlsClient';
+import type { LogLevel } from '../log/levels';
 
 export type UnlistenFn = () => void;
 
@@ -45,6 +46,8 @@ export interface ElectronAPI {
   listen<T = unknown>(event: string, handler: (payload: T) => void): Promise<UnlistenFn>;
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
+  /** Optional bridge added in Task 8 (renderer→main log IPC). */
+  log?: (level: LogLevel, msg: string, meta?: Record<string, unknown>) => Promise<unknown>;
 }
 
 declare global {
