@@ -142,9 +142,8 @@ describe('skills IPC (PR-C)', () => {
     const body = init.body as FormData;
     expect(body).toBeInstanceOf(FormData);
     const entries: string[][] = [];
-    body.forEach((_value, key) => {
-      // forEach on FormData iterates (value, key); we want the keys
-      // (in case there are dupes) — collect via getAll below
+    body.forEach((_value) => {
+      // forEach on FormData iterates (value, key); keys are collected via getAll below
       void _value;
     });
     const all = body.getAll('files');
