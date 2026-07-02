@@ -1,5 +1,169 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { COMMAND_ROUTES, UnknownIpcCommandError } from '../commands';
+
+// ===== Skills IPC (Task 4: PR-C load-new) =====
+//
+// The skills IPC module (`electron/skillsIpc.ts`) is a pure module that
+// takes an injected `register(channel, handler)` function so we can mock
+// electron without booting the runtime. Tests assert that:
+//   - all 3 channels are registered with the right name
+//   - pick-files delegates to dialog.showOpenDialog + handles cancel
+//   - rescan + import forward to backend via injected fetch
+//   - import error response surfaces detail.type as message
+
+// `vi.mock` is hoisted to the top of the file by Vitest — before any
+// imports. The factory closure cannot reference top-level `const`s
+// declared below (TDZ error). Use `vi.hoisted` to safely declare the
+// shared mocks the factory references.
+const mocks = vi.hoisted(() => ({
+  dialog: { showOpenDialog: vi.fn() },
+  BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
+  fs: { readFileSync: vi.fn() },
+}));
+
+vi.mock('electron', () => ({
+  dialog: mocks.dialog,
+  BrowserWindow: mocks.BrowserWindow,
+}));
+
+// Mock fs so the import handler doesn't hit the real filesystem when
+// tests pass fake paths like '/path/a.md'. We include `__esModule: true`
+// + `default` so Vitest's ESM/CJS interop doesn't trip on the partial
+// mock — Node's fs is a CJS module and `import { readFileSync } from 'fs'`
+// relies on Node's default-export interop.
+vi.mock('fs', () => ({
+  __esModule: true,
+  default: { readFileSync: mocks.fs.readFileSync },
+  readFileSync: mocks.fs.readFileSync,
+}));
+
+// Injectable register fn captures all ipcMain.handle calls.
+const registeredHandlers = new Map<string, (...args: unknown[]) => unknown>();
+function fakeRegister(channel: string, handler: (...args: unknown[]) => unknown): void {
+  registeredHandlers.set(channel, handler);
+}
+
+// Provide a stubbed fetch the rescan/import handlers will pick up.
+const mockFetch = vi.fn();
+
+import { registerSkillsIpc } from '../skillsIpc';
+
+describe('skills IPC (PR-C)', () => {
+  beforeEach(() => {
+    registeredHandlers.clear();
+    mocks.dialog.showOpenDialog.mockReset();
+    mocks.BrowserWindow.getFocusedWindow.mockReset();
+    mocks.BrowserWindow.getFocusedWindow.mockReturnValue(null);
+    mocks.fs.readFileSync.mockReset();
+    mocks.fs.readFileSync.mockReturnValue(Buffer.from('# content'));
+    mockFetch.mockReset();
+    (global as unknown as { fetch: typeof mockFetch }).fetch = mockFetch;
+    registerSkillsIpc(fakeRegister);
+  });
+
+  it('registers all 3 channels', () => {
+    expect(registeredHandlers.has('skills:pick-files')).toBe(true);
+    expect(registeredHandlers.has('skills:rescan')).toBe(true);
+    expect(registeredHandlers.has('skills:import')).toBe(true);
+  });
+
+  it('pick-files returns paths from dialog', async () => {
+    mocks.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ['/path/a.md', '/path/b.md'],
+    });
+    const handler = registeredHandlers.get('skills:pick-files')!;
+    const result = await handler({});
+    expect(result).toEqual(['/path/a.md', '/path/b.md']);
+    expect(mocks.dialog.showOpenDialog).toHaveBeenCalledTimes(1);
+  });
+
+  it('pick-files returns null on cancel', async () => {
+    mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
+    const handler = registeredHandlers.get('skills:pick-files')!;
+    const result = await handler({});
+    expect(result).toBeNull();
+  });
+
+  it('rescan POSTs to backend /api/v1/skills/rescan and returns JSON', async () => {
+    const mockResponse = {
+      loaded: [{ name: 'a', source: 'skillmd', path: '/p/a/SKILL.md' }],
+      skipped: [],
+      total_loaded: 1,
+    };
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockResponse,
+    });
+
+    const handler = registeredHandlers.get('skills:rescan')!;
+    const result = await handler({});
+
+    expect(result).toEqual(mockResponse);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(String(url)).toContain('/api/v1/skills/rescan');
+    expect(init.method).toBe('POST');
+  });
+
+  it('import posts multipart FormData with file blobs', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        imported: [{ name: 'a', path: '/p/a/SKILL.md' }],
+        skipped: [],
+      }),
+    });
+
+    const handler = registeredHandlers.get('skills:import')!;
+    const result = (await handler({}, ['/path/a.md'])) as {
+      imported: Array<{ name: string; path: string }>;
+      skipped: Array<{ name: string; reason: string }>;
+    };
+
+    expect(result.imported).toHaveLength(1);
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(String(url)).toContain('/api/v1/skills/import');
+    expect(init.method).toBe('POST');
+    // body is a FormData instance with one 'files' entry
+    const body = init.body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    const entries: string[][] = [];
+    body.forEach((_value, key) => {
+      // forEach on FormData iterates (value, key); we want the keys
+      // (in case there are dupes) — collect via getAll below
+      void _value;
+    });
+    const all = body.getAll('files');
+    expect(all.length).toBe(1);
+    expect(all[0]).toBeInstanceOf(Blob);
+    void entries;
+  });
+
+  it('import handles 400 response with detail.type as error', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ detail: { type: 'invalid_request', message: 'no files' } }),
+    });
+
+    const handler = registeredHandlers.get('skills:import')!;
+    await expect(handler({}, ['/path/a.md'])).rejects.toThrow(/invalid_request/);
+  });
+
+  it('import handles 500 response with detail.type as error', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ detail: { type: 'no_skills_dir', message: 'cannot create' } }),
+    });
+
+    const handler = registeredHandlers.get('skills:import')!;
+    await expect(handler({}, ['/path/a.md'])).rejects.toThrow(/no_skills_dir/);
+  });
+});
 
 // Backend mounts legacy_routes under /api/v1 (see backend/main.py:215).
 // All Electron IPC paths MUST match — otherwise every IPC call 404s.

@@ -32,6 +32,7 @@ import { join } from 'node:path';
 import http from 'node:http';
 import { invokeBackend } from './invoke';
 import { relayChatStream } from './relay';
+import { registerSkillsIpc } from './skillsIpc';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -380,6 +381,15 @@ function registerIpcHandlers(): void {
       return result.filePaths[0];
     },
   );
+
+  // ─── PR-C: Skills load-new IPC (rescan + import) ─────────────────────
+  // Three channels back the Skills page buttons:
+  //   skills:pick-files → native multi-select dialog
+  //   skills:rescan     → POST /api/v1/skills/rescan
+  //   skills:import     → POST /api/v1/skills/import (multipart)
+  registerSkillsIpc((channel, handler) => {
+    ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
+  });
 }
 
 function shutdownBackend(): void {
