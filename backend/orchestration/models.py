@@ -388,9 +388,10 @@ class TaskGraph:
         completed_ids = {t.task_id for t in self.tasks if t.status == TaskStatus.COMPLETED}
         ready = []
         for task in self.tasks:
-            if task.status == TaskStatus.CREATED:
-                if all(dep_id in completed_ids for dep_id in task.blocked_by):
-                    ready.append(task)
+            if task.status == TaskStatus.CREATED and all(
+                dep_id in completed_ids for dep_id in task.blocked_by
+            ):
+                ready.append(task)
         return ready
 
     def is_completed(self) -> bool:

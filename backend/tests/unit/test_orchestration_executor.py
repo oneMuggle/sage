@@ -21,7 +21,7 @@ from backend.data.orchestration_repo import (
     TaskRepository,
 )
 from backend.orchestration.events import EventRecorder, EventStream
-from backend.orchestration.executor import LaneExecutionError, LaneExecutor
+from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import (
     Lane,
@@ -32,13 +32,12 @@ from backend.orchestration.models import (
 )
 from backend.orchestration.task_registry import TaskRegistry
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================
 
 
-@pytest.fixture
+@pytest.fixture()
 def temp_db():
     """Create a temporary SQLite database for testing."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
@@ -51,7 +50,7 @@ def temp_db():
     os.unlink(tmp_path)
 
 
-@pytest.fixture
+@pytest.fixture()
 def registries(temp_db):
     """Create registries wired to the temp database."""
     db, _ = temp_db
@@ -76,7 +75,7 @@ def registries(temp_db):
     }
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_task(registries):
     """Create a sample task in the registry."""
     return registries["task_registry"].create_task(
@@ -86,7 +85,7 @@ def sample_task(registries):
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_lane(registries, sample_task):
     """Create a sample lane bound to the sample task."""
     return registries["lane_registry"].create_lane(task_id=sample_task.task_id)

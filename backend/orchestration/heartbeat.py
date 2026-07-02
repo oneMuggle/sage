@@ -9,6 +9,7 @@ Triggers recovery policies when issues are detected.
 """
 
 import asyncio
+import contextlib
 import time
 from collections.abc import Callable
 
@@ -55,10 +56,8 @@ class HeartbeatMonitor:
         """Stop the heartbeat monitor background task."""
         if self._monitor_task is not None:
             self._monitor_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._monitor_task
-            except asyncio.CancelledError:
-                pass
             self._monitor_task = None
 
     async def _monitor_loop(self):

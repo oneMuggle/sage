@@ -50,15 +50,17 @@ class LanePermission:
             return False
 
         # Audit/Explain presets cannot write, execute, or run lanes
-        if self.preset in (PermissionPreset.AUDIT, PermissionPreset.EXPLAIN):
-            if action.action_type in (
-                "write_file",
-                "delete_file",
-                "execute",
-                "shell",
-                "execute_lane",
-            ):
-                return False
+        if self.preset in (
+            PermissionPreset.AUDIT,
+            PermissionPreset.EXPLAIN,
+        ) and action.action_type in (
+            "write_file",
+            "delete_file",
+            "execute",
+            "shell",
+            "execute_lane",
+        ):
+            return False
 
         # Check path restrictions for file operations
         if action.action_type in ("read_file", "write_file", "delete_file"):
