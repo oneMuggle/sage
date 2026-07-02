@@ -44,6 +44,10 @@ import http from 'node:http';
 import { invokeBackend } from './invoke';
 import { relayChatStream } from './relay';
 import { registerSkillsIpc } from './skillsIpc';
+import { buildApplicationMenu } from './menu';
+import { showStartupFailureDialog } from './showStartupFailureDialog';
+import { cleanupOlderThan } from './logRotate';
+import { registerLogIpc } from './ipc/logIpc';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -245,18 +249,26 @@ function createMainWindow(): void {
   });
 
   if (isDev) {
-    mainWindow
-      .loadURL(VITE_DEV_URL)
-      .catch((e) => logger.error('main: loadURL failed', { url: VITE_DEV_URL, err: e.message }));
+    mainWindow.loadURL(VITE_DEV_URL).catch(async (e) => {
+      logger.error('main: loadURL failed', { url: VITE_DEV_URL, err: e.message });
+      await showStartupFailureDialog({
+        reason: '加载前端开发服务失败',
+        detail: `URL: ${VITE_DEV_URL}\n错误: ${e.message}`,
+      });
+    });
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     // tsconfig.electron.json uses rootDirs: [electron, src], so the compiled
     // main.js lives at dist-electron/electron/main.js (one extra directory level
     // vs the legacy rootDir: electron setup). Go up two levels to reach dist/.
     const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
-    mainWindow
-      .loadFile(indexHtml)
-      .catch((e) => logger.error('main: loadFile failed', { path: indexHtml, err: e.message }));
+    mainWindow.loadFile(indexHtml).catch(async (e) => {
+      logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
+      await showStartupFailureDialog({
+        reason: '加载前端资源失败',
+        detail: `路径: ${indexHtml}\n错误: ${e.message}`,
+      });
+    });
   }
 
   mainWindow.on('closed', () => {
@@ -405,6 +417,10 @@ function registerIpcHandlers(): void {
   registerSkillsIpc((channel, handler) => {
     ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
   });
+
+  // PR: log IPC — write renderer-side logs through the main process logger
+  // so they share the same NDJSON sink + log rotate.
+  registerLogIpc(ipcMain);
 }
 
 function shutdownBackend(): void {
@@ -421,6 +437,8 @@ function shutdownBackend(): void {
 }
 
 app.whenReady().then(async () => {
+  // Step 3: prune log files older than 7 days on every cold start
+  cleanupOlderThan(7);
   registerIpcHandlers();
   // Phase 4 lightweight smoke test path: skip backend spawn + health wait
   // (CI doesn't have the sage-backend conda env; main renderer still loads
@@ -428,6 +446,7 @@ app.whenReady().then(async () => {
   if (process.env.SAGE_SKIP_BACKEND === '1') {
     logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
     createMainWindow();
+    buildApplicationMenu();
     return;
   }
   backendProc = spawnBackend();
@@ -437,11 +456,32 @@ app.whenReady().then(async () => {
       url: BACKEND_HEALTH,
       timeoutMs: BACKEND_HEALTH_TIMEOUT_MS,
     });
-    app.quit();
+    // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
+    // User can open logs, retry the health check, or quit.
+    const choice = await showStartupFailureDialog({
+      reason: '后端服务在 30 秒内未响应',
+      detail: `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`,
+    });
+    if (choice === 'retry') {
+      const ready2 = await waitForBackend();
+      if (!ready2) {
+        await showStartupFailureDialog({
+          reason: '后端服务在重试后仍未响应',
+          detail: '已重试一次,仍无法连接',
+        });
+        return;
+      }
+      createMainWindow();
+      buildApplicationMenu();
+      return;
+    }
+    // 'open-logs' or 'quit' — quit is handled inside showStartupFailureDialog
     return;
   }
   logger.info('main: backend ready', { url: BACKEND_URL });
   createMainWindow();
+  // Step 6: build native application menu (File / Help with log dir shortcuts)
+  buildApplicationMenu();
 });
 
 app.on('window-all-closed', () => {
