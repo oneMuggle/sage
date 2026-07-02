@@ -10,8 +10,8 @@ from backend.storage.recent_projects import (
     RecentProject,
     load_recent,
     most_recent_parent,
-    record_recent,
     recent_projects_file,
+    record_recent,
     save_recent,
     user_data_dir,
 )

@@ -22,8 +22,8 @@ from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
-from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.orchestration_router import build_router as build_orchestration_router
+from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.application.services.chat_service import ChatService
@@ -174,13 +174,13 @@ async def lifespan(app: FastAPI):
         app.state.wiki_mcp_server = None
 
     # Phase 2 (multi-agent core): 初始化注册中心 + Planner + Router + HeartbeatMonitor
+    from backend.orchestration.heartbeat import HeartbeatMonitor
     from backend.orchestration.lane_registry import LaneRegistry
+    from backend.orchestration.models import Agent
+    from backend.orchestration.planner import Planner
+    from backend.orchestration.router import DispatchStrategy, Router
     from backend.orchestration.task_registry import TaskRegistry
     from backend.orchestration.team_registry import TeamRegistry
-    from backend.orchestration.planner import Planner
-    from backend.orchestration.router import Router, DispatchStrategy
-    from backend.orchestration.heartbeat import HeartbeatMonitor
-    from backend.orchestration.models import Agent
 
     class _AgentRegistryAdapter:
         """薄适配器：将 AgentRepository (返回 dict) 适配为 Router 期望的 list_agents() 接口。"""

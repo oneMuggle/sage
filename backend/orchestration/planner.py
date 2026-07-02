@@ -150,7 +150,7 @@ class Planner:
         """Build prompt for LLM task decomposition."""
         context_str = json.dumps(context, indent=2) if context else "None"
 
-        prompt = f"""You are a task planning assistant. Decompose the following user request into a graph of tasks.
+        return f"""You are a task planning assistant. Decompose the following user request into a graph of tasks.
 
 User Request: {request}
 
@@ -179,7 +179,6 @@ Output format (JSON):
 
 Return ONLY valid JSON, no additional text."""
 
-        return prompt
 
     def _parse_llm_response(
         self,
@@ -287,9 +286,4 @@ Return ONLY valid JSON, no additional text."""
             return False
 
         # Check for cycles
-        for task_id in task_map:
-            if task_id not in visited:
-                if has_cycle(task_id):
-                    return False
-
-        return True
+        return all(not (task_id not in visited and has_cycle(task_id)) for task_id in task_map)
