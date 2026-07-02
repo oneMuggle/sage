@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+
 import { clientLogger } from '../../shared/log/client';
 
 interface ErrorBoundaryProps {
