@@ -283,9 +283,10 @@ class InprocSkillAdapter:
     async def import_skill_mds(self, files: list[Any]) -> dict[str, list[dict[str, str]]]:
         """异步包装 SkillMdImporter.import_files()。"""
         if self._skill_importer is None:
-            return {"imported": [], "skipped": [
-                {"name": "<unknown>", "reason": "adapter_init_failed"}
-            ]}
+            return {
+                "imported": [],
+                "skipped": [{"name": "<unknown>", "reason": "adapter_init_failed"}],
+            }
         return await self._skill_importer.import_files(files)
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
