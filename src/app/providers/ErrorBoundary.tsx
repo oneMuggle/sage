@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { clientLogger } from '../../shared/log/client';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -24,7 +25,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[ErrorBoundary] caught error:', error, info.componentStack);
+    clientLogger.error('react error boundary', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      componentStack: info.componentStack,
+    });
   }
 
   private reset = (): void => {

@@ -22,11 +22,20 @@ import type {
   RescanResult,
   SkillsElectronApiBridge,
 } from '../src/shared/types/electron-api';
+import type { LogLevel } from '../src/shared/log/levels';
 
 /** UnlistenFn signature mirrors Tauri 2.x for drop-in Phase 2 compatibility. */
 export type UnlistenFn = () => void;
 
 const electronAPI = {
+  /**
+   * Renderer-side log bridge — forwards to main process for file persistence.
+   * Fire-and-forget on the renderer side; main applies rate limit + writes NDJSON.
+   */
+  log(level: LogLevel, msg: string, meta?: Record<string, unknown>): Promise<{ ok: boolean; reason?: string }> {
+    return ipcRenderer.invoke('sage:log:write', { level, msg, meta }) as Promise<{ ok: boolean; reason?: string }>;
+  },
+
   /**
    * Frontend invoke shim — matches `@tauri-apps/api/core` invoke<T>() signature.
    * Phase 2 will replace this entirely; for now it routes through main process.
