@@ -12,6 +12,7 @@ dependencies:
       - pydantic==2.5.0
       # HTTP
       - httpx==0.26.0
+      - python-multipart==0.0.9  # required for FastAPI File() in api/legacy_routes.py
       # Observability
       - prometheus-client==0.25.0
       # Tracing

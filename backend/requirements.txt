@@ -17,6 +17,7 @@ sqlite-vec>=0.1.9
 
 # HTTP
 httpx==0.26.0
+python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
 
 # Observability
 prometheus-client==0.25.0
