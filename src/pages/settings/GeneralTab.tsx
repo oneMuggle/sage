@@ -3,6 +3,7 @@
  */
 
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { DiagnosticsCard } from '../../widgets/settings/DiagnosticsCard';
 
 import { ThemeSelector } from './ThemeSelector';
 import { SettingRow, Toggle } from './components';
@@ -48,6 +49,10 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         >
           恢复默认设置
         </button>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">诊断</h3>
+        <DiagnosticsCard />
       </section>
     </div>
   );

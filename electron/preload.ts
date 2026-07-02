@@ -104,6 +104,32 @@ const electronAPI = {
     importSkills: (paths: string[]) =>
       ipcRenderer.invoke('skills:import', paths) as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,
+
+  /**
+   * T13 (2026-07-02): Log management bridge — Diagnostics card on Settings page.
+   * - listLogFiles: scan log dir → [{ name, sizeBytes, mtimeMs }] sorted newest first
+   * - openLogDir: shell.openPath() + return resolved dir
+   * - copyLogPath: clipboard.writeText() + return resolved dir
+   * - cleanupLogs: rotate + unlink files older than 7 days → { removed }
+   * - setLogLevel: update process.env.SAGE_LOG_LEVEL → { ok: true }
+   */
+  listLogFiles(): Promise<Array<{ name: string; sizeBytes: number; mtimeMs: number }>> {
+    return ipcRenderer.invoke('sage:log:list-files') as Promise<
+      Array<{ name: string; sizeBytes: number; mtimeMs: number }>
+    >;
+  },
+  openLogDir(): Promise<string> {
+    return ipcRenderer.invoke('sage:log:open-dir') as Promise<string>;
+  },
+  copyLogPath(): Promise<string> {
+    return ipcRenderer.invoke('sage:log:copy-path') as Promise<string>;
+  },
+  cleanupLogs(): Promise<{ removed: number }> {
+    return ipcRenderer.invoke('sage:log:cleanup') as Promise<{ removed: number }>;
+  },
+  setLogLevel(level: LogLevel): Promise<{ ok: true }> {
+    return ipcRenderer.invoke('sage:log:set-level', { level }) as Promise<{ ok: true }>;
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
