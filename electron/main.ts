@@ -25,13 +25,34 @@
  *   - --no-sandbox (Win7 SUID-less chrome-sandbox)
  *   - --disable-gpu (compositor fallback)
  */
+// Logger MUST be the first import — it must be initialized before the GPU
+// compat flags below so any throw from `app.disableHardwareAcceleration()`
+// or `app.commandLine.appendSwitch(...)` is captured to the NDJSON log file.
+//
+// NOTE: `electron` is imported FIRST so `app.isPackaged` (used in the
+// initial log line below) is resolvable in the compiled CommonJS output.
+// TypeScript preserves source order of imports; if `./logger` is required
+// before `electron`, the `app.isPackaged` reference throws a TDZ error at
+// runtime even though tsc --noEmit is happy.
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { logger } from './logger';
+logger.info('main: process started', {
+  pid: process.pid,
+  electronVer: process.versions.electron,
+  platform: process.platform,
+  packaged: app.isPackaged,
+});
+
 import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import http from 'node:http';
 import { invokeBackend } from './invoke';
 import { relayChatStream } from './relay';
+import { buildApplicationMenu } from './menu';
+import { showStartupFailureDialog } from './showStartupFailureDialog';
+import { cleanupOlderThan } from './logRotate';
+import { registerLogIpc } from './ipc/logIpc';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -149,10 +170,10 @@ function spawnBackend(): ChildProcess {
     });
   }
 
-  proc.stdout?.on('data', (b) => process.stdout.write(`[backend] ${b}`));
-  proc.stderr?.on('data', (b) => process.stderr.write(`[backend:err] ${b}`));
+  proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: b.toString().trim() }));
+  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: b.toString().trim() }));
   proc.on('exit', (code) => {
-    console.log(`[backend] exited with code ${code}`);
+    logger.info('main: backend exited', { code });
     backendProc = null;
   });
   return proc;
@@ -233,14 +254,26 @@ function createMainWindow(): void {
   });
 
   if (isDev) {
-    mainWindow.loadURL(VITE_DEV_URL).catch((e) => console.error('Failed to load Vite dev URL:', e));
+    mainWindow.loadURL(VITE_DEV_URL).catch(async (e) => {
+      logger.error('main: loadURL failed', { url: VITE_DEV_URL, err: e.message });
+      await showStartupFailureDialog({
+        reason: '加载前端开发服务失败',
+        detail: `URL: ${VITE_DEV_URL}\n错误: ${e.message}`,
+      });
+    });
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     // tsconfig.electron.json uses rootDirs: [electron, src], so the compiled
     // main.js lives at dist-electron/electron/main.js (one extra directory level
     // vs the legacy rootDir: electron setup). Go up two levels to reach dist/.
     const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
-    mainWindow.loadFile(indexHtml).catch((e) => console.error('Failed to load index.html:', e));
+    mainWindow.loadFile(indexHtml).catch(async (e) => {
+      logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
+      await showStartupFailureDialog({
+        reason: '加载前端资源失败',
+        detail: `路径: ${indexHtml}\n错误: ${e.message}`,
+      });
+    });
   }
 
   mainWindow.on('closed', () => {
@@ -256,7 +289,7 @@ function registerIpcHandlers(): void {
         return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error(`[ipc:sage:invoke] ${payload.cmd} failed:`, msg);
+        logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
         throw new Error(msg);
       }
     },
@@ -276,7 +309,7 @@ function registerIpcHandlers(): void {
     async (evt, payload: { event: string }): Promise<{ ok: true; event: string }> => {
       const { event } = payload;
       const senderWebContents = evt.sender;
-      console.log(`[ipc:sage:listen] subscribe: ${event}`);
+      logger.debug('ipc: listen subscribe', { event });
 
       // If already subscribed (e.g., React StrictMode double-mount), return early.
       if (eventSubscriptions.has(event)) {
@@ -294,7 +327,7 @@ function registerIpcHandlers(): void {
         relayChatStream(senderWebContents, event, streamId, BACKEND_URL, abort.signal).catch(
           (e) => {
             if (e instanceof Error && e.name !== 'AbortError') {
-              console.error(`[relay ${event}] error:`, e.message);
+              logger.error('ipc: relay error', { event, err: e.message });
             }
           },
         );
@@ -302,7 +335,7 @@ function registerIpcHandlers(): void {
       }
 
       // Unknown event: log + no-op (frontend listen() Promise still resolves)
-      console.warn(`[ipc:sage:listen] unknown event pattern (no relay): ${event}`);
+      logger.warn('ipc: unknown event', { event });
       return { ok: true, event };
     },
   );
@@ -315,7 +348,7 @@ function registerIpcHandlers(): void {
       if (abort) {
         abort.abort();
         eventSubscriptions.delete(event);
-        console.log(`[ipc:sage:unlisten] aborted: ${event}`);
+        logger.debug('ipc: unlisten aborted', { event });
       }
       return { ok: true };
     },
@@ -362,11 +395,15 @@ function registerIpcHandlers(): void {
     // Return base64 PNG (no data URI prefix)
     return image.toPNG().toString('base64');
   });
+
+  // PR: log IPC — write renderer-side logs through the main process logger
+  // so they share the same NDJSON sink + log rotate.
+  registerLogIpc(ipcMain);
 }
 
 function shutdownBackend(): void {
   if (backendProc && backendProc.exitCode === null) {
-    console.log('[main] killing backend subprocess');
+    logger.info('main: killing backend subprocess');
     backendProc.kill('SIGTERM');
     // Give it 3s to exit cleanly, then SIGKILL
     setTimeout(() => {
@@ -378,24 +415,52 @@ function shutdownBackend(): void {
 }
 
 app.whenReady().then(async () => {
+  // Step 3: prune log files older than 7 days on every cold start
+  cleanupOlderThan(7);
   registerIpcHandlers();
   // Phase 4 lightweight smoke test path: skip backend spawn + health wait
   // (CI doesn't have the sage-backend conda env; main renderer still loads
   // and exposes window.electronAPI for IPC contract verification).
   if (process.env.SAGE_SKIP_BACKEND === '1') {
-    console.log('[main] SAGE_SKIP_BACKEND=1 — skipping backend spawn');
+    logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
     createMainWindow();
+    buildApplicationMenu();
     return;
   }
   backendProc = spawnBackend();
   const ready = await waitForBackend();
   if (!ready) {
-    console.error('[main] backend failed to become healthy within 30s');
-    app.quit();
+    logger.error('main: backend health timeout', {
+      url: BACKEND_HEALTH,
+      timeoutMs: BACKEND_HEALTH_TIMEOUT_MS,
+    });
+    // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
+    // User can open logs, retry the health check, or quit.
+    const choice = await showStartupFailureDialog({
+      reason: '后端服务在 30 秒内未响应',
+      detail: `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`,
+    });
+    if (choice === 'retry') {
+      const ready2 = await waitForBackend();
+      if (!ready2) {
+        await showStartupFailureDialog({
+          reason: '后端服务在重试后仍未响应',
+          detail: '已重试一次,仍无法连接',
+        });
+        return;
+      }
+      logger.info('main: backend ready', { url: BACKEND_URL });
+      createMainWindow();
+      buildApplicationMenu();
+      return;
+    }
+    // 'open-logs' or 'quit' — quit is handled inside showStartupFailureDialog
     return;
   }
-  console.log(`[main] backend ready at ${BACKEND_URL}`);
+  logger.info('main: backend ready', { url: BACKEND_URL });
   createMainWindow();
+  // Step 6: build native application menu (File / Help with log dir shortcuts)
+  buildApplicationMenu();
 });
 
 app.on('window-all-closed', () => {
