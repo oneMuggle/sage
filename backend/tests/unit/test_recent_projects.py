@@ -65,9 +65,7 @@ def test_load_recent_skips_invalid_entries(isolated_data_dir: Path):
 
 # 5. save_recent: atomic write (no partial file on crash)
 def test_save_recent_writes_atomically(isolated_data_dir: Path):
-    items = [
-        RecentProject(path="/x", name="x", opened_at=1.0, intent="create")
-    ]
+    items = [RecentProject(path="/x", name="x", opened_at=1.0, intent="create")]
     save_recent(items)
     f = recent_projects_file()
     assert f.exists()
@@ -116,9 +114,7 @@ def test_most_recent_parent_returns_none_when_empty(isolated_data_dir: Path):
 
 
 # 10. most_recent_parent: non-empty -> parent of first item
-def test_most_recent_parent_returns_parent_of_head(
-    isolated_data_dir: Path, tmp_path: Path
-):
+def test_most_recent_parent_returns_parent_of_head(isolated_data_dir: Path, tmp_path: Path):
     target = tmp_path / "my-wiki"
     record_recent(str(target), "my-wiki", "create")
     parent = most_recent_parent()
@@ -136,7 +132,5 @@ def test_most_recent_parent_returns_none_when_parent_missing(
 
 
 # 12. user_data_dir: env var priority
-def test_user_data_dir_uses_env_var_when_set(
-    isolated_data_dir: Path, tmp_path: Path
-):
+def test_user_data_dir_uses_env_var_when_set(isolated_data_dir: Path, tmp_path: Path):
     assert user_data_dir() == isolated_data_dir

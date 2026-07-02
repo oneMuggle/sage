@@ -179,7 +179,6 @@ Output format (JSON):
 
 Return ONLY valid JSON, no additional text."""
 
-
     def _parse_llm_response(
         self,
         response: str,
