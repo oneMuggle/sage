@@ -14,8 +14,7 @@ const mockElectronAPI = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (window as unknown as { electronAPI: typeof mockElectronAPI }).electronAPI =
-    mockElectronAPI;
+  (window as unknown as { electronAPI: typeof mockElectronAPI }).electronAPI = mockElectronAPI;
 });
 
 describe('DiagnosticsCard', () => {

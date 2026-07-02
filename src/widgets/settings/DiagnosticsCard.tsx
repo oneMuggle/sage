@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
+
 import type { LogLevel } from '../../shared/log/levels';
 
 interface LogFile {
@@ -36,14 +37,16 @@ export function DiagnosticsCard() {
   const [level, setLevel] = useState<LogLevel>('info');
 
   useEffect(() => {
-    window.electronAPI?.listLogFiles?.()
+    window.electronAPI
+      ?.listLogFiles?.()
       .then((r) => setFiles(r ?? []))
       .finally(() => setLoading(false));
   }, []);
 
   const refresh = () => {
     setLoading(true);
-    window.electronAPI?.listLogFiles?.()
+    window.electronAPI
+      ?.listLogFiles?.()
       .then((r) => setFiles(r ?? []))
       .finally(() => setLoading(false));
   };
@@ -59,16 +62,11 @@ export function DiagnosticsCard() {
   };
 
   return (
-    <section
-      className="rounded-lg border border-border bg-card p-4"
-      data-testid="diagnostics-card"
-    >
+    <section className="rounded-lg border border-border bg-card p-4" data-testid="diagnostics-card">
       <h2 className="text-lg font-semibold mb-3">诊断与日志</h2>
 
       <div className="mb-4">
-        <div className="text-sm text-muted-foreground mb-2">
-          日志目录(由系统管理,无需记忆)
-        </div>
+        <div className="text-sm text-muted-foreground mb-2">日志目录(由系统管理,无需记忆)</div>
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => window.electronAPI?.openLogDir?.()}

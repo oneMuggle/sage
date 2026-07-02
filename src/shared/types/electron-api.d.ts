@@ -49,9 +49,7 @@ export interface ElectronAPI {
   /** Optional bridge added in Task 8 (renderer→main log IPC). */
   log?: (level: LogLevel, msg: string, meta?: Record<string, unknown>) => Promise<unknown>;
   /** T13 (2026-07-02): Diagnostics card — list log files (newest first). */
-  listLogFiles?: () => Promise<
-    Array<{ name: string; sizeBytes: number; mtimeMs: number }>
-  >;
+  listLogFiles?: () => Promise<Array<{ name: string; sizeBytes: number; mtimeMs: number }>>;
   /** T13: Open the OS file manager at the log directory. Returns the resolved dir path. */
   openLogDir?: () => Promise<string>;
   /** T13: Copy the log directory path to the clipboard. Returns the resolved dir path. */
