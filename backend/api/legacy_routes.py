@@ -22,7 +22,7 @@ import time
 import uuid
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, StrictBool
 
@@ -646,6 +646,50 @@ async def delete_skill(name: str):
     except FileNotFoundError as exc:
         # SAGE_SKILLS_DIR 未配置 / 其他 fs 错误 — 路由层转 500
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return result
+
+
+# ========== PR-C: Skills load-new (rescan + import) ==========
+
+
+@router.post("/skills/rescan")
+async def rescan_skills():
+    """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载新 SKILL.md。
+
+    - 200 + ``{"loaded": [{"name", "source", "path"}], "skipped": [...], "total_loaded": int}``
+    - 不抛 4xx/5xx (内部失败 → 500 via FastAPI 默认, 但 adapter 层已 try/except)
+    """
+    adapter = _get_skill_adapter()
+    return adapter.rescan_skill_mds()
+
+
+@router.post("/skills/import")
+async def import_skills(files: list[UploadFile] = File(default=[])):
+    """导入 SKILL.md 文件 (multipart)。
+
+    - 200 + ``{"imported": [{"name", "path"}], "skipped": [{"name", "reason"}]}``
+    - 400 + detail: multipart 没 files (空列表)
+    - 500 + detail: skills_dir 无法创建 (NoSkillsDirError)
+
+    partial success 策略: 即使部分文件失败, HTTP 仍 200, 在 skipped 数组中报告。
+    """
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "invalid_request", "message": "no files provided"},
+        )
+
+    from backend.skills.skill_md.exceptions import NoSkillsDirError
+
+    adapter = _get_skill_adapter()
+    try:
+        result = await adapter.import_skill_mds(files)
+    except NoSkillsDirError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"type": "no_skills_dir", "message": str(exc)},
+        ) from exc
+
     return result
 
 

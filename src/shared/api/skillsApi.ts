@@ -2,6 +2,8 @@
  * Sage API - Skills API (PR-7)
  */
 
+import type { ImportResult, RescanResult } from '../types/electron-api';
+
 import { invoke } from './desktopInvoke';
 import type { DeleteSkillResult, Skill, SkillExecuteRequest, SkillExecuteResult } from './types';
 import { handleApiError, withRetry } from './utils';
@@ -70,6 +72,47 @@ export const skillsApi = {
     return withRetry(async () => {
       try {
         return await invoke<DeleteSkillResult>('delete_skill', { name });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 重扫磁盘上的 SKILL.md 目录, 增量加载新增的 SKILL.md 文件。
+   * 走 IPC bridge `window.electronAPI.skills.rescanSkills()` →
+   * main process `skills:rescan` → POST /api/v1/skills/rescan。
+   *
+   * Returns `{loaded, skipped, total_loaded}`.
+   */
+  async rescan(): Promise<RescanResult> {
+    return withRetry(async () => {
+      try {
+        const bridge = window.electronAPI?.skills;
+        if (!bridge) {
+          throw new Error('skills IPC bridge not available');
+        }
+        return await bridge.rescanSkills();
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 通过 IPC bridge 导入用户选中的 SKILL.md 文件。
+   * main process 内部组装 multipart FormData → POST /api/v1/skills/import。
+   *
+   * Returns `{imported, skipped}` — 部分成功时仍返回 200。
+   */
+  async importFiles(paths: string[]): Promise<ImportResult> {
+    return withRetry(async () => {
+      try {
+        const bridge = window.electronAPI?.skills;
+        if (!bridge) {
+          throw new Error('skills IPC bridge not available');
+        }
+        return await bridge.importSkills(paths);
       } catch (error) {
         throw handleApiError(error);
       }

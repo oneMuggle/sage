@@ -17,6 +17,11 @@
  */
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
+import type {
+  ImportResult,
+  RescanResult,
+  SkillsElectronApiBridge,
+} from '../src/shared/types/electron-api';
 
 /** UnlistenFn signature mirrors Tauri 2.x for drop-in Phase 2 compatibility. */
 export type UnlistenFn = () => void;
@@ -72,6 +77,24 @@ const electronAPI = {
    */
   selectDirectory: (opts: { intent: 'create' | 'open'; defaultPath?: string }) =>
     ipcRenderer.invoke('sage:dialog:select-directory', opts) as Promise<string | null>,
+
+  /**
+   * PR-C (2026-07-02): Skills load-new bridge.
+   * - pickSkillFiles: native multi-select dialog → string[] | null
+   * - rescanSkills: POST /api/v1/skills/rescan → RescanResult
+   * - importSkills: POST /api/v1/skills/import (multipart) → ImportResult
+   *
+   * Nested under `skills` (mirrors `windowControls` pattern) so future
+   * skills IPC additions group naturally without polluting top-level.
+   */
+  skills: {
+    pickSkillFiles: () =>
+      ipcRenderer.invoke('skills:pick-files') as Promise<string[] | null>,
+    rescanSkills: () =>
+      ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
+    importSkills: (paths: string[]) =>
+      ipcRenderer.invoke('skills:import', paths) as Promise<ImportResult>,
+  } satisfies SkillsElectronApiBridge,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
