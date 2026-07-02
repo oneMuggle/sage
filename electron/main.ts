@@ -25,6 +25,17 @@
  *   - --no-sandbox (Win7 SUID-less chrome-sandbox)
  *   - --disable-gpu (compositor fallback)
  */
+// Logger MUST be the first import — it must be initialized before the GPU
+// compat flags below so any throw from `app.disableHardwareAcceleration()`
+// or `app.commandLine.appendSwitch(...)` is captured to the NDJSON log file.
+import { logger } from './logger';
+logger.info('main: process started', {
+  pid: process.pid,
+  electronVer: process.versions.electron,
+  platform: process.platform,
+  packaged: app.isPackaged,
+});
+
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -150,10 +161,10 @@ function spawnBackend(): ChildProcess {
     });
   }
 
-  proc.stdout?.on('data', (b) => process.stdout.write(`[backend] ${b}`));
-  proc.stderr?.on('data', (b) => process.stderr.write(`[backend:err] ${b}`));
+  proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: b.toString().trim() }));
+  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: b.toString().trim() }));
   proc.on('exit', (code) => {
-    console.log(`[backend] exited with code ${code}`);
+    logger.info('main: backend exited', { code });
     backendProc = null;
   });
   return proc;
@@ -234,14 +245,18 @@ function createMainWindow(): void {
   });
 
   if (isDev) {
-    mainWindow.loadURL(VITE_DEV_URL).catch((e) => console.error('Failed to load Vite dev URL:', e));
+    mainWindow
+      .loadURL(VITE_DEV_URL)
+      .catch((e) => logger.error('main: loadURL failed', { url: VITE_DEV_URL, err: e.message }));
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     // tsconfig.electron.json uses rootDirs: [electron, src], so the compiled
     // main.js lives at dist-electron/electron/main.js (one extra directory level
     // vs the legacy rootDir: electron setup). Go up two levels to reach dist/.
     const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
-    mainWindow.loadFile(indexHtml).catch((e) => console.error('Failed to load index.html:', e));
+    mainWindow
+      .loadFile(indexHtml)
+      .catch((e) => logger.error('main: loadFile failed', { path: indexHtml, err: e.message }));
   }
 
   mainWindow.on('closed', () => {
@@ -257,7 +272,7 @@ function registerIpcHandlers(): void {
         return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error(`[ipc:sage:invoke] ${payload.cmd} failed:`, msg);
+        logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
         throw new Error(msg);
       }
     },
@@ -277,7 +292,7 @@ function registerIpcHandlers(): void {
     async (evt, payload: { event: string }): Promise<{ ok: true; event: string }> => {
       const { event } = payload;
       const senderWebContents = evt.sender;
-      console.log(`[ipc:sage:listen] subscribe: ${event}`);
+      logger.debug('ipc: listen subscribe', { event });
 
       // If already subscribed (e.g., React StrictMode double-mount), return early.
       if (eventSubscriptions.has(event)) {
@@ -295,7 +310,7 @@ function registerIpcHandlers(): void {
         relayChatStream(senderWebContents, event, streamId, BACKEND_URL, abort.signal).catch(
           (e) => {
             if (e instanceof Error && e.name !== 'AbortError') {
-              console.error(`[relay ${event}] error:`, e.message);
+              logger.error('ipc: relay error', { event, err: e.message });
             }
           },
         );
@@ -303,7 +318,7 @@ function registerIpcHandlers(): void {
       }
 
       // Unknown event: log + no-op (frontend listen() Promise still resolves)
-      console.warn(`[ipc:sage:listen] unknown event pattern (no relay): ${event}`);
+      logger.warn('ipc: unknown event', { event });
       return { ok: true, event };
     },
   );
@@ -316,7 +331,7 @@ function registerIpcHandlers(): void {
       if (abort) {
         abort.abort();
         eventSubscriptions.delete(event);
-        console.log(`[ipc:sage:unlisten] aborted: ${event}`);
+        logger.debug('ipc: unlisten aborted', { event });
       }
       return { ok: true };
     },
@@ -394,7 +409,7 @@ function registerIpcHandlers(): void {
 
 function shutdownBackend(): void {
   if (backendProc && backendProc.exitCode === null) {
-    console.log('[main] killing backend subprocess');
+    logger.info('main: killing backend subprocess');
     backendProc.kill('SIGTERM');
     // Give it 3s to exit cleanly, then SIGKILL
     setTimeout(() => {
@@ -411,18 +426,21 @@ app.whenReady().then(async () => {
   // (CI doesn't have the sage-backend conda env; main renderer still loads
   // and exposes window.electronAPI for IPC contract verification).
   if (process.env.SAGE_SKIP_BACKEND === '1') {
-    console.log('[main] SAGE_SKIP_BACKEND=1 — skipping backend spawn');
+    logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
     createMainWindow();
     return;
   }
   backendProc = spawnBackend();
   const ready = await waitForBackend();
   if (!ready) {
-    console.error('[main] backend failed to become healthy within 30s');
+    logger.error('main: backend health timeout', {
+      url: BACKEND_HEALTH,
+      timeoutMs: BACKEND_HEALTH_TIMEOUT_MS,
+    });
     app.quit();
     return;
   }
-  console.log(`[main] backend ready at ${BACKEND_URL}`);
+  logger.info('main: backend ready', { url: BACKEND_URL });
   createMainWindow();
 });
 
