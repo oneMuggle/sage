@@ -28,6 +28,13 @@
 // Logger MUST be the first import — it must be initialized before the GPU
 // compat flags below so any throw from `app.disableHardwareAcceleration()`
 // or `app.commandLine.appendSwitch(...)` is captured to the NDJSON log file.
+//
+// NOTE: `electron` is imported FIRST so `app.isPackaged` (used in the
+// initial log line below) is resolvable in the compiled CommonJS output.
+// TypeScript preserves source order of imports; if `./logger` is required
+// before `electron`, the `app.isPackaged` reference throws a TDZ error at
+// runtime even though tsc --noEmit is happy.
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { logger } from './logger';
 logger.info('main: process started', {
   pid: process.pid,
@@ -36,7 +43,6 @@ logger.info('main: process started', {
   packaged: app.isPackaged,
 });
 
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
