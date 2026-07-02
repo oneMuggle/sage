@@ -614,9 +614,12 @@ afterEach(() => {
 });
 
 describe('logPaths', () => {
-  it('returns SAGE_LOG_DIR when env is set', async () => {
+  // ⚠️ Plan amendment 2026-07-02 (after T4 review):
+  // SAGE_LOG_DIR is the BASE directory; sage files always go in `${SAGE_LOG_DIR}/logs/`
+  // subdirectory. This matches logger.ts T4 behavior and T3 test expectations.
+  it('returns SAGE_LOG_DIR/logs when env is set', async () => {
     const { getLogDir } = await import('../logPaths');
-    expect(getLogDir()).toBe(tmpDir);
+    expect(getLogDir()).toBe(join(tmpDir, 'logs'));
   });
 
   it('creates the directory if it does not exist', async () => {
@@ -626,8 +629,8 @@ describe('logPaths', () => {
 
     const { getLogDir } = await import('../logPaths');
     const result = getLogDir();
-    expect(result).toBe(freshDir);
-    expect(existsSync(freshDir)).toBe(true);
+    expect(result).toBe(join(freshDir, 'logs'));
+    expect(existsSync(result)).toBe(true);
   });
 
   it('falls back to app.getPath("userData")/logs when SAGE_LOG_DIR not set', async () => {
@@ -637,11 +640,10 @@ describe('logPaths', () => {
     expect(getLogDir()).toBe(join('/mock/userData', 'logs'));
   });
 
-  it('getCurrentLogFile returns sage-YYYY-MM-DD.ndjson under log dir', async () => {
+  it('getCurrentLogFile returns sage-YYYY-MM-DD.ndjson under SAGE_LOG_DIR/logs', async () => {
     const { getCurrentLogFile } = await import('../logPaths');
     const file = getCurrentLogFile();
-    expect(file.startsWith(tmpDir)).toBe(true);
-    expect(file).toMatch(/sage-\d{4}-\d{2}-\d{2}\.ndjson$/);
+    expect(file).toBe(join(tmpDir, 'logs', `sage-${new Date().toISOString().slice(0, 10)}.ndjson`));
   });
 });
 ```
@@ -666,7 +668,10 @@ let cachedDir: string | null = null;
 
 export function getLogDir(): string {
   if (cachedDir) return cachedDir;
-  const dir = process.env.SAGE_LOG_DIR ?? join(app.getPath('userData'), 'logs');
+  // SAGE_LOG_DIR is the BASE directory; sage files always go in `${SAGE_LOG_DIR}/logs/`.
+  // This matches logger.ts (T4) and aligns with T3 test expectations.
+  const base = process.env.SAGE_LOG_DIR ?? app.getPath('userData');
+  const dir = join(base, 'logs');
   if (!existsSync(dir)) {
     try {
       mkdirSync(dir, { recursive: true });
