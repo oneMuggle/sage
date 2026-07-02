@@ -107,6 +107,17 @@ describe('skills IPC (PR-C)', () => {
     expect(init.method).toBe('POST');
   });
 
+  it('rescan throws on non-OK HTTP response with status', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ detail: { type: 'internal', message: 'boom' } }),
+    });
+
+    const handler = registeredHandlers.get('skills:rescan')!;
+    await expect(handler({})).rejects.toThrow(/500/);
+  });
+
   it('import posts multipart FormData with file blobs', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
