@@ -2,9 +2,10 @@
  * Sage API - Skills API (PR-7)
  */
 
+import type { ImportResult, RescanResult } from '../types/electron-api';
+
 import { invoke } from './desktopInvoke';
 import type { DeleteSkillResult, Skill, SkillExecuteRequest, SkillExecuteResult } from './types';
-import type { ImportResult, RescanResult } from '../types/electron-api';
 import { handleApiError, withRetry } from './utils';
 
 export const skillsApi = {

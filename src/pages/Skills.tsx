@@ -104,9 +104,7 @@ const Skills: React.FC = () => {
         toast.success(`已导入 ${result.imported.length} 个技能`);
       }
       if (result.skipped.length > 0) {
-        const reasons = result.skipped
-          .map((s) => `${s.name}(${s.reason})`)
-          .join(', ');
+        const reasons = result.skipped.map((s) => `${s.name}(${s.reason})`).join(', ');
         toast.warning(`跳过 ${result.skipped.length} 个: ${reasons}`);
       }
       await loadSkills();

@@ -44,9 +44,7 @@ Object.defineProperty(globalThis.window, 'electronAPI', {
  *  query the [data-sonner-toast] root directly and substring-match
  *  its textContent. Returns the matching root element. */
 const findToastByText = (regex: RegExp): HTMLElement => {
-  const roots = Array.from(
-    document.querySelectorAll<HTMLElement>('[data-sonner-toast]'),
-  );
+  const roots = Array.from(document.querySelectorAll<HTMLElement>('[data-sonner-toast]'));
   const match = roots.find((el) => regex.test(el.textContent ?? ''));
   if (!match) throw new Error(`No toast matching ${regex}`);
   return match;
@@ -136,9 +134,7 @@ describe('Skills page — Rescan + Import buttons', () => {
 
   it('import error shows error toast', async () => {
     mockElectronAPI.skills.pickSkillFiles.mockResolvedValue(['/path/a.md']);
-    vi.mocked(skillsApi.importFiles).mockRejectedValue(
-      new Error('no_skills_dir: cannot create'),
-    );
+    vi.mocked(skillsApi.importFiles).mockRejectedValue(new Error('no_skills_dir: cannot create'));
     renderWithToast();
     await waitFor(() => screen.getByLabelText('导入 SKILL.md'));
     fireEvent.click(screen.getByLabelText('导入 SKILL.md'));

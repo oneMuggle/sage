@@ -30,6 +30,7 @@ def _reset_skill_adapter_singleton() -> None:
     单例存在 backend/api/legacy_routes.py 模块全局变量 `_skill_adapter_singleton`。
     """
     import backend.api.legacy_routes as routes_mod
+
     routes_mod._skill_adapter_singleton = None
 
 
@@ -112,9 +113,7 @@ def test_post_skills_import_multipart_round_trip(client: TestClient, tmp_path: P
     assert "code-review" in names
 
 
-def test_post_skills_import_returns_structured_skipped(
-    client: TestClient, tmp_path: Path
-) -> None:
+def test_post_skills_import_returns_structured_skipped(client: TestClient, tmp_path: Path) -> None:
     """Bad file → skipped with reason, valid file → imported."""
     _reset_skill_adapter_singleton()
 
