@@ -82,6 +82,9 @@ const Skills: React.FC = () => {
       if (result.total_loaded > 0) {
         toast.success(`已加载 ${result.total_loaded} 个技能`);
       }
+      // rescan 的 `skipped` 字段当前始终为 `[]` (loader API 只返 count tuple 不返 detail;
+      // 见 inproc.py::rescan_skill_mds docstring + spec §10 已知限制)。保留 `if` 是为未来
+      // loader API 扩展后立即启用 toast.warning,无需改前端。
       if (result.skipped.length > 0) {
         toast.warning(`跳过 ${result.skipped.length} 个`);
       }

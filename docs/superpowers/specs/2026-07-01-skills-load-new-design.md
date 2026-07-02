@@ -111,14 +111,15 @@ def _resolve_skills_dir() -> Path:
   "loaded": [
     {"name": "code-review", "source": "skillmd", "path": "/home/user/.sage/skills/code-review/SKILL.md"}
   ],
-  "skipped": [
-    {"name": "coder", "reason": "builtin_conflict"}
-  ],
+  "skipped": [],
   "total_loaded": 1
 }
 ```
 
-**幂等:** 重复调用,新文件数为 0,返回 `loaded: []` + `skipped: []`(可能非空,如 builtin_conflict 始终 skip)。`total_loaded` 是本次 rescan 新增并注册的数量(不是注册表总数),与 `loaded.length` 相等 — 此字段保留是为未来按需扩展(例如批量 hot reload 数)。
+**幂等:** 重复调用,新文件数为 0,返回 `loaded: []` + `skipped: []`。
+`total_loaded` 是本次 rescan 新增并注册的数量(不是注册表总数),与 `loaded.length` 相等 — 此字段保留是为未来按需扩展(例如批量 hot reload 数)。
+
+**`skipped` 字段当前始终为 `[]` 的原因** (plan-mandated 限制): `SkillMdHotLoader.scan_and_load()` 当前只返 `(loaded_count, skipped_count)` 两个 int, 不返 `[{name, reason}]` detail。Backend 端在 `inproc.py::rescan_skill_mds` 已经按 `[]` 兜底, docstring 已记录此限制。要支持 detail 报告, 需扩展 `SkillMdHotLoader.scan_and_load()` API — 未来 follow-up (见 plan §10.9)。
 
 ### 4.2 `POST /api/v1/skills/import`
 
