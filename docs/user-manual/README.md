@@ -11,9 +11,11 @@
 | 03   | [Wiki 知识库](./03-wiki.md)                              | 创建/编辑文档 / 版本管理 / LLM 问答                                      |
 | 04   | [SKILL.md 编写指南](./04-skill-md-authoring.md)          | 自定义技能: frontmatter 字段 / scripts/ 脚本 / gating 条件 / dispatch   |
 | 05   | [从 builtin 迁移到 SKILL.md](./05-skill-md-migration.md) | 内置技能转 SKILL.md 的路径与限制                                        |
+<<<<<<< HEAD
 | 06   | [侧边栏分组与会话排序](./06-sider.md)                  | 4 个可折叠分组 / 会话拖拽重排 / localStorage 持久化 / i18n(M5)       |
 | 07   | [自定义标题栏与前进后退](./07-titlebar.md)           | ↩/→ 浏览器风格导航 + 窗口最小化/最大化/关闭 (M7+M9)                |
 | 08   | [/btw 补充消息 + @文件](./08-btw-at-file.md)       | /btw 浮层补充问题 + @ 工作区文件搜索菜单 (M8)                  |
+| 09   | [诊断与日志](./09-diagnostics.md)                       | 日志文件位置 / 查看方式 / 反馈问题步骤 / 保留策略 / 隐私说明            |
 
 ---
 
