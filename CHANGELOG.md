@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.4.2-lts] - 2026-07-04
+
+### Added
+- **feat(win7): Electron desktop NDJSON logging (cherry-pick from main, PR #98 / PR #99)**
+  - **结构化 NDJSON 日志**: 主进程 + 渲染进程统一写到 `%APPDATA%/sage/logs/sage-YYYY-MM-DD.ndjson`
+    (`electron/logger.ts` 包 `electron-log@^4.4.8`,兼容 Node 16 / Electron 21)
+  - **每天一文件 + 7 天保留 + 10MB 单文件上限自动切 `.1`** (`electron/logRotate.ts`)
+  - **3 个用户入口**:
+    1. 菜单 「帮助 → 打开日志目录 / 复制日志路径」(`electron/menu.ts`)
+    2. 设置页 `/settings` → 「诊断与日志」卡片 (`src/widgets/settings/DiagnosticsCard.tsx`),
+       含日志文件列表 + 4 按钮 (打开目录 / 复制路径 / 立即清理旧日志 / 刷新) + 日志级别选择
+    3. 启动失败对话框 (`electron/showStartupFailureDialog.ts`): backend health 超时 / HTML 加载失败 /
+       uncaughtException 时自动弹出,3 按钮 (打开日志目录 / 重试 / 退出);**logger.error 早于 dialog.showMessageBox 调用**,
+       即使对话框崩溃失败也已落盘
+  - **跨进程 IPC 桥接** (`electron/ipc/logIpc.ts` + `src/shared/log/client.ts`):
+    渲染端 `clientLogger.{debug,info,warn,error}` fire-and-forget 调 `sage:log:write`,
+    主进程统一写文件;**100 msg/sec per sender rate limit** + 1/min dedup warn
+  - **5 个管理 IPC 命令**: `sage:log:list-files` / `open-dir` / `copy-path` / `cleanup` / `set-level`
+  - **ErrorBoundary 接入** (`src/app/providers/ErrorBoundary.tsx`):
+    React 错误 → `clientLogger.error('react error boundary', { error, stack, componentStack })`
+  - **Win7 启动失败排查流程文档化**:
+    `docs/technical/29-electron-logging.md` + `docs/user-manual/06-diagnostics.md`
+
+### Fixed
+- **fix(electron): TDZ runtime bug** — `import { logger } from './logger'` 必须放在
+  `import { app } from 'electron'` **之后**(T5 commit 修复);TS CJS preserve import order,
+  而 `logger.info('main: process started', { packaged: app.isPackaged })` 立即引用
+  electron 模块 → 之前顺序会导致 `ReferenceError: Cannot access 'electron_1' before initialization`。
+  **`tsc --noEmit` + CI build 不抓这个**(只 typecheck + transpile),只能 runtime smoke test 抓。
+
+### Known Limitations (永久)
+- **ChatInput SKILL.md slash 集成不可用** (PR #86 #87 跳过): 依赖 win7 M8 同步时删除的
+  `slashCommands.ts` (win7 长期不做 SlashCommandMenu)。直接通过 `skillsApi.execute()` 调用
+  SKILL.md skills 仍可用。
+- **Wiki folder picker 不可用**: win7 之前 revert 了 llm-wiki-folder-picker PR。
+
 ## [v0.4.1-lts] - 2026-07-01
 
 ### Added
