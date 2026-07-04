@@ -38,6 +38,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "cmdk": "^1.1.1",
+    "electron-log": "^4.4.8",
     "lucide-react": "^0.294.0",
     "motion": "^12.41.0",
     "node-fetch": "^2.7.0",
