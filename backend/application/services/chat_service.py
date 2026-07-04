@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from typing import Any
 
 from sage_core import LLMError, Message, Role, ToolCall
@@ -38,6 +39,7 @@ except ImportError:
     MemoryPort = None  # type: ignore
     MemoryContext = None  # type: ignore
 
+from backend.domain.agent_event import RunEventScope
 from backend.utils.otel import get_tracer
 
 logger = logging.getLogger(__name__)
@@ -167,6 +169,11 @@ class ChatService:
         span: Any,
     ) -> list[Message]:
         """``run_turn`` 的实际实现，调用方需已开好 OTel span。"""
+        # M1: run-lifecycle 事件作用域（稳定 run_id + 单调 seq）
+        run = RunEventScope(self.events, uuid.uuid4().hex)
+        run.emit("run_start", session_id=session_id)
+        run.emit("turn_start", session_id=session_id)
+
         # 1) 持久化 user message
         await self.storage.append_message(session_id, user_message)
         self.events.emit(
@@ -281,6 +288,7 @@ class ChatService:
             )
             span.set_attribute("error", True)
             span.set_attribute("error.type", exc.type.value)
+            run.emit("run_end", session_id=session_id, status="error", error_type=exc.type.value)
             raise
 
         # 成功路径：直方图 + 成功 outcome
@@ -303,7 +311,7 @@ class ChatService:
 
         # 4) 执行模型发起的 tool_calls（PG2.9：单轮执行；不触发二次 LLM）
         if response.tool_calls:
-            await self._execute_tool_calls(session_id, response.tool_calls)
+            await self._execute_tool_calls(session_id, response.tool_calls, run)
             # 埋点：ReAct 步数（9 指标之一）— 本轮触发的 tool_call 数
             self.metrics.histogram(
                 _REACT_STEPS_METRIC,
@@ -361,6 +369,7 @@ class ChatService:
                 logger.warning(f"Failed to compress working memory: {e}")
                 span.set_attribute("memory.compress_error", str(e))
 
+        run.emit("run_end", session_id=session_id, status="ok")
         return [user_message, response]
 
     # ------------------------------------------------------------------ #
@@ -413,6 +422,7 @@ class ChatService:
         self,
         session_id: str,
         tool_calls: list[ToolCall],
+        run: RunEventScope,
     ) -> None:
         """执行模型返回的 tool_calls，依次 emit 事件 / 计数 / 持久化。
 
@@ -439,6 +449,14 @@ class ChatService:
                 tool_call_id=tc.id,
             )
             await self.storage.append_message(session_id, tool_message)
+            # M1: 对称的 tool_result 事件（与 tool_invoked 成对，带 run_id + seq）
+            run.emit(
+                "tool_result",
+                session_id=session_id,
+                tool=tc.name,
+                success=result.success,
+                error=result.error if not result.success else None,
+            )
             if not result.success:
                 self.events.emit(
                     "tool_failed",
