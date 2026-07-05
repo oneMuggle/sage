@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -31,6 +32,9 @@ from sage_core.repositories import (
     ToolPort,  # noqa: F401  (structural typing target)
 )
 
+from backend.adapters.out.tool.inproc_adapter import _truncate_output
+from backend.domain.tool_policy import ToolPolicy
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,11 +44,18 @@ class ComputeToolAdapter:
     Args:
         compute: ``ComputePort`` 实现(如 ``SubprocessComputeAdapter``)。
         inner:   现有 ``ToolPort`` 实现(如 ``InprocToolAdapter``)。
+        policy:  M2 显式限制策略（超时 + byte 截断）。缺省即 ``ToolPolicy()``。
     """
 
-    def __init__(self, compute: ComputePort, inner: ToolPort) -> None:
+    def __init__(
+        self,
+        compute: ComputePort,
+        inner: ToolPort,
+        policy: ToolPolicy | None = None,
+    ) -> None:
         self._compute = compute
         self._inner = inner
+        self._policy = policy or ToolPolicy()
         # 缓存计算工具名集合,避免每次 execute 都调 list_operations
         self._compute_names = {spec.name for spec in compute.list_operations()}
 
@@ -61,7 +72,7 @@ class ComputeToolAdapter:
         return list(self._inner.list_tools()) + compute_specs
 
     async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
-        """路由:计算工具走 ComputePort,其他委托给 inner。"""
+        """路由:计算工具走 ComputePort,其他委托给 inner（均受 M2 策略约束）。"""
         if name in self._compute_names:
             return await self._execute_compute(name, args)
         return await self._inner.execute(name, args)
@@ -69,10 +80,29 @@ class ComputeToolAdapter:
     # ---- 私有 ----
 
     async def _execute_compute(self, name: str, args: dict[str, Any]) -> ToolResult:
-        """调 ComputePort,把 ComputeResult 翻译为 ToolResult。"""
+        """调 ComputePort,把 ComputeResult 翻译为 ToolResult。
+
+        M2：受 ``policy.timeout_seconds`` 中心超时约束；超时返回
+        ``success=False, error="tool_timeout: ..."``。
+        """
         req = ComputeRequest(operation=name, params=dict(args))
         try:
-            result = await self._compute.execute(req)
+            result = await asyncio.wait_for(
+                self._compute.execute(req),
+                timeout=self._policy.timeout_seconds,
+            )
+        except (asyncio.TimeoutError, TimeoutError):  # noqa: UP041
+            # Python 3.10: asyncio.exceptions.TimeoutError ≠ builtin TimeoutError；
+            # 3.11+ 两者为同一类。兼容两个名称。
+            return ToolResult(
+                success=False,
+                output="",
+                error=f"tool_timeout: exceeded {self._policy.timeout_seconds}s",
+                metadata={
+                    "timeout_seconds": self._policy.timeout_seconds,
+                    "truncated": False,
+                },
+            )
         except Exception as exc:  # noqa: BLE001  — ToolPort 契约要求不抛
             logger.exception("compute.execute unexpected error tool=%s", name)
             return ToolResult(
@@ -81,15 +111,18 @@ class ComputeToolAdapter:
                 error=f"{type(exc).__name__}: {exc}",
                 metadata=None,
             )
-        return _compute_result_to_tool_result(result)
+        return _compute_result_to_tool_result(result, self._policy)
 
 
-def _compute_result_to_tool_result(result: ComputeResult) -> ToolResult:
+def _compute_result_to_tool_result(result: ComputeResult, policy: ToolPolicy) -> ToolResult:
     """``ComputeResult`` → ``ToolResult`` 适配。
 
     成功时把 ``output`` (dict) 序列化为 JSON 字符串放入 ``ToolResult.output``;
     失败时 ``error`` 取 ``ComputeError.message``。无论成败,``metadata`` 携带
     ``duration_ms`` / ``exit_code`` / 错误分类供上层日志/指标使用。
+
+    M2: ``output`` 按 ``policy.max_output_bytes`` 截断；截断时 metadata 增
+    ``truncated`` / ``original_bytes`` / ``max_output_bytes``。
     """
     metadata: dict[str, Any] = {}
     if result.duration_ms is not None:
@@ -111,9 +144,12 @@ def _compute_result_to_tool_result(result: ComputeResult) -> ToolResult:
                 error=f"compute output not JSON-serializable: {exc}",
                 metadata=metadata or None,
             )
+        truncated, truncation_meta = _truncate_output(output_str, policy)
+        if truncation_meta:
+            metadata.update(truncation_meta)
         return ToolResult(
             success=True,
-            output=output_str,
+            output=truncated,
             error=None,
             metadata=metadata or None,
         )

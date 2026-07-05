@@ -40,6 +40,7 @@ except ImportError:
     MemoryContext = None  # type: ignore
 
 from backend.domain.agent_event import RunEventScope
+from backend.domain.tool_policy import ToolPolicy
 from backend.utils.otel import get_tracer
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ class ChatService:
         metrics: MetricPort,
         events: EventPort,
         memory: MemoryPort | None = None,  # Optional for backward compatibility
+        tool_policy: ToolPolicy | None = None,  # M2 工具调用预算守卫
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -88,6 +90,7 @@ class ChatService:
         self.metrics = metrics
         self.events = events
         self.memory = memory  # MemoryPort for memory integration
+        self._tool_policy = tool_policy or ToolPolicy()
         # P3.2: 当前活跃 session 计数（用于 sage_active_sessions gauge）
         self._active_session_count: int = 0
 
@@ -310,8 +313,9 @@ class ChatService:
         span.set_attribute("response.has_tool_calls", bool(response.tool_calls))
 
         # 4) 执行模型发起的 tool_calls（PG2.9：单轮执行；不触发二次 LLM）
+        budget_exceeded = False
         if response.tool_calls:
-            await self._execute_tool_calls(session_id, response.tool_calls, run)
+            budget_exceeded = await self._execute_tool_calls(session_id, response.tool_calls, run)
             # 埋点：ReAct 步数（9 指标之一）— 本轮触发的 tool_call 数
             self.metrics.histogram(
                 _REACT_STEPS_METRIC,
@@ -369,7 +373,11 @@ class ChatService:
                 logger.warning(f"Failed to compress working memory: {e}")
                 span.set_attribute("memory.compress_error", str(e))
 
-        run.emit("run_end", session_id=session_id, status="ok")
+        run.emit(
+            "run_end",
+            session_id=session_id,
+            status="tool_budget_exceeded" if budget_exceeded else "ok",
+        )
         return [user_message, response]
 
     # ------------------------------------------------------------------ #
@@ -423,15 +431,28 @@ class ChatService:
         session_id: str,
         tool_calls: list[ToolCall],
         run: RunEventScope,
-    ) -> None:
+    ) -> bool:
         """执行模型返回的 tool_calls，依次 emit 事件 / 计数 / 持久化。
 
         PG2.9 简化：每个 tool_call 都立即执行（不并发）、执行结果
         作为 ``role=TOOL`` 消息追加到会话历史，但不重新调 LLM。
         这样 P3+ 在此基础上扩展 ReAct 多轮循环时，行为是"在末尾
         加一层循环"，向后兼容。
+
+        M2 工具调用预算守卫：单次 run 内 tool_call 累计超
+        ``tool_policy.max_tool_calls_per_run`` 时停止执行；返回 ``True`` 让
+        上层把 ``run_end`` 标记为 ``status="tool_budget_exceeded"``（对齐
+        ``core/legacy/agent.py:611`` 的 ``max_iterations_exceeded`` 语义）。
+
+        Returns:
+            ``True`` 当预算被超额；否则 ``False``。
         """
+        budget = self._tool_policy.max_tool_calls_per_run
+        called = 0
         for tc in tool_calls:
+            if called >= budget:
+                # 预算用尽：剩余 tool_calls 不再执行，直接 break。
+                break
             self.events.emit(
                 "tool_invoked",
                 {"session_id": session_id, "tool": tc.name, "args": tc.args},
@@ -449,6 +470,7 @@ class ChatService:
                 tool_call_id=tc.id,
             )
             await self.storage.append_message(session_id, tool_message)
+            called += 1
             # M1: 对称的 tool_result 事件（与 tool_invoked 成对，带 run_id + seq）
             run.emit(
                 "tool_result",
@@ -479,3 +501,4 @@ class ChatService:
                     _TOOL_INVOCATIONS_METRIC,
                     {"tool": tc.name, "outcome": "success"},
                 )
+        return called >= budget and len(tool_calls) > budget

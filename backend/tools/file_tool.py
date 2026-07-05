@@ -1,6 +1,7 @@
 """
 文件工具 - 文件系统操作
 """
+
 import os
 from pathlib import Path
 
@@ -17,21 +18,12 @@ class ReadFileTool(BaseTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "文件路径"
-                    },
-                    "offset": {
-                        "type": "integer",
-                        "description": "起始行号 (默认 1)"
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "读取行数 (默认 500)"
-                    }
+                    "path": {"type": "string", "description": "文件路径"},
+                    "offset": {"type": "integer", "description": "起始行号 (默认 1)"},
+                    "limit": {"type": "integer", "description": "读取行数 (默认 500)"},
                 },
-                "required": ["path"]
-            }
+                "required": ["path"],
+            },
         )
 
     def _is_safe_path(self, path: str, allowed_base: str) -> bool:
@@ -60,6 +52,10 @@ class ReadFileTool(BaseTool):
             path: 文件路径
             offset: 起始行号
             limit: 读取行数
+
+        M2: ``policy.max_read_bytes`` 字节上限——超限时**流式**读取（先于行
+        切片），避免一次性 ``read_text`` 把大文件载入内存。截断时 content
+        含 ``truncated=True, original_bytes, max_read_bytes``。
         """
         try:
             file_path = Path(path).expanduser()
@@ -74,7 +70,18 @@ class ReadFileTool(BaseTool):
             if not os.access(file_path, os.R_OK):
                 return ToolResult(success=False, error="无读取权限")
 
-            content = file_path.read_text(encoding="utf-8", errors="replace")
+            original_bytes = file_path.stat().st_size
+            max_bytes = self._policy.max_read_bytes
+            truncated = original_bytes > max_bytes
+
+            if truncated:
+                # 流式读取：仅读 max_bytes 字节到内存
+                with open(file_path, "rb") as f:
+                    raw_bytes = f.read(max_bytes)
+                content = raw_bytes.decode("utf-8", errors="replace")
+            else:
+                content = file_path.read_text(encoding="utf-8", errors="replace")
+
             lines = content.split("\n")
 
             # 处理分页
@@ -87,8 +94,11 @@ class ReadFileTool(BaseTool):
                 content={
                     "total_lines": len(lines),
                     "content": selected_content,
-                    "path": str(file_path.resolve())
-                }
+                    "path": str(file_path.resolve()),
+                    "truncated": truncated,
+                    "original_bytes": original_bytes,
+                    "max_read_bytes": max_bytes if truncated else None,
+                },
             )
 
         except Exception as e:
@@ -105,21 +115,12 @@ class WriteFileTool(BaseTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "文件路径"
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "文件内容"
-                    },
-                    "append": {
-                        "type": "boolean",
-                        "description": "是否追加模式 (默认 false)"
-                    }
+                    "path": {"type": "string", "description": "文件路径"},
+                    "content": {"type": "string", "description": "文件内容"},
+                    "append": {"type": "boolean", "description": "是否追加模式 (默认 false)"},
                 },
-                "required": ["path", "content"]
-            }
+                "required": ["path", "content"],
+            },
         )
 
     def execute(self, path: str, content: str, append: bool = False, **kwargs) -> ToolResult:
@@ -146,8 +147,8 @@ class WriteFileTool(BaseTool):
                 content={
                     "path": str(file_path.resolve()),
                     "bytes_written": len(content.encode("utf-8")),
-                    "mode": mode
-                }
+                    "mode": mode,
+                },
             )
 
         except Exception as e:
@@ -164,17 +165,11 @@ class ListDirTool(BaseTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "目录路径"
-                    },
-                    "all": {
-                        "type": "boolean",
-                        "description": "是否显示隐藏文件 (默认 true)"
-                    }
+                    "path": {"type": "string", "description": "目录路径"},
+                    "all": {"type": "boolean", "description": "是否显示隐藏文件 (默认 true)"},
                 },
-                "required": ["path"]
-            }
+                "required": ["path"],
+            },
         )
 
     def execute(self, path: str, all: bool = True, **kwargs) -> ToolResult:
@@ -184,6 +179,9 @@ class ListDirTool(BaseTool):
         Args:
             path: 目录路径
             all: 是否显示隐藏文件
+
+        M2: ``policy.max_result_items`` 条数上限——超限时截断 ``items``；
+        content 含 ``truncated``/``total_items``。
         """
         try:
             dir_path = Path(path).expanduser()
@@ -198,21 +196,31 @@ class ListDirTool(BaseTool):
             for item in dir_path.iterdir():
                 if not all and item.name.startswith("."):
                     continue
-                items.append({
-                    "name": item.name,
-                    "type": "dir" if item.is_dir() else "file",
-                    "size": item.stat().st_size if item.is_file() else None
-                })
+                items.append(
+                    {
+                        "name": item.name,
+                        "type": "dir" if item.is_dir() else "file",
+                        "size": item.stat().st_size if item.is_file() else None,
+                    }
+                )
+
+            total_items = len(items)
+            max_items = self._policy.max_result_items
+            truncated = total_items > max_items
 
             # 排序：目录在前，文件在后，按名称排序
             items.sort(key=lambda x: (x["type"] != "dir", x["name"]))
+            if truncated:
+                items = items[:max_items]
 
             return ToolResult(
                 success=True,
                 content={
                     "path": str(dir_path.resolve()),
-                    "items": items
-                }
+                    "items": items,
+                    "truncated": truncated,
+                    "total_items": total_items,
+                },
             )
 
         except Exception as e:
