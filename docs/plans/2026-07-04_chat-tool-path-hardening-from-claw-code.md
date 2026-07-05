@@ -162,13 +162,14 @@ class ToolPolicy:
 - [x] 测试：`test_agent_event` / `test_event_adapters_envelope` / `test_chat_service_run_events`（完整事件序列 + 信封字段 + `seq` 单调）
 
 ### M2 · 显式限制
-- [ ] 新增 `backend/domain/tool_policy.py`（`ToolPolicy` + `from_config`）
-- [ ] `InprocToolAdapter` / `ComputeToolAdapter` 中心 `asyncio.wait_for` 超时
-- [ ] `read_file` 限量读取（byte 上限，先于行切片）；分发处 output byte 截断
-- [ ] `list_dir` / `rglob` 条数上限
-- [ ] `ChatService` 工具调用预算守卫 + `tool_budget_exceeded`
-- [ ] `config.yaml` 新增 `tools:` 段；分散 30s 硬编码改读 policy
-- [ ] 单测：byte 截断 / 超时 / 条数截断 / 预算守卫
+- [x] 新增 `backend/domain/tool_policy.py`（`ToolPolicy` frozen dataclass + `from_config(dict)`）
+- [x] `InprocToolAdapter` / `ComputeToolAdapter` 中心 `asyncio.wait_for` 超时 + output byte 截断（Python 3.10 兼容：catch `asyncio.TimeoutError, TimeoutError` 双名）
+- [x] `BaseTool.__init__(policy=None)`；`register_all_tools(registry, policy=None)` 透传；`InprocToolAdapter` 在注册时把 `self._policy` 注入
+- [x] `read_file` 流式读取（先于行切片）；超 `max_read_bytes` 截断并标 `truncated/original_bytes/max_read_bytes`
+- [x] `list_dir` `iterdir` 条数截断 `max_result_items`；content 含 `truncated/total_items`
+- [x] `ChatService` 工具调用预算守卫 `_execute_tool_calls -> bool`；`_run_turn_inner` 据此 `run_end(status="tool_budget_exceeded" if exceeded else "ok")`
+- [x] `backend/config.yaml` 新增 `tools:` 段；`backend/application/services/tool_config.py: load_tool_policy_from_config(path)` 读取并构造 `ToolPolicy`；缺段/缺文件降级默认
+- [x] 测试：26 个新增（M2a=5、M2b=6、M2c=7、M2d=3、M2e=5）；后端全套 1468 passed（无 failure）；mypy domain strict 干净；ruff 全绿
 
 ### M3 · 权限与安全边界
 - [ ] `ChatService` 下传 `permission_preset` + `workspace_root`，工具执行前 `LanePermission.check`

@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+from backend.domain.tool_policy import ToolPolicy
+
 
 @dataclass
 class ToolSchema:
@@ -44,10 +46,13 @@ class BaseTool(ABC):
     所有工具必须继承此类并实现:
     - _build_schema(): 返回工具的 Schema
     - execute(): 执行工具逻辑
+
+    M2：构造器接 ``policy`` 注入（缺省 ``ToolPolicy()`` 默认值）。
     """
 
-    def __init__(self):
+    def __init__(self, policy: ToolPolicy | None = None) -> None:
         self._schema: ToolSchema | None = None
+        self._policy = policy or ToolPolicy()
 
     @property
     def schema(self) -> ToolSchema:
