@@ -26,7 +26,7 @@ _DEFAULT_MAX_TOOL_CALLS_PER_RUN = 25
 
 @dataclass(frozen=True)
 class ToolPolicy:
-    """工具执行的统一上限。
+    """工具执行的统一上限 + 安全边界。
 
     Fields:
         timeout_seconds:    中心超时（覆盖分散硬编码）
@@ -34,6 +34,8 @@ class ToolPolicy:
         max_result_items:   list/search 类条数上限
         max_read_bytes:     read_file 字节上限（先于行切片）
         max_tool_calls_per_run: 单次 run 内工具调用总数守卫
+        workspace_root:     M3 安全边界——文件工具执行时 resolve 后必须落在
+                           此目录下；``None`` 不做检查（向后兼容）。
     """
 
     timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS
@@ -41,6 +43,7 @@ class ToolPolicy:
     max_result_items: int = _DEFAULT_MAX_RESULT_ITEMS
     max_read_bytes: int = _DEFAULT_MAX_READ_BYTES
     max_tool_calls_per_run: int = _DEFAULT_MAX_TOOL_CALLS_PER_RUN
+    workspace_root: str | None = None
 
     @classmethod
     def from_config(cls, cfg: dict[str, Any]) -> ToolPolicy:
@@ -57,4 +60,5 @@ class ToolPolicy:
             max_tool_calls_per_run=cfg.get(
                 "max_tool_calls_per_run", defaults.max_tool_calls_per_run
             ),
+            workspace_root=cfg.get("workspace_root", defaults.workspace_root),
         )
