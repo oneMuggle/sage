@@ -154,8 +154,11 @@ def test_cli_confirmation_passes_correct_args_to_callback():
     callback.assert_called_once_with(skill_name="my-skill", script_path=script, args=args)
 
 
-def test_cli_confirmation_without_callback_defaults_to_true():
-    """CliConfirmationAdapter 无 callback 时默认返回 True (向后兼容)。"""
+def test_cli_confirmation_without_callback_defaults_to_false_fail_closed():
+    """CliConfirmationAdapter 无 callback 时**默认拒绝**（M3 fail-closed）。
+
+    历史默认 True 已被 M3 替换；调用方需显式注入自动确认 callback。
+    """
     adapter = CliConfirmationAdapter(callback=None)
     result = asyncio.run(
         adapter.confirm(
@@ -164,7 +167,7 @@ def test_cli_confirmation_without_callback_defaults_to_true():
             args=(),
         )
     )
-    assert result is True
+    assert result is False
 
 
 def test_cli_confirmation_handles_async_callback():

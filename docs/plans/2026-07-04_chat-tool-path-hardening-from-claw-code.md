@@ -172,13 +172,14 @@ class ToolPolicy:
 - [x] 测试：26 个新增（M2a=5、M2b=6、M2c=7、M2d=3、M2e=5）；后端全套 1468 passed（无 failure）；mypy domain strict 干净；ruff 全绿
 
 ### M3 · 权限与安全边界
-- [ ] `ChatService` 下传 `permission_preset` + `workspace_root`，工具执行前 `LanePermission.check`
-- [ ] 激活 `file_tool._is_safe_path`；三入口 resolve + 边界 + `..`/符号链接/绝对越界拒绝
-- [ ] `TerminalTool` PermissionMode 门 + cwd 限界
-- [ ] `McpTool.execute` 前置权限查
-- [ ] `CliConfirmationAdapter` 改 fail-closed
-- [ ] `tool_result` 事件补 `resolved_path` + `permission_decision`
-- [ ] 单测：越界拒绝 / 预设拦截 / MCP 门禁 / 确认默认拒绝 / 审计字段
+- [x] 激活 `file_tool._is_safe_path`（移到 `BaseTool`）；3 入口 resolve + `relative_to` 严格比对；`_enforce_workspace` 拒 .. / 符号链接 / 绝对越界
+- [x] `ToolPolicy` 加 `workspace_root: str | None = None` 字段
+- [x] `ChatService` 下传 `permission_preset`/`permission_allowed_paths`/`permission_denied_tools`；构造 `LanePermission`；`_execute_tool_calls` 在工具执行前 `LanePermission.check(AgentAction)` 门禁；被拒返回 `permission_denied` + `permission_decision=denied`
+- [x] `CliConfirmationAdapter` 改 fail-closed（callback=None 默认 False）；更新既有 `test_skill_md_confirm` 断言
+- [x] `tool_result` 事件补 `resolved_path` + `permission_decision` 字段
+- [ ] `TerminalTool` PermissionMode 门 + cwd 限界 — **暂缓**：核心权限语义已通过 `LanePermission` 在主链路落地，terminal 细化接线留 follow-up PR
+- [ ] `McpTool.execute` 前置权限查 — **暂缓**：同上，核心已覆盖
+- [x] 测试：21 个新增（M3a=9 + M3b=5 + M3c/d=6 + skill_md_confirm=1 改）；后端全套 1488 passed；mypy domain strict 干净；ruff 全绿
 
 ---
 

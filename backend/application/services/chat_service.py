@@ -41,6 +41,11 @@ except ImportError:
 
 from backend.domain.agent_event import RunEventScope
 from backend.domain.tool_policy import ToolPolicy
+from backend.orchestration.permission import (
+    AgentAction,
+    LanePermission,
+    PermissionPreset,
+)
 from backend.utils.otel import get_tracer
 
 logger = logging.getLogger(__name__)
@@ -82,6 +87,9 @@ class ChatService:
         events: EventPort,
         memory: MemoryPort | None = None,  # Optional for backward compatibility
         tool_policy: ToolPolicy | None = None,  # M2 工具调用预算守卫
+        permission_preset: PermissionPreset | None = None,  # M3 权限预设
+        permission_allowed_paths: list[str] | None = None,  # M3 允许的路径
+        permission_denied_tools: list[str] | None = None,  # M3 黑名单
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -91,6 +99,12 @@ class ChatService:
         self.events = events
         self.memory = memory  # MemoryPort for memory integration
         self._tool_policy = tool_policy or ToolPolicy()
+        # M3: 构造 LanePermission；缺省 IMPLEMENT 保持向后兼容
+        self._permission = LanePermission(
+            preset=permission_preset or PermissionPreset.IMPLEMENT,
+            allowed_paths=list(permission_allowed_paths or []),
+            denied_tools=list(permission_denied_tools or []),
+        )
         # P3.2: 当前活跃 session 计数（用于 sage_active_sessions gauge）
         self._active_session_count: int = 0
 
@@ -462,6 +476,28 @@ class ChatService:
                 _TOOL_INVOCATIONS_METRIC,
                 {"tool": tc.name, "outcome": "started"},
             )
+            # M3: 权限门禁——用 LanePermission.check 决定是否放行；
+            # 被拒时不调底层 tools.execute，直接返回 permission_denied。
+            target = _extract_action_target(tc.args)
+            action = AgentAction(action_type=tc.name, target=target, parameters=dict(tc.args))
+            decision = "allowed" if self._permission.check(action) else "denied"
+            if decision == "denied":
+                run.emit(
+                    "tool_result",
+                    session_id=session_id,
+                    tool=tc.name,
+                    success=False,
+                    error="permission_denied: action not permitted by "
+                    f"{self._permission.preset.value} preset",
+                    permission_decision="denied",
+                    resolved_path=target,
+                )
+                self.metrics.counter(
+                    _TOOL_INVOCATIONS_METRIC,
+                    {"tool": tc.name, "outcome": "denied"},
+                )
+                called += 1
+                continue
             result = await self.tools.execute(tc.name, tc.args)
             # 把工具结果作为 TOOL 消息回写会话历史
             tool_message = Message(
@@ -478,6 +514,8 @@ class ChatService:
                 tool=tc.name,
                 success=result.success,
                 error=result.error if not result.success else None,
+                permission_decision="allowed",
+                resolved_path=target,
             )
             if not result.success:
                 self.events.emit(
@@ -502,3 +540,21 @@ class ChatService:
                     {"tool": tc.name, "outcome": "success"},
                 )
         return called >= budget and len(tool_calls) > budget
+
+
+def _extract_action_target(args: dict) -> str:
+    """从工具参数中提取 ``LanePermission`` 关心的 target。
+
+    read/write/delete_file → ``path``；execute/shell → ``command``；其他 → 第一个 str 值。
+    """
+    if not args:
+        return ""
+    for key in ("path", "command", "cmd", "url"):
+        val = args.get(key)
+        if isinstance(val, str):
+            return val
+    # 退而求其次：第一个字符串值
+    for v in args.values():
+        if isinstance(v, str):
+            return v
+    return ""

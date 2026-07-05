@@ -33,7 +33,10 @@ class CliConfirmationAdapter:
     Args:
         timeout_s: 确认超时（秒），默认 60s
         callback: 用户定义的确认回调函数。签名: ``(skill_name, script_path, args) -> bool | Awaitable[bool]``
-                 如果为 None，默认返回 True（向后兼容）
+                 如果为 None，**默认拒绝**（M3 fail-closed：更安全）。
+                 调用方需显式注入自动确认 callback 才能无回调通过。
+
+    M3 变更：callback=None 旧默认 True → 新默认 False（fail-closed）。
     """
 
     def __init__(
@@ -59,14 +62,14 @@ class CliConfirmationAdapter:
             args: 脚本参数
 
         Returns:
-            callback 返回值，异常时返回 False，无 callback 时返回 True
+            callback 返回值，异常时返回 False，无 callback 时**默认拒绝**（M3）
         """
         if self._callback is None:
             logger.debug(
-                "CliConfirmationAdapter has no callback, auto-approving %s",
+                "CliConfirmationAdapter has no callback, fail-closed reject %s",
                 skill_name,
             )
-            return True
+            return False
 
         try:
             result = self._callback(

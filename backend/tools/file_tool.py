@@ -26,23 +26,11 @@ class ReadFileTool(BaseTool):
             },
         )
 
-    def _is_safe_path(self, path: str, allowed_base: str) -> bool:
-        """
-        检查路径是否在允许的基础目录内
+    def _is_safe_path(self, path: str, allowed_base: str) -> bool:  # noqa: F811 — 保留为外部 API
+        """历史 API：保留给外部调用方；推荐用基类 ``_enforce_workspace``。"""
+        from .base import _is_safe_path as _base_is_safe_path
 
-        Args:
-            path: 文件路径
-            allowed_base: 允许的基础目录
-
-        Returns:
-            是否安全
-        """
-        try:
-            file_path = Path(path).expanduser().resolve()
-            allowed_path = Path(allowed_base).resolve()
-            return str(file_path).startswith(str(allowed_path))
-        except Exception:
-            return False
+        return _base_is_safe_path(path, allowed_base)
 
     def execute(self, path: str, offset: int = 1, limit: int = 500, **kwargs) -> ToolResult:
         """
@@ -56,7 +44,11 @@ class ReadFileTool(BaseTool):
         M2: ``policy.max_read_bytes`` 字节上限——超限时**流式**读取（先于行
         切片），避免一次性 ``read_text`` 把大文件载入内存。截断时 content
         含 ``truncated=True, original_bytes, max_read_bytes``。
+        M3: ``policy.workspace_root`` 路径守卫（resolve 后比对，拒 ..、越界、symlink 逃逸）。
         """
+        blocked = self._enforce_workspace(path)
+        if blocked is not None:
+            return blocked
         try:
             file_path = Path(path).expanduser()
 
@@ -131,7 +123,12 @@ class WriteFileTool(BaseTool):
             path: 文件路径
             content: 文件内容
             append: 是否追加模式
+
+        M3: ``policy.workspace_root`` 路径守卫；越界直接拒写（不创建文件）。
         """
+        blocked = self._enforce_workspace(path)
+        if blocked is not None:
+            return blocked
         try:
             file_path = Path(path).expanduser()
 
@@ -182,7 +179,11 @@ class ListDirTool(BaseTool):
 
         M2: ``policy.max_result_items`` 条数上限——超限时截断 ``items``；
         content 含 ``truncated``/``total_items``。
+        M3: ``policy.workspace_root`` 路径守卫。
         """
+        blocked = self._enforce_workspace(path)
+        if blocked is not None:
+            return blocked
         try:
             dir_path = Path(path).expanduser()
 
