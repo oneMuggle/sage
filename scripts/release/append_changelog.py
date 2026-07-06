@@ -34,7 +34,7 @@ def categorize_commits(since_tag: str, cwd: str = ".") -> dict[str, list[str]]:
     categorized: dict[str, list[str]] = {
         "feat": [], "fix": [], "refactor": [], "perf": [],
         "docs": [], "test": [], "chore": [], "ci": [], "build": [],
-        "style": [], "other": [],
+        "style": [],
     }
     pattern = re.compile(r"^(?P<type>[a-z]+)(?:\(.+?\))?!?:\s*(?P<subject>.+)$")
     for s in subjects:
@@ -44,7 +44,7 @@ def categorize_commits(since_tag: str, cwd: str = ".") -> dict[str, list[str]]:
             if t in categorized:
                 categorized[t].append(s)
                 continue
-        categorized["other"].append(s)
+        categorized.setdefault("other", []).append(s)
     return categorized
 
 

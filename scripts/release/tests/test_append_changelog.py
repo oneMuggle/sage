@@ -54,6 +54,30 @@ def test_inserts_alpha_section_after_unreleased(temp_changelog):
     assert pos_unreleased < pos_alpha < pos_lts
 
 
+def test_stable_omits_known_issues(temp_changelog):
+    """Stable tier must NOT include Known Issues block (spec §5.3)."""
+    content = run_append_changelog(
+        temp_changelog,
+        "--tier", "stable",
+        "--tag", "v0.5.0",
+        "--known-issues", "issue/123,issue/456",
+    )
+
+    assert "### Known Issues" not in content
+
+
+def test_preserves_unreleased_section(temp_changelog):
+    """The ## [Unreleased] header must remain unchanged after insertion (spec §5.5)."""
+    content = run_append_changelog(temp_changelog)
+
+    # Unreleased header is still present and intact
+    assert "## [Unreleased]" in content
+    # And it still appears before the new section
+    pos_unreleased = content.index("## [Unreleased]")
+    pos_alpha = content.index("## [v0.5.0-alpha.1]")
+    assert pos_unreleased < pos_alpha
+
+
 def test_prerelease_adds_known_issues(temp_changelog):
     """Alpha section should include Known Issues block when provided."""
     content = run_append_changelog(
