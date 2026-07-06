@@ -18,21 +18,40 @@ export type StartupFailureChoice = 'open-logs' | 'retry' | 'quit';
 export async function showStartupFailureDialog(opts: {
   reason: string;
   detail?: string;
+  /**
+   * Optional tail of the most recent backend subprocess stderr lines.
+   * When provided, these are appended to the dialog detail so the user sees
+   * the actual root cause (e.g. `ModuleNotFoundError: No module named 'fastapi'`)
+   * without having to dig through NDJSON logs.
+   */
+  stderrTail?: string[];
 }): Promise<StartupFailureChoice> {
   // CRITICAL: write to log BEFORE showing dialog (so even if dialog crashes
   // the failure is captured on disk)
   logger.error('main: startup failed, showing dialog', {
     reason: opts.reason,
     detail: opts.detail,
+    stderrTail: opts.stderrTail,
   });
 
   const logDir = getLogDir();
   const buttons = ['打开日志目录', '重试', '退出'];
+
+  // Build the detail string incrementally. Cap stderr tail to a reasonable
+  // size so the dialog stays readable (Windows message boxes truncate).
+  const stderrSection =
+    opts.stderrTail && opts.stderrTail.length > 0
+      ? `\n\n最近后端输出（最多 20 行）：\n${opts.stderrTail
+          .slice(-20)
+          .map((l) => `  ${l}`)
+          .join('\n')}`
+      : '';
+
   const result = await dialog.showMessageBox({
     type: 'error',
     title: 'Sage 启动失败',
     message: opts.reason,
-    detail: `${opts.detail ?? ''}\n\n错误详情已写入日志，请点击下方按钮获取日志文件并附在反馈中。\n\n日志目录：${logDir}`,
+    detail: `${opts.detail ?? ''}${stderrSection}\n\n错误详情已写入日志，请点击下方按钮获取日志文件并附在反馈中。\n\n日志目录：${logDir}`,
     buttons,
     defaultId: 0,
     cancelId: 2,

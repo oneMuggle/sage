@@ -105,6 +105,25 @@ let backendProc: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 
 /**
+ * Ring buffer of the last 20 stderr lines emitted by the backend subprocess.
+ * Surfaced in the startup-failure dialog so users see the actual root cause
+ * (e.g. `ModuleNotFoundError`) without having to open the NDJSON log dir.
+ */
+const lastStderrLines: string[] = [];
+const STDERR_TAIL_MAX = 20;
+
+export function getLastStderrTail(): string[] {
+  return lastStderrLines.slice();
+}
+
+function pushStderrLine(line: string): void {
+  lastStderrLines.push(line);
+  if (lastStderrLines.length > STDERR_TAIL_MAX) {
+    lastStderrLines.shift();
+  }
+}
+
+/**
  * Locate the Python interpreter for the sage-backend conda env.
  * - Dev (running from repo): use `conda run -n sage-backend python`
  * - Packaged app: ship a launcher script (electron-builder extraResources)
@@ -171,7 +190,11 @@ function spawnBackend(): ChildProcess {
   }
 
   proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: b.toString().trim() }));
-  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: b.toString().trim() }));
+  proc.stderr?.on('data', (b) => {
+    const line = b.toString().trim();
+    logger.error('backend: stderr', { line });
+    pushStderrLine(line);
+  });
   proc.on('exit', (code) => {
     logger.info('main: backend exited', { code });
     backendProc = null;
@@ -436,9 +459,13 @@ app.whenReady().then(async () => {
     });
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
+    // The stderr tail is surfaced inline so the user sees the actual root
+    // cause (e.g. `ModuleNotFoundError: No module named 'fastapi'`) without
+    // having to dig through NDJSON logs first.
     const choice = await showStartupFailureDialog({
       reason: '后端服务在 30 秒内未响应',
       detail: `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`,
+      stderrTail: getLastStderrTail(),
     });
     if (choice === 'retry') {
       const ready2 = await waitForBackend();
@@ -446,6 +473,7 @@ app.whenReady().then(async () => {
         await showStartupFailureDialog({
           reason: '后端服务在重试后仍未响应',
           detail: '已重试一次,仍无法连接',
+          stderrTail: getLastStderrTail(),
         });
         return;
       }
