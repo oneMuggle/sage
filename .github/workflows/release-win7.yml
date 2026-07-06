@@ -1,11 +1,11 @@
 # Release LTS Workflow — Windows 7 LTS 维护分支专用
 #
-# 触发: push tag v*-lts (如 v0.2.0-lts) 到 release/win7 分支
+# 触发: push tag v*-win7 (如 v0.4.3-alpha.1-win7) 到 release/win7 分支
 # 目标: Windows 7 SP1 x64 only (Electron 21.4.4 冻结)
 #
 # 与 release.yml 差异:
-#   - 触发条件:  tag 含 '-lts' 后缀
-#   - 产物:      仅 Windows NSIS, artifactName 用 tier 后缀 (alpha-lts / beta-lts / rc-lts / win7)
+#   - 触发条件:  tag 含 '-win7' 后缀
+#   - 产物:      仅 Windows NSIS, artifactName 用 tier 后缀 (alpha-win7 / beta-win7 / rc-win7 / win7)
 #   - 不构建:    Linux / macOS (Win7 LTS 不覆盖)
 #   - EOL:       2027-12-13 归档, 届时删除本 workflow + release/win7 分支
 #
@@ -24,8 +24,8 @@ permissions:
 jobs:
   build-windows:
     name: Build Windows (Win7 LTS)
-    # Only act on LTS-suffixed tags; non-LTS tags skip this job entirely
-    if: "contains(github.ref_name, '-lts')"
+    # Only act on win7-suffixed tags; non-win7 tags skip this job entirely
+    if: "contains(github.ref_name, '-win7')"
 
     runs-on: windows-latest
 
@@ -43,17 +43,17 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Cache electron-builder downloads (LTS namespace)
+      - name: Cache electron-builder downloads (win7 namespace)
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/electron
             ~/.cache/electron-builder
-          # -lts suffix prevents cache collision with main release
+          # -win7 suffix prevents cache collision with main release
           # prerelease- namespace prevents alpha/beta/rc vs stable cache pollution
-          key: ${{ runner.os }}-electron-lts-${{ contains(github.ref_name, '-') && 'prerelease-' || '' }}${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-electron-win7-${{ contains(github.ref_name, '-') && 'prerelease-' || '' }}${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-electron-lts-
+            ${{ runner.os }}-electron-win7-
 
       - name: Install npm dependencies
         run: npm ci --force
