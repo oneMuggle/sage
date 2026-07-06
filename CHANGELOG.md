@@ -16,7 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Win7 LTS adds `-lts` suffix after tier (e.g. `vX.Y.Z-beta.N-lts`).
 
-## [Unreleased]
+## [v0.4.3-alpha.1-lts] - 2026-07-06
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 SP1 修复路径破例（按 4 档规范 win7 LTS 不跟 alpha，本 release 走 blocker 修复例外流程，未来待 PR 反馈是否更新 §30.4）。
 
 ### Fixed
 - **fix(win7): bundle Python 依赖时 pip install 失败未中止（v0.4.0-lts+ 启动 30 秒超时根因）**
@@ -27,6 +29,8 @@ Win7 LTS adds `-lts` suffix after tier (e.g. `vX.Y.Z-beta.N-lts`).
   - 修复 3（防御性改进）：`electron/main.ts` 把后端 stderr 末 20 行 buffer 到 module-level `lastStderrLines`，通过新 `stderrTail` 字段传给 `showStartupFailureDialog`。未来类似问题用户能直接看到 `ModuleNotFoundError: No module named 'fastapi'` 等真实根因，不必查 NDJSON 日志
   - 清理：删除死代码 `start-backend.bat`（`electron/main.ts` 直接 spawn `python.exe`，从未调用该 .bat；`scripts/bundle-python.ps1` 不再生成，`electron-builder.yml` 不再打包）
   - 测试：新增 `scripts/bundle-python.Tests.ps1`（Pester 5 静态分析测试，~14 个断言）+ `.github/workflows/ci.yml` 新增 `bundle-script-test` job（ubuntu-latest + pwsh 7.4 + Pester，~5s runtime，无网络依赖）
+
+## [Unreleased]
 
 ### Added
 - feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)
