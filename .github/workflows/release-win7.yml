@@ -5,7 +5,7 @@
 #
 # 与 release.yml 差异:
 #   - 触发条件:  tag 含 '-lts' 后缀
-#   - 产物:      仅 Windows NSIS, artifactName 用 -win7 后缀
+#   - 产物:      仅 Windows NSIS, artifactName 用 tier 后缀 (alpha-lts / beta-lts / rc-lts / win7)
 #   - 不构建:    Linux / macOS (Win7 LTS 不覆盖)
 #   - EOL:       2027-12-13 归档, 届时删除本 workflow + release/win7 分支
 #
@@ -94,7 +94,7 @@ jobs:
             > ⚠️ **此版本专为 Windows 7 SP1 x64 设计**。
             > Win10+ 用户请改用 [main release](https://github.com/${{ github.repository }}/releases)。
 
-            > **Tier**: ${{ contains(github.ref_name, '-alpha') && 'ALPHA' || contains(github.ref_name, '-beta') && 'BETA' || contains(github.ref_name, '-rc') && 'RC' || 'STABLE' }}
+            > **Tier**: ${{ contains(github.ref_name, '-alpha') && 'ALPHA' || contains(github.ref_name, '-beta') && 'BETA' || contains(github.ref_name, '-rc') && 'RELEASE CANDIDATE' || 'STABLE' }}
             > ${{ contains(github.ref_name, '-alpha') && '⚠️ 仅供 Sage 贡献者使用。' || contains(github.ref_name, '-beta') && '⚠️ 公开测试版。' || contains(github.ref_name, '-rc') && '✅ 准稳定版。' || '✅ 稳定版，推荐 Win7 用户升级。' }}
 
             ### Downloads

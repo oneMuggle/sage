@@ -123,8 +123,8 @@ def test_ambiguous_returns_low_confidence(temp_repo):
     )
 
     assert output["confidence"] == "low"
-    # tier still resolves (rc, because blockers > 0) — only confidence is demoted
-    assert output["recommended_tier"] in ("rc", "beta", "alpha")
+    # tier resolves to rc (blockers > 0 blocks stable)
+    assert output["recommended_tier"] == "rc"
 
 
 def test_patch_bump_emits_stable_hotfix(temp_repo):
@@ -150,3 +150,25 @@ def test_patch_bump_emits_stable_hotfix(temp_repo):
 
     assert output["recommended_tier"] == "stable"
     assert output["recommended_tag"] == "v0.5.1"
+
+
+def test_patch_bump_bad_input_returns_low_confidence(temp_repo):
+    """--bump=patch with non-stable since_tag returns confidence=low + empty tag."""
+    repo = temp_repo("fix: typo")
+
+    result = subprocess.run(
+        ["python", str(INFER_TIER),
+         "--since-tag", "v0.5.0-beta.1",
+         "--target-minor", "0.5.0",
+         "--milestone-closed", "",
+         "--open-blockers", "0",
+         "--bump", "patch"],
+        capture_output=True, text=True,
+        cwd=repo,
+    )
+    assert result.returncode == 0, f"infer_tier failed: {result.stderr}"
+    output = json.loads(result.stdout)
+
+    assert output["recommended_tag"] == ""
+    assert output["confidence"] == "low"
+    assert any("vX.Y.Z" in r for r in output["reasons"])

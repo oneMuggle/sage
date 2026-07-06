@@ -123,7 +123,7 @@ def infer_tier(
             reasons=[
                 f"--bump=patch: {since_tag} → {recommended_tag} (spec §2.2 hotfix)",
             ],
-            next_action=f"git tag {recommended_tag} -m 'hotfix' && git push origin {recommended_tag}",
+            next_action=f"git tag {recommended_tag} -m '...' && git push origin {recommended_tag}",
         )
 
     subjects = run_git_log(since_tag, cwd=cwd)
