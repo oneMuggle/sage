@@ -28,7 +28,12 @@ sqlite-vec>=0.1.9
 httpx==0.26.0
 
 # Observability
-prometheus-client==0.25.0
+# ⚠️ 0.22.0+ require Python >=3.9 (per PyPI metadata), so on Win7 LTS
+# (Python 3.8.10 embeddable) we MUST pin to the last 3.8-compatible release.
+# 0.21.1 was uploaded 2024-12-03, API stable since 0.20 (we use only
+# Counter/Histogram/Gauge/CollectorRegistry/generate_latest/CONTENT_TYPE_LATEST,
+# all unchanged in 0.21.1). See scripts/bundle-python.ps1 + PR history.
+prometheus-client==0.21.1
 
 # Tracing
 opentelemetry-api==1.27.0

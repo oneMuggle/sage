@@ -38,8 +38,6 @@ extraResources:
     to: "sage-core"
     filter:
       - "**/*"
-  - from: "resources/start-backend.bat"
-    to: "start-backend.bat"
 
 # Win7 + Win10/11 NSIS installer (electron-builder 24.x)
 win:

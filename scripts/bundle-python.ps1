@@ -64,12 +64,19 @@ Invoke-WebRequest -Uri $GetPipUrl -OutFile $GetPipPath -UseBasicParsing
 Write-Host "Installing pip..." -ForegroundColor Green
 $PythonExe = Join-Path $PythonDir "python.exe"
 & $PythonExe $GetPipPath --no-warn-script-location
+if ($LASTEXITCODE -ne 0) { throw "get-pip.py install failed with exit code $LASTEXITCODE" }
 Remove-Item $GetPipPath
 
 # Install dependencies
 Write-Host "Installing Python dependencies from requirements-py38.txt..." -ForegroundColor Green
 $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
 & $PipExe install --no-warn-script-location -r $RequirementsFile
+# CRITICAL: PowerShell's $ErrorActionPreference = "Stop" does NOT auto-catch
+# exit codes from `& $ExternalExe` calls. Without this check, a pip failure
+# would silently continue past this point and the verify step below would also
+# fail silently, producing a corrupt bundled Python runtime shipped to users
+# (this is the root cause of the v0.4.0-lts+ Win7 "30s backend timeout" bug).
+if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements-py38.txt failed with exit code $LASTEXITCODE" }
 
 # Copy backend code
 Write-Host "Copying backend code..." -ForegroundColor Green
@@ -93,29 +100,26 @@ if (Test-Path $SageCoreSource) {
     Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
     # Install sage-core in development mode
     & $PipExe install --no-warn-script-location -e $SageCoreDest
+    if ($LASTEXITCODE -ne 0) { throw "pip install -e sage-core failed with exit code $LASTEXITCODE" }
 }
-
-# Create backend startup script
-Write-Host "Creating backend startup script..." -ForegroundColor Green
-$StartBackendBat = Join-Path $ResourcesDir "start-backend.bat"
-$BatContent = @"
-@echo off
-set PYTHONPATH=%~dp0backend;%~dp0sage-core
-"%~dp0python\python.exe" -m uvicorn backend.main:app --host 127.0.0.1 --port 8765
-"@
-Set-Content -Path $StartBackendBat -Value $BatContent -Encoding ASCII
 
 # Verify installation
 Write-Host ""
 Write-Host "=== Verification ===" -ForegroundColor Cyan
 Write-Host "Python executable: $PythonExe"
 Write-Host "Backend directory: $BackendDir"
-Write-Host "Startup script: $StartBackendBat"
 Write-Host ""
 
-# Test Python import
+# Test Python import. Capture both stdout and stderr to a single buffer so we
+# can surface the underlying error in the exception message if any import
+# fails (otherwise we'd just see a bare exit code).
 Write-Host "Testing Python imports..." -ForegroundColor Green
-& $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; print('All critical imports successful')"
+$verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; print('All critical imports successful')" 2>&1
+$verifyExit = $LASTEXITCODE
+Write-Host $verifyOutput
+if ($verifyExit -ne 0) {
+    throw "Post-install verification failed: critical Python imports missing (exit code $verifyExit). Output: $verifyOutput"
+}
 
 Write-Host ""
 Write-Host "=== Python backend bundled successfully! ===" -ForegroundColor Green
