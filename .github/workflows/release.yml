@@ -39,7 +39,7 @@ jobs:
   build:
     name: Build (${{ matrix.os }})
     # Skip LTS-suffixed tags — those go to release-win7.yml
-    if: "!contains(github.ref_name, '-lts')"
+    if: "!contains(github.ref_name, '-lts') && !contains(github.ref_name, '-win7')"
     strategy:
       fail-fast: false
       matrix:
