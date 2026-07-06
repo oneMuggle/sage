@@ -57,7 +57,33 @@
 3. 拖动 Sage.app 到 Applications
 4. 首次打开可能需「系统设置 → 隐私与安全 → 仍要打开」
 
-## 1.4 安装 Linux
+## 1.4 选择合适的安装版本
+
+> 自 v0.5.0 起，Sage 提供 4 个发布档位（alpha / beta / RC / stable），用户可根据风险偏好选择。普通用户请始终下载 **stable** 版本。
+
+### 档位对比
+
+| 档位 | 适合谁 | 风险 | 更新频率 | 安装包名示例 |
+|------|--------|------|----------|--------------|
+| **Stable** (推荐) | 所有用户 | 低 | main milestone 闭合时 | `Sage-Setup-0.5.0-win10.exe` |
+| **RC / Preview** | 早期采用者 | 中 | RC 阶段 | `Sage-Setup-0.5.0-rc.exe` |
+| **Beta** | 测试贡献者 | 中高 | beta 阶段 | `Sage-Setup-0.5.0-beta.exe` |
+| **Alpha** | Sage 贡献者 | 高 | merge 后即发 | `Sage-Setup-0.5.0-alpha.exe` |
+
+Win7 用户请从 LTS release 下载对应档位，artifact 同步带 `-lts` 后缀（如 `Sage-Setup-0.5.0-beta-lts.exe`）。
+
+### 怎么装预发布版？
+
+1. 访问 [Sage Releases](https://github.com/oneMuggle/sage/releases)
+2. 点击 "Tags" 或筛选 "Pre-release"
+3. 下载对应档位的 installer
+4. ⚠️ 预发布版可能含已知 bug，重要数据请先备份
+
+### 怎么回滚到 Stable？
+
+下载最新 stable installer 覆盖安装即可。数据/配置保留在 `~/.config/sage/`。
+
+## 1.5 安装 Linux
 
 ### Debian/Ubuntu
 ```bash
@@ -78,7 +104,7 @@ chmod +x sage_0.1.0_x86_64.AppImage
 ./sage_0.1.0_x86_64.AppImage
 ```
 
-## 1.5 启动与配置
+## 1.6 启动与配置
 
 ### 首次启动
 
@@ -99,7 +125,7 @@ chmod +x sage_0.1.0_x86_64.AppImage
 | macOS | `~/Library/Application Support/Sage/settings.json` |
 | Linux | `~/.config/Sage/settings.json` |
 
-## 1.6 常见问题
+## 1.7 常见问题
 
 ### Q: 启动报「端口被占用」
 
@@ -117,7 +143,7 @@ A: 检查 WebKitGTK：`sudo apt install libwebkit2gtk-4.1-0`。
 
 A: 检查「设置」页面的 LLM Provider 配置 + API Key 是否正确。
 
-## 1.7 卸载
+## 1.8 卸载
 
 ### Windows
 设置 → 应用 → Sage → 卸载
@@ -131,7 +157,7 @@ sudo apt remove sage   # Debian
 sudo dnf remove sage   # Fedora
 ```
 
-## 1.8 数据与隐私
+## 1.9 数据与隐私
 
 - **聊天历史** 存储在本地 SQLite：`%APPDATA%\Sage\sage.db`
 - **API Key** 存储在本地 `settings.json`（明文，建议自行加密磁盘）
