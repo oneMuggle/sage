@@ -8,7 +8,7 @@
 # - fastapi 钉 0.85+（与 pydantic 1.x 兼容）
 # - 其他依赖跟随 backend/requirements.txt 但带 == 版本
 # - opentelemetry 1.27.0 支持 3.8（要 verify 实际包）
-# - ruff/mypy/import-linter 钉 0.x 系列（避免 1.x 新语法要求）
+# - ruff 钉 0.x，mypy 钉 1.x，import-linter 钉 2.0（py3.8 兼容，2.1+ 要 py3.9+）
 
 # Core
 fastapi==0.85.0      # py38 兼容 (与 pydantic 1.x 配)
@@ -54,7 +54,7 @@ respx==0.21.1
 # Quality
 ruff==0.4.4
 mypy==1.8.0
-import-linter==2.11
+import-linter==2.0
 types-PyYAML==6.0.12.20240311
 
 # Scheduled tasks (M3)
