@@ -1,7 +1,7 @@
 {
   "name": "sage",
   "private": true,
-  "version": "0.4.3-alpha.1-win7",
+  "version": "0.4.3-alpha.1",
   "type": "module",
   "main": "dist-electron/electron/main.js",
   "scripts": {
