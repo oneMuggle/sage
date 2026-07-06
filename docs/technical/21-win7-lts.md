@@ -145,3 +145,41 @@ NSIS 安装包内含 `vc_redist.x64.exe`(由 `build/installer.nsh` customInstall
 | 产物后缀     | `-win10` (Windows)          | `-win7` (Windows)           |
 | 频率         | 每次 main 发版              | 仅 Win7 特定 patch 时       |
 | EOL          | 持续                        | 2027-12-13                  |
+
+### 9.4 Pre-release tier mapping (Win7 LTS)
+
+Win7 LTS 跟随 main 进入预发布段，每个段位延迟 1-2 周让 main soak：
+
+| main tag | win7 LTS tag | 间隔 |
+|----------|--------------|------|
+| `v0.5.0-alpha.1` | 不跟随 | - |
+| `v0.5.0-beta.1` | `v0.5.0-beta.1-lts` (2 周后) | main soak 2 周 |
+| `v0.5.0-rc.1` | `v0.5.0-rc.1-lts` (1 周后) | main soak 1 周 |
+| `v0.5.0` | `v0.5.0-lts` (同日) | cherry-pick 完成后立即 |
+
+**不允许** win7 单独定义预发布段。Win7 特有修复走 hotfix patch (`v0.5.1-lts`)。
+
+### 9.5 升档脚本使用
+
+Win7 LTS 派生使用 `scripts/release/infer_tier.py` 推断档位（脚本只建议 main 使用，win7 派生直接按本节映射表执行）：
+
+```bash
+# 1. 在 main 上推断档位（确认何时 cherry-pick 到 win7）
+python scripts/release/infer_tier.py \
+  --since-tag v0.4.0-lts \
+  --target-minor 0.5.0 \
+  --milestone-closed "M1,M2" \
+  --open-blockers 0
+
+# 2. cherry-pick main 的 stable / RC / beta tag commits 到 release/win7
+git switch release/win7
+git cherry-pick <main-tag-commit-sha>
+
+# 3. 打 win7 LTS tag（带 -lts 后缀）
+git tag -a v0.5.0-beta.1-lts -m "v0.5.0-beta.1-lts — Win7 cherry-pick from main v0.5.0-beta.1"
+git push origin v0.5.0-beta.1-lts
+
+# 4. release-win7.yml 自动构建 + 标记 prerelease
+```
+
+详细的预发布构建矩阵（artifact 后缀 / cache key 隔离）见 [`26-packaging-matrix.md` §7](./26-packaging-matrix.md)；4 档分级系统的完整说明见 [`30-release-tiers.md`](./30-release-tiers.md)。
