@@ -103,6 +103,8 @@ coverage/
 # Electron builder
 dist-electron/
 release/
+# Allow scripts/release/ (Sage tier inference + changelog tooling)
+!scripts/release/
 
 # Playwright
 .playwright/

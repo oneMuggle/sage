@@ -5,7 +5,7 @@
 #
 # 与 release.yml 差异:
 #   - 触发条件:  tag 含 '-lts' 后缀
-#   - 产物:      仅 Windows NSIS, artifactName 用 -win7 后缀
+#   - 产物:      仅 Windows NSIS, artifactName 用 tier 后缀 (alpha-lts / beta-lts / rc-lts / win7)
 #   - 不构建:    Linux / macOS (Win7 LTS 不覆盖)
 #   - EOL:       2027-12-13 归档, 届时删除本 workflow + release/win7 分支
 #
@@ -50,7 +50,8 @@ jobs:
             ~/.cache/electron
             ~/.cache/electron-builder
           # -lts suffix prevents cache collision with main release
-          key: ${{ runner.os }}-electron-lts-${{ hashFiles('package-lock.json') }}
+          # prerelease- namespace prevents alpha/beta/rc vs stable cache pollution
+          key: ${{ runner.os }}-electron-lts-${{ contains(github.ref_name, '-') && 'prerelease-' || '' }}${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-lts-
 
@@ -68,7 +69,14 @@ jobs:
         shell: pwsh
         run: pwsh scripts/fetch-vcredist.ps1
 
-      - name: Build Windows NSIS (Win7 LTS, env.ARTIFACT_SUFFIX=win7)
+      - name: Determine ARTIFACT_SUFFIX
+        id: suffix
+        run: bash scripts/release/determine_artifact_suffix.sh >> $GITHUB_OUTPUT
+
+      - name: Build Windows NSIS (Win7 LTS, dynamic suffix)
+        env:
+          # Override default; produces Sage-Setup-${version}${env.ARTIFACT_SUFFIX}.${ext}
+          ARTIFACT_SUFFIX: ${{ steps.suffix.outputs.value }}
         run: npx electron-builder --win nsis --publish never
 
       - name: Upload to LTS GitHub Release
@@ -78,18 +86,22 @@ jobs:
           # so it becomes a separate release page from main's v0.2.0
           tag_name: ${{ github.ref_name }}
           files: |
-            release/*/Sage-Setup-*-win7.exe
+            release/*/Sage-Setup-*.exe
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
           body: |
             ## Sage ${{ github.ref_name }} (Win7 LTS) — Windows 7 SP1 x64 ONLY
 
             > ⚠️ **此版本专为 Windows 7 SP1 x64 设计**。
             > Win10+ 用户请改用 [main release](https://github.com/${{ github.repository }}/releases)。
 
+            > **Tier**: ${{ contains(github.ref_name, '-alpha') && 'ALPHA' || contains(github.ref_name, '-beta') && 'BETA' || contains(github.ref_name, '-rc') && 'RELEASE CANDIDATE' || 'STABLE' }}
+            > ${{ contains(github.ref_name, '-alpha') && '⚠️ 仅供 Sage 贡献者使用。' || contains(github.ref_name, '-beta') && '⚠️ 公开测试版。' || contains(github.ref_name, '-rc') && '✅ 准稳定版。' || '✅ 稳定版，推荐 Win7 用户升级。' }}
+
             ### Downloads
 
             | File | Notes |
             | --- | --- |
-            | `Sage-Setup-*-win7.exe` | NSIS, x64, VCRedist bundled |
+            | `Sage-Setup-*.exe` | NSIS, x64, VCRedist bundled |
 
             ### Win7 前置
 
@@ -99,7 +111,7 @@ jobs:
             ### 风险声明
 
             ⚠️ 本分支基于 EOL 技术栈 (Electron 21.4.4 + Python 3.8 + Chromium 106)。
-            详见 [`docs/technical/21-win7-lts.md`](https://github.com/${{ github.repository }}/blob/release/win7/docs/technical/21-win7-lts.md) §6。
+            详见 [`docs/technical/21-win7-lts.md`](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/technical/21-win7-lts.md) §6。
           # draft: true — 人工 review release notes 后再 publish
           draft: true
           generate_release_notes: true

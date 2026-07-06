@@ -5,161 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## Release Tier Definitions
+
+| Tier | Tag Format | Audience | Channel |
+|------|-----------|----------|---------|
+| **alpha** | `vX.Y.Z-alpha.N` | Sage contributors only | GitHub Releases (prerelease) |
+| **beta** | `vX.Y.Z-beta.N` | Public beta testers | GitHub Releases (prerelease) |
+| **rc / preview** | `vX.Y.Z-rc.N` | Broad testing, recommended for early adopters | GitHub Releases (prerelease) |
+| **stable** | `vX.Y.Z` | All users | GitHub Releases (latest) |
+
+Win7 LTS adds `-lts` suffix after tier (e.g. `vX.Y.Z-beta.N-lts`).
+
 ## [Unreleased]
 
-## [v0.4.2-lts] - 2026-07-04
-
 ### Added
-- **feat(win7): Electron desktop NDJSON logging (cherry-pick from main, PR #98 / PR #99)**
-  - **结构化 NDJSON 日志**: 主进程 + 渲染进程统一写到 `%APPDATA%/sage/logs/sage-YYYY-MM-DD.ndjson`
-    (`electron/logger.ts` 包 `electron-log@^4.4.8`,兼容 Node 16 / Electron 21)
-  - **每天一文件 + 7 天保留 + 10MB 单文件上限自动切 `.1`** (`electron/logRotate.ts`)
-  - **3 个用户入口**:
-    1. 菜单 「帮助 → 打开日志目录 / 复制日志路径」(`electron/menu.ts`)
-    2. 设置页 `/settings` → 「诊断与日志」卡片 (`src/widgets/settings/DiagnosticsCard.tsx`),
-       含日志文件列表 + 4 按钮 (打开目录 / 复制路径 / 立即清理旧日志 / 刷新) + 日志级别选择
-    3. 启动失败对话框 (`electron/showStartupFailureDialog.ts`): backend health 超时 / HTML 加载失败 /
-       uncaughtException 时自动弹出,3 按钮 (打开日志目录 / 重试 / 退出);**logger.error 早于 dialog.showMessageBox 调用**,
-       即使对话框崩溃失败也已落盘
-  - **跨进程 IPC 桥接** (`electron/ipc/logIpc.ts` + `src/shared/log/client.ts`):
-    渲染端 `clientLogger.{debug,info,warn,error}` fire-and-forget 调 `sage:log:write`,
-    主进程统一写文件;**100 msg/sec per sender rate limit** + 1/min dedup warn
-  - **5 个管理 IPC 命令**: `sage:log:list-files` / `open-dir` / `copy-path` / `cleanup` / `set-level`
-  - **ErrorBoundary 接入** (`src/app/providers/ErrorBoundary.tsx`):
-    React 错误 → `clientLogger.error('react error boundary', { error, stack, componentStack })`
-  - **Win7 启动失败排查流程文档化**:
-    `docs/technical/29-electron-logging.md` + `docs/user-manual/06-diagnostics.md`
+- feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)
+- feat(wiki): gate folder picker Browse button behind `appSettings.wiki.useFolderPicker` (default true; set false to fall back to plain text input — see §8 rollback in plan)
+- feat(skills): conform `backend/skills/skill_md/` to agentskills.io spec
+  - Add optional fields: `license`, `compatibility` (≤500 chars), `allowed-tools`
+  - Strengthen `name` (≤64 chars) and `description` (≤1024 chars) validation
+  - Support single-file `<dir>/SKILL.md` form in loader
+  - Warn (not block) when frontmatter `name` != parent directory name
+  - Emit warning when description lacks trigger keywords
+  - All changes forward-compatible; existing SKILL.md files unaffected
+  - Refs: docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md
 
-### Fixed
-- **fix(electron): TDZ runtime bug** — `import { logger } from './logger'` 必须放在
-  `import { app } from 'electron'` **之后**(T5 commit 修复);TS CJS preserve import order,
-  而 `logger.info('main: process started', { packaged: app.isPackaged })` 立即引用
-  electron 模块 → 之前顺序会导致 `ReferenceError: Cannot access 'electron_1' before initialization`。
-  **`tsc --noEmit` + CI build 不抓这个**(只 typecheck + transpile),只能 runtime smoke test 抓。
-
-### Known Limitations (永久)
-- **ChatInput SKILL.md slash 集成不可用** (PR #86 #87 跳过): 依赖 win7 M8 同步时删除的
-  `slashCommands.ts` (win7 长期不做 SlashCommandMenu)。直接通过 `skillsApi.execute()` 调用
-  SKILL.md skills 仍可用。
-- **Wiki folder picker 不可用**: win7 之前 revert 了 llm-wiki-folder-picker PR。
-
-## [v0.4.1-lts] - 2026-07-01
-
-### Added
-- **feat(win7): skills ecosystem (PR #84-#92) cherry-pick from main (#93)**
-  - **agentskills.io spec conformance** (`backend/skills/skill_md/`):
-    - 3 新 spec-optional fields: `license` / `compatibility` (≤500 chars) / `allowed-tools`
-    - 强化 `name` (≤64 chars) + `description` (≤1024 chars) 校验
-    - 单文件 `<dir>/SKILL.md` 形态支持
-    - Frontmatter `name` ≠ 父目录名时 warn (soft, not block)
-    - 描述缺 trigger 关键词时 warn
-    - 27 新测试,SKILL.md loader 80+ 测试全过
-    - win7 适配: docs 章节重编号 `28-skill-md-spec-conformance.md` → `31-`(28 被 M9 Titlebar 占用)
-  - **3 个 Skills 页面 IPC routes**: `list_skills` / `toggle_skill` / `execute_skill` (`/api/v1/skills/*`)
-  - **list_skills_extended 暴露 spec 字段**: 每条 SKILL.md skill 带 license / compatibility / allowed_tools
-  - **Skills 页 Refresh 按钮** + **10s 自动刷新 toggle**
-  - **SkillMdDeleter + POST /api/v1/skills/{name}/delete** (200/400/404):
-    - 内置 builtin / 名称正则 / 路径遍历防御
-    - fail-closed: 先 `unregister` 再 `rmtree`
-    - 9 backend integration + 8 frontend vitest
-  - **Sidebar 加 /skills 入口** (`Sparkles` 图标, 插入 `/orchestration` 和 `/settings` 之间)
-  - **test(e2e): Sidebar /skills 导航 E2E spec** (3 Playwright 用例,addInitScript 桩化 electronAPI)
-  - **fix(electron+backend): theme IPC 路径同步** `/api/theme` → `/api/v1/theme` (与 IPC 路由一致)
-- 9 backend integration (test_skill_delete.py) + 8 frontend vitest 全过;CI 4/4 ✅;Code review APPROVE (4 LOW 后续清理)
-
-### Fixed
-- **fix(theme): backend theme_router mount prefix** 从 `/api/theme` 统一为 `/api/v1/theme`,消除 `'COMMAND_ROUTES must be prefixed with /api/v1'` guard test 失败
-
-### Known Limitations (永久)
-- **ChatInput SKILL.md slash 集成不可用** (PR #86 #87 跳过): 依赖 win7 M8 同步时删除的 `slashCommands.ts` (win7 长期不做 SlashCommandMenu)。直接通过 `skillsApi.execute()` 调用 SKILL.md skills 仍可用。
-- **Wiki folder picker 不可用**: win7 之前 revert 了 llm-wiki-folder-picker PR。
-
-## [v0.4.0] - 2026-06-29
-
-### Added
-- **feat(M8): /btw 补充消息面板 + @文件提及 (byte-for-byte port from main)**
-  - `/btw` 链路: `useBtwCommand` 状态机 hook + `btwState` Zustand store +
-    `BtwOverlay` 浮层组件 + `useChat.askBtw` 方法;支持主对话运行中发补充问题
-    不打断,自动重连 1 次,Esc 关闭(不取消请求)
-  - `@文件提及` 链路: `useAtFileQuery` 解析 `@xxx` 模式 + `fileSearchClient`
-    (3s AbortController) + `AtFileMenu` 浮层(键盘导航 + 超时重试)
-  - 集成: ChatInput 拦截 `/btw ` + `@` 前缀,MessageList 挂载 `<BtwOverlay />`
-  - i18n: 11 新 keys (`chat.atFile.{searching,empty,timeout,error,retry}` +
-    `chat.btw.{title,placeholder,loading,error,close,question}`)
-  - 测试: 7 新 unit test file 累计 +41 测试 pass (btwState + useAtFileQuery +
-    AtFileMenu + useBtwCommand + BtwOverlay + ChatInput.btw + fileSearchClient)
-  - win7 适配: ChatInput 保留 M3 onSchedule,MessageList 不引入 ThinkingPanel;
-    跳过 main 上的 SlashCommandMenu / FeedbackButton(win7 长期不做)
-  - 累计: vitest 585 passed / 8 skipped;i18n 112 keys
-
-- **feat(M7): Nav-history — 跨路由前进/后退导航栈 (byte-for-byte port from main)**
-  - `NavHistoryProvider` + `useNavigationHistory` hook: 维护 pathname 栈 + cursor
-    + `MAX_HISTORY=50` 上限 + `skipNextRef` 防止自身 navigate() 触发 effect 重复 push
-    + 暴露 `canBack` / `canForward` / `back` / `forward` context
-  - `TitlebarActions` 组件: 浏览器风格 ◀ ▶ 按钮,根据 context canBack/canForward
-    自动 disabled;外层 `no-drag` 类确保按钮可点击(Electron frameless window)
-  - 集成: `<NavHistoryProvider>` 包裹 `<Routes>` 在 `<BrowserRouter>` 内(必须,
-    因 hook 调用 `useLocation`/`useNavigate`/`useNavigationType`)
-  - i18n: 6 新 keys (`nav.back` / `nav.forward` / `time.today` / `yesterday` /
-    `this_week` / `earlier`)
-  - 测试: 4 新 unit test file 累计 ~12 测试 pass (multi-route + MAX_HISTORY +
-    back/forward no-op + useNavigationHistory)
-  - win7 适配: 保留现有 routes(Welcome / scheduled / orchestration)+ ChatRoute
-    gating fallback
-- **feat(M9): Phase5 Titlebar — 跨平台自定义标题栏 (byte-for-byte port from main)**
-  - `windowControlsClient.ts`: `Platform`/`WindowControlsBridge` interface +
-    `detectPlatform()` + `isElectronDesktop()` + `windowControls` 单例
-  - `WindowControls` component: Win/Linux 显示 minimize / toggleMaximize / close
-    三按钮,mac/Web 返回 null(native traffic lights / 无窗口控制)
-  - `Titlebar` component: 三分支(Web 仅 TitlebarActions / macOS pt-7 给 native
-    traffic lights 留 28px / Win&Linux drag class + TitlebarActions +
-    WindowControls)
-  - Electron IPC: 5 个 `sage:window-controls:*` handlers (minimize /
-    toggle-maximize / close / capture-page / is-maximized) + preload bridge 暴露
-    + main.ts `titleBarStyle` 配置(mac hidden, Win/Linux frameless)
-  - i18n: 3 新 `titlebar.*` keys (minimize/maximize/close)
-  - CSS: `.drag` / `.no-drag` `webkit-app-region` 类让 frameless 标题栏可拖动
-    + 按钮可点击
-  - 测试: 4 新 vitest files (WindowControls 6 + Titlebar 8 + TitlebarActions 4 +
-    windowControlsClient 9)
-- **feat(M6): Welcome — 首次进入应用引导屏 (byte-for-byte port from main)**
-  - 7 新组件/hook: `WelcomeHero` / `WelcomeInputCard` / `AssistantRecommendations` /
-    `QuickActionBar` / `useTypewriterPlaceholder` / `recommendations` data / `Welcome` page
-  - i18n: 18 新 `welcome.*` keys (hero / input / rec / quick)
-  - 路由: `/welcome` + Chat sessionId gating fallback (无 sessionId → /welcome)
-  - Sidebar `+ 新对话`: M5 临时方案 `createSession()` 还原 main 同款 `navigate('/welcome')`
-  - Chat 接 `location.state.pendingMessage` 自动发送,带 race condition 修复
-    (等 settings + store loading 完成后才发,`pendingSentRef` dedupe,
-    `window.history.replaceState` 清 state 防 refresh 重发)
-  - 测试: 5 新 unit test files + 1 i18n translations test + 激活 2 个 phase 9 skip 测试
-  - win7 适配: `WelcomeInputCard` 行内简单 textarea(避免连带 port main 的 InputCard
-    及其 SlashCommandMenu/slashCommands 依赖); AssistantRecommendations 用
-    `as TranslationKey` 解决模板字面量类型问题
-- **feat(M5): Sider DnD — 侧边栏拖拽排序 + 可折叠分组 (byte-for-byte port from main)**
-  - Pure functions: `siderOrder` (reorder/read/write/reconcile/sort/equality, 26 tests)
-  - Hooks: `useStoredSiderOrder` (localStorage 持久化,18 tests) + `useSiderSections` (hydrate/toggle/reorder,12 tests)
-  - Components: `SiderSection` 容器 (可折叠/可重排/统一标题) + `ConversationsSection` (集成 SortableSessionList) + 3 placeholder (CronJob/Project/Team)
-  - Sortable: `SortableSessionItem` (drag handle) + `SortableSessionList` (DndContext + SortableContext + arrayMove)
-  - Sidebar.tsx 重构: 装配 4 个 section + `useStoredSiderOrder` 驱动会话顺序 + 折叠状态持久化
-  - i18n: 7 新 `sider.*` keys (drag_handle/expand/collapse + section labels)
-  - 测试: 56 新 unit tests pass (vitest 464/464 active + 16 M6-deferred skipped)
-  - win7 适配: keep ScheduledTasks + Orchestration 路由 (M3/M4) + 用 createSession() 替代 navigate('/welcome') (M6 尚未实现)
-- **feat(M4): Orchestration — 多智能体协调层 (byte-for-byte port from main)**
-  - Backend: 16 文件 `orchestration/` 包 (Planner/Router/Executor/LaneBoard/Heartbeat/Events/Policy/UltragoalStore/ApprovalTokens/ReportSchema/Permission) + `orchestration_router` (4 API endpoints) + `orchestration_repo` (SQLite 4 表 + 7 索引)
-  - Frontend: `Orchestration` 页面 + `LaneBoard` 三列看板 + `laneBoardStore` (Zustand) + `orchestrationClient` (IPC)
-  - 集成: Sidebar `协调` 导航项 (GitBranch) + `/orchestration` 路由 + 4 Electron IPC 通道
-  - 测试: backend 1248 unit tests pass (1 pre-existing main-side failure unrelated to port), frontend 399 tests pass, tsc 0 errors
-- **feat(M3): Scheduler — 用户定时消息功能 (byte-for-byte port from main)**
-  - Backend: `SchedulerService` (APScheduler 3.10.4 + JSON 持久化,98% coverage) + `scheduled_router` (6 endpoints)
-  - Frontend: `CronExpressionPicker` + `CreateTaskModal` + `ScheduledTasks` 页面 + `taskStore` + `scheduledClient`
-  - 集成: Sidebar Clock 导航项 + ChatInput 定时按钮 + `/scheduled` 路由
-  - Electron: 5 个 IPC routes (`scheduled_list/create/update/delete/run`)
-  - i18n: 58 键 (zh + en 完全对齐)
-  - 测试: backend 1192 tests pass, frontend 399 tests pass
-
-### Fixed
-- **fix(win7): smoke.spec.ts 同步 main 的 waitForLoadState('load') + 30s timeout (#83)**
-  - `tests/electron/smoke.spec.ts` test #1: `waitForLoadState('domcontentloaded')` → `'load'` (等待所有 chunk 加载完毕)
 ## [v0.3.0] - 2026-06-23
 
 ### Added

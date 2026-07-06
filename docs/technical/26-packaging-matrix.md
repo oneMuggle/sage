@@ -83,4 +83,57 @@ chmod +x Sage-${version}.AppImage
 
 - [`20-electron.md`](./20-electron.md) — Electron 主进程架构
 - [`21-win7-lts.md`](./21-win7-lts.md) — Win7 LTS 分支策略
+- [`30-release-tiers.md`](./30-release-tiers.md) — 4 档发布分级系统
 - `../plans/2026-06-15_cross-platform-packaging.md` — 本计划文档(实施后归并并删除)
+
+## 7. 预发布构建矩阵
+
+> 自 v0.5.0 起，Sage 引入 4 档发布分级（alpha / beta / RC / stable）+ SemVer 预发布段。`ARTIFACT_SUFFIX` 与 cache key 必须按 tag 命名空间隔离，避免 stable 构建被预发布版本污染。完整分级系统说明见 [`30-release-tiers.md`](./30-release-tiers.md)。
+
+### 7.1 Artifact 后缀映射
+
+`ARTIFACT_SUFFIX` 由 `scripts/release/determine_artifact_suffix.sh` 按 tag 推断，`electron-builder.yml` 用 `${env.ARTIFACT_SUFFIX}` 占位生成最终产物名：
+
+| Tag | workflow env `ARTIFACT_SUFFIX` | Artifact |
+|-----|----------------------------|----------|
+| `v0.5.0-alpha.1` | `alpha` | `Sage-Setup-0.5.0-alpha.exe` |
+| `v0.5.0-beta.1` | `beta` | `Sage-Setup-0.5.0-beta.exe` |
+| `v0.5.0-rc.1` | `rc` | `Sage-Setup-0.5.0-rc.exe` |
+| `v0.5.0` | `win10` | `Sage-Setup-0.5.0-win10.exe` |
+| `v0.5.0-lts` | `win7` | `Sage-Setup-0.5.0-win7.exe` |
+| `v0.5.0-beta.1-lts` | `beta-lts` | `Sage-Setup-0.5.0-beta-lts.exe` |
+
+> **规则**：`alpha-lts` / `beta-lts` / `rc-lts` 是 win7 LTS 分支在预发布段对应的 artifact 后缀；不带 `-lts` 的 `alpha` / `beta` / `rc` 仅 main 分支使用。
+
+### 7.2 Cache key 命名空间隔离
+
+预发布与 stable 必须使用不同 cache key，否则预发布版本的 node_modules / 打包产物可能污染 stable build：
+
+```yaml
+# release.yml — 旧：stable 与预发布共享 cache（已废弃）
+key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+
+# release.yml — 新：预发布 tag 加 -prerelease 命名空间
+key: ${{ runner.os }}-electron-${{ contains(github.ref_name, '-') && 'prerelease-' || '' }}${{ hashFiles('package-lock.json') }}
+```
+
+**效果**：
+
+- `v0.5.0` → `windows-electron-a1b2c3d4` (stable)
+- `v0.5.0-beta.1` → `windows-electron-prerelease-a1b2c3d4` (隔离)
+
+LTS workflow (`release-win7.yml`) 同步加 `-prerelease` 隔离，cache key prefix 为 `*-electron-lts-*`。
+
+### 7.3 `prerelease` 字段自动判断
+
+`release.yml` 与 `release-win7.yml` 在上传产物时按 tag 决定是否标记为 prerelease：
+
+```yaml
+prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+```
+
+这确保 GitHub Releases 页面默认显示 stable 为 "Latest"，预发布版本归入 "Pre-release" 筛选器，避免用户误装。
+
+### 7.4 Tauri 矩阵隔离
+
+Tauri 矩阵**不参与**预发布段：alpha / beta / RC 阶段不发 Tauri 构建。仅当 main 进入 stable 时才同步触发 Tauri stable 构建（`release.yml` 加 `tauri-build` 步骤，条件为 tag 不含 `-alpha` / `-beta` / `-rc` / `-lts`）。Tauri 矩阵的常规 CI 维持现状（`ci.yml` 跑常规检查）。
