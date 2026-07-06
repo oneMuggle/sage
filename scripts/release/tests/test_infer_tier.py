@@ -4,7 +4,6 @@ Uses a temporary git repo fixture (see fixtures/sample_repo.sh) to create
 real commit history and invoke infer_tier as subprocess.
 """
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -102,3 +101,52 @@ def test_increments_segment_counter(temp_repo):
 
     assert output["recommended_tier"] == "alpha"
     assert output["recommended_tag"] == "v0.5.0-alpha.2"
+
+
+def test_ambiguous_returns_low_confidence(temp_repo):
+    """Genuinely ambiguous case (feat>=6, blockers>0, milestones<2) → confidence=low (spec §7.6).
+
+    Without the --bump=patch path, the script's default --bump=minor falls through to the
+    rc branch (open_blockers > 0 → rc), but the spec §7.6 'ambiguous → low confidence' rule
+    fires first and forces confidence='low' so the caller knows human judgment is required.
+    """
+    repo = temp_repo(
+        "feat: 1", "feat: 2", "feat: 3",
+        "feat: 4", "feat: 5", "feat: 6",
+    )
+
+    # 6 feat commits + 0 milestones + 1 open blocker → ambiguous (spec §7.6)
+    output = run_infer_tier(
+        repo,
+        "--milestone-closed", "",
+        "--open-blockers", "1",
+    )
+
+    assert output["confidence"] == "low"
+    # tier still resolves (rc, because blockers > 0) — only confidence is demoted
+    assert output["recommended_tier"] in ("rc", "beta", "alpha")
+
+
+def test_patch_bump_emits_stable_hotfix(temp_repo):
+    """--bump=patch emits v0.5.1 (stable hotfix; spec §2.2 PATCH 路径).
+
+    Bypasses tier logic entirely; computes next PATCH from --since-tag.
+    """
+    repo = temp_repo("fix: typo")
+
+    # Run with --bump=patch and --since-tag pointing to a stable tag
+    result = subprocess.run(
+        ["python", str(INFER_TIER),
+         "--since-tag", "v0.5.0",
+         "--target-minor", "0.5.0",
+         "--milestone-closed", "",
+         "--open-blockers", "0",
+         "--bump", "patch"],
+        capture_output=True, text=True,
+        cwd=repo,
+    )
+    assert result.returncode == 0, f"infer_tier failed: {result.stderr}"
+    output = json.loads(result.stdout)
+
+    assert output["recommended_tier"] == "stable"
+    assert output["recommended_tag"] == "v0.5.1"

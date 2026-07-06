@@ -11,9 +11,14 @@ Usage:
         --target-minor 0.5.0 \\
         --milestone-closed "M1,M2" \\
         --open-blockers 0 \\
+        [--bump {minor,patch}] \\
         [--dry-run]
 
 Output: JSON to stdout
+
+Bump semantics:
+    --bump minor (default): emit v0.5.0-{alpha,beta,rc}.N or v0.5.0 stable
+    --bump patch:           emit v0.5.1 (hotfix; spec §2.2 PATCH 路径)
 """
 from __future__ import annotations
 
@@ -86,9 +91,41 @@ def infer_tier(
     target_minor: str,
     milestone_closed: list[str],
     open_blockers: int,
+    bump: str = "minor",
     cwd: str = ".",
 ) -> TierRecommendation:
-    """Main inference logic. Returns TierRecommendation dataclass."""
+    """Main inference logic. Returns TierRecommendation dataclass.
+
+    Args:
+        bump: "minor" (default) → tier-based tag (v0.5.0-rc.1 etc.)
+              "patch"           → stable hotfix (v0.5.1; spec §2.2 PATCH 路径)
+    """
+    # PATCH path — spec §2.2: hotfix stable bumps PATCH, no tier logic.
+    if bump == "patch":
+        # Derive next PATCH from since-tag (e.g. v0.5.0 → v0.5.1).
+        m = re.match(r"^v(\d+)\.(\d+)\.(\d+)$", since_tag.strip())
+        if not m:
+            return TierRecommendation(
+                recommended_tier="stable",
+                recommended_tag="",
+                confidence="low",
+                reasons=[
+                    f"--bump=patch 需要 since_tag 形如 vX.Y.Z (stable); 实际: {since_tag}",
+                ],
+                next_action="fix --since-tag 指向 stable tag 后重跑",
+            )
+        major, minor, patch_n = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        recommended_tag = f"v{major}.{minor}.{patch_n + 1}"
+        return TierRecommendation(
+            recommended_tier="stable",
+            recommended_tag=recommended_tag,
+            confidence="high",
+            reasons=[
+                f"--bump=patch: {since_tag} → {recommended_tag} (spec §2.2 hotfix)",
+            ],
+            next_action=f"git tag {recommended_tag} -m 'hotfix' && git push origin {recommended_tag}",
+        )
+
     subjects = run_git_log(since_tag, cwd=cwd)
     feat_count = count_feat_commits(subjects)
     breaking = has_breaking_change(subjects)
@@ -130,8 +167,21 @@ def infer_tier(
     else:
         recommended_tag = f"v{target_minor}-{tier}.{counter}"
 
-    # Confidence — alpha with 0 features (just-fix path) is medium; everything else high.
-    if tier == "alpha" and feat_count == 0:
+    # Confidence — spec §7.6 ambiguous recommendations emit "low".
+    # Three tiers: high (default) / medium (info-light) / low (ambiguous).
+    ambiguous = (
+        feat_count >= 6
+        and open_blockers > 0
+        and len(milestone_closed) < 2
+    )
+    if ambiguous:
+        confidence = "low"
+        reasons.append(
+            "⚠️ 矛盾信号: feat 足够多 (>={}) 但同时有 open blockers ({}) 且 milestones 不足 (<2) — 需人工裁决".format(
+                6, open_blockers
+            )
+        )
+    elif tier == "alpha" and feat_count == 0:
         confidence = "medium"
     else:
         confidence = "high"
@@ -151,6 +201,12 @@ def main() -> int:
     parser.add_argument("--target-minor", required=True, help="Target MINOR version (e.g. 0.5.0)")
     parser.add_argument("--milestone-closed", default="", help="Comma-separated closed milestone names (e.g. M1,M2)")
     parser.add_argument("--open-blockers", type=int, default=0, help="Number of open release-blocker issues")
+    parser.add_argument(
+        "--bump",
+        choices=("minor", "patch"),
+        default="minor",
+        help="Bump type: 'minor' (default; tier-based v0.5.0-rc.1) or 'patch' (stable hotfix v0.5.1; spec §2.2)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Recommend only; do not modify anything")
     args = parser.parse_args()
 
@@ -161,6 +217,7 @@ def main() -> int:
         target_minor=args.target_minor,
         milestone_closed=milestones,
         open_blockers=args.open_blockers,
+        bump=args.bump,
         cwd=".",
     )
 
