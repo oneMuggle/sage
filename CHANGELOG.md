@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## Release Tier Definitions
+
+| Tier | Tag Format | Audience | Channel |
+|------|-----------|----------|---------|
+| **alpha** | `vX.Y.Z-alpha.N` | Sage contributors only | GitHub Releases (prerelease) |
+| **beta** | `vX.Y.Z-beta.N` | Public beta testers | GitHub Releases (prerelease) |
+| **rc / preview** | `vX.Y.Z-rc.N` | Broad testing, recommended for early adopters | GitHub Releases (prerelease) |
+| **stable** | `vX.Y.Z` | All users | GitHub Releases (latest) |
+
+Win7 LTS adds `-lts` suffix after tier (e.g. `vX.Y.Z-beta.N-lts`).
+
 ## [Unreleased]
 
 ### Added
