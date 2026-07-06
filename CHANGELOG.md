@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 | **rc / preview** | `vX.Y.Z-rc.N` | Broad testing, recommended for early adopters | GitHub Releases (prerelease) |
 | **stable** | `vX.Y.Z` | All users | GitHub Releases (latest) |
 
-Win7 LTS adds `-lts` suffix after tier (e.g. `vX.Y.Z-beta.N-lts`).
+Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
