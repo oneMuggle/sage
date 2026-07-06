@@ -14,11 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 | **rc / preview** | `vX.Y.Z-rc.N` | Broad testing, recommended for early adopters | GitHub Releases (prerelease) |
 | **stable** | `vX.Y.Z` | All users | GitHub Releases (latest) |
 
-Win7 LTS adds `-lts` suffix after tier (e.g. `vX.Y.Z-beta.N-lts`).
+Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
-## [v0.4.3-alpha.1] - 2026-07-06
+## [v0.4.3-alpha.1-win7] - 2026-07-06
 
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 SP1 修复路径破例（按 4 档规范 win7 LTS 不跟 alpha，本 release 走 blocker 修复例外流程，未来待 PR 反馈是否更新 §30.4）。Tag 不带 `-lts` 后缀，与 main 上 alpha tag 命名风格一致（实际产物是 Win7 LTS 的 Electron 21 + Python 3.8 NSIS installer）。
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 SP1 修复路径破例（按 4 档规范 win7 LTS 不跟 alpha，本 release 走 blocker 修复例外流程，未来待 PR 反馈是否更新 §30.4）。Tag 使用新命名方案 `vX.Y.Z-alpha.N-win7`（与 main 的 `vX.Y.Z-alpha.N` 对应，-win7 后缀标识 Win7 LTS 构建；实际产物是 Win7 LTS 的 Electron 21 + Python 3.8 NSIS installer）。
 
 ### Fixed
 - **fix(win7): bundle Python 依赖时 pip install 失败未中止（v0.4.0-lts+ 启动 30 秒超时根因）**

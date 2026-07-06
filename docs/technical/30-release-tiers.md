@@ -40,12 +40,16 @@ Sage 自 v0.1.0 起所有 tag 都是"稳定版"语义，没有区分 alpha / bet
 
 | 档位 | main 分支 | win7 LTS 分支 |
 |------|-----------|---------------|
-| alpha | `v0.5.0-alpha.1` | `v0.5.0-alpha.1-lts` |
-| beta | `v0.5.0-beta.2` | `v0.5.0-beta.2-lts` |
-| preview / RC | `v0.5.0-rc.1` | `v0.5.0-rc.1-lts` |
-| stable | `v0.5.0` | `v0.5.0-lts` |
+| alpha | `v0.5.0-alpha.1` | `v0.5.0-alpha.1-win7` |
+| beta | `v0.5.0-beta.2` | `v0.5.0-beta.2-win7` |
+| preview / RC | `v0.5.0-rc.1` | `v0.5.0-rc.1-win7` |
+| stable | `v0.5.0` | `v0.5.0-win7` |
 
-> `-lts` 后缀始终在 tier 之后，符合 SemVer 2.0 附录 B（多 pre-release identifier 用 `.` 分隔，`-` 仅作为第一个分隔符）。
+> `-win7` 后缀始终在 tier 之后（stable 段直接加在版本号后），标识该 tag 是 Win7 LTS 维护分支的 release 产物。
+>
+> **SemVer 影响**：pre-release identifier 按 ASCII 字典序比较（`1 < win7`），所以 `v0.5.0-alpha.1-win7` 优先级**低于** `v0.5.0-alpha.1`（实际上 main 和 win7 不会互相比较优先级，因为它们是分 branch 维护的独立发布线）。npm/uv 等依赖 SemVer 排序的工具不依赖跨 branch tag 比较，对实际发布流程无影响。
+>
+> **向后兼容**：之前发布的 `v0.2.0-lts` / `v0.2.1-lts` / `v0.3.0-lts` / `v0.4.0-lts` / `v0.4.1-lts` / `v0.4.2-lts` tag 仍保留（Git tag 不可改名）。新命名从 `v0.4.3-alpha.1-win7` 开始生效。CHANGELOG 段命名也同步：`## [v0.4.3-alpha.1-win7]` 而非 `## [v0.4.3-alpha.1]`。
 
 ### 段内数字递增规则
 
@@ -127,23 +131,25 @@ Sage 自 v0.1.0 起所有 tag 都是"稳定版"语义，没有区分 alpha / bet
 
 ## 30.4 win7 LTS 派生
 
-Win7 LTS 跟随 main 进入预发布段，每个段位延迟 1-2 周让 main soak：
+Win7 LTS 与 main 走**完全平行**的 4 档发布线，MAJOR.MINOR.PATCH 与 main 同步，tier 编号与 main 同步。win7 LTS 现在是独立的 4 档发布线（**不再**仅从 beta 阶段开始跟随 main）。
 
-| main tag | win7 LTS tag | 间隔 |
-|----------|--------------|------|
-| `v0.5.0-alpha.1` | 不跟随 | - |
-| `v0.5.0-beta.1` | `v0.5.0-beta.1-lts`（2 周后） | main soak 2 周 |
-| `v0.5.0-rc.1` | `v0.5.0-rc.1-lts`（1 周后） | main soak 1 周 |
-| `v0.5.0` | `v0.5.0-lts`（同日） | cherry-pick 完成后立即 |
+**Tag 同步矩阵**：
+
+| main tag | win7 LTS tag | 间隔 | 备注 |
+|----------|--------------|------|------|
+| `v0.5.0-alpha.1` | `v0.5.0-alpha.1-win7` | **同日** | alpha 阶段 win7 LTS **也参与**（破除旧 §30.4 "alpha 不跟随" 条款） |
+| `v0.5.0-beta.1` | `v0.5.0-beta.1-win7` | **1 周** | 缩短为 1 周（vs 旧 2 周）—— 留 soak 时间给平台特定 bug |
+| `v0.5.0-rc.1` | `v0.5.0-rc.1-win7` | **同日** | rc 阶段已稳定，平台差异可快速 cherry-pick（vs 旧 1 周） |
+| `v0.5.0` | `v0.5.0-win7` | **同日** | 不变 |
 
 **核心约束**：
 
-- **不允许** win7 单独定义预发布段。Win7 特有修复走 hotfix patch (`v0.5.1-lts`)。
-- win7 LTS 的预发布 tag **必须**从 main 的对应 tag cherry-pick 后打，不允许直接基于旧 LTS tag 升档
-- 例：main 发 `v0.5.0-beta.2`，2 周 soak 后 win7 才打 `v0.5.0-beta.2-lts`
-- 例外：纯 win7 修复可打 `v0.4.3-lts` patch（`v0.4.2-lts → v0.4.3-lts`），不走预发布段
-- alpha 阶段 win7 LTS 不跟随（alpha 仅供贡献者，win7 用户无 alpha 需求）
-- beta/rc/stable 跟随，间隔 1-2 周
+- win7 LTS 的 tag **必须**从 main 的对应 tag cherry-pick 后打（不能直接基于旧 win7 LTS tag 升档——避免版本号脱钩）
+- **MAJOR.MINOR.PATCH 强同步**：win7 LTS 的 `X.Y.Z` 必须等于 main 的 `X.Y.Z`，tier 编号（alpha.1 / beta.2 / rc.1）也必须一致
+- 例：main 发 `v0.5.0-beta.2` → 1 周后 win7 LTS 发 `v0.5.0-beta.2-win7`（cherry-pick beta.2 + win7 特定 commit）
+- 例外：纯 win7 修复可打 hotfix patch（`v0.4.2-lts → v0.4.3-alpha.1-win7`，走 4 档而不是 hotfix，因为 win7 现在有完整 4 档）
+- 4 档全 win7 参与，破除旧的 "alpha 阶段 win7 不跟随" 限制
+- win7 LTS 与 main 同步策略简化为：alpha/rc/stable 同日，beta 1 周后
 
 详细流程与失败处理：[`21-win7-lts.md` §9.1](./21-win7-lts.md)。
 
