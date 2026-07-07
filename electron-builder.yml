@@ -51,7 +51,7 @@ win:
   # Force code signing stub (Phase 3 will add real cert)
   # signtoolOptions:
   #   sign: scripts/sign-windows.js
-  artifactName: ${productName}-Setup-${version}-${env.ARTIFACT_SUFFIX}.${ext}
+  artifactName: ${productName}-Setup-${version}.${ext}
 
 nsis:
   include: build/installer.nsh    # ← NEW: NSIS customInstall macro (bundles VCRedist)

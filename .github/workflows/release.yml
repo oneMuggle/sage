@@ -3,8 +3,8 @@
 # 触发条件: push tag 形如 v* (如 v0.2.0, v1.0.0-beta.1)
 #
 # ⚠️ Win7 LTS 专用 installer 改由 release-win7.yml 在 release/win7 分支产出
-#    tag 格式: v*-lts (如 v0.2.0-lts)
-#    下载入口: https://github.com/oneMuggle/sage/releases?q=tag%3Av0.2.0-lts
+#    tag 格式: v*-win7 (如 v0.5.0-alpha.1-win7)
+#    下载入口: https://github.com/oneMuggle/sage/releases?q=tag%3Av*-win7
 #
 # 工作流:
 #   1. checkout 代码
@@ -14,12 +14,13 @@
 #   5. electron-builder 跨平台构建 (linux AppImage/deb + windows NSIS)
 #   6. 上传产物到 GitHub Release (由本次 push tag 自动创建)
 #
-# 产物格式 (来自 electron-builder.yml, env.ARTIFACT_SUFFIX 由 workflow 设置):
+# 产物格式 (来自 electron-builder.yml):
 #   - Sage-${version}.AppImage              (Linux)
 #   - sage_${version}_amd64.deb             (Linux Debian)
-#   - Sage-Setup-${version}-win10.exe       (Windows NSIS, Win10+ only)
+#   - Sage-Setup-${version}.exe             (Windows NSIS, Win10+ 默认)
 #
-# Win7 用户请改用 release-win7.yml 的 LTS release。
+# Win7 LTS 用户的 -win7 后缀产物由 release-win7.yml 在 release/win7 分支产出
+# (如 Sage-Setup-0.5.0-alpha.1-win7.exe)。
 #
 # 失败处理: tag push 后 workflow 失败, 需人工:
 #   1. git tag -d v<X.Y.Z> && git push origin :v<X.Y.Z>  # 删除坏 tag
@@ -49,11 +50,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
-    # Default suffix — empty placeholder.
-    # ⚠️ MUST be overridden by any step that uses ${env.ARTIFACT_SUFFIX}
-    # in electron-builder.yml artifactName. Windows job overrides below.
-    env:
-      ARTIFACT_SUFFIX: ''
+    # Note: main's electron-builder.yml no longer uses ${env.ARTIFACT_SUFFIX}
+    # in artifactName (commit 1a9dc5a simplified this). win7 LTS suffix is
+    # handled in release-win7.yml's own electron-builder.yml (literal '-win7').
 
     steps:
       - name: Checkout
@@ -106,15 +105,8 @@ jobs:
         shell: pwsh
         run: pwsh scripts/fetch-vcredist.ps1
 
-      - name: Determine ARTIFACT_SUFFIX
-        id: suffix
-        run: bash scripts/release/determine_artifact_suffix.sh >> $GITHUB_OUTPUT
-
       - name: Build Windows (NSIS installer)
         if: matrix.os == 'windows-latest'
-        env:
-          # Override default; produces Sage-Setup-${version}${env.ARTIFACT_SUFFIX}.${ext}
-          ARTIFACT_SUFFIX: ${{ steps.suffix.outputs.value }}
         run: npx electron-builder --win nsis --publish never
 
       - name: Upload artifacts to GitHub Release
