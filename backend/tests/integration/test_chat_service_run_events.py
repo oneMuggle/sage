@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from typing import List, Tuple
 from unittest.mock import MagicMock
 
 import pytest
@@ -22,12 +23,12 @@ pytestmark = pytest.mark.integration
 
 class _RecordingEvents:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict]] = []
+        self.calls: List[Tuple[str, dict]] = []
 
     def emit(self, event_type: str, payload: dict) -> None:
         self.calls.append((event_type, payload))
 
-    def lifecycle(self) -> list[tuple[str, dict]]:
+    def lifecycle(self) -> List[Tuple[str, dict]]:
         """只取带 run_id 的 run-lifecycle 事件。"""
         return [(t, p) for t, p in self.calls if isinstance(p, dict) and "run_id" in p]
 

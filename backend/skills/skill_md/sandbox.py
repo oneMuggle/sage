@@ -18,10 +18,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Dict, FrozenSet, Optional, Protocol, Tuple
 
 # 默认敏感环境变量黑名单（防止子进程访问宿主机的密钥）
-DEFAULT_ENV_DENYLIST: frozenset[str] = frozenset(
+DEFAULT_ENV_DENYLIST: FrozenSet[str] = frozenset(
     {
         # 云服务凭据
         "AWS_SECRET_ACCESS_KEY",
@@ -71,11 +71,11 @@ class SandboxRequest:
     """
 
     script_path: Path
-    args: tuple[str, ...] = ()
-    cwd: Path | None = None
-    env: dict[str, str] = field(default_factory=dict)
+    args: Tuple[str, ...] = ()
+    cwd: Optional[Path] = None
+    env: Dict[str, str] = field(default_factory=dict)
     timeout_s: float = 30.0
-    stdin_data: bytes | None = None
+    stdin_data: Optional[bytes] = None
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,7 @@ class SandboxResult:
     stderr: str
     duration_ms: int
     timed_out: bool = False
-    error: str | None = None
+    error: Optional[str] = None
 
 
 class SandboxPort(Protocol):

@@ -2,9 +2,9 @@
 
 实现级联删除：删除 Source 时自动清理派生 Wiki 页、嵌入向量、死链。
 """
-
 import logging
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 from . import frontmatter
 from .vectorstore import VectorStore
@@ -148,7 +148,7 @@ def _update_wiki_index(project_root: Path) -> None:
         return
 
     # 收集所有页面
-    pages_by_type: dict[str, list[tuple[str, str]]] = {}  # type -> [(title, path)]
+    pages_by_type: Dict[str, List[Tuple[str, str]]] = {}  # type -> [(title, path)]
 
     for md_file in wiki_dir.rglob("*.md"):
         if md_file.name in ("index.md", "log.md", "schema.md"):

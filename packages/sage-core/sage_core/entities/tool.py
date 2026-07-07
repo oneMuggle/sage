@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -22,7 +23,7 @@ class ToolSpec:
 
     name: str
     description: str
-    parameters: dict[str, Any] = field(default_factory=dict)
+    parameters: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -38,5 +39,5 @@ class ToolResult:
 
     success: bool
     output: str = ""
-    error: str | None = None
-    metadata: dict[str, Any] | None = None
+    error: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None

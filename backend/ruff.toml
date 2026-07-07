@@ -51,8 +51,19 @@ ignore = [
     "PTH112",   # os.path.isfile → Path.is_file
     "PTH120",   # os.path.join → Path /
     "PTH123",   # builtin open → Path.open
-    "PLW0602",  # global variable not assigned
+        "PLW0602",  # global variable not assigned
     "PLW0603",  # global variable assigned but never used
+    # UP006/UP007/UP035 disabled to keep backend/ PEP 604/585 syntax
+    # (X | Y, list[X]) compatible with both Python 3.11 (main) and
+    # Python 3.8 (release/win7 LTS bundles). The rewriter
+    # scripts/py38_compat_rewrite.py intentionally converts all PEP 604/585
+    # to typing.* equivalents so both branches share identical
+    # annotations; UP006/007/035 would auto-fix them back on main and
+    # silently re-introduce the divergence. Keep disabled until either
+    # branch drops Py3.8 support.
+    "UP006",  # Use `list` instead of `List` — prefer typing.List for Py3.8 compat
+    "UP007",  # Use `X | Y` for type annotations — prefer typing.Union for Py3.8 compat
+    "UP035",  # `typing.Dict` is deprecated, use `dict` — prefer typing.Dict for Py3.8 compat
 ]
 
 [lint.per-file-ignores]

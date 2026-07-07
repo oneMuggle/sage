@@ -3,6 +3,7 @@
 
 提供所有内置工具的注册函数
 """
+from typing import Optional
 
 from backend.domain.tool_policy import ToolPolicy
 
@@ -16,7 +17,7 @@ from .terminal import TerminalTool
 from .web_tool import WebFetchTool, WebSearchTool
 
 
-def register_all_tools(registry: ToolRegistry, policy: ToolPolicy | None = None) -> None:
+def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = None) -> None:
     """
     注册所有内置工具到注册表
 

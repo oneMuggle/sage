@@ -13,6 +13,7 @@ SageAgent profile 接通测试（阶段 1）
 
 from __future__ import annotations
 
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -26,7 +27,7 @@ from backend.data.agent_repo import AgentRepository
 pytestmark = pytest.mark.unit
 
 
-def _make_response(content: str = "", tool_calls: list | None = None) -> LLMResponse:
+def _make_response(content: str = "", tool_calls: Optional[list] = None) -> LLMResponse:
     return LLMResponse(content=content, tool_calls=tool_calls or [])
 
 

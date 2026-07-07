@@ -2,11 +2,10 @@
 
 实现 7 个 MCP 工具，让 Claude 等外部 Agent 能查询 Sage Wiki。
 """
-
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 from backend.wiki import (
     build_graph,
@@ -31,7 +30,7 @@ server = Server("sage-wiki")
 
 
 @server.list_tools()
-async def list_tools() -> list[Tool]:
+async def list_tools() -> List[Tool]:
     """列出所有可用的 Wiki 工具。"""
     return [
         Tool(
@@ -163,7 +162,7 @@ async def list_tools() -> list[Tool]:
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:  # noqa: PLR0911
+async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:  # noqa: PLR0911
     """调用指定的 Wiki 工具。"""
     try:
         if name == "wiki_status":
@@ -192,7 +191,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]: 
 # ============================================================================
 
 
-async def _wiki_status(args: dict[str, Any]) -> list[TextContent]:
+async def _wiki_status(args: Dict[str, Any]) -> List[TextContent]:
     """获取 Wiki 状态信息。"""
     project_path = Path(args["project_path"])
 
@@ -220,7 +219,7 @@ async def _wiki_status(args: dict[str, Any]) -> list[TextContent]:
     return [TextContent(type="text", text=json.dumps(status, indent=2, ensure_ascii=False))]
 
 
-async def _wiki_files(args: dict[str, Any]) -> list[TextContent]:
+async def _wiki_files(args: Dict[str, Any]) -> List[TextContent]:
     """列出 Wiki 项目中的文件。"""
     project_path = Path(args["project_path"])
     relative_path = args.get("path", "")
@@ -249,7 +248,7 @@ async def _wiki_files(args: dict[str, Any]) -> list[TextContent]:
     return [TextContent(type="text", text=json.dumps(files, indent=2, ensure_ascii=False))]
 
 
-async def _wiki_search(args: dict[str, Any]) -> list[TextContent]:
+async def _wiki_search(args: Dict[str, Any]) -> List[TextContent]:
     """搜索 Wiki 内容。"""
     project_path = Path(args["project_path"])
     query = args["query"]
@@ -281,7 +280,7 @@ async def _wiki_search(args: dict[str, Any]) -> list[TextContent]:
     ]
 
 
-async def _wiki_read(args: dict[str, Any]) -> list[TextContent]:
+async def _wiki_read(args: Dict[str, Any]) -> List[TextContent]:
     """读取指定的 Wiki 页面。"""
     project_path = Path(args["project_path"])
     relative_path = args["path"]
@@ -308,7 +307,7 @@ async def _wiki_read(args: dict[str, Any]) -> list[TextContent]:
     ]
 
 
-async def _wiki_graph(args: dict[str, Any]) -> list[TextContent]:
+async def _wiki_graph(args: Dict[str, Any]) -> List[TextContent]:
     """获取知识图谱数据。"""
     project_path = Path(args["project_path"])
     query = args.get("query")
@@ -348,7 +347,7 @@ async def _wiki_graph(args: dict[str, Any]) -> list[TextContent]:
     ]
 
 
-async def _wiki_communities(args: dict[str, Any]) -> list[TextContent]:
+async def _wiki_communities(args: Dict[str, Any]) -> List[TextContent]:
     """获取社区检测结果。"""
     project_path = Path(args["project_path"])
 
@@ -378,7 +377,7 @@ async def _wiki_communities(args: dict[str, Any]) -> list[TextContent]:
     ]
 
 
-async def _wiki_insights(args: dict[str, Any]) -> list[TextContent]:
+async def _wiki_insights(args: Dict[str, Any]) -> List[TextContent]:
     """获取图谱洞察。"""
     project_path = Path(args["project_path"])
 

@@ -12,6 +12,7 @@ Provides high-level operations for lane management:
 from __future__ import annotations
 
 import uuid
+from typing import List, Optional
 
 from backend.data.orchestration_repo import LaneRepository
 from backend.orchestration.models import (
@@ -29,13 +30,13 @@ class LaneRegistry:
     specific agent and tracks execution health via heartbeats.
     """
 
-    def __init__(self, repo: LaneRepository | None = None) -> None:
+    def __init__(self, repo: Optional[LaneRepository] = None) -> None:
         self.repo = repo or LaneRepository()
 
     def create_lane(
         self,
         task_id: str,
-        worktree: str | None = None,
+        worktree: Optional[str] = None,
     ) -> Lane:
         """
         Create a new lane for a task.
@@ -109,7 +110,7 @@ class LaneRegistry:
         except ValueError:
             return False
 
-    def mark_failed(self, lane_id: str, error: str | None = None) -> bool:
+    def mark_failed(self, lane_id: str, error: Optional[str] = None) -> bool:
         """Transition lane to FAILED state."""
         lane = self.repo.get(lane_id)
         if not lane:
@@ -154,19 +155,19 @@ class LaneRegistry:
         lane.heartbeat.update_ping()
         return self.repo.update_heartbeat(lane_id, lane.heartbeat)
 
-    def list_lanes_by_task(self, task_id: str) -> list[Lane]:
+    def list_lanes_by_task(self, task_id: str) -> List[Lane]:
         """List all lanes for a task."""
         return self.repo.list_by_task(task_id)
 
-    def list_lanes_by_agent(self, agent_id: str) -> list[Lane]:
+    def list_lanes_by_agent(self, agent_id: str) -> List[Lane]:
         """List all lanes assigned to an agent."""
         return self.repo.list_by_agent(agent_id)
 
-    def list_lanes_by_status(self, status: LaneStatus, limit: int = 100) -> list[Lane]:
+    def list_lanes_by_status(self, status: LaneStatus, limit: int = 100) -> List[Lane]:
         """List lanes by status."""
         return self.repo.list_by_status(status, limit)
 
-    def list_all_lanes(self) -> list[Lane]:
+    def list_all_lanes(self) -> List[Lane]:
         """List all lanes."""
         return self.repo.list_all()
 
@@ -182,7 +183,7 @@ class LaneRegistry:
         lane.status = status
         return self.repo.update(lane)
 
-    def get_stalled_lanes(self, stalled_after_ms: int = 300_000) -> list[Lane]:
+    def get_stalled_lanes(self, stalled_after_ms: int = 300_000) -> List[Lane]:
         """
         Get lanes with stalled heartbeats.
 

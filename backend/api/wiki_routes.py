@@ -2,12 +2,12 @@
 
 提供 Wiki 子系统的 HTTP API：文件操作、搜索、Ingest、Chat、Graph、Research、Clip。
 """
-
 import logging
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Dict, List, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -195,7 +195,7 @@ async def open_project(req: OpenProjectRequest) -> ProjectInfo:
 
 
 @router.get("/project/list")
-async def list_projects(base_path: str = "") -> list[ProjectInfo]:
+async def list_projects(base_path: str = "") -> List[ProjectInfo]:
     """列出指定目录下的 Wiki 项目。
 
     Args:
@@ -276,7 +276,7 @@ class ChatResponse(BaseModel):
     """Chat 响应。"""
 
     answer: str
-    citations: list[str]
+    citations: List[str]
 
 
 # ============================================================================
@@ -285,7 +285,7 @@ class ChatResponse(BaseModel):
 
 
 @router.get("/list")
-async def list_directory(path: str, project_path: str) -> list[dict]:
+async def list_directory(path: str, project_path: str) -> List[dict]:
     """列出目录内容。
 
     Args:
@@ -524,7 +524,7 @@ async def ingest(req: IngestRequest) -> IngestResult:
     )
 
     # LLM 调用函数
-    async def llm_call(messages: list[dict], temperature: float) -> str:
+    async def llm_call(messages: List[dict], temperature: float) -> str:
         async with httpx.AsyncClient(timeout=1800) as client:
             headers = {
                 "Content-Type": "application/json",
@@ -553,7 +553,7 @@ async def ingest(req: IngestRequest) -> IngestResult:
             return data["choices"][0]["message"]["content"]
 
     # HTTP POST 函数（用于嵌入）
-    async def http_post(url: str, headers: dict[str, str], body: dict) -> str:
+    async def http_post(url: str, headers: Dict[str, str], body: dict) -> str:
         async with httpx.AsyncClient(timeout=1800) as client:
             response = await client.post(url, headers=headers, json=body)
 
@@ -609,7 +609,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
     )
 
     # LLM 调用函数
-    async def llm_call(messages: list[dict], temperature: float) -> str:
+    async def llm_call(messages: List[dict], temperature: float) -> str:
         async with httpx.AsyncClient(timeout=1800) as client:
             headers = {
                 "Content-Type": "application/json",
@@ -638,7 +638,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
             return data["choices"][0]["message"]["content"]
 
     # HTTP POST 函数（用于嵌入）
-    async def http_post(url: str, headers: dict[str, str], body: dict) -> str:
+    async def http_post(url: str, headers: Dict[str, str], body: dict) -> str:
         async with httpx.AsyncClient(timeout=1800) as client:
             response = await client.post(url, headers=headers, json=body)
 
@@ -672,7 +672,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
 
 
 @router.get("/graph")
-async def get_graph(project_path: str, query: str | None = None, limit: int = 100) -> GraphData:
+async def get_graph(project_path: str, query: Optional[str] = None, limit: int = 100) -> GraphData:
     """获取知识图谱。
 
     Args:
@@ -868,7 +868,7 @@ async def start_research(req: ResearchRequest) -> dict:
         )
 
     # LLM 调用函数
-    async def llm_call(messages: list[dict], temperature: float) -> str:
+    async def llm_call(messages: List[dict], temperature: float) -> str:
         import httpx
 
         async with httpx.AsyncClient(timeout=1800) as client:
@@ -1151,8 +1151,8 @@ class ProjectCheckResponse(BaseModel):
     writable: bool
     is_project: bool
     parent_writable: bool
-    warning: str | None = None
-    error: str | None = None
+    warning: Optional[str] = None
+    error: Optional[str] = None
 
 
 class RecordRecentRequest(BaseModel):
@@ -1259,8 +1259,8 @@ async def check_project(path: str, intent: Literal["create", "open"]) -> Project
     return _check_project_impl(path, intent)
 
 
-@router.get("/recent-projects", response_model=list[RecentProject])
-async def get_recent_projects() -> list[RecentProject]:
+@router.get("/recent-projects", response_model=List[RecentProject])
+async def get_recent_projects() -> List[RecentProject]:
     """Most-recent first, capped at MAX_RECENT."""
     return load_recent()
 

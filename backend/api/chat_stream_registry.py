@@ -23,7 +23,12 @@ import asyncio
 import contextlib
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
+from typing import (  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
+    Any,
+    Callable,
+    Dict,
+    Optional,
+)
 
 # 当 Queue.get() 收到此 sentinel,attach 端点就关闭 NDJSON 流。
 # 必须是单例(用 `is` 比较),不能是 None 或 dict(None) 等可能的合法事件值。
@@ -48,7 +53,7 @@ class StreamEntry:
     """
 
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=1000))
-    task: asyncio.Task | None = None
+    task: Optional[asyncio.Task] = None
     status: str = "pending"
     created_at: float = field(default_factory=time.time)
 
@@ -65,13 +70,13 @@ class StreamRegistry:
     """
 
     def __init__(self) -> None:
-        self._entries: dict[str, StreamEntry] = {}
+        self._entries: Dict[str, StreamEntry] = {}
 
     async def create(
         self,
         stream_id: str,
         queue_maxsize: int = 1000,
-        producer: ProducerFn | None = None,
+        producer: Optional[ProducerFn] = None,
     ) -> StreamEntry:
         """注册新 stream,可选启动 producer task。
 

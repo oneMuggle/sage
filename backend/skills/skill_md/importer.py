@@ -19,7 +19,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ..registry import SkillRegistry
 from .exceptions import NoSkillsDirError
@@ -48,13 +48,13 @@ class SkillMdImporter:
         self,
         registry: SkillRegistry,
         *,
-        skills_dir: Path | None = None,
+        skills_dir: Optional[Path] = None,
     ) -> None:
         self._registry = registry
         self._explicit_skills_dir = skills_dir
-        self._batch_loader: SkillMdHotLoader | None = None  # lazy-init for batch reuse
+        self._batch_loader: Optional[SkillMdHotLoader] = None  # lazy-init for batch reuse
 
-    async def import_files(self, files: list[UploadedFile]) -> dict[str, list[dict[str, str]]]:
+    async def import_files(self, files: List[UploadedFile]) -> Dict[str, List[Dict[str, str]]]:
         """逐文件解析 + 写盘 + hot_reload, 聚合结果。
 
         Returns:
@@ -67,8 +67,8 @@ class SkillMdImporter:
             return {"imported": [], "skipped": []}
 
         skills_dir = self._resolve_skills_dir()
-        imported: list[dict[str, str]] = []
-        skipped: list[dict[str, str]] = []
+        imported: List[Dict[str, str]] = []
+        skipped: List[Dict[str, str]] = []
 
         for f in files:
             try:
@@ -205,8 +205,8 @@ def _strip_md_extension(filename: str) -> str:
 
 
 def parse_file_from_bytes(
-    content: bytes, *, fallback_name: str | None = None
-) -> tuple[dict[str, Any], str]:
+    content: bytes, *, fallback_name: Optional[str] = None
+) -> Tuple[Dict[str, Any], str]:
     """从字节内容解析 frontmatter, 返回 (meta, body)。
 
     与 parse_file(path) 对齐, 但不依赖文件系统。

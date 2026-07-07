@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Tuple
 
 
 class InMemoryAutoConfirmAdapter:
@@ -30,7 +31,7 @@ class InMemoryAutoConfirmAdapter:
         self,
         skill_name: str,
         script_path: Path,
-        args: tuple[str, ...],
+        args: Tuple[str, ...],
     ) -> bool:
         """返回 ``self._response``（忽略所有参数）。
 

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -24,9 +24,9 @@ class SkillSpec:
 
     name: str
     description: str
-    triggers: list[str] = field(default_factory=list)
-    parameters: dict[str, Any] = field(default_factory=dict)
-    examples: list[str] = field(default_factory=list)
+    triggers: List[str] = field(default_factory=list)
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    examples: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -42,5 +42,5 @@ class SkillResult:
 
     success: bool
     content: Any = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-    error: str | None = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None

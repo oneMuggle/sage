@@ -4,10 +4,10 @@ Permission system for multi-agent orchestration.
 Controls what actions agents can perform during lane execution.
 Implements least-privilege principle with preset profiles.
 """
-
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import List
 
 
 class PermissionPreset(str, Enum):
@@ -32,8 +32,8 @@ class LanePermission:
     """Permission constraints for a lane execution."""
 
     preset: PermissionPreset
-    allowed_paths: list[str] = field(default_factory=list)
-    denied_tools: list[str] = field(default_factory=list)
+    allowed_paths: List[str] = field(default_factory=list)
+    denied_tools: List[str] = field(default_factory=list)
 
     def check(self, action: AgentAction) -> bool:
         """

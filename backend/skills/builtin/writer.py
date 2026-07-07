@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from ..base import BaseSkill, SkillResult, SkillSchema
 
@@ -43,7 +43,7 @@ class WriterSkill(BaseSkill):
             examples=["写一封商务邮件", "帮我写一篇关于 AI 的文章"],
         )
 
-    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         """执行写作"""
         article_type = params.get("type")
         topic = params.get("topic")

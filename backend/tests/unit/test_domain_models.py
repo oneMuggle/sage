@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from typing import List
 
 import pytest
 from sage_core import (
@@ -284,7 +285,7 @@ class TestDomainPurity:
         allowed_external = {"sage_core"}
 
         import_re = re.compile(r"^\s*(?:from|import)\s+([\w\.]+)")
-        offenders: list[str] = []
+        offenders: List[str] = []
 
         for py_file in sorted(domain_dir.rglob("*.py")):
             for line in py_file.read_text(encoding="utf-8").splitlines():

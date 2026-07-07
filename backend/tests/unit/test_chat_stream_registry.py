@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Optional
 
 import pytest
 
@@ -19,7 +20,7 @@ from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegist
 pytestmark = pytest.mark.unit
 
 
-def _make_event(state: str, content: str | None = None) -> dict:
+def _make_event(state: str, content: Optional[str] = None) -> dict:
     return {"state": state, "iteration": 0, "content": content}
 
 

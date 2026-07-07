@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import List, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -209,7 +210,7 @@ def test_to_domain_tool_call_with_no_id_keeps_id_as_none():
 # ============================================================================
 
 
-def _build_adapter_with_mocked_client() -> tuple[HttpxLLMAdapter, AsyncMock]:
+def _build_adapter_with_mocked_client() -> Tuple[HttpxLLMAdapter, AsyncMock]:
     """构造 adapter + 返回底层 chat AsyncMock, 便于委派断言。"""
     with patch("backend.adapters.out.llm.httpx_adapter._LLMClient") as MockClient:
         MockClient.return_value = MagicMock()
@@ -338,7 +339,7 @@ async def test_chat_stream_yields_chunks_from_underlying_client():
     adapter._client.chat_stream = fake_stream  # type: ignore[method-assign]
 
     msgs = [Message(role=Role.USER, content="hi")]
-    chunks: list[str] = []
+    chunks: List[str] = []
     async for c in adapter.chat_stream(msgs):
         chunks.append(c)
     assert chunks == ["Hello", " ", "world"]
@@ -352,7 +353,7 @@ async def test_chat_stream_converts_domain_messages_to_dicts():
         api_key="test-key",
     )
 
-    received: list[list[dict]] = []
+    received: List[List[dict]] = []
 
     async def fake_stream(messages):
         received.append(messages)
@@ -420,7 +421,7 @@ async def test_chat_stream_via_real_mock_fixture_yields_chunks():
     mock_http.stream = _stream_ctx
 
     with patch.object(adapter._client, "_get_client", return_value=mock_http):
-        chunks: list[str] = []
+        chunks: List[str] = []
         async for c in adapter.chat_stream([Message(role=Role.USER, content="hi")]):
             chunks.append(c)
         assert chunks == ["Hello", " world"]

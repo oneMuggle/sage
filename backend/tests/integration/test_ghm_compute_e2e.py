@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 import pytest
 import pytest_asyncio
@@ -64,7 +64,7 @@ requires_ghm = pytest.mark.skipif(
 )
 
 
-def _make_ghm_config() -> dict[str, Any]:
+def _make_ghm_config() -> Dict[str, Any]:
     """E2E 用的 ghm 配置:走 python_module 回退,操作只含 compute_shock。"""
     return {
         "enabled": True,

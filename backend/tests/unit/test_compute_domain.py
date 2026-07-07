@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, List
 
 import pytest
 from sage_core import (
@@ -179,7 +179,7 @@ def test_compute_result_defaults_all_optional() -> None:
 class _FakeComputePort:
     """一个最小的 ``ComputePort`` 结构性实现（仅用于测试）。"""
 
-    def list_operations(self) -> list[ComputeSpec]:
+    def list_operations(self) -> List[ComputeSpec]:
         return [ComputeSpec(name="noop", description="no-op")]
 
     async def execute(self, req: ComputeRequest) -> ComputeResult:
@@ -196,7 +196,7 @@ def test_compute_port_missing_method_fails() -> None:
     """缺少 ``execute`` 方法的类不应通过协议检查。"""
 
     class _PartialImpl:
-        def list_operations(self) -> list[ComputeSpec]:
+        def list_operations(self) -> List[ComputeSpec]:
             return []
 
     assert not isinstance(_PartialImpl(), ComputePort)

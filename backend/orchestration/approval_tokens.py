@@ -25,6 +25,7 @@ import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, List, Optional
 
 
 class DenyReason(str, Enum):
@@ -51,7 +52,7 @@ class ApprovalToken:
     action: str
     scope_repo: str
     scope_branch: str
-    scope_commit: str | None
+    scope_commit: Optional[str]
     issued_at: int
     expires_at: int
     max_uses: int = 1
@@ -81,7 +82,7 @@ class TokenUseResult:
 
     granted: bool
     token_id: str
-    reason: DenyReason | None = None
+    reason: Optional[DenyReason] = None
     message: str = ""
 
 
@@ -94,7 +95,7 @@ class ApprovalTokenStore:
     """
 
     def __init__(self) -> None:
-        self._tokens: dict[str, ApprovalToken] = {}
+        self._tokens: Dict[str, ApprovalToken] = {}
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -108,7 +109,7 @@ class ApprovalTokenStore:
         action: str,
         scope_repo: str,
         scope_branch: str,
-        scope_commit: str | None = None,
+        scope_commit: Optional[str] = None,
         ttl_ms: int = 60_000,
         max_uses: int = 1,
     ) -> ApprovalToken:
@@ -145,7 +146,7 @@ class ApprovalTokenStore:
         with self._lock:
             token.revoked = True
 
-    def list_active(self) -> list[ApprovalToken]:
+    def list_active(self) -> List[ApprovalToken]:
         """Return all non-revoked tokens currently in the store."""
         return [t for t in self._tokens.values() if not t.revoked]
 
@@ -160,7 +161,7 @@ class ApprovalTokenStore:
         action: str,
         repo: str,
         branch: str,
-        commit: str | None = None,
+        commit: Optional[str] = None,
     ) -> TokenUseResult:
         """Attempt to consume an approval token.
 

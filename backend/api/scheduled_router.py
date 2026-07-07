@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -24,14 +24,14 @@ logger = logging.getLogger(__name__)
 
 class ScheduleIn(BaseModel):
     kind: Literal["once", "recurring"]
-    at: int | None = None
-    cron: str | None = None
+    at: Optional[int] = None
+    cron: Optional[str] = None
 
 
 class ScheduleOut(BaseModel):
     kind: Literal["once", "recurring"]
-    at: int | None = None
-    cron: str | None = None
+    at: Optional[int] = None
+    cron: Optional[str] = None
 
 
 class CreateTaskIn(BaseModel):
@@ -43,8 +43,8 @@ class CreateTaskIn(BaseModel):
 
 
 class UpdateTaskIn(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=80)
-    enabled: bool | None = None
+    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    enabled: Optional[bool] = None
 
 
 class TaskOut(BaseModel):
@@ -56,11 +56,11 @@ class TaskOut(BaseModel):
     content: str
     enabled: bool
     created_at: int
-    last_run: int | None = None
-    next_run: int | None = None
+    last_run: Optional[int] = None
+    next_run: Optional[int] = None
 
 
-def _task_to_dict(task: Any) -> dict[str, Any]:
+def _task_to_dict(task: Any) -> Dict[str, Any]:
     return {
         "id": task.id,
         "name": task.name,
@@ -75,7 +75,7 @@ def _task_to_dict(task: Any) -> dict[str, Any]:
     }
 
 
-def _schedule_in_to_dict(s: ScheduleIn) -> dict[str, Any]:
+def _schedule_in_to_dict(s: ScheduleIn) -> Dict[str, Any]:
     if s.kind == "once":
         if s.at is None:
             raise ValueError("'at' is required for one-shot tasks")
@@ -98,17 +98,17 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
         return svc
 
     @router.get("/scheduled/health")
-    def health() -> dict[str, str]:
+    def health() -> Dict[str, str]:
         return {"status": "ok"}
 
-    @router.get("/scheduled/tasks", response_model=list[TaskOut])
-    def list_tasks(svc: SchedulerService = Depends(service_dep)) -> list[dict[str, Any]]:
+    @router.get("/scheduled/tasks", response_model=List[TaskOut])
+    def list_tasks(svc: SchedulerService = Depends(service_dep)) -> List[Dict[str, Any]]:
         return [_task_to_dict(t) for t in svc.list_tasks()]
 
     @router.post("/scheduled/tasks", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
     def create_task(
         payload: CreateTaskIn, svc: SchedulerService = Depends(service_dep)
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         try:
             schedule_dict = _schedule_in_to_dict(payload.schedule)
         except ValueError as exc:
@@ -130,8 +130,8 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
         task_id: str,
         payload: UpdateTaskIn,
         svc: SchedulerService = Depends(service_dep),
-    ) -> dict[str, Any]:
-        changes: dict[str, Any] = {}
+    ) -> Dict[str, Any]:
+        changes: Dict[str, Any] = {}
         if payload.name is not None:
             changes["name"] = payload.name
         if payload.enabled is not None:
@@ -156,7 +156,7 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/scheduled/tasks/{task_id}/run", response_model=TaskOut)
-    def run_task(task_id: str, svc: SchedulerService = Depends(service_dep)) -> dict[str, Any]:
+    def run_task(task_id: str, svc: SchedulerService = Depends(service_dep)) -> Dict[str, Any]:
         try:
             svc.run_now(task_id)
         except TaskNotFoundError as exc:

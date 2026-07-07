@@ -3,11 +3,11 @@
 使用 JSON 文件存储嵌入向量，支持余弦相似度搜索。
 存储路径: {project_root}/.llm-wiki/vectors.json
 """
-
 import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -18,7 +18,7 @@ class ChunkRecord:
     page_path: str
     chunk_index: int
     content: str
-    vector: list[float]
+    vector: List[float]
 
 
 @dataclass
@@ -34,11 +34,11 @@ class SearchHit:
 class VectorStore:
     """JSON 向量存储。"""
 
-    def __init__(self, storage_path: Path, dim: int, records: list[ChunkRecord] | None = None):
+    def __init__(self, storage_path: Path, dim: int, records: Optional[List[ChunkRecord]] = None):
         self.storage_path = storage_path
         self.dim = dim
-        self.records: list[ChunkRecord] = records or []
-        self.by_page: dict[str, list[int]] = {}  # page_path → record indices
+        self.records: List[ChunkRecord] = records or []
+        self.by_page: Dict[str, List[int]] = {}  # page_path → record indices
         self._rebuild_index()
 
     def _rebuild_index(self) -> None:
@@ -85,7 +85,7 @@ class VectorStore:
         store._flush()
         return store
 
-    def upsert_chunks(self, page_path: str, chunks: list[tuple[int, str, list[float]]]) -> None:
+    def upsert_chunks(self, page_path: str, chunks: List[Tuple[int, str, List[float]]]) -> None:
         """插入或更新页面的向量。
 
         Args:
@@ -132,7 +132,7 @@ class VectorStore:
         self._flush()
         return len(indices_to_remove)
 
-    def search(self, query_vec: list[float], limit: int) -> list[SearchHit]:
+    def search(self, query_vec: List[float], limit: int) -> List[SearchHit]:
         """搜索最相似的向量。
 
         Args:
@@ -182,7 +182,7 @@ class VectorStore:
         tmp_path.replace(self.storage_path)
 
 
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
     """计算余弦相似度。"""
     dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = math.sqrt(sum(x * x for x in a))

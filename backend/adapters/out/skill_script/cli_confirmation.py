@@ -18,7 +18,7 @@ import inspect
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class CliConfirmationAdapter:
         self,
         *,
         timeout_s: float = 60.0,
-        callback: Callable[..., Any] | None = None,
+        callback: Optional[Callable[..., Any]] = None,
     ) -> None:
         self._timeout_s = timeout_s
         self._callback = callback
@@ -52,7 +52,7 @@ class CliConfirmationAdapter:
         self,
         skill_name: str,
         script_path: Path,
-        args: tuple[str, ...],
+        args: Tuple[str, ...],
     ) -> bool:
         """调用 callback 获取用户确认。
 

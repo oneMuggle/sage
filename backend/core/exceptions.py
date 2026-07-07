@@ -5,7 +5,7 @@ Sage 异常类定义
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, Optional
 
 
 class SageError(Exception):
@@ -15,14 +15,14 @@ class SageError(Exception):
     """
 
     def __init__(
-        self, message: str, code: str = "SAGE_ERROR", details: dict[str, Any] | None = None
+        self, message: str, code: str = "SAGE_ERROR", details: Optional[Dict[str, Any]] = None
     ):
         super().__init__(message)
         self.message = message
         self.code = code
         self.details = details or {}
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
         return {"error": self.code, "message": self.message, "details": self.details}
 
@@ -38,7 +38,7 @@ class AgentError(SageError):
     Agent 引擎运行过程中的错误
     """
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message=message, code="AGENT_ERROR", details=details)
 
 
@@ -48,7 +48,7 @@ class ToolCallError(SageError):
     工具执行失败时抛出
     """
 
-    def __init__(self, tool_name: str, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, tool_name: str, message: str, details: Optional[Dict[str, Any]] = None):
         details = details or {}
         details["tool_name"] = tool_name
         super().__init__(
@@ -64,7 +64,7 @@ class MaxIterationsError(SageError):
     Agent 循环超过最大迭代次数时抛出
     """
 
-    def __init__(self, max_iterations: int, details: dict[str, Any] | None = None):
+    def __init__(self, max_iterations: int, details: Optional[Dict[str, Any]] = None):
         details = details or {}
         details["max_iterations"] = max_iterations
         super().__init__(
@@ -80,7 +80,7 @@ class MemoryError(SageError):
     记忆操作失败时抛出
     """
 
-    def __init__(self, operation: str, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, operation: str, message: str, details: Optional[Dict[str, Any]] = None):
         details = details or {}
         details["operation"] = operation
         super().__init__(
@@ -94,7 +94,7 @@ class SessionNotFoundError(SageError):
     指定的会话 ID 不存在时抛出
     """
 
-    def __init__(self, session_id: str, details: dict[str, Any] | None = None):
+    def __init__(self, session_id: str, details: Optional[Dict[str, Any]] = None):
         details = details or {}
         details["session_id"] = session_id
         super().__init__(
@@ -108,7 +108,7 @@ class ValidationError(SageError):
     输入数据验证失败时抛出
     """
 
-    def __init__(self, field: str, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, field: str, message: str, details: Optional[Dict[str, Any]] = None):
         details = details or {}
         details["field"] = field
         super().__init__(
@@ -122,7 +122,7 @@ class SecurityError(SageError):
     安全检查失败时抛出 (SQL注入、XSS等)
     """
 
-    def __init__(self, threat_type: str, message: str, details: dict[str, Any] | None = None):
+    def __init__(self, threat_type: str, message: str, details: Optional[Dict[str, Any]] = None):
         details = details or {}
         details["threat_type"] = threat_type
         super().__init__(
@@ -130,7 +130,7 @@ class SecurityError(SageError):
         )
 
 
-def handle_sage_error(error: Exception) -> dict[str, Any]:
+def handle_sage_error(error: Exception) -> Dict[str, Any]:
     """
     将异常转换为统一错误格式
 

@@ -2,11 +2,11 @@
 
 使用 hnswlib 实现高效的近似最近邻搜索，支持大规模向量检索（100k+ chunks）。
 """
-
 import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 import hnswlib
 import numpy as np
@@ -66,8 +66,8 @@ class HNSWVectorStore:
         self.M = m_connections
 
         # 元数据：id -> ChunkRecord
-        self.records: dict[str, ChunkRecord] = {}
-        self.label_to_id: dict[int, str] = {}  # HNSW label -> record id
+        self.records: Dict[str, ChunkRecord] = {}
+        self.label_to_id: Dict[int, str] = {}  # HNSW label -> record id
         self.next_label = 0
 
         # 初始化或加载索引
@@ -107,7 +107,7 @@ class HNSWVectorStore:
         logger.info(f"创建新 HNSW 索引: 维度 {self.dim}, " f"最大元素 {self.max_elements}")
         return index
 
-    def upsert_chunks(self, page_path: str, chunks: list[tuple[int, str, list[float]]]) -> None:
+    def upsert_chunks(self, page_path: str, chunks: List[Tuple[int, str, List[float]]]) -> None:
         """插入或更新页面的向量。
 
         Args:
@@ -193,7 +193,7 @@ class HNSWVectorStore:
 
         return len(records_to_delete)
 
-    def search(self, query_vec: list[float], limit: int) -> list[SearchHit]:
+    def search(self, query_vec: List[float], limit: int) -> List[SearchHit]:
         """搜索最相似的向量。
 
         Args:

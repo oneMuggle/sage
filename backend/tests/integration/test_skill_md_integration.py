@@ -13,6 +13,7 @@ import asyncio
 import os
 import unittest.mock
 from pathlib import Path
+from typing import List, Optional
 
 import pytest
 
@@ -41,7 +42,7 @@ def _write_skill_md_with_dispatch(
     name: str,
     *,
     user_invocable: bool = False,
-    user_invocable_name: str | None = None,
+    user_invocable_name: Optional[str] = None,
     command_dispatch: str = "auto",
     disable_model_invocation: bool = False,
     body: str = "Skill body\n",
@@ -50,7 +51,7 @@ def _write_skill_md_with_dispatch(
     skill_dir = tmp_path / name
     skill_dir.mkdir(parents=True, exist_ok=True)
     path = skill_dir / "SKILL.md"
-    extra_lines: list[str] = []
+    extra_lines: List[str] = []
     if user_invocable:
         extra_lines.append("user-invocable: true")
     if user_invocable_name is not None:

@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 from sage_core import Message, Role, ToolCall
 
@@ -44,10 +44,10 @@ def _to_domain_message(raw: LLMResponse) -> Message:
                     解析失败时安全降级为 ``{}``，保证不抛错。
     - ``role``  ：固定为 ``ASSISTANT``（LLMClient 的 chat 返回值总是 assistant 消息）。
     """
-    domain_tcs: list[ToolCall] = []
+    domain_tcs: List[ToolCall] = []
     for tc in raw.tool_calls or []:
         try:
-            args: dict[str, Any] = json.loads(tc.arguments) if tc.arguments else {}
+            args: Dict[str, Any] = json.loads(tc.arguments) if tc.arguments else {}
         except (ValueError, TypeError):
             logger.warning(
                 "LLMClient 工具调用 arguments 不是合法 JSON, 降级为空 dict: %r",
@@ -63,13 +63,13 @@ def _to_domain_message(raw: LLMResponse) -> Message:
     )
 
 
-def _from_domain_message(msg: Message) -> dict[str, Any]:
+def _from_domain_message(msg: Message) -> Dict[str, Any]:
     """``domain.Message`` → LLMClient 输入 dict。
 
     LLMClient 的 ``_convert_messages`` 会再次过滤（只保留 role/content/tool_calls/tool_call_id），
     但我们仍按 OpenAI 标准格式输出，避免依赖其内部实现细节。
     """
-    entry: dict[str, Any] = {
+    entry: Dict[str, Any] = {
         "role": msg.role.value if isinstance(msg.role, Role) else str(msg.role),
         "content": msg.content,
     }
@@ -119,9 +119,9 @@ class HttpxLLMAdapter:
 
     async def chat(
         self,
-        messages: list[Message],
-        tools: list[Any] | None = None,
-        tool_choice: str | dict[str, Any] | None = None,
+        messages: List[Message],
+        tools: Optional[List[Any]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> Message:
         """非流式对话：把 ``domain.Message`` 列表翻译成 LLMClient 输入并委派。
 
@@ -136,7 +136,7 @@ class HttpxLLMAdapter:
         raw_messages = [_from_domain_message(m) for m in messages]
         # LLMClient.tool_choice 签名是 str | None；dict[str, Any] 形式由调用方自行
         # 解析为 provider-specific 形式，adapter 不做猜测。
-        tc: str | None = tool_choice if isinstance(tool_choice, str) else None
+        tc: Optional[str] = tool_choice if isinstance(tool_choice, str) else None
 
         # P3.3: 整个 chat 调用包一层 OTel span，便于后端看 LLM 调用耗时
         with _tracer.start_as_current_span("llm.chat") as span:
@@ -152,7 +152,7 @@ class HttpxLLMAdapter:
 
     async def chat_stream(
         self,
-        messages: list[Message],
+        messages: List[Message],
     ) -> AsyncIterator[str]:
         """流式对话：逐 token 透传 LLMClient 的异步生成器。
 
@@ -165,7 +165,7 @@ class HttpxLLMAdapter:
     # ---- 公开辅助（便于测试 / 复用）----
 
     @staticmethod
-    def from_domain(msg: Message) -> dict[str, Any]:
+    def from_domain(msg: Message) -> Dict[str, Any]:
         """显式暴露 domain → dict 转换（单元测试直接调用）。"""
         return _from_domain_message(msg)
 

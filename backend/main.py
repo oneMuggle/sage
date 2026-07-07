@@ -2,12 +2,12 @@
 Sage - 记忆型 AI 桌面助手
 FastAPI 后端入口
 """
-
 import asyncio
 import logging
 import os
 import uuid
 from contextlib import asynccontextmanager, suppress
+from typing import List
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -188,9 +188,9 @@ async def lifespan(app: FastAPI):
         def __init__(self) -> None:
             self._repo = AgentRepository()
 
-        def list_agents(self) -> list[Agent]:
+        def list_agents(self) -> List[Agent]:
             profiles = self._repo.list_all()
-            agents: list[Agent] = []
+            agents: List[Agent] = []
             for p in profiles:
                 if not p.get("enabled", True):
                     continue

@@ -25,6 +25,7 @@ SQLite ``agents`` 表 (见 ``backend/data/database.py:init_db``)。
 """
 
 from __future__ import annotations
+from typing import Dict, List, Tuple
 
 import json
 import time
@@ -49,14 +50,14 @@ class AgentRepository:
     # 读
     # ------------------------------------------------------------------ #
 
-    def list_all(self) -> list[dict[str, Any]]:
+    def list_all(self) -> List[Dict[str, Any]]:
         """列出所有 agent (含 disabled), 按 id 排序。"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM agents ORDER BY id ASC")
         return [self._row_to_dict(row) for row in cursor.fetchall()]
 
-    def get(self, agent_id: str) -> dict[str, Any] | None:
+    def get(self, agent_id: str) -> Dict[str, Any] | None:
         """按 id 取单个 agent。"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -75,7 +76,7 @@ class AgentRepository:
     # 写
     # ------------------------------------------------------------------ #
 
-    def upsert(self, profile: dict[str, Any]) -> None:
+    def upsert(self, profile: Dict[str, Any]) -> None:
         """插入或覆盖一个 agent。 ``updated_at`` 自动写当前毫秒时间戳。"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -113,13 +114,13 @@ class AgentRepository:
         conn.commit()
         return cursor.rowcount > 0
 
-    def update(self, agent_id: str, profile: dict[str, Any]) -> bool:
+    def update(self, agent_id: str, profile: Dict[str, Any]) -> bool:
         """部分更新 (PR-4 用)。仅写传入的字段, id 不可改。
 
         支持字段: name / role / system_prompt / tools / memory_access /
         model_config / max_iterations / enabled / description。
         """
-        column_setters: list[tuple[str, Any]] = []
+        column_setters: List[Tuple[str, Any]] = []
         for col in (
             "name",
             "role",
@@ -144,7 +145,7 @@ class AgentRepository:
             return self.get(agent_id) is not None
 
         set_clause = ", ".join(f"{col} = ?" for col, _ in column_setters) + ", updated_at = ?"
-        values: list[Any] = [val for _, val in column_setters]
+        values: List[Any] = [val for _, val in column_setters]
         values.append(int(time.time() * 1000))
         values.append(agent_id)
 
@@ -181,7 +182,7 @@ class AgentRepository:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _row_to_dict(row: Any) -> dict[str, Any]:
+    def _row_to_dict(row: Any) -> Dict[str, Any]:
         """``sqlite3.Row`` → wire-format dict (与 ``AgentProfile.to_dict()`` 字段对齐)。
 
         注: ``updated_at`` 在 PR-3 漏返, PR-4 测试 ``test_update_agent_bumps_updated_at``

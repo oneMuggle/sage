@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 from backend.domain.agent_event import envelope
 
@@ -37,7 +37,7 @@ class AuditEventType:
     RUN_END = "run_end"
 
     @classmethod
-    def all(cls) -> list[str]:
+    def all(cls) -> List[str]:
         """返回全部 5 类审计事件名（便于测试断言、CI 门禁 grep）。"""
         return [
             cls.CHAT_MESSAGE_SENT,
@@ -48,7 +48,7 @@ class AuditEventType:
         ]
 
     @classmethod
-    def run_lifecycle(cls) -> list[str]:
+    def run_lifecycle(cls) -> List[str]:
         """返回 run-lifecycle 事件名（run_start → run_end 顺序）。"""
         return [
             cls.RUN_START,
@@ -66,7 +66,7 @@ class FileEventAdapter:
         self._log_path = Path(log_path)
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def emit(self, event_type: str, payload: dict[str, Any]) -> None:
+    def emit(self, event_type: str, payload: Dict[str, Any]) -> None:
         event = envelope(event_type, payload, ts=datetime.now().isoformat())
         with self._log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")

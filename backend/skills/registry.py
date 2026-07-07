@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import builtins
 import logging
+from typing import Dict, List
 
 from .base import BaseSkill, SkillResult, SkillSchema
 
@@ -24,7 +25,7 @@ class SkillRegistry:
     """
 
     def __init__(self):
-        self._skills: dict[str, BaseSkill] = {}
+        self._skills: Dict[str, BaseSkill] = {}
 
     def register(self, skill: BaseSkill) -> None:
         """
@@ -68,7 +69,7 @@ class SkillRegistry:
         """
         return self._skills.get(name)
 
-    def list(self) -> list[SkillSchema]:
+    def list(self) -> List[SkillSchema]:
         """
         列出所有已注册技能的 Schema
 

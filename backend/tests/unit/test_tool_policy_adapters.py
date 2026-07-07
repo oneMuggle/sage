@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 import pytest
 from sage_core import (
@@ -85,7 +85,7 @@ class _FakeRegistry:
         ]
 
 
-def _make_inproc(tool, policy: ToolPolicy | None = None) -> InprocToolAdapter:
+def _make_inproc(tool, policy: Optional[ToolPolicy] = None) -> InprocToolAdapter:
     return InprocToolAdapter(
         registry=_FakeRegistry([tool]),
         policy=policy,
@@ -177,7 +177,7 @@ class _SlowAsyncCompute:
 
 
 class _BigOutputCompute:
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(self, payload: Dict[str, Any]) -> None:
         self._payload = payload
 
     def list_operations(self):
@@ -197,10 +197,10 @@ class _BigOutputCompute:
 class _FakeInnerForCompute:
     """ComputeToolAdapter 的 inner ToolPort 假实现。"""
 
-    def list_tools(self) -> list[ToolSpec]:
+    def list_tools(self) -> List[ToolSpec]:
         return []
 
-    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         return ToolResult(success=True, output="inner", error=None, metadata=None)
 
 

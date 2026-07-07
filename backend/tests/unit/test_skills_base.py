@@ -12,7 +12,7 @@ Skill 基类单元测试
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 import pytest
 
@@ -61,7 +61,7 @@ def test_skill_result_default_values():
 class _DummySkill(BaseSkill):
     """最小可用技能实现（用于测试基类行为）"""
 
-    def __init__(self, triggers: list[str] | None = None, name: str = "dummy"):
+    def __init__(self, triggers: Optional[List[str]] = None, name: str = "dummy"):
         super().__init__()
         self._triggers = triggers or ["dummy"]
         self._name = name
@@ -75,7 +75,7 @@ class _DummySkill(BaseSkill):
             examples=["do dummy thing"],
         )
 
-    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         return SkillResult(content="done", metadata={"params": params})
 
 
@@ -91,7 +91,7 @@ class _SchemaBuildCounter(BaseSkill):
         type(self).call_count += 1
         return SkillSchema(name="counter", description="counter skill", triggers=["counter"])
 
-    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         return SkillResult()
 
 

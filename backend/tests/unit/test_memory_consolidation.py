@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 import pytest
 
@@ -19,9 +19,9 @@ pytestmark = pytest.mark.unit
 class _FakeLLM:
     """最小 LLMClient stub。"""
 
-    def __init__(self, response: str | None = "summary text") -> None:
+    def __init__(self, response: Optional[str] = "summary text") -> None:
         self._response = response
-        self.calls: list[str] = []
+        self.calls: List[str] = []
 
     def complete(self, prompt: str) -> str | None:
         self.calls.append(prompt)
@@ -67,7 +67,7 @@ def test_compress_with_llm_uses_llm_response() -> None:
 def test_compress_llm_returns_empty_falls_back() -> None:
     llm = _FakeLLM(response="   ")
     pipe = ConsolidationPipeline(llm_client=llm)
-    msgs: list[dict[str, Any]] = [{"role": "user", "content": "hi"}]
+    msgs: List[Dict[str, Any]] = [{"role": "user", "content": "hi"}]
     summary = pipe.compress_working_memory(msgs)
     assert summary is not None
     assert "条消息" in summary or "对话围绕" in summary
@@ -75,7 +75,7 @@ def test_compress_llm_returns_empty_falls_back() -> None:
 
 def test_compress_llm_exception_falls_back() -> None:
     pipe = ConsolidationPipeline(llm_client=_ErrorLLM())
-    msgs: list[dict[str, Any]] = [
+    msgs: List[Dict[str, Any]] = [
         {"role": "user", "content": "talk about cats"},
         {"role": "assistant", "content": "ok"},
     ]
@@ -85,7 +85,7 @@ def test_compress_llm_exception_falls_back() -> None:
 
 def test_compress_no_llm_uses_fallback() -> None:
     pipe = ConsolidationPipeline()
-    msgs: list[dict[str, Any]] = [
+    msgs: List[Dict[str, Any]] = [
         {"role": "user", "content": "first question"},
         {"role": "assistant", "content": "answer"},
     ]
@@ -96,7 +96,7 @@ def test_compress_no_llm_uses_fallback() -> None:
 
 def test_fallback_summary_without_user_messages() -> None:
     pipe = ConsolidationPipeline()
-    msgs: list[dict[str, Any]] = [
+    msgs: List[Dict[str, Any]] = [
         {"role": "assistant", "content": "only assistant"},
     ]
     summary = pipe._fallback_summary(msgs)

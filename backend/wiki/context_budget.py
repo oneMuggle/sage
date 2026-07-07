@@ -2,9 +2,9 @@
 
 实现上下文窗口的 token 预算分配，确保不超出模型限制。
 """
-
 import math
 from dataclasses import dataclass
+from typing import List, Tuple
 
 # 常量
 PAGES_RATIO = 0.50  # 50% 用于检索页面
@@ -75,7 +75,7 @@ class PageChunk:
     truncated: bool
 
 
-def truncate_pages(pages: list[tuple[str, str]], budget: ContextBudget) -> list[PageChunk]:
+def truncate_pages(pages: List[Tuple[str, str]], budget: ContextBudget) -> List[PageChunk]:
     """截断页面以适应预算。
 
     Args:

@@ -9,6 +9,7 @@ import logging
 import time
 import uuid
 from datetime import datetime
+from typing import Dict, List
 
 from backend.data.database import get_database
 
@@ -157,7 +158,7 @@ class DailySummaryTask(BaseEvolutionTask):
 
         return processed
 
-    async def _generate_summary(self, messages: list[dict]) -> str | None:
+    async def _generate_summary(self, messages: List[dict]) -> str | None:
         """
         生成对话摘要
 
@@ -484,7 +485,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
 
         return len(preferences)
 
-    def _analyze_preferences(self, feedback_messages: list[dict]) -> dict[str, str]:
+    def _analyze_preferences(self, feedback_messages: List[dict]) -> Dict[str, str]:
         """
         分析用户偏好
 
@@ -782,7 +783,7 @@ def _safe_json_loads(s: str) -> list:
         return []
 
 
-def create_evolution_tasks(config: dict = None) -> dict[str, BaseEvolutionTask]:
+def create_evolution_tasks(config: dict = None) -> Dict[str, BaseEvolutionTask]:
     """
     创建所有进化任务
 
@@ -835,7 +836,7 @@ def create_evolution_tasks(config: dict = None) -> dict[str, BaseEvolutionTask]:
     return tasks
 
 
-def get_evolution_logs(db, limit: int = 50, offset: int = 0) -> list[dict]:
+def get_evolution_logs(db, limit: int = 50, offset: int = 0) -> List[dict]:
     """
     获取进化日志
 

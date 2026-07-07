@@ -4,6 +4,7 @@ SQLite 实现
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import os
 import sqlite3
@@ -13,7 +14,7 @@ from pathlib import Path
 class Database:
     """SQLite 数据库管理"""
 
-    def __init__(self, db_path: str | None = None):
+    def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
             env_path = os.environ.get("SAGE_DB_PATH")
             if env_path:
@@ -26,7 +27,7 @@ class Database:
                 db_path = str(data_dir / "sage.db")
 
         self.db_path = db_path
-        self._connection: sqlite3.Connection | None = None
+        self._connection: Optional[sqlite3.Connection] = None
 
     def get_connection(self) -> sqlite3.Connection:
         """获取数据库连接"""
@@ -403,7 +404,7 @@ class Database:
 
 
 # 全局数据库实例
-_db: Database | None = None
+_db: Optional[Database] = None
 
 
 def get_database() -> Database:

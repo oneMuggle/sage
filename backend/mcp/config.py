@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Dict, List
 
 
 @dataclass(frozen=True)
@@ -15,8 +16,8 @@ class McpServerConfig:
 
     name: str
     command: str
-    args: list[str] = field(default_factory=list)
-    env: dict[str, str] = field(default_factory=dict)
+    args: List[str] = field(default_factory=list)
+    env: Dict[str, str] = field(default_factory=dict)
     enabled: bool = True
 
 
@@ -25,7 +26,7 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def get_mcp_server_configs() -> list[McpServerConfig]:
+def get_mcp_server_configs() -> List[McpServerConfig]:
     """
     Return the list of configured MCP servers.
 
@@ -35,7 +36,7 @@ def get_mcp_server_configs() -> list[McpServerConfig]:
     root = _project_root()
     mcp_server_entry = root / "packages" / "drawio-mcp-server" / "dist" / "index.js"
 
-    servers: list[McpServerConfig] = []
+    servers: List[McpServerConfig] = []
 
     # draw.io MCP server
     drawio_base_url = os.environ.get("DRAWIO_BASE_URL", "http://localhost:8080")

@@ -25,7 +25,7 @@ import secrets
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class PolicyDecisionKind(str, Enum):
@@ -57,12 +57,12 @@ class PolicyContext:
     attempt: int = 1
 
     # Failure context
-    failure_class: str | None = None  # "Test" / "Compile" / "TrustGate" / ...
-    heartbeat_status: str | None = None  # "healthy" / "stalled" / "dead" / "transport_dead"
-    lane_status: str | None = None  # "green" / "red" / "blocked" / ...
+    failure_class: Optional[str] = None  # "Test" / "Compile" / "TrustGate" / ...
+    heartbeat_status: Optional[str] = None  # "healthy" / "stalled" / "dead" / "transport_dead"
+    lane_status: Optional[str] = None  # "green" / "red" / "blocked" / ...
 
     # Action context
-    action: str | None = None
+    action: Optional[str] = None
     branch: str = "main"
     repo: str = ""
     commit: str = ""
@@ -71,7 +71,7 @@ class PolicyContext:
     upstream_reconciled: bool = False
     workspace_mismatch: bool = False
 
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 # ============================================================================
@@ -87,7 +87,7 @@ class PolicyDecision:
     priority: int
     kind: PolicyDecisionKind
     explanation: str
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -104,10 +104,10 @@ class PolicyDecisionEvent:
     explanation: str
     lane_id: str
     decided_at: int
-    approval_token_id: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    approval_token_id: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """Serialize to plain dict (JSON-compatible)."""
         return {
             "rule_name": self.rule_name,
@@ -141,9 +141,9 @@ class PolicyEngine:
     # Public API
     # ------------------------------------------------------------------
 
-    def evaluate(self, ctx: PolicyContext) -> list[PolicyDecision]:
+    def evaluate(self, ctx: PolicyContext) -> List[PolicyDecision]:
         """Run all matching rules, return decisions sorted by priority ascending."""
-        raw: list[PolicyDecision] = []
+        raw: List[PolicyDecision] = []
         raw.extend(self._retry_rules(ctx))
         raw.extend(self._rebase_rules(ctx))
         raw.extend(self._escalate_rules(ctx))
@@ -154,7 +154,7 @@ class PolicyEngine:
 
     def evaluate_with_events(
         self, ctx: PolicyContext
-    ) -> tuple[list[PolicyDecision], list[PolicyDecisionEvent]]:
+    ) -> Tuple[List[PolicyDecision], List[PolicyDecisionEvent]]:
         """Run `evaluate` and convert each decision into a persistable event.
 
         Returns (decisions, events). Each decision maps to exactly one event;
@@ -162,9 +162,9 @@ class PolicyEngine:
         """
         decisions = self.evaluate(ctx)
         now = int(time.time() * 1000)
-        events: list[PolicyDecisionEvent] = []
+        events: List[PolicyDecisionEvent] = []
         for d in decisions:
-            token_id: str | None = None
+            token_id: Optional[str] = None
             if d.kind == PolicyDecisionKind.APPROVAL:
                 # Each approval decision must carry a token id (even if it is a
                 # placeholder — the real token is minted by ApprovalTokenStore).
@@ -188,8 +188,8 @@ class PolicyEngine:
     # `evaluate` method always returns priority-sorted output.
     # ------------------------------------------------------------------
 
-    def _retry_rules(self, ctx: PolicyContext) -> list[PolicyDecision]:
-        out: list[PolicyDecision] = []
+    def _retry_rules(self, ctx: PolicyContext) -> List[PolicyDecision]:
+        out: List[PolicyDecision] = []
         # Rule 1: retry on test failure (attempt <= 3)
         if ctx.failure_class == "Test" and ctx.attempt <= 3:
             out.append(
@@ -218,8 +218,8 @@ class PolicyEngine:
             )
         return out
 
-    def _rebase_rules(self, ctx: PolicyContext) -> list[PolicyDecision]:
-        out: list[PolicyDecision] = []
+    def _rebase_rules(self, ctx: PolicyContext) -> List[PolicyDecision]:
+        out: List[PolicyDecision] = []
         # Rule 3: rebase on branch divergence
         if ctx.failure_class == "BranchDivergence":
             out.append(
@@ -232,8 +232,8 @@ class PolicyEngine:
             )
         return out
 
-    def _escalate_rules(self, ctx: PolicyContext) -> list[PolicyDecision]:
-        out: list[PolicyDecision] = []
+    def _escalate_rules(self, ctx: PolicyContext) -> List[PolicyDecision]:
+        out: List[PolicyDecision] = []
         # Rule 4: escalate on trust gate (no retry, no auto)
         if ctx.failure_class == "TrustGate":
             out.append(
@@ -266,8 +266,8 @@ class PolicyEngine:
             )
         return out
 
-    def _stale_cleanup_rules(self, ctx: PolicyContext) -> list[PolicyDecision]:
-        out: list[PolicyDecision] = []
+    def _stale_cleanup_rules(self, ctx: PolicyContext) -> List[PolicyDecision]:
+        out: List[PolicyDecision] = []
         # Rule 6: heartbeat dead
         if ctx.heartbeat_status == "dead":
             out.append(
@@ -302,8 +302,8 @@ class PolicyEngine:
             )
         return out
 
-    def _merge_rules(self, ctx: PolicyContext) -> list[PolicyDecision]:
-        out: list[PolicyDecision] = []
+    def _merge_rules(self, ctx: PolicyContext) -> List[PolicyDecision]:
+        out: List[PolicyDecision] = []
         # Rule 8: merge on lane green + upstream reconciled
         if ctx.lane_status == "green" and ctx.upstream_reconciled:
             out.append(
@@ -316,8 +316,8 @@ class PolicyEngine:
             )
         return out
 
-    def _approval_rules(self, ctx: PolicyContext) -> list[PolicyDecision]:
-        out: list[PolicyDecision] = []
+    def _approval_rules(self, ctx: PolicyContext) -> List[PolicyDecision]:
+        out: List[PolicyDecision] = []
         # Rule 9: force push requires approval
         if ctx.force_push:
             out.append(

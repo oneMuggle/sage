@@ -2,9 +2,9 @@
 
 定义 Wiki 子系统的核心数据结构，包括项目、文件、页面、搜索结果、图谱等。
 """
-
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import List, Optional
 
 
 @dataclass
@@ -23,7 +23,7 @@ class FileNode:
     name: str
     path: str
     is_dir: bool
-    children: list["FileNode"] | None = None
+    children: Optional[List["FileNode"]] = None
 
 
 @dataclass
@@ -49,7 +49,7 @@ class SearchResult:
 class SearchResponse:
     """搜索响应。"""
 
-    results: list[SearchResult]
+    results: List[SearchResult]
     total: int
 
 
@@ -67,7 +67,7 @@ class WikiChatResponse:
     """Wiki 聊天响应。"""
 
     answer: str
-    citations: list[str]  # 引用的页面路径
+    citations: List[str]  # 引用的页面路径
 
 
 class GraphSignal(str, Enum):
@@ -84,9 +84,9 @@ class GraphNode:
 
     id: str  # 相对路径: "wiki/sources/albert-einstein.md"
     label: str  # frontmatter title 或文件名
-    page_type: str | None = None  # "source"/"entity"/"concept"/...
-    sources: list[str] = field(default_factory=list)  # frontmatter sources:[]
-    wikilinks: list[str] = field(default_factory=list)  # [[X]] 链接
+    page_type: Optional[str] = None  # "source"/"entity"/"concept"/...
+    sources: List[str] = field(default_factory=list)  # frontmatter sources:[]
+    wikilinks: List[str] = field(default_factory=list)  # [[X]] 链接
 
 
 @dataclass
@@ -103,8 +103,8 @@ class GraphEdge:
 class GraphData:
     """图谱数据。"""
 
-    nodes: list[GraphNode]
-    edges: list[GraphEdge]
+    nodes: List[GraphNode]
+    edges: List[GraphEdge]
 
 
 # Ingest 进度相关
@@ -116,7 +116,7 @@ class IngestProgress:
 
     stage: str  # "copy_source"|"step1_analyze"|"step2_write"|"embedding"|"finalize"
     percent: int  # 0-100
-    message: str | None = None
+    message: Optional[str] = None
 
 
 @dataclass
@@ -140,10 +140,10 @@ class AnalysisConcept:
 class Analysis:
     """LLM 分析结果。"""
 
-    entities: list[AnalysisEntity]
-    concepts: list[AnalysisConcept]
-    tags: list[str]
-    related_topics: list[str]
+    entities: List[AnalysisEntity]
+    concepts: List[AnalysisConcept]
+    tags: List[str]
+    related_topics: List[str]
     summary: str
 
 
@@ -165,5 +165,5 @@ class WikiChatOutcome:
     """Wiki 聊天结果。"""
 
     answer: str
-    citations: list[str]
+    citations: List[str]
     stats: RetrievalStats

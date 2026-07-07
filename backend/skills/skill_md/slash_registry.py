@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from typing import Dict, List, Optional, Tuple
+
 from ..registry import SkillRegistry
 from .skill import SkillMdSkill
 
@@ -21,8 +23,8 @@ from .skill import SkillMdSkill
 class SlashCommandRegistry:
     """Slash command → SkillMdSkill 索引。"""
 
-    def __init__(self, mapping: dict[str, SkillMdSkill] | None = None) -> None:
-        self._commands: dict[str, SkillMdSkill] = mapping or {}
+    def __init__(self, mapping: Optional[Dict[str, SkillMdSkill]] = None) -> None:
+        self._commands: Dict[str, SkillMdSkill] = mapping or {}
 
     @classmethod
     def from_registry(cls, registry: SkillRegistry) -> SlashCommandRegistry:
@@ -34,7 +36,7 @@ class SlashCommandRegistry:
           - builtin (非 ``SkillMdSkill``) 永不索引
           - key 优先用 ``dispatch.user_invocable_name``,fallback 到 ``/{doc.name}``
         """
-        mapping: dict[str, SkillMdSkill] = {}
+        mapping: Dict[str, SkillMdSkill] = {}
         for schema in registry.list():
             skill = registry.get(schema.name)
             if skill is None or not isinstance(skill, SkillMdSkill):
@@ -55,14 +57,14 @@ class SlashCommandRegistry:
         normalized = self._normalize(command_name)
         return self._commands.get(normalized)
 
-    def list_commands(self) -> list[str]:
+    def list_commands(self) -> List[str]:
         """返回所有已注册命令名 (规范化后, 带前导斜杠)。"""
         return list(self._commands.keys())
 
     async def execute_command(
         self,
         command_name: str,
-        args: tuple[str, ...] = (),
+        args: Tuple[str, ...] = (),
     ):
         """执行 slash command: 委托 ``SkillMdSkill.execute_v2`` 走 v1 body fallback。
 

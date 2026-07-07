@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from typing import Dict, List, Optional
+
 from sage_core import (
     ComputeError,
     ComputeErrorType,
@@ -26,12 +28,12 @@ class MockComputeAdapter:
 
     def __init__(
         self,
-        specs: list[ComputeSpec] | None = None,
-        responses: dict[str, ComputeResult] | None = None,
-        default_result: ComputeResult | None = None,
+        specs: Optional[List[ComputeSpec]] = None,
+        responses: Optional[Dict[str, ComputeResult]] = None,
+        default_result: Optional[ComputeResult] = None,
     ) -> None:
-        self._specs: list[ComputeSpec] = list(specs or [])
-        self._responses: dict[str, ComputeResult] = dict(responses or {})
+        self._specs: List[ComputeSpec] = list(specs or [])
+        self._responses: Dict[str, ComputeResult] = dict(responses or {})
         self._default = default_result or ComputeResult(
             success=False,
             error=ComputeError(
@@ -39,11 +41,11 @@ class MockComputeAdapter:
                 message="no mock response configured",
             ),
         )
-        self.calls: list[ComputeRequest] = []
+        self.calls: List[ComputeRequest] = []
 
     # ---- ComputePort 实现 ----
 
-    def list_operations(self) -> list[ComputeSpec]:
+    def list_operations(self) -> List[ComputeSpec]:
         return list(self._specs)
 
     async def execute(self, req: ComputeRequest) -> ComputeResult:

@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, FrozenSet, Optional
 
 import json
 import time
@@ -15,7 +16,7 @@ from backend.data.database import Database, get_database
 class SettingsRepository:
     """preferences 表的 KV 仓储。"""
 
-    KEYS: frozenset[str] = frozenset(
+    KEYS: FrozenSet[str] = frozenset(
         {
             "app_settings",
             "theme_mode",
@@ -24,7 +25,7 @@ class SettingsRepository:
         }
     )
 
-    def __init__(self, db: Database | None = None):
+    def __init__(self, db: Optional[Database] = None):
         self.db = db or get_database()
 
     def _conn(self):
@@ -83,7 +84,7 @@ class SettingsRepository:
         conn.execute("DELETE FROM preferences WHERE key = ?", (key,))
         conn.commit()
 
-    def list_by_category(self, category: str) -> dict[str, str]:
+    def list_by_category(self, category: str) -> Dict[str, str]:
         rows = (
             self._conn()
             .execute("SELECT key, value FROM preferences WHERE category = ?", (category,))

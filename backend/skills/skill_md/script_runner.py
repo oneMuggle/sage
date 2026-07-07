@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 from backend.skills.base import SkillResult
 from backend.skills.skill_md.confirm import ConfirmationPort
@@ -53,7 +54,7 @@ class ScriptRunner:
         self,
         sandbox: SandboxPort,
         confirmer: ConfirmationPort,
-        allowed_roots: list[Path] | None = None,
+        allowed_roots: Optional[List[Path]] = None,
     ) -> None:
         """初始化 ScriptRunner。
 
@@ -70,7 +71,7 @@ class ScriptRunner:
         self,
         doc: SkillMdDocument,
         script_name: str,
-        args: tuple[str, ...],
+        args: Tuple[str, ...],
     ) -> SkillResult:
         """执行 SKILL.md 中的脚本。
 

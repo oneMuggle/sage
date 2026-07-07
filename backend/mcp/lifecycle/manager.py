@@ -14,6 +14,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import List, Optional
 
 from .state_machine import MCPState, MCPStateMachine
 
@@ -45,8 +46,8 @@ class MCPLifecycleManager:
         self._state_machine = MCPStateMachine()
         self._max_retries = max_retries
         self._health_check_interval = health_check_interval
-        self._health_check_task: asyncio.Task | None = None
-        self._resources: list[object] = []  # 需要清理的资源
+        self._health_check_task: Optional[asyncio.Task] = None
+        self._resources: List[object] = []  # 需要清理的资源
         self._shutdown_event = asyncio.Event()
 
     @property

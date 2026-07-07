@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from typing import List, Tuple
+
 import pytest
 
 from backend.domain.agent_event import (
@@ -23,7 +25,7 @@ class _RecordingEvents:
     """最小 EventPort 假实现（记录 emit 调用），避免用 MagicMock。"""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict]] = []
+        self.calls: List[Tuple[str, dict]] = []
 
     def emit(self, event_type: str, payload: dict) -> None:
         self.calls.append((event_type, payload))

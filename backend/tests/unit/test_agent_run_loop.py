@@ -11,6 +11,7 @@ agent.run_loop() 状态机测试
 
 from __future__ import annotations
 
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -601,7 +602,7 @@ async def test_run_loop_raises_agent_error_when_no_client_and_no_llm_config():
 
 
 def _make_response_with_reasoning(
-    content: str = "", reasoning_content: str | None = None, tool_calls: list = None
+    content: str = "", reasoning_content: Optional[str] = None, tool_calls: list = None
 ) -> LLMResponse:
     """创建包含 reasoning_content 的 LLM 响应。"""
     return LLMResponse(

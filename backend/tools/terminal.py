@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+from typing import List
 
 from .base import BaseTool, ToolResult, ToolSchema
 
@@ -18,7 +19,7 @@ class TerminalTool(BaseTool):
     """
 
     # 危险命令黑名单
-    DANGEROUS_PATTERNS: list[str] = [
+    DANGEROUS_PATTERNS: List[str] = [
         "rm -rf /",
         "rm -rf /",
         "fork bomb",

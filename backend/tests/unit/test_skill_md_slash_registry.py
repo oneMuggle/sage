@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -33,10 +34,10 @@ def _make_skill(
     name: str,
     *,
     user_invocable: bool = False,
-    user_invocable_name: str | None = None,
+    user_invocable_name: Optional[str] = None,
     command_dispatch: str = "auto",
     script_runner: object = None,
-    body_content: str | None = None,
+    body_content: Optional[str] = None,
 ) -> SkillMdSkill:
     """构造 SkillMdSkill 用于测试 (绕过真实 loader)。"""
     doc = SkillMdDocument(

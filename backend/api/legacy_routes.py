@@ -9,6 +9,7 @@ API 路由定义
 from __future__ import annotations
 
 import asyncio
+from typing import List
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
 # 让前端能逐字渲染 (避免 LLM 一次返回完整字符串时 "砰一下" 全显示)。
@@ -20,7 +21,7 @@ import json
 import logging
 import time
 import uuid
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -664,7 +665,7 @@ async def rescan_skills():
 
 
 @router.post("/skills/import")
-async def import_skills(files: list[UploadFile] = File(default=[])):
+async def import_skills(files: List[UploadFile] = File(default=[])):
     """导入 SKILL.md 文件 (multipart)。
 
     - 200 + ``{"imported": [{"name", "path"}], "skipped": [{"name", "reason"}]}``

@@ -12,7 +12,7 @@ import logging
 import subprocess
 import threading
 import time
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.mcp.config import McpServerConfig
 
@@ -37,12 +37,12 @@ class McpClient:
 
     def __init__(self, config: McpServerConfig):
         self._config = config
-        self._process: subprocess.Popen | None = None
+        self._process: Optional[subprocess.Popen] = None
         self._request_id = 0
         self._lock = threading.Lock()
         self._initialized = False
-        self._stderr_lines: list[str] = []
-        self._stderr_thread: threading.Thread | None = None
+        self._stderr_lines: List[str] = []
+        self._stderr_thread: Optional[threading.Thread] = None
 
     @property
     def server_name(self) -> str:
@@ -136,7 +136,7 @@ class McpClient:
                 self._initialized = False
             logger.info(f"[MCP:{self._config.name}] Stopped")
 
-    def list_tools(self) -> list[dict[str, Any]]:
+    def list_tools(self) -> List[Dict[str, Any]]:
         """
         List available tools from the MCP server.
 
@@ -147,7 +147,7 @@ class McpClient:
         result = self._send_request("tools/list", {})
         return result.get("tools", [])
 
-    def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
         Call a tool on the MCP server.
 
@@ -166,7 +166,7 @@ class McpClient:
         if not self._initialized:
             raise McpClientError(f"MCP server '{self._config.name}' is not initialized")
 
-    def _send_request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _send_request(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Send a JSON-RPC request and wait for the response."""
         with self._lock:
             self._request_id += 1
@@ -186,7 +186,7 @@ class McpClient:
             )
         return response.get("result", {})
 
-    def _send_notification(self, method: str, params: dict[str, Any]) -> None:
+    def _send_notification(self, method: str, params: Dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         notification = {
             "jsonrpc": "2.0",
@@ -195,7 +195,7 @@ class McpClient:
         }
         self._write_message(notification)
 
-    def _write_message(self, message: dict[str, Any]) -> None:
+    def _write_message(self, message: Dict[str, Any]) -> None:
         """Write a JSON-RPC message to the server's stdin."""
         assert self._process is not None
         assert self._process.stdin is not None
@@ -206,7 +206,7 @@ class McpClient:
         except (BrokenPipeError, OSError) as exc:
             raise McpClientError(f"Failed to write to MCP server: {exc}")
 
-    def _read_response(self, expected_id: int) -> dict[str, Any]:
+    def _read_response(self, expected_id: int) -> Dict[str, Any]:
         """Read JSON-RPC messages from stdout until we get the response for expected_id."""
         assert self._process is not None
         assert self._process.stdout is not None

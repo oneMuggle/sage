@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,7 @@ class MemorySafetyScanner:
 
 
 # 全局扫描器实例
-_scanner: MemorySafetyScanner | None = None
+_scanner: Optional[MemorySafetyScanner] = None
 
 
 def get_scanner() -> MemorySafetyScanner:

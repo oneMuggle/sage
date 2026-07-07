@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import posixpath
 from collections.abc import AsyncIterator
+from typing import Dict, FrozenSet, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -39,7 +40,7 @@ router = APIRouter()
 # 额外过滤 content-encoding: 即使 proxy 向上游发 Accept-Encoding: identity,
 # 某些上游仍可能返回 Content-Encoding: gzip。如果不把这个 header 过滤掉,
 # httpx 客户端会尝试解压响应,导致 zlib.error: Error -3 while decompressing data。
-HOP_BY_HOP_HEADERS: frozenset[str] = frozenset(
+HOP_BY_HOP_HEADERS: FrozenSet[str] = frozenset(
     {
         "host",
         "connection",
@@ -56,12 +57,12 @@ HOP_BY_HOP_HEADERS: frozenset[str] = frozenset(
 )
 
 # 代理专用、不应回流到上游的 header
-PROXY_INTERNAL_HEADERS: frozenset[str] = frozenset({"x-llm-provider-url"})
+PROXY_INTERNAL_HEADERS: FrozenSet[str] = frozenset({"x-llm-provider-url"})
 
 PROXY_TIMEOUT_SECONDS: float = 60.0
 
 
-def _filter_request_headers(request: Request) -> dict[str, str]:
+def _filter_request_headers(request: Request) -> Dict[str, str]:
     """复制请求头到 dict,过滤 hop-by-hop 与代理内部头。"""
     return {
         k: v
@@ -70,7 +71,7 @@ def _filter_request_headers(request: Request) -> dict[str, str]:
     }
 
 
-def _filter_response_headers(headers: httpx.Headers) -> dict[str, str]:
+def _filter_response_headers(headers: httpx.Headers) -> Dict[str, str]:
     """复制上游响应头到 dict,过滤 hop-by-hop。"""
     return {k: v for k, v in headers.items() if k.lower() not in HOP_BY_HOP_HEADERS}
 
@@ -174,7 +175,7 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
 
     # 4. 透传头部与 body
     fwd_headers = _filter_request_headers(request)
-    body: bytes | None = (
+    body: Optional[bytes] = (
         await request.body() if request.method in {"POST", "PUT", "PATCH"} else None
     )
 
@@ -265,8 +266,8 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
 async def _proxy_streaming(
     upstream_url: str,
     method: str,
-    fwd_headers: dict[str, str],
-    body: bytes | None,
+    fwd_headers: Dict[str, str],
+    body: Optional[bytes],
 ) -> StreamingResponse:
     """v2: SSE/chunked 流式透传。
 

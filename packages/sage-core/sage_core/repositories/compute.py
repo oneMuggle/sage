@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import List, Protocol, runtime_checkable
 
 from sage_core import ComputeRequest, ComputeResult, ComputeSpec
 
@@ -21,7 +21,7 @@ from sage_core import ComputeRequest, ComputeResult, ComputeSpec
 class ComputePort(Protocol):
     """外部计算能力的端口抽象。"""
 
-    def list_operations(self) -> list[ComputeSpec]:
+    def list_operations(self) -> List[ComputeSpec]:
         """列出当前可用的计算操作。
 
         Returns:

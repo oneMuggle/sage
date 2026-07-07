@@ -1,6 +1,7 @@
 """
 Web 工具 - 网络搜索和网页获取
 """
+from typing import Optional
 
 import httpx
 
@@ -12,7 +13,7 @@ from .base import BaseTool, ToolResult, ToolSchema
 class WebSearchTool(BaseTool):
     """网络搜索工具"""
 
-    def __init__(self, policy: ToolPolicy | None = None) -> None:
+    def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
         self.client = httpx.Client(timeout=30.0)
 
@@ -136,7 +137,7 @@ class WebSearchTool(BaseTool):
 class WebFetchTool(BaseTool):
     """获取网页内容工具"""
 
-    def __init__(self, policy: ToolPolicy | None = None) -> None:
+    def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
         self.client = httpx.Client(timeout=30.0)
 
