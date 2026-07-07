@@ -321,9 +321,23 @@ class TypingImportAdder(cst.CSTTransformer):
         to_add = sorted(self.needed - existing_names)
         if not to_add:
             return updated_node
+        new_aliases = [
+            cst.ImportAlias(
+                name=cst.Name(n),
+                comma=cst.Comma(whitespace_after=cst.SimpleWhitespace(" ")),
+            )
+            for n in to_add
+        ]
+        # Last alias MUST NOT have a comma (Python does not allow trailing
+        # commas in non-parenthesized from-imports). We default to no
+        # trailing comma; the merge path will re-attach commas correctly.
+        if new_aliases:
+            new_aliases[-1] = new_aliases[-1].with_changes(
+                comma=cst.MaybeSentinel.DEFAULT
+            )
         new_import = cst.ImportFrom(
             module=cst.Name("typing"),
-            names=[cst.ImportAlias(name=cst.Name(n)) for n in to_add],
+            names=new_aliases,
         )
         new_stmt = cst.SimpleStatementLine(body=[new_import])
         if typing_import_idx is not None:
@@ -332,12 +346,32 @@ class TypingImportAdder(cst.CSTTransformer):
             assert isinstance(existing_stmt, cst.SimpleStatementLine)
             existing_import = existing_stmt.body[0]
             assert isinstance(existing_import, cst.ImportFrom)
-            merged_names = list(existing_import.names) + list(new_import.names)
-            # Sort alphabetically for stable diff.
-            merged_names.sort(
+            # Strip ALL commas from existing aliases (we'll re-add correctly
+            # after merging + sorting to avoid dangling trailing commas that
+            # break non-parenthesized imports).
+            existing_aliases = [
+                a.with_changes(comma=cst.MaybeSentinel.DEFAULT)
+                for a in existing_import.names
+            ]
+            combined = existing_aliases + new_aliases
+            # Sort alphabetically by name for stable diff (canonicalizing).
+            combined.sort(
                 key=lambda a: a.name.value if isinstance(a.name, cst.Name) else ""
             )
-            new_existing = existing_import.with_changes(names=merged_names)
+            # Last item MUST have no comma (trailing commas invalid in
+            # non-parenthesized from-imports). All preceding items get a comma.
+            for i in range(len(combined) - 1):
+                combined[i] = combined[i].with_changes(
+                    comma=cst.Comma(
+                        whitespace_after=cst.SimpleWhitespace(" ")
+                    )
+                )
+            # Last item: ensure DEFAULT (no comma).
+            if combined:
+                combined[-1] = combined[-1].with_changes(
+                    comma=cst.MaybeSentinel.DEFAULT
+                )
+            new_existing = existing_import.with_changes(names=combined)
             new_existing_stmt = existing_stmt.with_changes(body=[new_existing])
             new_body = list(updated_node.body)
             new_body[typing_import_idx] = new_existing_stmt
