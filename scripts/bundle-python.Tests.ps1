@@ -72,6 +72,47 @@ Describe 'bundle-python.ps1: fail-fast guards on external invocations' {
     }
 }
 
+Describe 'bundle-python.ps1: python38._pth config (v0.4.3-alpha.2 backend timeout fix)' {
+
+    It 'uncomments #import site so site-packages loads' {
+        # Without `import site`, fastapi/uvicorn/PyYAML (all in site-packages)
+        # are unreachable on Win7 LTS embedded Python.
+        $Script:ScriptContent | Should -Match '(?m)^import site\s*$'
+        $Script:ScriptContent | Should -Not -Match '(?m)^#import site\s*$'
+    }
+
+    It 'writes ..\backend into _pth so embedded Python can import backend.*' {
+        # The whole point of the fix: Python 3.8 embeddable ignores PYTHONPATH
+        # when _pth exists. The ONLY reliable way to make `from backend.*`
+        # resolve on Win7 LTS is to write the path into _pth at bundle time.
+        $Script:ScriptContent | Should -Match '\.\.\\backend'
+        $pattern = '(?s)\$PthFile.*?Set-Content.*?backend'
+        $Script:ScriptContent | Should -Match $pattern
+    }
+
+    It 'writes ..\sage-core into _pth for the sage_core package' {
+        $Script:ScriptContent | Should -Match '\.\.\\sage-core'
+        $pattern = '(?s)\$PthFile.*?Set-Content.*?sage-core'
+        $Script:ScriptContent | Should -Match $pattern
+    }
+
+    It 'makes _pth config idempotent (re-running bundle does not duplicate paths)' {
+        # Guard against repeated bundle runs appending duplicate lines to _pth.
+        $Script:ScriptContent | Should -Match "Where-Object.*-ne \\\$CanonicalBackend"
+        $Script:ScriptContent | Should -Match "Where-Object.*-ne \\\$CanonicalSageCore"
+    }
+
+    It 'verify step imports backend.main (catches _pth path errors at bundle time)' {
+        # The original verify only imported fastapi/pydantic/jieba — all in
+        # site-packages — so a missing _pth backend path was never caught.
+        # Without `import backend.main` in the verify, the v0.4.3-alpha.1
+        # Win7 bug would silently ship again.
+        $Script:ScriptContent | Should -Match 'import backend\.main'
+        $pattern = '(?s)import backend\.main.*?if \(\$verifyExit -ne 0\)'
+        $Script:ScriptContent | Should -Match $pattern
+    }
+}
+
 Describe 'bundle-python.ps1: dead-code cleanup' {
 
     It 'does not generate start-backend.bat (dead code, removed)' {

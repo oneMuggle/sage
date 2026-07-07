@@ -49,12 +49,41 @@ Write-Host "Extracting Python..." -ForegroundColor Green
 Expand-Archive -Path $PythonZip -DestinationPath $PythonDir -Force
 Remove-Item $PythonZip
 
-# Enable site-packages by uncommenting python38._pth
-Write-Host "Enabling site-packages..." -ForegroundColor Green
+# Enable site-packages AND pin backend/sage-core import paths into python38._pth.
+#
+# CRITICAL (v0.4.3-alpha.2 Win7 backend 30s timeout fix):
+# python38._pth, when present, makes the embedded interpreter ignore
+# PYTHONPATH, registry, and environment variables (Python 3.8 docs:
+# https://docs.python.org/3.8/using/windows.html#finding-modules).
+# Without these two extra lines, `from backend.adapters...` raises
+# ModuleNotFoundError because backend/ lives in resources/, not in
+# site-packages. electron/main.ts sets PYTHONPATH at spawn, but the
+# embedded interpreter silently discards it. The fix: write the paths
+# into _pth at bundle time (the only mechanism _pth does not ignore).
+#
+# Paths are RELATIVE to the directory holding _pth. After NSIS
+# extraction, _pth lives at <installDir>/resources/python/, so
+# `..\backend` and `..\sage-core` resolve to resources/backend/ and
+# resources/sage-core/ — surviving any user-chosen install directory
+# (electron-builder.yml has allowToChangeInstallationDirectory: true).
+Write-Host "Configuring python38._pth (site + backend/sage-core paths)..." -ForegroundColor Green
 $PthFile = Join-Path $PythonDir "python38._pth"
-$PthContent = Get-Content $PthFile
-$PthContent = $PthContent -replace '#import site', 'import site'
-Set-Content -Path $PthFile -Value $PthContent
+$PthLines = @(Get-Content $PthFile)
+
+$CanonicalBackend = '..\backend'
+$CanonicalSageCore = '..\sage-core'
+
+# Strip existing backend/sage-core lines first (idempotent re-run).
+$Cleaned = $PthLines | Where-Object { $_ -ne $CanonicalBackend -and $_ -ne $CanonicalSageCore }
+# Uncomment `#import site` if present.
+$Cleaned = $Cleaned -replace '^#import site\s*$', 'import site'
+
+$NewLines = @($Cleaned + $CanonicalBackend + $CanonicalSageCore)
+# Strip trailing blank lines so the file ends exactly with the sage-core path.
+while ($NewLines.Count -gt 0 -and [string]::IsNullOrWhiteSpace($NewLines[-1])) {
+    $NewLines = $NewLines[0..($NewLines.Count - 2)]
+}
+Set-Content -Path $PthFile -Value $NewLines
 
 # Download and install pip
 Write-Host "Downloading get-pip.py..." -ForegroundColor Green
@@ -113,8 +142,13 @@ Write-Host ""
 # Test Python import. Capture both stdout and stderr to a single buffer so we
 # can surface the underlying error in the exception message if any import
 # fails (otherwise we'd just see a bare exit code).
-Write-Host "Testing Python imports..." -ForegroundColor Green
-$verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; print('All critical imports successful')" 2>&1
+#
+# CRITICAL: `import backend.main` is the canary for the _pth / PYTHONPATH
+# regression — without `..\backend` in python38._pth, this raises
+# ModuleNotFoundError immediately, catching the v0.4.3-alpha.1 Win7 bug
+# at bundle time instead of at user runtime.
+Write-Host "Testing Python imports (incl. backend.main canary)..." -ForegroundColor Green
+$verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import backend.main; print('All critical imports successful (backend.main OK)')" 2>&1
 $verifyExit = $LASTEXITCODE
 Write-Host $verifyOutput
 if ($verifyExit -ne 0) {
