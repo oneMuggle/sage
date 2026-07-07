@@ -7,6 +7,7 @@ Routes tasks to appropriate agents based on:
 - Agent availability and load
 - Permission requirements
 """
+from typing import Dict, List, Optional, Tuple
 
 import uuid
 from dataclasses import dataclass
@@ -117,7 +118,7 @@ class Router:
             reasoning=reasoning,
         )
 
-    async def _get_available_agents(self) -> list[Agent]:
+    async def _get_available_agents(self) -> List[Agent]:
         """Get list of available agents (not at max concurrency)."""
         all_agents = self.agent_registry.list_agents()
         available = []
@@ -131,7 +132,7 @@ class Router:
                     available.append(agent)
         return available
 
-    def _select_round_robin(self, agents: list[Agent]) -> Agent | None:
+    def _select_round_robin(self, agents: List[Agent]) -> Agent | None:
         """Select agent using round-robin strategy."""
         if not agents:
             return None
@@ -139,7 +140,7 @@ class Router:
         self._round_robin_index += 1
         return agent
 
-    def _select_by_capability(self, task: Task, agents: list[Agent]) -> Agent | None:
+    def _select_by_capability(self, task: Task, agents: List[Agent]) -> Agent | None:
         """Select agent based on capability match."""
         # Simple capability matching based on task type
         # In production, this could be more sophisticated
@@ -167,7 +168,7 @@ class Router:
         scored_agents.sort(key=lambda x: x[0], reverse=True)
         return scored_agents[0][1] if scored_agents else None
 
-    def _select_by_load(self, agents: list[Agent]) -> Agent | None:
+    def _select_by_load(self, agents: List[Agent]) -> Agent | None:
         """Select agent with least current load."""
         if not agents:
             return None
@@ -240,7 +241,7 @@ class Router:
 
         return False
 
-    def get_routing_stats(self) -> dict[str, Any]:
+    def get_routing_stats(self) -> Dict[str, Any]:
         """Get routing statistics."""
         all_lanes = self.lane_registry.list_all_lanes()
         stats = {
@@ -263,7 +264,7 @@ class Router:
         self,
         task: Task,
         context: "PolicyContext",
-    ) -> tuple[RoutingDecision, list["PolicyDecisionEvent"]]:
+    ) -> Tuple[RoutingDecision, List["PolicyDecisionEvent"]]:
         """Evaluate the policy context and then dispatch the task.
 
         When `policy_engine` is None, this is a thin wrapper over `route_task`
@@ -271,7 +272,7 @@ class Router:
         are emitted for each matching rule (audit trail); dispatch always
         proceeds — privileged actions must use `try_dispatch_privileged`.
         """
-        events: list[PolicyDecisionEvent] = []
+        events: List[PolicyDecisionEvent] = []
         if self.policy_engine is not None:
             _, events = self.policy_engine.evaluate_with_events(context)
         decision = await self.route_task(task)
@@ -280,10 +281,10 @@ class Router:
     async def try_dispatch_privileged(
         self,
         task: Task,
-        token_id: str | None,
+        token_id: Optional[str],
         actor: str,
         context: "PolicyContext",
-    ) -> tuple[RoutingDecision | None, list["PolicyDecisionEvent"], str | None]:
+    ) -> Tuple[Optional[RoutingDecision], List["PolicyDecisionEvent"], Optional[str]]:
         """Dispatch a task that may require an approval token.
 
         Algorithm:
@@ -297,7 +298,7 @@ class Router:
            - On successful consume, dispatch proceeds.
         3. Otherwise dispatch normally.
         """
-        events: list[PolicyDecisionEvent] = []
+        events: List[PolicyDecisionEvent] = []
         if self.policy_engine is not None:
             decisions, events = self.policy_engine.evaluate_with_events(context)
         else:

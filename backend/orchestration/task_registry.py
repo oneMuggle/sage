@@ -9,6 +9,7 @@ Provides high-level operations for task management:
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Union
 
 import uuid
 from typing import Any
@@ -25,19 +26,19 @@ class TaskRegistry:
     providing atomic state transitions and dependency-aware queries.
     """
 
-    def __init__(self, repo: TaskRepository | None = None) -> None:
+    def __init__(self, repo: Optional[TaskRepository] = None) -> None:
         self.repo = repo or TaskRepository()
 
     def create_task(
         self,
-        name: str | Task,
-        description: str | None = None,
-        blocked_by: list[str] | None = None,
+        name: Union[str, Task],
+        description: Optional[str] = None,
+        blocked_by: Optional[List[str]] = None,
         priority: int = 0,
         executor_type: str = "agent",
-        parameters: dict[str, Any] | None = None,
-        packet: TaskPacket | None = None,
-        team_id: str | None = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        packet: Optional[TaskPacket] = None,
+        team_id: Optional[str] = None,
         task_type: str = "general",
     ) -> Task:
         """
@@ -116,7 +117,7 @@ class TaskRegistry:
         except ValueError:
             return False
 
-    def mark_failed(self, task_id: str, error: str | None = None) -> bool:
+    def mark_failed(self, task_id: str, error: Optional[str] = None) -> bool:
         """Transition task to FAILED state."""
         task = self.repo.get(task_id)
         if not task:
@@ -152,7 +153,7 @@ class TaskRegistry:
         except ValueError:
             return False
 
-    def get_ready_tasks(self, team_id: str | None = None) -> list[Task]:
+    def get_ready_tasks(self, team_id: Optional[str] = None) -> List[Task]:
         """
         Get tasks that are ready to execute.
 
@@ -170,10 +171,10 @@ class TaskRegistry:
 
     def list_tasks(
         self,
-        status: TaskStatus | None = None,
-        team_id: str | None = None,
+        status: Optional[TaskStatus] = None,
+        team_id: Optional[str] = None,
         limit: int = 100,
-    ) -> list[Task]:
+    ) -> List[Task]:
         """List tasks with optional filters."""
         return self.repo.list(status=status, team_id=team_id, limit=limit)
 

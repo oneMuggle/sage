@@ -3,6 +3,7 @@
 支持解析 Markdown 文件中的 YAML frontmatter，提取 wikilinks，序列化回 Markdown。
 用于 Wiki 页面（区别于 backend/skills/skill_md/frontmatter.py 用于 SKILL.md）。
 """
+from typing import Dict, List, Optional
 
 from dataclasses import dataclass, field
 
@@ -11,14 +12,14 @@ from dataclasses import dataclass, field
 class Frontmatter:
     """YAML frontmatter 数据。"""
 
-    title: str | None = None
-    page_type: str | None = None  # "source"/"entity"/"concept"/...
-    tags: list[str] = field(default_factory=list)
-    related: list[str] = field(default_factory=list)  # wikilink 目标
-    sources: list[str] = field(default_factory=list)
-    created: str | None = None
-    updated: str | None = None
-    extra: dict[str, str] = field(default_factory=dict)  # 未知字段
+    title: Optional[str] = None
+    page_type: Optional[str] = None  # "source"/"entity"/"concept"/...
+    tags: List[str] = field(default_factory=list)
+    related: List[str] = field(default_factory=list)  # wikilink 目标
+    sources: List[str] = field(default_factory=list)
+    created: Optional[str] = None
+    updated: Optional[str] = None
+    extra: Dict[str, str] = field(default_factory=dict)  # 未知字段
 
 
 @dataclass
@@ -104,7 +105,7 @@ def _parse_yaml(yaml_str: str) -> Frontmatter:
     return fm
 
 
-def _parse_list_value(value: str) -> list[str]:
+def _parse_list_value(value: str) -> List[str]:
     """解析列表值（支持 [a, b, c] 格式）。
 
     Args:
@@ -120,7 +121,7 @@ def _parse_list_value(value: str) -> list[str]:
     return [item for item in items if item]
 
 
-def _parse_related_value(value: str) -> list[str]:
+def _parse_related_value(value: str) -> List[str]:
     """解析 related 字段（提取 [[X]] wikilinks）。
 
     Args:
@@ -132,7 +133,7 @@ def _parse_related_value(value: str) -> list[str]:
     return extract_wikilinks(value)
 
 
-def extract_wikilinks(content: str) -> list[str]:
+def extract_wikilinks(content: str) -> List[str]:
     """提取内容中的所有 wikilinks [[X]]。
 
     Args:

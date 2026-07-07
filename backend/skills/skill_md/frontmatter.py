@@ -20,6 +20,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Tuple
 
 import logging
 import re
@@ -46,7 +47,7 @@ def _strip_bom(text: str) -> str:
     return text
 
 
-def _split_frontmatter(text: str) -> tuple[str, str]:
+def _split_frontmatter(text: str) -> Tuple[str, str]:
     """切分 frontmatter 与 body。
 
     Returns:
@@ -121,7 +122,7 @@ def _validate_description(description: Any) -> str:
     return description
 
 
-def _validate_requires(requires: Any) -> dict[str, Any]:
+def _validate_requires(requires: Any) -> Dict[str, Any]:
     """校验 requires 字段（v2）。"""
     if requires is None:
         return {}
@@ -140,7 +141,7 @@ def _validate_requires(requires: Any) -> dict[str, Any]:
     return requires
 
 
-def _validate_os(os_field: Any) -> list[str]:
+def _validate_os(os_field: Any) -> List[str]:
     """校验 os 字段（v2）。"""
     if os_field is None:
         return []
@@ -253,7 +254,7 @@ def _validate_allowed_tools(tools: Any) -> str | None:
     return tools
 
 
-def parse(text: str) -> tuple[dict[str, Any], str]:
+def parse(text: str) -> Tuple[Dict[str, Any], str]:
     """解析 SKILL.md 文本, 返回 (frontmatter_dict, body)。
 
     - 无 frontmatter → 返回 ``({}, text)``。
@@ -302,7 +303,7 @@ def parse(text: str) -> tuple[dict[str, Any], str]:
     return meta, body
 
 
-def parse_file(path: Path) -> tuple[dict[str, Any], str]:
+def parse_file(path: Path) -> Tuple[Dict[str, Any], str]:
     """读盘并解析 SKILL.md。"""
     try:
         text = Path(path).read_text(encoding="utf-8")
@@ -313,7 +314,7 @@ def parse_file(path: Path) -> tuple[dict[str, Any], str]:
     return parse(text)
 
 
-def dump(meta: dict[str, Any], body: str) -> str:
+def dump(meta: Dict[str, Any], body: str) -> str:
     """序列化 frontmatter dict + body 为 SKILL.md 文本(测试用 round-trip)。"""
     dumped = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False)
     # safe_dump 默认末尾加 '\n...', 我们要 "---...\n---\n" 的形态

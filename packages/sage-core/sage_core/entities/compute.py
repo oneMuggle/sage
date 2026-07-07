@@ -16,6 +16,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -34,7 +35,7 @@ class ComputeSpec:
 
     name: str
     description: str
-    params_schema: dict[str, Any] = field(default_factory=dict)
+    params_schema: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -49,9 +50,9 @@ class ComputeRequest:
     """
 
     operation: str
-    params: dict[str, Any] = field(default_factory=dict)
-    timeout_ms: int | None = None
-    request_id: str | None = None
+    params: Dict[str, Any] = field(default_factory=dict)
+    timeout_ms: Optional[int] = None
+    request_id: Optional[str] = None
 
 
 class ComputeErrorType(str, Enum):
@@ -77,7 +78,7 @@ class ComputeError:
 
     type: ComputeErrorType
     message: str
-    details: dict[str, Any] = field(default_factory=dict)
+    details: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -95,9 +96,9 @@ class ComputeResult:
     """
 
     success: bool
-    output: dict[str, Any] | None = None
-    raw_stdout: str | None = None
-    raw_stderr: str | None = None
-    exit_code: int | None = None
-    duration_ms: int | None = None
-    error: ComputeError | None = None
+    output: Optional[Dict[str, Any]] = None
+    raw_stdout: Optional[str] = None
+    raw_stderr: Optional[str] = None
+    exit_code: Optional[int] = None
+    duration_ms: Optional[int] = None
+    error: Optional[ComputeError] = None

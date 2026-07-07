@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import logging
 import threading
@@ -35,9 +36,9 @@ class EvolutionScheduler:
 
     def __init__(self):
         """初始化调度器"""
-        self.tasks: list[dict[str, Any]] = []
+        self.tasks: List[Dict[str, Any]] = []
         self.running = False
-        self._thread: threading.Thread | None = None
+        self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
     def add_task(
@@ -77,7 +78,7 @@ class EvolutionScheduler:
         self.tasks.append(task_info)
         logger.info(f"添加进化任务: {name}, 调度: {schedule}, 下次执行: {task_info['next_run']}")
 
-    def _calculate_next_run(self, task_info: dict[str, Any]) -> datetime:
+    def _calculate_next_run(self, task_info: Dict[str, Any]) -> datetime:
         """
         计算任务下次执行时间
 
@@ -173,7 +174,7 @@ class EvolutionScheduler:
         # 更新所有任务的下次执行时间
         self._update_all_next_run()
 
-    def _should_run(self, task_info: dict[str, Any], now: datetime) -> bool:
+    def _should_run(self, task_info: Dict[str, Any], now: datetime) -> bool:
         """
         判断任务是否应该执行
 
@@ -191,7 +192,7 @@ class EvolutionScheduler:
         # 考虑1分钟内的误差
         return now >= next_run and (now - next_run).total_seconds() < 60
 
-    def _run_task(self, task_info: dict[str, Any]) -> None:
+    def _run_task(self, task_info: Dict[str, Any]) -> None:
         """
         执行任务
 
@@ -236,7 +237,7 @@ class EvolutionScheduler:
         for task_info in self.tasks:
             task_info["next_run"] = self._calculate_next_run(task_info)
 
-    def get_task_status(self) -> list[dict[str, Any]]:
+    def get_task_status(self) -> List[Dict[str, Any]]:
         """
         获取所有任务状态
 
@@ -277,7 +278,7 @@ class EvolutionScheduler:
 
 
 # 全局调度器实例
-_scheduler: EvolutionScheduler | None = None
+_scheduler: Optional[EvolutionScheduler] = None
 
 
 def get_scheduler() -> EvolutionScheduler:

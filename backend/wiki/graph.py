@@ -2,6 +2,7 @@
 
 实现 4 信号图谱构建：DirectLink、SourceOverlap、TypeAffinity，以及 2-hop 相关性传播。
 """
+from typing import Dict, List, Optional, Tuple
 
 import re
 from collections import defaultdict
@@ -147,7 +148,7 @@ def build_graph(project_root: Path) -> GraphData:
     return GraphData(nodes=nodes, edges=edges)
 
 
-def relevance(query: str, graph: GraphData, k_hops: int = K_HOPS) -> list[tuple[str, float]]:
+def relevance(query: str, graph: GraphData, k_hops: int = K_HOPS) -> List[Tuple[str, float]]:
     """计算节点相关性（2-hop 传播）。
 
     Args:
@@ -173,7 +174,7 @@ def relevance(query: str, graph: GraphData, k_hops: int = K_HOPS) -> list[tuple[
         return []
 
     # BFS 传播
-    scores: dict[str, float] = {seed: 1.0 for seed in seeds}
+    scores: Dict[str, float] = {seed: 1.0 for seed in seeds}
     frontier = set(seeds)
 
     # 构建邻接表
@@ -202,7 +203,7 @@ def relevance(query: str, graph: GraphData, k_hops: int = K_HOPS) -> list[tuple[
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
 
-def get_graph_cached(project_root: Path, query: str | None = None, limit: int = 100) -> GraphData:
+def get_graph_cached(project_root: Path, query: Optional[str] = None, limit: int = 100) -> GraphData:
     """获取图谱（带缓存和过滤）。
 
     Args:
@@ -235,7 +236,7 @@ def get_graph_cached(project_root: Path, query: str | None = None, limit: int = 
     return graph
 
 
-def _resolve_wikilink(wikilink: str, node_map: dict[str, GraphNode]) -> GraphNode | None:
+def _resolve_wikilink(wikilink: str, node_map: Dict[str, GraphNode]) -> GraphNode | None:
     """解析 wikilink 到目标节点。"""
     wikilink_lower = wikilink.lower()
 

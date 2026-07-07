@@ -23,6 +23,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -37,7 +38,7 @@ class _OperationView:
 
     name: str
     description: str
-    params_schema: dict[str, Any] = field(default_factory=dict)
+    params_schema: Dict[str, Any] = field(default_factory=dict)
 
 
 class HttpComputeAdapter:
@@ -53,9 +54,9 @@ class HttpComputeAdapter:
         "(参见 docs/technical/19-ghm-integration.md §12)。"
     )
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: Dict[str, Any]) -> None:
         self._config = config
-        self._operations: dict[str, _OperationView] = {}
+        self._operations: Dict[str, _OperationView] = {}
         for raw in config.get("operations", []):
             view = _OperationView(
                 name=str(raw["name"]),
@@ -64,7 +65,7 @@ class HttpComputeAdapter:
             )
             self._operations[view.name] = view
 
-    def list_operations(self) -> list[ComputeSpec]:
+    def list_operations(self) -> List[ComputeSpec]:
         """与 SubprocessComputeAdapter 行为一致(共享 operations 声明)。"""
         return [
             ComputeSpec(

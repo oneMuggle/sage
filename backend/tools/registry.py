@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List
 
 import builtins
 import logging
@@ -25,7 +26,7 @@ class ToolRegistry:
     """
 
     def __init__(self):
-        self._tools: dict[str, BaseTool] = {}
+        self._tools: Dict[str, BaseTool] = {}
 
     def register(self, tool: BaseTool) -> None:
         """
@@ -69,7 +70,7 @@ class ToolRegistry:
         """
         return self._tools.get(name)
 
-    def list(self) -> list[ToolSchema]:
+    def list(self) -> List[ToolSchema]:
         """
         列出所有已注册工具的 Schema
 
@@ -87,7 +88,7 @@ class ToolRegistry:
         """
         return list(self._tools.keys())
 
-    def get_schemas_for_llm(self) -> builtins.list[dict[str, Any]]:
+    def get_schemas_for_llm(self) -> builtins.list[Dict[str, Any]]:
         """
         获取适合 LLM 调用的工具 Schema 列表
 

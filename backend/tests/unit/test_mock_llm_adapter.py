@@ -12,6 +12,7 @@
 """
 
 from __future__ import annotations
+from typing import List
 
 import pytest
 from sage_core import Message, Role, ToolCall
@@ -105,7 +106,7 @@ async def test_default_args_recorded_as_none():
 async def test_chat_stream_yields_chars():
     """流式返回 ``default_content`` 的每个字符。"""
     adapter = MockLLMAdapter(default_content="abc")
-    chunks: list[str] = []
+    chunks: List[str] = []
     async for chunk in adapter.chat_stream([Message(role=Role.USER, content="hi")]):
         chunks.append(chunk)
     assert chunks == ["a", "b", "c"]

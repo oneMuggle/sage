@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import logging
 
@@ -16,7 +17,7 @@ from backend.memory.working import WorkingMemory
 
 logger = logging.getLogger(__name__)
 
-_memory_manager: MemoryManager | None = None
+_memory_manager: Optional[MemoryManager] = None
 
 
 def get_memory_manager() -> MemoryManager:

@@ -15,13 +15,13 @@ claw-code ``concept.md`` §4 原则 3「Agent 可观测」：事件带 ``schema`
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Dict, Protocol
 
 AGENT_EVENT_SCHEMA = "sage.agent.event"
 AGENT_EVENT_FORMAT_VERSION = 1
 
 
-def envelope(event_type: str, payload: dict[str, Any], *, ts: str) -> dict[str, Any]:
+def envelope(event_type: str, payload: Dict[str, Any], *, ts: str) -> Dict[str, Any]:
     """把事件包成版本化信封。
 
     输出形状（每行审计/流事件的统一形状）::
@@ -40,7 +40,7 @@ def envelope(event_type: str, payload: dict[str, Any], *, ts: str) -> dict[str, 
 
 
 class _EventSink(Protocol):
-    def emit(self, event_type: str, payload: dict[str, Any]) -> None: ...
+    def emit(self, event_type: str, payload: Dict[str, Any]) -> None: ...
 
 
 class RunEventScope:

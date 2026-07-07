@@ -18,6 +18,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import json
 import time
@@ -41,7 +42,7 @@ _DEFAULT_TITLE = "新对话"
 # ============================================================================
 
 
-def _serialize_tool_calls(tool_calls: list[ToolCall]) -> str | None:
+def _serialize_tool_calls(tool_calls: List[ToolCall]) -> str | None:
     """``[ToolCall, ...]`` → JSON 字符串（与 messages.tool_calls TEXT 列兼容）。"""
     if not tool_calls:
         return None
@@ -51,7 +52,7 @@ def _serialize_tool_calls(tool_calls: list[ToolCall]) -> str | None:
     )
 
 
-def _deserialize_tool_calls(raw: str | None) -> list[ToolCall]:
+def _deserialize_tool_calls(raw: Optional[str]) -> List[ToolCall]:
     """messages.tool_calls JSON 字符串 → ``[ToolCall, ...]``；非法 JSON 降级为 ``[]``。"""
     if not raw:
         return []
@@ -61,7 +62,7 @@ def _deserialize_tool_calls(raw: str | None) -> list[ToolCall]:
         return []
     if not isinstance(items, list):
         return []
-    out: list[ToolCall] = []
+    out: List[ToolCall] = []
     for it in items:
         if not isinstance(it, dict):
             continue
@@ -117,8 +118,8 @@ class SqliteStorageAdapter:
 
     def __init__(
         self,
-        session_repo: SessionRepository | None = None,
-        message_repo: MessageRepository | None = None,
+        session_repo: Optional[SessionRepository] = None,
+        message_repo: Optional[MessageRepository] = None,
     ) -> None:
         # 默认使用全局仓储（向后兼容）；依赖注入便于单测替换。
         self._sessions: SessionRepository = session_repo or SessionRepository()
@@ -137,7 +138,7 @@ class SqliteStorageAdapter:
         # 显式 str()：SessionRepository 在非 strict 模块，session.id 被推断为 Any
         return str(session.id)
 
-    async def list_sessions(self) -> list[dict[str, Any]]:
+    async def list_sessions(self) -> List[Dict[str, Any]]:
         """列出当前所有会话（已过滤归档），返回 dict 列表。"""
         sessions = self._sessions.list(limit=1000, offset=0)
         return [
@@ -152,7 +153,7 @@ class SqliteStorageAdapter:
             for s in sessions
         ]
 
-    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+    async def get_session(self, session_id: str) -> Dict[str, Any] | None:
         """按 ID 取单个会话;不存在返 ``None``。"""
         s = self._sessions.get(session_id)
         if s is None:
@@ -172,7 +173,7 @@ class SqliteStorageAdapter:
         ``is_pinned`` 字段是 bool,持久化层需要 0/1 int,这里做转换。
         其他字段(如 ``title``)原样转发。
         """
-        kwargs: dict[str, Any] = {}
+        kwargs: Dict[str, Any] = {}
         if "title" in fields and fields["title"] is not None:
             kwargs["title"] = fields["title"]
         if "is_pinned" in fields and fields["is_pinned"] is not None:
@@ -198,7 +199,7 @@ class SqliteStorageAdapter:
         self,
         session_id: str,
         limit: int = 50,
-    ) -> list[Message]:
+    ) -> List[Message]:
         """按时间正序获取会话的最新若干条消息。
 
         实现：先取全部历史，然后取尾部 ``limit`` 条并保持时间正序。

@@ -8,6 +8,7 @@
 """
 
 from __future__ import annotations
+from typing import List
 
 import hashlib
 import math
@@ -23,7 +24,7 @@ class Embedder(Protocol):
         """向量维度"""
         ...
 
-    def encode(self, text: str) -> list[float]:
+    def encode(self, text: str) -> List[float]:
         """将文本编码为固定维度的浮点向量"""
         ...
 
@@ -57,7 +58,7 @@ class HashEmbedder:
     def dimensions(self) -> int:
         return self._dimensions
 
-    def encode(self, text: str) -> list[float]:
+    def encode(self, text: str) -> List[float]:
         """将文本编码为固定维度的浮点向量
 
         Args:
@@ -72,7 +73,7 @@ class HashEmbedder:
         vector = [0.0] * self._dimensions
 
         # 提取 bigram 和 trigram
-        ngrams: list[str] = []
+        ngrams: List[str] = []
         for n in (2, 3):
             for i in range(len(text) - n + 1):
                 ngrams.append(text[i : i + n])

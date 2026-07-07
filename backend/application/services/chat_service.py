@@ -22,6 +22,7 @@
 """
 
 from __future__ import annotations
+from typing import List, Optional
 
 import logging
 import time
@@ -85,11 +86,11 @@ class ChatService:
         storage: StoragePort,
         metrics: MetricPort,
         events: EventPort,
-        memory: MemoryPort | None = None,  # Optional for backward compatibility
-        tool_policy: ToolPolicy | None = None,  # M2 工具调用预算守卫
-        permission_preset: PermissionPreset | None = None,  # M3 权限预设
-        permission_allowed_paths: list[str] | None = None,  # M3 允许的路径
-        permission_denied_tools: list[str] | None = None,  # M3 黑名单
+        memory: Optional[MemoryPort] = None,  # Optional for backward compatibility
+        tool_policy: Optional[ToolPolicy] = None,  # M2 工具调用预算守卫
+        permission_preset: Optional[PermissionPreset] = None,  # M3 权限预设
+        permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
+        permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -157,7 +158,7 @@ class ChatService:
         self,
         session_id: str,
         user_message: Message,
-    ) -> list[Message]:
+    ) -> List[Message]:
         """执行一轮对话（含 ReAct 工具调用——PG2.9 阶段只做单轮）。
 
         Args:
@@ -184,7 +185,7 @@ class ChatService:
         session_id: str,
         user_message: Message,
         span: Any,
-    ) -> list[Message]:
+    ) -> List[Message]:
         """``run_turn`` 的实际实现，调用方需已开好 OTel span。"""
         # M1: run-lifecycle 事件作用域（稳定 run_id + 单调 seq）
         run = RunEventScope(self.events, uuid.uuid4().hex)
@@ -199,7 +200,7 @@ class ChatService:
         )
 
         # 1.5) 检索相关记忆 (Memory Integration)
-        memory_context: MemoryContext | None = None
+        memory_context: Optional[MemoryContext] = None
         if self.memory:
             try:
                 memory_context = await self.memory.retrieve(
@@ -443,7 +444,7 @@ class ChatService:
     async def _execute_tool_calls(
         self,
         session_id: str,
-        tool_calls: list[ToolCall],
+        tool_calls: List[ToolCall],
         run: RunEventScope,
     ) -> bool:
         """执行模型返回的 tool_calls，依次 emit 事件 / 计数 / 持久化。

@@ -5,13 +5,14 @@ yaml 文件不存在、解析失败或缺 ``tools:`` 段时均降级为 ``ToolPo
 """
 
 from __future__ import annotations
+from typing import Union
 
 from pathlib import Path
 
 from backend.domain.tool_policy import ToolPolicy
 
 
-def load_tool_policy_from_config(config_path: str | Path) -> ToolPolicy:
+def load_tool_policy_from_config(config_path: Union[str, Path]) -> ToolPolicy:
     """从 yaml 加载 ``tools:`` 段并构造 ``ToolPolicy``。
 
     - 文件不存在 → ``ToolPolicy()`` 默认

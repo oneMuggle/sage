@@ -7,6 +7,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Tuple, Union
 
 from collections.abc import AsyncIterator
 from typing import Any
@@ -97,17 +98,17 @@ class _InMemoryMetric:
     """最小 MetricPort 实现。"""
 
     def __init__(self) -> None:
-        self.counters: list[tuple[str, dict[str, str]]] = []
-        self.histograms: list[tuple[str, float, dict[str, str]]] = []
-        self.gauges: list[tuple[str, float, dict[str, str]]] = []
+        self.counters: List[Tuple[str, Dict[str, str]]] = []
+        self.histograms: List[Tuple[str, float, Dict[str, str]]] = []
+        self.gauges: List[Tuple[str, float, Dict[str, str]]] = []
 
-    def counter(self, name: str, labels: dict[str, str]) -> None:
+    def counter(self, name: str, labels: Dict[str, str]) -> None:
         self.counters.append((name, labels))
 
-    def histogram(self, name: str, value: float, labels: dict[str, str]) -> None:
+    def histogram(self, name: str, value: float, labels: Dict[str, str]) -> None:
         self.histograms.append((name, value, labels))
 
-    def gauge(self, name: str, value: float, labels: dict[str, str]) -> None:
+    def gauge(self, name: str, value: float, labels: Dict[str, str]) -> None:
         self.gauges.append((name, value, labels))
 
 
@@ -115,9 +116,9 @@ class _InMemoryEvent:
     """最小 EventPort 实现。"""
 
     def __init__(self) -> None:
-        self.events: list[tuple[str, dict[str, Any]]] = []
+        self.events: List[Tuple[str, Dict[str, Any]]] = []
 
-    def emit(self, event_type: str, payload: dict[str, Any]) -> None:
+    def emit(self, event_type: str, payload: Dict[str, Any]) -> None:
         self.events.append((event_type, payload))
 
 
@@ -125,13 +126,13 @@ class _InMemoryStorage:
     """最小 StoragePort 实现。"""
 
     def __init__(self) -> None:
-        self.messages: list[tuple[str, Message]] = []
-        self.sessions: dict[str, str] = {}
+        self.messages: List[Tuple[str, Message]] = []
+        self.sessions: Dict[str, str] = {}
 
     async def append_message(self, session_id: str, message: Message) -> None:
         self.messages.append((session_id, message))
 
-    async def get_messages(self, session_id: str, limit: int = 50) -> list[Message]:
+    async def get_messages(self, session_id: str, limit: int = 50) -> List[Message]:
         return [m for sid, m in self.messages if sid == session_id][:limit]
 
     async def create_session(self, title: str = "") -> str:
@@ -139,7 +140,7 @@ class _InMemoryStorage:
         self.sessions[new_id] = title
         return new_id
 
-    async def list_sessions(self) -> list[dict[str, Any]]:
+    async def list_sessions(self) -> List[Dict[str, Any]]:
         return [{"id": k, "title": v} for k, v in self.sessions.items()]
 
     async def delete_session(self, session_id: str) -> None:
@@ -150,24 +151,24 @@ class _InMemoryStorage:
 class _InMemoryTool:
     """最小 ToolPort 实现。"""
 
-    def list_tools(self) -> list[ToolSpec]:
+    def list_tools(self) -> List[ToolSpec]:
         return [ToolSpec(name="echo", description="回显输入")]
 
-    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         return ToolResult(success=True, output=str(args))
 
 
 class _InMemorySkill:
     """最小 SkillPort 实现。"""
 
-    def list_skills(self) -> list[SkillSpec]:
+    def list_skills(self) -> List[SkillSpec]:
         return [SkillSpec(name="greet", description="打招呼")]
 
     async def execute(
         self,
         name: str,
         action: str,
-        args: dict[str, Any],
+        args: Dict[str, Any],
     ) -> SkillResult:
         return SkillResult(success=True, content=f"{name}:{action}")
 
@@ -177,15 +178,15 @@ class _InMemoryLLM:
 
     async def chat(
         self,
-        messages: list[Message],
-        tools: list[Any] | None = None,
-        tool_choice: str | dict[str, Any] | None = None,
+        messages: List[Message],
+        tools: Optional[List[Any]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> Message:
         return Message(role=Role.ASSISTANT, content="ok")
 
     def chat_stream(
         self,
-        messages: list[Message],
+        messages: List[Message],
     ) -> AsyncIterator[str]:
         async def _gen() -> AsyncIterator[str]:
             yield "ok"
@@ -268,7 +269,7 @@ def test_ports_only_depend_on_domain() -> None:
     allowed_external = {"sage_core"}
 
     import_re = re.compile(r"^\s*(?:from|import)\s+([\w\.]+)")
-    offenders: list[str] = []
+    offenders: List[str] = []
 
     for py_file in sorted(ports_dir.rglob("*.py")):
         for line in py_file.read_text(encoding="utf-8").splitlines():

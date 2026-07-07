@@ -4,6 +4,7 @@ SageAgent - 核心对话引擎
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import hashlib
 import json
@@ -65,7 +66,7 @@ class QueryCache:
         key_str = f"{session_id}:{message}"
         return hashlib.md5(key_str.encode()).hexdigest()
 
-    def get(self, session_id: str, message: str) -> dict[str, Any] | None:
+    def get(self, session_id: str, message: str) -> Dict[str, Any] | None:
         """
         获取缓存结果
 
@@ -91,7 +92,7 @@ class QueryCache:
                         break
         return None
 
-    def set(self, session_id: str, message: str, result: dict[str, Any]) -> None:
+    def set(self, session_id: str, message: str, result: Dict[str, Any]) -> None:
         """
         设置缓存
 
@@ -161,19 +162,19 @@ class SageAgent:
 
     def __init__(
         self,
-        llm_config: dict[str, Any] | None = None,
-        agent_id: str | None = None,
+        llm_config: Optional[Dict[str, Any]] = None,
+        agent_id: Optional[str] = None,
     ):
         self.session_repo = SessionRepository()
         self.message_repo = MessageRepository()
         self._interrupted = False
-        self._current_session_id: str | None = None
+        self._current_session_id: Optional[str] = None
 
         # 加载 agent profile (阶段 1: Profile → 运行时)
         # 从 SQLite 读最新版本, 用户刚 PATCH 的 enabled/system_prompt 立即生效
         # agent_id 不存在 / 已禁用 → self.profile = None → 保持默认行为(向后兼容)
-        self.profile: dict[str, Any] | None = None
-        self.agent_id: str | None = None
+        self.profile: Optional[Dict[str, Any]] = None
+        self.agent_id: Optional[str] = None
         if agent_id:
             from backend.agents.profiles import get_enabled_agent
 
@@ -207,7 +208,7 @@ class SageAgent:
         # 初始化 LLM 客户端
         if llm_config:
             self.llm_config = LLMConfig(**llm_config)
-            self.llm_client: LLMClient | None = LLMClient(self.llm_config)
+            self.llm_client: Optional[LLMClient] = LLMClient(self.llm_config)
             logger.info(
                 "LLM 客户端已初始化: provider={}, model={}".format(
                     llm_config.get("provider"), llm_config.get("model")
@@ -222,8 +223,8 @@ class SageAgent:
         self.consolidation = ConsolidationPipeline(llm_client=self.llm_client)
 
     async def chat(
-        self, session_id: str, message: str, llm_config: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+        self, session_id: str, message: str, llm_config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         处理用户消息
 
@@ -377,7 +378,7 @@ class SageAgent:
             }
 
     def _extract_and_save_memories(
-        self, session_id: str, user_message: dict[str, Any], assistant_message: dict[str, Any]
+        self, session_id: str, user_message: Dict[str, Any], assistant_message: Dict[str, Any]
     ) -> None:
         """
         从对话中提取关键信息并存入情景记忆
@@ -448,9 +449,9 @@ class SageAgent:
 
     async def run_loop(
         self,
-        messages: list[dict[str, Any]],
-        max_iterations: int | None = None,
-        llm_config: dict[str, Any] | None = None,
+        messages: List[Dict[str, Any]],
+        max_iterations: Optional[int] = None,
+        llm_config: Optional[Dict[str, Any]] = None,
     ):
         """ReAct 主循环。
 
@@ -620,7 +621,7 @@ class SageAgent:
                 self.llm_client = original_llm_client
                 self.llm_config = original_llm_config
 
-    def execute_tool(self, tool_name: str, parameters: dict[str, Any]) -> dict[str, Any]:
+    def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行工具
 
@@ -645,7 +646,7 @@ class SageAgent:
             logger.error(f"工具执行失败: {tool_name}, error: {str(e)}")
             raise ToolCallError(tool_name, str(e))
 
-    def get_available_tools(self) -> list[dict[str, Any]]:
+    def get_available_tools(self) -> List[Dict[str, Any]]:
         """
         获取所有可用工具的 Schema（OpenAI function-calling 格式）
 
@@ -693,7 +694,7 @@ class SageAgent:
         """
         return self._cache.cleanup()
 
-    def get_cache_stats(self) -> dict[str, Any]:
+    def get_cache_stats(self) -> Dict[str, Any]:
         """
         获取缓存统计信息
 

@@ -23,6 +23,7 @@
 """
 
 from __future__ import annotations
+from typing import Set
 
 import json
 import os
@@ -92,7 +93,7 @@ def test_file_event_adapter_writes_5_audit_types(tmp_path: Path):
     lines = [ln for ln in content.strip().split("\n") if ln]
     assert len(lines) == 5
 
-    seen_types: set[str] = set()
+    seen_types: Set[str] = set()
     for line in lines:
         evt = json.loads(line)
         assert "ts" in evt
@@ -120,12 +121,12 @@ _HEX_ONLY = pytest.mark.skipif(
 )
 
 
-def _read_event_types(log_path: Path) -> set[str]:
+def _read_event_types(log_path: Path) -> Set[str]:
     """从 audit.jsonl 读取所有事件 type 集合。"""
     if not log_path.exists():
         return set()
     content = log_path.read_text(encoding="utf-8")
-    types: set[str] = set()
+    types: Set[str] = set()
     for line in content.strip().split("\n"):
         if not line:
             continue

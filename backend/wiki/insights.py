@@ -2,6 +2,7 @@
 
 实现惊人联系发现和知识缺口分析，帮助用户发现知识库中的有趣模式和潜在问题。
 """
+from typing import List
 
 import logging
 from collections import defaultdict
@@ -43,8 +44,8 @@ class KnowledgeGap:
 class GraphInsights:
     """图谱洞察结果。"""
 
-    surprising_connections: list[SurprisingConnection]
-    knowledge_gaps: list[KnowledgeGap]
+    surprising_connections: List[SurprisingConnection]
+    knowledge_gaps: List[KnowledgeGap]
     stats: dict  # 统计信息
 
 
@@ -79,8 +80,8 @@ def analyze_graph(project_root: Path) -> GraphInsights:
 
 
 def _find_surprising_connections(
-    graph_data: GraphData, communities: list[CommunityInfo]
-) -> list[SurprisingConnection]:
+    graph_data: GraphData, communities: List[CommunityInfo]
+) -> List[SurprisingConnection]:
     """发现惊人联系。
 
     惊人联系包括：
@@ -182,8 +183,8 @@ def _find_surprising_connections(
 
 
 def _find_knowledge_gaps(
-    graph_data: GraphData, communities: list[CommunityInfo]
-) -> list[KnowledgeGap]:
+    graph_data: GraphData, communities: List[CommunityInfo]
+) -> List[KnowledgeGap]:
     """发现知识缺口。
 
     知识缺口包括：

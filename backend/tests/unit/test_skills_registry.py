@@ -12,7 +12,7 @@ SkillRegistry 单元测试
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional
 from unittest.mock import Mock
 
 import pytest
@@ -28,7 +28,7 @@ pytestmark = pytest.mark.unit
 # ============================================================================
 
 
-def _make_skill(name: str = "x", triggers: list[str] | None = None) -> BaseSkill:
+def _make_skill(name: str = "x", triggers: Optional[List[str]] = None) -> BaseSkill:
     class _S(BaseSkill):
         def _build_schema(self) -> SkillSchema:
             return SkillSchema(
@@ -38,7 +38,7 @@ def _make_skill(name: str = "x", triggers: list[str] | None = None) -> BaseSkill
                 parameters={"type": "object", "properties": {}, "required": []},
             )
 
-        def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+        def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
             return SkillResult(content=f"{name}-{params}", metadata={"name": name})
 
     return _S()
@@ -185,7 +185,7 @@ def test_execute_wraps_skill_exception_into_failure_result():
         def _build_schema(self) -> SkillSchema:
             return SkillSchema(name="boom", description="always fails", triggers=["boom"])
 
-        def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+        def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
             raise RuntimeError("intentional failure")
 
     reg = SkillRegistry()

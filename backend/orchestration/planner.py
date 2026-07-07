@@ -4,6 +4,7 @@ Planner for multi-agent orchestration.
 Uses LLM to decompose user requests into multiple tasks with dependencies.
 Creates Teams to manage task groups and supports plan refinement.
 """
+from typing import Dict, List, Optional, Tuple
 
 import json
 import uuid
@@ -21,7 +22,7 @@ class Plan:
 
     plan_id: str
     team_id: str
-    tasks: list[Task]
+    tasks: List[Task]
     original_request: str
     reasoning: str
 
@@ -50,7 +51,7 @@ class Planner:
     async def decompose_request(
         self,
         request: str,
-        context: dict[str, Any] | None = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> Plan:
         """
         Decompose a user request into multiple tasks.
@@ -115,8 +116,8 @@ class Planner:
     async def _decompose_with_llm(
         self,
         request: str,
-        context: dict[str, Any] | None = None,
-    ) -> tuple[list[dict[str, Any]], str]:
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[Dict[str, Any]], str]:
         """
         Decompose request using LLM.
 
@@ -145,7 +146,7 @@ class Planner:
     def _build_decomposition_prompt(
         self,
         request: str,
-        context: dict[str, Any] | None = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Build prompt for LLM task decomposition."""
         context_str = json.dumps(context, indent=2) if context else "None"
@@ -182,7 +183,7 @@ Return ONLY valid JSON, no additional text."""
     def _parse_llm_response(
         self,
         response: str,
-    ) -> tuple[list[dict[str, Any]], str]:
+    ) -> Tuple[List[Dict[str, Any]], str]:
         """Parse LLM response into tasks and reasoning."""
         try:
             # Extract JSON from response
@@ -197,7 +198,7 @@ Return ONLY valid JSON, no additional text."""
     def _simple_decompose(
         self,
         request: str,
-    ) -> tuple[list[dict[str, Any]], str]:
+    ) -> Tuple[List[Dict[str, Any]], str]:
         """
         Simple fallback decomposition without LLM.
 
@@ -235,7 +236,7 @@ Return ONLY valid JSON, no additional text."""
         # For now, return the original plan
         return plan
 
-    def get_plan_status(self, plan_id: str) -> dict[str, Any]:
+    def get_plan_status(self, plan_id: str) -> Dict[str, Any]:
         """
         Get status of a plan.
 
@@ -253,7 +254,7 @@ Return ONLY valid JSON, no additional text."""
             "message": "Plan status tracking not yet implemented",
         }
 
-    def validate_task_graph(self, tasks: list[Task]) -> bool:
+    def validate_task_graph(self, tasks: List[Task]) -> bool:
         """
         Validate task graph for cycles and consistency.
 

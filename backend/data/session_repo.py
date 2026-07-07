@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import json
 import time
@@ -22,14 +23,14 @@ class Session:
     title: str
     created_at: int
     updated_at: int
-    last_message_at: int | None = None
+    last_message_at: Optional[int] = None
     message_count: int = 0
-    metadata: str | None = None
+    metadata: Optional[str] = None
     total_tokens: int = 0
     total_cost: float = 0.0
     is_pinned: bool = False
     is_archived: bool = False
-    parent_id: str | None = None
+    parent_id: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Session:
@@ -48,7 +49,7 @@ class Session:
             parent_id=row["parent_id"],
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "title": self.title,
@@ -67,7 +68,7 @@ class SessionRepository:
     def __init__(self):
         self.db = get_database()
 
-    def create(self, title: str = "新对话", parent_id: str | None = None) -> Session:
+    def create(self, title: str = "新对话", parent_id: Optional[str] = None) -> Session:
         """创建新会话"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -105,7 +106,7 @@ class SessionRepository:
             return Session.from_row(row)
         return None
 
-    def list(self, limit: int = 100, offset: int = 0) -> list[Session]:
+    def list(self, limit: int = 100, offset: int = 0) -> List[Session]:
         """获取会话列表"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -177,11 +178,11 @@ class Message:
     role: str
     content: str
     created_at: int
-    model: str | None = None
-    provider: str | None = None
-    tool_calls: str | None = None
-    tool_call_id: str | None = None
-    reasoning_content: str | None = None  # LLM 思考/推理过程
+    model: Optional[str] = None
+    provider: Optional[str] = None
+    tool_calls: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    reasoning_content: Optional[str] = None  # LLM 思考/推理过程
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -198,7 +199,7 @@ class Message:
             reasoning_content=row["reasoning_content"],
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "session_id": self.session_id,
@@ -246,7 +247,7 @@ class MessageRepository:
         conn.commit()
         return message
 
-    def get_by_session(self, session_id: str, limit: int = 100, offset: int = 0) -> list[Message]:
+    def get_by_session(self, session_id: str, limit: int = 100, offset: int = 0) -> List[Message]:
         """获取会话消息列表"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -301,7 +302,7 @@ class MessageRepository:
         role: str,
         content: str,
         created_at: int,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """Insert a new message row and return the inserted record.
 
         The scheduler uses this to deliver one-shot/recurring task content

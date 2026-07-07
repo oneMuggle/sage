@@ -8,6 +8,7 @@ FTS5 索引 tokenized_content 而非原始 content，使中文搜索生效。
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import json
 import time
@@ -65,7 +66,7 @@ class SemanticMemory:
 
         conn.commit()
 
-    def save(self, content: str, summary: str | None = None, tags: list[str] | None = None) -> str:
+    def save(self, content: str, summary: Optional[str] = None, tags: Optional[List[str]] = None) -> str:
         """
         保存语义记忆
 
@@ -118,8 +119,8 @@ class SemanticMemory:
         return content[:max_length] + "..."
 
     def search(
-        self, query: str, limit: int = 10, tags: list[str] | None = None
-    ) -> list[dict[str, Any]]:
+        self, query: str, limit: int = 10, tags: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         """
         搜索语义记忆
 
@@ -193,8 +194,8 @@ class SemanticMemory:
         return tokenize_for_search(query)
 
     def _search_like(
-        self, query: str, limit: int = 10, tags: list[str] | None = None
-    ) -> list[dict[str, Any]]:
+        self, query: str, limit: int = 10, tags: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         """
         使用 LIKE 进行回退搜索
 
@@ -238,7 +239,7 @@ class SemanticMemory:
 
         return results
 
-    def get_recent(self, limit: int = 20) -> list[dict[str, Any]]:
+    def get_recent(self, limit: int = 20) -> List[Dict[str, Any]]:
         """
         获取最近的语义记忆
 
@@ -272,7 +273,7 @@ class SemanticMemory:
 
         return results
 
-    def get_all(self) -> list[dict[str, Any]]:
+    def get_all(self) -> List[Dict[str, Any]]:
         """
         获取所有语义记忆
 
@@ -281,7 +282,7 @@ class SemanticMemory:
         """
         return self.get_recent(limit=10000)
 
-    def get_by_id(self, memory_id: str) -> dict[str, Any] | None:
+    def get_by_id(self, memory_id: str) -> Dict[str, Any] | None:
         """
         根据 ID 获取记忆
 
@@ -345,7 +346,7 @@ class SemanticMemory:
         cursor.execute("SELECT COUNT(*) FROM memories_semantic")
         return cursor.fetchone()[0]
 
-    def update_tags(self, memory_id: str, tags: list[str]) -> bool:
+    def update_tags(self, memory_id: str, tags: List[str]) -> bool:
         """
         更新记忆标签
 

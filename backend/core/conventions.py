@@ -4,6 +4,7 @@ Convention Manager - 惯例管理
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import json
 import logging
@@ -32,7 +33,7 @@ class Convention:
     last_updated: int = field(default_factory=lambda: int(time.time()))
     is_active: bool = True
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -60,7 +61,7 @@ class ConventionManager:
     DECAY_FACTOR = 0.9
     MIN_CONFIDENCE = 0.1
 
-    def __init__(self, llm_client: LLMClient | None = None):
+    def __init__(self, llm_client: Optional[LLMClient] = None):
         self.db = get_database()
         self.llm_client = llm_client
         self._ensure_table()
@@ -148,7 +149,7 @@ class ConventionManager:
         row["is_active"] = bool(row["is_active"])
         return Convention(**dict(row))
 
-    def get_active(self, category: str | None = None) -> list[Convention]:
+    def get_active(self, category: Optional[str] = None) -> List[Convention]:
         """获取活跃惯例"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -190,7 +191,7 @@ class ConventionManager:
 
     # ========== LLM 驱动学习 ==========
 
-    async def learn_from_conversation(self, messages: list[dict[str, Any]]) -> list[str]:
+    async def learn_from_conversation(self, messages: List[Dict[str, Any]]) -> List[str]:
         """从对话中提取新惯例"""
         if not self.llm_client:
             return []
@@ -293,7 +294,7 @@ class ConventionManager:
 
     # ========== 统计 ==========
 
-    def get_stats(self) -> dict[str, Any]:
+    def get_stats(self) -> Dict[str, Any]:
         """获取惯例统计"""
         conn = self.db.get_connection()
         cursor = conn.cursor()

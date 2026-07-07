@@ -20,6 +20,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List
 
 import asyncio
 import json
@@ -55,9 +56,9 @@ class _OperationDef:
     """yaml 中单个 operation 的内部表示。"""
 
     name: str
-    cli_subcommand: list[str]
+    cli_subcommand: List[str]
     description: str
-    params_schema: dict[str, Any] = field(default_factory=dict)
+    params_schema: Dict[str, Any] = field(default_factory=dict)
 
 
 class SubprocessComputeAdapter:
@@ -78,10 +79,10 @@ class SubprocessComputeAdapter:
                                                       params={"mach": 6.5, ...}))
     """
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: Dict[str, Any]):
         self._config = config
         self._timeout_s = int(config.get("timeout_seconds", _DEFAULT_TIMEOUT_S))
-        self._operations: dict[str, _OperationDef] = {}
+        self._operations: Dict[str, _OperationDef] = {}
         for raw in config.get("operations", []):
             op = _OperationDef(
                 name=str(raw["name"]),
@@ -95,7 +96,7 @@ class SubprocessComputeAdapter:
 
     # ---- ComputePort 实现 ----
 
-    def list_operations(self) -> list[ComputeSpec]:
+    def list_operations(self) -> List[ComputeSpec]:
         """返回 yaml 中声明的全部 operations 的 spec 视图。"""
         return [
             ComputeSpec(
@@ -156,10 +157,10 @@ class SubprocessComputeAdapter:
     def _build_argv(
         resolved: ResolvedExecutable,
         op: _OperationDef,
-        params: dict[str, Any],
-    ) -> list[str]:
+        params: Dict[str, Any],
+    ) -> List[str]:
         """拼出最终 argv 列表。"""
-        argv: list[str] = list(resolved.argv_prefix)
+        argv: List[str] = list(resolved.argv_prefix)
         argv.extend(op.cli_subcommand)
         argv.extend(_params_to_args(params, op.params_schema))
         argv.append("--json")
@@ -167,7 +168,7 @@ class SubprocessComputeAdapter:
 
     async def _run_subprocess(
         self,
-        argv: list[str],
+        argv: List[str],
         resolved: ResolvedExecutable,
         timeout_s: float,
         start: float,
@@ -216,7 +217,7 @@ class SubprocessComputeAdapter:
 # ---------- 辅助函数(模块级,便于单测覆盖) ----------
 
 
-def _params_to_args(params: dict[str, Any], schema: dict[str, Any]) -> list[str]:
+def _params_to_args(params: Dict[str, Any], schema: Dict[str, Any]) -> List[str]:
     """把 params dict 翻译为 CLI flag 列表。
 
     规则:
@@ -226,7 +227,7 @@ def _params_to_args(params: dict[str, Any], schema: dict[str, Any]) -> list[str]
     - 其他类型一律 ``str(val)`` 序列化
     - schema 仅用于查询 ``type``,不做强校验(实际校验由 ghm CLI 完成)
     """
-    out: list[str] = []
+    out: List[str] = []
     props = schema.get("properties", {}) if isinstance(schema, dict) else {}
 
     for key, val in params.items():

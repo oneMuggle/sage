@@ -4,6 +4,7 @@ Agent Orchestrator - 多Agent协作编排
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import asyncio
 import json
@@ -39,14 +40,14 @@ class AgentOrchestrator:
     - 结果聚合: 汇总多个 Agent 的输出
     """
 
-    def __init__(self, llm_client: LLMClient | None = None):
+    def __init__(self, llm_client: Optional[LLMClient] = None):
         self.llm_client = llm_client
         self.blackboard = BlackboardRepo()
-        self._agent_cache: dict[str, AgentProfile] = {}
+        self._agent_cache: Dict[str, AgentProfile] = {}
 
     async def process_request(
-        self, session_id: str, user_message: str, history: list[dict[str, Any]] | None = None
-    ) -> dict[str, Any]:
+        self, session_id: str, user_message: str, history: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
         """
         处理用户请求的主入口
 
@@ -164,8 +165,8 @@ class AgentOrchestrator:
         session_id: str,
         agent_id: str,
         message: str,
-        history: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
+        history: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         """
         执行单个 Agent 任务
 
@@ -261,8 +262,8 @@ class AgentOrchestrator:
         }
 
     async def _execute_multi_step(
-        self, session_id: str, message: str, history: list[dict[str, Any]] | None = None
-    ) -> dict[str, Any]:
+        self, session_id: str, message: str, history: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
         """
         执行多步骤任务
 
@@ -329,7 +330,7 @@ class AgentOrchestrator:
             "subtasks": results,
         }
 
-    async def _decompose_task(self, message: str) -> list[dict[str, Any]]:
+    async def _decompose_task(self, message: str) -> List[Dict[str, Any]]:
         """
         将复杂任务拆解为子任务
 
@@ -366,7 +367,7 @@ class AgentOrchestrator:
 
         return [{"intent": "general", "description": message}]
 
-    async def _aggregate_results(self, original_message: str, results: list[dict[str, Any]]) -> str:
+    async def _aggregate_results(self, original_message: str, results: List[Dict[str, Any]]) -> str:
         """
         聚合多个子任务的结果
 
@@ -405,7 +406,7 @@ class AgentOrchestrator:
         return "\n\n".join(parts)
 
     async def _run_agent_llm(
-        self, agent: AgentProfile, message: str, history: list[dict[str, Any]] | None = None
+        self, agent: AgentProfile, message: str, history: Optional[List[Dict[str, Any]]] = None
     ) -> str:
         """
         使用 Agent 的 LLM 配置执行对话
@@ -438,7 +439,7 @@ class AgentOrchestrator:
             logger.error(f"Agent LLM 调用失败 ({agent.id}): {e}")
             return f"[{agent.name} LLM 调用失败: {e}]"
 
-    def _summarize_history(self, history: list[dict[str, Any]] | None = None) -> str:
+    def _summarize_history(self, history: Optional[List[Dict[str, Any]]] = None) -> str:
         """
         简单总结对话历史
 

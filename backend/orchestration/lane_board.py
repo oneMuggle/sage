@@ -26,6 +26,7 @@ References:
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Set, Tuple
 
 import hashlib
 import json
@@ -66,18 +67,18 @@ class LaneFreshness:
     """
 
     lane_id: str
-    last_heartbeat_at: int | None
-    age_ms: int | None
+    last_heartbeat_at: Optional[int]
+    age_ms: Optional[int]
     level: _FreshnessLevel
-    reasons: list[str] = field(default_factory=list)
+    reasons: List[str] = field(default_factory=list)
 
     @classmethod
     def from_age(
         cls,
         lane_id: str,
-        age_ms: int | None,
-        last_heartbeat_at: int | None = None,
-        now_ms: int | None = None,  # noqa: ARG003 — kept for API symmetry
+        age_ms: Optional[int],
+        last_heartbeat_at: Optional[int] = None,
+        now_ms: Optional[int] = None,  # noqa: ARG003 — kept for API symmetry
     ) -> LaneFreshness:
         """Compute freshness from an explicit age in ms (or None = no heartbeat)."""
         if age_ms is None:
@@ -116,8 +117,8 @@ class LaneFreshness:
     def from_heartbeat(
         cls,
         lane_id: str,
-        last_heartbeat_at: int | None,
-        now_ms: int | None = None,
+        last_heartbeat_at: Optional[int],
+        now_ms: Optional[int] = None,
     ) -> LaneFreshness:
         """Compute freshness from a heartbeat timestamp."""
         if last_heartbeat_at is None:
@@ -126,7 +127,7 @@ class LaneFreshness:
         age = max(0, now - last_heartbeat_at)
         return cls.from_age(lane_id=lane_id, age_ms=age, last_heartbeat_at=last_heartbeat_at)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "lane_id": self.lane_id,
             "last_heartbeat_at": self.last_heartbeat_at,
@@ -147,7 +148,7 @@ class FreshnessSummary:
     overall_level: _FreshnessLevel
 
     @classmethod
-    def from_entries(cls, entries: list[LaneFreshness]) -> FreshnessSummary:
+    def from_entries(cls, entries: List[LaneFreshness]) -> FreshnessSummary:
         fresh = sum(1 for e in entries if e.level == "fresh")
         stale = sum(1 for e in entries if e.level == "stale")
         dead = sum(1 for e in entries if e.level == "dead")
@@ -165,7 +166,7 @@ class FreshnessSummary:
             overall_level=overall,
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "total": self.total,
             "fresh": self.fresh,
@@ -186,14 +187,14 @@ class BoardEntry:
 
     lane_id: str
     task_id: str
-    agent_id: str | None
+    agent_id: Optional[str]
     status: str
     freshness: LaneFreshness
     last_event_at: int
     last_event_type: str
-    heartbeat_status: str | None = None
+    heartbeat_status: Optional[str] = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "lane_id": self.lane_id,
             "task_id": self.task_id,
@@ -216,12 +217,12 @@ class LaneBoardSnapshot:
     schema_version: str
     generated_at: int
     generated_by: str
-    active: list[BoardEntry]
-    blocked: list[BoardEntry]
-    finished: list[BoardEntry]
+    active: List[BoardEntry]
+    blocked: List[BoardEntry]
+    finished: List[BoardEntry]
     freshness_summary: FreshnessSummary
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "generated_at": self.generated_at,
@@ -249,7 +250,7 @@ class LaneBoardSnapshot:
                 f"requested_view={request.requested_view!r} not in " f"{manifest.projection_views}"
             )
 
-        downgrade: list[str] = []
+        downgrade: List[str] = []
         if request.max_schema_version and _is_version_older(
             request.max_schema_version, self.schema_version
         ):
@@ -258,14 +259,14 @@ class LaneBoardSnapshot:
             )
 
         all_entries = self.active + self.blocked + self.finished
-        redaction_provenance: dict[str, str] = {}
-        projected_entries: list[dict[str, Any]] = []
+        redaction_provenance: Dict[str, str] = {}
+        projected_entries: List[Dict[str, Any]] = []
 
         # Define field families a consumer can request.
         # "lifecycle" → core lane fields
         # "branch_health" → freshness + heartbeat_status
         # "ship" → last_event_at + last_event_type
-        FIELDS_BY_FAMILY: dict[str, set[str]] = {
+        FIELDS_BY_FAMILY: Dict[str, Set[str]] = {
             "lifecycle": {"lane_id", "task_id", "agent_id", "status"},
             "branch_health": {"freshness", "heartbeat_status"},
             "ship": {"last_event_at", "last_event_type"},
@@ -279,13 +280,13 @@ class LaneBoardSnapshot:
         else:
             allowed_families = set(request.accepted_field_families) or {"lifecycle"}
 
-        allowed_fields: set[str] = set()
+        allowed_fields: Set[str] = set()
         for fam in allowed_families:
             allowed_fields |= FIELDS_BY_FAMILY.get(fam, set())
 
         for entry in all_entries:
             full = entry.to_dict()
-            projected: dict[str, Any] = {}
+            projected: Dict[str, Any] = {}
             for k, v in full.items():
                 if k == "lane_id":
                     # lane_id is always preserved (cross-reference invariant).
@@ -308,11 +309,11 @@ class LaneBoardSnapshot:
         )
 
 
-def _parse_version(version: str) -> tuple[int, ...]:
+def _parse_version(version: str) -> Tuple[int, ...]:
     """Parse a version string like "board@1.0" or "1.0" into a numeric tuple."""
     # Strip "<prefix>@" prefix if present.
     body = version.split("@", 1)[-1]
-    parts: list[int] = []
+    parts: List[int] = []
     for chunk in body.split("."):
         try:
             parts.append(int(chunk))
@@ -353,23 +354,23 @@ class LaneBoardBuilder:
     def __init__(self, lane_registry: Any) -> None:
         self.lane_registry = lane_registry
 
-    def freshness_for(self, lane: Any, now_ms: int | None = None) -> LaneFreshness:
-        last_hb: int | None = None
+    def freshness_for(self, lane: Any, now_ms: Optional[int] = None) -> LaneFreshness:
+        last_hb: Optional[int] = None
         if getattr(lane, "heartbeat", None) is not None:
             last_hb = getattr(lane.heartbeat, "last_heartbeat_at", None)
         return LaneFreshness.from_heartbeat(
             lane_id=lane.lane_id, last_heartbeat_at=last_hb, now_ms=now_ms
         )
 
-    def build_snapshot(self, actor: str, now_ms: int | None = None) -> LaneBoardSnapshot:
+    def build_snapshot(self, actor: str, now_ms: Optional[int] = None) -> LaneBoardSnapshot:
         lanes = self.lane_registry.list_all_lanes()
         now = now_ms if now_ms is not None else int(time.time() * 1000)
 
-        active: list[BoardEntry] = []
-        blocked: list[BoardEntry] = []
-        finished: list[BoardEntry] = []
+        active: List[BoardEntry] = []
+        blocked: List[BoardEntry] = []
+        finished: List[BoardEntry] = []
 
-        all_freshness: list[LaneFreshness] = []
+        all_freshness: List[LaneFreshness] = []
 
         for lane in lanes:
             status_value = lane.status.value if hasattr(lane.status, "value") else str(lane.status)
@@ -418,9 +419,9 @@ class CapabilityManifest:
     """Producer-side declaration of supported views / schema versions / families."""
 
     emitter: str
-    schema_versions: list[str]
-    field_families: list[str]
-    projection_views: list[str]
+    schema_versions: List[str]
+    field_families: List[str]
+    projection_views: List[str]
     redaction_policy: str
     fixture_suite_version: str = "1.0"
 
@@ -435,7 +436,7 @@ class CapabilityManifest:
             fixture_suite_version="1.0",
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "emitter": self.emitter,
             "schema_versions": list(self.schema_versions),
@@ -452,10 +453,10 @@ class ProjectionRequest:
 
     consumer: str
     requested_view: str
-    accepted_field_families: list[str] = field(default_factory=list)
-    max_schema_version: str | None = None
+    accepted_field_families: List[str] = field(default_factory=list)
+    max_schema_version: Optional[str] = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "consumer": self.consumer,
             "requested_view": self.requested_view,
@@ -471,11 +472,11 @@ class BoardProjection:
     parent_content_hash: str
     parent_schema_version: str
     view: str
-    entries: list[dict[str, Any]]
-    downgrade_for_compatibility: list[str] = field(default_factory=list)
-    redaction_provenance: dict[str, str] = field(default_factory=dict)
+    entries: List[Dict[str, Any]]
+    downgrade_for_compatibility: List[str] = field(default_factory=list)
+    redaction_provenance: Dict[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "parent_content_hash": self.parent_content_hash,
             "parent_schema_version": self.parent_schema_version,

@@ -3,6 +3,7 @@
 支持多个搜索 API：Tavily、SerpApi、SearXNG。
 实现多查询策略，收集多个来源的信息。
 """
+from typing import List
 
 import asyncio
 import logging
@@ -37,7 +38,7 @@ class WebSearchResponse:
     """网络搜索响应。"""
 
     query: str
-    results: list[WebSearchResult]
+    results: List[WebSearchResult]
     total: int
 
 
@@ -187,12 +188,12 @@ class WebSearchClient:
 
 
 async def multi_query_search(
-    queries: list[str],
+    queries: List[str],
     provider: SearchProvider,
     api_key: str = "",
     base_url: str = "",
     max_results_per_query: int = 5,
-) -> list[WebSearchResult]:
+) -> List[WebSearchResult]:
     """执行多查询搜索。
 
     对多个查询并行执行搜索，合并结果并去重。

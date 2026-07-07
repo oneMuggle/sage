@@ -2,16 +2,17 @@
 
 实现 RRF 算法，融合 token 搜索和向量搜索的结果。
 """
+from typing import Dict, List, Tuple
 
 # 默认 RRF 常数
 DEFAULT_RRF_K = 60.0
 
 
 def rrf_fuse(
-    token_items: list[str],
-    vector_items: list[str],
+    token_items: List[str],
+    vector_items: List[str],
     k: float = DEFAULT_RRF_K,
-) -> list[tuple[str, float]]:
+) -> List[Tuple[str, float]]:
     """融合两个排序列表。
 
     RRF 公式: score(item) = Σ 1 / (k + rank_i)
@@ -24,7 +25,7 @@ def rrf_fuse(
     Returns:
         list[tuple[str, float]]: 融合后的 (item, score) 列表，按 score 降序
     """
-    scores: dict[str, float] = {}
+    scores: Dict[str, float] = {}
 
     # Token 搜索贡献
     for rank, item in enumerate(token_items):

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List
 
 from ..base import BaseSkill, SkillResult, SkillSchema
 
@@ -28,7 +28,7 @@ class SearchSkill(BaseSkill):
             examples=["帮我搜索一下 Python 异步编程", "查一下 ChatGPT 最新消息"],
         )
 
-    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         """执行搜索"""
         query = params.get("query")
         limit = params.get("limit", 5)
@@ -53,7 +53,7 @@ class SearchSkill(BaseSkill):
 
         return SkillResult(success=False, error=result.error or "搜索失败")
 
-    def _format_results(self, results: list[dict]) -> str:
+    def _format_results(self, results: List[dict]) -> str:
         """格式化搜索结果"""
         if not results:
             return "没有找到相关结果。"

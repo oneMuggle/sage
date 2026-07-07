@@ -10,6 +10,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -36,8 +37,8 @@ class ToolCall:
     """
 
     name: str
-    args: dict[str, Any]
-    id: str | None = None
+    args: Dict[str, Any]
+    id: Optional[str] = None
 
 
 @dataclass
@@ -53,5 +54,5 @@ class Message:
 
     role: Role
     content: str
-    tool_calls: list[ToolCall] = field(default_factory=list)
-    tool_call_id: str | None = None
+    tool_calls: List[ToolCall] = field(default_factory=list)
+    tool_call_id: Optional[str] = None

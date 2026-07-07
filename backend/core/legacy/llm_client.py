@@ -4,6 +4,7 @@ LLM Client - 大语言模型客户端
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Tuple
 
 import json
 import logging
@@ -31,8 +32,8 @@ class LLMMessage:
 
     role: str  # "system" | "user" | "assistant" | "tool"
     content: str
-    tool_calls: list[dict[str, Any]] | None = None
-    tool_call_id: str | None = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+    tool_call_id: Optional[str] = None
 
 
 @dataclass
@@ -49,8 +50,8 @@ class LLMChoice:
     """单条回复选项"""
 
     message: LLMMessage
-    finish_reason: str | None = None
-    tool_calls: list[LLMToolCall] | None = None
+    finish_reason: Optional[str] = None
+    tool_calls: Optional[List[LLMToolCall]] = None
 
 
 @dataclass
@@ -58,16 +59,16 @@ class LLMResponse:
     """LLM 回复"""
 
     content: str = ""
-    reasoning_content: str | None = (
+    reasoning_content: Optional[str] = (
         None  # LLM 思考/推理过程（Claude extended thinking, o1 reasoning 等）
     )
     model: str = ""
-    finish_reason: str | None = None
-    tool_calls: list[LLMToolCall] = field(default_factory=list)
+    finish_reason: Optional[str] = None
+    tool_calls: List[LLMToolCall] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
-    raw: dict[str, Any] | None = None
+    raw: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -83,9 +84,9 @@ class LLMConfig:
     timeout: int = 60
     # 推理参数（覆盖 commit #38 之前的硬编码 "custom" provider 路径，
     # 让用户在前端选的真实 provider 透传到 LLMClient，并启用 thinking 输出）
-    reasoning_effort: str | None = None  # OpenAI o1/o3/5: "low" | "medium" | "high"
-    thinking_budget: int | None = None  # Gemini 2.5: 思考 token 上限,0 关闭,-1 动态
-    extra_headers: dict[str, str] = field(default_factory=dict)
+    reasoning_effort: Optional[str] = None  # OpenAI o1/o3/5: "low" | "medium" | "high"
+    thinking_budget: Optional[int] = None  # Gemini 2.5: 思考 token 上限,0 关闭,-1 动态
+    extra_headers: Dict[str, str] = field(default_factory=dict)
     # === v2: LLM proxy 路由 ===
     # 为统一「测试连接」与「chat」两条路径的 baseUrl 解析规则（避免 baseUrl 是否
     # 包含 `/v1` 后缀的二义性），所有 LLM HTTP 调用现在走本机 FastAPI 上的
@@ -116,7 +117,7 @@ class LLMClient:
 
     def __init__(self, config: LLMConfig):
         self.config = config
-        self._client: httpx.AsyncClient | None = None
+        self._client: Optional[httpx.AsyncClient] = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """获取或创建 HTTP 客户端
@@ -126,7 +127,7 @@ class LLMClient:
         单测场景下 `LLMConfig(use_proxy=False)` 切回直连上游,保持 fixture 简洁。
         """
         if self._client is None or self._client.is_closed:
-            headers: dict[str, str] = {"Content-Type": "application/json"}
+            headers: Dict[str, str] = {"Content-Type": "application/json"}
 
             if self.config.use_proxy:
                 backend = (self.config.backend_url or "http://127.0.0.1:8765").rstrip("/")
@@ -152,7 +153,7 @@ class LLMClient:
             await self._client.aclose()
 
     @staticmethod
-    def _convert_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _convert_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """转换消息格式"""
         result = []
         for msg in messages:
@@ -165,7 +166,7 @@ class LLMClient:
         return result
 
     @staticmethod
-    def _parse_tool_calls(raw_tool_calls: list) -> list[LLMToolCall]:
+    def _parse_tool_calls(raw_tool_calls: list) -> List[LLMToolCall]:
         """解析工具调用"""
         result = []
         for tc in raw_tool_calls:
@@ -179,7 +180,7 @@ class LLMClient:
         return result
 
     @staticmethod
-    def _extract_think_tags(content: str) -> tuple[str | None, str]:
+    def _extract_think_tags(content: str) -> Tuple[Optional[str], str]:
         """
         从 content 中提取 <think>...</think> 标签内容。
 
@@ -207,9 +208,9 @@ class LLMClient:
 
     async def chat(
         self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        tool_choice: str | None = None,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
     ) -> LLMResponse:
         """
         发送聊天请求（非流式）
@@ -331,7 +332,7 @@ class LLMClient:
             raw=data,
         )
 
-    async def chat_stream(self, messages: list[dict[str, Any]]) -> AsyncGenerator[str, None]:
+    async def chat_stream(self, messages: List[Dict[str, Any]]) -> AsyncGenerator[str, None]:
         """
         发送聊天请求（流式）
 
@@ -402,7 +403,7 @@ class LLMClient:
         response = await self.chat(messages)
         return response.content
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """导出配置信息"""
         return {
             "provider": self.config.provider,

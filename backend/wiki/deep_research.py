@@ -2,6 +2,7 @@
 
 实现多步骤研究：网络搜索 → 收集来源 → LLM 综合 → 自动 Ingest。
 """
+from typing import List
 
 import json
 import logging
@@ -22,14 +23,14 @@ class ResearchTask:
     id: str
     topic: str
     status: str = "queued"  # queued, searching, synthesizing, done, error
-    queries: list[str] = field(default_factory=list)
-    web_results: list[WebSearchResult] = field(default_factory=list)
+    queries: List[str] = field(default_factory=list)
+    web_results: List[WebSearchResult] = field(default_factory=list)
     synthesis: str = ""
     saved_path: str = ""
     error: str = ""
 
 
-async def generate_search_queries(topic: str, llm_call: Callable) -> list[str]:
+async def generate_search_queries(topic: str, llm_call: Callable) -> List[str]:
     """使用 LLM 生成多个搜索查询。
 
     Args:
@@ -81,7 +82,7 @@ async def generate_search_queries(topic: str, llm_call: Callable) -> list[str]:
 
 async def synthesize_research(
     topic: str,
-    web_results: list[WebSearchResult],
+    web_results: List[WebSearchResult],
     llm_call: Callable,
 ) -> str:
     """使用 LLM 综合搜索结果。

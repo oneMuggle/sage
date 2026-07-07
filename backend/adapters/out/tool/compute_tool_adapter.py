@@ -20,6 +20,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import asyncio
 import json
@@ -51,7 +52,7 @@ class ComputeToolAdapter:
         self,
         compute: ComputePort,
         inner: ToolPort,
-        policy: ToolPolicy | None = None,
+        policy: Optional[ToolPolicy] = None,
     ) -> None:
         self._compute = compute
         self._inner = inner
@@ -59,7 +60,7 @@ class ComputeToolAdapter:
         # 缓存计算工具名集合,避免每次 execute 都调 list_operations
         self._compute_names = {spec.name for spec in compute.list_operations()}
 
-    def list_tools(self) -> list[ToolSpec]:
+    def list_tools(self) -> List[ToolSpec]:
         """合并 inner 工具 + 计算工具(inner 在前)。"""
         compute_specs = [
             ToolSpec(
@@ -71,7 +72,7 @@ class ComputeToolAdapter:
         ]
         return list(self._inner.list_tools()) + compute_specs
 
-    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         """路由:计算工具走 ComputePort,其他委托给 inner（均受 M2 策略约束）。"""
         if name in self._compute_names:
             return await self._execute_compute(name, args)
@@ -79,7 +80,7 @@ class ComputeToolAdapter:
 
     # ---- 私有 ----
 
-    async def _execute_compute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def _execute_compute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         """调 ComputePort,把 ComputeResult 翻译为 ToolResult。
 
         M2：受 ``policy.timeout_seconds`` 中心超时约束；超时返回
@@ -124,7 +125,7 @@ def _compute_result_to_tool_result(result: ComputeResult, policy: ToolPolicy) ->
     M2: ``output`` 按 ``policy.max_output_bytes`` 截断；截断时 metadata 增
     ``truncated`` / ``original_bytes`` / ``max_output_bytes``。
     """
-    metadata: dict[str, Any] = {}
+    metadata: Dict[str, Any] = {}
     if result.duration_ms is not None:
         metadata["duration_ms"] = result.duration_ms
     if result.exit_code is not None:

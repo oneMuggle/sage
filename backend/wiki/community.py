@@ -3,6 +3,7 @@
 使用 networkx 实现 Louvain 算法，检测知识图谱中的社区结构，
 并计算每个社区的凝聚度（intra-community edge density）。
 """
+from typing import List, Tuple
 
 import logging
 from dataclasses import dataclass
@@ -21,12 +22,12 @@ class CommunityInfo:
     """社区信息。"""
 
     community_id: int
-    members: list[str]  # 节点 ID 列表
+    members: List[str]  # 节点 ID 列表
     cohesion: float  # 凝聚度 (0-1)
     size: int
 
 
-def detect_communities(graph_data: GraphData) -> list[CommunityInfo]:
+def detect_communities(graph_data: GraphData) -> List[CommunityInfo]:
     """检测图谱中的社区结构。
 
     使用 Louvain 算法进行社区检测，并计算每个社区的凝聚度。
@@ -89,7 +90,7 @@ def detect_communities(graph_data: GraphData) -> list[CommunityInfo]:
     return community_infos
 
 
-def _calculate_cohesion(graph: nx.Graph, members: list[str]) -> float:
+def _calculate_cohesion(graph: nx.Graph, members: List[str]) -> float:
     """计算社区的凝聚度。
 
     凝聚度 = 社区内实际边数 / 社区内可能的最大边数
@@ -129,7 +130,7 @@ def _calculate_cohesion(graph: nx.Graph, members: list[str]) -> float:
 
 def get_communities_with_nodes(
     project_root: Path,
-) -> tuple[list[CommunityInfo], GraphData]:
+) -> Tuple[List[CommunityInfo], GraphData]:
     """获取社区信息及其对应的图谱数据。
 
     这是一个便捷函数，同时返回社区信息和图谱数据，

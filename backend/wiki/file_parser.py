@@ -2,6 +2,7 @@
 
 支持 PDF、DOCX、PPTX、HTML、Markdown 等格式的文本提取。
 """
+from typing import List, Tuple
 
 import logging
 from pathlib import Path
@@ -126,7 +127,7 @@ def _parse_html(file_path: Path) -> str:
         raise ImportError("HTML 解析需要 beautifulsoup4。请安装: pip install beautifulsoup4")
 
 
-def extract_images(file_path: Path) -> list[tuple[bytes, str]]:
+def extract_images(file_path: Path) -> List[Tuple[bytes, str]]:
     """从文档中提取图片。
 
     Args:
@@ -147,7 +148,7 @@ def extract_images(file_path: Path) -> list[tuple[bytes, str]]:
         return []
 
 
-def _extract_images_pdf(file_path: Path) -> list[tuple[bytes, str]]:
+def _extract_images_pdf(file_path: Path) -> List[Tuple[bytes, str]]:
     """从 PDF 提取图片。"""
     try:
         import fitz  # PyMuPDF
@@ -174,7 +175,7 @@ def _extract_images_pdf(file_path: Path) -> list[tuple[bytes, str]]:
         return []
 
 
-def _extract_images_docx(file_path: Path) -> list[tuple[bytes, str]]:
+def _extract_images_docx(file_path: Path) -> List[Tuple[bytes, str]]:
     """从 DOCX 提取图片。"""
     try:
         import zipfile
@@ -193,7 +194,7 @@ def _extract_images_docx(file_path: Path) -> list[tuple[bytes, str]]:
         return []
 
 
-def _extract_images_pptx(file_path: Path) -> list[tuple[bytes, str]]:
+def _extract_images_pptx(file_path: Path) -> List[Tuple[bytes, str]]:
     """从 PPTX 提取图片。"""
     try:
         import zipfile

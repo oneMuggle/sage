@@ -26,6 +26,7 @@ sage 在不同部署形态下零代码切换：
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Union
 
 import os
 import shutil
@@ -48,9 +49,9 @@ class ResolvedExecutable:
                       等），用于审计 / 日志。
     """
 
-    argv_prefix: list[str]
-    working_dir: str | None = None
-    env: dict[str, str] | None = None
+    argv_prefix: List[str]
+    working_dir: Optional[str] = None
+    env: Optional[Dict[str, str]] = None
     source: str = ""
 
 
@@ -61,7 +62,7 @@ class ExecutableNotFoundError(RuntimeError):
         tried:  按顺序尝试过的来源描述（便于诊断 yaml 配置错误）。
     """
 
-    def __init__(self, tried: list[str]) -> None:
+    def __init__(self, tried: List[str]) -> None:
         super().__init__(f"ghm executable not found. Tried: {tried}")
         self.tried = list(tried)
 
@@ -79,8 +80,8 @@ class ExecutableResolver:
                  缺失字段按 ``None`` 跳过；详见模块 docstring。
     """
 
-    config: dict[str, Any] = field(default_factory=dict)
-    _cached: ResolvedExecutable | None = field(default=None, init=False, repr=False)
+    config: Dict[str, Any] = field(default_factory=dict)
+    _cached: Optional[ResolvedExecutable] = field(default=None, init=False, repr=False)
 
     def resolve(self) -> ResolvedExecutable:
         """按优先级查找并返回首个可用入口。多次调用使用缓存。
@@ -91,7 +92,7 @@ class ExecutableResolver:
         if self._cached is not None:
             return self._cached
 
-        tried: list[str] = []
+        tried: List[str] = []
 
         # 1) 显式 exe 路径（env 覆盖优先于 yaml）
         exe = os.environ.get(_ENV_OVERRIDE) or self.config.get("executable_path")
@@ -143,7 +144,7 @@ class ExecutableResolver:
         self._cached = None
 
 
-def _is_executable(path: str | os.PathLike[str]) -> bool:
+def _is_executable(path: Union[str, os.PathLike[str]]) -> bool:
     """``True`` iff path 存在、是文件且当前用户具备执行权限。"""
     try:
         p = Path(path)

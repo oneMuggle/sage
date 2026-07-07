@@ -14,6 +14,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Tuple
 
 import asyncio
 from typing import Any
@@ -40,9 +41,9 @@ from backend.adapters.out.compute.subprocess_adapter import (
 # ---------- 通用 fixtures ----------
 
 
-def _make_config(**overrides: Any) -> dict[str, Any]:
+def _make_config(**overrides: Any) -> Dict[str, Any]:
     """生成默认 yaml-like config(可单测精细覆盖)。"""
-    cfg: dict[str, Any] = {
+    cfg: Dict[str, Any] = {
         "enabled": True,
         "timeout_seconds": 10,
         "adapter": "subprocess",
@@ -92,7 +93,7 @@ def _make_mock_proc(
     proc = MagicMock()
     if timeout:
         # 在 communicate 时永久挂起(由 wait_for timeout 触发)
-        async def hang() -> tuple[bytes, bytes]:
+        async def hang() -> Tuple[bytes, bytes]:
             await asyncio.sleep(100)
             return (b"", b"")
 
@@ -250,9 +251,9 @@ async def test_execute_per_request_timeout_overrides(
     """ComputeRequest.timeout_ms 优先于 yaml.timeout_seconds。"""
     adapter = SubprocessComputeAdapter(_make_config(timeout_seconds=100))
 
-    captured_timeouts: list[float] = []
+    captured_timeouts: List[float] = []
 
-    async def capturing_wait_for(coro: Any, timeout: float) -> tuple[bytes, bytes]:
+    async def capturing_wait_for(coro: Any, timeout: float) -> Tuple[bytes, bytes]:
         captured_timeouts.append(timeout)
         return await coro
 
@@ -437,7 +438,7 @@ async def test_argv_includes_subcommand_and_flags(
     """spawn argv 应包含:resolver 前缀 + subcommand + flags + --json。"""
     adapter = SubprocessComputeAdapter(_make_config())
 
-    captured_argv: list[str] = []
+    captured_argv: List[str] = []
     mock_proc = _make_mock_proc(stdout=b"{}", return_code=0)
 
     async def capture_exec(*argv: str, **_kwargs: Any) -> Any:

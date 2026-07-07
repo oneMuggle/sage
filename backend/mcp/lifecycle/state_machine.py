@@ -9,6 +9,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Set
 
 from enum import Enum
 
@@ -30,7 +31,7 @@ class MCPState(str, Enum):
 
 
 # 合法的状态转换
-VALID_TRANSITIONS: dict[MCPState, set[MCPState]] = {
+VALID_TRANSITIONS: Dict[MCPState, Set[MCPState]] = {
     MCPState.CREATED: {MCPState.INITIALIZING},
     MCPState.INITIALIZING: {MCPState.READY, MCPState.SHUTDOWN},
     MCPState.READY: {MCPState.RUNNING, MCPState.SHUTDOWN},
@@ -54,7 +55,7 @@ class MCPStateMachine:
 
     def __init__(self):
         self._state = MCPState.initial()
-        self._history: list[MCPState] = [self._state]
+        self._history: List[MCPState] = [self._state]
 
     @property
     def state(self) -> MCPState:
@@ -62,7 +63,7 @@ class MCPStateMachine:
         return self._state
 
     @property
-    def history(self) -> list[MCPState]:
+    def history(self) -> List[MCPState]:
         """状态历史。"""
         return self._history.copy()
 

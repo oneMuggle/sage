@@ -2,6 +2,7 @@
 
 实现 Markdown 内容的智能分块，以及嵌入向量的 HTTP 请求构建和响应解析。
 """
+from typing import Dict, List
 
 import json
 from dataclasses import dataclass
@@ -27,11 +28,11 @@ class EmbedHttpRequest:
 
     url: str
     method: str  # "POST"
-    headers: dict[str, str]
+    headers: Dict[str, str]
     body: dict
 
 
-def chunk_markdown(content: str, target_chunk_size: int = DEFAULT_CHUNK_SIZE) -> list[str]:
+def chunk_markdown(content: str, target_chunk_size: int = DEFAULT_CHUNK_SIZE) -> List[str]:
     """将 Markdown 内容分块。
 
     按段落分割，合并短段落，分割长段落，保持语义完整性。
@@ -81,7 +82,7 @@ def chunk_markdown(content: str, target_chunk_size: int = DEFAULT_CHUNK_SIZE) ->
     return chunks
 
 
-def _split_long_paragraph(text: str, chunk_size: int, overlap: int) -> list[str]:
+def _split_long_paragraph(text: str, chunk_size: int, overlap: int) -> List[str]:
     """分割长段落。
 
     使用滑动窗口分割长文本，保持重叠以保持上下文。
@@ -111,7 +112,7 @@ def _split_long_paragraph(text: str, chunk_size: int, overlap: int) -> list[str]
     return chunks
 
 
-def build_embed_request(config: EmbeddingConfig, texts: list[str]) -> EmbedHttpRequest:
+def build_embed_request(config: EmbeddingConfig, texts: List[str]) -> EmbedHttpRequest:
     """构建嵌入 HTTP 请求。
 
     Args:
@@ -132,7 +133,7 @@ def build_embed_request(config: EmbeddingConfig, texts: list[str]) -> EmbedHttpR
     return EmbedHttpRequest(url=url, method="POST", headers=headers, body=body)
 
 
-def parse_embed_response(body: str, expected_dim: int = 0) -> list[list[float]]:
+def parse_embed_response(body: str, expected_dim: int = 0) -> List[List[float]]:
     """解析嵌入 HTTP 响应。
 
     Args:

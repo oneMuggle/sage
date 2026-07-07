@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import logging
 from typing import Any
@@ -109,8 +110,8 @@ class VectorStore:
         self,
         query: str,
         top_k: int = 10,
-        memory_type: str | None = None,
-    ) -> list[dict[str, Any]]:
+        memory_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """向量相似度搜索
 
         Args:

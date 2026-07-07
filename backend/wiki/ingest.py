@@ -2,6 +2,7 @@
 
 实现源文档的 LLM 驱动 ingest：复制 → 缓存检查 → Step1 分析 → Step2 写入 → 嵌入 → 更新缓存。
 """
+from typing import Dict, List, Optional
 
 import hashlib
 import json
@@ -48,9 +49,9 @@ async def ingest_source(
     config: IngestConfig,
     project_root: Path,
     source_file_path: Path,
-    llm_call: Callable[[list[dict], float], Any],
-    http_post: Callable[[str, dict[str, str], dict], Any],
-    progress_callback: Callable[[IngestProgress], None] | None = None,
+    llm_call: Callable[[List[dict], float], Any],
+    http_post: Callable[[str, Dict[str, str], dict], Any],
+    progress_callback: Optional[Callable[[IngestProgress], None]] = None,
 ) -> IngestResult:
     """Ingest 源文档。
 
@@ -66,7 +67,7 @@ async def ingest_source(
         IngestResult: Ingest 结果
     """
 
-    def _report(stage: str, percent: int, message: str | None = None) -> None:
+    def _report(stage: str, percent: int, message: Optional[str] = None) -> None:
         if progress_callback:
             progress_callback(IngestProgress(stage=stage, percent=percent, message=message))
 
@@ -257,7 +258,7 @@ def _parse_analysis_json(content: str) -> Analysis:
     )
 
 
-def _load_cache(project_root: Path) -> dict[str, CacheEntry]:
+def _load_cache(project_root: Path) -> Dict[str, CacheEntry]:
     """加载 ingest 缓存。"""
     cache_file = project_root / ".llm-wiki" / "ingest-cache.json"
 
@@ -275,7 +276,7 @@ def _load_cache(project_root: Path) -> dict[str, CacheEntry]:
     }
 
 
-def _save_cache(project_root: Path, cache: dict[str, CacheEntry]) -> None:
+def _save_cache(project_root: Path, cache: Dict[str, CacheEntry]) -> None:
     """保存 ingest 缓存。"""
     cache_file = project_root / ".llm-wiki" / "ingest-cache.json"
     cache_file.parent.mkdir(parents=True, exist_ok=True)

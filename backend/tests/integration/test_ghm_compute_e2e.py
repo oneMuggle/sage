@@ -10,6 +10,7 @@ TOOL message 落库 + tool_invoked 事件 emit。
 """
 
 from __future__ import annotations
+from typing import Dict
 
 import os
 from pathlib import Path
@@ -64,7 +65,7 @@ requires_ghm = pytest.mark.skipif(
 )
 
 
-def _make_ghm_config() -> dict[str, Any]:
+def _make_ghm_config() -> Dict[str, Any]:
     """E2E 用的 ghm 配置:走 python_module 回退,操作只含 compute_shock。"""
     return {
         "enabled": True,

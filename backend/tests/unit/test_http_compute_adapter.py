@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 import pytest
 from sage_core import ComputeRequest
@@ -16,7 +16,7 @@ from sage_core import ComputeRequest
 from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
 
 
-def _make_config() -> dict[str, Any]:
+def _make_config() -> Dict[str, Any]:
     return {
         "adapter": "http",
         "http": {"base_url": "http://localhost:8000", "timeout_seconds": 30},

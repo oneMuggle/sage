@@ -20,6 +20,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Tuple
 
 import hashlib
 import logging
@@ -36,7 +37,7 @@ from .validation import sanitize_for_logging
 logger = logging.getLogger(__name__)
 
 
-def _parse_allowed_tools(tools_str: Any) -> tuple[str, ...]:
+def _parse_allowed_tools(tools_str: Any) -> Tuple[str, ...]:
     """解析 allowed-tools 字段: 空格分隔字符串 → tuple (去空, 保序)。
 
     Args:
@@ -51,7 +52,7 @@ def _parse_allowed_tools(tools_str: Any) -> tuple[str, ...]:
     return tuple(part for part in tools_str.split() if part)
 
 
-def discover_skill_md_dirs() -> list[Path]:
+def discover_skill_md_dirs() -> List[Path]:
     """按优先级返回 SKILL.md 搜索根列表。
 
     优先级:
@@ -61,7 +62,7 @@ def discover_skill_md_dirs() -> list[Path]:
 
     不存在的目录会被过滤掉 (而不是抛错), 调用方拿到的列表都是可直接扫描的。
     """
-    roots: list[Path] = []
+    roots: List[Path] = []
 
     env_dir = os.environ.get("SAGE_SKILLS_DIR", "").strip()
     if env_dir:
@@ -93,18 +94,18 @@ class SkillMdHotLoader:
     def __init__(
         self,
         registry: SkillRegistry,
-        dirs: list[Path] | None = None,
-        gating_ctx: GatingContext | None = None,
+        dirs: Optional[List[Path]] = None,
+        gating_ctx: Optional[GatingContext] = None,
     ) -> None:
         self._registry = registry
-        self._dirs: list[Path] = list(dirs or [])
-        self._file_hashes: dict[str, str] = {}
-        self._loaded_paths: dict[str, str] = {}  # skill_name -> file_path str
+        self._dirs: List[Path] = list(dirs or [])
+        self._file_hashes: Dict[str, str] = {}
+        self._loaded_paths: Dict[str, str] = {}  # skill_name -> file_path str
         self._gating_ctx = gating_ctx  # None = 不门控 (v1 行为)
 
     # ===== scan / load =====
 
-    def scan_and_load(self) -> tuple[int, int]:
+    def scan_and_load(self) -> Tuple[int, int]:
         """扫描所有 dirs, 加载新 SKILL.md。返回 ``(loaded_count, skipped_count)``。
 
         支持两种文件形态 (agentskills.io spec):
@@ -288,9 +289,9 @@ class SkillMdHotLoader:
 
     # ===== hot reload =====
 
-    def check_for_updates(self) -> list[str]:
+    def check_for_updates(self) -> List[str]:
         """扫所有已加载文件, 返回内容变更的 skill 名称列表。"""
-        updated: list[str] = []
+        updated: List[str] = []
         for path_str, old_hash in list(self._file_hashes.items()):
             path = Path(path_str)
             if not path.exists():
@@ -322,7 +323,7 @@ class SkillMdHotLoader:
                 reloaded += 1
         return reloaded
 
-    def get_stats(self) -> dict[str, Any]:
+    def get_stats(self) -> Dict[str, Any]:
         return {
             "loaded_skills": len(self._loaded_paths),
             "watched_files": len(self._file_hashes),
@@ -337,8 +338,8 @@ class SkillMdHotLoader:
 
 def register_skill_md_skills(
     registry: SkillRegistry,
-    dirs: list[str] | None = None,
-    gating_ctx: GatingContext | None = None,
+    dirs: Optional[List[str]] = None,
+    gating_ctx: Optional[GatingContext] = None,
 ) -> int:
     """便捷封装: 从 ``dirs`` (或 ``discover_skill_md_dirs()``) 加载 SKILL.md。
 

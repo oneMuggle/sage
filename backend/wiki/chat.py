@@ -2,6 +2,7 @@
 
 实现混合检索（token + 向量）→ RRF 融合 → LLM 综合回答。
 """
+from typing import Dict, List, Tuple
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -40,8 +41,8 @@ async def chat_with_wiki(
     config: ChatConfig,
     project_root: Path,
     query: str,
-    llm_call: Callable[[list[dict], float], Any],
-    http_post: Callable[[str, dict[str, str], dict], Any],
+    llm_call: Callable[[List[dict], float], Any],
+    http_post: Callable[[str, Dict[str, str], dict], Any],
 ) -> WikiChatOutcome:
     """与 Wiki 聊天（非流式）。
 
@@ -89,8 +90,8 @@ async def _build_chat_context(
     config: ChatConfig,
     project_root: Path,
     query: str,
-    http_post: Callable[[str, dict[str, str], dict], Any],
-) -> tuple[str, list[str], RetrievalStats]:
+    http_post: Callable[[str, Dict[str, str], dict], Any],
+) -> Tuple[str, List[str], RetrievalStats]:
     """构建聊天上下文。
 
     Returns:

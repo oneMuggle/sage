@@ -19,6 +19,7 @@ PG3.1 落地：按 spec § 6.1 注册 5 Counter + 3 Histogram + 1 Gauge，全部
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -48,7 +49,7 @@ class PrometheusMetricAdapter:
     # 1 Gauge
     ACTIVE_SESSIONS = "sage_active_sessions"
 
-    def __init__(self, registry: CollectorRegistry | None = None) -> None:
+    def __init__(self, registry: Optional[CollectorRegistry] = None) -> None:
         self._registry = registry or CollectorRegistry()
 
         # ---------- 5 Counter ----------
@@ -114,7 +115,7 @@ class PrometheusMetricAdapter:
     # MetricPort 入口（counter/histogram/gauge）
     # ====================================================================== #
 
-    def counter(self, name: str, labels: dict[str, str]) -> None:
+    def counter(self, name: str, labels: Dict[str, str]) -> None:
         """按指标名路由到具体 Counter。未知指标名 → 静默忽略。"""
         if name == self.HTTP_REQUESTS_TOTAL:
             self._http_requests.labels(**labels).inc()
@@ -134,7 +135,7 @@ class PrometheusMetricAdapter:
             pass
         # 其它未知指标：同样 no-op，保持 MetricPort 协议稳定
 
-    def histogram(self, name: str, value: float, labels: dict[str, str]) -> None:
+    def histogram(self, name: str, value: float, labels: Dict[str, str]) -> None:
         """按指标名路由到具体 Histogram。未知指标名 → 静默忽略。"""
         if name == self.HTTP_REQUEST_DURATION:
             self._http_request_duration.labels(**labels).observe(value)
@@ -145,7 +146,7 @@ class PrometheusMetricAdapter:
             self._react_steps.observe(value)
         # 其它：no-op
 
-    def gauge(self, name: str, value: float, labels: dict[str, str]) -> None:
+    def gauge(self, name: str, value: float, labels: Dict[str, str]) -> None:
         """按指标名路由到具体 Gauge。未知指标名 → 静默忽略。"""
         if name == self.ACTIVE_SESSIONS:
             self._active_sessions.set(value)

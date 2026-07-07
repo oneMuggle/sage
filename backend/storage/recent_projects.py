@@ -4,6 +4,7 @@
 # For cherry-pick to release/win7 (Pydantic 1.x): replace with .parse_obj() and .dict().
 
 from __future__ import annotations
+from typing import List
 
 import contextlib
 import json
@@ -41,7 +42,7 @@ def recent_projects_file() -> Path:
     return d / "recent-projects.json"
 
 
-def _read_raw() -> list[dict]:
+def _read_raw() -> List[dict]:
     f = recent_projects_file()
     if not f.exists():
         return []
@@ -63,8 +64,8 @@ def _read_raw() -> list[dict]:
     return data
 
 
-def load_recent() -> list[RecentProject]:
-    items: list[RecentProject] = []
+def load_recent() -> List[RecentProject]:
+    items: List[RecentProject] = []
     for raw in _read_raw():
         try:
             items.append(RecentProject.model_validate(raw))
@@ -73,7 +74,7 @@ def load_recent() -> list[RecentProject]:
     return items
 
 
-def save_recent(items: list[RecentProject]) -> None:
+def save_recent(items: List[RecentProject]) -> None:
     """Atomic write: serialize to tmp file then rename."""
     f = recent_projects_file()
     tmp = f.with_suffix(f.suffix + ".tmp")

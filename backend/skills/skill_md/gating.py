@@ -15,6 +15,7 @@
 """
 
 from __future__ import annotations
+from typing import FrozenSet, List, Optional, Set, Tuple
 
 import os
 import shutil
@@ -31,15 +32,15 @@ class GatingContext:
     """门控评估所需的环境快照。"""
 
     platform: str
-    available_bins: frozenset[str]
-    available_env: frozenset[str]
-    available_config: frozenset[str]
+    available_bins: FrozenSet[str]
+    available_env: FrozenSet[str]
+    available_config: FrozenSet[str]
 
     @classmethod
     def from_env(
         cls,
-        platform: str | None = None,
-        bin_whitelist: list[str] | None = None,
+        platform: Optional[str] = None,
+        bin_whitelist: Optional[List[str]] = None,
     ) -> GatingContext:
         """从当前环境构造 GatingContext。
 
@@ -56,7 +57,7 @@ class GatingContext:
                 platform = "linux"
 
         # 探测二进制
-        available_bins: set[str] = set()
+        available_bins: Set[str] = set()
         if bin_whitelist:
             for bin_name in bin_whitelist:
                 if shutil.which(bin_name) is not None:
@@ -75,7 +76,7 @@ class GatingResult:
     """门控评估结果。"""
 
     allowed: bool
-    reasons: tuple[str, ...] = ()
+    reasons: Tuple[str, ...] = ()
     always_override: bool = False
 
 
@@ -92,7 +93,7 @@ def evaluate_gating(doc: SkillMdDocument, ctx: GatingContext) -> GatingResult:
     Returns:
         GatingResult: 评估结果
     """
-    reasons: list[str] = []
+    reasons: List[str] = []
 
     # always=True 跳过门控
     if doc.always:
@@ -138,8 +139,8 @@ def evaluate_gating(doc: SkillMdDocument, ctx: GatingContext) -> GatingResult:
 
 
 def build_gating_context(
-    platform: str | None = None,
-    bin_whitelist: list[str] | None = None,
+    platform: Optional[str] = None,
+    bin_whitelist: Optional[List[str]] = None,
 ) -> GatingContext:
     """构造门控上下文。bin 探测开销由调用方控制。
 

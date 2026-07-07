@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -19,7 +20,7 @@ class ToolSchema:
 
     name: str  # 工具名称
     description: str  # 工具描述
-    parameters: dict[str, Any] = field(default_factory=dict)  # JSON Schema 格式参数
+    parameters: Dict[str, Any] = field(default_factory=dict)  # JSON Schema 格式参数
 
 
 @dataclass
@@ -28,9 +29,9 @@ class ToolResult:
 
     success: bool  # 是否成功
     content: Any = None  # 返回内容
-    error: str | None = None  # 错误信息
+    error: Optional[str] = None  # 错误信息
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
         result = {"success": self.success}
         if self.content is not None:
@@ -81,8 +82,8 @@ class BaseTool(ABC):
         ``_enforce_workspace`` 在 ``execute()`` 入口调用做路径守卫。
     """
 
-    def __init__(self, policy: ToolPolicy | None = None) -> None:
-        self._schema: ToolSchema | None = None
+    def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
+        self._schema: Optional[ToolSchema] = None
         self._policy = policy or ToolPolicy()
 
     def _enforce_workspace(self, path: str) -> ToolResult | None:

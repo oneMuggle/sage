@@ -22,6 +22,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Tuple
 
 import asyncio
 from typing import Any
@@ -38,8 +39,8 @@ class InprocToolAdapter:
 
     def __init__(
         self,
-        registry: _ToolRegistry | None = None,
-        policy: ToolPolicy | None = None,
+        registry: Optional[_ToolRegistry] = None,
+        policy: Optional[ToolPolicy] = None,
     ) -> None:
         # 接受外部注入（用于测试）或使用新建 registry
         self._registry = registry if registry is not None else _ToolRegistry()
@@ -51,9 +52,9 @@ class InprocToolAdapter:
 
             register_all_tools(self._registry, policy=self._policy)
 
-    def list_tools(self) -> list[ToolSpec]:
+    def list_tools(self) -> List[ToolSpec]:
         """返回所有已注册工具的 spec（按注册顺序）。"""
-        specs: list[ToolSpec] = []
+        specs: List[ToolSpec] = []
         for schema in self._registry.list():
             specs.append(
                 ToolSpec(
@@ -64,7 +65,7 @@ class InprocToolAdapter:
             )
         return specs
 
-    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         """按名称执行工具并返回端口侧的 ``ToolResult``。
 
         M2 增强：
@@ -113,7 +114,7 @@ class InprocToolAdapter:
         output_str = "" if raw.content is None else str(raw.content)
         truncated_output, truncation_meta = _truncate_output(output_str, self._policy)
 
-        metadata: dict[str, Any] | None = None
+        metadata: Optional[Dict[str, Any]] = None
         if truncation_meta:
             metadata = dict(truncation_meta)
 
@@ -126,7 +127,7 @@ class InprocToolAdapter:
         )
 
 
-def _truncate_output(output: str, policy: ToolPolicy) -> tuple[str, dict[str, Any]]:
+def _truncate_output(output: str, policy: ToolPolicy) -> Tuple[str, Dict[str, Any]]:
     """按 ``policy.max_output_bytes``（utf-8 字节）截断 output。
 
     Returns:

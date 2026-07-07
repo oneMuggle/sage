@@ -23,7 +23,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from sage_core import SkillResult, SkillSpec
 from sage_core.repositories import SkillPort  # noqa: F401  (structural typing target)
@@ -47,7 +47,7 @@ class InprocSkillAdapter:
     用于前端折叠展示 SKILL.md 的 body。
     """
 
-    def __init__(self, registry: _SkillRegistry | None = None) -> None:
+    def __init__(self, registry: Optional[_SkillRegistry] = None) -> None:
         # 接受外部注入(用于测试)或使用新建 registry 并装载 builtin
         if registry is not None:
             self._registry = registry
@@ -79,9 +79,9 @@ class InprocSkillAdapter:
             self._skill_dirs = []
             self._skill_importer = None
         # enabled 状态: 未登记视为 enabled
-        self._enabled: dict[str, bool] = {}
+        self._enabled: Dict[str, bool] = {}
         # usage_count: 进程内累计,重启归零
-        self._usage_count: dict[str, int] = {}
+        self._usage_count: Dict[str, int] = {}
         # M10: slash command 索引 (从 registry 一次性构建)
         from backend.skills.skill_md.slash_registry import SlashCommandRegistry
 
@@ -91,9 +91,9 @@ class InprocSkillAdapter:
 
     # ========== SkillPort 协议方法 ==========
 
-    def list_skills(self) -> list[SkillSpec]:
+    def list_skills(self) -> List[SkillSpec]:
         """返回所有已注册技能的 spec(按注册顺序)。"""
-        specs: list[SkillSpec] = []
+        specs: List[SkillSpec] = []
         for schema in self._registry.list():
             specs.append(
                 SkillSpec(
@@ -110,7 +110,7 @@ class InprocSkillAdapter:
         self,
         name: str,
         action: str,
-        args: dict[str, Any],
+        args: Dict[str, Any],
     ) -> SkillResult:
         """执行技能。
 
@@ -181,7 +181,7 @@ class InprocSkillAdapter:
     async def execute_command(
         self,
         command: str,
-        args: list[str] | tuple[str, ...] = (),
+        args: Union[List[str], Tuple[str, ...]] = (),
     ) -> SkillResult:
         """通过 slash command 触发 SKILL.md 技能 (M10)。
 
@@ -212,7 +212,7 @@ class InprocSkillAdapter:
             error=result.error,
         )
 
-    def list_slash_commands(self) -> list[str]:
+    def list_slash_commands(self) -> List[str]:
         """列出所有已注册的 slash command (M10)。
 
         用于前端自动补全 / chat 输入提示。
@@ -221,7 +221,7 @@ class InprocSkillAdapter:
 
     # ========== Skills management: SKILL.md 删除 (PR-A) ==========
 
-    def delete_skill_md(self, name: str) -> dict[str, Any]:
+    def delete_skill_md(self, name: str) -> Dict[str, Any]:
         """Public API: 物理删除一个 SKILL.md 技能 (委托给 SkillMdDeleter)。
 
         仅可删 SKILL.md 技能 (source='skillmd')。builtin 拒绝 — 由
@@ -250,7 +250,7 @@ class InprocSkillAdapter:
 
     # ========== PR-C: Skills load-new (rescan + import) ==========
 
-    def rescan_skill_mds(self) -> dict[str, Any]:
+    def rescan_skill_mds(self) -> Dict[str, Any]:
         """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载新 SKILL.md。
 
         Returns:
@@ -280,7 +280,7 @@ class InprocSkillAdapter:
             "total_loaded": loaded_count,
         }
 
-    async def import_skill_mds(self, files: list[Any]) -> dict[str, list[dict[str, str]]]:
+    async def import_skill_mds(self, files: List[Any]) -> Dict[str, List[Dict[str, str]]]:
         """异步包装 SkillMdImporter.import_files()。"""
         if self._skill_importer is None:
             return {
@@ -291,7 +291,7 @@ class InprocSkillAdapter:
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
 
-    def list_skills_extended(self) -> list[dict[str, Any]]:
+    def list_skills_extended(self) -> List[Dict[str, Any]]:
         """列出所有技能 + 扩展字段 (供路由层序列化到前端)。
 
         返回的 dict 包含 SkillSpec 全字段 + 扩展字段:
@@ -309,12 +309,12 @@ class InprocSkillAdapter:
         # 延迟导入避免循环 (skill_md 依赖 base, base 在更早的初始化阶段)
         from backend.skills.skill_md.skill import SkillMdSkill
 
-        result: list[dict[str, Any]] = []
+        result: List[Dict[str, Any]] = []
         for schema in self._registry.list():
             skill = self._registry.get(schema.name)
             assert skill is not None  # list() 与 get() 同源, exists 已 guard
             is_skillmd = isinstance(skill, SkillMdSkill)
-            item: dict[str, Any] = {
+            item: Dict[str, Any] = {
                 "name": schema.name,
                 "description": schema.description,
                 "triggers": list(schema.triggers),

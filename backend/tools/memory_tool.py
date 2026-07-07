@@ -2,7 +2,7 @@
 Memory 工具 - 记忆系统操作
 """
 
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from backend.domain.tool_policy import ToolPolicy
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class MemorySearchTool(BaseTool):
     """记忆搜索工具"""
 
-    def __init__(self, memory_manager=None, policy: ToolPolicy | None = None) -> None:
+    def __init__(self, memory_manager=None, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
         self.memory = memory_manager
 
@@ -83,7 +83,7 @@ class MemorySearchTool(BaseTool):
 class MemorySaveTool(BaseTool):
     """记忆保存工具"""
 
-    def __init__(self, memory_manager=None, policy: ToolPolicy | None = None) -> None:
+    def __init__(self, memory_manager=None, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
         self.memory = memory_manager
 

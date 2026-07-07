@@ -9,6 +9,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 from dataclasses import dataclass
 from enum import Enum
@@ -43,15 +44,15 @@ class LLMError(Exception):
 
     type: LLMErrorType
     message: str
-    status_code: int | None = None
-    retry_after: int | None = None  # 仅 RATE_LIMITED 时使用（秒）
+    status_code: Optional[int] = None
+    retry_after: Optional[int] = None  # 仅 RATE_LIMITED 时使用（秒）
 
     def __post_init__(self) -> None:
         # dataclass 不会自动调用 super().__init__，手动把 message 传给
         # Exception，让 str(err) / err.args / traceback 能正确携带信息。
         super().__init__(self.message)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """序列化为 API 响应格式。"""
         return {
             "type": self.type.value,

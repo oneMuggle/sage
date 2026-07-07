@@ -12,6 +12,7 @@ claw-code ``concept.md`` §4 原则 2「显式限制」：byte/turn/glob caps + 
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 from dataclasses import dataclass
 from typing import Any
@@ -43,10 +44,10 @@ class ToolPolicy:
     max_result_items: int = _DEFAULT_MAX_RESULT_ITEMS
     max_read_bytes: int = _DEFAULT_MAX_READ_BYTES
     max_tool_calls_per_run: int = _DEFAULT_MAX_TOOL_CALLS_PER_RUN
-    workspace_root: str | None = None
+    workspace_root: Optional[str] = None
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> ToolPolicy:
+    def from_config(cls, cfg: Dict[str, Any]) -> ToolPolicy:
         """从已加载的配置 dict 构造，缺字段回退默认值。
 
         调用方负责把 yaml/JSON 解析成 dict；本方法只读 dict 字段。

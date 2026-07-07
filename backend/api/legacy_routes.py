@@ -7,6 +7,7 @@ API 路由定义
 """
 
 from __future__ import annotations
+from typing import List
 
 import asyncio
 
@@ -664,7 +665,7 @@ async def rescan_skills():
 
 
 @router.post("/skills/import")
-async def import_skills(files: list[UploadFile] = File(default=[])):
+async def import_skills(files: List[UploadFile] = File(default=[])):
     """导入 SKILL.md 文件 (multipart)。
 
     - 200 + ``{"imported": [{"name", "path"}], "skipped": [{"name", "reason"}]}``

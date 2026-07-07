@@ -7,6 +7,7 @@ Episodic Memory - 情景记忆模块
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import json
 import time
@@ -40,8 +41,8 @@ class EpisodicMemory:
         self,
         content: str,
         importance: int = 5,
-        metadata: dict[str, Any] | None = None,
-        session_id: str | None = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
         memory_type: str = "conversation",
     ) -> str:
         """
@@ -101,8 +102,8 @@ class EpisodicMemory:
         return content[:max_length] + "..."
 
     def search(
-        self, query: str, limit: int = 10, min_importance: int = 1, memory_type: str | None = None
-    ) -> list[dict[str, Any]]:
+        self, query: str, limit: int = 10, min_importance: int = 1, memory_type: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         搜索情景记忆
 
@@ -172,7 +173,7 @@ class EpisodicMemory:
 
         return results
 
-    def get_recent(self, limit: int = 10, session_id: str | None = None) -> list[dict[str, Any]]:
+    def get_recent(self, limit: int = 10, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         获取最近的记忆
 
@@ -219,7 +220,7 @@ class EpisodicMemory:
 
         return results
 
-    def get_by_session(self, session_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    def get_by_session(self, session_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         """
         获取指定会话的记忆
 
@@ -279,7 +280,7 @@ class EpisodicMemory:
 
         conn.commit()
 
-    def get_by_id(self, memory_id: str) -> dict[str, Any] | None:
+    def get_by_id(self, memory_id: str) -> Dict[str, Any] | None:
         """
         根据 ID 获取记忆
 

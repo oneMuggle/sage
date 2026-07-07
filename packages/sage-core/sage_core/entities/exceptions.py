@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, Optional
 
 
 class SageBaseError(Exception):
@@ -22,14 +22,14 @@ class SageBaseError(Exception):
         self,
         message: str,
         code: str = "SAGE_ERROR",
-        details: dict[str, Any] | None = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.code = code
-        self.details: dict[str, Any] = details or {}
+        self.details: Dict[str, Any] = details or {}
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式。"""
         return {
             "error": self.code,
@@ -49,7 +49,7 @@ class AgentError(SageBaseError):
     def __init__(
         self,
         message: str,
-        details: dict[str, Any] | None = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(message=message, code="AGENT_ERROR", details=details)
 
@@ -61,9 +61,9 @@ class ToolCallError(SageBaseError):
         self,
         tool_name: str,
         message: str,
-        details: dict[str, Any] | None = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> None:
-        merged: dict[str, Any] = dict(details or {})
+        merged: Dict[str, Any] = dict(details or {})
         merged["tool_name"] = tool_name
         super().__init__(
             message=f"工具 '{tool_name}' 执行失败: {message}",
@@ -78,9 +78,9 @@ class MaxIterationsError(SageBaseError):
     def __init__(
         self,
         max_iterations: int,
-        details: dict[str, Any] | None = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> None:
-        merged: dict[str, Any] = dict(details or {})
+        merged: Dict[str, Any] = dict(details or {})
         merged["max_iterations"] = max_iterations
         super().__init__(
             message=f"Agent 循环已达到最大迭代次数 ({max_iterations})",
@@ -100,9 +100,9 @@ class SageMemoryError(SageBaseError):
         self,
         operation: str,
         message: str,
-        details: dict[str, Any] | None = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> None:
-        merged: dict[str, Any] = dict(details or {})
+        merged: Dict[str, Any] = dict(details or {})
         merged["operation"] = operation
         super().__init__(
             message=f"记忆操作 '{operation}' 失败: {message}",
@@ -117,9 +117,9 @@ class SessionNotFoundError(SageBaseError):
     def __init__(
         self,
         session_id: str,
-        details: dict[str, Any] | None = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> None:
-        merged: dict[str, Any] = dict(details or {})
+        merged: Dict[str, Any] = dict(details or {})
         merged["session_id"] = session_id
         super().__init__(
             message=f"会话未找到: {session_id}",
@@ -135,9 +135,9 @@ class ValidationError(SageBaseError):
         self,
         field: str,
         message: str,
-        details: dict[str, Any] | None = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> None:
-        merged: dict[str, Any] = dict(details or {})
+        merged: Dict[str, Any] = dict(details or {})
         merged["field"] = field
         super().__init__(
             message=f"验证失败 [{field}]: {message}",
@@ -153,9 +153,9 @@ class SecurityError(SageBaseError):
         self,
         threat_type: str,
         message: str,
-        details: dict[str, Any] | None = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> None:
-        merged: dict[str, Any] = dict(details or {})
+        merged: Dict[str, Any] = dict(details or {})
         merged["threat_type"] = threat_type
         super().__init__(
             message=f"安全威胁 [{threat_type}]: {message}",

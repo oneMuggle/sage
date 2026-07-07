@@ -9,6 +9,7 @@ DI 装配:用 ``hex_sessions_client`` fixture override  ``get_session_service``
 """
 
 from __future__ import annotations
+from typing import Dict
 
 import os
 from typing import Any
@@ -72,7 +73,7 @@ async def test_post_sessions_creates_and_returns_dict(hex_sessions_client):
     ac, _ = hex_sessions_client
     resp = await ac.post(f"{PREFIX}/sessions", json={"title": "我的新会话"})
     assert resp.status_code == 200
-    data: dict[str, Any] = resp.json()
+    data: Dict[str, Any] = resp.json()
     assert "id" in data
     assert data["title"] == "我的新会话"
 

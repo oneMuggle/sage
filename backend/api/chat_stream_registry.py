@@ -18,6 +18,7 @@ Chat 流注册表 (I2: 拆分 create/attach,避免 LLM 被调两次)
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 import asyncio
 import contextlib
@@ -48,7 +49,7 @@ class StreamEntry:
     """
 
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=1000))
-    task: asyncio.Task | None = None
+    task: Optional[asyncio.Task] = None
     status: str = "pending"
     created_at: float = field(default_factory=time.time)
 
@@ -65,13 +66,13 @@ class StreamRegistry:
     """
 
     def __init__(self) -> None:
-        self._entries: dict[str, StreamEntry] = {}
+        self._entries: Dict[str, StreamEntry] = {}
 
     async def create(
         self,
         stream_id: str,
         queue_maxsize: int = 1000,
-        producer: ProducerFn | None = None,
+        producer: Optional[ProducerFn] = None,
     ) -> StreamEntry:
         """注册新 stream,可选启动 producer task。
 

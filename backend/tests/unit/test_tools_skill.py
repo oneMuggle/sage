@@ -16,6 +16,7 @@
 """
 
 from __future__ import annotations
+from typing import List
 
 import os
 import textwrap
@@ -117,7 +118,7 @@ def test_ensure_dirs_skips_init_creation_when_exists(tmp_path) -> None:
 def test_ensure_dirs_called_on_every_skill_dir(tmp_path, monkeypatch) -> None:
     """_ensure_dirs 应在构造时对每个 skill_dir 调用 makedirs。"""
     dirs = [str(tmp_path / f"d{i}") for i in range(3)]
-    called: list[str] = []
+    called: List[str] = []
     real_makedirs = os.makedirs
     monkeypatch.setattr(
         "os.makedirs",

@@ -3,6 +3,7 @@
 使用视觉 LLM 为图片生成描述，支持多模态 Ingest。
 支持 OpenAI GPT-4V、Anthropic Claude 3 with vision 等。
 """
+from typing import Dict, Optional
 
 import base64
 import hashlib
@@ -52,7 +53,7 @@ def _get_cache_path(project_root: Path) -> Path:
     return project_root / ".llm-wiki" / "vision-cache.json"
 
 
-def _load_cache(project_root: Path) -> dict[str, str]:
+def _load_cache(project_root: Path) -> Dict[str, str]:
     """加载视觉描述缓存。"""
     cache_path = _get_cache_path(project_root)
     if not cache_path.exists():
@@ -64,7 +65,7 @@ def _load_cache(project_root: Path) -> dict[str, str]:
         return {}
 
 
-def _save_cache(project_root: Path, cache: dict[str, str]) -> None:
+def _save_cache(project_root: Path, cache: Dict[str, str]) -> None:
     """保存视觉描述缓存。"""
     cache_path = _get_cache_path(project_root)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,7 +89,7 @@ async def caption_image(
     config: VisionConfig,
     image_data: bytes,
     image_path: str = "",
-    project_root: Path | None = None,
+    project_root: Optional[Path] = None,
     context: str = "",
 ) -> ImageCaption:
     """为图片生成描述。

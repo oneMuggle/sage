@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Dict, List, Protocol
 
 from sage_core import Message
 
@@ -29,7 +29,7 @@ class StoragePort(Protocol):
         self,
         session_id: str,
         limit: int = 50,
-    ) -> list[Message]:
+    ) -> List[Message]:
         """按时间正序获取会话的最新若干条消息。"""
         ...
 
@@ -37,11 +37,11 @@ class StoragePort(Protocol):
         """创建新会话，返回会话 ID。"""
         ...
 
-    async def list_sessions(self) -> list[dict[str, Any]]:
+    async def list_sessions(self) -> List[Dict[str, Any]]:
         """列出当前所有会话（字典形式，键集由实现定义）。"""
         ...
 
-    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+    async def get_session(self, session_id: str) -> Dict[str, Any] | None:
         """按 ID 取单个会话；不存在返 ``None``（路由层映射 404）。"""
         ...
 

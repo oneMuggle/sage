@@ -21,6 +21,7 @@ References:
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import hashlib
 import json
@@ -56,7 +57,7 @@ class Assertion:
     type: AssertionType
     statement: str
     confidence: float  # 0.0 - 1.0
-    source_ref: str | None = None  # lane_id / event_id / test name
+    source_ref: Optional[str] = None  # lane_id / event_id / test name
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.confidence <= 1.0):
@@ -64,7 +65,7 @@ class Assertion:
         if not self.statement or not self.statement.strip():
             raise ValueError("statement must not be empty")
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "type": self.type.value,
             "statement": self.statement,
@@ -73,7 +74,7 @@ class Assertion:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> Assertion:
+    def from_dict(cls, d: Dict[str, Any]) -> Assertion:
         return cls(
             type=AssertionType(d["type"]),
             statement=d["statement"],
@@ -93,9 +94,9 @@ class ProjectionRef:
 
     view: str  # "ui_minimal" / "ops_full" / "audit_only" / ...
     source_hash: str  # MUST equal the parent report's content_hash
-    downgrade_reason: str | None = None  # "compatibility" / "redaction" / "source_absence"
+    downgrade_reason: Optional[str] = None  # "compatibility" / "redaction" / "source_absence"
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "view": self.view,
             "source_hash": self.source_hash,
@@ -103,7 +104,7 @@ class ProjectionRef:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> ProjectionRef:
+    def from_dict(cls, d: Dict[str, Any]) -> ProjectionRef:
         return cls(
             view=d["view"],
             source_hash=d["source_hash"],
@@ -123,9 +124,9 @@ class ReviewReport:
     canonical_id: str
     lane_id: str
     reviewer_id: str
-    assertions: list[Assertion]
-    projection_lineage: list[ProjectionRef]
-    redaction_provenance: dict[str, str] = field(default_factory=dict)
+    assertions: List[Assertion]
+    projection_lineage: List[ProjectionRef]
+    redaction_provenance: Dict[str, str] = field(default_factory=dict)
     schema_version: str = SCHEMA_VERSION
     content_hash: str = ""  # computed in __post_init__
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
@@ -152,7 +153,7 @@ class ReviewReport:
     # Hashing
     # ------------------------------------------------------------------
 
-    def _canonical_payload(self) -> dict[str, Any]:
+    def _canonical_payload(self) -> Dict[str, Any]:
         """Return the canonical payload used for hashing.
 
         Excludes:
@@ -209,7 +210,7 @@ class ReviewReport:
     # Serialization
     # ------------------------------------------------------------------
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "canonical_id": self.canonical_id,
@@ -223,7 +224,7 @@ class ReviewReport:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> ReviewReport:
+    def from_dict(cls, d: Dict[str, Any]) -> ReviewReport:
         """Reconstruct a ReviewReport from a dict.
 
         The `content_hash` is recomputed from the canonical payload so that

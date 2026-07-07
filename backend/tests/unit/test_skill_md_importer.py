@@ -4,6 +4,7 @@ Mirrors test_skill_md_loader.py style: monkeypatch env, use tmp_path, no real fs
 """
 
 from __future__ import annotations
+from typing import List, Optional
 
 import textwrap
 from pathlib import Path
@@ -26,7 +27,7 @@ def _make_skill_md(name: str, description: str = "Test skill") -> bytes:
     """).encode("utf-8")
 
 
-def _make_named_upload(name: str, content: bytes, filename: str | None = None):
+def _make_named_upload(name: str, content: bytes, filename: Optional[str] = None):
     """Mock UploadFile-like object with .filename and async .read()."""
     upload = mock.AsyncMock()
     upload.filename = filename or f"{name}.md"
@@ -40,7 +41,7 @@ def registry() -> SkillRegistry:
 
 
 @pytest.fixture()
-def builtin_names(registry: SkillRegistry) -> list[str]:
+def builtin_names(registry: SkillRegistry) -> List[str]:
     """Register a few builtins to test conflict behavior."""
     for n in ("coder", "search", "writer"):
         from backend.skills.base import BaseSkill, SkillResult, SkillSchema
@@ -103,7 +104,7 @@ async def test_import_files_creates_skill_dir_if_missing(
 
 
 async def test_import_files_skips_builtin_name_collision(
-    registry: SkillRegistry, skills_dir: Path, builtin_names: list[str]
+    registry: SkillRegistry, skills_dir: Path, builtin_names: List[str]
 ) -> None:
     files = [_make_named_upload("coder", _make_skill_md("coder"))]
     importer = SkillMdImporter(registry, skills_dir=skills_dir)
@@ -169,7 +170,7 @@ async def test_import_files_skips_parse_error(registry: SkillRegistry, skills_di
 
 
 async def test_import_files_aggregates_skipped_in_result(
-    registry: SkillRegistry, skills_dir: Path, builtin_names: list[str]
+    registry: SkillRegistry, skills_dir: Path, builtin_names: List[str]
 ) -> None:
     """Mix of valid + builtin_conflict + invalid → all reported."""
     files = [

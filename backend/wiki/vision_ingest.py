@@ -2,6 +2,7 @@
 
 集成文件解析、图片提取、视觉描述，生成包含图片描述的 Wiki 页面。
 """
+from typing import Dict, List, Optional
 
 import logging
 from collections.abc import Callable
@@ -39,7 +40,7 @@ async def ingest_with_vision(
     source_file_path: Path,
     llm_call: Callable,
     http_post: Callable,
-    progress_callback: Callable | None = None,
+    progress_callback: Optional[Callable] = None,
 ) -> Any:
     """执行 Vision-enabled Ingest 流程。
 
@@ -71,7 +72,7 @@ async def ingest_with_vision(
         text_content = source_file_path.read_text(encoding="utf-8", errors="ignore")
 
     # Step 2: 提取图片（如果支持）
-    images: list[ImageInfo] = []
+    images: List[ImageInfo] = []
     try:
         from .file_parser import extract_images
 
@@ -85,7 +86,7 @@ async def ingest_with_vision(
         logger.warning(f"图片提取失败（继续 Ingest）: {e}")
 
     # Step 3: 为每个图片生成描述
-    image_captions: dict[int, str] = {}
+    image_captions: Dict[int, str] = {}
     if config.auto_caption and images:
         for i, img in enumerate(images):
             if progress_callback:
@@ -144,7 +145,7 @@ async def ingest_with_vision(
             temp_path.unlink()
 
 
-def _insert_image_captions(content: str, captions: dict[int, str]) -> str:
+def _insert_image_captions(content: str, captions: Dict[int, str]) -> str:
     """将图片描述插入到文档内容中。
 
     在文档末尾添加"图片描述"章节。
