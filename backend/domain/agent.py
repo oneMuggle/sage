@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, Optional, Set
 
 
 class AgentState(str, Enum):
@@ -37,7 +37,7 @@ class AgentState(str, Enum):
         - DONE      → ∅（终态）
         - FAILED    → ∅（终态）
         """
-        legal: dict[AgentState, set[AgentState]] = {
+        legal: Dict[AgentState, Set[AgentState]] = {
             AgentState.IDLE: {AgentState.THINKING},
             AgentState.THINKING: {
                 AgentState.ACTING,
@@ -68,6 +68,6 @@ class AgentDecision:
     """
 
     state: AgentState
-    final_message: str | None = None
-    action_name: str | None = None
-    action_args: dict[str, Any] | None = None
+    final_message: Optional[str] = None
+    action_name: Optional[str] = None
+    action_args: Optional[Dict[str, Any]] = None

@@ -1,6 +1,7 @@
 """CSS 主题 API 路由"""
 
 from __future__ import annotations
+from typing import List, Optional
 
 import logging
 from pathlib import Path
@@ -22,7 +23,7 @@ class ThemeCssPayload(BaseModel):
 
     id: str
     name: str = Field(min_length=1, max_length=32)
-    cover: str | None = None
+    cover: Optional[str] = None
     css: str = Field(min_length=1, max_length=8192)
     appearance: str = Field(pattern="^(light|dark)$")
     created_at: int
@@ -43,7 +44,7 @@ def save_theme(payload: ThemeCssPayload) -> dict:
 
 
 @router.get("/list")
-def list_themes() -> list[dict]:
+def list_themes() -> List[dict]:
     """列出所有主题"""
     return _storage.list()
 

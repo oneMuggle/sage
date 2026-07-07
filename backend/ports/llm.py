@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any, Protocol
+from typing import Any, Dict, List, Optional, Protocol, Union
 
 from sage_core import Message
 
@@ -24,9 +24,9 @@ class LLMPort(Protocol):
 
     async def chat(
         self,
-        messages: list[Message],
-        tools: list[Any] | None = None,
-        tool_choice: str | dict[str, Any] | None = None,
+        messages: List[Message],
+        tools: Optional[List[Any]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> Message:
         """非流式对话。
 
@@ -44,7 +44,7 @@ class LLMPort(Protocol):
 
     def chat_stream(
         self,
-        messages: list[Message],
+        messages: List[Message],
     ) -> AsyncIterator[str]:
         """流式对话（逐 token delta）。
 

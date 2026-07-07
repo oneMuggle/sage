@@ -16,6 +16,7 @@ Agent / LLMClient 流式响应边界测试 (PG1.1 - Task 1.1.3)
 """
 
 from __future__ import annotations
+from typing import List
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -43,7 +44,7 @@ def _sse_response(chunks: list, status_code: int = 200):
     """
     import json
 
-    lines: list[str] = []
+    lines: List[str] = []
     for c in chunks:
         if isinstance(c, dict):
             lines.append(f"data: {json.dumps(c)}")

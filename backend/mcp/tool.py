@@ -5,7 +5,7 @@ MCP tool wrapper — exposes MCP server tools as sage BaseTool instances.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Dict
 
 from backend.mcp.client import McpClient, McpClientError
 from backend.mcp.config import McpServerConfig, get_mcp_server_configs
@@ -14,7 +14,7 @@ from backend.tools.base import BaseTool, ToolResult, ToolSchema
 logger = logging.getLogger(__name__)
 
 # Global registry of active MCP clients (server_name -> client)
-_mcp_clients: dict[str, McpClient] = {}
+_mcp_clients: Dict[str, McpClient] = {}
 
 
 def _get_or_create_client(config: McpServerConfig) -> McpClient:
@@ -40,7 +40,7 @@ class McpTool(BaseTool):
     execute() calls the MCP server via the shared client.
     """
 
-    def __init__(self, client: McpClient, tool_spec: dict[str, Any]):
+    def __init__(self, client: McpClient, tool_spec: Dict[str, Any]):
         """
         Args:
             client: The MCP client for this tool's server
@@ -87,7 +87,7 @@ class McpTool(BaseTool):
         # Extract content
         content_parts = response.get("content", [])
         text_parts = []
-        metadata: dict[str, Any] = {}
+        metadata: Dict[str, Any] = {}
 
         for part in content_parts:
             if part.get("type") == "text":

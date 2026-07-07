@@ -23,6 +23,7 @@ References:
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 import time
 from unittest.mock import MagicMock
@@ -69,7 +70,7 @@ def _make_agent_registry(agent_id: str = "agent-1") -> MagicMock:
 
 def _make_lane_registry() -> MagicMock:
     """Mock lane_registry; tracks lanes created by Router."""
-    lanes: dict[str, MagicMock] = {}
+    lanes: Dict[str, MagicMock] = {}
 
     def _create_lane(lane):
         lanes[lane.lane_id] = lane
@@ -180,7 +181,7 @@ class TestFiveLaneEndToEndWorkflow:
             task_id = f"task-{i}"
 
             # First attempt
-            failure_class: str | None = None
+            failure_class: Optional[str] = None
             attempt = 1
             if lane_id == retry_target_lane:
                 failure_class = "Test"

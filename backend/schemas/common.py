@@ -1,5 +1,5 @@
 """Common API envelope schemas shared across all routers (pydantic 2.x)."""
-from typing import Any, Generic, TypeVar
+from typing import Any, Dict, Generic, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -17,8 +17,8 @@ class ApiError(BaseModel):
 
     success: bool = False
     error: str
-    code: str | None = None
-    details: dict[str, Any] | None = None
+    code: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
 
 
 class ApiResponse(BaseModel, Generic[T]):
@@ -31,7 +31,7 @@ class ApiResponse(BaseModel, Generic[T]):
     model_config = ConfigDict(extra="forbid")
 
     success: bool
-    data: T | None = None
-    error: str | None = None
-    code: str | None = None
-    details: dict[str, Any] | None = None
+    data: Optional[T] = None
+    error: Optional[str] = None
+    code: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None

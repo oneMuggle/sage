@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 
 class AuditEventType:
@@ -27,7 +27,7 @@ class AuditEventType:
     SETTINGS_CHANGED = "settings_changed"
 
     @classmethod
-    def all(cls) -> list[str]:
+    def all(cls) -> List[str]:
         """返回全部 5 类事件名（便于测试断言、CI 门禁 grep）。"""
         return [
             cls.CHAT_MESSAGE_SENT,
@@ -45,7 +45,7 @@ class FileEventAdapter:
         self._log_path = Path(log_path)
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def emit(self, event_type: str, payload: dict[str, Any]) -> None:
+    def emit(self, event_type: str, payload: Dict[str, Any]) -> None:
         event = {
             "ts": datetime.now().isoformat(),
             "type": event_type,

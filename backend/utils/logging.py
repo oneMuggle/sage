@@ -4,6 +4,7 @@ Sage 日志配置模块
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import logging
 import sys
@@ -75,7 +76,7 @@ class SageLogger:
     单例模式，统一管理日志配置
     """
 
-    _instance: SageLogger | None = None
+    _instance: Optional[SageLogger] = None
     _initialized: bool = False
 
     def __new__(cls):
@@ -86,15 +87,15 @@ class SageLogger:
     def __init__(self):
         if not self._initialized:
             self._loggers = {}
-            self._log_dir: Path | None = None
+            self._log_dir: Optional[Path] = None
             self._log_level: str = DEFAULT_LOG_LEVEL
             self._initialized = True
 
     def setup(
         self,
-        log_dir: str | None = None,
+        log_dir: Optional[str] = None,
         log_level: str = DEFAULT_LOG_LEVEL,
-        project_root: str | None = None,
+        project_root: Optional[str] = None,
     ) -> None:
         """
         配置日志系统
@@ -237,7 +238,7 @@ _logger_manager = SageLogger()
 
 
 def setup_logging(
-    log_dir: str | None = None, log_level: str = DEFAULT_LOG_LEVEL, project_root: str | None = None
+    log_dir: Optional[str] = None, log_level: str = DEFAULT_LOG_LEVEL, project_root: Optional[str] = None
 ) -> None:
     """
     设置全局日志系统（便捷函数）

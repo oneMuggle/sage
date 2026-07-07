@@ -16,7 +16,7 @@ import json
 import time
 import uuid
 from dataclasses import asdict, is_dataclass
-from typing import Any
+from typing import Any, List, Optional
 
 from backend.data.database import get_database
 from backend.orchestration.models import (
@@ -132,17 +132,17 @@ class TaskRepository:
 
     def list(
         self,
-        status: TaskStatus | None = None,
-        team_id: str | None = None,
+        status: Optional[TaskStatus] = None,
+        team_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[Task]:
+    ) -> List[Task]:
         """List tasks with optional filters."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
         query = "SELECT * FROM orchestration_tasks WHERE 1=1"
-        params: list[Any] = []
+        params: List[Any] = []
 
         if status is not None:
             query += " AND status = ?"
@@ -157,7 +157,7 @@ class TaskRepository:
         cursor.execute(query, params)
         return [self._row_to_task(row) for row in cursor.fetchall()]
 
-    def get_ready_tasks(self, team_id: str | None = None) -> list[Task]:
+    def get_ready_tasks(self, team_id: Optional[str] = None) -> List[Task]:
         """
         Get tasks that are ready to execute.
 
@@ -172,7 +172,7 @@ class TaskRepository:
             SELECT t.* FROM orchestration_tasks t
             WHERE t.status = 'created'
         """
-        params: list[Any] = []
+        params: List[Any] = []
 
         if team_id is not None:
             query += " AND t.team_id = ?"
@@ -308,7 +308,7 @@ class LaneRepository:
         conn.commit()
         return cursor.rowcount > 0
 
-    def list_by_task(self, task_id: str) -> list[Lane]:
+    def list_by_task(self, task_id: str) -> List[Lane]:
         """List all lanes for a task."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -323,7 +323,7 @@ class LaneRepository:
         )
         return [self._row_to_lane(row) for row in cursor.fetchall()]
 
-    def list_by_status(self, status: LaneStatus, limit: int = 100) -> list[Lane]:
+    def list_by_status(self, status: LaneStatus, limit: int = 100) -> List[Lane]:
         """List lanes by status."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -339,7 +339,7 @@ class LaneRepository:
         )
         return [self._row_to_lane(row) for row in cursor.fetchall()]
 
-    def list_by_agent(self, agent_id: str) -> list[Lane]:
+    def list_by_agent(self, agent_id: str) -> List[Lane]:
         """List all lanes assigned to an agent."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -354,7 +354,7 @@ class LaneRepository:
         )
         return [self._row_to_lane(row) for row in cursor.fetchall()]
 
-    def list_all(self) -> list[Lane]:
+    def list_all(self) -> List[Lane]:
         """List all lanes."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -477,13 +477,13 @@ class TeamRepository:
         conn.commit()
         return cursor.rowcount > 0
 
-    def list(self, status: TeamStatus | None = None, limit: int = 100) -> list[Team]:
+    def list(self, status: Optional[TeamStatus] = None, limit: int = 100) -> List[Team]:
         """List teams with optional status filter."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
         query = "SELECT * FROM orchestration_teams"
-        params: list[Any] = []
+        params: List[Any] = []
 
         if status is not None:
             query += " WHERE status = ?"
@@ -524,9 +524,9 @@ class LaneEventRepository:
         event_type: str,
         lane_id: str,
         task_id: str,
-        agent_id: str | None = None,
+        agent_id: Optional[str] = None,
         provenance: str = "LiveLane",
-        metadata: dict | None = None,
+        metadata: Optional[dict] = None,
     ) -> str:
         """Record a lane event. Returns the event_id."""
         conn = self.db.get_connection()
@@ -555,7 +555,7 @@ class LaneEventRepository:
         conn.commit()
         return event_id
 
-    def list_by_lane(self, lane_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
+    def list_by_lane(self, lane_id: str, limit: int = 100, offset: int = 0) -> List[dict]:
         """List events for a lane, ordered by timestamp."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -571,7 +571,7 @@ class LaneEventRepository:
         )
         return [self._row_to_dict(row) for row in cursor.fetchall()]
 
-    def list_by_task(self, task_id: str, limit: int = 100) -> list[dict]:
+    def list_by_task(self, task_id: str, limit: int = 100) -> List[dict]:
         """List events for a task (across all lanes)."""
         conn = self.db.get_connection()
         cursor = conn.cursor()

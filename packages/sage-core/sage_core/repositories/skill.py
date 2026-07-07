@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Dict, List, Protocol
 
 from sage_core import SkillResult, SkillSpec
 
@@ -14,7 +14,7 @@ from sage_core import SkillResult, SkillSpec
 class SkillPort(Protocol):
     """技能发现与执行端口。"""
 
-    def list_skills(self) -> list[SkillSpec]:
+    def list_skills(self) -> List[SkillSpec]:
         """列出当前可用的所有技能规格。"""
         ...
 
@@ -22,7 +22,7 @@ class SkillPort(Protocol):
         self,
         name: str,
         action: str,
-        args: dict[str, Any],
+        args: Dict[str, Any],
     ) -> SkillResult:
         """按名称与动作执行技能。
 

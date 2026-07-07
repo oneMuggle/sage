@@ -6,7 +6,7 @@ Memory Consolidation Pipeline - 记忆压缩管道
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.core.legacy.llm_client import LLMClient
@@ -24,10 +24,10 @@ class ConsolidationPipeline:
     3. 可选：使用 LLM 辅助摘要生成
     """
 
-    def __init__(self, llm_client: LLMClient | None = None):
+    def __init__(self, llm_client: Optional[LLMClient] = None):
         self.llm_client = llm_client
 
-    def compress_working_memory(self, messages: list[dict[str, Any]]) -> str | None:
+    def compress_working_memory(self, messages: List[Dict[str, Any]]) -> str | None:
         """
         压缩工作记忆为摘要
 
@@ -59,7 +59,7 @@ class ConsolidationPipeline:
 
         return self._fallback_summary(messages)
 
-    def _fallback_summary(self, messages: list[dict[str, Any]]) -> str:
+    def _fallback_summary(self, messages: List[Dict[str, Any]]) -> str:
         """简单的回退摘要策略"""
         user_msgs = [m for m in messages if m.get("role") == "user"]
         if user_msgs:
@@ -72,7 +72,7 @@ class ConsolidationPipeline:
         self,
         episodic_memory,
         summary: str,
-        session_id: str | None = None,
+        session_id: Optional[str] = None,
         importance: int = 5,
         message_count: int = 0,
     ) -> str:
@@ -102,7 +102,7 @@ class ConsolidationPipeline:
         )
 
     def consolidate(
-        self, memory_manager, session_id: str | None = None, importance_threshold: int = 5
+        self, memory_manager, session_id: Optional[str] = None, importance_threshold: int = 5
     ) -> str | None:
         """
         完整的记忆压缩流程
@@ -138,7 +138,7 @@ class ConsolidationPipeline:
 
         return memory_id
 
-    def extract_key_facts(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def extract_key_facts(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         从对话中提取关键事实
 

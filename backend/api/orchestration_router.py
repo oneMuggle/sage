@@ -5,6 +5,7 @@ to lanes and lane events, plus cancellation endpoint for manual control.
 """
 
 from __future__ import annotations
+from typing import List, Optional
 
 import logging
 
@@ -30,14 +31,14 @@ class LaneHeartbeatOut(BaseModel):
 class LaneOut(BaseModel):
     lane_id: str
     task_id: str
-    agent_id: str | None = None
+    agent_id: Optional[str] = None
     status: LaneStatus
     created_at: int
-    started_at: int | None = None
-    completed_at: int | None = None
-    worktree: str | None = None
-    heartbeat: LaneHeartbeatOut | None = None
-    error: str | None = None
+    started_at: Optional[int] = None
+    completed_at: Optional[int] = None
+    worktree: Optional[str] = None
+    heartbeat: Optional[LaneHeartbeatOut] = None
+    error: Optional[str] = None
     permission_preset: str
     metadata: dict
 
@@ -47,7 +48,7 @@ class LaneEventOut(BaseModel):
     event_type: str
     lane_id: str
     task_id: str
-    agent_id: str | None = None
+    agent_id: Optional[str] = None
     timestamp: int
     provenance: str
     metadata: dict
@@ -92,12 +93,12 @@ def build_router() -> APIRouter:
             metadata=dict(lane.metadata),
         )
 
-    @router.get("/lanes", response_model=list[LaneOut])
+    @router.get("/lanes", response_model=List[LaneOut])
     async def list_lanes(
-        status: LaneStatus | None = Query(default=None),
-        team_id: str | None = Query(default=None),
+        status: Optional[LaneStatus] = Query(default=None),
+        team_id: Optional[str] = Query(default=None),
         limit: int = Query(default=100, ge=1, le=500),
-    ) -> list[LaneOut]:
+    ) -> List[LaneOut]:
         """List lanes with optional filters.
 
         Args:
@@ -136,11 +137,11 @@ def build_router() -> APIRouter:
             raise HTTPException(status_code=404, detail=f"Lane {lane_id} not found")
         return _to_lane_out(lane)
 
-    @router.get("/lanes/{lane_id}/events", response_model=list[LaneEventOut])
+    @router.get("/lanes/{lane_id}/events", response_model=List[LaneEventOut])
     async def list_lane_events(
         lane_id: str,
         limit: int = Query(default=100, ge=1, le=1000),
-    ) -> list[LaneEventOut]:
+    ) -> List[LaneEventOut]:
         """Get event history for a lane.
 
         Args:

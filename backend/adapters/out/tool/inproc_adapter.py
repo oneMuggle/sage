@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
@@ -32,7 +32,7 @@ from backend.tools.registry import ToolRegistry as _ToolRegistry
 class InprocToolAdapter:
     """``ToolPort`` 的 in-process 实现。"""
 
-    def __init__(self, registry: _ToolRegistry | None = None) -> None:
+    def __init__(self, registry: Optional[_ToolRegistry] = None) -> None:
         # 接受外部注入（用于测试）或使用新建 registry
         self._registry = registry if registry is not None else _ToolRegistry()
         # 注册所有内置工具（含 MCP 工具）
@@ -41,9 +41,9 @@ class InprocToolAdapter:
 
             register_all_tools(self._registry)
 
-    def list_tools(self) -> list[ToolSpec]:
+    def list_tools(self) -> List[ToolSpec]:
         """返回所有已注册工具的 spec（按注册顺序）。"""
-        specs: list[ToolSpec] = []
+        specs: List[ToolSpec] = []
         for schema in self._registry.list():
             specs.append(
                 ToolSpec(
@@ -54,7 +54,7 @@ class InprocToolAdapter:
             )
         return specs
 
-    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         """按名称执行工具并返回端口侧的 ``ToolResult``。
 
         工具未注册时返回 ``success=False``；工具执行抛异常时同样捕获并

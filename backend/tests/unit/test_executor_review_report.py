@@ -13,6 +13,7 @@ Coverage:
 """
 
 from __future__ import annotations
+from typing import List
 
 from unittest.mock import MagicMock
 
@@ -38,7 +39,7 @@ def _make_executor(*, with_recorder: bool = False) -> LaneExecutor:
     )
 
 
-def _sample_assertions() -> list[Assertion]:
+def _sample_assertions() -> List[Assertion]:
     return [
         Assertion(
             type=AssertionType.FACT,

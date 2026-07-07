@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from ..base import BaseSkill, SkillResult, SkillSchema
 
@@ -40,7 +40,7 @@ class CoderSkill(BaseSkill):
             examples=["帮我写一个 Python 快速排序", "解释一下这段代码", "debug 这段 JavaScript"],
         )
 
-    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         """执行编程任务"""
         action = params.get("action")
         language = params.get("language", "python")

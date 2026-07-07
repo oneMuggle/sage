@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+from typing import List, Optional
 
 import logging
 
@@ -84,7 +85,7 @@ class MemoryAdapter:
         keyword_items = keyword_results.get("episodic", []) + keyword_results.get("semantic", [])
 
         # 2. 向量检索（VectorStore）
-        vector_items: list[dict] = []
+        vector_items: List[dict] = []
         if self.vector_store is not None:
             vec_results = self.vector_store.search(query, top_k=limit)
             for vr in vec_results:
@@ -104,9 +105,9 @@ class MemoryAdapter:
         )
 
         # 4. 分层：高重要性 → core，其余 → episodic/semantic
-        core: list[dict] = []
-        episodic: list[dict] = []
-        semantic: list[dict] = []
+        core: List[dict] = []
+        episodic: List[dict] = []
+        semantic: List[dict] = []
         for item in fused[: limit * 2]:
             importance = item.get("importance", 5)
             if importance >= 8:
@@ -124,7 +125,7 @@ class MemoryAdapter:
         )
 
     async def store(
-        self, content: str, session_id: str, importance: int = 5, tags: list[str] | None = None
+        self, content: str, session_id: str, importance: int = 5, tags: Optional[List[str]] = None
     ) -> str:
         """存储记忆
 

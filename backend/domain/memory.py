@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -37,10 +37,10 @@ class MemoryContext:
         - Python 是编程语言
     """
 
-    working: list[dict[str, Any]] = field(default_factory=list)
-    episodic: list[dict[str, Any]] = field(default_factory=list)
-    semantic: list[dict[str, Any]] = field(default_factory=list)
-    core: list[dict[str, Any]] = field(default_factory=list)
+    working: List[Dict[str, Any]] = field(default_factory=list)
+    episodic: List[Dict[str, Any]] = field(default_factory=list)
+    semantic: List[Dict[str, Any]] = field(default_factory=list)
+    core: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def has_memories(self) -> bool:
@@ -65,7 +65,7 @@ class MemoryContext:
         Returns:
             格式化后的记忆上下文字符串,如果没有记忆则返回空字符串
         """
-        parts: list[str] = []
+        parts: List[str] = []
         used_tokens = 0
 
         # ---- 核心记忆：始终注入（类似 Hermes 的 MEMORY.md）----
@@ -100,7 +100,7 @@ class MemoryContext:
             reverse=True,
         )
 
-        memory_lines: list[str] = []
+        memory_lines: List[str] = []
         for mem in memory_items:
             summary = mem.get("summary", mem.get("content", ""))[:100]
             line = f"- {summary}"

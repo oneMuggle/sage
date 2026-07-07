@@ -17,7 +17,7 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import TypedDict
+from typing import Optional, TypedDict
 
 from ..registry import SkillRegistry
 
@@ -49,14 +49,14 @@ class SkillMdDeleter:
         self,
         registry: SkillRegistry,
         *,
-        skills_dir: Path | None = None,
+        skills_dir: Optional[Path] = None,
     ) -> None:
         self._registry = registry
         # skills_dir 解析延迟到 delete() 时 (避免 builtin-blocked 路径上
         # 解析失败; 也让 __init__ 在缺 SAGE_SKILLS_DIR 时不抛异常)。
         # 首次解析后缓存到 self._skills_dir 供路径校验复用。
         self._explicit_skills_dir = skills_dir
-        self._skills_dir: Path | None = None
+        self._skills_dir: Optional[Path] = None
 
     def _resolve_skills_dir(self) -> Path:
         """解析 skills_dir: 显式参数 > SAGE_SKILLS_DIR > ./skills > ~/.sage/skills。

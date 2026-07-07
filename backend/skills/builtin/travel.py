@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from ..base import BaseSkill, SkillResult, SkillSchema
 
@@ -33,7 +33,7 @@ class TravelSkill(BaseSkill):
             examples=["帮我规划一个北京三日游", "去日本旅行有什么推荐"],
         )
 
-    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         """执行旅行规划"""
         destination = params.get("destination")
         days = params.get("days", 3)

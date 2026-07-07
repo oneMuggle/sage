@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 from sage_core import (
@@ -35,17 +35,17 @@ from backend.adapters.out.tool.compute_tool_adapter import (
 class _FakeInnerTool:
     """模拟 InprocToolAdapter,记录 execute 调用便于断言。"""
 
-    def __init__(self, specs: list[ToolSpec] | None = None) -> None:
+    def __init__(self, specs: Optional[List[ToolSpec]] = None) -> None:
         self._specs = list(specs or [])
-        self.execute_calls: list[tuple[str, dict[str, Any]]] = []
+        self.execute_calls: List[Tuple[str, Dict[str, Any]]] = []
         self.preset_result = ToolResult(
             success=True, output="inner result", error=None, metadata=None
         )
 
-    def list_tools(self) -> list[ToolSpec]:
+    def list_tools(self) -> List[ToolSpec]:
         return list(self._specs)
 
-    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         self.execute_calls.append((name, args))
         return self.preset_result
 
@@ -234,7 +234,7 @@ async def test_metadata_includes_duration() -> None:
 class _RaisingComputeAdapter:
     """ComputePort 实现:execute 抛非预期异常。"""
 
-    def list_operations(self) -> list[ComputeSpec]:
+    def list_operations(self) -> List[ComputeSpec]:
         return [ComputeSpec(name="boom", description="raises")]
 
     async def execute(self, req: Any) -> ComputeResult:

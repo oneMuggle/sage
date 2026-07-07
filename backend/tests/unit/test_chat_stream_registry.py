@@ -8,6 +8,7 @@ StreamRegistry 单元测试
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import asyncio
 import time
@@ -19,7 +20,7 @@ from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegist
 pytestmark = pytest.mark.unit
 
 
-def _make_event(state: str, content: str | None = None) -> dict:
+def _make_event(state: str, content: Optional[str] = None) -> dict:
     return {"state": state, "iteration": 0, "content": content}
 
 

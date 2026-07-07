@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, Dict, List
 
 from sage_core import ComputeRequest, ComputeResult, ToolResult, ToolSpec
 from sage_core.repositories import (
@@ -48,7 +48,7 @@ class ComputeToolAdapter:
         # 缓存计算工具名集合,避免每次 execute 都调 list_operations
         self._compute_names = {spec.name for spec in compute.list_operations()}
 
-    def list_tools(self) -> list[ToolSpec]:
+    def list_tools(self) -> List[ToolSpec]:
         """合并 inner 工具 + 计算工具(inner 在前)。"""
         compute_specs = [
             ToolSpec(
@@ -60,7 +60,7 @@ class ComputeToolAdapter:
         ]
         return list(self._inner.list_tools()) + compute_specs
 
-    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         """路由:计算工具走 ComputePort,其他委托给 inner。"""
         if name in self._compute_names:
             return await self._execute_compute(name, args)
@@ -68,7 +68,7 @@ class ComputeToolAdapter:
 
     # ---- 私有 ----
 
-    async def _execute_compute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def _execute_compute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         """调 ComputePort,把 ComputeResult 翻译为 ToolResult。"""
         req = ComputeRequest(operation=name, params=dict(args))
         try:
@@ -91,7 +91,7 @@ def _compute_result_to_tool_result(result: ComputeResult) -> ToolResult:
     失败时 ``error`` 取 ``ComputeError.message``。无论成败,``metadata`` 携带
     ``duration_ms`` / ``exit_code`` / 错误分类供上层日志/指标使用。
     """
-    metadata: dict[str, Any] = {}
+    metadata: Dict[str, Any] = {}
     if result.duration_ms is not None:
         metadata["duration_ms"] = result.duration_ms
     if result.exit_code is not None:

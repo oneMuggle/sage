@@ -1,6 +1,7 @@
 """主题存储 — 单文件 JSON 原子读写"""
 
 from __future__ import annotations
+from typing import List, Optional, Union
 
 import json
 import logging
@@ -17,7 +18,7 @@ VALID_APPEARANCES = frozenset({"light", "dark"})
 class ThemeStorage:
     """JSON 文件持久化 — 每主题一个文件 <id>.json"""
 
-    def __init__(self, storage_dir: Path | str | None = None) -> None:
+    def __init__(self, storage_dir: Optional[Union[Path, str]] = None) -> None:
         if storage_dir is None:
             storage_dir = Path(__file__).resolve().parent.parent / "data" / "themes"
         self._dir = Path(storage_dir)
@@ -53,9 +54,9 @@ class ThemeStorage:
             raise
         return payload["id"]
 
-    def list(self) -> list[dict]:
+    def list(self) -> List[dict]:
         """列出所有主题，跳过损坏文件（记录 warning）"""
-        results: list[dict] = []
+        results: List[dict] = []
         for path in self._dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))

@@ -5,7 +5,7 @@ Agent Profiles - Agent 角色定义和配置
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -25,14 +25,14 @@ class AgentProfile:
     name: str
     role: str  # "coordinator" | "researcher" | "coder" | "memory_manager"
     system_prompt: str
-    tools: list[str] = field(default_factory=list)
-    memory_access: list[str] = field(default_factory=lambda: ["working", "episodic", "semantic"])
+    tools: List[str] = field(default_factory=list)
+    memory_access: List[str] = field(default_factory=lambda: ["working", "episodic", "semantic"])
     model_config: AgentModelConfig = field(default_factory=AgentModelConfig)
     max_iterations: int = 10
     enabled: bool = True
     description: str = ""
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """导出为字典"""
         return {
             "id": self.id,
@@ -48,14 +48,14 @@ class AgentProfile:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> AgentProfile:
+    def from_dict(cls, data: Dict[str, Any]) -> AgentProfile:
         """从字典创建"""
         model_data = data.pop("model_config", {})
         model_config = AgentModelConfig(**model_data) if model_data else AgentModelConfig()
         return cls(model_config=model_config, **data)
 
 
-def create_default_agents() -> list[AgentProfile]:
+def create_default_agents() -> List[AgentProfile]:
     """创建默认的 Agent 配置"""
     return [
         AgentProfile(
@@ -106,10 +106,10 @@ def create_default_agents() -> list[AgentProfile]:
 
 
 # 全局 Agent 注册表
-_agent_registry: dict[str, AgentProfile] = {}
+_agent_registry: Dict[str, AgentProfile] = {}
 
 
-def get_agent_registry() -> dict[str, AgentProfile]:
+def get_agent_registry() -> Dict[str, AgentProfile]:
     """获取 Agent 注册表"""
     if not _agent_registry:
         for agent in create_default_agents():
@@ -127,12 +127,12 @@ def get_agent(agent_id: str) -> AgentProfile | None:
     return get_agent_registry().get(agent_id)
 
 
-def list_agents() -> list[AgentProfile]:
+def list_agents() -> List[AgentProfile]:
     """列出所有已注册的 Agent"""
     return list(get_agent_registry().values())
 
 
-def get_enabled_agent(agent_id: str) -> dict[str, Any] | None:
+def get_enabled_agent(agent_id: str) -> Dict[str, Any] | None:
     """从 SQLite 获取启用的 agent profile（运行时读取最新版本）。
 
     返回 agent dict（与 ``AgentRepository.get()`` 同形态），或：

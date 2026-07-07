@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Dict
 
 
 class StdoutEventAdapter:
@@ -12,6 +12,6 @@ class StdoutEventAdapter:
     def __init__(self, verbose: bool = True):
         self._verbose = verbose
 
-    def emit(self, event_type: str, payload: dict[str, Any]) -> None:
+    def emit(self, event_type: str, payload: Dict[str, Any]) -> None:
         if self._verbose:
             print(f"[event] {event_type}: {json.dumps(payload, ensure_ascii=False)}")  # noqa: T201

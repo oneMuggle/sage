@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -16,9 +16,9 @@ class SkillSchema:
 
     name: str  # 技能名称
     description: str  # 技能描述
-    triggers: list[str] = field(default_factory=list)  # 触发关键词列表
-    parameters: dict[str, Any] = field(default_factory=dict)  # JSON Schema 格式参数
-    examples: list[str] = field(default_factory=list)  # 使用示例
+    triggers: List[str] = field(default_factory=list)  # 触发关键词列表
+    parameters: Dict[str, Any] = field(default_factory=dict)  # JSON Schema 格式参数
+    examples: List[str] = field(default_factory=list)  # 使用示例
 
 
 @dataclass
@@ -26,11 +26,11 @@ class SkillResult:
     """技能执行结果"""
 
     content: Any = None  # 返回内容
-    metadata: dict[str, Any] = field(default_factory=dict)  # 元数据
+    metadata: Dict[str, Any] = field(default_factory=dict)  # 元数据
     success: bool = True  # 是否成功
-    error: str | None = None  # 错误信息
+    error: Optional[str] = None  # 错误信息
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
         result = {"success": self.success, "content": self.content, "metadata": self.metadata}
         if self.error:
@@ -49,7 +49,7 @@ class BaseSkill(ABC):
     """
 
     def __init__(self):
-        self._schema: SkillSchema | None = None
+        self._schema: Optional[SkillSchema] = None
 
     @property
     def schema(self) -> SkillSchema:
@@ -69,7 +69,7 @@ class BaseSkill(ABC):
         return self.schema.description
 
     @property
-    def triggers(self) -> list[str]:
+    def triggers(self) -> List[str]:
         """获取触发关键词列表"""
         return self.schema.triggers
 
@@ -84,7 +84,7 @@ class BaseSkill(ABC):
         pass
 
     @abstractmethod
-    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         """
         执行技能
 

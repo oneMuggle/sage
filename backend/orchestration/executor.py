@@ -11,7 +11,7 @@ Handles the complete execution flow for a Lane:
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Dict, Optional
 
 from backend.orchestration.events import (
     EventProvenance,
@@ -62,8 +62,8 @@ class LaneExecutor:
         self,
         lane_registry: Any,
         task_registry: Any,
-        event_recorder: EventRecorder | None = None,
-        agent_runner: Callable | None = None,
+        event_recorder: Optional[EventRecorder] = None,
+        agent_runner: Optional[Callable] = None,
     ) -> None:
         """
         Initialize LaneExecutor.
@@ -83,8 +83,8 @@ class LaneExecutor:
     async def execute_lane(
         self,
         lane: Lane,
-        agent_id: str | None = None,
-    ) -> dict[str, Any]:
+        agent_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Execute a Lane through its full lifecycle.
 
@@ -214,8 +214,8 @@ class LaneExecutor:
         lane: Lane,
         task: Task,
         error_message: str,
-        error_code: str | None = None,
-    ) -> dict[str, Any]:
+        error_code: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Handle lane execution failure using the task's recovery policy.
 
@@ -285,7 +285,7 @@ class LaneExecutor:
         lane: Lane,
         error_message: str,
         error_code: str,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """
         Mark lane as failed and record event.
 
@@ -329,7 +329,7 @@ class LaneExecutor:
         self,
         lane: Lane,
         reason: str = "user_cancelled",
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """
         Cancel a running or queued lane.
 
@@ -358,7 +358,7 @@ class LaneExecutor:
 
         return {"status": "cancelled", "lane_id": lane.lane_id, "reason": reason}
 
-    def _get_recovery_policy(self, task: Task) -> dict[str, Any]:
+    def _get_recovery_policy(self, task: Task) -> Dict[str, Any]:
         """
         Extract recovery policy from task packet.
 
@@ -446,7 +446,7 @@ class LaneExecutor:
         lane: Lane,
         event: LaneEvent,
         provenance: EventProvenance,
-        metadata: dict[str, Any] | None = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Record a lane event with full context.
@@ -470,8 +470,8 @@ class LaneExecutor:
     async def _default_agent_runner(
         self,
         task: Task,
-        agent_id: str | None,
-    ) -> dict[str, Any]:
+        agent_id: Optional[str],
+    ) -> Dict[str, Any]:
         """
         Default agent runner. Override in production with real execution.
 

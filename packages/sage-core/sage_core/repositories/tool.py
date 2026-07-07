@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Dict, List, Protocol
 
 from sage_core import ToolResult, ToolSpec
 
@@ -15,11 +15,11 @@ from sage_core import ToolResult, ToolSpec
 class ToolPort(Protocol):
     """工具注册与执行端口。"""
 
-    def list_tools(self) -> list[ToolSpec]:
+    def list_tools(self) -> List[ToolSpec]:
         """列出当前可用的所有工具规格。"""
         ...
 
-    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, args: Dict[str, Any]) -> ToolResult:
         """按名称执行工具。
 
         Args:

@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List
 
 from sage_core import Message
 from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
@@ -31,7 +31,7 @@ class _SessionState:
     """单会话的内存状态。"""
 
     title: str = ""
-    messages: list[Message] = field(default_factory=list)
+    messages: List[Message] = field(default_factory=list)
 
 
 class MemoryStorageAdapter:
@@ -42,7 +42,7 @@ class MemoryStorageAdapter:
     """
 
     def __init__(self) -> None:
-        self._sessions: dict[str, _SessionState] = {}
+        self._sessions: Dict[str, _SessionState] = {}
         self._counter: int = 0
 
     # ----- 会话 -----
@@ -53,7 +53,7 @@ class MemoryStorageAdapter:
         self._sessions[session_id] = _SessionState(title=title)
         return session_id
 
-    async def list_sessions(self) -> list[dict[str, Any]]:
+    async def list_sessions(self) -> List[Dict[str, Any]]:
         return [
             {
                 "id": sid,
@@ -63,7 +63,7 @@ class MemoryStorageAdapter:
             for sid, state in self._sessions.items()
         ]
 
-    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+    async def get_session(self, session_id: str) -> Dict[str, Any] | None:
         state = self._sessions.get(session_id)
         if state is None:
             return None
@@ -98,7 +98,7 @@ class MemoryStorageAdapter:
         self,
         session_id: str,
         limit: int = 50,
-    ) -> list[Message]:
+    ) -> List[Message]:
         state = self._sessions.get(session_id)
         if state is None:
             return []

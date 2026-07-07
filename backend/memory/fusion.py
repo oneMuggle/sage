@@ -12,16 +12,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 def reciprocal_rank_fusion(
-    result_lists: list[list[dict[str, Any]]],
-    weights: list[float] | None = None,
+    result_lists: List[List[Dict[str, Any]]],
+    weights: Optional[List[float]] = None,
     k: int = 60,
-) -> list[dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """Reciprocal Rank Fusion 融合多路检索结果
 
     Args:
@@ -56,8 +56,8 @@ def reciprocal_rank_fusion(
         weights = [1.0 / n_lists] * n_lists
 
     # 按 id 聚合分数
-    scores: dict[str, float] = {}
-    items: dict[str, dict[str, Any]] = {}
+    scores: Dict[str, float] = {}
+    items: Dict[str, Dict[str, Any]] = {}
 
     for results, weight in zip(result_lists, weights, strict=False):
         for rank, item in enumerate(results, start=1):

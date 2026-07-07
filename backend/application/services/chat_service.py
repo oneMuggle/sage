@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, List, Optional
 
 from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
@@ -77,7 +77,7 @@ class ChatService:
         storage: StoragePort,
         metrics: MetricPort,
         events: EventPort,
-        memory: MemoryPort | None = None,  # Optional for backward compatibility
+        memory: Optional[MemoryPort] = None,  # Optional for backward compatibility
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -138,7 +138,7 @@ class ChatService:
         self,
         session_id: str,
         user_message: Message,
-    ) -> list[Message]:
+    ) -> List[Message]:
         """执行一轮对话（含 ReAct 工具调用——PG2.9 阶段只做单轮）。
 
         Args:
@@ -165,7 +165,7 @@ class ChatService:
         session_id: str,
         user_message: Message,
         span: Any,
-    ) -> list[Message]:
+    ) -> List[Message]:
         """``run_turn`` 的实际实现，调用方需已开好 OTel span。"""
         # 1) 持久化 user message
         await self.storage.append_message(session_id, user_message)
@@ -175,7 +175,7 @@ class ChatService:
         )
 
         # 1.5) 检索相关记忆 (Memory Integration)
-        memory_context: MemoryContext | None = None
+        memory_context: Optional[MemoryContext] = None
         if self.memory:
             try:
                 memory_context = await self.memory.retrieve(
@@ -412,7 +412,7 @@ class ChatService:
     async def _execute_tool_calls(
         self,
         session_id: str,
-        tool_calls: list[ToolCall],
+        tool_calls: List[ToolCall],
     ) -> None:
         """执行模型返回的 tool_calls，依次 emit 事件 / 计数 / 持久化。
 
