@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
+## [v0.4.3-alpha.2] - 2026-07-07
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。PEP 604/585 → typing.* 跨平台兼容同步(原 Win7 LTS fix PR #112 现在 main 也对齐)。Win10+Linux+Mac 验证用版本。
+
+### Changed
+- **fix(backend): mass-rewrite PEP 604/585 annotations → typing.*** — 193 个文件 (backend/ + packages/sage-core/) 同步 Win7 LTS 的 Py3.8 兼容性重写。Main (Py3.11) 上纯属 stylistic 改动,功能不变。release/win7 上是必需的运行兼容性修复
+- **fix(scripts): py38_compat_rewrite.py** — 新增 AST-based 重写工具 + 一个 follow-up 修复(typing import 只插入到模块顶部,不合并到中间位置的旧 import)
+
 ## [Unreleased]
 
 ### Added
