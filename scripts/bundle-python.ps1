@@ -49,37 +49,44 @@ Write-Host "Extracting Python..." -ForegroundColor Green
 Expand-Archive -Path $PythonZip -DestinationPath $PythonDir -Force
 Remove-Item $PythonZip
 
-# Enable site-packages AND pin backend/sage-core import paths into python38._pth.
+# Enable site-packages AND pin the resources/ directory into python38._pth.
 #
 # CRITICAL (v0.4.3-alpha.2 Win7 backend 30s timeout fix):
 # python38._pth, when present, makes the embedded interpreter ignore
 # PYTHONPATH, registry, and environment variables (Python 3.8 docs:
 # https://docs.python.org/3.8/using/windows.html#finding-modules).
-# Without these two extra lines, `from backend.adapters...` raises
+# Without this extra line, `from backend.adapters...` raises
 # ModuleNotFoundError because backend/ lives in resources/, not in
 # site-packages. electron/main.ts sets PYTHONPATH at spawn, but the
-# embedded interpreter silently discards it. The fix: write the paths
+# embedded interpreter silently discards it. The fix: write resources/
 # into _pth at bundle time (the only mechanism _pth does not ignore).
 #
-# Paths are RELATIVE to the directory holding _pth. After NSIS
-# extraction, _pth lives at <installDir>/resources/python/, so
-# `..\backend` and `..\sage-core` resolve to resources/backend/ and
-# resources/sage-core/ — surviving any user-chosen install directory
-# (electron-builder.yml has allowToChangeInstallationDirectory: true).
-Write-Host "Configuring python38._pth (site + backend/sage-core paths)..." -ForegroundColor Green
+# Path semantics (key insight from v0.4.3-alpha.2-debug):
+# Python's import system walks sys.path entries looking for the PACKAGE
+# NAME as a DIRECTORY or .py FILE inside each entry. So sys.path must
+# contain the PARENT of the package directory, NOT the package directory
+# itself. e.g. for `import backend.main`, sys.path must contain
+# resources/ (parent), not resources/backend/ — otherwise Python looks
+# for resources/backend/backend/ which doesn't exist.
+#
+# After NSIS extraction, _pth lives at <installDir>/resources/python/,
+# so `..` resolves to <installDir>/resources/. This single entry puts
+# both resources/backend/ AND resources/sage-core/ on sys.path, surviving
+# any user-chosen install directory (electron-builder.yml has
+# allowToChangeInstallationDirectory: true).
+Write-Host "Configuring python38._pth (site + resources/ parent path)..." -ForegroundColor Green
 $PthFile = Join-Path $PythonDir "python38._pth"
 $PthLines = @(Get-Content $PthFile)
 
-$CanonicalBackend = '..\backend'
-$CanonicalSageCore = '..\sage-core'
+$CanonicalResources = '..'
 
-# Strip existing backend/sage-core lines first (idempotent re-run).
-$Cleaned = $PthLines | Where-Object { $_ -ne $CanonicalBackend -and $_ -ne $CanonicalSageCore }
+# Strip existing `..` line if present (idempotent re-run).
+$Cleaned = $PthLines | Where-Object { $_ -ne $CanonicalResources }
 # Uncomment `#import site` if present.
 $Cleaned = $Cleaned -replace '^#import site\s*$', 'import site'
 
-$NewLines = @($Cleaned + $CanonicalBackend + $CanonicalSageCore)
-# Strip trailing blank lines so the file ends exactly with the sage-core path.
+$NewLines = @($Cleaned + $CanonicalResources)
+# Strip trailing blank lines so the file ends exactly with the `..` path.
 while ($NewLines.Count -gt 0 -and [string]::IsNullOrWhiteSpace($NewLines[-1])) {
     $NewLines = $NewLines[0..($NewLines.Count - 2)]
 }
