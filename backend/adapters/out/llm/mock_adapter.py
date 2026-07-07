@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 from sage_core import Message, Role
 from sage_core.repositories import LLMPort
@@ -31,21 +31,21 @@ class MockLLMAdapter:
 
     def __init__(
         self,
-        responses: list[Message] | None = None,
+        responses: Optional[List[Message]] = None,
         default_content: str = "[mock default]",
     ) -> None:
-        self._responses: list[Message] = list(responses or [])
+        self._responses: List[Message] = list(responses or [])
         self._index: int = 0
         self._default_content: str = default_content
-        self.calls: list[dict[str, Any]] = []
+        self.calls: List[Dict[str, Any]] = []
 
     # ---- LLMPort 实现 ----
 
     async def chat(
         self,
-        messages: list[Message],
-        tools: list[Any] | None = None,
-        tool_choice: str | dict[str, Any] | None = None,
+        messages: List[Message],
+        tools: Optional[List[Any]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> Message:
         """按顺序返回预置 responses；耗尽后回退到 ``default_content``。"""
         self.calls.append({"messages": messages, "tools": tools, "tool_choice": tool_choice})
@@ -57,7 +57,7 @@ class MockLLMAdapter:
 
     async def chat_stream(
         self,
-        messages: list[Message],
+        messages: List[Message],
     ) -> AsyncIterator[str]:
         """流式默认 yield ``default_content`` 的字符。"""
         self.calls.append({"messages": messages, "stream": True})
@@ -68,7 +68,7 @@ class MockLLMAdapter:
 
     def assert_called_with(
         self,
-        messages: list[Message] | None = None,
+        messages: Optional[List[Message]] = None,
         **kwargs: Any,
     ) -> None:
         """断言最后一次调用包含指定 messages 与其它参数。

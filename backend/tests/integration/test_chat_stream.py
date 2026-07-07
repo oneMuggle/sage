@@ -17,6 +17,7 @@
 """
 
 from __future__ import annotations
+from typing import List
 
 import asyncio
 import contextlib
@@ -39,7 +40,7 @@ pytestmark = pytest.mark.integration
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
 
 
-def _parse_ndjson(text: str) -> list[dict]:
+def _parse_ndjson(text: str) -> List[dict]:
     return [json.loads(line) for line in text.split("\n") if line.strip()]
 
 

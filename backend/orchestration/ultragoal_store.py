@@ -36,7 +36,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Dict, List, Literal, Optional, Union
 
 # ============================================================================
 # Errors
@@ -81,13 +81,13 @@ class Ultragoal:
     goal_id: str
     title: str
     objective: str
-    acceptance_criteria: list[str]
-    parent_goal_id: str | None = None
+    acceptance_criteria: List[str]
+    parent_goal_id: Optional[str] = None
     status: _GoalStatus = "active"
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
     updated_at: int = field(default_factory=lambda: int(time.time() * 1000))
-    sub_goal_ids: list[str] = field(default_factory=list)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    sub_goal_ids: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.goal_id or not self.goal_id.strip():
@@ -104,7 +104,7 @@ class Ultragoal:
             raise ValueError("acceptance_criteria must contain ≥1 non-blank entry")
         self.acceptance_criteria = cleaned
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "goal_id": self.goal_id,
             "title": self.title,
@@ -119,7 +119,7 @@ class Ultragoal:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> Ultragoal:
+    def from_dict(cls, d: Dict[str, Any]) -> Ultragoal:
         return cls(
             goal_id=d["goal_id"],
             title=d["title"],
@@ -143,15 +143,15 @@ class LedgerEntry:
     actor: str
     action: _LedgerAction
     goal_id: str
-    before: dict[str, Any] | None
-    after: dict[str, Any]
-    evidence_refs: list[str] = field(default_factory=list)
+    before: Optional[Dict[str, Any]]
+    after: Dict[str, Any]
+    evidence_refs: List[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.action not in _VALID_LEDGER_ACTIONS:
             raise ValueError(f"action must be one of {_VALID_LEDGER_ACTIONS}, got {self.action!r}")
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "entry_id": self.entry_id,
             "timestamp": self.timestamp,
@@ -164,7 +164,7 @@ class LedgerEntry:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> LedgerEntry:
+    def from_dict(cls, d: Dict[str, Any]) -> LedgerEntry:
         return cls(
             entry_id=d["entry_id"],
             timestamp=int(d["timestamp"]),
@@ -185,11 +185,11 @@ class Checkpoint:
     goal_id: str
     created_at: int
     actor: str
-    evidence: list[str]
+    evidence: List[str]
     summary: str
     terminal: bool
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "checkpoint_id": self.checkpoint_id,
             "goal_id": self.goal_id,
@@ -201,7 +201,7 @@ class Checkpoint:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> Checkpoint:
+    def from_dict(cls, d: Dict[str, Any]) -> Checkpoint:
         return cls(
             checkpoint_id=d["checkpoint_id"],
             goal_id=d["goal_id"],
@@ -229,12 +229,12 @@ class UltragoalStore:
       - `worker-write-rejected.log` — append-only
     """
 
-    def __init__(self, persist_dir: Path | str | None = None) -> None:
+    def __init__(self, persist_dir: Optional[Union[Path, str]] = None) -> None:
         self.persist_dir = Path(persist_dir) if persist_dir is not None else None
-        self._goals: dict[str, Ultragoal] = {}
-        self._ledger: list[LedgerEntry] = []
-        self._worker_rejections: list[dict[str, Any]] = []
-        self._checkpoint_seq: dict[str, int] = {}
+        self._goals: Dict[str, Ultragoal] = {}
+        self._ledger: List[LedgerEntry] = []
+        self._worker_rejections: List[Dict[str, Any]] = []
+        self._checkpoint_seq: Dict[str, int] = {}
         self._lock = threading.Lock()
 
         # Reload existing state from disk (if persist_dir is set).
@@ -250,9 +250,9 @@ class UltragoalStore:
         goal_id: str,
         title: str,
         objective: str,
-        acceptance_criteria: list[str],
-        parent_goal_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        acceptance_criteria: List[str],
+        parent_goal_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Ultragoal:
         """Create a new goal. Raises DuplicateGoalId if goal_id exists."""
         with self._lock:
@@ -285,16 +285,16 @@ class UltragoalStore:
     def get_goal(self, goal_id: str) -> Ultragoal | None:
         return self._goals.get(goal_id)
 
-    def list_active_goals(self) -> list[Ultragoal]:
+    def list_active_goals(self) -> List[Ultragoal]:
         return [g for g in self._goals.values() if g.status == "active"]
 
     def update_goal(
         self,
         goal_id: str,
         actor: str,
-        status: _GoalStatus | None = None,
-        metadata: dict[str, Any] | None = None,
-        sub_goal_ids: list[str] | None = None,
+        status: Optional[_GoalStatus] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        sub_goal_ids: Optional[List[str]] = None,
     ) -> Ultragoal:
         """Update mutable fields of a goal. Raises GoalNotFound if missing."""
         with self._lock:
@@ -330,7 +330,7 @@ class UltragoalStore:
         self,
         goal_id: str,
         actor: str,
-        evidence: list[str],
+        evidence: List[str],
         summary: str,
         terminal: bool,
     ) -> Checkpoint:
@@ -365,7 +365,7 @@ class UltragoalStore:
     # Ledger
     # ------------------------------------------------------------------
 
-    def read_ledger(self) -> list[LedgerEntry]:
+    def read_ledger(self) -> List[LedgerEntry]:
         """Return the full ledger (immutable from the caller's perspective)."""
         return list(self._ledger)
 
@@ -390,7 +390,7 @@ class UltragoalStore:
             self._worker_rejections.append(entry)
             self._persist_worker_rejection(entry)
 
-    def read_worker_write_rejections(self) -> list[dict[str, Any]]:
+    def read_worker_write_rejections(self) -> List[Dict[str, Any]]:
         return list(self._worker_rejections)
 
     # ------------------------------------------------------------------
@@ -402,9 +402,9 @@ class UltragoalStore:
         actor: str,
         action: _LedgerAction,
         goal_id: str,
-        before: dict[str, Any] | None,
-        after: dict[str, Any],
-        evidence_refs: list[str],
+        before: Optional[Dict[str, Any]],
+        after: Dict[str, Any],
+        evidence_refs: List[str],
     ) -> None:
         entry = LedgerEntry(
             entry_id=f"le_{secrets.token_hex(6)}",
@@ -446,7 +446,7 @@ class UltragoalStore:
         path = self.persist_dir / f"{ck.checkpoint_id}.json"
         path.write_text(json.dumps(ck.to_dict(), sort_keys=True, indent=2))
 
-    def _persist_worker_rejection(self, entry: dict[str, Any]) -> None:
+    def _persist_worker_rejection(self, entry: Dict[str, Any]) -> None:
         if self.persist_dir is None:
             return
         self.persist_dir.mkdir(parents=True, exist_ok=True)
@@ -538,9 +538,9 @@ class UltragoalGuard:
         goal_id: str,
         title: str,
         objective: str,
-        acceptance_criteria: list[str],
-        parent_goal_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        acceptance_criteria: List[str],
+        parent_goal_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Ultragoal:
         self.assert_can_write(actor, "create_goal")
         return self.store.create_goal(
@@ -556,9 +556,9 @@ class UltragoalGuard:
         self,
         goal_id: str,
         actor: str,
-        status: _GoalStatus | None = None,
-        metadata: dict[str, Any] | None = None,
-        sub_goal_ids: list[str] | None = None,
+        status: Optional[_GoalStatus] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        sub_goal_ids: Optional[List[str]] = None,
     ) -> Ultragoal:
         self.assert_can_write(actor, "update_goal")
         return self.store.update_goal(
@@ -573,7 +573,7 @@ class UltragoalGuard:
         self,
         goal_id: str,
         actor: str,
-        evidence: list[str],
+        evidence: List[str],
         summary: str,
         terminal: bool,
     ) -> Checkpoint:
@@ -590,7 +590,7 @@ class UltragoalGuard:
         self,
         goal_id: str,
         actor: str,
-        evidence: list[str] | None = None,
+        evidence: Optional[List[str]] = None,
     ) -> Ultragoal:
         """Convenience: mark goal complete + record a terminal checkpoint."""
         self.assert_can_write(actor, "complete")

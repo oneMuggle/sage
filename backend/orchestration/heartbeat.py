@@ -7,6 +7,7 @@ Periodically scans running lanes and detects:
 
 Triggers recovery policies when issues are detected.
 """
+from typing import Optional
 
 import asyncio
 import contextlib
@@ -25,8 +26,8 @@ class HeartbeatMonitor:
         check_interval: float = 30.0,
         stalled_after: float = 300.0,
         dead_after: float = 600.0,
-        on_stalled: Callable | None = None,
-        on_dead: Callable | None = None,
+        on_stalled: Optional[Callable] = None,
+        on_dead: Optional[Callable] = None,
     ):
         """
         Initialize heartbeat monitor.
@@ -45,7 +46,7 @@ class HeartbeatMonitor:
         self.dead_after = dead_after
         self.on_stalled = on_stalled
         self.on_dead = on_dead
-        self._monitor_task: asyncio.Task | None = None
+        self._monitor_task: Optional[asyncio.Task] = None
 
     async def start(self):
         """Start the heartbeat monitor background task."""

@@ -13,6 +13,7 @@
 """
 
 from __future__ import annotations
+from typing import Optional
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -27,7 +28,7 @@ from backend.skills.skill_md.skill import SkillMdDocument
 pytestmark = pytest.mark.unit
 
 
-def _make_doc(name: str = "test-skill", base_dir: Path | None = None) -> SkillMdDocument:
+def _make_doc(name: str = "test-skill", base_dir: Optional[Path] = None) -> SkillMdDocument:
     """创建测试用的 SkillMdDocument。"""
     return SkillMdDocument(
         name=name,

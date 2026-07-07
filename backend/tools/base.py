@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -16,7 +16,7 @@ class ToolSchema:
 
     name: str  # 工具名称
     description: str  # 工具描述
-    parameters: dict[str, Any] = field(default_factory=dict)  # JSON Schema 格式参数
+    parameters: Dict[str, Any] = field(default_factory=dict)  # JSON Schema 格式参数
 
 
 @dataclass
@@ -25,9 +25,9 @@ class ToolResult:
 
     success: bool  # 是否成功
     content: Any = None  # 返回内容
-    error: str | None = None  # 错误信息
+    error: Optional[str] = None  # 错误信息
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
         result = {"success": self.success}
         if self.content is not None:
@@ -47,7 +47,7 @@ class BaseTool(ABC):
     """
 
     def __init__(self):
-        self._schema: ToolSchema | None = None
+        self._schema: Optional[ToolSchema] = None
 
     @property
     def schema(self) -> ToolSchema:

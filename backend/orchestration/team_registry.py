@@ -11,7 +11,7 @@ Provides high-level operations for team management:
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.data.orchestration_repo import TeamRepository
 from backend.orchestration.models import Team, TeamStatus
@@ -25,13 +25,13 @@ class TeamRegistry:
     from the completion status of its member tasks.
     """
 
-    def __init__(self, repo: TeamRepository | None = None) -> None:
+    def __init__(self, repo: Optional[TeamRepository] = None) -> None:
         self.repo = repo or TeamRepository()
 
     def create_team(
         self,
         name: str,
-        metadata: dict[str, Any] | None = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Team:
         """
         Create a new team.
@@ -121,7 +121,7 @@ class TeamRegistry:
         except ValueError:
             return False
 
-    def list_teams(self, status: TeamStatus | None = None, limit: int = 100) -> list[Team]:
+    def list_teams(self, status: Optional[TeamStatus] = None, limit: int = 100) -> List[Team]:
         """List teams with optional status filter."""
         return self.repo.list(status=status, limit=limit)
 
@@ -129,7 +129,7 @@ class TeamRegistry:
         """Delete a team."""
         return self.repo.delete(team_id)
 
-    def get_team_progress(self, team_id: str) -> dict[str, int]:
+    def get_team_progress(self, team_id: str) -> Dict[str, int]:
         """
         Get task progress breakdown for a team.
 

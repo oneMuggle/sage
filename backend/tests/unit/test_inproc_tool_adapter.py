@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 import pytest
 from sage_core import ToolResult, ToolSpec
@@ -89,7 +89,7 @@ class _FakeRawResult:
         self,
         success: bool,
         content: Any = None,
-        error: str | None = None,
+        error: Optional[str] = None,
     ) -> None:
         self.success = success
         self.content = content
@@ -102,13 +102,13 @@ class _FakeTool:
     def __init__(
         self,
         name: str,
-        raw: _FakeRawResult | None = None,
-        raise_exc: Exception | None = None,
+        raw: Optional[_FakeRawResult] = None,
+        raise_exc: Optional[Exception] = None,
     ) -> None:
         self._name = name
         self._raw = raw
         self._raise = raise_exc
-        self.calls: list[dict[str, Any]] = []
+        self.calls: List[Dict[str, Any]] = []
 
     @property
     def name(self) -> str:
@@ -122,7 +122,7 @@ class _FakeTool:
         return self._raw
 
 
-def _make_registry(tools: dict[str, _FakeTool]) -> Any:
+def _make_registry(tools: Dict[str, _FakeTool]) -> Any:
     """构造一个最简 registry：暴露 ``get``/``list``，兼容 adapter 期望。"""
 
     class _Reg:

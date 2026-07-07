@@ -10,6 +10,7 @@
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import logging
 import re
@@ -126,7 +127,7 @@ class MemorySafetyScanner:
 
 
 # 全局扫描器实例
-_scanner: MemorySafetyScanner | None = None
+_scanner: Optional[MemorySafetyScanner] = None
 
 
 def get_scanner() -> MemorySafetyScanner:

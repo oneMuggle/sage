@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.semantic import SemanticMemory
@@ -40,7 +40,7 @@ class MemoryManager:
         self.episodic = episodic
         self.semantic = semantic
 
-    def remember(self, content: str, metadata: dict[str, Any] | None = None) -> str:
+    def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
         将内容存入情景记忆
 
@@ -73,8 +73,8 @@ class MemoryManager:
         content: str,
         memory_type: str = "auto",
         importance: int = 5,
-        tags: list[str] | None = None,
-        metadata: dict[str, Any] | None = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str | None:
         """
         通用记忆存储接口
@@ -133,8 +133,8 @@ class MemoryManager:
         return "episodic"
 
     def recall(
-        self, query: str, limit: int = 5, memory_types: list[str] | None = None
-    ) -> dict[str, list[dict[str, Any]]]:
+        self, query: str, limit: int = 5, memory_types: Optional[List[str]] = None
+    ) -> Dict[str, List[Dict[str, Any]]]:
         """
         检索记忆
 
@@ -259,8 +259,8 @@ class MemoryManager:
         self.working.add({"role": role, "content": content})
 
     def search_memories(
-        self, query: str, memory_type: str | None = None, limit: int = 10
-    ) -> list[dict[str, Any]]:
+        self, query: str, memory_type: Optional[str] = None, limit: int = 10
+    ) -> List[Dict[str, Any]]:
         """
         搜索记忆的统一接口
 
@@ -310,7 +310,7 @@ class MemoryManager:
             logger.warning(f"不支持删除记忆类型: {memory_type}")
             return False
 
-    def get_stats(self) -> dict[str, Any]:
+    def get_stats(self) -> Dict[str, Any]:
         """
         获取记忆统计信息
 

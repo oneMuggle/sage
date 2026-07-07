@@ -17,7 +17,7 @@ from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 try:  # pragma: no cover — py3.11+ runtime branch
     from datetime import UTC as _UTC  # type: ignore[attr-defined]
@@ -54,19 +54,19 @@ class ScheduledTask:
     id: str
     name: str
     type: Literal["once", "recurring"]
-    schedule: dict[str, Any]
+    schedule: Dict[str, Any]
     session_id: str
     content: str
     enabled: bool
     created_at: int
-    last_run: int | None = None
-    next_run: int | None = None
+    last_run: Optional[int] = None
+    next_run: Optional[int] = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> ScheduledTask:
+    def from_dict(cls, raw: Dict[str, Any]) -> ScheduledTask:
         return cls(
             id=str(raw["id"]),
             name=str(raw["name"]),
@@ -102,14 +102,14 @@ class SchedulerService:
         self._message_repo = message_repo
         self._session_repo = session_repo
         self._lock = threading.Lock()
-        self._tasks: dict[str, ScheduledTask] = {}
+        self._tasks: Dict[str, ScheduledTask] = {}
         self._scheduler = BackgroundScheduler(daemon=True)
         self._load_from_disk()
         self._reschedule_all()
 
     # ---------- public API ----------
 
-    def list_tasks(self) -> list[ScheduledTask]:
+    def list_tasks(self) -> List[ScheduledTask]:
         with self._lock:
             return list(self._tasks.values())
 
@@ -123,7 +123,7 @@ class SchedulerService:
         self,
         name: str,
         task_type: Literal["once", "recurring"],
-        schedule: dict[str, Any],
+        schedule: Dict[str, Any],
         session_id: str,
         content: str,
     ) -> ScheduledTask:
@@ -138,7 +138,7 @@ class SchedulerService:
             at_ms = int(schedule["at"])
             if at_ms <= int(time.time() * 1000):
                 raise ValidationError("one-shot 'at' must be in the future")
-            validated_schedule: dict[str, Any] = {"kind": "once", "at": at_ms}
+            validated_schedule: Dict[str, Any] = {"kind": "once", "at": at_ms}
             next_run = at_ms
         else:
             cron_expr = str(schedule["cron"]).strip()
@@ -354,7 +354,7 @@ class SchedulerService:
         tmp.replace(self._store_path)
 
 
-_global_service: SchedulerService | None = None
+_global_service: Optional[SchedulerService] = None
 
 
 def get_scheduler_service() -> SchedulerService | None:

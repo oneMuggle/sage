@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from sage_core import Message
 from sage_core.exceptions import SessionNotFoundError
@@ -39,7 +39,7 @@ _ACTIVE_SESSIONS_METRIC = "sage_active_sessions"
 _tracer = get_tracer("session_service")
 
 
-def _message_to_dict(m: Message) -> dict[str, Any]:
+def _message_to_dict(m: Message) -> Dict[str, Any]:
     """``domain.Message`` → API 响应 dict(供 list_messages 等端点用)。
 
     比 ``dataclasses.asdict`` 多一层:把 ``Role`` 枚举转字符串、把
@@ -115,12 +115,12 @@ class SessionService:
         self,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """列出会话;offset/limit 仅做分页(底层 storage 暂不支持,先 in-mem 切片)。"""
         all_sessions = await self.storage.list_sessions()
         return all_sessions[offset : offset + limit]
 
-    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+    async def get_session(self, session_id: str) -> Dict[str, Any] | None:
         """取单个会话;不存在返 ``None``(路由层映射 404)。"""
         return await self.storage.get_session(session_id)
 
@@ -128,9 +128,9 @@ class SessionService:
         self,
         session_id: str,
         *,
-        title: str | None = None,
-        is_pinned: bool | None = None,
-    ) -> dict[str, Any]:
+        title: Optional[str] = None,
+        is_pinned: Optional[bool] = None,
+    ) -> Dict[str, Any]:
         """局部更新会话字段;全 ``None`` 等于 no-op(返当前快照)。
 
         Args:
@@ -150,7 +150,7 @@ class SessionService:
             raise SessionNotFoundError(session_id)
 
         # 收集非 None 字段
-        fields: dict[str, Any] = {}
+        fields: Dict[str, Any] = {}
         if title is not None:
             fields["title"] = title
         if is_pinned is not None:
@@ -187,7 +187,7 @@ class SessionService:
         session_id: str,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """列出会话消息(转 dict 格式供 API);offset/limit in-mem 切片。
 
         底层 storage.get_messages 已带 limit;本方法先取较大窗口

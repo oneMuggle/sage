@@ -10,7 +10,7 @@ import importlib.util
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.skills.base import BaseSkill
 from backend.skills.registry import SkillRegistry
@@ -28,11 +28,11 @@ class SkillHotLoader:
     - 与 SkillRegistry 集成
     """
 
-    def __init__(self, registry: SkillRegistry, skill_dirs: list[str] | None = None):
+    def __init__(self, registry: SkillRegistry, skill_dirs: Optional[List[str]] = None):
         self.registry = registry
         self._skill_dirs = skill_dirs or [str(Path(__file__).parent.parent / "skills" / "builtin")]
-        self._file_hashes: dict[str, str] = {}
-        self._loaded_skills: dict[str, str] = {}  # skill_name -> file_path
+        self._file_hashes: Dict[str, str] = {}
+        self._loaded_skills: Dict[str, str] = {}  # skill_name -> file_path
         self._ensure_dirs()
 
     def _ensure_dirs(self):
@@ -101,7 +101,7 @@ class SkillHotLoader:
             logger.error(f"加载 Skill 文件失败: {file_path}, error: {e}")
             return False
 
-    def check_for_updates(self) -> list[str]:
+    def check_for_updates(self) -> List[str]:
         """检查文件变更"""
         updated = []
         for file_path, old_hash in list(self._file_hashes.items()):
@@ -140,7 +140,7 @@ class SkillHotLoader:
                 reloaded += 1
         return reloaded
 
-    def get_stats(self) -> dict[str, Any]:
+    def get_stats(self) -> Dict[str, Any]:
         """获取统计"""
         return {
             "loaded_skills": len(self._loaded_skills),

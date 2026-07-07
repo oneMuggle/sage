@@ -14,6 +14,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, FrozenSet
 
 import asyncio
 import logging
@@ -46,7 +47,7 @@ class SubprocessSandboxAdapter:
         python_executable: str = sys.executable,
         default_timeout_s: float = 30.0,
         max_timeout_s: float = 300.0,
-        env_denylist: frozenset[str] = DEFAULT_ENV_DENYLIST,
+        env_denylist: FrozenSet[str] = DEFAULT_ENV_DENYLIST,
     ) -> None:
         self._python_executable = python_executable
         self._default_timeout_s = default_timeout_s
@@ -155,7 +156,7 @@ class SubprocessSandboxAdapter:
             duration_ms=duration_ms,
         )
 
-    def _build_env(self, request_env: dict[str, str]) -> dict[str, str]:
+    def _build_env(self, request_env: Dict[str, str]) -> Dict[str, str]:
         """构造子进程环境变量（剥离敏感键）。
 
         Args:

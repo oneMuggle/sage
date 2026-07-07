@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple
 
 from ..base import BaseSkill, SkillResult, SkillSchema
 
@@ -31,9 +31,9 @@ if TYPE_CHECKING:
 class RequiresSpec:
     """技能执行前置条件规格（v2）。"""
 
-    bins: list[str] = field(default_factory=list)
-    env: list[str] = field(default_factory=list)
-    config: list[str] = field(default_factory=list)
+    bins: List[str] = field(default_factory=list)
+    env: List[str] = field(default_factory=list)
+    config: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class DispatchMode:
 
     disable_model_invocation: bool = False
     user_invocable: bool = False
-    user_invocable_name: str | None = None
+    user_invocable_name: Optional[str] = None
     command_dispatch: str = "auto"
 
 
@@ -52,24 +52,24 @@ class SkillMdDocument:
 
     name: str
     description: str
-    triggers: list[str] = field(default_factory=list)
+    triggers: List[str] = field(default_factory=list)
     body: str = ""
-    base_dir: Path | None = None
-    version: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-    raw_frontmatter: dict[str, Any] = field(default_factory=dict)
+    base_dir: Optional[Path] = None
+    version: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    raw_frontmatter: Dict[str, Any] = field(default_factory=dict)
 
     # v2 新增字段（向后兼容）
     requires: RequiresSpec = field(default_factory=RequiresSpec)
-    os: list[str] = field(default_factory=list)  # 平台过滤
+    os: List[str] = field(default_factory=list)  # 平台过滤
     always: bool = False  # 跳过条件加载
     dispatch: DispatchMode = field(default_factory=DispatchMode)
-    resources: Any | None = None  # ResourceIndex，由 loader 构建
+    resources: Optional[Any] = None  # ResourceIndex，由 loader 构建
 
     # agentskills.io spec optional fields (Task 3)
-    license: str | None = None
-    compatibility: str | None = None
-    allowed_tools: tuple[str, ...] = field(default_factory=tuple)
+    license: Optional[str] = None
+    compatibility: Optional[str] = None
+    allowed_tools: Tuple[str, ...] = field(default_factory=tuple)
 
 
 class SkillMdSkill(BaseSkill):
@@ -87,8 +87,8 @@ class SkillMdSkill(BaseSkill):
     def __init__(
         self,
         doc: SkillMdDocument,
-        base_dir: Path | None = None,
-        script_runner: ScriptRunner | None = None,
+        base_dir: Optional[Path] = None,
+        script_runner: Optional[ScriptRunner] = None,
     ) -> None:
         # 必须先 super().__init__(), 让 BaseSkill 初始化 _schema cache
         super().__init__()
@@ -97,7 +97,7 @@ class SkillMdSkill(BaseSkill):
         if base_dir is not None:
             self._doc.base_dir = base_dir
         # v2: 可选 ScriptRunner 引用 (None = 不支持脚本执行)
-        self._script_runner: ScriptRunner | None = script_runner
+        self._script_runner: Optional[ScriptRunner] = script_runner
 
     def _build_schema(self) -> SkillSchema:
         triggers = self._doc.triggers if self._doc.triggers else [self._doc.name.lower()]
@@ -109,7 +109,7 @@ class SkillMdSkill(BaseSkill):
             examples=[],
         )
 
-    def execute(self, params: dict[str, Any], context: dict[str, Any]) -> SkillResult:
+    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         """返回 body + 元数据, 不消费 params/context (v1 设计)。
 
         v1 决策: SKILL.md 技能**不**调 LLM / 工具, 只产提示词模板。
@@ -131,8 +131,8 @@ class SkillMdSkill(BaseSkill):
 
     async def execute_v2(
         self,
-        params: dict[str, Any],
-        context: dict[str, Any],
+        params: Dict[str, Any],
+        context: Dict[str, Any],
     ) -> SkillResult:
         """v2 执行路径: 支持脚本执行 + 向后兼容 body 返回。
 
@@ -161,7 +161,7 @@ class SkillMdSkill(BaseSkill):
             return self.execute(params, context)
 
         # 委托 ScriptRunner: args 强制转为 tuple (ScriptRunner 接口契约)
-        args: tuple[str, ...] = tuple(params.get("args") or ())
+        args: Tuple[str, ...] = tuple(params.get("args") or ())
 
         return await self._script_runner.run_script(
             doc=self._doc,

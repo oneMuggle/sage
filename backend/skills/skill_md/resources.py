@@ -17,6 +17,7 @@
 """
 
 from __future__ import annotations
+from typing import List, Tuple
 
 import logging
 import re
@@ -44,10 +45,10 @@ class ResourceIndex:
     字段全部为 ``tuple[Path, ...]``，按文件名字典序排列，确保测试可重现。
     """
 
-    scripts: tuple[Path, ...] = ()
-    references: tuple[Path, ...] = ()
-    assets: tuple[Path, ...] = ()
-    templates: tuple[Path, ...] = ()
+    scripts: Tuple[Path, ...] = ()
+    references: Tuple[Path, ...] = ()
+    assets: Tuple[Path, ...] = ()
+    templates: Tuple[Path, ...] = ()
 
 
 def build_resource_index(base_dir: Path) -> ResourceIndex:
@@ -69,10 +70,10 @@ def build_resource_index(base_dir: Path) -> ResourceIndex:
     if not base_dir.is_dir():
         return ResourceIndex()
 
-    scripts: list[Path] = []
-    references: list[Path] = []
-    assets: list[Path] = []
-    templates: list[Path] = []
+    scripts: List[Path] = []
+    references: List[Path] = []
+    assets: List[Path] = []
+    templates: List[Path] = []
 
     for subdir_name in ALLOWED_RESOURCE_DIRS:
         subdir = base_dir / subdir_name

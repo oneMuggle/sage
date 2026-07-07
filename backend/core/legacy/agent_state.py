@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, Optional
 
 
 class AgentState(str, Enum):
@@ -36,9 +36,9 @@ class ToolCallRequest:
 
     id: str
     name: str
-    arguments: dict[str, Any]
+    arguments: Dict[str, Any]
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """序列化为 OpenAI 工具调用格式。"""
         return {
             "id": self.id,
@@ -58,7 +58,7 @@ class ToolCallResult:
     content: str
     is_error: bool = False
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "tool_call_id": self.tool_call_id,
             "role": "tool",
@@ -72,16 +72,16 @@ class AgentEvent:
 
     state: AgentState
     iteration: int = 0
-    content: str | None = None
-    reasoning: str | None = None  # LLM 思考/推理过程内容
-    tool_call: ToolCallRequest | None = None
-    tool_result: ToolCallResult | None = None
-    error: str | None = None
-    agent_id: str | None = None  # 当前执行 agent 的 ID(供前端显示"当前处理 agent")
+    content: Optional[str] = None
+    reasoning: Optional[str] = None  # LLM 思考/推理过程内容
+    tool_call: Optional[ToolCallRequest] = None
+    tool_result: Optional[ToolCallResult] = None
+    error: Optional[str] = None
+    agent_id: Optional[str] = None  # 当前执行 agent 的 ID(供前端显示"当前处理 agent")
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """序列化为 JSON 友好的字典。"""
-        d: dict[str, Any] = {
+        d: Dict[str, Any] = {
             "state": self.state.value,
             "iteration": self.iteration,
         }

@@ -11,7 +11,7 @@ This module defines the fundamental abstractions for task coordination:
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 # ============================================================================
 # Task Status & Model
@@ -49,19 +49,19 @@ class Task:
     status: TaskStatus = TaskStatus.CREATED
     priority: int = 0  # Higher = more important
     executor_type: str = "agent"  # "agent" / "tool" / "script"
-    parameters: dict[str, Any] = field(default_factory=dict)
+    parameters: Dict[str, Any] = field(default_factory=dict)
     packet: Optional["TaskPacket"] = None  # Advanced configuration
 
     # Dependency management
-    blocks: list[str] = field(default_factory=list)  # Tasks this task unblocks
-    blocked_by: list[str] = field(default_factory=list)  # Tasks that block this task
+    blocks: List[str] = field(default_factory=list)  # Tasks this task unblocks
+    blocked_by: List[str] = field(default_factory=list)  # Tasks that block this task
 
     # Execution metadata
-    result: Any | None = None
+    result: Optional[Any] = None
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
-    started_at: int | None = None
-    completed_at: int | None = None
-    team_id: str | None = None
+    started_at: Optional[int] = None
+    completed_at: Optional[int] = None
+    team_id: Optional[str] = None
 
     def mark_running(self) -> None:
         """Transition to RUNNING state."""
@@ -78,7 +78,7 @@ class Task:
         self.completed_at = int(time.time() * 1000)
         self.result = result
 
-    def mark_failed(self, error: str | None = None) -> None:
+    def mark_failed(self, error: Optional[str] = None) -> None:
         """Transition to FAILED state."""
         if self.status != TaskStatus.RUNNING:
             raise ValueError(f"Cannot fail: task is {self.status}")
@@ -111,7 +111,7 @@ class RecoveryPolicy:
     """Defines how to handle task failures."""
 
     on_failure: str = "retry"  # "retry" / "skip" / "abort-siblings" / "ask-human"
-    retry_backoff_secs: list[int] = field(default_factory=lambda: [30, 120, 600])
+    retry_backoff_secs: List[int] = field(default_factory=lambda: [30, 120, 600])
     max_retries: int = 2
 
 
@@ -120,7 +120,7 @@ class EscalationPolicy:
     """Defines how to escalate unresolved issues."""
 
     after_retries: str = "notify-human"  # "notify-human" / "mark-blocked" / "fail-fast"
-    notify_channels: list[str] = field(default_factory=list)  # ["discord", "email"]
+    notify_channels: List[str] = field(default_factory=list)  # ["discord", "email"]
 
 
 @dataclass
@@ -132,11 +132,11 @@ class TaskPacket:
     """
 
     objective: str
-    scope: list[str] = field(default_factory=list)  # Allowed file paths
-    acceptance_tests: list[str] = field(default_factory=list)  # Tests that must pass
+    scope: List[str] = field(default_factory=list)  # Allowed file paths
+    acceptance_tests: List[str] = field(default_factory=list)  # Tests that must pass
 
     # Execution constraints
-    model: str | None = None  # LLM model to use
+    model: Optional[str] = None  # LLM model to use
     permission_profile: str = "workspace-write"  # "read-only" / "workspace-write" / "full"
     timeout_secs: int = 600
 
@@ -206,18 +206,18 @@ class Lane:
 
     lane_id: str
     task_id: str
-    agent_id: str | None = None
+    agent_id: Optional[str] = None
     status: LaneStatus = LaneStatus.CREATED
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
-    started_at: int | None = None
-    completed_at: int | None = None
+    started_at: Optional[int] = None
+    completed_at: Optional[int] = None
 
     # Execution context
-    worktree: str | None = None  # Isolated filesystem workspace
-    heartbeat: LaneHeartbeat | None = None
-    error: str | None = None
+    worktree: Optional[str] = None  # Isolated filesystem workspace
+    heartbeat: Optional[LaneHeartbeat] = None
+    error: Optional[str] = None
     permission_preset: str = "implement"  # "audit" / "explain" / "implement"
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     def bind_agent(self, agent_id: str) -> None:
         """Bind an agent to this lane."""
@@ -246,7 +246,7 @@ class Lane:
         self.status = LaneStatus.SUCCEEDED
         self.completed_at = int(time.time() * 1000)
 
-    def mark_failed(self, error: str | None = None) -> None:
+    def mark_failed(self, error: Optional[str] = None) -> None:
         """Transition to FAILED state."""
         if self.status != LaneStatus.RUNNING:
             raise ValueError(f"Cannot fail: lane is {self.status}")
@@ -297,11 +297,11 @@ class Team:
 
     team_id: str
     name: str
-    task_ids: list[str] = field(default_factory=list)
+    task_ids: List[str] = field(default_factory=list)
     status: TeamStatus = TeamStatus.CREATED
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
     updated_at: int = field(default_factory=lambda: int(time.time() * 1000))
-    metadata: dict[str, Any] = field(default_factory=dict)  # Trigger source, session, user intent
+    metadata: Dict[str, Any] = field(default_factory=dict)  # Trigger source, session, user intent
 
     def add_task(self, task_id: str) -> None:
         """Add a task to this team."""
@@ -356,11 +356,11 @@ class Agent:
     agent_id: str
     name: str
     status: str = "active"  # "active" / "busy" / "offline"
-    capabilities: list[str] = field(default_factory=list)  # ["coding", "research", "analysis"]
-    specializations: list[str] = field(default_factory=list)  # ["python", "testing", "docs"]
+    capabilities: List[str] = field(default_factory=list)  # ["coding", "research", "analysis"]
+    specializations: List[str] = field(default_factory=list)  # ["python", "testing", "docs"]
     max_concurrent_tasks: int = 1
     default_permission: str = "implement"  # "audit" / "explain" / "implement"
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 # ============================================================================
@@ -376,14 +376,14 @@ class TaskGraph:
     Used by the Planner to represent task decomposition results.
     """
 
-    tasks: list[Task] = field(default_factory=list)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    tasks: List[Task] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     def add_task(self, task: Task) -> None:
         """Add a task to the graph."""
         self.tasks.append(task)
 
-    def get_ready_tasks(self) -> list[Task]:
+    def get_ready_tasks(self) -> List[Task]:
         """Get tasks that are ready to execute (all dependencies satisfied)."""
         completed_ids = {t.task_id for t in self.tasks if t.status == TaskStatus.COMPLETED}
         ready = []

@@ -18,6 +18,7 @@
 """
 
 from __future__ import annotations
+from typing import List, Optional, Tuple
 
 import logging
 from pathlib import Path
@@ -53,7 +54,7 @@ class ScriptRunner:
         self,
         sandbox: SandboxPort,
         confirmer: ConfirmationPort,
-        allowed_roots: list[Path] | None = None,
+        allowed_roots: Optional[List[Path]] = None,
     ) -> None:
         """初始化 ScriptRunner。
 
@@ -70,7 +71,7 @@ class ScriptRunner:
         self,
         doc: SkillMdDocument,
         script_name: str,
-        args: tuple[str, ...],
+        args: Tuple[str, ...],
     ) -> SkillResult:
         """执行 SKILL.md 中的脚本。
 

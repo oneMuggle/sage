@@ -4,6 +4,7 @@
 """
 
 from __future__ import annotations
+from typing import List, Optional
 
 import pytest
 
@@ -15,10 +16,10 @@ pytestmark = pytest.mark.unit
 class _FakeMemoryManager:
     """简化的 async 记忆管理器：记录每次 remember 调用并按需返回结果。"""
 
-    def __init__(self, remember_return=None, raise_exc: Exception | None = None):
+    def __init__(self, remember_return=None, raise_exc: Optional[Exception] = None):
         self._return = remember_return if remember_return is not None else []
         self._raise = raise_exc
-        self.calls: list[tuple] = []
+        self.calls: List[tuple] = []
 
     async def remember(self, *args, **kwargs):
         self.calls.append((args, kwargs))

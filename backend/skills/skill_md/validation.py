@@ -16,6 +16,7 @@
 """
 
 from __future__ import annotations
+from typing import List
 
 import re
 from pathlib import Path
@@ -27,7 +28,7 @@ class SkillMdSecurityError(Exception):
     """SKILL.md 路径安全校验失败。"""
 
 
-def validate_base_dir(base_dir: Path, allowed_roots: list[Path]) -> Path:
+def validate_base_dir(base_dir: Path, allowed_roots: List[Path]) -> Path:
     """断言 ``base_dir`` 落在任一 ``allowed_roots`` 内, 返回 resolve 后的绝对路径。
 
     Args:

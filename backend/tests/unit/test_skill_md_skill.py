@@ -7,6 +7,7 @@
 """
 
 from __future__ import annotations
+from typing import List, Optional
 
 from pathlib import Path
 
@@ -26,12 +27,12 @@ pytestmark = pytest.mark.unit
 def _make_doc(
     name: str = "test-skill",
     description: str = "A test skill",
-    triggers: list[str] | None = None,
+    triggers: Optional[List[str]] = None,
     body: str = "Body content",
-    version: str | None = "1.0.0",
-    metadata: dict | None = None,
-    raw_frontmatter: dict | None = None,
-    base_dir: Path | None = None,
+    version: Optional[str] = "1.0.0",
+    metadata: Optional[dict] = None,
+    raw_frontmatter: Optional[dict] = None,
+    base_dir: Optional[Path] = None,
 ) -> SkillMdDocument:
     return SkillMdDocument(
         name=name,

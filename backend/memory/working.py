@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import deque
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ class WorkingMemory:
         self,
         max_size: int = 20,
         max_tokens: int = 4000,
-        db: Any | None = None,
-        session_id: str | None = None,
+        db: Optional[Any] = None,
+        session_id: Optional[str] = None,
     ):
         """
         初始化工作记忆
@@ -51,14 +51,14 @@ class WorkingMemory:
         self.messages: deque = deque(maxlen=max_size)
         self.total_tokens: int = 0
         self.session_summary: str = ""
-        self.active_entities: list[str] = []
-        self.temp_variables: dict[str, Any] = {}
+        self.active_entities: List[str] = []
+        self.temp_variables: Dict[str, Any] = {}
 
         # 如果提供了数据库，从快照恢复
         if self._db is not None:
             self._load_snapshot()
 
-    def add(self, message: dict[str, Any]) -> None:
+    def add(self, message: Dict[str, Any]) -> None:
         """
         添加消息到工作记忆
 
@@ -113,7 +113,7 @@ class WorkingMemory:
             old_message = self.messages.popleft()
             self.total_tokens -= old_message.get("tokens", 0)
 
-    def get_context(self, limit: int | None = None) -> list[dict[str, Any]]:
+    def get_context(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         获取当前上下文
 
@@ -127,7 +127,7 @@ class WorkingMemory:
             return list(self.messages)
         return list(self.messages)[-limit:]
 
-    def get_recent(self, limit: int = 5) -> list[dict[str, Any]]:
+    def get_recent(self, limit: int = 5) -> List[Dict[str, Any]]:
         """
         获取最近 N 条消息
 

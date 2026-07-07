@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, Tuple
 
 
 class ConfirmationPort(Protocol):
@@ -31,7 +31,7 @@ class ConfirmationPort(Protocol):
         self,
         skill_name: str,
         script_path: Path,
-        args: tuple[str, ...],
+        args: Tuple[str, ...],
     ) -> bool:
         """请求用户确认脚本执行。
 

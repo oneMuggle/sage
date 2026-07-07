@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -29,7 +29,7 @@ class RAGServiceClient:
         """
         self.base_url = base_url
         self.timeout = timeout
-        self._client: httpx.AsyncClient | None = None
+        self._client: Optional[httpx.AsyncClient] = None
 
     async def __aenter__(self):
         """异步上下文管理器入口。"""
@@ -49,8 +49,8 @@ class RAGServiceClient:
         self,
         query: str,
         top_k: int = 5,
-        filters: dict | None = None,
-    ) -> list[dict[str, Any]]:
+        filters: Optional[dict] = None,
+    ) -> List[Dict[str, Any]]:
         """检索记忆。
 
         Args:
@@ -80,7 +80,7 @@ class RAGServiceClient:
             logger.error(f"RAG service search failed: {e}")
             raise
 
-    async def index(self, documents: list[dict]) -> int:
+    async def index(self, documents: List[dict]) -> int:
         """索引文档。
 
         Args:
@@ -104,7 +104,7 @@ class RAGServiceClient:
             logger.error(f"RAG service index failed: {e}")
             raise
 
-    async def delete(self, ids: list[str]) -> int:
+    async def delete(self, ids: List[str]) -> int:
         """删除文档。
 
         Args:

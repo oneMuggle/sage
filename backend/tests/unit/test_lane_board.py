@@ -15,6 +15,7 @@ Coverage:
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import time
 from unittest.mock import MagicMock
@@ -44,9 +45,9 @@ def _now_ms() -> int:
 def _make_lane(
     lane_id: str,
     status: str = "running",
-    heartbeat_at: int | None = None,
+    heartbeat_at: Optional[int] = None,
     task_id: str = "task-1",
-    agent_id: str | None = "agent-1",
+    agent_id: Optional[str] = "agent-1",
 ):
     """Build a MagicMock lane with the minimal attributes LaneBoardBuilder reads."""
     lane = MagicMock()
@@ -65,7 +66,7 @@ def _make_lane(
     return lane
 
 
-def _builder(lanes: list | None = None) -> LaneBoardBuilder:
+def _builder(lanes: Optional[list] = None) -> LaneBoardBuilder:
     """Build a builder backed by a mocked lane_registry."""
     reg = MagicMock()
     reg.list_all_lanes.return_value = lanes or []
