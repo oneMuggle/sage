@@ -81,25 +81,31 @@ Describe 'bundle-python.ps1: python38._pth config (v0.4.3-alpha.2 backend timeou
         $Script:ScriptContent | Should -Not -Match '(?m)^#import site\s*$'
     }
 
-    It 'writes ..\backend into _pth so embedded Python can import backend.*' {
-        # The whole point of the fix: Python 3.8 embeddable ignores PYTHONPATH
-        # when _pth exists. The ONLY reliable way to make `from backend.*`
-        # resolve on Win7 LTS is to write the path into _pth at bundle time.
-        $Script:ScriptContent | Should -Match '\.\.\\backend'
-        $pattern = '(?s)\$PthFile.*?Set-Content.*?backend'
+    It 'writes the resources/ parent path (`..`) into _pth so embedded Python can import backend.* and sage_core' {
+        # Python's import system walks sys.path looking for the package name
+        # as a DIRECTORY inside each entry. So sys.path must contain the
+        # PARENT of the package directory, NOT the package itself. Writing
+        # `..\backend` (==resources/backend/) makes Python look for
+        # resources/backend/backend/ which doesn't exist — the v0.4.3-alpha.2
+        # first-attempt bug that this test now guards against. Correct path:
+        # `..` (==resources/) — finds both resources/backend/ and
+        # resources/sage-core/ as children.
+        $Script:ScriptContent | Should -Match '\$CanonicalResources\s*=\s*''\.{2}'''
+        $pattern = '(?s)\$PthFile.*?Set-Content.*?\.\.'
         $Script:ScriptContent | Should -Match $pattern
     }
 
-    It 'writes ..\sage-core into _pth for the sage_core package' {
-        $Script:ScriptContent | Should -Match '\.\.\\sage-core'
-        $pattern = '(?s)\$PthFile.*?Set-Content.*?sage-core'
-        $Script:ScriptContent | Should -Match $pattern
+    It 'does NOT write ..\backend or ..\sage-core into _pth (would put package dir itself on sys.path, breaking imports)' {
+        # Regression guard for the v0.4.3-alpha.2 first-attempt bug. Adding
+        # the package directory itself to sys.path makes Python look for
+        # <pkg>/<pkg>/ — ModuleNotFoundError.
+        $Script:ScriptContent | Should -Not -Match '\.\.\\\\backend'
+        $Script:ScriptContent | Should -Not -Match '\.\.\\\\sage-core'
     }
 
-    It 'makes _pth config idempotent (re-running bundle does not duplicate paths)' {
-        # Guard against repeated bundle runs appending duplicate lines to _pth.
-        $Script:ScriptContent | Should -Match "Where-Object.*-ne \\\$CanonicalBackend"
-        $Script:ScriptContent | Should -Match "Where-Object.*-ne \\\$CanonicalSageCore"
+    It 'makes _pth config idempotent (re-running bundle does not duplicate the .. line)' {
+        # Guard against repeated bundle runs appending duplicate `..` lines.
+        $Script:ScriptContent | Should -Match "Where-Object.*-ne \\\$CanonicalResources"
     }
 
     It 'verify step imports backend.main (catches _pth path errors at bundle time)' {
