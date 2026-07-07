@@ -164,4 +164,4 @@ Win7 LTS 与 main 走**完全平行**的 4 档发布线，MAJOR.MINOR.PATCH 与 
 - CI 工作流：[`.github/workflows/release.yml`](../../.github/workflows/release.yml) + [`release-win7.yml`](../../.github/workflows/release-win7.yml)
 - 升档脚本：`scripts/release/infer_tier.py`
 - CHANGELOG 模板：`scripts/release/append_changelog.py`
-- Artifact 后缀判定：`scripts/release/determine_artifact_suffix.sh`
+- Artifact 后缀：**main 用 `electron-builder.yml` 字面量 `${version}`（无后缀），win7 LTS 用字面量 `${version}-win7`**（详见 PR #110）
