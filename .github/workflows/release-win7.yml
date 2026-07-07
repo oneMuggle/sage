@@ -29,9 +29,8 @@ jobs:
 
     runs-on: windows-latest
 
-    env:
-      # Force -win7 suffix via electron-builder.yml artifactName placeholder
-      ARTIFACT_SUFFIX: win7
+    # Note: electron-builder.yml hardcodes '-win7' in win.artifactName,
+    # so no ARTIFACT_SUFFIX env var is needed. (PR #110 follow-up.)
 
     steps:
       - name: Checkout
@@ -69,14 +68,9 @@ jobs:
         shell: pwsh
         run: pwsh scripts/fetch-vcredist.ps1
 
-      - name: Determine ARTIFACT_SUFFIX
-        id: suffix
-        run: bash scripts/release/determine_artifact_suffix.sh >> $GITHUB_OUTPUT
-
-      - name: Build Windows NSIS (Win7 LTS, dynamic suffix)
-        env:
-          # Override default; produces Sage-Setup-${version}${env.ARTIFACT_SUFFIX}.${ext}
-          ARTIFACT_SUFFIX: ${{ steps.suffix.outputs.value }}
+      - name: Build Windows NSIS (Win7 LTS)
+        # electron-builder.yml hardcodes '-win7' in artifactName (commit
+        # for this PR). No ARTIFACT_SUFFIX env needed.
         run: npx electron-builder --win nsis --publish never
 
       - name: Upload to LTS GitHub Release
