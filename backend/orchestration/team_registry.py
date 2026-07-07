@@ -9,10 +9,9 @@ Provides high-level operations for team management:
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import uuid
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.data.orchestration_repo import TeamRepository
 from backend.orchestration.models import Team, TeamStatus

@@ -12,10 +12,9 @@ claw-code ``concept.md`` §4 原则 2「显式限制」：byte/turn/glob caps + 
 """
 
 from __future__ import annotations
-from typing import Dict, Optional
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Dict, Optional
 
 # 默认值与方案 §3.2 设计一致
 _DEFAULT_TIMEOUT_SECONDS = 30.0

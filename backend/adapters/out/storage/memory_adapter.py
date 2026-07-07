@@ -18,10 +18,9 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List
 
 from sage_core import Message
 from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)

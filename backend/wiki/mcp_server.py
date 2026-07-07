@@ -2,12 +2,10 @@
 
 实现 7 个 MCP 工具，让 Claude 等外部 Agent 能查询 Sage Wiki。
 """
-from typing import Dict, List
-
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 from backend.wiki import (
     build_graph,

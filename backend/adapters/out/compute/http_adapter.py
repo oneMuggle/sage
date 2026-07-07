@@ -23,10 +23,9 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List
 
 from sage_core import ComputeRequest, ComputeResult, ComputeSpec
 from sage_core.repositories import ComputePort  # noqa: F401  (structural typing target)

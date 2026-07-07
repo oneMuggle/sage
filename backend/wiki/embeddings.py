@@ -2,10 +2,9 @@
 
 实现 Markdown 内容的智能分块，以及嵌入向量的 HTTP 请求构建和响应解析。
 """
-from typing import Dict, List
-
 import json
 from dataclasses import dataclass
+from typing import Dict, List
 
 # 常量
 DEFAULT_CHUNK_SIZE = 500  # 目标块大小（字符数）

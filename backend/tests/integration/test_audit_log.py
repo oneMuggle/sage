@@ -23,11 +23,11 @@
 """
 
 from __future__ import annotations
-from typing import Set
 
 import json
 import os
 from pathlib import Path
+from typing import Set
 from unittest.mock import MagicMock
 
 import pytest

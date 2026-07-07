@@ -2,12 +2,10 @@
 
 实现混合检索（token + 向量）→ RRF 融合 → LLM 综合回答。
 """
-from typing import Dict, List, Tuple
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Tuple
 
 from . import llm_prompts
 from .context_budget import ContextBudget, truncate_pages

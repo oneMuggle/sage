@@ -6,12 +6,11 @@ Agent 状态机与事件流定义
 """
 
 from __future__ import annotations
-from typing import Dict, Optional
 
 import json
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, Optional
 
 
 class AgentState(str, Enum):

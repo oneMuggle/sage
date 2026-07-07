@@ -4,14 +4,13 @@
 # For cherry-pick to release/win7 (Pydantic 1.x): replace with .parse_obj() and .dict().
 
 from __future__ import annotations
-from typing import List
 
 import contextlib
 import json
 import os
 import time
 from pathlib import Path
-from typing import Literal
+from typing import List, Literal
 
 from pydantic import BaseModel
 

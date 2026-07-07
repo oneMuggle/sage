@@ -15,12 +15,11 @@ Events are the primary mechanism for:
 """
 
 from __future__ import annotations
-from typing import Dict, FrozenSet, List, Optional
 
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, FrozenSet, List, Optional
 
 from backend.data.orchestration_repo import LaneEventRepository
 

@@ -3,10 +3,9 @@ MCP tool wrapper — exposes MCP server tools as sage BaseTool instances.
 """
 
 from __future__ import annotations
-from typing import Dict
 
 import logging
-from typing import Any
+from typing import Any, Dict
 
 from backend.mcp.client import McpClient, McpClientError
 from backend.mcp.config import McpServerConfig, get_mcp_server_configs

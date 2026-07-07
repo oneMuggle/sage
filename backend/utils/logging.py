@@ -4,12 +4,12 @@ Sage 日志配置模块
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from opentelemetry import trace
 

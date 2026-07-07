@@ -4,7 +4,6 @@ SageAgent - 核心对话引擎
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import hashlib
 import json
@@ -13,7 +12,7 @@ import time
 import uuid
 from collections import deque
 from threading import Lock
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import AgentError, ToolCallError

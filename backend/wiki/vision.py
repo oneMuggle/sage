@@ -3,8 +3,6 @@
 使用视觉 LLM 为图片生成描述，支持多模态 Ingest。
 支持 OpenAI GPT-4V、Anthropic Claude 3 with vision 等。
 """
-from typing import Dict, Optional
-
 import base64
 import hashlib
 import json
@@ -12,6 +10,7 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Dict, Optional
 
 import httpx
 

@@ -3,10 +3,10 @@
 """
 
 from __future__ import annotations
-from typing import List
 
 import shlex
 import subprocess
+from typing import List
 
 from .base import BaseTool, ToolResult, ToolSchema
 

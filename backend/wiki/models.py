@@ -2,10 +2,9 @@
 
 定义 Wiki 子系统的核心数据结构，包括项目、文件、页面、搜索结果、图谱等。
 """
-from typing import List, Optional
-
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import List, Optional
 
 
 @dataclass

@@ -15,13 +15,12 @@
 """
 
 from __future__ import annotations
-from typing import FrozenSet, List, Optional, Set, Tuple
 
 import os
 import shutil
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, FrozenSet, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from .skill import SkillMdDocument

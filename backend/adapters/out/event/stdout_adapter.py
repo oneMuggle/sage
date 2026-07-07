@@ -1,11 +1,10 @@
 """Stdout event adapter — 开发用，把事件打到控制台。"""
 
 from __future__ import annotations
-from typing import Dict
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict
 
 from backend.domain.agent_event import envelope
 

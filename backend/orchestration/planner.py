@@ -4,12 +4,10 @@ Planner for multi-agent orchestration.
 Uses LLM to decompose user requests into multiple tasks with dependencies.
 Creates Teams to manage task groups and supports plan refinement.
 """
-from typing import Dict, List, Optional, Tuple
-
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.orchestration.models import Task, Team
 from backend.orchestration.task_registry import TaskRegistry

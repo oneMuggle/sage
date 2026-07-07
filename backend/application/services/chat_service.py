@@ -22,12 +22,11 @@
 """
 
 from __future__ import annotations
-from typing import List, Optional
 
 import logging
 import time
 import uuid
-from typing import Any
+from typing import Any, List, Optional
 
 from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort

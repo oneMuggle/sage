@@ -10,8 +10,8 @@ agent.run_loop() 状态机测试
 """
 
 from __future__ import annotations
-from typing import Optional
 
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

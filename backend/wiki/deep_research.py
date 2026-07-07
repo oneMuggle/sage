@@ -2,13 +2,12 @@
 
 实现多步骤研究：网络搜索 → 收集来源 → LLM 综合 → 自动 Ingest。
 """
-from typing import List
-
 import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import List
 
 from .ingest import IngestConfig, ingest_source
 from .web_search import SearchProvider, WebSearchResult, multi_query_search

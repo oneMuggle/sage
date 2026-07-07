@@ -11,14 +11,13 @@
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import logging
 import os
 import re
 import shutil
 from pathlib import Path
-from typing import TypedDict
+from typing import Optional, TypedDict
 
 from ..registry import SkillRegistry
 

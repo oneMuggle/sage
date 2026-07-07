@@ -7,7 +7,6 @@ loop, so a bad task cannot kill the scheduler.
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import json
 import logging
@@ -18,7 +17,7 @@ from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 try:  # pragma: no cover — py3.11+ runtime branch
     from datetime import UTC as _UTC  # type: ignore[attr-defined]

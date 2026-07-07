@@ -3,12 +3,11 @@
 支持多个搜索 API：Tavily、SerpApi、SearXNG。
 实现多查询策略，收集多个来源的信息。
 """
-from typing import List
-
 import asyncio
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from typing import List
 
 import httpx
 

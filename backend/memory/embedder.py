@@ -8,12 +8,11 @@
 """
 
 from __future__ import annotations
-from typing import List
 
 import hashlib
 import math
 import struct
-from typing import Protocol
+from typing import List, Protocol
 
 
 class Embedder(Protocol):

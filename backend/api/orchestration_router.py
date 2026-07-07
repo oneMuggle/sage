@@ -5,9 +5,9 @@ to lanes and lane events, plus cancellation endpoint for manual control.
 """
 
 from __future__ import annotations
-from typing import List, Optional
 
 import logging
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field

@@ -8,12 +8,11 @@ FTS5 索引 tokenized_content 而非原始 content，使中文搜索生效。
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import json
 import time
 import uuid
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
 

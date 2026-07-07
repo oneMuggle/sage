@@ -10,11 +10,10 @@ TOOL message 落库 + tool_invoked 事件 emit。
 """
 
 from __future__ import annotations
-from typing import Dict
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 import pytest
 import pytest_asyncio

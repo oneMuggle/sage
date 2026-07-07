@@ -15,11 +15,10 @@
 """
 
 from __future__ import annotations
-from typing import Dict, FrozenSet, Optional, Tuple
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Dict, FrozenSet, Optional, Protocol, Tuple
 
 # 默认敏感环境变量黑名单（防止子进程访问宿主机的密钥）
 DEFAULT_ENV_DENYLIST: FrozenSet[str] = frozenset(

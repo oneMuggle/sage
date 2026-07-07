@@ -2,13 +2,11 @@
 
 集成文件解析、图片提取、视觉描述，生成包含图片描述的 Wiki 页面。
 """
-from typing import Dict, List, Optional
-
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from .ingest import IngestConfig, ingest_source
 from .vision import VisionConfig, caption_image

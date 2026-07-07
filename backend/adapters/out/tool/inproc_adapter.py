@@ -22,10 +22,9 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple
 
 import asyncio
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)

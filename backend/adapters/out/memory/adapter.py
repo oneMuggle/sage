@@ -5,9 +5,9 @@
 """
 
 from __future__ import annotations
-from typing import List, Optional
 
 import logging
+from typing import List, Optional
 
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager

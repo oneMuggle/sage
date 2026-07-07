@@ -3,10 +3,9 @@ Agent Profiles - Agent 角色定义和配置
 """
 
 from __future__ import annotations
-from typing import Dict, List
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List
 
 
 @dataclass

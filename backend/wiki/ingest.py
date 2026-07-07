@@ -2,8 +2,6 @@
 
 实现源文档的 LLM 驱动 ingest：复制 → 缓存检查 → Step1 分析 → Step2 写入 → 嵌入 → 更新缓存。
 """
-from typing import Dict, List, Optional
-
 import hashlib
 import json
 import re
@@ -11,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from . import frontmatter, llm_prompts
 from .embeddings import EmbeddingConfig, build_embed_request, chunk_markdown, parse_embed_response

@@ -6,11 +6,10 @@ LLM 错误类型定义
 """
 
 from __future__ import annotations
-from typing import Dict, Optional
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, Optional
 
 
 class LLMErrorType(str, Enum):

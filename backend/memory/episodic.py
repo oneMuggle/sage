@@ -7,12 +7,11 @@ Episodic Memory - 情景记忆模块
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import json
 import time
 import uuid
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.memory.chinese_tokenizer import tokenize
 

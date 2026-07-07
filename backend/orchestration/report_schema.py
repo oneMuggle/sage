@@ -21,14 +21,13 @@ References:
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import hashlib
 import json
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 SCHEMA_VERSION = "1.0"
 

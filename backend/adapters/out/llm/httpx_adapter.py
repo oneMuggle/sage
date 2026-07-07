@@ -14,12 +14,11 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Union
 
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 from sage_core import Message, Role, ToolCall
 

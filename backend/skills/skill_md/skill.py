@@ -16,11 +16,10 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ..base import BaseSkill, SkillResult, SkillSchema
 

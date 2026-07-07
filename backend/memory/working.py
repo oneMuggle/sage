@@ -7,12 +7,11 @@ Working Memory - 工作记忆模块
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import logging
 import time
 from collections import deque
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

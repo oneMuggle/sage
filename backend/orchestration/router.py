@@ -7,12 +7,10 @@ Routes tasks to appropriate agents based on:
 - Agent availability and load
 - Permission requirements
 """
-from typing import Dict, List, Optional, Tuple
-
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from backend.orchestration.models import Agent, Lane, LaneStatus, Task
 from backend.orchestration.permission import PermissionPreset

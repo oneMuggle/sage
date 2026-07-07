@@ -9,10 +9,9 @@ DI 装配:用 ``hex_sessions_client`` fixture override  ``get_session_service``
 """
 
 from __future__ import annotations
-from typing import Dict
 
 import os
-from typing import Any
+from typing import Any, Dict
 
 import pytest
 import pytest_asyncio

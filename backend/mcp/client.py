@@ -6,14 +6,13 @@ Implements the MCP handshake (initialize -> initialized -> tools/list -> tools/c
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import json
 import logging
 import subprocess
 import threading
 import time
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.mcp.config import McpServerConfig
 

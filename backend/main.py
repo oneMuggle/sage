@@ -2,13 +2,12 @@
 Sage - 记忆型 AI 桌面助手
 FastAPI 后端入口
 """
-from typing import List
-
 import asyncio
 import logging
 import os
 import uuid
 from contextlib import asynccontextmanager, suppress
+from typing import List
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware

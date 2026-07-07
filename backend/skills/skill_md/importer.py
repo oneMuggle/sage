@@ -14,13 +14,12 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple
 
 import logging
 import os
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ..registry import SkillRegistry
 from .exceptions import NoSkillsDirError

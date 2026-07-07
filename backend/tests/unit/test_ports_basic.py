@@ -7,10 +7,9 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple, Union
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pytest
 from sage_core import Message, Role, SkillResult, SkillSpec, ToolResult, ToolSpec

@@ -4,10 +4,9 @@ Memory Consolidation Pipeline - 记忆压缩管道
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from backend.core.legacy.llm_client import LLMClient

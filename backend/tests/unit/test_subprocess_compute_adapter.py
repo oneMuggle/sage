@@ -14,10 +14,9 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Tuple
 
 import asyncio
-from typing import Any
+from typing import Any, Dict, List, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

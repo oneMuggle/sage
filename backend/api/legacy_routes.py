@@ -7,9 +7,9 @@ API 路由定义
 """
 
 from __future__ import annotations
-from typing import List
 
 import asyncio
+from typing import List
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
 # 让前端能逐字渲染 (避免 LLM 一次返回完整字符串时 "砰一下" 全显示)。
@@ -21,7 +21,7 @@ import json
 import logging
 import time
 import uuid
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse

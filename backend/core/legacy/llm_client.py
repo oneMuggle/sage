@@ -4,7 +4,6 @@ LLM Client - 大语言模型客户端
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple
 
 import json
 import logging
@@ -13,7 +12,7 @@ import re
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 

@@ -3,12 +3,11 @@
 使用 JSON 文件存储嵌入向量，支持余弦相似度搜索。
 存储路径: {project_root}/.llm-wiki/vectors.json
 """
-from typing import Dict, List, Optional, Tuple
-
 import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass

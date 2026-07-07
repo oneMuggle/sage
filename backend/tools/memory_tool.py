@@ -2,7 +2,7 @@
 Memory 工具 - 记忆系统操作
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from backend.domain.tool_policy import ToolPolicy
 

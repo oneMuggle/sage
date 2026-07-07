@@ -5,10 +5,10 @@
 """
 
 from __future__ import annotations
-from typing import List
 
 import dataclasses
 import json
+from typing import List
 
 import pytest
 from sage_core import (

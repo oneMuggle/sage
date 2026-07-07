@@ -2,12 +2,11 @@
 
 使用 hnswlib 实现高效的近似最近邻搜索，支持大规模向量检索（100k+ chunks）。
 """
-from typing import Dict, List, Tuple
-
 import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 import hnswlib
 import numpy as np

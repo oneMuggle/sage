@@ -2,9 +2,8 @@
 
 实现基于 token 的全文搜索，支持中文 bigram 分词，BM25-like 评分。
 """
-from typing import List
-
 from pathlib import Path
+from typing import List
 
 from .models import SearchResponse, SearchResult
 

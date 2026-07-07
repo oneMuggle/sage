@@ -18,12 +18,11 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import json
 import time
 import uuid
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from sage_core import Message, Role, ToolCall
 from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)

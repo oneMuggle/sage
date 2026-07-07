@@ -5,9 +5,9 @@ yaml 文件不存在、解析失败或缺 ``tools:`` 段时均降级为 ``ToolPo
 """
 
 from __future__ import annotations
-from typing import Union
 
 from pathlib import Path
+from typing import Union
 
 from backend.domain.tool_policy import ToolPolicy
 

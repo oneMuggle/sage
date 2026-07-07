@@ -20,12 +20,11 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Tuple
 
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Tuple
 
 import yaml
 

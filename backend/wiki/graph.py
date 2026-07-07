@@ -2,11 +2,10 @@
 
 实现 4 信号图谱构建：DirectLink、SourceOverlap、TypeAffinity，以及 2-hop 相关性传播。
 """
-from typing import Dict, List, Optional, Tuple
-
 import re
 from collections import defaultdict
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 from . import frontmatter
 from .models import GraphData, GraphEdge, GraphNode, GraphSignal

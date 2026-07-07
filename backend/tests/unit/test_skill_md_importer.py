@@ -4,10 +4,10 @@ Mirrors test_skill_md_loader.py style: monkeypatch env, use tmp_path, no real fs
 """
 
 from __future__ import annotations
-from typing import List, Optional
 
 import textwrap
 from pathlib import Path
+from typing import List, Optional
 from unittest import mock
 
 import pytest
