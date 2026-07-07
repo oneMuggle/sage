@@ -92,18 +92,24 @@ chmod +x Sage-${version}.AppImage
 
 ### 7.1 Artifact 后缀映射
 
-`ARTIFACT_SUFFIX` 由 `scripts/release/determine_artifact_suffix.sh` 按 tag 推断，`electron-builder.yml` 用 `${env.ARTIFACT_SUFFIX}` 占位生成最终产物名：
+**自 v0.5.0 起，artifact 后缀在 `electron-builder.yml` 字面量硬编码，不再使用 env 占位符或脚本推断。** main 分支默认无后缀，win7 LTS 分支硬编码 `-win7` 后缀。
 
-| Tag | workflow env `ARTIFACT_SUFFIX` | Artifact |
-|-----|----------------------------|----------|
-| `v0.5.0-alpha.1` | `alpha` | `Sage-Setup-0.5.0-alpha.exe` |
-| `v0.5.0-beta.1` | `beta` | `Sage-Setup-0.5.0-beta.exe` |
-| `v0.5.0-rc.1` | `rc` | `Sage-Setup-0.5.0-rc.exe` |
-| `v0.5.0` | `win10` | `Sage-Setup-0.5.0-win10.exe` |
-| `v0.5.0-lts` | `win7` | `Sage-Setup-0.5.0-win7.exe` |
-| `v0.5.0-beta.1-lts` | `beta-lts` | `Sage-Setup-0.5.0-beta-lts.exe` |
+| Tag | 分支 | Artifact 后缀 | 产物名 |
+|-----|------|--------------|--------|
+| `v0.5.0-alpha.1` | main | (无) | `Sage-Setup-0.5.0-alpha.1.exe` |
+| `v0.5.0-beta.1` | main | (无) | `Sage-Setup-0.5.0-beta.1.exe` |
+| `v0.5.0-rc.1` | main | (无) | `Sage-Setup-0.5.0-rc.1.exe` |
+| `v0.5.0` | main | (无) | `Sage-Setup-0.5.0.exe` |
+| `v0.5.0-alpha.1-win7` | release/win7 | `-win7` | `Sage-Setup-0.5.0-alpha.1-win7.exe` |
+| `v0.5.0-beta.1-win7` | release/win7 | `-win7` | `Sage-Setup-0.5.0-beta.1-win7.exe` |
+| `v0.5.0-rc.1-win7` | release/win7 | `-win7` | `Sage-Setup-0.5.0-rc.1-win7.exe` |
+| `v0.5.0-win7` | release/win7 | `-win7` | `Sage-Setup-0.5.0-win7.exe` |
 
-> **规则**：`alpha-lts` / `beta-lts` / `rc-lts` 是 win7 LTS 分支在预发布段对应的 artifact 后缀；不带 `-lts` 的 `alpha` / `beta` / `rc` 仅 main 分支使用。
+> **设计意图**：
+> - **main** 是主要开发分支，默认平台（Win10+/Linux），artifact 不带平台后缀
+> - **release/win7** 是附属特化分支（仅 Win7 SP1），artifact 强制 `-win7` 后缀标识平台
+> - tier（alpha/beta/rc）后缀从 SemVer pre-release 段保留在 version 里，不需要额外 suffix
+> - 老 `-lts` 后缀 + `scripts/release/determine_artifact_suffix.sh` 已在 v0.4.3-alpha.1-win7 配套 PR 中废弃
 
 ### 7.2 Cache key 命名空间隔离
 
