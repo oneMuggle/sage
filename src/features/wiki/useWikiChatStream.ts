@@ -34,7 +34,7 @@ export function useWikiChatStream(streamId: string | null) {
 
     listen<string>(chunkEvent, (e) => {
       setState((s) => ({ ...s, answer: s.answer + e.payload }));
-    })
+    }, { streamId })
       .then((fn) => {
         unlistenChunk = fn;
       })
@@ -48,7 +48,7 @@ export function useWikiChatStream(streamId: string | null) {
         streaming: false,
         citations: e.payload.citations,
       }));
-    })
+    }, { streamId })
       .then((fn) => {
         unlistenDone = fn;
       })
@@ -64,7 +64,7 @@ export function useWikiChatStream(streamId: string | null) {
       const errorMessage =
         typeof e.payload === 'string' ? e.payload : (e.payload?.error ?? String(e.payload));
       setState((s) => ({ ...s, streaming: false, error: errorMessage }));
-    })
+    }, { streamId })
       .then((fn) => {
         unlistenError = fn;
       })
