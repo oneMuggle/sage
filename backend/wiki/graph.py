@@ -2,6 +2,7 @@
 
 实现 4 信号图谱构建：DirectLink、SourceOverlap、TypeAffinity，以及 2-hop 相关性传播。
 """
+
 import json
 import re
 from collections import defaultdict
@@ -203,10 +204,15 @@ def relevance(query: str, graph: GraphData, k_hops: int = K_HOPS) -> List[Tuple[
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
 
-def get_graph_cached(project_root: Path, query: Optional[str] = None, limit: int = 100) -> GraphData:
+def get_graph_cached(
+    project_root: Path, query: Optional[str] = None, limit: int = 100
+) -> GraphData:
     """Build or load the wiki graph, with mtime-based cache.
 
-    Cache key = (max mtime of wiki/**/*.md, query string).
+    Cache stores the FULL unfiltered graph; query/limit filtering is
+    applied on every read so changing either is free (no rebuild).
+
+    Cache key: max mtime of wiki/**/*.md (changes to wiki files only).
     Cache file: {project_root}/.llm-wiki/graph-cache.json
 
     Args:
@@ -220,53 +226,53 @@ def get_graph_cached(project_root: Path, query: Optional[str] = None, limit: int
     cache_path = project_root / ".llm-wiki" / "graph-cache.json"
     wiki_dir = project_root / "wiki"
 
-    latest_mtime = 0.0
-    if wiki_dir.exists():
-        latest_mtime = max(
-            (p.stat().st_mtime for p in wiki_dir.rglob("*.md") if p.is_file()),
-            default=0.0,
-        )
+    # Early return when wiki dir does not exist — never write a useless
+    # cache file in that case (Important #2 fix).
+    if not wiki_dir.exists():
+        return build_graph(project_root)
 
+    latest_mtime = max(
+        (p.stat().st_mtime for p in wiki_dir.rglob("*.md") if p.is_file()),
+        default=0.0,
+    )
+
+    graph: Optional[GraphData] = None
     if cache_path.exists():
         try:
             cache = json.loads(cache_path.read_text(encoding="utf-8"))
-            if (
-                cache.get("latest_mtime") == latest_mtime
-                and cache.get("query") == query
-            ):
-                return _deserialize_graph_data(cache["data"])
+            # Match on mtime only — query/limit are filtered at read time
+            # (Important #1 fix).
+            if cache.get("latest_mtime") == latest_mtime:
+                graph = _deserialize_graph_data(cache["data"])
         except (json.JSONDecodeError, KeyError, OSError):
             pass  # corrupt cache, rebuild
 
-    graph = build_graph(project_root)
+    if graph is None:
+        graph = build_graph(project_root)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "latest_mtime": latest_mtime,
+                    "data": _serialize_graph_data(graph),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
 
-    # 如果有查询，过滤节点
+    # Apply query/limit filtering at call time so the cached full graph
+    # is reused for different queries/limits (Important #1 fix).
     if query:
         ranked = relevance(query, graph)
         top_ids = {node_id for node_id, _ in ranked[:limit]}
-
-        # 过滤节点和边
         filtered_nodes = [n for n in graph.nodes if n.id in top_ids]
-        filtered_edges = [
-            e for e in graph.edges if e.source in top_ids and e.target in top_ids
-        ]
+        filtered_edges = [e for e in graph.edges if e.source in top_ids and e.target in top_ids]
+        return GraphData(nodes=filtered_nodes, edges=filtered_edges)
 
-        graph = GraphData(nodes=filtered_nodes, edges=filtered_edges)
-    elif len(graph.nodes) > limit:
-        graph = GraphData(nodes=graph.nodes[:limit], edges=graph.edges)
+    if len(graph.nodes) > limit:
+        return GraphData(nodes=graph.nodes[:limit], edges=graph.edges)
 
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(
-        json.dumps(
-            {
-                "latest_mtime": latest_mtime,
-                "query": query,
-                "data": _serialize_graph_data(graph),
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
     return graph
 
 
