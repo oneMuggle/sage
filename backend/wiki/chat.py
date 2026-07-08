@@ -2,6 +2,7 @@
 
 实现混合检索（token + 向量）→ RRF 融合 → LLM 综合回答。
 """
+
 import json
 import logging
 from collections.abc import AsyncIterator, Callable
@@ -198,15 +199,21 @@ async def chat_with_wiki_stream(
     try:
         # 1. 检索 (与非流式完全相同)
         context, citations, _stats = await _build_chat_context(
-            config, project_root, query, ctx.http_post,
+            config,
+            project_root,
+            query,
+            ctx.http_post,
         )
 
         if not citations:
             # 没有命中页面, 直接 done (无 chunk)。
-            done_line = json.dumps(
-                {"event": "done", "data": {"citations": []}},
-                ensure_ascii=False,
-            ) + "\n"
+            done_line = (
+                json.dumps(
+                    {"event": "done", "data": {"citations": []}},
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
             yield done_line.encode("utf-8")
             return
 
@@ -216,23 +223,32 @@ async def chat_with_wiki_stream(
 
         # 3. 流式调用 LLM
         async for delta in ctx.llm_stream_call(messages, temperature):
-            chunk_line = json.dumps(
-                {"event": "chunk", "data": delta},
-                ensure_ascii=False,
-            ) + "\n"
+            chunk_line = (
+                json.dumps(
+                    {"event": "chunk", "data": delta},
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
             yield chunk_line.encode("utf-8")
 
         # 4. done 行带 citations
-        done_line = json.dumps(
-            {"event": "done", "data": {"citations": citations}},
-            ensure_ascii=False,
-        ) + "\n"
+        done_line = (
+            json.dumps(
+                {"event": "done", "data": {"citations": citations}},
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
         yield done_line.encode("utf-8")
     except Exception as e:
         logger.exception("chat_with_wiki_stream 失败")
-        err_line = json.dumps(
-            {"event": "error", "data": str(e)},
-            ensure_ascii=False,
-        ) + "\n"
+        err_line = (
+            json.dumps(
+                {"event": "error", "data": str(e)},
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
         yield err_line.encode("utf-8")
         raise
