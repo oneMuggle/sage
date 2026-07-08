@@ -293,11 +293,7 @@ function registerIpcHandlers(): void {
       // the renderer can subscribe + unlisten via the existing IPC
       // channels without waiting for the backend to complete.
       if (payload.cmd === 'wiki_chat_stream') {
-        return startWikiChatStream(
-          _evt.sender,
-          payload.args ?? {},
-          BACKEND_URL,
-        );
+        return startWikiChatStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       try {
         return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
@@ -356,10 +352,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'sage:unlisten',
-    async (
-      _evt,
-      payload: { event: string; streamId?: string },
-    ): Promise<{ ok: true }> => {
+    async (_evt, payload: { event: string; streamId?: string }): Promise<{ ok: true }> => {
       const { event, streamId } = payload;
       // Streaming commands: abort the in-flight fetch so the backend
       // stops producing NDJSON. The relay's finally{} block will
@@ -507,10 +500,9 @@ function startWikiChatStream(
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
-        wc.webContents.send(
-          `sage:event:wiki-chat-stream-${streamId}-error`,
-          { error: `HTTP ${res.status}` },
-        );
+        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, {
+          error: `HTTP ${res.status}`,
+        });
         return;
       }
       await relayNdjsonToEvent(
@@ -521,10 +513,7 @@ function startWikiChatStream(
       );
     } catch (e) {
       if (e instanceof Error && e.name !== 'AbortError') {
-        wc.webContents.send(
-          `sage:event:wiki-chat-stream-${streamId}-error`,
-          { error: String(e) },
-        );
+        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, { error: String(e) });
       }
     } finally {
       streamControllers.delete(streamId);

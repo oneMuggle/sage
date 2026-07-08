@@ -32,8 +32,15 @@ const electronAPI = {
    * Renderer-side log bridge — forwards to main process for file persistence.
    * Fire-and-forget on the renderer side; main applies rate limit + writes NDJSON.
    */
-  log(level: LogLevel, msg: string, meta?: Record<string, unknown>): Promise<{ ok: boolean; reason?: string }> {
-    return ipcRenderer.invoke('sage:log:write', { level, msg, meta }) as Promise<{ ok: boolean; reason?: string }>;
+  log(
+    level: LogLevel,
+    msg: string,
+    meta?: Record<string, unknown>,
+  ): Promise<{ ok: boolean; reason?: string }> {
+    return ipcRenderer.invoke('sage:log:write', { level, msg, meta }) as Promise<{
+      ok: boolean;
+      reason?: string;
+    }>;
   },
 
   /**
@@ -107,10 +114,8 @@ const electronAPI = {
    * skills IPC additions group naturally without polluting top-level.
    */
   skills: {
-    pickSkillFiles: () =>
-      ipcRenderer.invoke('skills:pick-files') as Promise<string[] | null>,
-    rescanSkills: () =>
-      ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
+    pickSkillFiles: () => ipcRenderer.invoke('skills:pick-files') as Promise<string[] | null>,
+    rescanSkills: () => ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
     importSkills: (paths: string[]) =>
       ipcRenderer.invoke('skills:import', paths) as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,

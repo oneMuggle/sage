@@ -111,9 +111,7 @@ const DEFAULT_EVENT_SPLIT: Record<NdjsonEvent, string> = {
   progress: '-progress',
 };
 
-export type NdjsonEventTransform = (
-  rawEvent: unknown,
-) => { suffix: string; data: unknown } | null;
+export type NdjsonEventTransform = (rawEvent: unknown) => { suffix: string; data: unknown } | null;
 
 /**
  * Parse NDJSON stream and forward each event to a distinct Electron
@@ -138,31 +136,35 @@ export async function relayNdjsonToEvent(
   signal: AbortSignal,
   transform?: NdjsonEventTransform,
 ): Promise<void> {
-  await parseNdjsonStream(body, (rawEvent: unknown) => {
-    if (typeof rawEvent !== 'object' || rawEvent === null) {
-      webContents.send(`sage:event:${eventPrefix}-error`, {
-        error: 'invalid NDJSON line',
-      });
-      return;
-    }
-    const ev = (rawEvent as { event?: unknown }).event;
-    if (typeof ev !== 'string') {
-      webContents.send(`sage:event:${eventPrefix}-error`, {
-        error: 'invalid NDJSON line',
-      });
-      return;
-    }
-    let result: { suffix: string; data: unknown } | null;
-    if (transform) {
-      result = transform(rawEvent);
-    } else {
-      const suffix = DEFAULT_EVENT_SPLIT[ev as NdjsonEvent];
-      if (!suffix) return; // unknown event, skip
-      result = { suffix, data: (rawEvent as { data?: unknown }).data };
-    }
-    if (!result) return;
-    webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
-  }, signal);
+  await parseNdjsonStream(
+    body,
+    (rawEvent: unknown) => {
+      if (typeof rawEvent !== 'object' || rawEvent === null) {
+        webContents.send(`sage:event:${eventPrefix}-error`, {
+          error: 'invalid NDJSON line',
+        });
+        return;
+      }
+      const ev = (rawEvent as { event?: unknown }).event;
+      if (typeof ev !== 'string') {
+        webContents.send(`sage:event:${eventPrefix}-error`, {
+          error: 'invalid NDJSON line',
+        });
+        return;
+      }
+      let result: { suffix: string; data: unknown } | null;
+      if (transform) {
+        result = transform(rawEvent);
+      } else {
+        const suffix = DEFAULT_EVENT_SPLIT[ev as NdjsonEvent];
+        if (!suffix) return; // unknown event, skip
+        result = { suffix, data: (rawEvent as { data?: unknown }).data };
+      }
+      if (!result) return;
+      webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
+    },
+    signal,
+  );
 }
 
 /**

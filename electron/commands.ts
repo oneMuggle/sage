@@ -194,4 +194,3 @@ export class UnknownIpcCommandError extends Error {
  * error, or abort. Read by main.ts on `sage:unlisten`.
  */
 export const streamControllers = new Map<string, AbortController>();
-

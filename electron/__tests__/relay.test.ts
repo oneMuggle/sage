@@ -224,9 +224,7 @@ describe('relayNdjsonToEvent (PR-2 Task 3: wiki_chat_stream relay)', () => {
 
   it('forwards backend "error" event as {prefix}-error', async () => {
     const wc = new MockWebContents();
-    const body = makeNdjsonReadable([
-      JSON.stringify({ event: 'error', data: 'LLM exploded' }),
-    ]);
+    const body = makeNdjsonReadable([JSON.stringify({ event: 'error', data: 'LLM exploded' })]);
     await relayNdjsonToEvent(
       body,
       'wiki-chat-stream-s1',
@@ -285,9 +283,7 @@ describe('relayNdjsonToEvent (PR-2 Task 3: wiki_chat_stream relay)', () => {
 
   it('uses transform to remap event suffix and payload (e.g. ingest done→progress)', async () => {
     const wc = new MockWebContents();
-    const body = makeNdjsonReadable([
-      JSON.stringify({ event: 'done', data: { ingested: 42 } }),
-    ]);
+    const body = makeNdjsonReadable([JSON.stringify({ event: 'done', data: { ingested: 42 } })]);
     await relayNdjsonToEvent(
       body,
       'wiki-ingest-i1',
