@@ -1,6 +1,6 @@
 // Wiki Editor - split-pane markdown editor/viewer
 import { Eye, Pencil, Save } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useWikiStore } from '../../entities/wiki/store';
 
@@ -15,10 +15,10 @@ export function WikiEditor() {
   const [isEditing, setIsEditing] = useState(false);
 
   // Sync edit content when file changes
-  useState(() => {
+  useEffect(() => {
     setEditContent(fileContent);
     setIsEditing(false);
-  });
+  }, [fileContent]);
 
   const handleSave = async () => {
     if (!selectedFile) return;
