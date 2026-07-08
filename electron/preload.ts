@@ -32,8 +32,15 @@ const electronAPI = {
    * Renderer-side log bridge — forwards to main process for file persistence.
    * Fire-and-forget on the renderer side; main applies rate limit + writes NDJSON.
    */
-  log(level: LogLevel, msg: string, meta?: Record<string, unknown>): Promise<{ ok: boolean; reason?: string }> {
-    return ipcRenderer.invoke('sage:log:write', { level, msg, meta }) as Promise<{ ok: boolean; reason?: string }>;
+  log(
+    level: LogLevel,
+    msg: string,
+    meta?: Record<string, unknown>,
+  ): Promise<{ ok: boolean; reason?: string }> {
+    return ipcRenderer.invoke('sage:log:write', { level, msg, meta }) as Promise<{
+      ok: boolean;
+      reason?: string;
+    }>;
   },
 
   /**
@@ -52,8 +59,16 @@ const electronAPI = {
    *      main opens backend NDJSON relay and pushes events via webContents.send
    *   2. receive payloads via ipcRenderer.on(`sage:event:${event}`, (_e, payload) => handler(payload))
    *   3. unlisten() invokes sage:unlisten to abort backend relay + remove listener
+   *
+   * Streaming callers (e.g. wikiChatStream in api-client/wiki.ts) pass
+   * `options.streamId` so the unlisten payload can abort the in-flight
+   * backend fetch via the main process's `streamControllers` Map.
    */
-  listen<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
+  listen<T>(
+    event: string,
+    handler: (payload: T) => void,
+    options?: { streamId?: string },
+  ): Promise<UnlistenFn> {
     // Forward subscription request to main; main opens backend relay
     ipcRenderer
       .invoke('sage:listen', { event })
@@ -63,7 +78,9 @@ const electronAPI = {
     ipcRenderer.on(`sage:event:${event}`, wrapped);
     const unlisten: UnlistenFn = () => {
       ipcRenderer.off(`sage:event:${event}`, wrapped);
-      ipcRenderer.invoke('sage:unlisten', { event }).catch(() => undefined);
+      ipcRenderer
+        .invoke('sage:unlisten', { event, streamId: options?.streamId })
+        .catch(() => undefined);
     };
     return Promise.resolve(unlisten);
   },
@@ -97,10 +114,8 @@ const electronAPI = {
    * skills IPC additions group naturally without polluting top-level.
    */
   skills: {
-    pickSkillFiles: () =>
-      ipcRenderer.invoke('skills:pick-files') as Promise<string[] | null>,
-    rescanSkills: () =>
-      ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
+    pickSkillFiles: () => ipcRenderer.invoke('skills:pick-files') as Promise<string[] | null>,
+    rescanSkills: () => ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
     importSkills: (paths: string[]) =>
       ipcRenderer.invoke('skills:import', paths) as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,

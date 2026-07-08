@@ -43,7 +43,16 @@ export interface SkillsElectronApiBridge {
 
 export interface ElectronAPI {
   invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>;
-  listen<T = unknown>(event: string, handler: (payload: T) => void): Promise<UnlistenFn>;
+  /**
+   * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`
+   * so the unlisten payload can abort the in-flight backend fetch via
+   * the main process's `streamControllers` Map.
+   */
+  listen<T = unknown>(
+    event: string,
+    handler: (payload: T) => void,
+    options?: { streamId?: string },
+  ): Promise<UnlistenFn>;
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
   /** Optional bridge added in Task 8 (renderer→main log IPC). */

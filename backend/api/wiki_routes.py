@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from backend.wiki import (
@@ -19,7 +20,7 @@ from backend.wiki import (
     IngestConfig,
     IngestResult,
     SearchResponse,
-    chat_with_wiki,
+    chat_with_wiki_stream,
     get_graph_cached,
     ingest_source,
     search_wiki,
@@ -271,13 +272,6 @@ class ChatRequest(BaseModel):
     embed_api_key: str
     embed_model: str
     max_tokens: int = 4096
-
-
-class ChatResponse(BaseModel):
-    """Chat 响应。"""
-
-    answer: str
-    citations: List[str]
 
 
 # ============================================================================
@@ -573,19 +567,25 @@ async def ingest(req: IngestRequest) -> IngestResult:
 
 
 # ============================================================================
-# Chat
+# Chat (PR-2: 流式 NDJSON 端点, 替换原 /chat 同步端点)
 # ============================================================================
 
 
-@router.post("/chat")
-async def chat(req: ChatRequest) -> ChatResponse:
-    """与 Wiki 聊天。
+@router.post("/chat/stream")
+async def chat_stream(req: ChatRequest) -> StreamingResponse:
+    """与 Wiki 流式聊天 (NDJSON)。
+
+    返回 ``application/x-ndjson`` 流,每行一条 JSON 事件:
+
+    - ``{"event":"chunk","data":"<text>"}`` — 每个 LLM delta 一条
+    - ``{"event":"done","data":{"citations":[...]}}`` — 流末尾
+    - ``{"event":"error","data":"<msg>"}`` — 仅在异常路径出现
 
     Args:
         req: Chat 请求
 
     Returns:
-        ChatResponse: Chat 响应
+        StreamingResponse: NDJSON 流式响应
     """
     project_root = Path(req.project_path)
 
@@ -607,20 +607,14 @@ async def chat(req: ChatRequest) -> ChatResponse:
         llm_model=req.llm_model,
     )
 
-    # 执行聊天
-    try:
-        outcome = await chat_with_wiki(
-            config=config,
-            project_root=project_root,
-            query=req.query,
-            llm_call=ctx.llm_call,
-            http_post=ctx.http_post,
-        )
-
-        return ChatResponse(answer=outcome.answer, citations=outcome.citations)
-    except Exception as e:
-        logger.error(f"Chat 失败: {e}")
-        raise HTTPException(status_code=500, detail=f"Chat 失败: {e}")
+    return StreamingResponse(
+        chat_with_wiki_stream(config, project_root, req.query, ctx),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ============================================================================
