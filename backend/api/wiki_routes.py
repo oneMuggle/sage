@@ -2,6 +2,7 @@
 
 提供 Wiki 子系统的 HTTP API：文件操作、搜索、Ingest、Chat、Graph、Research、Clip。
 """
+
 import logging
 import os
 import re
@@ -284,6 +285,47 @@ class ChatResponse(BaseModel):
 # ============================================================================
 
 
+def list_directory_impl(path: str, project_path: str, depth: int = 10) -> List[dict]:
+    """递归列出目录内容（pure helper，便于单元测试）。
+
+    行为：
+    - 递归到指定 depth（默认 10），到达 depth 后子目录不再展开（children=[]）
+    - 过滤隐藏文件（名称以 . 开头）
+    - 目录排在文件前，按 name（lowercase）升序
+
+    Args:
+        path: 相对路径（相对于 project_path）
+        project_path: 项目根目录
+        depth: 最大递归深度
+
+    Returns:
+        list[dict]: 根节点列表，每个节点包含 name/path/is_dir/children
+    """
+    project_root = Path(project_path)
+    base = project_root / path if path else project_root
+
+    def walk(p: Path, d: int) -> dict:
+        node = {
+            "name": p.name,
+            "path": str(p.relative_to(project_root)).replace("\\", "/"),
+            "is_dir": p.is_dir(),
+        }
+        if p.is_dir() and d > 0:
+            node["children"] = [
+                walk(child, d - 1)
+                for child in sorted(
+                    p.iterdir(),
+                    key=lambda x: (not x.is_dir(), x.name.lower()),
+                )
+                if not child.name.startswith(".")
+            ]
+        else:
+            node["children"] = []
+        return node
+
+    return [walk(base, depth)]
+
+
 @router.get("/list")
 async def list_directory(path: str, project_path: str) -> List[dict]:
     """列出目录内容。
@@ -294,6 +336,9 @@ async def list_directory(path: str, project_path: str) -> List[dict]:
 
     Returns:
         list[dict]: 文件节点列表
+
+    Raises:
+        HTTPException: 如果目标路径不存在
     """
     project_root = Path(project_path)
     target_dir = project_root / path if path else project_root
@@ -301,25 +346,7 @@ async def list_directory(path: str, project_path: str) -> List[dict]:
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail="目录不存在")
 
-    nodes = []
-    for item in sorted(target_dir.iterdir()):
-        # 跳过隐藏文件
-        if item.name.startswith("."):
-            continue
-
-        node = {
-            "name": item.name,
-            "path": str(item.relative_to(project_root)).replace("\\", "/"),
-            "is_dir": item.is_dir(),
-        }
-
-        if item.is_dir():
-            # 递归列出子目录（简化版）
-            node["children"] = []
-
-        nodes.append(node)
-
-    return nodes
+    return list_directory_impl(path, project_path)
 
 
 @router.get("/read")
