@@ -27,8 +27,10 @@ export function useWikiChatStream(streamId: string | null) {
     setState({ answer: '', citations: [], streaming: true, error: null });
     const chunkEvent = `wiki-chat-stream-${streamId}-chunk`;
     const doneEvent = `wiki-chat-stream-${streamId}-done`;
+    const errorEvent = `wiki-chat-stream-${streamId}-error`;
     let unlistenChunk: UnlistenFn | null = null;
     let unlistenDone: UnlistenFn | null = null;
+    let unlistenError: UnlistenFn | null = null;
 
     listen<string>(chunkEvent, (e) => {
       setState((s) => ({ ...s, answer: s.answer + e.payload }));
@@ -54,9 +56,28 @@ export function useWikiChatStream(streamId: string | null) {
         setState((s) => ({ ...s, streaming: false, error: String(e) }));
       });
 
+    // Electron main relays 4 error payload shapes; only 2 distinct runtime
+    // shapes arrive here — an object `{ error: string }` (HTTP non-2xx,
+    // non-AbortError catch, synthetic NDJSON-parse error) and a bare `string`
+    // (backend error event data relayed verbatim). Normalize both to string.
+    listen<{ error?: string } | string>(errorEvent, (e) => {
+      const errorMessage =
+        typeof e.payload === 'string'
+          ? e.payload
+          : (e.payload?.error ?? String(e.payload));
+      setState((s) => ({ ...s, streaming: false, error: errorMessage }));
+    })
+      .then((fn) => {
+        unlistenError = fn;
+      })
+      .catch((e) => {
+        setState((s) => ({ ...s, streaming: false, error: String(e) }));
+      });
+
     return () => {
       if (unlistenChunk) unlistenChunk();
       if (unlistenDone) unlistenDone();
+      if (unlistenError) unlistenError();
     };
   }, [streamId]);
 
