@@ -2,8 +2,8 @@
 import { FolderPlus, Upload } from 'lucide-react';
 import { useState } from 'react';
 
-import { useWikiStore } from '../../entities/wiki/store';
 import { mockSourcesTree } from '../../entities/wiki/mock-data';
+import { useWikiStore } from '../../entities/wiki/store';
 import { useWikiIngest } from '../../features/wiki/useWikiIngest';
 import { wikiIngestStream } from '../../shared/api-client/wiki';
 
@@ -93,11 +93,7 @@ export function SourcesView() {
           STAGE_LABELS-driven bar; collapses to null when none are set. */}
       {(ingest.progress || ingest.done || ingest.error) && (
         <div className="border-b border-border px-4 py-3 bg-surface" data-testid="ingest-progress">
-          <WikiIngestProgress
-            progress={ingest.progress}
-            done={ingest.done}
-            error={ingest.error}
-          />
+          <WikiIngestProgress progress={ingest.progress} done={ingest.done} error={ingest.error} />
         </div>
       )}
 

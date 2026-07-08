@@ -7,6 +7,7 @@ PR-3 Task 1 将 6 步拆为模块级 helper (``copy_to_raw`` / ``cache_get`` /
 供同步 ``ingest_source`` (callback 进度) 和流式 ``ingest_source_stream``
 (NDJSON 进度) 共享。
 """
+
 import hashlib
 import json
 import logging
@@ -269,10 +270,7 @@ async def embed_pages(
     vector_store = VectorStore.open(project_root, config.embed_dim)
     vector_store.upsert_chunks(
         wiki_page_path,
-        [
-            (idx, chunk, vec)
-            for idx, (chunk, vec) in enumerate(zip(chunks, vectors, strict=False))
-        ],
+        [(idx, chunk, vec) for idx, (chunk, vec) in enumerate(zip(chunks, vectors, strict=False))],
     )
 
 
