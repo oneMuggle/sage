@@ -2,7 +2,9 @@
 
 实现混合检索（token + 向量）→ RRF 融合 → LLM 综合回答。
 """
-from collections.abc import Callable
+import json
+import logging
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -10,6 +12,7 @@ from typing import Any, Dict, List, Tuple
 from . import llm_prompts
 from .context_budget import ContextBudget, truncate_pages
 from .embeddings import EmbeddingConfig, build_embed_request, parse_embed_response
+from .llm_context import LLMContext
 from .models import RetrievalStats, WikiChatOutcome
 from .rrf import rrf_fuse
 from .search import search_wiki
@@ -19,6 +22,8 @@ from .vectorstore import VectorStore
 DEFAULT_EMBED_DIM = 1536
 RETRIEVAL_LIMIT = 20
 FINAL_TOP_K = 5
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -64,17 +69,11 @@ async def chat_with_wiki(
             stats=stats,
         )
 
-    # 构建 prompt
-    system_prompt = llm_prompts.format_rag_system(context)
-    user_prompt = llm_prompts.format_rag_user_message(query)
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
+    # 构建 prompt (与流式路径复用同一 helper, 保证 prompt 完全一致)
+    ContextBudget.compute(config.max_tokens)
+    messages = _build_rag_messages(query, context)
 
     # 调用 LLM
-    ContextBudget.compute(config.max_tokens)
     answer = await llm_call(messages, temperature=0.3)
 
     return WikiChatOutcome(
@@ -159,3 +158,81 @@ async def _build_chat_context(
     )
 
     return context, citations, stats
+
+
+def _build_rag_messages(query: str, context: str) -> List[Dict[str, str]]:
+    """构建 RAG prompt messages (system + user)。
+
+    抽出供 ``chat_with_wiki`` 与 ``chat_with_wiki_stream`` 复用,
+    保证非流式和流式路径使用完全一致的 prompt。
+    """
+    system_prompt = llm_prompts.format_rag_system(context)
+    user_prompt = llm_prompts.format_rag_user_message(query)
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+async def chat_with_wiki_stream(
+    config: ChatConfig,
+    project_root: Path,
+    query: str,
+    ctx: LLMContext,
+    temperature: float = 0.3,
+) -> AsyncIterator[bytes]:
+    """与 Wiki 聊天的流式变体 (NDJSON)。
+
+    与 ``chat_with_wiki`` 共用 ``_build_chat_context`` (检索 + RRF + 截断),
+    并复用 ``_build_rag_messages`` (prompt 构造), 仅把 LLM 调用从
+    ``ctx.llm_call`` 替换为 ``ctx.llm_stream_call``。
+
+    每条 yield 是 UTF-8 编码的 NDJSON 行, 以 ``\\n`` 结尾:
+
+    - ``{"event": "chunk", "data": "<text>"}`` —— 每个 LLM delta 一条
+    - ``{"event": "done", "data": {"citations": ["wiki/a.md", ...]}}`` —— 流末尾
+    - ``{"event": "error", "data": "<msg>"}`` —— 仅在异常路径出现
+
+    异常时先 yield 一条 error 行, 然后 re-raise, 让 FastAPI 关掉连接。
+    """
+    try:
+        # 1. 检索 (与非流式完全相同)
+        context, citations, _stats = await _build_chat_context(
+            config, project_root, query, ctx.http_post,
+        )
+
+        if not citations:
+            # 没有命中页面, 直接 done (无 chunk)。
+            done_line = json.dumps(
+                {"event": "done", "data": {"citations": []}},
+                ensure_ascii=False,
+            ) + "\n"
+            yield done_line.encode("utf-8")
+            return
+
+        # 2. 构建 prompt (与非流式完全相同)
+        ContextBudget.compute(config.max_tokens)
+        messages = _build_rag_messages(query, context)
+
+        # 3. 流式调用 LLM
+        async for delta in ctx.llm_stream_call(messages, temperature):
+            chunk_line = json.dumps(
+                {"event": "chunk", "data": delta},
+                ensure_ascii=False,
+            ) + "\n"
+            yield chunk_line.encode("utf-8")
+
+        # 4. done 行带 citations
+        done_line = json.dumps(
+            {"event": "done", "data": {"citations": citations}},
+            ensure_ascii=False,
+        ) + "\n"
+        yield done_line.encode("utf-8")
+    except Exception as e:
+        logger.exception("chat_with_wiki_stream 失败")
+        err_line = json.dumps(
+            {"event": "error", "data": str(e)},
+            ensure_ascii=False,
+        ) + "\n"
+        yield err_line.encode("utf-8")
+        raise
