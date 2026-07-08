@@ -1,10 +1,10 @@
 // Wiki API layer - HTTP API calls to backend
+import { invoke } from '../api/desktopInvoke';
 import type {
   WikiProject,
   FileNode,
   SearchResponse,
   IngestResult,
-  WikiChatResponse,
   GraphData,
   ProjectCheckResponse,
   RecentProject,
@@ -194,25 +194,44 @@ export async function wikiIngestSource(
 
 // ==================== Chat API ====================
 
-export async function wikiChat(
-  query: string,
-  projectPath: string,
-  apiUrl: string,
-  apiKey: string,
-  model: string,
-  embedApiUrl: string,
-  embedApiKey: string,
-  embedModel: string,
-): Promise<WikiChatResponse> {
-  return httpPost<WikiChatResponse>('/wiki/chat', {
-    query,
-    project_path: projectPath,
-    llm_base_url: apiUrl,
-    llm_api_key: apiKey,
-    llm_model: model,
-    embed_base_url: embedApiUrl,
-    embed_api_key: embedApiKey,
-    embed_model: embedModel,
+/**
+ * PR-2 (2026-07-08): streaming chat via NDJSON. The backend route
+ * `/api/v1/wiki/chat/stream` returns a long-lived `text/event-stream`-like
+ * NDJSON body; Electron main relays each event to a distinct channel
+ * `sage:event:wiki-chat-stream-{streamId}-{chunk|done|error}`.
+ *
+ * This function is **invoke-only** — it does NOT register listeners on the
+ * three per-stream channels. The caller (WikiChat.tsx → useWikiChatStream
+ * hook) owns the listeners; if we registered here too the renderer's handler
+ * would fire twice per chunk. Returns the server-allocated `streamId` so the
+ * hook can build the per-stream channel names and so the `sage:unlisten`
+ * closure (via desktopEvent → preload) aborts the in-flight backend fetch
+ * through the main process's `streamControllers` Map.
+ *
+ * Field names are snake_case to match the backend `ChatRequest` schema
+ * (see backend/api/wiki_routes.py: `class ChatRequest`).
+ */
+export interface WikiChatStreamRequest {
+  query: string;
+  projectPath: string;
+  llmBaseUrl: string;
+  llmApiKey: string;
+  llmModel: string;
+  embedBaseUrl: string;
+  embedApiKey: string;
+  embedModel: string;
+}
+
+export async function wikiChatStream(req: WikiChatStreamRequest): Promise<{ streamId: string }> {
+  return invoke<{ streamId: string }>('wiki_chat_stream', {
+    query: req.query,
+    project_path: req.projectPath,
+    llm_base_url: req.llmBaseUrl,
+    llm_api_key: req.llmApiKey,
+    llm_model: req.llmModel,
+    embed_base_url: req.embedBaseUrl,
+    embed_api_key: req.embedApiKey,
+    embed_model: req.embedModel,
   });
 }
 
