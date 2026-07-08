@@ -18,11 +18,10 @@ from backend.wiki import (
     ChatConfig,
     GraphData,
     IngestConfig,
-    IngestResult,
     SearchResponse,
     chat_with_wiki_stream,
     get_graph_cached,
-    ingest_source,
+    ingest_source_stream,
     search_wiki,
 )
 from backend.wiki.file_parser import parse_document
@@ -503,15 +502,24 @@ async def search(query: str, project_path: str, limit: int = 20) -> SearchRespon
 # ============================================================================
 
 
-@router.post("/ingest")
-async def ingest(req: IngestRequest) -> IngestResult:
-    """Ingest 源文档。
+@router.post("/ingest/stream")
+async def ingest_stream(req: IngestRequest) -> StreamingResponse:
+    """Ingest 源文档 (NDJSON 流式进度)。
+
+    返回 ``application/x-ndjson`` 流,每行一条 JSON 事件:
+
+    - ``{"event":"progress","data":{"stage":"...","percent":N,"message":"..."}}`` — 每个阶段一条
+    - 末尾由 ``ingest_source_stream`` yield ``completed`` (100%) 关闭流
+    - 异常路径 yield ``failed`` (0%) 后 re-raise 让 FastAPI 关流
+
+    文档解析保留同步(fast, <1s):失败时在 stream 开启前抛 ``HTTPException``。
+    LLM/HTTP 实际工作由 ``ingest_source_stream`` 异步生成器驱动。
 
     Args:
         req: Ingest 请求
 
     Returns:
-        IngestResult: Ingest 结果
+        StreamingResponse: NDJSON 流式响应
     """
     project_root = Path(req.project_path)
     source_file = Path(req.source_file)
@@ -519,7 +527,7 @@ async def ingest(req: IngestRequest) -> IngestResult:
     if not source_file.exists():
         raise HTTPException(status_code=404, detail="源文件不存在")
 
-    # 解析文档（如果是 PDF/DOCX 等）
+    # 同步解析文档（PDF/DOCX 等），失败时在 stream 开启前抛 HTTPException
     try:
         content = parse_document(source_file)
 
@@ -551,19 +559,14 @@ async def ingest(req: IngestRequest) -> IngestResult:
         llm_model=req.llm_model,
     )
 
-    # 执行 ingest
-    try:
-        return await ingest_source(
-            config=config,
-            project_root=project_root,
-            source_file_path=source_file,
-            llm_call=ctx.llm_call,
-            http_post=ctx.http_post,
-        )
-
-    except Exception as e:
-        logger.error(f"Ingest 失败: {e}")
-        raise HTTPException(status_code=500, detail=f"Ingest 失败: {e}")
+    return StreamingResponse(
+        ingest_source_stream(config, project_root, source_file, ctx),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ============================================================================

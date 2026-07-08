@@ -4,7 +4,6 @@ import type {
   WikiProject,
   FileNode,
   SearchResponse,
-  IngestResult,
   GraphData,
   ProjectCheckResponse,
   RecentProject,
@@ -170,25 +169,48 @@ export async function wikiSearch(
 
 // ==================== Ingest API ====================
 
-export async function wikiIngestSource(
-  sourceFilePath: string,
-  projectPath: string,
-  apiUrl: string,
-  apiKey: string,
-  model: string,
-  embedApiUrl: string,
-  embedApiKey: string,
-  embedModel: string,
-): Promise<IngestResult> {
-  return httpPost<IngestResult>('/wiki/ingest', {
-    source_file: sourceFilePath,
-    project_path: projectPath,
-    llm_base_url: apiUrl,
-    llm_api_key: apiKey,
-    llm_model: model,
-    embed_base_url: embedApiUrl,
-    embed_api_key: embedApiKey,
-    embed_model: embedModel,
+/**
+ * PR-3 Task 4: streaming ingest via NDJSON. Replaces the old synchronous
+ * `wikiIngestSource` helper (which hit the non-streaming `/wiki/ingest`
+ * endpoint). The backend route `/api/v1/wiki/ingest/stream` returns a
+ * long-lived NDJSON body; Electron main relays each event to a per-id
+ * channel `sage:event:wiki-ingest-{streamId}-progress` (with the relay
+ * transform collapsing `done` → `{stage:'completed'}` and `error` →
+ * `{stage:'failed'}` so the renderer only needs to listen on one channel).
+ *
+ * This function is **invoke-only** for the IPC call — it does NOT register
+ * a listener itself, because the caller's `useWikiIngest` hook / a local
+ * `useEffect` will register one. Returns `{ streamId, cancel }` so the
+ * caller can wire the listener with `{ streamId }` on `listen()` — without
+ * that option the unlisten closure cannot pass streamId to `sage:unlisten`
+ * and the backend AbortController leaks.
+ *
+ * Field names are snake_case to match the backend `IngestRequest` schema
+ * (see backend/api/wiki_routes.py: `class IngestRequest`).
+ */
+export interface WikiIngestStreamRequest {
+  sourceFile: string;
+  projectPath: string;
+  llmBaseUrl: string;
+  llmApiKey: string;
+  llmModel: string;
+  embedBaseUrl: string;
+  embedApiKey: string;
+  embedModel: string;
+}
+
+export async function wikiIngestStream(
+  req: WikiIngestStreamRequest,
+): Promise<{ streamId: string }> {
+  return invoke<{ streamId: string }>('wiki_ingest_stream', {
+    source_file: req.sourceFile,
+    project_path: req.projectPath,
+    llm_base_url: req.llmBaseUrl,
+    llm_api_key: req.llmApiKey,
+    llm_model: req.llmModel,
+    embed_base_url: req.embedBaseUrl,
+    embed_api_key: req.embedApiKey,
+    embed_model: req.embedModel,
   });
 }
 

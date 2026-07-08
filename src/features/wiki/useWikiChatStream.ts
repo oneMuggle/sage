@@ -32,9 +32,13 @@ export function useWikiChatStream(streamId: string | null) {
     let unlistenDone: UnlistenFn | null = null;
     let unlistenError: UnlistenFn | null = null;
 
-    listen<string>(chunkEvent, (e) => {
-      setState((s) => ({ ...s, answer: s.answer + e.payload }));
-    })
+    listen<string>(
+      chunkEvent,
+      (e) => {
+        setState((s) => ({ ...s, answer: s.answer + e.payload }));
+      },
+      { streamId },
+    )
       .then((fn) => {
         unlistenChunk = fn;
       })
@@ -42,13 +46,17 @@ export function useWikiChatStream(streamId: string | null) {
         setState((s) => ({ ...s, streaming: false, error: String(e) }));
       });
 
-    listen<{ citations: string[] }>(doneEvent, (e) => {
-      setState((s) => ({
-        ...s,
-        streaming: false,
-        citations: e.payload.citations,
-      }));
-    })
+    listen<{ citations: string[] }>(
+      doneEvent,
+      (e) => {
+        setState((s) => ({
+          ...s,
+          streaming: false,
+          citations: e.payload.citations,
+        }));
+      },
+      { streamId },
+    )
       .then((fn) => {
         unlistenDone = fn;
       })
@@ -60,11 +68,15 @@ export function useWikiChatStream(streamId: string | null) {
     // shapes arrive here — an object `{ error: string }` (HTTP non-2xx,
     // non-AbortError catch, synthetic NDJSON-parse error) and a bare `string`
     // (backend error event data relayed verbatim). Normalize both to string.
-    listen<{ error?: string } | string>(errorEvent, (e) => {
-      const errorMessage =
-        typeof e.payload === 'string' ? e.payload : (e.payload?.error ?? String(e.payload));
-      setState((s) => ({ ...s, streaming: false, error: errorMessage }));
-    })
+    listen<{ error?: string } | string>(
+      errorEvent,
+      (e) => {
+        const errorMessage =
+          typeof e.payload === 'string' ? e.payload : (e.payload?.error ?? String(e.payload));
+        setState((s) => ({ ...s, streaming: false, error: errorMessage }));
+      },
+      { streamId },
+    )
       .then((fn) => {
         unlistenError = fn;
       })

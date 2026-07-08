@@ -295,6 +295,9 @@ function registerIpcHandlers(): void {
       if (payload.cmd === 'wiki_chat_stream') {
         return startWikiChatStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
       }
+      if (payload.cmd === 'wiki_ingest_stream') {
+        return startWikiIngestStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
+      }
       try {
         return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
       } catch (e) {
@@ -514,6 +517,107 @@ function startWikiChatStream(
     } catch (e) {
       if (e instanceof Error && e.name !== 'AbortError') {
         wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, { error: String(e) });
+      }
+    } finally {
+      streamControllers.delete(streamId);
+    }
+  })();
+  return { streamId };
+}
+
+/**
+ * PR-3 Task 3: start a wiki-ingest NDJSON stream.
+ *
+ * Same fire-and-forget shape as `startWikiChatStream`, but the backend
+ * `/ingest/stream` endpoint speaks a 3-event vocabulary
+ * (progress / done / error) and the renderer `useWikiIngest` hook only
+ * listens for a single `-progress` channel. The transform argument to
+ * `relayNdjsonToEvent` collapses `done` → completed progress and
+ * `error` → failed progress, so the hook needs no changes.
+ *
+ * Event-channel mapping (sent to renderer):
+ *   progress → {prefix}-progress (data: raw)
+ *   done     → {prefix}-progress (data: {stage:'completed', percent:100, message: JSON.stringify(raw.data)})
+ *   error    → {prefix}-progress (data: {stage:'failed',    percent:0,  message: String(raw.data)})
+ *   HTTP non-2xx / throw → {prefix}-progress (data: {stage:'failed', percent:0, message: 'HTTP N' | String(e)})
+ */
+function startWikiIngestStream(
+  sender: Electron.WebContents,
+  args: Record<string, unknown>,
+  backendUrl: string,
+): { streamId: string } {
+  const streamId = `wiki-ingest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const controller = new AbortController();
+  streamControllers.set(streamId, controller);
+  const wc = BrowserWindow.fromWebContents(sender);
+  if (!wc) {
+    streamControllers.delete(streamId);
+    throw new Error('No WebContents for invoke');
+  }
+  // Fire-and-forget: relay runs in background. Return streamId NOW so
+  // the renderer can start subscribing to the per-id event channels.
+  (async () => {
+    try {
+      const res = await fetch(`${backendUrl}/api/v1/wiki/ingest/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(args),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        wc.webContents.send(`sage:event:wiki-ingest-${streamId}-progress`, {
+          stage: 'failed',
+          percent: 0,
+          message: `HTTP ${res.status}`,
+        });
+        return;
+      }
+      await relayNdjsonToEvent(
+        res.body as NodeJS.ReadableStream,
+        `wiki-ingest-${streamId}`,
+        wc.webContents,
+        controller.signal,
+        (rawEvent: unknown) => {
+          if (typeof rawEvent !== 'object' || rawEvent === null) return null;
+          const ev = (rawEvent as { event?: unknown }).event;
+          if (ev === 'done') {
+            // Backend done → frontend completed-progress (useWikiIngest
+            // sets done=true on stage==='completed').
+            return {
+              suffix: '-progress',
+              data: {
+                stage: 'completed',
+                percent: 100,
+                message: JSON.stringify((rawEvent as { data?: unknown }).data),
+              },
+            };
+          }
+          if (ev === 'error') {
+            return {
+              suffix: '-progress',
+              data: {
+                stage: 'failed',
+                percent: 0,
+                message: String((rawEvent as { data?: unknown }).data ?? 'unknown error'),
+              },
+            };
+          }
+          if (ev === 'progress') {
+            return {
+              suffix: '-progress',
+              data: (rawEvent as { data?: unknown }).data,
+            };
+          }
+          return null; // unknown event — let relay drop it
+        },
+      );
+    } catch (e) {
+      if (e instanceof Error && e.name !== 'AbortError') {
+        wc.webContents.send(`sage:event:wiki-ingest-${streamId}-progress`, {
+          stage: 'failed',
+          percent: 0,
+          message: String(e),
+        });
       }
     } finally {
       streamControllers.delete(streamId);

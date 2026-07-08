@@ -8,7 +8,7 @@ from .community import CommunityInfo, detect_communities, get_communities_with_n
 from .deep_research import ResearchTask, deep_research
 from .embeddings import EmbeddingConfig
 from .graph import GraphData, build_graph, get_graph_cached
-from .ingest import IngestConfig, ingest_source
+from .ingest import IngestConfig, ingest_source, ingest_source_stream
 from .insights import (
     GraphInsights,
     KnowledgeGap,
@@ -93,6 +93,7 @@ __all__ = [
     "VisionIngestConfig",
     # Functions
     "ingest_source",
+    "ingest_source_stream",
     "chat_with_wiki",
     "chat_with_wiki_stream",
     "search_wiki",
