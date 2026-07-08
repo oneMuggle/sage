@@ -89,11 +89,7 @@ def make_llm_context(
                 if payload == "[DONE]":
                     break
                 try:
-                    delta = (
-                        json.loads(payload)["choices"][0]
-                        .get("delta", {})
-                        .get("content", "")
-                    )
+                    delta = json.loads(payload)["choices"][0].get("delta", {}).get("content", "")
                 except (json.JSONDecodeError, KeyError, IndexError):
                     continue
                 if delta:
@@ -106,38 +102,3 @@ def make_llm_context(
             return r.text
 
     return LLMContext(llm_call, llm_stream_call, http_post)
-
-
-def get_wiki_llm_context(
-    llm_base_url: str,
-    llm_api_key: str,
-    llm_model: str,
-    timeout_seconds: int = 1800,
-) -> LLMContext:
-    """FastAPI Depends factory: build LLMContext from the 3 LLM fields.
-
-    Each of the wiki route models (ChatRequest / IngestRequest /
-    ResearchRequest) carries ``llm_base_url``/``llm_api_key``/``llm_model``;
-    routes inject those into this factory. ClipRequest does not — its
-    values come from env vars and are passed in directly.
-    """
-    return make_llm_context(
-        llm_base_url=llm_base_url,
-        llm_api_key=llm_api_key,
-        llm_model=llm_model,
-        timeout_seconds=timeout_seconds,
-    )
-
-
-def get_wiki_llm_context_from_body(request_body: dict) -> LLMContext:
-    """Alternative factory: build LLMContext from a parsed request body dict.
-
-    Convenience for callers that already have a body dict (e.g. middleware
-    that stashed it in ``request.state``). Same semantics as
-    :func:`get_wiki_llm_context`.
-    """
-    return get_wiki_llm_context(
-        llm_base_url=request_body.get("llm_base_url") or "",
-        llm_api_key=request_body.get("llm_api_key") or "",
-        llm_model=request_body.get("llm_model") or "",
-    )

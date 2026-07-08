@@ -25,7 +25,7 @@ from backend.wiki import (
     search_wiki,
 )
 from backend.wiki.file_parser import parse_document
-from backend.wiki.llm_context import get_wiki_llm_context, make_llm_context
+from backend.wiki.llm_context import make_llm_context
 
 logger = logging.getLogger(__name__)
 
@@ -551,7 +551,7 @@ async def ingest(req: IngestRequest) -> IngestResult:
     )
 
     # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）
-    ctx = get_wiki_llm_context(
+    ctx = make_llm_context(
         llm_base_url=req.llm_base_url,
         llm_api_key=req.llm_api_key,
         llm_model=req.llm_model,
@@ -601,7 +601,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
     )
 
     # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）
-    ctx = get_wiki_llm_context(
+    ctx = make_llm_context(
         llm_base_url=req.llm_base_url,
         llm_api_key=req.llm_api_key,
         llm_model=req.llm_model,
@@ -825,7 +825,7 @@ async def start_research(req: ResearchRequest) -> dict:
         )
 
     # LLM/HTTP 能力
-    ctx = get_wiki_llm_context(
+    ctx = make_llm_context(
         llm_base_url=req.llm_base_url,
         llm_api_key=req.llm_api_key,
         llm_model=req.llm_model,
