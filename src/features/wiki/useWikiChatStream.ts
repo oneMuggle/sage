@@ -62,9 +62,7 @@ export function useWikiChatStream(streamId: string | null) {
     // (backend error event data relayed verbatim). Normalize both to string.
     listen<{ error?: string } | string>(errorEvent, (e) => {
       const errorMessage =
-        typeof e.payload === 'string'
-          ? e.payload
-          : (e.payload?.error ?? String(e.payload));
+        typeof e.payload === 'string' ? e.payload : (e.payload?.error ?? String(e.payload));
       setState((s) => ({ ...s, streaming: false, error: errorMessage }));
     })
       .then((fn) => {

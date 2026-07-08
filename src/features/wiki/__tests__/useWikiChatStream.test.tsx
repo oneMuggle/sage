@@ -28,10 +28,9 @@ describe('useWikiChatStream', () => {
   });
 
   it('accumulates answer from chunk events and keeps streaming', async () => {
-    const { result } = renderHook(
-      ({ streamId }) => useWikiChatStream(streamId),
-      { initialProps: { streamId: 's1' as string | null } },
-    );
+    const { result } = renderHook(({ streamId }) => useWikiChatStream(streamId), {
+      initialProps: { streamId: 's1' as string | null },
+    });
     await act(async () => {
       fire('wiki-chat-stream-s1-chunk', 'Hello');
       fire('wiki-chat-stream-s1-chunk', ' world');
@@ -42,10 +41,9 @@ describe('useWikiChatStream', () => {
   });
 
   it('sets streaming=false and citations on done event', async () => {
-    const { result } = renderHook(
-      ({ streamId }) => useWikiChatStream(streamId),
-      { initialProps: { streamId: 's1' as string | null } },
-    );
+    const { result } = renderHook(({ streamId }) => useWikiChatStream(streamId), {
+      initialProps: { streamId: 's1' as string | null },
+    });
     await act(async () => {
       fire('wiki-chat-stream-s1-done', { citations: ['wiki/a.md', 'wiki/b.md'] });
     });
@@ -60,10 +58,9 @@ describe('useWikiChatStream', () => {
   // state.error: string.
 
   it('normalizes object-shape error payload { error } to state.error', async () => {
-    const { result } = renderHook(
-      ({ streamId }) => useWikiChatStream(streamId),
-      { initialProps: { streamId: 's1' as string | null } },
-    );
+    const { result } = renderHook(({ streamId }) => useWikiChatStream(streamId), {
+      initialProps: { streamId: 's1' as string | null },
+    });
     await act(async () => {
       fire('wiki-chat-stream-s1-error', { error: 'LLM timeout' });
     });
@@ -72,10 +69,9 @@ describe('useWikiChatStream', () => {
   });
 
   it('normalizes string error payload to state.error', async () => {
-    const { result } = renderHook(
-      ({ streamId }) => useWikiChatStream(streamId),
-      { initialProps: { streamId: 's1' as string | null } },
-    );
+    const { result } = renderHook(({ streamId }) => useWikiChatStream(streamId), {
+      initialProps: { streamId: 's1' as string | null },
+    });
     await act(async () => {
       fire('wiki-chat-stream-s1-error', 'invalid NDJSON line');
     });
@@ -84,10 +80,9 @@ describe('useWikiChatStream', () => {
   });
 
   it('unlistens all events when streamId becomes null', async () => {
-    const { rerender } = renderHook(
-      ({ streamId }) => useWikiChatStream(streamId),
-      { initialProps: { streamId: 's1' as string | null } },
-    );
+    const { rerender } = renderHook(({ streamId }) => useWikiChatStream(streamId), {
+      initialProps: { streamId: 's1' as string | null },
+    });
     // Flush the pending listen() promises so the unlisten fns (assigned in
     // .then callbacks) are captured before cleanup runs on rerender.
     await act(async () => {});
