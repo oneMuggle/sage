@@ -8,9 +8,8 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -26,6 +25,7 @@ from backend.wiki import (
     search_wiki,
 )
 from backend.wiki.file_parser import parse_document
+from backend.wiki.llm_context import get_wiki_llm_context, make_llm_context
 
 logger = logging.getLogger(__name__)
 
@@ -550,47 +550,12 @@ async def ingest(req: IngestRequest) -> IngestResult:
         embed_model=req.embed_model,
     )
 
-    # LLM 调用函数
-    async def llm_call(messages: List[dict], temperature: float) -> str:
-        async with httpx.AsyncClient(timeout=1800) as client:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {req.llm_api_key}",
-            }
-
-            body = {
-                "model": req.llm_model,
-                "messages": messages,
-                "temperature": temperature,
-            }
-
-            response = await client.post(
-                f"{req.llm_base_url}/chat/completions",
-                headers=headers,
-                json=body,
-            )
-
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"LLM 调用失败: {response.text}",
-                )
-
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-
-    # HTTP POST 函数（用于嵌入）
-    async def http_post(url: str, headers: Dict[str, str], body: dict) -> str:
-        async with httpx.AsyncClient(timeout=1800) as client:
-            response = await client.post(url, headers=headers, json=body)
-
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"HTTP POST 失败: {response.text}",
-                )
-
-            return response.text
+    # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）
+    ctx = get_wiki_llm_context(
+        llm_base_url=req.llm_base_url,
+        llm_api_key=req.llm_api_key,
+        llm_model=req.llm_model,
+    )
 
     # 执行 ingest
     try:
@@ -598,8 +563,8 @@ async def ingest(req: IngestRequest) -> IngestResult:
             config=config,
             project_root=project_root,
             source_file_path=source_file,
-            llm_call=llm_call,
-            http_post=http_post,
+            llm_call=ctx.llm_call,
+            http_post=ctx.http_post,
         )
 
     except Exception as e:
@@ -635,47 +600,12 @@ async def chat(req: ChatRequest) -> ChatResponse:
         max_tokens=req.max_tokens,
     )
 
-    # LLM 调用函数
-    async def llm_call(messages: List[dict], temperature: float) -> str:
-        async with httpx.AsyncClient(timeout=1800) as client:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {req.llm_api_key}",
-            }
-
-            body = {
-                "model": req.llm_model,
-                "messages": messages,
-                "temperature": temperature,
-            }
-
-            response = await client.post(
-                f"{req.llm_base_url}/chat/completions",
-                headers=headers,
-                json=body,
-            )
-
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"LLM 调用失败: {response.text}",
-                )
-
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-
-    # HTTP POST 函数（用于嵌入）
-    async def http_post(url: str, headers: Dict[str, str], body: dict) -> str:
-        async with httpx.AsyncClient(timeout=1800) as client:
-            response = await client.post(url, headers=headers, json=body)
-
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"HTTP POST 失败: {response.text}",
-                )
-
-            return response.text
+    # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）
+    ctx = get_wiki_llm_context(
+        llm_base_url=req.llm_base_url,
+        llm_api_key=req.llm_api_key,
+        llm_model=req.llm_model,
+    )
 
     # 执行聊天
     try:
@@ -683,8 +613,8 @@ async def chat(req: ChatRequest) -> ChatResponse:
             config=config,
             project_root=project_root,
             query=req.query,
-            llm_call=llm_call,
-            http_post=http_post,
+            llm_call=ctx.llm_call,
+            http_post=ctx.http_post,
         )
 
         return ChatResponse(answer=outcome.answer, citations=outcome.citations)
@@ -894,33 +824,12 @@ async def start_research(req: ResearchRequest) -> dict:
             embed_model=req.llm_model,
         )
 
-    # LLM 调用函数
-    async def llm_call(messages: List[dict], temperature: float) -> str:
-        import httpx
-
-        async with httpx.AsyncClient(timeout=1800) as client:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {req.llm_api_key}",
-            }
-
-            body = {
-                "model": req.llm_model,
-                "messages": messages,
-                "temperature": temperature,
-            }
-
-            response = await client.post(
-                f"{req.llm_base_url}/chat/completions",
-                headers=headers,
-                json=body,
-            )
-
-            if response.status_code != 200:
-                raise Exception(f"LLM 调用失败: {response.status_code} - {response.text}")
-
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+    # LLM/HTTP 能力
+    ctx = get_wiki_llm_context(
+        llm_base_url=req.llm_base_url,
+        llm_api_key=req.llm_api_key,
+        llm_model=req.llm_model,
+    )
 
     # 执行 Deep Research
     try:
@@ -930,7 +839,7 @@ async def start_research(req: ResearchRequest) -> dict:
             search_provider=SearchProvider(req.search_provider),
             search_api_key=req.search_api_key,
             search_base_url=req.search_base_url,
-            llm_call=llm_call,
+            llm_call=ctx.llm_call,
             ingest_config=ingest_config,
             auto_ingest=req.auto_ingest,
         )
@@ -1039,41 +948,19 @@ async def clip_webpage(req: ClipRequest) -> dict:
                 embed_model=embed_model,
             )
 
-            # LLM 调用函数
-            async def llm_call(messages, temperature=0.3):
-                async with httpx.AsyncClient(timeout=1800) as client:
-                    headers = {
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {llm_api_key}",
-                    }
-                    body = {
-                        "model": llm_model,
-                        "messages": messages,
-                        "temperature": temperature,
-                    }
-                    response = await client.post(
-                        f"{llm_base_url}/chat/completions",
-                        headers=headers,
-                        json=body,
-                    )
-                    if response.status_code != 200:
-                        raise Exception(f"LLM 错误: {response.text}")
-                    data = response.json()
-                    return data["choices"][0]["message"]["content"]
-
-            async def http_post(url, headers, body):
-                async with httpx.AsyncClient(timeout=1800) as client:
-                    response = await client.post(url, headers=headers, json=body)
-                    if response.status_code != 200:
-                        raise Exception(f"HTTP 错误: {response.text}")
-                    return response.text
+            # LLM/HTTP 能力（从环境变量构造，因为 ClipRequest 不带 LLM 字段）
+            ctx = make_llm_context(
+                llm_base_url=llm_base_url,
+                llm_api_key=llm_api_key,
+                llm_model=llm_model,
+            )
 
             ingest_result = await ingest_source(
                 config=config,
                 project_root=project_root,
                 source_file_path=source_file,
-                llm_call=llm_call,
-                http_post=http_post,
+                llm_call=ctx.llm_call,
+                http_post=ctx.http_post,
             )
 
             result["wiki_page_path"] = ingest_result.wiki_page_path
