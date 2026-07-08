@@ -66,3 +66,4 @@ test.describe('wiki chat stream', () => {
     await expect(page).toHaveURL(/.*/);
   });
 });
+
