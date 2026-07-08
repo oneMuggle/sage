@@ -2,14 +2,14 @@
 
 提供 Wiki 子系统的 HTTP API：文件操作、搜索、Ingest、Chat、Graph、Research、Clip。
 """
+
 import logging
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -25,6 +25,7 @@ from backend.wiki import (
     search_wiki,
 )
 from backend.wiki.file_parser import parse_document
+from backend.wiki.llm_context import make_llm_context
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +285,47 @@ class ChatResponse(BaseModel):
 # ============================================================================
 
 
+def list_directory_impl(path: str, project_path: str, depth: int = 10) -> List[dict]:
+    """递归列出目录内容（pure helper，便于单元测试）。
+
+    行为：
+    - 递归到指定 depth（默认 10），到达 depth 后子目录不再展开（children=[]）
+    - 过滤隐藏文件（名称以 . 开头）
+    - 目录排在文件前，按 name（lowercase）升序
+
+    Args:
+        path: 相对路径（相对于 project_path）
+        project_path: 项目根目录
+        depth: 最大递归深度
+
+    Returns:
+        list[dict]: 根节点列表，每个节点包含 name/path/is_dir/children
+    """
+    project_root = Path(project_path)
+    base = project_root / path if path else project_root
+
+    def walk(p: Path, d: int) -> dict:
+        node = {
+            "name": p.name,
+            "path": str(p.relative_to(project_root)).replace("\\", "/"),
+            "is_dir": p.is_dir(),
+        }
+        if p.is_dir() and d > 0:
+            node["children"] = [
+                walk(child, d - 1)
+                for child in sorted(
+                    p.iterdir(),
+                    key=lambda x: (not x.is_dir(), x.name.lower()),
+                )
+                if not child.name.startswith(".")
+            ]
+        else:
+            node["children"] = []
+        return node
+
+    return [walk(base, depth)]
+
+
 @router.get("/list")
 async def list_directory(path: str, project_path: str) -> List[dict]:
     """列出目录内容。
@@ -294,6 +336,9 @@ async def list_directory(path: str, project_path: str) -> List[dict]:
 
     Returns:
         list[dict]: 文件节点列表
+
+    Raises:
+        HTTPException: 如果目标路径不存在
     """
     project_root = Path(project_path)
     target_dir = project_root / path if path else project_root
@@ -301,25 +346,7 @@ async def list_directory(path: str, project_path: str) -> List[dict]:
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail="目录不存在")
 
-    nodes = []
-    for item in sorted(target_dir.iterdir()):
-        # 跳过隐藏文件
-        if item.name.startswith("."):
-            continue
-
-        node = {
-            "name": item.name,
-            "path": str(item.relative_to(project_root)).replace("\\", "/"),
-            "is_dir": item.is_dir(),
-        }
-
-        if item.is_dir():
-            # 递归列出子目录（简化版）
-            node["children"] = []
-
-        nodes.append(node)
-
-    return nodes
+    return list_directory_impl(path, project_path)
 
 
 @router.get("/read")
@@ -523,47 +550,12 @@ async def ingest(req: IngestRequest) -> IngestResult:
         embed_model=req.embed_model,
     )
 
-    # LLM 调用函数
-    async def llm_call(messages: List[dict], temperature: float) -> str:
-        async with httpx.AsyncClient(timeout=1800) as client:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {req.llm_api_key}",
-            }
-
-            body = {
-                "model": req.llm_model,
-                "messages": messages,
-                "temperature": temperature,
-            }
-
-            response = await client.post(
-                f"{req.llm_base_url}/chat/completions",
-                headers=headers,
-                json=body,
-            )
-
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"LLM 调用失败: {response.text}",
-                )
-
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-
-    # HTTP POST 函数（用于嵌入）
-    async def http_post(url: str, headers: Dict[str, str], body: dict) -> str:
-        async with httpx.AsyncClient(timeout=1800) as client:
-            response = await client.post(url, headers=headers, json=body)
-
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"HTTP POST 失败: {response.text}",
-                )
-
-            return response.text
+    # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）
+    ctx = make_llm_context(
+        llm_base_url=req.llm_base_url,
+        llm_api_key=req.llm_api_key,
+        llm_model=req.llm_model,
+    )
 
     # 执行 ingest
     try:
@@ -571,8 +563,8 @@ async def ingest(req: IngestRequest) -> IngestResult:
             config=config,
             project_root=project_root,
             source_file_path=source_file,
-            llm_call=llm_call,
-            http_post=http_post,
+            llm_call=ctx.llm_call,
+            http_post=ctx.http_post,
         )
 
     except Exception as e:
@@ -608,47 +600,12 @@ async def chat(req: ChatRequest) -> ChatResponse:
         max_tokens=req.max_tokens,
     )
 
-    # LLM 调用函数
-    async def llm_call(messages: List[dict], temperature: float) -> str:
-        async with httpx.AsyncClient(timeout=1800) as client:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {req.llm_api_key}",
-            }
-
-            body = {
-                "model": req.llm_model,
-                "messages": messages,
-                "temperature": temperature,
-            }
-
-            response = await client.post(
-                f"{req.llm_base_url}/chat/completions",
-                headers=headers,
-                json=body,
-            )
-
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"LLM 调用失败: {response.text}",
-                )
-
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-
-    # HTTP POST 函数（用于嵌入）
-    async def http_post(url: str, headers: Dict[str, str], body: dict) -> str:
-        async with httpx.AsyncClient(timeout=1800) as client:
-            response = await client.post(url, headers=headers, json=body)
-
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"HTTP POST 失败: {response.text}",
-                )
-
-            return response.text
+    # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON）
+    ctx = make_llm_context(
+        llm_base_url=req.llm_base_url,
+        llm_api_key=req.llm_api_key,
+        llm_model=req.llm_model,
+    )
 
     # 执行聊天
     try:
@@ -656,8 +613,8 @@ async def chat(req: ChatRequest) -> ChatResponse:
             config=config,
             project_root=project_root,
             query=req.query,
-            llm_call=llm_call,
-            http_post=http_post,
+            llm_call=ctx.llm_call,
+            http_post=ctx.http_post,
         )
 
         return ChatResponse(answer=outcome.answer, citations=outcome.citations)
@@ -867,33 +824,12 @@ async def start_research(req: ResearchRequest) -> dict:
             embed_model=req.llm_model,
         )
 
-    # LLM 调用函数
-    async def llm_call(messages: List[dict], temperature: float) -> str:
-        import httpx
-
-        async with httpx.AsyncClient(timeout=1800) as client:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {req.llm_api_key}",
-            }
-
-            body = {
-                "model": req.llm_model,
-                "messages": messages,
-                "temperature": temperature,
-            }
-
-            response = await client.post(
-                f"{req.llm_base_url}/chat/completions",
-                headers=headers,
-                json=body,
-            )
-
-            if response.status_code != 200:
-                raise Exception(f"LLM 调用失败: {response.status_code} - {response.text}")
-
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+    # LLM/HTTP 能力
+    ctx = make_llm_context(
+        llm_base_url=req.llm_base_url,
+        llm_api_key=req.llm_api_key,
+        llm_model=req.llm_model,
+    )
 
     # 执行 Deep Research
     try:
@@ -903,7 +839,7 @@ async def start_research(req: ResearchRequest) -> dict:
             search_provider=SearchProvider(req.search_provider),
             search_api_key=req.search_api_key,
             search_base_url=req.search_base_url,
-            llm_call=llm_call,
+            llm_call=ctx.llm_call,
             ingest_config=ingest_config,
             auto_ingest=req.auto_ingest,
         )
@@ -1012,41 +948,19 @@ async def clip_webpage(req: ClipRequest) -> dict:
                 embed_model=embed_model,
             )
 
-            # LLM 调用函数
-            async def llm_call(messages, temperature=0.3):
-                async with httpx.AsyncClient(timeout=1800) as client:
-                    headers = {
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {llm_api_key}",
-                    }
-                    body = {
-                        "model": llm_model,
-                        "messages": messages,
-                        "temperature": temperature,
-                    }
-                    response = await client.post(
-                        f"{llm_base_url}/chat/completions",
-                        headers=headers,
-                        json=body,
-                    )
-                    if response.status_code != 200:
-                        raise Exception(f"LLM 错误: {response.text}")
-                    data = response.json()
-                    return data["choices"][0]["message"]["content"]
-
-            async def http_post(url, headers, body):
-                async with httpx.AsyncClient(timeout=1800) as client:
-                    response = await client.post(url, headers=headers, json=body)
-                    if response.status_code != 200:
-                        raise Exception(f"HTTP 错误: {response.text}")
-                    return response.text
+            # LLM/HTTP 能力（从环境变量构造，因为 ClipRequest 不带 LLM 字段）
+            ctx = make_llm_context(
+                llm_base_url=llm_base_url,
+                llm_api_key=llm_api_key,
+                llm_model=llm_model,
+            )
 
             ingest_result = await ingest_source(
                 config=config,
                 project_root=project_root,
                 source_file_path=source_file,
-                llm_call=llm_call,
-                http_post=http_post,
+                llm_call=ctx.llm_call,
+                http_post=ctx.http_post,
             )
 
             result["wiki_page_path"] = ingest_result.wiki_page_path

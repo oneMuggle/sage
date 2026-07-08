@@ -2,10 +2,12 @@
 
 实现 4 信号图谱构建：DirectLink、SourceOverlap、TypeAffinity，以及 2-hop 相关性传播。
 """
+
+import json
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import frontmatter
 from .models import GraphData, GraphEdge, GraphNode, GraphSignal
@@ -202,8 +204,16 @@ def relevance(query: str, graph: GraphData, k_hops: int = K_HOPS) -> List[Tuple[
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
 
-def get_graph_cached(project_root: Path, query: Optional[str] = None, limit: int = 100) -> GraphData:
-    """获取图谱（带缓存和过滤）。
+def get_graph_cached(
+    project_root: Path, query: Optional[str] = None, limit: int = 100
+) -> GraphData:
+    """Build or load the wiki graph, with mtime-based cache.
+
+    Cache stores the FULL unfiltered graph; query/limit filtering is
+    applied on every read so changing either is free (no rebuild).
+
+    Cache key: max mtime of wiki/**/*.md (changes to wiki files only).
+    Cache file: {project_root}/.llm-wiki/graph-cache.json
 
     Args:
         project_root: 项目根目录
@@ -213,26 +223,107 @@ def get_graph_cached(project_root: Path, query: Optional[str] = None, limit: int
     Returns:
         GraphData: 图谱数据
     """
-    project_root / ".llm-wiki" / "graph-cache.json"
+    cache_path = project_root / ".llm-wiki" / "graph-cache.json"
+    wiki_dir = project_root / "wiki"
 
-    # 检查缓存（简单实现：总是重建）
-    # TODO: 实现基于 mtime 的缓存
-    graph = build_graph(project_root)
+    # Early return when wiki dir does not exist — never write a useless
+    # cache file in that case (Important #2 fix).
+    if not wiki_dir.exists():
+        return build_graph(project_root)
 
-    # 如果有查询，过滤节点
+    latest_mtime = max(
+        (p.stat().st_mtime for p in wiki_dir.rglob("*.md") if p.is_file()),
+        default=0.0,
+    )
+
+    graph: Optional[GraphData] = None
+    if cache_path.exists():
+        try:
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            # Match on mtime only — query/limit are filtered at read time
+            # (Important #1 fix).
+            if cache.get("latest_mtime") == latest_mtime:
+                graph = _deserialize_graph_data(cache["data"])
+        except (json.JSONDecodeError, KeyError, OSError):
+            pass  # corrupt cache, rebuild
+
+    if graph is None:
+        graph = build_graph(project_root)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "latest_mtime": latest_mtime,
+                    "data": _serialize_graph_data(graph),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+    # Apply query/limit filtering at call time so the cached full graph
+    # is reused for different queries/limits (Important #1 fix).
     if query:
         ranked = relevance(query, graph)
         top_ids = {node_id for node_id, _ in ranked[:limit]}
-
-        # 过滤节点和边
         filtered_nodes = [n for n in graph.nodes if n.id in top_ids]
         filtered_edges = [e for e in graph.edges if e.source in top_ids and e.target in top_ids]
+        return GraphData(nodes=filtered_nodes, edges=filtered_edges)
 
-        graph = GraphData(nodes=filtered_nodes, edges=filtered_edges)
-    elif len(graph.nodes) > limit:
-        graph = GraphData(nodes=graph.nodes[:limit], edges=graph.edges)
+    if len(graph.nodes) > limit:
+        return GraphData(nodes=graph.nodes[:limit], edges=graph.edges)
 
     return graph
+
+
+def _serialize_graph_data(graph: GraphData) -> Dict[str, Any]:
+    """Serialize GraphData to a JSON-compatible dict."""
+    return {
+        "nodes": [
+            {
+                "id": n.id,
+                "label": n.label,
+                "page_type": n.page_type,
+                "sources": list(n.sources),
+                "wikilinks": list(n.wikilinks),
+            }
+            for n in graph.nodes
+        ],
+        "edges": [
+            {
+                "source": e.source,
+                "target": e.target,
+                "signal": e.signal.value,
+                "weight": e.weight,
+            }
+            for e in graph.edges
+        ],
+    }
+
+
+def _deserialize_graph_data(data: Dict[str, Any]) -> GraphData:
+    """Deserialize a dict (from cache JSON) back into GraphData."""
+    return GraphData(
+        nodes=[
+            GraphNode(
+                id=n["id"],
+                label=n["label"],
+                page_type=n.get("page_type"),
+                sources=list(n.get("sources", [])),
+                wikilinks=list(n.get("wikilinks", [])),
+            )
+            for n in data.get("nodes", [])
+        ],
+        edges=[
+            GraphEdge(
+                source=e["source"],
+                target=e["target"],
+                signal=GraphSignal(e["signal"]),
+                weight=e["weight"],
+            )
+            for e in data.get("edges", [])
+        ],
+    )
 
 
 def _resolve_wikilink(wikilink: str, node_map: Dict[str, GraphNode]) -> GraphNode | None:
