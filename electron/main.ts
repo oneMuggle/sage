@@ -47,8 +47,10 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import http from 'node:http';
+import fetch from 'node-fetch';
 import { invokeBackend } from './invoke';
-import { relayChatStream } from './relay';
+import { relayChatStream, relayNdjsonToEvent } from './relay';
+import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
@@ -286,6 +288,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     'sage:invoke',
     async (_evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
+      // Streaming commands need their own dispatcher branch — they
+      // fire-and-forget the relay and return { streamId } immediately so
+      // the renderer can subscribe + unlisten via the existing IPC
+      // channels without waiting for the backend to complete.
+      if (payload.cmd === 'wiki_chat_stream') {
+        return startWikiChatStream(
+          _evt.sender,
+          payload.args ?? {},
+          BACKEND_URL,
+        );
+      }
       try {
         return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
       } catch (e) {
@@ -343,8 +356,24 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'sage:unlisten',
-    async (_evt, payload: { event: string }): Promise<{ ok: true }> => {
-      const { event } = payload;
+    async (
+      _evt,
+      payload: { event: string; streamId?: string },
+    ): Promise<{ ok: true }> => {
+      const { event, streamId } = payload;
+      // Streaming commands: abort the in-flight fetch so the backend
+      // stops producing NDJSON. The relay's finally{} block will
+      // streamControllers.delete on its own; we delete eagerly here so a
+      // re-subscribe with the same id (e.g. after React StrictMode
+      // double-mount) gets a fresh controller.
+      if (streamId) {
+        const controller = streamControllers.get(streamId);
+        if (controller) {
+          controller.abort();
+          streamControllers.delete(streamId);
+          logger.debug('ipc: unlisten aborted stream', { streamId });
+        }
+      }
       const abort = eventSubscriptions.get(event);
       if (abort) {
         abort.abort();
@@ -427,6 +456,81 @@ function registerIpcHandlers(): void {
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
   registerLogIpc(ipcMain);
+}
+
+/**
+ * Start a wiki chat streaming session.
+ *
+ * Returns a unique `streamId` immediately (the renderer needs it to
+ * subscribe to `wiki-chat-stream-{streamId}-chunk/done/error` channels
+ * and to call `sage:unlisten` for abort). The actual HTTP POST +
+ * NDJSON relay runs in the background:
+ *
+ *   1. POST args to /api/v1/wiki/chat/stream (camelCase→snake_case
+ *      conversion is the renderer's responsibility — see
+ *      api-client/wiki.ts wikiChatStream).
+ *   2. Stream the NDJSON response via relayNdjsonToEvent; each event is
+ *      dispatched to `sage:event:wiki-chat-stream-{streamId}-{chunk|
+ *      done|error}`.
+ *   3. On HTTP failure → forward `HTTP {status}` as a -error event.
+ *   4. On AbortError (renderer unsubscribed via sage:unlisten) → swallow
+ *      silently. Any other exception → forward `String(e)` as a -error.
+ *   5. The AbortController is removed from `streamControllers` in the
+ *      `finally` block regardless of outcome.
+ *
+ * Why a separate function (not inlined in `sage:invoke`):
+ *   - Keeps the IPC handler readable.
+ *   - The closure captures `webContents` and `backendUrl` cleanly, so
+ *     the body of the async block doesn't have to thread them through.
+ */
+function startWikiChatStream(
+  sender: Electron.WebContents,
+  args: Record<string, unknown>,
+  backendUrl: string,
+): { streamId: string } {
+  const streamId = `wiki-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const controller = new AbortController();
+  streamControllers.set(streamId, controller);
+  const wc = BrowserWindow.fromWebContents(sender);
+  if (!wc) {
+    streamControllers.delete(streamId);
+    throw new Error('No WebContents for invoke');
+  }
+  // Fire-and-forget: relay runs in background. Return streamId NOW so
+  // the renderer can start subscribing to the per-id event channels.
+  (async () => {
+    try {
+      const res = await fetch(`${backendUrl}/api/v1/wiki/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(args),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        wc.webContents.send(
+          `sage:event:wiki-chat-stream-${streamId}-error`,
+          { error: `HTTP ${res.status}` },
+        );
+        return;
+      }
+      await relayNdjsonToEvent(
+        res.body as NodeJS.ReadableStream,
+        `wiki-chat-stream-${streamId}`,
+        wc.webContents,
+        controller.signal,
+      );
+    } catch (e) {
+      if (e instanceof Error && e.name !== 'AbortError') {
+        wc.webContents.send(
+          `sage:event:wiki-chat-stream-${streamId}-error`,
+          { error: String(e) },
+        );
+      }
+    } finally {
+      streamControllers.delete(streamId);
+    }
+  })();
+  return { streamId };
 }
 
 function shutdownBackend(): void {

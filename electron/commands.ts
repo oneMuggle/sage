@@ -183,3 +183,15 @@ export class UnknownIpcCommandError extends Error {
     this.name = 'UnknownIpcCommandError';
   }
 }
+
+/**
+ * Module-level Map: streamId → AbortController.
+ *
+ * Tracks in-flight streaming IPC commands (e.g. `wiki_chat_stream`) so the
+ * renderer can abort the backend HTTP request via `sage:unlisten` when it
+ * unsubscribes. The controller is created when the stream starts and
+ * removed in the `finally` block of the relay loop on normal completion,
+ * error, or abort. Read by main.ts on `sage:unlisten`.
+ */
+export const streamControllers = new Map<string, AbortController>();
+
