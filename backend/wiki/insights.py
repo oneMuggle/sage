@@ -2,6 +2,7 @@
 
 实现惊人联系发现和知识缺口分析，帮助用户发现知识库中的有趣模式和潜在问题。
 """
+
 import logging
 from collections import defaultdict
 from dataclasses import dataclass

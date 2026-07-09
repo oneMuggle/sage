@@ -2,6 +2,7 @@
 
 实现上下文窗口的 token 预算分配，确保不超出模型限制。
 """
+
 import math
 from dataclasses import dataclass
 from typing import List, Tuple

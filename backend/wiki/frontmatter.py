@@ -3,6 +3,7 @@
 支持解析 Markdown 文件中的 YAML frontmatter，提取 wikilinks，序列化回 Markdown。
 用于 Wiki 页面（区别于 backend/skills/skill_md/frontmatter.py 用于 SKILL.md）。
 """
+
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 

@@ -8,7 +8,7 @@
 # - fastapi 钉 0.85+（与 pydantic 1.x 兼容）
 # - 其他依赖跟随 backend/requirements.txt 但带 == 版本
 # - opentelemetry 1.27.0 支持 3.8（要 verify 实际包）
-# - ruff/mypy/import-linter 钉 0.x 系列（避免 1.x 新语法要求）
+# - ruff 钉 0.x，mypy 钉 1.x，import-linter 钉 2.0（py3.8 兼容，2.1+ 要 py3.9+）
 
 # Core
 fastapi==0.85.0      # py38 兼容 (与 pydantic 1.x 配)
@@ -28,7 +28,12 @@ sqlite-vec>=0.1.9
 httpx==0.26.0
 
 # Observability
-prometheus-client==0.25.0
+# ⚠️ 0.22.0+ require Python >=3.9 (per PyPI metadata), so on Win7 LTS
+# (Python 3.8.10 embeddable) we MUST pin to the last 3.8-compatible release.
+# 0.21.1 was uploaded 2024-12-03, API stable since 0.20 (we use only
+# Counter/Histogram/Gauge/CollectorRegistry/generate_latest/CONTENT_TYPE_LATEST,
+# all unchanged in 0.21.1). See scripts/bundle-python.ps1 + PR history.
+prometheus-client==0.21.1
 
 # Tracing
 opentelemetry-api==1.27.0
@@ -49,5 +54,8 @@ respx==0.21.1
 # Quality
 ruff==0.4.4
 mypy==1.8.0
-import-linter==2.11
+import-linter==2.0
 types-PyYAML==6.0.12.20240311
+
+# Scheduled tasks (M3)
+apscheduler==3.10.4
