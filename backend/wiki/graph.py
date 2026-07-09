@@ -278,52 +278,12 @@ def get_graph_cached(
 
 def _serialize_graph_data(graph: GraphData) -> Dict[str, Any]:
     """Serialize GraphData to a JSON-compatible dict."""
-    return {
-        "nodes": [
-            {
-                "id": n.id,
-                "label": n.label,
-                "page_type": n.page_type,
-                "sources": list(n.sources),
-                "wikilinks": list(n.wikilinks),
-            }
-            for n in graph.nodes
-        ],
-        "edges": [
-            {
-                "source": e.source,
-                "target": e.target,
-                "signal": e.signal.value,
-                "weight": e.weight,
-            }
-            for e in graph.edges
-        ],
-    }
+    return graph.to_dict()
 
 
 def _deserialize_graph_data(data: Dict[str, Any]) -> GraphData:
     """Deserialize a dict (from cache JSON) back into GraphData."""
-    return GraphData(
-        nodes=[
-            GraphNode(
-                id=n["id"],
-                label=n["label"],
-                page_type=n.get("page_type"),
-                sources=list(n.get("sources", [])),
-                wikilinks=list(n.get("wikilinks", [])),
-            )
-            for n in data.get("nodes", [])
-        ],
-        edges=[
-            GraphEdge(
-                source=e["source"],
-                target=e["target"],
-                signal=GraphSignal(e["signal"]),
-                weight=e["weight"],
-            )
-            for e in data.get("edges", [])
-        ],
-    )
+    return GraphData.from_dict(data)
 
 
 def _resolve_wikilink(wikilink: str, node_map: Dict[str, GraphNode]) -> GraphNode | None:

@@ -2,9 +2,9 @@
 
 定义 Wiki 子系统的核心数据结构，包括项目、文件、页面、搜索结果、图谱等。
 """
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -88,6 +88,19 @@ class GraphNode:
     sources: List[str] = field(default_factory=list)  # frontmatter sources:[]
     wikilinks: List[str] = field(default_factory=list)  # [[X]] 链接
 
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GraphNode":
+        return cls(
+            id=data["id"],
+            label=data["label"],
+            page_type=data.get("page_type"),
+            sources=list(data.get("sources", [])),
+            wikilinks=list(data.get("wikilinks", [])),
+        )
+
 
 @dataclass
 class GraphEdge:
@@ -98,6 +111,20 @@ class GraphEdge:
     signal: GraphSignal
     weight: float
 
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        d["signal"] = self.signal.value
+        return d
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GraphEdge":
+        return cls(
+            source=data["source"],
+            target=data["target"],
+            signal=GraphSignal(data["signal"]),
+            weight=data["weight"],
+        )
+
 
 @dataclass
 class GraphData:
@@ -105,6 +132,21 @@ class GraphData:
 
     nodes: List[GraphNode]
     edges: List[GraphEdge]
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to a JSON-compatible dict (for caching / IPC)."""
+        return {
+            "nodes": [n.to_dict() for n in self.nodes],
+            "edges": [e.to_dict() for e in self.edges],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GraphData":
+        """Deserialize from a dict (from cache JSON / IPC payload)."""
+        return cls(
+            nodes=[GraphNode.from_dict(n) for n in data.get("nodes", [])],
+            edges=[GraphEdge.from_dict(e) for e in data.get("edges", [])],
+        )
 
 
 # Ingest 进度相关
