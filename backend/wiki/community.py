@@ -3,6 +3,7 @@
 使用 networkx 实现 Louvain 算法，检测知识图谱中的社区结构，
 并计算每个社区的凝聚度（intra-community edge density）。
 """
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path

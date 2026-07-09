@@ -29,7 +29,7 @@ from typing import Dict, List, Tuple
 
 import json
 import time
-from typing import Any
+from typing import Any, Dict, List, Tuple
 
 
 class AgentRepository:

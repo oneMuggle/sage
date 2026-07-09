@@ -63,6 +63,34 @@ jobs:
           flags: backend-py38
           fail_ci_if_error: false
 
+  # ========== bundle-python.ps1 fail-fast guard tests (Win7 LTS) ==========
+  # - Lightweight Pester 5 static-analysis tests for the Win7 Python bundler
+  # - Catches regressions of the v0.4.0-lts+ "30s backend timeout" bug where
+  #   pip failures were silently swallowed by $ErrorActionPreference = "Stop"
+  #   (which doesn't auto-catch exit codes from `& $ExternalExe` calls).
+  # - Runs on ubuntu-latest (PowerShell is cross-platform) — no network
+  #   dependency, ~5s runtime.
+  bundle-script-test:
+    name: Bundle Script Tests (Pester)
+    if: github.ref == 'refs/heads/release/win7' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PowerShell
+        uses: microsoft/powershell@v1
+        with:
+          pwsh: '7.4'
+
+      - name: Install Pester
+        shell: pwsh
+        run: Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0
+
+      - name: Run Pester
+        shell: pwsh
+        run: Invoke-Pester -Path scripts/bundle-python.Tests.ps1 -Output Detailed
+
   # ========== Backend: lint + type + test + coverage ==========
   backend:
     name: Backend (Python)

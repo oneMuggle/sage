@@ -7,6 +7,7 @@ This module defines the fundamental abstractions for task coordination:
 - Lane: An execution unit with isolated lifecycle
 - Team: A group of related tasks forming a workflow
 """
+
 import time
 from dataclasses import dataclass, field
 from enum import Enum

@@ -2,6 +2,7 @@
 
 支持 PDF、DOCX、PPTX、HTML、Markdown 等格式的文本提取。
 """
+
 import logging
 from pathlib import Path
 from typing import List, Tuple

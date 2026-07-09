@@ -217,12 +217,7 @@ describe('useStoredSiderOrder', () => {
   });
 
   it('multiple reorders accumulate correctly', () => {
-    const items = [
-      makeSession('a'),
-      makeSession('b'),
-      makeSession('c'),
-      makeSession('d'),
-    ];
+    const items = [makeSession('a'), makeSession('b'), makeSession('c'), makeSession('d')];
     const { result } = renderHook(() =>
       useStoredSiderOrder({ storageKey: STORAGE_KEY, items, getId: (x) => x.id }),
     );

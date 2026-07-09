@@ -2,6 +2,7 @@
 
 集成文件解析、图片提取、视觉描述，生成包含图片描述的 Wiki 页面。
 """
+
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
