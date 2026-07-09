@@ -1,7 +1,6 @@
 """
 Web 工具 - 网络搜索和网页获取
 """
-
 from typing import Optional
 
 import httpx

@@ -8,6 +8,10 @@ import { useSettings } from '../../features/manage-settings/useSettings';
 import { useWikiChatStream } from '../../features/wiki/useWikiChatStream';
 import { wikiChatStream } from '../../shared/api-client/wiki';
 
+/** Default embedding model when the chat endpoint doubles as the embed endpoint.
+ * Override via the embedding model setting in chat settings (future #3 followup). */
+const DEFAULT_EMBED_MODEL = 'text-embedding-3-small';
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -23,6 +27,9 @@ export function WikiChat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [streamId, setStreamId] = useState<string | null>(null);
+  // PR-2 follow-up: track the most recent completed query so we can show
+  // a "no results" message when retrieval returns 0 pages.
+  const [lastQueryHadNoResults, setLastQueryHadNoResults] = useState(false);
   const stream = useWikiChatStream(streamId);
 
   // PR-2 Task 5: the hook (`useWikiChatStream`) owns the per-stream
@@ -42,8 +49,14 @@ export function WikiChat() {
     if (!stream.streaming) {
       // Hook finished streaming (done or error event fired).
       setLoading(false);
+      // No-results UX: when the stream ends with no answer and no error,
+      // and we had a recent query, surface "no results" so the user isn't
+      // left staring at the empty-state placeholder.
+      if (!stream.answer && !stream.error && messages.length > 0) {
+        setLastQueryHadNoResults(true);
+      }
     }
-  }, [stream.streaming]);
+  }, [stream.streaming, stream.answer, stream.error, messages.length]);
 
   const chatEndpoint = resolveEndpoint(
     settings.settings.modelSelections.chatModel,
@@ -74,7 +87,7 @@ export function WikiChat() {
         llmModel: chatModelId,
         embedBaseUrl: chatEndpoint.baseUrl, // 复用 chat 端点作为 embedding 端点(MVP)
         embedApiKey: chatEndpoint.apiKey,
-        embedModel: 'text-embedding-3-small', // 默认 embedding 模型
+        embedModel: DEFAULT_EMBED_MODEL,
       });
       setStreamId(serverStreamId);
     } catch (e) {
@@ -100,11 +113,19 @@ export function WikiChat() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && !stream.answer && (
+        {messages.length === 0 && !stream.answer && !lastQueryHadNoResults && (
           <div className="flex flex-col items-center justify-center gap-2 text-muted text-sm py-12">
             <BookOpen className="h-8 w-8 text-muted/30" />
             <p>向你的 wiki 提问</p>
             <p className="text-xs">我会基于 wiki 中的内容回答你的问题</p>
+          </div>
+        )}
+
+        {lastQueryHadNoResults && (
+          <div className="flex justify-start" data-testid="chat-no-results">
+            <div className="max-w-[80%] rounded-lg px-4 py-3 bg-bg-muted text-text">
+              <div className="text-sm text-muted">未在 wiki 中找到相关内容</div>
+            </div>
           </div>
         )}
 

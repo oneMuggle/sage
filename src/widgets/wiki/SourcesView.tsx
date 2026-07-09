@@ -1,6 +1,6 @@
 // Sources View - 源文件管理视图
 import { FolderPlus, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { mockSourcesTree } from '../../entities/wiki/mock-data';
 import { useWikiStore } from '../../entities/wiki/store';
@@ -21,6 +21,15 @@ export function SourcesView() {
   // clearing it (via `reset`) hides the bar. We feed the hook output
   // straight into <WikiIngestProgress> for the live STAGE_LABELS bar.
   const ingest = useWikiIngest(ingestId);
+
+  // PR-3 follow-up: auto-dismiss the progress bar 4s after a terminal
+  // state (done / error). User can still see the final state for a moment
+  // before the bar disappears; new ingests reset the timer.
+  useEffect(() => {
+    if (!ingest.done && !ingest.error) return;
+    const t = setTimeout(() => setIngestId(null), 4000);
+    return () => clearTimeout(t);
+  }, [ingest.done, ingest.error]);
 
   // PR-3 Task 4: replace the previous `alert(\`模拟导入: ${path}\`)` mock
   // with a real stream invocation. `wikiIngestStream` is invoke-only — it
