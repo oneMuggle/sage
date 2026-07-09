@@ -2,8 +2,10 @@
 import { FolderPlus, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { resolveEndpoint } from '../../entities/setting/types';
 import { mockSourcesTree } from '../../entities/wiki/mock-data';
 import { useWikiStore } from '../../entities/wiki/store';
+import { useSettings } from '../../features/manage-settings/useSettings';
 import { useWikiIngest } from '../../features/wiki/useWikiIngest';
 import { wikiIngestStream } from '../../shared/api-client/wiki';
 
@@ -37,29 +39,36 @@ export function SourcesView() {
   // publishes `sage:event:wiki-ingest-{streamId}-progress` events which
   // the existing `useWikiIngest` hook subscribes to.
   //
-  // LLM config is currently placeholder-empty — wiring `useSettings()` is
-  // a known follow-up. Empty placeholders let the IPC + UI wiring round-
-  // trip cleanly; the backend will reject the empty llm_model on its end
-  // (so the user sees a failed progress event rather than a working
-  // import until the follow-up lands).
+  // LLM config is resolved from `useSettings()` (same pattern as
+  // WikiChat.tsx). If the user hasn't configured a chat endpoint +
+  // chatModel, the import button is disabled and the user sees no
+  // progress event. This is the same gate WikiChat uses for send.
+  const settings = useSettings();
+  const ingestEndpoint = settings ? resolveEndpoint(settings.settings.modelSelections.chatModel, settings.settings.endpoints) : undefined;
+  const ingestModelId = settings?.settings.modelSelections.chatModel.modelId ?? '';
+
   const handleIngest = async (path: string) => {
     if (!project) {
       // Reset hook state so the user can retry after opening a project.
       ingest.reset();
       return;
     }
+    if (!ingestEndpoint || !ingestModelId) {
+      // No LLM endpoint configured — silently no-op (button should also
+      // be disabled, but this is a defensive guard).
+      return;
+    }
     try {
       const { streamId } = await wikiIngestStream({
         sourceFile: path,
         projectPath: project.path,
-        // TODO(PR-3 follow-up): resolve from `useSettings()` like
-        // WikiChat.tsx (resolveEndpoint + chatModel.modelId).
-        llmBaseUrl: '',
-        llmApiKey: '',
-        llmModel: '',
-        embedBaseUrl: '',
-        embedApiKey: '',
-        embedModel: '',
+        llmBaseUrl: ingestEndpoint.baseUrl,
+        llmApiKey: ingestEndpoint.apiKey,
+        llmModel: ingestModelId,
+        // Reuse the chat endpoint as the embed endpoint (MVP).
+        embedBaseUrl: ingestEndpoint.baseUrl,
+        embedApiKey: ingestEndpoint.apiKey,
+        embedModel: ingestModelId,  // same model used for both chat + embed (MVP)
       });
       setIngestId(streamId);
     } catch {
