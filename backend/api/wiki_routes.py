@@ -2,14 +2,14 @@
 
 提供 Wiki 子系统的 HTTP API：文件操作、搜索、Ingest、Chat、Graph、Research、Clip。
 """
-
 import logging
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import AsyncIterator, List, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -30,6 +30,23 @@ from backend.wiki.llm_context import make_llm_context
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/wiki", tags=["wiki"])
+
+
+def _http_exception_from_llm(e: Exception, fallback_detail: str) -> HTTPException:
+    """Map an exception to HTTPException, preserving upstream status code.
+
+    `httpx.HTTPStatusError` (raised by `r.raise_for_status()`) carries the
+    upstream LLM/embedding provider's response status. Map it through so
+    clients can distinguish 401/403/429/5xx instead of seeing a flat 500.
+    Everything else falls back to 500.
+    """
+    if isinstance(e, httpx.HTTPStatusError):
+        upstream_text = e.response.text if e.response is not None else ""
+        return HTTPException(
+            status_code=e.response.status_code,
+            detail=f"{fallback_detail} (upstream {e.response.status_code}): {upstream_text}",
+        )
+    return HTTPException(status_code=500, detail=fallback_detail)
 
 
 # ============================================================================
@@ -528,6 +545,7 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
         raise HTTPException(status_code=404, detail="源文件不存在")
 
     # 同步解析文档（PDF/DOCX 等），失败时在 stream 开启前抛 HTTPException
+    temp_md: Optional[Path] = None
     try:
         content = parse_document(source_file)
 
@@ -540,6 +558,8 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
             source_file = temp_md
     except Exception as e:
         logger.error(f"文档解析失败: {e}")
+        if temp_md is not None:
+            temp_md.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=f"文档解析失败: {e}")
 
     # 配置
@@ -559,8 +579,16 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
         llm_model=req.llm_model,
     )
 
+    async def _stream_with_cleanup() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in ingest_source_stream(config, project_root, source_file, ctx):
+                yield chunk
+        finally:
+            if temp_md is not None:
+                temp_md.unlink(missing_ok=True)
+
     return StreamingResponse(
-        ingest_source_stream(config, project_root, source_file, ctx),
+        _stream_with_cleanup(),
         media_type="application/x-ndjson",
         headers={
             "Cache-Control": "no-cache",
@@ -701,7 +729,7 @@ async def get_communities(project_path: str) -> dict:
         }
     except Exception as e:
         logger.error(f"社区检测失败: {e}")
-        raise HTTPException(status_code=500, detail=f"社区检测失败: {e}")
+        raise _http_exception_from_llm(e, "社区检测失败")
 
 
 # ============================================================================
@@ -758,7 +786,7 @@ async def get_insights(project_path: str) -> dict:
         }
     except Exception as e:
         logger.error(f"图谱洞察分析失败: {e}")
-        raise HTTPException(status_code=500, detail=f"图谱洞察分析失败: {e}")
+        raise _http_exception_from_llm(e, "图谱洞察分析失败")
 
 
 # ============================================================================
@@ -863,7 +891,7 @@ async def start_research(req: ResearchRequest) -> dict:
 
     except Exception as e:
         logger.error(f"Deep Research 失败: {e}")
-        raise HTTPException(status_code=500, detail=f"Deep Research 失败: {e}")
+        raise _http_exception_from_llm(e, "Deep Research 失败")
 
 
 # ============================================================================
