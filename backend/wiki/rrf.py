@@ -2,6 +2,7 @@
 
 实现 RRF 算法，融合 token 搜索和向量搜索的结果。
 """
+
 from typing import Dict, List, Tuple
 
 # 默认 RRF 常数

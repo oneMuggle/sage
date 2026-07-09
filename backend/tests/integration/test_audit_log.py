@@ -23,7 +23,6 @@
 """
 
 from __future__ import annotations
-from typing import Set
 
 import json
 import os

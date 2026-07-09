@@ -2,6 +2,7 @@
 
 实现 7 个 MCP 工具，让 Claude 等外部 Agent 能查询 Sage Wiki。
 """
+
 import json
 import logging
 from pathlib import Path

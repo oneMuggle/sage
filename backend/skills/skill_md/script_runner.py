@@ -18,7 +18,6 @@
 """
 
 from __future__ import annotations
-from typing import List, Optional, Tuple
 
 import logging
 from pathlib import Path

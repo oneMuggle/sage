@@ -4,6 +4,7 @@ Permission system for multi-agent orchestration.
 Controls what actions agents can perform during lane execution.
 Implements least-privilege principle with preset profiles.
 """
+
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path

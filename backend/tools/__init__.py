@@ -3,6 +3,7 @@
 
 提供所有内置工具的注册函数
 """
+
 from typing import Optional
 
 from backend.domain.tool_policy import ToolPolicy

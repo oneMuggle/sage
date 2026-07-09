@@ -2,6 +2,7 @@
 
 实现 Markdown 内容的智能分块，以及嵌入向量的 HTTP 请求构建和响应解析。
 """
+
 import json
 from dataclasses import dataclass
 from typing import Dict, List

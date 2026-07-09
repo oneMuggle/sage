@@ -25,7 +25,6 @@ SQLite ``agents`` 表 (见 ``backend/data/database.py:init_db``)。
 """
 
 from __future__ import annotations
-from typing import Dict, List, Tuple
 
 import json
 import time
