@@ -4,11 +4,10 @@ Permission system for multi-agent orchestration.
 Controls what actions agents can perform during lane execution.
 Implements least-privilege principle with preset profiles.
 """
-from typing import List
-
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import List
 
 
 class PermissionPreset(str, Enum):
@@ -51,7 +50,10 @@ class LanePermission:
             return False
 
         # Audit/Explain presets cannot write, execute, or run lanes
-        if self.preset in (PermissionPreset.AUDIT, PermissionPreset.EXPLAIN) and action.action_type in (
+        if self.preset in (
+            PermissionPreset.AUDIT,
+            PermissionPreset.EXPLAIN,
+        ) and action.action_type in (
             "write_file",
             "delete_file",
             "execute",

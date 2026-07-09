@@ -1,11 +1,17 @@
-import { Send, Square, Image, Paperclip, BookOpen, Clock } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
+import { skillsApi } from '../../shared/api';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
+import { useI18n } from '../../shared/lib/i18n';
 
-import { FileAttachment } from './FileAttachment';
-import { KnowledgeChip } from './KnowledgeChip';
+import { InputCard, type KnowledgeDocType } from './InputCard';
+import {
+  commandToPrompt,
+  mergeSlashCommands,
+  type DynamicSlashSkill,
+  type SlashCommand,
+} from './slashCommands';
 
 interface ChatInputProps {
   onSend: (
@@ -17,37 +23,63 @@ interface ChatInputProps {
     },
   ) => void;
   onInterrupt?: () => void;
-  onSchedule?: () => void;
+  onClear?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
 }
 
-const KNOWLEDGE_DOCS = [
+const KNOWLEDGE_DOCS: KnowledgeDocType[] = [
   { id: 'prd', title: '产品需求文档', desc: 'Sage 核心功能定义' },
   { id: 'api-docs', title: 'API 接口文档', desc: '内部 API 网关说明' },
   { id: 'deploy-guide', title: '部署指南', desc: 'Windows 环境部署步骤' },
   { id: 'memory-arch', title: '记忆系统架构', desc: '本地存储与同步策略' },
   { id: 'ui-spec', title: 'UI 设计规范', desc: '设计令牌与组件库' },
+  { id: 'test-data', title: '测试数据集', desc: '样本对话和测试用例' },
 ];
 
 export function ChatInput({
   onSend,
   onInterrupt,
-  onSchedule,
+  onClear,
   isLoading = false,
   disabled = false,
-  placeholder = '输入消息...',
+  placeholder,
 }: ChatInputProps) {
+  const { t } = useI18n();
   const [value, setValue] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
   const [knowledgeRefs, setKnowledgeRefs] = useState<{ id: string; title: string }[]>([]);
   const [showKnowledgeSelector, setShowKnowledgeSelector] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  // Path B: dynamic SKILL.md slash command names fetched from the backend.
+  // On fetch failure we silently fall back to an empty list (no slash skills).
+  const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
 
-  // Phase 6 (M8 /btw): @文件提及 + /btw 补充消息
+  // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
   const atQuery = useAtFileQuery(value, cursorPos);
+
+  // Fetch SKILL.md skills on mount. Filter to user-invocable ones for slash menu.
+  // The full `description` from the SKILL.md frontmatter is passed through so the
+  // menu can display meaningful descriptions (not just "Skill: <name>").
+  // List is loaded once; re-mount or restart app to pick up new SKILL.md.
+  useEffect(() => {
+    skillsApi
+      .list()
+      .then((skills) => {
+        const dynamic = skills
+          .filter((s) => s.dispatch?.user_invocable === true)
+          .map((s) => ({
+            commandName: s.dispatch?.user_invocable_name ?? `/${s.name}`,
+            description: s.description,
+          }));
+        setDynamicSlashCommands(dynamic);
+      })
+      .catch(() => setDynamicSlashCommands([]));
+  }, []);
 
   const {
     files,
@@ -63,8 +95,8 @@ export function ChatInput({
   } = useFileUpload();
 
   const handleSend = () => {
-    if (!value.trim() || disabled) return;
-    onSend(value, {
+    if (!value.trim() || isLoading) return;
+    onSend(value.trim(), {
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,
       images: images.length > 0 ? images : undefined,
@@ -74,219 +106,162 @@ export function ChatInput({
     clearAll();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  const handleSlashSelect = useCallback(
+    (cmd: SlashCommand) => {
+      setSlashMenuOpen(false);
+
+      if (cmd.mode === 'clear') {
+        setValue('');
+        onClear?.();
+        return;
+      }
+
+      if (cmd.mode === 'help') {
+        const helpText = slashCommands.map((c) => `/${c.name} — ${c.description}`).join('\n');
+        setValue('');
+        onSend(`可用命令列表：\n${helpText}`);
+        return;
+      }
+
+      // Path B: SKILL.md skill — invoke via execute API and send returned content.
+      // On failure, fall back to prompt-style execution so the user can still
+      // talk about the skill even if the executor is unavailable.
+      if (cmd.mode === 'skill' && cmd.skillName) {
+        const parts = value.split(/\s+/);
+        const args = parts.slice(1).join(' ');
+        const skillName = cmd.skillName;
+        skillsApi
+          .execute(skillName, { args: { query: args } })
+          .then((result) => {
+            const body =
+              typeof result.content === 'string' ? result.content : `/${skillName} ${args}`.trim();
+            onSend(body);
+            setValue('');
+          })
+          .catch(() => {
+            // Fall back to prompt-style: send the raw "/skill args" as instruction
+            const prompt = commandToPrompt({ ...cmd, mode: 'prompt', name: skillName }, args);
+            onSend(prompt);
+            setValue('');
+          });
+        return;
+      }
+
+      // prompt 模式：提取参数并转为提示词
+      const parts = value.split(/\s+/);
+      const args = parts.slice(1).join(' ');
+      const prompt = commandToPrompt(cmd, args);
+      setValue('');
+      onSend(prompt);
+    },
+    [value, onSend, onClear, slashCommands],
+  );
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles) return;
+    Array.from(selectedFiles).forEach(addImage);
+    e.target.value = '';
   };
 
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    setValue(newValue);
-    setCursorPos(e.target.selectionStart ?? newValue.length);
-    const ta = e.target;
-    ta.style.height = 'auto';
-    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles) return;
+    Array.from(selectedFiles).forEach(addFile);
+    e.target.value = '';
+  };
 
-    // Phase 6 (M8 /btw): /btw 拦截
+  const toggleKnowledgeRef = (doc: (typeof KNOWLEDGE_DOCS)[number]) => {
+    setKnowledgeRefs((prev) =>
+      prev.find((r) => r.id === doc.id)
+        ? prev.filter((r) => r.id !== doc.id)
+        : [...prev, { id: doc.id, title: doc.title }],
+    );
+  };
+
+  const handleChange = (newValue: string) => {
+    setValue(newValue);
+    setCursorPos(newValue.length);
+
+    // Phase 6: /btw 拦截（优先级高于普通 slash 命令）
     const btwMatch = newValue.match(/^\/btw\s+(.+)$/);
     if (btwMatch) {
       btw.open(btwMatch[1]);
       setValue('');
       return;
     }
-  };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files;
-    if (!selectedFiles) return;
-    Array.from(selectedFiles).forEach((file) => {
-      if (file.type.startsWith('image/')) {
-        addImage(file);
+    // 检测 slash 命令
+    if (newValue.startsWith('/')) {
+      const query = newValue.slice(1).split(/\s/)[0] ?? '';
+      // Path B: merge static commands with dynamically loaded SKILL.md slash commands.
+      const merged = mergeSlashCommands(dynamicSlashCommands);
+      const lower = query.toLowerCase();
+      const filtered = merged.filter(
+        (cmd) => cmd.name.toLowerCase().includes(lower) || cmd.label.toLowerCase().includes(lower),
+      );
+      if (filtered.length > 0) {
+        setSlashCommands(filtered);
+        setSlashSelectedIndex(0);
+        setSlashMenuOpen(true);
       } else {
-        addFile(file);
+        setSlashMenuOpen(false);
       }
-    });
-  };
-
-  const toggleKnowledge = (id: string, title: string) => {
-    setKnowledgeRefs((prev) => {
-      const exists = prev.find((k) => k.id === id);
-      if (exists) return prev.filter((k) => k.id !== id);
-      return [...prev, { id, title }];
-    });
+    } else {
+      setSlashMenuOpen(false);
+    }
   };
 
   return (
-    <div
-      className={`border-t border-border p-4 ${isDragOver ? 'bg-bg-hover' : ''}`}
+    <InputCard
+      value={value}
+      onChange={handleChange}
+      onSubmit={handleSend}
+      placeholder={placeholder ?? t('chat.placeholder')}
+      disabled={disabled}
+      isLoading={isLoading}
+      onInterrupt={onInterrupt}
+      files={files}
+      images={images}
+      knowledgeRefs={knowledgeRefs}
+      onRemoveFile={removeFile}
+      onRemoveImage={removeImage}
+      onRemoveKnowledge={(idx) => setKnowledgeRefs((prev) => prev.filter((_, i) => i !== idx))}
+      knowledgeDocs={KNOWLEDGE_DOCS}
+      showKnowledgeSelector={showKnowledgeSelector}
+      onToggleKnowledgeSelector={setShowKnowledgeSelector}
+      onToggleKnowledge={(docId) => {
+        const doc = KNOWLEDGE_DOCS.find((d) => d.id === docId);
+        if (doc) toggleKnowledgeRef(doc);
+      }}
+      onImageSelect={handleImageSelect}
+      onFileSelect={handleFileSelect}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
-    >
-      {/* 知识库引用 chips */}
-      {knowledgeRefs.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2">
-          {knowledgeRefs.map((k) => (
-            <KnowledgeChip
-              key={k.id}
-              title={k.title}
-              onRemove={() => toggleKnowledge(k.id, k.title)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* 文件附件 */}
-      {(files.length > 0 || images.length > 0) && (
-        <div className="flex flex-wrap gap-2 mb-2">
-          {[...files, ...images].map((f, i) => (
-            <FileAttachment
-              key={`${f.name}-${i}`}
-              name={f.name}
-              size={f.size}
-              type={f.type}
-              onRemove={() => {
-                if (f.type.startsWith('image/')) {
-                  removeImage(i - files.length);
-                } else {
-                  removeFile(i);
-                }
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="flex items-end gap-2">
-        <div className="flex-1 relative">
-          {/* Phase 6 (M8 /btw): @ 文件提及浮层 */}
-          {atQuery.query !== null && (
-            <AtFileMenu
-              query={atQuery.query}
-              onSelect={(path) => {
-                const newValue =
-                  value.slice(0, atQuery.startIdx) + '@' + path + ' ' + value.slice(atQuery.endIdx);
-                setValue(newValue);
-                setCursorPos(atQuery.startIdx + 1 + path.length + 1);
-              }}
-              onClose={() => {
-                const newValue = value.slice(0, atQuery.startIdx) + value.slice(atQuery.endIdx);
-                setValue(newValue);
-                setCursorPos(atQuery.startIdx);
-              }}
-            />
-          )}
-          <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
-              onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
-              placeholder={placeholder}
-              disabled={disabled}
-              rows={1}
-              className="flex-1 bg-transparent border-none outline-none resize-none text-text placeholder:text-muted"
-              style={{ maxHeight: '200px' }}
-            />
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => document.getElementById('chat-image-input')?.click()}
-                title="图片"
-                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-              >
-                <Image className="w-4 h-4" />
-              </button>
-              <input
-                id="chat-image-input"
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={handleImageSelect}
-              />
-              <button
-                type="button"
-                onClick={() => document.getElementById('chat-file-input')?.click()}
-                title="附件"
-                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
-              <input
-                id="chat-file-input"
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleImageSelect}
-              />
-              <button
-                type="button"
-                onClick={() => setShowKnowledgeSelector(!showKnowledgeSelector)}
-                title="知识库"
-                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-              >
-                <BookOpen className="w-4 h-4" />
-              </button>
-              {onSchedule && (
-                <button
-                  type="button"
-                  onClick={onSchedule}
-                  title="定时"
-                  className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-                >
-                  <Clock className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 知识库选择器 */}
-          {showKnowledgeSelector && (
-            <div className="absolute bottom-full mb-2 left-0 right-0 max-h-60 overflow-y-auto bg-bg-elevated border border-border rounded-radius-sm shadow-lg p-2 z-10">
-              {KNOWLEDGE_DOCS.map((doc) => {
-                const selected = knowledgeRefs.find((k) => k.id === doc.id);
-                return (
-                  <button
-                    key={doc.id}
-                    type="button"
-                    onClick={() => toggleKnowledge(doc.id, doc.title)}
-                    className={`w-full text-left px-3 py-2 rounded-radius-sm transition-colors ${
-                      selected ? 'bg-primary text-text-inverse' : 'hover:bg-bg-hover text-text'
-                    }`}
-                  >
-                    <div className="font-medium">{doc.title}</div>
-                    <div className="text-xs text-muted">{doc.desc}</div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        {isLoading ? (
-          <button
-            type="button"
-            onClick={onInterrupt}
-            title="停止"
-            className="w-10 h-10 flex items-center justify-center bg-bg-elevated text-text rounded-radius-sm hover:bg-bg-hover transition-colors"
-          >
-            <Square className="w-4 h-4" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!value.trim() || disabled}
-            className="w-10 h-10 flex items-center justify-center bg-primary text-text-inverse rounded-radius-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
-          >
-            发送
-            <Send className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-    </div>
+      isDragOver={isDragOver}
+      showSlashMenu={slashMenuOpen}
+      slashCommands={slashCommands}
+      slashSelectedIndex={slashSelectedIndex}
+      onSlashSelect={handleSlashSelect}
+      atFileMenu={
+        atQuery.query !== null && (
+          <AtFileMenu
+            query={atQuery.query}
+            onSelect={(path) => {
+              const newValue =
+                value.slice(0, atQuery.startIdx) + '@' + path + ' ' + value.slice(atQuery.endIdx);
+              setValue(newValue);
+              setCursorPos(atQuery.startIdx + 1 + path.length + 1);
+            }}
+            onClose={() => {
+              const newValue = value.slice(0, atQuery.startIdx) + value.slice(atQuery.endIdx);
+              setValue(newValue);
+              setCursorPos(atQuery.startIdx);
+            }}
+          />
+        )
+      }
+      hint={t('chat.hint')}
+    />
   );
 }

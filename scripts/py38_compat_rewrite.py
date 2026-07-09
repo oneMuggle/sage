@@ -287,6 +287,16 @@ class AnnotationRewriter(cst.CSTTransformer):
 class TypingImportAdder(cst.CSTTransformer):
     """Add `from typing import ...` for names used by AnnotationRewriter.
     Idempotent: never duplicates an existing import.
+
+    ALWAYS inserts at the TOP of the module (after docstring /
+    __future__ imports). If an existing `from typing import ...` already
+    lives at the top, we MERGE into it; if it exists elsewhere (e.g.
+    mid-file with `# noqa: E402`), we DO NOT merge — we leave that
+    import alone and add a fresh top-of-module import. This is critical:
+    a mid-file typing import placed AFTER PEP 604/585 use sites (like
+    wiki_routes.py does for `from typing import Literal`) causes
+    NameError at runtime since `List[...]` is evaluated before that
+    import line runs.
     """
 
     def __init__(self, needed: Set[str]) -> None:
@@ -298,10 +308,12 @@ class TypingImportAdder(cst.CSTTransformer):
     ) -> cst.Module:
         if not self.needed:
             return updated_node
-        # Find existing `from typing import ...` (or typing.X aliases).
+        # Find existing `from typing import ...` AT THE TOP of the module
+        # (within the docstring / __future__ / typing block). Mid-file
+        # typing imports are ignored for the merge decision.
         existing_names: Set[str] = set()
-        existing_aliases: dict[str, str] = {}  # alias -> canonical name
         typing_import_idx: int | None = None
+        top_block_end = 0
         for idx, stmt in enumerate(updated_node.body):
             if (
                 isinstance(stmt, cst.SimpleStatementLine)
@@ -311,19 +323,51 @@ class TypingImportAdder(cst.CSTTransformer):
                 and stmt.body[0].module.value == "typing"
             ):
                 typing_import_idx = idx
+                top_block_end = idx + 1
                 for alias in stmt.body[0].names:
                     if isinstance(alias.name, cst.Name):
                         existing_names.add(alias.name.value)
-                    if alias.asname is not None and isinstance(alias.asname.name, cst.Name):
-                        existing_aliases[alias.asname.name.value] = (
-                            alias.name.value if isinstance(alias.name, cst.Name) else ""
-                        )
+            elif (
+                isinstance(stmt, cst.SimpleStatementLine)
+                and len(stmt.body) == 1
+                and (
+                    # docstring
+                    (
+                        isinstance(stmt.body[0], cst.Expr)
+                        and isinstance(stmt.body[0].value, cst.SimpleString)
+                    )
+                    # `from __future__ import ...`
+                    or (
+                        isinstance(stmt.body[0], cst.ImportFrom)
+                        and stmt.body[0].module
+                        and stmt.body[0].module.value == "__future__"
+                    )
+                )
+            ):
+                top_block_end = idx + 1
+            else:
+                # First non-import / non-docstring statement — stop.
+                break
         to_add = sorted(self.needed - existing_names)
         if not to_add:
             return updated_node
+        new_aliases = [
+            cst.ImportAlias(
+                name=cst.Name(n),
+                comma=cst.Comma(whitespace_after=cst.SimpleWhitespace(" ")),
+            )
+            for n in to_add
+        ]
+        # Last alias MUST NOT have a comma (Python does not allow trailing
+        # commas in non-parenthesized from-imports). We default to no
+        # trailing comma; the merge path will re-attach commas correctly.
+        if new_aliases:
+            new_aliases[-1] = new_aliases[-1].with_changes(
+                comma=cst.MaybeSentinel.DEFAULT
+            )
         new_import = cst.ImportFrom(
             module=cst.Name("typing"),
-            names=[cst.ImportAlias(name=cst.Name(n)) for n in to_add],
+            names=new_aliases,
         )
         new_stmt = cst.SimpleStatementLine(body=[new_import])
         if typing_import_idx is not None:
@@ -332,39 +376,39 @@ class TypingImportAdder(cst.CSTTransformer):
             assert isinstance(existing_stmt, cst.SimpleStatementLine)
             existing_import = existing_stmt.body[0]
             assert isinstance(existing_import, cst.ImportFrom)
-            merged_names = list(existing_import.names) + list(new_import.names)
-            # Sort alphabetically for stable diff.
-            merged_names.sort(
+            # Strip ALL commas from existing aliases (we'll re-add correctly
+            # after merging + sorting to avoid dangling trailing commas that
+            # break non-parenthesized imports).
+            existing_aliases = [
+                a.with_changes(comma=cst.MaybeSentinel.DEFAULT)
+                for a in existing_import.names
+            ]
+            combined = existing_aliases + new_aliases
+            # Sort alphabetically by name for stable diff (canonicalizing).
+            combined.sort(
                 key=lambda a: a.name.value if isinstance(a.name, cst.Name) else ""
             )
-            new_existing = existing_import.with_changes(names=merged_names)
+            # Last item MUST have no comma (trailing commas invalid in
+            # non-parenthesized from-imports). All preceding items get a comma.
+            for i in range(len(combined) - 1):
+                combined[i] = combined[i].with_changes(
+                    comma=cst.Comma(
+                        whitespace_after=cst.SimpleWhitespace(" ")
+                    )
+                )
+            # Last item: ensure DEFAULT (no comma).
+            if combined:
+                combined[-1] = combined[-1].with_changes(
+                    comma=cst.MaybeSentinel.DEFAULT
+                )
+            new_existing = existing_import.with_changes(names=combined)
             new_existing_stmt = existing_stmt.with_changes(body=[new_existing])
             new_body = list(updated_node.body)
             new_body[typing_import_idx] = new_existing_stmt
         else:
-            # Insert after docstring (if any) and __future__ imports.
-            insert_at = 0
-            for i, stmt in enumerate(updated_node.body):
-                if (
-                    isinstance(stmt, cst.SimpleStatementLine)
-                    and len(stmt.body) == 1
-                    and (
-                        # docstring
-                        (
-                            isinstance(stmt.body[0], cst.Expr)
-                            and isinstance(stmt.body[0].value, cst.SimpleString)
-                        )
-                        # `from __future__ import ...`
-                        or (
-                            isinstance(stmt.body[0], cst.ImportFrom)
-                            and stmt.body[0].module
-                            and stmt.body[0].module.value == "__future__"
-                        )
-                    )
-                ):
-                    insert_at = i + 1
-                else:
-                    break
+            # No top-of-module typing import — insert at end of top block
+            # (after docstring + __future__ imports, before any code).
+            insert_at = top_block_end
             new_body = list(updated_node.body)
             new_body.insert(insert_at, new_stmt)
         return updated_node.with_changes(body=new_body)

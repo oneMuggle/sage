@@ -25,9 +25,8 @@ export function AssistantRecommendations({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {recommendations.map((rec) => {
           const Icon = lucideIconMap[rec.icon];
-          // rec.id is constrained to 'code' | 'search' | 'idea' from defaultRecommendations.
-          // Template literal can't be statically verified, so cast to TranslationKey;
-          // t() has a runtime fallback to the key string itself when missing.
+          // Cast: rec.id is a constrained string union from defaultRecommendations;
+          // runtime fallback to the key string itself keeps UI safe when a new id is added.
           const titleKey = `welcome.rec.${rec.id}.title` as TranslationKey;
           const descKey = `welcome.rec.${rec.id}.desc` as TranslationKey;
           return (

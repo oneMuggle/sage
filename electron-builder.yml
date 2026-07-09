@@ -38,6 +38,8 @@ extraResources:
     to: "sage-core"
     filter:
       - "**/*"
+  - from: "resources/start-backend.bat"
+    to: "start-backend.bat"
 
 # Win7 + Win10/11 NSIS installer (electron-builder 24.x)
 win:
@@ -49,9 +51,7 @@ win:
   # Force code signing stub (Phase 3 will add real cert)
   # signtoolOptions:
   #   sign: scripts/sign-windows.js
-  # Win7 LTS branch: hardcode -win7 suffix (this branch's specialty).
-  # See docs/technical/30-release-tiers.md §30.2 / 21-win7-lts.md §9.
-  artifactName: ${productName}-Setup-${version}-win7.${ext}
+  artifactName: ${productName}-Setup-${version}.${ext}
 
 nsis:
   include: build/installer.nsh    # ← NEW: NSIS customInstall macro (bundles VCRedist)

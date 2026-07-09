@@ -19,6 +19,7 @@ class Logger {
   private log(level: LogLevel, requestId: string, label: string, data?: unknown): void {
     if (!this.enabled) return;
     const prefix = `[${requestId}] [${label}]`;
+    // eslint-disable-next-line no-console
     const consoleFn = console[level] as (...args: unknown[]) => void;
     if (data instanceof Error) {
       consoleFn(prefix, data.message, data.stack);

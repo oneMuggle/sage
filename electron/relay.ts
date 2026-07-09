@@ -99,6 +99,75 @@ export async function parseNdjsonStream(
 }
 
 /**
+ * NDJSON event types that the relay recognizes by default. Each maps to
+ * a stable channel suffix appended to `eventPrefix` (e.g. chunk → "-chunk").
+ */
+type NdjsonEvent = 'chunk' | 'done' | 'error' | 'progress';
+
+const DEFAULT_EVENT_SPLIT: Record<NdjsonEvent, string> = {
+  chunk: '-chunk',
+  done: '-done',
+  error: '-error',
+  progress: '-progress',
+};
+
+export type NdjsonEventTransform = (rawEvent: unknown) => { suffix: string; data: unknown } | null;
+
+/**
+ * Parse NDJSON stream and forward each event to a distinct Electron
+ * channel based on the `event` field. Default mapping:
+ *   chunk    → {prefix}-chunk
+ *   done     → {prefix}-done
+ *   error    → {prefix}-error
+ *   progress → {prefix}-progress
+ *
+ * For ingest streams, pass `transform` to redirect events to a different
+ * suffix and/or remap the payload (e.g. wiki-ingest's `done` → `-progress`
+ * with payload { stage: 'completed', percent: 100 }).
+ *
+ * NDJSON lines without a recognized `event` field (or non-object payloads)
+ * are surfaced as `{prefix}-error` with `{ error: 'invalid NDJSON line' }`
+ * so the renderer can show a meaningful failure.
+ */
+export async function relayNdjsonToEvent(
+  body: NodeJS.ReadableStream | null,
+  eventPrefix: string,
+  webContents: WebContentsLike,
+  signal: AbortSignal,
+  transform?: NdjsonEventTransform,
+): Promise<void> {
+  await parseNdjsonStream(
+    body,
+    (rawEvent: unknown) => {
+      if (typeof rawEvent !== 'object' || rawEvent === null) {
+        webContents.send(`sage:event:${eventPrefix}-error`, {
+          error: 'invalid NDJSON line',
+        });
+        return;
+      }
+      const ev = (rawEvent as { event?: unknown }).event;
+      if (typeof ev !== 'string') {
+        webContents.send(`sage:event:${eventPrefix}-error`, {
+          error: 'invalid NDJSON line',
+        });
+        return;
+      }
+      let result: { suffix: string; data: unknown } | null;
+      if (transform) {
+        result = transform(rawEvent);
+      } else {
+        const suffix = DEFAULT_EVENT_SPLIT[ev as NdjsonEvent];
+        if (!suffix) return; // unknown event, skip
+        result = { suffix, data: (rawEvent as { data?: unknown }).data };
+      }
+      if (!result) return;
+      webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
+    },
+    signal,
+  );
+}
+
+/**
  * Attach to an existing chat stream (I2) and forward events to the renderer.
  *
  * 与旧版的差异:

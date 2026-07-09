@@ -1,6 +1,3 @@
-// TODO(M6): Welcome 屏幕 + 相关组件 win7 M6 尚未实现。
-// pre-7c76327 main 版本测试 import 未实现的 WelcomeInputCard/WelcomePage,M5 实施时恢复但用 describe.skip 包裹。
-// M6 实施时移除 skip + 适配 win7 M6 实现。2026-06-28 (win7 phase 9 commit 7c76327) 删除。
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

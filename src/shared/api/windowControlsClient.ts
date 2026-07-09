@@ -74,7 +74,11 @@ export function getWindowControlsBridge(): WindowControlsBridge | null {
  * Singleton bridge instance.
  * Uses electronAPI.windowControls in desktop mode, falls back to web stub.
  */
-export const windowControls: WindowControlsBridge =
-  typeof window !== 'undefined' && window.electronAPI?.windowControls
-    ? window.electronAPI.windowControls
-    : createWebControlsBridge();
+function createWindowControls(): WindowControlsBridge {
+  if (typeof window !== 'undefined' && window.electronAPI?.windowControls) {
+    return window.electronAPI.windowControls;
+  }
+  return createWebControlsBridge();
+}
+
+export const windowControls: WindowControlsBridge = createWindowControls();

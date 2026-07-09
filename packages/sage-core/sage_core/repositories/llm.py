@@ -12,9 +12,10 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional, Union
 
 from collections.abc import AsyncIterator
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, Protocol
 
 from sage_core import Message
 

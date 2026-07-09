@@ -10,11 +10,11 @@
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import logging
 import re
 from dataclasses import dataclass
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 

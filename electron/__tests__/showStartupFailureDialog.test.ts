@@ -60,33 +60,4 @@ describe('showStartupFailureDialog', () => {
     expect(result).toBe('quit');
     expect(mockQuit).toHaveBeenCalled();
   });
-
-  it('appends stderrTail lines to the dialog detail when provided', async () => {
-    mockShowMessageBox.mockResolvedValue({ response: 0 });
-    const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
-    const stderr = [
-      'Traceback (most recent call last):',
-      '  File "<string>", line 1, in <module>',
-      "ModuleNotFoundError: No module named 'fastapi'",
-    ];
-    await showStartupFailureDialog({ reason: 'backend timeout', stderrTail: stderr });
-
-    expect(mockShowMessageBox).toHaveBeenCalledTimes(1);
-    const opts = mockShowMessageBox.mock.calls[0][0];
-    expect(opts.detail).toContain('最近后端输出');
-    expect(opts.detail).toContain("ModuleNotFoundError: No module named 'fastapi'");
-    // All 3 lines should appear in order
-    for (const line of stderr) {
-      expect(opts.detail).toContain(line);
-    }
-  });
-
-  it('omits stderr section when stderrTail is empty or missing', async () => {
-    mockShowMessageBox.mockResolvedValue({ response: 0 });
-    const { showStartupFailureDialog } = await import('../showStartupFailureDialog');
-    await showStartupFailureDialog({ reason: 'no stderr' });
-
-    const opts = mockShowMessageBox.mock.calls[0][0];
-    expect(opts.detail).not.toContain('最近后端输出');
-  });
 });

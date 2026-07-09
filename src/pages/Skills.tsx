@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, RotateCw, Upload } from 'lucide-react';
 import React, { useCallback, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
@@ -14,6 +14,8 @@ const Skills: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [rescanLoading, setRescanLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
   const loadSkills = useCallback(async () => {
     setLoading(true);
@@ -69,6 +71,50 @@ const Skills: React.FC = () => {
       // 失败: 回滚 + 提示
       setSkills(prev);
       toast.error(`删除失败: ${(error as Error).message}`);
+    }
+  };
+
+  // PR-C Task 6: 重扫磁盘按钮
+  const handleRescan = async () => {
+    setRescanLoading(true);
+    try {
+      const result = await skillsApi.rescan();
+      if (result.total_loaded > 0) {
+        toast.success(`已加载 ${result.total_loaded} 个技能`);
+      }
+      // rescan 的 `skipped` 字段当前始终为 `[]` (loader API 只返 count tuple 不返 detail;
+      // 见 inproc.py::rescan_skill_mds docstring + spec §10 已知限制)。保留 `if` 是为未来
+      // loader API 扩展后立即启用 toast.warning,无需改前端。
+      if (result.skipped.length > 0) {
+        toast.warning(`跳过 ${result.skipped.length} 个`);
+      }
+      await loadSkills();
+    } catch (err) {
+      toast.error(`重扫失败: ${(err as Error).message}`);
+    } finally {
+      setRescanLoading(false);
+    }
+  };
+
+  // PR-C Task 6: 导入 SKILL.md 按钮
+  const handleImport = async () => {
+    const paths = await window.electronAPI?.skills?.pickSkillFiles();
+    if (!paths || paths.length === 0) return;
+    setImportLoading(true);
+    try {
+      const result = await skillsApi.importFiles(paths);
+      if (result.imported.length > 0) {
+        toast.success(`已导入 ${result.imported.length} 个技能`);
+      }
+      if (result.skipped.length > 0) {
+        const reasons = result.skipped.map((s) => `${s.name}(${s.reason})`).join(', ');
+        toast.warning(`跳过 ${result.skipped.length} 个: ${reasons}`);
+      }
+      await loadSkills();
+    } catch (err) {
+      toast.error(`导入失败: ${(err as Error).message}`);
+    } finally {
+      setImportLoading(false);
     }
   };
 
@@ -140,6 +186,26 @@ const Skills: React.FC = () => {
             className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={handleRescan}
+            disabled={rescanLoading}
+            aria-label="重扫磁盘"
+            title="重扫磁盘"
+            className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <RotateCw className={`w-4 h-4 ${rescanLoading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={handleImport}
+            disabled={importLoading}
+            aria-label="导入 SKILL.md"
+            title="导入 SKILL.md"
+            className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <Upload className={`w-4 h-4 ${importLoading ? 'animate-pulse' : ''}`} />
           </button>
         </div>
       </div>

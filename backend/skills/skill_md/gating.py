@@ -20,7 +20,7 @@ import os
 import shutil
 import sys
 from dataclasses import dataclass
-from typing import FrozenSet, List, Optional, Set, TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING, FrozenSet, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from .skill import SkillMdDocument

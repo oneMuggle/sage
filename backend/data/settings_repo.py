@@ -4,10 +4,11 @@
 """
 
 from __future__ import annotations
+from typing import Dict, FrozenSet, Optional
 
 import json
 import time
-from typing import Any, Dict, FrozenSet, Optional
+from typing import Any
 
 from backend.data.database import Database, get_database
 
@@ -19,6 +20,7 @@ class SettingsRepository:
         {
             "app_settings",
             "theme_mode",
+            "theme_preset",
             "current_session_id",
         }
     )

@@ -20,6 +20,7 @@ from typing import List
 
 import re
 from pathlib import Path
+from typing import List
 
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 

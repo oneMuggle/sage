@@ -9,12 +9,12 @@
 """
 
 from __future__ import annotations
-from typing import List, Optional
 
 import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import List, Optional
 
 from .state_machine import MCPState, MCPStateMachine
 

@@ -4,12 +4,13 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Optional
 
 import json
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from backend.data.database import get_database
 
@@ -294,3 +295,28 @@ class MessageRepository:
         conn.commit()
 
         return cursor.rowcount
+
+    def insert(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        created_at: int,
+    ) -> Dict[str, Any]:
+        """Insert a new message row and return the inserted record.
+
+        The scheduler uses this to deliver one-shot/recurring task content
+        into the target session. We deliberately bypass the LLM/agent path
+        because scheduled messages are pre-formed (no streaming).
+        """
+        message_id = f"msg-{uuid.uuid4().hex[:12]}"
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "INSERT INTO messages (id, session_id, role, content, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (message_id, session_id, role, content, created_at),
+        )
+        conn.commit()
+        return {"id": message_id}

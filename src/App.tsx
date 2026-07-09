@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
@@ -13,9 +13,10 @@ import { ScheduledTasks } from './pages/ScheduledTasks';
 import Skills from './pages/Skills';
 import { Welcome } from './pages/Welcome';
 import { useStore } from './shared/lib/store';
+import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
 
-// M6: gate /chat by currentSessionId; fall back to /welcome when missing.
+// Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
 function ChatRoute() {
   const currentSessionId = useStore((s) => s.currentSessionId);
   if (!currentSessionId) {
@@ -25,12 +26,26 @@ function ChatRoute() {
 }
 
 function App() {
+  const [commandOpen, setCommandOpen] = useState(false);
+
   useEffect(() => {
     loadCurrentSessionId().then((id) => {
       if (id) {
         useStore.getState().setCurrentSessionId(id);
       }
     });
+  }, []);
+
+  // 全局快捷键 Ctrl+K / Cmd+K 打开命令面板
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   return (
@@ -50,6 +65,7 @@ function App() {
             <Route path="orchestration" element={<Orchestration />} />
           </Route>
         </Routes>
+        <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       </NavHistoryProvider>
     </BrowserRouter>
   );

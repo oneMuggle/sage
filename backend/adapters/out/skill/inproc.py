@@ -65,6 +65,19 @@ class InprocSkillAdapter:
             import logging
 
             logging.getLogger(__name__).warning("SkillMd loader skipped in adapter init: %s", exc)
+        # PR-C: store SkillMdHotLoader dirs + SkillMdImporter for rescan_skill_mds / import_skill_mds
+        try:
+            from backend.skills.skill_md.importer import SkillMdImporter
+            from backend.skills.skill_md.loader import discover_skill_md_dirs
+
+            self._skill_dirs = discover_skill_md_dirs()
+            self._skill_importer = SkillMdImporter(self._registry)
+        except Exception as exc:  # noqa: BLE001 - adapter init must be tolerant
+            import logging
+
+            logging.getLogger(__name__).warning("SkillMd rescan/import wiring skipped: %s", exc)
+            self._skill_dirs = []
+            self._skill_importer = None
         # enabled 状态: 未登记视为 enabled
         self._enabled: Dict[str, bool] = {}
         # usage_count: 进程内累计,重启归零
@@ -234,6 +247,47 @@ class InprocSkillAdapter:
         deleter = SkillMdDeleter(self._registry)
         result = deleter.delete(name)
         return dict(result)
+
+    # ========== PR-C: Skills load-new (rescan + import) ==========
+
+    def rescan_skill_mds(self) -> Dict[str, Any]:
+        """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载新 SKILL.md。
+
+        Returns:
+            {
+                "loaded": [{"name", "source", "path"}],
+                "skipped": [{"name", "reason"}],  # currently always [] — plan-mandated limitation
+                "total_loaded": int,
+            }
+
+        Note on `skipped`: SkillMdHotLoader.scan_and_load() returns (loaded_count, skipped_count)
+        as integers only, not detailed [{name, reason}]. Detailed skipped reporting requires
+        loader API extension (future work). See plan §4.1 and §10 risk notes.
+        """
+        if self._skill_importer is None:  # init-time import failed
+            return {"loaded": [], "skipped": [], "total_loaded": 0}
+        from backend.skills.skill_md.loader import SkillMdHotLoader
+
+        loader = SkillMdHotLoader(self._registry, dirs=list(self._skill_dirs), gating_ctx=None)
+        loaded_count, _ = loader.scan_and_load()
+        # Fresh loader per call: _loaded_paths only contains THIS call's loads.
+        return {
+            "loaded": [
+                {"name": name, "source": "skillmd", "path": loader._loaded_paths.get(name) or ""}
+                for name in loader._loaded_paths
+            ],
+            "skipped": [],  # plan-mandated limitation; see docstring
+            "total_loaded": loaded_count,
+        }
+
+    async def import_skill_mds(self, files: List[Any]) -> Dict[str, List[Dict[str, str]]]:
+        """异步包装 SkillMdImporter.import_files()。"""
+        if self._skill_importer is None:
+            return {
+                "imported": [],
+                "skipped": [{"name": "<unknown>", "reason": "adapter_init_failed"}],
+            }
+        return await self._skill_importer.import_files(files)
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
 

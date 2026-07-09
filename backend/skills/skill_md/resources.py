@@ -23,6 +23,7 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import List, Tuple
 
 from .validation import SkillMdSecurityError
 

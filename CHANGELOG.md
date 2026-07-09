@@ -18,34 +18,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [v0.4.3-alpha.2] - 2026-07-07
 
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 SP1 修复路径（PR #111 blocker 修复，跟 v0.4.3-alpha.1 同路径）。Tag 不带 `-lts` 后缀，与 main 上 alpha tag 命名风格一致（实际产物是 Win7 LTS 的 Electron 21 + Python 3.8 NSIS installer）。
+> 🧪 **Alpha tier** — Sage 贡献者内测。PEP 604/585 → typing.* 跨平台兼容同步(原 Win7 LTS fix PR #112 现在 main 也对齐)。Win10+Linux+Mac 验证用版本。
 
-### Fixed
-- **fix(win7): python38._pth 屏蔽 PYTHONPATH 导致后端启动 30 秒超时（v0.4.3-alpha.1 仍未修复的根因）**
-  - 根因：Python 3.8.10 embeddable 自带 `python38._pth` 文件，按官方文档（https://docs.python.org/3.8/using/windows.html）"all registry and environment variables are ignored" — `electron/main.ts` 在 spawn 时设的 `PYTHONPATH=resources\backend;resources\sage-core` 被 _pth 静默丢弃。`from backend.adapters.out...` 找不到 `backend` 包 → `ModuleNotFoundError: No module named 'backend'` → 后端 ~1s 退出 → main.ts /health 30s 轮询后弹错误对话框
-  - 修复 1：`scripts/bundle-python.ps1` 把 `..\backend` 和 `..\sage-core` 写入 `python38._pth`（相对 _pth 所在目录的相对路径，不依赖用户自定义安装目录）。幂等：重跑 bundle 不会重复追加
-  - 修复 2：`scripts/bundle-python.ps1` verify 步骤从 `import fastapi/pydantic/jieba`（全在 site-packages）升级为加 `import backend.main` 作为 _pth 配置的金丝雀 — 之前 verify 步骤**永远不会发现** _pth backend 路径问题
-  - 修复 3：`scripts/bundle-python.Tests.ps1` 新增 `Describe 'python38._pth config'` 区块（5 个 It 用例），含幂等性守卫，防止后续 regression
-  - 用户提供 NDJSON 日志证实根因：`uvicorn.config.load → import_from_string("backend.main:app") → importlib.import_module → ModuleNotFoundError: No module named 'backend'`，发生位置 `C:\Program Files\Sage\resources\python\`
-
-### Notes
-- v0.4.3-alpha.1 的 prometheus-client/pip LASTEXITCODE/stderr tail 修复保留
-- Win7 LTS only — main 分支用 conda dev path，PYTHONPATH 不会被屏蔽，无需对等改动
-- 不改 `electron/main.ts`：当前 spawn 时设的 `PYTHONPATH` 在 packaged 路径下被 _pth 屏蔽但对 dev 路径仍有效，留作后续独立清理 PR
-
-## [v0.4.3-alpha.1] - 2026-07-06
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 SP1 修复路径破例（按 4 档规范 win7 LTS 不跟 alpha，本 release 走 blocker 修复例外流程，未来待 PR 反馈是否更新 §30.4）。Tag 不带 `-lts` 后缀，与 main 上 alpha tag 命名风格一致（实际产物是 Win7 LTS 的 Electron 21 + Python 3.8 NSIS installer）。
-
-### Fixed
-- **fix(win7): bundle Python 依赖时 pip install 失败未中止（v0.4.0-lts+ 启动 30 秒超时根因）**
-  - 根因：`prometheus-client==0.25.0` 在 PyPI 上 `requires_python=">=3.9"`，与 Win7 LTS 用的 Python 3.8.10 embeddable 不兼容 → 整个 `pip install -r requirements-py38.txt` 回滚 → `site-packages` 为空 → 后端 `import fastapi` 失败秒退 → 前端 /health 30 秒后弹"后端服务在 30 秒内未响应"对话框
-  - 受影响版本：`v0.4.0-lts`、`v0.4.1-lts`、`v0.4.2-lts`（全部是 GitHub Draft release，未公开发布）
-  - 修复 1：`backend/requirements-py38.txt` 将 `prometheus-client` 钉到 `==0.21.1`（PyPI 上最后一个支持 Python 3.8 的版本；代码只用 stable API，0.21.1 完全兼容）
-  - 修复 2：`scripts/bundle-python.ps1` 在所有 `& $PipExe` / `& $PythonExe` 调用后加显式 `if ($LASTEXITCODE -ne 0) { throw }` 检查（PowerShell 的 `$ErrorActionPreference = "Stop"` 不会自动捕获外部命令 exit code——这是 v0.4.0-lts+ 静默失败的根因）。Verification 步骤（`import fastapi/pydantic/jieba`）同样 fail-fast
-  - 修复 3（防御性改进）：`electron/main.ts` 把后端 stderr 末 20 行 buffer 到 module-level `lastStderrLines`，通过新 `stderrTail` 字段传给 `showStartupFailureDialog`。未来类似问题用户能直接看到 `ModuleNotFoundError: No module named 'fastapi'` 等真实根因，不必查 NDJSON 日志
-  - 清理：删除死代码 `start-backend.bat`（`electron/main.ts` 直接 spawn `python.exe`，从未调用该 .bat；`scripts/bundle-python.ps1` 不再生成，`electron-builder.yml` 不再打包）
-  - 测试：新增 `scripts/bundle-python.Tests.ps1`（Pester 5 静态分析测试，~14 个断言）+ `.github/workflows/ci.yml` 新增 `bundle-script-test` job（ubuntu-latest + pwsh 7.4 + Pester，~5s runtime，无网络依赖）
+### Changed
+- **fix(backend): mass-rewrite PEP 604/585 annotations → typing.*** — 193 个文件 (backend/ + packages/sage-core/) 同步 Win7 LTS 的 Py3.8 兼容性重写。Main (Py3.11) 上纯属 stylistic 改动,功能不变。release/win7 上是必需的运行兼容性修复
+- **fix(scripts): py38_compat_rewrite.py** — 新增 AST-based 重写工具 + 一个 follow-up 修复(typing import 只插入到模块顶部,不合并到中间位置的旧 import)
 
 ## [Unreleased]
 

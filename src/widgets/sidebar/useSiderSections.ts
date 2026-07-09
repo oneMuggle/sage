@@ -78,9 +78,7 @@ export function useSiderSections(defaultOrder: readonly string[]): UseSiderSecti
   const reorderSections = useCallback((from: number, to: number) => {
     const order = stateRef.current.order;
     if (from < 0 || from >= order.length || to < 0 || to >= order.length) {
-      throw new Error(
-        `reorderSections: index out of range (from=${from}, to=${to}, len=${order.length})`,
-      );
+      throw new Error(`reorderSections: index out of range (from=${from}, to=${to}, len=${order.length})`);
     }
     setState((prev) => {
       const nextOrder = reorderSiderIds(prev.order, from, to);

@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { MessageSquare, Settings, Brain, BookOpen, Clock, GitBranch, Sparkles } from 'lucide-react';
+import { MessageSquare, Settings, Brain, BookOpen, Network, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -24,8 +24,7 @@ const navItems = [
   { path: '/chat', label: '对话', icon: MessageSquare },
   { path: '/memory', label: '记忆', icon: Brain },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
-  { path: '/scheduled', label: '定时任务', icon: Clock },
-  { path: '/orchestration', label: '协调', icon: GitBranch },
+  { path: '/orchestration', label: '编排', icon: Network },
   { path: '/skills', label: '技能', icon: Sparkles },
   { path: '/settings', label: '设置', icon: Settings },
 ];
@@ -78,7 +77,7 @@ export function Sidebar({ width = 240 }: SidebarProps) {
   }, [chatEndpoint?.baseUrl, chatEndpoint?.apiKey, settings.modelSelections.chatModel.modelId]);
 
   const handleNewSession = () => {
-    // M6 还原:main 同款 — 跳到 /welcome 屏,让用户选 agent / 输入
+    // Phase 7: 新建会话跳转到欢迎屏，由用户在欢迎屏输入后再创建 session
     navigate('/welcome');
   };
 

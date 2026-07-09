@@ -4,12 +4,12 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List
 
 import logging
 import time
 import uuid
 from datetime import datetime
+from typing import Dict, List
 
 from backend.data.database import get_database
 

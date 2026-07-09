@@ -26,14 +26,23 @@ export function useWikiIngest(ingestId: string | null) {
     if (!ingestId) return;
     const eventName = `wiki-ingest-${ingestId}-progress`;
     let unlisten: UnlistenFn | null = null;
-    listen<IngestProgress>(eventName, (e) => {
-      const p = e.payload;
-      if (p.stage === 'completed') {
-        setState({ progress: p, done: true, error: null });
-      } else {
-        setState({ progress: p, done: false, error: null });
-      }
-    })
+    // PR-3 Task 4: pass `{ streamId }` so the unlisten closure forwards
+    // the streamId to `sage:unlisten` — the main process aborts the
+    // matching AbortController in `streamControllers`. Without this the
+    // backend fetch keeps running until the backend finishes naturally,
+    // leaking memory and CPU. See electron/main.ts::startWikiIngestStream.
+    listen<IngestProgress>(
+      eventName,
+      (e) => {
+        const p = e.payload;
+        if (p.stage === 'completed') {
+          setState({ progress: p, done: true, error: null });
+        } else {
+          setState({ progress: p, done: false, error: null });
+        }
+      },
+      { streamId: ingestId },
+    )
       .then((fn) => {
         unlisten = fn;
       })

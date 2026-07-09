@@ -23,9 +23,9 @@ References:
 """
 
 from __future__ import annotations
-from typing import Dict, Optional
 
 import time
+from typing import Dict, Optional
 from unittest.mock import MagicMock
 
 import pytest
