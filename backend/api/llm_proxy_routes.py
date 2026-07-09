@@ -21,11 +21,11 @@
 """
 
 from __future__ import annotations
-from typing import Dict, FrozenSet, Optional
 
 import logging
 import posixpath
 from collections.abc import AsyncIterator
+from typing import Dict, FrozenSet, Optional
 from urllib.parse import urlparse
 
 import httpx

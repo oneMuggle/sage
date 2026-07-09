@@ -34,7 +34,7 @@
 // TypeScript preserves source order of imports; if `./logger` is required
 // before `electron`, the `app.isPackaged` reference throws a TDZ error at
 // runtime even though tsc --noEmit is happy.
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { logger } from './logger';
 logger.info('main: process started', {
   pid: process.pid,
@@ -47,8 +47,11 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import http from 'node:http';
+import fetch from 'node-fetch';
 import { invokeBackend } from './invoke';
-import { relayChatStream } from './relay';
+import { relayChatStream, relayNdjsonToEvent } from './relay';
+import { streamControllers } from './commands';
+import { registerSkillsIpc } from './skillsIpc';
 import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
@@ -103,25 +106,6 @@ app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPAC
 
 let backendProc: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
-
-/**
- * Ring buffer of the last 20 stderr lines emitted by the backend subprocess.
- * Surfaced in the startup-failure dialog so users see the actual root cause
- * (e.g. `ModuleNotFoundError`) without having to open the NDJSON log dir.
- */
-const lastStderrLines: string[] = [];
-const STDERR_TAIL_MAX = 20;
-
-export function getLastStderrTail(): string[] {
-  return lastStderrLines.slice();
-}
-
-function pushStderrLine(line: string): void {
-  lastStderrLines.push(line);
-  if (lastStderrLines.length > STDERR_TAIL_MAX) {
-    lastStderrLines.shift();
-  }
-}
 
 /**
  * Locate the Python interpreter for the sage-backend conda env.
@@ -190,11 +174,7 @@ function spawnBackend(): ChildProcess {
   }
 
   proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: b.toString().trim() }));
-  proc.stderr?.on('data', (b) => {
-    const line = b.toString().trim();
-    logger.error('backend: stderr', { line });
-    pushStderrLine(line);
-  });
+  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: b.toString().trim() }));
   proc.on('exit', (code) => {
     logger.info('main: backend exited', { code });
     backendProc = null;
@@ -308,6 +288,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     'sage:invoke',
     async (_evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
+      // Streaming commands need their own dispatcher branch — they
+      // fire-and-forget the relay and return { streamId } immediately so
+      // the renderer can subscribe + unlisten via the existing IPC
+      // channels without waiting for the backend to complete.
+      if (payload.cmd === 'wiki_chat_stream') {
+        return startWikiChatStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
+      }
+      if (payload.cmd === 'wiki_ingest_stream') {
+        return startWikiIngestStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
+      }
       try {
         return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
       } catch (e) {
@@ -365,8 +355,21 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'sage:unlisten',
-    async (_evt, payload: { event: string }): Promise<{ ok: true }> => {
-      const { event } = payload;
+    async (_evt, payload: { event: string; streamId?: string }): Promise<{ ok: true }> => {
+      const { event, streamId } = payload;
+      // Streaming commands: abort the in-flight fetch so the backend
+      // stops producing NDJSON. The relay's finally{} block will
+      // streamControllers.delete on its own; we delete eagerly here so a
+      // re-subscribe with the same id (e.g. after React StrictMode
+      // double-mount) gets a fresh controller.
+      if (streamId) {
+        const controller = streamControllers.get(streamId);
+        if (controller) {
+          controller.abort();
+          streamControllers.delete(streamId);
+          logger.debug('ipc: unlisten aborted stream', { streamId });
+        }
+      }
       const abort = eventSubscriptions.get(event);
       if (abort) {
         abort.abort();
@@ -419,9 +422,208 @@ function registerIpcHandlers(): void {
     return image.toPNG().toString('base64');
   });
 
+  // Folder picker for LLM Wiki project create/open (added 2026-06-27)
+  ipcMain.handle(
+    'sage:dialog:select-directory',
+    async (evt, opts: { intent: 'create' | 'open'; defaultPath?: string }) => {
+      const win = BrowserWindow.fromWebContents(evt.sender);
+      const properties: ('openDirectory' | 'createDirectory')[] = ['openDirectory'];
+      if (opts?.intent === 'create') properties.push('createDirectory');
+      const result = await dialog.showOpenDialog(win ?? undefined!, {
+        properties,
+        defaultPath: opts?.defaultPath,
+        title: opts?.intent === 'create' ? '选择要创建的项目目录' : '选择要打开的项目目录',
+        buttonLabel: opts?.intent === 'create' ? '在此创建' : '打开',
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0];
+    },
+  );
+
+  // ─── PR-C: Skills load-new IPC (rescan + import) ─────────────────────
+  // Three channels back the Skills page buttons:
+  //   skills:pick-files → native multi-select dialog
+  //   skills:rescan     → POST /api/v1/skills/rescan
+  //   skills:import     → POST /api/v1/skills/import (multipart)
+  registerSkillsIpc((channel, handler) => {
+    ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
+  });
+
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
   registerLogIpc(ipcMain);
+}
+
+/**
+ * Start a wiki chat streaming session.
+ *
+ * Returns a unique `streamId` immediately (the renderer needs it to
+ * subscribe to `wiki-chat-stream-{streamId}-chunk/done/error` channels
+ * and to call `sage:unlisten` for abort). The actual HTTP POST +
+ * NDJSON relay runs in the background:
+ *
+ *   1. POST args to /api/v1/wiki/chat/stream (camelCase→snake_case
+ *      conversion is the renderer's responsibility — see
+ *      api-client/wiki.ts wikiChatStream).
+ *   2. Stream the NDJSON response via relayNdjsonToEvent; each event is
+ *      dispatched to `sage:event:wiki-chat-stream-{streamId}-{chunk|
+ *      done|error}`.
+ *   3. On HTTP failure → forward `HTTP {status}` as a -error event.
+ *   4. On AbortError (renderer unsubscribed via sage:unlisten) → swallow
+ *      silently. Any other exception → forward `String(e)` as a -error.
+ *   5. The AbortController is removed from `streamControllers` in the
+ *      `finally` block regardless of outcome.
+ *
+ * Why a separate function (not inlined in `sage:invoke`):
+ *   - Keeps the IPC handler readable.
+ *   - The closure captures `webContents` and `backendUrl` cleanly, so
+ *     the body of the async block doesn't have to thread them through.
+ */
+function startWikiChatStream(
+  sender: Electron.WebContents,
+  args: Record<string, unknown>,
+  backendUrl: string,
+): { streamId: string } {
+  const streamId = `wiki-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const controller = new AbortController();
+  streamControllers.set(streamId, controller);
+  const wc = BrowserWindow.fromWebContents(sender);
+  if (!wc) {
+    streamControllers.delete(streamId);
+    throw new Error('No WebContents for invoke');
+  }
+  // Fire-and-forget: relay runs in background. Return streamId NOW so
+  // the renderer can start subscribing to the per-id event channels.
+  (async () => {
+    try {
+      const res = await fetch(`${backendUrl}/api/v1/wiki/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(args),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, {
+          error: `HTTP ${res.status}`,
+        });
+        return;
+      }
+      await relayNdjsonToEvent(
+        res.body as NodeJS.ReadableStream,
+        `wiki-chat-stream-${streamId}`,
+        wc.webContents,
+        controller.signal,
+      );
+    } catch (e) {
+      if (e instanceof Error && e.name !== 'AbortError') {
+        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, { error: String(e) });
+      }
+    } finally {
+      streamControllers.delete(streamId);
+    }
+  })();
+  return { streamId };
+}
+
+/**
+ * PR-3 Task 3: start a wiki-ingest NDJSON stream.
+ *
+ * Same fire-and-forget shape as `startWikiChatStream`, but the backend
+ * `/ingest/stream` endpoint speaks a 3-event vocabulary
+ * (progress / done / error) and the renderer `useWikiIngest` hook only
+ * listens for a single `-progress` channel. The transform argument to
+ * `relayNdjsonToEvent` collapses `done` → completed progress and
+ * `error` → failed progress, so the hook needs no changes.
+ *
+ * Event-channel mapping (sent to renderer):
+ *   progress → {prefix}-progress (data: raw)
+ *   done     → {prefix}-progress (data: {stage:'completed', percent:100, message: JSON.stringify(raw.data)})
+ *   error    → {prefix}-progress (data: {stage:'failed',    percent:0,  message: String(raw.data)})
+ *   HTTP non-2xx / throw → {prefix}-progress (data: {stage:'failed', percent:0, message: 'HTTP N' | String(e)})
+ */
+function startWikiIngestStream(
+  sender: Electron.WebContents,
+  args: Record<string, unknown>,
+  backendUrl: string,
+): { streamId: string } {
+  const streamId = `wiki-ingest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const controller = new AbortController();
+  streamControllers.set(streamId, controller);
+  const wc = BrowserWindow.fromWebContents(sender);
+  if (!wc) {
+    streamControllers.delete(streamId);
+    throw new Error('No WebContents for invoke');
+  }
+  // Fire-and-forget: relay runs in background. Return streamId NOW so
+  // the renderer can start subscribing to the per-id event channels.
+  (async () => {
+    try {
+      const res = await fetch(`${backendUrl}/api/v1/wiki/ingest/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(args),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        wc.webContents.send(`sage:event:wiki-ingest-${streamId}-progress`, {
+          stage: 'failed',
+          percent: 0,
+          message: `HTTP ${res.status}`,
+        });
+        return;
+      }
+      await relayNdjsonToEvent(
+        res.body as NodeJS.ReadableStream,
+        `wiki-ingest-${streamId}`,
+        wc.webContents,
+        controller.signal,
+        (rawEvent: unknown) => {
+          if (typeof rawEvent !== 'object' || rawEvent === null) return null;
+          const ev = (rawEvent as { event?: unknown }).event;
+          if (ev === 'done') {
+            // Backend done → frontend completed-progress (useWikiIngest
+            // sets done=true on stage==='completed').
+            return {
+              suffix: '-progress',
+              data: {
+                stage: 'completed',
+                percent: 100,
+                message: JSON.stringify((rawEvent as { data?: unknown }).data),
+              },
+            };
+          }
+          if (ev === 'error') {
+            return {
+              suffix: '-progress',
+              data: {
+                stage: 'failed',
+                percent: 0,
+                message: String((rawEvent as { data?: unknown }).data ?? 'unknown error'),
+              },
+            };
+          }
+          if (ev === 'progress') {
+            return {
+              suffix: '-progress',
+              data: (rawEvent as { data?: unknown }).data,
+            };
+          }
+          return null; // unknown event — let relay drop it
+        },
+      );
+    } catch (e) {
+      if (e instanceof Error && e.name !== 'AbortError') {
+        wc.webContents.send(`sage:event:wiki-ingest-${streamId}-progress`, {
+          stage: 'failed',
+          percent: 0,
+          message: String(e),
+        });
+      }
+    } finally {
+      streamControllers.delete(streamId);
+    }
+  })();
+  return { streamId };
 }
 
 function shutdownBackend(): void {
@@ -459,13 +661,9 @@ app.whenReady().then(async () => {
     });
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
-    // The stderr tail is surfaced inline so the user sees the actual root
-    // cause (e.g. `ModuleNotFoundError: No module named 'fastapi'`) without
-    // having to dig through NDJSON logs first.
     const choice = await showStartupFailureDialog({
       reason: '后端服务在 30 秒内未响应',
       detail: `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`,
-      stderrTail: getLastStderrTail(),
     });
     if (choice === 'retry') {
       const ready2 = await waitForBackend();
@@ -473,7 +671,6 @@ app.whenReady().then(async () => {
         await showStartupFailureDialog({
           reason: '后端服务在重试后仍未响应',
           detail: '已重试一次,仍无法连接',
-          stderrTail: getLastStderrTail(),
         });
         return;
       }

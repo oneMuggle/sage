@@ -17,6 +17,11 @@
  */
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
+import type {
+  ImportResult,
+  RescanResult,
+  SkillsElectronApiBridge,
+} from '../src/shared/types/electron-api';
 import type { LogLevel } from '../src/shared/log/levels';
 
 /** UnlistenFn signature mirrors Tauri 2.x for drop-in Phase 2 compatibility. */
@@ -27,8 +32,15 @@ const electronAPI = {
    * Renderer-side log bridge — forwards to main process for file persistence.
    * Fire-and-forget on the renderer side; main applies rate limit + writes NDJSON.
    */
-  log(level: LogLevel, msg: string, meta?: Record<string, unknown>): Promise<{ ok: boolean; reason?: string }> {
-    return ipcRenderer.invoke('sage:log:write', { level, msg, meta }) as Promise<{ ok: boolean; reason?: string }>;
+  log(
+    level: LogLevel,
+    msg: string,
+    meta?: Record<string, unknown>,
+  ): Promise<{ ok: boolean; reason?: string }> {
+    return ipcRenderer.invoke('sage:log:write', { level, msg, meta }) as Promise<{
+      ok: boolean;
+      reason?: string;
+    }>;
   },
 
   /**
@@ -47,8 +59,16 @@ const electronAPI = {
    *      main opens backend NDJSON relay and pushes events via webContents.send
    *   2. receive payloads via ipcRenderer.on(`sage:event:${event}`, (_e, payload) => handler(payload))
    *   3. unlisten() invokes sage:unlisten to abort backend relay + remove listener
+   *
+   * Streaming callers (e.g. wikiChatStream in api-client/wiki.ts) pass
+   * `options.streamId` so the unlisten payload can abort the in-flight
+   * backend fetch via the main process's `streamControllers` Map.
    */
-  listen<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
+  listen<T>(
+    event: string,
+    handler: (payload: T) => void,
+    options?: { streamId?: string },
+  ): Promise<UnlistenFn> {
     // Forward subscription request to main; main opens backend relay
     ipcRenderer
       .invoke('sage:listen', { event })
@@ -58,7 +78,9 @@ const electronAPI = {
     ipcRenderer.on(`sage:event:${event}`, wrapped);
     const unlisten: UnlistenFn = () => {
       ipcRenderer.off(`sage:event:${event}`, wrapped);
-      ipcRenderer.invoke('sage:unlisten', { event }).catch(() => undefined);
+      ipcRenderer
+        .invoke('sage:unlisten', { event, streamId: options?.streamId })
+        .catch(() => undefined);
     };
     return Promise.resolve(unlisten);
   },
@@ -74,6 +96,29 @@ const electronAPI = {
     capturePage: () => ipcRenderer.invoke('sage:window-controls:capture-page') as Promise<string>,
     isMaximized: () => ipcRenderer.invoke('sage:window-controls:is-maximized') as Promise<boolean>,
   } satisfies WindowControlsBridge,
+
+  /**
+   * Phase 6 (2026-06-27): Native folder picker for LLM Wiki.
+   * Returns absolute path string, or null if user cancelled.
+   */
+  selectDirectory: (opts: { intent: 'create' | 'open'; defaultPath?: string }) =>
+    ipcRenderer.invoke('sage:dialog:select-directory', opts) as Promise<string | null>,
+
+  /**
+   * PR-C (2026-07-02): Skills load-new bridge.
+   * - pickSkillFiles: native multi-select dialog → string[] | null
+   * - rescanSkills: POST /api/v1/skills/rescan → RescanResult
+   * - importSkills: POST /api/v1/skills/import (multipart) → ImportResult
+   *
+   * Nested under `skills` (mirrors `windowControls` pattern) so future
+   * skills IPC additions group naturally without polluting top-level.
+   */
+  skills: {
+    pickSkillFiles: () => ipcRenderer.invoke('skills:pick-files') as Promise<string[] | null>,
+    rescanSkills: () => ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
+    importSkills: (paths: string[]) =>
+      ipcRenderer.invoke('skills:import', paths) as Promise<ImportResult>,
+  } satisfies SkillsElectronApiBridge,
 
   /**
    * T13 (2026-07-02): Log management bridge — Diagnostics card on Settings page.

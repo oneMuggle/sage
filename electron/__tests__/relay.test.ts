@@ -16,7 +16,7 @@ vi.mock('node-fetch', async () => {
 });
 
 import nodeFetch from 'node-fetch';
-import { parseNdjsonStream, relayChatStream } from '../relay';
+import { parseNdjsonStream, relayChatStream, relayNdjsonToEvent } from '../relay';
 
 const mockedFetch = nodeFetch as unknown as ReturnType<typeof vi.fn>;
 
@@ -175,6 +175,183 @@ describe('relayChatStream (I2: attach to existing stream via GET)', () => {
       'http://127.0.0.1:8765',
       new AbortController().signal,
     );
+    expect(wc.sent).toEqual([]);
+  });
+});
+
+describe('relayNdjsonToEvent (PR-2 Task 3: wiki_chat_stream relay)', () => {
+  it('dispatches each NDJSON event to {prefix}-{event} channel with rawEvent.data payload', async () => {
+    const wc = new MockWebContents();
+    const body = makeNdjsonReadable([
+      JSON.stringify({ event: 'chunk', data: 'hello ' }),
+      JSON.stringify({ event: 'chunk', data: 'world' }),
+      JSON.stringify({ event: 'done', data: { citations: ['wiki/a.md'] } }),
+    ]);
+    await relayNdjsonToEvent(
+      body,
+      'wiki-chat-stream-s1',
+      wc as unknown as Electron.WebContents,
+      new AbortController().signal,
+    );
+    expect(wc.sent).toEqual([
+      { channel: 'sage:event:wiki-chat-stream-s1-chunk', payload: 'hello ' },
+      { channel: 'sage:event:wiki-chat-stream-s1-chunk', payload: 'world' },
+      {
+        channel: 'sage:event:wiki-chat-stream-s1-done',
+        payload: { citations: ['wiki/a.md'] },
+      },
+    ]);
+  });
+
+  it('maps "progress" event to {prefix}-progress channel', async () => {
+    const wc = new MockWebContents();
+    const body = makeNdjsonReadable([
+      JSON.stringify({ event: 'progress', data: { stage: 'indexing', percent: 50 } }),
+    ]);
+    await relayNdjsonToEvent(
+      body,
+      'wiki-ingest-i1',
+      wc as unknown as Electron.WebContents,
+      new AbortController().signal,
+    );
+    expect(wc.sent).toEqual([
+      {
+        channel: 'sage:event:wiki-ingest-i1-progress',
+        payload: { stage: 'indexing', percent: 50 },
+      },
+    ]);
+  });
+
+  it('forwards backend "error" event as {prefix}-error', async () => {
+    const wc = new MockWebContents();
+    const body = makeNdjsonReadable([JSON.stringify({ event: 'error', data: 'LLM exploded' })]);
+    await relayNdjsonToEvent(
+      body,
+      'wiki-chat-stream-s1',
+      wc as unknown as Electron.WebContents,
+      new AbortController().signal,
+    );
+    expect(wc.sent).toEqual([
+      {
+        channel: 'sage:event:wiki-chat-stream-s1-error',
+        payload: 'LLM exploded',
+      },
+    ]);
+  });
+
+  it('synthesizes {prefix}-error for non-object NDJSON lines', async () => {
+    const wc = new MockWebContents();
+    // parseNdjsonStream wraps non-JSON in { raw: ... } and null in { raw: 'null' }.
+    // relayNdjsonToEvent sees the wrapped object, finds no `event` field, and
+    // emits a synthetic error.
+    const body = makeNdjsonReadable(['not json at all']);
+    await relayNdjsonToEvent(
+      body,
+      'wiki-chat-stream-s1',
+      wc as unknown as Electron.WebContents,
+      new AbortController().signal,
+    );
+    expect(wc.sent).toEqual([
+      {
+        channel: 'sage:event:wiki-chat-stream-s1-error',
+        payload: { error: 'invalid NDJSON line' },
+      },
+    ]);
+  });
+
+  it('skips unknown event names (no channel sent)', async () => {
+    const wc = new MockWebContents();
+    const body = makeNdjsonReadable([
+      JSON.stringify({ event: 'chunk', data: 'ok' }),
+      JSON.stringify({ event: 'mystery', data: 'should skip' }),
+      JSON.stringify({ event: 'done', data: { citations: [] } }),
+    ]);
+    await relayNdjsonToEvent(
+      body,
+      'wiki-chat-stream-s1',
+      wc as unknown as Electron.WebContents,
+      new AbortController().signal,
+    );
+    expect(wc.sent).toEqual([
+      { channel: 'sage:event:wiki-chat-stream-s1-chunk', payload: 'ok' },
+      {
+        channel: 'sage:event:wiki-chat-stream-s1-done',
+        payload: { citations: [] },
+      },
+    ]);
+  });
+
+  it('uses transform to remap event suffix and payload (e.g. ingest done→progress)', async () => {
+    const wc = new MockWebContents();
+    const body = makeNdjsonReadable([JSON.stringify({ event: 'done', data: { ingested: 42 } })]);
+    await relayNdjsonToEvent(
+      body,
+      'wiki-ingest-i1',
+      wc as unknown as Electron.WebContents,
+      new AbortController().signal,
+      (rawEvent) => {
+        // Ingest: redirect done to -progress with stage/percent envelope
+        const e = rawEvent as { event?: string; data?: unknown };
+        if (e.event === 'done') {
+          return {
+            suffix: '-progress',
+            data: { stage: 'completed', percent: 100, message: e.data },
+          };
+        }
+        return null;
+      },
+    );
+    expect(wc.sent).toEqual([
+      {
+        channel: 'sage:event:wiki-ingest-i1-progress',
+        payload: { stage: 'completed', percent: 100, message: { ingested: 42 } },
+      },
+    ]);
+  });
+
+  it('transform returning null suppresses the event (no channel sent)', async () => {
+    const wc = new MockWebContents();
+    const body = makeNdjsonReadable([
+      JSON.stringify({ event: 'progress', data: { stage: 'skip' } }),
+    ]);
+    await relayNdjsonToEvent(
+      body,
+      'wiki-ingest-i1',
+      wc as unknown as Electron.WebContents,
+      new AbortController().signal,
+      () => null,
+    );
+    expect(wc.sent).toEqual([]);
+  });
+
+  it('does nothing when body is null (no events sent, no error thrown)', async () => {
+    const wc = new MockWebContents();
+    await expect(
+      relayNdjsonToEvent(
+        null,
+        'wiki-chat-stream-s1',
+        wc as unknown as Electron.WebContents,
+        new AbortController().signal,
+      ),
+    ).resolves.toBeUndefined();
+    expect(wc.sent).toEqual([]);
+  });
+
+  it('honors AbortSignal that fires before consumption (no events sent)', async () => {
+    const wc = new MockWebContents();
+    const ac = new AbortController();
+    ac.abort();
+    const body = makeNdjsonReadable([
+      JSON.stringify({ event: 'chunk', data: 'should not arrive' }),
+    ]);
+    await expect(
+      relayNdjsonToEvent(
+        body,
+        'wiki-chat-stream-s1',
+        wc as unknown as Electron.WebContents,
+        ac.signal,
+      ),
+    ).resolves.toBeUndefined();
     expect(wc.sent).toEqual([]);
   });
 });

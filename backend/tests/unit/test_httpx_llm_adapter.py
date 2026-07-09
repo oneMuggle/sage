@@ -14,9 +14,9 @@
 """
 
 from __future__ import annotations
-from typing import List, Tuple
 
 from contextlib import asynccontextmanager
+from typing import List, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

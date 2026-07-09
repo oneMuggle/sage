@@ -4,12 +4,12 @@ Sage 日志配置模块
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from opentelemetry import trace
 
@@ -238,7 +238,9 @@ _logger_manager = SageLogger()
 
 
 def setup_logging(
-    log_dir: Optional[str] = None, log_level: str = DEFAULT_LOG_LEVEL, project_root: Optional[str] = None
+    log_dir: Optional[str] = None,
+    log_level: str = DEFAULT_LOG_LEVEL,
+    project_root: Optional[str] = None,
 ) -> None:
     """
     设置全局日志系统（便捷函数）

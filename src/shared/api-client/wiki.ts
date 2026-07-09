@@ -1,18 +1,19 @@
-// Wiki API layer - wrappers around Tauri invoke() + HTTP helpers for project API
-import { invoke } from '../../shared/api/desktopInvoke';
+// Wiki API layer - HTTP API calls to backend
+import { invoke } from '../api/desktopInvoke';
 import type {
   WikiProject,
   FileNode,
   SearchResponse,
-  IngestResult,
-  WikiChatResponse,
   GraphData,
+  ProjectCheckResponse,
+  RecentProject,
+  RecordRecentRequest,
 } from '../types/wiki';
 
-// Backend API base URL (for project-level HTTP calls)
+// Backend API base URL
 const API_BASE = 'http://127.0.0.1:8765/api/v1';
 
-// Helper function for HTTP POST requests
+// Helper function for HTTP requests
 async function httpPost<T>(endpoint: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
@@ -28,7 +29,6 @@ async function httpPost<T>(endpoint: string, body: unknown): Promise<T> {
   return response.json();
 }
 
-// Helper function for HTTP GET requests
 async function httpGet<T>(
   endpoint: string,
   params?: Record<string, string | number | undefined>,
@@ -43,6 +43,21 @@ async function httpGet<T>(
   }
 
   const response = await fetch(url.toString());
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`HTTP ${response.status}: ${error}`);
+  }
+
+  return response.json();
+}
+
+async function httpDelete<T>(endpoint: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 
   if (!response.ok) {
     const error = await response.text();
@@ -90,11 +105,11 @@ export async function listWikiProjects(basePath: string): Promise<ProjectInfo[]>
 // ==================== File API ====================
 
 export async function wikiListDirectory(path: string, projectPath: string): Promise<FileNode[]> {
-  return invoke<FileNode[]>('wiki_list_directory', { path, projectPath });
+  return httpGet<FileNode[]>('/wiki/list', { path, project_path: projectPath });
 }
 
 export async function wikiReadFile(path: string, projectPath: string): Promise<string> {
-  return invoke<string>('wiki_read_file', { path, projectPath });
+  return httpGet<string>('/wiki/read', { path, project_path: projectPath });
 }
 
 export async function wikiWriteFile(
@@ -102,11 +117,28 @@ export async function wikiWriteFile(
   content: string,
   projectPath: string,
 ): Promise<void> {
-  return invoke<void>('wiki_write_file', { path, content, projectPath });
+  await httpPost('/wiki/write', { path, content, project_path: projectPath });
 }
 
 export async function wikiDeleteFile(path: string, projectPath: string): Promise<void> {
-  return invoke<void>('wiki_delete_file', { path, projectPath });
+  await httpDelete('/wiki/delete', { path, project_path: projectPath });
+}
+
+export interface CascadeDeleteResult {
+  success: boolean;
+  source_deleted: string;
+  deleted_wiki_pages: string[];
+  deleted_vectors: number;
+  cleaned_deadlinks: number;
+}
+
+export async function wikiDeleteSource(
+  sourcePath: string,
+  projectPath: string,
+): Promise<CascadeDeleteResult> {
+  return httpDelete<CascadeDeleteResult>(`/wiki/source/${sourcePath}`, {
+    project_path: projectPath,
+  });
 }
 
 export async function wikiRenameFile(
@@ -114,7 +146,11 @@ export async function wikiRenameFile(
   newPath: string,
   projectPath: string,
 ): Promise<void> {
-  return invoke<void>('wiki_rename_file', { oldPath, newPath, projectPath });
+  await httpPost('/wiki/rename', {
+    old_path: oldPath,
+    new_path: newPath,
+    project_path: projectPath,
+  });
 }
 
 // ==================== Search API ====================
@@ -124,56 +160,100 @@ export async function wikiSearch(
   projectPath: string,
   limit?: number,
 ): Promise<SearchResponse> {
-  return invoke<SearchResponse>('wiki_search', { query, projectPath, limit: limit ?? 20 });
+  return httpGet<SearchResponse>('/wiki/search', {
+    query,
+    project_path: projectPath,
+    limit: limit ?? 20,
+  });
 }
 
 // ==================== Ingest API ====================
 
-export async function wikiIngestSource(
-  ingestId: string,
-  sourceFilePath: string,
-  projectPath: string,
-  apiUrl: string,
-  apiKey: string,
-  model: string,
-  embedApiUrl: string,
-  embedApiKey: string,
-  embedModel: string,
-): Promise<IngestResult> {
-  return invoke<IngestResult>('wiki_ingest_source', {
-    ingestId,
-    sourceFilePath,
-    projectPath,
-    apiUrl,
-    apiKey,
-    model,
-    embedApiUrl,
-    embedApiKey,
-    embedModel,
+/**
+ * PR-3 Task 4: streaming ingest via NDJSON. Replaces the old synchronous
+ * `wikiIngestSource` helper (which hit the non-streaming `/wiki/ingest`
+ * endpoint). The backend route `/api/v1/wiki/ingest/stream` returns a
+ * long-lived NDJSON body; Electron main relays each event to a per-id
+ * channel `sage:event:wiki-ingest-{streamId}-progress` (with the relay
+ * transform collapsing `done` → `{stage:'completed'}` and `error` →
+ * `{stage:'failed'}` so the renderer only needs to listen on one channel).
+ *
+ * This function is **invoke-only** for the IPC call — it does NOT register
+ * a listener itself, because the caller's `useWikiIngest` hook / a local
+ * `useEffect` will register one. Returns `{ streamId, cancel }` so the
+ * caller can wire the listener with `{ streamId }` on `listen()` — without
+ * that option the unlisten closure cannot pass streamId to `sage:unlisten`
+ * and the backend AbortController leaks.
+ *
+ * Field names are snake_case to match the backend `IngestRequest` schema
+ * (see backend/api/wiki_routes.py: `class IngestRequest`).
+ */
+export interface WikiIngestStreamRequest {
+  sourceFile: string;
+  projectPath: string;
+  llmBaseUrl: string;
+  llmApiKey: string;
+  llmModel: string;
+  embedBaseUrl: string;
+  embedApiKey: string;
+  embedModel: string;
+}
+
+export async function wikiIngestStream(
+  req: WikiIngestStreamRequest,
+): Promise<{ streamId: string }> {
+  return invoke<{ streamId: string }>('wiki_ingest_stream', {
+    source_file: req.sourceFile,
+    project_path: req.projectPath,
+    llm_base_url: req.llmBaseUrl,
+    llm_api_key: req.llmApiKey,
+    llm_model: req.llmModel,
+    embed_base_url: req.embedBaseUrl,
+    embed_api_key: req.embedApiKey,
+    embed_model: req.embedModel,
   });
 }
 
 // ==================== Chat API ====================
 
-export async function wikiChat(
-  query: string,
-  projectPath: string,
-  apiUrl: string,
-  apiKey: string,
-  model: string,
-  embedApiUrl: string,
-  embedApiKey: string,
-  embedModel: string,
-): Promise<WikiChatResponse> {
-  return invoke<WikiChatResponse>('wiki_chat', {
-    query,
-    projectPath,
-    apiUrl,
-    apiKey,
-    model,
-    embedApiUrl,
-    embedApiKey,
-    embedModel,
+/**
+ * PR-2 (2026-07-08): streaming chat via NDJSON. The backend route
+ * `/api/v1/wiki/chat/stream` returns a long-lived `text/event-stream`-like
+ * NDJSON body; Electron main relays each event to a distinct channel
+ * `sage:event:wiki-chat-stream-{streamId}-{chunk|done|error}`.
+ *
+ * This function is **invoke-only** — it does NOT register listeners on the
+ * three per-stream channels. The caller (WikiChat.tsx → useWikiChatStream
+ * hook) owns the listeners; if we registered here too the renderer's handler
+ * would fire twice per chunk. Returns the server-allocated `streamId` so the
+ * hook can build the per-stream channel names and so the `sage:unlisten`
+ * closure (via desktopEvent → preload) aborts the in-flight backend fetch
+ * through the main process's `streamControllers` Map.
+ *
+ * Field names are snake_case to match the backend `ChatRequest` schema
+ * (see backend/api/wiki_routes.py: `class ChatRequest`).
+ */
+export interface WikiChatStreamRequest {
+  query: string;
+  projectPath: string;
+  llmBaseUrl: string;
+  llmApiKey: string;
+  llmModel: string;
+  embedBaseUrl: string;
+  embedApiKey: string;
+  embedModel: string;
+}
+
+export async function wikiChatStream(req: WikiChatStreamRequest): Promise<{ streamId: string }> {
+  return invoke<{ streamId: string }>('wiki_chat_stream', {
+    query: req.query,
+    project_path: req.projectPath,
+    llm_base_url: req.llmBaseUrl,
+    llm_api_key: req.llmApiKey,
+    llm_model: req.llmModel,
+    embed_base_url: req.embedBaseUrl,
+    embed_api_key: req.embedApiKey,
+    embed_model: req.embedModel,
   });
 }
 
@@ -184,9 +264,122 @@ export async function getWikiGraph(
   query?: string,
   limit: number = 100,
 ): Promise<GraphData> {
-  return invoke<GraphData>('wiki_get_graph', {
-    projectPath,
-    query: query ?? null,
+  return httpGet<GraphData>('/wiki/graph', {
+    project_path: projectPath,
+    query: query ?? undefined,
     limit,
   });
+}
+
+// ==================== Community API ====================
+
+export interface CommunityInfo {
+  community_id: number;
+  members: string[];
+  cohesion: number;
+  size: number;
+}
+
+export interface CommunitiesResponse {
+  communities: CommunityInfo[];
+  graph: GraphData;
+}
+
+export async function getWikiCommunities(projectPath: string): Promise<CommunitiesResponse> {
+  return httpGet<CommunitiesResponse>('/wiki/communities', {
+    project_path: projectPath,
+  });
+}
+
+// ==================== Research API ====================
+
+export interface ResearchRequest {
+  topic: string;
+  project_path: string;
+  search_provider?: string;
+  search_api_key?: string;
+  search_base_url?: string;
+  llm_base_url: string;
+  llm_api_key: string;
+  llm_model: string;
+  auto_ingest?: boolean;
+}
+
+export interface WebResultData {
+  title: string;
+  url: string;
+  snippet: string;
+  score: number;
+}
+
+export interface ResearchResponse {
+  id: string;
+  topic: string;
+  status: string;
+  queries: string[];
+  web_results_count: number;
+  web_results: WebResultData[];
+  synthesis: string;
+  saved_path: string;
+  error: string;
+}
+
+export async function startWikiResearch(req: ResearchRequest): Promise<ResearchResponse> {
+  return httpPost<ResearchResponse>('/wiki/research', req);
+}
+
+// ==================== Insights API ====================
+
+export interface SurprisingConnection {
+  source_id: string;
+  source_label: string;
+  target_id: string;
+  target_label: string;
+  reason: string;
+  strength: number;
+}
+
+export interface KnowledgeGap {
+  gap_type: string;
+  node_id: string;
+  node_label: string;
+  description: string;
+  severity: string;
+  suggestion: string;
+}
+
+export interface InsightsResponse {
+  surprising_connections: SurprisingConnection[];
+  knowledge_gaps: KnowledgeGap[];
+  stats: {
+    total_nodes: number;
+    total_edges: number;
+    total_communities: number;
+    surprising_connections: number;
+    knowledge_gaps: number;
+  };
+}
+
+export async function getWikiInsights(projectPath: string): Promise<InsightsResponse> {
+  return httpGet<InsightsResponse>('/wiki/insights', {
+    project_path: projectPath,
+  });
+}
+
+// ==================== Folder Picker API ====================
+// --- Added 2026-06-27: folder picker support ---
+
+export async function checkWikiProject(
+  path: string,
+  intent: 'create' | 'open',
+): Promise<ProjectCheckResponse> {
+  return httpGet<ProjectCheckResponse>('/wiki/project/check', { path, intent });
+}
+
+export async function getRecentWikiProjects(): Promise<RecentProject[]> {
+  return httpGet<RecentProject[]>('/wiki/recent-projects');
+}
+
+export async function recordRecentWikiProject(req: RecordRecentRequest): Promise<void> {
+  await httpPost<void>('/wiki/recent-projects/record', req);
 }

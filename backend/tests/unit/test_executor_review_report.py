@@ -13,8 +13,8 @@ Coverage:
 """
 
 from __future__ import annotations
-from typing import List
 
+from typing import List
 from unittest.mock import MagicMock
 
 from backend.orchestration.events import EventRecorder

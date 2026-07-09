@@ -1,21 +1,30 @@
 """6 步 CoT Ingest 流程。
 
 实现源文档的 LLM 驱动 ingest：复制 → 缓存检查 → Step1 分析 → Step2 写入 → 嵌入 → 更新缓存。
+
+PR-3 Task 1 将 6 步拆为模块级 helper (``copy_to_raw`` / ``cache_get`` /
+``analyze_source`` / ``generate_pages`` / ``embed_pages`` / ``cache_put``),
+供同步 ``ingest_source`` (callback 进度) 和流式 ``ingest_source_stream``
+(NDJSON 进度) 共享。
 """
 
 import hashlib
 import json
+import logging
 import re
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import frontmatter, llm_prompts
 from .embeddings import EmbeddingConfig, build_embed_request, chunk_markdown, parse_embed_response
+from .llm_context import LLMContext
 from .models import Analysis, AnalysisConcept, AnalysisEntity, IngestProgress, IngestResult
 from .vectorstore import VectorStore
+
+logger = logging.getLogger(__name__)
 
 # 常量
 MAX_CONTENT_CHARS = 50_000  # 50KB
@@ -72,43 +81,118 @@ async def ingest_source(
 
     # Step 1: 复制源文件 (10%)
     _report("copy_source", 10, "复制源文件")
-    filename = source_file_path.name
+    target = copy_to_raw(project_root, source_file_path)
+    source_path = f"raw/sources/{target.name}"
+
+    # Step 2: SHA256 缓存检查
+    _report("cache_check", 15, "检查缓存")
+    cached = cache_get(project_root, target)
+    if cached is not None:
+        _report("completed", 100, "完成")
+        return cached
+
+    # Step 3: LLM 分析 (20%)
+    _report("step1_analyze", 20, "Step 1: 分析源文档")
+    analysis = await analyze_source(target, llm_call)
+
+    # Step 4 + 5: LLM 写入 + 解析 frontmatter + 落盘 (45% → 70%)
+    _report("step2_write", 45, "Step 2: 写入 Wiki 页面")
+    wiki_file, page_type, wiki_content = await generate_pages(
+        project_root, target, analysis, llm_call
+    )
+    wiki_page_path = f"wiki/sources/{wiki_file.name}"
+
+    # Step 6: 嵌入 + 存储 (80%)
+    _report("embedding", 80, "嵌入 Wiki 页面")
+    await embed_pages(project_root, wiki_page_path, wiki_content, config, http_post)
+
+    # Step 7: 更新缓存 (95%)
+    _report("finalize", 95, "更新缓存")
+    cache_put(project_root, target, wiki_page_path, page_type)
+
+    _report("completed", 100, "完成")
+
+    return IngestResult(
+        source_path=source_path,
+        wiki_page_path=wiki_page_path,
+        page_type=page_type,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers (PR-3 Task 1 refactor)
+# ---------------------------------------------------------------------------
+
+
+async def copy_to_raw(project_root: Path, source_file: Path) -> Path:
+    """复制源文件到 ``raw/sources/``。返回目标绝对路径。
+
+    幂等:目标已存在则跳过(避免 LLM 重新生成时覆盖用户源文件)。
+    """
+    filename = source_file.name
     raw_sources_dir = project_root / "raw" / "sources"
     raw_sources_dir.mkdir(parents=True, exist_ok=True)
     dest_path = raw_sources_dir / filename
 
     if not dest_path.exists():
-        dest_path.write_bytes(source_file_path.read_bytes())
+        dest_path.write_bytes(source_file.read_bytes())
 
-    source_path = f"raw/sources/{filename}"
+    return dest_path
 
-    # Step 2: SHA256 缓存检查
-    _report("cache_check", 15, "检查缓存")
-    content = dest_path.read_text(encoding="utf-8", errors="ignore")[:MAX_CONTENT_CHARS]
+
+def cache_get(project_root: Path, target: Path) -> Optional[IngestResult]:
+    """SHA256 缓存命中检查。
+
+    命中时返回缓存的 ``IngestResult``(保留上次的 ``wiki_page_path`` + ``page_type``),
+    miss 返回 ``None``。
+    """
+    source_path = f"raw/sources/{target.name}"
+    content = target.read_text(encoding="utf-8", errors="ignore")[:MAX_CONTENT_CHARS]
     sha256 = _compute_sha256(content)
 
     cache = _load_cache(project_root)
-    if source_path in cache and cache[source_path].sha256 == sha256:
-        # 缓存命中
+    entry = cache.get(source_path)
+    if entry is not None and entry.sha256 == sha256:
         return IngestResult(
             source_path=source_path,
-            wiki_page_path=cache[source_path].wiki_page_path,
-            page_type=cache[source_path].page_type,
+            wiki_page_path=entry.wiki_page_path,
+            page_type=entry.page_type,
         )
+    return None
 
-    # Step 3: LLM 分析 (20% → 40%)
-    _report("step1_analyze", 20, "Step 1: 分析源文档")
+
+async def analyze_source(
+    target: Path,
+    llm_call: Callable[[List[dict], float], Any],
+) -> Analysis:
+    """Step 1: LLM 分析源内容,返回结构化 ``Analysis``。
+
+    读取源内容、构造 Step1 prompt、调用 LLM、解析 JSON;
+    解析失败时退化为空 ``Analysis``(与原 ``_parse_analysis_json`` 行为一致)。
+    """
+    content = target.read_text(encoding="utf-8", errors="ignore")[:MAX_CONTENT_CHARS]
     step1_prompt = llm_prompts.format_step1_prompt(content)
     messages = [
         {"role": "system", "content": "You are a JSON-only assistant. Output strict JSON."},
         {"role": "user", "content": step1_prompt},
     ]
-
     analysis_json = await llm_call(messages, temperature=0.0)
-    analysis = _parse_analysis_json(analysis_json)
+    return _parse_analysis_json(analysis_json)
 
-    # Step 4: LLM 写入 (45% → 70%)
-    _report("step2_write", 45, "Step 2: 写入 Wiki 页面")
+
+async def generate_pages(
+    project_root: Path,
+    target: Path,
+    analysis: Analysis,
+    llm_call: Callable[[List[dict], float], Any],
+) -> Tuple[Path, str, str]:
+    """Step 2 + 5: LLM 写作 → 解析 frontmatter → 原子落盘到 ``wiki/sources/``。
+
+    Returns:
+        (wiki_file_path, page_type, wiki_content) — ``wiki_content`` 供 embed 阶段复用。
+    """
+    content = target.read_text(encoding="utf-8", errors="ignore")[:MAX_CONTENT_CHARS]
+    filename = target.name
     slug = _slugify(filename)
     today = datetime.now(tz=timezone.utc).date().isoformat()  # noqa: DTZ011, UP017
     tags_csv = ", ".join(analysis.tags)
@@ -136,54 +220,75 @@ async def ingest_source(
     )
 
     messages = [{"role": "user", "content": step2_prompt}]
-    wiki_content = await llm_call(messages, temperature=0.3)
+    raw_wiki_content = await llm_call(messages, temperature=0.3)
 
-    # Step 5: 解析 frontmatter + 写入 (70%)
-    _report("finalize", 70, "写入 Wiki 文件")
-    parsed = frontmatter.parse(wiki_content)
+    # 解析 frontmatter + 序列化
+    parsed = frontmatter.parse(raw_wiki_content)
     page_type = parsed.frontmatter.page_type or "source"
     wiki_content = frontmatter.serialize(parsed)
 
+    # 原子写入 wiki 文件
     wiki_sources_dir = project_root / "wiki" / "sources"
     wiki_sources_dir.mkdir(parents=True, exist_ok=True)
-    wiki_page_path = f"wiki/sources/{slug}.md"
-    wiki_file = project_root / wiki_page_path
+    wiki_file = project_root / "wiki" / "sources" / f"{slug}.md"
 
-    # 原子写入
     tmp_file = wiki_file.with_suffix(".md.tmp")
     tmp_file.write_text(wiki_content, encoding="utf-8")
     tmp_file.replace(wiki_file)
 
-    # Step 6: 嵌入 + 存储 (80% → 90%)
-    _report("embedding", 80, "嵌入 Wiki 页面")
+    return wiki_file, page_type, wiki_content
+
+
+async def embed_pages(
+    project_root: Path,
+    wiki_page_path: str,
+    wiki_content: str,
+    config: IngestConfig,
+    http_post: Callable[[str, Dict[str, str], dict], Any],
+) -> None:
+    """Step 6: 分块 → 调用 embed HTTP → upsert 到 VectorStore。
+
+    无 chunk 时跳过(空文档场景)。
+    """
     chunks = chunk_markdown(wiki_content, target_chunk_size=500)
+    if not chunks:
+        return
 
-    if chunks:
-        embed_req = build_embed_request(
-            EmbeddingConfig(
-                base_url=config.embed_base_url,
-                api_key=config.embed_api_key,
-                model=config.embed_model,
-                dim=config.embed_dim,
-            ),
-            chunks,
-        )
+    embed_req = build_embed_request(
+        EmbeddingConfig(
+            base_url=config.embed_base_url,
+            api_key=config.embed_api_key,
+            model=config.embed_model,
+            dim=config.embed_dim,
+        ),
+        chunks,
+    )
 
-        embed_response = await http_post(embed_req.url, embed_req.headers, embed_req.body)
-        vectors = parse_embed_response(embed_response, config.embed_dim)
+    embed_response = await http_post(embed_req.url, embed_req.headers, embed_req.body)
+    vectors = parse_embed_response(embed_response, config.embed_dim)
 
-        # 存储向量
-        vector_store = VectorStore.open(project_root, config.embed_dim)
-        vector_store.upsert_chunks(
-            wiki_page_path,
-            [
-                (idx, chunk, vec)
-                for idx, (chunk, vec) in enumerate(zip(chunks, vectors, strict=False))
-            ],
-        )
+    vector_store = VectorStore.open(project_root, config.embed_dim)
+    vector_store.upsert_chunks(
+        wiki_page_path,
+        [(idx, chunk, vec) for idx, (chunk, vec) in enumerate(zip(chunks, vectors, strict=False))],
+    )
 
-    # Step 7: 更新缓存 (95%)
-    _report("finalize", 95, "更新缓存")
+
+def cache_put(
+    project_root: Path,
+    target: Path,
+    wiki_page_path: str,
+    page_type: str,
+) -> None:
+    """Step 7: 写入缓存条目(原子保存 ingest-cache.json)。
+
+    同一 source_path 的旧条目会被覆盖(支持重新 ingest)。
+    """
+    source_path = f"raw/sources/{target.name}"
+    content = target.read_text(encoding="utf-8", errors="ignore")[:MAX_CONTENT_CHARS]
+    sha256 = _compute_sha256(content)
+
+    cache = _load_cache(project_root)
     cache[source_path] = CacheEntry(
         sha256=sha256,
         wiki_page_path=wiki_page_path,
@@ -191,13 +296,75 @@ async def ingest_source(
     )
     _save_cache(project_root, cache)
 
-    _report("completed", 100, "完成")
 
-    return IngestResult(
-        source_path=source_path,
-        wiki_page_path=wiki_page_path,
-        page_type=page_type,
-    )
+# ---------------------------------------------------------------------------
+# Streaming variant (PR-3 Task 1)
+# ---------------------------------------------------------------------------
+
+
+async def ingest_source_stream(
+    config: IngestConfig,
+    project_root: Path,
+    source_file: Path,
+    ctx: LLMContext,
+) -> AsyncIterator[bytes]:
+    """Streaming variant of :func:`ingest_source`.
+
+    Yields NDJSON progress lines(``\\n``-terminated UTF-8):
+
+    .. code-block:: json
+
+        {"event":"progress","data":{"stage":"...","percent":N,"message":"..."}}
+
+    Stages(必须与 ``src/widgets/wiki/WikiIngestProgress.tsx::STAGE_LABELS`` 完全一致):
+
+        started → copy_source → step1_analyze → step2_write → embedding → completed
+
+    ``failed`` 阶段在异常路径发出(``percent=0``),随后 ``raise`` 让上层 FastAPI
+    关闭流。
+    """
+
+    def emit(stage: str, percent: int, message: Optional[str] = None) -> bytes:
+        return (
+            json.dumps(
+                {
+                    "event": "progress",
+                    "data": {"stage": stage, "percent": percent, "message": message},
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+
+    try:
+        yield emit("started", 0, "开始导入")
+
+        target = await copy_to_raw(project_root, source_file)
+        yield emit("copy_source", 10, f"复制到 {target.name}")
+
+        cached = cache_get(project_root, target)
+        if cached is not None:
+            yield emit("completed", 100, f"缓存命中: {cached.wiki_page_path}")
+            return
+
+        yield emit("step1_analyze", 20, "LLM 分析中...")
+        analysis = await analyze_source(target, ctx.llm_call)
+
+        yield emit("step2_write", 50, "LLM 写作中...")
+        wiki_file, page_type, wiki_content = await generate_pages(
+            project_root, target, analysis, ctx.llm_call
+        )
+        wiki_page_path = f"wiki/sources/{wiki_file.name}"
+
+        yield emit("embedding", 80, f"嵌入 {wiki_file.name}")
+        await embed_pages(project_root, wiki_page_path, wiki_content, config, ctx.http_post)
+
+        cache_put(project_root, target, wiki_page_path, page_type)
+        yield emit("completed", 100, f"导入完成: {wiki_file.name}")
+    except Exception as e:
+        logger.exception("ingest_source_stream 失败")
+        yield emit("failed", 0, str(e))
+        raise
 
 
 def _compute_sha256(content: str) -> str:

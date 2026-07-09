@@ -1,6 +1,10 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { I18nProvider } from '../../../shared/lib/i18n';
+import { ChatInput } from '../ChatInput';
+
+// Mocks
 vi.mock('../../../shared/lib/hooks/useFileUpload', () => ({
   useFileUpload: () => ({
     files: [],
@@ -68,7 +72,9 @@ vi.mock('../../../features/chat/AtFileMenu', () => ({
   },
 }));
 
-import { ChatInput } from '../ChatInput';
+const renderWithI18n = (ui: React.ReactElement) => {
+  return render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
+};
 
 describe('ChatInput — @ and /btw integration', () => {
   beforeEach(() => {
@@ -76,12 +82,12 @@ describe('ChatInput — @ and /btw integration', () => {
   });
 
   it('does not show AtFileMenu initially', () => {
-    render(<ChatInput onSend={vi.fn()} />);
+    renderWithI18n(<ChatInput onSend={vi.fn()} />);
     expect(screen.queryByTestId('at-file-mock')).toBeNull();
   });
 
   it('typing @ shows AtFileMenu with query', () => {
-    render(<ChatInput onSend={vi.fn()} />);
+    renderWithI18n(<ChatInput onSend={vi.fn()} />);
     const input = screen.getByPlaceholderText(/输入消息/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '@fo' } });
     expect(screen.getByTestId('at-file-mock')).toBeInTheDocument();
@@ -89,7 +95,7 @@ describe('ChatInput — @ and /btw integration', () => {
   });
 
   it('selecting file inserts @path into textarea', () => {
-    render(<ChatInput onSend={vi.fn()} />);
+    renderWithI18n(<ChatInput onSend={vi.fn()} />);
     const input = screen.getByPlaceholderText(/输入消息/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '@fo' } });
     fireEvent.click(screen.getByTestId('at-file-mock-item'));
@@ -97,14 +103,14 @@ describe('ChatInput — @ and /btw integration', () => {
   });
 
   it('typing /btw then question triggers btw.open()', () => {
-    render(<ChatInput onSend={vi.fn()} />);
+    renderWithI18n(<ChatInput onSend={vi.fn()} />);
     const input = screen.getByPlaceholderText(/输入消息/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '/btw 什么是 useEffect?' } });
     expect(openBtwMock).toHaveBeenCalledWith('什么是 useEffect?');
   });
 
   it('normal text does not trigger @ or /btw', () => {
-    render(<ChatInput onSend={vi.fn()} />);
+    renderWithI18n(<ChatInput onSend={vi.fn()} />);
     const input = screen.getByPlaceholderText(/输入消息/) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: 'hello world' } });
     expect(openBtwMock).not.toHaveBeenCalled();

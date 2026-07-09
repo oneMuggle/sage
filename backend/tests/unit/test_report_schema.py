@@ -243,29 +243,24 @@ class TestProjectionLineage:
         r = _report()
         assert r.projection_lineage[0].source_hash == r.content_hash
 
-    @pytest.mark.xfail(
-        reason=(
-            "Report schema defers projection_lineage validation to validate_lineage() "
-            "(see report_schema.py:145-147), so __init__ does not raise on source_hash "
-            "mismatch. Pre-existing test/code inconsistency — also fails on main."
-        ),
-        strict=True,
-    )
     def test_lineage_with_mismatched_source_hash_raises(self):
+        # Lineage validation is deferred to `validate()` so callers can
+        # build a report incrementally (see `ReviewReport.__post_init__`).
+        report = ReviewReport(
+            canonical_id="rep-003",
+            lane_id="lane-1",
+            reviewer_id="r",
+            assertions=[_assertion()],
+            projection_lineage=[
+                ProjectionRef(
+                    view="ops_full",
+                    source_hash="0" * 64,
+                    downgrade_reason=None,
+                )
+            ],
+        )
         with pytest.raises(ValueError, match="source_hash"):
-            ReviewReport(
-                canonical_id="rep-003",
-                lane_id="lane-1",
-                reviewer_id="r",
-                assertions=[_assertion()],
-                projection_lineage=[
-                    ProjectionRef(
-                        view="ops_full",
-                        source_hash="0" * 64,
-                        downgrade_reason=None,
-                    )
-                ],
-            )
+            report.validate()
 
     def test_empty_projection_lineage_allowed(self):
         r = _report(projection_lineage=[])

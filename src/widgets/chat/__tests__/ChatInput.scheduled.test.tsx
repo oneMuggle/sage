@@ -2,12 +2,12 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { ChatInput } from '../ChatInput';
+import { InputCard } from '../InputCard';
 
-function renderInput(props: Partial<React.ComponentProps<typeof ChatInput>> = {}) {
+function renderInput(props: Partial<React.ComponentProps<typeof InputCard>> = {}) {
   return render(
     <I18nProvider>
-      <ChatInput onSend={() => {}} isLoading={false} {...props} />
+      <InputCard value="" onChange={() => {}} onSubmit={() => {}} {...props} />
     </I18nProvider>,
   );
 }

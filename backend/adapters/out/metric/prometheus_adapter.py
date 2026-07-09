@@ -19,6 +19,7 @@ PG3.1 落地：按 spec § 6.1 注册 5 Counter + 3 Histogram + 1 Gauge，全部
 """
 
 from __future__ import annotations
+
 from typing import Dict, Optional
 
 from prometheus_client import (

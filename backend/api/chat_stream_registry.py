@@ -23,7 +23,12 @@ import asyncio
 import contextlib
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
+from typing import (  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
+    Any,
+    Callable,
+    Dict,
+    Optional,
+)
 
 # 当 Queue.get() 收到此 sentinel,attach 端点就关闭 NDJSON 流。
 # 必须是单例(用 `is` 比较),不能是 None 或 dict(None) 等可能的合法事件值。

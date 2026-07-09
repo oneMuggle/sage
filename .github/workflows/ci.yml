@@ -19,7 +19,9 @@ jobs:
   # - coverage 强门禁 ≥ 80%
   backend-py38:
     name: Backend (Python 3.8, Win7 LTS)
-    if: github.ref == 'refs/heads/release/win7'
+    if: |
+      github.ref == 'refs/heads/release/win7' ||
+      (github.event_name == 'pull_request' && github.base_ref == 'release/win7')
     runs-on: ubuntu-latest
 
     steps:
@@ -92,7 +94,10 @@ jobs:
   # ========== Backend: lint + type + test + coverage ==========
   backend:
     name: Backend (Python)
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/develop' ||
+      (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
     runs-on: ubuntu-latest
 
     steps:
@@ -330,6 +335,7 @@ jobs:
   # ========== All-checks aggregator ==========
   # - 强门禁：backend + frontend + electron-smoke 全部 success 才算通过
   # - desktop-build 暂不强制门禁（首次跑通优先，后续加 continue-on-error → required）
+  # - PR 也能在 backend job 上跑（见 backend/backend-py38 的 if: 改 PR + push 都触发）
   all-green:
     name: All Checks
     needs: [backend, backend-py38, frontend, electron-smoke]
@@ -339,21 +345,22 @@ jobs:
       - name: Check all required jobs passed
         run: |
           set -e
-          # 必过项：frontend + electron-smoke
+          # 必过项：frontend + electron-smoke 永远要过
           [ "${{ needs.frontend.result }}" = "success" ]
           [ "${{ needs.electron-smoke.result }}" = "success" ]
-          # backend job: main 走 backend, win7 走 backend-py38.
-          # skipped (守卫 if 不匹配) 也算 success —— PR 不在 main/win7 上时预期 skip.
-          backend_ok=false
-          if [ "${{ needs.backend.result }}" = "success" ] || [ "${{ needs.backend.result }}" = "skipped" ]; then
-            backend_ok=true
-          fi
-          backend_py38_ok=false
-          if [ "${{ needs.backend-py38.result }}" = "success" ] || [ "${{ needs.backend-py38.result }}" = "skipped" ]; then
-            backend_py38_ok=true
-          fi
-          if [ "$backend_ok" != "true" ] && [ "$backend_py38_ok" != "true" ]; then
-            echo "No backend job succeeded"
-            exit 1
+
+          backend_status="${{ needs.backend.result }}"
+          py38_status="${{ needs.backend-py38.result }}"
+
+          # 两个 backend 都失败/被 skip → 不通过
+          # 例外：两个都 skipped（PR 不在 main/win7/release win7 分支上，理论不会发生因为
+          #  workflow trigger 限定了，但保留防御性）
+          if [ "$backend_status" != "success" ] && [ "$py38_status" != "success" ]; then
+            if [ "$backend_status" = "skipped" ] && [ "$py38_status" = "skipped" ]; then
+              echo "Both backend jobs skipped (no relevant branch) — OK"
+            else
+              echo "::error::Backend CI failed: backend=$backend_status, backend-py38=$py38_status"
+              exit 1
+            fi
           fi
           echo "All required checks passed"

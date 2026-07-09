@@ -5,10 +5,11 @@
 """
 
 from __future__ import annotations
+from typing import Dict, Optional
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class LLMErrorType(str, Enum):

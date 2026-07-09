@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any, Dict
+
+from backend.domain.agent_event import envelope
 
 
 class StdoutEventAdapter:
-    """EventPort 的 stdout 实现（开发用）。"""
+    """EventPort 的 stdout 实现（开发用）：输出纯 NDJSON 行。"""
 
     def __init__(self, verbose: bool = True):
         self._verbose = verbose
 
     def emit(self, event_type: str, payload: Dict[str, Any]) -> None:
         if self._verbose:
-            print(f"[event] {event_type}: {json.dumps(payload, ensure_ascii=False)}")  # noqa: T201
+            event = envelope(event_type, payload, ts=datetime.now().isoformat())
+            print(json.dumps(event, ensure_ascii=False))  # noqa: T201

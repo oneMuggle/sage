@@ -3,8 +3,8 @@
 # 触发条件: push tag 形如 v* (如 v0.2.0, v1.0.0-beta.1)
 #
 # ⚠️ Win7 LTS 专用 installer 改由 release-win7.yml 在 release/win7 分支产出
-#    tag 格式: v*-lts (如 v0.2.0-lts)
-#    下载入口: https://github.com/oneMuggle/sage/releases?q=tag%3Av0.2.0-lts
+#    tag 格式: v*-win7 (如 v0.5.0-alpha.1-win7)
+#    下载入口: https://github.com/oneMuggle/sage/releases?q=tag%3Av*-win7
 #
 # 工作流:
 #   1. checkout 代码
@@ -14,12 +14,13 @@
 #   5. electron-builder 跨平台构建 (linux AppImage/deb + windows NSIS)
 #   6. 上传产物到 GitHub Release (由本次 push tag 自动创建)
 #
-# 产物格式 (来自 electron-builder.yml, env.ARTIFACT_SUFFIX 由 workflow 设置):
+# 产物格式 (来自 electron-builder.yml):
 #   - Sage-${version}.AppImage              (Linux)
 #   - sage_${version}_amd64.deb             (Linux Debian)
-#   - Sage-Setup-${version}-win10.exe       (Windows NSIS, Win10+ only)
+#   - Sage-Setup-${version}.exe             (Windows NSIS, Win10+ 默认)
 #
-# Win7 用户请改用 release-win7.yml 的 LTS release。
+# Win7 LTS 用户的 -win7 后缀产物由 release-win7.yml 在 release/win7 分支产出
+# (如 Sage-Setup-0.5.0-alpha.1-win7.exe)。
 #
 # 失败处理: tag push 后 workflow 失败, 需人工:
 #   1. git tag -d v<X.Y.Z> && git push origin :v<X.Y.Z>  # 删除坏 tag
@@ -39,7 +40,7 @@ jobs:
   build:
     name: Build (${{ matrix.os }})
     # Skip LTS-suffixed tags — those go to release-win7.yml
-    if: "!contains(github.ref_name, '-lts')"
+    if: "!contains(github.ref_name, '-lts') && !contains(github.ref_name, '-win7')"
     strategy:
       fail-fast: false
       matrix:
@@ -49,11 +50,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
-    # Default suffix — empty placeholder.
-    # ⚠️ MUST be overridden by any step that uses ${env.ARTIFACT_SUFFIX}
-    # in electron-builder.yml artifactName. Windows job overrides below.
-    env:
-      ARTIFACT_SUFFIX: ''
+    # Note: main's electron-builder.yml no longer uses ${env.ARTIFACT_SUFFIX}
+    # in artifactName (commit 1a9dc5a simplified this). win7 LTS suffix is
+    # handled in release-win7.yml's own electron-builder.yml (literal '-win7').
 
     steps:
       - name: Checkout
@@ -71,7 +70,7 @@ jobs:
           path: |
             ~/.cache/electron
             ~/.cache/electron-builder
-          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-electron-${{ contains(github.ref_name, '-') && 'prerelease-' || '' }}${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
 
@@ -108,25 +107,26 @@ jobs:
 
       - name: Build Windows (NSIS installer)
         if: matrix.os == 'windows-latest'
-        env:
-          # Override default; produces Sage-Setup-${version}-win10.exe
-          ARTIFACT_SUFFIX: win10
         run: npx electron-builder --win nsis --publish never
 
       - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # tag_name 默认 = github.ref (即本次 push 的 tag),无需显式指定
+          tag_name: ${{ github.ref_name }}
           files: |
             release/*/Sage-*.AppImage
             release/*/sage_*_amd64.deb
-            release/*/Sage-Setup-*-win10.exe
-          # draft: true (本次发布先 draft, 人工审核后再 publish)
-          # 与 v0.1.2 流程一致: gh release create v0.1.2 --draft
+            release/*/Sage-Setup-*.exe
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          body: |
+            ## 🧪 Sage ${{ github.ref_name }}
+
+            > **This is a ${{ contains(github.ref_name, '-alpha') && 'ALPHA' || contains(github.ref_name, '-beta') && 'BETA' || contains(github.ref_name, '-rc') && 'RELEASE CANDIDATE' || 'STABLE' }} release.**
+            > ${{ contains(github.ref_name, '-alpha') && '⚠️ 仅供 Sage 贡献者使用，可能含已知 bug。' || contains(github.ref_name, '-beta') && '⚠️ 公开测试版，欢迎反馈 issue。' || contains(github.ref_name, '-rc') && '✅ 准稳定版，推荐广泛测试。' || '✅ 稳定版，推荐所有用户升级。' }}
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for details.
           draft: true
-          # 包含完整 commit history 和 changelog
           generate_release_notes: true
-          # 失败时仍上传部分产物 (其他平台可能成功)
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

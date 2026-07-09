@@ -12,8 +12,8 @@ SageAgent profile 接通测试（阶段 1）
 """
 
 from __future__ import annotations
-from typing import Optional
 
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

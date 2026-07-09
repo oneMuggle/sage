@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from typing import Any, List, Optional
 
 from sage_core import LLMError, Message, Role, ToolCall
@@ -38,6 +39,13 @@ except ImportError:
     MemoryPort = None  # type: ignore
     MemoryContext = None  # type: ignore
 
+from backend.domain.agent_event import RunEventScope
+from backend.domain.tool_policy import ToolPolicy
+from backend.orchestration.permission import (
+    AgentAction,
+    LanePermission,
+    PermissionPreset,
+)
 from backend.utils.otel import get_tracer
 
 logger = logging.getLogger(__name__)
@@ -78,6 +86,10 @@ class ChatService:
         metrics: MetricPort,
         events: EventPort,
         memory: Optional[MemoryPort] = None,  # Optional for backward compatibility
+        tool_policy: Optional[ToolPolicy] = None,  # M2 工具调用预算守卫
+        permission_preset: Optional[PermissionPreset] = None,  # M3 权限预设
+        permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
+        permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -86,6 +98,13 @@ class ChatService:
         self.metrics = metrics
         self.events = events
         self.memory = memory  # MemoryPort for memory integration
+        self._tool_policy = tool_policy or ToolPolicy()
+        # M3: 构造 LanePermission；缺省 IMPLEMENT 保持向后兼容
+        self._permission = LanePermission(
+            preset=permission_preset or PermissionPreset.IMPLEMENT,
+            allowed_paths=list(permission_allowed_paths or []),
+            denied_tools=list(permission_denied_tools or []),
+        )
         # P3.2: 当前活跃 session 计数（用于 sage_active_sessions gauge）
         self._active_session_count: int = 0
 
@@ -167,6 +186,11 @@ class ChatService:
         span: Any,
     ) -> List[Message]:
         """``run_turn`` 的实际实现，调用方需已开好 OTel span。"""
+        # M1: run-lifecycle 事件作用域（稳定 run_id + 单调 seq）
+        run = RunEventScope(self.events, uuid.uuid4().hex)
+        run.emit("run_start", session_id=session_id)
+        run.emit("turn_start", session_id=session_id)
+
         # 1) 持久化 user message
         await self.storage.append_message(session_id, user_message)
         self.events.emit(
@@ -281,6 +305,7 @@ class ChatService:
             )
             span.set_attribute("error", True)
             span.set_attribute("error.type", exc.type.value)
+            run.emit("run_end", session_id=session_id, status="error", error_type=exc.type.value)
             raise
 
         # 成功路径：直方图 + 成功 outcome
@@ -302,8 +327,9 @@ class ChatService:
         span.set_attribute("response.has_tool_calls", bool(response.tool_calls))
 
         # 4) 执行模型发起的 tool_calls（PG2.9：单轮执行；不触发二次 LLM）
+        budget_exceeded = False
         if response.tool_calls:
-            await self._execute_tool_calls(session_id, response.tool_calls)
+            budget_exceeded = await self._execute_tool_calls(session_id, response.tool_calls, run)
             # 埋点：ReAct 步数（9 指标之一）— 本轮触发的 tool_call 数
             self.metrics.histogram(
                 _REACT_STEPS_METRIC,
@@ -361,6 +387,11 @@ class ChatService:
                 logger.warning(f"Failed to compress working memory: {e}")
                 span.set_attribute("memory.compress_error", str(e))
 
+        run.emit(
+            "run_end",
+            session_id=session_id,
+            status="tool_budget_exceeded" if budget_exceeded else "ok",
+        )
         return [user_message, response]
 
     # ------------------------------------------------------------------ #
@@ -413,15 +444,29 @@ class ChatService:
         self,
         session_id: str,
         tool_calls: List[ToolCall],
-    ) -> None:
+        run: RunEventScope,
+    ) -> bool:
         """执行模型返回的 tool_calls，依次 emit 事件 / 计数 / 持久化。
 
         PG2.9 简化：每个 tool_call 都立即执行（不并发）、执行结果
         作为 ``role=TOOL`` 消息追加到会话历史，但不重新调 LLM。
         这样 P3+ 在此基础上扩展 ReAct 多轮循环时，行为是"在末尾
         加一层循环"，向后兼容。
+
+        M2 工具调用预算守卫：单次 run 内 tool_call 累计超
+        ``tool_policy.max_tool_calls_per_run`` 时停止执行；返回 ``True`` 让
+        上层把 ``run_end`` 标记为 ``status="tool_budget_exceeded"``（对齐
+        ``core/legacy/agent.py:611`` 的 ``max_iterations_exceeded`` 语义）。
+
+        Returns:
+            ``True`` 当预算被超额；否则 ``False``。
         """
+        budget = self._tool_policy.max_tool_calls_per_run
+        called = 0
         for tc in tool_calls:
+            if called >= budget:
+                # 预算用尽：剩余 tool_calls 不再执行，直接 break。
+                break
             self.events.emit(
                 "tool_invoked",
                 {"session_id": session_id, "tool": tc.name, "args": tc.args},
@@ -431,6 +476,28 @@ class ChatService:
                 _TOOL_INVOCATIONS_METRIC,
                 {"tool": tc.name, "outcome": "started"},
             )
+            # M3: 权限门禁——用 LanePermission.check 决定是否放行；
+            # 被拒时不调底层 tools.execute，直接返回 permission_denied。
+            target = _extract_action_target(tc.args)
+            action = AgentAction(action_type=tc.name, target=target, parameters=dict(tc.args))
+            decision = "allowed" if self._permission.check(action) else "denied"
+            if decision == "denied":
+                run.emit(
+                    "tool_result",
+                    session_id=session_id,
+                    tool=tc.name,
+                    success=False,
+                    error="permission_denied: action not permitted by "
+                    f"{self._permission.preset.value} preset",
+                    permission_decision="denied",
+                    resolved_path=target,
+                )
+                self.metrics.counter(
+                    _TOOL_INVOCATIONS_METRIC,
+                    {"tool": tc.name, "outcome": "denied"},
+                )
+                called += 1
+                continue
             result = await self.tools.execute(tc.name, tc.args)
             # 把工具结果作为 TOOL 消息回写会话历史
             tool_message = Message(
@@ -439,6 +506,17 @@ class ChatService:
                 tool_call_id=tc.id,
             )
             await self.storage.append_message(session_id, tool_message)
+            called += 1
+            # M1: 对称的 tool_result 事件（与 tool_invoked 成对，带 run_id + seq）
+            run.emit(
+                "tool_result",
+                session_id=session_id,
+                tool=tc.name,
+                success=result.success,
+                error=result.error if not result.success else None,
+                permission_decision="allowed",
+                resolved_path=target,
+            )
             if not result.success:
                 self.events.emit(
                     "tool_failed",
@@ -461,3 +539,22 @@ class ChatService:
                     _TOOL_INVOCATIONS_METRIC,
                     {"tool": tc.name, "outcome": "success"},
                 )
+        return called >= budget and len(tool_calls) > budget
+
+
+def _extract_action_target(args: dict) -> str:
+    """从工具参数中提取 ``LanePermission`` 关心的 target。
+
+    read/write/delete_file → ``path``；execute/shell → ``command``；其他 → 第一个 str 值。
+    """
+    if not args:
+        return ""
+    for key in ("path", "command", "cmd", "url"):
+        val = args.get(key)
+        if isinstance(val, str):
+            return val
+    # 退而求其次：第一个字符串值
+    for v in args.values():
+        if isinstance(v, str):
+            return v
+    return ""

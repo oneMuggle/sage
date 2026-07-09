@@ -1,6 +1,3 @@
-// TODO(M6): win7 M5 Sidebar 在 new chat 时用 createSession() (不 navigate /welcome)。
-// pre-7c76327 main 版本测 /welcome 行为与 win7 不兼容。M6 实施 Welcome 屏时移除 skip + 适配 createSession 路径。
-// 2026-06-28 (win7 phase 9 commit 7c76327) 删除,M5 实施时从 main 恢复,因行为差异暂跳。
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -50,7 +47,7 @@ function renderSidebar() {
   );
 }
 
-describe.skip('Sidebar — new chat button navigates to /welcome', () => {
+describe('Sidebar — new chat button navigates to /welcome', () => {
   it('renders the new chat button on the conversations section header', () => {
     renderSidebar();
     // The button is a Plus icon with aria-label translated to "新对话"

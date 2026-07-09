@@ -28,6 +28,7 @@ from backend.adapters.out.tool.compute_tool_adapter import (
     ComputeToolAdapter,
     _compute_result_to_tool_result,
 )
+from backend.domain.tool_policy import ToolPolicy
 
 # ---------- inner ToolPort 假实现(仅满足结构化协议) ----------
 
@@ -262,7 +263,7 @@ def test_translator_handles_failure_without_error_obj() -> None:
     """失败但 error=None → 仍能产出可用的 ToolResult。"""
     result = ComputeResult(success=False, raw_stdout="x")
 
-    tool_result = _compute_result_to_tool_result(result)
+    tool_result = _compute_result_to_tool_result(result, ToolPolicy())
 
     assert tool_result.success is False
     assert tool_result.error == "compute failed without error detail"
@@ -277,7 +278,7 @@ def test_translator_handles_non_json_serializable_output() -> None:
 
     result = ComputeResult(success=True, output={"obj": _NotSerializable()})
 
-    tool_result = _compute_result_to_tool_result(result)
+    tool_result = _compute_result_to_tool_result(result, ToolPolicy())
 
     assert tool_result.success is False
     assert tool_result.error is not None
@@ -288,7 +289,7 @@ def test_translator_empty_output_success() -> None:
     """success 且 output=None → ToolResult.output='{}'."""
     result = ComputeResult(success=True, output=None, duration_ms=10)
 
-    tool_result = _compute_result_to_tool_result(result)
+    tool_result = _compute_result_to_tool_result(result, ToolPolicy())
 
     assert tool_result.success is True
     assert json.loads(tool_result.output) == {}

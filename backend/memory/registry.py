@@ -5,9 +5,9 @@
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import logging
+from typing import Optional
 
 from backend.data.database import get_database
 from backend.memory.episodic import EpisodicMemory

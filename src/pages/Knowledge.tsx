@@ -13,6 +13,7 @@ import {
   WikiChat,
   WikiEditor,
   WikiGraphView,
+  WikiInsightsPanel,
   WikiProjectPicker,
   WikiSearch,
 } from '../widgets/wiki';
@@ -22,6 +23,7 @@ const VIEW_TITLES: Record<string, string> = {
   search: '搜索',
   chat: '对话',
   graph: '图谱',
+  insights: '洞察',
   lint: '质量检查',
   review: '审核队列',
   sources: '来源文件',
@@ -113,6 +115,7 @@ export function Knowledge() {
           {renderMainView(activeView, {
             openFile,
             graphData,
+            project,
           })}
         </div>
       </div>
@@ -126,6 +129,7 @@ export function Knowledge() {
 interface MainViewProps {
   openFile: (path: string) => Promise<void>;
   graphData: ReturnType<typeof useWikiStore.getState>['graphData'];
+  project: ReturnType<typeof useWikiStore.getState>['project'];
 }
 
 function renderMainView(activeView: string, props: MainViewProps) {
@@ -147,6 +151,14 @@ function renderMainView(activeView: string, props: MainViewProps) {
       ) : (
         <div className="flex h-full items-center justify-center text-muted text-sm">
           加载图谱中...
+        </div>
+      );
+    case 'insights':
+      return props.project ? (
+        <WikiInsightsPanel projectPath={props.project.path} onNodeClick={handleOpenFile} />
+      ) : (
+        <div className="flex h-full items-center justify-center text-muted text-sm">
+          请先选择项目
         </div>
       );
     case 'lint':

@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Globe,
   MessageCircle,
+  Sparkles,
 } from 'lucide-react';
 
 import { useResearchStore } from '../../entities/wiki/research-store';
@@ -20,6 +21,7 @@ const NAV_ITEMS: { view: WikiView; icon: React.ElementType; label: string }[] = 
   { view: 'search', icon: Search, label: '搜索' },
   { view: 'chat', icon: MessageCircle, label: '对话' },
   { view: 'graph', icon: Network, label: '图谱' },
+  { view: 'insights', icon: Sparkles, label: '洞察' },
   { view: 'lint', icon: CheckSquare, label: '质量检查' },
   { view: 'review', icon: ClipboardList, label: '审核' },
   { view: 'sources', icon: FolderOpen, label: '来源' },

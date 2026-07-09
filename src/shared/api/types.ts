@@ -255,7 +255,7 @@ export interface AgentUpdate {
   description?: string;
 }
 
-// ─── Scheduled Tasks (M3) ───────────────────────────────
+// ─── Scheduled Tasks (Phase 8) ───────────────────────────────
 
 export type ScheduleKind = 'once' | 'recurring';
 

@@ -1,12 +1,12 @@
 // Wiki Chat - ask questions and get synthesized answers (with streaming)
 import { Send, BookOpen } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { resolveEndpoint } from '../../entities/setting/types';
 import { useWikiStore } from '../../entities/wiki/store';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useWikiChatStream } from '../../features/wiki/useWikiChatStream';
-import { wikiChat } from '../../shared/api-client/wiki';
+import { wikiChatStream } from '../../shared/api-client/wiki';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -25,6 +25,26 @@ export function WikiChat() {
   const [streamId, setStreamId] = useState<string | null>(null);
   const stream = useWikiChatStream(streamId);
 
+  // PR-2 Task 5: the hook (`useWikiChatStream`) owns the per-stream
+  // listeners and flips `stream.streaming` to false on done/error. Mirror
+  // that into the local `loading` flag so the "正在思考..." placeholder
+  // goes away when the stream ends — we no longer have a try/finally around
+  // a single await because the streaming response resolves immediately.
+  //
+  // Dep is `[stream.streaming]` only — NOT `streamId` or `stream.error` —
+  // because on the render where streamId just changed, the hook's own
+  // useEffect has not yet executed its `setState({streaming: true})`, so
+  // a dep of `[streamId, stream.streaming]` would observe the stale
+  // streaming=false value and prematurely clear `loading`. Hook transitions
+  // streaming: false → true (subscribed) → false (done/error); watching
+  // the false→true→false toggles naturally skips the initial-false render.
+  useEffect(() => {
+    if (!stream.streaming) {
+      // Hook finished streaming (done or error event fired).
+      setLoading(false);
+    }
+  }, [stream.streaming]);
+
   const chatEndpoint = resolveEndpoint(
     settings.settings.modelSelections.chatModel,
     settings.settings.endpoints,
@@ -40,30 +60,25 @@ export function WikiChat() {
     setInput('');
     setLoading(true);
 
-    const newStreamId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setStreamId(newStreamId);
-
     try {
-      const response = await wikiChat(
+      // `wikiChatStream` is invoke-only — it does NOT subscribe to the
+      // per-stream channels. We hand the returned `streamId` straight to
+      // the `useWikiChatStream` hook above so it builds
+      // `wiki-chat-stream-{streamId}-chunk/done/error` listeners against
+      // the same id the Electron main relay is publishing to.
+      const { streamId: serverStreamId } = await wikiChatStream({
         query,
-        project.path,
-        chatEndpoint.baseUrl,
-        chatEndpoint.apiKey,
-        chatModelId,
-        chatEndpoint.baseUrl, // 复用 chat 端点作为 embedding 端点(MVP)
-        chatEndpoint.apiKey,
-        'text-embedding-3-small', // 默认 embedding 模型
-      );
-
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: response.answer,
-        citations: response.citations,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+        projectPath: project.path,
+        llmBaseUrl: chatEndpoint.baseUrl,
+        llmApiKey: chatEndpoint.apiKey,
+        llmModel: chatModelId,
+        embedBaseUrl: chatEndpoint.baseUrl, // 复用 chat 端点作为 embedding 端点(MVP)
+        embedApiKey: chatEndpoint.apiKey,
+        embedModel: 'text-embedding-3-small', // 默认 embedding 模型
+      });
+      setStreamId(serverStreamId);
     } catch (e) {
       setMessages((prev) => [...prev, { role: 'assistant', content: `查询失败: ${e}` }]);
-    } finally {
       setLoading(false);
     }
   };

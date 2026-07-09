@@ -42,7 +42,15 @@ export interface WikiChatResponse {
   citations: string[];
 }
 
-export type WikiView = 'browser' | 'search' | 'chat' | 'graph' | 'lint' | 'review' | 'sources';
+export type WikiView =
+  | 'browser'
+  | 'search'
+  | 'chat'
+  | 'graph'
+  | 'lint'
+  | 'review'
+  | 'sources'
+  | 'insights';
 
 // Lint 检查项
 export interface LintItem {
@@ -118,4 +126,33 @@ export interface GraphEdge {
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+}
+
+// --- Added 2026-06-27: folder picker support ---
+
+export interface ProjectCheckResponse {
+  exists: boolean;
+  writable: boolean;
+  is_project: boolean;
+  parent_writable: boolean;
+  warning: string | null;
+  error: string | null;
+}
+
+export interface RecentProject {
+  path: string;
+  name: string;
+  opened_at: number;
+  intent: 'create' | 'open';
+}
+
+export interface RecordRecentRequest {
+  path: string;
+  name: string;
+  intent: 'create' | 'open';
+}
+
+export interface SelectDirectoryOpts {
+  intent: 'create' | 'open';
+  defaultPath?: string;
 }

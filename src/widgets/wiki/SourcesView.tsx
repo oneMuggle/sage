@@ -3,16 +3,62 @@ import { FolderPlus, Upload } from 'lucide-react';
 import { useState } from 'react';
 
 import { mockSourcesTree } from '../../entities/wiki/mock-data';
+import { useWikiStore } from '../../entities/wiki/store';
+import { useWikiIngest } from '../../features/wiki/useWikiIngest';
+import { wikiIngestStream } from '../../shared/api-client/wiki';
 
 import { SourcesTree } from './SourcesTree';
+import { WikiIngestProgress } from './WikiIngestProgress';
 
 export function SourcesView() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [ingestId, setIngestId] = useState<string | null>(null);
+  const project = useWikiStore((s) => s.project);
 
-  // 模拟操作处理
-  const handleIngest = (path: string) => {
-    // 模拟导入操作
-    alert(`模拟导入: ${path}`);
+  // PR-3 Task 4: `useWikiIngest(ingestId)` is the existing hook that
+  // subscribes to `wiki-ingest-{id}-progress` and exposes
+  // {progress, done, error}. Setting `ingestId` triggers the listener;
+  // clearing it (via `reset`) hides the bar. We feed the hook output
+  // straight into <WikiIngestProgress> for the live STAGE_LABELS bar.
+  const ingest = useWikiIngest(ingestId);
+
+  // PR-3 Task 4: replace the previous `alert(\`模拟导入: ${path}\`)` mock
+  // with a real stream invocation. `wikiIngestStream` is invoke-only — it
+  // returns the server-allocated streamId immediately; the backend relay
+  // publishes `sage:event:wiki-ingest-{streamId}-progress` events which
+  // the existing `useWikiIngest` hook subscribes to.
+  //
+  // LLM config is currently placeholder-empty — wiring `useSettings()` is
+  // a known follow-up. Empty placeholders let the IPC + UI wiring round-
+  // trip cleanly; the backend will reject the empty llm_model on its end
+  // (so the user sees a failed progress event rather than a working
+  // import until the follow-up lands).
+  const handleIngest = async (path: string) => {
+    if (!project) {
+      // Reset hook state so the user can retry after opening a project.
+      ingest.reset();
+      return;
+    }
+    try {
+      const { streamId } = await wikiIngestStream({
+        sourceFile: path,
+        projectPath: project.path,
+        // TODO(PR-3 follow-up): resolve from `useSettings()` like
+        // WikiChat.tsx (resolveEndpoint + chatModel.modelId).
+        llmBaseUrl: '',
+        llmApiKey: '',
+        llmModel: '',
+        embedBaseUrl: '',
+        embedApiKey: '',
+        embedModel: '',
+      });
+      setIngestId(streamId);
+    } catch {
+      // Invoke-only failure (IPC dispatch error). Swallow silently —
+      // the main process IPC layer logs this kind of error, and the
+      // user sees no progress UI change (the failed stream never
+      // produced a streamId so `useWikiIngest` stays idle).
+    }
   };
 
   const handleDelete = (path: string) => {
@@ -41,6 +87,15 @@ export function SourcesView() {
           </button>
         </div>
       </div>
+
+      {/* PR-3 Task 4: render live ingest progress when a stream is active.
+          Component reads `progress`, `done`, `error` and renders the
+          STAGE_LABELS-driven bar; collapses to null when none are set. */}
+      {(ingest.progress || ingest.done || ingest.error) && (
+        <div className="border-b border-border px-4 py-3 bg-surface" data-testid="ingest-progress">
+          <WikiIngestProgress progress={ingest.progress} done={ingest.done} error={ingest.error} />
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex flex-1 overflow-hidden">

@@ -113,34 +113,6 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/scheduled/tasks/${encodeURIComponent(String(a.id))}/run`,
   },
 
-  // orchestration (Phase 4 — multi-agent coordination)
-  orchestration_list_lanes: {
-    method: 'GET',
-    path: (a) => {
-      const params = new URLSearchParams();
-      const p = (a?.params ?? {}) as Record<string, unknown>;
-      if (p.status) params.set('status', String(p.status));
-      if (p.team_id) params.set('team_id', String(p.team_id));
-      if (p.limit) params.set('limit', String(p.limit));
-      const qs = params.toString();
-      return `/api/v1/orchestration/lanes${qs ? `?${qs}` : ''}`;
-    },
-  },
-  orchestration_get_lane: {
-    method: 'GET',
-    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id ?? a.laneId))}`,
-  },
-  orchestration_list_lane_events: {
-    method: 'GET',
-    path: (a) =>
-      `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id ?? a.laneId))}/events`,
-  },
-  orchestration_cancel_lane: {
-    method: 'POST',
-    path: (a) =>
-      `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id ?? a.laneId))}/cancel`,
-  },
-
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)
   theme_list: { method: 'GET', path: () => '/api/v1/theme/list' },
@@ -150,7 +122,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/theme/get/${encodeURIComponent(String(a.id))}`,
   },
   theme_delete: { method: 'POST', path: () => '/api/v1/theme/delete' },
-  // skills (PR-7) - from PR #85 (8b80d48)
+
+  // skills (PR-7)
   // src/pages/Skills.tsx calls skillsApi.list() / .toggle() / .execute()
   // which route through these IPC names. Backend exposes matching endpoints
   // at backend/api/legacy_routes.py:487-559. Without these entries the
@@ -168,6 +141,37 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/delete`,
   },
+
+  // Path B: list user-invocable SKILL.md slash command names.
+  // Returns {commands: ["/name1", "/name2", ...]} for skills with
+  // user_invocable: true. Used by ChatInput to merge into the slash menu.
+  list_slash_commands: { method: 'GET', path: () => '/api/v1/skills/commands' },
+
+  // orchestration (Phase 4: multi-agent coordination)
+  orchestration_list_lanes: {
+    method: 'GET',
+    path: (a) => {
+      const params = (a?.params as Record<string, unknown>) ?? {};
+      const search = new URLSearchParams();
+      if (params.status) search.set('status', String(params.status));
+      if (params.team_id) search.set('team_id', String(params.team_id));
+      if (params.limit) search.set('limit', String(params.limit));
+      const qs = search.toString();
+      return `/api/v1/orchestration/lanes${qs ? `?${qs}` : ''}`;
+    },
+  },
+  orchestration_get_lane: {
+    method: 'GET',
+    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}`,
+  },
+  orchestration_list_lane_events: {
+    method: 'GET',
+    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/events`,
+  },
+  orchestration_cancel_lane: {
+    method: 'POST',
+    path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/cancel`,
+  },
 };
 
 export class UnknownIpcCommandError extends Error {
@@ -179,3 +183,14 @@ export class UnknownIpcCommandError extends Error {
     this.name = 'UnknownIpcCommandError';
   }
 }
+
+/**
+ * Module-level Map: streamId → AbortController.
+ *
+ * Tracks in-flight streaming IPC commands (e.g. `wiki_chat_stream`) so the
+ * renderer can abort the backend HTTP request via `sage:unlisten` when it
+ * unsubscribes. The controller is created when the stream starts and
+ * removed in the `finally` block of the relay loop on normal completion,
+ * error, or abort. Read by main.ts on `sage:unlisten`.
+ */
+export const streamControllers = new Map<string, AbortController>();

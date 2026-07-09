@@ -6,7 +6,7 @@ Memory Consolidation Pipeline - 记忆压缩管道
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from backend.core.legacy.llm_client import LLMClient

@@ -1,69 +1,44 @@
 /**
- * i18n — 自研国际化 Provider（API 与 main 100% 兼容 + win7 增强）
+ * i18n — 轻量国际化系统
  *
  * 用法:
- *   <I18nProvider>
- *     <App />
- *   </I18nProvider>
- *
  *   const { t, locale, setLocale } = useI18n();
  *   <h1>{t('chat.title')}</h1>
- *
- * 架构:
- *   - locale 状态用 Zustand store（持久化到 localStorage）
- *   - t 函数在 Provider 内 useMemo 构造（依赖 locale）
- *   - 通过 Context 暴露 { locale, setLocale, t }
- *
- * 增强（超越 main）:
- *   - locale 自动持久化（main 无）
- *   - t() 支持 {placeholder}（main 无）
- *   - fallback 链 current → zh → key 字符串（main 只 current → key）
  */
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 
 import { en } from './en';
-import { formatMessage } from './formatMessage';
-import { useLocaleStore } from './useLocaleStore';
-import { zh, type TranslationKey, type Locale } from './zh';
+import { zh, type TranslationKey } from './zh';
 
-// 统一 re-export 类型
-export type { Locale, TranslationKey } from './zh';
+export type Locale = 'zh' | 'en';
+
+const translations: Record<Locale, Record<TranslationKey, string>> = { zh, en };
 
 interface I18nContextValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  /** 翻译函数：fallback 链 current → zh → key 字符串；支持 {placeholder}。 */
-  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
+  t: (key: TranslationKey) => string;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 interface I18nProviderProps {
   children: ReactNode;
-  /** 测试用：跳过持久化的初始 locale(M5 恢复的 main 测试用 defaultLocale="zh") */
   defaultLocale?: Locale;
 }
 
-export function I18nProvider({ children, defaultLocale }: I18nProviderProps) {
-  // 精细订阅：只选 locale 和 setLocale，避免 store 其他字段变化触发重渲染
-  const storeLocale = useLocaleStore((s) => s.locale);
-  const setLocale = useLocaleStore((s) => s.setLocale);
+export function I18nProvider({ children, defaultLocale = 'zh' }: I18nProviderProps) {
+  const [locale, setLocale] = useState<Locale>(defaultLocale);
 
-  // 如果传入 defaultLocale,测试场景下覆盖 store 初始值(不写回 store,避免污染)
-  const locale = defaultLocale ?? storeLocale;
+  const t = useCallback(
+    (key: TranslationKey): string => {
+      return translations[locale][key] ?? key;
+    },
+    [locale],
+  );
 
-  const value = useMemo<I18nContextValue>(() => {
-    const translations: Record<Locale, Record<string, string>> = { zh, en };
-    const t: I18nContextValue['t'] = (key, params) => {
-      const direct = translations[locale][key];
-      const fallback = direct ?? translations.zh[key] ?? key;
-      return params ? formatMessage(fallback, params) : fallback;
-    };
-    return { locale, setLocale, t };
-  }, [locale, setLocale]);
-
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+  return <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -74,3 +49,5 @@ export function useI18n(): I18nContextValue {
   }
   return ctx;
 }
+
+export type { TranslationKey } from './zh';

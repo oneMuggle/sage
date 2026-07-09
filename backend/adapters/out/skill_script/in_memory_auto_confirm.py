@@ -12,9 +12,9 @@
 """
 
 from __future__ import annotations
-from typing import Tuple
 
 from pathlib import Path
+from typing import Tuple
 
 
 class InMemoryAutoConfirmAdapter:

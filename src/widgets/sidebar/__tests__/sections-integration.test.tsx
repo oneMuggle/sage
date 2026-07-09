@@ -1,6 +1,3 @@
-// TODO(M6): win7 M5 Sidebar 在 new chat 时用 createSession() (不 navigate /welcome)。
-// pre-7c76327 main 版本测 /welcome 行为与 win7 不兼容。M6 实施 Welcome 屏时移除 skip + 适配 createSession 路径。
-// 2026-06-28 (win7 phase 9 commit 7c76327) 删除,M5 实施时从 main 恢复,因行为差异暂跳。
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,7 +37,7 @@ const mockSessions = [
   },
 ];
 
-describe.skip('Sidebar Sections Integration', () => {
+describe('Sidebar Sections Integration', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.resetModules();
