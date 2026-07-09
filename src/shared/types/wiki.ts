@@ -37,11 +37,6 @@ export interface IngestResult {
   page_type: string;
 }
 
-export interface WikiChatResponse {
-  answer: string;
-  citations: string[];
-}
-
 export type WikiView =
   | 'browser'
   | 'search'

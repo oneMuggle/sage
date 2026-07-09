@@ -2,13 +2,12 @@
 
 提供 Wiki 子系统的 HTTP API：文件操作、搜索、Ingest、Chat、Graph、Research、Clip。
 """
-
 import logging
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import AsyncIterator, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -528,6 +527,7 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
         raise HTTPException(status_code=404, detail="源文件不存在")
 
     # 同步解析文档（PDF/DOCX 等），失败时在 stream 开启前抛 HTTPException
+    temp_md: Optional[Path] = None
     try:
         content = parse_document(source_file)
 
@@ -540,6 +540,8 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
             source_file = temp_md
     except Exception as e:
         logger.error(f"文档解析失败: {e}")
+        if temp_md is not None:
+            temp_md.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=f"文档解析失败: {e}")
 
     # 配置
@@ -559,8 +561,16 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
         llm_model=req.llm_model,
     )
 
+    async def _stream_with_cleanup() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in ingest_source_stream(config, project_root, source_file, ctx):
+                yield chunk
+        finally:
+            if temp_md is not None:
+                temp_md.unlink(missing_ok=True)
+
     return StreamingResponse(
-        ingest_source_stream(config, project_root, source_file, ctx),
+        _stream_with_cleanup(),
         media_type="application/x-ndjson",
         headers={
             "Cache-Control": "no-cache",
