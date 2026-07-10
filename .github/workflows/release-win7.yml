@@ -79,6 +79,14 @@ jobs:
           ARTIFACT_SUFFIX: ${{ steps.suffix.outputs.value }}
         run: npx electron-builder --win nsis --publish never
 
+      - name: Promote release/stable-win7 mirror
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha') && endsWith(github.ref_name, '-win7')
+        run: |
+          python scripts/release/release_branches.py promote-stable \
+            --tier stable --tag ${{ github.ref_name }} --branch release/stable-win7
+        env:
+          SAGE_RELEASE_BOT_TOKEN: ${{ secrets.SAGE_RELEASE_BOT_TOKEN }}
+
       - name: Upload to LTS GitHub Release
         uses: softprops/action-gh-release@v2
         with:
