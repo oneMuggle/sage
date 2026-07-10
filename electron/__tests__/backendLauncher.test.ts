@@ -48,15 +48,7 @@ describe('resolveBackendLaunchCommand', () => {
       expect(plan).toMatchObject({
         kind: 'spawn',
         cmd: 'python3',
-        args: [
-          '-m',
-          'uvicorn',
-          'backend.main:app',
-          '--host',
-          '127.0.0.1',
-          '--port',
-          '8765',
-        ],
+        args: ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', '8765'],
         reason: 'dev-conda-overridden',
       });
     });
