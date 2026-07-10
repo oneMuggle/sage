@@ -17,7 +17,7 @@ Exit codes (per docs/superpowers/specs/2026-07-10-release-branch-strategy-design
   2  cross-minor guard: previous release/vX.Y.0 not finalized
   3  cherry-pick conflict (during finalize merge to main)
   4  force-with-lease detected remote ref diverged
-  5  finalize refused: main is ahead of vX.Y.0
+  5  finalize refused: main is ahead of vX.Y.0  [reserved — not currently returned; deferred per plan Step 2.7]
   6  invalid tag format
 """
 import argparse
@@ -195,10 +195,11 @@ def cmd_finalize(args: argparse.Namespace) -> int:
         text=True,
     )
     if delete.returncode != 0:
-        # 分支删除失败不影响主流程
+        # 分支删除失败不影响主流程,但 success 消息必须如实反映
         print(f"warning: failed to delete {branch_name}: {delete.stderr}", file=sys.stderr)
-
-    print(f"finalized {branch_name}: merged to {main_branch} and deleted")
+        print(f"finalized {branch_name}: merged to {main_branch} (delete failed, manual cleanup needed)")
+    else:
+        print(f"finalized {branch_name}: merged to {main_branch} and deleted")
     return 0
 
 
