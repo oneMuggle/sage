@@ -25,7 +25,15 @@
 
 > 状态：💭 Backlog | 🎯 Next Up | 📋 Planned
 > 日期：YYYY-MM-DD
-> 关联：<相关 spec / plan / issue / 外部参考>
+> 关联：[`spec-name`](path/to/spec.md) · [`plan-name`](path/to/plan.md) · [`docs/technical/25-llm-wiki-integration.md`](../../technical/25-llm-wiki-integration.md)
+
+> 💡 关联 ≥5 项时改为 multi-line bullet，更易读：
+> ```
+> > 关联：
+> > - [`spec-1`](path/to/spec-1.md) §X
+> > - [`plan-2`](path/to/plan-2.md) §Y
+> > - ...
+> ```
 
 ## 动机
 为什么想做？解决什么痛点？
@@ -47,16 +55,34 @@
 
 ## 工作流
 
+**ideas/ 内状态机**（状态字段写在每个 idea 的 frontmatter `> 状态：` 里）：
+
 ```
-💭 想法诞生
-   ↓ 写下 docs/superpowers/ideas/<date>-<slug>.md (轻量)
-🎯 决定要做了 → 升级
-   ↓ 移动到 docs/superpowers/specs/<date>-<slug>-design.md (写正式设计)
-📋 决定实施了
-   ↓ 移动到 docs/superpowers/plans/<date>-<slug>.md (写实施步骤)
-✅ 完成
-   ↓ 归档到 docs/technical/<XX>-<topic>.md，删除中间产物
+💭 Backlog  ──→  🎯 Next Up  ──→  📋 Planned
+                                  │
+                                  │ 升级（移动文件 + 加 "> 已升级到: specs/xxx"）
+                                  ↓
+                      docs/superpowers/specs/<date>-<slug>-design.md
+                                  │
+                                  │ 写实施步骤
+                                  ↓
+                      docs/superpowers/plans/<date>-<slug>.md
+                                  │
+                                  │ 完成
+                                  ↓
+                      docs/technical/<XX>-<topic>.md
 ```
+
+**状态含义**：
+
+| 阶段 | 含义 | 在哪 |
+|---|---|---|
+| 💭 Backlog | 想法刚萌芽，没明确触发 | ideas/ |
+| 🎯 Next Up | 触发条件满足或很快满足，1-2 周内升级 | ideas/ |
+| 📋 Planned | 已写 spec 或粗略规划过，准备实施 | ideas/ |
+| specs/ | 已写正式设计文档，等待 feature-development.md 流程 | specs/ |
+| plans/ | feature-development.md 流程进行中 | plans/ |
+| technical/ | 完成归档 | technical/ |
 
 ## 状态分类
 
