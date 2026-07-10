@@ -50,6 +50,16 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ### Added
 - feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)
+- feat(release): main-branch Python bundling (`scripts/bundle-python-main.ps1`) — wraps Python 3.11 embeddable + `backend/requirements.txt` (main, pydantic 2.x) + `packages/sage-core` into the same `resources/` tree that `electron-builder.yml` extraResources expects. Mirrors `scripts/bundle-python.ps1` (Win7 LTS, Py 3.8).
+- feat(electron): `electron/backendLauncher.ts` — pure-function resolver that picks the right Python launcher (dev conda / packaged Win / packaged Linux / macOS unsupported / unknown platform). Replaces the inline `if (pyLauncher)` branch in `electron/main.ts#spawnBackend()` so the decision is unit-testable.
+- test(electron): `electron/__tests__/backendLauncher.test.ts` — 12 cases including a regression assertion that packaged Win32 with missing `python.exe` MUST NOT fall back to `conda` (the original spawn-conda ENOENT bug).
+
+### Fixed
+- **fix(electron): packaged Win installer crashed with "spawn conda ENOENT" at startup** — root cause was twofold and both layers fixed in this PR:
+  1. **Resolver layer** (`electron/main.ts` + new `electron/backendLauncher.ts`): previously `spawnBackend()` fell back to `spawn('conda', ...)` whenever bundled Python didn't exist. End-user Windows machines have no `conda`, so this surfaced as an opaque main-process JavaScript crash that buried the real cause (missing bundled Python). Now: in `app.isPackaged` mode the resolver refuses to call `conda` and instead surfaces a clear "Python 后端未找到 (安装包可能损坏)" dialog pointing users to the GitHub releases page to reinstall. macOS / unknown-platform packaged builds also short-circuit to informative dialogs instead of crashing.
+  2. **CI layer** (`.github/workflows/release.yml`): previously the main release workflow was missing the `bundle-python` step that `release-win7.yml` has had since the Win7 LTS split. Without it the Windows NSIS installer was shipping without `resources/python/`. Now `release.yml` calls `pwsh scripts/bundle-python-main.ps1` on the Windows runner before `electron-builder`, so main-branch releases produce a self-contained installer.
+  - **Known follow-up**: Linux Python bundling (Ubuntu AppImage / deb) is still missing. No Python "embeddable" distribution exists for Linux; needs a portable distribution (e.g. `python-build-standalone` / PyInstaller) — out of scope for this bug-fix PR.
+  - **12 new vitest cases** cover both packaged branches + dev branch + broken-installer paths.
 - feat(wiki): gate folder picker Browse button behind `appSettings.wiki.useFolderPicker` (default true; set false to fall back to plain text input — see §8 rollback in plan)
 - feat(skills): conform `backend/skills/skill_md/` to agentskills.io spec
   - Add optional fields: `license`, `compatibility` (≤500 chars), `allowed-tools`
