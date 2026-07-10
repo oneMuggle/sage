@@ -46,10 +46,31 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Documentation
 - docs(wiki): 25-llm-wiki-integration.md 新增 "流式架构" section (10 章节) 描述 PR-114+115+116 架构 (PR-125)
 
-## [Unreleased]
+## [Unreleased] — for changes after v0.4.5-alpha.1
+
+### Added
+
+### Fixed
+
+### Changed
+
+## [v0.4.5-alpha.1] - 2026-07-10
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**spawn conda ENOENT 修复 + main-branch Python bundling** (PR #130, 6 commits / 8 files / +914 -75)。修复了 main 分支 Windows NSIS installer 因缺 Python bundling 步骤导致 end-user 启动时抛"a javascript error occurred in the main process"的根因。Resolver + bundling 双层修复，新 resolver 函数 13 个 vitest cases 覆盖全分支。
 
 ### Added
 - feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)
+- feat(release): main-branch Python bundling (`scripts/bundle-python-main.ps1`) — wraps Python 3.11 embeddable + `backend/requirements.txt` (main, pydantic 2.x) + `packages/sage-core` into the same `resources/` tree that `electron-builder.yml` extraResources expects. Mirrors `scripts/bundle-python.ps1` (Win7 LTS, Py 3.8), with main-branch-specific fixes cherry-picked from release/win7 LTS commits 4cea570 / 2689cb8 / a20c061 / 973d44c (python311._pth `..` path import + `import backend.main` canary + `LASTEXITCODE` guards + no dead `start-backend.bat` + precise `resources/` cleanup).
+- feat(electron): `electron/backendLauncher.ts` — pure-function resolver that picks the right Python launcher (dev conda / SAGE_PYTHON override raw-python / packaged Win / packaged Linux / macOS unsupported / unknown platform). Replaces the inline `if (pyLauncher)` branch in `electron/main.ts#spawnBackend()` so the decision is unit-testable.
+
+### Fixed
+- **fix(electron): packaged Win installer crashed with "spawn conda ENOENT" at startup** — root cause was two-layer, fixed in this PR + review pass:
+  1. **Resolver layer** (`electron/main.ts` + new `electron/backendLauncher.ts`): previously `spawnBackend()` fell back to `spawn('conda', ...)` whenever bundled Python didn't exist. End-user Windows machines have no `conda`, so this surfaced as an opaque main-process JavaScript crash that buried the real cause. The resolver now refuses to call `conda` in `app.isPackaged` mode and instead surfaces a clear "Python 后端未找到 (安装包可能损坏)" dialog pointing users to the GitHub releases page to reinstall; macOS / unknown-platform packaged builds short-circuit to informative dialogs.
+  2. **CI layer** (`.github/workflows/release.yml`): previously the main release workflow was missing the `bundle-python` step that `release-win7.yml` had since the Win7 LTS split. `release.yml` now calls `pwsh scripts/bundle-python-main.ps1` on the Windows runner before `electron-builder`, so main-branch releases produce a self-contained installer.
+  3. **Hardening** (review pass after PR was opened): spawn-backend now has a `'error'` handler so AV/ACL/ENOEXEC failures don't crash the main process; the second misleading "30s 后端超时" dialog is suppressed when the broken-installer dialog already fired (`reportedBrokenInstaller` sentinel); `SAGE_PYTHON=python3` override no longer produces a broken `python3 run -n ...` spawn (the resolver now distinguishes conda-style vs raw-python commands).
+  4. **`electron-builder.yml` extraResources trimmed**: dropped the dead `resources/start-backend.bat` entry (main.ts spawns `python.exe` directly via the resolver, never invokes the .bat — same cleanup release/win7 applied in 973d44c).
+  - **Known follow-up**: Linux Python bundling (Ubuntu AppImage / deb) is still missing. No Python "embeddable" distribution exists for Linux; needs `python-build-standalone` or PyInstaller — out of scope for this bug-fix PR.
+  - **13 new vitest cases** cover both packaged branches + dev branch + SAGE_PYTHON override (incl. a regression guard that `python3` override does NOT emit conda-flavoured args).
 - feat(wiki): gate folder picker Browse button behind `appSettings.wiki.useFolderPicker` (default true; set false to fall back to plain text input — see §8 rollback in plan)
 - feat(skills): conform `backend/skills/skill_md/` to agentskills.io spec
   - Add optional fields: `license`, `compatibility` (≤500 chars), `allowed-tools`

@@ -44,7 +44,6 @@ logger.info('main: process started', {
 });
 
 import { spawn, ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import http from 'node:http';
 import fetch from 'node-fetch';
@@ -56,6 +55,7 @@ import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
+import { resolveBackendLaunchCommand } from './backendLauncher';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -107,29 +107,35 @@ app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPAC
 let backendProc: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 
+// Set by spawnBackend() when the resolver reports a broken installer, so the
+// startup-failure path in app.whenReady() can SKIP its own dialog (which
+// would otherwise show a misleading "port 8765 occupied / conda not installed"
+// message 30s after the user already saw the accurate broken-installer dialog).
+//
+// Without this sentinel the user would see two stacked modal dialogs: a
+// correct one immediately, then a misleading one ~30s later.
+let reportedBrokenInstaller = false;
+
 /**
- * Locate the Python interpreter for the sage-backend conda env.
- * - Dev (running from repo): use `conda run -n sage-backend python`
- * - Packaged app: ship a launcher script (electron-builder extraResources)
+ * Locate and spawn the Python interpreter that runs the FastAPI backend.
  *
- * Phase 1 implementation: only handles dev path; packaged launcher is
- * Phase 3 work (Win7 NSIS installer extraResources section).
+ * Decision logic lives in `electron/backendLauncher.ts` (pure, unit-tested).
+ * This wrapper:
+ *   1. Computes SAGE_DB_PATH (uses electron's userData when packaged).
+ *   2. Calls the resolver.
+ *   3. spawns the returned cmd, OR — if the resolver says the installer is
+ *      broken (bundled Python missing, macOS unsupported, etc.) — surfaces a
+ *      user-friendly error dialog and returns a no-op stub process that exits
+ *      immediately.
+ *
+ * Why "broken installer" → dialog instead of "spawn conda as fallback":
+ *   The previous implementation fell back to `spawn('conda', ...)` when
+ *   bundled Python was missing. End-user machines have no conda, so this
+ *   produced an opaque "spawn conda ENOENT" JavaScript crash in the main
+ *   process — the actual cause (missing bundled Python) was hidden.
+ *   We now refuse the fallback in packaged mode and tell the user what to do.
  */
 function spawnBackend(): ChildProcess {
-  // Pick the right launcher based on platform / packaging
-  const condaCmd = process.env.SAGE_PYTHON ?? 'conda';
-  // Run as a module so `from backend.adapters...` absolute imports resolve
-  // (running `python backend/main.py` puts the script's dir on sys.path[0],
-  // which makes the `backend` package unfindable).
-  const condaArgs = ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'];
-
-  // On Windows, prefer `pythonw` (no console) when packaged; fallback to `python`
-  const pyLauncher =
-    process.platform === 'win32' &&
-    existsSync(join(process.resourcesPath ?? '', 'python', 'python.exe'))
-      ? join(process.resourcesPath, 'python', 'python.exe')
-      : null;
-
   // Resolve SAGE_DB_PATH once so both packaged and dev spawn paths share it.
   // Backend prefers this env var; falls back to:
   //   - Dev (running from repo): <repo>/data/sage.db (project-local DB so
@@ -142,36 +148,45 @@ function spawnBackend(): ChildProcess {
       ? join(app.getPath('userData'), 'sage.db')
       : join(process.cwd(), 'data', 'sage.db'));
 
-  let proc: ChildProcess;
-  if (pyLauncher) {
-    // Packaged Win: launch bundled Python directly
-    // Set PYTHONPATH to include backend and sage-core from resources
-    const pythonPath = [
-      join(process.resourcesPath, 'backend'),
-      join(process.resourcesPath, 'sage-core'),
-    ].join(process.platform === 'win32' ? ';' : ':');
+  const plan = resolveBackendLaunchCommand({
+    env: process.env,
+    resourcesPath: process.resourcesPath,
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    sageDbPath,
+    port: BACKEND_PORT,
+  });
 
-    proc = spawn(
-      pyLauncher,
-      ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)],
-      {
-        env: {
-          ...process.env,
-          SAGE_DB_PATH: sageDbPath,
-          PYTHONPATH: pythonPath,
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true,
-      },
-    );
-  } else {
-    // Dev: delegate to conda
-    proc = spawn(condaCmd, condaArgs, {
-      env: { ...process.env, SAGE_DB_PATH: sageDbPath },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
+  if (plan.kind === 'broken-installer') {
+    logger.error('main: broken installer — bundled Python missing', {
+      reason: plan.reason,
+      detail: plan.detail,
     });
+    // Mark so the health-timeout branch in app.whenReady() suppresses its
+    // own (misleading) "port occupied / conda" dialog 30s later. Without
+    // this, the user sees two stacked modal dialogs about the same problem.
+    reportedBrokenInstaller = true;
+    void showStartupFailureDialog({
+      reason: plan.title,
+      detail: plan.detail,
+    });
+    // Return a no-op stub proc that exits immediately so the rest of the
+    // startup flow (health probe → timeout) still works predictably.
+    return spawnStubProcess(plan.reason);
   }
+
+  // plan.kind === 'spawn' — happy path
+  const proc = spawn(plan.cmd, plan.args, {
+    env: { ...process.env, ...plan.extraEnv },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+
+  logger.info('main: backend spawned', {
+    reason: plan.reason,
+    cmd: plan.cmd,
+    args: plan.args,
+  });
 
   proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: b.toString().trim() }));
   proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: b.toString().trim() }));
@@ -179,7 +194,53 @@ function spawnBackend(): ChildProcess {
     logger.info('main: backend exited', { code });
     backendProc = null;
   });
+  // Without an 'error' listener, Node treats spawn-time failures (binary
+  // exists but is not executable, ACL block, AV lock, ENOEXEC) as uncaught
+  // exceptions and crashes the Electron main process — exactly the failure
+  // mode PR #130 was meant to fix. PR #130 review flagged this as issue #10.
+  proc.on('error', (err) => {
+    logger.error('main: backend spawn error', {
+      reason: plan.reason,
+      cmd: plan.cmd,
+      err: String(err),
+    });
+    backendProc = null;
+  });
   return proc;
+}
+
+/**
+ * Stand-in subprocess used when the resolver reports a broken installer.
+ *
+ * We can't return `null` (caller typed as ChildProcess) and we don't want
+ * to leave `backendProc = null` without a process so health polling can run
+ * predictably. Spawning `process.execPath` with `--version` is portable
+ * and exits within milliseconds — the subsequent `waitForBackend()` will
+ * simply time out and the user will see the broken-installer dialog.
+ */
+function spawnStubProcess(reason: string): ChildProcess {
+  const stub = spawn(process.execPath, ['--version'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  stub.stdout?.on('data', (b) =>
+    logger.debug('main: stub proc stdout', { reason, line: b.toString().trim() }),
+  );
+  stub.stderr?.on('data', (b) =>
+    logger.error('main: stub proc stderr', { reason, line: b.toString().trim() }),
+  );
+  stub.on('exit', (code) => {
+    logger.info('main: stub proc exited', { reason, code });
+    backendProc = null;
+  });
+  // Same rationale as spawnBackend's `'error'` handler above — stub may fail
+  // to start (e.g. process.execPath is locked) and we don't want an uncaught
+  // exception to bubble out of the Electron main process.
+  stub.on('error', (err) => {
+    logger.error('main: stub proc error', { reason, err: String(err) });
+    backendProc = null;
+  });
+  return stub;
 }
 
 /**
@@ -653,6 +714,14 @@ app.whenReady().then(async () => {
     return;
   }
   backendProc = spawnBackend();
+  // If the resolver already fired the broken-installer dialog (because
+  // bundled Python is missing or the platform is unsupported), suppress the
+  // generic health-timeout dialog below so the user doesn't see two stacked
+  // modal dialogs describing the same problem from different angles.
+  if (reportedBrokenInstaller) {
+    logger.info('main: skipping health-timeout dialog (broken-installer dialog already shown)');
+    return;
+  }
   const ready = await waitForBackend();
   if (!ready) {
     logger.error('main: backend health timeout', {

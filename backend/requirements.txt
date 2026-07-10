@@ -33,6 +33,14 @@ pyyaml==6.0.1
 croniter==2.0.1
 networkx>=3.2.0
 
+# numpy is required as a build-time dep by:
+#   - hnswlib (PEP 517 build_meta imports numpy unconditionally — fails without it)
+#   - networkx (transitive runtime dep)
+# Pin to <2 because hnswlib 0.8.x's compiled wheels target numpy 1.x ABI;
+# numpy 2.0+ ships an incompatible C-API that crashes hnswlib at import.
+# Pinned here to match the bundled Python 3.11 (see scripts/bundle-python-main.ps1).
+numpy>=1.24,<2
+
 # MCP (Model Context Protocol) - 可选依赖
 # 与 httpx==0.26.0 存在 starlette 版本冲突，需要 mcp 时手动安装：
 #   pip install mcp --no-deps

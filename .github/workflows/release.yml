@@ -96,6 +96,23 @@ jobs:
       - name: Build frontend + Electron
         run: npm run electron:build
 
+      - name: Bundle Python backend (main, Windows)
+        # Bundles Python 3.11 + backend + sage-core into resources/ so
+        # electron-builder.yml's extraResources picks them up.
+        # Without this step the Windows installer ships without a Python
+        # runtime and end-users hit "spawn conda ENOENT" at startup
+        # (the bundled app falls back to `conda` which doesn't exist on
+        # end-user machines).
+        #
+        # Mirrors release-win7.yml's pwsh scripts/bundle-python.ps1 step
+        # but targets main's Python line + backend/requirements.txt.
+        # Linux matrix skips this — Linux Python bundling is tracked
+        # separately as a follow-up (no `embeddable` distribution for
+        # Linux).
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: pwsh scripts/bundle-python-main.ps1
+
       - name: Build Linux (AppImage + deb)
         if: matrix.os == 'ubuntu-latest'
         run: npx electron-builder --linux AppImage deb --publish never
