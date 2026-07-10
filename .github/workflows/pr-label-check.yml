@@ -24,7 +24,7 @@ jobs:
 
           # 接受 label 名: "fix:", "hotfix:", 或带 scope (如 "fix(electron):")
           # 简化: 仅匹配以 "fix:" 或 "hotfix:" 开头的 label
-          if echo "$LABELS_JSON" | grep -qE '"(fix|hotfix):'; then
+          if echo "$LABELS_JSON" | grep -qE '"(fix|hotfix)[\(:]'; then
             echo "✅ PR has fix: or hotfix: label"
             exit 0
           fi
