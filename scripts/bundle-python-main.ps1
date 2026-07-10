@@ -49,7 +49,13 @@ $ErrorActionPreference = "Stop"
 
 # Configuration — 3.11 is main's stable Python line (matches backend Dockerfile
 # + CI pytest python_version). When 3.11 EOLs (2027-10), bump here + rerun.
-$PythonVersion = "3.11.10"
+#
+# IMPORTANT: python.org periodically prunes old embeddable zip files from
+# the /ftp/python/ mirror (typically after the patch's security-only phase
+# ends + ~6 months). If your CI fails with HTTP 404 on $PythonUrl, search
+# https://www.python.org/ftp/python/ for available versions and bump here.
+# Verified 2026-07-10 that 3.11.0–3.11.9 still exist; 3.11.10+ return 404.
+$PythonVersion = "3.11.9"
 $PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
 $GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"
 $ResourcesDir = Join-Path $PSScriptRoot "..\resources"
