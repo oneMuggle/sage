@@ -95,9 +95,11 @@ def cmd_promote_stable(args: argparse.Namespace) -> int:
         return 1
     sha = rev.stdout.strip()
 
-    # Push with --force-with-lease (拒绝 divergent ref)
+    # Push with --force-with-lease (拒绝 divergent ref).
+    # Use full refname (refs/heads/<branch>) so the push works even when the
+    # local <branch> ref doesn't exist yet (first promote into a fresh mirror).
     push = subprocess.run(
-        ["git", "push", "origin", f"{sha}:{target_branch}", "--force-with-lease"],
+        ["git", "push", "origin", f"{sha}:refs/heads/{target_branch}", "--force-with-lease"],
         capture_output=True,
         text=True,
     )

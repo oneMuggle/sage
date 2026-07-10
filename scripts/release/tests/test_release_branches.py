@@ -140,7 +140,7 @@ class TestPromoteStable:
         push_call = mock_run.call_args_list[1]
         push_args = push_call.args[0]
         assert "push" in push_args
-        assert "abc123def456:release/stable" in " ".join(push_args)
+        assert "abc123def456:refs/heads/release/stable" in " ".join(push_args)
         assert "--force-with-lease" in push_args
 
     @patch("subprocess.run")
@@ -202,7 +202,7 @@ class TestPromoteStable:
 
         assert rc == 0
         push_args = mock_run.call_args_list[1].args[0]
-        assert "win7sha:release/stable-win7" in " ".join(push_args)
+        assert "win7sha:refs/heads/release/stable-win7" in " ".join(push_args)
 
 
 class TestFinalize:
