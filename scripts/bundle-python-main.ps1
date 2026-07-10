@@ -142,9 +142,20 @@ if ($LASTEXITCODE -ne 0) { throw "get-pip.py install failed with exit code $LAST
 Remove-Item $GetPipPath
 
 # Install dependencies from backend/requirements.txt (main, pydantic 2.x)
-Write-Host "Installing Python dependencies from requirements.txt..." -ForegroundColor Green
+#
+# --no-build-isolation: hnswlib 0.8.x's setup.py imports numpy unconditionally
+# during PEP 517 build, but its pyproject.toml doesn't declare numpy as a
+# build-time dep. Without --no-build-isolation, pip spins up an isolated build
+# env that lacks numpy → ModuleNotFoundError → no wheel produced. With it, pip
+# reuses site-packages where numpy (also in requirements.txt) is already
+# installed, so the build succeeds.
+#
+# This isn't needed for the dev/CI install path because dev conda envs already
+# have numpy, but the bundled-install path goes through pip into a freshly
+# created environment so it must be explicit.
+Write-Host "Installing Python dependencies from requirements.txt (--no-build-isolation)..." -ForegroundColor Green
 $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
-& $PipExe install --no-warn-script-location -r $RequirementsFile
+& $PipExe install --no-build-isolation --no-warn-script-location -r $RequirementsFile
 if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements.txt failed with exit code $LASTEXITCODE" }
 
 # Copy backend code
