@@ -240,7 +240,7 @@ T5   进入 v0.6.0 cycle: 再次从 v0.6.0-rc.1 开 release/v0.6.0
 - stable 镜像同步：`scripts/release/release_branches.py promote-stable`
 - 收尾清理（merge 回 main + 删分支）：`scripts/release/release_branches.py finalize`
 - Cross-minor guard + 幂等保护 + 冲突检测均内置在脚本中
-- 单元测试 18 个 + 集成测试 3 个位于 `scripts/release/tests/`
+- 单元测试 17 个 + 集成测试 3 个位于 `scripts/release/tests/`
 
 ---
 
@@ -298,8 +298,7 @@ gh pr create --base release/v0.5.0 --title "test label check (will close)" --lab
 
 ### 手动 Smoke Test（每次 release.yml 改动后必跑）
 
-> 这是 release.yml 新 step 的验证流程，**首次合入 Task 4 PR 后必跑**。
-> 触发的 step 由 `scripts/release/release_branches.py` 实现。
+> 这是 release.yml 新 step 的验证流程，**首次合入 Task 4-5 PR 后必跑**。
 
 **前置**：
 
@@ -393,7 +392,7 @@ git push origin v0.5.0
 | `Detect rc.1` step 报 "branch already exists" | 正常：幂等 skip，verify log 看到 "already exists, skipping" |
 | `Promote stable` 报 exit 4 (diverged) | release/stable 被外部 push 覆盖，需人工 review + 决定保留哪侧 |
 | `Finalize` 报 exit 2 (previous still open) | 上 cycle release/vX.Y.0 未 finalize，先打稳定 tag 走完流程 |
-| `Finalize` 报 exit 3 (conflict) | merge 冲突，按 §5.4 应急路径人工解 |
+| `Finalize` 报 exit 3 (conflict) | merge 冲突，按 [§5.4 应急路径](../superpowers/specs/2026-07-10-release-branch-strategy-design.md#5-4-cherry-pick-冲突的应急路径) 人工解 |
 | PR label check 红但 PR 有 `fix:` label | label 全名匹配：应是 `fix:` `fix(scope):` `hotfix:`，不是 `Fix` `bug` `Bug Fix` |
 
 ### 故障回滚
