@@ -46,7 +46,17 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Documentation
 - docs(wiki): 25-llm-wiki-integration.md 新增 "流式架构" section (10 章节) 描述 PR-114+115+116 架构 (PR-125)
 
-## [Unreleased]
+## [Unreleased] — for changes after v0.4.5-alpha.1
+
+### Added
+
+### Fixed
+
+### Changed
+
+## [v0.4.5-alpha.1] - 2026-07-10
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**spawn conda ENOENT 修复 + main-branch Python bundling** (PR #130, 6 commits / 8 files / +914 -75)。修复了 main 分支 Windows NSIS installer 因缺 Python bundling 步骤导致 end-user 启动时抛"a javascript error occurred in the main process"的根因。Resolver + bundling 双层修复，新 resolver 函数 13 个 vitest cases 覆盖全分支。
 
 ### Added
 - feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)
