@@ -20,8 +20,13 @@ files:
   - "!**/*.map"
   - "!**/.DS_Store"
 extraResources:
-  # Python 3.8 embedded runtime + backend for Win7 LTS
-  # Bundled by scripts/bundle-python.ps1 before build
+  # Python embedded runtime + backend code.
+  # - main: bundled by scripts/bundle-python-main.ps1 (Python 3.11 + requirements.txt)
+  # - release/win7: bundled by scripts/bundle-python.ps1 (Python 3.8 + requirements-py38.txt)
+  # Both scripts emit resources/python, resources/backend, resources/sage-core.
+  # resources/start-backend.bat was REMOVED in release/win7 commit 973d44c as
+  # dead code (main.ts spawns python.exe directly via the resolver, never
+  # invokes the .bat). Both branches now share the same 3-entry shape.
   - from: "resources/python"
     to: "python"
     filter:
@@ -38,8 +43,6 @@ extraResources:
     to: "sage-core"
     filter:
       - "**/*"
-  - from: "resources/start-backend.bat"
-    to: "start-backend.bat"
 
 # Win7 + Win10/11 NSIS installer (electron-builder 24.x)
 win:
