@@ -61,11 +61,11 @@ opentelemetry-exporter-otlp-proto-grpc==1.27.0
 python-dotenv==1.0.0
 pyyaml==6.0.1
 croniter==2.0.1
-
-# NumPy is required by networkx (no hnswlib build dep since hnswlib is
-# excluded below — see header). Pin to <2 to match networkx 3.x's numpy 1.x
-# ABI requirement.
 networkx>=3.2.0
+
+# numpy is required as a build-time dep by:
+#   - networkx (transitive runtime dep)
+# Pinned here to match the bundled Python 3.11 (see scripts/bundle-python-main.ps1).
 numpy>=1.24,<2
 
 # MCP (Model Context Protocol) - 可选依赖
@@ -73,8 +73,6 @@ numpy>=1.24,<2
 #   pip install mcp --no-deps
 # 或使用兼容版本：pip install 'mcp<1.0'（需自行测试）
 
-# Excluded from bundled install (no Windows wheel + C-extension + heavy
-# build chain — see header comment for details):
-# hnswlib>=0.8.0
 
 # Scheduled tasks (Phase 8)
+apscheduler==3.10.4
