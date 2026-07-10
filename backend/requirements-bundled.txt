@@ -1,0 +1,80 @@
+# Python deps bundled into the packaged installer via scripts/bundle-python-main.ps1.
+#
+# Derived from backend/requirements.txt MINUS packages that don't have
+# prebuilt cp311 win_amd64 wheels (so they can't be bundled into a Python
+# 3.11.9 embeddable). Currently excluded:
+#
+#   - hnswlib>=0.8.0  (ships source-only on Windows; bundling requires
+#     numpy + pybind11 + cython + Visual Studio C++ toolchain at CI time —
+#     see https://github.com/nmslib/hnswlib/issues — and adds ~2 minutes
+#     to release CI for an optional vector store backend)
+#
+# `import backend.main` (the post-install verify step in
+# scripts/bundle-python-main.ps1) does NOT transitively import hnswlib, so
+# the bundled Python can satisfy the launch-time `import backend.main` even
+# without hnswlib installed. Users hitting the wiki/vectorstore_hnsw.py
+# code path will see a runtime ImportError if they don't have hnswlib on
+# their system (this is the same trade-off release/win7 LTS has lived
+# with since v0.4.0-lts and which main now inherits — there is no fix
+# upstream).
+#
+# This file should match backend/requirements.txt byte-for-byte minus the
+# hnswlib line (and any other future source-only packages). Diff with:
+#
+#   diff backend/requirements.txt backend/requirements-bundled.txt
+#
+# If you add a new dep to requirements.txt, decide whether it needs bundling
+# (most pure-Python / wheel-shippers: yes) or runtime-install only
+# (anything with a C extension and no win wheel: put in
+# requirements-bundled.txt's excluded list comment, not in this file).
+
+# Sage 后端 - 生产依赖
+# 安装: pip install -r requirements-bundled.txt
+
+# Core
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.5.0
+
+# Sage Core (零外部依赖的领域模型)
+# pip 24+ 不接受 -e ../packages/sage-core，用 ./packages/sage-core
+-e ./packages/sage-core
+
+# Database
+# sqlite3 is built-in
+jieba>=0.42.1
+sqlite-vec>=0.1.9
+
+# HTTP
+httpx==0.26.0
+python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
+
+# Observability
+prometheus-client==0.25.0
+
+# Tracing
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-exporter-otlp-proto-grpc==1.27.0
+
+# Utils
+python-dotenv==1.0.0
+pyyaml==6.0.1
+croniter==2.0.1
+
+# NumPy is required by networkx (no hnswlib build dep since hnswlib is
+# excluded below — see header). Pin to <2 to match networkx 3.x's numpy 1.x
+# ABI requirement.
+networkx>=3.2.0
+numpy>=1.24,<2
+
+# MCP (Model Context Protocol) - 可选依赖
+# 与 httpx==0.26.0 存在 starlette 版本冲突，需要 mcp 时手动安装：
+#   pip install mcp --no-deps
+# 或使用兼容版本：pip install 'mcp<1.0'（需自行测试）
+
+# Excluded from bundled install (no Windows wheel + C-extension + heavy
+# build chain — see header comment for details):
+# hnswlib>=0.8.0
+
+# Scheduled tasks (Phase 8)

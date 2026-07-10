@@ -63,7 +63,14 @@ $PythonDir = Join-Path $ResourcesDir "python"
 $BackendDir = Join-Path $ResourcesDir "backend"
 $SageCoreDir = Join-Path $ResourcesDir "sage-core"
 $BackendSourceDir = Join-Path $PSScriptRoot "..\backend"
-$RequirementsFile = Join-Path $PSScriptRoot "..\backend\requirements.txt"
+# Use requirements-bundled.txt (subset of requirements.txt that omits
+# source-only / no-Windows-wheel packages like hnswlib). Without splitting,
+# pip would try to build hnswlib from source on the Windows runner, which
+# requires numpy + pybind11 + cython + Visual Studio C++ toolchain — adding
+# ~2 minutes of CI time for an optional vector store backend that isn't
+# transitively imported by backend.main anyway. See the header comment at
+# the top of backend/requirements-bundled.txt for the full rationale.
+$RequirementsFile = Join-Path $PSScriptRoot "..\backend\requirements-bundled.txt"
 
 Write-Host "=== Python Backend Bundler for main branch ===" -ForegroundColor Cyan
 Write-Host "Python version: $PythonVersion"
@@ -141,28 +148,11 @@ $PythonExe = Join-Path $PythonDir "python.exe"
 if ($LASTEXITCODE -ne 0) { throw "get-pip.py install failed with exit code $LASTEXITCODE" }
 Remove-Item $GetPipPath
 
-# Install dependencies from backend/requirements.txt (main, pydantic 2.x).
-#
-# Background: hnswlib 0.8.0 ships ONLY as a source distribution (no cp311
-# wheels). Its setup.py does `import numpy` at module top level but its
-# pyproject.toml does NOT declare numpy as a build-time dep. PEP 517 isolated
-# build envs created by pip therefore lack numpy and the build fails with
-# "ModuleNotFoundError: No module named 'numpy'" before numpy from -r gets
-# installed. Even `--no-build-isolation` is not a guaranteed fix because
-# pip's in-process build hook runs in a subprocess that may not see
-# site-packages.
-#
-# Working fix: install build deps (numpy, cython) in their OWN pip call FIRST
-# so they're physically in site-packages, THEN install requirements.txt with
-# --no-build-isolation so the build subprocess can resolve `import numpy`.
-Write-Host "Installing build-time deps (numpy, cython)..." -ForegroundColor Green
+# Install dependencies from requirements-bundled.txt (cp311+win_amd64 wheels only).
+Write-Host "Installing Python dependencies from requirements-bundled.txt..." -ForegroundColor Green
 $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
-& $PipExe install --no-warn-script-location "numpy>=1.24,<2" "cython>=3.0,<4"
-if ($LASTEXITCODE -ne 0) { throw "pip install build-time deps failed with exit code $LASTEXITCODE" }
-
-Write-Host "Installing Python dependencies from requirements.txt (--no-build-isolation)..." -ForegroundColor Green
-& $PipExe install --no-build-isolation --no-warn-script-location -r $RequirementsFile
-if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements.txt failed with exit code $LASTEXITCODE" }
+& $PipExe install --no-warn-script-location -r $RequirementsFile
+if ($LASTEXITCODE -ne 0) { throw "pip install -r $RequirementsFile failed with exit code $LASTEXITCODE" }
 
 # Copy backend code
 Write-Host "Copying backend code..." -ForegroundColor Green
