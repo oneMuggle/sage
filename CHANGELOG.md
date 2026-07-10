@@ -24,6 +24,28 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - **fix(backend): mass-rewrite PEP 604/585 annotations → typing.*** — 193 个文件 (backend/ + packages/sage-core/) 同步 Win7 LTS 的 Py3.8 兼容性重写。Main (Py3.11) 上纯属 stylistic 改动,功能不变。release/win7 上是必需的运行兼容性修复
 - **fix(scripts): py38_compat_rewrite.py** — 新增 AST-based 重写工具 + 一个 follow-up 修复(typing import 只插入到模块顶部,不合并到中间位置的旧 import)
 
+## [v0.4.4-alpha.1] - 2026-07-09
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。LLM Wiki **NDJSON 流式架构** (PR-114+115+116) 上线,9 个 followup 清理 (PR-118+120+122+124),Win7 LTS 同步 (PR-117+119+121+123)。流式 chat/ingest + 6 stage 进度 + sticky progress auto-dismiss + empty retrieval UX + HTTPException status 保留 + 5 个路由层集成测试 + LLMContext dataclass 抽象 + GraphData 序列化方法 + llmConfig 集成 useSettings。
+
+### Added
+- **feat(wiki): LLM Wiki NDJSON 流式架构 (PR-114+115+116)** — `/api/v1/wiki/{chat,ingest}/stream` NDJSON 端点,Electron main `relayNdjsonToEvent` 拆分到 IPC channel,前端 `useWikiChatStream` / `useWikiIngest` hooks
+- feat(wiki): 6 stage ingest 进度 (`started` → `copy_source` → `step1_analyze` → `step2_write` → `embedding` → `completed`)
+- feat(wiki): `LLMContext` dataclass 抽象 (`llm_call` + `llm_stream_call` + `http_post`) + `make_llm_context` 工厂,4 路由共享
+- feat(wiki): `GraphData.to_dict()` / `from_dict()` 方法,dedupe 序列化
+- feat(wiki): `lastQueryHadNoResults` 状态 + "未在 wiki 中找到相关内容" UX
+- feat(wiki): ingest 进度条 4s 自动 dismiss (sticky progress UX)
+- feat(wiki): `DEFAULT_EMBED_MODEL` 常量 (`'text-embedding-3-small'`)
+- feat(wiki): `_http_exception_from_llm` helper,3 LLM-using 路由保留 upstream status code
+- test(wiki): `/ingest/stream` 路由层 5 个集成测试
+
+### Fixed
+- fix(wiki): temp .md file leak in `/ingest/stream` — `_stream_with_cleanup` async generator wrapper + try/finally
+- fix(wiki): `useWikiChatStream` / `useWikiIngest` unlisten 时 `{streamId}` 透传到 `sage:unlisten` (修 abort leak)
+
+### Documentation
+- docs(wiki): 25-llm-wiki-integration.md 新增 "流式架构" section (10 章节) 描述 PR-114+115+116 架构 (PR-125)
+
 ## [Unreleased]
 
 ### Added
