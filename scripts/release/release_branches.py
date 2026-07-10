@@ -80,6 +80,126 @@ def cmd_create(args):
     return 1
 
 
+def cmd_promote_stable(args: argparse.Namespace) -> int:
+    """Update release/stable[-win7] mirror to point at --tag commit."""
+    target_branch = args.branch
+
+    # Resolve tag → commit SHA
+    rev = subprocess.run(
+        ["git", "rev-parse", args.tag],
+        capture_output=True,
+        text=True,
+    )
+    if rev.returncode != 0:
+        print(f"git rev-parse {args.tag} failed: {rev.stderr}", file=sys.stderr)
+        return 1
+    sha = rev.stdout.strip()
+
+    # Push with --force-with-lease (拒绝 divergent ref)
+    push = subprocess.run(
+        ["git", "push", "origin", f"{sha}:{target_branch}", "--force-with-lease"],
+        capture_output=True,
+        text=True,
+    )
+
+    if push.returncode == 0:
+        print(f"updated {target_branch} to {args.tag} ({sha[:7]})")
+        return 0
+
+    # Idempotent: "stale info" / "Everything up-to-date" 视为成功
+    if "Everything up-to-date" in push.stdout or "stale info" in push.stderr and "rejected" not in push.stderr:
+        print(f"{target_branch} already at {args.tag}, skipping")
+        return 0
+
+    # force-with-lease 检测到 ref diverged
+    if "forced update declined" in push.stderr or "stale info" in push.stderr and "rejected" in push.stderr:
+        print(f"remote ref {target_branch} diverged, manual review needed", file=sys.stderr)
+        print(push.stderr, file=sys.stderr)
+        return 4
+
+    # 其他错误
+    print(f"git push failed: {push.stderr}", file=sys.stderr)
+    return 1
+
+
+def cmd_finalize(args: argparse.Namespace) -> int:
+    """Merge release/vX.Y.0 back to main, delete branch, and (next cycle) cross-minor guard."""
+    version = args.version
+    main_branch = args.main_branch
+    branch_name = f"release/v{version}"
+
+    # 0. fetch latest main
+    fetch = subprocess.run(["git", "fetch", "origin", main_branch], capture_output=True, text=True)
+    if fetch.returncode != 0:
+        print(f"git fetch failed: {fetch.stderr}", file=sys.stderr)
+        return 1
+
+    # 1. check release/vX.Y.0 远端是否存在
+    ls = subprocess.run(
+        ["git", "ls-remote", "--heads", "origin", branch_name],
+        capture_output=True,
+        text=True,
+    )
+    if ls.returncode == 2 or not ls.stdout.strip():
+        # 分支已不存在 → 幂等 skip
+        print(f"branch {branch_name} already gone, skipping finalize")
+        return 0
+
+    # 2. cross-minor guard: 检查 release/v(PREVIOUS_MINOR).0 是否残留
+    parts = version.split(".")
+    minor = int(parts[1])
+    if minor > 0:
+        prev_version = f"{parts[0]}.{minor - 1}.0"
+        prev_branch = f"release/v{prev_version}"
+        ls_prev = subprocess.run(
+            ["git", "ls-remote", "--heads", "origin", prev_branch],
+            capture_output=True,
+            text=True,
+        )
+        if ls_prev.returncode == 0 and ls_prev.stdout.strip():
+            print(f"previous stabilization branch {prev_branch} still open, refusing finalize", file=sys.stderr)
+            return 2
+
+    # 3. checkout main
+    co = subprocess.run(["git", "checkout", main_branch], capture_output=True, text=True)
+    if co.returncode != 0:
+        print(f"git checkout {main_branch} failed: {co.stderr}", file=sys.stderr)
+        return 1
+
+    # 4. merge --no-ff release/vX.Y.0
+    merge = subprocess.run(
+        ["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name} (finalize)"],
+        capture_output=True,
+        text=True,
+    )
+    if merge.returncode != 0:
+        # 冲突: 包含 CONFLICT 字样
+        if "CONFLICT" in merge.stdout or "conflict" in merge.stderr.lower():
+            print(f"merge conflict during finalize:\n{merge.stdout}\n{merge.stderr}", file=sys.stderr)
+            return 3
+        print(f"git merge failed: {merge.stderr}", file=sys.stderr)
+        return 1
+
+    # 5. push main
+    push_main = subprocess.run(["git", "push", "origin", main_branch], capture_output=True, text=True)
+    if push_main.returncode != 0:
+        print(f"git push origin {main_branch} failed: {push_main.stderr}", file=sys.stderr)
+        return 1
+
+    # 6. delete release/vX.Y.0 远端
+    delete = subprocess.run(
+        ["git", "push", "origin", "--delete", branch_name],
+        capture_output=True,
+        text=True,
+    )
+    if delete.returncode != 0:
+        # 分支删除失败不影响主流程
+        print(f"warning: failed to delete {branch_name}: {delete.stderr}", file=sys.stderr)
+
+    print(f"finalized {branch_name}: merged to {main_branch} and deleted")
+    return 0
+
+
 def main():
     args = parse_args()
 
@@ -92,13 +212,13 @@ def main():
     if args.cmd == "create":
         return cmd_create(args)
     elif args.cmd == "promote-stable":
-        print(f"subcommand {args.cmd} not yet implemented (Task 2)", file=sys.stderr)
-        return 1
+        return cmd_promote_stable(args)
     elif args.cmd == "finalize":
-        print(f"subcommand {args.cmd} not yet implemented (Task 2)", file=sys.stderr)
-        return 1
+        return cmd_finalize(args)
 
     return 1
+
+
 
 
 if __name__ == "__main__":
