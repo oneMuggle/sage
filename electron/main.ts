@@ -107,6 +107,15 @@ app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPAC
 let backendProc: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 
+// Set by spawnBackend() when the resolver reports a broken installer, so the
+// startup-failure path in app.whenReady() can SKIP its own dialog (which
+// would otherwise show a misleading "port 8765 occupied / conda not installed"
+// message 30s after the user already saw the accurate broken-installer dialog).
+//
+// Without this sentinel the user would see two stacked modal dialogs: a
+// correct one immediately, then a misleading one ~30s later.
+let reportedBrokenInstaller = false;
+
 /**
  * Locate and spawn the Python interpreter that runs the FastAPI backend.
  *
@@ -153,10 +162,10 @@ function spawnBackend(): ChildProcess {
       reason: plan.reason,
       detail: plan.detail,
     });
-    // Fire-and-forget dialog; the caller (`app.whenReady().then`) is still
-    // about to wait on `waitForBackend()` which will time out and trigger
-    // a second failure dialog. Showing this one now gives the user a clearer
-    // message before the generic health-timeout dialog appears.
+    // Mark so the health-timeout branch in app.whenReady() suppresses its
+    // own (misleading) "port occupied / conda" dialog 30s later. Without
+    // this, the user sees two stacked modal dialogs about the same problem.
+    reportedBrokenInstaller = true;
     void showStartupFailureDialog({
       reason: plan.title,
       detail: plan.detail,
@@ -185,6 +194,18 @@ function spawnBackend(): ChildProcess {
     logger.info('main: backend exited', { code });
     backendProc = null;
   });
+  // Without an 'error' listener, Node treats spawn-time failures (binary
+  // exists but is not executable, ACL block, AV lock, ENOEXEC) as uncaught
+  // exceptions and crashes the Electron main process — exactly the failure
+  // mode PR #130 was meant to fix. PR #130 review flagged this as issue #10.
+  proc.on('error', (err) => {
+    logger.error('main: backend spawn error', {
+      reason: plan.reason,
+      cmd: plan.cmd,
+      err: String(err),
+    });
+    backendProc = null;
+  });
   return proc;
 }
 
@@ -210,6 +231,13 @@ function spawnStubProcess(reason: string): ChildProcess {
   );
   stub.on('exit', (code) => {
     logger.info('main: stub proc exited', { reason, code });
+    backendProc = null;
+  });
+  // Same rationale as spawnBackend's `'error'` handler above — stub may fail
+  // to start (e.g. process.execPath is locked) and we don't want an uncaught
+  // exception to bubble out of the Electron main process.
+  stub.on('error', (err) => {
+    logger.error('main: stub proc error', { reason, err: String(err) });
     backendProc = null;
   });
   return stub;
@@ -686,6 +714,14 @@ app.whenReady().then(async () => {
     return;
   }
   backendProc = spawnBackend();
+  // If the resolver already fired the broken-installer dialog (because
+  // bundled Python is missing or the platform is unsupported), suppress the
+  // generic health-timeout dialog below so the user doesn't see two stacked
+  // modal dialogs describing the same problem from different angles.
+  if (reportedBrokenInstaller) {
+    logger.info('main: skipping health-timeout dialog (broken-installer dialog already shown)');
+    return;
+  }
   const ready = await waitForBackend();
   if (!ready) {
     logger.error('main: backend health timeout', {

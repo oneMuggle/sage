@@ -90,15 +90,43 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
 
   // ───── Dev branch (isPackaged=false): conda ────────────────────────────
   if (!opts.isPackaged) {
-    const cmd = opts.env.SAGE_PYTHON ?? 'conda';
-    const reason: 'dev-conda' | 'dev-conda-overridden' =
-      opts.env.SAGE_PYTHON !== undefined ? 'dev-conda-overridden' : 'dev-conda';
+    // SAGE_PYTHON distinguishes two dev intent:
+    //   - unset → conda run -n sage-backend python -m backend.main
+    //     (current standard "spin up the conda env" workflow)
+    //   - set   → use that path as a raw Python interpreter that ALREADY has
+    //     `backend` and `sage_core` on its path (e.g. a developer running
+    //     `pip install -e` into a system Python). Args become `-m uvicorn ...`
+    //     because there is no conda subcommand namespace to delegate to.
+    //
+    // The previous implementation paired SAGE_PYTHON's value with conda-flavoured
+    // args (`['run', '-n', 'sage-backend', 'python', '-m', 'backend.main']`),
+    // which produced broken spawns like `python3 run -n sage-backend ...` when
+    // SAGE_PYTHON=python3 (python3 has no `run` subcommand). PR #130 review
+    // flagged this — see issue #6.
+    const sagePythonOverride = opts.env.SAGE_PYTHON;
+    if (sagePythonOverride !== undefined) {
+      return {
+        kind: 'spawn',
+        cmd: sagePythonOverride,
+        args: [
+          '-m',
+          'uvicorn',
+          'backend.main:app',
+          '--host',
+          '127.0.0.1',
+          '--port',
+          String(opts.port),
+        ],
+        extraEnv: { SAGE_DB_PATH: opts.sageDbPath },
+        reason: 'dev-conda-overridden',
+      };
+    }
     return {
       kind: 'spawn',
-      cmd,
+      cmd: 'conda',
       args: ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'],
       extraEnv: { SAGE_DB_PATH: opts.sageDbPath },
-      reason,
+      reason: 'dev-conda',
     };
   }
 
@@ -210,8 +238,6 @@ function packagedEnv(
 ): Record<string, string> {
   return {
     SAGE_DB_PATH: sageDbPath,
-    PYTHONPATH: [join(resourcesPath, 'backend'), join(resourcesPath, 'sage-core')].join(
-      sep,
-    ),
+    PYTHONPATH: [join(resourcesPath, 'backend'), join(resourcesPath, 'sage-core')].join(sep),
   };
 }

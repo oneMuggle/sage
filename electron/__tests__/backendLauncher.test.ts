@@ -39,14 +39,41 @@ describe('resolveBackendLaunchCommand', () => {
     });
 
     it('honors SAGE_PYTHON env override (e.g. "python3") for power devs', () => {
+      // When SAGE_PYTHON is set, we treat it as a raw interpreter that already
+      // has `backend` and `sage_core` importable. Args drop the conda
+      // subcommand shell and go straight to uvicorn.
       const plan = resolveBackendLaunchCommand(
         makeOpts({ isPackaged: false, env: { SAGE_PYTHON: 'python3' } }),
       );
       expect(plan).toMatchObject({
         kind: 'spawn',
         cmd: 'python3',
+        args: [
+          '-m',
+          'uvicorn',
+          'backend.main:app',
+          '--host',
+          '127.0.0.1',
+          '--port',
+          '8765',
+        ],
         reason: 'dev-conda-overridden',
       });
+    });
+
+    it('does NOT pair SAGE_PYTHON with conda-flavoured args (no `run -n` regression)', () => {
+      // Regression guard for issue #6 of PR #130. Old behaviour: any cmd
+      // value (e.g. "python3") was paired with
+      // ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'] which
+      // produces `python3 run -n ...` and dies with "no such subcommand".
+      const plan = resolveBackendLaunchCommand(
+        makeOpts({ isPackaged: false, env: { SAGE_PYTHON: 'python3' } }),
+      );
+      if (plan.kind === 'spawn') {
+        expect(plan.args).not.toContain('run');
+        expect(plan.args).not.toContain('-n');
+        expect(plan.args).not.toContain('sage-backend');
+      }
     });
 
     it('ignores resourcesPath in dev even if provided', () => {
@@ -78,15 +105,7 @@ describe('resolveBackendLaunchCommand', () => {
       expect(plan).toMatchObject({
         kind: 'spawn',
         cmd: '/mock/resources/python/python.exe',
-        args: [
-          '-m',
-          'uvicorn',
-          'backend.main:app',
-          '--host',
-          '127.0.0.1',
-          '--port',
-          '8765',
-        ],
+        args: ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', '8765'],
         reason: 'packaged-win32-bundled',
       });
       if (plan.kind === 'spawn') {
