@@ -141,20 +141,26 @@ $PythonExe = Join-Path $PythonDir "python.exe"
 if ($LASTEXITCODE -ne 0) { throw "get-pip.py install failed with exit code $LASTEXITCODE" }
 Remove-Item $GetPipPath
 
-# Install dependencies from backend/requirements.txt (main, pydantic 2.x)
+# Install dependencies from backend/requirements.txt (main, pydantic 2.x).
 #
-# --no-build-isolation: hnswlib 0.8.x's setup.py imports numpy unconditionally
-# during PEP 517 build, but its pyproject.toml doesn't declare numpy as a
-# build-time dep. Without --no-build-isolation, pip spins up an isolated build
-# env that lacks numpy → ModuleNotFoundError → no wheel produced. With it, pip
-# reuses site-packages where numpy (also in requirements.txt) is already
-# installed, so the build succeeds.
+# Background: hnswlib 0.8.0 ships ONLY as a source distribution (no cp311
+# wheels). Its setup.py does `import numpy` at module top level but its
+# pyproject.toml does NOT declare numpy as a build-time dep. PEP 517 isolated
+# build envs created by pip therefore lack numpy and the build fails with
+# "ModuleNotFoundError: No module named 'numpy'" before numpy from -r gets
+# installed. Even `--no-build-isolation` is not a guaranteed fix because
+# pip's in-process build hook runs in a subprocess that may not see
+# site-packages.
 #
-# This isn't needed for the dev/CI install path because dev conda envs already
-# have numpy, but the bundled-install path goes through pip into a freshly
-# created environment so it must be explicit.
-Write-Host "Installing Python dependencies from requirements.txt (--no-build-isolation)..." -ForegroundColor Green
+# Working fix: install build deps (numpy, cython) in their OWN pip call FIRST
+# so they're physically in site-packages, THEN install requirements.txt with
+# --no-build-isolation so the build subprocess can resolve `import numpy`.
+Write-Host "Installing build-time deps (numpy, cython)..." -ForegroundColor Green
 $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
+& $PipExe install --no-warn-script-location "numpy>=1.24,<2" "cython>=3.0,<4"
+if ($LASTEXITCODE -ne 0) { throw "pip install build-time deps failed with exit code $LASTEXITCODE" }
+
+Write-Host "Installing Python dependencies from requirements.txt (--no-build-isolation)..." -ForegroundColor Green
 & $PipExe install --no-build-isolation --no-warn-script-location -r $RequirementsFile
 if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements.txt failed with exit code $LASTEXITCODE" }
 
