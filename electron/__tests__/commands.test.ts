@@ -177,7 +177,6 @@ describe('skills IPC (PR-C)', () => {
 
 // Backend mounts legacy_routes under /api/v1 (see backend/main.py:215).
 // All Electron IPC paths MUST match — otherwise every IPC call 404s.
-const API_PREFIX = '/api/v1';
 
 describe('COMMAND_ROUTES', () => {
   it('includes the full session/message/chat surface used by the renderer', () => {
@@ -196,11 +195,13 @@ describe('COMMAND_ROUTES', () => {
     }
   });
 
-  // Guard: every command path MUST start with /api/v1 (matches backend mount).
-  // If a new command is added without the prefix, this test fails — preventing
-  // a class of 404 bugs where the renderer talks to a path the backend doesn't
-  // expose at root.
-  it('all command paths are prefixed with /api/v1', () => {
+  // Guard: every command path MUST start with /api/v1 or /api/theme.
+  // Legacy routes use /api/v1 (matches backend/main.py:215 legacy_router mount).
+  // Theme routes use /api/theme (matches backend/main.py theme_router mount).
+  // If a new command is added without one of these prefixes, this test fails —
+  // preventing a class of 404 bugs where the renderer talks to a path the
+  // backend doesn't expose at root.
+  it('all command paths are prefixed with /api/v1 or /api/theme', () => {
     for (const [cmd, route] of Object.entries(COMMAND_ROUTES)) {
       const samplePath = route.path({
         limit: 1,
@@ -209,8 +210,8 @@ describe('COMMAND_ROUTES', () => {
         streamId: 'x',
         sessionId: 'x',
       });
-      expect(samplePath, `${cmd} path must start with ${API_PREFIX}`).toMatch(
-        new RegExp(`^${API_PREFIX}/`),
+      expect(samplePath, `${cmd} path must start with /api/v1 or /api/theme`).toMatch(
+        /^(\/api\/v1\/|\/api\/theme\/)/,
       );
     }
   });
@@ -303,9 +304,7 @@ describe('settings & preferences IPC routes', () => {
   it('has set_preference route with key encoding', () => {
     const r = COMMAND_ROUTES.set_preference;
     expect(r.method).toBe('PUT');
-    expect(r.path({ key: 'current_session_id' })).toBe(
-      '/api/v1/preferences/current_session_id',
-    );
+    expect(r.path({ key: 'current_session_id' })).toBe('/api/v1/preferences/current_session_id');
   });
 
   it('all settings/preference paths have /api/v1 prefix', () => {
@@ -317,6 +316,83 @@ describe('settings & preferences IPC routes', () => {
       COMMAND_ROUTES.set_preference.path({ key: 'theme_mode' }),
     ];
     paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\//));
+  });
+});
+
+describe('theme IPC routes', () => {
+  it('has theme_list route (GET /api/v1/theme/list)', () => {
+    const r = COMMAND_ROUTES.theme_list;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({})).toBe('/api/v1/theme/list');
+  });
+
+  it('has theme_save route (POST /api/v1/theme/save)', () => {
+    const r = COMMAND_ROUTES.theme_save;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/theme/save');
+  });
+
+  it('has theme_get route (GET /api/v1/theme/get/{id}) with URL encoding', () => {
+    const r = COMMAND_ROUTES.theme_get;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({ id: 'abc-123' })).toBe('/api/v1/theme/get/abc-123');
+    expect(r.path({ id: 'id/with/slash' })).toBe('/api/v1/theme/get/id%2Fwith%2Fslash');
+  });
+
+  it('has theme_delete route (POST /api/v1/theme/delete)', () => {
+    const r = COMMAND_ROUTES.theme_delete;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/theme/delete');
+  });
+
+  it('all theme paths have /api/v1/theme prefix', () => {
+    const paths = [
+      COMMAND_ROUTES.theme_list.path({}),
+      COMMAND_ROUTES.theme_save.path({}),
+      COMMAND_ROUTES.theme_get.path({ id: 'x' }),
+      COMMAND_ROUTES.theme_delete.path({}),
+    ];
+    paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\/theme\//));
+  });
+});
+
+describe('scheduled tasks IPC routes', () => {
+  it('has scheduled_list_tasks route', () => {
+    expect(COMMAND_ROUTES.scheduled_list_tasks).toEqual({
+      method: 'GET',
+      path: expect.any(Function),
+    });
+    expect(COMMAND_ROUTES.scheduled_list_tasks.path({})).toBe('/api/v1/scheduled/tasks');
+  });
+
+  it('has scheduled_create_task route', () => {
+    expect(COMMAND_ROUTES.scheduled_create_task.method).toBe('POST');
+    expect(COMMAND_ROUTES.scheduled_create_task.path({})).toBe('/api/v1/scheduled/tasks');
+  });
+
+  it('has scheduled_update_task route with id encoding', () => {
+    expect(COMMAND_ROUTES.scheduled_update_task.method).toBe('PATCH');
+    expect(COMMAND_ROUTES.scheduled_update_task.path({ id: 'task-1' })).toBe(
+      '/api/v1/scheduled/tasks/task-1',
+    );
+  });
+
+  it('has scheduled_delete_task route', () => {
+    expect(COMMAND_ROUTES.scheduled_delete_task.method).toBe('DELETE');
+    expect(COMMAND_ROUTES.scheduled_delete_task.path({ id: 'task-1' })).toBe(
+      '/api/v1/scheduled/tasks/task-1',
+    );
+  });
+
+  it('has scheduled_run_task route', () => {
+    expect(COMMAND_ROUTES.scheduled_run_task.method).toBe('POST');
+    expect(COMMAND_ROUTES.scheduled_run_task.path({ id: 'task-1' })).toBe(
+      '/api/v1/scheduled/tasks/task-1/run',
+    );
   });
 });
 

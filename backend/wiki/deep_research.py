@@ -2,6 +2,7 @@
 
 实现多步骤研究：网络搜索 → 收集来源 → LLM 综合 → 自动 Ingest。
 """
+
 import json
 import logging
 from collections.abc import Callable

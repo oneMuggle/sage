@@ -3,6 +3,7 @@
 使用视觉 LLM 为图片生成描述，支持多模态 Ingest。
 支持 OpenAI GPT-4V、Anthropic Claude 3 with vision 等。
 """
+
 import base64
 import hashlib
 import json
