@@ -1,0 +1,39 @@
+name: PR Label Check (release branches)
+
+on:
+  pull_request:
+    branches:
+      - 'release/v*'
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-label:
+    name: "Verify fix: or hotfix: label on release/v* PRs"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Check PR has fix: or hotfix: label"
+        env:
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          echo "Labels on PR #${{ github.event.pull_request.number }}:"
+          echo "$LABELS_JSON"
+
+          # 接受 label 名: "fix:", "hotfix:", 或带 scope (如 "fix(electron):")
+          # 简化: 仅匹配以 "fix:" 或 "hotfix:" 开头的 label
+          if echo "$LABELS_JSON" | grep -qE '"(fix|hotfix)[\(:]'; then
+            echo "✅ PR has fix: or hotfix: label"
+            exit 0
+          fi
+
+          echo "::error::PR to release/v* must have a 'fix:' or 'hotfix:' label."
+          echo "Applicable labels:"
+          echo "  - fix:"
+          echo "  - fix(scope):"
+          echo "  - hotfix:"
+          echo ""
+          echo "Per docs/superpowers/specs/2026-07-10-release-branch-strategy-design.md §3.5"
+          exit 1
