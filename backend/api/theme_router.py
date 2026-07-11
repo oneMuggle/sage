@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -15,7 +14,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["theme"])
 
-_storage = ThemeStorage(storage_dir=Path(__file__).resolve().parent.parent / "data" / "themes")
+# Use ThemeStorage's default (which honors SAGE_USER_DATA_DIR when set by
+# the packaged Electron app). Previously hardcoded
+# `Path(__file__).parent.parent / "data" / "themes"` — that resolved to the
+# bundled resources/backend/data/themes which is read-only when Sage is
+# installed to C:\Program Files\Sage and raised PermissionError on save/list.
+_storage = ThemeStorage()
 
 
 class ThemeCssPayload(BaseModel):

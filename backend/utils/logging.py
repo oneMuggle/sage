@@ -6,6 +6,7 @@ Sage 日志配置模块
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -113,8 +114,15 @@ class SageLogger:
         elif project_root:
             self._log_dir = Path(project_root) / "logs"
         else:
-            # 默认使用 backend/logs
-            self._log_dir = Path(__file__).parent.parent / "logs"
+            # 默认使用 SAGE_USER_DATA_DIR/logs(per-user writable)— 当未设置
+            # 时(比如 dev / 测试)退回 backend/logs,但 production 用户应通过
+            # electron 注入 SAGE_USER_DATA_DIR 避免向 <C:\Program Files\Sage>
+            # 这类系统保护目录写入。
+            user_data_dir = os.environ.get("SAGE_USER_DATA_DIR")
+            if user_data_dir:
+                self._log_dir = Path(user_data_dir) / "logs"
+            else:
+                self._log_dir = Path(__file__).parent.parent / "logs"
 
         # 确保日志目录存在
         self._log_dir.mkdir(parents=True, exist_ok=True)
@@ -238,7 +246,9 @@ _logger_manager = SageLogger()
 
 
 def setup_logging(
-    log_dir: Optional[str] = None, log_level: str = DEFAULT_LOG_LEVEL, project_root: Optional[str] = None
+    log_dir: Optional[str] = None,
+    log_level: str = DEFAULT_LOG_LEVEL,
+    project_root: Optional[str] = None,
 ) -> None:
     """
     设置全局日志系统（便捷函数）
