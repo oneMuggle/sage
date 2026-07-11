@@ -46,14 +46,23 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Documentation
 - docs(wiki): 25-llm-wiki-integration.md 新增 "流式架构" section (10 章节) 描述 PR-114+115+116 架构 (PR-125)
 
-## [Unreleased] — for changes after v0.4.5-alpha.1
+## [Unreleased] — for changes after v0.4.5-alpha.2
 
 ### Added
+
+### Fixed
+
+### Changed
+
+## [v0.4.5-alpha.2] - 2026-07-11
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**bundle python 修复 PR #132** 修复了 v0.4.5-alpha.1 NSIS installer 安装后启动 4-5 秒仍报 `ModuleNotFoundError: No module named 'sage_core'` 然后 30s "后端健康检查超时" 对话框的根因(7z 提取已确认每行 content 都是真正的 traceback)。
 
 ### Fixed
 - fix(scripts): v0.4.5-alpha.1 packaged installer still crashed at startup with `ModuleNotFoundError: No module named 'sage_core'` (4-5s after spawn → 30s backend health timeout dialog). PR #130 carried forward the `_pth` `..` fix but DELETED the win7 LTS `pip install -e $SageCoreDest` step on the (incorrect) assumption that the hyphen-named `resources/sage-core/` directory would satisfy `import sage_core`. Python's import machinery is path-literal and rejects hyphen-named module dirs, so the inner `sage_core/` was never on sys.path. Now `bundle-python-main.ps1` ALSO copies `packages/sage-core/sage_core/` directly into `resources/python/Lib/site-packages/sage_core/`, where `import site` (enabled in `_pth`) puts it on `sys.path` unconditionally. `pip install -e` is intentionally NOT used because it bakes the build-machine's absolute path into the generated `.pth`, which does not exist on end-user machines. Verify step now also canary-imports `sage_core` + `from sage_core.entities import AgentDecision` to catch this regression at bundle time.
 
 ### Changed
+- chore(release): bump version to 0.4.5-alpha.2
 
 ## [v0.4.5-alpha.1] - 2026-07-10
 
