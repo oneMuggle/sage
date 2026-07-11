@@ -191,11 +191,12 @@ foreach ($item in $BackendItems) {
 
 # Copy packages/sage-core if it exists.
 #
-# CRITICAL (release/win7 commit 973d44c + main follow-up): sage_core imports
-# are at the TOP of `backend/domain/__init__.py`, which uvicorn loads at
-# `import backend.main` time. Without sage_core on sys.path the backend exits
-# with `ModuleNotFoundError: No module named 'sage_core'` 4-5 seconds after
-# spawn (after fastapi/uvicorn/jieba finish importing). End users see a 30s
+# CRITICAL (release/win7 commit 973d44c + main follow-up): sage_core is
+# imported at module-load time via `backend/adapters/out/tool/inproc_adapter.py`,
+# which `backend/main.py` imports at line 20. So `import backend.main`
+# transitively loads sage_core within the first ~4-5 seconds of process
+# startup. Without sage_core on sys.path the backend exits with
+# `ModuleNotFoundError: No module named 'sage_core'`, surfaces as a 30s
 # "backend health timeout" dialog identical to the historical win7 LTS bug.
 #
 # Why we DON'T use `pip install -e $SageCoreDest` like release/win7 LTS does:
@@ -231,6 +232,11 @@ if (Test-Path $SageCoreSource) {
   # 1) Mirror source layout to resources/sage-core/ (debug + dev parity)
   Copy-Item -Path $SageCoreSource -Destination $SageCoreDir -Recurse -Force
   if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage-core (mirror) failed with exit code $LASTEXITCODE" }
+  # Strip __pycache__ that may have leaked from a prior local dev run; the
+  # mirror is debug-only but we keep it clean for consistency with the inner
+  # copy + to avoid shipping stale .pyc bytecode to a Windows machine that
+  # may be running a different Python minor (which would ignore them).
+  Get-ChildItem -Path $SageCoreDir -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
   # 2) Copy inner sage_core/ package directly into bundled site-packages so
   #    `import sage_core` works at runtime. Done as a separate step (instead
@@ -252,6 +258,8 @@ if (Test-Path $SageCoreSource) {
   } else {
     Write-Host "WARNING: $SageCorePkgSource not found; sage_core will not be importable." -ForegroundColor Yellow
   }
+} else {
+  Write-Host "WARNING: $SageCoreSource not found; sage_core will not be importable." -ForegroundColor Yellow
 }
 
 # Verify installation
@@ -273,13 +281,16 @@ Write-Host ""
 # silently succeed even with a broken _pth, hiding the regression until
 # end-user startup.
 #
-# ALSO canary `import sage_core` + `from sage_core import ...` — both must
-# succeed at bundle time, or end users hit the v0.4.5-alpha.1 regression
-# (`ModuleNotFoundError: No module named 'sage_core'` 4-5s after spawn,
-# surfaces as 30s "backend health timeout" dialog). `import backend.main`
-# alone does NOT exercise sage_core because backend.main lazy-imports
-# sage_core's consumers only inside lifespan/handlers — so we explicitly
-# import sage_core here to fail-fast at bundle time.
+# ALSO canary `import sage_core` + `from sage_core.entities import AgentDecision` —
+# both must succeed at bundle time, or end users hit the v0.4.5-alpha.1
+# regression (`ModuleNotFoundError: No module named 'sage_core'` 4-5s
+# after spawn, surfaces as 30s "backend health timeout" dialog). Strictly
+# speaking `import backend.main` would *also* fail (transitively via
+# `backend/adapters/out/tool/inproc_adapter.py` which has a top-level
+# `from sage_core import ToolResult, ToolSpec`), but the downstream error
+# chain points at the adapter module — making the root cause hard to
+# diagnose. An explicit `import sage_core` canary fails fast on the
+# specific missing module so the bundle-time error message is precise.
 Write-Host "Testing Python imports (backend.main + sage_core canary)..." -ForegroundColor Green
 $verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import sage_core; from sage_core.entities import AgentDecision; import backend.main; print('All critical imports successful (backend.main + sage_core OK)')" 2>&1
 $verifyExit = $LASTEXITCODE
