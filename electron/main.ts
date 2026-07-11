@@ -339,12 +339,22 @@ function createMainWindow(): void {
     // main.js lives at dist-electron/electron/main.js (one extra directory level
     // vs the legacy rootDir: electron setup). Go up two levels to reach dist/.
     const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
+    logger.info('main: loading frontend', { path: indexHtml, __dirname });
     mainWindow.loadFile(indexHtml).catch(async (e) => {
       logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
       await showStartupFailureDialog({
         reason: '加载前端资源失败',
         detail: `路径: ${indexHtml}\n错误: ${e.message}`,
       });
+    });
+    // Diagnostic: log when page finishes loading (or fails)
+    mainWindow.webContents.on('did-finish-load', () => {
+      if (mainWindow) {
+        logger.info('main: frontend did-finish-load', { url: mainWindow.webContents.getURL() });
+      }
+    });
+    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      logger.error('main: frontend did-fail-load', { errorCode, errorDescription });
     });
   }
 
