@@ -30,7 +30,14 @@ def _default_storage_dir() -> Path:
     """
     user_data_dir = os.environ.get("SAGE_USER_DATA_DIR")
     if user_data_dir:
+        logger.info(f"[theme_storage] SAGE_USER_DATA_DIR set: {user_data_dir}")
         return Path(user_data_dir) / "themes"
+    # Diagnostic: log all SAGE_* env vars to see what's being passed
+    sage_env_vars = {k: v for k, v in os.environ.items() if k.startswith("SAGE_")}
+    logger.warning(
+        f"[theme_storage] SAGE_USER_DATA_DIR NOT set, using bundled fallback. "
+        f"SAGE_* env vars: {sage_env_vars}"
+    )
     return Path(__file__).resolve().parent.parent / "data" / "themes"
 
 
