@@ -46,13 +46,20 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Documentation
 - docs(wiki): 25-llm-wiki-integration.md 新增 "流式架构" section (10 章节) 描述 PR-114+115+116 架构 (PR-125)
 
-## [Unreleased] — for changes after v0.4.5-alpha.2
+## [Unreleased] — for changes after v0.4.5-alpha.3
 
 ### Added
 
 ### Fixed
 
 ### Changed
+
+## [v0.4.5-alpha.3] - 2026-07-11
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**SAGE_USER_DATA_DIR 修复**(PR #134):v0.4.5-alpha.2 NSIS installer 安装到 `C:\Program Files\Sage\` 后 5 分钟内必崩(`PermissionError: [WinError 5] 拒绝访问`),因为 backend 写 themes/scheduled_tasks JSON/logs 到 bundled `resources/backend/data/`,而程序目录对普通用户只读。新 `SAGE_USER_DATA_DIR` env 让 packaged Electron 注入 `<userData>` 作为运行时可变路径,dev 透传 `<project>/data`。3 个 backend 写路径(threading + theme + logger scheduler JSON)统一签名;`electron/main.ts` + `electron/backendLauncher.ts` 增加 `sageUserDataDir` 在所有 4 个 spawn 分支都注入。
+
+### Fixed
+- fix(scripts): v0.4.5-alpha.2 NSIS installer installs to `C:\Program Files\Sage\` (system-protected) crashed 4-5s after spawn with `PermissionError: [WinError 5] 拒绝访问: 'C:\Program Files\Sage\resources\backend\data\themes'`. Backend code wrote runtime-mutable files (themes, scheduled-tasks JSON, logs) to the bundled `resources/backend/data/` directory, which is read-only when installed to a system directory. Introduced `SAGE_USER_DATA_DIR` env var; packaged Electron sets it to `<userData>` (`%AppData%/Sage`), dev mode sets it to `<project>/data`. Three runtime-mutable paths now honor the env: `backend/api/theme_router.py` (module-level `_storage = ThemeStorage()` no longer hardcodes `<services>/parent/data/themes`), `backend/services/theme_storage.py` (new `_default_storage_dir()` helper prefers `${SAGE_USER_DATA_DIR}/themes`, falls back to bundled), `backend/main.py:154` (lifespan scheduled_tasks.json resolves to `${SAGE_USER_DATA_DIR}/scheduled_tasks.json` when env set, else keeps the relative `backend/data/scheduled_tasks.json` dev convenience), `backend/utils/logging.py` (SageLogger.setup picks env-driven path when no log_dir/project_root is supplied). Electron side: `electron/main.ts` computes `SAGE_USER_DATA_DIR` (`<userData>` in packaged, `<cwd>/data` in dev) and passes it through to the resolver; `electron/backendLauncher.ts` adds `sageUserDataDir` to `ResolveOpts` and includes it in `extraEnv` for all 4 spawn branches (dev-conda / dev-conda-overridden / packaged-win32 / packaged-linux). Caller-supplied `storage_dir=...` always wins (test/doc scenarios). 3 new unit tests in `TestThemeStorageDefaultDir` cover env-set / env-unset / explicit-overrides-env. All 18 theme tests + 13 backendLauncher tests + 691 vitest + backend pytest all pass; tsc clean.
 
 ## [v0.4.5-alpha.2] - 2026-07-11
 
