@@ -51,6 +51,7 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Added
 
 ### Fixed
+- fix(scripts): v0.4.5-alpha.1 packaged installer still crashed at startup with `ModuleNotFoundError: No module named 'sage_core'` (4-5s after spawn → 30s backend health timeout dialog). PR #130 carried forward the `_pth` `..` fix but DELETED the win7 LTS `pip install -e $SageCoreDest` step on the (incorrect) assumption that the hyphen-named `resources/sage-core/` directory would satisfy `import sage_core`. Python's import machinery is path-literal and rejects hyphen-named module dirs, so the inner `sage_core/` was never on sys.path. Now `bundle-python-main.ps1` ALSO copies `packages/sage-core/sage_core/` directly into `resources/python/Lib/site-packages/sage_core/`, where `import site` (enabled in `_pth`) puts it on `sys.path` unconditionally. `pip install -e` is intentionally NOT used because it bakes the build-machine's absolute path into the generated `.pth`, which does not exist on end-user machines. Verify step now also canary-imports `sage_core` + `from sage_core.entities import AgentDecision` to catch this regression at bundle time.
 
 ### Changed
 
