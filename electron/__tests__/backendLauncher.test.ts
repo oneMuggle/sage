@@ -52,6 +52,17 @@ describe('resolveBackendLaunchCommand', () => {
         args: ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', '8765'],
         reason: 'dev-conda-overridden',
       });
+      if (plan.kind === 'spawn') {
+        // Regression guard (AI review L2): SAGE_USER_DATA_DIR must travel with
+        // the dev branches, not only packaged. Without this assertion an
+        // accidental drop in dev-conda-overridden's extraEnv would silently
+        // regress dev installs to the bundled fallback path.
+        expect(plan.extraEnv).toEqual({
+          SAGE_DB_PATH: '/mock/sage.db',
+          SAGE_USER_DATA_DIR: '/mock/userData',
+        });
+        expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
+      }
     });
 
     it('does NOT pair SAGE_PYTHON with conda-flavoured args (no `run -n` regression)', () => {

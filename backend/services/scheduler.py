@@ -1,9 +1,11 @@
 """APScheduler wrapper for Phase 8 scheduled tasks.
 
-Persistence: ``backend/data/scheduled_tasks.json`` (atomic write).
-Concurrency: a single ``threading.Lock`` guards JSON read/write.
-Failure mode: per-job exceptions are logged and never raised to the scheduler
-loop, so a bad task cannot kill the scheduler.
+Persistence: ``${SAGE_USER_DATA_DIR}/scheduled_tasks.json`` in packaged
+mode (env set by Electron at spawn → per-user ``<userData>``); falls back
+to ``backend/data/scheduled_tasks.json`` in dev / tests when env is unset.
+Concurrent write safety: a single ``threading.Lock`` guards JSON read/write.
+Failure mode: per-job exceptions are logged and never raised to the
+scheduler loop, so a bad task cannot kill the scheduler.
 """
 
 from __future__ import annotations
