@@ -246,7 +246,9 @@ _logger_manager = SageLogger()
 
 
 def setup_logging(
-    log_dir: Optional[str] = None, log_level: str = DEFAULT_LOG_LEVEL, project_root: Optional[str] = None
+    log_dir: Optional[str] = None,
+    log_level: str = DEFAULT_LOG_LEVEL,
+    project_root: Optional[str] = None,
 ) -> None:
     """
     设置全局日志系统（便捷函数）
