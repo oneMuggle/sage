@@ -3,17 +3,48 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
-from backend.services.theme_storage import ThemeStorage
+from backend.services.theme_storage import ThemeStorage, _default_storage_dir
 
 
 @pytest.fixture()
 def storage(tmp_path: Path) -> ThemeStorage:
     """使用临时目录作为存储根"""
     return ThemeStorage(storage_dir=tmp_path)
+
+
+class TestThemeStorageDefaultDir:
+    """验证默认存储目录遵循 SAGE_USER_DATA_DIR(env-injected by packaged Electron).
+
+    Critical for Windows installs to C:\\Program Files\\Sage where the
+    bundled resources/backend/data/themes is system-protected and raises
+    PermissionError on the first mkdir/write.
+    """
+
+    def test_uses_sage_user_data_dir_when_set(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setenv("SAGE_USER_DATA_DIR", str(tmp_path))
+        resolved = _default_storage_dir()
+        assert resolved == tmp_path / "themes"
+
+    def test_falls_back_to_bundled_path_when_env_unset(
+        self, monkeypatch
+    ) -> None:
+        monkeypatch.delenv("SAGE_USER_DATA_DIR", raising=False)
+        resolved = _default_storage_dir()
+        # bundled fallback = <services>/../../data/themes = backend/data/themes
+        assert resolved == Path(__file__).resolve().parent.parent.parent / "data" / "themes"
+
+    def test_explicit_storage_dir_overrides_env(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Caller-supplied storage_dir always wins over env var (test/doc scenarios)."""
+        monkeypatch.setenv("SAGE_USER_DATA_DIR", "/tmp/should/not/be/used")
+        s = ThemeStorage(storage_dir=tmp_path)
+        assert s._dir == tmp_path
 
 
 @pytest.fixture()

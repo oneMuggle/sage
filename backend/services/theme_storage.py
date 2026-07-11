@@ -15,12 +15,31 @@ REQUIRED_FIELDS = ("id", "name", "css", "appearance")
 VALID_APPEARANCES = frozenset({"light", "dark"})
 
 
+def _default_storage_dir() -> Path:
+    """Resolve the writable themes directory.
+
+    Order of preference:
+      1. Caller-supplied storage_dir (explicit in __init__).
+      2. ${SAGE_USER_DATA_DIR}/themes — per-user writable, used by the
+         packaged Electron app (writes to <userData>/themes, never to the
+         bundled resources/backend/data/themes which is system-protected
+         when Sage is installed to C:\\Program Files\\Sage).
+      3. bundled fallback resources/backend/data/themes — only reached in
+         dev / tests where SAGE_USER_DATA_DIR isn't set; assumes a
+         writable repo checkout (which is the documented dev workflow).
+    """
+    user_data_dir = os.environ.get("SAGE_USER_DATA_DIR")
+    if user_data_dir:
+        return Path(user_data_dir) / "themes"
+    return Path(__file__).resolve().parent.parent / "data" / "themes"
+
+
 class ThemeStorage:
     """JSON 文件持久化 — 每主题一个文件 <id>.json"""
 
     def __init__(self, storage_dir: Optional[Union[Path, str]] = None) -> None:
         if storage_dir is None:
-            storage_dir = Path(__file__).resolve().parent.parent / "data" / "themes"
+            storage_dir = _default_storage_dir()
         self._dir = Path(storage_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
 

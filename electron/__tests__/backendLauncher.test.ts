@@ -13,6 +13,7 @@ function makeOpts(overrides: Partial<ResolveOpts> = {}): ResolveOpts {
     platform: 'win32',
     isPackaged: true,
     sageDbPath: '/mock/sage.db',
+    sageUserDataDir: '/mock/userData',
     port: 8765,
     existsSyncFn: () => false,
     ...overrides,
@@ -33,7 +34,7 @@ describe('resolveBackendLaunchCommand', () => {
       });
       // No PYTHONPATH in dev (conda handles it via env name)
       if (plan.kind === 'spawn') {
-        expect(plan.extraEnv).toEqual({ SAGE_DB_PATH: '/mock/sage.db' });
+        expect(plan.extraEnv).toEqual({ SAGE_DB_PATH: '/mock/sage.db', SAGE_USER_DATA_DIR: '/mock/userData' });
         expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
     });
@@ -103,6 +104,7 @@ describe('resolveBackendLaunchCommand', () => {
       if (plan.kind === 'spawn') {
         expect(plan.extraEnv).toEqual({
           SAGE_DB_PATH: '/mock/sage.db',
+          SAGE_USER_DATA_DIR: '/mock/userData',
           // Win uses ';' as PYTHONPATH separator
           PYTHONPATH: '/mock/resources/backend;/mock/resources/sage-core',
         });

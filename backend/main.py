@@ -151,7 +151,16 @@ async def lifespan(app: FastAPI):
     # Phase 8: scheduled tasks service — load JSON, start APScheduler
     from pathlib import Path
 
-    store_path = Path("backend/data/scheduled_tasks.json")
+    # Persist scheduled tasks JSON under SAGE_USER_DATA_DIR (per-user writable)
+    # rather than the bundled resources/backend/data/, which is system-protected
+    # under C:\Program Files\Sage and raised PermissionError on first write.
+    # Falls back to <cwd>/backend/data/scheduled_tasks.json for `npm run
+    # electron:dev` where SAGE_USER_DATA_DIR isn't injected.
+    user_data_dir = os.environ.get("SAGE_USER_DATA_DIR")
+    if user_data_dir:
+        store_path = Path(user_data_dir) / "scheduled_tasks.json"
+    else:
+        store_path = Path("backend/data/scheduled_tasks.json")
     scheduler_service = init_scheduler_service(
         store_path=store_path,
         message_repo=MessageRepository(),

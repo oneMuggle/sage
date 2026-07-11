@@ -136,17 +136,24 @@ let reportedBrokenInstaller = false;
  *   We now refuse the fallback in packaged mode and tell the user what to do.
  */
 function spawnBackend(): ChildProcess {
-  // Resolve SAGE_DB_PATH once so both packaged and dev spawn paths share it.
-  // Backend prefers this env var; falls back to:
-  //   - Dev (running from repo): <repo>/data/sage.db (project-local DB so
-  //     developers see their existing session history during `npm run electron:dev`).
-  //   - Packaged app: userData/sage.db (per-user writable location).
-  // SAGE_DB_PATH env var always wins (for CI / override scenarios).
+  // Resolve SAGE_DB_PATH and SAGE_USER_DATA_DIR once so both packaged and
+  // dev spawn paths share them. Backend prefers these env vars; falls back to:
+  //   - Dev (running from repo): <repo>/data/* (project-local so developers
+  //     see their existing session history during `npm run electron:dev`).
+  //   - Packaged app: <userData>/* (per-user writable location, ALWAYS —
+  //     critical for Win installs to C:\Program Files\Sage which is a
+  //     system-protected directory and rejects writes from non-admin users).
+  // SAGE_DB_PATH / SAGE_USER_DATA_DIR env vars always win (for CI / override).
   const sageDbPath =
     process.env.SAGE_DB_PATH ??
     (app.isPackaged
       ? join(app.getPath('userData'), 'sage.db')
       : join(process.cwd(), 'data', 'sage.db'));
+  const sageUserDataDir =
+    process.env.SAGE_USER_DATA_DIR ??
+    (app.isPackaged
+      ? app.getPath('userData')
+      : join(process.cwd(), 'data'));
 
   const plan = resolveBackendLaunchCommand({
     env: process.env,
@@ -154,6 +161,7 @@ function spawnBackend(): ChildProcess {
     platform: process.platform,
     isPackaged: app.isPackaged,
     sageDbPath,
+    sageUserDataDir,
     port: BACKEND_PORT,
   });
 

@@ -44,6 +44,11 @@ export interface ResolveOpts {
   isPackaged: boolean;
   /** Resolved SAGE_DB_PATH — caller computes (may depend on app.getPath) */
   sageDbPath: string;
+  /** Resolved SAGE_USER_DATA_DIR — per-user writable location for runtime-mutable
+   *  backend artifacts (themes, scheduled-tasks JSON, log files). Caller computes
+   *  (typically <userData> in packaged, <project>/data in dev). Critical for
+   *  Windows installs to C:\Program Files\Sage which is system-protected. */
+  sageUserDataDir: string;
   /** Injected for tests so we can stage "file exists" / "file missing" */
   existsSyncFn?: (path: string) => boolean;
   /** Backend port — main.ts owns this constant so this module stays framework-free */
@@ -117,7 +122,7 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
           '--port',
           String(opts.port),
         ],
-        extraEnv: { SAGE_DB_PATH: opts.sageDbPath },
+        extraEnv: { SAGE_DB_PATH: opts.sageDbPath, SAGE_USER_DATA_DIR: opts.sageUserDataDir },
         reason: 'dev-conda-overridden',
       };
     }
@@ -125,7 +130,7 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
       kind: 'spawn',
       cmd: 'conda',
       args: ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'],
-      extraEnv: { SAGE_DB_PATH: opts.sageDbPath },
+      extraEnv: { SAGE_DB_PATH: opts.sageDbPath, SAGE_USER_DATA_DIR: opts.sageUserDataDir },
       reason: 'dev-conda',
     };
   }
@@ -159,7 +164,7 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
           '--port',
           String(opts.port),
         ],
-        extraEnv: packagedEnv(opts.resourcesPath, opts.sageDbPath, sep),
+        extraEnv: packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
         reason: 'packaged-win32-bundled',
       };
     }
@@ -191,7 +196,7 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
           '--port',
           String(opts.port),
         ],
-        extraEnv: packagedEnv(opts.resourcesPath, opts.sageDbPath, sep),
+        extraEnv: packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
         reason: 'packaged-linux-bundled',
       };
     }
@@ -234,10 +239,12 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
 function packagedEnv(
   resourcesPath: string,
   sageDbPath: string,
+  sageUserDataDir: string,
   sep: string,
 ): Record<string, string> {
   return {
     SAGE_DB_PATH: sageDbPath,
+    SAGE_USER_DATA_DIR: sageUserDataDir,
     PYTHONPATH: [join(resourcesPath, 'backend'), join(resourcesPath, 'sage-core')].join(sep),
   };
 }
