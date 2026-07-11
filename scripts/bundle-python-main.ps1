@@ -42,8 +42,29 @@
 #    (resources/python, resources/backend, resources/sage-core), never the
 #    whole resources/ tree (which holds icons the project owns).
 #
+# 6. **Inner sage_core copy to site-packages (main PR fixing v0.4.5-alpha.1
+#    regression)**: PR #130 carried forward the _pth fix but DELIBERATELY
+#    dropped the `pip install -e $SageCoreDest` step (comment at the time:
+#    "main's sage-core has no external deps and step `pip install -e` is
+#    omitted"). The assumption was that the `_pth`'s `..` puts `resources/`
+#    on sys.path and `import sage_core` would walk `resources/sage-core/`.
+#    It does NOT — because the source dir is hyphen-named `sage-core/`
+#    while the Python module is underscore-named `sage_core/`. Python's
+#    import machinery is path-literal and does no hyphen↔underscore
+#    normalization. Result: v0.4.5-alpha.1 (and any pre-PR backport) bundles
+#    successfully but every end user hits ModuleNotFoundError on first
+#    backend launch (4-5 sec after spawn → 30 sec timeout dialog).
+#    Fix: also copy the inner sage_core/ package directly into the bundled
+#    Python's site-packages/. `import site` (enabled in _pth) puts
+#    site-packages on sys.path unconditionally regardless of
+#    machine-specific paths. We deliberately DON'T use `pip install -e`
+#    here because pip bakes the build-machine's absolute path into the
+#    generated .pth — that absolute path is the CI runner's path which
+#    does not exist on end-user machines.
+#
 # Usage:  pwsh scripts/bundle-python-main.ps1
-# Output: resources/python/, resources/backend/, resources/sage-core/
+# Output: resources/python/, resources/backend/, resources/sage-core/,
+#         resources/python/Lib/site-packages/sage_core/
 
 $ErrorActionPreference = "Stop"
 
@@ -169,15 +190,68 @@ foreach ($item in $BackendItems) {
 }
 
 # Copy packages/sage-core if it exists.
-# CRITICAL (release/win7 commit 973d44c): this block still needs the
-# LASTEXITCODE guard even though main's sage-core has no external deps
-# and step `pip install -e` is omitted — copying itself can fail on
-# file-locking / antivirus / path-too-long, so wrap with try/catch.
+#
+# CRITICAL (release/win7 commit 973d44c + main follow-up): sage_core imports
+# are at the TOP of `backend/domain/__init__.py`, which uvicorn loads at
+# `import backend.main` time. Without sage_core on sys.path the backend exits
+# with `ModuleNotFoundError: No module named 'sage_core'` 4-5 seconds after
+# spawn (after fastapi/uvicorn/jieba finish importing). End users see a 30s
+# "backend health timeout" dialog identical to the historical win7 LTS bug.
+#
+# Why we DON'T use `pip install -e $SageCoreDest` like release/win7 LTS does:
+#   pip embeds an absolute path to the *build machine's* sage-core directory
+#   into a site-packages/__editable__-sage_core-*.pth file. That absolute path
+#   is the CI runner's path (e.g. D:\a\sage\sage\resources\sage-core), which
+#   does not exist on the end-user's machine — so the import still fails.
+#
+# Instead we copy the inner sage_core/ package directory directly into the
+# bundled Python's site-packages/. Python's `import site` (enabled in the
+# _pth file) puts site-packages on sys.path unconditionally, regardless of
+# machine-specific paths or PYTHONPATH overrides. This is also why we
+# additionally keep the resources/sage-core/ tree — it's a development
+# artifact that mirrors the source layout and matches what we'd see in any
+# dev `pip install -e` checkout.
+#
+# Why we keep BOTH copies:
+#   1) resources/sage-core/   — mirrors source layout (debug-friendly if a
+#      user extracts the NSIS payload and inspects files). Unused at runtime
+#      because the directory name uses a hyphen while the Python module
+#      name uses an underscore (see verify comment below).
+#   2) resources/python/Lib/site-packages/sage_core/ — runtime-importable.
+#      This is the path `from sage_core import ...` resolves to inside the
+#      packaged Sage process.
+#
+# CRITICAL (release/win7 commit 973d44c): even though main's sage-core has
+# no external deps and we deliberately skip `pip install -e`, both Copy-Item
+# steps can fail on file-locking / antivirus / path-too-long — wrap with
+# LASTEXITCODE guards.
 Write-Host "Copying sage-core package..." -ForegroundColor Green
 $SageCoreSource = Join-Path $PSScriptRoot "..\packages\sage-core"
 if (Test-Path $SageCoreSource) {
+  # 1) Mirror source layout to resources/sage-core/ (debug + dev parity)
   Copy-Item -Path $SageCoreSource -Destination $SageCoreDir -Recurse -Force
-  if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage-core failed with exit code $LASTEXITCODE" }
+  if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage-core (mirror) failed with exit code $LASTEXITCODE" }
+
+  # 2) Copy inner sage_core/ package directly into bundled site-packages so
+  #    `import sage_core` works at runtime. Done as a separate step (instead
+  #    of relying on resources/sage-core/sage_core/) because the parent dir
+  #    uses a hyphen (sage-core) but the importable module uses an underscore
+  #    (sage_core) — Python's import machinery walks sys.path literally and
+  #    would not find the package under a hyphen-named directory.
+  $SageCorePkgSource = Join-Path $SageCoreSource "sage_core"
+  $SageCorePkgDest = Join-Path $PythonDir "Lib\site-packages\sage_core"
+  if (Test-Path $SageCorePkgSource) {
+    if (Test-Path $SageCorePkgDest) {
+      # Idempotent on re-run: clean any previous copy.
+      Remove-Item -Recurse -Force $SageCorePkgDest
+    }
+    Copy-Item -Path $SageCorePkgSource -Destination $SageCorePkgDest -Recurse -Force
+    if ($LASTEXITCODE -ne 0) { throw "Copy-Item sage_core package to site-packages failed with exit code $LASTEXITCODE" }
+    # Strip __pycache__ that might sneak in from a prior dev run
+    Get-ChildItem -Path $SageCorePkgDest -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  } else {
+    Write-Host "WARNING: $SageCorePkgSource not found; sage_core will not be importable." -ForegroundColor Yellow
+  }
 }
 
 # Verify installation
@@ -198,8 +272,16 @@ Write-Host ""
 # sys.path. Site-packages imports alone (fastapi/pydantic/jieba) would
 # silently succeed even with a broken _pth, hiding the regression until
 # end-user startup.
-Write-Host "Testing Python imports (incl. backend.main canary)..." -ForegroundColor Green
-$verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import backend.main; print('All critical imports successful (backend.main OK)')" 2>&1
+#
+# ALSO canary `import sage_core` + `from sage_core import ...` — both must
+# succeed at bundle time, or end users hit the v0.4.5-alpha.1 regression
+# (`ModuleNotFoundError: No module named 'sage_core'` 4-5s after spawn,
+# surfaces as 30s "backend health timeout" dialog). `import backend.main`
+# alone does NOT exercise sage_core because backend.main lazy-imports
+# sage_core's consumers only inside lifespan/handlers — so we explicitly
+# import sage_core here to fail-fast at bundle time.
+Write-Host "Testing Python imports (backend.main + sage_core canary)..." -ForegroundColor Green
+$verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import sage_core; from sage_core.entities import AgentDecision; import backend.main; print('All critical imports successful (backend.main + sage_core OK)')" 2>&1
 $verifyExit = $LASTEXITCODE
 Write-Host $verifyOutput
 if ($verifyExit -ne 0) {
