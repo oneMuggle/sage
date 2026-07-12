@@ -1,18 +1,10 @@
+import { ErrorBoundary } from './app/providers/ErrorBoundary';
+import { Layout } from './widgets/layout';
+
 /**
- * App component — diagnostic-only stub.
- *
- * The real implementation (BrowserRouter, Layout, NavHistoryProvider, all
- * the page components) has been temporarily removed to isolate a white-
- * screen bug. Two visible markers are rendered so we can confirm App
- * function body executes and React can mount its output:
- *
- *   - red banner at the top
- *   - green diagnostic block below the banner
- *
- * If the user sees both markers, App itself is fine and the white-screen
- * is downstream (Layout, providers, etc.). If the user sees only the red
- * banner, the green block failed to render (an error is being thrown
- * somewhere between the two).
+ * App component — diagnostic build reintroduces Layout inside an inner
+ * ErrorBoundary so the specific throw inside Layout (or any of its
+ * children) is captured and shown to the user.
  */
 
 function App() {
@@ -54,9 +46,30 @@ function App() {
           fontWeight: 'bold',
         }}
       >
-        ✅ MINIMAL TEST 渲染成功 — App 组件 + 第二个 div 都工作
+        ✅ MINIMAL TEST 渲染成功 — App 组件健康
         <br />
-        如果你看到这条绿条,说明 App function body 完整执行,问题在原 Layout 树。
+        下方是 Layout 测试 (被 ErrorBoundary 包裹,抛出错误会显示 '出错了')
+      </div>
+      {/* Layout test — if it throws, ErrorBoundary will catch and show '出错了' */}
+      <div
+        data-testid="sage-layout-test"
+        style={{
+          position: 'fixed',
+          top: 180,
+          left: 0,
+          right: 0,
+          zIndex: 999997,
+          background: '#1a1a1a',
+          color: 'white',
+          padding: '20px',
+          fontFamily: 'monospace',
+          fontSize: 16,
+        }}
+      >
+        <h3>Layout 测试 (下面这个):</h3>
+        <ErrorBoundary>
+          <Layout />
+        </ErrorBoundary>
       </div>
     </>
   );
