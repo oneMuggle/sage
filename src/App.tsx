@@ -71,6 +71,16 @@ function App() {
         APP MOUNTED — 如果你看到这条红条,App 组件正常挂载
       </div>
       <ErrorBoundary>
+        {/* MINIMAL TEST: replace Layout with plain div to isolate which component throws */}
+        <BrowserRouter>
+          <div data-testid="sage-minimal-router" style={{ padding: '20px', color: 'white' }}>
+            ✅ BrowserRouter + plain div 渲染成功！
+            <br />
+            如果你看到这条,说明问题在 Layout 组件,不在 BrowserRouter。
+          </div>
+        </BrowserRouter>
+      </ErrorBoundary>
+      <ErrorBoundary>
         <BrowserRouter>
           <NavHistoryProvider>
             <Routes>
