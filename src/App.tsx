@@ -49,25 +49,46 @@ function App() {
   }, []);
 
   return (
-    <BrowserRouter>
-      <NavHistoryProvider>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Navigate to="/chat" replace />} />
-            <Route path="welcome" element={<Welcome />} />
-            <Route path="chat" element={<ChatRoute />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="memory" element={<Memory />} />
-            <Route path="agents" element={<Agents />} />
-            <Route path="skills" element={<Skills />} />
-            <Route path="knowledge" element={<Knowledge />} />
-            <Route path="scheduled" element={<ScheduledTasks />} />
-            <Route path="orchestration" element={<Orchestration />} />
-          </Route>
-        </Routes>
-        <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-      </NavHistoryProvider>
-    </BrowserRouter>
+    <>
+      {/* DIAGNOSTIC BANNER — red bar so we can confirm App mounted */}
+      <div
+        data-testid="sage-app-mounted"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 999999,
+          background: 'red',
+          color: 'white',
+          padding: '8px 12px',
+          fontFamily: 'sans-serif',
+          fontSize: 14,
+          fontWeight: 'bold',
+        }}
+      >
+        APP MOUNTED — 如果你看到这条红条,App 组件正常挂载
+      </div>
+      <BrowserRouter>
+        <NavHistoryProvider>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Navigate to="/chat" replace />} />
+              <Route path="welcome" element={<Welcome />} />
+              <Route path="chat" element={<ChatRoute />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="memory" element={<Memory />} />
+              <Route path="agents" element={<Agents />} />
+              <Route path="skills" element={<Skills />} />
+              <Route path="knowledge" element={<Knowledge />} />
+              <Route path="scheduled" element={<ScheduledTasks />} />
+              <Route path="orchestration" element={<Orchestration />} />
+            </Route>
+          </Routes>
+          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        </NavHistoryProvider>
+      </BrowserRouter>
+    </>
   );
 }
 
