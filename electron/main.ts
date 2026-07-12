@@ -151,9 +151,7 @@ function spawnBackend(): ChildProcess {
       : join(process.cwd(), 'data', 'sage.db'));
   const sageUserDataDir =
     process.env.SAGE_USER_DATA_DIR ??
-    (app.isPackaged
-      ? app.getPath('userData')
-      : join(process.cwd(), 'data'));
+    (app.isPackaged ? app.getPath('userData') : join(process.cwd(), 'data'));
 
   const plan = resolveBackendLaunchCommand({
     env: process.env,
@@ -355,6 +353,21 @@ function createMainWindow(): void {
     });
     mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       logger.error('main: frontend did-fail-load', { errorCode, errorDescription });
+    });
+    // Diagnostic: capture console messages (JS errors, warnings, logs)
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const logLevel = level === 0 ? 'debug' : level === 1 ? 'info' : level === 2 ? 'warn' : 'error';
+      logger[logLevel]('main: frontend console', { level, message, line, sourceId });
+    });
+    // Diagnostic: capture page crashes (using non-deprecated render-process-gone)
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+      logger.error('main: frontend render-process-gone', {
+        reason: details.reason,
+        exitCode: details.exitCode,
+      });
+    });
+    mainWindow.webContents.on('unresponsive', () => {
+      logger.error('main: frontend unresponsive');
     });
   }
 
