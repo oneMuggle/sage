@@ -365,17 +365,25 @@ function createMainWindow(): void {
         logger.info('main: frontend did-finish-load', { url: mainWindow.webContents.getURL() });
         // Diagnostic: check if React root is mounted after page loads
         mainWindow.webContents
-          .executeJavaScript(`
+          .executeJavaScript(
+            `
           (function() {
+            const root = document.getElementById('root');
+            const body = document.body;
             return {
-              hasRoot: !!document.getElementById('root'),
-              rootChildren: document.getElementById('root')?.children.length || 0,
-              rootInnerHTML: document.getElementById('root')?.innerHTML?.substring(0, 200) || '',
+              hasRoot: !!root,
+              rootChildren: root?.children.length || 0,
+              rootInnerHTML: root?.innerHTML?.substring(0, 500) || '',
+              bodyInnerHTML: body?.innerHTML?.substring(0, 500) || '',
+              hasSidebar: !!document.querySelector('[class*="sidebar" i], aside, nav'),
+              hasLayout: !!document.querySelector('[class*="layout" i]'),
+              allElements: document.querySelectorAll('*').length,
               scripts: Array.from(document.scripts).map(s => s.src || s.textContent?.substring(0, 100) || ''),
               title: document.title,
             };
           })()
-        `)
+        `,
+          )
           .then((result) => {
             logger.info('main: frontend React root check', result);
           })
