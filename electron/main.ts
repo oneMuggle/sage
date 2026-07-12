@@ -45,6 +45,7 @@ logger.info('main: process started', {
 
 import { spawn, ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import fetch from 'node-fetch';
 import { invokeBackend } from './invoke';
@@ -338,6 +339,19 @@ function createMainWindow(): void {
     // vs the legacy rootDir: electron setup). Go up two levels to reach dist/.
     const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
     logger.info('main: loading frontend', { path: indexHtml, __dirname });
+    // Diagnostic: read and log the contents of index.html to verify it has the
+    // correct script references (not the source /src/main.tsx)
+    try {
+      const htmlContent = readFileSync(indexHtml, 'utf-8');
+      logger.info('main: index.html contents', {
+        length: htmlContent.length,
+        hasScriptTag: htmlContent.includes('<script'),
+        hasSrcMainTsx: htmlContent.includes('/src/main.tsx'),
+        snippet: htmlContent.substring(0, 500),
+      });
+    } catch (e) {
+      logger.error('main: failed to read index.html', { error: (e as Error).message });
+    }
     mainWindow.loadFile(indexHtml).catch(async (e) => {
       logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
       await showStartupFailureDialog({
@@ -349,6 +363,25 @@ function createMainWindow(): void {
     mainWindow.webContents.on('did-finish-load', () => {
       if (mainWindow) {
         logger.info('main: frontend did-finish-load', { url: mainWindow.webContents.getURL() });
+        // Diagnostic: check if React root is mounted after page loads
+        mainWindow.webContents
+          .executeJavaScript(`
+          (function() {
+            return {
+              hasRoot: !!document.getElementById('root'),
+              rootChildren: document.getElementById('root')?.children.length || 0,
+              rootInnerHTML: document.getElementById('root')?.innerHTML?.substring(0, 200) || '',
+              scripts: Array.from(document.scripts).map(s => s.src || s.textContent?.substring(0, 100) || ''),
+              title: document.title,
+            };
+          })()
+        `)
+          .then((result) => {
+            logger.info('main: frontend React root check', result);
+          })
+          .catch((e) => {
+            logger.error('main: failed to check React root', { error: e.message });
+          });
       }
     });
     mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
@@ -356,7 +389,8 @@ function createMainWindow(): void {
     });
     // Diagnostic: capture console messages (JS errors, warnings, logs)
     mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-      const logLevel = level === 0 ? 'debug' : level === 1 ? 'info' : level === 2 ? 'warn' : 'error';
+      const logLevel =
+        level === 0 ? 'debug' : level === 1 ? 'info' : level === 2 ? 'warn' : 'error';
       logger[logLevel]('main: frontend console', { level, message, line, sourceId });
     });
     // Diagnostic: capture page crashes (using non-deprecated render-process-gone)
