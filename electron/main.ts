@@ -370,6 +370,8 @@ function createMainWindow(): void {
           (function() {
             const root = document.getElementById('root');
             const body = document.body;
+            const hasElectronAPI = typeof window.electronAPI !== 'undefined';
+            const apiKeys = hasElectronAPI ? Object.keys(window.electronAPI || {}) : [];
             return {
               hasRoot: !!root,
               rootChildren: root?.children.length || 0,
@@ -378,6 +380,8 @@ function createMainWindow(): void {
               hasSidebar: !!document.querySelector('[class*="sidebar" i], aside, nav'),
               hasLayout: !!document.querySelector('[class*="layout" i]'),
               allElements: document.querySelectorAll('*').length,
+              hasElectronAPI,
+              apiKeys,
               scripts: Array.from(document.scripts).map(s => s.src || s.textContent?.substring(0, 100) || ''),
               title: document.title,
             };
