@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+import { ErrorBoundary } from './app/providers/ErrorBoundary';
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { Settings } from './pages';
@@ -71,20 +72,26 @@ function App() {
       </div>
       <BrowserRouter>
         <NavHistoryProvider>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Navigate to="/chat" replace />} />
-              <Route path="welcome" element={<Welcome />} />
-              <Route path="chat" element={<ChatRoute />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="memory" element={<Memory />} />
-              <Route path="agents" element={<Agents />} />
-              <Route path="skills" element={<Skills />} />
-              <Route path="knowledge" element={<Knowledge />} />
-              <Route path="scheduled" element={<ScheduledTasks />} />
-              <Route path="orchestration" element={<Orchestration />} />
-            </Route>
-          </Routes>
+          {/* Outer ErrorBoundary: catches throws from the entire route subtree
+              (including the Layout shell + all children). v0.4.5-alpha.18
+              showed this fires with an empty Error (the actual root cause
+              was below). */}
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Navigate to="/chat" replace />} />
+                <Route path="welcome" element={<Welcome />} />
+                <Route path="chat" element={<ChatRoute />} />
+                <Route path="settings" element={<Settings />} />
+                <Route path="memory" element={<Memory />} />
+                <Route path="agents" element={<Agents />} />
+                <Route path="skills" element={<Skills />} />
+                <Route path="knowledge" element={<Knowledge />} />
+                <Route path="scheduled" element={<ScheduledTasks />} />
+                <Route path="orchestration" element={<Orchestration />} />
+              </Route>
+            </Routes>
+          </ErrorBoundary>
           <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
         </NavHistoryProvider>
       </BrowserRouter>
