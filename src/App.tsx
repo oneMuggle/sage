@@ -1,18 +1,53 @@
-import { ErrorBoundary } from './app/providers/ErrorBoundary';
-import { ResizeDivider } from './widgets/layout/ResizeDivider';
-import { Sidebar } from './widgets/layout/Sidebar';
-import { Titlebar } from './widgets/layout/Titlebar';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-/**
- * App component — diagnostic build isolates which Layout subcomponent
- * throws by wrapping each in its own ErrorBoundary. Previous attempts
- * showed App and Layout are healthy; the error is somewhere inside.
- * The full original Layout tree couldn't surface the message because
- * it threw a bare `new Error()` with empty message at minified code
- * boundary, so we need granular per-child boundaries to localize.
- */
+import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
+import { loadCurrentSessionId } from './entities/session/storage';
+import { Settings } from './pages';
+import { Agents } from './pages/Agents';
+import { Chat } from './pages/Chat';
+import { Knowledge } from './pages/Knowledge';
+import { Memory } from './pages/Memory';
+import { Orchestration } from './pages/Orchestration';
+import { ScheduledTasks } from './pages/ScheduledTasks';
+import Skills from './pages/Skills';
+import { Welcome } from './pages/Welcome';
+import { useStore } from './shared/lib/store';
+import { CommandPalette } from './widgets/command';
+import { Layout } from './widgets/layout';
+
+// Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
+function ChatRoute() {
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  if (!currentSessionId) {
+    return <Navigate to="/welcome" replace />;
+  }
+  return <Chat />;
+}
 
 function App() {
+  const [commandOpen, setCommandOpen] = useState(false);
+
+  useEffect(() => {
+    loadCurrentSessionId().then((id) => {
+      if (id) {
+        useStore.getState().setCurrentSessionId(id);
+      }
+    });
+  }, []);
+
+  // 全局快捷键 Ctrl+K / Cmd+K 打开命令面板
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   return (
     <>
       {/* DIAGNOSTIC BANNER — red bar so we can confirm App mounted */}
@@ -34,61 +69,25 @@ function App() {
       >
         APP MOUNTED — 如果你看到这条红条,App 组件正常挂载
       </div>
-      <div
-        data-testid="sage-minimal-router"
-        style={{
-          position: 'fixed',
-          top: 60,
-          left: 0,
-          right: 0,
-          zIndex: 999998,
-          background: '#0a0a0a',
-          color: '#00ff00',
-          padding: '20px',
-          fontFamily: 'monospace',
-          fontSize: 18,
-          fontWeight: 'bold',
-        }}
-      >
-        ✅ MINIMAL TEST 渲染成功 — App 组件健康
-        <br />
-        下方是按组件拆分的 ErrorBoundary 测试,会显示哪个组件抛错
-      </div>
-      <div
-        data-testid="sage-layout-test"
-        style={{
-          position: 'fixed',
-          top: 180,
-          left: 0,
-          right: 0,
-          zIndex: 999997,
-          background: '#1a1a1a',
-          color: 'white',
-          padding: '20px',
-          fontFamily: 'monospace',
-          fontSize: 16,
-        }}
-      >
-        <h3>Layout 子组件拆分测试:</h3>
-        <div style={{ border: '2px solid #00ff00', padding: '8px', margin: '8px 0' }}>
-          <strong>1. Titlebar 测试:</strong>
-          <ErrorBoundary>
-            <Titlebar />
-          </ErrorBoundary>
-        </div>
-        <div style={{ border: '2px solid #00ff00', padding: '8px', margin: '8px 0' }}>
-          <strong>2. Sidebar 测试 (no width prop):</strong>
-          <ErrorBoundary>
-            <Sidebar />
-          </ErrorBoundary>
-        </div>
-        <div style={{ border: '2px solid #00ff00', padding: '8px', margin: '8px 0' }}>
-          <strong>3. ResizeDivider 测试 (no handlers):</strong>
-          <ErrorBoundary>
-            <ResizeDivider onMouseDown={() => {}} />
-          </ErrorBoundary>
-        </div>
-      </div>
+      <BrowserRouter>
+        <NavHistoryProvider>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Navigate to="/chat" replace />} />
+              <Route path="welcome" element={<Welcome />} />
+              <Route path="chat" element={<ChatRoute />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="memory" element={<Memory />} />
+              <Route path="agents" element={<Agents />} />
+              <Route path="skills" element={<Skills />} />
+              <Route path="knowledge" element={<Knowledge />} />
+              <Route path="scheduled" element={<ScheduledTasks />} />
+              <Route path="orchestration" element={<Orchestration />} />
+            </Route>
+          </Routes>
+          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        </NavHistoryProvider>
+      </BrowserRouter>
     </>
   );
 }

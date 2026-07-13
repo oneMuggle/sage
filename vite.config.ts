@@ -9,6 +9,18 @@ export default defineConfig({
   // - base: './' required for Electron file:// loading (relative paths)
   // - watch.ignored now excludes archive/ (was src-tauri/, archived)
   base: './',
+  resolve: {
+    // CRITICAL: dedupe react/react-dom so ReactDOM reads the SAME React
+    // instance as React. Without this, ESM module resolution can produce
+    // two different module records for `react` and `react-dom`, and
+    // ReactDOM's __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+    // check fails (returns undefined) → TypeError → white screen.
+    // Symptom: `Cannot read properties of undefined (reading
+    // '__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED')` in
+    // vendor-react-*.js line ~17, with rootChildren=0 (React never
+    // initialized). v0.4.5-alpha.17 logs showed exactly this.
+    dedupe: ['react', 'react-dom', 'react-dom/client'],
+  },
   clearScreen: false,
   server: {
     port: 1420,
