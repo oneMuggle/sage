@@ -28,7 +28,32 @@ export function Layout() {
   }, []);
 
   return (
-    <div className="flex h-screen bg-bg">
+    <>
+      {/* DIAGNOSTIC MARKER: shows whether Layout function body's return
+          statement was reached. If you see this text in the UI, Layout
+          is rendering successfully. If you don't see it, the throw is
+          happening BEFORE the return (in useResizableSidebar hook or
+          useState initializer). */}
+      <h1
+        data-testid="sage-layout-mounted"
+        style={{
+          position: 'fixed',
+          top: 40,
+          left: 0,
+          right: 0,
+          zIndex: 999990,
+          background: 'blue',
+          color: 'white',
+          padding: '8px 12px',
+          fontFamily: 'sans-serif',
+          fontSize: 14,
+          fontWeight: 'bold',
+          textAlign: 'center',
+        }}
+      >
+        LAYOUT MOUNTED — 如果看到这条蓝条,Layout 函数 return 已执行
+      </h1>
+      <div className="flex h-screen bg-bg">
       {/* 跳到主内容链接 (a11y) */}
       <a
         href="#main-content"
@@ -70,5 +95,6 @@ export function Layout() {
         </main>
       </div>
     </div>
+    </>
   );
 }
