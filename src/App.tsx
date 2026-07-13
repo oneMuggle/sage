@@ -1,10 +1,15 @@
 import { ErrorBoundary } from './app/providers/ErrorBoundary';
-import { Layout } from './widgets/layout';
+import { ResizeDivider } from './widgets/layout/ResizeDivider';
+import { Sidebar } from './widgets/layout/Sidebar';
+import { Titlebar } from './widgets/layout/Titlebar';
 
 /**
- * App component — diagnostic build reintroduces Layout inside an inner
- * ErrorBoundary so the specific throw inside Layout (or any of its
- * children) is captured and shown to the user.
+ * App component — diagnostic build isolates which Layout subcomponent
+ * throws by wrapping each in its own ErrorBoundary. Previous attempts
+ * showed App and Layout are healthy; the error is somewhere inside.
+ * The full original Layout tree couldn't surface the message because
+ * it threw a bare `new Error()` with empty message at minified code
+ * boundary, so we need granular per-child boundaries to localize.
  */
 
 function App() {
@@ -29,7 +34,6 @@ function App() {
       >
         APP MOUNTED — 如果你看到这条红条,App 组件正常挂载
       </div>
-      {/* MINIMAL TEST: position below red banner with bright contrast so visible */}
       <div
         data-testid="sage-minimal-router"
         style={{
@@ -48,9 +52,8 @@ function App() {
       >
         ✅ MINIMAL TEST 渲染成功 — App 组件健康
         <br />
-        下方是 Layout 测试 (被 ErrorBoundary 包裹,抛出错误会显示 '出错了')
+        下方是按组件拆分的 ErrorBoundary 测试,会显示哪个组件抛错
       </div>
-      {/* Layout test — if it throws, ErrorBoundary will catch and show '出错了' */}
       <div
         data-testid="sage-layout-test"
         style={{
@@ -66,10 +69,25 @@ function App() {
           fontSize: 16,
         }}
       >
-        <h3>Layout 测试 (下面这个):</h3>
-        <ErrorBoundary>
-          <Layout />
-        </ErrorBoundary>
+        <h3>Layout 子组件拆分测试:</h3>
+        <div style={{ border: '2px solid #00ff00', padding: '8px', margin: '8px 0' }}>
+          <strong>1. Titlebar 测试:</strong>
+          <ErrorBoundary>
+            <Titlebar />
+          </ErrorBoundary>
+        </div>
+        <div style={{ border: '2px solid #00ff00', padding: '8px', margin: '8px 0' }}>
+          <strong>2. Sidebar 测试 (no width prop):</strong>
+          <ErrorBoundary>
+            <Sidebar />
+          </ErrorBoundary>
+        </div>
+        <div style={{ border: '2px solid #00ff00', padding: '8px', margin: '8px 0' }}>
+          <strong>3. ResizeDivider 测试 (no handlers):</strong>
+          <ErrorBoundary>
+            <ResizeDivider onMouseDown={() => {}} />
+          </ErrorBoundary>
+        </div>
       </div>
     </>
   );
