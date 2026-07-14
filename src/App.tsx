@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { ErrorBoundary } from './app/providers/ErrorBoundary';
-import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
+// import { NavHistoryProvider } from './app/providers/NavHistoryProvider'; // REMOVED for diagnostic
 import { loadCurrentSessionId } from './entities/session/storage';
 import { Settings } from './pages';
 import { Agents } from './pages/Agents';
@@ -70,14 +70,21 @@ function App() {
         APP MOUNTED — 如果你看到这条红条,App 组件正常挂载
       </div>
       <BrowserRouter>
-        <NavHistoryProvider>
-          {/* Outer ErrorBoundary: catches throws from the entire route subtree
-              (including the Layout shell + all children). v0.4.5-alpha.18
-              showed this fires with an empty Error (the actual root cause
-              was below). */}
+        <div data-testid="sage-no-navhistory" style={{ color: 'magenta', padding: 20, fontSize: 24 }}>
+          NavHistoryProvider REMOVED for diagnostic
           <ErrorBoundary>
             <Routes>
-              <Route path="/" element={<div data-testid="sage-route-replacement" style={{ color: 'yellow', padding: 20, fontSize: 24 }}>ROUTE ELEMENT — Layout REMOVED for diagnostic</div>}>
+              <Route
+                path="/"
+                element={
+                  <div
+                    data-testid="sage-route-replacement"
+                    style={{ color: 'yellow', padding: 20, fontSize: 24 }}
+                  >
+                    ROUTE ELEMENT — Layout REMOVED for diagnostic
+                  </div>
+                }
+              >
                 <Route index element={<Navigate to="/chat" replace />} />
                 <Route path="welcome" element={<Welcome />} />
                 <Route path="chat" element={<ChatRoute />} />
@@ -92,7 +99,7 @@ function App() {
             </Routes>
           </ErrorBoundary>
           <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-        </NavHistoryProvider>
+        </div>
       </BrowserRouter>
     </>
   );
