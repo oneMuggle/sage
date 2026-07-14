@@ -15,7 +15,6 @@ import Skills from './pages/Skills';
 import { Welcome } from './pages/Welcome';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
-import { Layout } from './widgets/layout';
 
 // Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
 function ChatRoute() {
@@ -78,7 +77,7 @@ function App() {
               was below). */}
           <ErrorBoundary>
             <Routes>
-              <Route path="/" element={<Layout />}>
+              <Route path="/" element={<div data-testid="sage-route-replacement" style={{ color: 'yellow', padding: 20, fontSize: 24 }}>ROUTE ELEMENT — Layout REMOVED for diagnostic</div>}>
                 <Route index element={<Navigate to="/chat" replace />} />
                 <Route path="welcome" element={<Welcome />} />
                 <Route path="chat" element={<ChatRoute />} />
