@@ -1,32 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 // import { NavHistoryProvider } from './app/providers/NavHistoryProvider'; // REMOVED for diagnostic
 import { loadCurrentSessionId } from './entities/session/storage';
 import { useStore } from './shared/lib/store';
-import { CommandPalette } from './widgets/command';
 
 function App() {
-  const [commandOpen, setCommandOpen] = useState(false);
-
   useEffect(() => {
     loadCurrentSessionId().then((id) => {
       if (id) {
         useStore.getState().setCurrentSessionId(id);
       }
     });
-  }, []);
-
-  // 全局快捷键 Ctrl+K / Cmd+K 打开命令面板
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setCommandOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   return (
@@ -56,13 +41,10 @@ function App() {
           style={{ color: 'magenta', padding: 20, fontSize: 24 }}
         >
           NavHistoryProvider REMOVED for diagnostic
-          <div
-            data-testid="sage-no-routes"
-            style={{ color: 'cyan', padding: 20, fontSize: 24 }}
-          >
+          <div data-testid="sage-no-routes" style={{ color: 'cyan', padding: 20, fontSize: 24 }}>
             ROUTES REMOVED for diagnostic — if this cyan div appears, throw is inside Routes
           </div>
-          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+          {/* CommandPalette REMOVED for diagnostic — if more content appears, throw is in CommandPalette */}
         </div>
       </BrowserRouter>
     </>
