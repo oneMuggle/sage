@@ -1,29 +1,10 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 
-import { ErrorBoundary } from './app/providers/ErrorBoundary';
 // import { NavHistoryProvider } from './app/providers/NavHistoryProvider'; // REMOVED for diagnostic
 import { loadCurrentSessionId } from './entities/session/storage';
-import { Settings } from './pages';
-import { Agents } from './pages/Agents';
-import { Chat } from './pages/Chat';
-import { Knowledge } from './pages/Knowledge';
-import { Memory } from './pages/Memory';
-import { Orchestration } from './pages/Orchestration';
-import { ScheduledTasks } from './pages/ScheduledTasks';
-import Skills from './pages/Skills';
-import { Welcome } from './pages/Welcome';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
-
-// Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
-function ChatRoute() {
-  const currentSessionId = useStore((s) => s.currentSessionId);
-  if (!currentSessionId) {
-    return <Navigate to="/welcome" replace />;
-  }
-  return <Chat />;
-}
 
 function App() {
   const [commandOpen, setCommandOpen] = useState(false);
@@ -70,34 +51,17 @@ function App() {
         APP MOUNTED — 如果你看到这条红条,App 组件正常挂载
       </div>
       <BrowserRouter>
-        <div data-testid="sage-no-navhistory" style={{ color: 'magenta', padding: 20, fontSize: 24 }}>
+        <div
+          data-testid="sage-no-navhistory"
+          style={{ color: 'magenta', padding: 20, fontSize: 24 }}
+        >
           NavHistoryProvider REMOVED for diagnostic
-          <ErrorBoundary>
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  <div
-                    data-testid="sage-route-replacement"
-                    style={{ color: 'yellow', padding: 20, fontSize: 24 }}
-                  >
-                    ROUTE ELEMENT — Layout REMOVED for diagnostic
-                  </div>
-                }
-              >
-                <Route index element={<Navigate to="/chat" replace />} />
-                <Route path="welcome" element={<Welcome />} />
-                <Route path="chat" element={<ChatRoute />} />
-                <Route path="settings" element={<Settings />} />
-                <Route path="memory" element={<Memory />} />
-                <Route path="agents" element={<Agents />} />
-                <Route path="skills" element={<Skills />} />
-                <Route path="knowledge" element={<Knowledge />} />
-                <Route path="scheduled" element={<ScheduledTasks />} />
-                <Route path="orchestration" element={<Orchestration />} />
-              </Route>
-            </Routes>
-          </ErrorBoundary>
+          <div
+            data-testid="sage-no-routes"
+            style={{ color: 'cyan', padding: 20, fontSize: 24 }}
+          >
+            ROUTES REMOVED for diagnostic — if this cyan div appears, throw is inside Routes
+          </div>
           <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
         </div>
       </BrowserRouter>
