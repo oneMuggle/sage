@@ -1,17 +1,51 @@
-import { useEffect } from 'react';
-import { BrowserRouter } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-// import { NavHistoryProvider } from './app/providers/NavHistoryProvider'; // REMOVED for diagnostic
+import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
+import { Settings } from './pages';
+import { Agents } from './pages/Agents';
+import { Chat } from './pages/Chat';
+import { Knowledge } from './pages/Knowledge';
+import { Memory } from './pages/Memory';
+import { Orchestration } from './pages/Orchestration';
+import { ScheduledTasks } from './pages/ScheduledTasks';
+import Skills from './pages/Skills';
+import { Welcome } from './pages/Welcome';
 import { useStore } from './shared/lib/store';
+import { CommandPalette } from './widgets/command';
+import { Layout } from './widgets/layout';
+
+// Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
+function ChatRoute() {
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  if (!currentSessionId) {
+    return <Navigate to="/welcome" replace />;
+  }
+  return <Chat />;
+}
 
 function App() {
+  const [commandOpen, setCommandOpen] = useState(false);
+
   useEffect(() => {
     loadCurrentSessionId().then((id) => {
       if (id) {
         useStore.getState().setCurrentSessionId(id);
       }
     });
+  }, []);
+
+  // 全局快捷键 Ctrl+K / Cmd+K 打开命令面板
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   return (
@@ -36,16 +70,23 @@ function App() {
         APP MOUNTED — 如果你看到这条红条,App 组件正常挂载
       </div>
       <BrowserRouter>
-        <div
-          data-testid="sage-no-navhistory"
-          style={{ color: 'magenta', padding: 20, fontSize: 24 }}
-        >
-          NavHistoryProvider REMOVED for diagnostic
-          <div data-testid="sage-no-routes" style={{ color: 'cyan', padding: 20, fontSize: 24 }}>
-            ROUTES REMOVED for diagnostic — if this cyan div appears, throw is inside Routes
-          </div>
-          {/* CommandPalette REMOVED for diagnostic — if more content appears, throw is in CommandPalette */}
-        </div>
+        <NavHistoryProvider>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Navigate to="/chat" replace />} />
+              <Route path="welcome" element={<Welcome />} />
+              <Route path="chat" element={<ChatRoute />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="memory" element={<Memory />} />
+              <Route path="agents" element={<Agents />} />
+              <Route path="skills" element={<Skills />} />
+              <Route path="knowledge" element={<Knowledge />} />
+              <Route path="scheduled" element={<ScheduledTasks />} />
+              <Route path="orchestration" element={<Orchestration />} />
+            </Route>
+          </Routes>
+          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        </NavHistoryProvider>
       </BrowserRouter>
     </>
   );
