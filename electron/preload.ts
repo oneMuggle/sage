@@ -135,18 +135,6 @@ const electronAPI = {
   } satisfies OfficeElectronApiBridge,
 
   /**
-   * Phase 1.3 (2026-07-16): Office document bridge for /office page.
-   * - pickOfficeFile: native open dialog filtered by doc type
-   * - pickSavePath: native save dialog for generated docs (Phase 1.4)
-   */
-  office: {
-    pickOfficeFile: (docType: 'ppt' | 'word' | 'excel') =>
-      ipcRenderer.invoke('office:pick-file', { docType }) as Promise<PickedOfficeFile | null>,
-    pickSavePath: (defaultName: string) =>
-      ipcRenderer.invoke('office:save-dialog', { defaultName }) as Promise<string | null>,
-  } satisfies OfficeElectronApiBridge,
-
-  /**
    * T13 (2026-07-02): Log management bridge — Diagnostics card on Settings page.
    * - listLogFiles: scan log dir → [{ name, sizeBytes, mtimeMs }] sorted newest first
    * - openLogDir: shell.openPath() + return resolved dir
