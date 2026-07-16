@@ -14,6 +14,7 @@ office_error_to_http_status() (errors.py). The exception handler is exposed
 as `register_office_exception_handlers(app)` and called from main.py at
 startup so other routers aren't affected.
 """
+
 from __future__ import annotations
 
 import logging
