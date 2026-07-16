@@ -11,6 +11,7 @@ Why not commit static .pptx/.docx/.xlsx fixtures?
   different binary output
 - Programmatic generation makes tests self-documenting
 """
+
 from __future__ import annotations
 
 from pathlib import Path

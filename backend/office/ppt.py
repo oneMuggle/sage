@@ -19,6 +19,7 @@ It deliberately does NOT preserve:
 
 These omissions are intentional per plan §1.3 "non-goals".
 """
+
 from __future__ import annotations
 
 import time
@@ -92,20 +93,12 @@ def _extract_text_blocks(slide) -> List[str]:
 
 def _count_tables(slide) -> int:
     """Number of GraphicFrame shapes containing tables on this slide."""
-    return sum(
-        1
-        for shape in slide.shapes
-        if shape.shape_type == MSO_SHAPE_TYPE.TABLE
-    )
+    return sum(1 for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.TABLE)
 
 
 def _count_images(slide) -> int:
     """Number of Picture shapes on this slide."""
-    return sum(
-        1
-        for shape in slide.shapes
-        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE
-    )
+    return sum(1 for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.PICTURE)
 
 
 def _extract_notes(slide) -> Optional[str]:
@@ -180,18 +173,14 @@ def read_ppt(
     if not file_path.exists():
         raise OfficeFileNotFoundError(file_path)
     if not file_path.is_file():
-        raise OfficeParseError(
-            f"Path is not a regular file: {file_path}", file_path=file_path
-        )
+        raise OfficeParseError(f"Path is not a regular file: {file_path}", file_path=file_path)
 
     try:
         prs = Presentation(str(file_path))
     except Exception as exc:
         # python-pptx raises various low-level exceptions (zipfile.BadZipFile,
         # lxml.etree.XMLSyntaxError, etc.). Normalize to OfficeParseError.
-        raise OfficeParseError(
-            f"Failed to parse PPTX: {exc}", file_path=file_path
-        ) from exc
+        raise OfficeParseError(f"Failed to parse PPTX: {exc}", file_path=file_path) from exc
 
     doc_id = document_id or file_path.stem
     slides: List[PptSlideContent] = []

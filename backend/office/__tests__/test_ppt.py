@@ -11,6 +11,7 @@ Test coverage (plan §5.1):
 - slide with image
 - slide with notes
 """
+
 from __future__ import annotations
 
 import base64
