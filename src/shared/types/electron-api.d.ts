@@ -41,6 +41,28 @@ export interface SkillsElectronApiBridge {
   importSkills: (paths: string[]) => Promise<ImportResult>;
 }
 
+/**
+ * Phase 1.3 (2026-07-16): Office document bridge for the /office page.
+ *
+ * - pickOfficeFile: native open dialog filtered to .pptx/.docx/.xlsx
+ *   → { path, name, sizeBytes } | null
+ * - pickSavePath: native save dialog → absolute path | null
+ *
+ * The 8 read/list/delete HTTP routes (office_ppt_read etc.) are routed
+ * through the standard invoke→HTTP path; they don't appear here because
+ * they're consumed via the typed `officeApi` wrapper in src/shared/api/officeApi.ts.
+ */
+export interface PickedOfficeFile {
+  path: string;
+  name: string;
+  sizeBytes: number;
+}
+
+export interface OfficeElectronApiBridge {
+  pickOfficeFile: (docType: 'ppt' | 'word' | 'excel') => Promise<PickedOfficeFile | null>;
+  pickSavePath: (defaultName: string) => Promise<string | null>;
+}
+
 export interface ElectronAPI {
   invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>;
   /**
@@ -55,6 +77,7 @@ export interface ElectronAPI {
   ): Promise<UnlistenFn>;
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
+  office: OfficeElectronApiBridge;
   /** Optional bridge added in Task 8 (renderer→main log IPC). */
   log?: (level: LogLevel, msg: string, meta?: Record<string, unknown>) => Promise<unknown>;
   /** T13 (2026-07-02): Diagnostics card — list log files (newest first). */

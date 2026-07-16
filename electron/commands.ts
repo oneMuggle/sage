@@ -172,6 +172,23 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/cancel`,
   },
+
+  // Office document features (Phase 1.3, plan §4.1.3 step 14).
+  // 5 routes for Phase 1.2 backend (3 read + list + delete).
+  // Generate endpoints (ppt_generate, word_generate, excel_generate)
+  // deferred to Phase 1.4 follow-up PR.
+  office_ppt_read: { method: 'POST', path: () => '/api/v1/office/ppt/read' },
+  office_word_read: { method: 'POST', path: () => '/api/v1/office/word/read' },
+  office_excel_read: { method: 'POST', path: () => '/api/v1/office/excel/read' },
+  office_list_documents: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/documents?workspace_path=${encodeURIComponent(String(a.workspacePath))}`,
+  },
+  office_delete_document: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/office/documents/${encodeURIComponent(String(a.docId))}`,
+  },
 };
 
 export class UnknownIpcCommandError extends Error {
