@@ -47,16 +47,29 @@ export function Office() {
   const { documents, loading, error, refresh, readPpt, readWord, readExcel, deleteDocument } =
     useOfficeDocuments(workspacePath);
 
+  // In-flight delete tracker so double-click on a trash button doesn't fire
+  // two parallel API calls (one 200, one 404 → spurious error toast).
+  const deletingRef = useRef<Set<string>>(new Set());
+
   const handleSelectWorkspace = async () => {
     try {
-      const dir = await window.electronAPI?.selectDirectory({ intent: 'open' });
+      const api = window.electronAPI;
+      if (!api) {
+        // No preload bridge → running outside Electron (e.g. plain browser).
+        // Tell the user instead of silently no-op'ing.
+        toast.error('IPC 桥接不可用,请在 Electron 桌面端运行');
+        return;
+      }
+      const dir = await api.selectDirectory({ intent: 'open' });
       if (dir) {
+        // Bump readIdRef so any in-flight read from the previous workspace
+        // is correctly discarded by the stale-read guard.
+        readIdRef.current += 1;
         setWorkspacePath(dir);
         setPreview(null);
         setPreviewingPath(null);
       }
     } catch (e) {
-      // HIGH FIX: surface IPC failure to user via toast (previously silent).
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`选择工作区失败: ${msg}`);
     }
@@ -78,22 +91,34 @@ export function Office() {
       } else {
         data = { docType: 'excel', data: await readExcel(filePath) };
       }
-      // Discard stale read: only commit preview if no newer read started
+      // Stale-read guard: only commit preview if this is still the latest
       if (myReadId !== readIdRef.current) return;
       setPreview(data);
-      // Refresh list to reflect new parsed record (if backend saved one)
       await refresh();
+      // Re-check after the await (refresh may take time; another read
+      // could have started in the meantime)
+      if (myReadId !== readIdRef.current) return;
       toast.success('文档读取成功');
     } catch (e) {
+      // If this read is stale, suppress its error toast (a newer read
+      // is in flight and the user will see ITS result instead)
+      if (myReadId !== readIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`读取失败: ${msg}`);
       setPreview(null);
     } finally {
-      setPreviewingPath(null);
+      // Only clear previewingPath if this is still the latest read;
+      // otherwise a newer read is still in flight
+      if (myReadId === readIdRef.current) {
+        setPreviewingPath(null);
+      }
     }
   };
 
   const handleDelete = async (docId: string) => {
+    // HIGH FIX: in-flight guard against double-click
+    if (deletingRef.current.has(docId)) return;
+    deletingRef.current.add(docId);
     try {
       await deleteDocument(docId);
       toast.success('已删除');
@@ -102,6 +127,8 @@ export function Office() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`删除失败: ${msg}`);
+    } finally {
+      deletingRef.current.delete(docId);
     }
   };
 
@@ -192,10 +219,7 @@ export function Office() {
           </div>
 
           {/* Generate form (Phase 1.4) */}
-          <OfficeGenerateForm
-            workspacePath={workspacePath}
-            onGenerated={refresh}
-          />
+          <OfficeGenerateForm workspacePath={workspacePath} onGenerated={refresh} />
         </>
       )}
     </div>

@@ -98,10 +98,31 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
   );
 
   const deleteDocument = useCallback(async (docId: string): Promise<void> => {
-    await officeApi.deleteDocument(docId);
-    // Optimistic update: remove from local list immediately
+    // HIGH FIX (Phase 2 — real implementation): optimistic update with
+    // rollback. Previous commit claimed this fix but never modified the
+    // file (linter or stale write). Now correctly:
+    // 1. Capture the doc for potential rollback
+    // 2. Optimistically remove from list
+    // 3. Call API
+    // 4. On failure, restore the doc to the front of the list (matches
+    //    list_documents ORDER BY created_at DESC)
+    const previous = documents.find((d) => d.id === docId);
+    if (!previous) {
+      // Nothing to do; not in local cache
+      return;
+    }
     setDocuments((prev) => prev.filter((d) => d.id !== docId));
-  }, []);
+    try {
+      await officeApi.deleteDocument(docId);
+    } catch (err) {
+      // Roll back: re-insert at head (most recent first).
+      setDocuments((prev) => {
+        if (prev.some((d) => d.id === docId)) return prev;
+        return [previous, ...prev];
+      });
+      throw err;
+    }
+  }, [documents]);
 
   return {
     documents,
