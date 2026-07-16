@@ -78,9 +78,15 @@ def generate_document_dir(
 
     target = (workspace / "office" / doc_type.value / doc_id).resolve()
 
-    # Defense-in-depth: confirm target is still inside workspace after resolve
-    if not target.is_relative_to(workspace):
-        raise OfficePathError(f"Resolved doc dir escapes workspace: {target}", file_path=target)
+    # Defense-in-depth: confirm target is still inside workspace after resolve.
+    # Use string prefix (Python 3.8-compatible) since Path.is_relative_to
+    # is 3.9+ and the project supports release/win7 LTS on Python 3.8.
+    workspace_str = str(workspace)
+    target_str = str(target)
+    if not (target_str == workspace_str or target_str.startswith(workspace_str + "/")):
+        raise OfficePathError(
+            f"Resolved doc dir escapes workspace: {target}", file_path=target
+        )
 
     target.mkdir(parents=True, exist_ok=True)
     return target

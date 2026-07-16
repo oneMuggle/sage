@@ -25,11 +25,20 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from backend.data.database import Database, get_database
-from backend.office.errors import OfficeError, office_error_to_http_status
-from backend.office.excel import read_xlsx
+from backend.office.errors import (
+    OfficeError,
+    OfficePathError,
+    OfficeSizeLimitError,
+    office_error_to_http_status,
+)
+from backend.office.excel import generate_xlsx, read_xlsx
 from backend.office.models import (
     OfficeDeleteResponse,
+    OfficeDocStatus,
+    OfficeDocType,
     OfficeDocumentListResponse,
+    OfficeDocumentMetadata,
+    OfficeDocumentSummary,
     OfficeExcelGenerateRequest,
     OfficeExcelReadResult,
     OfficePptGenerateRequest,
@@ -38,12 +47,102 @@ from backend.office.models import (
     OfficeWordGenerateRequest,
     OfficeWordReadResult,
 )
-from backend.office.ppt import read_ppt
-from backend.office.storage import delete_document, list_documents
-from backend.office.word import read_docx
+from backend.office.ppt import generate_ppt, read_ppt
+from backend.office.storage import (
+    delete_document,
+    list_documents,
+    save_document,
+    validate_workspace,
+)
+from backend.office.word import generate_docx, read_docx
 
 if TYPE_CHECKING:
     pass
+
+
+import time  # noqa: E402  (used by _build_summary_for_generated)
+
+
+def _validate_file_in_workspace(file_path_str: str, workspace_path_str: str) -> Path:
+    """CRITICAL SECURITY: ensure file_path is inside workspace_path.
+
+    Rejects path traversal (../), absolute paths outside workspace, and
+    symlink-escape attacks. This is the only barrier between an untrusted
+    renderer IPC call and arbitrary local file reads (e.g. /etc/passwd).
+    """
+    workspace = validate_workspace(workspace_path_str)
+    target = Path(file_path_str).resolve()
+    # String prefix check for Python 3.8 compat (Path.is_relative_to is 3.9+).
+    workspace_str = str(workspace)
+    target_str = str(target)
+    if not (target_str == workspace_str or target_str.startswith(workspace_str + "/")):
+        raise OfficePathError(
+            f"file_path is not within workspace: {file_path_str}",
+            file_path=target,
+        )
+    if not target.is_file():
+        raise OfficePathError(
+            f"file_path is not a regular file: {file_path_str}", file_path=target
+        )
+    return target
+
+
+def _check_size_limit(file_path: Path, max_size_bytes: int) -> None:
+    """Plan §6 R1: enforce max_size_bytes (default 50MB) before parsing."""
+    actual_size = file_path.stat().st_size
+    if actual_size > max_size_bytes:
+        raise OfficeSizeLimitError(
+            actual_size=actual_size, max_size=max_size_bytes, file_path=file_path
+        )
+
+
+def _build_summary_for_generated(
+    *,
+    file_path: Path,
+    doc_type: OfficeDocType,
+    workspace_path: str,
+) -> OfficeDocumentSummary:
+    """Build a summary for a freshly-generated document and persist it.
+
+    CRITICAL FIX: previous version never called save_document, so the
+    office_documents table stayed empty in production.
+    """
+    now_ms = int(time.time() * 1000)
+    summary = OfficeDocumentSummary(
+        id=file_path.parent.name,  # storage places <doc_id>/ next to the file
+        workspace_path=workspace_path,
+        doc_type=doc_type,
+        original_filename=None,
+        generated_filename=file_path.name,
+        status=OfficeDocStatus.GENERATED,
+        created_at=now_ms,
+        updated_at=now_ms,
+        metadata=OfficeDocumentMetadata(
+            file_size_bytes=file_path.stat().st_size
+        ),
+    )
+    save_document(_db().get_connection(), summary)
+    return summary
+
+
+def _delete_office_doc_record_and_files(doc_id: str) -> bool:
+    """Delete the DB row AND the on-disk file directory.
+
+    HIGH FIX: previous version only removed the DB row, leaving on-disk
+    .pptx/.docx/.xlsx files as orphans forever.
+    """
+    import shutil
+    conn = _db().get_connection()
+    row = conn.execute(
+        "SELECT workspace_path, doc_type FROM office_documents WHERE id = ?",
+        (doc_id,),
+    ).fetchone()
+    deleted = delete_document(conn, doc_id)
+    if row:
+        parent_dir = Path(row["workspace_path"]) / "office" / row["doc_type"] / doc_id
+        if parent_dir.is_dir():
+            shutil.rmtree(parent_dir, ignore_errors=True)
+    return deleted
 
 logger = logging.getLogger(__name__)
 
@@ -87,10 +186,16 @@ async def _office_error_handler(request: Request, exc: OfficeError) -> JSONRespo
 
 @router.post("/ppt/read", response_model=OfficePptReadResult)
 def read_ppt_endpoint(req: OfficeReadRequest) -> OfficePptReadResult:
-    """Read a .pptx file and return structured content."""
+    """Read a .pptx file and return structured content.
+
+    SECURITY: file_path is validated to lie inside workspace_path.
+    Plan §6 R1: rejects files >max_size_bytes (default 50MB) to prevent OOM.
+    """
     logger.info("Reading PPT: %s", req.file_path)
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    _check_size_limit(file_path, req.max_size_bytes)
     return read_ppt(
-        file_path=Path(req.file_path),
+        file_path=file_path,
         workspace_path=req.workspace_path,
     )
 
@@ -99,8 +204,10 @@ def read_ppt_endpoint(req: OfficeReadRequest) -> OfficePptReadResult:
 def read_word_endpoint(req: OfficeReadRequest) -> OfficeWordReadResult:
     """Read a .docx file and return structured content."""
     logger.info("Reading Word: %s", req.file_path)
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    _check_size_limit(file_path, req.max_size_bytes)
     return read_docx(
-        file_path=Path(req.file_path),
+        file_path=file_path,
         workspace_path=req.workspace_path,
     )
 
@@ -109,8 +216,10 @@ def read_word_endpoint(req: OfficeReadRequest) -> OfficeWordReadResult:
 def read_excel_endpoint(req: OfficeReadRequest) -> OfficeExcelReadResult:
     """Read a .xlsx file and return structured content."""
     logger.info("Reading Excel: %s", req.file_path)
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    _check_size_limit(file_path, req.max_size_bytes)
     return read_xlsx(
-        file_path=Path(req.file_path),
+        file_path=file_path,
         workspace_path=req.workspace_path,
     )
 
@@ -129,8 +238,11 @@ def list_documents_endpoint(workspace_path: str) -> OfficeDocumentListResponse:
 
 @router.delete("/documents/{doc_id}", response_model=OfficeDeleteResponse)
 def delete_document_endpoint(doc_id: str) -> OfficeDeleteResponse:
-    """Delete an office document record by id."""
-    deleted = delete_document(_db().get_connection(), doc_id)
+    """Delete an office document record + on-disk file directory.
+
+    HIGH FIX: also removes <workspace>/office/<doc_type>/<doc_id>/ on disk.
+    """
+    deleted = _delete_office_doc_record_and_files(doc_id)
     return OfficeDeleteResponse(id=doc_id, deleted=deleted)
 
 
@@ -141,10 +253,17 @@ def delete_document_endpoint(doc_id: str) -> OfficeDeleteResponse:
 
 @router.post("/ppt/generate")
 def generate_ppt_endpoint(req: OfficePptGenerateRequest) -> dict:
-    """Generate a .pptx file from structured input. Returns output_path metadata."""
-    from backend.office.ppt import generate_ppt
+    """Generate a .pptx file from structured input.
 
+    CRITICAL FIX: now also calls save_document() to persist the generated
+    document in the office_documents table so it appears in the list API.
+    """
     output_path = generate_ppt(req)
+    _build_summary_for_generated(
+        file_path=output_path,
+        doc_type=OfficeDocType.PPT,
+        workspace_path=req.workspace_path,
+    )
     return {
         "output_path": str(output_path),
         "filename": output_path.name,
@@ -155,9 +274,12 @@ def generate_ppt_endpoint(req: OfficePptGenerateRequest) -> dict:
 @router.post("/word/generate")
 def generate_word_endpoint(req: OfficeWordGenerateRequest) -> dict:
     """Generate a .docx file from structured input."""
-    from backend.office.word import generate_docx
-
     output_path = generate_docx(req)
+    _build_summary_for_generated(
+        file_path=output_path,
+        doc_type=OfficeDocType.WORD,
+        workspace_path=req.workspace_path,
+    )
     return {
         "output_path": str(output_path),
         "filename": output_path.name,
@@ -168,9 +290,12 @@ def generate_word_endpoint(req: OfficeWordGenerateRequest) -> dict:
 @router.post("/excel/generate")
 def generate_excel_endpoint(req: OfficeExcelGenerateRequest) -> dict:
     """Generate a .xlsx file from structured input."""
-    from backend.office.excel import generate_xlsx
-
     output_path = generate_xlsx(req)
+    _build_summary_for_generated(
+        file_path=output_path,
+        doc_type=OfficeDocType.EXCEL,
+        workspace_path=req.workspace_path,
+    )
     return {
         "output_path": str(output_path),
         "filename": output_path.name,
