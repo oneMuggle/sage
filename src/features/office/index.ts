@@ -6,3 +6,5 @@ export { OfficePreviewPanel } from './OfficePreviewPanel';
 export type { OfficePreviewData, OfficePreviewPanelProps } from './OfficePreviewPanel';
 export { OfficeDocumentList } from './OfficeDocumentList';
 export type { OfficeDocumentListProps } from './OfficeDocumentList';
+export { OfficeGenerateForm } from './OfficeGenerateForm';
+export type { OfficeGenerateFormProps } from './OfficeGenerateForm';

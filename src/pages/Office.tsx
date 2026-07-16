@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import {
   OfficeDocumentList,
   OfficeFilePicker,
+  OfficeGenerateForm,
   OfficePreviewPanel,
   useOfficeDocuments,
   type OfficePreviewData,
@@ -174,6 +175,9 @@ export function Office() {
             </h2>
             <OfficeDocumentList documents={documents} loading={loading} onDelete={handleDelete} />
           </div>
+
+          {/* Generate form (Phase 1.4) */}
+          <OfficeGenerateForm workspacePath={workspacePath} />
         </>
       )}
     </div>

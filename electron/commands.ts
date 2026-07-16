@@ -189,6 +189,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/office/documents/${encodeURIComponent(String(a.docId))}`,
   },
+  // Phase 1.4 (2026-07-16): Office generate endpoints (plan §4.1.4 step 19).
+  office_ppt_generate: { method: 'POST', path: () => '/api/v1/office/ppt/generate' },
+  office_word_generate: { method: 'POST', path: () => '/api/v1/office/word/generate' },
+  office_excel_generate: { method: 'POST', path: () => '/api/v1/office/excel/generate' },
 };
 
 export class UnknownIpcCommandError extends Error {

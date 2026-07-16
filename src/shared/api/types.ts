@@ -460,6 +460,55 @@ export interface OfficeReadRequest {
   max_size_bytes?: number;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Generate request types (Phase 1.4, plan §4.1.4)
+// Backend counterpart: OfficePptGenerateRequest / OfficeWordGenerateRequest /
+// OfficeExcelGenerateRequest in backend/office/models.py
+// ──────────────────────────────────────────────────────────────────────
+
+export interface PptSlideSpec {
+  title: string;
+  bullets?: string[];
+  notes?: string;
+}
+
+export interface OfficePptGenerateRequest {
+  workspace_path: string;
+  filename: string;
+  slides: PptSlideSpec[];
+  template?: 'default' | 'minimal';
+}
+
+export interface WordParagraphSpec {
+  heading?: 'h1' | 'h2' | 'h3';
+  text: string;
+}
+
+export interface WordTableSpec {
+  headers: string[];
+  rows: string[][];
+}
+
+export interface OfficeWordGenerateRequest {
+  workspace_path: string;
+  filename: string;
+  title: string;
+  paragraphs?: WordParagraphSpec[];
+  tables?: WordTableSpec[];
+}
+
+export interface ExcelSheetSpec {
+  name: string;
+  headers?: string[];
+  rows?: string[][];
+}
+
+export interface OfficeExcelGenerateRequest {
+  workspace_path: string;
+  filename: string;
+  sheets: ExcelSheetSpec[];
+}
+
 export interface OfficeDocumentListResponse {
   documents: OfficeDocumentSummary[];
   total: number;
