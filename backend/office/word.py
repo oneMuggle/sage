@@ -16,6 +16,7 @@ It does NOT extract:
 
 These omissions are intentional per plan §1.3 "non-goals".
 """
+
 from __future__ import annotations
 
 import time
@@ -155,17 +156,13 @@ def read_docx(
     if not file_path.exists():
         raise OfficeFileNotFoundError(file_path)
     if not file_path.is_file():
-        raise OfficeParseError(
-            f"Path is not a regular file: {file_path}", file_path=file_path
-        )
+        raise OfficeParseError(f"Path is not a regular file: {file_path}", file_path=file_path)
 
     try:
         doc = Document(str(file_path))
     except Exception as exc:
         # python-docx raises zipfile.BadZipFile, lxml.etree.XMLSyntaxError, etc.
-        raise OfficeParseError(
-            f"Failed to parse DOCX: {exc}", file_path=file_path
-        ) from exc
+        raise OfficeParseError(f"Failed to parse DOCX: {exc}", file_path=file_path) from exc
 
     paragraphs = _extract_paragraphs(doc)
     tables = _extract_tables(doc)

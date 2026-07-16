@@ -12,6 +12,7 @@ Test coverage (plan §5.1):
 - Missing file → OfficeFileNotFoundError
 - Corrupt file → OfficeParseError
 """
+
 from __future__ import annotations
 
 import base64
