@@ -22,6 +22,10 @@ from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
+from backend.api.office_routes import (
+    register_office_exception_handlers,
+    router as office_router,
+)
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
@@ -335,6 +339,8 @@ async def add_request_id_header(request: Request, call_next):
 # 跟踪 issue/PR 见 docs/plans/2026-06-13_full-quality-optimization-v2.md。
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
+app.include_router(office_router, prefix="/api/v1")
+register_office_exception_handlers(app)
 app.include_router(build_orchestration_router(), prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
