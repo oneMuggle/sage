@@ -381,3 +381,91 @@ export interface LaneBoardGroup {
   blocked: Lane[];
   finished: Lane[];
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Office document types (Phase 1, plan §3.4)
+// Backend counterpart: backend/office/models.py
+// ──────────────────────────────────────────────────────────────────────
+
+export type OfficeDocType = 'ppt' | 'word' | 'excel';
+
+export type OfficeDocStatus = 'parsed' | 'generated' | 'edited';
+
+export interface OfficeDocumentMetadata {
+  page_count?: number;
+  sheet_count?: number;
+  paragraph_count?: number;
+  table_count?: number;
+  file_size_bytes: number;
+}
+
+export interface OfficeDocumentSummary {
+  id: string;
+  workspace_path: string;
+  doc_type: OfficeDocType;
+  original_filename: string | null;
+  generated_filename: string;
+  status: OfficeDocStatus;
+  created_at: number;
+  updated_at: number;
+  metadata: OfficeDocumentMetadata;
+}
+
+export interface OfficePptSlideContent {
+  index: number;
+  title: string | null;
+  text_blocks: string[];
+  table_count: number;
+  image_count: number;
+  notes: string | null;
+}
+
+export interface OfficePptReadResult {
+  summary: OfficeDocumentSummary;
+  slides: OfficePptSlideContent[];
+}
+
+export interface OfficeWordParagraphContent {
+  style: string;
+  text: string;
+  level: number;
+}
+
+export interface OfficeWordTableContent {
+  rows: string[][];
+}
+
+export interface OfficeWordReadResult {
+  summary: OfficeDocumentSummary;
+  paragraphs: OfficeWordParagraphContent[];
+  tables: OfficeWordTableContent[];
+  images: number;
+}
+
+export interface OfficeExcelSheetContent {
+  name: string;
+  rows: string[][];
+  max_row: number;
+  max_col: number;
+}
+
+export interface OfficeExcelReadResult {
+  summary: OfficeDocumentSummary;
+  sheets: OfficeExcelSheetContent[];
+}
+
+export interface OfficeReadRequest {
+  workspace_path: string;
+  file_path: string;
+  max_size_bytes?: number;
+}
+
+export interface OfficeDocumentListResponse {
+  documents: OfficeDocumentSummary[];
+  total: number;
+}
+
+export interface OfficeDeleteResponse {
+  id: string;
+  deleted: boolean;
+}
