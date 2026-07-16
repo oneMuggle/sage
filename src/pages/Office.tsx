@@ -20,7 +20,7 @@
  */
 
 import { FileSpreadsheet, FileText, FolderOpen, Presentation } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -37,16 +37,28 @@ export function Office() {
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [preview, setPreview] = useState<OfficePreviewData | null>(null);
   const [previewingPath, setPreviewingPath] = useState<string | null>(null);
+  // HIGH FIX: stale-read guard. Increments on every handlePickAndRead
+  // invocation; setPreview checks the captured id before applying state.
+  // Without this, a read that resolves after a workspace change
+  // (or a faster subsequent read) would overwrite the correct preview
+  // with stale data from the wrong workspace.
+  const readIdRef = useRef(0);
 
   const { documents, loading, error, refresh, readPpt, readWord, readExcel, deleteDocument } =
     useOfficeDocuments(workspacePath);
 
   const handleSelectWorkspace = async () => {
-    const dir = await window.electronAPI?.selectDirectory({ intent: 'open' });
-    if (dir) {
-      setWorkspacePath(dir);
-      setPreview(null);
-      setPreviewingPath(null);
+    try {
+      const dir = await window.electronAPI?.selectDirectory({ intent: 'open' });
+      if (dir) {
+        setWorkspacePath(dir);
+        setPreview(null);
+        setPreviewingPath(null);
+      }
+    } catch (e) {
+      // HIGH FIX: surface IPC failure to user via toast (previously silent).
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`选择工作区失败: ${msg}`);
     }
   };
 
@@ -55,6 +67,7 @@ export function Office() {
       toast.error('请先选择工作区目录');
       return;
     }
+    const myReadId = ++readIdRef.current;
     setPreviewingPath(filePath);
     try {
       let data: OfficePreviewData;
@@ -65,6 +78,8 @@ export function Office() {
       } else {
         data = { docType: 'excel', data: await readExcel(filePath) };
       }
+      // Discard stale read: only commit preview if no newer read started
+      if (myReadId !== readIdRef.current) return;
       setPreview(data);
       // Refresh list to reflect new parsed record (if backend saved one)
       await refresh();
@@ -177,7 +192,10 @@ export function Office() {
           </div>
 
           {/* Generate form (Phase 1.4) */}
-          <OfficeGenerateForm workspacePath={workspacePath} />
+          <OfficeGenerateForm
+            workspacePath={workspacePath}
+            onGenerated={refresh}
+          />
         </>
       )}
     </div>

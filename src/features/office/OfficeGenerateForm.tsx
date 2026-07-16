@@ -5,8 +5,8 @@
  * displayed below with size + path.
  */
 
-import { useState } from 'react';
 import { FileSpreadsheet, FileText, Presentation, Sparkles } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { officeApi } from '../../shared/api/officeApi';
@@ -14,9 +14,15 @@ import type { OfficeDocType } from '../../shared/api/types';
 
 export interface OfficeGenerateFormProps {
   workspacePath: string;
+  /**
+   * Called after a successful generate so the parent can refresh the
+   * document list. Without this, generated docs don't appear in history
+   * until the next manual refresh (HIGH #6 in AI review).
+   */
+  onGenerated?: () => void | Promise<void>;
 }
 
-export function OfficeGenerateForm({ workspacePath }: OfficeGenerateFormProps) {
+export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerateFormProps) {
   const [docType, setDocType] = useState<OfficeDocType>('ppt');
   const [filename, setFilename] = useState('my-document');
   const [busy, setBusy] = useState(false);
@@ -45,7 +51,10 @@ export function OfficeGenerateForm({ workspacePath }: OfficeGenerateFormProps) {
     try {
       let out: { output_path: string; filename: string; file_size_bytes: number };
       if (docType === 'ppt') {
-        const bullets = pptBullets.split('\n').map((b) => b.trim()).filter(Boolean);
+        const bullets = pptBullets
+          .split('\n')
+          .map((b) => b.trim())
+          .filter(Boolean);
         out = await officeApi.generatePpt({
           workspace_path: workspacePath,
           filename,
@@ -59,10 +68,11 @@ export function OfficeGenerateForm({ workspacePath }: OfficeGenerateFormProps) {
           paragraphs: [{ text: wordBody }],
         });
       } else {
-        const headers = sheetHeaders.split(',').map((h) => h.trim()).filter(Boolean);
-        const rows = sheetRows
-          .split('\n')
-          .map((r) => r.split(',').map((c) => c.trim()));
+        const headers = sheetHeaders
+          .split(',')
+          .map((h) => h.trim())
+          .filter(Boolean);
+        const rows = sheetRows.split('\n').map((r) => r.split(',').map((c) => c.trim()));
         out = await officeApi.generateExcel({
           workspace_path: workspacePath,
           filename,
@@ -71,6 +81,10 @@ export function OfficeGenerateForm({ workspacePath }: OfficeGenerateFormProps) {
       }
       setResult({ path: out.output_path, sizeBytes: out.file_size_bytes });
       toast.success(`已生成 ${out.filename}`);
+      // HIGH FIX: notify parent so it can refresh the document list.
+      if (onGenerated) {
+        await onGenerated();
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`生成失败: ${msg}`);
@@ -207,7 +221,9 @@ export function OfficeGenerateForm({ workspacePath }: OfficeGenerateFormProps) {
 
       {result && (
         <div className="text-xs text-muted bg-surface border border-border rounded p-2">
-          <div>已生成: <code className="text-text">{result.path}</code></div>
+          <div>
+            已生成: <code className="text-text">{result.path}</code>
+          </div>
           <div>大小: {(result.sizeBytes / 1024).toFixed(1)} KB</div>
         </div>
       )}
