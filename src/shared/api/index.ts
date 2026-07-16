@@ -10,6 +10,7 @@ export { chatApi } from './chatApi';
 export { knowledgeApi } from './knowledgeApi';
 export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
+export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
 export { skillsApi } from './skillsApi';
 export { themeCssClient } from './themeCssClient';
@@ -36,6 +37,20 @@ export type {
   KnowledgeDoc,
   Memory,
   Message,
+  OfficeDeleteResponse,
+  OfficeDocStatus,
+  OfficeDocType,
+  OfficeDocumentListResponse,
+  OfficeDocumentMetadata,
+  OfficeDocumentSummary,
+  OfficeExcelReadResult,
+  OfficeExcelSheetContent,
+  OfficePptReadResult,
+  OfficePptSlideContent,
+  OfficeReadRequest,
+  OfficeWordParagraphContent,
+  OfficeWordReadResult,
+  OfficeWordTableContent,
   Session,
   Skill,
   SkillDispatch,
