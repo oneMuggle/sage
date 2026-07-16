@@ -1,0 +1,229 @@
+/**
+ * /office page (Phase 1.3, plan §4.1.4 step 17).
+ *
+ * Layout:
+ *   ┌──────────────────────────────────────┐
+ *   │ Header (workspace selector)            │
+ *   ├──────────┬───────────────────────────┤
+ *   │ 3 file   │   Preview panel (right)   │
+ *   │ pickers  │   (PPT slides / Word text │
+ *   │ (PPTX/   │   / Excel sheets)        │
+ *   │ DOCX/    │                          │
+ *   │ XLSX)    │                          │
+ *   ├──────────┴───────────────────────────┤
+ *   │ Document list (history)              │
+ *   └──────────────────────────────────────┘
+ *
+ * Reads: per-user Q3 includes "MVP 包含编辑现有", but editing endpoints
+ * are deferred to Phase 2 per plan §4.1.4 step 17. This page only
+ * implements read + list + delete for Phase 1.3.
+ */
+
+import { FileSpreadsheet, FileText, FolderOpen, Presentation } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
+
+import {
+  OfficeDocumentList,
+  OfficeFilePicker,
+  OfficeGenerateForm,
+  OfficePreviewPanel,
+  useOfficeDocuments,
+  type OfficePreviewData,
+} from '../features/office';
+import type { OfficeDocType } from '../shared/api/types';
+
+export function Office() {
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [preview, setPreview] = useState<OfficePreviewData | null>(null);
+  const [previewingPath, setPreviewingPath] = useState<string | null>(null);
+  // HIGH FIX: stale-read guard. Increments on every handlePickAndRead
+  // invocation; setPreview checks the captured id before applying state.
+  // Without this, a read that resolves after a workspace change
+  // (or a faster subsequent read) would overwrite the correct preview
+  // with stale data from the wrong workspace.
+  const readIdRef = useRef(0);
+
+  const { documents, loading, error, refresh, readPpt, readWord, readExcel, deleteDocument } =
+    useOfficeDocuments(workspacePath);
+
+  // In-flight delete tracker so double-click on a trash button doesn't fire
+  // two parallel API calls (one 200, one 404 → spurious error toast).
+  const deletingRef = useRef<Set<string>>(new Set());
+
+  const handleSelectWorkspace = async () => {
+    try {
+      const api = window.electronAPI;
+      if (!api) {
+        // No preload bridge → running outside Electron (e.g. plain browser).
+        // Tell the user instead of silently no-op'ing.
+        toast.error('IPC 桥接不可用,请在 Electron 桌面端运行');
+        return;
+      }
+      const dir = await api.selectDirectory({ intent: 'open' });
+      if (dir) {
+        // Bump readIdRef so any in-flight read from the previous workspace
+        // is correctly discarded by the stale-read guard.
+        readIdRef.current += 1;
+        setWorkspacePath(dir);
+        setPreview(null);
+        setPreviewingPath(null);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`选择工作区失败: ${msg}`);
+    }
+  };
+
+  const handlePickAndRead = (docType: OfficeDocType) => async (filePath: string) => {
+    if (!workspacePath) {
+      toast.error('请先选择工作区目录');
+      return;
+    }
+    const myReadId = ++readIdRef.current;
+    setPreviewingPath(filePath);
+    try {
+      let data: OfficePreviewData;
+      if (docType === 'ppt') {
+        data = { docType: 'ppt', data: await readPpt(filePath) };
+      } else if (docType === 'word') {
+        data = { docType: 'word', data: await readWord(filePath) };
+      } else {
+        data = { docType: 'excel', data: await readExcel(filePath) };
+      }
+      // Stale-read guard: only commit preview if this is still the latest
+      if (myReadId !== readIdRef.current) return;
+      setPreview(data);
+      await refresh();
+      // Re-check after the await (refresh may take time; another read
+      // could have started in the meantime)
+      if (myReadId !== readIdRef.current) return;
+      toast.success('文档读取成功');
+    } catch (e) {
+      // If this read is stale, suppress its error toast (a newer read
+      // is in flight and the user will see ITS result instead)
+      if (myReadId !== readIdRef.current) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`读取失败: ${msg}`);
+      setPreview(null);
+    } finally {
+      // Only clear previewingPath if this is still the latest read;
+      // otherwise a newer read is still in flight
+      if (myReadId === readIdRef.current) {
+        setPreviewingPath(null);
+      }
+    }
+  };
+
+  const handleDelete = async (docId: string) => {
+    // HIGH FIX: in-flight guard against double-click
+    if (deletingRef.current.has(docId)) return;
+    deletingRef.current.add(docId);
+    try {
+      await deleteDocument(docId);
+      toast.success('已删除');
+      setPreview(null);
+      setPreviewingPath(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`删除失败: ${msg}`);
+    } finally {
+      deletingRef.current.delete(docId);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto" data-testid="office-page">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-semibold text-text">Office 文档</h1>
+        <div className="ml-auto flex items-center gap-2 text-sm text-muted">
+          <FolderOpen className="w-4 h-4" />
+          {workspacePath ? (
+            <button
+              onClick={handleSelectWorkspace}
+              className="text-primary hover:underline"
+              data-testid="office-workspace-path"
+            >
+              {workspacePath}
+            </button>
+          ) : (
+            <button
+              onClick={handleSelectWorkspace}
+              className="px-3 py-1.5 rounded bg-primary text-text-inverse text-sm hover:bg-primary-hover"
+            >
+              选择工作区
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!workspacePath ? (
+        <div className="flex items-center justify-center p-12 text-muted text-sm border border-dashed border-border rounded-lg">
+          请先选择工作区目录以开始使用
+        </div>
+      ) : (
+        <>
+          {error && (
+            <div className="px-4 py-3 bg-error/10 border border-error/30 rounded text-sm text-error">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left: 3 file pickers */}
+            <div className="space-y-3">
+              <h2 className="text-sm font-medium text-text-secondary">选择文件</h2>
+              <OfficeFilePicker
+                docType="ppt"
+                onFileSelected={handlePickAndRead('ppt')}
+                disabled={!!previewingPath}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Presentation className="w-3.5 h-3.5" /> 选择 PowerPoint
+                </span>
+              </OfficeFilePicker>
+              <OfficeFilePicker
+                docType="word"
+                onFileSelected={handlePickAndRead('word')}
+                disabled={!!previewingPath}
+              >
+                <span className="flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5" /> 选择 Word
+                </span>
+              </OfficeFilePicker>
+              <OfficeFilePicker
+                docType="excel"
+                onFileSelected={handlePickAndRead('excel')}
+                disabled={!!previewingPath}
+              >
+                <span className="flex items-center gap-1.5">
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> 选择 Excel
+                </span>
+              </OfficeFilePicker>
+            </div>
+
+            {/* Right: preview panel */}
+            <div>
+              <h2 className="text-sm font-medium text-text-secondary mb-3">预览</h2>
+              <OfficePreviewPanel preview={preview} />
+            </div>
+          </div>
+
+          {/* Document list */}
+          <div>
+            <h2 className="text-sm font-medium text-text-secondary mb-3">
+              历史记录 ({documents.length})
+            </h2>
+            <OfficeDocumentList documents={documents} loading={loading} onDelete={handleDelete} />
+          </div>
+
+          {/* Generate form (Phase 1.4) */}
+          <OfficeGenerateForm workspacePath={workspacePath} onGenerated={refresh} />
+        </>
+      )}
+    </div>
+  );
+}
+
+export default Office;

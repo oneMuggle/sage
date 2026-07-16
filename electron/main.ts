@@ -52,6 +52,7 @@ import { invokeBackend } from './invoke';
 import { relayChatStream, relayNdjsonToEvent } from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
+import { registerOfficeIpc } from './officeIpc';
 import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
@@ -584,6 +585,14 @@ function registerIpcHandlers(): void {
   //   skills:rescan     → POST /api/v1/skills/rescan
   //   skills:import     → POST /api/v1/skills/import (multipart)
   registerSkillsIpc((channel, handler) => {
+    ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
+  });
+
+  // Phase 1.3 (2026-07-16): Office document IPC handlers.
+  //   office:pick-file   → native open dialog filtered by doc type
+  //   office:save-dialog → native save dialog
+  // The 5 office_* HTTP routes are auto-routed via COMMAND_ROUTES in commands.ts.
+  registerOfficeIpc((channel, handler) => {
     ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
   });
 

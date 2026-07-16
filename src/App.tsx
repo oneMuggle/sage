@@ -8,6 +8,7 @@ import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
 import { Knowledge } from './pages/Knowledge';
 import { Memory } from './pages/Memory';
+import { Office } from './pages/Office';
 import { Orchestration } from './pages/Orchestration';
 import { ScheduledTasks } from './pages/ScheduledTasks';
 import Skills from './pages/Skills';
@@ -60,6 +61,7 @@ function App() {
             <Route path="memory" element={<Memory />} />
             <Route path="agents" element={<Agents />} />
             <Route path="skills" element={<Skills />} />
+            <Route path="office" element={<Office />} />
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="scheduled" element={<ScheduledTasks />} />
             <Route path="orchestration" element={<Orchestration />} />
