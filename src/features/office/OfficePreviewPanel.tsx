@@ -22,6 +22,14 @@ export interface OfficePreviewPanelProps {
   preview: OfficePreviewData | null;
 }
 
+// Static lookup so Tailwind JIT sees full literal class names at build time
+// (don't interpolate pl-${level} — Tailwind scans source for literal tokens only).
+const HEADING_PADDING: Record<number, string> = {
+  1: 'pl-2',
+  2: 'pl-4',
+  3: 'pl-6',
+};
+
 export function OfficePreviewPanel({ preview }: OfficePreviewPanelProps) {
   if (!preview) {
     return (
@@ -94,7 +102,7 @@ function WordPreview({ data }: { data: OfficeWordReadResult }) {
           className={[
             'text-sm',
             para.level > 0
-              ? `font-semibold text-text pl-${Math.min(para.level * 2, 6)}`
+              ? `font-semibold text-text ${HEADING_PADDING[Math.min(para.level, 3)] ?? ''}`
               : 'text-text-secondary',
           ].join(' ')}
         >

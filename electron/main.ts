@@ -596,14 +596,6 @@ function registerIpcHandlers(): void {
     ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
   });
 
-  // Phase 1.3 (2026-07-16): Office document IPC handlers.
-  //   office:pick-file   → native open dialog filtered by doc type
-  //   office:save-dialog → native save dialog
-  // The 5 office_* HTTP routes are auto-routed via COMMAND_ROUTES in commands.ts.
-  registerOfficeIpc((channel, handler) => {
-    ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
-  });
-
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
   registerLogIpc(ipcMain);
