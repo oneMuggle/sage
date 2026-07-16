@@ -4,11 +4,11 @@ SQLite 实现
 """
 
 from __future__ import annotations
-from typing import Optional
 
 import os
 import sqlite3
 from pathlib import Path
+from typing import Optional
 
 
 class Database:
@@ -154,6 +154,31 @@ class Database:
                 updated_at INTEGER
             )
         """)
+
+        # Office 文档表 (Phase 1, plan §4.1.2 step 10)
+        # Stores metadata for .pptx/.docx/.xlsx documents in user workspaces.
+        # Actual files live in <workspace>/office/<doc_type>/<id>/ on disk.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS office_documents (
+                id TEXT PRIMARY KEY,
+                workspace_path TEXT NOT NULL,
+                doc_type TEXT NOT NULL,
+                original_filename TEXT,
+                generated_filename TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                metadata TEXT
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_docs_workspace "
+            "ON office_documents(workspace_path)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_docs_created "
+            "ON office_documents(created_at DESC)"
+        )
 
         # 进化日志表
         cursor.execute("""

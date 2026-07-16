@@ -15,6 +15,7 @@ Two responsibilities:
 This module is **connection-agnostic** — functions take a sqlite3.Connection
 so tests can use `:memory:` and production uses the real Database.get_connection().
 """
+
 from __future__ import annotations
 
 import json
@@ -43,21 +44,15 @@ def validate_workspace(path: Path) -> Path:
 
     # Reject strings that obviously try to traverse (cheap pre-check before resolve)
     if any(part == ".." for part in path.parts):
-        raise OfficePathError(
-            f"Path contains '..' traversal segment: {path}", file_path=path
-        )
+        raise OfficePathError(f"Path contains '..' traversal segment: {path}", file_path=path)
 
     # Resolve to absolute (handles relative paths and existing symlinks)
     resolved = path.resolve()
 
     if not resolved.exists():
-        raise OfficePathError(
-            f"Workspace path does not exist: {path}", file_path=path
-        )
+        raise OfficePathError(f"Workspace path does not exist: {path}", file_path=path)
     if not resolved.is_dir():
-        raise OfficePathError(
-            f"Workspace path is not a directory: {path}", file_path=path
-        )
+        raise OfficePathError(f"Workspace path is not a directory: {path}", file_path=path)
 
     return resolved
 
@@ -85,9 +80,7 @@ def generate_document_dir(
 
     # Defense-in-depth: confirm target is still inside workspace after resolve
     if not target.is_relative_to(workspace):
-        raise OfficePathError(
-            f"Resolved doc dir escapes workspace: {target}", file_path=target
-        )
+        raise OfficePathError(f"Resolved doc dir escapes workspace: {target}", file_path=target)
 
     target.mkdir(parents=True, exist_ok=True)
     return target

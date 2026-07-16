@@ -12,6 +12,7 @@ Test coverage:
 - list_documents: SELECT rows filtered by workspace
 - delete_document: DELETE row by id
 """
+
 from __future__ import annotations
 
 import sqlite3
