@@ -81,9 +81,7 @@ def _validate_file_in_workspace(file_path_str: str, workspace_path_str: str) -> 
             file_path=target,
         )
     if not target.is_file():
-        raise OfficePathError(
-            f"file_path is not a regular file: {file_path_str}", file_path=target
-        )
+        raise OfficePathError(f"file_path is not a regular file: {file_path_str}", file_path=target)
     return target
 
 
@@ -108,18 +106,19 @@ def _build_summary_for_generated(
     office_documents table stayed empty in production.
     """
     now_ms = int(time.time() * 1000)
+    # Resolve workspace_path to canonical absolute form so list queries
+    # by the same path match later (prevents `/tmp/./foo` vs `/tmp/foo` mismatch).
+    canonical_workspace = str(Path(workspace_path).resolve())
     summary = OfficeDocumentSummary(
         id=file_path.parent.name,  # storage places <doc_id>/ next to the file
-        workspace_path=workspace_path,
+        workspace_path=canonical_workspace,
         doc_type=doc_type,
         original_filename=None,
         generated_filename=file_path.name,
         status=OfficeDocStatus.GENERATED,
         created_at=now_ms,
         updated_at=now_ms,
-        metadata=OfficeDocumentMetadata(
-            file_size_bytes=file_path.stat().st_size
-        ),
+        metadata=OfficeDocumentMetadata(file_size_bytes=file_path.stat().st_size),
     )
     save_document(_db().get_connection(), summary)
     return summary
@@ -128,10 +127,15 @@ def _build_summary_for_generated(
 def _delete_office_doc_record_and_files(doc_id: str) -> bool:
     """Delete the DB row AND the on-disk file directory.
 
-    HIGH FIX: previous version only removed the DB row, leaving on-disk
-    .pptx/.docx/.xlsx files as orphans forever.
+    HIGH FIX (Phase 2 — real implementation):
+    - Resolve workspace_path before computing parent_dir (avoids drift
+      between stored DB path and on-disk path)
+    - Use rmtree WITHOUT ignore_errors=True; on Windows file-locked case,
+      the OSError propagates so the caller (and user via toast) sees the
+      cleanup failure instead of silently orphaning the file
     """
     import shutil
+
     conn = _db().get_connection()
     row = conn.execute(
         "SELECT workspace_path, doc_type FROM office_documents WHERE id = ?",
@@ -139,10 +143,15 @@ def _delete_office_doc_record_and_files(doc_id: str) -> bool:
     ).fetchone()
     deleted = delete_document(conn, doc_id)
     if row:
-        parent_dir = Path(row["workspace_path"]) / "office" / row["doc_type"] / doc_id
+        canonical_workspace = str(Path(row["workspace_path"]).resolve())
+        parent_dir = Path(canonical_workspace) / "office" / row["doc_type"] / doc_id
         if parent_dir.is_dir():
-            shutil.rmtree(parent_dir, ignore_errors=True)
+            # Don't use ignore_errors=True — caller (delete endpoint) will
+            # surface the OSError via FastAPI exception handler so user sees
+            # the actual cleanup failure (e.g. Word still has the file open).
+            shutil.rmtree(parent_dir)
     return deleted
+
 
 logger = logging.getLogger(__name__)
 

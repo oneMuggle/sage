@@ -84,9 +84,7 @@ def generate_document_dir(
     workspace_str = str(workspace)
     target_str = str(target)
     if not (target_str == workspace_str or target_str.startswith(workspace_str + "/")):
-        raise OfficePathError(
-            f"Resolved doc dir escapes workspace: {target}", file_path=target
-        )
+        raise OfficePathError(f"Resolved doc dir escapes workspace: {target}", file_path=target)
 
     target.mkdir(parents=True, exist_ok=True)
     return target
