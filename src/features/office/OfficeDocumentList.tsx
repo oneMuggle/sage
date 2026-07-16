@@ -7,10 +7,7 @@
 
 import { FileSpreadsheet, FileText, Presentation, Trash2 } from 'lucide-react';
 
-import type {
-  OfficeDocType,
-  OfficeDocumentSummary,
-} from '../../shared/api/types';
+import type { OfficeDocType, OfficeDocumentSummary } from '../../shared/api/types';
 
 const DOC_TYPE_ICONS: Record<OfficeDocType, React.ReactNode> = {
   ppt: <Presentation className="w-4 h-4" />,
@@ -36,15 +33,9 @@ export interface OfficeDocumentListProps {
   onDelete: (docId: string) => void | Promise<void>;
 }
 
-export function OfficeDocumentList({
-  documents,
-  loading,
-  onDelete,
-}: OfficeDocumentListProps) {
+export function OfficeDocumentList({ documents, loading, onDelete }: OfficeDocumentListProps) {
   if (loading) {
-    return (
-      <div className="text-sm text-muted p-4 text-center">加载中...</div>
-    );
+    return <div className="text-sm text-muted p-4 text-center">加载中...</div>;
   }
   if (documents.length === 0) {
     return (
@@ -70,9 +61,7 @@ export function OfficeDocumentList({
               <span>·</span>
               <span>{STATUS_LABELS[doc.status]}</span>
               <span>·</span>
-              <span>
-                {(doc.metadata.file_size_bytes / 1024).toFixed(1)} KB
-              </span>
+              <span>{(doc.metadata.file_size_bytes / 1024).toFixed(1)} KB</span>
               <span>·</span>
               <span>{new Date(doc.created_at).toLocaleString()}</span>
             </div>

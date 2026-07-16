@@ -39,9 +39,7 @@ export interface UseOfficeDocumentsReturn {
  * @param workspacePath - user's selected workspace directory. Pass null when
  *                       no workspace is selected (loading stays true, list empty).
  */
-export function useOfficeDocuments(
-  workspacePath: string | null,
-): UseOfficeDocumentsReturn {
+export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocumentsReturn {
   const [documents, setDocuments] = useState<OfficeDocumentSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,14 +97,11 @@ export function useOfficeDocuments(
     [workspacePath],
   );
 
-  const deleteDocument = useCallback(
-    async (docId: string): Promise<void> => {
-      await officeApi.deleteDocument(docId);
-      // Optimistic update: remove from local list immediately
-      setDocuments((prev) => prev.filter((d) => d.id !== docId));
-    },
-    [],
-  );
+  const deleteDocument = useCallback(async (docId: string): Promise<void> => {
+    await officeApi.deleteDocument(docId);
+    // Optimistic update: remove from local list immediately
+    setDocuments((prev) => prev.filter((d) => d.id !== docId));
+  }, []);
 
   return {
     documents,

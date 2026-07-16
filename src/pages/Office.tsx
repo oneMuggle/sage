@@ -19,9 +19,9 @@
  * implements read + list + delete for Phase 1.3.
  */
 
+import { FileSpreadsheet, FileText, FolderOpen, Presentation } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { FileSpreadsheet, FileText, FolderOpen, Presentation } from 'lucide-react';
 
 import {
   OfficeDocumentList,
@@ -37,16 +37,8 @@ export function Office() {
   const [preview, setPreview] = useState<OfficePreviewData | null>(null);
   const [previewingPath, setPreviewingPath] = useState<string | null>(null);
 
-  const {
-    documents,
-    loading,
-    error,
-    refresh,
-    readPpt,
-    readWord,
-    readExcel,
-    deleteDocument,
-  } = useOfficeDocuments(workspacePath);
+  const { documents, loading, error, refresh, readPpt, readWord, readExcel, deleteDocument } =
+    useOfficeDocuments(workspacePath);
 
   const handleSelectWorkspace = async () => {
     const dir = await window.electronAPI?.selectDirectory({ intent: 'open' });
@@ -57,34 +49,33 @@ export function Office() {
     }
   };
 
-  const handlePickAndRead =
-    (docType: OfficeDocType) => async (filePath: string) => {
-      if (!workspacePath) {
-        toast.error('请先选择工作区目录');
-        return;
+  const handlePickAndRead = (docType: OfficeDocType) => async (filePath: string) => {
+    if (!workspacePath) {
+      toast.error('请先选择工作区目录');
+      return;
+    }
+    setPreviewingPath(filePath);
+    try {
+      let data: OfficePreviewData;
+      if (docType === 'ppt') {
+        data = { docType: 'ppt', data: await readPpt(filePath) };
+      } else if (docType === 'word') {
+        data = { docType: 'word', data: await readWord(filePath) };
+      } else {
+        data = { docType: 'excel', data: await readExcel(filePath) };
       }
-      setPreviewingPath(filePath);
-      try {
-        let data: OfficePreviewData;
-        if (docType === 'ppt') {
-          data = { docType: 'ppt', data: await readPpt(filePath) };
-        } else if (docType === 'word') {
-          data = { docType: 'word', data: await readWord(filePath) };
-        } else {
-          data = { docType: 'excel', data: await readExcel(filePath) };
-        }
-        setPreview(data);
-        // Refresh list to reflect new parsed record (if backend saved one)
-        await refresh();
-        toast.success('文档读取成功');
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        toast.error(`读取失败: ${msg}`);
-        setPreview(null);
-      } finally {
-        setPreviewingPath(null);
-      }
-    };
+      setPreview(data);
+      // Refresh list to reflect new parsed record (if backend saved one)
+      await refresh();
+      toast.success('文档读取成功');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`读取失败: ${msg}`);
+      setPreview(null);
+    } finally {
+      setPreviewingPath(null);
+    }
+  };
 
   const handleDelete = async (docId: string) => {
     try {
@@ -181,11 +172,7 @@ export function Office() {
             <h2 className="text-sm font-medium text-text-secondary mb-3">
               历史记录 ({documents.length})
             </h2>
-            <OfficeDocumentList
-              documents={documents}
-              loading={loading}
-              onDelete={handleDelete}
-            />
+            <OfficeDocumentList documents={documents} loading={loading} onDelete={handleDelete} />
           </div>
         </>
       )}

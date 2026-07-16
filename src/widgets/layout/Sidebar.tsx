@@ -1,5 +1,13 @@
 import { clsx } from 'clsx';
-import { MessageSquare, Settings, Brain, BookOpen, Network, Sparkles, FileSpreadsheet } from 'lucide-react';
+import {
+  MessageSquare,
+  Settings,
+  Brain,
+  BookOpen,
+  Network,
+  Sparkles,
+  FileSpreadsheet,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 

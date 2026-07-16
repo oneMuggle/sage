@@ -37,9 +37,7 @@ export function OfficePreviewPanel({ preview }: OfficePreviewPanelProps) {
         {preview.docType === 'ppt' && <Presentation className="w-4 h-4" />}
         {preview.docType === 'word' && <FileText className="w-4 h-4" />}
         {preview.docType === 'excel' && <FileSpreadsheet className="w-4 h-4" />}
-        <span className="font-medium text-sm">
-          {preview.data.summary.generated_filename}
-        </span>
+        <span className="font-medium text-sm">{preview.data.summary.generated_filename}</span>
         <span className="ml-auto text-xs text-muted">
           {(preview.data.summary.metadata.file_size_bytes / 1024).toFixed(1)} KB
         </span>
@@ -61,14 +59,9 @@ function PptPreview({ data }: { data: OfficePptReadResult }) {
   return (
     <ol className="space-y-3">
       {data.slides.map((slide) => (
-        <li
-          key={slide.index}
-          className="border border-border rounded p-3"
-        >
+        <li key={slide.index} className="border border-border rounded p-3">
           <div className="text-xs text-muted mb-1">第 {slide.index + 1} 页</div>
-          {slide.title && (
-            <div className="font-semibold text-text mb-1">{slide.title}</div>
-          )}
+          {slide.title && <div className="font-semibold text-text mb-1">{slide.title}</div>}
           {slide.text_blocks.length > 0 && (
             <ul className="text-sm space-y-0.5 list-disc list-inside text-text-secondary">
               {slide.text_blocks.map((block, i) => (
@@ -82,11 +75,7 @@ function PptPreview({ data }: { data: OfficePptReadResult }) {
               {slide.image_count > 0 && `${slide.image_count} 个图片`}
             </div>
           )}
-          {slide.notes && (
-            <div className="text-xs text-muted mt-2 italic">
-              备注: {slide.notes}
-            </div>
-          )}
+          {slide.notes && <div className="text-xs text-muted mt-2 italic">备注: {slide.notes}</div>}
         </li>
       ))}
     </ol>
@@ -117,15 +106,9 @@ function WordPreview({ data }: { data: OfficeWordReadResult }) {
           <table className="w-full text-xs">
             <tbody>
               {table.rows.map((row, ri) => (
-                <tr
-                  key={ri}
-                  className={ri === 0 ? 'bg-bg-subtle font-medium' : ''}
-                >
+                <tr key={ri} className={ri === 0 ? 'bg-bg-subtle font-medium' : ''}>
                   {row.map((cell, ci) => (
-                    <td
-                      key={ci}
-                      className="px-3 py-2 border-b border-border last:border-b-0"
-                    >
+                    <td key={ci} className="px-3 py-2 border-b border-border last:border-b-0">
                       {cell}
                     </td>
                   ))}
@@ -160,15 +143,9 @@ function ExcelPreview({ data }: { data: OfficeExcelReadResult }) {
               <table className="w-full text-xs">
                 <tbody>
                   {sheet.rows.map((row, ri) => (
-                    <tr
-                      key={ri}
-                      className={ri === 0 ? 'bg-bg-subtle font-medium' : ''}
-                    >
+                    <tr key={ri} className={ri === 0 ? 'bg-bg-subtle font-medium' : ''}>
                       {row.map((cell, ci) => (
-                        <td
-                          key={ci}
-                          className="px-3 py-2 border-b border-border last:border-b-0"
-                        >
+                        <td key={ci} className="px-3 py-2 border-b border-border last:border-b-0">
                           {cell}
                         </td>
                       ))}
