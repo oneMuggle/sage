@@ -78,6 +78,13 @@ export interface ElectronAPI {
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
   office: OfficeElectronApiBridge;
+  /**
+   * Phase 6 (2026-06-27): Native folder picker (used by LLM Wiki and Office).
+   * Returns absolute path string, or null if user cancelled.
+   */
+  selectDirectory: (opts: { intent: 'create' | 'open'; defaultPath?: string }) => Promise<
+    string | null
+  >;
   /** Optional bridge added in Task 8 (renderer→main log IPC). */
   log?: (level: LogLevel, msg: string, meta?: Record<string, unknown>) => Promise<unknown>;
   /** T13 (2026-07-02): Diagnostics card — list log files (newest first). */
