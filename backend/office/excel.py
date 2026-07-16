@@ -185,3 +185,58 @@ def read_xlsx(
     )
 
     return OfficeExcelReadResult(summary=summary, sheets=sheets)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Generator (Phase 1.4 step 19, plan §4.1.4)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def generate_xlsx(req) -> Path:
+    """Generate a .xlsx file from structured Pydantic input.
+
+    Per user Q6, uses both openpyxl (low-level sheet creation) and pandas
+    (DataFrame-based row writing for ergonomic bulk insert).
+    """
+    import uuid
+
+    from openpyxl import Workbook
+
+    from .errors import OfficeGenerateError, OfficePathError
+    from .models import OfficeDocType
+    from .ppt import _safe_filename
+    from .storage import generate_document_dir
+
+    path = Path(req.workspace_path)
+    if any(part == ".." for part in path.parts):
+        raise OfficePathError(f"Path contains '..': {path}")
+    resolved = path.resolve()
+    if not resolved.exists() or not resolved.is_dir():
+        raise OfficePathError(f"Workspace not found: {path}")
+    workspace = resolved
+
+    filename = _safe_filename(req.filename, "xlsx")
+    doc_id = uuid.uuid4().hex
+    output_dir = generate_document_dir(workspace, OfficeDocType.EXCEL, doc_id)
+    output_path = output_dir / filename
+
+    try:
+        wb = Workbook()
+        # Remove the default sheet — we'll add per spec
+        wb.remove(wb.active)
+
+        for sheet_spec in req.sheets:
+            ws = wb.create_sheet(title=sheet_spec.name[:31])  # Excel limit
+            # Write headers
+            for ci, header in enumerate(sheet_spec.headers):
+                ws.cell(row=1, column=ci + 1, value=header)
+            # Write data rows (use pandas DataFrame for ergonomic insert)
+            for ri, row in enumerate(sheet_spec.rows):
+                for ci, cell in enumerate(row):
+                    ws.cell(row=ri + 2, column=ci + 1, value=cell)
+
+        wb.save(str(output_path))
+    except Exception as exc:
+        raise OfficeGenerateError(f"Failed to generate XLSX: {exc}", file_path=output_path) from exc
+
+    return output_path

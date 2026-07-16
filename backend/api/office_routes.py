@@ -30,9 +30,12 @@ from backend.office.excel import read_xlsx
 from backend.office.models import (
     OfficeDeleteResponse,
     OfficeDocumentListResponse,
+    OfficeExcelGenerateRequest,
     OfficeExcelReadResult,
+    OfficePptGenerateRequest,
     OfficePptReadResult,
     OfficeReadRequest,
+    OfficeWordGenerateRequest,
     OfficeWordReadResult,
 )
 from backend.office.ppt import read_ppt
@@ -131,6 +134,50 @@ def delete_document_endpoint(doc_id: str) -> OfficeDeleteResponse:
     return OfficeDeleteResponse(id=doc_id, deleted=deleted)
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Generate endpoints (Phase 1.4 step 19, plan §4.1.4)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/ppt/generate")
+def generate_ppt_endpoint(req: OfficePptGenerateRequest) -> dict:
+    """Generate a .pptx file from structured input. Returns output_path metadata."""
+    from backend.office.ppt import generate_ppt
+
+    output_path = generate_ppt(req)
+    return {
+        "output_path": str(output_path),
+        "filename": output_path.name,
+        "file_size_bytes": output_path.stat().st_size,
+    }
+
+
+@router.post("/word/generate")
+def generate_word_endpoint(req: OfficeWordGenerateRequest) -> dict:
+    """Generate a .docx file from structured input."""
+    from backend.office.word import generate_docx
+
+    output_path = generate_docx(req)
+    return {
+        "output_path": str(output_path),
+        "filename": output_path.name,
+        "file_size_bytes": output_path.stat().st_size,
+    }
+
+
+@router.post("/excel/generate")
+def generate_excel_endpoint(req: OfficeExcelGenerateRequest) -> dict:
+    """Generate a .xlsx file from structured input."""
+    from backend.office.excel import generate_xlsx
+
+    output_path = generate_xlsx(req)
+    return {
+        "output_path": str(output_path),
+        "filename": output_path.name,
+        "file_size_bytes": output_path.stat().st_size,
+    }
+
+
 __all__ = [
     "router",
     "register_office_exception_handlers",
@@ -139,4 +186,7 @@ __all__ = [
     "read_ppt_endpoint",
     "read_word_endpoint",
     "read_excel_endpoint",
+    "generate_ppt_endpoint",
+    "generate_word_endpoint",
+    "generate_excel_endpoint",
 ]

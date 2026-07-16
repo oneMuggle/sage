@@ -186,3 +186,64 @@ def read_docx(
         tables=tables,
         images=images,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Generator (Phase 1.4 step 19, plan §4.1.4)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def generate_docx(req) -> Path:
+    """Generate a .docx file from structured Pydantic input."""
+    import uuid
+
+    from docx import Document as _Doc
+
+    from .errors import OfficeGenerateError, OfficePathError
+    from .models import OfficeDocType
+    from .ppt import _safe_filename
+    from .storage import generate_document_dir
+
+    path = Path(req.workspace_path)
+    if any(part == ".." for part in path.parts):
+        raise OfficePathError(f"Path contains '..': {path}")
+    resolved = path.resolve()
+    if not resolved.exists() or not resolved.is_dir():
+        raise OfficePathError(f"Workspace not found: {path}")
+    workspace = resolved
+
+    filename = _safe_filename(req.filename, "docx")
+    doc_id = uuid.uuid4().hex
+    output_dir = generate_document_dir(workspace, OfficeDocType.WORD, doc_id)
+    output_path = output_dir / filename
+
+    try:
+        doc = _Doc()
+        # Title
+        doc.add_heading(req.title, level=0)
+        # Body paragraphs
+        for para in req.paragraphs:
+            if para.heading == "h1":
+                doc.add_heading(para.text, level=1)
+            elif para.heading == "h2":
+                doc.add_heading(para.text, level=2)
+            elif para.heading == "h3":
+                doc.add_heading(para.text, level=3)
+            else:
+                doc.add_paragraph(para.text)
+        # Tables
+        for table_spec in req.tables:
+            table = doc.add_table(rows=1 + len(table_spec.rows), cols=len(table_spec.headers))
+            # Header row
+            for ci, header in enumerate(table_spec.headers):
+                table.cell(0, ci).text = header
+            # Data rows
+            for ri, row in enumerate(table_spec.rows):
+                for ci, cell in enumerate(row):
+                    if ci < len(table_spec.headers):
+                        table.cell(ri + 1, ci).text = cell
+        doc.save(str(output_path))
+    except Exception as exc:
+        raise OfficeGenerateError(f"Failed to generate DOCX: {exc}", file_path=output_path) from exc
+
+    return output_path

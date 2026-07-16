@@ -29,7 +29,7 @@ from typing import List, Optional
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
-from .errors import OfficeFileNotFoundError, OfficeParseError
+from .errors import OfficeFileNotFoundError, OfficeGenerateError, OfficeParseError, OfficePathError
 from .models import (
     OfficeDocStatus,
     OfficeDocType,
@@ -38,6 +38,7 @@ from .models import (
     OfficePptReadResult,
     PptSlideContent,
 )
+from .storage import generate_document_dir, validate_workspace
 
 
 def _extract_slide_title(slide) -> Optional[str]:
@@ -207,3 +208,70 @@ def read_ppt(
     )
 
     return OfficePptReadResult(summary=summary, slides=slides)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Generator (Phase 1.4 step 19, plan §4.1.4)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _safe_filename(name: str, default_ext: str) -> str:
+    """Sanitize a user-provided filename, ensuring it ends with the right extension.
+
+    Rejects path separators and parent-traversal segments.
+    """
+    if "/" in name or "\\" in name or ".." in name:
+        raise OfficePathError(f"Filename contains path separator or '..': {name!r}")
+    if not name.lower().endswith("." + default_ext):
+        name = name + "." + default_ext
+    return name
+
+
+def generate_ppt(req) -> Path:
+    """Generate a .pptx file from structured Pydantic input.
+
+    Writes to `<workspace>/office/ppt/<uuid>/<safe-name>.pptx` via storage helper.
+    """
+
+    workspace = validate_workspace(Path(req.workspace_path))
+    filename = _safe_filename(req.filename, "pptx")
+
+    import uuid
+
+    doc_id = uuid.uuid4().hex
+    output_dir = generate_document_dir(workspace, OfficeDocType.PPT, doc_id)
+    output_path = output_dir / filename
+
+    try:
+        prs = Presentation()
+        # Layout 6 is "Blank" — most flexible for any content
+        blank_layout = prs.slide_layouts[6]
+        for spec in req.slides:
+            slide = prs.slides.add_slide(blank_layout)
+            # Add a title text box at the top
+            if spec.title:
+                title_box = slide.shapes.add_textbox(
+                    914400,
+                    274638,
+                    9144000,
+                    1143000,  # 1"x0.3" position, 10"x1.25" size
+                )
+                title_box.text_frame.text = spec.title
+            # Add bullets as another text box
+            if spec.bullets:
+                body_box = slide.shapes.add_textbox(914400, 1600200, 9144000, 4572000)
+                tf = body_box.text_frame
+                for i, bullet in enumerate(spec.bullets):
+                    if i == 0:
+                        tf.text = bullet
+                    else:
+                        p = tf.add_paragraph()
+                        p.text = bullet
+            # Add speaker notes
+            if spec.notes:
+                slide.notes_slide.notes_text_frame.text = spec.notes
+        prs.save(str(output_path))
+    except Exception as exc:
+        raise OfficeGenerateError(f"Failed to generate PPTX: {exc}", file_path=output_path) from exc
+
+    return output_path
