@@ -6,6 +6,7 @@ to match FastAPI 0.109 + pydantic 2.5 already pinned in requirements.txt.
 Frontend IPC contracts (in src/shared/api/types.ts) MUST stay in sync with
 the response shapes defined here.
 """
+
 from __future__ import annotations
 
 from enum import Enum
