@@ -1,10 +1,7 @@
 # 25. LLM Wiki 集成(PR-8 + PR-114+115+116 流式架构)
 
 > 状态: Phase 1-8 ✅ (Rust/Tauri 时代) · 流式架构 ✅ (Python/FastAPI + Electron, PR-114+115+116)
-> 前置: [docs/plans/2026-05-30_llm-wiki.md](../plans/2026-05-30_llm-wiki.md)(Phase 1-5)
-> 计划: [docs/plans/2026-06-12_llm-wiki-llm-integration.md](../plans/2026-06-12_llm-wiki-llm-integration.md)
 > 流式架构设计: [docs/superpowers/specs/2026-07-08-wiki-streaming-design.md](../superpowers/specs/2026-07-08-wiki-streaming-design.md)
-> 流式架构计划: [docs/superpowers/plans/2026-07-08-wiki-streaming.md](../superpowers/plans/2026-07-08-wiki-streaming.md)
 > 参考实现: `/home/fz/project/llm_wiki`
 
 本文档分两部分:
@@ -926,8 +923,6 @@ const { answer, citations, streaming, error, reset } = useWikiChatStream(streamI
 - 多格式文档解析(PDF/DOCX/PPTX/图像)
 - MCP server(对外暴露给 Agent)
 - HNSW 向量索引(突破 1万 chunk 规模)
-
-参考: [`docs/plans/2026-06-12_llm-wiki-llm-integration.md`](../plans/2026-06-12_llm-wiki-llm-integration.md) 原始计划
 
 ---
 

@@ -1,8 +1,7 @@
 # 27. 多 Agent 编排层（M1：typed 化）
 
 > 本章节描述 Sage 多 Agent 协调层的 typed 化设计。
-> 增量于 [`22-agents-crud.md`](./22-agents-crud.md)、[`24-skills-system.md`](./24-skills-system.md) 等运行时模块；
-> 整体方案见 [`../plans/2026-06-26_multi-agent-optimization-from-claw-code.md`](../plans/2026-06-26_multi-agent-optimization-from-claw-code.md)（如仍存在则参考）。
+> 增量于 [`22-agents-crud.md`](./22-agents-crud.md)、[`24-skills-system.md`](./24-skills-system.md) 等运行时模块。
 > M1 落地于 `feat/multi-agent-v2` 分支，2026-06-27。
 
 ## 1. 背景

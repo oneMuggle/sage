@@ -143,6 +143,5 @@ Wiki 用 sage 已配置的端点。Settings → 模型选择:
 
 ## 相关文档
 
-- 计划: [`docs/plans/2026-06-12_llm-wiki-llm-integration.md`](../plans/2026-06-12_llm-wiki-llm-integration.md)
 - 技术: [`docs/technical/25-llm-wiki-integration.md`](../technical/25-llm-wiki-integration.md)
 - 参考实现: `/home/fz/project/llm_wiki`

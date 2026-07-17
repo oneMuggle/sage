@@ -31,9 +31,8 @@ Sage 当前是"对话型"桌面助手，但用户的实际工作流大量围绕 
 - 让 LLM 把分析结果输出成 `.pptx` 演示稿
 - 让 LLM 把表格数据生成成 `.xlsx`
 
-Sage 目前缺失这三类能力。已有的 [2026-06-26 officecli 集成计划](2026-06-26_officecli-integration.md) 解决了**预览**
-（依赖 .NET OfficeCLI 二进制，**Win7 不兼容**），本计划解决**读取 + 生成**（纯 Python，
-**Win7 LTS 兼容**），两者互补。
+Sage 目前缺失这三类能力。此前曾有 officecli 集成计划（依赖 .NET OfficeCLI 二进制，**Win7 不兼容**）解决**预览**，
+但该计划已于 2026-07-17 清理。本计划解决**读取 + 生成**（纯 Python，**Win7 LTS 兼容**）。
 
 ### 1.2 目标（按 MoSCoW 排序）
 
@@ -795,7 +794,6 @@ openpyxl==3.1.5       # XLSX 读写，~1MB wheel，纯 Python
 | [python-pptx 官方文档](https://python-pptx.readthedocs.io/) | API 参考 |
 | [python-docx 官方文档](https://python-docx.readthedocs.io/) | API 参考 |
 | [openpyxl 官方文档](https://openpyxl.readthedocs.io/) | API 参考 |
-| [2026-06-26 officecli 集成计划](2026-06-26_officecli-integration.md) | 互补的"预览"计划 |
 | `backend/api/wiki_routes.py` | 路由 + sandbox 模式参考 |
 | `src/shared/api/skillsApi.ts` | API 客户端模式参考 |
 | `electron/skillsIpc.ts` | Electron IPC 模块参考 |
