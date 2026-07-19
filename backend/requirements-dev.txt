@@ -14,5 +14,5 @@ respx==0.21.1
 # Quality
 ruff==0.4.4
 mypy==1.8.0
-import-linter==2.11
+import-linter==2.0
 types-PyYAML==6.0.12.20240311
