@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
@@ -49,7 +49,7 @@ function App() {
   }, []);
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <NavHistoryProvider>
         <Routes>
           <Route path="/" element={<Layout />}>
@@ -67,7 +67,7 @@ function App() {
         </Routes>
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       </NavHistoryProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
