@@ -69,14 +69,13 @@ jobs:
         shell: pwsh
         run: pwsh scripts/fetch-vcredist.ps1
 
-      - name: Determine ARTIFACT_SUFFIX
-        id: suffix
-        run: bash scripts/release/determine_artifact_suffix.sh >> $GITHUB_OUTPUT
+      # Note: previously had "Determine ARTIFACT_SUFFIX" step that ran
+      # scripts/release/determine_artifact_suffix.sh, but that script was
+      # deleted (commit ea3639e — orphan). Suffix is hardcoded 'win7' in
+      # env block above (line 34), so electron-builder artifactName resolves
+      # to Sage-Setup-${version}win7.${ext}.
 
-      - name: Build Windows NSIS (Win7 LTS, dynamic suffix)
-        env:
-          # Override default; produces Sage-Setup-${version}${env.ARTIFACT_SUFFIX}.${ext}
-          ARTIFACT_SUFFIX: ${{ steps.suffix.outputs.value }}
+      - name: Build Windows NSIS (Win7 LTS)
         run: npx electron-builder --win nsis --publish never
 
       - name: Upload to LTS GitHub Release
