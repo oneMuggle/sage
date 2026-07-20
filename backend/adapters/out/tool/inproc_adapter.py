@@ -87,7 +87,7 @@ class InprocToolAdapter:
 
         try:
             raw = await asyncio.wait_for(
-                asyncio.to_thread(tool.execute, **args),
+                asyncio.get_running_loop().run_in_executor(None, lambda: tool.execute(**args)),
                 timeout=self._policy.timeout_seconds,
             )
         except (asyncio.TimeoutError, TimeoutError):  # noqa: UP041

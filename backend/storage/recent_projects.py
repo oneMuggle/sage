@@ -1,7 +1,6 @@
 """Recent wiki projects store — atomic JSON file under user data dir."""
 
-# Pydantic 2.x only — uses .model_validate() and .model_dump().
-# For cherry-pick to release/win7 (Pydantic 1.x): replace with .parse_obj() and .dict().
+# Pydantic 1.x for win7 LTS (Python 3.8) — uses .parse_obj() and .dict().
 
 from __future__ import annotations
 
@@ -67,7 +66,7 @@ def load_recent() -> List[RecentProject]:
     items: List[RecentProject] = []
     for raw in _read_raw():
         try:
-            items.append(RecentProject.model_validate(raw))
+            items.append(RecentProject.parse_obj(raw))
         except Exception:
             continue
     return items
@@ -77,7 +76,7 @@ def save_recent(items: List[RecentProject]) -> None:
     """Atomic write: serialize to tmp file then rename."""
     f = recent_projects_file()
     tmp = f.with_suffix(f.suffix + ".tmp")
-    payload = json.dumps([i.model_dump() for i in items], ensure_ascii=False, indent=2)
+    payload = json.dumps([i.dict() for i in items], ensure_ascii=False, indent=2)
     tmp.write_text(payload, encoding="utf-8")
     tmp.replace(f)
 

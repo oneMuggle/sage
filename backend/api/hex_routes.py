@@ -68,12 +68,13 @@ class SettingsRequest(BaseModel):
     在审计日志中明文落盘（adapter 侧负责脱敏），本路由层只关心
     "哪些字段被改"，不持久化值。
 
-    PG3.2 升级（2026-06-22）：``model_config = ConfigDict(extra="allow")``
-    以接受前端的 ``AppSettings`` 完整字段（version / endpoints /
-    modelSelections / streaming 等）。``api_key`` 仍走白名单脱敏审计。
+    PG3.2 升级（2026-06-22）：``Config.extra = "allow"`` 以接受前端的
+    ``AppSettings`` 完整字段（version / endpoints / modelSelections /
+    streaming 等）。``api_key`` 仍走白名单脱敏审计。
     """
 
-    model_config = {"extra": "allow"}
+    class Config:
+        extra = "allow"
 
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None  # noqa: S105 — 字段名占位；不存储
@@ -196,7 +197,7 @@ async def update_settings(
     - 仍 emit settings_changed 审计事件（api_key 字段不进 payload）
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
-    payload = req.model_dump(exclude_none=True)
+    payload = req.dict(exclude_none=True)
 
     # 持久化到 SQLite
     from backend.data.settings_repo import SettingsRepository
@@ -217,7 +218,7 @@ async def update_settings(
 
 
 @router.get("/settings")
-async def get_settings() -> dict | None:
+async def get_settings() -> Optional[dict]:
     """读取持久化的 settings；不存在返回 null（前端走 DEFAULT_SETTINGS）。
 
     说明（PG3.2）：本端点**不**用 ``response_model=SettingsResponse`` 包装，

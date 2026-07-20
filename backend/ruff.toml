@@ -51,6 +51,8 @@ ignore = [
     "PTH112",   # os.path.isfile → Path.is_file
     "PTH120",   # os.path.join → Path /
     "PTH123",   # builtin open → Path.open
+    "B905",     # zip-without-explicit-strict — py38 LTS can't accept strict= kwarg (PEP 618)
+    "UP038",    # Use X | Y in isinstance — py38 LTS can't evaluate PEP 604 at runtime
         "PLW0602",  # global variable not assigned
     "PLW0603",  # global variable assigned but never used
     # UP006/UP007/UP035 disabled to keep backend/ PEP 604/585 syntax

@@ -41,8 +41,8 @@ class TestHashEmbedder:
         v3 = emb.encode("今天天气真好")
 
         # 计算欧氏距离（向量已 L2 归一化）
-        d_similar = sum((a - b) ** 2 for a, b in zip(v1, v2, strict=False)) ** 0.5
-        d_different = sum((a - b) ** 2 for a, b in zip(v1, v3, strict=False)) ** 0.5
+        d_similar = sum((a - b) ** 2 for a, b in zip(v1, v2)) ** 0.5
+        d_different = sum((a - b) ** 2 for a, b in zip(v1, v3)) ** 0.5
 
         # 相似文本的距离应小于不同文本
         assert d_similar < d_different
