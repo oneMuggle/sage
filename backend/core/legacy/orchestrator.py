@@ -302,7 +302,7 @@ class AgentOrchestrator:
 
         # 3. 错误隔离: 单个子任务失败不影响其他
         results = []
-        for subtask, result in zip(subtasks, results_or_errors, strict=False):
+        for subtask, result in zip(subtasks, results_or_errors):
             if isinstance(result, Exception):
                 logger.error(f"子任务失败 ({subtask.get('description', '?')}): {result}")
                 results.append(

@@ -216,7 +216,7 @@ class HNSWVectorStore:
 
         # 转换结果
         hits = []
-        for label, distance in zip(labels[0], distances[0], strict=False):
+        for label, distance in zip(labels[0], distances[0]):
             if label not in self.label_to_id:
                 continue
 

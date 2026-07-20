@@ -7,11 +7,71 @@ Chat 路由分流测试（阶段 2）
 3. /chat 和 /chat/stream 路由分流逻辑
 """
 
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 pytestmark = pytest.mark.unit
+
+_API_MODE = os.environ.get("API_MODE", "legacy").lower()
+_LEGACY_ONLY = pytest.mark.skipif(
+    _API_MODE == "hex",
+    reason=(
+        "本文件测 legacy_routes /chat 的 SageAgent/AgentOrchestrator 分流逻辑；"
+        f"当前 API_MODE={_API_MODE!r}（hex 模式下 /chat 路由由 hex_routes 接管，"
+        "本测试的 legacy 路径不可达）"
+    ),
+)
+
+
+# =============================================================================
+# Hex DI override（autouse）
+# =============================================================================
+#
+# P4 fix-forward: hex 模式下 main.py lifespan 会装配 get_chat_service override,
+# 但 conftest.setup_test_db 把 _db 替换为 tmp db, 可能导致 lifespan 启动时部分
+# 服务(Planner / Heartbeat / Scheduler)早退, 使得 get_chat_service override
+# 实际上不会落到 app.dependency_overrides 上。本 fixture 显式 mock
+# ChatService(7 个 port: llm/tools/skills/storage/metrics/events/memory),
+# 保证 unit/integration test 中 hex_routes /chat 端点不会被
+# NotImplementedError 阻断。
+#
+# 与 tests/integration/test_settings_endpoint.py 的 _hex_di_override 模式对齐。
+@pytest.fixture(autouse=True)
+def _hex_di_override_chat_service():
+    """hex 模式 /chat 路由注入 mock ChatService,避免 NotImplementedError。"""
+    from sage_core import Message, Role
+
+    from backend.adapters.out.llm.mock_adapter import MockLLMAdapter
+    from backend.adapters.out.metric.noop_adapter import NoopMetricAdapter
+    from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
+    from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
+    from backend.api.hex_routes import get_chat_service
+    from backend.application.services.chat_service import ChatService
+    from backend.main import app
+
+    mock_tool = MagicMock()
+    mock_tool.execute.return_value = MagicMock(success=True, output="ok", error=None)
+    mock_registry = MagicMock()
+    mock_registry.list.return_value = []
+    mock_registry.get.return_value = mock_tool
+
+    fake_svc = ChatService(
+        llm=MockLLMAdapter(responses=[Message(role=Role.ASSISTANT, content="ok")]),
+        tools=InprocToolAdapter(registry=mock_registry),
+        skills=MagicMock(),
+        storage=MemoryStorageAdapter(),
+        metrics=NoopMetricAdapter(),
+        events=MagicMock(),  # emit 接受任意 dict
+    )
+    saved_override = app.dependency_overrides.get(get_chat_service)
+    app.dependency_overrides[get_chat_service] = lambda: fake_svc
+    yield
+    if saved_override is not None:
+        app.dependency_overrides[get_chat_service] = saved_override
+    else:
+        app.dependency_overrides.pop(get_chat_service, None)
 
 
 # =============================================================================
@@ -105,6 +165,7 @@ async def test_orchestrator_execute_agent_task_calls_sage_agent_run_loop():
 # =============================================================================
 
 
+@_LEGACY_ONLY
 def test_chat_route_uses_single_agent_for_simple_message():
     """简单消息应走单 agent 路径（不走 orchestrator）。"""
     from fastapi.testclient import TestClient
@@ -136,6 +197,7 @@ def test_chat_route_uses_single_agent_for_simple_message():
         assert mock_agent.chat.called
 
 
+@_LEGACY_ONLY
 def test_chat_route_uses_orchestrator_for_complex_message():
     """复杂消息应走 orchestrator 路径。"""
     from fastapi.testclient import TestClient

@@ -214,9 +214,10 @@ class AgentUpdate(BaseModel):
     走 Pydantic 校验, 非法值 422 (由 FastAPI 自动处理)。
     """
 
-    # 注: Pydantic v2 默认对 "model_" 前缀的字段名有保留命名空间保护.
-    # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
-    model_config = {"protected_namespaces": ()}
+    # 注: Pydantic 默认对 "model_" 前缀的字段名有保留命名空间保护.
+    # 实际字段用 model_config_data (避开保留名), 路由层映射到 model_config.
+    class Config:
+        protected_namespaces = ()
 
     name: Optional[str] = None
 
@@ -416,7 +417,7 @@ async def update_agent(agent_id: str, data: AgentUpdate):
         )
 
     # 转 dict 给 repo.update; 字段名 model_config_data → model_config (避开 Pydantic 保留名)
-    update_payload = data.model_dump(exclude_none=True)
+    update_payload = data.dict(exclude_none=True)
     if "model_config_data" in update_payload:
         update_payload["model_config"] = update_payload.pop("model_config_data")
 
@@ -701,13 +702,11 @@ async def import_skills(files: List[UploadFile] = File(default=[])):
 # 因此在 legacy_routes 中也提供，确保两种 API_MODE 下都能工作。
 
 
-from pydantic import ConfigDict as _ConfigDict
-
-
 class LegacySettingsRequest(BaseModel):
     """PUT /settings 请求体（legacy 路径）。所有字段可选。"""
 
-    model_config = _ConfigDict(extra="allow")
+    class Config:
+        extra = "allow"
 
     api_base_url: Optional[str] = None
 
@@ -755,7 +754,7 @@ async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsRe
     # 先读现有 settings
     existing = repo.get_json("app_settings") or {}
     # 合并请求字段（排除 None）
-    payload = req.model_dump(exclude_none=True)
+    payload = req.dict(exclude_none=True)
     merged = {**existing, **payload}
     repo.set_json("app_settings", merged, category="general")
     changed_fields = [k for k in payload if k != "api_key"]

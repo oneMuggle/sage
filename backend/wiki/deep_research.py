@@ -5,10 +5,9 @@
 
 import json
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import Callable, List
 
 from .ingest import IngestConfig, ingest_source
 from .web_search import SearchProvider, WebSearchResult, multi_query_search

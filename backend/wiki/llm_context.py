@@ -68,20 +68,17 @@ def make_llm_context(
         messages: List[Dict],
         temperature: float,
     ) -> AsyncIterator[str]:
-        async with (
-            httpx.AsyncClient(timeout=timeout_seconds) as client,
-            client.stream(
-                "POST",
-                chat_url,
-                headers=auth_headers,
-                json={
-                    "model": llm_model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "stream": True,
-                },
-            ) as r,
-        ):
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client, client.stream(
+            "POST",
+            chat_url,
+            headers=auth_headers,
+            json={
+                "model": llm_model,
+                "messages": messages,
+                "temperature": temperature,
+                "stream": True,
+            },
+        ) as r:
             async for line in r.aiter_lines():
                 if not line.startswith("data: "):
                     continue
