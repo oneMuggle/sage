@@ -269,7 +269,7 @@ async def embed_pages(
     vector_store = VectorStore.open(project_root, config.embed_dim)
     vector_store.upsert_chunks(
         wiki_page_path,
-        [(idx, chunk, vec) for idx, (chunk, vec) in enumerate(zip(chunks, vectors, strict=False))],
+        [(idx, chunk, vec) for idx, (chunk, vec) in enumerate(zip(chunks, vectors))],
     )
 
 

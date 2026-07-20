@@ -185,7 +185,7 @@ class VectorStore:
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     """计算余弦相似度。"""
-    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
 
