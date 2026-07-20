@@ -39,7 +39,7 @@ class DeleteRequest(BaseModel):
 @router.post("/save")
 def save_theme(payload: ThemeCssPayload) -> dict:
     """保存主题"""
-    theme_id = _storage.save(payload.model_dump())
+    theme_id = _storage.save(payload.dict())
     return {"id": theme_id}
 
 
