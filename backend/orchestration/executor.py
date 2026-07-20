@@ -10,8 +10,7 @@ Handles the complete execution flow for a Lane:
 """
 
 import logging
-from typing import Callable
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from backend.orchestration.events import (
     EventProvenance,

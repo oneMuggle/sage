@@ -43,9 +43,7 @@ jobs:
         shell: bash -el {0}
         run: |
           conda run -n sage-backend-py38 pip install -r backend/requirements-py38.txt
-          conda run -n sage-backend-py38 python -c "import fastapi, pydantic; assert fastapi.__version__ == '0.85.0', fastapi.__version__; assert pydantic.VERSION == '1.10.13', pydantic.VERSION"
-          conda run -n sage-backend-py38 python -c "import networkx; print(networkx.__version__)"
-          conda run -n sage-backend-py38 python -c "import hnswlib, importlib.metadata as m; print(m.version('hnswlib'))"
+          conda run -n sage-backend-py38 python -c "import fastapi, pydantic, networkx, hnswlib, importlib.metadata as m; assert fastapi.__version__ == '0.85.0', fastapi.__version__; assert pydantic.VERSION == '1.10.13', pydantic.VERSION; assert tuple(int(x) for x in networkx.__version__.split('.')[:2]) == (3, 1), networkx.__version__; assert m.version('hnswlib') == '0.8.0', m.version('hnswlib')"
 
       - name: Ruff check
         shell: bash -el {0}

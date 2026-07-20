@@ -8,8 +8,7 @@ mocked repos.
 from __future__ import annotations
 
 import logging
-from typing import Callable
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field

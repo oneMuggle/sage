@@ -16,9 +16,8 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from typing import Callable
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
