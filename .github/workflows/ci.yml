@@ -78,11 +78,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup PowerShell
-        uses: microsoft/powershell@v1
-        with:
-          pwsh: '7.4'
-
       - name: Install Pester
         shell: pwsh
         run: Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0
