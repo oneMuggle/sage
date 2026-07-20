@@ -196,7 +196,7 @@ async def update_settings(
     - 仍 emit settings_changed 审计事件（api_key 字段不进 payload）
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
-    payload = req.model_dump(exclude_none=True)
+    payload = req.dict(exclude_none=True)
 
     # 持久化到 SQLite
     from backend.data.settings_repo import SettingsRepository
