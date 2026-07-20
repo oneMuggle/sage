@@ -43,7 +43,9 @@ jobs:
         shell: bash -el {0}
         run: |
           conda run -n sage-backend-py38 pip install -r backend/requirements-py38.txt
-          conda run -n sage-backend-py38 pip install -r backend/requirements-dev.txt
+          conda run -n sage-backend-py38 python -c "import fastapi, pydantic; assert fastapi.__version__ == '0.85.0', fastapi.__version__; assert pydantic.VERSION == '1.10.13', pydantic.VERSION"
+          conda run -n sage-backend-py38 python -c "import networkx; print(networkx.__version__)"
+          conda run -n sage-backend-py38 python -c "import hnswlib, importlib.metadata as m; print(m.version('hnswlib'))"
 
       - name: Ruff check
         shell: bash -el {0}
@@ -53,7 +55,7 @@ jobs:
       - name: Pytest (py38, hex mode) with coverage
         shell: bash -el {0}
         run: |
-          conda run -n sage-backend-py38 bash -c "cd backend && pytest --cov --cov-report=xml --cov-report=term --cov-fail-under=80"
+          conda run -n sage-backend-py38 bash -c "cd backend && API_MODE=hex pytest --cov --cov-report=xml --cov-report=term --cov-fail-under=80"
 
       - name: Upload coverage
         if: always()
