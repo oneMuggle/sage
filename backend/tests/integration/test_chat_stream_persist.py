@@ -140,10 +140,9 @@ async def test_message_save_failure_does_not_break_stream(client):
 
     # mock MessageRepository.save 抛 RuntimeError → 走 logger.warning,
     # 流应该正常关闭,客户端 attach 应能拿到所有事件
-    with (
-        patch("backend.api.legacy_routes.SageAgent") as MockAgent,
-        patch("backend.api.legacy_routes.MessageRepository") as MockMsgRepo,
-    ):
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent, patch(
+        "backend.api.legacy_routes.MessageRepository"
+    ) as MockMsgRepo:
         MockAgent.return_value.run_loop = mock_run_loop
         MockMsgRepo.return_value.save.side_effect = RuntimeError("simulated db down")
 

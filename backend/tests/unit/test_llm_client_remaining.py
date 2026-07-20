@@ -512,10 +512,9 @@ async def test_chat_stream_http_error_raises_runtime_error():
 
     mock_http.stream = _stream_ctx
 
-    with (
-        patch.object(client, "_get_client", return_value=mock_http),
-        pytest.raises(RuntimeError) as exc_info,
-    ):
+    with patch.object(client, "_get_client", return_value=mock_http), pytest.raises(
+        RuntimeError
+    ) as exc_info:
         await _drain_stream(client.chat_stream([{"role": "user", "content": "hi"}]))
     assert "500" in str(exc_info.value)
 
@@ -533,9 +532,8 @@ async def test_chat_stream_other_exception_raises_runtime_error():
 
     mock_http.stream = _stream_ctx
 
-    with (
-        patch.object(client, "_get_client", return_value=mock_http),
-        pytest.raises(RuntimeError),
+    with patch.object(client, "_get_client", return_value=mock_http), pytest.raises(
+        RuntimeError
     ):
         await _drain_stream(client.chat_stream([{"role": "user", "content": "hi"}]))
 
