@@ -68,12 +68,13 @@ class SettingsRequest(BaseModel):
     在审计日志中明文落盘（adapter 侧负责脱敏），本路由层只关心
     "哪些字段被改"，不持久化值。
 
-    PG3.2 升级（2026-06-22）：``model_config = ConfigDict(extra="allow")``
-    以接受前端的 ``AppSettings`` 完整字段（version / endpoints /
-    modelSelections / streaming 等）。``api_key`` 仍走白名单脱敏审计。
+    PG3.2 升级（2026-06-22）：``Config.extra = "allow"`` 以接受前端的
+    ``AppSettings`` 完整字段（version / endpoints / modelSelections /
+    streaming 等）。``api_key`` 仍走白名单脱敏审计。
     """
 
-    model_config = {"extra": "allow"}
+    class Config:
+        extra = "allow"
 
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None  # noqa: S105 — 字段名占位；不存储
