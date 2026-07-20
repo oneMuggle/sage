@@ -286,7 +286,7 @@ def _deserialize_graph_data(data: Dict[str, Any]) -> GraphData:
     return GraphData.from_dict(data)
 
 
-def _resolve_wikilink(wikilink: str, node_map: Dict[str, GraphNode]) -> GraphNode | None:
+def _resolve_wikilink(wikilink: str, node_map: Dict[str, GraphNode]) -> Optional[GraphNode]:
     """解析 wikilink 到目标节点。"""
     wikilink_lower = wikilink.lower()
 

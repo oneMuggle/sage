@@ -217,7 +217,7 @@ async def update_settings(
 
 
 @router.get("/settings")
-async def get_settings() -> dict | None:
+async def get_settings() -> Optional[dict]:
     """读取持久化的 settings；不存在返回 null（前端走 DEFAULT_SETTINGS）。
 
     说明（PG3.2）：本端点**不**用 ``response_model=SettingsResponse`` 包装，

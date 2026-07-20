@@ -131,7 +131,7 @@ class Router:
                     available.append(agent)
         return available
 
-    def _select_round_robin(self, agents: List[Agent]) -> Agent | None:
+    def _select_round_robin(self, agents: List[Agent]) -> Optional[Agent]:
         """Select agent using round-robin strategy."""
         if not agents:
             return None
@@ -139,7 +139,7 @@ class Router:
         self._round_robin_index += 1
         return agent
 
-    def _select_by_capability(self, task: Task, agents: List[Agent]) -> Agent | None:
+    def _select_by_capability(self, task: Task, agents: List[Agent]) -> Optional[Agent]:
         """Select agent based on capability match."""
         # Simple capability matching based on task type
         # In production, this could be more sophisticated
@@ -167,7 +167,7 @@ class Router:
         scored_agents.sort(key=lambda x: x[0], reverse=True)
         return scored_agents[0][1] if scored_agents else None
 
-    def _select_by_load(self, agents: List[Agent]) -> Agent | None:
+    def _select_by_load(self, agents: List[Agent]) -> Optional[Agent]:
         """Select agent with least current load."""
         if not agents:
             return None
