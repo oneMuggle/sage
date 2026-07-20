@@ -4,7 +4,7 @@
 """
 
 import logging
-from collections.abc import Callable
+from typing import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional

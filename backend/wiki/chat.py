@@ -5,7 +5,7 @@
 
 import json
 import logging
-from collections.abc import AsyncIterator, Callable
+from typing import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple

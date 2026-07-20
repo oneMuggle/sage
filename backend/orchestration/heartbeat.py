@@ -11,7 +11,7 @@ Triggers recovery policies when issues are detected.
 import asyncio
 import contextlib
 import time
-from collections.abc import Callable
+from typing import Callable
 from typing import Optional
 
 from backend.orchestration.models import HeartbeatStatus, LaneStatus

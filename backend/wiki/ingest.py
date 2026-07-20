@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import AsyncIterator, Callable
+from typing import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
