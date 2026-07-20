@@ -27,6 +27,7 @@ sqlite-vec>=0.1.9
 # HTTP
 httpx==0.26.0
 python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
+requests>=2.28,<3.0  # required by starlette==0.20.4 testclient on Python 3.8 (main uses httpx2 instead)
 
 # Observability
 # ⚠️ 0.22.0+ require Python >=3.9 (per PyPI metadata), so on Win7 LTS
