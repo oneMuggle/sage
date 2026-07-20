@@ -1,4 +1,5 @@
-"""Common API envelope schemas shared across all routers (pydantic 2.x)."""
+"""Common API envelope schemas shared across all routers (pydantic 1.x)."""
+
 from typing import Any, Dict, Generic, Optional, TypeVar
 
 from pydantic import BaseModel
