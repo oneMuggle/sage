@@ -27,7 +27,7 @@ sqlite-vec>=0.1.9
 # HTTP
 httpx==0.26.0
 python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
-requests>=2.28,<3.0  # required by starlette==0.20.4 testclient on Python 3.8 (main uses httpx2 instead)
+requests>=2.32.3,<3.0  # starlette==0.20.4 testclient on py38 (main uses httpx2); >=2.32.3 规避 CVE-2023-32681 / CVE-2024-35195
 
 # Observability
 # ⚠️ 0.22.0+ require Python >=3.9 (per PyPI metadata), so on Win7 LTS
@@ -49,7 +49,7 @@ croniter==2.0.1
 networkx>=3.1,<3.2
 
 # Vector Index (HNSW)
-hnswlib>=0.8.0
+hnswlib==0.8.0  # 收紧上界，避免未来版本破坏 ABI
 
 # Testing
 pytest==7.4.4
