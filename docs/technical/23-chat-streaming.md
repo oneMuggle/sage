@@ -1,9 +1,8 @@
 # 23 — Chat 流式响应端到端 (PR-6)
 
-> 收口计划 [`docs/plans/2026-06-12_finish-designed-features.md`](../plans/2026-06-12_finish-designed-features.md) 的"缺口 B":
-> 后端 `POST /api/v1/chat/stream` 已实现 NDJSON 流式协议 + 完整集成测试,
+> 本章记录端到端贯通方案: 后端 `POST /api/v1/chat/stream` 已实现 NDJSON 流式协议 + 完整集成测试,
 > 但 Tauri 层无 `agent_chat_stream` 命令,前端 `chatApi` 也无流式调用方法,
-> 流式 UX (thinking/acting/observing 实时反馈) 无法触达用户。本章记录端到端贯通方案。
+> 流式 UX (thinking/acting/observing 实时反馈) 无法触达用户。
 
 ## 1. 全景
 

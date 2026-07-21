@@ -1,11 +1,147 @@
-# 25. LLM Wiki 集成(PR-8)
+# 25. LLM Wiki 集成(PR-8 + PR-114+115+116 流式架构)
 
-> 状态: Phase 1 ✅ · Phase 2-8 计划中
-> 前置: [docs/plans/2026-05-30_llm-wiki.md](../plans/2026-05-30_llm-wiki.md)(Phase 1-5)
-> 计划: [docs/plans/2026-06-12_llm-wiki-llm-integration.md](../plans/2026-06-12_llm-wiki-llm-integration.md)
+> 状态: Phase 1-8 ✅ (Rust/Tauri 时代) · 流式架构 ✅ (Python/FastAPI + Electron, PR-114+115+116)
+> 流式架构设计: [docs/superpowers/specs/2026-07-08-wiki-streaming-design.md](../superpowers/specs/2026-07-08-wiki-streaming-design.md)
 > 参考实现: `/home/fz/project/llm_wiki`
 
-本文档分 8 个 phase 介绍 sage 的 LLM Wiki 集成(借鉴 Karpathy "LLM 驱动个人知识库"模式 + llm_wiki 的 Rust 桌面实现)。当前 Phase 1 已完成。
+本文档分两部分:
+1. **Phase 1-8 (历史参考)** — Rust/Tauri 时代 (2026-05 至 2026-06),RAG 流程 + 4-signal 图谱 + 用户手册。
+2. **流式架构 (PR-114+115+116)** — 当前 Python/FastAPI + Electron 时代的 NDJSON 流式 chat/ingest,9 个 followup 清理。
+
+---
+
+## 流式架构 (PR-114+115+116, 2026-07-08 起)
+
+### 1. 全景
+
+```
+┌──────────┐   POST /api/v1/wiki/{chat,ingest}/stream  ┌──────────────────┐
+│ Renderer │ ──────────────────────────────────────► │ Python FastAPI   │
+│ (React)  │   NDJSON (一行一事件)                  │  backend/wiki/    │
+│          │ ◄────────────────────────────────────── │  + api/wiki_routes│
+└────┬─────┘                                          └────────┬─────────┘
+     │   invoke('wiki_chat_stream' / 'wiki_ingest_stream')    │
+     │   listen('wiki-{chat-stream|ingest}-{id}-*')          │   app.emit(...)
+     ▼                                                       ▼
+┌──────────────────────────────────────────────────────┐
+│ Electron main (electron/commands.ts)                    │
+│   wiki_chat_stream / wiki_ingest_stream                │
+│     └─ fetch('/api/v1/wiki/{chat,ingest}/stream')      │
+│         └─ NDJSON → relayNdjsonToEvent → split         │
+│            ├─ -chunk event                             │
+│            ├─ -done event                              │
+│            └─ -progress event (ingest only)            │
+└──────────────────────────────────────────────────────┘
+```
+
+### 2. 4 个端点 (backend/api/wiki_routes.py)
+
+| 端点 | 行为 | 事件 |
+|------|------|------|
+| `POST /api/v1/wiki/chat/stream` | RAG 检索 + LLM 流式 | `chunk` / `done` / `error` |
+| `POST /api/v1/wiki/ingest/stream` | 6 步 ingest 管线 | `progress` (6 stage labels) |
+
+两个端点都用 `StreamingResponse(media_type="application/x-ndjson")` + `Cache-Control: no-cache` + `X-Accel-Buffering: no` 头,FastAPI 自动管理 streaming 关闭。
+
+### 3. 5 个 stage 进度 (ingest)
+
+每条 progress line 包含 `{stage, percent, message}`:
+
+| Stage           | Percent | 触发 |
+|----------------|---------|------|
+| `started`       | 0%      | 入口 |
+| `copy_source`   | 10%     | 复制源到 `raw/sources/` |
+| `step1_analyze` | 20%     | LLM Step1 分析 |
+| `step2_write`   | 50%     | LLM Step2 写作 |
+| `embedding`     | 80%     | 嵌入 + 写 VectorStore |
+| `completed`     | 100%    | 全部完成 |
+| `failed`        | 0%      | 异常路径,`message` 含原因 |
+
+`WikiIngestProgress.tsx::STAGE_LABELS` 与上述 6 stage 一一对应。
+
+### 4. LLMContext 抽象 (PR-114, backend/wiki/llm_context.py)
+
+`LLMContext` 是 3 callback 的 dataclass,`make_llm_context(base_url, api_key, model)` 工厂函数构造,4 路由 (`/chat`, `/ingest`, `/research`, `/clip`) 共享。
+
+```python
+@dataclass
+class LLMContext:
+    llm_call: LlmCall              # 同步 POST /chat/completions
+    llm_stream_call: LlmStreamCall # 流式 POST /chat/completions (SSE-style)
+    http_post: HttpPost            # 通用 POST (e.g. embedding API)
+```
+
+注: `llm_stream_call` 专为 PR-115/116 引入,使用 httpx `client.stream("POST", ...)` + `aiter_lines()` 逐行 yield delta 内容。
+
+### 5. 3 层 NDJSON 协议
+
+**chat/stream NDJSON**:
+```json
+{"event": "chunk", "data": "Hello"}
+{"event": "chunk", "data": " world"}
+{"event": "done", "data": {"citations": ["wiki/a.md", "wiki/b.md"]}}
+```
+
+**ingest/stream NDJSON** (全部 `progress`):
+```json
+{"event": "progress", "data": {"stage": "started", "percent": 0, "message": "开始导入"}}
+{"event": "progress", "data": {"stage": "copy_source", "percent": 10, "message": "复制到 doc.md"}}
+...
+{"event": "progress", "data": {"stage": "completed", "percent": 100, "message": "导入完成"}}
+```
+
+### 6. Electron relay (electron/relay.ts + electron/commands.ts)
+
+- `relayNdjsonToEvent(body, eventPrefix, webContents, signal, transform?)` — 通用 NDJSON 拆分助手,按 `event` 字段分到不同 Electron IPC channel:
+  - `chunk` → `{prefix}-chunk`
+  - `done` → `{prefix}-done` (或 ingest 的 transform 翻译为 `{prefix}-progress` with `{stage: 'completed'}`)
+  - `error` → `{prefix}-error` (或 ingest 的 transform 翻译为 `{prefix}-progress` with `{stage: 'failed'}`)
+  - `progress` → `{prefix}-progress` (原始 data 透传)
+- `streamControllers: Map<streamId, AbortController>` — 客户端 unlisten 时 abort 后端 fetch
+- 2 个 IPC handler: `wiki_chat_stream` + `wiki_ingest_stream`,都 `await fetch(...)` 后台 relay
+
+### 7. 前端 hook 体系 (src/features/wiki/)
+
+| Hook | 职责 |
+|------|------|
+| `useWikiChatStream(streamId)` | 订阅 `wiki-chat-stream-{id}-{chunk,done,error}` 3 个 channel,累积到 `state.answer` + `state.citations` |
+| `useWikiIngest(streamId)` | 订阅 `wiki-ingest-{id}-progress` 单 channel,映射到 `{progress, done, error}` |
+| `useWikiIngest` 含 4s auto-dismiss timer (PR-120 followup) | 完成后进度条自动消失 |
+
+### 8. 关键设计决策
+
+1. **同步 NDJSON (no create-then-attach split)** — 比 PR-6 (orchestration chat) 的 create+attach 简单,RTT 更短,适合一次性 chat/ingest。
+2. **INGEST done/error 翻译为 progress 终态** — 避免前端为 ingest 多订阅一个 channel;`done` → `{stage:'completed', percent:100}`,`error` → `{stage:'failed', percent:0, message:...}`。
+3. **streamId 由后端生成,前端透传** — `wikiChatStream` API 返回 server-side streamId,`useWikiChatStream` 订阅相同 id 的 channel。避免双重 ID 失配。
+4. **`{streamId}` 透传到 `listen()` options** — 客户端 unlisten 时把 streamId 传给 `sage:unlisten`,Electron main 用 `streamControllers.get(streamId)` 找到对应 AbortController 并 abort 后端 fetch。
+5. **无 LLM 调用取消** — 已发出去的 LLM 请求无法回收,abort 只停止 fetch 后的 stream 读取。
+6. **临时文件清理** — `/ingest/stream` 对非 .md 源创建临时 .md,通过 `_stream_with_cleanup` async generator wrapper + try/finally 清理,避免 `/tmp` 泄漏 (PR-118 followup)。
+7. **Win7 LTS 兼容** — Python 3.8.10 + pydantic 1.x,UP006/UP007/UP035/UP038 禁用 (在 `backend/ruff.toml`),`isinstance(x, (X, Y))` 而非 `X | Y` (Py3.10+)。
+
+### 9. 集成测试
+
+`backend/tests/integration/test_wiki_chat_stream.py` (5 cases, PR-2):
+- NDJSON format / 全 chunk 拼合 / citations / error / 流中断
+`backend/tests/integration/test_ingest_stream.py` (5 cases, PR-3 Task 1):
+- progress 顺序 / 6 stage labels / 缓存命中早退 / error / 取消
+`backend/tests/integration/test_wiki_ingest_stream_route.py` (5 cases, PR-122):
+- Content-Type / cache headers / 6 progress events / 404 / failed 事件
+
+### 10. 9 个 followup 清理 (PR-118/120/122/124 + 3 个 win7 sync)
+
+| PR | 清理 | 来源 |
+|----|------|------|
+| PR-118 | dead `WikiChatResponse` type 删 | PR-2 Task 5 |
+| PR-118 | temp .md file leak 修 | PR-3 Task 2 |
+| PR-118 | `GraphData.to_dict()` / `from_dict()` 方法 | PR-1 |
+| PR-120 | HTTPException status 保留 upstream code (401/403/429/5xx) | PR-1 |
+| PR-120 | Hardcoded embed model → `DEFAULT_EMBED_MODEL` 常量 | PR-2 Task 5 |
+| PR-120 | Sticky progress UI → 4s auto-dismiss | PR-3 Task 4 |
+| PR-120 | Empty retrieval UX → "未在 wiki 中找到相关内容" | PR-2 Task 1 |
+| PR-122 | /ingest/stream 路由层 5 个集成测试 | PR-3 Task 2 |
+| PR-124 | llmConfig placeholders → `useSettings()` 集成 | PR-3 Task 4 |
+
+---
 
 ## Phase 1: LLM Provider 抽象层 ✅
 
@@ -787,8 +923,6 @@ const { answer, citations, streaming, error, reset } = useWikiChatStream(streamI
 - 多格式文档解析(PDF/DOCX/PPTX/图像)
 - MCP server(对外暴露给 Agent)
 - HNSW 向量索引(突破 1万 chunk 规模)
-
-参考: [`docs/plans/2026-06-12_llm-wiki-llm-integration.md`](../plans/2026-06-12_llm-wiki-llm-integration.md) 原始计划
 
 ---
 

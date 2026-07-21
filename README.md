@@ -55,7 +55,7 @@ Win7 LTS 派生在档位后追加 `-lts`（如 `vX.Y.Z-beta.N-lts`），artifact
 - LTS release 锁在 Electron 21.4.4 + Python 3.8，单独维护 Win7 SP1 x64
 - 两条通道独立迭代：main 后续可升 Electron 28+/32+，LTS 维持冻结
 
-详细同步策略和风险说明见 [`release/win7` 分支的 BRANCH_NOTES.md](https://github.com/oneMuggle/sage/blob/release/win7/BRANCH_NOTES.md) 和 [`docs/technical/21-win7-lts.md`](./docs/technical/21-win7-lts.md)。
+详细同步策略和风险说明见 [`release/win7` 分支的 BRANCH_NOTES.md](https://github.com/oneMuggle/sage/blob/release/win7/BRANCH_NOTES.md) 和 [`docs/technical/31-win7-lts.md`](./docs/technical/31-win7-lts.md)。
 
 ## 核心功能
 
@@ -342,7 +342,7 @@ python -c "from memory import init_memory; init_memory()"
 - **Win7 SP1 x64 用户**请从 LTS release 下载 `Sage-Setup-${version}-win7.exe`：
   https://github.com/oneMuggle/sage/releases?q=tag%3Av*-lts
 - 前置条件: 装 **KB3033929** (SHA-2 代码签名, 2016 年发布)；x64 only
-- 详细: [`docs/technical/21-win7-lts.md` §6](./docs/technical/21-win7-lts.md) 风险声明
+- 详细: [`docs/technical/31-win7-lts.md` §6](./docs/technical/31-win7-lts.md) 风险声明
 
 ### Q5: 构建产物巨大
 

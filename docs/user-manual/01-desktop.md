@@ -41,7 +41,7 @@
 
 - 不保证 Win7 GPU 驱动兼容, 启动时已禁用硬件加速 (`--disable-gpu`)
 - 7 个 Chromium 启动开关在 `electron/main.ts` 行内注释完整记录
-- 详见 [`../technical/21-win7-lts.md` §6 风险声明](../technical/21-win7-lts.md)
+- 详见 [`../technical/31-win7-lts.md` §6 风险声明](../technical/31-win7-lts.md)
 
 ### 1.2.3 验证安装
 
