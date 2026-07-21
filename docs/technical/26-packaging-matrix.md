@@ -34,7 +34,7 @@
 5. 启动 Sage 前确认桌面快捷方式 (`Sage.lnk`) 存在
 6. **x64 only** — Electron 21 不支持 Win7 32-bit
 
-LTS release 由 `release/win7` 分支的 `release-win7.yml` workflow 产出, 详见 [`21-win7-lts.md` §9](./21-win7-lts.md)。
+LTS release 由 `release/win7` 分支的 `release-win7.yml` workflow 产出, 详见 [`31-win7-lts.md` §9](./31-win7-lts.md)。
 
 ### Ubuntu 20.04+ / Debian / Mint
 
@@ -61,7 +61,7 @@ chmod +x Sage-${version}.AppImage
 |---|---|---|---|
 | Win Server 2022 | ✅ CI `electron-smoke`(每次 PR) | Per-PR | Playwright `_electron` |
 | Win10 / Win11 | ⚠️ 等价于 Server 2022(同 Chromium 内核),无独立真机 | — | — |
-| Win7 SP1 | ❌ 人工([`21-win7-lts.md`](./21-win7-lts.md)§3) | 每 release | `scripts/win7-smoke/*.ps1` |
+| Win7 SP1 | ❌ 人工([`31-win7-lts.md`](./31-win7-lts.md)§3) | 每 release | `scripts/win7-smoke/*.ps1` |
 | Ubuntu | ❌ 暂无 | — | (TODO:可加 `electron-smoke` 的 Linux 镜像) |
 
 ## 4. 已知限制
@@ -82,7 +82,7 @@ chmod +x Sage-${version}.AppImage
 ## 6. 相关文档
 
 - [`20-electron.md`](./20-electron.md) — Electron 主进程架构
-- [`21-win7-lts.md`](./21-win7-lts.md) — Win7 LTS 分支策略
+- [`31-win7-lts.md`](./31-win7-lts.md) — Win7 LTS 分支策略
 - [`30-release-tiers.md`](./30-release-tiers.md) — 4 档发布分级系统
 - `../plans/2026-06-15_cross-platform-packaging.md` — 本计划文档(实施后归并并删除)
 

@@ -1,8 +1,7 @@
 # 27. 多 Agent 编排层（M1：typed 化）
 
 > 本章节描述 Sage 多 Agent 协调层的 typed 化设计。
-> 增量于 [`22-agents-crud.md`](./22-agents-crud.md)、[`24-skills-system.md`](./24-skills-system.md) 等运行时模块；
-> 整体方案见 [`../plans/2026-06-26_multi-agent-optimization-from-claw-code.md`](../plans/2026-06-26_multi-agent-optimization-from-claw-code.md)（如仍存在则参考）。
+> 增量于 [`22-agents-crud.md`](./22-agents-crud.md)、[`24-skills-system.md`](./24-skills-system.md) 等运行时模块。
 > M1 落地于 `feat/multi-agent-v2` 分支，2026-06-27。
 
 ## 1. 背景
@@ -177,7 +176,7 @@ M1 的 3 个模块都遵守 claw-code 的"事件契约"原则：
 
 ## 8. 参考
 
-- 设计方案：`docs/plans/2026-06-26_multi-agent-optimization-from-claw-code.md`
+- 设计方案：本章 (claw-code 经验已整合到上文 §1–§7，原 plan 文档 `2026-06-26_multi-agent-optimization-from-claw-code.md` 已按 `feature-development.md` 规则归档删除)
 - claw-code 参考：`/home/fz/project/claw-code/rust/crates/runtime/src/`
 - claw-code 事件契约：`docs/g004-events-reports-contract.md`
 
