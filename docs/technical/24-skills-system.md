@@ -167,14 +167,12 @@ pub struct SkillExecuteResult {
 - PR-7.3: 用户自定义 skill (UI 上传 SkillSpec JSON,存到 `user_skills` 表)
 - PR-7.4: Skill parameters 表单动态生成 (基于 JSON Schema) + execute UI
 
-PR-7 完工后,`docs/plans/2026-06-12_finish-designed-features.md` 可删除(按 `feature-development.md` 规则)。
-
 ---
 
 ## 9. SKILL.md 适配层 (PR-8)
 
 > PR-8 新增: 让 Sage 兼容 AgentSkills 开放规范 (agentskills.io),与 Hermes Agent / OpenClaw / Claude Skills 生态互通。
-> 完整设计文档见 `docs/plans/2026-06-18_skill-md-adapter.md` (按 `feature-development.md` 规则完工后并入本节并删除 plan 文档)。
+> 设计预期见 [spec §"SKILL.md 适配层"](../superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md)。原 plan 文档 `docs/plans/2026-06-18_skill-md-adapter.md` 从未在 git 历史中提交,具体实现见本节下文。
 
 ### 9.1 双 loader 并存
 
