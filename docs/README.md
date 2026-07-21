@@ -41,6 +41,21 @@ Sage 维护两条独立分支：
 
 > 完整技术专题目录见 [`technical/README.md`](./technical/README.md)。
 
+## 📚 docs/ 子目录总览
+
+| 子目录 | 定位 | 维护规则 |
+|---|---|---|
+| `01-14.md`(根) | 核心技术章节(架构/数据库/记忆/Agent/工具等) | 稳定文档,功能完成后更新对应章节 |
+| [`technical/`](./technical/) | 15-30 横切关注点(质量门禁/可观测性/六边形等) | 新功能模块加章节,编号顺延 |
+| [`user-manual/`](./user-manual/) | 终端用户操作指南(01-06) | 用户可见功能完成后加章节 |
+| [`plans/`](./plans/) | **仅进行中的实施计划** | 功能完成后并入技术手册/用户手册并删除 |
+| [`superpowers/ideas/`](./superpowers/ideas/) | 暂不做的零散想法 | 不进 roadmap,不进 specs/ |
+| [`superpowers/specs/`](./superpowers/specs/) | 设计 spec 归档(实施后保留作对比基线) | 见同目录 README.md |
+| [`philosophy/`](./philosophy/) | 哲学/反模式/决策框架 | 缓慢演化,极少更新 |
+| [`verification/`](./verification/) | 9 大目标验证地图(g001-g009) | 见同目录 README.md |
+
+> 维护规则来源:`feature-development.md`(项目根)。
+
 ---
 
 ## 核心技术参考

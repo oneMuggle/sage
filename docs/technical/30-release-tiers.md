@@ -72,7 +72,7 @@ Sage 自 v0.1.0 起所有 tag 都是"稳定版"语义，没有区分 alpha / bet
 
 ### 跨章节参考
 
-- Win7 LTS 预发布段映射：[`21-win7-lts.md` §9.1](./21-win7-lts.md)
+- Win7 LTS 预发布段映射：[`31-win7-lts.md` §9.1](./31-win7-lts.md)
 - 预发布构建矩阵（artifact 后缀 / cache key 隔离）：[`26-packaging-matrix.md` §7](./26-packaging-matrix.md)
 
 ---
@@ -151,14 +151,14 @@ Win7 LTS 与 main 走**完全平行**的 4 档发布线，MAJOR.MINOR.PATCH 与 
 - 4 档全 win7 参与，破除旧的 "alpha 阶段 win7 不跟随" 限制
 - win7 LTS 与 main 同步策略简化为：alpha/rc/stable 同日，beta 1 周后
 
-详细流程与失败处理：[`21-win7-lts.md` §9.1](./21-win7-lts.md)。
+详细流程与失败处理：[`31-win7-lts.md` §9.1](./31-win7-lts.md)。
 
 ---
 
 ## 30.5 相关文档
 
 - 设计规范：[`docs/superpowers/specs/2026-07-06-sage-release-tiers-design.md`](../superpowers/specs/2026-07-06-sage-release-tiers-design.md)
-- Win7 LTS 维护与 Release 工作流：[`21-win7-lts.md`](./21-win7-lts.md)
+- Win7 LTS 维护与 Release 工作流：[`31-win7-lts.md`](./31-win7-lts.md)
 - 跨平台打包矩阵与预发布构建矩阵：[`26-packaging-matrix.md`](./26-packaging-matrix.md)
 - Electron 21 桌面壳：[`20-electron.md`](./20-electron.md)
 - CI 工作流：[`.github/workflows/release.yml`](../../.github/workflows/release.yml) + [`release-win7.yml`](../../.github/workflows/release-win7.yml)
