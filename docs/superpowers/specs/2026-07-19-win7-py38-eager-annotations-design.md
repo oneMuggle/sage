@@ -2,7 +2,7 @@
 
 - **Date:** 2026-07-19
 - **Branch:** `fix/win7-py38-eager-annotations`（基于 `release/win7`）
-- **Status:** Draft，待用户 review
+- **Status:** Implemented（PR #190 + PR #189 merged to release/win7 @ 4bbe7a7 / 172c7d1, Backend Python 3.8 CI 全绿，coverage ~87%）
 - **Author:** Claude（与用户共同设计）
 
 ## 1. 背景与目标
@@ -155,12 +155,12 @@ conda run -n sage-backend-py38 python -c "from backend.main import app"
 
 ## 5. 实施里程碑
 
-- [ ] M1：创建 `sage-backend-py38`，安装锁定依赖并捕获 RED。
-- [ ] M2：替换 5 个注解，完成 import GREEN。
-- [ ] M3：修正 backend-py38 CI 的依赖安装、版本断言和 hex mode。
-- [ ] M4：运行定向测试、Ruff、全量 coverage。
-- [ ] M5：完成多维代码审查并修复高优先级问题。
-- [ ] M6：提交、推送、创建独立 PR，监控 CI。
+- [x] M1：创建 `sage-backend-py38`，安装锁定依赖并捕获 RED。
+- [x] M2：替换 5 个注解，完成 import GREEN。
+- [x] M3：修正 backend-py38 CI 的依赖安装、版本断言和 hex mode。
+- [x] M4：运行定向测试、Ruff、全量 coverage。
+- [x] M5：完成多维代码审查并修复高优先级问题。
+- [x] M6：提交、推送、创建独立 PR，监控 CI。
 
 ## 6. 风险与依赖
 
