@@ -113,8 +113,19 @@ if ($LASTEXITCODE -ne 0) { throw "get-pip.py install failed with exit code $LAST
 Remove-Item $GetPipPath
 
 # Install dependencies
-Write-Host "Installing Python dependencies from requirements-py38.txt..." -ForegroundColor Green
+# CRITICAL: hnswlib==0.8.0's setup.py does `import numpy` at module top level
+# (line 5 of hnswlib/setup.py), and pip invokes setup.py during dependency
+# resolution — BEFORE installing numpy. With `--no-build-isolation`, the
+# build subprocess inherits the parent env, but numpy still isn't installed
+# in site-packages yet, so the import fails. The fix: pre-install numpy<2
+# in a separate pip call so it's on sys.path before hnswlib's setup.py runs.
+# See run 29817891642 trace + PR #200 + PR #201 history for context.
+Write-Host "Pre-installing numpy<2 (hnswlib build-time dep)..." -ForegroundColor Green
 $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
+& $PipExe install --no-warn-script-location "numpy<2"
+if ($LASTEXITCODE -ne 0) { throw "pip install numpy<2 failed with exit code $LASTEXITCODE" }
+
+Write-Host "Installing Python dependencies from requirements-py38.txt..." -ForegroundColor Green
 & $PipExe install --no-warn-script-location --no-build-isolation -r $RequirementsFile
 # CRITICAL: PowerShell's $ErrorActionPreference = "Stop" does NOT auto-catch
 # exit codes from `& $ExternalExe` calls. Without this check, a pip failure
