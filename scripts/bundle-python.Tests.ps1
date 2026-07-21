@@ -105,7 +105,10 @@ Describe 'bundle-python.ps1: python38._pth config (v0.4.3-alpha.2 backend timeou
 
     It 'makes _pth config idempotent (re-running bundle does not duplicate the .. line)' {
         # Guard against repeated bundle runs appending duplicate `..` lines.
-        $Script:ScriptContent | Should -Match "Where-Object.*-ne \\\$CanonicalResources"
+        # Use single quotes so PowerShell doesn't interpret \$CanonicalResources
+        # as a variable interpolation (which would compile to an illegal
+        # regex pattern ending with a stray backslash).
+        $Script:ScriptContent | Should -Match 'Where-Object.*-ne \$CanonicalResources'
     }
 
     It 'verify step imports backend.main (catches _pth path errors at bundle time)' {
