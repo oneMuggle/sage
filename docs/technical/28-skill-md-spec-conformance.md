@@ -65,5 +65,4 @@ This skill reads PDF files using pypdf.
 ## Related Documents
 
 - `docs/technical/24-skills-system.md` — original skills architecture (now appends "Spec Conformance" subsection)
-- `docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md` — design spec
-- `docs/superpowers/plans/2026-06-29-agentskills-io-spec-conformance.md` — implementation plan
+- `docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md` — design spec (实施细节已并入 24-skills-system.md §"Spec Conformance"，对应 implementation plan 已归档删除)

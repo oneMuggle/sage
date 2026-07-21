@@ -176,7 +176,7 @@ M1 的 3 个模块都遵守 claw-code 的"事件契约"原则：
 
 ## 8. 参考
 
-- 设计方案：`docs/plans/2026-06-26_multi-agent-optimization-from-claw-code.md`
+- 设计方案：本章 (claw-code 经验已整合到上文 §1–§7，原 plan 文档 `2026-06-26_multi-agent-optimization-from-claw-code.md` 已按 `feature-development.md` 规则归档删除)
 - claw-code 参考：`/home/fz/project/claw-code/rust/crates/runtime/src/`
 - claw-code 事件契约：`docs/g004-events-reports-contract.md`
 
