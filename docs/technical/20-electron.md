@@ -234,7 +234,7 @@ Step 9 [回归]      重启 Sage → 设置应保留
 | `.github/workflows/release-win7.yml`                                       | Tauri Win7 NSIS release        | Tauri 移除 |
 | `scripts/patch-webkit2js.mjs`                                              | webkit2gtk-4.0 JSC regex patch | Tauri 移除 |
 | `docs/technical/20-win7-tauri-compat.md`                                   | Tauri Win7 配置                | 替换为本章 |
-| `docs/superpowers/plans/2026-06-13-tauri-2.1.1-zeroize-edition2024-fix.md` | Tauri 零碎 plan                | Tauri 移除 |
+| `docs/superpowers/plans/2026-06-13-tauri-2.1.1-zeroize-edition2024-fix.md` | Tauri 零碎 plan                | Tauri 移除（原 plan 已按 `feature-development.md` 规则归档删除）|
 
 ### 8.4 不动
 
