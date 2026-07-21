@@ -38,8 +38,8 @@ extraResources:
     to: "sage-core"
     filter:
       - "**/*"
-  - from: "resources/start-backend.bat"
-    to: "start-backend.bat"
+  # NOTE: start-backend.bat removed — was dead code (electron/main.ts spawns
+  # python.exe directly, never invoked the .bat). See PR #107/#111/#112.
 
 # Win7 + Win10/11 NSIS installer (electron-builder 24.x)
 win:

@@ -4,7 +4,7 @@
 # into the Electron NSIS installer. It downloads Python 3.8 embeddable,
 # installs pip, installs dependencies, and copies the backend code.
 #
-# Usage: .\scripts\bundle-python.ps1
+# Usage: .\scripts/bundle-python.ps1
 # Output: resources/python/ and resources/backend/
 
 $ErrorActionPreference = "Stop"
@@ -49,12 +49,57 @@ Write-Host "Extracting Python..." -ForegroundColor Green
 Expand-Archive -Path $PythonZip -DestinationPath $PythonDir -Force
 Remove-Item $PythonZip
 
-# Enable site-packages by uncommenting python38._pth
-Write-Host "Enabling site-packages..." -ForegroundColor Green
+# Enable site-packages AND pin the resources/ directory into python38._pth.
+#
+# CRITICAL (v0.4.3-alpha.2 Win7 backend 30s timeout fix):
+# python38._pth, when present, makes the embedded interpreter ignore
+# PYTHONPATH, registry, and environment variables (Python 3.8 docs:
+# https://docs.python.org/3.8/using/windows.html#finding-modules).
+# Without this extra line, `from backend.adapters...` raises
+# ModuleNotFoundError because backend/ lives in resources/, not in
+# site-packages. electron/main.ts sets PYTHONPATH at spawn, but the
+# embedded interpreter silently discards it. The fix: write resources/
+# into _pth at bundle time (the only mechanism _pth does not ignore).
+#
+# Path semantics (key insight from v0.4.3-alpha.2-debug):
+# Python's import system walks sys.path entries looking for the PACKAGE
+# NAME as a DIRECTORY or .py FILE inside each entry. So sys.path must
+# contain the PARENT of the package directory, NOT the package directory
+# itself. e.g. for `import backend.main`, sys.path must contain
+# resources/ (parent), not resources/backend/ — otherwise Python looks
+# for resources/backend/backend/ which doesn't exist.
+#
+# After NSIS extraction, _pth lives at <installDir>/resources/python/,
+# so `..` resolves to <installDir>/resources/. This single entry puts
+# both resources/backend/ AND resources/sage-core/ on sys.path, surviving
+# any user-chosen install directory (electron-builder.yml has
+# allowToChangeInstallationDirectory: true).
+Write-Host "Configuring python38._pth (site + resources/ parent path)..." -ForegroundColor Green
 $PthFile = Join-Path $PythonDir "python38._pth"
-$PthContent = Get-Content $PthFile
-$PthContent = $PthContent -replace '#import site', 'import site'
-Set-Content -Path $PthFile -Value $PthContent
+$PthLines = @(Get-Content $PthFile)
+
+# Final _pth content template (also serves as the Pester regression-test
+# anchor: scripts/bundle-python.Tests.ps1 asserts a literal `import site`
+# line is present in this script). The actual file is constructed by the
+# replacement block below — this here-string is documentation only.
+$ExpectedPthTemplate = @"
+import site
+..
+"@
+
+$CanonicalResources = '..'
+
+# Strip existing `..` line if present (idempotent re-run).
+$Cleaned = $PthLines | Where-Object { $_ -ne $CanonicalResources }
+# Uncomment `#import site` if present.
+$Cleaned = $Cleaned -replace '^#import site\s*$', 'import site'
+
+$NewLines = @($Cleaned + $CanonicalResources)
+# Strip trailing blank lines so the file ends exactly with the `..` path.
+while ($NewLines.Count -gt 0 -and [string]::IsNullOrWhiteSpace($NewLines[-1])) {
+    $NewLines = $NewLines[0..($NewLines.Count - 2)]
+}
+Set-Content -Path $PthFile -Value $NewLines
 
 # Download and install pip
 Write-Host "Downloading get-pip.py..." -ForegroundColor Green
@@ -64,12 +109,19 @@ Invoke-WebRequest -Uri $GetPipUrl -OutFile $GetPipPath -UseBasicParsing
 Write-Host "Installing pip..." -ForegroundColor Green
 $PythonExe = Join-Path $PythonDir "python.exe"
 & $PythonExe $GetPipPath --no-warn-script-location
+if ($LASTEXITCODE -ne 0) { throw "get-pip.py install failed with exit code $LASTEXITCODE" }
 Remove-Item $GetPipPath
 
 # Install dependencies
 Write-Host "Installing Python dependencies from requirements-py38.txt..." -ForegroundColor Green
 $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
 & $PipExe install --no-warn-script-location -r $RequirementsFile
+# CRITICAL: PowerShell's $ErrorActionPreference = "Stop" does NOT auto-catch
+# exit codes from `& $ExternalExe` calls. Without this check, a pip failure
+# would silently continue past this point and the verify step below would also
+# fail silently, producing a corrupt bundled Python runtime shipped to users
+# (this is the root cause of the v0.4.0-lts+ Win7 "30s backend timeout" bug).
+if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements-py38.txt failed with exit code $LASTEXITCODE" }
 
 # Copy backend code
 Write-Host "Copying backend code..." -ForegroundColor Green
@@ -93,29 +145,31 @@ if (Test-Path $SageCoreSource) {
     Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
     # Install sage-core in development mode
     & $PipExe install --no-warn-script-location -e $SageCoreDest
+    if ($LASTEXITCODE -ne 0) { throw "pip install -e sage-core failed with exit code $LASTEXITCODE" }
 }
-
-# Create backend startup script
-Write-Host "Creating backend startup script..." -ForegroundColor Green
-$StartBackendBat = Join-Path $ResourcesDir "start-backend.bat"
-$BatContent = @"
-@echo off
-set PYTHONPATH=%~dp0backend;%~dp0sage-core
-"%~dp0python\python.exe" -m uvicorn backend.main:app --host 127.0.0.1 --port 8765
-"@
-Set-Content -Path $StartBackendBat -Value $BatContent -Encoding ASCII
 
 # Verify installation
 Write-Host ""
 Write-Host "=== Verification ===" -ForegroundColor Cyan
 Write-Host "Python executable: $PythonExe"
 Write-Host "Backend directory: $BackendDir"
-Write-Host "Startup script: $StartBackendBat"
 Write-Host ""
 
-# Test Python import
-Write-Host "Testing Python imports..." -ForegroundColor Green
-& $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; print('All critical imports successful')"
+# Test Python import. Capture both stdout and stderr to a single buffer so we
+# can surface the underlying error in the exception message if any import
+# fails (otherwise we'd just see a bare exit code).
+#
+# CRITICAL: `import backend.main` is the canary for the _pth / PYTHONPATH
+# regression — without `..` in python38._pth, this raises
+# ModuleNotFoundError immediately, catching the v0.4.3-alpha.1 Win7 bug
+# at bundle time instead of at user runtime.
+Write-Host "Testing Python imports (incl. backend.main canary)..." -ForegroundColor Green
+$verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import backend.main; print('All critical imports successful (backend.main OK)')" 2>&1
+$verifyExit = $LASTEXITCODE
+Write-Host $verifyOutput
+if ($verifyExit -ne 0) {
+    throw "Post-install verification failed: critical Python imports missing (exit code $verifyExit). Output: $verifyOutput"
+}
 
 Write-Host ""
 Write-Host "=== Python backend bundled successfully! ===" -ForegroundColor Green
