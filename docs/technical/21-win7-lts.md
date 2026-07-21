@@ -191,3 +191,83 @@ git push origin v0.5.0-beta.1-win7
 ```
 
 详细的预发布构建矩阵（artifact 后缀 / cache key 隔离）见 [`26-packaging-matrix.md` §7](./26-packaging-matrix.md)；4 档分级系统的完整说明见 [`30-release-tiers.md`](./30-release-tiers.md)。
+
+## 10. Python 3.8 后端兼容与 CI 锁定（2026-07-20）
+
+Win7 LTS 的 Python 3.8.10 embeddable 与 main 的 Python 3.11 不能共享同一份依赖锁文件。本节记录 F1（PR #190 + #189）的修复要点 + v0.4.5-alpha.1 + PR #191/#192 的 bundling 回归修复要点。
+
+### 10.1 Python 3.8 锁定依赖（`backend/requirements-py38.txt`）
+
+| 包 | 锁定版本 | 原因 |
+| --- | --- | --- |
+| `fastapi` | `0.85.0` | 0.86+ 需要 `pydantic>=2` |
+| `pydantic` | `1.10.13` | 1.x → Pydantic v1 API（`model.dict()`、`Config` 类、`validator`）；v2 需要 Python 3.9+ 部分语法糖 |
+| `networkx` | `3.1` | 3.2+ 需要 Python 3.9+ |
+| `hnswlib` | `0.8.0` | 0.9+ 无 cp38 wheel |
+| `requests` | `2.32+` | TLS 验证修复 + Win7 兼容 |
+| `prometheus-client` | `0.21.1` | 0.22+ 需要 Python 3.9+（关键 — 0.25.0 会让整个 pip install 回滚） |
+
+> **不要**把 main 的 `backend/requirements.txt` 自动同步到 win7。两者技术栈分叉。
+
+### 10.2 PEP 604 / 585 / collections.abc 注解
+
+Python 3.8 不支持 PEP 604 union syntax（`int | None`）和 PEP 585 generic builtin（`list[int]`）。F1 做了：
+
+- **5 处** PEP 604 → `Optional[...]` / `Union[...]`
+- **9 处** PEP 585 → `typing.List/Dict/Set/Tuple/Type`
+- **Pydantic v1** API 兼容性（`model.dict()` 而非 `model_dump()`，`Config` 类而非 `model_config`）
+
+辅助工具：`scripts/py38_compat_rewrite.py`（mass-rewriter，用于未来其他 sync 批次）。
+
+### 10.3 bundle-python.ps1 Pester 回归 guards
+
+`scripts/bundle-python.Tests.ps1` 静态分析回归 guards，**16 个测试**：
+
+1. **AST parse** — 语法错误立即报错
+2. **`$ErrorActionPreference = "Stop"`** at top
+3-5. **三处 `$LASTEXITCODE` throw**：get-pip.py install / pip install -r / pip install -e sage-core
+   - PowerShell 的 `ErrorActionPreference = "Stop"` **不会**自动捕获外部调用退出码
+   - 没有这三处，pip 失败会被静默吞掉 → v0.4.0-lts+ 30s 后端超时 root cause
+6. **`$verifyExit = $LASTEXITCODE`** + `if ($verifyExit is nonzero) throw`
+7. **`python38._pth` 配置**：
+   - 取消注释 `#import site`（激活 site-packages）
+   - 写入 `..`（resources/ 父目录）作为 sys.path 入口
+   - **不**写入 `..\backend` 或 `..\sage-core`（sys.path 必须含 package 父目录，不能含 package 本身）
+   - `Where-Object -ne '..'` 保证幂等（重跑 bundle 不会重复加行）
+8. **`backend.main` canary**：verify 步骤 `import backend.main`，任何 _pth 错误立即 bundle 时爆炸
+9. **dead-code cleanup**：脚本不应生成 `start-backend.bat`（electron/main.ts spawn python.exe 直接，从不调用 .bat）
+10. **electron-builder.yml**：NSIS extraResources 不打包 `resources/start-backend.bat`
+11. **requirements pin**：`prometheus-client==0.21.1`（必须）
+
+### 10.4 Bundling 回归修复链（v0.4.5-alpha.1 期间发现）
+
+| 日期 | Commit / PR | 修复内容 |
+| --- | --- | --- |
+| 2026-07-06 | `973d44c` | 三处 `$LASTEXITCODE` throw + 移除 start-backend.bat |
+| 2026-07-07 | `2689cb8` | `_pth` 写入 `..\backend` / `..\sage-core` + `backend.main` canary |
+| 2026-07-07 | `a20c061` | `_pth` 改为单条 `..`（resources/ 父目录）— Python import 语义要求 |
+| 2026-07-20 | PR #191 (`0f25f7a`) | cherry-pick 546f8e5 静默回退了以上三 fix，恢复之 |
+| 2026-07-21 | PR #192 (`2b9d637`) | Pester T10 双引号 → 单引号字符串字面（PowerShell `\\\$CanonicalResources` 变量插值转义，正则编译失败） |
+
+### 10.5 验证矩阵
+
+| 验证项 | 工具 | 触发 | 当前状态 |
+| --- | --- | --- | --- |
+| Pester 16 测试 | `Invoke-Pester scripts/bundle-python.Tests.ps1` | ci.yml `bundle-script-test` job on push to release/win7/main | ✅ 全过（run 29792790778） |
+| Backend Python 3.8 单测 | `pytest backend/` | ci.yml `backend-py38` job | ✅ 全过（run 29792790778） |
+| 真实 Win7 bundling | `release-win7.yml` Bundle Python step | 打 `v*-win7` tag | ⏳ 待下次 release 验证 |
+| Electron smoke | `tests/electron/smoke.spec.ts` | ci.yml `electron-smoke` job | ⚠️ Pre-existing flaky（10/10 历史失败，但 PR #191 merge 后成功） |
+
+### 10.6 Fix-forward Checklist（所有 Win7 bundling 脚本同步时）
+
+每次 `bundle-python.ps1` / `bundle-python-main.ps1` / `bundle-python-py38.ps1` 跨分支同步时，**必须**fix-forward 以下历史修复，否则会重新引入：
+
+- [ ] `$CanonicalResources = '..'`（不是 `..\backend` / `..\sage-core`）
+- [ ] 三处 `$LASTEXITCODE -ne 0` throw
+- [ ] `$verifyExit = $LASTEXITCODE` + canary check
+- [ ] `import backend.main` 在 verify 步骤
+- [ ] `Where-Object -ne '..'` 幂等
+- [ ] 不生成 `start-backend.bat`
+- [ ] electron-builder.yml `extraResources` 不含 `start-backend.bat`
+
+详见 memory `sage-bundling-script-fix-forward.md`。
