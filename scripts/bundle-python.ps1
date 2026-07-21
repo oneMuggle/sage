@@ -115,7 +115,7 @@ Remove-Item $GetPipPath
 # Install dependencies
 Write-Host "Installing Python dependencies from requirements-py38.txt..." -ForegroundColor Green
 $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
-& $PipExe install --no-warn-script-location -r $RequirementsFile
+& $PipExe install --no-warn-script-location --no-build-isolation -r $RequirementsFile
 # CRITICAL: PowerShell's $ErrorActionPreference = "Stop" does NOT auto-catch
 # exit codes from `& $ExternalExe` calls. Without this check, a pip failure
 # would silently continue past this point and the verify step below would also
@@ -144,7 +144,7 @@ if (Test-Path $SageCoreSource) {
     $SageCoreDest = Join-Path $ResourcesDir "sage-core"
     Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
     # Install sage-core in development mode
-    & $PipExe install --no-warn-script-location -e $SageCoreDest
+    & $PipExe install --no-warn-script-location --no-build-isolation -e $SageCoreDest
     if ($LASTEXITCODE -ne 0) { throw "pip install -e sage-core failed with exit code $LASTEXITCODE" }
 }
 
