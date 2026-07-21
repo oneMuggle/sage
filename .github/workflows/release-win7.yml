@@ -43,6 +43,17 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # CRITICAL (v0.4.5-alpha.2-win7 bundling fix):
+      # hnswlib==0.8.0 source build requires Python.h from a FULL Python distribution
+      # (the embeddable zip used previously lacks headers). Python 3.11+ requires
+      # Windows 8.1+, so we must use 3.8.10 (last 3.8.x compatible with Win7).
+      # setup-python installs full Python (with headers), bundle-python.ps1
+      # copies it to resources/python/ instead of downloading embeddable.
+      - name: Setup Python 3.8.10 (Win7 LTS bundling)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.8.10'
+
       - name: Cache electron-builder downloads (LTS namespace)
         uses: actions/cache@v4
         with:

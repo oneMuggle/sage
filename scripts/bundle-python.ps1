@@ -1,11 +1,26 @@
-# Bundle Python 3.8 embedded runtime + backend for Win7 LTS release
+# Bundle Python 3.8 backend for Win7 LTS release
 #
 # This script prepares the Python runtime and backend code for packaging
-# into the Electron NSIS installer. It downloads Python 3.8 embeddable,
-# installs pip, installs dependencies, and copies the backend code.
+# into the Electron NSIS installer.
 #
-# Usage: .\scripts/bundle-python.ps1
-# Output: resources/python/ and resources/backend/
+# v0.4.5-alpha.2-win7 bundling architecture change:
+# - PREVIOUS: downloaded Python 3.8.10-embed-amd64.zip (12MB, NO headers)
+#             and tried to pip install hnswlib==0.8.0 → failed at
+#             `fatal error C1083: Cannot open include file: 'Python.h'`
+# - NOW:      actions/setup-python@v5 installs Python 3.8.10 FULL
+#             distribution (with headers) for the BUILD step. We use it
+#             to compile hnswlib etc. Then we download the embeddable
+#             (for RUNTIME, smaller bundle), copy full Python's
+#             site-packages (with compiled wheels) to embeddable's
+#             Lib/site-packages.
+#
+# Why two Pythons? Win7 is end-of-life, Python 3.11+ requires Win8.1+,
+# so we MUST use Python 3.8.x. Embeddable lacks Python.h (for C compile)
+# but has python38.dll (same ABI as full Python 3.8.10), so compiled
+# wheels work in either. We trade ~30MB extra download for working bundling.
+#
+# Usage: .\scripts\bundle-python.ps1
+# Output: resources/python/ (embeddable runtime + site-packages) and resources/backend/
 
 $ErrorActionPreference = "Stop"
 
@@ -23,8 +38,22 @@ $BackendSourceDir = Join-Path $PSScriptRoot "..\backend"
 $RequirementsFile = Join-Path $PSScriptRoot "..\backend\requirements-py38.txt"
 
 Write-Host "=== Python Backend Bundler for Win7 LTS ===" -ForegroundColor Cyan
-Write-Host "Python version: $PythonVersion"
+Write-Host "Python version: $PythonVersion (full distribution from setup-python)"
 Write-Host "Resources directory: $ResourcesDir"
+Write-Host ""
+
+# Locate Python from setup-python. After `actions/setup-python@v5` with
+# python-version: '3.8.10' runs, `python.exe` is on PATH and points to the
+# FULL distribution (with headers in Include/, stdlib in Lib/, etc).
+$PythonExe = (Get-Command python.exe).Source
+if (-not $PythonExe) {
+    throw "Python not found on PATH. Did actions/setup-python@v5 run with python-version: '3.8.10'?"
+}
+$PythonRoot = Split-Path -Parent $PythonExe
+$FullSitePackages = Join-Path $PythonRoot "Lib\site-packages"
+Write-Host "Using full Python at: $PythonExe" -ForegroundColor Cyan
+& $PythonExe --version
+if ($LASTEXITCODE -ne 0) { throw "Python verification failed" }
 Write-Host ""
 
 # Clean up existing resources
@@ -39,13 +68,14 @@ New-Item -ItemType Directory -Force -Path $ResourcesDir | Out-Null
 New-Item -ItemType Directory -Force -Path $PythonDir | Out-Null
 New-Item -ItemType Directory -Force -Path $BackendDir | Out-Null
 
-# Download Python embeddable
-Write-Host "Downloading Python $PythonVersion embeddable..." -ForegroundColor Green
+# Download Python embeddable (runtime only — has python38.dll, stdlib in
+# python38.zip, but NO Include/ headers). We use it as the runtime because
+# it's ~12MB vs ~30MB for the full distribution.
+Write-Host "Downloading Python $PythonVersion embeddable (runtime)..." -ForegroundColor Green
 $PythonZip = Join-Path $ResourcesDir "python-embed.zip"
 Invoke-WebRequest -Uri $PythonUrl -OutFile $PythonZip -UseBasicParsing
 
-# Extract Python
-Write-Host "Extracting Python..." -ForegroundColor Green
+Write-Host "Extracting embeddable..." -ForegroundColor Green
 Expand-Archive -Path $PythonZip -DestinationPath $PythonDir -Force
 Remove-Item $PythonZip
 
@@ -101,39 +131,41 @@ while ($NewLines.Count -gt 0 -and [string]::IsNullOrWhiteSpace($NewLines[-1])) {
 }
 Set-Content -Path $PthFile -Value $NewLines
 
-# Download and install pip
-Write-Host "Downloading get-pip.py..." -ForegroundColor Green
-$GetPipPath = Join-Path $ResourcesDir "get-pip.py"
-Invoke-WebRequest -Uri $GetPipUrl -OutFile $GetPipPath -UseBasicParsing
-
-Write-Host "Installing pip..." -ForegroundColor Green
-$PythonExe = Join-Path $PythonDir "python.exe"
-& $PythonExe $GetPipPath --no-warn-script-location
-if ($LASTEXITCODE -ne 0) { throw "get-pip.py install failed with exit code $LASTEXITCODE" }
-Remove-Item $GetPipPath
-
-# Install dependencies
-# CRITICAL: hnswlib==0.8.0's setup.py does `import numpy` AND `import pybind11`
-# at module top level (lines 5-6 of hnswlib/setup.py), and pip invokes setup.py
-# during dependency resolution — BEFORE installing these build deps. With
-# `--no-build-isolation`, the build subprocess inherits the parent env, but
-# these packages still aren't installed in site-packages yet, so the imports
-# fail. The fix: pre-install numpy<2 + pybind11 in a separate pip call so
-# they're on sys.path before hnswlib's setup.py runs.
-# See runs 29817891642 (numpy fail) + 29818568506 (pybind11 fail) history.
+# Install Python dependencies into the FULL Python's site-packages.
+# Full Python has Python.h (in Include/), so hnswlib's setup.py can compile
+# C extensions. After install, we'll copy the site-packages to the embeddable.
+#
+# Order matters:
+# 1. Build-time deps (numpy<2 + pybind11): hnswlib==0.8.0 setup.py imports
+#    these at top level (lines 5-6). pip calls setup.py during dependency
+#    resolution BEFORE installing them. Pre-install first.
+# 2. requirements-py38.txt: rest of deps, with --no-build-isolation so the
+#    build env inherits the parent's already-installed numpy/pybind11.
 Write-Host "Pre-installing numpy<2 + pybind11 (hnswlib build-time deps)..." -ForegroundColor Green
-$PipExe = Join-Path $PythonDir "Scripts\pip.exe"
-& $PipExe install --no-warn-script-location "numpy<2" "pybind11>=2.6,<3"
+& $PythonExe -m pip install --no-warn-script-location "numpy<2" "pybind11>=2.6,<3"
 if ($LASTEXITCODE -ne 0) { throw "pip install build-time deps failed with exit code $LASTEXITCODE" }
 
 Write-Host "Installing Python dependencies from requirements-py38.txt..." -ForegroundColor Green
-& $PipExe install --no-warn-script-location --no-build-isolation -r $RequirementsFile
-# CRITICAL: PowerShell's $ErrorActionPreference = "Stop" does NOT auto-catch
-# exit codes from `& $ExternalExe` calls. Without this check, a pip failure
-# would silently continue past this point and the verify step below would also
-# fail silently, producing a corrupt bundled Python runtime shipped to users
-# (this is the root cause of the v0.4.0-lts+ Win7 "30s backend timeout" bug).
+& $PythonExe -m pip install --no-warn-script-location --no-build-isolation -r $RequirementsFile
 if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements-py38.txt failed with exit code $LASTEXITCODE" }
+
+# Install sage-core in development mode (also using full Python)
+$SageCoreSource = Join-Path $PSScriptRoot "..\packages\sage-core"
+if (Test-Path $SageCoreSource) {
+    Write-Host "Installing sage-core package..." -ForegroundColor Green
+    $SageCoreDest = Join-Path $ResourcesDir "sage-core"
+    Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
+    & $PythonExe -m pip install --no-warn-script-location --no-build-isolation -e $SageCoreDest
+    if ($LASTEXITCODE -ne 0) { throw "pip install -e sage-core failed with exit code $LASTEXITCODE" }
+}
+
+# Copy full Python's site-packages (with compiled wheels including hnswlib)
+# to the embeddable's site-packages. Embeddable's python.exe can then
+# load them at runtime (same ABI as full Python 3.8.10).
+$EmbedSitePackages = Join-Path $PythonDir "Lib\site-packages"
+Write-Host "Copying site-packages from full Python to embeddable..." -ForegroundColor Green
+New-Item -ItemType Directory -Force -Path $EmbedSitePackages | Out-Null
+Copy-Item -Path "$FullSitePackages\*" -Destination $EmbedSitePackages -Recurse -Force
 
 # Copy backend code
 Write-Host "Copying backend code..." -ForegroundColor Green
@@ -149,21 +181,10 @@ foreach ($item in $BackendItems) {
     }
 }
 
-# Copy packages/sage-core if it exists
-$SageCoreSource = Join-Path $PSScriptRoot "..\packages\sage-core"
-if (Test-Path $SageCoreSource) {
-    Write-Host "Copying sage-core package..." -ForegroundColor Green
-    $SageCoreDest = Join-Path $ResourcesDir "sage-core"
-    Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
-    # Install sage-core in development mode
-    & $PipExe install --no-warn-script-location --no-build-isolation -e $SageCoreDest
-    if ($LASTEXITCODE -ne 0) { throw "pip install -e sage-core failed with exit code $LASTEXITCODE" }
-}
-
 # Verify installation
 Write-Host ""
 Write-Host "=== Verification ===" -ForegroundColor Cyan
-Write-Host "Python executable: $PythonExe"
+Write-Host "Python executable (runtime): $PythonDir\python.exe"
 Write-Host "Backend directory: $BackendDir"
 Write-Host ""
 
@@ -176,7 +197,8 @@ Write-Host ""
 # ModuleNotFoundError immediately, catching the v0.4.3-alpha.1 Win7 bug
 # at bundle time instead of at user runtime.
 Write-Host "Testing Python imports (incl. backend.main canary)..." -ForegroundColor Green
-$verifyOutput = & $PythonExe -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import backend.main; print('All critical imports successful (backend.main OK)')" 2>&1
+$EmbedPython = Join-Path $PythonDir "python.exe"
+$verifyOutput = & $EmbedPython -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import hnswlib; import backend.main; print('All critical imports successful (hnswlib + backend.main OK)')" 2>&1
 $verifyExit = $LASTEXITCODE
 Write-Host $verifyOutput
 if ($verifyExit -ne 0) {
