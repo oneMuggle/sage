@@ -38,6 +38,10 @@ export default defineConfig({
       name: 'electron',
       testDir: './tests/electron',
       timeout: 60_000,
+      // Allow 2 retries on CI to absorb pre-existing flaky Electron cold-start timing
+      // (Windows runner can be slow during preload execution — waitForFunction 30s
+      // covers most cases, but a retry catches the tail).
+      retries: process.env.CI ? 2 : 0,
       outputDir: './tests/electron/test-results',
     },
     {

@@ -54,12 +54,15 @@ test('Electron launches and exposes electronAPI', async () => {
   // Wait for electronAPI to be exposed by preload (contextBridge.exposeInMainWorld
   // is called synchronously but Playwright's firstWindow may resolve before
   // preload finishes — waitForFunction polls until the API is on window).
+  // 30s timeout: Electron cold start on Windows CI runner can take 20-30s before
+  // preload finishes exposing electronAPI.invoke. 10s was too tight (pre-existing
+  // flaky failures — see run 29792790778 trace).
   await window.waitForFunction(
     () =>
       typeof (window as unknown as { electronAPI?: { invoke?: unknown } }).electronAPI?.invoke ===
       'function',
     undefined,
-    { timeout: 10_000 },
+    { timeout: 30_000 },
   );
 
   // Verify electronAPI.listen also exposed
@@ -89,13 +92,13 @@ test('invoke IPC bridge round-trips through main process', async () => {
   const window = await app!.firstWindow({ timeout: 10_000 });
   await window.waitForLoadState('domcontentloaded');
 
-  // Wait for electronAPI ready (same as first test)
+  // Wait for electronAPI ready (same as first test, 30s timeout to match firstWindow cold-start)
   await window.waitForFunction(
     () =>
       typeof (window as unknown as { electronAPI?: { invoke?: unknown } }).electronAPI?.invoke ===
       'function',
     undefined,
-    { timeout: 10_000 },
+    { timeout: 30_000 },
   );
 
   // electronAPI.invoke calls ipcRenderer.invoke('sage:invoke', {cmd, args}).
