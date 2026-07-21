@@ -136,11 +136,19 @@ Set-Content -Path $PthFile -Value $NewLines
 # C extensions. After install, we'll copy the site-packages to the embeddable.
 #
 # Order matters:
-# 1. Build-time deps (numpy<2 + pybind11): hnswlib==0.8.0 setup.py imports
+# 1. Modern setuptools + wheel (run 29830405815 history: sage-core build failed
+#    with "invalid command 'bdist_wheel'" because Python 3.8.10 ships old
+#    setuptools without wheel support). --no-build-isolation requires parent
+#    env to have these.
+# 2. Build-time deps (numpy<2 + pybind11): hnswlib==0.8.0 setup.py imports
 #    these at top level (lines 5-6). pip calls setup.py during dependency
 #    resolution BEFORE installing them. Pre-install first.
-# 2. requirements-py38.txt: rest of deps, with --no-build-isolation so the
+# 3. requirements-py38.txt: rest of deps, with --no-build-isolation so the
 #    build env inherits the parent's already-installed numpy/pybind11.
+Write-Host "Upgrading pip/setuptools/wheel (bdist_wheel requirement)..." -ForegroundColor Green
+& $PythonExe -m pip install --no-warn-script-location --upgrade "pip" "setuptools>=68" "wheel"
+if ($LASTEXITCODE -ne 0) { throw "pip install setuptools/wheel failed with exit code $LASTEXITCODE" }
+
 Write-Host "Pre-installing numpy<2 + pybind11 (hnswlib build-time deps)..." -ForegroundColor Green
 & $PythonExe -m pip install --no-warn-script-location "numpy<2" "pybind11>=2.6,<3"
 if ($LASTEXITCODE -ne 0) { throw "pip install build-time deps failed with exit code $LASTEXITCODE" }
