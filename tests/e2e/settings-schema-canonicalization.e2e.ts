@@ -90,7 +90,7 @@ test.describe('Settings schema canonicalization', () => {
     }, JSON.stringify(LEGACY_SNAKE_PAYLOAD));
 
     // Do not mock GET here: the unavailable browser backend exercises the local fallback path.
-    await page.goto('/settings');
+    await page.goto('/#/settings');
     await expect(page.getByText('设置')).toBeVisible();
     await page.waitForFunction(
       () => Boolean(window.localStorage.getItem('sage-settings.migrated_to_backend')),
@@ -126,7 +126,7 @@ test.describe('Settings schema canonicalization', () => {
       });
     });
 
-    await page.goto('/settings');
+    await page.goto('/#/settings');
     await expect(page.getByText('设置')).toBeVisible();
     await page.getByRole('button', { name: '端点' }).click();
     await expect(page.getByText('https://camel.example.com/v1')).toBeVisible();
