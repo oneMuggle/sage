@@ -64,12 +64,38 @@ class ChatResponse(BaseModel):
 class SettingsRequest(BaseModel):
     """Hex 路径的 PUT /settings 请求体。
 
-    从 ``extra="allow"`` 收紧到 ``extra="forbid"``；请求体翻译和整树校验
-    由 ``update_settings`` 显式处理。
+    字段契约（双层校验设计）：
+
+    - **Pydantic 层**（本类）：声明类型边界 + ``extra="forbid"`` 拒白名单外字段。
+      顶层 13 个 AppSettings 字段 + 3 个 legacy 字段。
+    - **canonical shape 层**（``validate_settings_shape``）：校验嵌套白名单
+      + 拒绝残留 snake_case。两条不互冗余：Pydantic 给 OpenAPI docs + 顶层
+      类型校验，canonical 给嵌套结构 + snake_case 翻译。
+    - **legacy 字段**（``api_base_url`` / ``api_key`` / ``model``）：保留以兼容
+      旧客户端调用（如 ``test_audit_log.py``）。handler 收到后只用作审计
+      ``changed_fields`` 占位 + 日志标记，**不**写入 settings 存储。
     """
 
     model_config = {"extra": "forbid"}
 
+    # ----- AppSettings 13 fields (canonical, src/entities/setting/types.ts) -----
+    # noqa: N815 — camelCase 是为了与 AppSettings TypeScript interface 字段一一对齐；
+    # 字段名经过 to_camel/validate_settings_shape 链路进入存储。
+    streaming: Optional[bool] = None
+    autoMemory: Optional[bool] = None  # noqa: N815
+    confirmDelete: Optional[bool] = None  # noqa: N815
+    compactMode: Optional[bool] = None  # noqa: N815
+    endpoints: Optional[List[dict]] = None
+    modelSelections: Optional[dict] = None  # noqa: N815
+    maxContext: Optional[int] = None  # noqa: N815
+    temperature: Optional[float] = None
+    proxyMode: Optional[str] = None  # noqa: N815  # 'system' | 'custom' | 'direct'
+    proxyUrl: Optional[str] = None  # noqa: N815
+    tlsVersion: Optional[str] = None  # noqa: N815  # '1.2' | '1.3'
+    wiki: Optional[dict] = None
+    version: Optional[str] = None
+
+    # ----- Legacy fields (deprecated, 兼容旧客户端, 不写入存储) -----
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None  # noqa: S105 — 字段名占位；不存储
     model: Optional[str] = None
@@ -187,19 +213,29 @@ async def update_settings(
     """Hex 路径的 settings 更新端点 + persist + emit 审计事件。
 
     与 legacy 路径对齐：合并现有设置后翻译为 camelCase，并校验完整白名单。
+    Legacy 字段（api_base_url / api_key / model）仅进入审计 changed_fields，
+    不写入存储。
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     payload = req.model_dump(exclude_none=True)
+
+    # 分离 legacy 字段 vs canonical 字段
+    legacy_keys = {"api_base_url", "api_key", "model"}
+    legacy_present = [k for k in payload if k in legacy_keys]
+    canonical_payload = {k: v for k, v in payload.items() if k not in legacy_keys}
 
     from backend.data.settings_canonicalizer import to_camel, validate_settings_shape
     from backend.data.settings_repo import SettingsRepository
 
     repo = SettingsRepository()
     try:
-        existing = repo.get_json("app_settings") or {}
+        existing = repo.get_json("app_settings")
     except (ValueError, TypeError):
         existing = {}
-    camel_merged = to_camel({**existing, **payload})
+    # JSON 损坏 / 非 dict 时（如 list / str）→ fallback 到空 dict，避免 merge 时炸
+    if not isinstance(existing, dict):
+        existing = {}
+    camel_merged = to_camel({**existing, **canonical_payload})
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
@@ -207,10 +243,12 @@ async def update_settings(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     repo.set_json("app_settings", camel_merged, category="general")
 
-    # 审计：仅记录字段名，不记录值；api_key 永不进 audit
-    changed_fields = [k for k in payload if k != "api_key"]
+    # 审计：仅记录字段名，不记录值；api_key 永不进 audit payload (但进 changed_fields 占位)
+    changed_fields = list(canonical_payload)
     if "api_key" in payload:
         changed_fields.append("api_key")  # 占位标记
+    # legacy 字段加在尾部以保留 audit_log 测试期望的顺序
+    changed_fields.extend(legacy_present)
     logger.info(f"[HEX REQ {request_id}] /settings updated: changed={changed_fields}")
 
     svc.events.emit(
@@ -225,6 +263,7 @@ async def get_settings() -> Optional[dict]:
     """读取持久化 settings，并把历史 snake_case 残留翻译为 camelCase。
 
     不存在或 JSON 损坏时返回 null，前端继续使用 DEFAULT_SETTINGS。
+    非 dict 类型（如 list / str）也视为损坏，返回 None。
     """
     from backend.data.settings_canonicalizer import (
         detect_legacy_snake_pollution,
@@ -238,6 +277,9 @@ async def get_settings() -> Optional[dict]:
     except (ValueError, TypeError):
         return None
     if raw is None:
+        return None
+    # get_json 可返回任意合法 JSON（list / str / num）；app_settings 必须是 dict
+    if not isinstance(raw, dict):
         return None
     detect_legacy_snake_pollution(raw)
     return to_camel(raw)

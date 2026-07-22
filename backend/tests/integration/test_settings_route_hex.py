@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -24,7 +25,10 @@ def _clean():
     conn.execute("DELETE FROM preferences WHERE key='app_settings'")
     conn.commit()
     saved = app.dependency_overrides.get(get_chat_service)
-    app.dependency_overrides[get_chat_service] = lambda: object()
+    # 用 MagicMock() 替代 lambda: object() — 后者没 .events.emit，
+    # 若 handler 路径走到 emit 调用即会 AttributeError。
+    # MagicMock() 自动接受任意属性访问 / 调用，永不抛 AttributeError。
+    app.dependency_overrides[get_chat_service] = lambda: MagicMock()
     yield
     conn.execute("DELETE FROM preferences WHERE key='app_settings'")
     conn.commit()

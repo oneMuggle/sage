@@ -6,6 +6,7 @@
 
 纯函数, 无外部依赖, 可独立测试。
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,26 +42,51 @@ ALIASES: Dict[str, str] = {
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
-LEGAL_TOP_KEYS: FrozenSet[str] = frozenset({
-    "streaming", "autoMemory", "confirmDelete", "compactMode",
-    "endpoints", "modelSelections", "maxContext", "temperature",
-    "proxyMode", "proxyUrl", "tlsVersion",
-    "wiki",
-    "version",
-})
-LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset({
-    "id", "name", "baseUrl", "apiKey",
-    "discoveredModels", "lastDiscoveredAt",
-})
-LEGAL_MODEL_SELECTION_KEYS: FrozenSet[str] = frozenset({
-    "endpointId", "modelId",
-})
-LEGAL_DISCOVERED_MODEL_KEYS: FrozenSet[str] = frozenset({
-    "id", "capabilities", "endpointId",
-})
-LEGAL_WIKI_KEYS: FrozenSet[str] = frozenset({
-    "useFolderPicker",
-})
+LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
+    {
+        "streaming",
+        "autoMemory",
+        "confirmDelete",
+        "compactMode",
+        "endpoints",
+        "modelSelections",
+        "maxContext",
+        "temperature",
+        "proxyMode",
+        "proxyUrl",
+        "tlsVersion",
+        "wiki",
+        "version",
+    }
+)
+LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
+    {
+        "id",
+        "name",
+        "baseUrl",
+        "apiKey",
+        "discoveredModels",
+        "lastDiscoveredAt",
+    }
+)
+LEGAL_MODEL_SELECTION_KEYS: FrozenSet[str] = frozenset(
+    {
+        "endpointId",
+        "modelId",
+    }
+)
+LEGAL_DISCOVERED_MODEL_KEYS: FrozenSet[str] = frozenset(
+    {
+        "id",
+        "capabilities",
+        "endpointId",
+    }
+)
+LEGAL_WIKI_KEYS: FrozenSet[str] = frozenset(
+    {
+        "useFolderPicker",
+    }
+)
 
 # snake_case 必须含至少一个下划线 (否则只是普通单词, 不是 snake_case)
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)+$")
@@ -94,8 +120,7 @@ def validate_settings_shape(settings: dict) -> None:
     unknown = [k for k in settings if k not in LEGAL_TOP_KEYS]
     if unknown:
         raise ValueError(
-            f"unknown top-level field {unknown[0]!r}; "
-            f"allowed: {sorted(LEGAL_TOP_KEYS)}"
+            f"unknown top-level field {unknown[0]!r}; " f"allowed: {sorted(LEGAL_TOP_KEYS)}"
         )
 
     for i, ep in enumerate(settings.get("endpoints") or []):
@@ -109,9 +134,7 @@ def validate_settings_shape(settings: dict) -> None:
             )
         for j, model in enumerate(ep.get("discoveredModels") or []):
             if not isinstance(model, dict):
-                raise ValueError(
-                    f"endpoints[{i}].discoveredModels[{j}] is not a dict"
-                )
+                raise ValueError(f"endpoints[{i}].discoveredModels[{j}] is not a dict")
             bad = [k for k in model if k not in LEGAL_DISCOVERED_MODEL_KEYS]
             if bad:
                 raise ValueError(
@@ -137,8 +160,7 @@ def validate_settings_shape(settings: dict) -> None:
     bad_wiki = [k for k in wiki if k not in LEGAL_WIKI_KEYS]
     if bad_wiki:
         raise ValueError(
-            f"unknown wiki field {bad_wiki[0]!r}; "
-            f"allowed: {sorted(LEGAL_WIKI_KEYS)}"
+            f"unknown wiki field {bad_wiki[0]!r}; " f"allowed: {sorted(LEGAL_WIKI_KEYS)}"
         )
 
 
@@ -156,9 +178,7 @@ def detect_legacy_snake_pollution(
             polluted.extend(detect_legacy_snake_pollution(v, sub_path))
     elif isinstance(settings, list):
         for i, item in enumerate(settings):
-            polluted.extend(
-                detect_legacy_snake_pollution(item, f"{path}[{i}]")
-            )
+            polluted.extend(detect_legacy_snake_pollution(item, f"{path}[{i}]"))
     if polluted:
         logger.warning(
             "[settings_canonicalizer] legacy snake_case pollution detected: %s",
