@@ -62,18 +62,13 @@ class ChatResponse(BaseModel):
 
 
 class SettingsRequest(BaseModel):
-    """Hex 路径的 PUT /settings 请求体（PG3.2）。
+    """Hex 路径的 PUT /settings 请求体。
 
-    所有字段可选；为 ``None`` 表示该字段未变更。``api_key`` 永远不应
-    在审计日志中明文落盘（adapter 侧负责脱敏），本路由层只关心
-    "哪些字段被改"，不持久化值。
-
-    PG3.2 升级（2026-06-22）：``model_config = ConfigDict(extra="allow")``
-    以接受前端的 ``AppSettings`` 完整字段（version / endpoints /
-    modelSelections / streaming 等）。``api_key`` 仍走白名单脱敏审计。
+    从 ``extra="allow"`` 收紧到 ``extra="forbid"``；请求体翻译和整树校验
+    由 ``update_settings`` 显式处理。
     """
 
-    model_config = {"extra": "allow"}
+    model_config = {"extra": "forbid"}
 
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None  # noqa: S105 — 字段名占位；不存储
@@ -191,17 +186,26 @@ async def update_settings(
 ) -> SettingsResponse:
     """Hex 路径的 settings 更新端点 + persist + emit 审计事件。
 
-    PG3.2 升级（2026-06-22）：
-    - 持久化到 preferences 表的 app_settings key
-    - 仍 emit settings_changed 审计事件（api_key 字段不进 payload）
+    与 legacy 路径对齐：合并现有设置后翻译为 camelCase，并校验完整白名单。
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     payload = req.model_dump(exclude_none=True)
 
-    # 持久化到 SQLite
+    from backend.data.settings_canonicalizer import to_camel, validate_settings_shape
     from backend.data.settings_repo import SettingsRepository
 
-    SettingsRepository().set_json("app_settings", payload, category="general")
+    repo = SettingsRepository()
+    try:
+        existing = repo.get_json("app_settings") or {}
+    except (ValueError, TypeError):
+        existing = {}
+    camel_merged = to_camel({**existing, **payload})
+    try:
+        validate_settings_shape(camel_merged)
+    except ValueError as exc:
+        logger.warning(f"[HEX REQ {request_id}] /settings rejected unknown field: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    repo.set_json("app_settings", camel_merged, category="general")
 
     # 审计：仅记录字段名，不记录值；api_key 永不进 audit
     changed_fields = [k for k in payload if k != "api_key"]
@@ -217,17 +221,26 @@ async def update_settings(
 
 
 @router.get("/settings")
-async def get_settings() -> dict | None:
-    """读取持久化的 settings；不存在返回 null（前端走 DEFAULT_SETTINGS）。
+async def get_settings() -> Optional[dict]:
+    """读取持久化 settings，并把历史 snake_case 残留翻译为 camelCase。
 
-    说明（PG3.2）：本端点**不**用 ``response_model=SettingsResponse`` 包装，
-    直接返回原始 payload（或 ``None``），以满足契约：
-    - 无数据时 body 为字面量 ``null``（不是 ``{"data": null, ...}``）
-    - 有数据时 body 为原始 dict（前端按 AppSettings 字段直接读）
+    不存在或 JSON 损坏时返回 null，前端继续使用 DEFAULT_SETTINGS。
     """
+    from backend.data.settings_canonicalizer import (
+        detect_legacy_snake_pollution,
+        to_camel,
+    )
     from backend.data.settings_repo import SettingsRepository
 
-    return SettingsRepository().get_json("app_settings")
+    repo = SettingsRepository()
+    try:
+        raw = repo.get_json("app_settings")
+    except (ValueError, TypeError):
+        return None
+    if raw is None:
+        return None
+    detect_legacy_snake_pollution(raw)
+    return to_camel(raw)
 
 
 # ==================== 通用 KV /preferences/{key} 端点（白名单） ====================
