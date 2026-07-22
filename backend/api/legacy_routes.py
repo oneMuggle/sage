@@ -734,10 +734,23 @@ class LegacyPreferenceItem(BaseModel):
 
 @router.get("/settings")
 async def legacy_get_settings() -> Optional[dict]:
-    """读取持久化的 settings；不存在返回 null。"""
+    """读取持久化的 settings；不存在返回 null。
+
+    翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
+    JSON 损坏走 null fallback，不抛 500（get_json 已 try/except）。
+    """
+    from backend.data.settings_canonicalizer import (
+        detect_legacy_snake_pollution,
+        to_camel,
+    )
     from backend.data.settings_repo import SettingsRepository
 
-    return SettingsRepository().get_json("app_settings")
+    repo = SettingsRepository()
+    raw = repo.get_json("app_settings")
+    if raw is None:
+        return None
+    detect_legacy_snake_pollution(raw)
+    return to_camel(raw)
 
 
 @router.put("/settings", response_model=LegacySettingsResponse)
@@ -748,16 +761,32 @@ async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsRe
     LegacySettingsRequest 只有 api_base_url/api_key/model 三个字段，
     如果直接替换，会丢失 endpoints、model_selections 等其他数据。
     修复策略：先读现有 settings，再把请求字段 merge 进去。
+
+    Task 2 (settings-schema-canonicalization):
+    - 整树翻译到 camelCase (to_camel)
+    - 白名单校验 (validate_settings_shape) 拒绝白名单外字段 → 400
     """
+    from backend.data.settings_canonicalizer import to_camel, validate_settings_shape
     from backend.data.settings_repo import SettingsRepository
 
     repo = SettingsRepository()
-    # 先读现有 settings
-    existing = repo.get_json("app_settings") or {}
-    # 合并请求字段（排除 None）
+    try:
+        existing = repo.get_json("app_settings") or {}
+    except (ValueError, TypeError):
+        # DB 行 JSON 损坏 → 当空树处理, 避免 500 阻断合法的 PUT
+        existing = {}
+
+    # LegacySettingsRequest 是 extra="allow", model_dump(exclude_none=True) 会包含所有 set 字段
+    # (含 extras, 如 streaming/foo/endpoints) — 这是设计: 旧客户端 PUT schema 之外字段不丢。
     payload = req.model_dump(exclude_none=True)
     merged = {**existing, **payload}
-    repo.set_json("app_settings", merged, category="general")
+    camel_merged = to_camel(merged)
+    try:
+        validate_settings_shape(camel_merged)
+    except ValueError as exc:
+        logger.warning(f"[LEGACY] /settings rejected unknown field: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    repo.set_json("app_settings", camel_merged, category="general")
     changed_fields = [k for k in payload if k != "api_key"]
     if "api_key" in payload:
         changed_fields.append("api_key")
