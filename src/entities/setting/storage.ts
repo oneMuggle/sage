@@ -7,6 +7,7 @@
  */
 import { settingsClient } from '../../shared/api/settingsClient';
 
+import { deepMerge } from './deepMerge';
 import { AppSettings, DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from './types';
 
 const CACHE_KEY = SETTINGS_STORAGE_KEY;
@@ -102,17 +103,30 @@ function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
 export async function loadSettings(): Promise<AppSettings> {
   cleanupLocalCacheIfExpired();
 
-  const remote = await settingsClient.getSettings();
-  if (remote) {
-    // 先和 local cache 合并（保留本地已有但后端缺失的字段，如 endpoints）
-    const local = readLocalCacheSync() ?? {};
-    const merged = mergeWithDefaults({ ...local, ...remote });
-    writeLocalCacheSync(merged);
-    return merged;
+  let remote: AppSettings | null = null;
+  try {
+    remote = await settingsClient.getSettings();
+  } catch (e: unknown) {
+    console.error('[loadSettings] backend getSettings failed, falling back to local:', e);
   }
-  await maybeAutoMigrate(null);
+
+  if (remote) {
+    // 远端成功 → 以远端为权威, local 仅作 merge 兜底
+    const local = readLocalCacheSync() ?? {};
+    const merged = deepMerge<Partial<AppSettings>>(local, remote, {
+      policy: 'remote-wins',
+    });
+    const finalSettings = mergeWithDefaults(merged);
+    writeLocalCacheSync(finalSettings);
+    return finalSettings;
+  }
+
+  await maybeAutoMigrate(remote);
+
   const local = readLocalCacheSync();
-  return mergeWithDefaults(local ?? {});
+  const finalSettings = mergeWithDefaults(local ?? {});
+  writeLocalCacheSync(finalSettings);
+  return finalSettings;
 }
 
 /**

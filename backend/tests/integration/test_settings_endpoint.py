@@ -1,9 +1,10 @@
 """GET/PUT /settings 端点集成测试"""
+
 import os
 from unittest.mock import MagicMock
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from backend.api.hex_routes import get_chat_service
 from backend.main import app
@@ -54,7 +55,10 @@ def _hex_di_override():
 @pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_get_settings_returns_null_when_no_data():
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),  # type: ignore[arg-type]
+        base_url="http://test",
+    ) as ac:
         resp = await ac.get("/api/v1/settings")
     assert resp.status_code == 200
     assert resp.json() is None
@@ -63,7 +67,10 @@ async def test_get_settings_returns_null_when_no_data():
 @pytest.mark.asyncio()
 @_HEX_ONLY
 async def test_put_settings_persists_and_get_returns():
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),  # type: ignore[arg-type]
+        base_url="http://test",
+    ) as ac:
         payload = {
             "version": "3.0.0",
             "endpoints": [],
@@ -91,4 +98,3 @@ async def test_put_settings_persists_and_get_returns():
         data = get_resp.json()
         assert data["maxContext"] == 4096
         assert data["version"] == "3.0.0"
-
