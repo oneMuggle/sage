@@ -737,7 +737,7 @@ async def legacy_get_settings() -> Optional[dict]:
     """读取持久化的 settings；不存在返回 null。
 
     翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
-    JSON 损坏走 null fallback，不抛 500（get_json 已 try/except）。
+    JSON 损坏 / 顶层非 dict (list / scalar) → null fallback，不抛 500，与 hex GET 对齐。
     """
     from backend.data.settings_canonicalizer import (
         detect_legacy_snake_pollution,
@@ -746,8 +746,16 @@ async def legacy_get_settings() -> Optional[dict]:
     from backend.data.settings_repo import SettingsRepository
 
     repo = SettingsRepository()
-    raw = repo.get_json("app_settings")
+    try:
+        raw = repo.get_json("app_settings")
+    except (ValueError, TypeError):
+        logger.warning("[LEGACY] /settings: corrupted app_settings JSON, returning null")
+        return None
     if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        # get_json 可返回任意合法 JSON; app_settings 必须是 dict; 与 hex GET 对齐。
+        logger.warning("[LEGACY] /settings: top-level non-dict JSON, returning null")
         return None
     detect_legacy_snake_pollution(raw)
     return to_camel(raw)
@@ -775,10 +783,21 @@ async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsRe
     except (ValueError, TypeError):
         # DB 行 JSON 损坏 → 当空树处理, 避免 500 阻断合法的 PUT
         existing = {}
+    if not isinstance(existing, dict):
+        # existing 是 list/scalar (脏数据) → 用空树, 不阻断合法 PUT; 与 hex PUT 对齐.
+        existing = {}
 
     # LegacySettingsRequest 是 extra="allow", model_dump(exclude_none=True) 会包含所有 set 字段
     # (含 extras, 如 streaming/foo/endpoints) — 这是设计: 旧客户端 PUT schema 之外字段不丢。
     payload = req.model_dump(exclude_none=True)
+
+    # 剥离 legacy compatibility 3 字段: api_base_url / api_key / model.
+    # 这 3 字段不进 DB (与 hex PUT 对齐, 见 eebbedd), 仅用于审计和 changed_fields.
+    # 原因: 这 3 个 snake 字段通过 to_camel 翻译后 (apiKey) 或原样保留 (api_base_url/model)
+    # 都不在 LEGAL_TOP_KEYS, 会触发 validate_settings_shape 400, 但它们是合法 legacy schema 字段.
+    legacy_compat_fields = {"api_base_url", "api_key", "model"}
+    legacy_compat_payload = {k: payload.pop(k) for k in list(payload) if k in legacy_compat_fields}
+
     merged = {**existing, **payload}
     camel_merged = to_camel(merged)
     try:
@@ -790,6 +809,8 @@ async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsRe
     changed_fields = [k for k in payload if k != "api_key"]
     if "api_key" in payload:
         changed_fields.append("api_key")
+    # 同时把 legacy 兼容字段记进 changed_fields (审计可见), 即使不进 DB
+    changed_fields.extend(k for k in legacy_compat_payload if k not in changed_fields)
     logger.info(f"[LEGACY] /settings updated: changed={changed_fields}")
     return LegacySettingsResponse(status="ok", changed_fields=changed_fields)
 

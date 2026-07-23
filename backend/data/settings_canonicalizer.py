@@ -10,10 +10,15 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any, Dict, FrozenSet, List
 
 logger = logging.getLogger(__name__)
+
+# B3: DEBUG_LEGACY_POLLUTION env gate. 默认 False: 生产环境不 log snake 污染 (避免日志噪音).
+# 仅在调试时开启 (DEBUG_LEGACY_POLLUTION=1 / true / yes), 且只在顶层 path=="" 时 log 一次 (子帧不再重复 log).
+_DEBUG_POLLUTION = os.environ.get("DEBUG_LEGACY_POLLUTION", "").lower() in ("1", "true", "yes")
 
 # snake_case → camelCase 字段名映射 (单源)
 # 修改 AppSettings (src/entities/setting/types.ts) 字段时必须同步更新此处
@@ -87,6 +92,15 @@ LEGAL_WIKI_KEYS: FrozenSet[str] = frozenset(
         "useFolderPicker",
     }
 )
+# modelSelections 对象的 keys (chatModel/visionModel/embeddingModel).
+# Contract test (test_settings_schema_parity.py) 保证此处与前端 AppSettings.modelSelections 字段同步.
+LEGAL_MODEL_SELECTIONS_KEYS: FrozenSet[str] = frozenset(
+    {
+        "chatModel",
+        "visionModel",
+        "embeddingModel",
+    }
+)
 
 # snake_case 必须含至少一个下划线 (否则只是普通单词, 不是 snake_case)
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)+$")
@@ -144,6 +158,14 @@ def validate_settings_shape(settings: dict) -> None:
                 )
 
     ms = settings.get("modelSelections") or {}
+    # 校验 modelSelections 子对象 keys (chatModel/visionModel/embeddingModel);
+    # 未知 key 会污染 DB, 应拒收. Contract test 保证此处与 AppSettings 同步.
+    bad_ms_keys = [k for k in ms if k not in LEGAL_MODEL_SELECTIONS_KEYS]
+    if bad_ms_keys:
+        raise ValueError(
+            f"unknown model-selections field {bad_ms_keys[0]!r}; "
+            f"allowed: {sorted(LEGAL_MODEL_SELECTIONS_KEYS)}"
+        )
     for sel_key in ("chatModel", "visionModel", "embeddingModel"):
         sel = ms.get(sel_key) or {}
         if not isinstance(sel, dict):
@@ -168,7 +190,13 @@ def detect_legacy_snake_pollution(
     settings: Any,
     path: str = "",
 ) -> List[str]:
-    """递归遍历, 返回所有 snake_case 字段路径 (开发模式 log.warning 用)."""
+    """递归遍历, 返回所有 snake_case 字段路径.
+
+    日志策略 (B3):
+    - 默认不 log (生产环境避免日志噪音);
+    - 仅当 env gate ``DEBUG_LEGACY_POLLUTION`` 开启且 path=="" (顶层调用) 时 log.warning 一次;
+    - 子帧递归不再重复 log, 避免同一路径多帧重复输出.
+    """
     polluted: List[str] = []
     if isinstance(settings, dict):
         for k, v in settings.items():
@@ -179,7 +207,8 @@ def detect_legacy_snake_pollution(
     elif isinstance(settings, list):
         for i, item in enumerate(settings):
             polluted.extend(detect_legacy_snake_pollution(item, f"{path}[{i}]"))
-    if polluted:
+    # 仅顶层 + gate 开启才 log; 子帧不重复
+    if polluted and path == "" and _DEBUG_POLLUTION:
         logger.warning(
             "[settings_canonicalizer] legacy snake_case pollution detected: %s",
             polluted,
