@@ -47,6 +47,7 @@ from backend.office.models import (
     OfficeWordGenerateRequest,
     OfficeWordReadResult,
 )
+from backend.office.path_safety import resolve_within
 from backend.office.ppt import generate_ppt, read_ppt
 from backend.office.storage import (
     delete_document,
@@ -69,19 +70,21 @@ def _validate_file_in_workspace(file_path_str: str, workspace_path_str: str) -> 
     Rejects path traversal (../), absolute paths outside workspace, and
     symlink-escape attacks. This is the only barrier between an untrusted
     renderer IPC call and arbitrary local file reads (e.g. /etc/passwd).
+
+    Containment is delegated to :func:`path_safety.resolve_within`, which
+    resolves the candidate path (collapsing ``..`` and following
+    symlinks) and uses ``PurePath.relative_to`` for the boundary check
+    instead of brittle string-prefix comparison. This closes the
+    sibling-prefix attack class (``/tmp/work-evil`` vs ``/tmp/work``)
+    that the previous ``str.startswith`` guard missed.
     """
     workspace = validate_workspace(workspace_path_str)
-    target = Path(file_path_str).resolve()
-    # String prefix check for Python 3.8 compat (Path.is_relative_to is 3.9+).
-    workspace_str = str(workspace)
-    target_str = str(target)
-    if not (target_str == workspace_str or target_str.startswith(workspace_str + "/")):
+    target = resolve_within(workspace, Path(file_path_str))
+    if not target.is_file():
         raise OfficePathError(
-            f"file_path is not within workspace: {file_path_str}",
+            f"file_path is not a regular file: {file_path_str}",
             file_path=target,
         )
-    if not target.is_file():
-        raise OfficePathError(f"file_path is not a regular file: {file_path_str}", file_path=target)
     return target
 
 

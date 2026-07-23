@@ -26,6 +26,7 @@ from typing import List
 
 from .errors import OfficePathError
 from .models import OfficeDocType, OfficeDocumentSummary
+from .path_safety import resolve_within
 
 _DOC_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
@@ -64,10 +65,18 @@ def generate_document_dir(
 ) -> Path:
     """Create (and return) the per-document directory.
 
-    Layout: <workspace>/office/<doc_type>/<doc_id>/
+    Layout: ``<workspace>/office/<doc_type>/<doc_id>/``
+
+    Containment is enforced by :func:`path_safety.resolve_within`, which
+    resolves the candidate path (collapsing ``..`` and following
+    symlinks) and uses ``PurePath.relative_to`` for the boundary check
+    instead of brittle string-prefix comparison. This closes the
+    sibling-prefix attack class (``/tmp/work-evil`` vs ``/tmp/work``)
+    that the previous ``str.startswith`` guard missed.
 
     Raises:
-        OfficePathError: doc_id contains unsafe characters (path traversal).
+        OfficePathError: doc_id is unsafe, the workspace does not exist,
+                        or the resolved path escapes the workspace.
     """
     workspace = validate_workspace(workspace)
 
@@ -76,15 +85,11 @@ def generate_document_dir(
             f"doc_id contains unsafe characters (must match {_DOC_ID_PATTERN.pattern}): {doc_id!r}"
         )
 
-    target = (workspace / "office" / doc_type.value / doc_id).resolve()
-
-    # Defense-in-depth: confirm target is still inside workspace after resolve.
-    # Use string prefix (Python 3.8-compatible) since Path.is_relative_to
-    # is 3.9+ and the project supports release/win7 LTS on Python 3.8.
-    workspace_str = str(workspace)
-    target_str = str(target)
-    if not (target_str == workspace_str or target_str.startswith(workspace_str + "/")):
-        raise OfficePathError(f"Resolved doc dir escapes workspace: {target}", file_path=target)
+    # Cross-platform containment: resolve collapses ``..`` and follows
+    # symlinks; ``relative_to`` then rejects any candidate that lands
+    # outside the workspace. Works identically on POSIX and Windows.
+    candidate = workspace / "office" / doc_type.value / doc_id
+    target = resolve_within(workspace, candidate)
 
     target.mkdir(parents=True, exist_ok=True)
     return target

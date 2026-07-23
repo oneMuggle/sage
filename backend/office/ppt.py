@@ -38,7 +38,8 @@ from .models import (
     OfficePptReadResult,
     PptSlideContent,
 )
-from .storage import generate_document_dir, validate_workspace
+from .path_safety import managed_document_path, validate_supported_filename
+from .storage import validate_workspace
 
 
 def _extract_slide_title(slide) -> Optional[str]:
@@ -216,31 +217,39 @@ def read_ppt(
 
 
 def _safe_filename(name: str, default_ext: str) -> str:
-    """Sanitize a user-provided filename, ensuring it ends with the right extension.
+    """Backwards-compat shim retained for callers that still import it.
 
-    Rejects path separators and parent-traversal segments.
+    The canonical implementation now lives in
+    :func:`backend.office.path_safety.validate_supported_filename`, which
+    additionally enforces the extension matches the doc type's canonical
+    extension and rejects sibling-prefix-style typos.
     """
-    if "/" in name or "\\" in name or ".." in name:
-        raise OfficePathError(f"Filename contains path separator or '..': {name!r}")
-    if not name.lower().endswith("." + default_ext):
-        name = name + "." + default_ext
-    return name
+    if default_ext == "pptx":
+        return validate_supported_filename(name, OfficeDocType.PPT)
+    if default_ext == "docx":
+        return validate_supported_filename(name, OfficeDocType.WORD)
+    if default_ext == "xlsx":
+        return validate_supported_filename(name, OfficeDocType.EXCEL)
+    raise OfficePathError(f"Unknown default_ext: {default_ext!r}")
 
 
 def generate_ppt(req) -> Path:
     """Generate a .pptx file from structured Pydantic input.
 
-    Writes to `<workspace>/office/ppt/<uuid>/<safe-name>.pptx` via storage helper.
+    Writes to ``<workspace>/office/ppt/<uuid>/<safe-name>.pptx`` via the
+    :func:`path_safety.managed_document_path` helper, which performs
+    cross-platform containment validation as part of building the path.
     """
-
     workspace = validate_workspace(Path(req.workspace_path))
-    filename = _safe_filename(req.filename, "pptx")
 
     import uuid
 
     doc_id = uuid.uuid4().hex
-    output_dir = generate_document_dir(workspace, OfficeDocType.PPT, doc_id)
-    output_path = output_dir / filename
+    # Compose the full file path with one validated call. Raises
+    # OfficePathError on filename separators, parent traversal, wrong
+    # extension, doc_id injection, or any path that escapes the workspace.
+    output_path = managed_document_path(workspace, OfficeDocType.PPT, doc_id, req.filename)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         prs = Presentation()
