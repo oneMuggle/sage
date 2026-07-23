@@ -51,16 +51,70 @@ export interface SkillsElectronApiBridge {
  * The 8 read/list/delete HTTP routes (office_ppt_read etc.) are routed
  * through the standard invoke→HTTP path; they don't appear here because
  * they're consumed via the typed `officeApi` wrapper in src/shared/api/officeApi.ts.
+ *
+ * M0 Task 5 (2026-07-23): added the seven-channel gateway that backs
+ * Chat-native CRUD — atomic import via dialog or drag/drop, token-
+ * gated complete/discard lifecycle, native Save As, shell.openPath,
+ * shell.showItemInFolder. Source paths are NEVER accepted from the
+ * renderer; the bridge reconstructs managed paths from
+ * `OfficeManagedRef` tuples.
  */
+
+export type OfficeDocType = 'ppt' | 'word' | 'excel';
+
+export interface OfficeManagedRef {
+  workspacePath: string;
+  docType: OfficeDocType;
+  documentId: string;
+  filename: string;
+}
+
+export interface ImportedOfficeFile extends OfficeManagedRef {
+  managedPath: string;
+  originalName: string;
+  sizeBytes: number;
+  importToken: string;
+}
+
 export interface PickedOfficeFile {
   path: string;
   name: string;
   sizeBytes: number;
 }
 
+export interface SavedOfficeFile {
+  savedPath: string;
+}
+
 export interface OfficeElectronApiBridge {
-  pickOfficeFile: (docType: 'ppt' | 'word' | 'excel') => Promise<PickedOfficeFile | null>;
+  /** Legacy Phase 1.3 channels — kept for compat with the /office page UI. */
+  pickOfficeFile: (docType: OfficeDocType) => Promise<PickedOfficeFile | null>;
   pickSavePath: (defaultName: string) => Promise<string | null>;
+  /**
+   * Open native open dialog filtered by docType → atomic copy into the
+   * workspace → return ImportedOfficeFile with an importToken the
+   * renderer must later complete or discard. Returns `null` on cancel.
+   */
+  pickAndImportOfficeFile: (
+    workspacePath: string,
+    docType: OfficeDocType,
+  ) => Promise<ImportedOfficeFile | null>;
+  /** Drag/drop variant — renderer already has sourcePath from DataTransfer. */
+  importDroppedOfficeFile: (
+    workspacePath: string,
+    docType: OfficeDocType,
+    sourcePath: string,
+  ) => Promise<ImportedOfficeFile>;
+  /** Finalize an import; the staged file becomes permanent and the token is consumed. */
+  completeOfficeImport: (importToken: string) => Promise<void>;
+  /** Discard an import; the staged file is deleted. Idempotent on unknown tokens. */
+  discardOfficeImport: (importToken: string) => Promise<void>;
+  /** Native Save As dialog → copy managed→chosen path. Returns null on cancel. */
+  saveOfficeDocumentAs: (ref: OfficeManagedRef) => Promise<SavedOfficeFile | null>;
+  /** shell.openPath on the validated managed file. Throws on shell error string. */
+  openOfficeDocument: (ref: OfficeManagedRef) => Promise<void>;
+  /** shell.showItemInFolder on the validated managed file. */
+  showOfficeDocumentInFolder: (ref: OfficeManagedRef) => Promise<void>;
 }
 
 export interface ElectronAPI {
