@@ -5,9 +5,14 @@
 
 from __future__ import annotations
 
-import pytest
+from unittest.mock import MagicMock
 
+import pytest
+import pytest_asyncio
+
+from backend.api.hex_routes import get_chat_service
 from backend.data.settings_repo import SettingsRepository
+from backend.main import app
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +29,26 @@ def _clean_settings():
     conn = repo.db.get_connection()
     conn.execute("DELETE FROM preferences WHERE key='app_settings'")
     conn.commit()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _override_get_chat_service():
+    """PUT /settings handler 依赖 ``get_chat_service``; 测试环境无 ChatService 实例,
+    用 MagicMock 注入避免 NotImplementedError。同时隔离: 保存原 override, 退出时恢复,
+    避免污染后续 test (与 test_settings_route_hex.py 同款 pattern).
+
+    不加这个 fixture, hex mode 下 PUT handler 会 raise NotImplementedError("get_chat_service()
+    must be overridden"), win7 py3.8 ci 即 fail 在此.
+    """
+    saved = app.dependency_overrides.get(get_chat_service)
+    app.dependency_overrides[get_chat_service] = lambda: MagicMock()
+    try:
+        yield
+    finally:
+        if saved is not None:
+            app.dependency_overrides[get_chat_service] = saved
+        else:
+            app.dependency_overrides.pop(get_chat_service, None)
 
 
 @pytest.mark.asyncio()
