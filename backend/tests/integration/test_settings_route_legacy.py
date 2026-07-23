@@ -98,9 +98,15 @@ async def test_put_with_legacy_compat_fields_does_not_400(client):
     body = resp.json()
     # PUT response body 是 LegacySettingsResponse{status, changed_fields},
     # 不返回完整 settings. 验证 changed_fields + 直接读 DB 验持久化.
-    assert body == {"status": "ok", "changed_fields": [
-        "streaming", "api_base_url", "api_key", "model",
-    ]} or set(body["changed_fields"]) == {"streaming", "api_base_url", "api_key", "model"}
+    assert body == {
+        "status": "ok",
+        "changed_fields": [
+            "streaming",
+            "api_base_url",
+            "api_key",
+            "model",
+        ],
+    } or set(body["changed_fields"]) == {"streaming", "api_base_url", "api_key", "model"}
     # DB 仍存纯 camelCase AppSettings 形状 — legacy 3 字段不进 DB
     persisted = SettingsRepository().get_json("app_settings")
     assert persisted is not None

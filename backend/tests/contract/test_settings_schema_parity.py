@@ -10,6 +10,7 @@ pytest 立刻失败, 防止前后端 drift.
 - src/entities/setting/types.ts: AppSettings / EndpointConfig / ModelSelection
 - backend/data/settings_canonicalizer.py: ALIASES / LEGAL_*_KEYS
 """
+
 from __future__ import annotations
 
 import re
@@ -30,21 +31,23 @@ from backend.data.settings_canonicalizer import (
 
 # 前端 AppSettings 13 顶层字段 (camelCase).
 # 修改 src/entities/setting/types.ts:AppSettings 时必须同步 LEGAL_TOP_KEYS.
-EXPECTED_TOP_KEYS = frozenset({
-    "streaming",
-    "autoMemory",
-    "confirmDelete",
-    "compactMode",
-    "endpoints",
-    "modelSelections",
-    "maxContext",
-    "temperature",
-    "proxyMode",
-    "proxyUrl",
-    "tlsVersion",
-    "wiki",
-    "version",
-})
+EXPECTED_TOP_KEYS = frozenset(
+    {
+        "streaming",
+        "autoMemory",
+        "confirmDelete",
+        "compactMode",
+        "endpoints",
+        "modelSelections",
+        "maxContext",
+        "temperature",
+        "proxyMode",
+        "proxyUrl",
+        "tlsVersion",
+        "wiki",
+        "version",
+    }
+)
 
 
 def test_legal_top_keys_matches_appsettings_interface() -> None:
@@ -54,9 +57,19 @@ def test_legal_top_keys_matches_appsettings_interface() -> None:
 
 def test_legal_endpoint_keys_is_stable() -> None:
     """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 6 字段."""
-    assert frozenset({
-        "id", "name", "baseUrl", "apiKey", "discoveredModels", "lastDiscoveredAt",
-    }) == LEGAL_ENDPOINT_KEYS
+    assert (
+        frozenset(
+            {
+                "id",
+                "name",
+                "baseUrl",
+                "apiKey",
+                "discoveredModels",
+                "lastDiscoveredAt",
+            }
+        )
+        == LEGAL_ENDPOINT_KEYS
+    )
 
 
 def test_legal_model_selection_keys_is_stable() -> None:
@@ -66,9 +79,16 @@ def test_legal_model_selection_keys_is_stable() -> None:
 
 def test_legal_discovered_model_keys_is_stable() -> None:
     """LEGAL_DISCOVERED_MODEL_KEYS 是 DiscoveredModel 3 字段."""
-    assert frozenset({
-        "id", "capabilities", "endpointId",
-    }) == LEGAL_DISCOVERED_MODEL_KEYS
+    assert (
+        frozenset(
+            {
+                "id",
+                "capabilities",
+                "endpointId",
+            }
+        )
+        == LEGAL_DISCOVERED_MODEL_KEYS
+    )
 
 
 def test_legal_wiki_keys_is_stable() -> None:
@@ -78,9 +98,16 @@ def test_legal_wiki_keys_is_stable() -> None:
 
 def test_legal_model_selections_obj_keys_is_stable() -> None:
     """LEGAL_MODEL_SELECTIONS_KEYS 是 modelSelections 对象 3 子字段."""
-    assert frozenset({
-        "chatModel", "visionModel", "embeddingModel",
-    }) == LEGAL_MODEL_SELECTIONS_KEYS
+    assert (
+        frozenset(
+            {
+                "chatModel",
+                "visionModel",
+                "embeddingModel",
+            }
+        )
+        == LEGAL_MODEL_SELECTIONS_KEYS
+    )
 
 
 def test_aliases_camel_side_subset_of_legal_keys() -> None:
@@ -89,9 +116,12 @@ def test_aliases_camel_side_subset_of_legal_keys() -> None:
     否则 validate_settings_shape 会拒收合法的翻译结果.
     """
     all_legal_camel = (
-        LEGAL_TOP_KEYS | LEGAL_ENDPOINT_KEYS | LEGAL_MODEL_SELECTION_KEYS
+        LEGAL_TOP_KEYS
+        | LEGAL_ENDPOINT_KEYS
+        | LEGAL_MODEL_SELECTION_KEYS
         | LEGAL_MODEL_SELECTIONS_KEYS
-        | LEGAL_DISCOVERED_MODEL_KEYS | LEGAL_WIKI_KEYS
+        | LEGAL_DISCOVERED_MODEL_KEYS
+        | LEGAL_WIKI_KEYS
     )
     aliases_camel_side = frozenset(ALIASES.values())
     missing = aliases_camel_side - all_legal_camel
