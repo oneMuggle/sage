@@ -246,6 +246,22 @@ jobs:
         shell: pwsh
         run: pwsh scripts/fetch-vcredist.ps1
 
+      # M0 Task 4: stdlib-only Office path-safety canary.
+      # Validates backend.office.path_safety.is_within (the sibling-prefix
+      # traversal fix) using only Python 3's pathlib. Runs before the
+      # Windows NSIS packaging step so a regression in path_safety fails
+      # the build fast, without waiting for the full Python embeddable
+      # bundle (several hundred MB) to be assembled. The release bundle
+      # itself still does the heavier `import backend.main` canary in
+      # scripts/bundle-python-main.ps1 — this lightweight guardrail is in
+      # addition, not a replacement.
+      - name: Verify Office path safety (stdlib canary, Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/verify-office-paths.py
+
       - name: Package (Windows NSIS)
         if: matrix.os == 'windows-latest'
         env:
