@@ -1,6 +1,7 @@
 # Office Phase 1 生产加固设计
 
-> **状态：** 已批准，待实施计划
+> **状态：** 已 superseded，不得作为实施依据
+> **替代设计：** `docs/superpowers/specs/2026-07-23-office-chat-native-crud-design.md`
 > **日期：** 2026-07-23
 > **目标分支：** `main`
 > **实施分支：** `fix/office-phase1-hardening`
