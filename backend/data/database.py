@@ -180,6 +180,23 @@ class Database:
             "ON office_documents(created_at DESC)"
         )
 
+        # M0 Task 3: idempotent migration — add derived_from / archived_at
+        # columns for legacy DBs that pre-date the Chat-native Office plan.
+        # ``derived_from`` records the source document id for edited/copied
+        # docs; ``archived_at`` (ms epoch) hides soft-deleted rows from
+        # list_documents(include_archived=False). Both nullable so existing
+        # rows remain valid.
+        cursor.execute("PRAGMA table_info(office_documents)")
+        _office_columns = {row["name"] for row in cursor.fetchall()}
+        if "derived_from" not in _office_columns:
+            cursor.execute("ALTER TABLE office_documents ADD COLUMN derived_from TEXT")
+        if "archived_at" not in _office_columns:
+            cursor.execute("ALTER TABLE office_documents ADD COLUMN archived_at INTEGER")
+        # Persist the migration immediately so a crash between this point
+        # and the final commit at the end of init_db doesn't leave the
+        # schema half-migrated for the next process.
+        conn.commit()
+
         # 进化日志表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS evolution_log (

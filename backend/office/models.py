@@ -66,6 +66,23 @@ class OfficeDocumentSummary(BaseModel):
     created_at: int = Field(description="Unix timestamp in milliseconds")
     updated_at: int = Field(description="Unix timestamp in milliseconds")
     metadata: OfficeDocumentMetadata
+    # M0 Task 3: nullable lineage + soft-delete columns. Both default to
+    # ``None`` so Phase 1.2 callers (which only know status + paths) keep
+    # working without supplying the extra fields.
+    derived_from: Optional[str] = Field(
+        default=None,
+        description=(
+            "Source document id for edited/copied documents. NULL when this row "
+            "is a fresh read or generation with no upstream parent."
+        ),
+    )
+    archived_at: Optional[int] = Field(
+        default=None,
+        description=(
+            "Unix timestamp (ms) when the document was soft-deleted. When set, "
+            "list_documents(include_archived=False) hides the row."
+        ),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -159,6 +176,17 @@ class OfficeReadRequest(BaseModel):
     # Optional size limit for early rejection. Default 50MB per plan §6 R1.
     max_size_bytes: int = Field(
         default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
+    )
+    # M0 Task 3: optional original (uploaded) filename. When the caller has
+    # already imported an external file into the managed directory this is
+    # the user-visible name; ``None`` keeps the Phase 1.2 contract for
+    # back-compat with tests and existing IPC callers that don't track it.
+    original_filename: Optional[str] = Field(
+        default=None,
+        description=(
+            "User's original filename (before managed import). When None the "
+            "summary's original_filename column stays NULL."
+        ),
     )
 
 

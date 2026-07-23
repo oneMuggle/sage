@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -196,20 +196,82 @@ async def _office_error_handler(request: Request, exc: OfficeError) -> JSONRespo
 # ──────────────────────────────────────────────────────────────────────
 
 
+def _persist_read_summary(
+    result,
+    *,
+    file_path: Path,
+    canonical_workspace: str,
+    original_filename: Optional[str],
+) -> None:
+    """Persist a read result's summary into the office_documents table.
+
+    M0 Task 3: every read creates (or refreshes) a ``parsed`` row keyed by
+    the managed directory name. Callers (chat tools, IPC handlers) can
+    then list workspace history without re-reading files.
+
+    Implementation note: ``result`` is duck-typed because PPT/Word/Excel
+    results each carry their own concrete ``OfficeXxxReadResult`` type
+    with the same ``.summary`` attribute. We mutate ``result.summary`` in
+    place so the response body reflects the persisted identifiers (the
+    reader builds the summary with ``document_id=file_path.stem`` which
+    is *not* the managed UUID when the file lives in a UUID directory).
+    """
+    from backend.office.models import OfficeDocumentSummary  # local: avoids cycle
+
+    conn = _db().get_connection()
+    summary = result.summary
+    document_id = file_path.parent.name
+    # Use the file's basename as ``generated_filename`` (matches the
+    # managed-import layout); ``original_filename`` is the user-visible
+    # uploaded name when the caller tracked it.
+    generated_filename = file_path.name
+    persisted = OfficeDocumentSummary(
+        id=document_id,
+        workspace_path=canonical_workspace,
+        doc_type=summary.doc_type,
+        original_filename=original_filename,
+        generated_filename=generated_filename,
+        status=summary.status,
+        created_at=summary.created_at,
+        updated_at=summary.updated_at,
+        metadata=summary.metadata,
+        derived_from=summary.derived_from,
+        archived_at=summary.archived_at,
+    )
+    save_document(conn, persisted)
+    # Patch the returned summary so the caller sees the same id/filename
+    # that was persisted (otherwise the reader's default ``file_path.stem``
+    # id leaks out, breaking the contract that ``id == managed dir name``).
+    result.summary = persisted
+
+
 @router.post("/ppt/read", response_model=OfficePptReadResult)
 def read_ppt_endpoint(req: OfficeReadRequest) -> OfficePptReadResult:
     """Read a .pptx file and return structured content.
 
     SECURITY: file_path is validated to lie inside workspace_path.
     Plan §6 R1: rejects files >max_size_bytes (default 50MB) to prevent OOM.
+    M0 Task 3: persists a ``parsed`` row keyed by the managed directory UUID.
     """
     logger.info("Reading PPT: %s", req.file_path)
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     _check_size_limit(file_path, req.max_size_bytes)
-    return read_ppt(
+    # Canonicalize workspace_path so the row's ``workspace_path`` matches
+    # the same canonical form used by list_documents() and the generators.
+    canonical_workspace = str(Path(req.workspace_path).resolve())
+    result = read_ppt(
         file_path=file_path,
-        workspace_path=req.workspace_path,
+        workspace_path=canonical_workspace,
+        generated_filename=file_path.name,
+        original_filename=req.original_filename,
     )
+    _persist_read_summary(
+        result,
+        file_path=file_path,
+        canonical_workspace=canonical_workspace,
+        original_filename=req.original_filename,
+    )
+    return result
 
 
 @router.post("/word/read", response_model=OfficeWordReadResult)
@@ -218,10 +280,20 @@ def read_word_endpoint(req: OfficeReadRequest) -> OfficeWordReadResult:
     logger.info("Reading Word: %s", req.file_path)
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     _check_size_limit(file_path, req.max_size_bytes)
-    return read_docx(
+    canonical_workspace = str(Path(req.workspace_path).resolve())
+    result = read_docx(
         file_path=file_path,
-        workspace_path=req.workspace_path,
+        workspace_path=canonical_workspace,
+        generated_filename=file_path.name,
+        original_filename=req.original_filename,
     )
+    _persist_read_summary(
+        result,
+        file_path=file_path,
+        canonical_workspace=canonical_workspace,
+        original_filename=req.original_filename,
+    )
+    return result
 
 
 @router.post("/excel/read", response_model=OfficeExcelReadResult)
@@ -230,10 +302,20 @@ def read_excel_endpoint(req: OfficeReadRequest) -> OfficeExcelReadResult:
     logger.info("Reading Excel: %s", req.file_path)
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     _check_size_limit(file_path, req.max_size_bytes)
-    return read_xlsx(
+    canonical_workspace = str(Path(req.workspace_path).resolve())
+    result = read_xlsx(
         file_path=file_path,
-        workspace_path=req.workspace_path,
+        workspace_path=canonical_workspace,
+        generated_filename=file_path.name,
+        original_filename=req.original_filename,
     )
+    _persist_read_summary(
+        result,
+        file_path=file_path,
+        canonical_workspace=canonical_workspace,
+        original_filename=req.original_filename,
+    )
+    return result
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -243,8 +325,16 @@ def read_excel_endpoint(req: OfficeReadRequest) -> OfficeExcelReadResult:
 
 @router.get("/documents", response_model=OfficeDocumentListResponse)
 def list_documents_endpoint(workspace_path: str) -> OfficeDocumentListResponse:
-    """List all office documents in a workspace."""
-    documents = list_documents(_db().get_connection(), workspace_path)
+    """List all office documents in a workspace.
+
+    Canonicalizes ``workspace_path`` so callers that pass ``/tmp/./ws``
+    or symlink-resolved variants still hit the same rows. The persisted
+    rows always store the resolved form because every write path
+    (``_build_summary_for_generated``, ``_persist_read_summary``)
+    normalizes before INSERT.
+    """
+    canonical_workspace = str(Path(workspace_path).resolve())
+    documents = list_documents(_db().get_connection(), canonical_workspace)
     return OfficeDocumentListResponse(documents=documents, total=len(documents))
 
 
