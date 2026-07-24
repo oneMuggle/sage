@@ -143,17 +143,16 @@ const electronAPI = {
     pickSavePath: (defaultName: string) =>
       ipcRenderer.invoke('office:save-dialog', { defaultName }) as Promise<string | null>,
     pickAndImportOfficeFile: (workspacePath: string, docType: OfficeDocType) =>
-      ipcRenderer.invoke('office:pick-and-import', { workspacePath, docType }) as Promise<
-        ImportedOfficeFile | null
-      >,
-    importDroppedOfficeFile: (
-      workspacePath: string,
-      docType: OfficeDocType,
-      sourcePath: string,
-    ) =>
-      ipcRenderer.invoke('office:import-dropped', { workspacePath, docType, sourcePath }) as Promise<
-        ImportedOfficeFile
-      >,
+      ipcRenderer.invoke('office:pick-and-import', {
+        workspacePath,
+        docType,
+      }) as Promise<ImportedOfficeFile | null>,
+    importDroppedOfficeFile: (workspacePath: string, docType: OfficeDocType, sourcePath: string) =>
+      ipcRenderer.invoke('office:import-dropped', {
+        workspacePath,
+        docType,
+        sourcePath,
+      }) as Promise<ImportedOfficeFile>,
     completeOfficeImport: (importToken: string) =>
       ipcRenderer.invoke('office:complete-import', { importToken }) as Promise<void>,
     discardOfficeImport: (importToken: string) =>

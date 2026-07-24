@@ -174,11 +174,14 @@ describe('office:import-dropped', () => {
     fs.writeFileSync(tmpSrc, Buffer.from('PK fake docx'));
 
     const handler = registeredHandlers.get('office:import-dropped')!;
-    const result = (await handler({}, {
-      workspacePath: '/tmp/ws',
-      docType: 'word',
-      sourcePath: tmpSrc,
-    })) as {
+    const result = (await handler(
+      {},
+      {
+        workspacePath: '/tmp/ws',
+        docType: 'word',
+        sourcePath: tmpSrc,
+      },
+    )) as {
       managedPath: string;
       originalName: string;
       sizeBytes: number;
@@ -216,10 +219,13 @@ describe('office:complete-import and office:discard-import (token lifecycle)', (
     });
 
     const pickHandler = registeredHandlers.get('office:pick-and-import')!;
-    const picked = (await pickHandler({}, {
-      workspacePath: '/tmp/ws',
-      docType: 'excel',
-    })) as PendingImport;
+    const picked = (await pickHandler(
+      {},
+      {
+        workspacePath: '/tmp/ws',
+        docType: 'excel',
+      },
+    )) as PendingImport;
 
     expect(picked).not.toBeNull();
     const { managedPath, importToken } = picked as unknown as PendingImport;
@@ -244,10 +250,13 @@ describe('office:complete-import and office:discard-import (token lifecycle)', (
     });
 
     const pickHandler = registeredHandlers.get('office:pick-and-import')!;
-    const picked = (await pickHandler({}, {
-      workspacePath: '/tmp/ws',
-      docType: 'excel',
-    })) as PendingImport;
+    const picked = (await pickHandler(
+      {},
+      {
+        workspacePath: '/tmp/ws',
+        docType: 'excel',
+      },
+    )) as PendingImport;
 
     expect(picked).not.toBeNull();
     const { managedPath, importToken } = picked as unknown as PendingImport;
@@ -304,12 +313,15 @@ describe('office:save-as (brief §Step 5)', () => {
   it('returns null when the user cancels the save dialog', async () => {
     mocks.dialog.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined });
     const handler = registeredHandlers.get('office:save-as')!;
-    const result = await handler({}, {
-      workspacePath: '/workspace',
-      docType: 'ppt',
-      documentId: 'doc-001',
-      filename: 'deck.pptx',
-    });
+    const result = await handler(
+      {},
+      {
+        workspacePath: '/workspace',
+        docType: 'ppt',
+        documentId: 'doc-001',
+        filename: 'deck.pptx',
+      },
+    );
     expect(result).toBeNull();
   });
 
@@ -322,17 +334,23 @@ describe('office:save-as (brief §Step 5)', () => {
       filePaths: [tmpSrc],
     });
     const pickHandler = registeredHandlers.get('office:pick-and-import')!;
-    const picked = (await pickHandler({}, { workspacePath: '/tmp/ws', docType: 'ppt' })) as PendingImport;
+    const picked = (await pickHandler(
+      {},
+      { workspacePath: '/tmp/ws', docType: 'ppt' },
+    )) as PendingImport;
 
     const tmpDst = path.join(os.tmpdir(), `sage-saveas-dst-${Date.now()}.pptx`);
     mocks.dialog.showSaveDialog.mockResolvedValue({ canceled: false, filePath: tmpDst });
     const handler = registeredHandlers.get('office:save-as')!;
-    const result = (await handler({}, {
-      workspacePath: picked.workspacePath,
-      docType: picked.docType,
-      documentId: picked.documentId,
-      filename: path.basename(picked.managedPath),
-    })) as { savedPath: string } | null;
+    const result = (await handler(
+      {},
+      {
+        workspacePath: picked.workspacePath,
+        docType: picked.docType,
+        documentId: picked.documentId,
+        filename: path.basename(picked.managedPath),
+      },
+    )) as { savedPath: string } | null;
     expect(result).not.toBeNull();
     expect(result!.savedPath).toBe(tmpDst);
     expect(fs.existsSync(tmpDst)).toBe(true);
@@ -367,10 +385,13 @@ describe('office:open + office:show-in-folder (brief §Step 5)', () => {
       filePaths: [tmpSrc],
     });
     const pickHandler = registeredHandlers.get('office:pick-and-import')!;
-    const picked = (await pickHandler({}, {
-      workspacePath: '/tmp/ws',
-      docType: 'ppt',
-    })) as PendingImport;
+    const picked = (await pickHandler(
+      {},
+      {
+        workspacePath: '/tmp/ws',
+        docType: 'ppt',
+      },
+    )) as PendingImport;
 
     mocks.shell.openPath.mockResolvedValue(''); // success -> empty string
     const openHandler = registeredHandlers.get('office:open')!;
@@ -378,12 +399,15 @@ describe('office:open + office:show-in-folder (brief §Step 5)', () => {
     // import — the gateway must reconstruct the managed path itself,
     // not trust a renderer-supplied (and possibly mismatched) tuple.
     await expect(
-      openHandler({}, {
-        workspacePath: picked.workspacePath,
-        docType: picked.docType,
-        documentId: picked.documentId,
-        filename: path.basename(picked.managedPath),
-      }),
+      openHandler(
+        {},
+        {
+          workspacePath: picked.workspacePath,
+          docType: picked.docType,
+          documentId: picked.documentId,
+          filename: path.basename(picked.managedPath),
+        },
+      ),
     ).resolves.toBeUndefined();
 
     expect(mocks.shell.openPath).toHaveBeenCalledTimes(1);
@@ -405,20 +429,26 @@ describe('office:open + office:show-in-folder (brief §Step 5)', () => {
       canceled: false,
       filePaths: [tmpSrc],
     });
-    const picked = (await registeredHandlers.get('office:pick-and-import')!({}, {
-      workspacePath: '/tmp/ws',
-      docType: 'ppt',
-    })) as PendingImport;
+    const picked = (await registeredHandlers.get('office:pick-and-import')!(
+      {},
+      {
+        workspacePath: '/tmp/ws',
+        docType: 'ppt',
+      },
+    )) as PendingImport;
 
     mocks.shell.openPath.mockResolvedValue('no app associated');
     const openHandler = registeredHandlers.get('office:open')!;
     await expect(
-      openHandler({}, {
-        workspacePath: picked.workspacePath,
-        docType: picked.docType,
-        documentId: picked.documentId,
-        filename: path.basename(picked.managedPath),
-      }),
+      openHandler(
+        {},
+        {
+          workspacePath: picked.workspacePath,
+          docType: picked.docType,
+          documentId: picked.documentId,
+          filename: path.basename(picked.managedPath),
+        },
+      ),
     ).rejects.toThrow(/openPath failed/);
 
     fs.unlinkSync(tmpSrc);
@@ -431,20 +461,26 @@ describe('office:open + office:show-in-folder (brief §Step 5)', () => {
       canceled: false,
       filePaths: [tmpSrc],
     });
-    const picked = (await registeredHandlers.get('office:pick-and-import')!({}, {
-      workspacePath: '/tmp/ws',
-      docType: 'ppt',
-    })) as PendingImport;
+    const picked = (await registeredHandlers.get('office:pick-and-import')!(
+      {},
+      {
+        workspacePath: '/tmp/ws',
+        docType: 'ppt',
+      },
+    )) as PendingImport;
 
     mocks.shell.showItemInFolder.mockReset();
     const showHandler = registeredHandlers.get('office:show-in-folder')!;
     await expect(
-      showHandler({}, {
-        workspacePath: picked.workspacePath,
-        docType: picked.docType,
-        documentId: picked.documentId,
-        filename: path.basename(picked.managedPath),
-      }),
+      showHandler(
+        {},
+        {
+          workspacePath: picked.workspacePath,
+          docType: picked.docType,
+          documentId: picked.documentId,
+          filename: path.basename(picked.managedPath),
+        },
+      ),
     ).resolves.toBeUndefined();
     expect(mocks.shell.showItemInFolder).toHaveBeenCalledTimes(1);
 
@@ -458,12 +494,15 @@ describe('office:open + office:show-in-folder (brief §Step 5)', () => {
     const openHandler = registeredHandlers.get('office:open')!;
     // No prior import — passing a fabricated documentId has no file to open.
     await expect(
-      openHandler({}, {
-        workspacePath: '/tmp/ws',
-        docType: 'ppt',
-        documentId: 'no-such-doc',
-        filename: 'deck.pptx',
-      }),
+      openHandler(
+        {},
+        {
+          workspacePath: '/tmp/ws',
+          docType: 'ppt',
+          documentId: 'no-such-doc',
+          filename: 'deck.pptx',
+        },
+      ),
     ).rejects.toThrow();
   });
 });

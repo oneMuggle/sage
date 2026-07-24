@@ -103,7 +103,7 @@ function openDialogOptions(docType: OfficeDocType) {
   return {
     title: `选择 ${filter.name}`,
     filters: [filter],
-    properties: ['openFile'] as ('openFile')[],
+    properties: ['openFile'] as 'openFile'[],
   };
 }
 
@@ -191,9 +191,7 @@ function resolveManagedFilePath(ref: OfficeManagedRef): string {
   // lands a file on disk. If `existsSync` returns false, we refuse
   // to operate on a path the gateway never wrote.
   if (!existsSync(candidate)) {
-    throw new Error(
-      `refused: managed file does not exist on disk (never imported?): ${candidate}`,
-    );
+    throw new Error(`refused: managed file does not exist on disk (never imported?): ${candidate}`);
   }
   return candidate;
 }
@@ -250,66 +248,65 @@ export async function sweepOrphanStaging(
 export function registerOfficeIpc(register: RegisterIpcHandler): void {
   // ── office:pick-and-import ────────────────────────────────────────────
   // Atomic dialog → copy → token. Returns ImportedOfficeFile | null.
-  register(
-    'office:pick-and-import',
-    (async (
-      _event: unknown,
-      opts: { workspacePath: string; docType: OfficeDocType },
-    ): Promise<ImportedOfficeFile | null> => {
-      const focused = focusedWindow();
-      const dialogOpts = openDialogOptions(opts.docType);
-      const result = await dialog.showOpenDialog(focused ?? undefined!, dialogOpts);
-      if (result.canceled || result.filePaths.length === 0) return null;
-      const sourcePath = result.filePaths[0]!;
-      const importToken = randomUUID();
-      const imported = await stageImportedFile(opts.workspacePath, opts.docType, sourcePath, importToken);
-      pendingImports.set(importToken, {
-        managedPath: imported.managedPath,
-        stagingDir: path.dirname(imported.managedPath),
-        originalName: imported.originalName,
-        sizeBytes: imported.sizeBytes,
-        workspacePath: imported.workspacePath,
-      });
-      return imported;
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:pick-and-import', (async (
+    _event: unknown,
+    opts: { workspacePath: string; docType: OfficeDocType },
+  ): Promise<ImportedOfficeFile | null> => {
+    const focused = focusedWindow();
+    const dialogOpts = openDialogOptions(opts.docType);
+    const result = await dialog.showOpenDialog(focused ?? undefined!, dialogOpts);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const sourcePath = result.filePaths[0]!;
+    const importToken = randomUUID();
+    const imported = await stageImportedFile(
+      opts.workspacePath,
+      opts.docType,
+      sourcePath,
+      importToken,
+    );
+    pendingImports.set(importToken, {
+      managedPath: imported.managedPath,
+      stagingDir: path.dirname(imported.managedPath),
+      originalName: imported.originalName,
+      sizeBytes: imported.sizeBytes,
+      workspacePath: imported.workspacePath,
+    });
+    return imported;
+  }) as (...args: unknown[]) => unknown);
 
   // ── office:import-dropped ─────────────────────────────────────────────
   // Renderer already has sourcePath (drag/drop handler did the JSON
   // serialization). Same atomic copy logic as pick-and-import.
-  register(
-    'office:import-dropped',
-    (async (
-      _event: unknown,
-      opts: { workspacePath: string; docType: OfficeDocType; sourcePath: string },
-    ): Promise<ImportedOfficeFile> => {
-      const importToken = randomUUID();
-      const imported = await stageImportedFile(
-        opts.workspacePath,
-        opts.docType,
-        opts.sourcePath,
-        importToken,
-      );
-      pendingImports.set(importToken, {
-        managedPath: imported.managedPath,
-        stagingDir: path.dirname(imported.managedPath),
-        originalName: imported.originalName,
-        sizeBytes: imported.sizeBytes,
-        workspacePath: imported.workspacePath,
-      });
-      return imported;
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:import-dropped', (async (
+    _event: unknown,
+    opts: { workspacePath: string; docType: OfficeDocType; sourcePath: string },
+  ): Promise<ImportedOfficeFile> => {
+    const importToken = randomUUID();
+    const imported = await stageImportedFile(
+      opts.workspacePath,
+      opts.docType,
+      opts.sourcePath,
+      importToken,
+    );
+    pendingImports.set(importToken, {
+      managedPath: imported.managedPath,
+      stagingDir: path.dirname(imported.managedPath),
+      originalName: imported.originalName,
+      sizeBytes: imported.sizeBytes,
+      workspacePath: imported.workspacePath,
+    });
+    return imported;
+  }) as (...args: unknown[]) => unknown);
 
   // ── office:complete-import ────────────────────────────────────────────
   // Consumes the token without deleting the file. Idempotent: a second
   // call on the same (now-consumed) token is a no-op.
-  register(
-    'office:complete-import',
-    (async (_event: unknown, opts: { importToken: string }): Promise<void> => {
-      pendingImports.delete(opts.importToken);
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:complete-import', (async (
+    _event: unknown,
+    opts: { importToken: string },
+  ): Promise<void> => {
+    pendingImports.delete(opts.importToken);
+  }) as (...args: unknown[]) => unknown);
 
   // ── office:discard-import ─────────────────────────────────────────────
   // Consumes the token and deletes ONLY the staging directory captured at
@@ -317,137 +314,119 @@ export function registerOfficeIpc(register: RegisterIpcHandler): void {
   // property test asserts that even if no real import ever happened,
   // an attacker cannot make us delete an arbitrary file (because we
   // never had a path to that file in the map).
-  register(
-    'office:discard-import',
-    (async (_event: unknown, opts: { importToken: string }): Promise<void> => {
-      const pending = pendingImports.get(opts.importToken);
-      if (!pending) return; // unknown token → no-op (NO delete path)
-      pendingImports.delete(opts.importToken);
-      try {
-        await rm(pending.stagingDir, { recursive: true, force: true });
-      } catch {
-        // Best-effort cleanup; if rm fails (locked, gone) we just leave
-        // the file. The renderer shouldn't surface this as a crash.
-      }
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:discard-import', (async (
+    _event: unknown,
+    opts: { importToken: string },
+  ): Promise<void> => {
+    const pending = pendingImports.get(opts.importToken);
+    if (!pending) return; // unknown token → no-op (NO delete path)
+    pendingImports.delete(opts.importToken);
+    try {
+      await rm(pending.stagingDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup; if rm fails (locked, gone) we just leave
+      // the file. The renderer shouldn't surface this as a crash.
+    }
+  }) as (...args: unknown[]) => unknown);
 
-  register(
-    'office:sweep-orphan-staging',
-    (async (
-      _event: unknown,
-      opts: { workspacePath: string; knownDocIds: string[] },
-    ): Promise<{ swept: number }> => {
-      return sweepOrphanStaging(opts.workspacePath, new Set(opts.knownDocIds));
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:sweep-orphan-staging', (async (
+    _event: unknown,
+    opts: { workspacePath: string; knownDocIds: string[] },
+  ): Promise<{ swept: number }> => {
+    return sweepOrphanStaging(opts.workspacePath, new Set(opts.knownDocIds));
+  }) as (...args: unknown[]) => unknown);
 
   // ── office:save-as ────────────────────────────────────────────────────
   // Native save dialog → copy the managed file to the chosen path.
   // Returns { savedPath } on confirmation, null on cancel. We never
   // accept a renderer-supplied destination — only the dialog drives it.
-  register(
-    'office:save-as',
-    (async (
-      _event: unknown,
-      opts: { workspacePath: string; docType: OfficeDocType; documentId: string; filename: string },
-    ): Promise<{ savedPath: string } | null> => {
-      const focused = focusedWindow();
-      const dialogOpts = {
-        title: '保存 Office 文档',
-        defaultPath: opts.filename,
-        filters: [getOpenDialogFilters()[opts.docType]],
-      };
-      const result = await dialog.showSaveDialog(focused ?? undefined!, dialogOpts);
-      if (result.canceled || !result.filePath) return null;
-      const sourcePath = resolveManagedFilePath({
-        workspacePath: opts.workspacePath,
-        docType: opts.docType,
-        documentId: opts.documentId,
-        filename: opts.filename,
-      });
-      // Save As is the user's explicit "OK, replace whatever is there"
-      // gesture, so we don't use COPYFILE_EXCL — just an atomic copy.
-      await copyFile(sourcePath, result.filePath, fsConstants.COPYFILE_FICLONE);
-      return { savedPath: result.filePath };
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:save-as', (async (
+    _event: unknown,
+    opts: { workspacePath: string; docType: OfficeDocType; documentId: string; filename: string },
+  ): Promise<{ savedPath: string } | null> => {
+    const focused = focusedWindow();
+    const dialogOpts = {
+      title: '保存 Office 文档',
+      defaultPath: opts.filename,
+      filters: [getOpenDialogFilters()[opts.docType]],
+    };
+    const result = await dialog.showSaveDialog(focused ?? undefined!, dialogOpts);
+    if (result.canceled || !result.filePath) return null;
+    const sourcePath = resolveManagedFilePath({
+      workspacePath: opts.workspacePath,
+      docType: opts.docType,
+      documentId: opts.documentId,
+      filename: opts.filename,
+    });
+    // Save As is the user's explicit "OK, replace whatever is there"
+    // gesture, so we don't use COPYFILE_EXCL — just an atomic copy.
+    await copyFile(sourcePath, result.filePath, fsConstants.COPYFILE_FICLONE);
+    return { savedPath: result.filePath };
+  }) as (...args: unknown[]) => unknown);
 
   // ── office:open ───────────────────────────────────────────────────────
   // shell.openPath on the validated managed file. Throws a typed error
   // if the OS shell reports a non-empty error string (no app associated
   // with this filetype, etc.).
-  register(
-    'office:open',
-    (async (
-      _event: unknown,
-      opts: { workspacePath: string; docType: OfficeDocType; documentId: string; filename: string },
-    ): Promise<void> => {
-      const targetPath = resolveManagedFilePath(opts);
-      let openResult: string;
-      try {
-        openResult = await shell.openPath(targetPath);
-      } catch (err) {
-        throw new Error(
-          `office:open: shell.openPath threw: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-      if (openResult) {
-        // shell.openPath returns a non-empty error string on failure
-        throw new Error(`openPath failed: ${openResult}`);
-      }
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:open', (async (
+    _event: unknown,
+    opts: { workspacePath: string; docType: OfficeDocType; documentId: string; filename: string },
+  ): Promise<void> => {
+    const targetPath = resolveManagedFilePath(opts);
+    let openResult: string;
+    try {
+      openResult = await shell.openPath(targetPath);
+    } catch (err) {
+      throw new Error(
+        `office:open: shell.openPath threw: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (openResult) {
+      // shell.openPath returns a non-empty error string on failure
+      throw new Error(`openPath failed: ${openResult}`);
+    }
+  }) as (...args: unknown[]) => unknown);
 
   // ── office:show-in-folder ─────────────────────────────────────────────
   // shell.showItemInFolder is fire-and-forget (no return code). The
   // path is reconstructed from the OfficeManagedRef so the renderer
   // can't trigger a folder view of arbitrary paths.
-  register(
-    'office:show-in-folder',
-    (async (
-      _event: unknown,
-      opts: { workspacePath: string; docType: OfficeDocType; documentId: string; filename: string },
-    ): Promise<void> => {
-      const targetPath = resolveManagedFilePath(opts);
-      shell.showItemInFolder(targetPath);
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:show-in-folder', (async (
+    _event: unknown,
+    opts: { workspacePath: string; docType: OfficeDocType; documentId: string; filename: string },
+  ): Promise<void> => {
+    const targetPath = resolveManagedFilePath(opts);
+    shell.showItemInFolder(targetPath);
+  }) as (...args: unknown[]) => unknown);
 
   // ── legacy channels (Phase 1.3 + 1.4) ────────────────────────────────
   // Kept so the existing preload bridges (pickOfficeFile, pickSavePath)
   // continue to resolve. New code should prefer the gateway channels.
-  register(
-    'office:pick-file',
-    (async (_event: unknown, opts: { docType: OfficeDocType }) => {
-      const focused = focusedWindow();
-      const dialogOpts = openDialogOptions(opts.docType);
-      const result = await dialog.showOpenDialog(focused ?? undefined!, dialogOpts);
-      if (result.canceled || result.filePaths.length === 0) return null;
-      const filePath = result.filePaths[0]!;
-      const name = filePath.split(/[\\/]/).pop() ?? filePath;
-      let sizeBytes = 0;
-      try {
-        sizeBytes = statSync(filePath).size;
-      } catch {
-        /* file disappeared between dialog and stat */
-      }
-      return { path: filePath, name, sizeBytes };
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:pick-file', (async (_event: unknown, opts: { docType: OfficeDocType }) => {
+    const focused = focusedWindow();
+    const dialogOpts = openDialogOptions(opts.docType);
+    const result = await dialog.showOpenDialog(focused ?? undefined!, dialogOpts);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0]!;
+    const name = filePath.split(/[\\/]/).pop() ?? filePath;
+    let sizeBytes = 0;
+    try {
+      sizeBytes = statSync(filePath).size;
+    } catch {
+      /* file disappeared between dialog and stat */
+    }
+    return { path: filePath, name, sizeBytes };
+  }) as (...args: unknown[]) => unknown);
 
-  register(
-    'office:save-dialog',
-    (async (_event: unknown, opts: { defaultName: string }) => {
-      const focused = focusedWindow();
-      const result = await dialog.showSaveDialog(focused ?? undefined!, {
-        title: '保存 Office 文档',
-        defaultPath: opts.defaultName,
-      });
-      if (result.canceled || !result.filePath) return null;
-      return result.filePath;
-    }) as (...args: unknown[]) => unknown,
-  );
+  register('office:save-dialog', (async (_event: unknown, opts: { defaultName: string }) => {
+    const focused = focusedWindow();
+    const result = await dialog.showSaveDialog(focused ?? undefined!, {
+      title: '保存 Office 文档',
+      defaultPath: opts.defaultName,
+    });
+    if (result.canceled || !result.filePath) return null;
+    return result.filePath;
+  }) as (...args: unknown[]) => unknown);
 }
 
 // Test-only helper: clear the pending import state. Not exported on
@@ -466,8 +445,4 @@ export function __resetPendingImportsForTests(): void {
 
 // Re-export the typed surface so the preload bridge only needs to
 // import once from `officeIpc` for types.
-export type {
-  OfficeDocType,
-  OfficeManagedRef,
-  ImportedOfficeFile,
-} from './officePaths';
+export type { OfficeDocType, OfficeManagedRef, ImportedOfficeFile } from './officePaths';
