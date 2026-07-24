@@ -150,6 +150,41 @@ def _validate_doc_id(document_id: str) -> str:
     return document_id
 
 
+def validate_doc_id(document_id: str) -> str:
+    """Public re-export of :func:`_validate_doc_id`.
+
+    Exists so the storage layer can enforce the same doc-id regex that
+    :func:`managed_document_path` uses without re-declaring
+    ``_DOC_ID_PATTERN``. The previous layout duplicated the regex in
+    ``storage.py`` and ``path_safety.py``, which silently diverged
+    during refactors; one source of truth now lives in this module.
+    """
+    return _validate_doc_id(document_id)
+
+
+def managed_document_directory(
+    workspace: Path,
+    doc_type: OfficeDocType,
+    document_id: str,
+) -> Path:
+    """Compose the per-document directory under the workspace sandbox.
+
+    Output: ``<workspace>/office/<doc_type>/<document_id>/``
+
+    Validates ``document_id`` (see :func:`validate_doc_id`) but does
+    NOT touch the filesystem — callers that want the directory to
+    exist must still call ``.mkdir(parents=True, exist_ok=True)``.
+
+    This helper centralizes the ``office/<docType>/<docId>`` layout
+    arithmetic that the storage layer's ``generate_document_dir`` and
+    ``document_path`` (and any future persistence helper) need to
+    reproduce; centralizing prevents the layout from drifting between
+    modules when someone adds an ``office/<extra>`` segment.
+    """
+    validate_doc_id(document_id)
+    return workspace / "office" / doc_type.value / document_id
+
+
 def managed_document_path(
     workspace: Path,
     doc_type: OfficeDocType,
@@ -173,10 +208,12 @@ def managed_document_path(
     callers must still call ``.mkdir(parents=True, exist_ok=True)`` if
     they want the on-disk layout to exist.
     """
-    _validate_doc_id(document_id)
+    validate_doc_id(document_id)
     safe_filename = validate_supported_filename(filename, doc_type)
 
-    target = (workspace / "office" / doc_type.value / document_id / safe_filename).resolve()
+    target = (
+        managed_document_directory(workspace, doc_type, document_id) / safe_filename
+    ).resolve()
     resolved_workspace = workspace.resolve()
     if not is_within(resolved_workspace, target):
         raise OfficePathError(
@@ -189,6 +226,8 @@ def managed_document_path(
 __all__ = [
     "is_within",
     "resolve_within",
+    "validate_doc_id",
     "validate_supported_filename",
+    "managed_document_directory",
     "managed_document_path",
 ]

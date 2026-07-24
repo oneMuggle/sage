@@ -19,16 +19,13 @@ so tests can use `:memory:` and production uses the real Database.get_connection
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 from pathlib import Path
 from typing import List
 
 from .errors import OfficePathError
 from .models import OfficeDocType, OfficeDocumentSummary
-from .path_safety import resolve_within
-
-_DOC_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+from .path_safety import managed_document_directory, resolve_within, validate_doc_id
 
 
 def validate_workspace(path: Path) -> Path:
@@ -80,15 +77,16 @@ def generate_document_dir(
     """
     workspace = validate_workspace(workspace)
 
-    if not _DOC_ID_PATTERN.match(doc_id):
-        raise OfficePathError(
-            f"doc_id contains unsafe characters (must match {_DOC_ID_PATTERN.pattern}): {doc_id!r}"
-        )
+    # Reuse the path_safety doc-id regex (single source of truth) and
+    # the managed-directory layout helper. Centralizing prevents the
+    # regex / layout from drifting if a future change adds an extra
+    # segment to the on-disk layout.
+    validate_doc_id(doc_id)
+    candidate = managed_document_directory(workspace, doc_type, doc_id)
 
     # Cross-platform containment: resolve collapses ``..`` and follows
     # symlinks; ``relative_to`` then rejects any candidate that lands
     # outside the workspace. Works identically on POSIX and Windows.
-    candidate = workspace / "office" / doc_type.value / doc_id
     target = resolve_within(workspace, candidate)
 
     target.mkdir(parents=True, exist_ok=True)
@@ -237,12 +235,14 @@ def document_path(summary: OfficeDocumentSummary) -> Path:
     No filesystem access; pure path arithmetic. Lets the routes layer
     show ``open``/``reveal-in-folder`` actions without re-deriving the
     layout in each caller.
+
+    Delegates to :func:`path_safety.managed_document_directory` so the
+    ``office/<docType>/<docId>`` segment is defined in exactly one
+    place; adding a new ``office/<extra>`` segment in the future
+    automatically flows through both functions.
     """
     return (
-        Path(summary.workspace_path)
-        / "office"
-        / summary.doc_type.value
-        / summary.id
+        managed_document_directory(Path(summary.workspace_path), summary.doc_type, summary.id)
         / summary.generated_filename
     )
 

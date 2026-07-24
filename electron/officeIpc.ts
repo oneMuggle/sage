@@ -396,7 +396,14 @@ export function registerOfficeIpc(register: RegisterIpcHandler): void {
 // Test-only helper: clear the pending import state. Not exported on
 // the public surface; only invoked from __tests__ to keep specs
 // isolated. Calling this in production code is a no-op semantically.
+// The NODE_ENV guard is a defense-in-depth check: even if a renderer
+// bridge accidentally exposes this symbol on the public preload surface,
+// production builds will refuse to clear in-flight imports that the
+// user might be waiting on (the clear is otherwise silent and lossy).
 export function __resetPendingImportsForTests(): void {
+  if (process.env.NODE_ENV !== 'test') {
+    return;
+  }
   pendingImports.clear();
 }
 
