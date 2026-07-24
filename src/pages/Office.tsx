@@ -14,9 +14,13 @@
  *   │ Document list (history)              │
  *   └──────────────────────────────────────┘
  *
- * Reads: per-user Q3 includes "MVP 包含编辑现有", but editing endpoints
- * are deferred to Phase 2 per plan §4.1.4 step 17. This page only
- * implements read + list + delete for Phase 1.3.
+ * M0 Task 6 (2026-07-23): rewired the file-pick flow through the
+ * Electron managed-file gateway. The picker now goes through
+ * `importAndRead` which atomic-copies the file into the managed area
+ * and returns a `managedPath` — the page no longer sees the original
+ * source path at any point. The M0 management set replaces the
+ * Phase 1.3 delete action with Save As / Open / Show in Folder; the
+ * destructive delete flow lives in M3–M5.
  */
 
 import { FileSpreadsheet, FileText, FolderOpen, Presentation } from 'lucide-react';
@@ -30,26 +34,31 @@ import {
   OfficePreviewPanel,
   useOfficeDocuments,
   type OfficePreviewData,
+  type OfficeReadResult,
 } from '../features/office';
 import type { OfficeDocType } from '../shared/api/types';
 
 export function Office() {
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [preview, setPreview] = useState<OfficePreviewData | null>(null);
-  const [previewingPath, setPreviewingPath] = useState<string | null>(null);
-  // HIGH FIX: stale-read guard. Increments on every handlePickAndRead
+  // HIGH FIX: stale-read guard. Increments on every handleImportAndRead
   // invocation; setPreview checks the captured id before applying state.
   // Without this, a read that resolves after a workspace change
   // (or a faster subsequent read) would overwrite the correct preview
   // with stale data from the wrong workspace.
   const readIdRef = useRef(0);
 
-  const { documents, loading, error, refresh, readPpt, readWord, readExcel, deleteDocument } =
-    useOfficeDocuments(workspacePath);
-
-  // In-flight delete tracker so double-click on a trash button doesn't fire
-  // two parallel API calls (one 200, one 404 → spurious error toast).
-  const deletingRef = useRef<Set<string>>(new Set());
+  const {
+    documents,
+    loading,
+    error,
+    refresh,
+    importAndRead,
+    readDropped,
+    saveAs,
+    open,
+    showInFolder,
+  } = useOfficeDocuments(workspacePath);
 
   const handleSelectWorkspace = async () => {
     try {
@@ -67,7 +76,6 @@ export function Office() {
         readIdRef.current += 1;
         setWorkspacePath(dir);
         setPreview(null);
-        setPreviewingPath(null);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -75,25 +83,25 @@ export function Office() {
     }
   };
 
-  const handlePickAndRead = (docType: OfficeDocType) => async (filePath: string) => {
+  const toPreview = (docType: OfficeDocType, data: OfficeReadResult): OfficePreviewData => ({
+    docType,
+    // The discriminated union types line up by docType; this is safe
+    // because we are passing the same `data` we just read.
+    data: data as never,
+  });
+
+  const handleImportAndRead = (docType: OfficeDocType) => async () => {
     if (!workspacePath) {
       toast.error('请先选择工作区目录');
       return;
     }
     const myReadId = ++readIdRef.current;
-    setPreviewingPath(filePath);
     try {
-      let data: OfficePreviewData;
-      if (docType === 'ppt') {
-        data = { docType: 'ppt', data: await readPpt(filePath) };
-      } else if (docType === 'word') {
-        data = { docType: 'word', data: await readWord(filePath) };
-      } else {
-        data = { docType: 'excel', data: await readExcel(filePath) };
-      }
+      const data = await importAndRead(docType);
+      if (data === null) return; // user cancelled
       // Stale-read guard: only commit preview if this is still the latest
       if (myReadId !== readIdRef.current) return;
-      setPreview(data);
+      setPreview(toPreview(docType, data));
       await refresh();
       // Re-check after the await (refresh may take time; another read
       // could have started in the meantime)
@@ -106,29 +114,61 @@ export function Office() {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`读取失败: ${msg}`);
       setPreview(null);
-    } finally {
-      // Only clear previewingPath if this is still the latest read;
-      // otherwise a newer read is still in flight
-      if (myReadId === readIdRef.current) {
-        setPreviewingPath(null);
-      }
     }
   };
 
-  const handleDelete = async (docId: string) => {
-    // HIGH FIX: in-flight guard against double-click
-    if (deletingRef.current.has(docId)) return;
-    deletingRef.current.add(docId);
+  // Drop path: the picker already resolved the OS source path; the hook
+  // imports it into the managed area and reads it (same complete/discard
+  // lifecycle as importAndRead). Shares the stale-read guard so a workspace
+  // switch mid-read still discards stale data.
+  const handleReadDropped = (docType: OfficeDocType) => async (sourcePath: string) => {
+    if (!workspacePath) {
+      toast.error('请先选择工作区目录');
+      return;
+    }
+    const myReadId = ++readIdRef.current;
     try {
-      await deleteDocument(docId);
-      toast.success('已删除');
+      const data = await readDropped(docType, sourcePath);
+      if (myReadId !== readIdRef.current) return;
+      setPreview(toPreview(docType, data));
+      await refresh();
+      if (myReadId !== readIdRef.current) return;
+      toast.success('文档读取成功');
+    } catch (e) {
+      if (myReadId !== readIdRef.current) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`读取失败: ${msg}`);
       setPreview(null);
-      setPreviewingPath(null);
+    }
+  };
+
+  const handleSaveAs = async (docId: string) => {
+    try {
+      const savedPath = await saveAs(docId);
+      if (savedPath) {
+        toast.success(`已另存为 ${savedPath}`);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`删除失败: ${msg}`);
-    } finally {
-      deletingRef.current.delete(docId);
+      toast.error(`另存为失败: ${msg}`);
+    }
+  };
+
+  const handleOpen = async (docId: string) => {
+    try {
+      await open(docId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`打开失败: ${msg}`);
+    }
+  };
+
+  const handleShowInFolder = async (docId: string) => {
+    try {
+      await showInFolder(docId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`显示文件夹失败: ${msg}`);
     }
   };
 
@@ -171,13 +211,17 @@ export function Office() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left: 3 file pickers */}
+            {/* Left: 3 file pickers — click opens the dialog, drop imports
+                the dropped file. Both paths go through the hook's managed
+                import + read lifecycle. */}
             <div className="space-y-3">
               <h2 className="text-sm font-medium text-text-secondary">选择文件</h2>
               <OfficeFilePicker
                 docType="ppt"
-                onFileSelected={handlePickAndRead('ppt')}
-                disabled={!!previewingPath}
+                workspacePath={workspacePath}
+                onPick={handleImportAndRead('ppt')}
+                onDropFile={handleReadDropped('ppt')}
+                disabled={loading}
               >
                 <span className="flex items-center gap-1.5">
                   <Presentation className="w-3.5 h-3.5" /> 选择 PowerPoint
@@ -185,8 +229,10 @@ export function Office() {
               </OfficeFilePicker>
               <OfficeFilePicker
                 docType="word"
-                onFileSelected={handlePickAndRead('word')}
-                disabled={!!previewingPath}
+                workspacePath={workspacePath}
+                onPick={handleImportAndRead('word')}
+                onDropFile={handleReadDropped('word')}
+                disabled={loading}
               >
                 <span className="flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5" /> 选择 Word
@@ -194,8 +240,10 @@ export function Office() {
               </OfficeFilePicker>
               <OfficeFilePicker
                 docType="excel"
-                onFileSelected={handlePickAndRead('excel')}
-                disabled={!!previewingPath}
+                workspacePath={workspacePath}
+                onPick={handleImportAndRead('excel')}
+                onDropFile={handleReadDropped('excel')}
+                disabled={loading}
               >
                 <span className="flex items-center gap-1.5">
                   <FileSpreadsheet className="w-3.5 h-3.5" /> 选择 Excel
@@ -215,7 +263,13 @@ export function Office() {
             <h2 className="text-sm font-medium text-text-secondary mb-3">
               历史记录 ({documents.length})
             </h2>
-            <OfficeDocumentList documents={documents} loading={loading} onDelete={handleDelete} />
+            <OfficeDocumentList
+              documents={documents}
+              loading={loading}
+              onSaveAs={handleSaveAs}
+              onOpen={handleOpen}
+              onShowInFolder={handleShowInFolder}
+            />
           </div>
 
           {/* Generate form (Phase 1.4) */}
