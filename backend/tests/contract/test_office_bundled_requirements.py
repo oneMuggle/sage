@@ -66,9 +66,7 @@ def test_bundled_requirements_include_office_runtime_packages() -> None:
     text = _BUNDLED_REQ.read_text(encoding="utf-8")
     lines = text.splitlines()
     for distribution in REQUIRED:
-        assert any(
-            line.startswith(distribution + "==") for line in lines
-        ), (
+        assert any(line.startswith(distribution + "==") for line in lines), (
             f"{distribution} is missing from backend/requirements-bundled.txt; "
             f"the Windows NSIS installer would ship without it and "
             f"`import {REQUIRED[distribution]}` would fail at startup."
@@ -94,9 +92,7 @@ def test_bundled_office_versions_match_requirements_txt() -> None:
             f"{distribution} is present in requirements.txt but missing "
             f"from requirements-bundled.txt."
         )
-        assert (
-            bundled_versions[distribution] == requirements_versions[distribution]
-        ), (
+        assert bundled_versions[distribution] == requirements_versions[distribution], (
             f"Version drift for {distribution}: "
             f"requirements.txt has {requirements_versions[distribution]!r} "
             f"but requirements-bundled.txt has {bundled_versions[distribution]!r}. "

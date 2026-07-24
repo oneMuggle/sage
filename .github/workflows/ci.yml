@@ -255,6 +255,15 @@ jobs:
       # itself still does the heavier `import backend.main` canary in
       # scripts/bundle-python-main.ps1 — this lightweight guardrail is in
       # addition, not a replacement.
+      # NB: path_safety transitively imports backend.office.models which
+      # depends on pydantic. The canary is "almost-stdlib" — it needs
+      # pydantic installed in the runner Python. Install it once before
+      # invoking the script.
+      - name: Install canary dependency (pydantic, Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: python -m pip install --quiet pydantic
+
       - name: Verify Office path safety (stdlib canary, Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
