@@ -109,6 +109,14 @@ export interface OfficeElectronApiBridge {
   completeOfficeImport: (importToken: string) => Promise<void>;
   /** Discard an import; the staged file is deleted. Idempotent on unknown tokens. */
   discardOfficeImport: (importToken: string) => Promise<void>;
+  /**
+   * Sweep orphan staging directories not present in `knownDocIds`.
+   * Returns the count of directories removed.
+   */
+  sweepOrphanStaging: (opts: {
+    workspacePath: string;
+    knownDocIds: string[];
+  }) => Promise<{ swept: number }>;
   /** Native Save As dialog → copy managed→chosen path. Returns null on cancel. */
   saveOfficeDocumentAs: (ref: OfficeManagedRef) => Promise<SavedOfficeFile | null>;
   /** shell.openPath on the validated managed file. Throws on shell error string. */

@@ -158,6 +158,8 @@ const electronAPI = {
       ipcRenderer.invoke('office:complete-import', { importToken }) as Promise<void>,
     discardOfficeImport: (importToken: string) =>
       ipcRenderer.invoke('office:discard-import', { importToken }) as Promise<void>,
+    sweepOrphanStaging: (opts: { workspacePath: string; knownDocIds: string[] }) =>
+      ipcRenderer.invoke('office:sweep-orphan-staging', opts) as Promise<{ swept: number }>,
     saveOfficeDocumentAs: (ref: OfficeManagedRef) =>
       ipcRenderer.invoke('office:save-as', ref) as Promise<SavedOfficeFile | null>,
     openOfficeDocument: (ref: OfficeManagedRef) =>
