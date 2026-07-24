@@ -209,17 +209,11 @@ Integration (`src/features/office/__tests__/useOfficeDocuments.test.ts`):
 - **No startup-time cross-workspace sweep.** Lazy trigger is
   sufficient; a startup scan would require a workspace registry and
   adds complexity for marginal benefit.
-- **No change to `completeOfficeImport` semantics.** Completed
-  imports keep the staging dir (now under `.pending/`) — but only
-  transiently; the renderer immediately triggers a workspace
-  document refresh, which does not write into `.pending/`. The
-  staging dir's contents become the managed dir when the document is
-  refreshed? No — actually, on success, the renderer reads from the
-  managed file and the staging dir is retained (same content). The
-  next sweep removes it. **This needs re-checking against the actual
-  completeOfficeImport behavior.** If the staging dir is meant to
-  become the managed dir (renamed, not deleted), the sweep must NOT
-  delete it. See **Open question** below.
+- **No change to `completeOfficeImport` semantics.** This design does
+  not modify how completion flows work; it only adds cleanup on
+  workspace entry. Whether `completeOfficeImport` keeps the staging
+  dir in place or renames it to the managed dir is a separate
+  concern — see **Open question** below.
 
 ## Open question
 
