@@ -150,8 +150,28 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
   it('calls listDocuments then sweepOrphanStaging with the same workspace and known ids', async () => {
     mockListDocuments.mockResolvedValue({
       documents: [
-        { id: 'doc-a', workspace_path: '/tmp/ws', doc_type: 'ppt', original_filename: 'a.pptx', generated_filename: 'a.pptx', status: 'parsed', created_at: 0, updated_at: 0, metadata: { file_size_bytes: 1 } },
-        { id: 'doc-b', workspace_path: '/tmp/ws', doc_type: 'word', original_filename: 'b.docx', generated_filename: 'b.docx', status: 'parsed', created_at: 0, updated_at: 0, metadata: { file_size_bytes: 1 } },
+        {
+          id: 'doc-a',
+          workspace_path: '/tmp/ws',
+          doc_type: 'ppt',
+          original_filename: 'a.pptx',
+          generated_filename: 'a.pptx',
+          status: 'parsed',
+          created_at: 0,
+          updated_at: 0,
+          metadata: { file_size_bytes: 1 },
+        },
+        {
+          id: 'doc-b',
+          workspace_path: '/tmp/ws',
+          doc_type: 'word',
+          original_filename: 'b.docx',
+          generated_filename: 'b.docx',
+          status: 'parsed',
+          created_at: 0,
+          updated_at: 0,
+          metadata: { file_size_bytes: 1 },
+        },
       ],
     });
     mockSweepOrphanStaging.mockResolvedValue({ swept: 0 });
@@ -182,7 +202,17 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
   it('surfaces sweep failure without losing the documents list', async () => {
     mockListDocuments.mockResolvedValue({
       documents: [
-        { id: 'doc-x', workspace_path: '/tmp/ws', doc_type: 'ppt', original_filename: 'x.pptx', generated_filename: 'x.pptx', status: 'parsed', created_at: 0, updated_at: 0, metadata: { file_size_bytes: 1 } },
+        {
+          id: 'doc-x',
+          workspace_path: '/tmp/ws',
+          doc_type: 'ppt',
+          original_filename: 'x.pptx',
+          generated_filename: 'x.pptx',
+          status: 'parsed',
+          created_at: 0,
+          updated_at: 0,
+          metadata: { file_size_bytes: 1 },
+        },
       ],
     });
     mockSweepOrphanStaging.mockRejectedValue(new Error('rm failed'));
@@ -209,10 +239,9 @@ describe('useOfficeDocuments — workspace entry sweep', () => {
       .mockImplementationOnce(() => new Promise(() => undefined));
     mockSweepOrphanStaging.mockResolvedValue({ swept: 0 });
 
-    const { result, rerender } = renderHook(
-      ({ ws }) => useOfficeDocuments(ws),
-      { initialProps: { ws: '/tmp/first' } },
-    );
+    const { result, rerender } = renderHook(({ ws }) => useOfficeDocuments(ws), {
+      initialProps: { ws: '/tmp/first' },
+    });
     rerender({ ws: '/tmp/second' });
     resolveFirstList!({ documents: [] });
     await waitFor(() => {
