@@ -103,10 +103,47 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     }
   }, [workspacePath]);
 
-  // Auto-refresh when workspacePath changes
+  // Workspace entry: list first, then sweep with the known id set.
+  // Cancellation guard prevents a stale resolution from a prior
+  // workspace from clobbering the new workspace's documents.
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (!workspacePath) {
+      setDocuments([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const { documents } = await officeApi.listDocuments(workspacePath);
+        if (cancelled) return;
+        setDocuments(documents);
+        // Best-effort: a sweep failure surfaces via setError but does
+        // not undo the documents we just listed.
+        try {
+          await window.electronAPI?.office.sweepOrphanStaging({
+            workspacePath,
+            knownDocIds: documents.map((d) => d.id),
+          });
+        } catch (sweepErr) {
+          if (cancelled) return;
+          setError(sweepErr instanceof Error ? sweepErr.message : String(sweepErr));
+        }
+      } catch (listErr) {
+        if (cancelled) return;
+        setError(listErr instanceof Error ? listErr.message : String(listErr));
+        setDocuments([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspacePath]);
 
   const findDocument = useCallback(
     (docId: string) => documents.find((d) => d.id === docId),

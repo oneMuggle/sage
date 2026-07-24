@@ -30,6 +30,7 @@ import { useOfficeDocuments } from '../useOfficeDocuments';
 const mockPickAndImport = vi.fn();
 const mockCompleteImport = vi.fn();
 const mockDiscardImport = vi.fn();
+const mockSweepOrphanStaging = vi.fn();
 
 interface FakeWindow {
   electronAPI?: {
@@ -37,6 +38,7 @@ interface FakeWindow {
       pickAndImportOfficeFile: typeof mockPickAndImport;
       completeOfficeImport: typeof mockCompleteImport;
       discardOfficeImport: typeof mockDiscardImport;
+      sweepOrphanStaging: typeof mockSweepOrphanStaging;
     };
   };
 }
@@ -58,14 +60,17 @@ beforeEach(() => {
   mockPickAndImport.mockReset();
   mockCompleteImport.mockReset();
   mockDiscardImport.mockReset();
+  mockSweepOrphanStaging.mockReset();
   mockListDocuments.mockResolvedValue({ documents: [] });
   mockCompleteImport.mockResolvedValue(undefined);
   mockDiscardImport.mockResolvedValue(undefined);
+  mockSweepOrphanStaging.mockResolvedValue({ swept: 0 });
   (window as unknown as FakeWindow).electronAPI = {
     office: {
       pickAndImportOfficeFile: mockPickAndImport,
       completeOfficeImport: mockCompleteImport,
       discardOfficeImport: mockDiscardImport,
+      sweepOrphanStaging: mockSweepOrphanStaging,
     },
   };
 });
@@ -138,5 +143,81 @@ describe('useOfficeDocuments — importAndRead token lifecycle', () => {
     expect(mockReadPpt).not.toHaveBeenCalled();
     expect(mockCompleteImport).not.toHaveBeenCalled();
     expect(mockDiscardImport).not.toHaveBeenCalled();
+  });
+});
+
+describe('useOfficeDocuments — workspace entry sweep', () => {
+  it('calls listDocuments then sweepOrphanStaging with the same workspace and known ids', async () => {
+    mockListDocuments.mockResolvedValue({
+      documents: [
+        { id: 'doc-a', workspace_path: '/tmp/ws', doc_type: 'ppt', original_filename: 'a.pptx', generated_filename: 'a.pptx', status: 'parsed', created_at: 0, updated_at: 0, metadata: { file_size_bytes: 1 } },
+        { id: 'doc-b', workspace_path: '/tmp/ws', doc_type: 'word', original_filename: 'b.docx', generated_filename: 'b.docx', status: 'parsed', created_at: 0, updated_at: 0, metadata: { file_size_bytes: 1 } },
+      ],
+    });
+    mockSweepOrphanStaging.mockResolvedValue({ swept: 0 });
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+
+    await waitFor(() => {
+      expect(result.current.documents).toHaveLength(2);
+    });
+    expect(mockListDocuments).toHaveBeenCalledWith('/tmp/ws');
+    expect(mockSweepOrphanStaging).toHaveBeenCalledWith({
+      workspacePath: '/tmp/ws',
+      knownDocIds: ['doc-a', 'doc-b'],
+    });
+  });
+
+  it('skips sweep when listDocuments rejects (no known ids to gate on)', async () => {
+    mockListDocuments.mockRejectedValue(new Error('backend down'));
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+
+    await waitFor(() => {
+      expect(result.current.error).toMatch(/backend down/);
+    });
+    expect(mockSweepOrphanStaging).not.toHaveBeenCalled();
+  });
+
+  it('surfaces sweep failure without losing the documents list', async () => {
+    mockListDocuments.mockResolvedValue({
+      documents: [
+        { id: 'doc-x', workspace_path: '/tmp/ws', doc_type: 'ppt', original_filename: 'x.pptx', generated_filename: 'x.pptx', status: 'parsed', created_at: 0, updated_at: 0, metadata: { file_size_bytes: 1 } },
+      ],
+    });
+    mockSweepOrphanStaging.mockRejectedValue(new Error('rm failed'));
+
+    const { result } = renderHook(() => useOfficeDocuments('/tmp/ws'));
+
+    await waitFor(() => {
+      expect(result.current.documents).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(result.current.error).toMatch(/rm failed/);
+    });
+  });
+
+  it('does not setDocuments on an unmounted hook when workspace changes mid-flight', async () => {
+    let resolveFirstList: ((v: { documents: unknown[] }) => void) | null = null;
+    mockListDocuments
+      .mockImplementationOnce(
+        () =>
+          new Promise((res) => {
+            resolveFirstList = res;
+          }),
+      )
+      .mockImplementationOnce(() => new Promise(() => undefined));
+    mockSweepOrphanStaging.mockResolvedValue({ swept: 0 });
+
+    const { result, rerender } = renderHook(
+      ({ ws }) => useOfficeDocuments(ws),
+      { initialProps: { ws: '/tmp/first' } },
+    );
+    rerender({ ws: '/tmp/second' });
+    resolveFirstList!({ documents: [] });
+    await waitFor(() => {
+      expect(result.current.documents).toEqual([]);
+    });
+    expect(mockSweepOrphanStaging).not.toHaveBeenCalled();
   });
 });
