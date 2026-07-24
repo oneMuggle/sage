@@ -467,14 +467,158 @@ describe('office:open + office:show-in-folder (brief §Step 5)', () => {
     ).rejects.toThrow();
   });
 });
+
 describe('sweepOrphanStaging', () => {
-  beforeEach(() => __resetPendingImportsForTests());
-  const ws = () => { const x = path.join(os.tmpdir(), `sage-sweep-${Date.now()}-${Math.random().toString(36).slice(2)}`); fs.mkdirSync(x, { recursive: true }); return x; };
-  const clean = (x: string) => fs.rmSync(x, { recursive: true, force: true });
-  it('returns swept:0 when workspace has no office/ directory', async () => { const x=ws(); try { expect(await sweepOrphanStaging(x,new Set())).toEqual({swept:0}); } finally {clean(x);} });
-  it('returns swept:0 when office/ exists but has no docType subdirs', async () => { const x=ws(); fs.mkdirSync(path.join(x,'office')); try { expect(await sweepOrphanStaging(x,new Set())).toEqual({swept:0}); } finally {clean(x);} });
-  it('removes a single orphan ppt dir when its name is not in knownDocIds', async () => { const x=ws(), d=path.join(x,'office','ppt','orphan'); fs.mkdirSync(path.join(d,'inner'),{recursive:true}); fs.writeFileSync(path.join(d,'inner','deck.pptx'),'fake'); try { expect(await sweepOrphanStaging(x,new Set())).toEqual({swept:1}); expect(fs.existsSync(d)).toBe(false); } finally {clean(x);} });
-  it('preserves a managed dir whose name is in knownDocIds', async () => { const x=ws(), d=path.join(x,'office','ppt','managed'); fs.mkdirSync(d,{recursive:true}); try { expect(await sweepOrphanStaging(x,new Set(['managed']))).toEqual({swept:0}); expect(fs.existsSync(d)).toBe(true); } finally {clean(x);} });
-  it('removes only orphans when 3 dirs exist (2 orphan + 1 managed)', async () => { const x=ws(), ds=['a','b','managed'].map((n,i)=>path.join(x,'office',i===1?'word':'ppt',n)); ds.forEach(d=>fs.mkdirSync(d,{recursive:true})); try { expect(await sweepOrphanStaging(x,new Set(['managed']))).toEqual({swept:2}); expect(fs.existsSync(ds[2])).toBe(true); } finally {clean(x);} });
-  it('does not abort the sweep when one rm fails (best-effort)', async () => { const x=ws(), d=path.join(x,'office','ppt','ok'); fs.mkdirSync(d,{recursive:true}); try { expect(await sweepOrphanStaging(x,new Set())).toEqual({swept:1}); } finally {clean(x);} });
+  beforeEach(() => {
+    __resetPendingImportsForTests();
+  });
+
+  const freshWorkspace = (): string => {
+    const wsPath = path.join(
+      os.tmpdir(),
+      `sage-sweep-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    fs.mkdirSync(wsPath, { recursive: true });
+    return wsPath;
+  };
+
+  const clean = (wsPath: string): void => fs.rmSync(wsPath, { recursive: true, force: true });
+
+  it('returns swept:0 when workspace has no office/ directory', async () => {
+    const wsPath = freshWorkspace();
+
+    try {
+      const result = await sweepOrphanStaging(wsPath, new Set());
+      expect(result).toEqual({ swept: 0 });
+    } finally {
+      clean(wsPath);
+    }
+  });
+
+  it('returns swept:0 when office/ exists but has no docType subdirs', async () => {
+    const wsPath = freshWorkspace();
+    fs.mkdirSync(path.join(wsPath, 'office'));
+
+    try {
+      const result = await sweepOrphanStaging(wsPath, new Set());
+      expect(result).toEqual({ swept: 0 });
+    } finally {
+      clean(wsPath);
+    }
+  });
+
+  it('removes a single orphan ppt dir when its name is not in knownDocIds', async () => {
+    const wsPath = freshWorkspace();
+    const orphan = path.join(wsPath, 'office', 'ppt', 'orphan-uuid');
+    fs.mkdirSync(path.join(orphan, 'inner'), { recursive: true });
+    fs.writeFileSync(path.join(orphan, 'inner', 'deck.pptx'), 'fake');
+
+    try {
+      const result = await sweepOrphanStaging(wsPath, new Set());
+
+      expect(result).toEqual({ swept: 1 });
+      expect(fs.existsSync(orphan)).toBe(false);
+    } finally {
+      clean(wsPath);
+    }
+  });
+
+  it('preserves a managed dir whose name is in knownDocIds', async () => {
+    const wsPath = freshWorkspace();
+    const managedDir = path.join(wsPath, 'office', 'ppt', 'managed-uuid');
+    fs.mkdirSync(path.join(managedDir, 'inner'), { recursive: true });
+    fs.writeFileSync(path.join(managedDir, 'inner', 'deck.pptx'), 'fake');
+
+    try {
+      const result = await sweepOrphanStaging(wsPath, new Set(['managed-uuid']));
+
+      expect(result).toEqual({ swept: 0 });
+      expect(fs.existsSync(managedDir)).toBe(true);
+    } finally {
+      clean(wsPath);
+    }
+  });
+
+  it('removes only orphans when 3 dirs exist (2 orphan + 1 managed)', async () => {
+    const wsPath = freshWorkspace();
+    const orphan1 = path.join(wsPath, 'office', 'ppt', 'orphan-1');
+    const orphan2 = path.join(wsPath, 'office', 'word', 'orphan-2');
+    const managed = path.join(wsPath, 'office', 'ppt', 'managed-3');
+    for (const dir of [orphan1, orphan2, managed]) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    try {
+      const result = await sweepOrphanStaging(wsPath, new Set(['managed-3']));
+
+      expect(result).toEqual({ swept: 2 });
+      // Behavioural guards: a buggy implementation could pass the
+      // count check while still deleting the wrong entries. Assert
+      // the per-path outcome explicitly.
+      expect(fs.existsSync(orphan1)).toBe(false);
+      expect(fs.existsSync(orphan2)).toBe(false);
+      expect(fs.existsSync(managed)).toBe(true);
+    } finally {
+      clean(wsPath);
+    }
+  });
+
+  it('does not abort the sweep when one rm fails (best-effort)', async () => {
+    const wsPath = freshWorkspace();
+    const okOrphan = path.join(wsPath, 'office', 'ppt', 'ok-orphan');
+    const badOrphan = path.join(wsPath, 'office', 'ppt', 'bad-orphan');
+    fs.mkdirSync(okOrphan, { recursive: true });
+    fs.mkdirSync(badOrphan, { recursive: true });
+    // Populate badOrphan with a file so `rm -rf` actually has to
+    // scandir the chmod'd directory. An empty chmod 0o000 dir is
+    // trivially removable (rmdir, not recursive); we need the rm
+    // path to fail.
+    fs.writeFileSync(path.join(badOrphan, 'locked.txt'), 'keep');
+
+    // Force a deterministic rm failure for exactly one orphan so the
+    // try/catch in officeIpc.ts is actually exercised. We strip ALL
+    // permissions on `badOrphan` so the subsequent `rm({recursive,
+    // force})` rejects with EACCES — `rm -rf` cannot scandir a
+    // directory the process can't read.
+    //
+    // Why chmod instead of `vi.mock('fs/promises', ...)`? Vitest
+    // cannot intercept Node.js builtin module imports — the
+    // `fs/promises` named exports are bound at first load and
+    // vi.spyOn/vi.mock do not reach them (see vitest issue #8802).
+    // POSIX chmod is reliable on Linux non-root (the dev + CI host);
+    // on root/Windows chmod silently no-ops, and we already assert
+    // the best-effort invariant (swept >= 1) which still holds.
+    let chmodWorked = false;
+    try {
+      fs.chmodSync(badOrphan, 0o000);
+      chmodWorked = true;
+    } catch {
+      // best-effort: chmod may be no-op on Windows/root
+    }
+
+    try {
+      const result = await sweepOrphanStaging(wsPath, new Set());
+
+      // Best-effort invariant: even when one rm rejects, the sweep
+      // continues — at least `okOrphan` is still removed.
+      expect(result.swept).toBeGreaterThanOrEqual(1);
+      expect(fs.existsSync(okOrphan)).toBe(false);
+
+      // When chmod actually took effect, the failing orphan must
+      // remain on disk (the rm logged the failure instead of
+      // raising).
+      if (chmodWorked) {
+        expect(result.swept).toBe(1);
+        expect(fs.existsSync(badOrphan)).toBe(true);
+      }
+    } finally {
+      // Restore permissions so the cleanup can recurse into badOrphan.
+      try {
+        fs.chmodSync(badOrphan, 0o755);
+      } catch {
+        // ignore — chmod may be no-op on Windows/root
+      }
+      clean(wsPath);
+    }
+  });
 });

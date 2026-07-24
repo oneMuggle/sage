@@ -217,6 +217,18 @@ export async function sweepOrphanStaging(
     for (const dirName of await readdir(typeDir)) {
       if (knownDocIds.has(dirName)) continue;
       const orphanPath = path.join(typeDir, dirName);
+      // Skip non-directories: a stray file directly under
+      // <office>/<docType>/ would otherwise be rm'd and counted as
+      // a swept orphan, inflating `swept`. Keep candidates to actual
+      // directories only.
+      try {
+        if (!statSync(orphanPath).isDirectory()) continue;
+      } catch {
+        // raced with another process, or disappeared between readdir
+        // and stat — skip silently (best-effort behaviour matches the
+        // outer sweep)
+        continue;
+      }
       try {
         await rm(orphanPath, { recursive: true, force: true });
         swept += 1;
