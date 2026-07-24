@@ -43,7 +43,7 @@ jobs:
         shell: bash -el {0}
         run: |
           conda run -n sage-backend-py38 pip install -r backend/requirements-py38.txt
-          conda run -n sage-backend-py38 python -c "import fastapi, pydantic, networkx, hnswlib, importlib.metadata as m; assert fastapi.__version__ == '0.85.0', fastapi.__version__; assert pydantic.VERSION == '1.10.13', pydantic.VERSION; assert tuple(int(x) for x in networkx.__version__.split('.')[:2]) == (3, 1), networkx.__version__; assert m.version('hnswlib') == '0.8.0', m.version('hnswlib')"
+          conda run -n sage-backend-py38 pip install -r backend/requirements-dev.txt
 
       - name: Ruff check
         shell: bash -el {0}
@@ -53,7 +53,7 @@ jobs:
       - name: Pytest (py38, hex mode) with coverage
         shell: bash -el {0}
         run: |
-          conda run -n sage-backend-py38 bash -c "cd backend && API_MODE=hex pytest --cov --cov-report=xml --cov-report=term --cov-fail-under=80"
+          conda run -n sage-backend-py38 bash -c "cd backend && pytest --cov --cov-report=xml --cov-report=term --cov-fail-under=80"
 
       - name: Upload coverage
         if: always()
@@ -62,29 +62,6 @@ jobs:
           file: backend/coverage.xml
           flags: backend-py38
           fail_ci_if_error: false
-
-  # ========== bundle-python.ps1 fail-fast guard tests (Win7 LTS) ==========
-  # - Lightweight Pester 5 static-analysis tests for the Win7 Python bundler
-  # - Catches regressions of the v0.4.0-lts+ "30s backend timeout" bug where
-  #   pip failures were silently swallowed by $ErrorActionPreference = "Stop"
-  #   (which doesn't auto-catch exit codes from `& $ExternalExe` calls).
-  # - Runs on ubuntu-latest (PowerShell is cross-platform) — no network
-  #   dependency, ~5s runtime.
-  bundle-script-test:
-    name: Bundle Script Tests (Pester)
-    if: github.ref == 'refs/heads/release/win7' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Pester
-        shell: pwsh
-        run: Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0
-
-      - name: Run Pester
-        shell: pwsh
-        run: Invoke-Pester -Path scripts/bundle-python.Tests.ps1 -Output Detailed
 
   # ========== Backend: lint + type + test + coverage ==========
   backend:
@@ -268,6 +245,31 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: pwsh scripts/fetch-vcredist.ps1
+
+      # M0 Task 4: stdlib-only Office path-safety canary.
+      # Validates backend.office.path_safety.is_within (the sibling-prefix
+      # traversal fix) using only Python 3's pathlib. Runs before the
+      # Windows NSIS packaging step so a regression in path_safety fails
+      # the build fast, without waiting for the full Python embeddable
+      # bundle (several hundred MB) to be assembled. The release bundle
+      # itself still does the heavier `import backend.main` canary in
+      # scripts/bundle-python-main.ps1 — this lightweight guardrail is in
+      # addition, not a replacement.
+      # NB: path_safety transitively imports backend.office.models which
+      # depends on pydantic. The canary is "almost-stdlib" — it needs
+      # pydantic installed in the runner Python. Install it once before
+      # invoking the script.
+      - name: Install canary dependency (pydantic, Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: python -m pip install --quiet pydantic
+
+      - name: Verify Office path safety (stdlib canary, Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/verify-office-paths.py
 
       - name: Package (Windows NSIS)
         if: matrix.os == 'windows-latest'

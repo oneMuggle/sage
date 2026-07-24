@@ -1,0 +1,312 @@
+"""Office document Pydantic models.
+
+Defines request/response models for the office API. All models are Pydantic v2
+to match FastAPI 0.109 + pydantic 2.5 already pinned in requirements.txt.
+
+Frontend IPC contracts (in src/shared/api/types.ts) MUST stay in sync with
+the response shapes defined here.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class OfficeDocType(str, Enum):
+    """Document type discriminator."""
+
+    PPT = "ppt"
+    WORD = "word"
+    EXCEL = "excel"
+
+
+class OfficeDocStatus(str, Enum):
+    """Lifecycle status of an office document in the workspace."""
+
+    PARSED = "parsed"  # read from an uploaded user file
+    GENERATED = "generated"  # created from scratch via the generator
+    EDITED = "edited"  # read + modified + saved as new file
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Metadata
+# ──────────────────────────────────────────────────────────────────────
+
+
+class OfficeDocumentMetadata(BaseModel):
+    """Per-document metadata captured at read/generate time."""
+
+    class Config:
+        extra = "forbid"
+
+    page_count: Optional[int] = Field(
+        default=None, description="Slide count (PPT) or page count (Word)"
+    )
+    sheet_count: Optional[int] = Field(default=None, description="Sheet count (Excel)")
+    paragraph_count: Optional[int] = Field(default=None, description="Paragraph count (Word)")
+    table_count: Optional[int] = Field(default=None, description="Table count (Word/PPT)")
+    file_size_bytes: int = Field(ge=0, description="Output file size in bytes")
+
+
+class OfficeDocumentSummary(BaseModel):
+    """Compact document record — used in list API and as a sub-field in read results."""
+
+    class Config:
+        extra = "forbid"
+
+    id: str = Field(description="UUIDv4 assigned by storage layer")
+    workspace_path: str = Field(description="Absolute path to the user's workspace dir")
+    doc_type: OfficeDocType
+    original_filename: Optional[str] = Field(
+        default=None, description="User's uploaded filename (None when generated from scratch)"
+    )
+    generated_filename: str = Field(description="On-disk filename in workspace/office/<id>/")
+    status: OfficeDocStatus
+    created_at: int = Field(description="Unix timestamp in milliseconds")
+    updated_at: int = Field(description="Unix timestamp in milliseconds")
+    metadata: OfficeDocumentMetadata
+    # M0 Task 3: nullable lineage + soft-delete columns. Both default to
+    # ``None`` so Phase 1.2 callers (which only know status + paths) keep
+    # working without supplying the extra fields.
+    derived_from: Optional[str] = Field(
+        default=None,
+        description=(
+            "Source document id for edited/copied documents. NULL when this row "
+            "is a fresh read or generation with no upstream parent."
+        ),
+    )
+    archived_at: Optional[int] = Field(
+        default=None,
+        description=(
+            "Unix timestamp (ms) when the document was soft-deleted. When set, "
+            "list_documents(include_archived=False) hides the row."
+        ),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Read results — content extracted from a file
+# ──────────────────────────────────────────────────────────────────────
+
+
+class PptSlideContent(BaseModel):
+    """One PPT slide's extracted content."""
+
+    class Config:
+        extra = "forbid"
+
+    index: int = Field(ge=0)
+    title: Optional[str] = None
+    text_blocks: List[str] = Field(default_factory=list)
+    table_count: int = Field(ge=0, default=0)
+    image_count: int = Field(ge=0, default=0)
+    notes: Optional[str] = None
+
+
+class OfficePptReadResult(BaseModel):
+    """Result of POST /api/v1/office/ppt/read."""
+
+    class Config:
+        extra = "forbid"
+
+    summary: OfficeDocumentSummary
+    slides: List[PptSlideContent]
+
+
+class WordParagraphContent(BaseModel):
+    """One Word paragraph."""
+
+    class Config:
+        extra = "forbid"
+
+    style: str = Field(description="Paragraph style name, e.g. 'Normal', 'Heading 1'")
+    text: str
+    level: int = Field(ge=0, description="Heading level (0 for body text)")
+
+
+class WordTableContent(BaseModel):
+    """One Word table."""
+
+    class Config:
+        extra = "forbid"
+
+    rows: List[List[str]]
+
+
+class OfficeWordReadResult(BaseModel):
+    """Result of POST /api/v1/office/word/read."""
+
+    class Config:
+        extra = "forbid"
+
+    summary: OfficeDocumentSummary
+    paragraphs: List[WordParagraphContent]
+    tables: List[WordTableContent]
+    images: int = Field(ge=0, default=0)
+
+
+class ExcelSheetContent(BaseModel):
+    """One Excel sheet."""
+
+    class Config:
+        extra = "forbid"
+
+    name: str
+    rows: List[List[str]]
+    max_row: int = Field(ge=0)
+    max_col: int = Field(ge=0)
+
+
+class OfficeExcelReadResult(BaseModel):
+    """Result of POST /api/v1/office/excel/read."""
+
+    class Config:
+        extra = "forbid"
+
+    summary: OfficeDocumentSummary
+    sheets: List[ExcelSheetContent]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Read requests
+# ──────────────────────────────────────────────────────────────────────
+
+
+class OfficeReadRequest(BaseModel):
+    """Common shape for all three read endpoints."""
+
+    class Config:
+        extra = "forbid"
+
+    workspace_path: str = Field(description="Absolute path to the workspace dir")
+    file_path: str = Field(description="Absolute path to the .pptx/.docx/.xlsx file to read")
+    # Optional size limit for early rejection. Default 50MB per plan §6 R1.
+    max_size_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
+    )
+    # M0 Task 3: optional original (uploaded) filename. When the caller has
+    # already imported an external file into the managed directory this is
+    # the user-visible name; ``None`` keeps the Phase 1.2 contract for
+    # back-compat with tests and existing IPC callers that don't track it.
+    original_filename: Optional[str] = Field(
+        default=None,
+        description=(
+            "User's original filename (before managed import). When None the "
+            "summary's original_filename column stays NULL."
+        ),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Generate requests
+# ──────────────────────────────────────────────────────────────────────
+
+
+class PptSlideSpec(BaseModel):
+    """One slide to generate in a PPT."""
+
+    class Config:
+        extra = "forbid"
+
+    title: str = Field(min_length=1, max_length=200)
+    bullets: List[str] = Field(default_factory=list, max_items=20)
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+class OfficePptGenerateRequest(BaseModel):
+    """POST /api/v1/office/ppt/generate."""
+
+    class Config:
+        extra = "forbid"
+
+    workspace_path: str
+    filename: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Output filename (without .pptx extension is OK; we'll add it)",
+    )
+    slides: List[PptSlideSpec] = Field(min_items=1, max_items=100)
+    template: Optional[str] = Field(default=None, description="'default' | 'minimal'")
+
+
+class WordParagraphSpec(BaseModel):
+    """One paragraph in a generated Word document."""
+
+    class Config:
+        extra = "forbid"
+
+    heading: Optional[str] = Field(default=None, description="'h1' | 'h2' | 'h3' or None")
+    text: str = Field(min_length=1, max_length=10000)
+
+
+class WordTableSpec(BaseModel):
+    """One table in a generated Word document."""
+
+    class Config:
+        extra = "forbid"
+
+    headers: List[str] = Field(min_items=1, max_items=50)
+    rows: List[List[str]] = Field(default_factory=list, max_items=1000)
+
+
+class OfficeWordGenerateRequest(BaseModel):
+    """POST /api/v1/office/word/generate."""
+
+    class Config:
+        extra = "forbid"
+
+    workspace_path: str
+    filename: str = Field(min_length=1, max_length=200)
+    title: str = Field(min_length=1, max_length=200)
+    paragraphs: List[WordParagraphSpec] = Field(default_factory=list, max_items=5000)
+    tables: List[WordTableSpec] = Field(default_factory=list, max_items=100)
+
+
+class ExcelSheetSpec(BaseModel):
+    """One sheet in a generated Excel workbook."""
+
+    class Config:
+        extra = "forbid"
+
+    name: str = Field(min_length=1, max_length=31, description="Excel sheet name max length")
+    headers: List[str] = Field(default_factory=list, max_items=100)
+    rows: List[List[str]] = Field(default_factory=list, max_items=10000)
+
+
+class OfficeExcelGenerateRequest(BaseModel):
+    """POST /api/v1/office/excel/generate."""
+
+    class Config:
+        extra = "forbid"
+
+    workspace_path: str
+    filename: str = Field(min_length=1, max_length=200)
+    sheets: List[ExcelSheetSpec] = Field(min_items=1, max_items=50)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# List / delete endpoints
+# ──────────────────────────────────────────────────────────────────────
+
+
+class OfficeDocumentListResponse(BaseModel):
+    """GET /api/v1/office/documents."""
+
+    class Config:
+        extra = "forbid"
+
+    documents: List[OfficeDocumentSummary]
+    total: int = Field(ge=0)
+
+
+class OfficeDeleteResponse(BaseModel):
+    """DELETE /api/v1/office/documents/{id}."""
+
+    class Config:
+        extra = "forbid"
+
+    id: str
+    deleted: bool
