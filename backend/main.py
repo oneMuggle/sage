@@ -22,6 +22,10 @@ from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
+from backend.api.office_routes import (
+    register_office_exception_handlers,
+    router as office_router,
+)
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
@@ -151,7 +155,16 @@ async def lifespan(app: FastAPI):
     # Phase 8: scheduled tasks service — load JSON, start APScheduler
     from pathlib import Path
 
-    store_path = Path("backend/data/scheduled_tasks.json")
+    # Persist scheduled tasks JSON under SAGE_USER_DATA_DIR (per-user writable)
+    # rather than the bundled resources/backend/data/, which is system-protected
+    # under C:\Program Files\Sage and raised PermissionError on first write.
+    # Falls back to <cwd>/backend/data/scheduled_tasks.json for `npm run
+    # electron:dev` where SAGE_USER_DATA_DIR isn't injected.
+    user_data_dir = os.environ.get("SAGE_USER_DATA_DIR")
+    if user_data_dir:
+        store_path = Path(user_data_dir) / "scheduled_tasks.json"
+    else:
+        store_path = Path("backend/data/scheduled_tasks.json")
     scheduler_service = init_scheduler_service(
         store_path=store_path,
         message_repo=MessageRepository(),
@@ -326,6 +339,8 @@ async def add_request_id_header(request: Request, call_next):
 # 跟踪 issue/PR 见 docs/plans/2026-06-13_full-quality-optimization-v2.md。
 app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
+app.include_router(office_router, prefix="/api/v1")
+register_office_exception_handlers(app)
 app.include_router(build_orchestration_router(), prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")

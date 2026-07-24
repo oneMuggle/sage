@@ -20,7 +20,7 @@ httpx==0.26.0
 python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
 
 # Observability
-prometheus-client==0.21.1
+prometheus-client==0.21.1  # 0.25.0 yanked from PyPI; pin to the prior LTS-tested version
 
 # Tracing
 opentelemetry-api==1.27.0
@@ -31,7 +31,15 @@ opentelemetry-exporter-otlp-proto-grpc==1.27.0
 python-dotenv==1.0.0
 pyyaml==6.0.1
 croniter==2.0.1
-networkx>=3.1,<3.2
+networkx<3.2,>=3.1  # win7 LTS only has 3.1; 3.2 yanked
+
+# numpy is required as a build-time dep by:
+#   - hnswlib (PEP 517 build_meta imports numpy unconditionally — fails without it)
+#   - networkx (transitive runtime dep)
+# Pin to <2 because hnswlib 0.8.x's compiled wheels target numpy 1.x ABI;
+# numpy 2.0+ ships an incompatible C-API that crashes hnswlib at import.
+# Pinned here to match the bundled Python 3.11 (see scripts/bundle-python-main.ps1).
+numpy>=1.24,<2
 
 # MCP (Model Context Protocol) - 可选依赖
 # 与 httpx==0.26.0 存在 starlette 版本冲突，需要 mcp 时手动安装：
@@ -43,3 +51,13 @@ hnswlib>=0.8.0
 
 # Scheduled tasks (Phase 8)
 apscheduler==3.10.4
+
+# Office document features (Phase 1, 2026-07-16)
+# Pure-Python libraries; support Python 3.8+ (Win7 LTS). No C extensions.
+# See docs/plans/2026-07-16_office-features.md for design.
+python-pptx==0.6.23   # PPTX read/write, ~5MB wheel
+python-docx==1.1.2    # DOCX read/write, ~2MB wheel
+openpyxl==3.1.5       # XLSX read/write (low-level), ~1MB wheel
+# pandas for Excel data manipulation (DataFrame ops, aggregation). Requires numpy 1.x.
+# pandas 2.2.3 is the last release that supports numpy 1.24+ which is what we already pin.
+pandas<2.1           # DataFrame Excel ops; 2.1+ yanked from PyPI, 2.0.3 is last working
