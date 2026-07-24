@@ -202,23 +202,18 @@ def generate_xlsx(req) -> Path:
 
     from openpyxl import Workbook
 
-    from .errors import OfficeGenerateError, OfficePathError
+    from .errors import OfficeGenerateError
     from .models import OfficeDocType
-    from .ppt import _safe_filename
-    from .storage import generate_document_dir
+    from .path_safety import managed_document_path
+    from .storage import validate_workspace
 
-    path = Path(req.workspace_path)
-    if any(part == ".." for part in path.parts):
-        raise OfficePathError(f"Path contains '..': {path}")
-    resolved = path.resolve()
-    if not resolved.exists() or not resolved.is_dir():
-        raise OfficePathError(f"Workspace not found: {path}")
-    workspace = resolved
-
-    filename = _safe_filename(req.filename, "xlsx")
+    workspace = validate_workspace(Path(req.workspace_path))
     doc_id = uuid.uuid4().hex
-    output_dir = generate_document_dir(workspace, OfficeDocType.EXCEL, doc_id)
-    output_path = output_dir / filename
+    # Compose the full file path with one validated call. Raises
+    # OfficePathError on filename separators, parent traversal, wrong
+    # extension, doc_id injection, or any path that escapes the workspace.
+    output_path = managed_document_path(workspace, OfficeDocType.EXCEL, doc_id, req.filename)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         wb = Workbook()

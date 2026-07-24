@@ -76,3 +76,13 @@ numpy>=1.24,<2
 
 # Scheduled tasks (Phase 8)
 apscheduler==3.10.4
+
+# Office document features (Phase 1, 2026-07-16)
+# Pure-Python libraries; support Python 3.8+ (Win7 LTS). No C extensions.
+# Mirrors backend/requirements.txt (which additionally lists pandas==2.2.3
+# for DataFrame Excel ops) — pandas is intentionally NOT bundled here yet
+# because no Office implementation imports it; add it once excel.py (or
+# any reader) starts using pandas at module load time.
+python-pptx==0.6.23
+python-docx==1.1.2
+openpyxl==3.1.5

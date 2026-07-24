@@ -1,5 +1,5 @@
 export { useOfficeDocuments } from './useOfficeDocuments';
-export type { UseOfficeDocumentsReturn } from './useOfficeDocuments';
+export type { UseOfficeDocumentsReturn, OfficeReadResult } from './useOfficeDocuments';
 export { OfficeFilePicker } from './OfficeFilePicker';
 export type { OfficeFilePickerProps } from './OfficeFilePicker';
 export { OfficePreviewPanel } from './OfficePreviewPanel';

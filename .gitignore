@@ -69,6 +69,16 @@ logs/
 *.sqlite
 *.sqlite3
 data/
+# Re-include backend/data/ (Python module package) but still ignore
+# runtime SQLite files. The bare `data/` rule would otherwise shadow
+# `backend/data/*.py` for anyone adding a new repo module.
+!backend/data/
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
+# Runtime audit/JSONL ledgers written under backend/data/. These are
+# created by the runtime, not part of the source tree.
+backend/data/audit/*.jsonl
 
 # Environment
 .env

@@ -19,9 +19,13 @@ import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
 import type {
   ImportResult,
+  ImportedOfficeFile,
+  OfficeDocType,
   OfficeElectronApiBridge,
+  OfficeManagedRef,
   PickedOfficeFile,
   RescanResult,
+  SavedOfficeFile,
   SkillsElectronApiBridge,
 } from '../src/shared/types/electron-api';
 import type { LogLevel } from '../src/shared/log/levels';
@@ -123,15 +127,44 @@ const electronAPI = {
   } satisfies SkillsElectronApiBridge,
 
   /**
-   * Phase 1.3 (2026-07-16): Office document bridge for /office page.
-   * - pickOfficeFile: native open dialog filtered by doc type
-   * - pickSavePath: native save dialog for generated docs (Phase 1.4)
+   * Office document bridge (Phase 1.3 + M0 Task 5).
+   *
+   * Phase 1.3 (2026-07-16): pickOfficeFile / pickSavePath for /office page.
+   *
+   * M0 Task 5 (2026-07-23): seven new gateway channels backing Chat-native
+   * CRUD — atomic import via dialog or drag/drop, token-gated complete /
+   * discard lifecycle, native Save As, shell.openPath, shell.showItemInFolder.
+   * Source paths are NEVER accepted from the renderer; the bridge
+   * reconstructs managed paths from `OfficeManagedRef` tuples.
    */
   office: {
-    pickOfficeFile: (docType: 'ppt' | 'word' | 'excel') =>
+    pickOfficeFile: (docType: OfficeDocType) =>
       ipcRenderer.invoke('office:pick-file', { docType }) as Promise<PickedOfficeFile | null>,
     pickSavePath: (defaultName: string) =>
       ipcRenderer.invoke('office:save-dialog', { defaultName }) as Promise<string | null>,
+    pickAndImportOfficeFile: (workspacePath: string, docType: OfficeDocType) =>
+      ipcRenderer.invoke('office:pick-and-import', {
+        workspacePath,
+        docType,
+      }) as Promise<ImportedOfficeFile | null>,
+    importDroppedOfficeFile: (workspacePath: string, docType: OfficeDocType, sourcePath: string) =>
+      ipcRenderer.invoke('office:import-dropped', {
+        workspacePath,
+        docType,
+        sourcePath,
+      }) as Promise<ImportedOfficeFile>,
+    completeOfficeImport: (importToken: string) =>
+      ipcRenderer.invoke('office:complete-import', { importToken }) as Promise<void>,
+    discardOfficeImport: (importToken: string) =>
+      ipcRenderer.invoke('office:discard-import', { importToken }) as Promise<void>,
+    sweepOrphanStaging: (opts: { workspacePath: string; knownDocIds: string[] }) =>
+      ipcRenderer.invoke('office:sweep-orphan-staging', opts) as Promise<{ swept: number }>,
+    saveOfficeDocumentAs: (ref: OfficeManagedRef) =>
+      ipcRenderer.invoke('office:save-as', ref) as Promise<SavedOfficeFile | null>,
+    openOfficeDocument: (ref: OfficeManagedRef) =>
+      ipcRenderer.invoke('office:open', ref) as Promise<void>,
+    showOfficeDocumentInFolder: (ref: OfficeManagedRef) =>
+      ipcRenderer.invoke('office:show-in-folder', ref) as Promise<void>,
   } satisfies OfficeElectronApiBridge,
 
   /**

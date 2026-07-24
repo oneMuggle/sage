@@ -1,11 +1,20 @@
 /**
  * OfficeDocumentList — workspace history (Phase 1.3, plan §4.1.4 step 16).
  *
- * Lists previously read/generated office documents in the current workspace
- * and provides a delete action.
+ * Lists previously read/generated office documents in the current workspace.
+ *
+ * M0 Task 6 (2026-07-23): rewired actions to the M0 management set:
+ *   - Save As (native dialog → copy managed file to chosen path)
+ *   - Open (shell.openPath on the managed file)
+ *   - Show in Folder (shell.showItemInFolder)
+ * The Phase 1.3 delete action was REMOVED. The brief is explicit: do
+ * not expose a permanent delete action from the M0 management view;
+ * archive/restore and the user confirmation flow are implemented in
+ * M3–M5. Existing DB delete code may remain unreachable until the
+ * archive migration is complete.
  */
 
-import { FileSpreadsheet, FileText, Presentation, Trash2 } from 'lucide-react';
+import { FolderOpen, FileSpreadsheet, FileText, Presentation, Save } from 'lucide-react';
 
 import type { OfficeDocType, OfficeDocumentSummary } from '../../shared/api/types';
 
@@ -30,10 +39,21 @@ const STATUS_LABELS: Record<OfficeDocumentSummary['status'], string> = {
 export interface OfficeDocumentListProps {
   documents: OfficeDocumentSummary[];
   loading: boolean;
-  onDelete: (docId: string) => void | Promise<void>;
+  /** Native Save As dialog → copy managed file to chosen path. */
+  onSaveAs?: (docId: string) => void | Promise<void>;
+  /** shell.openPath on the managed file. */
+  onOpen?: (docId: string) => void | Promise<void>;
+  /** shell.showItemInFolder on the managed file. */
+  onShowInFolder?: (docId: string) => void | Promise<void>;
 }
 
-export function OfficeDocumentList({ documents, loading, onDelete }: OfficeDocumentListProps) {
+export function OfficeDocumentList({
+  documents,
+  loading,
+  onSaveAs,
+  onOpen,
+  onShowInFolder,
+}: OfficeDocumentListProps) {
   if (loading) {
     return <div className="text-sm text-muted p-4 text-center">加载中...</div>;
   }
@@ -66,14 +86,38 @@ export function OfficeDocumentList({ documents, loading, onDelete }: OfficeDocum
               <span>{new Date(doc.created_at).toLocaleString()}</span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void onDelete(doc.id)}
-            className="p-1.5 rounded text-muted hover:text-error hover:bg-error/10 transition-colors"
-            aria-label="Delete document"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {onSaveAs && (
+              <button
+                type="button"
+                onClick={() => void onSaveAs(doc.id)}
+                className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label="Save As"
+              >
+                <Save className="w-4 h-4" />
+              </button>
+            )}
+            {onOpen && (
+              <button
+                type="button"
+                onClick={() => void onOpen(doc.id)}
+                className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label="Open"
+              >
+                <FileText className="w-4 h-4" />
+              </button>
+            )}
+            {onShowInFolder && (
+              <button
+                type="button"
+                onClick={() => void onShowInFolder(doc.id)}
+                className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label="Show in Folder"
+              >
+                <FolderOpen className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </li>
       ))}
     </ul>
