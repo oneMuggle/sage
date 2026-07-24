@@ -32,11 +32,13 @@
  *     pickOfficeFile + pickSavePath preload bridges still resolve).
  */
 
-import { constants as fsConstants, existsSync, statSync } from 'fs';
-import { copyFile, mkdir, rm } from 'fs/promises';
+import { constants as fsConstants, existsSync, readdirSync, statSync } from 'fs';
+import { copyFile, mkdir, readdir, rm } from 'fs/promises';
 import path from 'path';
 import { BrowserWindow, dialog, shell } from 'electron';
 import { randomUUID } from 'crypto';
+
+import { logger } from './logger';
 
 import {
   buildManagedPath,
@@ -196,6 +198,39 @@ function resolveManagedFilePath(ref: OfficeManagedRef): string {
   return candidate;
 }
 
+/** Sweep orphan staging directories not present in the known document set. */
+export async function sweepOrphanStaging(
+  workspacePath: string,
+  knownDocIds: ReadonlySet<string>,
+): Promise<{ swept: number }> {
+  if (!workspacePath) throw new Error('workspacePath is required');
+  const officeRoot = path.join(workspacePath, 'office');
+  if (!existsSync(officeRoot)) return { swept: 0 };
+  let swept = 0;
+  for (const docType of readdirSync(officeRoot)) {
+    const typeDir = path.join(officeRoot, docType);
+    try {
+      if (!statSync(typeDir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    for (const dirName of await readdir(typeDir)) {
+      if (knownDocIds.has(dirName)) continue;
+      const orphanPath = path.join(typeDir, dirName);
+      try {
+        await rm(orphanPath, { recursive: true, force: true });
+        swept += 1;
+      } catch (err) {
+        logger.warn('office:staging-sweep: failed to remove orphan', {
+          path: orphanPath,
+          err: String(err),
+        });
+      }
+    }
+  }
+  return { swept };
+}
+
 // ----------------------------------------------------------------------------
 // registerOfficeIpc — the real wiring
 // ----------------------------------------------------------------------------
@@ -282,6 +317,16 @@ export function registerOfficeIpc(register: RegisterIpcHandler): void {
         // Best-effort cleanup; if rm fails (locked, gone) we just leave
         // the file. The renderer shouldn't surface this as a crash.
       }
+    }) as (...args: unknown[]) => unknown,
+  );
+
+  register(
+    'office:sweep-orphan-staging',
+    (async (
+      _event: unknown,
+      opts: { workspacePath: string; knownDocIds: string[] },
+    ): Promise<{ swept: number }> => {
+      return sweepOrphanStaging(opts.workspacePath, new Set(opts.knownDocIds));
     }) as (...args: unknown[]) => unknown,
   );
 

@@ -48,7 +48,7 @@ function fakeRegister(channel: string, handler: (...args: unknown[]) => unknown)
   registeredHandlers.set(channel, handler);
 }
 
-import { registerOfficeIpc, __resetPendingImportsForTests } from '../officeIpc';
+import { registerOfficeIpc, __resetPendingImportsForTests, sweepOrphanStaging } from '../officeIpc';
 import type { ImportedOfficeFile } from '../../src/shared/types/electron-api';
 
 /**
@@ -466,4 +466,15 @@ describe('office:open + office:show-in-folder (brief §Step 5)', () => {
       }),
     ).rejects.toThrow();
   });
+});
+describe('sweepOrphanStaging', () => {
+  beforeEach(() => __resetPendingImportsForTests());
+  const ws = () => { const x = path.join(os.tmpdir(), `sage-sweep-${Date.now()}-${Math.random().toString(36).slice(2)}`); fs.mkdirSync(x, { recursive: true }); return x; };
+  const clean = (x: string) => fs.rmSync(x, { recursive: true, force: true });
+  it('returns swept:0 when workspace has no office/ directory', async () => { const x=ws(); try { expect(await sweepOrphanStaging(x,new Set())).toEqual({swept:0}); } finally {clean(x);} });
+  it('returns swept:0 when office/ exists but has no docType subdirs', async () => { const x=ws(); fs.mkdirSync(path.join(x,'office')); try { expect(await sweepOrphanStaging(x,new Set())).toEqual({swept:0}); } finally {clean(x);} });
+  it('removes a single orphan ppt dir when its name is not in knownDocIds', async () => { const x=ws(), d=path.join(x,'office','ppt','orphan'); fs.mkdirSync(path.join(d,'inner'),{recursive:true}); fs.writeFileSync(path.join(d,'inner','deck.pptx'),'fake'); try { expect(await sweepOrphanStaging(x,new Set())).toEqual({swept:1}); expect(fs.existsSync(d)).toBe(false); } finally {clean(x);} });
+  it('preserves a managed dir whose name is in knownDocIds', async () => { const x=ws(), d=path.join(x,'office','ppt','managed'); fs.mkdirSync(d,{recursive:true}); try { expect(await sweepOrphanStaging(x,new Set(['managed']))).toEqual({swept:0}); expect(fs.existsSync(d)).toBe(true); } finally {clean(x);} });
+  it('removes only orphans when 3 dirs exist (2 orphan + 1 managed)', async () => { const x=ws(), ds=['a','b','managed'].map((n,i)=>path.join(x,'office',i===1?'word':'ppt',n)); ds.forEach(d=>fs.mkdirSync(d,{recursive:true})); try { expect(await sweepOrphanStaging(x,new Set(['managed']))).toEqual({swept:2}); expect(fs.existsSync(ds[2])).toBe(true); } finally {clean(x);} });
+  it('does not abort the sweep when one rm fails (best-effort)', async () => { const x=ws(), d=path.join(x,'office','ppt','ok'); fs.mkdirSync(d,{recursive:true}); try { expect(await sweepOrphanStaging(x,new Set())).toEqual({swept:1}); } finally {clean(x);} });
 });
