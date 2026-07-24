@@ -32,10 +32,7 @@ import type {
 } from '../../shared/api/types';
 
 /** Read result union — OfficePreviewPanel is doc-type-agnostic. */
-export type OfficeReadResult =
-  | OfficePptReadResult
-  | OfficeWordReadResult
-  | OfficeExcelReadResult;
+export type OfficeReadResult = OfficePptReadResult | OfficeWordReadResult | OfficeExcelReadResult;
 
 export interface UseOfficeDocumentsReturn {
   documents: OfficeDocumentSummary[];

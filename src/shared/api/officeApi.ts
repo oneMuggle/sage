@@ -120,7 +120,9 @@ export const officeApi = {
    * No retry — generation is side-effecting. We don't want a transient
    * network blip to silently produce a duplicate file.
    */
-  async generatePpt(req: OfficePptGenerateRequest): Promise<{ output_path: string; filename: string; file_size_bytes: number }> {
+  async generatePpt(
+    req: OfficePptGenerateRequest,
+  ): Promise<{ output_path: string; filename: string; file_size_bytes: number }> {
     try {
       return await invoke('office_ppt_generate', {
         workspacePath: req.workspace_path,
@@ -138,7 +140,9 @@ export const officeApi = {
    *
    * No retry — see generatePpt.
    */
-  async generateWord(req: OfficeWordGenerateRequest): Promise<{ output_path: string; filename: string; file_size_bytes: number }> {
+  async generateWord(
+    req: OfficeWordGenerateRequest,
+  ): Promise<{ output_path: string; filename: string; file_size_bytes: number }> {
     try {
       return await invoke('office_word_generate', {
         workspacePath: req.workspace_path,
@@ -157,7 +161,9 @@ export const officeApi = {
    *
    * No retry — see generatePpt.
    */
-  async generateExcel(req: OfficeExcelGenerateRequest): Promise<{ output_path: string; filename: string; file_size_bytes: number }> {
+  async generateExcel(
+    req: OfficeExcelGenerateRequest,
+  ): Promise<{ output_path: string; filename: string; file_size_bytes: number }> {
     try {
       return await invoke('office_excel_generate', {
         workspacePath: req.workspace_path,

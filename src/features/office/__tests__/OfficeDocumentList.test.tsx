@@ -10,8 +10,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { OfficeDocumentList } from '../OfficeDocumentList';
 import type { OfficeDocumentSummary } from '../../../shared/api/types';
+import { OfficeDocumentList } from '../OfficeDocumentList';
 
 const sampleDocs: OfficeDocumentSummary[] = [
   {
