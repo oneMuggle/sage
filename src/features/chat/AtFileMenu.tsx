@@ -1,14 +1,15 @@
 // src/features/chat/AtFileMenu.tsx
 import { useState, useEffect, useRef } from 'react';
 
-import { fileSearchClient, FileSearchTimeoutError } from '../../shared/api/fileSearchClient';
+import { fileSearchClient, FileSearchTimeoutError, type FileSearchResult } from '../../shared/api/fileSearchClient';
 import { useI18n } from '../../shared/lib/i18n';
 
-interface FileSearchResult {
-  path: string;
-  name: string;
-  size?: number;
-}
+const KIND_ICON: Record<FileSearchResult['kind'], string> = {
+  'file': '📄',
+  'office-ppt': '📊',
+  'office-word': '📝',
+  'office-excel': '📈',
+};
 
 interface AtFileMenuProps {
   query: string | null;
@@ -145,6 +146,9 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
                 onClick={() => handleSelect(file.path)}
                 onMouseEnter={() => setSelectedIdx(idx)}
               >
+                <span className="at-file-menu__item-kind" aria-label={file.kind}>
+                  {KIND_ICON[file.kind] ?? '📄'}
+                </span>
                 <span className="at-file-menu__item-name">{file.name}</span>
                 <span className="at-file-menu__item-path">{file.path}</span>
               </button>
