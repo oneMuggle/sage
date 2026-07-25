@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import concurrent.futures
 import logging
 import uuid
@@ -52,6 +53,9 @@ _HEX_ATTACHMENT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     max_workers=4,
     thread_name_prefix="hex-attachment-resolver",
 )
+# pytest session teardown 会触发 ResourceWarning (ThreadPoolExecutor 未显式关闭);
+# 注册 atexit handler 关闭它, wait=False 表示不等 in-flight 任务.
+atexit.register(_HEX_ATTACHMENT_EXECUTOR.shutdown, wait=False)
 
 
 # ==================== Pydantic 模型 ====================
