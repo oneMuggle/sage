@@ -9,6 +9,7 @@ API 路由定义
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 from typing import List
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
@@ -37,6 +38,12 @@ from backend.memory import get_memory_manager
 from backend.scheduler import get_evolution_logs, get_scheduler
 
 logger = logging.getLogger(__name__)
+
+# 独立 executor 给 office 附件处理用 (避免阻塞其他 FastAPI handler)
+_ATTACHMENT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4,
+    thread_name_prefix="attachment-resolver",
+)
 
 router = APIRouter()
 
@@ -1033,7 +1040,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 pass  # Graceful fallback if diagram module unavailable
 
             attachment_block = await asyncio.get_running_loop().run_in_executor(
-                None,
+                _ATTACHMENT_EXECUTOR,
                 attachment_resolver.process,
                 data.message,
                 data.workspace_path or "",
