@@ -77,7 +77,7 @@ describe('fileSearchClient.search', () => {
   it('merges office docs as office-* kinds', async () => {
     vi.mocked(invoke).mockResolvedValue([]);
     vi.mocked(officeApi.listDocuments).mockResolvedValue(OFFICE_DOCS as never);
-    const out = await fileSearchClient.search('prop');
+    const out = await fileSearchClient.search('prop', {}, '/w');
     const ppt = out.find((r) => r.kind === 'office-ppt');
     expect(ppt?.name).toBe('proposal.pptx');
     expect(ppt?.path).toBe('/w/office/ppt/1/proposal.pptx');
@@ -86,7 +86,7 @@ describe('fileSearchClient.search', () => {
   it('office query filter is case-insensitive substring match on name', async () => {
     vi.mocked(invoke).mockResolvedValue([]);
     vi.mocked(officeApi.listDocuments).mockResolvedValue(OFFICE_DOCS as never);
-    const out = await fileSearchClient.search('PROP');
+    const out = await fileSearchClient.search('PROP', {}, '/w');
     expect(out.some((r) => r.name === 'proposal.pptx')).toBe(true);
   });
 
@@ -95,7 +95,7 @@ describe('fileSearchClient.search', () => {
       { path: '/w/office/ppt/1/proposal.pptx', name: 'proposal.pptx', size: 100 },
     ]);
     vi.mocked(officeApi.listDocuments).mockResolvedValue(OFFICE_DOCS as never);
-    const out = await fileSearchClient.search('prop');
+    const out = await fileSearchClient.search('prop', {}, '/w');
     const matches = out.filter((r) => r.path === '/w/office/ppt/1/proposal.pptx');
     expect(matches).toHaveLength(1);
     expect(matches[0].kind).toBe('office-ppt');
@@ -112,7 +112,7 @@ describe('fileSearchClient.search', () => {
   it('preserves order: office results before fs results', async () => {
     vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
     vi.mocked(officeApi.listDocuments).mockResolvedValue(OFFICE_DOCS as never);
-    const out = await fileSearchClient.search('');
+    const out = await fileSearchClient.search('', {}, '/w');
     const officeIdx = out.findIndex((r) => r.kind !== 'file');
     const fileIdx = out.findIndex((r) => r.kind === 'file');
     expect(officeIdx).toBeLessThan(fileIdx);
@@ -129,5 +129,26 @@ describe('fileSearchClient.search', () => {
       { query: 'q', limit: 20 },
       expect.objectContaining({ signal: ctrl.signal }),
     );
+  });
+
+  it('skips office listDocuments entirely when workspacePath is empty', async () => {
+    vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
+    const listSpy = vi.mocked(officeApi.listDocuments);
+    listSpy.mockClear();
+
+    const out = await fileSearchClient.search('foo');
+    expect(out.every((r) => r.kind === 'file')).toBe(true);
+    expect(listSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips office listDocuments entirely when workspacePath is omitted', async () => {
+    vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
+    const listSpy = vi.mocked(officeApi.listDocuments);
+    listSpy.mockClear();
+
+    // explicit `''` argument — same contract as omitting the arg
+    const out = await fileSearchClient.search('foo', {}, '');
+    expect(out.every((r) => r.kind === 'file')).toBe(true);
+    expect(listSpy).not.toHaveBeenCalled();
   });
 });
