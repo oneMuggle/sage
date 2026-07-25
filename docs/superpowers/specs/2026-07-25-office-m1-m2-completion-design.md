@@ -1,7 +1,8 @@
 # Office M1–M2 完整收尾设计
 
-> **状态：** 已获用户批准并完成架构自审，待用户复核
+> **状态：** 已获用户批准并完成架构自审；implementation plan 已生成，待执行
 > **日期：** 2026-07-25
+> **实施计划：** [`docs/plans/2026-07-25-office-m1-m2-complete.md`](../../plans/2026-07-25-office-m1-m2-complete.md)
 > **目标分支：** `main`
 > **实施分支：** `feat/office-m1-m2-complete`
 > **前置提交：** `main@48eeb1c`（Office M1–M2 chat-read 摘要注入子集）
