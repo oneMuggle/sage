@@ -13,6 +13,7 @@ M2: 多文档按出现顺序拼接, 块首 `=== name ===` 分隔。
 
 Win7 兼容: 无 walrus, 无 PEP 604 union, str 类型注解仅在必须时用 (Python 3.8 兼容)。
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,18 +24,62 @@ from pathlib import Path
 from typing import FrozenSet, List, Optional
 
 
-# Task 2 才会装入, 本 Task stub 三个 digest 函数让 Task 1 测试通过
+# Task 2: 真实 digest 格式化器 (复用 office 纯函数, 不触发 FastAPI endpoint)
+from backend.office.ppt import read_ppt
+from backend.office.word import read_docx
+from backend.office.excel import read_xlsx
+
+
 def _digest_ppt(file_path: str, workspace: str) -> str:
-    """Stub. Task 2 will replace."""
-    return ""
+    """Return per-slide digest: '[title]\\n  - bullet' each."""
+    result = read_ppt(
+        file_path=Path(file_path),
+        workspace_path=workspace,
+        generated_filename=os.path.basename(file_path),
+    )
+    lines: List[str] = []
+    for slide in result.slides:
+        title = slide.title or "(untitled)"
+        lines.append(f"[{title}]")
+        for block in slide.text_blocks:
+            lines.append(f"  - {block}")
+    return "\n".join(lines)
+
 
 def _digest_word(file_path: str, workspace: str) -> str:
-    """Stub. Task 2 will replace."""
-    return ""
+    """Return per-paragraph first sentence."""
+    result = read_docx(
+        file_path=Path(file_path),
+        workspace_path=workspace,
+        generated_filename=os.path.basename(file_path),
+    )
+    lines: List[str] = []
+    for para in result.paragraphs:
+        text = para.text.strip()
+        if not text:
+            continue
+        first = text.split(".", 1)[0].strip()
+        # 即使整段无句号, 也加 '.' 后缀让 LLM 识别句子边界
+        lines.append(first + ".")
+    return "\n".join(lines)
+
 
 def _digest_excel(file_path: str, workspace: str) -> str:
-    """Stub. Task 2 will replace."""
-    return ""
+    """Return sheet names + first 5 rows per sheet as TSV."""
+    result = read_xlsx(
+        file_path=Path(file_path),
+        workspace_path=workspace,
+        generated_filename=os.path.basename(file_path),
+    )
+    sheets = result.sheets
+    names = [s.name for s in sheets]
+    lines: List[str] = [f"sheets: {', '.join(names)}"]
+    for sheet in sheets:
+        rows = sheet.rows[:5]
+        lines.append(f"--- {sheet.name} (top {len(rows)} rows) ---")
+        for row in rows:
+            lines.append("\t".join(row))
+    return "\n".join(lines)
 
 
 logger = logging.getLogger(__name__)
@@ -53,15 +98,15 @@ _EXT_TO_KIND = {
 
 @dataclass
 class Mention:
-    raw: str           # @ 后的整段原文 (含 ext)
-    path: str          # 与 raw 相同 (本轮不解析 host/relative)
+    raw: str  # @ 后的整段原文 (含 ext)
+    path: str  # 与 raw 相同 (本轮不解析 host/relative)
     kind: Optional[str]  # 'office-ppt'/'office-word'/'office-excel' 或 None
 
 
 @dataclass
 class ResolvedBlock:
-    source_ref: str    # 显示用的 basename (e.g. 'foo.pptx')
-    digest_text: str   # 注入 LLM 的纯文本
+    source_ref: str  # 显示用的 basename (e.g. 'foo.pptx')
+    digest_text: str  # 注入 LLM 的纯文本
 
 
 def extract_mentions(text: str) -> List[Mention]:
@@ -115,7 +160,9 @@ def resolve_mentions(
             )
         except OfficeError as exc:
             logger.warning(
-                "office mention resolve failed: %s (%s)", m.path, exc,
+                "office mention resolve failed: %s (%s)",
+                m.path,
+                exc,
             )
     return blocks
 
