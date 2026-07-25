@@ -203,9 +203,7 @@ def test_resolve_mentions_preserves_order(monkeypatch, tmp_path) -> None:
 # ─── T3.M4 closure: _resolve_attachment_path 异常链 ───────────
 
 
-def test_resolve_attachment_path_chains_cause_on_non_regular_file(
-    monkeypatch, tmp_path
-) -> None:
+def test_resolve_attachment_path_chains_cause_on_non_regular_file(monkeypatch, tmp_path) -> None:
     """T3.M4 closure: resolved path 不是 regular file 时, 抛出的 OfficePathError
     必须保留底层 cause (PermissionError / OSError 等), 而不是裸 raise 丢上下文。
     """
@@ -229,9 +227,7 @@ def test_resolve_attachment_path_chains_cause_on_non_regular_file(
     assert isinstance(exc_info.value.__cause__, PermissionError)
 
 
-def test_resolve_attachment_path_chains_cause_on_size_check(
-    monkeypatch, tmp_path
-) -> None:
+def test_resolve_attachment_path_chains_cause_on_size_check(monkeypatch, tmp_path) -> None:
     """T3.M4 closure (size branch): stat 抛 OSError 时, OfficeSizeLimitError
     必须保留 __cause__ — 后续 logger.warning 能看到根因。
     """
@@ -277,6 +273,40 @@ def test_render_single_block() -> None:
     assert out.endswith("</attachments>")
     assert "=== foo.pptx ===" in out
     assert "D1" in out
+
+
+def test_render_single_block_exact_output() -> None:
+    """T1.M3 closure: render 输出锁完整字符串, 不依赖 startswith/in 拼凑.
+
+    之前的测试用 'startswith/in' 断言, 任何格式漂移 (e.g. 空白行、顺序)
+    都不会被捕获. 这里锁字面量输出, 后续改 render 格式时强制更新本测试.
+    """
+    blocks = [ResolvedBlock(source_ref="foo.pptx", digest_text="D1")]
+    assert render_attachment_block(blocks) == (
+        "<attachments>\n"
+        "=== foo.pptx ===\n"
+        "D1\n"
+        "</attachments>"
+    )
+
+
+def test_render_multi_block_exact_output_with_separator() -> None:
+    """T1.M3 closure: 多块按顺序拼接, 块间 '\\n=== name ===\\n' 分隔.
+
+    锁定完整输出, 顺序错位或额外空行会被立即捕获。
+    """
+    blocks = [
+        ResolvedBlock(source_ref="a.pptx", digest_text="A_BODY"),
+        ResolvedBlock(source_ref="b.docx", digest_text="B_BODY"),
+    ]
+    assert render_attachment_block(blocks) == (
+        "<attachments>\n"
+        "=== a.pptx ===\n"
+        "A_BODY\n"
+        "=== b.docx ===\n"
+        "B_BODY\n"
+        "</attachments>"
+    )
 
 
 def test_render_multiple_blocks_with_separator() -> None:
