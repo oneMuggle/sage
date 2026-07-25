@@ -15,7 +15,15 @@ export interface FileSearchResult {
 export interface FileSearchOptions {
   /** 限制返回结果数, 默认 20 */
   limit?: number;
-  /** 外部 AbortSignal, 用于组件卸载时取消 */
+  /**
+   * 外部 AbortSignal, 用于组件卸载时取消.
+   *
+   * NOTE: 此 signal 仅用于 fs `invoke` 调用 (作为第 3 个参数传入).
+   * 当前 `desktopInvoke` 的真实签名只有 2 个参数 (cmd, args),
+   * 第 3 个 `{ signal }` 通过 `unknown as (...)` 类型断言传入,
+   * 运行时由真实 desktop 适配器忽略. 这是一个已知 TODO:
+   * 当 desktopInvoke 接受 options 后应去除此 cast.
+   */
   signal?: AbortSignal;
 }
 
@@ -135,32 +143,39 @@ export const fileSearchClient = {
       options.signal,
     );
 
-    // 2. Office docs list (新增) — caller 传 workspacePath 时拉取,
-    //    未传时空串调用以让 mock 仍能响应 (AtFileMenu 在 Task 6 接入时必传).
+    // 2. Office docs list (新增) — 仅当 caller 提供非空 workspacePath 时拉取;
+    //    空串传给后端会触发 400, 且本轮 (Task 5) AtFileMenu 仍是 2-arg 调用
+    //    站点, 所以门控短路掉 office 调用. Task 6 接入真实路径后才会真正
+    //    触发 listDocuments.
+    //
     //    NOTE: OfficeDocumentSummary 当前没有 name/file_path/file_size_bytes 字段
     //    (只有 original_filename/generated_filename/metadata.file_size_bytes);
     //    Task 6+ 决定是否扩展 backend 响应. 这里用本地接口声明, 测试 mock 数据
     //    提供这些字段, 真实后端响应需后续对接.
+    //    name 字段以 `(d.name ?? '')` 防御性兜底, 防止后端缺字段时 TypeError.
     interface OfficeDocForSearch {
       name: string;
       file_path: string;
       file_size_bytes: number;
       doc_type: 'ppt' | 'word' | 'excel';
     }
-    const officePromise: Promise<FileSearchResult[]> = officeApi
-      .listDocuments(workspacePath ?? '')
-      .then((res) =>
-        (res.documents ?? [])
-          .map((d) => d as unknown as OfficeDocForSearch)
-          .filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
-          .map<FileSearchResult>((d) => ({
-            path: d.file_path,
-            name: d.name,
-            size: d.file_size_bytes,
-            kind: kindFromDocType(d.doc_type),
-          })),
-      )
-      .catch(() => [] as FileSearchResult[]);
+    const queryLower = query.toLowerCase();
+    const officePromise: Promise<FileSearchResult[]> = workspacePath
+      ? officeApi
+          .listDocuments(workspacePath)
+          .then((res) =>
+            (res.documents ?? [])
+              .map((d) => d as unknown as OfficeDocForSearch)
+              .filter((d) => (d.name ?? '').toLowerCase().includes(queryLower))
+              .map<FileSearchResult>((d) => ({
+                path: d.file_path,
+                name: d.name,
+                size: d.file_size_bytes,
+                kind: kindFromDocType(d.doc_type),
+              })),
+          )
+          .catch(() => [] as FileSearchResult[])
+      : Promise.resolve([] as FileSearchResult[]);
 
     const [fsResults, officeResults] = await Promise.all([
       fsPromise.catch(() => [] as FileSearchResult[]),
