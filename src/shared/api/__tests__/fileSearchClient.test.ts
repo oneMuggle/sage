@@ -104,7 +104,10 @@ describe('fileSearchClient.search', () => {
   it('falls back to fs-only when office listDocuments fails', async () => {
     vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
     vi.mocked(officeApi.listDocuments).mockRejectedValue(new Error('office down'));
-    const out = await fileSearchClient.search('foo');
+    const listSpy = vi.mocked(officeApi.listDocuments);
+    const out = await fileSearchClient.search('foo', {}, '/w');
+    // exercise the actual rejection → catch-rescue path (workspacePath truthy)
+    expect(listSpy).toHaveBeenCalledWith('/w');
     expect(out.length).toBe(2);
     expect(out.every((r) => r.kind === 'file')).toBe(true);
   });
@@ -141,7 +144,7 @@ describe('fileSearchClient.search', () => {
     expect(listSpy).not.toHaveBeenCalled();
   });
 
-  it('skips office listDocuments entirely when workspacePath is omitted', async () => {
+  it('skips office listDocuments entirely when workspacePath is an empty string', async () => {
     vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
     const listSpy = vi.mocked(officeApi.listDocuments);
     listSpy.mockClear();
@@ -150,5 +153,30 @@ describe('fileSearchClient.search', () => {
     const out = await fileSearchClient.search('foo', {}, '');
     expect(out.every((r) => r.kind === 'file')).toBe(true);
     expect(listSpy).not.toHaveBeenCalled();
+  });
+
+  it('filters out office docs with missing name field without throwing', async () => {
+    vi.mocked(invoke).mockResolvedValue([]);
+    // defensive `(d.name ?? '')` path: documents lacking `name` must not crash
+    vi.mocked(officeApi.listDocuments).mockResolvedValue({
+      documents: [
+        {
+          id: '3',
+          doc_type: 'ppt' as const,
+          name: undefined as unknown as string,
+          file_path: '/w/office/ppt/3/anon.pptx',
+          file_size_bytes: 1,
+          workspace_path: '/w',
+          original_filename: null,
+          generated_filename: 'anon.pptx',
+          status: 'parsed',
+          created_at: 0,
+          updated_at: 0,
+          metadata: { file_size_bytes: 1, page_count: 1 },
+        },
+      ],
+    } as never);
+    const out = await fileSearchClient.search('ppt', {}, '/w');
+    expect(out.every((r) => r.kind === 'file')).toBe(true);
   });
 });
