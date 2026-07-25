@@ -90,13 +90,13 @@ describe('AtFileMenu kind rendering', () => {
         onSelect={vi.fn()}
         onClose={vi.fn()}
         workspacePath="/w/my-workspace"
-      />
+      />,
     );
     await vi.waitFor(() => {
       expect(fs.fileSearchClient.search).toHaveBeenCalledWith(
         'prop',
         expect.objectContaining({ signal: expect.anything() }),
-        '/w/my-workspace'
+        '/w/my-workspace',
       );
     });
   });
@@ -110,7 +110,7 @@ describe('AtFileMenu kind rendering', () => {
       expect(fs.fileSearchClient.search).toHaveBeenCalledWith(
         'x',
         expect.objectContaining({ signal: expect.anything() }),
-        undefined
+        undefined,
       );
     });
   });

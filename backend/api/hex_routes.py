@@ -165,23 +165,30 @@ async def chat(
         req.message,
         req.workspace_path or "",
     )
+    # T4.M2 closure: 附件块只在当前 LLM 调用中生效, 不持久化.
+    # 旧实现用 svc.storage.append_message(...) 会让后续 turn 重发同一块,
+    # 重复污染 context. 现在走 run_turn 的 extra_system_messages 参数,
+    # 在 build_system_base() 之后、history 之前 inline prepend, 不留痕.
+    extra_system_messages: Optional[List[Message]] = None
     if attachment_block:
-        # 把附件块作为系统消息 append 到 storage — ChatService.run_turn 会在
-        # 拉取 history 时一并 pickup (位于 build_system_base() 的 system_msg
-        # 之后, 历史 user/assistant 之前), LLM 收到时位置自然。
-        block_msg = Message(
-            role=Role.SYSTEM,
-            content=(
-                "The user has referenced the following attached documents. "
-                "Treat them as primary context for the user's request.\n\n"
-                f"{attachment_block}"
-            ),
-        )
-        await svc.storage.append_message(req.session_id, block_msg)
+        extra_system_messages = [
+            Message(
+                role=Role.SYSTEM,
+                content=(
+                    "The user has referenced the following attached documents. "
+                    "Treat them as primary context for the user's request.\n\n"
+                    f"{attachment_block}"
+                ),
+            )
+        ]
 
     user_msg = Message(role=Role.USER, content=req.message)
     try:
-        msgs = await svc.run_turn(req.session_id, user_msg)
+        msgs = await svc.run_turn(
+            req.session_id,
+            user_msg,
+            extra_system_messages=extra_system_messages,
+        )
     except LLMError as exc:
         logger.warning(
             f"[HEX REQ {request_id}] /chat LLM error: type={exc.type.value}, "
