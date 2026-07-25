@@ -9,6 +9,7 @@
 注: _digest_* 函数在 Task 2 才实现, 本 Task 的 resolve/process 测试用 unittest.mock.patch
     桩化 `_digest_ppt / _digest_word / _digest_excel` 让 extract/render/path 测试通过。
 """
+
 from __future__ import annotations
 
 from backend.chat import attachment_resolver
@@ -23,6 +24,7 @@ from backend.chat.attachment_resolver import (
 )
 
 # ─── extract_mentions ────────────────────────────────────────────
+
 
 def test_extract_mentions_basic_pptx() -> None:
     mentions = extract_mentions("看一下 @foo.pptx 好吗")
@@ -72,6 +74,13 @@ def test_office_exts_is_frozen() -> None:
 
 # ─── resolve_mentions (mock _digest_*) ───────────────────────────
 
+
+def _touch_office_file(tmp_path, filename):
+    file_path = tmp_path / filename
+    file_path.touch()
+    return file_path
+
+
 def test_resolve_mentions_skips_non_office(monkeypatch) -> None:
     """kind=None 的 mention 直接跳过"""
     mentions = [Mention(raw="@a.txt", path="a.txt", kind=None)]
@@ -79,67 +88,116 @@ def test_resolve_mentions_skips_non_office(monkeypatch) -> None:
     assert blocks == []
 
 
-def test_resolve_mentions_calls_ppt_digest(monkeypatch) -> None:
+def test_resolve_mentions_calls_ppt_digest(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
-        attachment_resolver, "_digest_ppt",
+        attachment_resolver,
+        "_digest_ppt",
         lambda path, workspace: "PPT_DUMMY",
     )
+    _touch_office_file(tmp_path, "x.pptx")
     mentions = [Mention(raw="@x.pptx", path="x.pptx", kind="office-ppt")]
-    blocks = resolve_mentions(mentions, workspace="/w")
+    blocks = resolve_mentions(mentions, workspace=str(tmp_path))
     assert len(blocks) == 1
     assert blocks[0].digest_text == "PPT_DUMMY"
     assert blocks[0].source_ref == "x.pptx"
 
 
-def test_resolve_mentions_calls_word_digest(monkeypatch) -> None:
+def test_resolve_mentions_calls_word_digest(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
-        attachment_resolver, "_digest_word",
+        attachment_resolver,
+        "_digest_word",
         lambda path, workspace: "WORD_DUMMY",
     )
+    _touch_office_file(tmp_path, "y.docx")
     mentions = [Mention(raw="@y.docx", path="y.docx", kind="office-word")]
-    blocks = resolve_mentions(mentions, workspace="/w")
+    blocks = resolve_mentions(mentions, workspace=str(tmp_path))
     assert blocks[0].digest_text == "WORD_DUMMY"
 
 
-def test_resolve_mentions_calls_excel_digest(monkeypatch) -> None:
+def test_resolve_mentions_calls_excel_digest(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
-        attachment_resolver, "_digest_excel",
+        attachment_resolver,
+        "_digest_excel",
         lambda path, workspace: "EXCEL_DUMMY",
     )
+    _touch_office_file(tmp_path, "z.xlsx")
     mentions = [Mention(raw="@z.xlsx", path="z.xlsx", kind="office-excel")]
-    blocks = resolve_mentions(mentions, workspace="/w")
+    blocks = resolve_mentions(mentions, workspace=str(tmp_path))
     assert blocks[0].digest_text == "EXCEL_DUMMY"
 
 
-def test_resolve_mentions_silently_skips_on_error(monkeypatch, caplog) -> None:
+def test_resolve_mentions_silently_skips_on_error(monkeypatch, caplog, tmp_path) -> None:
     """_digest_ppt 抛 OfficePathError 时, 本 mention 静默 skip + log warning"""
     from backend.office.errors import OfficePathError
+
     monkeypatch.setattr(
-        attachment_resolver, "_digest_ppt",
-        lambda path, workspace: (_ for _ in ()).throw(
-            OfficePathError("boom", file_path=None)
-        ),
+        attachment_resolver,
+        "_digest_ppt",
+        lambda path, workspace: (_ for _ in ()).throw(OfficePathError("boom", file_path=None)),
     )
+    _touch_office_file(tmp_path, "bad.pptx")
     mentions = [Mention(raw="@bad.pptx", path="bad.pptx", kind="office-ppt")]
-    blocks = resolve_mentions(mentions, workspace="/w")
+    blocks = resolve_mentions(mentions, workspace=str(tmp_path))
     assert blocks == []
 
 
-def test_resolve_mentions_preserves_order(monkeypatch) -> None:
+def test_resolve_mentions_skips_path_outside_workspace(monkeypatch, tmp_path) -> None:
+    outside_path = tmp_path.parent / "outside.pptx"
+    outside_path.touch()
+    digest_calls = []
+    monkeypatch.setattr(
+        attachment_resolver,
+        "_digest_ppt",
+        lambda path, workspace: digest_calls.append(path) or "P",
+    )
+
+    mentions = [Mention(raw=str(outside_path), path=str(outside_path), kind="office-ppt")]
+    blocks = resolve_mentions(mentions, workspace=str(tmp_path))
+
+    assert blocks == []
+    assert digest_calls == []
+
+
+def test_resolve_mentions_skips_oversized_file(monkeypatch, tmp_path) -> None:
+    file_path = tmp_path / "large.pptx"
+    file_path.write_bytes(b"too large")
+    digest_calls = []
+    monkeypatch.setattr(attachment_resolver, "MAX_ATTACHMENT_FILE_SIZE_BYTES", 1, raising=False)
+    monkeypatch.setattr(
+        attachment_resolver,
+        "_digest_ppt",
+        lambda path, workspace: digest_calls.append(path) or "P",
+    )
+
+    mentions = [Mention(raw="large.pptx", path="large.pptx", kind="office-ppt")]
+    blocks = resolve_mentions(mentions, workspace=str(tmp_path))
+
+    assert blocks == []
+    assert digest_calls == []
+
+
+def test_resolve_mentions_preserves_order(monkeypatch, tmp_path) -> None:
     """多个 mention 按出现顺序产出 blocks"""
     monkeypatch.setattr(
-        attachment_resolver, "_digest_ppt", lambda p, w: "P",
+        attachment_resolver,
+        "_digest_ppt",
+        lambda p, w: "P",
     )
     monkeypatch.setattr(
-        attachment_resolver, "_digest_word", lambda p, w: "W",
+        attachment_resolver,
+        "_digest_word",
+        lambda p, w: "W",
     )
+    _touch_office_file(tmp_path, "a.pptx")
+    _touch_office_file(tmp_path, "b.docx")
     text = "@a.pptx 然后 @b.docx"
     mentions = extract_mentions(text)
-    blocks = resolve_mentions(mentions, workspace="/w")
+    blocks = resolve_mentions(mentions, workspace=str(tmp_path))
     assert [b.source_ref for b in blocks] == ["a.pptx", "b.docx"]
 
 
 # ─── render_attachment_block ─────────────────────────────────────
+
 
 def test_render_empty_list_returns_empty_string() -> None:
     assert render_attachment_block([]) == ""
@@ -167,14 +225,16 @@ def test_render_multiple_blocks_with_separator() -> None:
 
 # ─── process (top-level entry, mock digests) ─────────────────────
 
+
 def test_process_no_mentions_returns_empty(monkeypatch) -> None:
     """无 @ → 返回空串"""
     assert process("hello world", workspace="/w") == ""
 
 
-def test_process_happy_path(monkeypatch) -> None:
+def test_process_happy_path(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(attachment_resolver, "_digest_ppt", lambda p, w: "D")
-    out = process("看 @x.pptx", workspace="/w")
+    _touch_office_file(tmp_path, "x.pptx")
+    out = process("看 @x.pptx", workspace=str(tmp_path))
     assert "<attachments>" in out
     assert "=== x.pptx ===" in out
     assert "D" in out
