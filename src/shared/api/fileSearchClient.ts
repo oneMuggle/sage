@@ -144,15 +144,12 @@ export const fileSearchClient = {
     );
 
     // 2. Office docs list (新增) — 仅当 caller 提供非空 workspacePath 时拉取;
-    //    空串传给后端会触发 400, 且本轮 (Task 5) AtFileMenu 仍是 2-arg 调用
-    //    站点, 所以门控短路掉 office 调用. Task 6 接入真实路径后才会真正
-    //    触发 listDocuments.
+    //    空串传给后端会触发 400, 因此 gate 短路掉 office 调用.
     //
-    //    NOTE: OfficeDocumentSummary 当前没有 name/file_path/file_size_bytes 字段
-    //    (只有 original_filename/generated_filename/metadata.file_size_bytes);
-    //    Task 6+ 决定是否扩展 backend 响应. 这里用本地接口声明, 测试 mock 数据
-    //    提供这些字段, 真实后端响应需后续对接.
-    //    name 字段以 `(d.name ?? '')` 防御性兜底, 防止后端缺字段时 TypeError.
+    //    NOTE: 这里用本地接口声明 OfficeDocForSearch, 与 OfficeDocumentSummary
+    //    字段略有差异 (name / file_path / file_size_bytes), 测试 mock 数据
+    //    已提供这些字段. name 字段以 `(d.name ?? '')` 防御性兜底, 防止后端
+    //    缺字段时 TypeError.
     interface OfficeDocForSearch {
       name: string;
       file_path: string;
