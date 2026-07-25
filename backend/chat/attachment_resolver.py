@@ -23,11 +23,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import FrozenSet, List, Optional
 
-
 # Task 2: 真实 digest 格式化器 (复用 office 纯函数, 不触发 FastAPI endpoint)
-from backend.office.ppt import read_ppt
-from backend.office.word import read_docx
+from backend.office.errors import OfficeError, OfficePathError, OfficeSizeLimitError
 from backend.office.excel import read_xlsx
+from backend.office.path_safety import resolve_within
+from backend.office.ppt import read_ppt
+from backend.office.storage import validate_workspace
+from backend.office.word import read_docx
 
 
 def _digest_ppt(file_path: str, workspace: str) -> str:
@@ -87,6 +89,7 @@ logger = logging.getLogger(__name__)
 _MENTION_RE = re.compile(r"(?:^|\s)@([^\s]+?)(?=\s|$)")
 
 OFFICE_EXTS: FrozenSet[str] = frozenset({".pptx", ".docx", ".xlsx"})
+MAX_ATTACHMENT_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
 # ext → kind (M1 用)
 _EXT_TO_KIND = {
@@ -130,39 +133,80 @@ def extract_mentions(text: str) -> List[Mention]:
     return result
 
 
+def _resolve_attachment_path(raw_path: str, workspace_root: Path) -> Path:
+    """Resolve one mention inside a validated workspace and enforce the read limit."""
+    candidate = Path(raw_path)
+    if not candidate.is_absolute():
+        candidate = workspace_root / candidate
+    resolved = resolve_within(workspace_root, candidate)
+    if not resolved.is_file():
+        raise OfficePathError(
+            "Attachment path is not a regular file",
+            file_path=resolved,
+        )
+    actual_size = resolved.stat().st_size
+    if actual_size > MAX_ATTACHMENT_FILE_SIZE_BYTES:
+        raise OfficeSizeLimitError(
+            actual_size=actual_size,
+            max_size=MAX_ATTACHMENT_FILE_SIZE_BYTES,
+            file_path=resolved,
+        )
+    return resolved
+
+
+def _digest_for_kind(kind: str, file_path: str, workspace: str) -> str:
+    if kind == "office-ppt":
+        return _digest_ppt(file_path, workspace)
+    if kind == "office-word":
+        return _digest_word(file_path, workspace)
+    return _digest_excel(file_path, workspace)
+
+
 def resolve_mentions(
     mentions: List[Mention],
     workspace: str,
 ) -> List[ResolvedBlock]:
-    """对 kind=office-* 的 mention 调 _digest_* 出 digest; 其它跳过。
+    """Resolve Office mentions within ``workspace``; invalid mentions are skipped."""
+    office_mentions = [
+        mention
+        for mention in mentions
+        if mention.kind in ("office-ppt", "office-word", "office-excel")
+    ]
+    if not office_mentions:
+        return []
+    if not workspace:
+        logger.warning("office mention resolve skipped: workspace path is missing")
+        return []
 
-    失败降级: 单个 mention 抛 OfficeError 时静默 skip + log warning,
-    不留 placeholder (避免用户在 LLM 看到残块)。
-    """
-    from backend.office.errors import OfficeError  # 延迟 import 避免循环
+    try:
+        workspace_root = validate_workspace(Path(workspace))
+    except OfficeError as exc:
+        logger.warning(
+            "office mention workspace validation failed (%s)",
+            type(exc).__name__,
+        )
+        return []
 
     blocks: List[ResolvedBlock] = []
-    for m in mentions:
-        if m.kind not in ("office-ppt", "office-word", "office-excel"):
-            continue
+    for mention in office_mentions:
         try:
-            if m.kind == "office-ppt":
-                digest = _digest_ppt(m.path, workspace)
-            elif m.kind == "office-word":
-                digest = _digest_word(m.path, workspace)
-            else:  # office-excel
-                digest = _digest_excel(m.path, workspace)
+            resolved_path = _resolve_attachment_path(mention.path, workspace_root)
+            digest = _digest_for_kind(
+                mention.kind or "",
+                str(resolved_path),
+                str(workspace_root),
+            )
             blocks.append(
                 ResolvedBlock(
-                    source_ref=os.path.basename(m.path),
+                    source_ref=resolved_path.name,
                     digest_text=digest,
                 )
             )
         except OfficeError as exc:
             logger.warning(
                 "office mention resolve failed: %s (%s)",
-                m.path,
-                exc,
+                os.path.basename(mention.path),
+                type(exc).__name__,
             )
     return blocks
 

@@ -28,6 +28,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
+from backend.chat import attachment_resolver
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database
@@ -89,6 +90,7 @@ class SessionUpdate(BaseModel):
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    workspace_path: Optional[str] = None
     api_key: Optional[str] = None
 
     api_url: Optional[str] = None
@@ -1031,10 +1033,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception:
                 pass  # Graceful fallback if diagram module unavailable
 
-            messages = [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": data.message},
-            ]
+            attachment_block = await asyncio.get_running_loop().run_in_executor(
+                None,
+                attachment_resolver.process,
+                data.message,
+                data.workspace_path or "",
+            )
+            messages = [{"role": "system", "content": system_content}]
+            if attachment_block:
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            "The user has referenced the following attached documents. "
+                            "Treat them as primary context for the user's request.\n\n"
+                            f"{attachment_block}"
+                        ),
+                    }
+                )
+            messages.append({"role": "user", "content": data.message})
             # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
             # session metadata。每个落盘独立 try/except,失败只 logger.warning
