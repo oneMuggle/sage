@@ -95,22 +95,21 @@ def _attachment_messages(messages: List[Any]) -> List[Any]:
     return [
         message
         for message in messages
-        if message.role == Role.SYSTEM
-        and "<attachments>" in (message.content or "")
+        if message.role == Role.SYSTEM and "<attachments>" in (message.content or "")
     ]
 
 
 @pytest.mark.asyncio()
 @_HEX_ONLY
-async def test_hex_chat_injects_pptx_digest(
-    hex_client_with_mocks, monkeypatch, tmp_path
-):
+async def test_hex_chat_injects_pptx_digest(hex_client_with_mocks, monkeypatch, tmp_path):
     """@foo.pptx 走 resolver.process 后, LLM 收到的 messages 应含 <attachments> 块."""
     client, fake_svc, mock_llm = hex_client_with_mocks
 
     pptx_path = tmp_path / "x.pptx"
     pptx_path.touch()
-    monkeypatch.setattr(attachment_resolver, "_digest_ppt", lambda path, workspace: "PPT_FAKE_DIGEST")
+    monkeypatch.setattr(
+        attachment_resolver, "_digest_ppt", lambda path, workspace: "PPT_FAKE_DIGEST"
+    )
 
     sid = await fake_svc.storage.create_session()
     resp = await client.post(
@@ -141,9 +140,7 @@ async def test_hex_chat_injects_pptx_digest(
 
 @pytest.mark.asyncio()
 @_HEX_ONLY
-async def test_hex_chat_no_mention_no_injection(
-    hex_client_with_mocks, monkeypatch, tmp_path
-):
+async def test_hex_chat_no_mention_no_injection(hex_client_with_mocks, monkeypatch, tmp_path):
     """无 @ mention 时 LLM 收到的 messages 不应包含 <attachments> 块."""
     client, fake_svc, mock_llm = hex_client_with_mocks
 
@@ -175,9 +172,7 @@ async def test_hex_chat_no_mention_no_injection(
 
 @pytest.mark.asyncio()
 @_HEX_ONLY
-async def test_hex_chat_multi_doc_in_order(
-    hex_client_with_mocks, monkeypatch, tmp_path
-):
+async def test_hex_chat_multi_doc_in_order(hex_client_with_mocks, monkeypatch, tmp_path):
     """@a.pptx @b.docx 产出按出现顺序的 attachment 块."""
     client, fake_svc, mock_llm = hex_client_with_mocks
 
