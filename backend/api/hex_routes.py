@@ -26,6 +26,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import logging
 import uuid
 from typing import List, Optional
@@ -38,10 +40,18 @@ from sage_core.exceptions import SessionNotFoundError
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.application.services.chat_service import ChatService
 from backend.application.services.session_service import SessionService
+from backend.chat import attachment_resolver
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 独立 executor 给 office 附件处理用 (避免阻塞其他 FastAPI handler).
+# 与 legacy_routes._ATTACHMENT_EXECUTOR 隔离 (hex 路径独立演进, 不耦合).
+_HEX_ATTACHMENT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4,
+    thread_name_prefix="hex-attachment-resolver",
+)
 
 
 # ==================== Pydantic 模型 ====================
@@ -52,6 +62,9 @@ class ChatRequest(BaseModel):
 
     session_id: str
     message: str
+    # Office @-mention 解析的工作区根路径 (与 legacy /chat/stream 一致,
+    # 缺省为空串 → attachment_resolver.process 跳过所有 mention).
+    workspace_path: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -146,6 +159,29 @@ async def chat(
         f"[HEX REQ {request_id}] /chat received: session_id={req.session_id[:8]}..., "
         f"message_len={len(req.message)}"
     )
+
+    # Office @-mention: 与 legacy /chat/stream 对齐, 在 run_in_executor 里
+    # 跑 attachment_resolver.process (含路径安全校验 + 50MiB 上限 + 失败
+    # mention 静默 skip — 这些已在 Task 3 落地到 attachment_resolver.process 本身).
+    attachment_block = await asyncio.get_running_loop().run_in_executor(
+        _HEX_ATTACHMENT_EXECUTOR,
+        attachment_resolver.process,
+        req.message,
+        req.workspace_path or "",
+    )
+    if attachment_block:
+        # 把附件块作为系统消息 append 到 storage — ChatService.run_turn 会在
+        # 拉取 history 时一并 pickup (位于 build_system_base() 的 system_msg
+        # 之后, 历史 user/assistant 之前), LLM 收到时位置自然。
+        block_msg = Message(
+            role=Role.SYSTEM,
+            content=(
+                "The user has referenced the following attached documents. "
+                "Treat them as primary context for the user's request.\n\n"
+                f"{attachment_block}"
+            ),
+        )
+        await svc.storage.append_message(req.session_id, block_msg)
 
     user_msg = Message(role=Role.USER, content=req.message)
     try:
