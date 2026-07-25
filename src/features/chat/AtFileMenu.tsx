@@ -1,11 +1,15 @@
 // src/features/chat/AtFileMenu.tsx
 import { useState, useEffect, useRef } from 'react';
 
-import { fileSearchClient, FileSearchTimeoutError, type FileSearchResult } from '../../shared/api/fileSearchClient';
+import {
+  fileSearchClient,
+  FileSearchTimeoutError,
+  type FileSearchResult,
+} from '../../shared/api/fileSearchClient';
 import { useI18n } from '../../shared/lib/i18n';
 
 const KIND_ICON: Record<FileSearchResult['kind'], string> = {
-  'file': '📄',
+  file: '📄',
   'office-ppt': '📊',
   'office-word': '📝',
   'office-excel': '📈',
