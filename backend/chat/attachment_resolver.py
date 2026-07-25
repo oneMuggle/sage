@@ -139,12 +139,29 @@ def _resolve_attachment_path(raw_path: str, workspace_root: Path) -> Path:
     if not candidate.is_absolute():
         candidate = workspace_root / candidate
     resolved = resolve_within(workspace_root, candidate)
-    if not resolved.is_file():
+    try:
+        is_file = resolved.is_file()
+    except OSError as exc:
+        # T3.M4 closure: 沙箱里 stat 可能因权限/IO 失败, 链回 cause 让
+        # logger.warning 看到根因 (不光是 'not a regular file')。
+        raise OfficePathError(
+            "Attachment path is not a regular file",
+            file_path=resolved,
+        ) from exc
+    if not is_file:
         raise OfficePathError(
             "Attachment path is not a regular file",
             file_path=resolved,
         )
-    actual_size = resolved.stat().st_size
+    try:
+        actual_size = resolved.stat().st_size
+    except OSError as exc:
+        # T3.M4 closure: stat 失败时同样链回 cause, 便于诊断 size 上限误触发。
+        raise OfficeSizeLimitError(
+            actual_size=-1,
+            max_size=MAX_ATTACHMENT_FILE_SIZE_BYTES,
+            file_path=resolved,
+        ) from exc
     if actual_size > MAX_ATTACHMENT_FILE_SIZE_BYTES:
         raise OfficeSizeLimitError(
             actual_size=actual_size,

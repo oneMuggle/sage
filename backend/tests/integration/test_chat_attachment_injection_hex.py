@@ -219,9 +219,7 @@ async def test_hex_chat_attachment_block_not_persisted(
 
     pptx_path = tmp_path / "x.pptx"
     pptx_path.touch()
-    monkeypatch.setattr(
-        attachment_resolver, "_digest_ppt", lambda path, workspace: "D"
-    )
+    monkeypatch.setattr(attachment_resolver, "_digest_ppt", lambda path, workspace: "D")
 
     sid = await fake_svc.storage.create_session()
     resp = await client.post(
@@ -237,17 +235,16 @@ async def test_hex_chat_attachment_block_not_persisted(
     # 持久化的 history 应只含 user + assistant (无 attachment system message)
     persisted = await fake_svc.storage.get_messages(sid)
     roles = [m.role for m in persisted]
-    assert roles == [Role.USER, Role.ASSISTANT], (
-        f"attachment system message leaked into storage: roles={roles}"
-    )
+    assert roles == [
+        Role.USER,
+        Role.ASSISTANT,
+    ], f"attachment system message leaked into storage: roles={roles}"
     assert not any("<attachments>" in (m.content or "") for m in persisted)
 
     # 但当前 turn 的 LLM 调用应收到 attachment 块
     assert len(mock_llm.calls) == 1
     messages = mock_llm.calls[0]["messages"]
-    assert _attachment_messages(messages), (
-        "current turn's LLM call lost the attachment block"
-    )
+    assert _attachment_messages(messages), "current turn's LLM call lost the attachment block"
 
 
 @pytest.mark.asyncio()
@@ -260,9 +257,7 @@ async def test_hex_chat_second_turn_attachment_not_replayed(
 
     pptx_path = tmp_path / "x.pptx"
     pptx_path.touch()
-    monkeypatch.setattr(
-        attachment_resolver, "_digest_ppt", lambda path, workspace: "D"
-    )
+    monkeypatch.setattr(attachment_resolver, "_digest_ppt", lambda path, workspace: "D")
 
     sid = await fake_svc.storage.create_session()
     # 第一轮: 触发 attachment 块

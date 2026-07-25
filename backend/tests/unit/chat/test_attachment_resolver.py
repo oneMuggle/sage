@@ -12,6 +12,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from backend.chat import attachment_resolver
 from backend.chat.attachment_resolver import (
     OFFICE_EXTS,
@@ -194,6 +198,69 @@ def test_resolve_mentions_preserves_order(monkeypatch, tmp_path) -> None:
     mentions = extract_mentions(text)
     blocks = resolve_mentions(mentions, workspace=str(tmp_path))
     assert [b.source_ref for b in blocks] == ["a.pptx", "b.docx"]
+
+
+# ─── T3.M4 closure: _resolve_attachment_path 异常链 ───────────
+
+
+def test_resolve_attachment_path_chains_cause_on_non_regular_file(
+    monkeypatch, tmp_path
+) -> None:
+    """T3.M4 closure: resolved path 不是 regular file 时, 抛出的 OfficePathError
+    必须保留底层 cause (PermissionError / OSError 等), 而不是裸 raise 丢上下文。
+    """
+    from backend.chat.attachment_resolver import _resolve_attachment_path
+    from backend.office.errors import OfficePathError
+
+    workspace_root = tmp_path
+    candidate = workspace_root / "missing.pptx"
+
+    # 让 Path.is_file() 抛 PermissionError, 模拟沙箱里 stat 失败
+    def is_file_with_error(self, *args, **kwargs):  # noqa: ANN001
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(Path, "is_file", is_file_with_error)
+
+    with pytest.raises(OfficePathError) as exc_info:
+        _resolve_attachment_path(str(candidate), workspace_root)
+
+    # 关键: __cause__ 必须链回底层 PermissionError
+    assert exc_info.value.__cause__ is not None
+    assert isinstance(exc_info.value.__cause__, PermissionError)
+
+
+def test_resolve_attachment_path_chains_cause_on_size_check(
+    monkeypatch, tmp_path
+) -> None:
+    """T3.M4 closure (size branch): stat 抛 OSError 时, OfficeSizeLimitError
+    必须保留 __cause__ — 后续 logger.warning 能看到根因。
+    """
+    from backend.chat.attachment_resolver import _resolve_attachment_path
+    from backend.office.errors import OfficeSizeLimitError
+
+    workspace_root = tmp_path
+    file_path = workspace_root / "x.pptx"
+    file_path.write_bytes(b"hi")
+
+    # is_file 直接返回 True (不调真实 stat — 因为 stat 也被 patch).
+    # 然后我们 patched stat 在 size 分支抛 OSError.
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+
+    target_path = file_path.resolve()
+    _real_stat = Path.stat
+
+    def _patched_stat(self, *args, **kwargs):
+        if str(self) == str(target_path):
+            raise OSError(5, "I/O error", str(self))
+        return _real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", _patched_stat)
+
+    with pytest.raises(OfficeSizeLimitError) as exc_info:
+        _resolve_attachment_path(str(file_path), workspace_root)
+
+    assert exc_info.value.__cause__ is not None
+    assert isinstance(exc_info.value.__cause__, OSError)
 
 
 # ─── render_attachment_block ─────────────────────────────────────
