@@ -197,6 +197,29 @@ class Database:
         # schema half-migrated for the next process.
         conn.commit()
 
+        # Session-workspace binding table (M1, plan §4.1.2 step 11).
+        # Maps a chat session id to the active workspace directory. A
+        # session has AT MOST ONE active (revoked_at IS NULL) binding; the
+        # ``generation`` column is bumped on every rebind so concurrent
+        # callers can detect stale references. ``revoked_at`` is set when
+        # the binding is explicitly torn down (workspace change, session
+        # deletion, etc.) and the row is left as a tombstone for audit.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_workspace_bindings (
+                session_id TEXT PRIMARY KEY,
+                workspace_path TEXT NOT NULL,
+                generation INTEGER NOT NULL DEFAULT 1,
+                activated_at INTEGER NOT NULL,
+                revoked_at INTEGER NULL,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_session_workspace_active "
+            "ON session_workspace_bindings(session_id, revoked_at)"
+        )
+        conn.commit()
+
         # 进化日志表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS evolution_log (
