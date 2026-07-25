@@ -1,22 +1,37 @@
 // src/features/chat/AtFileMenu.tsx
 import { useState, useEffect, useRef } from 'react';
 
-import { fileSearchClient, FileSearchTimeoutError } from '../../shared/api/fileSearchClient';
+import {
+  fileSearchClient,
+  FileSearchTimeoutError,
+  type FileSearchResult,
+} from '../../shared/api/fileSearchClient';
 import { useI18n } from '../../shared/lib/i18n';
 
-interface FileSearchResult {
-  path: string;
-  name: string;
-  size?: number;
-}
+const KIND_ICON: Record<FileSearchResult['kind'], string> = {
+  file: '📄',
+  'office-ppt': '📊',
+  'office-word': '📝',
+  'office-excel': '📈',
+};
 
 interface AtFileMenuProps {
   query: string | null;
   onSelect: (path: string) => void;
   onClose: () => void;
+  /**
+   * Optional workspace root — forwarded to `fileSearchClient.search` as the
+   * 3rd argument so office docs (which require a workspace) appear in the
+   * menu. Without it, the truthy gate inside `search` skips the office list
+   * and only filesystem files are returned.
+   *
+   * When the caller (ChatInput / Chat page) does not have workspace context,
+   * leave this undefined; the menu still works for filesystem files.
+   */
+  workspacePath?: string;
 }
 
-export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
+export function AtFileMenu({ query, onSelect, workspacePath }: AtFileMenuProps) {
   const { t } = useI18n();
   const [results, setResults] = useState<FileSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -41,7 +56,7 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
     setSelectedIdx(0);
 
     fileSearchClient
-      .search(query, { signal: controller.signal })
+      .search(query, { signal: controller.signal }, workspacePath)
       .then((res) => {
         setResults(res);
         setIsLoading(false);
@@ -63,7 +78,7 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
     return () => {
       controller.abort();
     };
-  }, [query]);
+  }, [query, workspacePath]);
 
   // Don't render if query is null
   if (query === null) {
@@ -82,7 +97,7 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
       setIsLoading(true);
 
       fileSearchClient
-        .search(query)
+        .search(query, undefined, workspacePath)
         .then((res) => {
           setResults(res);
           setIsLoading(false);
@@ -145,6 +160,9 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
                 onClick={() => handleSelect(file.path)}
                 onMouseEnter={() => setSelectedIdx(idx)}
               >
+                <span className="at-file-menu__item-kind" aria-label={file.kind}>
+                  {KIND_ICON[file.kind] ?? '📄'}
+                </span>
                 <span className="at-file-menu__item-name">{file.name}</span>
                 <span className="at-file-menu__item-path">{file.path}</span>
               </button>

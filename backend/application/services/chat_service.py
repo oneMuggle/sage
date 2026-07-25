@@ -157,6 +157,7 @@ class ChatService:
         self,
         session_id: str,
         user_message: Message,
+        extra_system_messages: Optional[List[Message]] = None,
     ) -> List[Message]:
         """执行一轮对话（含 ReAct 工具调用——PG2.9 阶段只做单轮）。
 
@@ -164,6 +165,13 @@ class ChatService:
             session_id:   会话 ID（必须已存在；如未存在，append_message
                           会按 ``MemoryStorageAdapter`` 行为自动建会话）。
             user_message: 用户消息（``role=USER``）。
+            extra_system_messages:
+                          临时 (request-scoped) system messages。仅用于
+                          本轮 LLM 调用, 不写入 storage, 不进历史。典型
+                          用例: Office @-mention 附件块 — 应当跟随
+                          mention 出现, 而非永久留在会话 history。
+                          按参数顺序在 ``build_system_base()`` 之后、
+                          history user/assistant 之前插入。
 
         Returns:
             ``[user_message, assistant_response]``——返回值包含用户原始
@@ -177,13 +185,19 @@ class ChatService:
         with _tracer.start_as_current_span("chat.run_turn") as span:
             span.set_attribute("session.id", session_id)
             span.set_attribute("message.role", user_message.role.value)
-            return await self._run_turn_inner(session_id, user_message, span)
+            return await self._run_turn_inner(
+                session_id,
+                user_message,
+                span,
+                extra_system_messages,
+            )
 
     async def _run_turn_inner(
         self,
         session_id: str,
         user_message: Message,
         span: Any,
+        extra_system_messages: Optional[List[Message]] = None,
     ) -> List[Message]:
         """``run_turn`` 的实际实现，调用方需已开好 OTel span。"""
         # M1: run-lifecycle 事件作用域（稳定 run_id + 单调 seq）
@@ -240,6 +254,13 @@ class ChatService:
         # Prepend system message to history
         system_msg = Message(role=Role.SYSTEM, content=system_content)
         history = [system_msg] + list(history)
+
+        # 2.7) 注入 request-scoped extras (T4.M2 closure):
+        #      Office @-mention 附件块走这里, 不写 storage,
+        #      下一轮 LLM 调用不会重复看到历史 turn 的 mention 摘要.
+        #      与 legacy /chat/stream 的 in-memory messages 对齐.
+        if extra_system_messages:
+            history = list(history) + list(extra_system_messages)
 
         # 3) 调 LLM（单次调用；错误时记 metric + event 后透传）
         # 埋点：LLM 调用计数（9 指标之一）
