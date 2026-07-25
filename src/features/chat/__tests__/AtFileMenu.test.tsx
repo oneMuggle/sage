@@ -1,6 +1,6 @@
 // src/features/chat/__tests__/AtFileMenu.test.tsx
-import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { AtFileMenu } from '../AtFileMenu';
 
@@ -19,8 +19,7 @@ describe('AtFileMenu kind rendering', () => {
   it('renders office-ppt icon for ppt results', async () => {
     const fs = await import('../../../shared/api/fileSearchClient');
     vi.mocked(fs.fileSearchClient.search).mockResolvedValue([
-      { path: '/w/proposal.pptx', name: 'proposal.pptx',
-        size: 100, kind: 'office-ppt' },
+      { path: '/w/proposal.pptx', name: 'proposal.pptx', size: 100, kind: 'office-ppt' },
     ] as never);
     const onSelect = vi.fn();
     render(<AtFileMenu query="prop" onSelect={onSelect} onClose={vi.fn()} />);
@@ -30,8 +29,7 @@ describe('AtFileMenu kind rendering', () => {
   it('renders office-word icon for docx results', async () => {
     const fs = await import('../../../shared/api/fileSearchClient');
     vi.mocked(fs.fileSearchClient.search).mockResolvedValue([
-      { path: '/w/notes.docx', name: 'notes.docx',
-        size: 50, kind: 'office-word' },
+      { path: '/w/notes.docx', name: 'notes.docx', size: 50, kind: 'office-word' },
     ] as never);
     render(<AtFileMenu query="notes" onSelect={vi.fn()} onClose={vi.fn()} />);
     expect(await screen.findByText('📝')).toBeInTheDocument();
@@ -40,8 +38,7 @@ describe('AtFileMenu kind rendering', () => {
   it('renders office-excel icon for xlsx results', async () => {
     const fs = await import('../../../shared/api/fileSearchClient');
     vi.mocked(fs.fileSearchClient.search).mockResolvedValue([
-      { path: '/w/budget.xlsx', name: 'budget.xlsx',
-        size: 80, kind: 'office-excel' },
+      { path: '/w/budget.xlsx', name: 'budget.xlsx', size: 80, kind: 'office-excel' },
     ] as never);
     render(<AtFileMenu query="bud" onSelect={vi.fn()} onClose={vi.fn()} />);
     expect(await screen.findByText('📈')).toBeInTheDocument();
