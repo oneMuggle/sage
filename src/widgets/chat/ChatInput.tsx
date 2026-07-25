@@ -27,6 +27,13 @@ interface ChatInputProps {
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
+  /**
+   * Optional workspace root — forwarded into the AtFileMenu so office docs
+   * are visible in the @ autocomplete. When undefined (e.g. caller has no
+   * workspace yet), only filesystem files show — that is the previous
+   * behavior and remains a valid fallback.
+   */
+  workspacePath?: string;
 }
 
 const KNOWLEDGE_DOCS: KnowledgeDocType[] = [
@@ -45,6 +52,7 @@ export function ChatInput({
   isLoading = false,
   disabled = false,
   placeholder,
+  workspacePath,
 }: ChatInputProps) {
   const { t } = useI18n();
   const [value, setValue] = useState('');
@@ -258,6 +266,7 @@ export function ChatInput({
               setValue(newValue);
               setCursorPos(atQuery.startIdx);
             }}
+            workspacePath={workspacePath}
           />
         )
       }

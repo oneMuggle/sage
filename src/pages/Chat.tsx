@@ -5,6 +5,7 @@ import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
 import { useStore } from '../shared/lib/store';
+import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
@@ -33,6 +34,12 @@ export function Chat() {
   const { settings, isLoading: settingsLoading } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
+  // Office M1-M2 chat-read: inject the active workspace path so the
+  // ChatInput → AtFileMenu chain can surface office docs in @ autocomplete.
+  // Default provider value is `undefined` (no workspace selected yet in M1-M2),
+  // which keeps file-search behavior unchanged in production. Office.tsx will
+  // be migrated onto this context in a follow-up PR.
+  const workspacePath = useCurrentWorkspace();
   const pendingSentRef = useRef(false);
   // LOW-1: 跟随新消息/流式 token 自动滚到底。
   // 必须用 derivedMessages 而非 messages —— 流式 override 只在 derivedMessages 里,
@@ -179,6 +186,7 @@ export function Chat() {
         isLoading={isLoading}
         disabled={!hasConfig}
         placeholder="输入消息..."
+        workspacePath={workspacePath}
       />
     </div>
   );
