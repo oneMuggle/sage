@@ -34,6 +34,12 @@
 | 2026-07-08 | [Wiki Streaming Design](./2026-07-08-wiki-streaming-design.md) | Sage LLM Wiki — 流式聊天/摄取接入设计 |
 | 2026-07-10 | [Release Branch Strategy Design](./2026-07-10-release-branch-strategy-design.md) | Sage Release Branch 策略（稳定化分支 + 下游消费镜像） |
 | 2026-07-17 | [Docs Cleanup Design](./2026-07-17-docs-cleanup-design.md) | Sage 文档整理 (Docs Cleanup) — 设计 Spec |
+| 2026-07-22 | [Settings Schema Canonicalization Design](./2026-07-22-settings-schema-canonicalization-design.md) | Settings snake_case ↔ camelCase 边界规范化设计 |
+| 2026-07-23 | [Chat-native Office CRUD Design](./2026-07-23-office-chat-native-crud-design.md) | Office M0–M5 的 Chat-native 产品与安全基线 |
+| 2026-07-23 | [Office Phase 1 Hardening Design](./2026-07-23-office-phase1-hardening-design.md) | 已 superseded 的独立 Office 加固设计 |
+| 2026-07-24 | [Office M1–M2 Chat-Read Design](./2026-07-24-office-m1-m2-chat-read-design.md) | 已实施的 `@` Office 摘要注入子集 |
+| 2026-07-24 | [Office Staging Sweep Design](./2026-07-24-office-staging-sweep-design.md) | Workspace staging orphan sweep 设计 |
+| 2026-07-25 | [Office M1–M2 Completion Design](./2026-07-25-office-m1-m2-completion-design.md) | 完整 session Workspace、Office list/read tools 与跨进程 E2E 设计 |
 
 ## 与其他目录关系
 
@@ -43,6 +49,6 @@
 | [`docs/technical/`](../../technical/) | 已归档的**横切关注点**技术文档 |
 | [`docs/user-manual/`](../../user-manual/) | 终端用户操作指南 |
 | [`docs/superpowers/ideas/`](../ideas/) | 暂不做的零散想法 |
-| [`docs/superpowers/plans/`](../plans/) | 已合并的**历史执行计划**(2026-07-17 整理后已清空,仅保留当前 cleanup 自身) |
+| [`docs/superpowers/plans/`](../plans/) | 历史执行计划和过渡期 active plan；以文件内状态与 merged/superseded 说明为准 |
 
 > 维护规则来源:`feature-development.md`(项目根)。
