@@ -77,4 +77,41 @@ describe('AtFileMenu kind rendering', () => {
     expect(screen.getByText('📊')).toBeInTheDocument();
     expect(screen.getByText('📈')).toBeInTheDocument();
   });
+
+  // ─── workspacePath plumbing (T6.WS.GAP closure) ────────────────
+
+  it('forwards workspacePath to fileSearchClient.search as 3rd arg', async () => {
+    const fs = await import('../../../shared/api/fileSearchClient');
+    vi.mocked(fs.fileSearchClient.search).mockReset();
+    vi.mocked(fs.fileSearchClient.search).mockResolvedValue([]);
+    render(
+      <AtFileMenu
+        query="prop"
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        workspacePath="/w/my-workspace"
+      />
+    );
+    await vi.waitFor(() => {
+      expect(fs.fileSearchClient.search).toHaveBeenCalledWith(
+        'prop',
+        expect.objectContaining({ signal: expect.anything() }),
+        '/w/my-workspace'
+      );
+    });
+  });
+
+  it('omits workspacePath when not provided (caller did not inject)', async () => {
+    const fs = await import('../../../shared/api/fileSearchClient');
+    vi.mocked(fs.fileSearchClient.search).mockReset();
+    vi.mocked(fs.fileSearchClient.search).mockResolvedValue([]);
+    render(<AtFileMenu query="x" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await vi.waitFor(() => {
+      expect(fs.fileSearchClient.search).toHaveBeenCalledWith(
+        'x',
+        expect.objectContaining({ signal: expect.anything() }),
+        undefined
+      );
+    });
+  });
 });

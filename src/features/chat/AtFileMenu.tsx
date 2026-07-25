@@ -19,9 +19,19 @@ interface AtFileMenuProps {
   query: string | null;
   onSelect: (path: string) => void;
   onClose: () => void;
+  /**
+   * Optional workspace root — forwarded to `fileSearchClient.search` as the
+   * 3rd argument so office docs (which require a workspace) appear in the
+   * menu. Without it, the truthy gate inside `search` skips the office list
+   * and only filesystem files are returned.
+   *
+   * When the caller (ChatInput / Chat page) does not have workspace context,
+   * leave this undefined; the menu still works for filesystem files.
+   */
+  workspacePath?: string;
 }
 
-export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
+export function AtFileMenu({ query, onSelect, workspacePath }: AtFileMenuProps) {
   const { t } = useI18n();
   const [results, setResults] = useState<FileSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -46,7 +56,7 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
     setSelectedIdx(0);
 
     fileSearchClient
-      .search(query, { signal: controller.signal })
+      .search(query, { signal: controller.signal }, workspacePath)
       .then((res) => {
         setResults(res);
         setIsLoading(false);
@@ -68,7 +78,7 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
     return () => {
       controller.abort();
     };
-  }, [query]);
+  }, [query, workspacePath]);
 
   // Don't render if query is null
   if (query === null) {
@@ -87,7 +97,7 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
       setIsLoading(true);
 
       fileSearchClient
-        .search(query)
+        .search(query, undefined, workspacePath)
         .then((res) => {
           setResults(res);
           setIsLoading(false);
