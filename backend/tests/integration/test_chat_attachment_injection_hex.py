@@ -203,3 +203,88 @@ async def test_hex_chat_multi_doc_in_order(hex_client_with_mocks, monkeypatch, t
     assert content.index("=== a.pptx ===") < content.index("=== b.docx ===")
     assert "=== a.pptx ===\nP" in content
     assert "=== b.docx ===\nW" in content
+
+
+@pytest.mark.asyncio()
+@_HEX_ONLY
+async def test_hex_chat_attachment_block_not_persisted(
+    hex_client_with_mocks, monkeypatch, tmp_path
+):
+    """T4.M2 闭包: attachment system message 不写入 storage.
+
+    旧实现用 svc.storage.append_message(...) 持久化块, 后续 turn 会重发。
+    新实现应在 run_turn 期间 inline prepend, 不留痕。
+    """
+    client, fake_svc, mock_llm = hex_client_with_mocks
+
+    pptx_path = tmp_path / "x.pptx"
+    pptx_path.touch()
+    monkeypatch.setattr(
+        attachment_resolver, "_digest_ppt", lambda path, workspace: "D"
+    )
+
+    sid = await fake_svc.storage.create_session()
+    resp = await client.post(
+        CHAT_PATH,
+        json={
+            "session_id": sid,
+            "message": f"看 @{pptx_path}",
+            "workspace_path": str(tmp_path),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    # 持久化的 history 应只含 user + assistant (无 attachment system message)
+    persisted = await fake_svc.storage.get_messages(sid)
+    roles = [m.role for m in persisted]
+    assert roles == [Role.USER, Role.ASSISTANT], (
+        f"attachment system message leaked into storage: roles={roles}"
+    )
+    assert not any("<attachments>" in (m.content or "") for m in persisted)
+
+    # 但当前 turn 的 LLM 调用应收到 attachment 块
+    assert len(mock_llm.calls) == 1
+    messages = mock_llm.calls[0]["messages"]
+    assert _attachment_messages(messages), (
+        "current turn's LLM call lost the attachment block"
+    )
+
+
+@pytest.mark.asyncio()
+@_HEX_ONLY
+async def test_hex_chat_second_turn_attachment_not_replayed(
+    hex_client_with_mocks, monkeypatch, tmp_path
+):
+    """T4.M2 闭包: 第二轮再发同 mention 时, 不应重复注入历史 turn 的 attachment 块."""
+    client, fake_svc, mock_llm = hex_client_with_mocks
+
+    pptx_path = tmp_path / "x.pptx"
+    pptx_path.touch()
+    monkeypatch.setattr(
+        attachment_resolver, "_digest_ppt", lambda path, workspace: "D"
+    )
+
+    sid = await fake_svc.storage.create_session()
+    # 第一轮: 触发 attachment 块
+    await client.post(
+        CHAT_PATH,
+        json={
+            "session_id": sid,
+            "message": f"first @{pptx_path}",
+            "workspace_path": str(tmp_path),
+        },
+    )
+    # 第二轮: 不带 mention
+    await client.post(
+        CHAT_PATH,
+        json={
+            "session_id": sid,
+            "message": "second no mention",
+            "workspace_path": str(tmp_path),
+        },
+    )
+
+    assert len(mock_llm.calls) == 2
+    second_messages = mock_llm.calls[1]["messages"]
+    # 第二轮 LLM 收到的 messages 不应包含任何 attachment 块
+    assert _attachment_messages(second_messages) == []
