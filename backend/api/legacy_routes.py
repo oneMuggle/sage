@@ -27,7 +27,7 @@ from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, StrictBool
+from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
 from backend.chat import attachment_resolver
@@ -36,6 +36,13 @@ from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.memory import get_memory_manager
+from backend.office.chat_refs import ChatOfficeRef, authorize_chat_office_request
+from backend.office.workspace_errors import (
+    WorkspaceDocumentNotFoundError,
+    WorkspaceNotBoundError,
+    WorkspacePathMismatchError,
+    WorkspaceSessionNotFoundError,
+)
 from backend.scheduler import get_evolution_logs, get_scheduler
 
 logger = logging.getLogger(__name__)
@@ -123,6 +130,13 @@ class ChatRequest(BaseModel):
     reasoning_effort: Optional[str] = None
 
     thinking_budget: Optional[int] = None
+
+    # Task 6 (M1-M2 chat-read): frontend 把 @mention 解析成
+    # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
+    # 在调 LLM 前同步授权. 空列表 = legacy 路径(attachment_resolver).
+    # 用 forward ref 避免 route→domain 循环导入; ``model_rebuild`` 在
+    # legacy_routes 模块加载完毕时自动被 Pydantic v2 调用.
+    office_refs: List["ChatOfficeRef"] = Field(default_factory=list)
 
 
 class MessageResponse(BaseModel):
@@ -997,6 +1011,65 @@ async def chat_stream_create(data: ChatRequest, request: Request):
         f"api_key={'***' if data.api_key else 'MISSING'}, "
         f"model={_safe_log_field(data.model or 'default')}"
     )
+
+    # Task 6 (M1-M2): 同步授权 ChatOfficeRef. 这一步必须在
+    # ``registry.create`` 之前完成 — 一旦 stream id 进入注册表,
+    # 失败路径就必须显式清理才能避免孤儿. 把授权放到 producer 启动
+    # 之前还有一个好处:授权失败时既不消耗 stream slot,也不浪费 LLM token.
+    # 错误映射见 ``backend.office.workspace_errors`` 模块注释.
+    try:
+        db = get_database()
+        _auth_conn = db.get_connection()
+        authorize_chat_office_request(
+            _auth_conn,
+            data.session_id,
+            data.workspace_path,
+            data.office_refs,
+        )
+    except WorkspacePathMismatchError as exc:
+        logger.warning(
+            f"[REQ {request_id}] /chat/stream office-ref path mismatch: {exc.safe_message}"
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "type": exc.code,
+                "message": exc.safe_message,
+            },
+        )
+    except WorkspaceNotBoundError as exc:
+        logger.warning(
+            f"[REQ {request_id}] /chat/stream office-ref not bound: {exc.safe_message}"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "type": exc.code,
+                "message": exc.safe_message,
+            },
+        )
+    except WorkspaceSessionNotFoundError as exc:
+        logger.warning(
+            f"[REQ {request_id}] /chat/stream office-ref session not found: {exc.safe_message}"
+        )
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": exc.code,
+                "message": exc.safe_message,
+            },
+        )
+    except WorkspaceDocumentNotFoundError as exc:
+        logger.warning(
+            f"[REQ {request_id}] /chat/stream office-ref doc not found: {exc.safe_message}"
+        )
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": exc.code,
+                "message": exc.safe_message,
+            },
+        )
 
     registry: StreamRegistry = request.app.state.streams
 
