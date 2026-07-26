@@ -136,7 +136,7 @@ class ChatRequest(BaseModel):
     # 在调 LLM 前同步授权. 空列表 = legacy 路径(attachment_resolver).
     # 用 forward ref 避免 route→domain 循环导入; ``model_rebuild`` 在
     # legacy_routes 模块加载完毕时自动被 Pydantic v2 调用.
-    office_refs: List["ChatOfficeRef"] = Field(default_factory=list)
+    office_refs: List[ChatOfficeRef] = Field(default_factory=list)
 
 
 class MessageResponse(BaseModel):

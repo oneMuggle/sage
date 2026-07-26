@@ -51,14 +51,14 @@ Public surface:
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
-
-from backend.office.errors import OfficePathError
-from backend.office.storage import validate_workspace
 from dataclasses import dataclass
+from pathlib import Path
 from typing import FrozenSet, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from backend.office.errors import OfficePathError
+from backend.office.storage import validate_workspace
 
 from .session_workspace import (
     get_document_in_workspace,

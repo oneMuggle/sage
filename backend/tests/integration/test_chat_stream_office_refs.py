@@ -24,7 +24,6 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.data.database import Database
 from backend.main import app
 from backend.office.models import (
     OfficeDocStatus,
