@@ -72,6 +72,24 @@ describe('invokeBackend', () => {
     );
   });
 
+  it('excludes workspace path parameters from the bind request body', async () => {
+    mockedFetch.mockResolvedValueOnce(mockJsonResponse({ binding: null }));
+
+    await invokeBackend(
+      'workspace_bind',
+      { sessionId: 's/1', workspacePath: '/synthetic/work' },
+      'http://x',
+    );
+
+    expect(mockedFetch).toHaveBeenCalledWith(
+      'http://x/api/v1/sessions/s%2F1/workspace',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ workspace_path: '/synthetic/work' }),
+      }),
+    );
+  });
+
   it('DELETE sends no body', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse({ ok: true }));
     await invokeBackend('delete_session', { id: 's1' }, 'http://x');
