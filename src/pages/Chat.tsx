@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
+import type { ChatOfficeRef } from '../shared/api';
 import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
@@ -95,18 +96,20 @@ export function Chat() {
 
   const handleSendMessage = async (
     content: string,
-    _options?: {
+    options?: {
       knowledgeRefs?: { id: string; title: string }[];
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
+      officeRefs?: readonly ChatOfficeRef[];
     },
   ) => {
     clearError();
+    const officeRefs = options?.officeRefs;
     if (!currentSessionId) {
       const sessionId = await createSession();
-      await sendMessage(content, sessionId);
+      await sendMessage(content, sessionId, officeRefs);
     } else {
-      await sendMessage(content);
+      await sendMessage(content, undefined, officeRefs);
     }
   };
 

@@ -27,7 +27,7 @@ import type { WorkspaceContextValue } from '../../app/providers/SessionWorkspace
  * no provider is mounted; `useCurrentWorkspace` falls back to `undefined`
  * to preserve the M1-M2 chat-read shape.
  */
- 
+
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 /**
@@ -39,10 +39,22 @@ export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null
  * AtFileMenu chain uses it. Use `useWorkspaceContext` for full lifecycle
  * access (status / error / bind / revoke / refresh).
  */
- 
+
 export function useCurrentWorkspace(): string | undefined {
   const ctx = useContext(WorkspaceContext);
   return ctx?.binding?.workspacePath;
+}
+
+/**
+ * Task 7 (2026-07-26): defensive accessor that returns `null` when no
+ * `SessionWorkspaceProvider` is mounted, instead of throwing. Used by
+ * `AtFileMenu` / `ChatInput` so legacy tests (which render these
+ * components without the provider) keep passing. In production the
+ * provider is mounted in `AppProviders`, so this returns the live
+ * `WorkspaceContextValue` exactly like `useWorkspaceContext`.
+ */
+export function useOptionalWorkspaceContext(): WorkspaceContextValue | null {
+  return useContext(WorkspaceContext);
 }
 
 // Re-export the value type so consumers do not need to import from

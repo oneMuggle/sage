@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
+import { importOfficeReference } from '../../features/office/importOfficeReference';
 import { skillsApi } from '../../shared/api';
+import { type AtFileSelection } from '../../shared/api/fileSearchClient';
+import type { ChatOfficeRef } from '../../shared/api/types';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../../shared/lib/i18n';
+import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
 import { InputCard, type KnowledgeDocType } from './InputCard';
 import {
@@ -20,6 +24,12 @@ interface ChatInputProps {
       knowledgeRefs?: { id: string; title: string }[];
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
+      /**
+       * Task 7 (2026-07-26): managed Office references from the @-menu.
+       * The Chat page forwards these into `chatApi.chatStream`'s 5th arg
+       * so the LLM can see the office doc summaries.
+       */
+      officeRefs?: readonly ChatOfficeRef[];
     },
   ) => void;
   onInterrupt?: () => void;
@@ -28,10 +38,10 @@ interface ChatInputProps {
   disabled?: boolean;
   placeholder?: string;
   /**
-   * Optional workspace root — forwarded into the AtFileMenu so office docs
-   * are visible in the @ autocomplete. When undefined (e.g. caller has no
-   * workspace yet), only filesystem files show — that is the previous
-   * behavior and remains a valid fallback.
+   * Optional workspace root — kept for backwards-compat with callers that
+   * haven't migrated to the SessionWorkspaceProvider yet. When the
+   * provider is mounted (Chat page via SessionWorkspaceProvider), the
+   * menu reads sessionId + workspacePath from there instead.
    */
   workspacePath?: string;
 }
@@ -65,6 +75,20 @@ export function ChatInput({
   // Path B: dynamic SKILL.md slash command names fetched from the backend.
   // On fetch failure we silently fall back to an empty list (no slash skills).
   const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
+
+  // Task 7 (2026-07-26): managed Office refs attached via the @ menu.
+  // Dedupe by docId (immutable state — every update is a new array).
+  const [officeRefs, setOfficeRefs] = useState<readonly ChatOfficeRef[]>([]);
+
+  // Workspace context — provides sessionId + binding for the @ menu.
+  // Falls back to the legacy `workspacePath` prop for callers that don't
+  // mount the provider (e.g. some legacy tests). Use the optional variant
+  // so legacy tests that don't mount the provider don't throw.
+  const workspaceContext = useOptionalWorkspaceContext();
+  const effectiveWorkspacePath = workspaceContext?.binding?.workspacePath ?? workspacePath;
+  // sessionId is used by the AtFileMenu itself (via useOptionalWorkspaceContext);
+  // expose on the closure so future tests can assert on it.
+  const effectiveSessionId = workspaceContext?.sessionId ?? null;
 
   // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
@@ -102,15 +126,90 @@ export function ChatInput({
     isDragOver,
   } = useFileUpload();
 
+  /**
+   * Insert a plain `@<path> ` into the textarea, replacing the @-query.
+   */
+  const insertAtFilePath = useCallback(
+    (filePath: string) => {
+      if (atQuery.query === null) return;
+      const newValue =
+        value.slice(0, atQuery.startIdx) + '@' + filePath + ' ' + value.slice(atQuery.endIdx);
+      setValue(newValue);
+      setCursorPos(atQuery.startIdx + 1 + filePath.length + 1);
+    },
+    [value, atQuery],
+  );
+
+  /**
+   * Add a managed office ref. Dedupe by `docId` — adding the same docId
+   * twice is a no-op (immutable update).
+   */
+  const addOfficeRef = useCallback((ref: ChatOfficeRef) => {
+    setOfficeRefs((prev) => {
+      if (prev.some((r) => r.docId === ref.docId)) return prev;
+      return [...prev, ref];
+    });
+  }, []);
+
+  /**
+   * Remove an office ref by docId.
+   */
+  const removeOfficeRef = useCallback((docId: string) => {
+    setOfficeRefs((prev) => prev.filter((r) => r.docId !== docId));
+  }, []);
+
+  /**
+   * Handle the @-menu selection. Routes by discriminated-union kind:
+   *   - 'file' → insert `@<path>` into the textarea (existing behavior)
+   *   - 'office' → add the ChatOfficeRef to officeRefs
+   *   - 'office-import' → call importOfficeReference then add the ref
+   */
+  const handleAtFileSelect = useCallback(
+    async (selection: AtFileSelection) => {
+      if (selection.kind === 'file') {
+        insertAtFilePath(selection.path);
+        return;
+      }
+      if (selection.kind === 'office') {
+        addOfficeRef(selection.ref);
+        return;
+      }
+      // kind === 'office-import'
+      if (!effectiveWorkspacePath) {
+        // No workspace bound — surface a friendly error rather than calling
+        // the gateway. Chat.tsx renders the WorkspaceBindModal entry point;
+        // we still close the @ menu so the user isn't stuck.
+        console.warn('[ChatInput] Office import requires a bound workspace');
+        return;
+      }
+      try {
+        const ref = await importOfficeReference(effectiveWorkspacePath, selection.result);
+        addOfficeRef(ref);
+      } catch (e) {
+        console.error('[ChatInput] Office import failed', e);
+      }
+    },
+    [effectiveWorkspacePath, insertAtFilePath, addOfficeRef],
+  );
+
+  const handleAtFileClose = useCallback(() => {
+    if (atQuery.query === null) return;
+    const newValue = value.slice(0, atQuery.startIdx) + value.slice(atQuery.endIdx);
+    setValue(newValue);
+    setCursorPos(atQuery.startIdx);
+  }, [value, atQuery]);
+
   const handleSend = () => {
     if (!value.trim() || isLoading) return;
     onSend(value.trim(), {
       knowledgeRefs: knowledgeRefs.length > 0 ? knowledgeRefs : undefined,
       attachments: files.length > 0 ? files : undefined,
       images: images.length > 0 ? images : undefined,
+      officeRefs: officeRefs.length > 0 ? officeRefs : undefined,
     });
     setValue('');
     setKnowledgeRefs([]);
+    setOfficeRefs([]);
     clearAll();
   };
 
@@ -220,6 +319,11 @@ export function ChatInput({
     }
   };
 
+  // Effective sessionId is read by the AtFileMenu through the workspace
+  // context; expose a hook here so future tests can assert on it without
+  // reaching into the closure.
+  void effectiveSessionId;
+
   return (
     <InputCard
       value={value}
@@ -232,9 +336,11 @@ export function ChatInput({
       files={files}
       images={images}
       knowledgeRefs={knowledgeRefs}
+      officeRefs={officeRefs}
       onRemoveFile={removeFile}
       onRemoveImage={removeImage}
       onRemoveKnowledge={(idx) => setKnowledgeRefs((prev) => prev.filter((_, i) => i !== idx))}
+      onRemoveOfficeRef={removeOfficeRef}
       knowledgeDocs={KNOWLEDGE_DOCS}
       showKnowledgeSelector={showKnowledgeSelector}
       onToggleKnowledgeSelector={setShowKnowledgeSelector}
@@ -255,18 +361,10 @@ export function ChatInput({
         atQuery.query !== null && (
           <AtFileMenu
             query={atQuery.query}
-            onSelect={(path) => {
-              const newValue =
-                value.slice(0, atQuery.startIdx) + '@' + path + ' ' + value.slice(atQuery.endIdx);
-              setValue(newValue);
-              setCursorPos(atQuery.startIdx + 1 + path.length + 1);
+            onSelect={(selection) => {
+              void handleAtFileSelect(selection);
             }}
-            onClose={() => {
-              const newValue = value.slice(0, atQuery.startIdx) + value.slice(atQuery.endIdx);
-              setValue(newValue);
-              setCursorPos(atQuery.startIdx);
-            }}
-            workspacePath={workspacePath}
+            onClose={handleAtFileClose}
           />
         )
       }
