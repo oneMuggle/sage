@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import builtins
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .base import BaseTool, ToolSchema
+from .context import ToolExecutionContext, current_tool_context
 
 logger = logging.getLogger(__name__)
 
@@ -87,15 +88,40 @@ class ToolRegistry:
         """
         return list(self._tools.keys())
 
-    def get_schemas_for_llm(self) -> builtins.list[Dict[str, Any]]:
+    def get_schemas_for_llm(
+        self,
+        context: Optional[ToolExecutionContext] = None,
+    ) -> builtins.list[Dict[str, Any]]:
         """
         获取适合 LLM 调用的工具 Schema 列表
+
+        Tools marked ``requires_tool_context = True`` are filtered out
+        unless an active ``ToolExecutionContext`` is in scope. Normal
+        tools are never hidden by an active context.
+
+        Args:
+            context: Explicit context override. When ``None`` (default),
+                falls back to ``current_tool_context()`` so the agent loop
+                can pull the per-request context without threading it
+                through every helper signature. Pass ``None`` explicitly
+                to opt out of the ContextVar lookup and force the
+                "no context" filter behavior.
 
         Returns:
             包含 name, description, parameters 的字典列表
         """
+        # Resolve the effective context: explicit ``context`` arg wins,
+        # otherwise consult the ContextVar. ``current_tool_context()``
+        # returns ``None`` outside any set_tool_context() block.
+        effective_context = context if context is not None else current_tool_context()
+
         result = []
         for tool in self._tools.values():
+            # Hide office-only tools when there's no context to bind them
+            # to. Normal tools are always visible -- an active context
+            # widens the set, never narrows it.
+            if tool.requires_tool_context and effective_context is None:
+                continue
             result.append(
                 {
                     "name": tool.schema.name,
