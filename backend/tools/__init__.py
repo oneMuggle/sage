@@ -3,6 +3,7 @@
 
 提供所有内置工具的注册函数
 """
+
 from typing import Optional
 
 from backend.domain.tool_policy import ToolPolicy
@@ -11,6 +12,7 @@ from .base import BaseTool, ToolResult, ToolSchema
 from .calculator import CalculatorTool
 from .file_tool import ListDirTool, ReadFileTool, WriteFileTool
 from .memory_tool import MemorySaveTool, MemorySearchTool
+from .office_tool import OfficeListTool, OfficeReadTool
 from .registry import ToolRegistry
 from .skill import SkillHotLoader
 from .terminal import TerminalTool
@@ -35,6 +37,8 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
     registry.register(CalculatorTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))
     registry.register(MemorySaveTool(policy=policy))
+    registry.register(OfficeListTool(policy=policy))
+    registry.register(OfficeReadTool(policy=policy))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
@@ -61,6 +65,8 @@ __all__ = [
     "CalculatorTool",
     "MemorySearchTool",
     "MemorySaveTool",
+    "OfficeListTool",
+    "OfficeReadTool",
     "SkillHotLoader",
     "register_all_tools",
 ]

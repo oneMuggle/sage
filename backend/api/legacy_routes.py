@@ -1020,7 +1020,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
     try:
         db = get_database()
         _auth_conn = db.get_connection()
-        authorize_chat_office_request(
+        _auth_result = authorize_chat_office_request(
             _auth_conn,
             data.session_id,
             data.workspace_path,
@@ -1038,9 +1038,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             },
         )
     except WorkspaceNotBoundError as exc:
-        logger.warning(
-            f"[REQ {request_id}] /chat/stream office-ref not bound: {exc.safe_message}"
-        )
+        logger.warning(f"[REQ {request_id}] /chat/stream office-ref not bound: {exc.safe_message}")
         raise HTTPException(
             status_code=403,
             detail={
@@ -1079,6 +1077,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
         这里把 AgentEvent.to_dict() 在入队时序列化,避免对象跨 task 边界泄漏
         内部状态(detached Pydantic / cyclic ref 等)。
         """
+        # Task 9 (M1-M2): build a ToolExecutionContext from the captured
+        # authorization so Office tools can read the session's binding.
+        # set/reset around ``agent.run_loop`` via try/finally so the
+        # ContextVar never leaks across producer invocations.
+        from backend.tools.context import (
+            ToolExecutionContext,
+            reset_tool_context,
+            set_tool_context,
+        )
+
+        _tool_ctx_token = None
+        if _auth_result is not None:
+            _tool_ctx = ToolExecutionContext(
+                session_id=_auth_result.session_id,
+                stream_id=stream_id,
+                binding_generation=_auth_result.binding_generation,
+                office_doc_scope=_auth_result.office_doc_scope,
+            )
+            _tool_ctx_token = set_tool_context(_tool_ctx)
         try:
             llm_config = None
             if data.api_key and data.api_url:
@@ -1241,6 +1258,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 f"type={e.type.value}, message={e.message}"
             )
             await entry.queue.put({"error": e.to_dict(), "state": "failed"})
+        finally:
+            # Task 9 (M1-M2): always reset the tool context so the
+            # ContextVar never leaks into the next producer invocation.
+            if _tool_ctx_token is not None:
+                reset_tool_context(_tool_ctx_token)
 
     await registry.create(stream_id, queue_maxsize=1000, producer=producer)
     return {"streamId": stream_id}
