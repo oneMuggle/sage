@@ -318,7 +318,9 @@ def _make_handler(db):
             m = _match(r"^/api/v1/sessions/([^/]+)/workspace$", path)
             if m:
                 sid = m.group(1)
-                workspace_path = data.get("workspace_path", "")
+                # Accept both snake_case (real backend contract) and camelCase
+                # (Electron IPC body fn sends workspacePath per commands.ts:64).
+                workspace_path = data.get("workspace_path") or data.get("workspacePath", "")
                 if not workspace_path:
                     self._send_json(
                         400,
@@ -385,7 +387,7 @@ def _make_handler(db):
                             },
                         )
                         return
-                    workspace_path = data.get("workspace_path", "")
+                    workspace_path = data.get("workspace_path") or data.get("workspacePath", "")
                     if workspace_path and binding["workspace_path"] != workspace_path:
                         self._send_json(
                             400,
