@@ -26,9 +26,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import atexit
-import concurrent.futures
 import logging
 import uuid
 from typing import List, Optional
@@ -41,21 +38,11 @@ from sage_core.exceptions import SessionNotFoundError
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.application.services.chat_service import ChatService
 from backend.application.services.session_service import SessionService
-from backend.chat import attachment_resolver
+from backend.chat.executors import resolve_attachments
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# 独立 executor 给 office 附件处理用 (避免阻塞其他 FastAPI handler).
-# 与 legacy_routes._ATTACHMENT_EXECUTOR 隔离 (hex 路径独立演进, 不耦合).
-_HEX_ATTACHMENT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
-    max_workers=4,
-    thread_name_prefix="hex-attachment-resolver",
-)
-# pytest session teardown 会触发 ResourceWarning (ThreadPoolExecutor 未显式关闭);
-# 注册 atexit handler 关闭它, wait=False 表示不等 in-flight 任务.
-atexit.register(_HEX_ATTACHMENT_EXECUTOR.shutdown, wait=False)
 
 
 # ==================== Pydantic 模型 ====================
@@ -167,11 +154,8 @@ async def chat(
     # Office @-mention: 与 legacy /chat/stream 对齐, 在 run_in_executor 里
     # 跑 attachment_resolver.process (含路径安全校验 + 50MiB 上限 + 失败
     # mention 静默 skip — 这些已在 Task 3 落地到 attachment_resolver.process 本身).
-    attachment_block = await asyncio.get_running_loop().run_in_executor(
-        _HEX_ATTACHMENT_EXECUTOR,
-        attachment_resolver.process,
-        req.message,
-        req.workspace_path or "",
+    attachment_block = await resolve_attachments(
+        req.message, req.workspace_path or ""
     )
     # T4.M2 closure: 附件块只在当前 LLM 调用中生效, 不持久化.
     # 旧实现用 svc.storage.append_message(...) 会让后续 turn 重发同一块,
