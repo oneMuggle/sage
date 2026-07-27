@@ -4,9 +4,11 @@
 - **Branch(es):**
   - `fix/office-m1-m2-chat-read`（从 `release/win7` 切，先 spec + plan + TDD）
   - 与 `main` 同步走项目惯例：main 提 PR + win7 单 squash cherry-pick
-- **Status:** Designed（待用户 review → writing-plans → 实施）
+- **Status:** 已实施（`@` Office 摘要注入子集）；完整 M1–M2 由 [`2026-07-25-office-m1-m2-completion-design.md`](./2026-07-25-office-m1-m2-completion-design.md) supersede
 - **Author:** Claude（与用户共同 brainstorming 5 个问题达成）
-- **Spec owner PR:** TBD（spec 阶段只 commit 到 feature 分支）
+- **Spec owner PR:** #210（main）/ #211（release/win7）
+
+> 本文保留为已落地摘要注入链路的设计记录。session Workspace binding、`ChatOfficeRef`、Office list/read tools、统一 Workspace context 与跨进程 E2E 以 2026-07-25 完整收尾设计为准。
 
 ## 1. 背景与目标
 
