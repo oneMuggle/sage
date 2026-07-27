@@ -42,7 +42,7 @@ vi.mock('../../../features/chat/AtFileMenu', () => ({
     onClose,
   }: {
     query: string | null;
-    onSelect: (p: string) => void;
+    onSelect: (s: unknown) => void;
     onClose: () => void;
   }) => {
     if (query === null) return null;
@@ -53,7 +53,7 @@ vi.mock('../../../features/chat/AtFileMenu', () => ({
           data-testid="at-file-mock-item"
           onClick={() => {
             atFileOnSelectMock('src/picked.ts');
-            onSelect('src/picked.ts');
+            onSelect({ kind: 'file', path: 'src/picked.ts', name: 'picked.ts' });
           }}
         >
           mock item

@@ -1,5 +1,6 @@
 /**
- * Chat 页 — WorkspaceContext wire-in 测试 (Office M1-M2 chat-read completion)
+ * Chat 页 — WorkspaceContext wire-in 测试 (Office M1-M2 chat-read closure +
+ * Task 5, 2026-07-26 SessionWorkspaceProvider migration).
  *
  * 覆盖 Chat.tsx 中：
  *   - Chat imports useCurrentWorkspace() from shared/lib/workspaceContext
@@ -8,13 +9,14 @@
  *
  * 关闭整个 Critical #1：Chat.tsx 把 workspacePath 注入 ChatInput → AtFileMenu
  * 链。三种状态各覆盖：
- *   1. context 提供具体路径 → ChatInput 收到该路径
- *   2. context 提供 undefined → ChatInput 收到 undefined
+ *   1. provider 提供具体路径 → ChatInput 收到该路径
+ *   2. provider 提供 null binding → ChatInput 收到 undefined
  *   3. 没有 provider → ChatInput 收到 undefined (useContext fallback)
  *
- * 不发起任何真实 IPC/localStorage;useSettings / useChat / fileSearchClient 都被 mock。
+ * 不发起任何真实 IPC/localStorage;useSettings / useChat / fileSearchClient
+ * 都被 mock；workspaceApi 也被 mock 以避免走真实后端。
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -104,25 +106,48 @@ vi.mock('../../widgets/chat/ChatInput', () => ({
   ActiveAgentIndicator: () => null,
 }));
 
+// Task 5: workspaceApi is now the source of truth — stub it so the
+// provider's get() resolves with the requested binding shape.
+const mockGet = vi.fn();
+vi.mock('../../shared/api/workspaceApi', () => ({
+  workspaceApi: {
+    bind: vi.fn().mockResolvedValue({ binding: null }),
+    get: (...args: unknown[]) => mockGet(...args),
+    revoke: vi.fn().mockResolvedValue({ revoked: true, generation: 1 }),
+  },
+}));
+
+import { SessionWorkspaceProvider } from '../../app/providers/SessionWorkspaceProvider';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
-import { WorkspaceContextProvider } from '../../shared/lib/workspaceContext';
 import { Chat } from '../Chat';
 
 function renderChat(workspaceValue: string | undefined) {
   chatInputPropsSpy.mockClear();
+  mockGet.mockReset();
+  mockGet.mockResolvedValue({
+    binding: workspaceValue
+      ? {
+          sessionId: 'session-ws',
+          workspacePath: workspaceValue,
+          generation: 1,
+          activatedAt: 0,
+          revokedAt: null,
+        }
+      : null,
+  });
   return render(
     <MemoryRouter>
       <I18nProvider>
-        <WorkspaceContextProvider value={workspaceValue}>
+        <SessionWorkspaceProvider>
           <Chat />
-        </WorkspaceContextProvider>
+        </SessionWorkspaceProvider>
       </I18nProvider>
     </MemoryRouter>,
   );
 }
 
-describe('Chat — workspacePath wire-in (Office M1-M2 chat-read closure)', () => {
+describe('Chat — workspacePath wire-in (Office M1-M2 chat-read closure + Task 5)', () => {
   beforeEach(() => {
     useSettingsMock.mockReturnValue({
       settings: {
@@ -141,22 +166,29 @@ describe('Chat — workspacePath wire-in (Office M1-M2 chat-read closure)', () =
     useStore.setState({ messages: [], currentSessionId: 'session-ws', sessions: [] });
   });
 
-  it('forwards WorkspaceContext value to ChatInput as workspacePath prop', () => {
+  it('forwards WorkspaceContext value to ChatInput as workspacePath prop', async () => {
     renderChat('/w/my-project');
     expect(screen.getByTestId('chat-input-mock')).toBeInTheDocument();
-    const props = chatInputPropsSpy.mock.calls[0][0] as Record<string, unknown>;
-    expect(props.workspacePath).toBe('/w/my-project');
+    await waitFor(() => {
+      const calls = chatInputPropsSpy.mock.calls;
+      const props = calls[calls.length - 1][0] as Record<string, unknown>;
+      expect(props.workspacePath).toBe('/w/my-project');
+    });
     expect(screen.getByTestId('chat-input-workspace').textContent).toBe('/w/my-project');
   });
 
-  it('passes undefined to ChatInput when context value is undefined', () => {
+  it('passes undefined to ChatInput when binding is null', async () => {
     renderChat(undefined);
-    const props = chatInputPropsSpy.mock.calls[0][0] as Record<string, unknown>;
-    expect(props.workspacePath).toBeUndefined();
+    await waitFor(() => {
+      const calls = chatInputPropsSpy.mock.calls;
+      const props = calls[calls.length - 1][0] as Record<string, unknown>;
+      expect(props.workspacePath).toBeUndefined();
+    });
   });
 
-  it('falls back to undefined when no WorkspaceContextProvider is mounted', () => {
+  it('falls back to undefined when no SessionWorkspaceProvider is mounted', async () => {
     chatInputPropsSpy.mockClear();
+    mockGet.mockReset();
     render(
       <MemoryRouter>
         <I18nProvider>
@@ -164,7 +196,10 @@ describe('Chat — workspacePath wire-in (Office M1-M2 chat-read closure)', () =
         </I18nProvider>
       </MemoryRouter>,
     );
-    const props = chatInputPropsSpy.mock.calls[0][0] as Record<string, unknown>;
-    expect(props.workspacePath).toBeUndefined();
+    await waitFor(() => {
+      const calls = chatInputPropsSpy.mock.calls;
+      const props = calls[calls.length - 1][0] as Record<string, unknown>;
+      expect(props.workspacePath).toBeUndefined();
+    });
   });
 });

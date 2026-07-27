@@ -7,7 +7,20 @@
 export interface CommandRoute {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: (args: Record<string, unknown>) => string;
+  body?: (args: Record<string, unknown>) => Record<string, unknown>;
   isSse?: boolean;
+}
+
+const DEFAULT_WORKSPACE_SEARCH_LIMIT = 20;
+const MIN_WORKSPACE_SEARCH_LIMIT = 1;
+const MAX_WORKSPACE_SEARCH_LIMIT = 50;
+
+function normalizeWorkspaceSearchLimit(value: unknown): number {
+  const limit =
+    typeof value === 'number' && Number.isFinite(value)
+      ? Math.trunc(value)
+      : DEFAULT_WORKSPACE_SEARCH_LIMIT;
+  return Math.min(MAX_WORKSPACE_SEARCH_LIMIT, Math.max(MIN_WORKSPACE_SEARCH_LIMIT, limit));
 }
 
 export const COMMAND_ROUTES: Record<string, CommandRoute> = {
@@ -42,6 +55,30 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   delete_session: {
     method: 'DELETE',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.id))}`,
+  },
+
+  // session workspace binding
+  workspace_bind: {
+    method: 'PUT',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
+    body: (a) => ({ workspacePath: a.workspacePath }),
+  },
+  workspace_get: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
+  },
+  workspace_revoke: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
+  },
+  workspace_search_files: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = encodeURIComponent(String(a.sessionId));
+      const query = encodeURIComponent(String(a.query));
+      const limit = normalizeWorkspaceSearchLimit(a.limit);
+      return `/api/v1/sessions/${sessionId}/workspace/files?q=${query}&limit=${limit}`;
+    },
   },
 
   // messages

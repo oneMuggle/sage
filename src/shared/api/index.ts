@@ -12,6 +12,7 @@ export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
+export { workspaceApi } from './workspaceApi';
 export { skillsApi } from './skillsApi';
 export { themeCssClient } from './themeCssClient';
 import * as windowControlsClient from './windowControlsClient';
@@ -34,6 +35,7 @@ export type {
   ChatConfig,
   ChatRequest,
   ChatResponse,
+  ChatOfficeRef,
   KnowledgeDoc,
   Memory,
   Message,
@@ -52,11 +54,16 @@ export type {
   OfficeWordReadResult,
   OfficeWordTableContent,
   Session,
+  SessionWorkspaceBinding,
   Skill,
   SkillDispatch,
   SkillExecuteRequest,
   SkillExecuteResult,
   ToolCall,
+  WorkspaceSearchKind,
+  WorkspaceSearchResponse,
+  WorkspaceSearchResult,
+  WorkspaceRevokeResponse,
 } from './types';
 
 // 工具函数和类

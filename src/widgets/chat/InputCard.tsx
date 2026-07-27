@@ -1,4 +1,4 @@
-import { BookOpen, Clock, Image, Paperclip, Send, Square } from 'lucide-react';
+import { BookOpen, Clock, Image, Paperclip, Send, Square, X } from 'lucide-react';
 import type React from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
@@ -28,6 +28,16 @@ export interface KnowledgeDocType {
   desc: string;
 }
 
+/**
+ * Office-ref chip shape — mirrors `ChatOfficeRef` from the shared types.
+ * Re-declared here to keep `InputCard` decoupled from the API module.
+ */
+export interface OfficeRefChipType {
+  docId: string;
+  docType: 'ppt' | 'word' | 'excel';
+  filename: string;
+}
+
 export interface InputCardProps {
   value: string;
   onChange: (value: string) => void;
@@ -43,9 +53,16 @@ export interface InputCardProps {
   files?: FileAttachmentType[];
   images?: ImageAttachmentType[];
   knowledgeRefs?: KnowledgeRefType[];
+  /**
+   * Task 7 (2026-07-26): managed Office references from the @-menu.
+   * Rendered as removable `office-ref-chip` chips above the textarea.
+   * Each entry is a `ChatOfficeRef` (docId, docType, filename).
+   */
+  officeRefs?: readonly OfficeRefChipType[];
   onRemoveFile?: (idx: number) => void;
   onRemoveImage?: (idx: number) => void;
   onRemoveKnowledge?: (idx: number) => void;
+  onRemoveOfficeRef?: (docId: string) => void;
 
   // Knowledge selector
   knowledgeDocs?: KnowledgeDocType[];
@@ -88,9 +105,11 @@ export function InputCard({
   files = [],
   images = [],
   knowledgeRefs = [],
+  officeRefs = [],
   onRemoveFile,
   onRemoveImage,
   onRemoveKnowledge,
+  onRemoveOfficeRef,
   knowledgeDocs = [],
   showKnowledgeSelector = false,
   onToggleKnowledgeSelector,
@@ -183,6 +202,35 @@ export function InputCard({
               onRemove={onRemoveKnowledge ? () => onRemoveKnowledge(idx) : undefined}
             />
           ))}
+        </div>
+      )}
+
+      {officeRefs.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2" data-testid="office-ref-chips">
+          {officeRefs.map((ref) => {
+            const kindLabel = ref.docType === 'ppt' ? '📊' : ref.docType === 'word' ? '📝' : '📈';
+            return (
+              <span
+                key={ref.docId}
+                className="office-ref-chip inline-flex items-center gap-1 px-2 py-0.5 rounded-radius-sm bg-primary/10 text-primary text-xs"
+                data-testid="office-ref-chip"
+                data-doc-id={ref.docId}
+              >
+                <span aria-hidden="true">{kindLabel}</span>
+                <span>{ref.filename}</span>
+                {onRemoveOfficeRef && (
+                  <button
+                    type="button"
+                    className="ml-1 hover:text-error transition-colors"
+                    aria-label={`remove office ref ${ref.filename}`}
+                    onClick={() => onRemoveOfficeRef(ref.docId)}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
 

@@ -21,12 +21,22 @@
  * source path at any point. The M0 management set replaces the
  * Phase 1.3 delete action with Save As / Open / Show in Folder; the
  * destructive delete flow lives in M3–M5.
+ *
+ * Task 5 (2026-07-26): removed the page-local `workspacePath` useState.
+ * The page now reads `useCurrentWorkspace()` from the SessionWorkspace
+ * provider (mounted in AppProviders) — the same source Chat.tsx uses,
+ * so workspace state is unified across the app. Bind / change / revoke
+ * go through <WorkspaceBindModal>; the provider owns the bind/revoke
+ * IPC. The stale-read guard (`readIdRef`) is preserved: when the user
+ * switches workspaces, any in-flight read is dropped before its data
+ * reaches `setPreview`.
  */
 
 import { FileSpreadsheet, FileText, FolderOpen, Presentation } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { useWorkspaceContext } from '../app/providers/SessionWorkspaceProvider';
 import {
   OfficeDocumentList,
   OfficeFilePicker,
@@ -36,10 +46,19 @@ import {
   type OfficePreviewData,
   type OfficeReadResult,
 } from '../features/office';
+import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeDocType } from '../shared/api/types';
+import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 
 export function Office() {
-  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  // Task 5: workspacePath now comes from SessionWorkspaceProvider, not
+  // local state. AppProviders mounts the provider; Chat.tsx reads from
+  // the same context. `?? null` keeps the local consumer contract
+  // (which expects `string | null`) unchanged.
+  const workspacePath = useCurrentWorkspace() ?? null;
+  const { bind, revoke, status: workspaceStatus, error: workspaceError } =
+    useWorkspaceContext();
+
   const [preview, setPreview] = useState<OfficePreviewData | null>(null);
   // HIGH FIX: stale-read guard. Increments on every handleImportAndRead
   // invocation; setPreview checks the captured id before applying state.
@@ -47,6 +66,10 @@ export function Office() {
   // (or a faster subsequent read) would overwrite the correct preview
   // with stale data from the wrong workspace.
   const readIdRef = useRef(0);
+
+  // Workspace bind modal is opened by the header button (initial bind)
+  // or the workspace-path chip (change).
+  const [isBindModalOpen, setIsBindModalOpen] = useState(false);
 
   const {
     documents,
@@ -60,27 +83,15 @@ export function Office() {
     showInFolder,
   } = useOfficeDocuments(workspacePath);
 
-  const handleSelectWorkspace = async () => {
-    try {
-      const api = window.electronAPI;
-      if (!api) {
-        // No preload bridge → running outside Electron (e.g. plain browser).
-        // Tell the user instead of silently no-op'ing.
-        toast.error('IPC 桥接不可用,请在 Electron 桌面端运行');
-        return;
-      }
-      const dir = await api.selectDirectory({ intent: 'open' });
-      if (dir) {
-        // Bump readIdRef so any in-flight read from the previous workspace
-        // is correctly discarded by the stale-read guard.
-        readIdRef.current += 1;
-        setWorkspacePath(dir);
-        setPreview(null);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`选择工作区失败: ${msg}`);
-    }
+  // The bind modal owns its own IPC; we just need to know when the
+  // workspace has actually changed so the stale-read guard can drop any
+  // in-flight read from the previous workspace.
+  const handleBindModalClose = () => {
+    setIsBindModalOpen(false);
+    // Workspace changed (or user cancelled) — bump readIdRef so any
+    // in-flight read is correctly discarded.
+    readIdRef.current += 1;
+    setPreview(null);
   };
 
   const toPreview = (docType: OfficeDocType, data: OfficeReadResult): OfficePreviewData => ({
@@ -181,7 +192,7 @@ export function Office() {
           <FolderOpen className="w-4 h-4" />
           {workspacePath ? (
             <button
-              onClick={handleSelectWorkspace}
+              onClick={() => setIsBindModalOpen(true)}
               className="text-primary hover:underline"
               data-testid="office-workspace-path"
             >
@@ -189,14 +200,29 @@ export function Office() {
             </button>
           ) : (
             <button
-              onClick={handleSelectWorkspace}
+              onClick={() => setIsBindModalOpen(true)}
               className="px-3 py-1.5 rounded bg-primary text-text-inverse text-sm hover:bg-primary-hover"
+              data-testid="office-workspace-pick"
             >
               选择工作区
             </button>
           )}
         </div>
       </div>
+
+      {/* workspaceStatus === 'error' (initial load failed) — surface
+          it here so users see it on the Office page even when the rest
+          of the page is healthy. The modal also surfaces errors during
+          bind/revoke. Shown above both branches so a fresh-error user
+          (no binding yet) still sees the cause. */}
+      {workspaceStatus === 'error' && workspaceError && (
+        <div
+          data-testid="office-workspace-error"
+          className="px-4 py-3 bg-error/10 border border-error/30 rounded text-sm text-error"
+        >
+          {workspaceError}
+        </div>
+      )}
 
       {!workspacePath ? (
         <div className="flex items-center justify-center p-12 text-muted text-sm border border-dashed border-border rounded-lg">
@@ -276,6 +302,17 @@ export function Office() {
           <OfficeGenerateForm workspacePath={workspacePath} onGenerated={refresh} />
         </>
       )}
+
+      {/* Bind / change / revoke modal. Mounted once; opens via the
+          header button or the workspace-path chip. The provider owns
+          the IPC; the modal just translates clicks. */}
+      <WorkspaceBindModal
+        isOpen={isBindModalOpen}
+        onClose={handleBindModalClose}
+        currentPath={workspacePath}
+        bind={bind}
+        revoke={revoke}
+      />
     </div>
   );
 }

@@ -1,12 +1,15 @@
 // src/features/chat/AtFileMenu.tsx
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   fileSearchClient,
   FileSearchTimeoutError,
+  classifyAtFileSelection,
+  type AtFileSelection,
   type FileSearchResult,
 } from '../../shared/api/fileSearchClient';
 import { useI18n } from '../../shared/lib/i18n';
+import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
 const KIND_ICON: Record<FileSearchResult['kind'], string> = {
   file: '📄',
@@ -17,22 +20,34 @@ const KIND_ICON: Record<FileSearchResult['kind'], string> = {
 
 interface AtFileMenuProps {
   query: string | null;
-  onSelect: (path: string) => void;
-  onClose: () => void;
   /**
-   * Optional workspace root — forwarded to `fileSearchClient.search` as the
-   * 3rd argument so office docs (which require a workspace) appear in the
-   * menu. Without it, the truthy gate inside `search` skips the office list
-   * and only filesystem files are returned.
+   * AtFileMenu notifies the caller of a selection. The payload is a
+   * discriminated union:
+   *   - `{ kind: 'file', path, name }` — plain file; caller inserts `@<path>`
+   *   - `{ kind: 'office-import', result }` — unmanaged office doc; caller
+   *     must call `importOfficeReference` to materialize a `ChatOfficeRef`
+   *   - `{ kind: 'office', ref }` — managed office doc; caller adds the
+   *     ref directly (no import needed)
    *
-   * When the caller (ChatInput / Chat page) does not have workspace context,
-   * leave this undefined; the menu still works for filesystem files.
+   * AtFileMenu never fabricates a `ChatOfficeRef` for a plain file.
    */
-  workspacePath?: string;
+  onSelect: (selection: AtFileSelection) => void;
+  onClose: () => void;
 }
 
-export function AtFileMenu({ query, onSelect, workspacePath }: AtFileMenuProps) {
+export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
   const { t } = useI18n();
+  // Task 7 (2026-07-26): read both sessionId and workspacePath from the
+  // session-workspace context. sessionId is required by fileSearchClient;
+  // workspacePath is required by `importOfficeReference` for the
+  // `kind: 'office-import'` selection. Both come from the same provider
+  // so the menu stays in lock-step with Chat's binding state.
+  //
+  // Use the optional variant so legacy tests (which don't mount the
+  // provider) keep working — the menu just returns no results.
+  const wsCtx = useOptionalWorkspaceContext();
+  const sessionId = wsCtx?.sessionId ?? null;
+  const workspacePath = wsCtx?.binding?.workspacePath;
   const [results, setResults] = useState<FileSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +57,13 @@ export function AtFileMenu({ query, onSelect, workspacePath }: AtFileMenuProps) 
   // Search files when query changes
   useEffect(() => {
     if (query === null) return;
+    if (!sessionId) {
+      // No active session → empty results, no loading state.
+      setResults([]);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
 
     // Cancel previous search
     if (abortControllerRef.current) {
@@ -56,62 +78,81 @@ export function AtFileMenu({ query, onSelect, workspacePath }: AtFileMenuProps) 
     setSelectedIdx(0);
 
     fileSearchClient
-      .search(query, { signal: controller.signal }, workspacePath)
+      .search(sessionId, query, { signal: controller.signal })
       .then((res) => {
         setResults(res);
         setIsLoading(false);
       })
-      .catch((err) => {
-        if (err.name === 'AbortError') {
-          // Search was cancelled, ignore
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') {
           return;
         }
         if (err instanceof FileSearchTimeoutError) {
           setError('timeout');
         } else {
-          setError(err.message);
+          setError(err instanceof Error ? err.message : String(err));
         }
         setIsLoading(false);
       });
 
-    // Cleanup on unmount or query change
     return () => {
       controller.abort();
     };
-  }, [query, workspacePath]);
+  }, [query, sessionId]);
 
   // Don't render if query is null
   if (query === null) {
     return null;
   }
 
-  const handleSelect = (path: string) => {
-    onSelect(path);
+  const handleSelect = (result: FileSearchResult) => {
+    const kind = classifyAtFileSelection(result);
+    if (kind === 'file') {
+      onSelect({ kind: 'file', path: result.path, name: result.name });
+      return;
+    }
+    if (kind === 'office') {
+      // Managed office doc — build the ref inline. Path is irrelevant
+      // here (the backend resolves the docId).
+      if (!result.docId || !result.docType) {
+        // Should never happen — classifyAtFileSelection guarantees it.
+        // Fall back to the import path so the user still gets a result.
+        onSelect({ kind: 'office-import', result });
+        return;
+      }
+      onSelect({
+        kind: 'office',
+        ref: { docId: result.docId, docType: result.docType, filename: result.name },
+      });
+      return;
+    }
+    // kind === 'office-import'
+    onSelect({ kind: 'office-import', result });
   };
 
   const handleRetry = () => {
-    if (query !== null) {
-      // Trigger search again by setting query to itself
-      // This will cause useEffect to re-run
-      setError(null);
-      setIsLoading(true);
-
-      fileSearchClient
-        .search(query, undefined, workspacePath)
-        .then((res) => {
-          setResults(res);
-          setIsLoading(false);
-        })
-        .catch((err) => {
-          if (err instanceof FileSearchTimeoutError) {
-            setError('timeout');
-          } else {
-            setError(err.message);
-          }
-          setIsLoading(false);
-        });
-    }
+    if (query === null || !sessionId) return;
+    setError(null);
+    setIsLoading(true);
+    fileSearchClient
+      .search(sessionId, query)
+      .then((res) => {
+        setResults(res);
+        setIsLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof FileSearchTimeoutError) {
+          setError('timeout');
+        } else {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+        setIsLoading(false);
+      });
   };
+
+  // Disable office selection when no workspace is bound — managed refs
+  // require a backend route, and import-on-pick needs the workspace path.
+  const officeSearchDisabled = !workspacePath;
 
   return (
     <div
@@ -152,22 +193,29 @@ export function AtFileMenu({ query, onSelect, workspacePath }: AtFileMenuProps) 
 
       {!isLoading && !error && results.length > 0 && (
         <ul className="at-file-menu__list">
-          {results.map((file, idx) => (
-            <li key={file.path}>
-              <button
-                type="button"
-                className={`at-file-menu__item ${idx === selectedIdx ? 'at-file-menu__item--selected' : ''}`}
-                onClick={() => handleSelect(file.path)}
-                onMouseEnter={() => setSelectedIdx(idx)}
-              >
-                <span className="at-file-menu__item-kind" aria-label={file.kind}>
-                  {KIND_ICON[file.kind] ?? '📄'}
-                </span>
-                <span className="at-file-menu__item-name">{file.name}</span>
-                <span className="at-file-menu__item-path">{file.path}</span>
-              </button>
-            </li>
-          ))}
+          {results.map((file, idx) => {
+            const kind = classifyAtFileSelection(file);
+            const disabled =
+              officeSearchDisabled && (kind === 'office' || kind === 'office-import');
+            return (
+              <li key={`${file.path}-${idx}`}>
+                <button
+                  type="button"
+                  className={`at-file-menu__item ${idx === selectedIdx ? 'at-file-menu__item--selected' : ''}`}
+                  onClick={() => handleSelect(file)}
+                  disabled={disabled}
+                  onMouseEnter={() => setSelectedIdx(idx)}
+                  title={disabled ? 'Bind a workspace first to use managed Office refs' : undefined}
+                >
+                  <span className="at-file-menu__item-kind" aria-label={file.kind}>
+                    {KIND_ICON[file.kind] ?? '📄'}
+                  </span>
+                  <span className="at-file-menu__item-name">{file.name}</span>
+                  <span className="at-file-menu__item-path">{file.path}</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
