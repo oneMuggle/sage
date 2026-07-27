@@ -29,8 +29,8 @@ from backend.api.office_routes import (
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
-from backend.api.workspace_routes import router as workspace_router
 from backend.api.wiki_routes import router as wiki_router
+from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
 from backend.data.session_repo import MessageRepository, SessionRepository

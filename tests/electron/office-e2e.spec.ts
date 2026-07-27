@@ -93,7 +93,7 @@ function startStub(): Promise<{ proc: ChildProcess; url: string; port: number }>
       }
     });
 
-    proc.stderr!.on('data', (_chunk: Buffer) => {
+    proc.stderr!.on('data', () => {
       // Ignore stderr noise; only reject if the process exits before ready.
     });
 
