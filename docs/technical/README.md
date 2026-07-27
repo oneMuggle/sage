@@ -26,6 +26,7 @@
 | 29   | [Electron 桌面日志](./29-electron-logging.md)         | 三层日志架构 / NDJSON 格式 / 路径与保留策略 / Win7 启动失败排查流程                                       |
 | 30   | [Release Tiers（发布档位分级）](./30-release-tiers.md) | 4 档分级 (alpha/beta/RC/stable) + SemVer 预发布段 + Win7 LTS 派生 + 升档脚本与流程                            |
 | 32   | [Settings Schema 规范化](./32-settings-canonicalization.md) | 后端 canonicalizer snake↔camel 翻译 + AppSettings 白名单 + 前端 deepMerge + 历史 snake 数据兼容             |
+| 33   | [Office M1–M2 完整收尾](./33-office-m1-m2-completion.md) | session-bound Workspace + ChatOfficeRef 透传 + office_list/read 工具 + Electron→Python stub E2E            |
 
 ---
 
