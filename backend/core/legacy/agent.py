@@ -28,6 +28,7 @@ from backend.memory import (
     WorkingMemory,
 )
 from backend.tools import ToolRegistry, register_all_tools
+from backend.tools.context import current_tool_context
 
 logger = logging.getLogger(__name__)
 
@@ -649,11 +650,18 @@ class SageAgent:
         """
         获取所有可用工具的 Schema（OpenAI function-calling 格式）
 
+        Pulls the active ``ToolExecutionContext`` (if any) from the
+        ContextVar so per-request Office scoping is honored. Office-only
+        tools are hidden when there is no context, and revealed when one
+        is active -- normal tools are always visible.
+
         Returns:
             工具 Schema 列表，每个为：
             {"type": "function", "function": {"name", "description", "parameters"}}
         """
-        schemas = self.tool_registry.get_schemas_for_llm()
+        schemas = self.tool_registry.get_schemas_for_llm(
+            context=current_tool_context(),
+        )
         return [
             {
                 "type": "function",
