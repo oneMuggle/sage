@@ -45,6 +45,17 @@ def setup_test_db(tmp_db_path):
     # 重置 MemoryManager 单例，确保每个测试使用新的数据库
     reset_memory_manager()
 
+    # M1-M2: 修复 pre-existing 测试隔离问题 — test_chat_stream.py
+    # 不使用 client fixture 也未清理 app.state.streams._entries,
+    # 会在跨测试文件时泄漏. 在 autouse setup 中强制清空.
+    from backend.main import app
+
+    if hasattr(app.state, "streams") and app.state.streams is not None:
+        for entry in list(app.state.streams._entries.values()):
+            if entry.task is not None and not entry.task.done():
+                entry.task.cancel()
+        app.state.streams._entries.clear()
+
     yield db_mod._db
     # test_db_path 用 importlib.reload 重建模块后 _db 会被重置为 None；
     # 守 None 防 AttributeError
