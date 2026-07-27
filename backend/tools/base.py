@@ -81,6 +81,13 @@ class BaseTool(ABC):
         ``_enforce_workspace`` 在 ``execute()`` 入口调用做路径守卫。
     """
 
+    # M3+: flag marking tools that must only be advertised to the LLM
+    # when an active ``ToolExecutionContext`` is in scope (e.g. Office
+    # document tools, which need a doc-scope to operate). Default False
+    # preserves backwards compatibility -- existing tools are not
+    # affected. Set on a subclass to opt in.
+    requires_tool_context: bool = False
+
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         self._schema: Optional[ToolSchema] = None
         self._policy = policy or ToolPolicy()
