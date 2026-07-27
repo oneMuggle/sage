@@ -1,182 +1,256 @@
+/**
+ * fileSearchClient (Task 7, 2026-07-26)
+ *
+ * Public signature: `search(sessionId, query, options?)` — delegates to
+ * `workspaceApi.search(sessionId, query, limit)`. No more raw
+ * `workspace_search_files` invoke or `officeApi.listDocuments` fallback;
+ * the workspace-aware search is the single source of truth.
+ */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-vi.mock('../desktopInvoke', () => ({
-  invoke: vi.fn(),
-}));
+const mockWorkspaceSearch = vi.fn();
 
-vi.mock('../officeApi', () => ({
-  officeApi: {
-    listDocuments: vi.fn(),
+vi.mock('../workspaceApi', () => ({
+  workspaceApi: {
+    search: (...args: unknown[]) => mockWorkspaceSearch(...args),
   },
 }));
 
-import { invoke } from '../desktopInvoke';
-import { fileSearchClient, type FileSearchKind } from '../fileSearchClient';
-import { officeApi } from '../officeApi';
+import { fileSearchClient } from '../fileSearchClient';
 
-const FS_RESULTS = [
-  { path: '/w/foo.txt', name: 'foo.txt', size: 100 },
-  { path: '/w/sub/bar.md', name: 'bar.md', size: 200 },
-];
+const SESSION_ID = 'session-1';
 
-const OFFICE_DOCS = {
-  documents: [
-    {
-      id: '1',
-      doc_type: 'ppt' as const,
-      name: 'proposal.pptx',
-      file_path: '/w/office/ppt/1/proposal.pptx',
-      file_size_bytes: 5000,
-      workspace_path: '/w',
-      original_filename: null,
-      generated_filename: 'proposal.pptx',
-      status: 'parsed',
-      created_at: 0,
-      updated_at: 0,
-      metadata: { file_size_bytes: 5000, page_count: 5 },
-    },
-    {
-      id: '2',
-      doc_type: 'word' as const,
-      name: 'notes.docx',
-      file_path: '/w/office/word/2/notes.docx',
-      file_size_bytes: 3000,
-      workspace_path: '/w',
-      original_filename: null,
-      generated_filename: 'notes.docx',
-      status: 'parsed',
-      created_at: 0,
-      updated_at: 0,
-      metadata: { file_size_bytes: 3000, page_count: 2 },
-    },
-  ],
-};
+function makeWorkspaceResults(results: unknown[] = [], total?: number) {
+  return {
+    results: results as never,
+    total: typeof total === 'number' ? total : results.length,
+  };
+}
 
 describe('fileSearchClient.search', () => {
   beforeEach(() => {
-    vi.mocked(invoke).mockReset();
-    vi.mocked(officeApi.listDocuments).mockReset();
+    mockWorkspaceSearch.mockReset();
   });
 
-  it('returns fs results with kind="file" by default', async () => {
-    vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
-    vi.mocked(officeApi.listDocuments).mockResolvedValue(OFFICE_DOCS as never);
-    const out = await fileSearchClient.search('foo');
-    expect(out.length).toBeGreaterThan(0);
-    const txt = out.find((r) => r.name === 'foo.txt');
-    expect(txt?.kind).toBe<FileSearchKind>('file');
+  it('delegates to workspaceApi.search with the given sessionId/query/limit', async () => {
+    mockWorkspaceSearch.mockResolvedValue(makeWorkspaceResults());
+    await fileSearchClient.search(SESSION_ID, 'foo');
+    expect(mockWorkspaceSearch).toHaveBeenCalledWith(SESSION_ID, 'foo', 20);
   });
 
-  it('infers kind from path extension for fs results', async () => {
-    vi.mocked(invoke).mockResolvedValue([{ path: '/w/a.pptx', name: 'a.pptx', size: 1 }]);
-    vi.mocked(officeApi.listDocuments).mockResolvedValue({ documents: [] } as never);
-    const out = await fileSearchClient.search('a');
-    expect(out[0].kind).toBe('office-ppt');
+  it('honours the explicit limit option', async () => {
+    mockWorkspaceSearch.mockResolvedValue(makeWorkspaceResults());
+    await fileSearchClient.search(SESSION_ID, 'foo', { limit: 5 });
+    expect(mockWorkspaceSearch).toHaveBeenCalledWith(SESSION_ID, 'foo', 5);
   });
 
-  it('merges office docs as office-* kinds', async () => {
-    vi.mocked(invoke).mockResolvedValue([]);
-    vi.mocked(officeApi.listDocuments).mockResolvedValue(OFFICE_DOCS as never);
-    const out = await fileSearchClient.search('prop', {}, '/w');
-    const ppt = out.find((r) => r.kind === 'office-ppt');
-    expect(ppt?.name).toBe('proposal.pptx');
-    expect(ppt?.path).toBe('/w/office/ppt/1/proposal.pptx');
-  });
-
-  it('office query filter is case-insensitive substring match on name', async () => {
-    vi.mocked(invoke).mockResolvedValue([]);
-    vi.mocked(officeApi.listDocuments).mockResolvedValue(OFFICE_DOCS as never);
-    const out = await fileSearchClient.search('PROP', {}, '/w');
-    expect(out.some((r) => r.name === 'proposal.pptx')).toBe(true);
-  });
-
-  it('deduplicates by path (office wins over fs when same path)', async () => {
-    vi.mocked(invoke).mockResolvedValue([
-      { path: '/w/office/ppt/1/proposal.pptx', name: 'proposal.pptx', size: 100 },
-    ]);
-    vi.mocked(officeApi.listDocuments).mockResolvedValue(OFFICE_DOCS as never);
-    const out = await fileSearchClient.search('prop', {}, '/w');
-    const matches = out.filter((r) => r.path === '/w/office/ppt/1/proposal.pptx');
-    expect(matches).toHaveLength(1);
-    expect(matches[0].kind).toBe('office-ppt');
-  });
-
-  it('falls back to fs-only when office listDocuments fails', async () => {
-    vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
-    vi.mocked(officeApi.listDocuments).mockRejectedValue(new Error('office down'));
-    const listSpy = vi.mocked(officeApi.listDocuments);
-    const out = await fileSearchClient.search('foo', {}, '/w');
-    // exercise the actual rejection → catch-rescue path (workspacePath truthy)
-    expect(listSpy).toHaveBeenCalledWith('/w');
-    expect(out.length).toBe(2);
-    expect(out.every((r) => r.kind === 'file')).toBe(true);
-  });
-
-  it('preserves order: office results before fs results', async () => {
-    vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
-    vi.mocked(officeApi.listDocuments).mockResolvedValue(OFFICE_DOCS as never);
-    const out = await fileSearchClient.search('', {}, '/w');
-    const officeIdx = out.findIndex((r) => r.kind !== 'file');
-    const fileIdx = out.findIndex((r) => r.kind === 'file');
-    expect(officeIdx).toBeLessThan(fileIdx);
-    expect(officeIdx).toBe(0);
-  });
-
-  it('passes AbortSignal to fs search but ignores for office list', async () => {
-    const ctrl = new AbortController();
-    vi.mocked(invoke).mockResolvedValue([]);
-    vi.mocked(officeApi.listDocuments).mockResolvedValue({ documents: [] } as never);
-    await fileSearchClient.search('q', { signal: ctrl.signal });
-    expect(invoke).toHaveBeenCalledWith(
-      'workspace_search_files',
-      { query: 'q', limit: 20 },
-      expect.objectContaining({ signal: ctrl.signal }),
-    );
-  });
-
-  it('skips office listDocuments entirely when workspacePath is empty', async () => {
-    vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
-    const listSpy = vi.mocked(officeApi.listDocuments);
-    listSpy.mockClear();
-
-    const out = await fileSearchClient.search('foo');
-    expect(out.every((r) => r.kind === 'file')).toBe(true);
-    expect(listSpy).not.toHaveBeenCalled();
-  });
-
-  it('skips office listDocuments entirely when workspacePath is an empty string', async () => {
-    vi.mocked(invoke).mockResolvedValue(FS_RESULTS);
-    const listSpy = vi.mocked(officeApi.listDocuments);
-    listSpy.mockClear();
-
-    // explicit `''` argument — same contract as omitting the arg
-    const out = await fileSearchClient.search('foo', {}, '');
-    expect(out.every((r) => r.kind === 'file')).toBe(true);
-    expect(listSpy).not.toHaveBeenCalled();
-  });
-
-  it('filters out office docs with missing name field without throwing', async () => {
-    vi.mocked(invoke).mockResolvedValue([]);
-    // defensive `(d.name ?? '')` path: documents lacking `name` must not crash
-    vi.mocked(officeApi.listDocuments).mockResolvedValue({
-      documents: [
+  it('maps workspace results to FileSearchResult rows', async () => {
+    mockWorkspaceSearch.mockResolvedValue({
+      results: [
         {
-          id: '3',
-          doc_type: 'ppt' as const,
-          name: undefined as unknown as string,
-          file_path: '/w/office/ppt/3/anon.pptx',
-          file_size_bytes: 1,
-          workspace_path: '/w',
-          original_filename: null,
-          generated_filename: 'anon.pptx',
-          status: 'parsed',
-          created_at: 0,
-          updated_at: 0,
-          metadata: { file_size_bytes: 1, page_count: 1 },
+          name: 'proposal.pptx',
+          kind: 'office-ppt',
+          docType: 'ppt',
+          docId: 'doc-1',
+          sizeBytes: 1024,
+          needsImport: false,
+          sourcePath: '/w/office/ppt/1/proposal.pptx',
         },
       ],
-    } as never);
-    const out = await fileSearchClient.search('ppt', {}, '/w');
-    expect(out.every((r) => r.kind === 'file')).toBe(true);
+      total: 1,
+    });
+
+    const out = await fileSearchClient.search(SESSION_ID, 'prop');
+    expect(out).toEqual([
+      {
+        path: '/w/office/ppt/1/proposal.pptx',
+        name: 'proposal.pptx',
+        size: 1024,
+        kind: 'office-ppt',
+        docId: 'doc-1',
+        docType: 'ppt',
+        sourcePath: '/w/office/ppt/1/proposal.pptx',
+      },
+    ]);
+  });
+
+  it('returns an empty array when sessionId is empty (no active session)', async () => {
+    const out = await fileSearchClient.search('', 'foo');
+    expect(out).toEqual([]);
+    expect(mockWorkspaceSearch).not.toHaveBeenCalled();
+  });
+
+  it('propagates workspaceApi.search rejections (caller falls back gracefully)', async () => {
+    mockWorkspaceSearch.mockRejectedValue(new Error('backend down'));
+    await expect(fileSearchClient.search(SESSION_ID, 'foo')).rejects.toThrow('backend down');
+  });
+
+  it('throws FileSearchTimeoutError when the search hangs past the timeout', async () => {
+    mockWorkspaceSearch.mockImplementation(
+      () => new Promise(() => undefined) as ReturnType<typeof mockWorkspaceSearch>,
+    );
+    const { FileSearchTimeoutError } = await import('../fileSearchClient');
+    vi.useFakeTimers();
+    try {
+      const promise = fileSearchClient.search(SESSION_ID, 'foo');
+      const expectation = expect(promise).rejects.toBeInstanceOf(FileSearchTimeoutError);
+      await vi.advanceTimersByTimeAsync(3000);
+      await expectation;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('throws DOMException("aborted") when the signal is already aborted', async () => {
+    mockWorkspaceSearch.mockResolvedValue(makeWorkspaceResults());
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(
+      fileSearchClient.search(SESSION_ID, 'foo', { signal: ctrl.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('returns empty array when no active session (missing-session contract)', async () => {
+    mockWorkspaceSearch.mockResolvedValue(makeWorkspaceResults());
+    const out = await fileSearchClient.search('', 'foo');
+    expect(out).toEqual([]);
+  });
+
+  it('classifies a managed office doc (docId present) as office kind', async () => {
+    mockWorkspaceSearch.mockResolvedValue({
+      results: [
+        {
+          name: 'managed.pptx',
+          kind: 'office-ppt',
+          docType: 'ppt',
+          docId: 'doc-m',
+          sizeBytes: 1,
+          needsImport: false,
+          sourcePath: '/w/office/ppt/m/managed.pptx',
+        },
+      ],
+      total: 1,
+    });
+    const out = await fileSearchClient.search(SESSION_ID, 'man');
+    expect(out[0].kind).toBe('office-ppt');
+    expect(out[0].docId).toBe('doc-m');
+  });
+
+  it('classifies a plain file (kind=file, docId=null) and keeps docId null', async () => {
+    mockWorkspaceSearch.mockResolvedValue({
+      results: [
+        {
+          name: 'note.md',
+          kind: 'file',
+          docType: null,
+          docId: null,
+          sizeBytes: 12,
+          needsImport: false,
+          sourcePath: 'note.md',
+        },
+      ],
+      total: 1,
+    });
+    const out = await fileSearchClient.search(SESSION_ID, 'note');
+    expect(out[0].kind).toBe('file');
+    expect(out[0].docId).toBeNull();
+    expect(out[0].docType).toBeNull();
+  });
+
+  it('marks an unmanaged office doc with needsImport for the import flow', async () => {
+    mockWorkspaceSearch.mockResolvedValue({
+      results: [
+        {
+          name: 'outside.pptx',
+          kind: 'office-ppt',
+          docType: 'ppt',
+          docId: null,
+          sizeBytes: 1,
+          needsImport: true,
+          sourcePath: '/tmp/outside.pptx',
+        },
+      ],
+      total: 1,
+    });
+    const out = await fileSearchClient.search(SESSION_ID, 'out');
+    expect(out[0].kind).toBe('office-ppt');
+    expect(out[0].docId).toBeNull();
+    expect(out[0].sourcePath).toBe('/tmp/outside.pptx');
+  });
+});
+
+describe('fileSearchClient — AtFileSelection helpers', () => {
+  beforeEach(() => {
+    mockWorkspaceSearch.mockReset();
+  });
+
+  it('classifyAtFileSelection returns "file" for plain files', async () => {
+    const { classifyAtFileSelection } = await import('../fileSearchClient');
+    expect(
+      classifyAtFileSelection({
+        path: 'a.txt',
+        name: 'a.txt',
+        kind: 'file',
+        docId: null,
+        docType: null,
+        sourcePath: null,
+      }),
+    ).toBe('file');
+  });
+
+  it('classifyAtFileSelection returns "office" for managed office docs', async () => {
+    const { classifyAtFileSelection } = await import('../fileSearchClient');
+    expect(
+      classifyAtFileSelection({
+        path: '/w/m.pptx',
+        name: 'm.pptx',
+        kind: 'office-ppt',
+        docId: 'doc-m',
+        docType: 'ppt',
+        sourcePath: '/w/m.pptx',
+      }),
+    ).toBe('office');
+  });
+
+  it('classifyAtFileSelection returns "office-import" for unmanaged office docs', async () => {
+    const { classifyAtFileSelection } = await import('../fileSearchClient');
+    expect(
+      classifyAtFileSelection({
+        path: '/tmp/o.pptx',
+        name: 'o.pptx',
+        kind: 'office-ppt',
+        docId: null,
+        docType: 'ppt',
+        sourcePath: '/tmp/o.pptx',
+      }),
+    ).toBe('office-import');
+  });
+
+  it('fileSearchResultToChatOfficeRef returns null for plain files (NEVER fabricates a ref)', async () => {
+    const { fileSearchResultToChatOfficeRef } = await import('../fileSearchClient');
+    expect(
+      fileSearchResultToChatOfficeRef({
+        path: 'a.txt',
+        name: 'a.txt',
+        kind: 'file',
+        docId: null,
+        docType: null,
+        sourcePath: null,
+      }),
+    ).toBeNull();
+  });
+
+  it('fileSearchResultToChatOfficeRef returns the ref for managed office docs', async () => {
+    const { fileSearchResultToChatOfficeRef } = await import('../fileSearchClient');
+    expect(
+      fileSearchResultToChatOfficeRef({
+        path: '/w/m.pptx',
+        name: 'm.pptx',
+        kind: 'office-ppt',
+        docId: 'doc-m',
+        docType: 'ppt',
+        sourcePath: '/w/m.pptx',
+      }),
+    ).toEqual({ docId: 'doc-m', docType: 'ppt', filename: 'm.pptx' });
   });
 });

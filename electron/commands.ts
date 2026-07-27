@@ -7,7 +7,20 @@
 export interface CommandRoute {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: (args: Record<string, unknown>) => string;
+  body?: (args: Record<string, unknown>) => Record<string, unknown>;
   isSse?: boolean;
+}
+
+const DEFAULT_WORKSPACE_SEARCH_LIMIT = 20;
+const MIN_WORKSPACE_SEARCH_LIMIT = 1;
+const MAX_WORKSPACE_SEARCH_LIMIT = 50;
+
+function normalizeWorkspaceSearchLimit(value: unknown): number {
+  const limit =
+    typeof value === 'number' && Number.isFinite(value)
+      ? Math.trunc(value)
+      : DEFAULT_WORKSPACE_SEARCH_LIMIT;
+  return Math.min(MAX_WORKSPACE_SEARCH_LIMIT, Math.max(MIN_WORKSPACE_SEARCH_LIMIT, limit));
 }
 
 export const COMMAND_ROUTES: Record<string, CommandRoute> = {
@@ -42,6 +55,30 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   delete_session: {
     method: 'DELETE',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.id))}`,
+  },
+
+  // session workspace binding
+  workspace_bind: {
+    method: 'PUT',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
+    body: (a) => ({ workspacePath: a.workspacePath }),
+  },
+  workspace_get: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
+  },
+  workspace_revoke: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
+  },
+  workspace_search_files: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = encodeURIComponent(String(a.sessionId));
+      const query = encodeURIComponent(String(a.query));
+      const limit = normalizeWorkspaceSearchLimit(a.limit);
+      return `/api/v1/sessions/${sessionId}/workspace/files?q=${query}&limit=${limit}`;
+    },
   },
 
   // messages
@@ -172,6 +209,27 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/cancel`,
   },
+
+  // Office document features (Phase 1.3, plan §4.1.3 step 14).
+  // 5 routes for Phase 1.2 backend (3 read + list + delete).
+  // Generate endpoints (ppt_generate, word_generate, excel_generate)
+  // deferred to Phase 1.4 follow-up PR.
+  office_ppt_read: { method: 'POST', path: () => '/api/v1/office/ppt/read' },
+  office_word_read: { method: 'POST', path: () => '/api/v1/office/word/read' },
+  office_excel_read: { method: 'POST', path: () => '/api/v1/office/excel/read' },
+  office_list_documents: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/office/documents?workspace_path=${encodeURIComponent(String(a.workspacePath))}`,
+  },
+  office_delete_document: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/office/documents/${encodeURIComponent(String(a.docId))}`,
+  },
+  // Phase 1.4 (2026-07-16): Office generate endpoints (plan §4.1.4 step 19).
+  office_ppt_generate: { method: 'POST', path: () => '/api/v1/office/ppt/generate' },
+  office_word_generate: { method: 'POST', path: () => '/api/v1/office/word/generate' },
+  office_excel_generate: { method: 'POST', path: () => '/api/v1/office/excel/generate' },
 };
 
 export class UnknownIpcCommandError extends Error {

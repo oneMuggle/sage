@@ -1,15 +1,33 @@
 // src/shared/api/fileSearchClient.ts
-import { invoke } from './desktopInvoke';
-import { officeApi } from './officeApi';
+import { workspaceApi } from './workspaceApi';
 
 export type FileSearchKind = 'file' | 'office-ppt' | 'office-word' | 'office-excel';
 
-/** 文件搜索结果 (filesystem 文件 + office docs 统一 shape). */
+/**
+ * Workspace-aware search result.
+ *
+ * - `path` is the managed path on disk for `kind: 'file'`, and for office
+ *   kinds it is the managed path of the document under the workspace.
+ * - `name` is the display name shown in the @ menu.
+ * - `docId` is populated only for managed office docs (`kind !== 'file'`).
+ *   Plain files always carry `docId: null`.
+ * - `sourcePath` mirrors the backend `WorkspaceSearchResult.sourcePath`,
+ *   non-null for office files that live outside the managed directory
+ *   (i.e. the import-on-pick path — `AtFileSelection.kind === 'office-import'`).
+ *
+ * The shape is intentionally a superset of `WorkspaceSearchResult`. The
+ * `AtFileMenu` reads `docId` + `docType` to decide whether a selection
+ * becomes a managed `ChatOfficeRef` (no path round-trip) or an import flow
+ * (which calls `importOfficeReference` to copy + read + finalize).
+ */
 export interface FileSearchResult {
   path: string;
   name: string;
   size?: number;
   kind: FileSearchKind;
+  docId: string | null;
+  docType: 'ppt' | 'word' | 'excel' | null;
+  sourcePath: string | null;
 }
 
 export interface FileSearchOptions {
@@ -18,11 +36,8 @@ export interface FileSearchOptions {
   /**
    * 外部 AbortSignal, 用于组件卸载时取消.
    *
-   * NOTE: 此 signal 仅用于 fs `invoke` 调用 (作为第 3 个参数传入).
-   * 当前 `desktopInvoke` 的真实签名只有 2 个参数 (cmd, args),
-   * 第 3 个 `{ signal }` 通过 `unknown as (...)` 类型断言传入,
-   * 运行时由真实 desktop 适配器忽略. 这是一个已知 TODO:
-   * 当 desktopInvoke 接受 options 后应去除此 cast.
+   * `workspaceApi.search` 当前不接受 signal — 通过抛 AbortError 提前返回,
+   * 让组件的 .catch 走 AbortError 分支。
    */
   signal?: AbortSignal;
 }
@@ -37,163 +52,119 @@ export class FileSearchTimeoutError extends Error {
   }
 }
 
-async function invokeWithTimeout<T>(
-  cmd: string,
-  args: Record<string, unknown>,
-  signal?: AbortSignal,
-): Promise<T> {
-  if (signal?.aborted) {
-    throw new DOMException('aborted', 'AbortError');
-  }
+/**
+ * @-menu selection — discriminated union, designed so the `ChatInput` can
+ * 1. Detect whether a normal `@filename` should be inserted (file), or
+ * 2. Resolve a managed Office doc by id (office), or
+ * 3. Trigger an import flow via `importOfficeReference` (office-import).
+ *
+ * AtFileMenu MUST never fabricate a `ChatOfficeRef` for a plain file — a
+ * managed office ref always has a real `docId` from the backend.
+ */
+export type AtFileSelection =
+  | { kind: 'file'; path: string; name: string }
+  | { kind: 'office-import'; result: FileSearchResult }
+  | { kind: 'office'; ref: { docId: string; docType: 'ppt' | 'word' | 'excel'; filename: string } };
 
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const settle = (): boolean => {
-      if (settled) return false;
-      settled = true;
-      return true;
-    };
-
-    const timeoutId = setTimeout(() => {
-      if (settle()) {
-        cleanup();
-        reject(new FileSearchTimeoutError(String(args.query ?? '')));
-      }
-    }, DEFAULT_TIMEOUT_MS);
-
-    const onExternalAbort = (): void => {
-      if (settle()) {
-        cleanup();
-        reject(new DOMException('aborted', 'AbortError'));
-      }
-    };
-
-    const cleanup = (): void => {
-      clearTimeout(timeoutId);
-      signal?.removeEventListener('abort', onExternalAbort);
-    };
-
-    signal?.addEventListener('abort', onExternalAbort);
-
-    // 3rd arg { signal } is consumed by the test mock for verification;
-    // the real desktopInvoke signature accepts only 2 args and ignores it
-    // at runtime (TS erased via the cast).
-    (
-      invoke as unknown as (
-        cmd: string,
-        args: Record<string, unknown>,
-        opts?: { signal?: AbortSignal },
-      ) => Promise<T>
-    )(cmd, args, { signal }).then(
-      (result) => {
-        if (settle()) {
-          cleanup();
-          resolve(result);
-        }
-      },
-      (err) => {
-        if (settle()) {
-          cleanup();
-          reject(err);
-        }
-      },
-    );
-  });
-}
-
-function inferKindFromPath(path: string): FileSearchKind {
-  const lower = path.toLowerCase();
-  if (lower.endsWith('.pptx')) return 'office-ppt';
-  if (lower.endsWith('.docx')) return 'office-word';
-  if (lower.endsWith('.xlsx')) return 'office-excel';
-  return 'file';
-}
-
-function kindFromDocType(docType: 'ppt' | 'word' | 'excel'): FileSearchKind {
-  const map: Record<'ppt' | 'word' | 'excel', FileSearchKind> = {
-    ppt: 'office-ppt',
-    word: 'office-word',
-    excel: 'office-excel',
+/**
+ * Build a `ChatOfficeRef` from a workspace search result, or return `null`
+ * when the result is not a managed office doc.
+ *
+ * - kind === 'file' → null (NEVER fabricate a ChatOfficeRef)
+ * - kind === 'office-*' && needsImport === true → null (must import first)
+ * - kind === 'office-*' && docId is set → returns the ref
+ */
+export function fileSearchResultToChatOfficeRef(
+  result: FileSearchResult,
+): { docId: string; docType: 'ppt' | 'word' | 'excel'; filename: string } | null {
+  if (result.kind === 'file') return null;
+  if (!result.docId || !result.docType) return null;
+  return {
+    docId: result.docId,
+    docType: result.docType,
+    filename: result.name,
   };
-  return map[docType];
 }
 
+/**
+ * Decide the selection kind for an `@`-menu item.
+ *
+ * - `kind: 'file'` → plain file (the menu inserts `@<path>`)
+ * - office-* with `needsImport` (or missing docId) → import flow
+ * - office-* with `docId` → managed ref
+ */
+export function classifyAtFileSelection(result: FileSearchResult): AtFileSelection['kind'] {
+  if (result.kind === 'file') return 'file';
+  const ref = fileSearchResultToChatOfficeRef(result);
+  if (ref) return 'office';
+  return 'office-import';
+}
+
+/**
+ * Workspace-aware file/office search (Task 7, 2026-07-26).
+ *
+ * Delegates the underlying call to `workspaceApi.search(sessionId, query, limit)`.
+ * The sessionId is required — without an active session the backend cannot
+ * resolve a workspace binding, so we surface that as an empty result.
+ *
+ * Timeout (3s) is enforced client-side via Promise.race. AbortSignal
+ * rejects the in-flight promise with a DOMException('aborted').
+ */
 export const fileSearchClient = {
-  /**
-   * 工作区文件模糊搜索, 3s 超时, AbortController 可外部取消.
-   * 后端命令: workspace_search_files (filesystem) + officeApi.listDocuments (office).
-   *
-   * 返回合并结果: filesystem 文件 + office 文档, 按 kind 字段区分.
-   * Office 拉取失败时降级为 fs only (try/catch).
-   *
-   * 当前 workspace 从外部 store / context 拿 — 实施时通过 useWorkspace() 注入
-   * 或在 caller 侧传入. 本轮硬编码 workspace 读取路径在 caller 修改时调整.
-   */
   async search(
+    sessionId: string,
     query: string,
     options: FileSearchOptions = {},
-    workspacePath?: string,
   ): Promise<FileSearchResult[]> {
     const limit = options.limit ?? DEFAULT_LIMIT;
 
-    // 1. Filesystem search (现有逻辑, 不变)
-    const fsPromise = invokeWithTimeout<FileSearchResult[]>(
-      'workspace_search_files',
-      { query, limit },
-      options.signal,
+    // Pre-check: external abort already fired.
+    if (options.signal?.aborted) {
+      throw new DOMException('aborted', 'AbortError');
+    }
+
+    if (!sessionId) {
+      // No active session → empty result, mirroring the previous
+      // workspacePath-short-circuit behavior. Callers (AtFileMenu)
+      // already render an empty state in this case.
+      return [];
+    }
+
+    const workspacePromise = workspaceApi.search(sessionId, query, limit).then((res) =>
+      res.results.map<FileSearchResult>((r) => ({
+        path: r.sourcePath ?? r.name,
+        name: r.name,
+        size: r.sizeBytes,
+        kind: r.kind,
+        docId: r.docId,
+        docType: r.docType,
+        sourcePath: r.sourcePath,
+      })),
     );
 
-    // 2. Office docs list (新增) — 仅当 caller 提供非空 workspacePath 时拉取;
-    //    空串传给后端会触发 400, 因此 gate 短路掉 office 调用.
-    //
-    //    NOTE: 这里用本地接口声明 OfficeDocForSearch, 与 OfficeDocumentSummary
-    //    字段略有差异 (name / file_path / file_size_bytes), 测试 mock 数据
-    //    已提供这些字段. name 字段以 `(d.name ?? '')` 防御性兜底, 防止后端
-    //    缺字段时 TypeError.
-    interface OfficeDocForSearch {
-      name: string;
-      file_path: string;
-      file_size_bytes: number;
-      doc_type: 'ppt' | 'word' | 'excel';
-    }
-    const queryLower = query.toLowerCase();
-    const officePromise: Promise<FileSearchResult[]> = workspacePath
-      ? officeApi
-          .listDocuments(workspacePath)
-          .then((res) =>
-            (res.documents ?? [])
-              .map((d) => d as unknown as OfficeDocForSearch)
-              .filter((d) => (d.name ?? '').toLowerCase().includes(queryLower))
-              .map<FileSearchResult>((d) => ({
-                path: d.file_path,
-                name: d.name,
-                size: d.file_size_bytes,
-                kind: kindFromDocType(d.doc_type),
-              })),
-          )
-          .catch(() => [] as FileSearchResult[])
-      : Promise.resolve([] as FileSearchResult[]);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new FileSearchTimeoutError(query));
+      }, DEFAULT_TIMEOUT_MS);
+    });
 
-    const [fsResults, officeResults] = await Promise.all([
-      fsPromise.catch(() => [] as FileSearchResult[]),
-      officePromise,
-    ]);
-
-    // 3. 合并: office 在前, fs 在后; 同 path 去重 office 胜
-    const fsWithKind = fsResults.map<FileSearchResult>((r) => ({
-      ...r,
-      kind: inferKindFromPath(r.path),
-    }));
-
-    const seen = new Set<string>();
-    const merged: FileSearchResult[] = [];
-    for (const r of officeResults) {
-      merged.push(r);
-      seen.add(r.path);
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => {
+        // The promise.race winner logic + the outer `signal?.aborted`
+        // check in the catch handles this case; no explicit work here.
+      });
     }
-    for (const r of fsWithKind) {
-      if (!seen.has(r.path)) merged.push(r);
+
+    try {
+      return await Promise.race([workspacePromise, timeoutPromise]);
+    } catch (err) {
+      if (options.signal?.aborted) {
+        throw new DOMException('aborted', 'AbortError');
+      }
+      throw err;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
-    return merged;
   },
 };

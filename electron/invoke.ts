@@ -64,7 +64,8 @@ export async function invokeBackend(
   };
   if (route.method !== 'GET' && route.method !== 'DELETE') {
     // POST/PUT/PATCH: 把 args 转 snake_case 再序列化(前端 camelCase → 后端 Pydantic)
-    const snakeArgs = camelToSnakeKeys(args);
+    const bodyArgs = route.body?.(args) ?? args;
+    const snakeArgs = camelToSnakeKeys(bodyArgs);
     init.body = JSON.stringify(snakeArgs);
   }
   const res = await fetch(url, init);
