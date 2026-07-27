@@ -25,7 +25,7 @@ from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, StrictBool
+from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
 from backend.chat.executors import resolve_attachments
@@ -34,6 +34,13 @@ from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.memory import get_memory_manager
+from backend.office.chat_refs import ChatOfficeRef, authorize_chat_office_request
+from backend.office.workspace_errors import (
+    WorkspaceDocumentNotFoundError,
+    WorkspaceNotBoundError,
+    WorkspacePathMismatchError,
+    WorkspaceSessionNotFoundError,
+)
 from backend.scheduler import get_evolution_logs, get_scheduler
 
 logger = logging.getLogger(__name__)
@@ -111,6 +118,11 @@ class ChatRequest(BaseModel):
     reasoning_effort: Optional[str] = None
 
     thinking_budget: Optional[int] = None
+
+    # Task 6 (M1-M2 chat-read): frontend 把 @mention 解析成
+    # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
+    # 在调 LLM 前同步授权. 空列表 = legacy 路径(attachment_resolver).
+    office_refs: List[ChatOfficeRef] = Field(default_factory=list)
 
 
 class MessageResponse(BaseModel):
@@ -987,6 +999,63 @@ async def chat_stream_create(data: ChatRequest, request: Request):
         f"model={_safe_log_field(data.model or 'default')}"
     )
 
+    # Task 6 (M1-M2): 同步授权 ChatOfficeRef. 这一步必须在
+    # ``registry.create`` 之前完成 — 一旦 stream id 进入注册表,
+    # 失败路径就必须显式清理才能避免孤儿. 把授权放到 producer 启动
+    # 之前还有一个好处:授权失败时既不消耗 stream slot,也不浪费 LLM token.
+    # 错误映射见 ``backend.office.workspace_errors`` 模块注释.
+    try:
+        db = get_database()
+        _auth_conn = db.get_connection()
+        _auth_result = authorize_chat_office_request(
+            _auth_conn,
+            data.session_id,
+            data.workspace_path,
+            data.office_refs,
+        )
+    except WorkspacePathMismatchError as exc:
+        logger.warning(
+            f"[REQ {request_id}] /chat/stream office-ref path mismatch: {exc.safe_message}"
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "type": exc.code,
+                "message": exc.safe_message,
+            },
+        )
+    except WorkspaceNotBoundError as exc:
+        logger.warning(f"[REQ {request_id}] /chat/stream office-ref not bound: {exc.safe_message}")
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "type": exc.code,
+                "message": exc.safe_message,
+            },
+        )
+    except WorkspaceSessionNotFoundError as exc:
+        logger.warning(
+            f"[REQ {request_id}] /chat/stream office-ref session not found: {exc.safe_message}"
+        )
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": exc.code,
+                "message": exc.safe_message,
+            },
+        )
+    except WorkspaceDocumentNotFoundError as exc:
+        logger.warning(
+            f"[REQ {request_id}] /chat/stream office-ref doc not found: {exc.safe_message}"
+        )
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": exc.code,
+                "message": exc.safe_message,
+            },
+        )
+
     registry: StreamRegistry = request.app.state.streams
 
     async def producer(entry: StreamEntry) -> None:
@@ -995,6 +1064,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
         这里把 AgentEvent.to_dict() 在入队时序列化,避免对象跨 task 边界泄漏
         内部状态(detached Pydantic / cyclic ref 等)。
         """
+        # Task 9 (M1-M2): build a ToolExecutionContext from the captured
+        # authorization so Office tools can read the session's binding.
+        # set/reset around ``agent.run_loop`` via try/finally so the
+        # ContextVar never leaks across producer invocations.
+        from backend.tools.context import (
+            ToolExecutionContext,
+            reset_tool_context,
+            set_tool_context,
+        )
+
+        _tool_ctx_token = None
+        if _auth_result is not None:
+            _tool_ctx = ToolExecutionContext(
+                session_id=_auth_result.session_id,
+                stream_id=stream_id,
+                binding_generation=_auth_result.binding_generation,
+                office_doc_scope=_auth_result.office_doc_scope,
+            )
+            _tool_ctx_token = set_tool_context(_tool_ctx)
         try:
             llm_config = None
             if data.api_key and data.api_url:
@@ -1154,6 +1242,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 f"type={e.type.value}, message={e.message}"
             )
             await entry.queue.put({"error": e.to_dict(), "state": "failed"})
+        finally:
+            # Task 9 (M1-M2): always reset the tool context so the
+            # ContextVar never leaks into the next producer invocation.
+            if _tool_ctx_token is not None:
+                reset_tool_context(_tool_ctx_token)
 
     await registry.create(stream_id, queue_maxsize=1000, producer=producer)
     return {"streamId": stream_id}
