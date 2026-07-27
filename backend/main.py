@@ -30,6 +30,7 @@ from backend.api.orchestration_router import build_router as build_orchestration
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
 from backend.api.wiki_routes import router as wiki_router
+from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
 from backend.data.database import Database
 from backend.data.session_repo import MessageRepository, SessionRepository
@@ -341,6 +342,7 @@ app.include_router(llm_proxy_router, prefix="/api/v1")
 app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
 register_office_exception_handlers(app)
+app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
