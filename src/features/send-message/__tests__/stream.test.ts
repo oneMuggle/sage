@@ -71,6 +71,9 @@ describe('chatApi.chatStream (PR-6)', () => {
       provider: null,
       reasoningEffort: null,
       thinkingBudget: null,
+      // Task 7 (2026-07-26): office refs default to an empty array when
+      // the caller omits the 5th arg.
+      officeRefs: [],
     });
     // 2) listen 订阅 chat-stream-{id} (从 {streamId} 对象解构得到)
     expect(listenMock).toHaveBeenCalledWith(`chat-stream-${streamId}`, expect.any(Function));

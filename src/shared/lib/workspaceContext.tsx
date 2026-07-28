@@ -1,41 +1,62 @@
-import { createContext, useContext, type ReactNode } from 'react';
-
 /**
- * Current workspace root path, if one is selected by the user.
+ * Workspace context — shared between Chat.tsx (M1-M2 chat-read) and
+ * SessionWorkspaceProvider (Task 5, 2026-07-26).
  *
- * - `undefined` means no workspace is active yet — the AtFileMenu (and any
- *   other consumer) falls back to filesystem-only results.
- * - A non-empty absolute path means a workspace is active; office docs
- *   become visible to consumers like `fileSearchClient.search`.
+ * History:
+ * - M1-M2: this module owned a tiny `string | undefined` context that
+ *   `AppProviders` set to `undefined`. The Office page kept its own
+ *   `useState`, which meant workspacePath could not be unified between
+ *   the Chat page and the Office page.
+ * - Task 5: SessionWorkspaceProvider is now the **only** renderer-side
+ *   source of truth. This module is reduced to:
+ *     1. The `WorkspaceContext` (typed `WorkspaceContextValue | null`)
+ *     2. The `useCurrentWorkspace()` accessor — returns
+ *        `binding?.workspacePath ?? undefined` so M1-M2 chat-read consumers
+ *        (Chat.tsx, AtFileMenu, etc.) keep working without changes.
  *
- * The provider value is intentionally `undefined` by default in M1-M2:
- * Office.tsx still owns its own local `useState` for workspacePath until a
- * follow-up PR migrates it onto this context. Wiring the context here gives
- * Chat.tsx (and future workspace-aware components) a stable integration
- * point without forcing the migration in this PR.
+ * Full lifecycle access (status / error / bind / revoke / refresh) lives
+ * on `useWorkspaceContext` (re-exported from SessionWorkspaceProvider).
  */
-// eslint-disable-next-line react-refresh/only-export-components
-export const WorkspaceContext = createContext<string | undefined>(undefined);
 
-interface WorkspaceContextProviderProps {
-  value: string | undefined;
-  children: ReactNode;
-}
+import { createContext, useContext } from 'react';
+
+import type { WorkspaceContextValue } from '../../app/providers/SessionWorkspaceProvider';
 
 /**
- * Tiny provider — keeps the value opt-in at the App level. Renders children
- * unconditionally so callers don't need a sibling provider when no
- * workspace source is wired up yet.
+ * Source of truth for the active session's workspace binding. `null` means
+ * no provider is mounted; `useCurrentWorkspace` falls back to `undefined`
+ * to preserve the M1-M2 chat-read shape.
  */
-export function WorkspaceContextProvider({ value, children }: WorkspaceContextProviderProps) {
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
-}
+
+export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 /**
- * Read the current workspace path from context. Returns `undefined` when no
- * provider has been mounted or when the provider is set to `undefined`.
+ * Backwards-compatible accessor. Returns the active workspace path string
+ * (or `undefined` when no provider is mounted or the session has no
+ * workspace bound yet).
+ *
+ * Use this when you only need the path string — the Chat → ChatInput →
+ * AtFileMenu chain uses it. Use `useWorkspaceContext` for full lifecycle
+ * access (status / error / bind / revoke / refresh).
  */
-// eslint-disable-next-line react-refresh/only-export-components
+
 export function useCurrentWorkspace(): string | undefined {
+  const ctx = useContext(WorkspaceContext);
+  return ctx?.binding?.workspacePath;
+}
+
+/**
+ * Task 7 (2026-07-26): defensive accessor that returns `null` when no
+ * `SessionWorkspaceProvider` is mounted, instead of throwing. Used by
+ * `AtFileMenu` / `ChatInput` so legacy tests (which render these
+ * components without the provider) keep passing. In production the
+ * provider is mounted in `AppProviders`, so this returns the live
+ * `WorkspaceContextValue` exactly like `useWorkspaceContext`.
+ */
+export function useOptionalWorkspaceContext(): WorkspaceContextValue | null {
   return useContext(WorkspaceContext);
 }
+
+// Re-export the value type so consumers do not need to import from
+// SessionWorkspaceProvider directly.
+export type { WorkspaceContextValue } from '../../app/providers/SessionWorkspaceProvider';

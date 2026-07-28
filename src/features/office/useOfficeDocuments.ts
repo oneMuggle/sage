@@ -31,6 +31,8 @@ import type {
   OfficeWordReadResult,
 } from '../../shared/api/types';
 
+import { importOfficeByType } from './importOfficeReference';
+
 /** Read result union — OfficePreviewPanel is doc-type-agnostic. */
 export type OfficeReadResult = OfficePptReadResult | OfficeWordReadResult | OfficeExcelReadResult;
 
@@ -205,24 +207,14 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
       if (!workspacePath) {
         throw new Error('No workspace selected');
       }
-      const imported = await window.electronAPI?.office.importDroppedOfficeFile(
-        workspacePath,
-        docType,
-        sourcePath,
-      );
-      if (!imported) {
-        throw new Error('importDroppedOfficeFile returned no payload');
-      }
-      try {
-        const result = await readByType(docType, imported.managedPath);
-        await window.electronAPI?.office.completeOfficeImport(imported.importToken);
-        return result;
-      } catch (e) {
-        await safeDiscard(imported.importToken);
-        throw e;
-      }
+      // Task 7 (2026-07-26): delegate the import-token lifecycle to the
+      // shared helper `importOfficeByType` so /office and chat-read paths
+      // stay in lock-step. Behavior is unchanged: read result on success,
+      // safeDiscard on read failure.
+      const { readResult } = await importOfficeByType(workspacePath, docType, sourcePath);
+      return readResult;
     },
-    [workspacePath, readByType, safeDiscard],
+    [workspacePath],
   );
 
   const saveAs = useCallback(

@@ -5,7 +5,7 @@
 
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
-import type { AgentEvent, ChatConfig, ChatResponse } from './types';
+import type { AgentEvent, ChatConfig, ChatOfficeRef, ChatResponse } from './types';
 import { ApiException, handleApiError, isValidSessionId, sanitizeInput, withRetry } from './utils';
 
 export const chatApi = {
@@ -62,6 +62,11 @@ export const chatApi = {
    * 3. 逐事件回调 onEvent; state=done/failed 时调 onDone 并自动 cancel
    * 4. 调用方在 unmount/中断时调返回的 cancel() 释放 listener
    *
+   * Task 7 (2026-07-26): optional 5th arg `officeRefs` is forwarded
+   * verbatim into the `agent_chat_stream` invoke body. The backend
+   * (`backend/office/chat_refs.py`) validates each ref against the active
+   * workspace binding and rejects unauthorized refs before streaming.
+   *
    * 注: 后端流是 fire-and-forget, 本方法不取消后端; 中断整个 chat 用 chatApi.interrupt()
    */
   async chatStream(
@@ -73,6 +78,7 @@ export const chatApi = {
       onDone?: () => void;
     },
     config?: ChatConfig,
+    officeRefs?: readonly ChatOfficeRef[],
   ): Promise<{ streamId: string; cancel: () => void }> {
     const safeMessage = sanitizeInput(message);
     if (!isValidSessionId(sessionId)) {
@@ -102,6 +108,8 @@ export const chatApi = {
       provider: config?.provider ?? null,
       reasoningEffort: config?.reasoningEffort ?? null,
       thinkingBudget: config?.thinkingBudget ?? null,
+      // Task 7: forwarded as-is. Backend authorizes before reading.
+      officeRefs: officeRefs ?? [],
     });
     const eventName = `chat-stream-${streamId}`;
 
