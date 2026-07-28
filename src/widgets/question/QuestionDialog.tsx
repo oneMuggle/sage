@@ -63,10 +63,11 @@ export function QuestionDialog() {
 
   const submit = async (answers: readonly string[], customValue: string | null): Promise<void> => {
     if (submitting) return;
+    const requestIdAtSubmit = currentQuestion.request_id;
     setSubmitting(true);
     try {
       const resp = await invoke<AnswerResponse>('questions_answer', {
-        requestId: currentQuestion.request_id,
+        requestId: requestIdAtSubmit,
         answers,
         custom: customValue,
       });
@@ -78,8 +79,12 @@ export function QuestionDialog() {
         `${t('question.toast.failed')}: ${err instanceof Error ? err.message : String(err)}`,
       );
     } finally {
-      // 无论 ok/error 都关闭 — 理由见文件头注
-      resolve();
+      // 无论 ok/error 都关闭 — 理由见文件头注。但仅当 store 中仍是本次
+      // 提交的提问时关闭：若提交在途时新提问 (Q2) 已到达，Q1 的 finally
+      // 不能把 Q2 的对话框一并清掉（否则 Q2 会静默走超时软默认）
+      if (useQuestionState.getState().currentQuestion?.request_id === requestIdAtSubmit) {
+        resolve();
+      }
     }
   };
 

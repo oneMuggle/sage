@@ -281,4 +281,31 @@ describe('QuestionDialog', () => {
     expect((screen.getByTestId('question-custom') as HTMLInputElement).value).toBe('');
     expect((screen.getByTestId('question-submit') as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('does not close a newer question when an older submit is still in flight', async () => {
+    // 审查加固回归: Q1 提交在途时 Q2 到达 → Q1 的 finally 不得清掉 Q2
+    seedQuestion({ request_id: 'q-1' });
+    renderDialog();
+
+    let resolveInvoke: (value: unknown) => void = () => {};
+    invokeMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveInvoke = resolve;
+      }),
+    );
+
+    fireEvent.click(optionInput(0));
+    fireEvent.click(screen.getByTestId('question-submit'));
+
+    // invoke 在途期间 Q2 替换 store
+    useQuestionState.getState().setFromEvent(makeQuestion({ request_id: 'q-2' }));
+
+    // Q1 的 invoke 解析 → finally 必须跳过 resolve（store 里已是 q-2）
+    resolveInvoke({ ok: true });
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalled();
+    });
+    expect(useQuestionState.getState().currentQuestion?.request_id).toBe('q-2');
+  });
 });

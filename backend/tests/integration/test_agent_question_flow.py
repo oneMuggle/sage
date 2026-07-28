@@ -245,3 +245,34 @@ async def test_run_loop_ask_user_bypasses_permission_enforcer():
     assert AgentState.PERMISSION_REQUEST not in states
     assert AgentState.ASK_USER_QUESTION in states
     assert events[-1].state == AgentState.DONE
+
+
+async def test_run_loop_consecutive_unanswered_cap_stops_asking():
+    """审查加固: 连续 3 次未应答后第 4 次提问直接拒绝（防 LLM 循环骚扰用户）。"""
+    # Arrange: LLM 连续请求提问 4 次，每次都不应答（超时）
+    init_question_gate()
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(content="", tool_calls=[_ask_call(call_id=f"call_{i}")])
+            for i in range(4)
+        ]
+        + [_make_response(content="直接推进任务")]
+    )
+    agent.question_timeout = 0.05  # 缩短超时加速测试
+
+    # Act
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "x"}]):
+        events.append(evt)
+
+    # Assert: 前 3 次正常发问，第 4 次被上限拦截（错误结果且无提问事件）
+    ask_events = [e for e in events if e.state == AgentState.ASK_USER_QUESTION]
+    assert len(ask_events) == 3
+    observings = [e for e in events if e.state == AgentState.OBSERVING]
+    assert len(observings) == 4
+    assert observings[-1].tool_result.is_error is True
+    assert "停止提问" in observings[-1].tool_result.content
+    # 软结果仍允许循环体面收尾
+    assert events[-1].state == AgentState.DONE

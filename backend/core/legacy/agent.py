@@ -41,6 +41,10 @@ from backend.services.question_gate import (
 )
 from backend.tools import ToolRegistry, register_all_tools
 from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_ask_user_args
+
+#: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
+#: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
+MAX_CONSECUTIVE_UNANSWERED_QUESTIONS = 3
 from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
 from backend.tools.permissions import (
@@ -506,6 +510,9 @@ class SageAgent:
         if self.llm_client is None and not llm_config:
             raise AgentError("LLM 未配置,无法运行 Agent 循环")
 
+        # 每次 run_loop 重置未应答计数(跨会话不累积)
+        self._consecutive_unanswered = 0
+
         # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 5
         effective_max_iterations = (
             max_iterations
@@ -606,12 +613,23 @@ class SageAgent:
                     # M2 part B: ask_user_question —— 分发前特判（与 M1 审批同构）。
                     # 校验参数 → 发 ASK_USER_QUESTION 事件 → await 提问闸口 →
                     # 把应答注入工具执行。超时 / 闸口缺失 → 空应答软结果，循环
-                    # 永不挂起。该工具不过权限执行器（READ 且无副作用）。
+                    # 永不挂起。该工具有意跳过权限执行器（READ 且零副作用，
+                    # 避免与提问闸口双重卡点）——因此用户 deny 规则对其不生效。
                     ask_handled = False
                     if tc.name == ASK_USER_QUESTION_TOOL_NAME:
                         ask_handled = True
                         validation_error = validate_ask_user_args(args)
-                        if validation_error is not None:
+                        if (
+                            self._consecutive_unanswered
+                            >= MAX_CONSECUTIVE_UNANSWERED_QUESTIONS
+                        ):
+                            # 审查加固: 防 LLM 循环提问骚扰用户
+                            result_content = (
+                                f"[错误] 已连续 {MAX_CONSECUTIVE_UNANSWERED_QUESTIONS} "
+                                "次提问未获应答，停止提问，请直接推进任务"
+                            )
+                            is_error = True
+                        elif validation_error is not None:
                             result_content = (
                                 f"[参数错误] ask_user_question: {validation_error}"
                             )
@@ -630,6 +648,11 @@ class SageAgent:
                                 agent_id=self.agent_id,
                             )
                             q_answer = await self._await_question_answer(question_req)
+                            # gui 应答(含 Escape 空提交)清零; 超时/缺 gate 累加
+                            if q_answer.answered_by == "gui":
+                                self._consecutive_unanswered = 0
+                            else:
+                                self._consecutive_unanswered += 1
                             tool = self.tool_registry.get(tc.name)
                             if tool is None:
                                 result_content = f"[错误] 工具不存在: {tc.name}"

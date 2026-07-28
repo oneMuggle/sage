@@ -89,15 +89,24 @@ class QuestionRequest:
         header: Optional[str] = None,
         multi_select: bool = False,
     ) -> QuestionRequest:
-        """工厂：生成 UUID + 时间戳，规范化选项（description 缺省 None）。"""
+        """工厂：生成 UUID + 时间戳，规范化选项。
+
+        防御性规范化（校验层的二道防线）：非字符串 description / header
+        一律落为 None——绝不让畸形载荷穿透到前端渲染层炸 UI。
+        """
         normalized: Tuple[Dict[str, Any], ...] = tuple(
-            {"label": str(opt.get("label", "")), "description": opt.get("description")}
+            {
+                "label": str(opt.get("label", "")),
+                "description": (
+                    opt["description"] if isinstance(opt.get("description"), str) else None
+                ),
+            }
             for opt in options
         )
         return cls(
             request_id=str(uuid.uuid4()),
             question=question,
-            header=header,
+            header=header if isinstance(header, str) else None,
             options=normalized,
             multi_select=bool(multi_select),
             created_at=time.time(),

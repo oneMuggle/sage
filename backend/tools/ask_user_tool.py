@@ -36,18 +36,26 @@ MAX_OPTIONS = 4
 UNANSWERED_RESULT_TEXT = "用户未回答，请自行决定合理默认值"
 
 
-def _validate_options(options: Any) -> Optional[str]:
-    """校验 options 列表（2-4 项，每项含非空 label）；合法返回 None。"""
+def _validate_options(options: Any) -> Optional[str]:  # noqa: PLR0911 — 级联校验早退可读性优先
+    """校验 options 列表（2-4 项，每项含非空唯一 label）；合法返回 None。"""
     if not isinstance(options, list):
         return "options 必须是列表"
     if not MIN_OPTIONS <= len(options) <= MAX_OPTIONS:
         return f"options 数量必须在 {MIN_OPTIONS}-{MAX_OPTIONS} 之间，实际 {len(options)}"
+    seen_labels = set()
     for idx, opt in enumerate(options):
         if not isinstance(opt, dict):
             return f"options[{idx}] 必须是对象"
         label = opt.get("label")
         if not isinstance(label, str) or not label.strip():
             return f"options[{idx}].label 必须是非空字符串"
+        if label in seen_labels:
+            return f"options[{idx}].label 与前面选项重复: {label}"
+        seen_labels.add(label)
+        description = opt.get("description")
+        if description is not None and not isinstance(description, str):
+            # 审查加固: 非字符串 description 会穿透到 React 渲染层炸 UI
+            return f"options[{idx}].description 必须是字符串（可选）"
     return None
 
 
