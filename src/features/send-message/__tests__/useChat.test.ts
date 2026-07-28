@@ -8,6 +8,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { usePermissionState } from '../../../entities/permission/permissionState';
+import { useQuestionState } from '../../../entities/question/questionState';
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
 import { useStore } from '../../../shared/lib/store';
 import { useChat } from '../useChat';
@@ -129,6 +130,8 @@ beforeEach(() => {
   });
   // M1: 隔离 permission store,避免用例间对话框状态串扰
   usePermissionState.setState({ currentRequest: null });
+  // M2 part B: 同理隔离 question store
+  useQuestionState.setState({ currentQuestion: null });
 });
 
 afterEach(() => {
@@ -768,5 +771,179 @@ describe('useChat M1 permission_request wiring', () => {
     });
 
     expect(usePermissionState.getState().currentRequest).toBeNull();
+  });
+});
+
+// ============================================================================
+// M2 part B: ask_user_question 流事件 → question store 接线
+// ============================================================================
+describe('useChat M2 ask_user_question wiring', () => {
+  type QuestionEvt = {
+    payload: {
+      state: string;
+      iteration: number;
+      agent_id?: string | null;
+      content?: string;
+      user_question?: {
+        request_id: string;
+        question: string;
+        header?: string | null;
+        options: Array<{ label: string; description?: string | null }>;
+        multi_select: boolean;
+        created_at: number;
+      };
+    };
+  };
+
+  const QUESTION_PAYLOAD = {
+    request_id: 'q-req-1',
+    question: '选择输出格式?',
+    header: '输出格式',
+    options: [
+      { label: 'Markdown', description: '纯文本报告' },
+      { label: 'PDF', description: '排版文档' },
+    ],
+    multi_select: false,
+    created_at: 1753718400.123,
+  };
+
+  it('ask_user_question event populates the question store for the dialog', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-q' });
+
+    let capturedCb: ((e: QuestionEvt) => void) | null = null;
+    listenMock.mockImplementationOnce(async (_name: string, cb: (e: QuestionEvt) => void) => {
+      capturedCb = cb;
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('给我个报告') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(capturedCb).not.toBeNull();
+    expect(useQuestionState.getState().currentQuestion).toBeNull();
+
+    // acting → ask_user_question（后端 gate 开始阻塞等待应答）
+    act(() => {
+      capturedCb!({ payload: { state: 'acting', iteration: 0 } });
+    });
+    act(() => {
+      capturedCb!({
+        payload: {
+          state: 'ask_user_question',
+          iteration: 0,
+          agent_id: null,
+          user_question: QUESTION_PAYLOAD,
+        },
+      });
+    });
+
+    // 对话框数据到位
+    expect(useQuestionState.getState().currentQuestion).toEqual(QUESTION_PAYLOAD);
+    // 且没有污染消息气泡（ask_user_question 不产生占位文本,保留 acting 占位）
+    const mid = result.current.messages.find((m) => m.role === 'assistant');
+    expect(mid?.content).toBe('🔧 行动中…');
+
+    // 用户应答后后端继续: observing → done
+    act(() => {
+      capturedCb!({ payload: { state: 'observing', iteration: 0 } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 1, content: '按 PDF 输出' } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+
+    // 流结束 → finishStream 清掉遗留对话框
+    expect(useQuestionState.getState().currentQuestion).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('stream error path also resolves a pending question', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-q-fail' });
+
+    let capturedCb: ((e: QuestionEvt) => void) | null = null;
+    listenMock.mockImplementationOnce(async (_name: string, cb: (e: QuestionEvt) => void) => {
+      capturedCb = cb;
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('x') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => {
+      capturedCb!({
+        payload: {
+          state: 'ask_user_question',
+          iteration: 0,
+          user_question: { ...QUESTION_PAYLOAD, request_id: 'q-fail' },
+        },
+      });
+    });
+    expect(useQuestionState.getState().currentQuestion?.request_id).toBe('q-fail');
+
+    // failed 事件 → onError + finishStream → resolve()
+    act(() => {
+      capturedCb!({ payload: { state: 'failed', iteration: 0, content: 'boom' } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+
+    expect(useQuestionState.getState().currentQuestion).toBeNull();
+  });
+
+  it('ask_user_question event without payload is ignored (defensive)', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-q-empty' });
+
+    let capturedCb: ((e: QuestionEvt) => void) | null = null;
+    listenMock.mockImplementationOnce(async (_name: string, cb: (e: QuestionEvt) => void) => {
+      capturedCb = cb;
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('hi') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(capturedCb).not.toBeNull();
+
+    // 缺少 user_question 载荷 → 防御性跳过,不写 store
+    act(() => {
+      capturedCb!({ payload: { state: 'ask_user_question', iteration: 0 } });
+    });
+    expect(useQuestionState.getState().currentQuestion).toBeNull();
+
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 1, content: 'ok' } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+
+    expect(useQuestionState.getState().currentQuestion).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ from typing import Optional
 
 from backend.domain.tool_policy import ToolPolicy
 
+from .ask_user_tool import AskUserQuestionTool
 from .base import BaseTool, ToolResult, ToolSchema
 from .calculator import CalculatorTool
 from .edit_tool import EditTool
@@ -18,6 +19,7 @@ from .registry import ToolRegistry
 from .repl_tool import ReplTool
 from .search_tools import GlobSearchTool, GrepSearchTool
 from .skill import SkillHotLoader
+from .skill_tool import SkillTool
 from .structured_output_tool import StructuredOutputTool
 from .terminal import TerminalTool
 from .todo_tool import TodoWriteTool
@@ -51,6 +53,10 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
     registry.register(TodoWriteTool(policy=policy))
     registry.register(StructuredOutputTool(policy=policy))
     registry.register(ReplTool(policy=policy))
+    # M2 part B: in-loop 技能调用（EXECUTE，M1 审批闸口按模式矩阵拦截）
+    registry.register(SkillTool(policy=policy))
+    # M2 part B: AskUserQuestion（READ，run_loop 分发前特判 + 提问闸口）
+    registry.register(AskUserQuestionTool(policy=policy))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
@@ -85,6 +91,8 @@ __all__ = [
     "TodoWriteTool",
     "StructuredOutputTool",
     "ReplTool",
+    "SkillTool",
+    "AskUserQuestionTool",
     "SkillHotLoader",
     "register_all_tools",
 ]

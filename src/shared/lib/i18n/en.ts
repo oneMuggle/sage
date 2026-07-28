@@ -218,6 +218,14 @@ export const en: Record<TranslationKey, string> = {
   'permission.deny': 'Deny',
   'permission.toast.failed': 'Failed to submit approval answer',
 
+  // ─── M2 AskUserQuestion ───────────
+  'question.title': 'The assistant needs your answer',
+  'question.custom.label': 'Other',
+  'question.custom.placeholder': 'Type a custom answer…',
+  'question.submit': 'Submit',
+  'question.multi_hint': '(multi-select)',
+  'question.toast.failed': 'Failed to submit answer',
+
   // ─── M1 settings: tool permissions ─
   'settings.section.permission': 'Tool permissions',
   'settings.permission.mode': 'Permission mode',

@@ -141,6 +141,22 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     body: (a) => ({ approved: a.approved, remember: a.remember }),
   },
 
+  // M2 part B: AskUserQuestion 提问 gate（backend/api/question_routes.py）。
+  // ask_user_question 流事件到达后,渲染进程弹出 QuestionDialog;用户选择/
+  // 填写 → questions_answer 应答。pending 端点用于断线重连后补拉。
+  questions_pending: { method: 'GET', path: () => '/api/v1/questions/pending' },
+  questions_answer: {
+    method: 'POST',
+    path: (a) => `/api/v1/questions/${encodeURIComponent(String(a.requestId))}/answer`,
+    // 后端 QuestionAnswerBody 是 extra="forbid" — body 里只允许
+    // answers/custom;requestId 是路径参数,必须从 body 剥掉,否则 422。
+    // (与 permissions_answer 剥 requestId 同理)
+    body: (a) => ({
+      answers: Array.isArray(a.answers) ? a.answers : [],
+      custom: a.custom ?? null,
+    }),
+  },
+
   // scheduled tasks (Phase 8)
   scheduled_list_tasks: {
     method: 'GET',

@@ -217,6 +217,14 @@ export const zh = {
   'permission.deny': '拒绝',
   'permission.toast.failed': '审批应答失败',
 
+  // ─── M2 AskUserQuestion ───────────
+  'question.title': '助手需要您的回答',
+  'question.custom.label': '其他',
+  'question.custom.placeholder': '输入自定义回答…',
+  'question.submit': '提交',
+  'question.multi_hint': '（可多选）',
+  'question.toast.failed': '提交回答失败',
+
   // ─── M1 设置：工具权限 ────────────
   'settings.section.permission': '工具权限',
   'settings.permission.mode': '权限模式',

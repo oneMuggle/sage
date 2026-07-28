@@ -33,7 +33,14 @@ from backend.services.permission_gate import (
     ApprovalRequest,
     get_permission_gate,
 )
+from backend.services.question_gate import (
+    DEFAULT_QUESTION_TIMEOUT_S,
+    QuestionAnswer,
+    QuestionRequest,
+    get_question_gate,
+)
 from backend.tools import ToolRegistry, register_all_tools
+from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_ask_user_args
 from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
 from backend.tools.permissions import (
@@ -226,6 +233,8 @@ class SageAgent:
         # - approval_timeout: 审批等待秒数; None → gate 默认 300s。
         self.permission_enforcer: Optional[PermissionEnforcer] = None
         self.approval_timeout: Optional[float] = None
+        # M2 part B: 提问等待秒数; None → gate 默认 300s（测试可缩短）。
+        self.question_timeout: Optional[float] = None
 
         # 初始化 LLM 客户端
         if llm_config:
@@ -594,64 +603,116 @@ class SageAgent:
                     is_error = False
                     result_content = ""
 
-                    # M1: enforcement-before-dispatch —— 每次工具调用先过权限
-                    # 执行器（deny/allow 规则 → 模式矩阵 → bash 风险升级）。
-                    # 被拒 → 注入错误 ToolResult，循环正常继续（不抛异常）。
-                    decision = enforcer.check(tc.name, args)
-                    if decision.needs_approval:
-                        # 先推 PERMISSION_REQUEST 事件给前端，再 await 审批闸口
-                        approval_req = self._build_approval_request(tc.name, args, decision)
-                        yield AgentEvent(
-                            state=AgentState.PERMISSION_REQUEST,
-                            iteration=i,
-                            permission_request=approval_req.to_dict(),
-                            agent_id=self.agent_id,
-                        )
-                        answer = await self._await_approval_answer(approval_req)
-                        if answer.approved:
-                            decision = PermissionDecision(
-                                allowed=True,
-                                needs_approval=False,
-                                reason=f"{decision.reason}（用户已批准）",
+                    # M2 part B: ask_user_question —— 分发前特判（与 M1 审批同构）。
+                    # 校验参数 → 发 ASK_USER_QUESTION 事件 → await 提问闸口 →
+                    # 把应答注入工具执行。超时 / 闸口缺失 → 空应答软结果，循环
+                    # 永不挂起。该工具不过权限执行器（READ 且无副作用）。
+                    ask_handled = False
+                    if tc.name == ASK_USER_QUESTION_TOOL_NAME:
+                        ask_handled = True
+                        validation_error = validate_ask_user_args(args)
+                        if validation_error is not None:
+                            result_content = (
+                                f"[参数错误] ask_user_question: {validation_error}"
                             )
+                            is_error = True
                         else:
-                            decision = PermissionDecision(
-                                allowed=False,
-                                needs_approval=False,
-                                reason=f"{decision.reason}（未获批准: {answer.answered_by}）",
+                            question_req = QuestionRequest.create(
+                                question=args["question"],
+                                options=args["options"],
+                                header=args.get("header"),
+                                multi_select=bool(args.get("multi_select", False)),
                             )
-
-                    if not decision.allowed:
-                        logger.info(
-                            "工具调用被权限执行器拒绝: tool=%s reason=%s", tc.name, decision.reason
-                        )
-                        result_content = f"权限拒绝: {decision.reason}"
-                        is_error = True
-                    else:
-                        try:
+                            yield AgentEvent(
+                                state=AgentState.ASK_USER_QUESTION,
+                                iteration=i,
+                                user_question=question_req.to_dict(),
+                                agent_id=self.agent_id,
+                            )
+                            q_answer = await self._await_question_answer(question_req)
                             tool = self.tool_registry.get(tc.name)
                             if tool is None:
                                 result_content = f"[错误] 工具不存在: {tc.name}"
                                 is_error = True
                             else:
-                                result = tool.execute(**args)
-                                if hasattr(result, "success") and hasattr(result, "content"):
-                                    is_error = not result.success
-                                    if result.success:
-                                        result_content = json.dumps(
-                                            result.content, ensure_ascii=False
-                                        )
-                                    else:
-                                        result_content = result.error or "工具执行失败"
+                                # 注入应答前剔除同名键，防 LLM 原始参数与注入冲突
+                                injected_args = {
+                                    k: v
+                                    for k, v in args.items()
+                                    if k not in ("answers", "custom")
+                                }
+                                q_result = tool.execute(
+                                    **injected_args,
+                                    answers=list(q_answer.answers),
+                                    custom=q_answer.custom,
+                                )
+                                is_error = not q_result.success
+                                if q_result.success:
+                                    result_content = str(q_result.content)
                                 else:
-                                    is_error = False
-                                    result_content = json.dumps(
-                                        result, ensure_ascii=False, default=str
-                                    )
-                        except Exception as e:
-                            logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
-                            result_content = f"[工具错误] {str(e)}"
+                                    result_content = q_result.error or "工具执行失败"
+
+                    if not ask_handled:
+                        # M1: enforcement-before-dispatch —— 每次工具调用先过权限
+                        # 执行器（deny/allow 规则 → 模式矩阵 → bash 风险升级）。
+                        # 被拒 → 注入错误 ToolResult，循环正常继续（不抛异常）。
+                        decision = enforcer.check(tc.name, args)
+                        if decision.needs_approval:
+                            # 先推 PERMISSION_REQUEST 事件给前端，再 await 审批闸口
+                            approval_req = self._build_approval_request(tc.name, args, decision)
+                            yield AgentEvent(
+                                state=AgentState.PERMISSION_REQUEST,
+                                iteration=i,
+                                permission_request=approval_req.to_dict(),
+                                agent_id=self.agent_id,
+                            )
+                            answer = await self._await_approval_answer(approval_req)
+                            if answer.approved:
+                                decision = PermissionDecision(
+                                    allowed=True,
+                                    needs_approval=False,
+                                    reason=f"{decision.reason}（用户已批准）",
+                                )
+                            else:
+                                decision = PermissionDecision(
+                                    allowed=False,
+                                    needs_approval=False,
+                                    reason=f"{decision.reason}（未获批准: {answer.answered_by}）",
+                                )
+
+                        if not decision.allowed:
+                            logger.info(
+                                "工具调用被权限执行器拒绝: tool=%s reason=%s",
+                                tc.name,
+                                decision.reason,
+                            )
+                            result_content = f"权限拒绝: {decision.reason}"
                             is_error = True
+                        else:
+                            try:
+                                tool = self.tool_registry.get(tc.name)
+                                if tool is None:
+                                    result_content = f"[错误] 工具不存在: {tc.name}"
+                                    is_error = True
+                                else:
+                                    result = tool.execute(**args)
+                                    if hasattr(result, "success") and hasattr(result, "content"):
+                                        is_error = not result.success
+                                        if result.success:
+                                            result_content = json.dumps(
+                                                result.content, ensure_ascii=False
+                                            )
+                                        else:
+                                            result_content = result.error or "工具执行失败"
+                                    else:
+                                        is_error = False
+                                        result_content = json.dumps(
+                                            result, ensure_ascii=False, default=str
+                                        )
+                            except Exception as e:
+                                logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
+                                result_content = f"[工具错误] {str(e)}"
+                                is_error = True
 
                     tool_result = ToolCallResult(
                         tool_call_id=tc.id,
@@ -734,6 +795,25 @@ class SageAgent:
             self.approval_timeout
             if self.approval_timeout is not None
             else DEFAULT_APPROVAL_TIMEOUT_S
+        )
+        return await gate.request(req, timeout=timeout)
+
+    async def _await_question_answer(self, req: QuestionRequest) -> QuestionAnswer:
+        """await 提问闸口应答；gate 未装配时按"无人应答"处理（不挂起）。
+
+        与审批的 fail-closed 不同：提问超时/缺 gate 返回空应答，工具渲染
+        "用户未回答"软结果，agent 带着它继续跑。
+        """
+        gate = get_question_gate()
+        if gate is None:
+            logger.warning(
+                "提问闸口未初始化，按无人应答处理: request_id=%s", req.request_id
+            )
+            return QuestionAnswer(answers=(), custom=None, answered_by="timeout")
+        timeout = (
+            self.question_timeout
+            if self.question_timeout is not None
+            else DEFAULT_QUESTION_TIMEOUT_S
         )
         return await gate.request(req, timeout=timeout)
 

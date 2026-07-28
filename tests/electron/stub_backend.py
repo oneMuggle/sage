@@ -20,11 +20,22 @@ M1 tool security hardening (permission-approval E2E):
 - POST /api/v1/permissions/{request_id}/answer
 - GET /api/v1/_test/permission_answers (inspection endpoint for tests)
 
+M2 part B AskUserQuestion (question-answer E2E):
+- GET /api/v1/questions/pending
+- POST /api/v1/questions/{request_id}/answer
+- GET /api/v1/_test/question_answers (inspection endpoint for tests)
+
 When the chat/stream POST message contains the marker ``__PERM_TEST__``,
 the attach stream emits ``acting`` → ``permission_request`` and BLOCKS
 (up to 25s) until the matching answer POST resolves the request — mimicking
 the real backend ApprovalGate (backend/services/permission_gate.py).
 After resolution it emits ``observing`` → ``content_delta`` → ``done``.
+
+When the message contains ``__QUESTION_TEST__`` instead, the attach stream
+emits ``acting`` → ``ask_user_question`` and BLOCKS (up to 25s) until the
+matching answer POST resolves — mimicking UserQuestionGate
+(backend/services/question_gate.py), including empty-answer timeout
+semantics ("用户未回答" soft result).
 
 Supports Task 6 office_refs authorization checks in chat/stream.
 """
@@ -47,6 +58,14 @@ PERM_TEST_MARKER = "__PERM_TEST__"
 #: How long the gated stream waits for an answer before failing closed
 #: (mirrors backend default-deny semantics; real backend waits 300s).
 PERM_WAIT_TIMEOUT_S = 25.0
+
+#: Marker in the chat message that makes the stub stream emit an
+#: ask_user_question event and block until answered (M2 part B E2E).
+QUESTION_TEST_MARKER = "__QUESTION_TEST__"
+
+#: How long the question-gated stream waits for an answer before resolving
+#: to an empty answer (mirrors UserQuestionGate timeout; real: 300s).
+QUESTION_WAIT_TIMEOUT_S = 25.0
 
 
 class StubBackend:
@@ -80,6 +99,15 @@ class StubBackend:
             "events": {},
             "verdicts": {},
             "answers": [],
+            # M2 part B question-gate state (mirrors the M1 permission gate):
+            #   questions:          request_id → user_question dict
+            #   question_events:    request_id → threading.Event
+            #   question_verdicts:  request_id → {answers, custom}
+            #   question_answers:   ordered record of successful answers
+            "questions": {},
+            "question_events": {},
+            "question_verdicts": {},
+            "question_answers": [],
         }  # type: Dict[str, Any]
         self._init_db()
 
@@ -220,6 +248,10 @@ def _make_handler(db, lock, state):
             with lock:
                 message = state["streams"].get(stream_id, "")
 
+            if QUESTION_TEST_MARKER in message:
+                self._handle_gated_question_stream()
+                return
+
             if PERM_TEST_MARKER not in message:
                 events = [
                     {
@@ -333,6 +365,132 @@ def _make_handler(db, lock, state):
                     tool_call=None,
                     tool_result={
                         "tool_call_id": "call-stub-1",
+                        "role": "tool",
+                        "content": tool_content,
+                    },
+                    error=None,
+                )
+            )
+            self._write_ndjson_line(
+                dict(
+                    base,
+                    state="content_delta",
+                    content=final,
+                    reasoning=None,
+                    tool_call=None,
+                    tool_result=None,
+                    error=None,
+                )
+            )
+            self._write_ndjson_line(
+                dict(
+                    base,
+                    state="done",
+                    content=final,
+                    reasoning=None,
+                    tool_call=None,
+                    tool_result=None,
+                    error=None,
+                )
+            )
+
+        def _handle_gated_question_stream(self):
+            # type: () -> None
+            """Emit the M2 part B gated question stream.
+
+            acting → ask_user_question, BLOCK until the answer POST
+            resolves the gate event (or QUESTION_WAIT_TIMEOUT_S → empty
+            answer), then observing → content_delta → done — mimicking
+            UserQuestionGate (backend/services/question_gate.py).
+            """
+            request_id = "q-{}".format(uuid.uuid4().hex[:12])
+            gate_event = threading.Event()
+            user_question = {
+                "request_id": request_id,
+                "question": "选择输出格式?",
+                "header": "输出格式",
+                "options": [
+                    {"label": "Markdown", "description": "纯文本报告"},
+                    {"label": "PDF", "description": "排版文档"},
+                ],
+                "multi_select": False,
+                "created_at": time.time(),
+            }
+            with lock:
+                state["questions"][request_id] = user_question
+                state["question_events"][request_id] = gate_event
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.end_headers()
+
+            base = {"iteration": 1, "agent_id": "stub-agent"}
+            self._write_ndjson_line(
+                dict(
+                    base,
+                    state="acting",
+                    content=None,
+                    reasoning=None,
+                    tool_call={
+                        "id": "call-stub-q1",
+                        "type": "function",
+                        "function": {
+                            "name": "ask_user_question",
+                            "arguments": json.dumps(
+                                {
+                                    "question": user_question["question"],
+                                    "options": user_question["options"],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    },
+                    tool_result=None,
+                    error=None,
+                )
+            )
+            self._write_ndjson_line(
+                {
+                    "state": "ask_user_question",
+                    "iteration": 1,
+                    "agent_id": None,
+                    "content": None,
+                    "reasoning": None,
+                    "tool_call": None,
+                    "tool_result": None,
+                    "error": None,
+                    "user_question": user_question,
+                }
+            )
+
+            answered = gate_event.wait(QUESTION_WAIT_TIMEOUT_S)
+            with lock:
+                verdict = state["question_verdicts"].get(request_id) or {}
+                answers = list(verdict.get("answers") or [])
+                custom = verdict.get("custom")
+                state["questions"].pop(request_id, None)
+                state["question_events"].pop(request_id, None)
+
+            if answers or custom:
+                parts = list(answers)
+                if custom:
+                    parts.append(custom)
+                tool_content = "用户已回答:\n" + "\n".join("- " + p for p in parts)
+                final = "已回答: {}".format(", ".join(parts))
+            else:
+                # 超时 / 空提交 → 与真实后端一致的软结果
+                tool_content = "用户未回答，请自行决定合理默认值"
+                final = "未收到回答，已按默认 Markdown 输出。"
+
+            self._write_ndjson_line(
+                dict(
+                    base,
+                    state="observing",
+                    content=None,
+                    reasoning=None,
+                    tool_call=None,
+                    tool_result={
+                        "tool_call_id": "call-stub-q1",
                         "role": "tool",
                         "content": tool_content,
                     },
@@ -480,6 +638,20 @@ def _make_handler(db, lock, state):
                 self._send_json(200, {"answers": answers})
                 return
 
+            # GET /api/v1/questions/pending (M2 part B)
+            if path == "/api/v1/questions/pending":
+                with lock:
+                    pending = list(state["questions"].values())
+                self._send_json(200, pending)
+                return
+
+            # GET /api/v1/_test/question_answers (M2 part B — test inspection)
+            if path == "/api/v1/_test/question_answers":
+                with lock:
+                    answers = list(state["question_answers"])
+                self._send_json(200, {"answers": answers})
+                return
+
             self._send_json(404, {"detail": "stub: no route for {}".format(path)})
 
         def do_POST(self):
@@ -623,6 +795,51 @@ def _make_handler(db, lock, state):
                             }
                         )
                         gate_event = state["events"].get(request_id)
+                    else:
+                        gate_event = None
+                if not known:
+                    self._send_json(200, {"ok": False, "error": "unknown_or_expired"})
+                    return
+                if gate_event is not None:
+                    gate_event.set()
+                self._send_json(200, {"ok": True})
+                return
+
+            # POST /api/v1/questions/{request_id}/answer (M2 part B)
+            m = _match(r"^/api/v1/questions/([^/]+)/answer$", path)
+            if m:
+                request_id = m.group(1)
+                # 与后端 QuestionAnswerBody extra="forbid" 对齐:
+                # 只接受 answers(list[str], 可选) / custom(str|None, 可选)
+                extra_keys = set(data.keys()) - {"answers", "custom"}
+                answers = data.get("answers", [])
+                custom = data.get("custom")
+                if (
+                    extra_keys
+                    or not isinstance(answers, list)
+                    or not all(isinstance(a, str) for a in answers)
+                    or not (custom is None or isinstance(custom, str))
+                ):
+                    self._send_json(
+                        422,
+                        {"detail": "body must be {answers?: list[str], custom?: str|null}"},
+                    )
+                    return
+                with lock:
+                    known = request_id in state["questions"]
+                    if known:
+                        state["question_verdicts"][request_id] = {
+                            "answers": answers,
+                            "custom": custom,
+                        }
+                        state["question_answers"].append(
+                            {
+                                "request_id": request_id,
+                                "answers": answers,
+                                "custom": custom,
+                            }
+                        )
+                        gate_event = state["question_events"].get(request_id)
                     else:
                         gate_event = None
                 if not known:

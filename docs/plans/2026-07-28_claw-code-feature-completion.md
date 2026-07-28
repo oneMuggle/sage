@@ -59,7 +59,18 @@
       READ）、`repl_tool.py`（sys.executable -I 隔离子进程，100 KiB 输出
       截断，超时杀进程，EXECUTE 由 M1 审批矩阵门控）；permissions.py 能力
       分类表 + __init__.py 注册同步扩展
-- [ ] agent 工具面续: SkillPort + AskUserQuestion（M2 part B）
+- [x] agent 工具面续: SkillPort 接线 + in-loop Skill 工具 + AskUserQuestion
+      （M2 part B）— `_build_chat_service` 关闭 `skills=None` TODO（装配
+      InprocSkillAdapter，与 /api/v1/skills* REST 同源）；`skill_tool.py`
+      （name=skill，EXECUTE，复用 REST 单例 + execute_command/execute 既有
+      执行路径，脚本走 script_runner 沙箱不旁路）；AskUserQuestion 无需
+      spike —— 异步 gate 模式已被 M1 ApprovalGate 证明，直接同构复制为
+      `question_gate.py`（超时 fail-open-ish 空应答，agent 永不挂起）：
+      `ask_user_tool.py` 纯渲染器 + run_loop 分发前特判（校验 question
+      非空 / options 2-4 项带 label，发 ask_user_question 事件，await 闸口，
+      注入 answers/custom 执行）+ `question_routes.py`（复用 permission
+      Origin 守卫）+ QuestionDialog 前端（单选 radio / 多选 checkbox 卡片 +
+      "其他"自由文本 + Escape 空提交）+ question-answer.spec.ts E2E
 
 ### 实施步骤
 
@@ -69,7 +80,11 @@
 - [x] 步骤 3：单元测试（edit 16 / search 22 / todo 16 / structured 15 /
       repl 23 / 能力表 1）+ run_loop 集成（grep→edit 往返、边界拒绝、
       repl PROMPT 审批）
-- [ ] 步骤 4：M2 part B（SkillPort + AskUserQuestion）由后续会话承接
+- [x] 步骤 4：M2 part B（SkillPort 接线 + in-loop Skill 工具 +
+      AskUserQuestion）完成。测试: question gate 21 + question routes 13 +
+      skill tool 12 + run_loop question flow 6（pytest）；questionState 7 +
+      QuestionDialog 12 + useChat 接线 3 + commands guard 4（vitest）；
+      question-answer.spec.ts 2 E2E + permission/smoke 回归 4 绿
 
 ## 涉及的文件与模块
 
@@ -96,6 +111,16 @@
 | 设置 | src/pages/settings/GeneralTab.tsx | 权限模式选择器（preferences KV） |
 | i18n | src/shared/lib/i18n/zh.ts、en.ts | 对话框 + 设置键 |
 | E2E | tests/electron/permission-approval.spec.ts、stub_backend.py | 审批 gate 桩 + Playwright 双路径 |
+| 服务 | backend/services/question_gate.py | M2b 新增（UserQuestionGate，ApprovalGate 同构） |
+| API | backend/api/question_routes.py | M2b 新增（pending + answer，复用 Origin 守卫） |
+| 工具域 | backend/tools/skill_tool.py、ask_user_tool.py | M2b 新增（skill=EXECUTE / ask_user_question=READ 纯渲染器） |
+| Agent | backend/core/legacy/agent.py、agent_state.py | M2b ask_user_question 分发前特判 + ASK_USER_QUESTION 事件 |
+| 装配 | backend/main.py | M2b skills=InprocSkillAdapter（关闭 skills=None TODO）+ question gate lifespan |
+| IPC | electron/commands.ts | M2b questions_pending / questions_answer 路由 |
+| 状态 | src/entities/question/questionState.ts | M2b 新增 zustand store |
+| 界面 | src/widgets/question/QuestionDialog.tsx | M2b 新增全局提问模态框（App.tsx 挂载） |
+| 流事件 | src/features/send-message/useChat.ts、src/shared/api/types.ts | M2b ask_user_question 接线 + UserQuestion 类型 |
+| E2E | tests/electron/question-answer.spec.ts、stub_backend.py | M2b 提问 gate 桩 + Playwright 双路径 |
 
 ## 风险评估
 

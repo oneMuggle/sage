@@ -68,6 +68,14 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "edit_file": ToolCapability.WRITE,
     "terminal": ToolCapability.EXECUTE,
     "repl": ToolCapability.EXECUTE,
+    # M2 part B: skill 归 EXECUTE —— 技能可编排任意工具调用, SKILL.md 脚本
+    # 更直接跑子进程(script_runner 沙箱内), 语义上是"执行任意动作",
+    # 故按最严格能力对待, 由 M1 审批闸口按模式矩阵逐次拦截。
+    "skill": ToolCapability.EXECUTE,
+    # M2 part B: ask_user_question 归 READ —— 零副作用(仅渲染问题卡片 +
+    # 等待用户输入); run_loop 在分发前特判该工具名并走提问闸口, 不过
+    # 权限执行器, 不存在双重审批。
+    "ask_user_question": ToolCapability.READ,
 }
 
 #: 未知工具默认能力（fail-safe）

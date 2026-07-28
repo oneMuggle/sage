@@ -74,11 +74,14 @@ class ApprovalAnswerBody(BaseModel):
         extra = "forbid"
 
 
-def _forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
+def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
     """Origin 守卫：带 Origin 头且不在白名单 → 403 响应；否则 None（放行）。
 
     无 ``Origin`` 头视为同源 / 非浏览器客户端（curl、python、Electron
     同源请求），直接放行——本应用是本地桌面后端，不依赖浏览器 CORS 预检。
+
+    本守卫供所有高权限 gate 路由复用（M2 part B: question_routes 导入本
+    函数，不复制实现）。
     """
     origin = request.headers.get("origin")
     if origin is not None and origin not in _ALLOWED_ORIGINS:
@@ -133,7 +136,7 @@ def _persist_remembered_rule(tool_name: str, approved: bool) -> None:
 @router.get("/pending")
 async def list_pending_approvals(request: Request) -> List[Dict[str, Any]]:
     """列出当前挂起的审批请求（gate 未初始化时返回空列表）。"""
-    forbidden = _forbidden_origin_response(request)
+    forbidden = forbidden_origin_response(request)
     if forbidden is not None:
         return forbidden  # type: ignore[return-value]
     gate = get_permission_gate()
@@ -155,7 +158,7 @@ async def answer_approval(
     - gate 未初始化          → ``{"ok": false, "error": "permission_gate_not_initialized"}``
     - id 未知 / 已过期       → ``{"ok": false, "error": "unknown_or_expired"}``
     """
-    forbidden = _forbidden_origin_response(request)
+    forbidden = forbidden_origin_response(request)
     if forbidden is not None:
         return forbidden  # type: ignore[return-value]
 
@@ -177,4 +180,4 @@ async def answer_approval(
     return {"ok": True}
 
 
-__all__ = ["router"]
+__all__ = ["router", "forbidden_origin_response"]
