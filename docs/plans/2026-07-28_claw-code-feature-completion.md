@@ -44,13 +44,46 @@
       tests/electron/permission-approval.spec.ts 走 stub_backend 审批
       gate 全链路（批准/拒绝双路径）
 
+## M2 — agent 工具面扩展
+
+移植 claw-code tool surface 中 sage 缺失的 6 个工具（M2 part A）：
+
+- [x] agent 工具面: edit_file / glob / grep / TodoWrite / StructuredOutput / REPL
+      — `edit_tool.py`（精确字符串替换编辑，WRITE，复用 M1 写限额 + workspace
+      边界 + 二进制/BOM 嗅探）、`search_tools.py`（glob_search mtime 倒序
+      上限 200 / grep_search content·files 双模式 + 非法正则干净报错，READ，
+      复用 NUL/BOM 嗅探跳过二进制）、`todo_state.py` + `todo_tool.py`
+      （会话级内存桶全量替换语义，READ——agent 内部草稿态无用户数据副作用）、
+      `structured_output_tool.py`（会话级载荷存储 + 可选 schema 校验，
+      jsonschema 可缺省 → 内置 {type,properties,required,items} 最小校验器，
+      READ）、`repl_tool.py`（sys.executable -I 隔离子进程，100 KiB 输出
+      截断，超时杀进程，EXECUTE 由 M1 审批矩阵门控）；permissions.py 能力
+      分类表 + __init__.py 注册同步扩展
+- [ ] agent 工具面续: SkillPort + AskUserQuestion（M2 part B）
+
+### 实施步骤
+
+- [x] 步骤 1：edit_tool / search_tools / todo_state + todo_tool /
+      structured_output_tool / repl_tool 五模块（py3.8 兼容）
+- [x] 步骤 2：register_all_tools 注册 + TOOL_CAPABILITIES 分类表扩展
+- [x] 步骤 3：单元测试（edit 16 / search 22 / todo 16 / structured 15 /
+      repl 23 / 能力表 1）+ run_loop 集成（grep→edit 往返、边界拒绝、
+      repl PROMPT 审批）
+- [ ] 步骤 4：M2 part B（SkillPort + AskUserQuestion）由后续会话承接
+
 ## 涉及的文件与模块
 
 | 层 | 文件 | 变更 |
 | --- | --- | --- |
-| 工具域 | backend/tools/permissions.py | 新增 |
+| 工具域 | backend/tools/permissions.py | 新增（M2: 能力表扩 6 工具） |
 | 工具域 | backend/tools/bash_validation.py | 新增 |
 | 工具域 | backend/tools/file_tool.py | 加固 |
+| 工具域 | backend/tools/edit_tool.py | M2 新增（精确编辑，WRITE） |
+| 工具域 | backend/tools/search_tools.py | M2 新增（glob/grep，READ） |
+| 工具域 | backend/tools/todo_state.py、todo_tool.py | M2 新增（会话 todo 桶，READ） |
+| 工具域 | backend/tools/structured_output_tool.py | M2 新增（结构化输出，READ） |
+| 工具域 | backend/tools/repl_tool.py | M2 新增（隔离 REPL，EXECUTE） |
+| 工具域 | backend/tools/__init__.py | M2 注册 6 工具 |
 | 服务 | backend/services/permission_gate.py | 新增 |
 | API | backend/api/permission_routes.py | 新增 |
 | Agent | backend/core/legacy/agent.py、agent_state.py | 接线 + 新事件 |

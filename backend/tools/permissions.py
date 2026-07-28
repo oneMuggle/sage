@@ -57,8 +57,17 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "office_list": ToolCapability.READ,
     "office_read": ToolCapability.READ,
     "calculator": ToolCapability.READ,
+    # M2 agent 工具面扩展（移植 claw-code tool surface）
+    "glob_search": ToolCapability.READ,
+    "grep_search": ToolCapability.READ,
+    # todo_write 归 READ：仅维护 agent 会话内的内部草稿状态（内存桶），
+    # 对用户数据零副作用——与 claw-code 将 TodoWrite 视为非敏感工具一致。
+    "todo_write": ToolCapability.READ,
+    "structured_output": ToolCapability.READ,
     "write_file": ToolCapability.WRITE,
+    "edit_file": ToolCapability.WRITE,
     "terminal": ToolCapability.EXECUTE,
+    "repl": ToolCapability.EXECUTE,
 }
 
 #: 未知工具默认能力（fail-safe）

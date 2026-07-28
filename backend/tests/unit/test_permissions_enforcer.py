@@ -388,3 +388,19 @@ def test_load_enforcer_from_settings_invalid_mode_falls_back():
 
     # Assert
     assert enforcer.mode is DEFAULT_PERMISSION_MODE
+
+
+# ---------------------------------------------------------------------------
+# M2 agent 工具面扩展：新工具能力分类
+# ---------------------------------------------------------------------------
+
+
+def test_classify_tool_m2_agent_surface():
+    """M2 移植的 6 个工具全部登记且能力分级正确。"""
+    # Arrange / Act / Assert —— READ: 搜索 + agent 内部状态（无用户数据副作用）
+    for name in ("glob_search", "grep_search", "todo_write", "structured_output"):
+        assert classify_tool(name) is ToolCapability.READ, name
+    # WRITE: 精确编辑走与 write_file 同级的写路径门控
+    assert classify_tool("edit_file") is ToolCapability.WRITE
+    # EXECUTE: REPL 跑子进程，由审批矩阵门控
+    assert classify_tool("repl") is ToolCapability.EXECUTE
