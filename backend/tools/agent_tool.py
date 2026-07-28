@@ -18,12 +18,38 @@ Security model (defense in depth):
   ``TOOL_CAPABILITIES`` table) does not exist on main — it arrives with the
   M1 branch. When M1 merges, classify ``agent`` as READ-equivalent (the
   sub-agent whitelist is read-only).
+
+Timeouts and residual risk:
+- ``execute`` bounds its wait on the sub-run with ``SUBAGENT_TIMEOUT_S``
+  (default 300s; env ``SAGE_AGENT_TOOL_TIMEOUT`` overrides). On timeout the
+  tool returns a failure ToolResult and the lane is marked FAILED; the
+  primary ReAct loop continues.
+- The sub-run executes on a worker thread that CANNOT be killed once
+  started: after a timeout the abandoned worker runs on until its own
+  ``SUBAGENT_MAX_ITERATIONS`` (6) cap and then drains in the background.
+  Mitigation: the sub-agent's ``LLMClient`` enforces a per-request httpx
+  timeout (``LLMConfig.timeout``, default 60s — see
+  ``backend/core/legacy/llm_client.py``), so a hung LLM call cannot wedge a
+  single iteration indefinitely; worst case the leaked thread consumes up to
+  6 × 60s of LLM time plus read-only tool time, then exits. If a caller
+  injects a custom LLM client that lacks per-request timeouts, that client's
+  behavior is the remaining exposure. No additional global kill mechanism is
+  provided by design.
+- Event-loop: ``SageAgent.run_loop`` dispatches this tool through
+  ``loop.run_in_executor`` (see ``backend/core/legacy/agent.py``), so the
+  blocking ``future.result()`` wait happens on a pool thread and never
+  stalls the asyncio loop (health endpoint, board polling, other sessions).
+  ``AgentTool.execute`` does not read the ``ToolExecutionContext``
+  ContextVar — it builds all of its state itself — so the context copy
+  semantics of ``run_in_executor`` are irrelevant for this tool.
 """
 
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
+import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional, Tuple
@@ -57,6 +83,28 @@ SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
 # Sub-agents are focused: small iteration budget, capped answers.
 SUBAGENT_MAX_ITERATIONS = 6
 SUBAGENT_ANSWER_CAP = 20_000
+
+
+def _resolve_timeout() -> float:
+    """Resolve the sub-run wait bound (env ``SAGE_AGENT_TOOL_TIMEOUT``)."""
+    raw = os.environ.get("SAGE_AGENT_TOOL_TIMEOUT")
+    if raw:
+        try:
+            value = float(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            pass
+        logger.warning(
+            "Invalid SAGE_AGENT_TOOL_TIMEOUT=%r; falling back to 300s", raw
+        )
+    return 300.0
+
+
+# Max time execute() waits on the sub-run before failing the tool call.
+# Residual risk (worker thread cannot be killed) documented in the module
+# docstring. Overridable via env for tests/ops.
+SUBAGENT_TIMEOUT_S: float = _resolve_timeout()
 
 SUBAGENT_SYSTEM_PROMPT = (
     "You are a focused Sage sub-agent performing a delegated task. "
@@ -195,6 +243,19 @@ class AgentTool(BaseTool):
 
         try:
             answer, error = self._run_subagent_sync(llm_client, description, prompt)
+        except concurrent.futures.TimeoutError:
+            # Wait bound exceeded — the worker thread is abandoned (it drains
+            # in the background; see module docstring residual-risk note). The
+            # lane fails with a "timeout" reason and the primary loop goes on.
+            logger.warning(
+                "Sub-agent timed out after %.1fs (lane will be FAILED)",
+                SUBAGENT_TIMEOUT_S,
+            )
+            error = (
+                f"timeout: 子代理执行超时（{SUBAGENT_TIMEOUT_S:g} 秒），"
+                "已放弃等待，后台线程将自行结束"
+            )
+            answer = ""
         except Exception as exc:  # sub-agent crashed — lane fails, loop continues
             logger.exception("Sub-agent execution crashed: %s", exc)
             error = str(exc)
@@ -248,13 +309,27 @@ class AgentTool(BaseTool):
         description: str,
         prompt: str,
     ) -> Tuple[str, Optional[str]]:
-        """Run the async sub-agent loop on a worker thread (sync façade)."""
-        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sage-subagent") as pool:
+        """Run the async sub-agent loop on a worker thread (sync façade).
+
+        Raises:
+            concurrent.futures.TimeoutError: when the sub-run exceeds
+                ``SUBAGENT_TIMEOUT_S``. The worker is abandoned (cannot be
+                killed) and drains in the background.
+        """
+        # Deliberately NOT a context manager: ``__exit__`` calls
+        # ``shutdown(wait=True)``, which on timeout would block the caller
+        # until the hung worker finishes — defeating SUBAGENT_TIMEOUT_S.
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sage-subagent")
+        try:
             future = pool.submit(
                 asyncio.run,
                 self._run_subagent_async(llm_client, description, prompt),
             )
-            return future.result()
+            return future.result(timeout=SUBAGENT_TIMEOUT_S)
+        finally:
+            # wait=False: an abandoned worker keeps running on its own thread
+            # and exits once the sub-loop hits its iteration cap.
+            pool.shutdown(wait=False)
 
     async def _run_subagent_async(
         self,
@@ -304,7 +379,12 @@ class AgentTool(BaseTool):
         # reverse direction — so importing at module load would cycle.
         from backend.core.legacy.agent import SageAgent
 
-        subagent = SageAgent()
-        # Structural whitelist: replace the full registry with read-only tools.
+        # bare=True: skip the memory stack and register_all_tools (which
+        # cold-starts MCP list_tools) — the full default registry built by a
+        # plain SageAgent() would be discarded immediately below. The sub-run
+        # only drives run_loop, which needs neither the memory stack nor the
+        # default tools.
+        subagent = SageAgent(bare=True)
+        # Structural whitelist: install the read-only registry directly.
         subagent.tool_registry = build_readonly_tool_registry(self._policy)
         return subagent

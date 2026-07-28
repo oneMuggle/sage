@@ -47,7 +47,6 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
     registry.register(MemorySaveTool(policy=policy))
     registry.register(OfficeListTool(policy=policy))
     registry.register(OfficeReadTool(policy=policy))
-<<<<<<< HEAD
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))

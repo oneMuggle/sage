@@ -16,7 +16,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from backend.orchestration.planner import MAX_PLAN_TASKS, Planner
+from backend.orchestration.planner import (
+    MAX_PLAN_TASKS,
+    MAX_TASK_DESCRIPTION_CHARS,
+    Planner,
+)
 from backend.orchestration.task_registry import TaskRegistry
 from backend.orchestration.team_registry import TeamRegistry
 
@@ -214,3 +218,88 @@ class TestPlannerLLMDecomposition:
 
         assert len(sanitized) == 1
         assert sanitized[0]["name"] == "Real"
+
+
+class TestPlannerHostileInputs:
+    def test_sanitize_caps_description_length(self):
+        """MEDIUM-2: 10k-char description → truncated to 4000."""
+        planner = _make_planner()
+
+        sanitized = planner._sanitize_tasks(
+            [{"title": "Verbose", "description": "x" * 10_000}]
+        )
+
+        assert len(sanitized[0]["description"]) == MAX_TASK_DESCRIPTION_CHARS
+        assert MAX_TASK_DESCRIPTION_CHARS == 4000
+
+    @pytest.mark.asyncio()
+    async def test_description_cap_survives_full_decomposition(self):
+        """Cap holds end-to-end through decompose_request + persistence."""
+        payload = json.dumps(
+            {"tasks": [{"id": "t1", "title": "Verbose", "description": "d" * 10_000}]}
+        )
+        planner = _make_planner(_mock_llm(payload))
+
+        plan = await planner.decompose_request("verbose goal")
+
+        assert len(plan.tasks) == 1
+        assert len(plan.tasks[0].description) == MAX_TASK_DESCRIPTION_CHARS
+
+    @pytest.mark.asyncio()
+    async def test_1000_task_response_capped(self):
+        """MEDIUM-3a: a flood of 1000 tasks is truncated to MAX_PLAN_TASKS."""
+        payload = json.dumps(
+            {
+                "tasks": [
+                    {
+                        "id": f"t{i}",
+                        "title": f"Task {i}",
+                        "description": f"hostile work {i}",
+                        "depends_on": [f"t{i - 1}"] if i > 1 else [],
+                    }
+                    for i in range(1, 1001)
+                ]
+            }
+        )
+        planner = _make_planner(_mock_llm(payload))
+
+        plan = await planner.decompose_request("hostile flood")
+
+        assert len(plan.tasks) == MAX_PLAN_TASKS
+        # Chained deps survive within the capped prefix.
+        assert plan.tasks[1].blocked_by == [plan.tasks[0].task_id]
+
+    @pytest.mark.asyncio()
+    async def test_explicit_cycle_attempt_is_acyclic_by_construction(self):
+        """MEDIUM-3b: t1↔t2↔t3 cycle attempt completes (no hang) and is
+        deterministically acyclic — deps can only resolve to EARLIER
+        placeholders, so every edge points strictly backwards in list order.
+        """
+        payload = json.dumps(
+            {
+                "tasks": [
+                    {"id": "t1", "title": "A", "depends_on": ["t2", "t3"]},
+                    {"id": "t2", "title": "B", "depends_on": ["t1", "t3"]},
+                    {"id": "t3", "title": "C", "depends_on": ["t1", "t2"]},
+                ]
+            }
+        )
+        planner = _make_planner(_mock_llm(payload))
+
+        plan = await planner.decompose_request("cyclic goal")  # must not hang
+
+        assert len(plan.tasks) == 3
+        # Structural proof: every dep index < own index → cycle impossible.
+        position = {t.task_id: i for i, t in enumerate(plan.tasks)}
+        for task in plan.tasks:
+            assert all(
+                position[dep] < position[task.task_id] for dep in task.blocked_by
+            )
+        assert planner.validate_task_graph(plan.tasks) is True
+        # Deterministic outcome: forward refs dropped, back-refs kept.
+        assert plan.tasks[0].blocked_by == []  # t1: t2/t3 are forward → dropped
+        assert plan.tasks[1].blocked_by == [plan.tasks[0].task_id]  # t2 → t1
+        assert set(plan.tasks[2].blocked_by) == {
+            plan.tasks[0].task_id,
+            plan.tasks[1].task_id,
+        }  # t3 → t1, t2

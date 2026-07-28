@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 # Hard cap on planner-emitted tasks (LLM output is truncated to this).
 MAX_PLAN_TASKS = 8
 
+# Hard cap on a single task description (titles are capped at 200; the
+# description was previously bounded only by the LLM max_tokens).
+MAX_TASK_DESCRIPTION_CHARS = 4000
+
 # task_type values the rest of the orchestration layer understands.
 KNOWN_TASK_TYPES = frozenset({"general", "research", "coding", "analysis", "testing"})
 
@@ -261,7 +265,8 @@ Output format — return ONLY valid JSON, no markdown fences, no extra text:
 
         Guarantees: at most MAX_PLAN_TASKS tasks; blocked_by only references
         earlier tasks in the list (structurally acyclic); every task has a
-        non-empty name and description.
+        non-empty name and description; names capped at 200 chars and
+        descriptions at MAX_TASK_DESCRIPTION_CHARS.
         """
         sanitized: List[Dict[str, Any]] = []
         id_map: Dict[str, str] = {}  # LLM-provided id -> positional placeholder
@@ -304,7 +309,7 @@ Output format — return ONLY valid JSON, no markdown fences, no extra text:
             sanitized.append(
                 {
                     "name": title.strip()[:200],
-                    "description": description.strip(),
+                    "description": description.strip()[:MAX_TASK_DESCRIPTION_CHARS],
                     "task_type": task_type,
                     "parameters": parameters,
                     "blocked_by": [],  # resolved below, once all ids are known

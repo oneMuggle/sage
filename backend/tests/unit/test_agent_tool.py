@@ -11,9 +11,12 @@ M5 — AgentTool (in-loop sub-agent) unit tests.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from unittest.mock import AsyncMock, MagicMock
 
+import backend.tools.agent_tool as agent_tool_module
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import LaneStatus
@@ -145,6 +148,22 @@ class TestAgentToolExecution:
         assert len(result.content["answer"]) == SUBAGENT_ANSWER_CAP
         assert result.content["truncated"] is True
 
+    def test_subagent_built_without_default_tool_registration(self, monkeypatch):
+        """MEDIUM-1: AgentTool uses the bare SageAgent path — no
+        register_all_tools (avoids memory stack + cold MCP list_tools)."""
+        import backend.core.legacy.agent as agent_module
+
+        calls = []
+        monkeypatch.setattr(
+            agent_module, "register_all_tools", lambda registry: calls.append(registry)
+        )
+        tool = AgentTool(llm_client=_mock_sub_llm(_done_response("ok")))
+
+        result = tool.execute(description="Bare build", prompt="task")
+
+        assert result.success is True
+        assert calls == []  # default registration never ran for the sub-agent
+
     def test_subagent_factory_injection_used(self):
         """Custom factory (test seam) receives the restricted registry."""
         captured = {}
@@ -169,3 +188,44 @@ class TestAgentToolExecution:
         assert result.success is True
         assert result.content["answer"] == "fake answer"
         assert "terminal" not in captured["registry"].list_names()
+
+
+class TestSubagentTimeout:
+    def test_timeout_returns_error_result_and_fails_lane(self, monkeypatch):
+        """Hung sub-run → bounded wait, 超时 error ToolResult, lane FAILED."""
+        monkeypatch.setattr(agent_tool_module, "SUBAGENT_TIMEOUT_S", 0.2)
+
+        async def _slow_run(llm_client, description, prompt):
+            await asyncio.sleep(1.0)
+            return "late answer", None
+
+        tool = AgentTool(llm_client=_mock_sub_llm(_done_response("unused")))
+        monkeypatch.setattr(tool, "_run_subagent_async", _slow_run)
+
+        start = time.monotonic()
+        result = tool.execute(description="Slow", prompt="hang")
+        elapsed = time.monotonic() - start
+
+        assert result.success is False
+        assert "超时" in result.error
+        assert "timeout" in result.error
+        assert elapsed < 0.9  # bounded by SUBAGENT_TIMEOUT_S, not the 1s sleep
+        # Lane recorded as FAILED with the timeout reason.
+        lane = LaneRegistry().get_lane(result.content["lane_id"])
+        assert lane is not None
+        assert lane.status == LaneStatus.FAILED
+        assert "timeout" in (lane.error or "")
+
+    def test_timeout_env_override_parsed(self, monkeypatch):
+        """SAGE_AGENT_TOOL_TIMEOUT overrides the default; junk falls back."""
+        monkeypatch.setenv("SAGE_AGENT_TOOL_TIMEOUT", "12.5")
+        assert agent_tool_module._resolve_timeout() == 12.5
+
+        monkeypatch.setenv("SAGE_AGENT_TOOL_TIMEOUT", "garbage")
+        assert agent_tool_module._resolve_timeout() == 300.0
+
+        monkeypatch.setenv("SAGE_AGENT_TOOL_TIMEOUT", "-3")
+        assert agent_tool_module._resolve_timeout() == 300.0
+
+        monkeypatch.delenv("SAGE_AGENT_TOOL_TIMEOUT")
+        assert agent_tool_module._resolve_timeout() == 300.0

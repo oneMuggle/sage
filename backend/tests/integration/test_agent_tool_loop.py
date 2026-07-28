@@ -10,6 +10,7 @@ run_loop with a mocked primary LLM issuing an ``agent`` tool call:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
 
@@ -150,3 +151,97 @@ class TestAgentToolInRunLoop:
         lanes = LaneRegistry().list_all_lanes()
         assert len(lanes) == 1
         assert lanes[0].status == LaneStatus.FAILED
+
+
+class TestAgentToolLoopSafety:
+    @pytest.mark.asyncio()
+    async def test_subagent_timeout_fails_lane_and_loop_continues(self, monkeypatch):
+        """HIGH: hung sub-run → 超时 tool error, lane FAILED, loop → DONE."""
+        monkeypatch.setattr("backend.tools.agent_tool.SUBAGENT_TIMEOUT_S", 0.2)
+
+        agent = SageAgent()
+        primary_llm = MagicMock()
+        primary_llm.chat = AsyncMock(
+            side_effect=[_primary_first_turn(), _primary_final_turn()]
+        )
+        agent.llm_client = primary_llm
+
+        tool = AgentTool(llm_client=MagicMock())
+
+        async def _hang(llm_client, description, prompt):
+            await asyncio.sleep(1.0)
+            return "too late", None
+
+        monkeypatch.setattr(tool, "_run_subagent_async", _hang)
+        agent.tool_registry.register(tool)
+
+        messages = [
+            {"role": "system", "content": "You are Sage."},
+            {"role": "user", "content": "delegate and wait"},
+        ]
+
+        events = [event async for event in agent.run_loop(messages, max_iterations=5)]
+
+        # Error tool result fed back to the primary LLM…
+        observing = [e for e in events if e.state == AgentState.OBSERVING]
+        assert len(observing) == 1
+        assert observing[0].tool_result.is_error is True
+        assert "超时" in observing[0].tool_result.content
+        assert "timeout" in observing[0].tool_result.content
+        # …and the loop still reached DONE.
+        assert any(e.state == AgentState.DONE for e in events)
+        # Lane ended FAILED with the timeout reason.
+        lanes = LaneRegistry().list_all_lanes()
+        assert len(lanes) == 1
+        assert lanes[0].status == LaneStatus.FAILED
+        assert "timeout" in (lanes[0].error or "")
+
+    @pytest.mark.asyncio()
+    async def test_agent_tool_offloaded_event_loop_stays_responsive(self, monkeypatch):
+        """HIGH: the agent tool runs off-loop — a concurrent ticker keeps
+        advancing while the (slow) sub-run is awaited."""
+        agent = SageAgent()
+        primary_llm = MagicMock()
+        primary_llm.chat = AsyncMock(
+            side_effect=[_primary_first_turn(), _primary_final_turn()]
+        )
+        agent.llm_client = primary_llm
+
+        sub_llm = MagicMock()
+        sub_llm.chat = AsyncMock(side_effect=[_sub_done_turn()])
+        tool = AgentTool(llm_client=sub_llm)
+
+        async def _slow_run(llm_client, description, prompt):
+            await asyncio.sleep(0.5)
+            return "sub answer: 42", None
+
+        monkeypatch.setattr(tool, "_run_subagent_async", _slow_run)
+        agent.tool_registry.register(tool)
+
+        messages = [
+            {"role": "system", "content": "You are Sage."},
+            {"role": "user", "content": "delegate something"},
+        ]
+
+        ticks = {"count": 0}
+
+        async def _ticker():
+            while True:
+                await asyncio.sleep(0.05)
+                ticks["count"] += 1
+
+        async def _drive():
+            return [event async for event in agent.run_loop(messages, max_iterations=5)]
+
+        ticker_task = asyncio.ensure_future(_ticker())
+        try:
+            events = await _drive()
+        finally:
+            ticker_task.cancel()
+
+        # Loop reached DONE with the sub-answer wired in.
+        assert any(e.state == AgentState.DONE for e in events)
+        # The 0.5s sub-run offered ~10 tick slots; ≥3 proves the loop thread
+        # was NOT blocked inside the agent tool call (a blocking dispatch
+        # would starve the ticker for the whole window → ~0 ticks).
+        assert ticks["count"] >= 3
