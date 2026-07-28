@@ -11,6 +11,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { OfficeDocumentSummary } from '../../../shared/api/types';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { OfficeDocumentList } from '../OfficeDocumentList';
 
 const sampleDocs: OfficeDocumentSummary[] = [
@@ -41,7 +42,11 @@ const sampleDocs: OfficeDocumentSummary[] = [
 describe('OfficeDocumentList — gateway action callbacks', () => {
   it('forwards the document ID to the Save As callback', () => {
     const onSaveAs = vi.fn();
-    render(<OfficeDocumentList documents={sampleDocs} loading={false} onSaveAs={onSaveAs} />);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} onSaveAs={onSaveAs} />
+      </I18nProvider>,
+    );
     // Use getAllByRole since each document row exposes its own Save As
     // button — assert on the FIRST row to keep the assertion unambiguous.
     const buttons = screen.getAllByRole('button', { name: /Save As|另存为/i });
@@ -51,7 +56,11 @@ describe('OfficeDocumentList — gateway action callbacks', () => {
 
   it('forwards the document ID to the Open callback', () => {
     const onOpen = vi.fn();
-    render(<OfficeDocumentList documents={sampleDocs} loading={false} onOpen={onOpen} />);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} onOpen={onOpen} />
+      </I18nProvider>,
+    );
     const buttons = screen.getAllByRole('button', { name: /open|打开/i });
     fireEvent.click(buttons[0]);
     expect(onOpen).toHaveBeenCalledWith('doc-1');
@@ -60,7 +69,9 @@ describe('OfficeDocumentList — gateway action callbacks', () => {
   it('forwards the document ID to the Show In Folder callback', () => {
     const onShowInFolder = vi.fn();
     render(
-      <OfficeDocumentList documents={sampleDocs} loading={false} onShowInFolder={onShowInFolder} />,
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} onShowInFolder={onShowInFolder} />
+      </I18nProvider>,
     );
     const buttons = screen.getAllByRole('button', { name: /show.*folder|显示.*文件夹/i });
     fireEvent.click(buttons[0]);
@@ -71,15 +82,27 @@ describe('OfficeDocumentList — gateway action callbacks', () => {
     // M0 brief: archive/restore and the user confirmation flow are
     // implemented in M3–M5. The M0 management view must not expose a
     // permanent delete action.
-    render(<OfficeDocumentList documents={sampleDocs} loading={false} />);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} />
+      </I18nProvider>,
+    );
     expect(screen.queryByRole('button', { name: /delete|删除/i })).toBeNull();
   });
 
   it('renders the loading and empty states', () => {
-    const { rerender } = render(<OfficeDocumentList documents={[]} loading={true} />);
+    const { rerender } = render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={[]} loading={true} />
+      </I18nProvider>,
+    );
     expect(screen.getByText(/加载中/)).toBeInTheDocument();
 
-    rerender(<OfficeDocumentList documents={sampleDocs} loading={false} />);
+    rerender(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} />
+      </I18nProvider>,
+    );
     expect(screen.queryByText(/暂无历史文档/)).toBeNull();
   });
 });

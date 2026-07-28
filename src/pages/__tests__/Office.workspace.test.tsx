@@ -64,6 +64,7 @@ vi.mock('../../features/office', () => ({
 }));
 
 import { SessionWorkspaceProvider } from '../../app/providers/SessionWorkspaceProvider';
+import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import { Office } from '../Office';
 
@@ -81,9 +82,11 @@ afterEach(() => {
 
 function renderWithProvider() {
   return render(
-    <SessionWorkspaceProvider>
-      <Office />
-    </SessionWorkspaceProvider>,
+    <I18nProvider defaultLocale="zh">
+      <SessionWorkspaceProvider>
+        <Office />
+      </SessionWorkspaceProvider>
+    </I18nProvider>,
   );
 }
 

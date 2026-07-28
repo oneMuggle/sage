@@ -67,6 +67,10 @@ class LLMResponse:
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    # M6 生态扩展: OpenAI 响应中的原始 usage 块 (prompt_tokens /
+    # completion_tokens / total_tokens)。响应无 usage 字段时保持 None —
+    # 既有调用方不受影响。
+    usage: Optional[Dict[str, int]] = None
     raw: Optional[Dict[str, Any]] = None
 
 
@@ -337,6 +341,27 @@ class LLMClient:
 
         usage = data.get("usage", {})
 
+        # ===== M6 USAGE BEGIN: 规范化 usage + 记录到全局 tracker =====
+        # tracker 故障永不影响 chat 返回 (fail-open)。
+        usage_dict: Optional[Dict[str, int]] = None
+        if isinstance(usage, dict) and usage:
+            usage_dict = {
+                "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                "completion_tokens": int(usage.get("completion_tokens") or 0),
+                "total_tokens": int(usage.get("total_tokens") or 0),
+            }
+            try:
+                from backend.services.usage_tracker import usage_tracker
+
+                usage_tracker.record(
+                    data.get("model", self.config.model),
+                    usage_dict["prompt_tokens"],
+                    usage_dict["completion_tokens"],
+                )
+            except Exception as usage_err:
+                logger.debug("usage tracking skipped: %s", usage_err)
+        # ===== M6 USAGE END =====
+
         return LLMResponse(
             content=content,
             reasoning_content=reasoning_content,
@@ -346,6 +371,7 @@ class LLMClient:
             input_tokens=usage.get("prompt_tokens", 0),
             output_tokens=usage.get("completion_tokens", 0),
             total_tokens=usage.get("total_tokens", 0),
+            usage=usage_dict,
             raw=data,
         )
 
@@ -380,6 +406,11 @@ class LLMClient:
         if self.config.thinking_budget is not None:
             body["thinking_budget"] = self.config.thinking_budget
 
+        # ===== M6 USAGE BEGIN: 流式 usage 捕获 (final chunk 若携带 usage) =====
+        stream_model: str = self.config.model
+        stream_usage: Optional[Dict[str, Any]] = None
+        # ===== M6 USAGE END =====
+
         try:
             async with client.stream("POST", "/v1/chat/completions", json=body) as response:
                 response.raise_for_status()
@@ -394,6 +425,12 @@ class LLMClient:
 
                     try:
                         data = json.loads(data_str)
+                        # ===== M6 USAGE BEGIN =====
+                        if isinstance(data.get("model"), str):
+                            stream_model = data["model"]
+                        if isinstance(data.get("usage"), dict):
+                            stream_usage = data["usage"]
+                        # ===== M6 USAGE END =====
                         choices = data.get("choices", [])
                         if choices:
                             delta = choices[0].get("delta", {})
@@ -403,6 +440,23 @@ class LLMClient:
                     except json.JSONDecodeError:
                         continue
 
+            # ===== M6 USAGE BEGIN: 流结束后记录 (tracker 故障 fail-open) =====
+            if isinstance(stream_usage, dict) and stream_usage:
+                try:
+                    from backend.services.usage_tracker import usage_tracker
+
+                    usage_tracker.record(
+                        stream_model,
+                        int(stream_usage.get("prompt_tokens") or 0),
+                        int(stream_usage.get("completion_tokens") or 0),
+                    )
+                except Exception as usage_err:
+                    logger.debug("usage tracking (stream) skipped: %s", usage_err)
+            # ===== M6 USAGE END =====
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"LLM 流式请求 HTTP 错误: {e.response.status_code}")
+            raise RuntimeError(f"LLM 流式请求错误: {e.response.status_code}")
         except Exception as e:
             self._raise_classified_error(e)
 

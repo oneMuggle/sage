@@ -11,17 +11,6 @@ import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import type { Lane, LaneBoardGroup, LaneStatus } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 
-const STATUS_LABELS: Record<LaneStatus, string> = {
-  created: '已创建',
-  ready: '就绪',
-  running: '运行中',
-  blocked: '阻塞',
-  succeeded: '成功',
-  failed: '失败',
-  stopped: '已停止',
-  cancelled: '已取消',
-};
-
 const STATUS_COLORS: Record<LaneStatus, string> = {
   created: 'bg-bg-subtle text-text-secondary',
   ready: 'bg-blue-100 text-blue-800',
@@ -40,19 +29,31 @@ interface LaneCardProps {
 
 function LaneCard({ lane, onCancel }: LaneCardProps) {
   const { t } = useI18n();
-  const statusLabel = STATUS_LABELS[lane.status] ?? lane.status;
+  // Status labels are built inside the component so the translated
+  // strings track the active locale (module-level maps can't call t()).
+  const statusLabels: Record<LaneStatus, string> = {
+    created: t('orchestration.status.created'),
+    ready: t('orchestration.status.ready'),
+    running: t('orchestration.status.running'),
+    blocked: t('orchestration.status.blocked'),
+    succeeded: t('orchestration.status.succeeded'),
+    failed: t('orchestration.status.failed'),
+    stopped: t('orchestration.status.stopped'),
+    cancelled: t('orchestration.status.cancelled'),
+  };
+  const statusLabel = statusLabels[lane.status] ?? lane.status;
   const statusColor = STATUS_COLORS[lane.status] ?? 'bg-bg-subtle text-text-secondary';
   // M5: planner / sub-agent lanes carry a metadata.source marker.
   const source = typeof lane.metadata?.source === 'string' ? lane.metadata.source : null;
 
   const heartbeatLabel = useMemo(() => {
-    if (!lane.heartbeat) return '—';
+    if (!lane.heartbeat) return t('orchestration.heartbeat.none');
     const age = Date.now() - lane.heartbeat.last_ping_at;
-    if (!lane.heartbeat.transport_alive) return 'transport dead';
-    if (age < 60_000) return `${Math.floor(age / 1000)}s ago`;
-    if (age < 3_600_000) return `${Math.floor(age / 60_000)}m ago`;
-    return `${Math.floor(age / 3_600_000)}h ago`;
-  }, [lane.heartbeat]);
+    if (!lane.heartbeat.transport_alive) return t('orchestration.heartbeat.transportDead');
+    if (age < 60_000) return `${Math.floor(age / 1000)}${t('orchestration.heartbeat.secondsAgo')}`;
+    if (age < 3_600_000) return `${Math.floor(age / 60_000)}${t('orchestration.heartbeat.minutesAgo')}`;
+    return `${Math.floor(age / 3_600_000)}${t('orchestration.heartbeat.hoursAgo')}`;
+  }, [lane.heartbeat, t]);
 
   const isTerminal = ['succeeded', 'failed', 'stopped', 'cancelled'].includes(lane.status);
 
@@ -82,10 +83,16 @@ function LaneCard({ lane, onCancel }: LaneCardProps) {
           </span>
         </span>
       </div>
-      <div className="text-sm text-text-secondary mb-1 truncate">task: {lane.task_id}</div>
+      <div className="text-sm text-text-secondary mb-1 truncate">
+        {t('orchestration.lane.task')} {lane.task_id}
+      </div>
       <div className="flex items-center justify-between text-xs text-text-tertiary">
-        <span>agent: {lane.agent_id ?? '—'}</span>
-        <span title={lane.heartbeat?.status ?? 'no heartbeat'}>{heartbeatLabel}</span>
+        <span>
+          {t('orchestration.lane.agent')} {lane.agent_id ?? t('orchestration.heartbeat.none')}
+        </span>
+        <span title={lane.heartbeat?.status ?? t('orchestration.heartbeat.noHeartbeat')}>
+          {heartbeatLabel}
+        </span>
       </div>
       {lane.error && (
         <div className="mt-1 text-xs text-red-600 truncate" title={lane.error}>
@@ -97,7 +104,7 @@ function LaneCard({ lane, onCancel }: LaneCardProps) {
           onClick={() => onCancel(lane.lane_id)}
           className="mt-2 text-xs text-red-600 hover:text-red-800"
         >
-          取消
+          {t('common.cancel')}
         </button>
       )}
     </div>
@@ -111,6 +118,7 @@ interface ColumnProps {
 }
 
 function Column({ title, lanes, onCancel }: ColumnProps) {
+  const { t } = useI18n();
   return (
     <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between mb-2">
@@ -119,7 +127,9 @@ function Column({ title, lanes, onCancel }: ColumnProps) {
       </div>
       <div className="space-y-2">
         {lanes.length === 0 ? (
-          <div className="text-xs text-text-tertiary text-center py-4">(无)</div>
+          <div className="text-xs text-text-tertiary text-center py-4">
+            {t('orchestration.column.empty')}
+          </div>
         ) : (
           lanes.map((lane) => <LaneCard key={lane.lane_id} lane={lane} onCancel={onCancel} />)
         )}
@@ -129,6 +139,7 @@ function Column({ title, lanes, onCancel }: ColumnProps) {
 }
 
 export function LaneBoard() {
+  const { t } = useI18n();
   const lanes = useLaneBoardStore((s) => s.lanes);
   const loading = useLaneBoardStore((s) => s.loading);
   const error = useLaneBoardStore((s) => s.error);
@@ -163,18 +174,30 @@ export function LaneBoard() {
   };
 
   if (loading && lanes.length === 0) {
-    return <div className="p-4 text-center text-text-secondary">加载中…</div>;
+    return <div className="p-4 text-center text-text-secondary">{t('orchestration.loading')}</div>;
   }
 
   if (error) {
-    return <div className="p-4 text-center text-red-600">错误: {error}</div>;
+    return (
+      <div className="p-4 text-center text-red-600">
+        {t('orchestration.error')} {error}
+      </div>
+    );
   }
 
   return (
     <div className="flex gap-4 p-4">
-      <Column title="活跃 (Active)" lanes={board.active} onCancel={handleCancel} />
-      <Column title="阻塞 (Blocked)" lanes={board.blocked} onCancel={handleCancel} />
-      <Column title="已完成 (Finished)" lanes={board.finished} onCancel={handleCancel} />
+      <Column title={t('orchestration.column.active')} lanes={board.active} onCancel={handleCancel} />
+      <Column
+        title={t('orchestration.column.blocked')}
+        lanes={board.blocked}
+        onCancel={handleCancel}
+      />
+      <Column
+        title={t('orchestration.column.finished')}
+        lanes={board.finished}
+        onCancel={handleCancel}
+      />
     </div>
   );
 }

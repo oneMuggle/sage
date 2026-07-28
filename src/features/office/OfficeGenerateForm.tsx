@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 
 import { officeApi } from '../../shared/api/officeApi';
 import type { OfficeDocType } from '../../shared/api/types';
+import { useI18n } from '../../shared/lib/i18n';
 
 export interface OfficeGenerateFormProps {
   workspacePath: string;
@@ -23,6 +24,7 @@ export interface OfficeGenerateFormProps {
 }
 
 export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerateFormProps) {
+  const { t } = useI18n();
   const [docType, setDocType] = useState<OfficeDocType>('ppt');
   const [filename, setFilename] = useState('my-document');
   const [busy, setBusy] = useState(false);
@@ -43,7 +45,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
 
   const handleGenerate = async () => {
     if (!filename.trim()) {
-      toast.error('请填写文件名');
+      toast.error(t('office.generate.filenameRequired'));
       return;
     }
     setBusy(true);
@@ -80,14 +82,14 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         });
       }
       setResult({ path: out.output_path, sizeBytes: out.file_size_bytes });
-      toast.success(`已生成 ${out.filename}`);
+      toast.success(`${t('office.generate.success')} ${out.filename}`);
       // HIGH FIX: notify parent so it can refresh the document list.
       if (onGenerated) {
         await onGenerated();
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`生成失败: ${msg}`);
+      toast.error(`${t('office.generate.failed')}: ${msg}`);
     } finally {
       setBusy(false);
     }
@@ -97,45 +99,45 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
     <div className="space-y-3 p-4 border border-border rounded-lg bg-bg-subtle">
       <div className="flex items-center gap-2">
         <Sparkles className="w-4 h-4 text-primary" />
-        <h2 className="text-sm font-medium text-text">生成新文档</h2>
+        <h2 className="text-sm font-medium text-text">{t('office.generate.title')}</h2>
       </div>
 
       <div className="flex gap-2">
-        {(['ppt', 'word', 'excel'] as OfficeDocType[]).map((t) => (
+        {(['ppt', 'word', 'excel'] as OfficeDocType[]).map((type) => (
           <button
-            key={t}
+            key={type}
             type="button"
-            onClick={() => setDocType(t)}
+            onClick={() => setDocType(type)}
             className={[
               'flex items-center gap-1.5 px-3 py-1.5 rounded text-sm border',
-              docType === t
+              docType === type
                 ? 'border-primary bg-primary/10 text-primary'
                 : 'border-border text-text-secondary hover:bg-bg-hover',
             ].join(' ')}
           >
-            {t === 'ppt' && <Presentation className="w-3.5 h-3.5" />}
-            {t === 'word' && <FileText className="w-3.5 h-3.5" />}
-            {t === 'excel' && <FileSpreadsheet className="w-3.5 h-3.5" />}
-            {t.toUpperCase()}
+            {type === 'ppt' && <Presentation className="w-3.5 h-3.5" />}
+            {type === 'word' && <FileText className="w-3.5 h-3.5" />}
+            {type === 'excel' && <FileSpreadsheet className="w-3.5 h-3.5" />}
+            {type.toUpperCase()}
           </button>
         ))}
       </div>
 
       <div>
-        <label className="block text-xs text-muted mb-1">文件名</label>
+        <label className="block text-xs text-muted mb-1">{t('office.generate.filename')}</label>
         <input
           type="text"
           value={filename}
           onChange={(e) => setFilename(e.target.value)}
           className="w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text"
-          placeholder="my-document"
+          placeholder={t('office.generate.filenamePlaceholder')}
         />
       </div>
 
       {docType === 'ppt' && (
         <div className="space-y-2">
           <div>
-            <label className="block text-xs text-muted mb-1">标题 (仅一张幻灯片)</label>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.pptTitle')}</label>
             <input
               type="text"
               value={pptTitle}
@@ -144,7 +146,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
             />
           </div>
           <div>
-            <label className="block text-xs text-muted mb-1">要点 (每行一个)</label>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.pptBullets')}</label>
             <textarea
               value={pptBullets}
               onChange={(e) => setPptBullets(e.target.value)}
@@ -158,7 +160,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       {docType === 'word' && (
         <div className="space-y-2">
           <div>
-            <label className="block text-xs text-muted mb-1">文档标题</label>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.wordTitle')}</label>
             <input
               type="text"
               value={wordTitle}
@@ -167,7 +169,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
             />
           </div>
           <div>
-            <label className="block text-xs text-muted mb-1">正文</label>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.wordBody')}</label>
             <textarea
               value={wordBody}
               onChange={(e) => setWordBody(e.target.value)}
@@ -181,7 +183,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       {docType === 'excel' && (
         <div className="space-y-2">
           <div>
-            <label className="block text-xs text-muted mb-1">Sheet 名</label>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.sheetName')}</label>
             <input
               type="text"
               value={sheetName}
@@ -190,7 +192,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
             />
           </div>
           <div>
-            <label className="block text-xs text-muted mb-1">表头 (逗号分隔)</label>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.sheetHeaders')}</label>
             <input
               type="text"
               value={sheetHeaders}
@@ -199,7 +201,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
             />
           </div>
           <div>
-            <label className="block text-xs text-muted mb-1">数据行 (每行一个,逗号分隔字段)</label>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.sheetRows')}</label>
             <textarea
               value={sheetRows}
               onChange={(e) => setSheetRows(e.target.value)}
@@ -216,15 +218,17 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
         disabled={busy}
         className="w-full px-4 py-2 bg-primary text-text-inverse rounded text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
       >
-        {busy ? '生成中...' : `生成 ${docType.toUpperCase()}`}
+        {busy ? t('office.generate.generating') : `${t('office.generate.button')} ${docType.toUpperCase()}`}
       </button>
 
       {result && (
         <div className="text-xs text-muted bg-surface border border-border rounded p-2">
           <div>
-            已生成: <code className="text-text">{result.path}</code>
+            {t('office.generate.outputPath')} <code className="text-text">{result.path}</code>
           </div>
-          <div>大小: {(result.sizeBytes / 1024).toFixed(1)} KB</div>
+          <div>
+            {t('office.generate.size')} {(result.sizeBytes / 1024).toFixed(1)} KB
+          </div>
         </div>
       )}
     </div>
