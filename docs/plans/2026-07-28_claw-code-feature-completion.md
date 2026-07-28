@@ -48,9 +48,9 @@ sage 是**记忆优先的桌面 AI 助手**（Electron + React + FastAPI），�
 | G11 | Cost/token 用量面板 | ✅ /cost | ⬜ 无用户可见面板 | **移植** | M6 |
 | G12 | 项目级指令文件发现（SAGE.md/CLAUDE.md 层级） | ✅ ProjectContext | ⬜（有 workspace 绑定，无指令文件） | **移植** | M6 |
 | G13 | Mock LLM parity 测试 harness | ✅ 12 脚本场景 | ⬜ | **移植思路** | M6 |
-| Q1 | `wiki_router` 重复注册 | — | 🐛 `main.py:347-348` | 修复 | M0 |
-| Q2 | `chat_stream` 裸 RuntimeError | — | 🐛 Task 11 待办 | 修复 | M0 |
-| Q3 | `HttpComputeAdapter` 空壳 | — | 🐛 NotImplementedError | 实现或删除 | M0 |
+| Q1 | `wiki_router` 重复注册 | — | ✅ 已删除重复行 + 回归测试 | — | M0 ✅ |
+| Q2 | `chat_stream` 裸 RuntimeError | — | ✅ LLMError 分类（Task 11 关闭） | — | M0 ✅ |
+| Q3 | `HttpComputeAdapter` 空壳 | — | ✅ 已删除（YAGNI，仅保留 subprocess） | — | M0 ✅ |
 | Q4 | `API_MODE` 强制 legacy（hex DI 未完） | — | 🟡 临时回退 | 归入 M2/M5 收尾 | M0 记录 |
 
 **明确不移植**（终端专属 / 与 sage 定位冲突）：Worker 舰队 + trust resolver、ACP/Zed、LSP 工具（若未来转 coding-first 再评估）、PowerShell（terminal 覆盖）、telemetry ClientIdentity 伪装、statusline/vim/键位。Git 工具组列为 P4 可选（开发者用户增值）。
@@ -134,9 +134,9 @@ messages 表加 `fork_root` / `branch_point` 列，copy-on-write：fork 时仅�
 ## 5. 实施步骤
 
 - [ ] **M0：存量缺陷速修**（~0.5 天，`fix/hygiene-2026-07`）
-  - [ ] 删除 `main.py:348` 重复 wiki_router + 回归
-  - [ ] `chat_stream` RuntimeError → LLMError 分类（关闭 Task 11）
-  - [ ] HttpComputeAdapter：实现或删除（二选一，README 注明决策）
+  - [x] 删除 `main.py:348` 重复 wiki_router + 回归（`backend/tests/api/test_router_registration.py`）
+  - [x] `chat_stream` RuntimeError → LLMError 分类（关闭 Task 11；`LLMClient._raise_classified_error` 与 `chat()` 共享分类）
+  - [x] HttpComputeAdapter：已删除（YAGNI 决策；仅保留 `adapter: subprocess`，docs 已同步）
   - [ ] 记录 API_MODE hex 回归的收尾条件到 Q4 跟踪项
 - [ ] **M1：工具安全硬化**（~3–5 天，`feat/tool-permission-hardening`）⭐ 最高优先
   - [ ] PermissionMode + Enforcer + 单测矩阵（参照 claw path_scope_enforcement）

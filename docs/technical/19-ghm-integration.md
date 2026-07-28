@@ -62,11 +62,10 @@ sage 在 hex 架构基础上新增一个 `ComputePort`，通过 `SubprocessCompu
 | `backend/ports/compute.py`                           | `ComputePort` Protocol（`list_operations` + `execute`）               |
 | `backend/adapters/out/compute/_resolver.py`          | `ExecutableResolver`：按优先级解析可执行文件                          |
 | `backend/adapters/out/compute/subprocess_adapter.py` | `SubprocessComputeAdapter`：asyncio subprocess + JSON 解析 + 错误映射 |
-| `backend/adapters/out/compute/http_adapter.py`       | `HttpComputeAdapter`：**预留空壳**，未来实现                          |
 | `backend/adapters/out/compute/mock_adapter.py`       | 测试用内存实现                                                        |
 | `backend/adapters/out/tool/compute_tool_adapter.py`  | `ComputeToolAdapter`：把 ComputePort 桥接为 ToolPort                  |
 | `backend/config/ghm.yaml`                            | ghm 入口路径 + 6 个 operation 声明                                    |
-| `backend/main.py:_build_compute_adapter`             | 装配工厂（按 yaml.adapter 字段选 subprocess/http）                    |
+| `backend/main.py:_build_compute_adapter`             | 装配工厂（按 yaml.adapter 字段选 adapter，当前仅 subprocess）         |
 | `backend/main.py:_build_chat_service`                | 接入：若 ghm 启用则用 ComputeToolAdapter 包装                         |
 
 ---
@@ -261,7 +260,7 @@ def _build_chat_service() -> ChatService:
 | --------------------------------------- | ----------------------------------------- | ------------------------------------------------------------- |
 | **接入 ghm-cli.exe 真分发**             | ghm 项目方提供 `ghm-cli.spec` 并出产物    | 改 `ghm.yaml: executable_path` 一行                           |
 | **启用 Tauri sidecar**                  | 桌面应用分发给非开发用户                  | 改 `tauri.conf.json` + 改 `ghm.yaml: sidecar_name`            |
-| **HttpComputeAdapter 真实现**           | subprocess 冷启动延迟 > 2s 影响 chat 体验 | 补完 `http_adapter.py`（约 200 行）+ 启动时拉起 `ghm gui web` |
+| **HTTP 模式 ComputePort 实现**          | subprocess 冷启动延迟 > 2s 影响 chat 体验 | 新写 `ComputePort` 的 HTTP 实现 + 启动时拉起 `ghm gui web`（原 `HttpComputeAdapter` 空壳已于 M0 删除） |
 | **常驻 worker（高频调用优化）**         | HTTP 模式仍不够快                         | ghm 项目侧新增 stdin loop 模式                                |
 | **接入 nozzle-contour / exptube-range** | core 6 项稳定 ≥ 2 周                      | 加 operation 到 yaml + 处理文件 I/O 参数                      |
 

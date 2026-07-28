@@ -8,7 +8,7 @@ Agent / LLMClient 流式响应边界测试 (PG1.1 - Task 1.1.3)
 1. 多 chunk 拼接:逐个 delta 累加
 2. `[DONE]` 哨兵:流正常终止
 3. 空 content 字段:不产出空字符串
-4. HTTP 错误状态码:抛 RuntimeError(注:Task 11 计划改为 LLMError)
+4. HTTP 错误状态码:抛分类 LLMError(Task 11 已关闭,与 chat() 同规则)
 5. 非 JSON 行:被静默跳过,不影响后续 chunk
 6. `run_loop` 异步生成器:本身已经是异步流,验证 DONE 后不继续产出事件
 
@@ -20,8 +20,10 @@ from __future__ import annotations
 from typing import List
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
+from backend.core.errors import LLMError, LLMErrorType
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 
@@ -166,12 +168,15 @@ async def test_chat_stream_skips_empty_delta_and_malformed_lines():
 
 
 @pytest.mark.asyncio()
-async def test_chat_stream_raises_runtime_error_on_http_error():
-    """HTTP 错误状态码应抛 RuntimeError(注:后续 Task 11 将统一为 LLMError 分类)。"""
+async def test_chat_stream_raises_classified_llm_error_on_http_error():
+    """HTTP 错误状态码应抛分类 LLMError(Task 11 已关闭:5xx → SERVER_ERROR)。"""
     client = _make_client()
     ctx = _sse_response([], status_code=500)
-    # 覆写 raise_for_status 抛错
-    ctx.__aenter__.return_value.raise_for_status = MagicMock(side_effect=Exception("HTTP 500"))
+    # 覆写 raise_for_status 抛 httpx.HTTPStatusError(与真实 httpx 行为一致)
+    response = ctx.__aenter__.return_value
+    response.raise_for_status = MagicMock(
+        side_effect=httpx.HTTPStatusError("500", request=MagicMock(), response=response)
+    )
 
     with pytest.MonkeyPatch.context() as mp:
         mock_http = MagicMock()
@@ -182,8 +187,11 @@ async def test_chat_stream_raises_runtime_error_on_http_error():
             async for _ in client.chat_stream([{"role": "user", "content": "x"}]):
                 pass
 
-        with pytest.raises(RuntimeError, match="LLM 流式请求"):
+        with pytest.raises(LLMError) as exc_info:
             await _consume()
+
+    assert exc_info.value.type == LLMErrorType.SERVER_ERROR
+    assert exc_info.value.status_code == 500
 
 
 # =============================================================================
