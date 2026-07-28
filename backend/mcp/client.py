@@ -43,6 +43,9 @@ class McpClient:
         self._initialized = False
         self._stderr_lines: List[str] = []
         self._stderr_thread: Optional[threading.Thread] = None
+        # M3: per-server response timeout from config (previously a
+        # hardcoded 60s). Falls back to 60s for configs without the field.
+        self._timeout = float(getattr(config, "timeout_seconds", 60.0) or 60.0)
 
     @property
     def server_name(self) -> str:
@@ -210,7 +213,7 @@ class McpClient:
         """Read JSON-RPC messages from stdout until we get the response for expected_id."""
         assert self._process is not None
         assert self._process.stdout is not None
-        max_wait = 60  # seconds
+        max_wait = self._timeout  # per-server, from ServerConfig.timeout_seconds
         start = time.monotonic()
 
         while time.monotonic() - start < max_wait:

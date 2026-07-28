@@ -408,6 +408,39 @@ describe('question IPC routes (M2 part B: AskUserQuestion)', () => {
   });
 });
 
+describe('MCP management IPC routes (M3)', () => {
+  it('exposes status / servers / add / update / delete', () => {
+    expect(COMMAND_ROUTES.mcp_status.method).toBe('GET');
+    expect(COMMAND_ROUTES.mcp_status.path({})).toBe('/api/v1/mcp/status');
+    expect(COMMAND_ROUTES.mcp_servers.method).toBe('GET');
+    expect(COMMAND_ROUTES.mcp_servers.path({})).toBe('/api/v1/mcp/servers');
+    expect(COMMAND_ROUTES.mcp_server_add.method).toBe('POST');
+    expect(COMMAND_ROUTES.mcp_server_add.path({})).toBe('/api/v1/mcp/servers');
+    expect(COMMAND_ROUTES.mcp_server_update.method).toBe('PATCH');
+    expect(COMMAND_ROUTES.mcp_server_delete.method).toBe('DELETE');
+  });
+
+  it('mcp_server_update puts name in path and only patch fields in body', () => {
+    const r = COMMAND_ROUTES.mcp_server_update;
+    expect(r.path({ name: 'srv/1' })).toBe('/api/v1/mcp/servers/srv%2F1');
+    // name must not leak into the body (backend model is extra=forbid)
+    expect(r.body!({ name: 'srv', enabled: false, timeout_seconds: 45 })).toEqual({
+      enabled: false,
+      timeout_seconds: 45,
+    });
+    expect(r.body!({ name: 'srv', enabled: true })).toEqual({ enabled: true });
+  });
+
+  it('mcp_server_delete encodes the server name', () => {
+    expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'drawio' })).toBe(
+      '/api/v1/mcp/servers/drawio',
+    );
+    expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'a b' })).toBe(
+      '/api/v1/mcp/servers/a%20b',
+    );
+  });
+});
+
 describe('UnknownIpcCommandError', () => {
   it('names the offending command and references the source of truth', () => {
     const err = new UnknownIpcCommandError('foo_bar');
