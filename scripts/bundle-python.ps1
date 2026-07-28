@@ -19,6 +19,18 @@
 # but has python38.dll (same ABI as full Python 3.8.10), so compiled
 # wheels work in either. We trade ~30MB extra download for working bundling.
 #
+# v0.4.5-alpha.3-win7 (port of main PR #132 — sage_core inner-copy fix):
+# Even with the embeddable's `python38._pth` correctly placing `..` on
+# sys.path, `import sage_core` fails on end-user machines because the
+# source dir is hyphen-named `sage-core/` while the Python module is
+# underscore-named `sage_core/`. Python's import machinery does no
+# hyphen↔underscore normalization. Fix: copy the inner sage_core/
+# package into embeddable's Lib/site-packages/ where `import site` puts
+# it unconditionally. The verify step explicitly imports both
+# `backend.main` AND `sage_core` so this regression is caught at
+# bundle time instead of at end-user startup (4-5s after spawn → 30s
+# timeout dialog).
+#
 # Usage: .\scripts\bundle-python.ps1
 # Output: resources/python/ (embeddable runtime + site-packages) and resources/backend/
 
@@ -165,6 +177,42 @@ if (Test-Path $SageCoreSource) {
     Copy-Item -Path $SageCoreSource -Destination $SageCoreDest -Recurse -Force
     & $PythonExe -m pip install --no-warn-script-location --no-build-isolation -e $SageCoreDest
     if ($LASTEXITCODE -ne 0) { throw "pip install -e sage-core failed with exit code $LASTEXITCODE" }
+
+    # CRITICAL (v0.4.5-alpha.1 bundling regression, main PR #132 fix ported to win7):
+    # The source dir is hyphen-named `sage-core/` but the Python module is
+    # underscore-named `sage_core/`. Python's import machinery is path-literal
+    # and does NOT do hyphen↔underscore normalization — `import sage_core`
+    # walks sys.path entries looking for a directory literally named `sage_core/`.
+    # Without this fix, end-user packaged Win installer hits ModuleNotFoundError
+    # on first backend launch (4-5 sec after spawn → 30 sec timeout dialog).
+    #
+    # Why not just `pip install -e`? That creates a .pth file with the CI
+    # runner's absolute path (e.g. `D:\a\sage\resources\sage-core`) which does
+    # not exist on end-user machines. Copying the inner `sage_core/` package
+    # into `Lib/site-packages/` (where `import site` puts it unconditionally)
+    # is portable across any user-chosen install dir.
+    #
+    # We deliberately don't `pip install` sage_core a second time here — the
+    # `-e` install above already registered the editable metadata; this block
+    # only adds the runtime-loadable package to the embeddable.
+    $EmbedSitePackagesForSageCore = Join-Path $PythonDir "Lib\site-packages"
+    New-Item -ItemType Directory -Force -Path $EmbedSitePackagesForSageCore | Out-Null
+    $SageCorePkgSrc = Join-Path $SageCoreDest "sage_core"
+    $SageCorePkgDest = Join-Path $EmbedSitePackagesForSageCore "sage_core"
+    if (Test-Path $SageCorePkgSrc) {
+        Write-Host "Copying inner sage_core/ to embeddable site-packages (port of main PR #132)..." -ForegroundColor Green
+        if (Test-Path $SageCorePkgDest) {
+            Remove-Item -Recurse -Force $SageCorePkgDest
+        }
+        Copy-Item -Path $SageCorePkgSrc -Destination $SageCorePkgDest -Recurse -Force
+        # Drop __pycache__ from the runtime copy
+        Get-ChildItem -Path $SageCorePkgDest -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
+    }
+} else {
+    # Outer WARNING mirrors the inner one below — surfaces the failure mode
+    # at bundle time instead of waiting for the verify-step `import sage_core`
+    # to throw a confusing ModuleNotFoundError far away from the cause.
+    Write-Host "WARNING: $SageCoreSource not found; sage_core will not be importable." -ForegroundColor Yellow
 }
 
 # Copy full Python's site-packages (with compiled wheels including hnswlib)
@@ -200,13 +248,19 @@ Write-Host ""
 # can surface the underlying error in the exception message if any import
 # fails (otherwise we'd just see a bare exit code).
 #
-# CRITICAL: `import backend.main` is the canary for the _pth / PYTHONPATH
-# regression — without `..` in python38._pth, this raises
-# ModuleNotFoundError immediately, catching the v0.4.3-alpha.1 Win7 bug
-# at bundle time instead of at user runtime.
-Write-Host "Testing Python imports (incl. backend.main canary)..." -ForegroundColor Green
+# CRITICAL canaries:
+#   - `import backend.main` catches the _pth / PYTHONPATH regression — without
+#     `..` in python38._pth this raises ModuleNotFoundError immediately,
+#     catching the v0.4.3-alpha.1 Win7 bug at bundle time instead of at user
+#     runtime.
+#   - `import sage_core` catches the v0.4.5-alpha.1 bundling regression (port
+#     of main PR #132). The source dir `sage-core/` (hyphen) does not satisfy
+#     `import sage_core` (underscore) — the inner package must be copied into
+#     embeddable's site-packages/ above. Without the inner-copy step, this
+#     raises ModuleNotFoundError at end-user startup.
+Write-Host "Testing Python imports (backend.main + sage_core canaries)..." -ForegroundColor Green
 $EmbedPython = Join-Path $PythonDir "python.exe"
-$verifyOutput = & $EmbedPython -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import hnswlib; import backend.main; print('All critical imports successful (hnswlib + backend.main OK)')" 2>&1
+$verifyOutput = & $EmbedPython -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import hnswlib; import sage_core; import backend.main; print('All critical imports successful (hnswlib + sage_core + backend.main OK)')" 2>&1
 $verifyExit = $LASTEXITCODE
 Write-Host $verifyOutput
 if ($verifyExit -ne 0) {
