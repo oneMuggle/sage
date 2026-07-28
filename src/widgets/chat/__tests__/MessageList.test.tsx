@@ -7,6 +7,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Message as MessageType } from '../../../shared/lib/store';
 import { MessageList } from '../MessageList';
 
@@ -14,6 +15,10 @@ import { MessageList } from '../MessageList';
 vi.mock('../../../features/chat', () => ({
   BtwOverlay: () => null,
 }));
+
+// M4: Message 内部使用 useI18n（fork 按钮 title），渲染 Message 的用例必须挂 provider
+const renderWithI18n = (ui: React.ReactElement) =>
+  render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
 
 const baseMsg = (id: string, role: MessageType['role'], content: string): MessageType => ({
   id,
@@ -35,14 +40,14 @@ describe('MessageList', () => {
       baseMsg('1', 'user', '问题'),
       baseMsg('2', 'assistant', '回答'),
     ];
-    render(<MessageList messages={messages} />);
+    renderWithI18n(<MessageList messages={messages} />);
     expect(screen.getByText('问题')).toBeInTheDocument();
     expect(screen.getByText('回答')).toBeInTheDocument();
   });
 
   it('forwards knowledgeRefs to the matching message', () => {
     const messages: MessageType[] = [baseMsg('m1', 'assistant', 'with refs')];
-    render(
+    renderWithI18n(
       <MessageList messages={messages} knowledgeRefs={{ m1: [{ id: 'k1', title: '知识A' }] }} />,
     );
     expect(screen.getByText('知识A')).toBeInTheDocument();
@@ -53,7 +58,7 @@ describe('MessageList', () => {
     // 之前把整个 wrapper 限到 768px 居中 → 在 1040px 主区域里左右各空 136px。
     // 现在 wrapper 撑满主区域,宽度约束下放到 Message 气泡( max-w-2xl)。
     const messages: MessageType[] = [baseMsg('1', 'user', 'hi')];
-    const { container } = render(<MessageList messages={messages} />);
+    const { container } = renderWithI18n(<MessageList messages={messages} />);
     const wrapper = container.firstChild as HTMLElement;
     expect(wrapper.className).not.toMatch(/max-w-3xl/);
     expect(wrapper.className).not.toMatch(/mx-auto/);

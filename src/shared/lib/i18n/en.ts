@@ -38,6 +38,15 @@ export const en: Record<TranslationKey, string> = {
   'chat.copied': 'Copied',
   'chat.delete_confirm': 'Are you sure you want to delete this session?',
 
+  // ─── M4 session compact / fork ────
+  'chat.compact_success': 'Context compacted: {before} → {after} messages ({removed} removed)',
+  'chat.compact_skipped': 'Conversation too short to compact',
+  'chat.compact_failed': 'Compaction failed: {message}',
+  'chat.fork_from_here': 'Fork from here',
+  'chat.fork_success': 'Forked into a new session',
+  'chat.fork_failed': 'Fork failed: {message}',
+  'session.fork_badge': 'Forked session',
+
   // ─── File upload ──────────────────
   'chat.drop_files': 'Drop files here',
   'chat.attach_image': 'Attach image',

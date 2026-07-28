@@ -4,13 +4,12 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional
 
 import json
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from backend.data.database import get_database
 
@@ -31,6 +30,10 @@ class Session:
     is_pinned: bool = False
     is_archived: bool = False
     parent_id: Optional[str] = None
+    # M4 会话分叉：fork_root 记录分叉源会话 id；forked_at_message_id 记录
+    # 分叉点（源会话中被复制的最后一条消息的 *源* id，None 表示复制到末尾）。
+    fork_root: Optional[str] = None
+    forked_at_message_id: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Session:
@@ -47,6 +50,8 @@ class Session:
             is_pinned=bool(row["is_pinned"] or 0),
             is_archived=bool(row["is_archived"] or 0),
             parent_id=row["parent_id"],
+            fork_root=row["fork_root"],
+            forked_at_message_id=row["forked_at_message_id"],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -59,6 +64,9 @@ class Session:
             "message_count": self.message_count,
             "is_pinned": self.is_pinned,
             "metadata": json.loads(self.metadata) if self.metadata else None,
+            # M4: 侧栏 fork 徽标依赖这两个字段（list_sessions 序列化必须带上）
+            "fork_root": self.fork_root,
+            "forked_at_message_id": self.forked_at_message_id,
         }
 
 
@@ -212,6 +220,101 @@ class Message:
             "tool_call_id": self.tool_call_id,
             "reasoning_content": self.reasoning_content,
         }
+
+
+class ForkSourceNotFoundError(LookupError):
+    """分叉源不存在（会话或分叉点消息）。
+
+    ``kind`` 取值 ``"session"`` / ``"message"``，路由层据此生成结构化 404。
+    """
+
+    def __init__(self, kind: str, ident: str):
+        self.kind = kind
+        self.ident = ident
+        super().__init__(f"fork source {kind} not found: {ident}")
+
+
+def fork_session(
+    session_repo: SessionRepository,
+    message_repo: MessageRepository,
+    source_id: str,
+    at_message_id: Optional[str] = None,
+    title: Optional[str] = None,
+) -> Session:
+    """从源会话分叉出一个新会话（M4，全量前缀复制）。
+
+    刻意偏离计划文档的 copy-on-write 设计：桌面级会话只有数百条消息，
+    全量复制更简单、更安全（读写路径零特判）；CoW 推迟到真正出现
+    存储压力时再做。
+
+    语义:
+        - 复制源会话中 ``at_message_id`` 及之前的全部消息；``at_message_id``
+          省略时复制全部消息。
+        - 复制的消息获得**新 id**，但保留原顺序 / role / content / 时间戳 /
+          model / provider / tool 字段。
+        - 新会话写入 ``fork_root=<源 id>``；``forked_at_message_id`` 取显式
+          传入的分叉点（源消息 id），省略分叉点时为 ``None``（表示"复制到
+          末尾"）。
+
+    Args:
+        session_repo: 会话仓储
+        message_repo: 消息仓储
+        source_id: 源会话 id
+        at_message_id: 可选分叉点消息 id（必须属于源会话）
+        title: 可选新标题；缺省为 ``"Fork: <源标题>"``
+
+    Returns:
+        新创建的 Session（含 fork_root / forked_at_message_id）
+
+    Raises:
+        ForkSourceNotFoundError: 源会话不存在，或分叉点消息不存在 / 不属于源会话
+    """
+    source = session_repo.get(source_id)
+    if source is None:
+        raise ForkSourceNotFoundError("session", source_id)
+
+    all_messages = message_repo.get_by_session(source_id, limit=100000)
+
+    if at_message_id is not None:
+        cut_index = next(
+            (i for i, m in enumerate(all_messages) if m.id == at_message_id), None
+        )
+        if cut_index is None:
+            raise ForkSourceNotFoundError("message", at_message_id)
+        prefix = all_messages[: cut_index + 1]  # 含分叉点本身
+    else:
+        prefix = all_messages
+
+    new_session = session_repo.create(title=title or f"Fork: {source.title}")
+
+    # 逐条复制：新 id + 原 created_at。插入顺序 = 源顺序，
+    # messages 表 ORDER BY created_at ASC（同值按 rowid）保持序。
+    for src_msg in prefix:
+        message_repo.save(
+            Message(
+                id=f"msg-{uuid.uuid4().hex[:12]}",
+                session_id=new_session.id,
+                role=src_msg.role,
+                content=src_msg.content,
+                created_at=src_msg.created_at,
+                model=src_msg.model,
+                provider=src_msg.provider,
+                tool_calls=src_msg.tool_calls,
+                tool_call_id=src_msg.tool_call_id,
+                reasoning_content=src_msg.reasoning_content,
+            )
+        )
+
+    update_fields: Dict[str, Any] = {"fork_root": source.id, "message_count": len(prefix)}
+    if at_message_id is not None:
+        update_fields["forked_at_message_id"] = at_message_id
+    if prefix:
+        update_fields["last_message_at"] = prefix[-1].created_at
+    session_repo.update(new_session.id, **update_fields)
+
+    forked = session_repo.get(new_session.id)
+    assert forked is not None  # 刚 create 的会话必然存在
+    return forked
 
 
 class MessageRepository:

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { mergeSlashCommands, slashCommands } from '../slashCommands';
+import { commandToPrompt, mergeSlashCommands, slashCommands } from '../slashCommands';
 
 describe('mergeSlashCommands', () => {
   it('returns the 6 static commands unchanged when dynamic list is empty', () => {
@@ -74,5 +74,19 @@ describe('mergeSlashCommands', () => {
   it('keeps short description as-is', () => {
     const result = mergeSlashCommands([{ commandName: '/short', description: 'Brief' }]);
     expect(result[0].description).toBe('Brief');
+  });
+});
+
+describe('M4: /compact is a real action (not a prompt)', () => {
+  it("compact command has mode 'compact'", () => {
+    const compact = slashCommands.find((c) => c.name === 'compact');
+    expect(compact).toBeDefined();
+    expect(compact!.mode).toBe('compact');
+  });
+
+  it('commandToPrompt falls through to the generic branch for compact', () => {
+    // compact 不再走提示词路径；即使误调也只返回通用 fallback
+    const compact = slashCommands.find((c) => c.name === 'compact')!;
+    expect(commandToPrompt(compact, '')).toBe('/compact');
   });
 });

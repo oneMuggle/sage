@@ -63,6 +63,22 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.id))}`,
   },
+  // M4: session engineering — 上下文压缩 + 会话分叉
+  session_compact: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/compact`,
+  },
+  session_fork: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/fork`,
+    // 后端 ForkSessionRequest 用 snake_case 字段；省略的参数不下发
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      if (a.atMessageId != null) body.at_message_id = a.atMessageId;
+      if (a.title != null) body.title = a.title;
+      return body;
+    },
+  },
 
   // session workspace binding
   workspace_bind: {

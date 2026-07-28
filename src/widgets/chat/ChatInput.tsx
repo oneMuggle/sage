@@ -34,6 +34,11 @@ interface ChatInputProps {
   ) => void;
   onInterrupt?: () => void;
   onClear?: () => void;
+  /**
+   * M4: /compact slash action 回调。由 Chat 页面实现（调用 session_compact
+   * IPC + toast + 重载消息）。未提供时 /compact 静默无操作。
+   */
+  onCompact?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -59,6 +64,7 @@ export function ChatInput({
   onSend,
   onInterrupt,
   onClear,
+  onCompact,
   isLoading = false,
   disabled = false,
   placeholder,
@@ -223,6 +229,13 @@ export function ChatInput({
         return;
       }
 
+      // M4: /compact 是真实 action（后端会话压缩），不再作为提示词发给 LLM
+      if (cmd.mode === 'compact') {
+        setValue('');
+        onCompact?.();
+        return;
+      }
+
       if (cmd.mode === 'help') {
         const helpText = slashCommands.map((c) => `/${c.name} — ${c.description}`).join('\n');
         setValue('');
@@ -261,7 +274,7 @@ export function ChatInput({
       setValue('');
       onSend(prompt);
     },
-    [value, onSend, onClear, slashCommands],
+    [value, onSend, onClear, onCompact, slashCommands],
   );
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

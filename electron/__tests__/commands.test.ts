@@ -188,6 +188,8 @@ describe('COMMAND_ROUTES', () => {
       'list_sessions',
       'create_session',
       'delete_session',
+      'session_compact',
+      'session_fork',
       'get_messages',
       'delete_message',
     ];
@@ -259,6 +261,31 @@ describe('COMMAND_ROUTES', () => {
     const r = COMMAND_ROUTES.delete_session;
     expect(r.method).toBe('DELETE');
     expect(r.path({ id: 'abc' })).toBe('/api/v1/sessions/abc');
+  });
+
+  // M4: session engineering — compact + fork
+  it('builds session_compact as POST /api/v1/sessions/{sessionId}/compact', () => {
+    const r = COMMAND_ROUTES.session_compact;
+    expect(r.method).toBe('POST');
+    expect(r.path({ sessionId: 's/1' })).toBe('/api/v1/sessions/s%2F1/compact');
+  });
+
+  it('builds session_fork as POST /api/v1/sessions/{sessionId}/fork', () => {
+    const r = COMMAND_ROUTES.session_fork;
+    expect(r.method).toBe('POST');
+    expect(r.path({ sessionId: 's/1' })).toBe('/api/v1/sessions/s%2F1/fork');
+  });
+
+  it('session_fork body maps camelCase args to backend snake_case fields', () => {
+    const r = COMMAND_ROUTES.session_fork;
+    expect(r.body).toBeDefined();
+    // 完整参数
+    expect(r.body!({ sessionId: 's1', atMessageId: 'm-9', title: '分支' })).toEqual({
+      at_message_id: 'm-9',
+      title: '分支',
+    });
+    // 缺省参数不下发（sessionId 走 path 不进 body）
+    expect(r.body!({ sessionId: 's1' })).toEqual({});
   });
 
   it('builds delete_message as POST /api/v1/messages/{id}/delete', () => {
