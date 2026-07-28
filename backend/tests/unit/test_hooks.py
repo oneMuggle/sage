@@ -265,3 +265,37 @@ def test_load_hooks_returns_valid_configs():
     assert len(hooks) == 1
     assert hooks[0].event == "post_tool_use"
     assert hooks[0].matcher == "file_*"
+
+
+# ---------------------------------------------------------------------------
+# 审查加固回归 (M6 review)
+# ---------------------------------------------------------------------------
+
+
+def test_config_validation_rejects_timeout_above_max():
+    """timeout_seconds > 300 → 拒绝 (20 条钩子串行, 病态配置可拖死循环)。"""
+    with pytest.raises(HookConfigError):
+        validate_hooks(
+            [{"event": "pre_tool_use", "command": "echo hi", "timeout_seconds": 301}]
+        )
+
+
+def test_config_validation_accepts_timeout_at_max():
+    hooks = validate_hooks(
+        [{"event": "pre_tool_use", "command": "echo hi", "timeout_seconds": 300}]
+    )
+    assert hooks[0].timeout_seconds == 300.0
+
+
+def test_build_payload_truncates_oversized_tool_output():
+    """post_tool_use payload 的 tool_output 截断至 PAYLOAD_OUTPUT_CAP。"""
+    from backend.hooks.runner import PAYLOAD_OUTPUT_CAP
+
+    payload = build_payload(
+        "post_tool_use",
+        "read_file",
+        {"path": "big.txt"},
+        tool_output="x" * (PAYLOAD_OUTPUT_CAP + 5000),
+    )
+    assert len(payload["tool_output"]) <= PAYLOAD_OUTPUT_CAP + 16
+    assert payload["tool_output"].endswith("…[截断]")

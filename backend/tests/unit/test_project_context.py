@@ -102,3 +102,34 @@ def test_missing_and_invalid_roots_never_raise():
     ctx2 = discover_project_context(None)  # 类型错误输入也不抛
     assert ctx2.entries == []
     assert ctx2.render() == ""
+
+
+def test_symlink_escaping_workspace_is_refused(tmp_path):
+    """审查加固: 符号链接指向工作区外的 SAGE.md (如 ~/.ssh/id_rsa) 不得注入。"""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "secret.md"
+    secret.write_text("TOP SECRET KEY MATERIAL", encoding="utf-8")
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "SAGE.md").symlink_to(secret)
+
+    ctx = discover_project_context(workspace)
+
+    assert ctx.entries == []
+    assert "TOP SECRET" not in ctx.render()
+
+
+def test_symlink_within_workspace_is_allowed(tmp_path):
+    """工作区内互链 (SAGE.md → 同目录真实文件) 放行注入。"""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    real = workspace / "real-notes.md"
+    real.write_text("legit project notes", encoding="utf-8")
+    (workspace / "SAGE.md").symlink_to(real)
+
+    ctx = discover_project_context(workspace)
+
+    assert len(ctx.entries) == 1
+    assert ctx.entries[0].content == "legit project notes"

@@ -29,6 +29,8 @@ HOOK_EVENTS = ("pre_tool_use", "post_tool_use")
 MAX_HOOKS = 20
 DEFAULT_TIMEOUT_SECONDS = 10.0
 _MIN_TIMEOUT_SECONDS = 0.1
+# 审查加固: 20 条钩子串行执行, 无上限的病态配置可拖死 agent 循环
+MAX_TIMEOUT_SECONDS = 300.0
 
 
 class HookConfigError(ValueError):
@@ -68,6 +70,8 @@ def _coerce_one(raw: Any, index: int) -> HookConfig:
         raise HookConfigError(f"hooks[{index}].timeout_seconds must be a number")
     if timeout < _MIN_TIMEOUT_SECONDS:
         raise HookConfigError(f"hooks[{index}].timeout_seconds must be >= {_MIN_TIMEOUT_SECONDS}")
+    if timeout > MAX_TIMEOUT_SECONDS:
+        raise HookConfigError(f"hooks[{index}].timeout_seconds must be <= {MAX_TIMEOUT_SECONDS}")
 
     return HookConfig(
         event=event,

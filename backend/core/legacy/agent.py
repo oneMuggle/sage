@@ -619,6 +619,10 @@ class SageAgent:
                     }
                 )
 
+                # 审查加固: 钩子配置每轮 LLM 响应只加载一次 (原实现每个
+                # tool call 都读一次 settings + 校验, 并行工具批次下 N 倍浪费)
+                m6_hooks = self._load_m6_hooks()
+
                 for tc in response.tool_calls:
                     try:
                         args = (
@@ -634,7 +638,6 @@ class SageAgent:
                     # 永不阻断循环, 仅显式 "deny" 拦截执行; "modify" 经 schema
                     # 再校验后替换参数。与 M1 enforcer 相互独立 — rebase 时
                     # 两个标记块都保留。
-                    m6_hooks = self._load_m6_hooks()
                     m6_pre = await run_event_hooks(
                         m6_hooks,
                         "pre_tool_use",

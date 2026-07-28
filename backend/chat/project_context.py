@@ -106,7 +106,19 @@ def discover_project_context(workspace_root: Union[str, Path]) -> ProjectContext
             try:
                 if not candidate.is_file():
                     continue
-                content = candidate.read_text(encoding="utf-8")
+                # 审查加固: 拒绝符号链接越界 —— 恶意仓库可用
+                # SAGE.md → ~/.ssh/id_rsa 把任意文件注入 LLM 提示词。
+                # 解析后的真实路径必须仍落在被扫描目录内 (工作区内互链放行)。
+                resolved = Path(os.path.realpath(str(candidate)))
+                scan_dir = Path(os.path.realpath(str(candidate.parent)))
+                if resolved.parent != scan_dir:
+                    logger.debug(
+                        "project context: skip symlink escape %s -> %s",
+                        candidate,
+                        resolved,
+                    )
+                    continue
+                content = resolved.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 logger.debug("project context: skip %s: %s", candidate, exc)
                 continue

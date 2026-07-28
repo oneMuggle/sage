@@ -60,6 +60,11 @@ def matches_tool(matcher: str, tool_name: str) -> bool:
     return fnmatch(tool_name, matcher or "*")
 
 
+#: post_tool_use payload 中 tool_output 的截断上限 (审查加固: 工具结果
+#: 可达数 MB, 逐钩子序列化全量既浪费又可能压垮钩子进程 stdin)
+PAYLOAD_OUTPUT_CAP = 65536
+
+
 def build_payload(
     event: str,
     tool_name: str,
@@ -74,7 +79,10 @@ def build_payload(
         "tool_input": tool_input,
     }
     if event == "post_tool_use":
-        payload["tool_output"] = tool_output
+        capped_output = tool_output
+        if isinstance(capped_output, str) and len(capped_output) > PAYLOAD_OUTPUT_CAP:
+            capped_output = capped_output[:PAYLOAD_OUTPUT_CAP] + "…[截断]"
+        payload["tool_output"] = capped_output
         payload["tool_result_is_error"] = is_error
     return payload
 
