@@ -6,9 +6,13 @@
 - 文件必须已存在（创建是 ``write_file`` 的职责）；
 - ``old_string`` 必须逐字符精确匹配（含空白）；
 - 默认要求匹配唯一，多处匹配需显式 ``replace_all=true``；
-- 复用 M1 加固设施：写 10 MiB 硬限额（``file_tool.MAX_WRITE_SIZE_BYTES``）、
+- 复用 M1 加固设施：写 10 MiB 硬限额（``file_tool.MAX_WRITE_SIZE_BYTES``，
+  读前按 ``st_size`` 预检，避免多 GB 文本全量入内存）、
   二进制嗅探（``file_tool._contains_binary_marker``）、BOM 识别
   （``file_tool.detect_bom_encoding``，UTF-16/.reg 类文件按原编码回写）；
+- 行尾保留：以 ``newline=""`` 读取关闭通用换行转换，回写字节不做换行
+  翻译——编辑片段之外的行尾原样保留（CRLF 文件不会被整体改写成 LF；
+  Windows 优先产品，CRLF 是常态）；
 - WRITE 能力工具：``BaseTool._enforce_workspace`` 在入口强制 workspace
   边界（与 file_tool 写路径同源的 resolve 前缀语义，拦 ``../`` 穿越 +
   symlink 逃逸）。
@@ -17,7 +21,7 @@
 import difflib
 import logging
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .file_tool import MAX_WRITE_SIZE_BYTES, _contains_binary_marker, detect_bom_encoding
@@ -58,6 +62,43 @@ def _count_logical_lines(fragment: str) -> int:
     return fragment.count("\n") + 1
 
 
+def _validate_edit_call_shape(  # noqa: PLR0911 — 守卫式参数校验：一参数一分支，平铺胜于嵌套
+    kwargs: Dict[str, Any],
+    file_path: Optional[str],
+    old_string: Optional[str],
+    new_string: Optional[str],
+) -> Optional[ToolResult]:
+    """调用形态检查：未知参数 / 必需参数哨兵 / 类型；返回 None 表示放行。
+
+    必需参数以 ``None`` 哨兵区分"未提供"与"空值"：漏传 ``new_string``
+    若按默认空串走会**静默删除** old_string，故 ``None`` → 报错，
+    显式空串 → 有意删除放行；未登记的 kwargs（拼错的参数名）同样报错。
+    """
+    if kwargs:
+        names = ", ".join(sorted(kwargs))
+        return ToolResult(
+            success=False,
+            error=(
+                f"未知参数: {names}（合法参数: file_path, old_string, "
+                "new_string, replace_all）"
+            ),
+        )
+    if not isinstance(file_path, str) or not file_path.strip():
+        return ToolResult(success=False, error="缺少必需参数 file_path")
+    if old_string is None:
+        return ToolResult(success=False, error="缺少必需参数 old_string")
+    if not isinstance(old_string, str):
+        return ToolResult(success=False, error="old_string 必须是字符串")
+    if new_string is None:
+        return ToolResult(
+            success=False,
+            error="缺少必需参数 new_string（如需删除请显式传空字符串）",
+        )
+    if not isinstance(new_string, str):
+        return ToolResult(success=False, error="new_string 必须是字符串")
+    return None
+
+
 def _validate_edit_params(old_string: str, new_string: str) -> Optional[ToolResult]:
     """参数级前置检查（与文件无关）；返回 None 表示放行。"""
     if old_string == new_string:
@@ -68,7 +109,11 @@ def _validate_edit_params(old_string: str, new_string: str) -> Optional[ToolResu
 
 
 def _validate_target_file(target: Path, file_path: str) -> Optional[ToolResult]:
-    """目标文件前置检查：存在 / 常规文件 / 非二进制；返回 None 表示放行。"""
+    """目标文件前置检查：存在 / 常规文件 / 尺寸 / 非二进制；返回 None 表示放行。
+
+    尺寸检查（``st_size`` 与写限额比对）有意排在读文件与二进制嗅探之前：
+    多 GB 文本不应为了报一个"太大"而全量读入内存。
+    """
     if not target.exists():
         return ToolResult(
             success=False,
@@ -76,6 +121,18 @@ def _validate_target_file(target: Path, file_path: str) -> Optional[ToolResult]:
         )
     if not target.is_file():
         return ToolResult(success=False, error=f"不是文件: {file_path}")
+    try:
+        size = target.stat().st_size
+    except OSError as exc:
+        return ToolResult(success=False, error=f"无法获取文件尺寸: {exc}")
+    if size > MAX_WRITE_SIZE_BYTES:
+        return ToolResult(
+            success=False,
+            error=(
+                f"file_too_large: 文件 {size} 字节超过编辑上限 "
+                f"{MAX_WRITE_SIZE_BYTES} 字节 (10 MiB)"
+            ),
+        )
     if _contains_binary_marker(target):
         return ToolResult(success=False, error="binary_file: 检测到二进制文件，不支持精确编辑")
     return None
@@ -132,9 +189,9 @@ class EditTool(BaseTool):
 
     def execute(
         self,
-        file_path: str,
-        old_string: str = "",
-        new_string: str = "",
+        file_path: Optional[str] = None,
+        old_string: Optional[str] = None,
+        new_string: Optional[str] = None,
         replace_all: bool = False,
         **kwargs,
     ) -> ToolResult:
@@ -144,13 +201,22 @@ class EditTool(BaseTool):
         Args:
             file_path:   目标文件路径（必须存在）
             old_string:  待替换原文本（精确匹配）
-            new_string:  新文本
+            new_string:  新文本（None=未提供 → 报错；空串=显式删除 → 允许）
             replace_all: 是否替换全部匹配
 
         Returns:
             ToolResult；content 含 path / replacements / lines_added /
             lines_removed / bytes_written 的变更摘要。
+
+        必需参数用 ``None`` 哨兵区分"未提供"与"空值"：LLM 漏传
+        ``new_string`` 时若按默认空串走会**静默删除** old_string，故
+        ``new_string=None`` 报错、``new_string=""`` 才是有意删除。
+        未登记的 kwargs（拼错的参数名）同样报错而非静默吞掉。
         """
+        invalid_shape = _validate_edit_call_shape(kwargs, file_path, old_string, new_string)
+        if invalid_shape is not None:
+            return invalid_shape
+
         # M1: WRITE 能力 → workspace 边界强制（policy.workspace_root 绑定时）
         blocked = self._enforce_workspace(file_path)
         if blocked is not None:
@@ -179,7 +245,12 @@ class EditTool(BaseTool):
         # BOM 识别：UTF-16/UTF-8 BOM 文件按原编码读写，回写保留 BOM
         encoding = detect_bom_encoding(target) or "utf-8"
         try:
-            original = target.read_text(encoding=encoding)
+            # newline="" 关闭通用换行转换：CRLF / CR / LF 在内存中原样保留，
+            # 随后 write_bytes 按编码落盘、不做换行翻译——编辑片段之外的行尾
+            # 不受影响（read_text 默认会把 \r\n 转 \n，回写即把整个 CRLF
+            # 文件静默改写成 LF）
+            with open(str(target), encoding=encoding, newline="") as handle:
+                original = handle.read()
         except UnicodeDecodeError as exc:
             return ToolResult(success=False, error=f"文件解码失败（{encoding}）: {exc}")
 

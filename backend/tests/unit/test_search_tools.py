@@ -15,6 +15,8 @@ from backend.tools.search_tools import (
     GLOB_MAX_RESULTS,
     GREP_CONTENT_MAX_MATCHES,
     GREP_FILES_MAX_MATCHES,
+    GREP_MAX_LINE_LENGTH,
+    GREP_MAX_PATTERN_LENGTH,
     GlobSearchTool,
     GrepSearchTool,
 )
@@ -156,6 +158,35 @@ def test_glob_empty_pattern_rejected(tmp_path):
         result = GlobSearchTool().execute(pattern=bad, path=str(tmp_path))
         assert result.success is False
         assert "pattern 不能为空" in result.error
+
+
+def test_glob_absolute_pattern_matches_on_absolute_path(tmp_path):
+    """绝对 pattern 按绝对路径匹配。
+
+    FIX-8 回归：拼出的绝对路径也归一成 "/" 分隔——Linux 上本测试只走通
+    该分支，Windows 上 os.path.join 的 "\\" 分隔符归一化是同一段代码保障的。
+    """
+    # Arrange
+    _touch(tmp_path / "abs.py")
+    _touch(tmp_path / "abs.txt")
+
+    # Act
+    result = GlobSearchTool().execute(pattern=f"{tmp_path}/*.py", path=str(tmp_path))
+
+    # Assert
+    assert result.success is True
+    assert [os.path.basename(f) for f in result.content["files"]] == ["abs.py"]
+
+
+def test_glob_rejects_unknown_kwargs(tmp_path):
+    """FIX-2 回归：拼错的参数名 → 干净错误，不被 **kwargs 静默吞掉。"""
+    # Act —— 模拟 LLM 把 path 拼成 pth
+    result = GlobSearchTool().execute(pattern="*.py", path=str(tmp_path), pth="/x")
+
+    # Assert
+    assert result.success is False
+    assert "未知参数" in result.error
+    assert "pth" in result.error
 
 
 # ---------------------------------------------------------------------------
@@ -312,3 +343,51 @@ def test_grep_nonexistent_path_returns_error(tmp_path):
     # Assert
     assert result.success is False
     assert "搜索路径不存在" in result.error
+
+
+# ---------------------------------------------------------------------------
+# FIX-3: grep ReDoS 缓解
+# ---------------------------------------------------------------------------
+
+
+def test_grep_skips_overlong_lines_and_counts_them(tmp_path):
+    """超长行（>10 000 字符）不喂给正则：跳过并计入 skipped_long_lines。"""
+    # Arrange: 一个超长行（含 needle，证明它确实被跳过而非匹配）+ 一个正常命中行
+    long_line = "needle " + "x" * GREP_MAX_LINE_LENGTH
+    _touch(tmp_path / "long.txt", long_line + "\nneedle here\n")
+    tool = GrepSearchTool()
+
+    # Act
+    result = tool.execute(pattern="needle", path=str(tmp_path), output_mode="content")
+
+    # Assert
+    assert result.success is True
+    assert result.content["num_matches"] == 1  # 只命中正常行
+    assert result.content["matches"] == [f"{tmp_path / 'long.txt'}:2:needle here"]
+    assert result.content["skipped_long_lines"] == 1
+
+
+def test_grep_rejects_overlong_pattern(tmp_path):
+    """超长正则（>1 000 字符）→ 干净错误（ReDoS 缓解）。"""
+    # Arrange
+    _touch(tmp_path / "a.txt", "data\n")
+
+    # Act
+    pattern = "a" * (GREP_MAX_PATTERN_LENGTH + 1)
+    result = GrepSearchTool().execute(pattern=pattern, path=str(tmp_path))
+
+    # Assert
+    assert result.success is False
+    assert "正则表达式过长" in result.error
+    assert "ReDoS" in result.error
+
+
+def test_grep_rejects_unknown_kwargs(tmp_path):
+    """FIX-2 回归：拼错的参数名 → 干净错误。"""
+    # Act —— 模拟 LLM 把 case_insensitive 拼成 ignore_case
+    result = GrepSearchTool().execute(pattern="x", path=str(tmp_path), ignore_case=True)
+
+    # Assert
+    assert result.success is False
+    assert "未知参数" in result.error
+    assert "ignore_case" in result.error

@@ -3,15 +3,20 @@
 精确字符串替换编辑（移植 claw-code file_ops.rs edit_file）：
 唯一匹配要求、多匹配错误、replace_all、文件缺失、空白失配、
 写限额 / workspace 边界 / 二进制 / BOM 复用 M1 加固设施。
+审查修复回归：CRLF 行尾保留（FIX-1）、必需参数哨兵 + 未知参数
+拒绝（FIX-2）、读前尺寸预检（FIX-6）。
 """
 
 from __future__ import annotations
+
+import os
 
 import pytest
 
 import backend.tools.edit_tool as edit_module
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.edit_tool import EditTool
+from backend.tools.file_tool import MAX_WRITE_SIZE_BYTES
 
 pytestmark = pytest.mark.unit
 
@@ -279,3 +284,162 @@ def test_edit_rejects_directory_target(tmp_path, tool):
     # Assert
     assert result.success is False
     assert "不是文件" in result.error
+
+
+# ---------------------------------------------------------------------------
+# FIX-1: CRLF / LF / 混合行尾保留
+# ---------------------------------------------------------------------------
+
+
+def test_edit_preserves_crlf_endings_outside_edit_region(tmp_path, tool):
+    """CRLF 文件编辑：片段被替换，其余各行行尾保持 \r\n（原始字节断言）。"""
+    # Arrange
+    target = tmp_path / "win.txt"
+    target.write_bytes(b"alpha\r\nbeta\r\ngamma\r\n")
+
+    # Act
+    result = tool.execute(file_path=str(target), old_string="beta", new_string="BETA")
+
+    # Assert
+    assert result.success is True
+    assert target.read_bytes() == b"alpha\r\nBETA\r\ngamma\r\n"
+
+
+def test_edit_preserves_lf_endings(tmp_path, tool):
+    """LF 文件编辑后仍是 LF（不被误引入 \r）。"""
+    # Arrange
+    target = tmp_path / "unix.txt"
+    target.write_bytes(b"a\nb\nc\n")
+
+    # Act
+    result = tool.execute(file_path=str(target), old_string="b", new_string="B")
+
+    # Assert
+    assert result.success is True
+    assert target.read_bytes() == b"a\nB\nc\n"
+
+
+def test_edit_preserves_mixed_endings_outside_edit_region(tmp_path, tool):
+    """混合行尾文件：编辑区之外的 CRLF 与 LF 各行均原样保留。"""
+    # Arrange
+    target = tmp_path / "mixed.txt"
+    target.write_bytes(b"one\r\ntwo\nthree\r\n")
+
+    # Act
+    result = tool.execute(file_path=str(target), old_string="two", new_string="TWO")
+
+    # Assert
+    assert result.success is True
+    assert target.read_bytes() == b"one\r\nTWO\nthree\r\n"
+
+
+# ---------------------------------------------------------------------------
+# FIX-2: 必需参数哨兵（None=未提供 → 报错）+ 未知参数拒绝
+# ---------------------------------------------------------------------------
+
+
+def test_edit_missing_new_string_is_error_not_silent_deletion(tmp_path, tool):
+    """漏传 new_string → 报错而非静默删除 old_string（哨兵语义）。"""
+    # Arrange
+    path = _write(tmp_path, "fragile.txt", "keep\nFRAGILE\n")
+
+    # Act —— 不传 new_string
+    result = tool.execute(file_path=path, old_string="FRAGILE\n")
+
+    # Assert
+    assert result.success is False
+    assert "缺少必需参数 new_string" in result.error
+    assert "空字符串" in result.error
+    # 文件内容未被删除
+    assert (tmp_path / "fragile.txt").read_text(encoding="utf-8") == "keep\nFRAGILE\n"
+
+
+def test_edit_explicit_empty_new_string_is_allowed_deletion(tmp_path, tool):
+    """显式空串 new_string = 有意删除，保持支持（claw/Claude 语义）。"""
+    # Arrange
+    path = _write(tmp_path, "del.txt", "keep\nGONE\n")
+
+    # Act
+    result = tool.execute(file_path=path, old_string="GONE\n", new_string="")
+
+    # Assert
+    assert result.success is True
+    assert (tmp_path / "del.txt").read_text(encoding="utf-8") == "keep\n"
+
+
+def test_edit_missing_old_string_is_error(tmp_path, tool):
+    """漏传 old_string → 干净错误。"""
+    # Arrange
+    path = _write(tmp_path, "x.txt", "a\n")
+
+    # Act
+    result = tool.execute(file_path=path, new_string="b")
+
+    # Assert
+    assert result.success is False
+    assert "缺少必需参数 old_string" in result.error
+
+
+def test_edit_missing_file_path_is_error(tool):
+    """漏传 file_path → 干净错误（不再 TypeError 外抛）。"""
+    # Act
+    result = tool.execute(old_string="a", new_string="b")
+
+    # Assert
+    assert result.success is False
+    assert "缺少必需参数 file_path" in result.error
+
+
+def test_edit_rejects_non_string_old_and_new_string(tmp_path, tool):
+    """old_string / new_string 非字符串 → 干净错误。"""
+    # Arrange
+    path = _write(tmp_path, "t.txt", "a\n")
+
+    # Act / Assert
+    bad_old = tool.execute(file_path=path, old_string=123, new_string="b")
+    assert bad_old.success is False
+    assert "old_string 必须是字符串" in bad_old.error
+
+    bad_new = tool.execute(file_path=path, old_string="a", new_string=456)
+    assert bad_new.success is False
+    assert "new_string 必须是字符串" in bad_new.error
+
+
+def test_edit_rejects_unknown_kwargs_with_valid_param_list(tmp_path, tool):
+    """拼错的参数名 → 干净错误并列出合法参数（不再被 **kwargs 静默吞掉）。"""
+    # Arrange
+    path = _write(tmp_path, "kw.txt", "a\n")
+
+    # Act —— 模拟 LLM 把 new_string 拼成 new_strng
+    result = tool.execute(
+        file_path=path, old_string="a", new_string="b", new_strng="typo"
+    )
+
+    # Assert
+    assert result.success is False
+    assert "未知参数" in result.error
+    assert "new_strng" in result.error
+    assert "合法参数" in result.error
+    # 文件未被改动
+    assert (tmp_path / "kw.txt").read_text(encoding="utf-8") == "a\n"
+
+
+# ---------------------------------------------------------------------------
+# FIX-6: 读前尺寸预检（st_size 比对写限额，不做全量读）
+# ---------------------------------------------------------------------------
+
+
+def test_edit_rejects_oversized_file_before_reading(tmp_path, tool):
+    """超过写限额的文件在读入前按 st_size 拒绝（file_too_large）。"""
+    # Arrange: truncate 造稀疏文件，不实际分配磁盘，尺寸 = 限额 + 1
+    huge = tmp_path / "huge.txt"
+    huge.write_bytes(b"seed")
+    os.truncate(huge, MAX_WRITE_SIZE_BYTES + 1)
+
+    # Act
+    result = tool.execute(file_path=str(huge), old_string="seed", new_string="x")
+
+    # Assert
+    assert result.success is False
+    assert "file_too_large" in result.error
+    assert str(MAX_WRITE_SIZE_BYTES) in result.error

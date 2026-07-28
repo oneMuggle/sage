@@ -129,6 +129,13 @@ class TodoWriteTool(BaseTool):
             ToolResult；content 含 checklist（markdown）/ counts /
             session_id / replaced_count（被替换的旧条目数）。
         """
+        if kwargs:
+            names = ", ".join(sorted(kwargs))
+            return ToolResult(
+                success=False,
+                error=f"未知参数: {names}（合法参数: todos）",
+            )
+
         errors = validate_todos(todos)
         if errors:
             return ToolResult(success=False, error="；".join(errors))

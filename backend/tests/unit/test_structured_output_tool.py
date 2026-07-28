@@ -246,3 +246,21 @@ def test_structured_output_missing_session_returns_none():
     """未存储过的会话 → None。"""
     # Act / Assert
     assert get_last_structured_output("never-stored") is None
+
+
+# ---------------------------------------------------------------------------
+# FIX-2: 未知参数拒绝
+# ---------------------------------------------------------------------------
+
+
+def test_structured_output_rejects_unknown_kwargs():
+    """FIX-2 回归：拼错的参数名 → 干净错误，不被 **kwargs 静默吞掉。"""
+    # Act —— 模拟 LLM 多传一个 payload
+    result = StructuredOutputTool().execute(data={"a": 1}, payload={"b": 2})
+
+    # Assert
+    assert result.success is False
+    assert "未知参数" in result.error
+    assert "payload" in result.error
+    # 载荷未被存储
+    assert get_last_structured_output() is None

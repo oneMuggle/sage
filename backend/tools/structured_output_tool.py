@@ -146,6 +146,13 @@ class StructuredOutputTool(BaseTool):
             ToolResult；content 回显存储的 data + session_id。
             校验失败 → success=False + 错误明细。
         """
+        if kwargs:
+            names = ", ".join(sorted(kwargs))
+            return ToolResult(
+                success=False,
+                error=f"未知参数: {names}（合法参数: data, schema）",
+            )
+
         if not isinstance(data, dict):
             return ToolResult(success=False, error="data 必须是 JSON 对象")
         if schema is not None and not isinstance(schema, dict):

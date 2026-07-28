@@ -13,7 +13,12 @@ from backend.tools.context import (
     reset_tool_context,
     set_tool_context,
 )
-from backend.tools.todo_state import ANONYMOUS_SESSION_ID, get_todo_store
+from backend.tools.todo_state import (
+    ANONYMOUS_SESSION_ID,
+    MAX_SESSION_BUCKETS,
+    SessionStateStore,
+    get_todo_store,
+)
 from backend.tools.todo_tool import MAX_TODO_ITEMS, TodoWriteTool
 
 pytestmark = pytest.mark.unit
@@ -255,3 +260,64 @@ def test_todo_store_clear_single_bucket():
     # Assert
     assert store.get("drop") is None
     assert store.get("keep") is not None
+
+
+# ---------------------------------------------------------------------------
+# FIX-7: LRU 淘汰上限
+# ---------------------------------------------------------------------------
+
+
+def test_todo_store_lru_evicts_oldest_beyond_cap():
+    """300 个会话只留 256：最旧淘汰，近期访问过的幸存者保留。"""
+    # Arrange: 写满上限（256）个桶
+    store = SessionStateStore()
+    make = lambda i: [{"content": f"t{i}", "status": "pending"}]  # noqa: E731
+    for i in range(MAX_SESSION_BUCKETS):
+        store.replace(f"s{i}", make(i))
+
+    # Act: 刷新 s0（get 计为 LRU 访问），再写入 44 个新会话触发溢出淘汰
+    assert store.get("s0") is not None
+    for i in range(MAX_SESSION_BUCKETS, MAX_SESSION_BUCKETS + 44):
+        store.replace(f"s{i}", make(i))
+
+    # Assert —— 总数恒在上限
+    remaining = sum(
+        1 for i in range(MAX_SESSION_BUCKETS + 44) if store.get(f"s{i}") is not None
+    )
+    assert remaining == MAX_SESSION_BUCKETS
+    # s0 未刷新时会是最旧桶（第一个被淘汰）；刷新后幸存
+    assert store.get("s0") is not None
+    # s1 成为实际最旧桶，被淘汰
+    assert store.get("s1") is None
+
+
+def test_todo_store_replace_existing_key_does_not_grow():
+    """重复替换同一会话不增加桶数（move_to_end 而非新增）。"""
+    # Arrange
+    store = SessionStateStore(max_buckets=4)
+    for i in range(4):
+        store.replace(f"s{i}", [{"content": f"t{i}", "status": "pending"}])
+
+    # Act: 对已有键再替换 10 次
+    for _ in range(10):
+        store.replace("s0", [{"content": "refreshed", "status": "completed"}])
+
+    # Assert: 桶数不变，其他会话未被误淘汰
+    for i in range(4):
+        assert store.get(f"s{i}") is not None
+
+
+# ---------------------------------------------------------------------------
+# FIX-2: 未知参数拒绝
+# ---------------------------------------------------------------------------
+
+
+def test_todo_write_rejects_unknown_kwargs():
+    """FIX-2 回归：拼错的参数名 → 干净错误。"""
+    # Act —— 模拟 LLM 把 todos 拼成 todo
+    result = TodoWriteTool().execute(todo=[{"content": "x", "status": "pending"}])
+
+    # Assert
+    assert result.success is False
+    assert "未知参数" in result.error
+    assert "todo" in result.error

@@ -13,6 +13,11 @@
   大文件；
 - 结果硬上限（glob 200 / grep content 100 行 / grep files 200），超限
   置 ``truncated=True``；
+- grep ReDoS **缓解**（mitigation，不是根治——in-process ``re`` 对恶意
+  模式无法保证线性时间，线程也无法被 asyncio 超时杀死）：正则长度上限
+  ``GREP_MAX_PATTERN_LENGTH``（1 000 字符，超限直接报错）；content 模式
+  逐行匹配时超过 ``GREP_MAX_LINE_LENGTH``（10 000 字符）的行跳过并计入
+  ``skipped_long_lines``——把回溯炸弹能烧掉的资源压在有限输入上；
 - 错误一律走 ``ToolResult(success=False)``，execute 永不抛异常。
 """
 
@@ -21,7 +26,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Callable, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .file_tool import MAX_READ_SIZE_BYTES, _contains_binary_marker, detect_bom_encoding
@@ -37,6 +42,10 @@ GLOB_MAX_RESULTS = 200
 GREP_CONTENT_MAX_MATCHES = 100
 #: grep files 模式文件数上限
 GREP_FILES_MAX_MATCHES = 200
+#: grep 正则长度上限（ReDoS 缓解：超限模式直接拒绝，见模块 docstring）
+GREP_MAX_PATTERN_LENGTH = 1_000
+#: grep 单行长度上限（ReDoS 缓解：超长行不喂给不可信正则，跳过并计数）
+GREP_MAX_LINE_LENGTH = 10_000
 
 
 def _walk_files(root: str) -> Iterator[str]:
@@ -73,7 +82,11 @@ def _build_glob_matcher(pattern: str, root: str) -> Callable[[str, str], bool]:
     """
     normalized = pattern.replace("\\", "/").replace("**/", "*").replace("**", "*")
     if Path(pattern).is_absolute():
-        return lambda rel, _base: fnmatch.fnmatch(os.path.join(root, rel), normalized)
+        # FIX-8: 拼出的绝对路径同样归一成 "/" 分隔——Windows 上 os.path.join
+        # 产出 "\\" 分隔符，直接与 "/" 归一后的 pattern 匹配会永远落空
+        return lambda rel, _base: fnmatch.fnmatch(
+            os.path.join(root, rel).replace(os.sep, "/"), normalized
+        )
     if "/" in normalized:
         return lambda rel, _base: fnmatch.fnmatch(rel, normalized)
     return lambda _rel, base: fnmatch.fnmatch(base, normalized)
@@ -116,6 +129,12 @@ class GlobSearchTool(BaseTool):
             truncated / root。
         """
         try:
+            if kwargs:
+                names = ", ".join(sorted(kwargs))
+                return ToolResult(
+                    success=False,
+                    error=f"未知参数: {names}（合法参数: pattern, path）",
+                )
             if not isinstance(pattern, str) or not pattern.strip():
                 return ToolResult(success=False, error="pattern 不能为空")
 
@@ -156,6 +175,38 @@ class GlobSearchTool(BaseTool):
         except Exception as e:  # noqa: BLE001 — 工具约定：错误走 ToolResult 不抛
             logger.error("glob_search 执行失败: %s", e)
             return ToolResult(success=False, error=f"搜索失败: {e}")
+
+
+def _validate_grep_params(
+    kwargs: Dict[str, Any], pattern: str, output_mode: str
+) -> Optional[ToolResult]:
+    """grep 调用形态检查：未知参数 / output_mode / pattern 非空 / 长度上限。
+
+    pattern 长度上限是 ReDoS 缓解的一部分（见模块 docstring）：超长正则
+    的回溯空间不可控，直接拒绝而非喂给 ``re.compile``。
+    """
+    if kwargs:
+        names = ", ".join(sorted(kwargs))
+        return ToolResult(
+            success=False,
+            error=(
+                f"未知参数: {names}（合法参数: pattern, path, "
+                "case_insensitive, output_mode）"
+            ),
+        )
+    if output_mode not in ("content", "files"):
+        return ToolResult(success=False, error="output_mode 必须是 content 或 files")
+    if not isinstance(pattern, str) or not pattern:
+        return ToolResult(success=False, error="pattern 不能为空")
+    if len(pattern) > GREP_MAX_PATTERN_LENGTH:
+        return ToolResult(
+            success=False,
+            error=(
+                f"正则表达式过长（{len(pattern)} 字符，上限 "
+                f"{GREP_MAX_PATTERN_LENGTH}）——ReDoS 防护，请拆短模式"
+            ),
+        )
+    return None
 
 
 class GrepSearchTool(BaseTool):
@@ -214,10 +265,9 @@ class GrepSearchTool(BaseTool):
             files_scanned / skipped_binary / skipped_large / truncated。
         """
         try:
-            if output_mode not in ("content", "files"):
-                return ToolResult(success=False, error="output_mode 必须是 content 或 files")
-            if not isinstance(pattern, str) or not pattern:
-                return ToolResult(success=False, error="pattern 不能为空")
+            invalid = _validate_grep_params(kwargs, pattern, output_mode)
+            if invalid is not None:
+                return invalid
 
             try:
                 regex = re.compile(pattern, re.IGNORECASE if case_insensitive else 0)
@@ -235,6 +285,7 @@ class GrepSearchTool(BaseTool):
             files_scanned = 0
             skipped_binary = 0
             skipped_large = 0
+            skipped_long_lines = 0
             truncated = False
 
             for file_path in _walk_files(root):
@@ -267,6 +318,10 @@ class GrepSearchTool(BaseTool):
                 # content 模式：逐行匹配，行级上限 100
                 file_hit = False
                 for lineno, line in enumerate(text.splitlines(), start=1):
+                    if len(line) > GREP_MAX_LINE_LENGTH:
+                        # ReDoS 缓解：超长行不喂给不可信正则（见模块 docstring）
+                        skipped_long_lines += 1
+                        continue
                     if not regex.search(line):
                         continue
                     file_hit = True
@@ -299,6 +354,7 @@ class GrepSearchTool(BaseTool):
                     "files_scanned": files_scanned,
                     "skipped_binary": skipped_binary,
                     "skipped_large": skipped_large,
+                    "skipped_long_lines": skipped_long_lines,
                     "truncated": truncated,
                 }
             )
