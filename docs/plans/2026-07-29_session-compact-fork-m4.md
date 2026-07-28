@@ -145,3 +145,14 @@ PRAGMA table_info + ALTER 模式，对新库与存量库一致生效）：
 - ❌ 压缩/分叉的 hex API 路径（session 面目前整体在 legacy_routes，API_MODE 默认 legacy）
 - ❌ 分叉树 / 谱系可视化
 - ❌ 压缩策略的按 provider 差异化
+
+## 6. 已知限制
+
+- **自动压缩尚不降低每轮 LLM token**（review HIGH-1，代码评审后补充）：
+  legacy chat producer（`chat_stream_create`）只组装 `messages = [system,
+  attachments?, user]` 交给 `run_loop`，**不注入持久化历史**。因此 M4 自动
+  压缩改写的是 DB，实际收益 = 持久化存储有界 + UI / fork 健全性；**每轮
+  token 节省要等聊天路径开始把持久化历史喂给 `run_loop` 才生效**。
+  - 跟进标记：`FOLLOWUP(persisted-history-injection)` — 历史注入落地后
+    本限制自动解除，压缩逻辑本身无需改动（`_maybe_auto_compact_session`
+    docstring 中有同样声明）。

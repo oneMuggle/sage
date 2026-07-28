@@ -127,8 +127,11 @@ export function Chat() {
 
   // M4: /compact slash action — 调后端压缩当前会话，成功后重载消息
   // （续接摘要行由后端持久化，重载后即显示在聊天列表中）。
+  // MEDIUM-1: 流式中（isLoading）early-return —— 两个并发手动压缩会在后端
+  // 各自通过 should_compact 检查并写出重复续接行；前端守卫是必须的修复，
+  // 后端 409 compact_in_progress 只是兜底。
   const handleCompact = async () => {
-    if (!currentSessionId) return;
+    if (!currentSessionId || isLoading) return;
     try {
       const result = await sessionApi.compact(currentSessionId);
       if (result.ok && result.compacted) {
@@ -154,8 +157,10 @@ export function Chat() {
 
   // M4: 消息级分叉 — 非破坏性操作（无需确认）。成功后切换到新会话
   // （复用现有 session-switch 路径：setCurrentSessionId → loadMessages effect）。
+  // MEDIUM-1: 流式中（isLoading）early-return —— 流式写入与 fork 前缀复制
+  // 并发会复制出不完整的消息序列，且中途切换会话会打断流式 UI。
   const handleFork = async (messageId: string) => {
-    if (!currentSessionId) return;
+    if (!currentSessionId || isLoading) return;
     try {
       const forked = await sessionApi.fork(currentSessionId, messageId);
       toast.success(t('chat.fork_success'));

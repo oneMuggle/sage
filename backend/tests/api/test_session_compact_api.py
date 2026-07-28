@@ -13,8 +13,7 @@ import time
 import pytest
 
 from backend.chat.compaction import CONTINUATION_PREFIX
-from backend.data.session_repo import Message as DbMessage
-from backend.data.session_repo import MessageRepository, SessionRepository
+from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 
 pytestmark = pytest.mark.integration
 
@@ -68,7 +67,9 @@ async def test_compact_below_message_floor_is_noop(client, monkeypatch):
     assert data["ok"] is True
     assert data["compacted"] is False
     assert data["reason"] == "below_message_floor"
-    assert data["before"] == 4 and data["after"] == 4 and data["removed"] == 0
+    assert data["before"] == 4
+    assert data["after"] == 4
+    assert data["removed"] == 0
     assert len(MessageRepository().get_by_session(sess.id)) == 4
 
 
@@ -138,6 +139,59 @@ async def test_compact_llm_failure_leaves_db_untouched(client, monkeypatch):
     rows = MessageRepository().get_by_session(sess.id)
     assert len(rows) == 14
     assert [r.id for r in rows] == [f"seed-{i}" for i in range(14)]
+
+
+@pytest.mark.asyncio()
+async def test_compact_persist_failure_rolls_back_whole_transaction(client, monkeypatch):
+    """CRITICAL-1: 续接消息 INSERT 在事务中途失败（重复主键）→ 整体回滚。
+
+    旧逐条提交流程在此场景下会永久丢失历史（删完 seed-0..7 后崩溃，
+    摘要行未写入）；单事务修复后 14 条原始行全部健在，计数不变。
+    """
+    monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
+    sess = _seed_session_with_messages(14)
+    SessionRepository().update(sess.id, message_count=14)
+    _patch_llm(monkeypatch, _fake_llm_ok)
+
+    # 让续接消息 id 与保留消息 seed-8 撞主键：8 条 DELETE 已执行后
+    # INSERT 抛 IntegrityError → rollback 必须恢复全部删除。
+    class _FixedUUID:
+        def __str__(self):
+            return "seed-8"
+
+    monkeypatch.setattr("backend.api.legacy_routes.uuid.uuid4", lambda: _FixedUUID())
+
+    resp = await client.post(f"{PREFIX}/sessions/{sess.id}/compact")
+    assert resp.status_code == 502
+    data = resp.json()
+    assert data["ok"] is False
+    assert data["error"] == "persist_failed"
+
+    rows = MessageRepository().get_by_session(sess.id)
+    assert [r.id for r in rows] == [f"seed-{i}" for i in range(14)]
+    assert SessionRepository().get(sess.id).message_count == 14
+
+
+@pytest.mark.asyncio()
+async def test_compact_concurrent_reentry_returns_409(client, monkeypatch):
+    """MEDIUM-1 后端兜底：同会话重复触发压缩 → 409 compact_in_progress，DB 不动。"""
+    monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
+    sess = _seed_session_with_messages(14)
+    _patch_llm(monkeypatch, _fake_llm_ok)
+
+    from backend.api import legacy_routes
+
+    legacy_routes._compact_in_progress.add(sess.id)
+    try:
+        resp = await client.post(f"{PREFIX}/sessions/{sess.id}/compact")
+    finally:
+        legacy_routes._compact_in_progress.discard(sess.id)
+
+    assert resp.status_code == 409
+    data = resp.json()
+    assert data["ok"] is False
+    assert data["error"] == "compact_in_progress"
+    assert len(MessageRepository().get_by_session(sess.id)) == 14
 
 
 @pytest.mark.asyncio()

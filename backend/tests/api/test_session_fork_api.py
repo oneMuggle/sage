@@ -9,12 +9,15 @@ M4 会话分叉路由 API 测试 — POST /api/v1/sessions/{id}/fork
 - 未知会话 / 未知消息 404
 """
 
-import time
 
 import pytest
 
-from backend.data.session_repo import Message as DbMessage
-from backend.data.session_repo import MessageRepository, SessionRepository
+from backend.data.session_repo import (
+    Message as DbMessage,
+    MessageRepository,
+    SessionRepository,
+    fork_session,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -161,3 +164,38 @@ async def test_fork_does_not_touch_source_session(client):
     assert [r.id for r in source_rows] == ids
     source = SessionRepository().get(source_id)
     assert source.fork_root is None
+
+
+def test_fork_mid_copy_failure_leaves_no_orphan(monkeypatch):
+    """MEDIUM-2: 复制到一半失败 → 整个事务回滚，不留孤儿会话/消息行。
+
+    旧逐条提交流程会在第 3 条失败后留下"有会话行 + 2 条消息"的半成品；
+    单事务修复后 sessions / messages 两表都回到 fork 前状态。
+    """
+    source = SessionRepository().create(title="fork 原子性")
+    _seed_messages(source.id, n=5)
+
+    import backend.data.session_repo as repo_mod
+
+    calls = {"n": 0}
+    original = repo_mod._insert_forked_message_row
+
+    def flaky_copy(cursor, session_id, src_msg):
+        calls["n"] += 1
+        if calls["n"] == 3:  # 5 条中的第 3 条失败（前 2 条已插入到事务内）
+            raise RuntimeError("simulated disk failure")
+        return original(cursor, session_id, src_msg)
+
+    monkeypatch.setattr(repo_mod, "_insert_forked_message_row", flaky_copy)
+
+    with pytest.raises(RuntimeError, match="simulated disk failure"):
+        fork_session(SessionRepository(), MessageRepository(), source.id)
+
+    # 无孤儿会话行：sessions 表仍只有源会话
+    assert [s.id for s in SessionRepository().list()] == [source.id]
+    # 零孤儿消息行：DB 中所有消息仍属于源会话
+    conn = SessionRepository().db.get_connection()
+    rows = conn.execute("SELECT DISTINCT session_id FROM messages").fetchall()
+    assert {r["session_id"] for r in rows} == {source.id}
+    # 源会话消息未被触碰
+    assert len(MessageRepository().get_by_session(source.id)) == 5

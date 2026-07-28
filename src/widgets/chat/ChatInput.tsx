@@ -229,8 +229,12 @@ export function ChatInput({
         return;
       }
 
-      // M4: /compact 是真实 action（后端会话压缩），不再作为提示词发给 LLM
+      // M4: /compact 是真实 action（后端会话压缩），不再作为提示词发给 LLM。
+      // MEDIUM-1: 流式中 / 禁用态选择 /compact 必须是 no-op —— 对齐 handleSend
+      // 的 isLoading 守卫，防止流式期间触发压缩（并发手动压缩会写出重复续接行；
+      // 后端 409 是兜底，前端守卫才是第一道防线）。
       if (cmd.mode === 'compact') {
+        if (isLoading || disabled) return;
         setValue('');
         onCompact?.();
         return;
@@ -274,7 +278,7 @@ export function ChatInput({
       setValue('');
       onSend(prompt);
     },
-    [value, onSend, onClear, onCompact, slashCommands],
+    [value, onSend, onClear, onCompact, slashCommands, isLoading, disabled],
   );
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

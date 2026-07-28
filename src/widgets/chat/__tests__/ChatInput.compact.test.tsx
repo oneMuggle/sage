@@ -61,4 +61,28 @@ describe('ChatInput — /compact action', () => {
     expect(onSend).not.toHaveBeenCalled();
     expect((input as HTMLTextAreaElement).value).toBe('');
   });
+
+  // MEDIUM-1: 流式 / 禁用态选择 /compact 必须是 no-op（对齐 handleSend 的
+  // isLoading 守卫），防止并发压缩写出重复续接行。
+  it('ignores /compact while loading (onCompact NOT called)', () => {
+    const onSend = vi.fn();
+    const onCompact = vi.fn();
+    renderWithI18n(<ChatInput onSend={onSend} onCompact={onCompact} isLoading />);
+
+    openSlashMenuAndSelectCompact();
+
+    expect(onCompact).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('ignores /compact while disabled (onCompact NOT called)', () => {
+    const onSend = vi.fn();
+    const onCompact = vi.fn();
+    renderWithI18n(<ChatInput onSend={onSend} onCompact={onCompact} disabled />);
+
+    openSlashMenuAndSelectCompact();
+
+    expect(onCompact).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+  });
 });

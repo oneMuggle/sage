@@ -10,13 +10,13 @@ M4 聊天流自动压缩集成测试
 import asyncio
 import contextlib
 import time
+from typing import Optional
 from unittest.mock import patch
 
 import pytest
 
 from backend.core.legacy.agent_state import AgentEvent, AgentState
-from backend.data.session_repo import Message as DbMessage
-from backend.data.session_repo import MessageRepository, SessionRepository
+from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.main import app
 
 pytestmark = pytest.mark.integration
@@ -49,11 +49,16 @@ def _mock_run_loop_done(reply: str):
     return mock_run_loop
 
 
-async def _drive_stream(client, session_id: str, message: str) -> None:
-    """POST /chat/stream → attach → 等待 producer 跑完。"""
-    create_stream = await client.post(
-        CHAT_STREAM_PATH, json={"session_id": session_id, "message": message}
-    )
+async def _drive_stream(client, session_id: str, message: str, extra: Optional[dict] = None) -> None:
+    """POST /chat/stream → attach → 等待 producer 跑完。
+
+    ``extra`` 合并进请求体（如显式 api_key/api_url，用于测试请求层
+    llm_config 分支）。
+    """
+    payload = {"session_id": session_id, "message": message}
+    if extra:
+        payload.update(extra)
+    create_stream = await client.post(CHAT_STREAM_PATH, json=payload)
     assert create_stream.status_code == 200, create_stream.text
     stream_id = create_stream.json()["streamId"]
     attach = await client.get(f"{CHAT_STREAM_PATH}/{stream_id}")
@@ -130,3 +135,53 @@ async def test_auto_compaction_failure_never_blocks_chat(client, monkeypatch):
     assert not any(c.startswith("[上下文已压缩]") for c in contents)
     assert "照常回复" in contents
     assert "还要聊" in contents
+
+
+@pytest.mark.asyncio()
+async def test_auto_compaction_prefers_request_llm_config(client, monkeypatch):
+    """LOW: 请求自带 api_key/api_url → 自动压缩走该配置组装的 LLMClient。
+
+    覆盖 _maybe_auto_compact_session 的 request-llm_config 分支：
+    app_settings 回退路径不应被触达（触达即 fail）。
+    """
+    monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
+
+    create = await client.post(SESSIONS_PATH, json={"title": "请求配置优先"})
+    session_id = create.json()["id"]
+    _seed_over_threshold(session_id, n=14)
+
+    captured = {}
+
+    class FakeLLMClient:
+        def __init__(self, config):
+            captured["config"] = config
+
+        async def complete(self, prompt: str) -> str:
+            captured["prompt"] = prompt
+            return DIGEST
+
+    monkeypatch.setattr("backend.core.legacy.llm_client.LLMClient", FakeLLMClient)
+    monkeypatch.setattr(
+        "backend.api.legacy_routes._build_compaction_llm_callable",
+        lambda: pytest.fail("请求带 llm_config 时不应走 app_settings 回退"),
+    )
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = _mock_run_loop_done("ok")
+        await _drive_stream(
+            client,
+            session_id,
+            "继续聊",
+            extra={
+                "api_key": "sk-request",
+                "api_url": "https://api.example.test/v1",
+                "model": "gpt-request-model",
+            },
+        )
+
+    # 压缩确实使用了请求配置组装的客户端，且收到真实压缩 prompt
+    assert captured["config"].model == "gpt-request-model"
+    assert captured["config"].api_key == "sk-request"
+    assert "对话历史" in captured["prompt"]
+    rows = MessageRepository().get_by_session(session_id)
+    assert any(r.content.startswith("[上下文已压缩]") for r in rows)

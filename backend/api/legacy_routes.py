@@ -21,7 +21,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Optional, Union
+from typing import Any, Optional, Set, Union
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -401,7 +401,11 @@ def _persist_compaction(
     new_messages: List[Any],
     removed_count: int,
 ) -> int:
-    """把压缩结果落盘：删除被摘要替代的消息行 + 插入续接消息。
+    """把压缩结果落盘：删除被摘要替代的消息行 + 插入续接消息 + 更新计数。
+
+    CRITICAL-1: 全部动作经 ``MessageRepository.replace_prefix_with_continuation``
+    在**单事务**中完成——旧流程逐条自动提交，若在"删完历史"与"写入摘要"
+    之间崩溃会永久丢失历史且没有摘要兜底；现在任何一步失败整体回滚。
 
     续接消息的 created_at 取第一条保留消息的时间戳 -1ms，保证
     ORDER BY created_at ASC 下排在保留尾部之前、旧消息之后的位置。
@@ -414,28 +418,28 @@ def _persist_compaction(
 
     Returns:
         压缩后的消息总数
+
+    Raises:
+        Exception: 落盘事务失败时抛出（DB 已回滚，保持压缩前状态）。
     """
-    message_repo = MessageRepository()
-    session_repo = SessionRepository()
-
-    for stale in messages[:removed_count]:
-        message_repo.delete(stale.id)
-
     summary = new_messages[0]
     first_kept = messages[removed_count] if len(messages) > removed_count else None
     created_at = (first_kept.created_at - 1) if first_kept is not None else int(time.time() * 1000)
-    message_repo.save(
-        DbMessage(
-            id=str(uuid.uuid4()),
-            session_id=session_id,
-            role=summary["role"],
-            content=summary["content"],
-            created_at=created_at,
-        )
+    continuation = DbMessage(
+        id=str(uuid.uuid4()),
+        session_id=session_id,
+        role=summary["role"],
+        content=summary["content"],
+        created_at=created_at,
     )
 
     after = len(new_messages)
-    session_repo.update(session_id, message_count=after)
+    MessageRepository().replace_prefix_with_continuation(
+        session_id,
+        [stale.id for stale in messages[:removed_count]],
+        continuation,
+        after,
+    )
     return after
 
 
@@ -445,6 +449,13 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[dict
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
     LLM 客户端优先用本次请求自带的 llm_config（与聊天同配置），
     缺省时回退到 app_settings 里的持久化配置。
+
+    已知限制（review HIGH-1）：当前 legacy chat producer 只组装
+    ``[system, attachments?, user]`` 交给 run_loop，**尚未注入持久化历史**，
+    因此自动压缩的实际收益 = 持久化存储有界 + UI / fork 健全性；
+    **每轮 LLM token 节省要等聊天路径开始把持久化历史喂给 run_loop
+    才会生效**（跟进标记见 docs/plans/2026-07-29_session-compact-fork-m4.md
+    §6「已知限制」）。
 
     本函数**可以抛 CompactionError / 其他异常**——调用方（producer）
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
@@ -477,6 +488,12 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[dict
     )
 
 
+# 进程内重入护栏（MEDIUM-1 后端兜底）：同一会话并发手动压缩时，两者都会在
+# 对方落盘前通过 should_compact 检查，导致续接消息行重复写入。前端
+# isLoading 守卫是第一道防线，这里是便宜的第二道。
+_compact_in_progress: Set[str] = set()
+
+
 @router.post("/sessions/{session_id}/compact", response_model=dict)
 async def compact_session(session_id: str):
     """手动压缩会话上下文（M4，对应前端 /compact slash action）。
@@ -485,7 +502,10 @@ async def compact_session(session_id: str):
     - 200 + ``{"ok": true, "compacted": false, "reason", ...}`` — 低于压缩
       地板（消息数 < 12 或 token 未达阈值），DB 不动
     - 404 — 会话不存在
-    - 502 + ``{"ok": false, "error"}`` — 无 LLM 配置 / 摘要失败，DB 不动
+    - 409 + ``{"ok": false, "error": "compact_in_progress"}`` — 同会话压缩
+      正在进行（重复触发）
+    - 502 + ``{"ok": false, "error"}`` — 无 LLM 配置 / 摘要失败 / 落盘失败，
+      DB 不动（落盘走单事务，失败整体回滚）
     """
     session_repo = SessionRepository()
     if session_repo.get(session_id) is None:
@@ -510,6 +530,16 @@ async def compact_session(session_id: str):
             "removed": 0,
         }
 
+    if session_id in _compact_in_progress:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "ok": False,
+                "error": "compact_in_progress",
+                "message": "该会话正在压缩中，请勿重复触发",
+            },
+        )
+
     llm_complete = _build_compaction_llm_callable()
     if llm_complete is None:
         return JSONResponse(
@@ -521,18 +551,39 @@ async def compact_session(session_id: str):
             },
         )
 
+    _compact_in_progress.add(session_id)
     try:
-        new_messages, removed_count = await compact_messages(messages, llm_complete)
-    except CompactionError as exc:
-        logger.warning(
-            "[M4] compact session=%s 失败(DB 未改动): %s", _safe_log_field(session_id), exc
-        )
-        return JSONResponse(
-            status_code=502,
-            content={"ok": False, "error": "compaction_failed", "message": str(exc)},
-        )
+        try:
+            new_messages, removed_count = await compact_messages(messages, llm_complete)
+        except CompactionError as exc:
+            logger.warning(
+                "[M4] compact session=%s 失败(DB 未改动): %s", _safe_log_field(session_id), exc
+            )
+            return JSONResponse(
+                status_code=502,
+                content={"ok": False, "error": "compaction_failed", "message": str(exc)},
+            )
 
-    after = _persist_compaction(session_id, messages, new_messages, removed_count)
+        try:
+            after = _persist_compaction(session_id, messages, new_messages, removed_count)
+        except Exception as exc:
+            # 单事务已回滚——DB 保持压缩前状态（CRITICAL-1 的核心保证）。
+            logger.warning(
+                "[M4] compact session=%s 落盘失败(事务已回滚, DB 未改动): %s",
+                _safe_log_field(session_id),
+                exc,
+            )
+            return JSONResponse(
+                status_code=502,
+                content={
+                    "ok": False,
+                    "error": "persist_failed",
+                    "message": "压缩结果落盘失败，数据库未改动",
+                },
+            )
+    finally:
+        _compact_in_progress.discard(session_id)
+
     logger.info(
         "[M4] compact session=%s 完成: before=%s after=%s removed=%s",
         _safe_log_field(session_id),

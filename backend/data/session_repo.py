@@ -234,6 +234,32 @@ class ForkSourceNotFoundError(LookupError):
         super().__init__(f"fork source {kind} not found: {ident}")
 
 
+def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -> None:
+    """在给定 cursor 的当前事务中插入一条 fork 复制的消息行。
+
+    独立成模块级函数是为了给测试留 seam：monkeypatch 本函数即可模拟
+    "复制到一半失败"，验证 fork 事务的整体回滚（MEDIUM-2）。
+    """
+    cursor.execute(
+        """
+        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """,
+        (
+            f"msg-{uuid.uuid4().hex[:12]}",  # 新 id，避免与源消息主键冲突
+            session_id,
+            src_msg.role,
+            src_msg.content,
+            src_msg.model,
+            src_msg.provider,
+            src_msg.tool_calls,
+            src_msg.tool_call_id,
+            src_msg.reasoning_content,
+            src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
+        ),
+    )
+
+
 def fork_session(
     session_repo: SessionRepository,
     message_repo: MessageRepository,
@@ -241,7 +267,7 @@ def fork_session(
     at_message_id: Optional[str] = None,
     title: Optional[str] = None,
 ) -> Session:
-    """从源会话分叉出一个新会话（M4，全量前缀复制）。
+    """从源会话分叉出一个新会话（M4，全量前缀复制，单事务原子落盘）。
 
     刻意偏离计划文档的 copy-on-write 设计：桌面级会话只有数百条消息，
     全量复制更简单、更安全（读写路径零特判）；CoW 推迟到真正出现
@@ -255,6 +281,8 @@ def fork_session(
         - 新会话写入 ``fork_root=<源 id>``；``forked_at_message_id`` 取显式
           传入的分叉点（源消息 id），省略分叉点时为 ``None``（表示"复制到
           末尾"）。
+        - **原子性**（MEDIUM-2）：新会话行 + 全部复制消息行在**同一事务**
+          落盘，任何一步失败整体回滚（连会话行一起），不留半成品孤儿会话。
 
     Args:
         session_repo: 会话仓储
@@ -285,35 +313,45 @@ def fork_session(
     else:
         prefix = all_messages
 
-    new_session = session_repo.create(title=title or f"Fork: {source.title}")
+    new_session_id = str(uuid.uuid4())
+    now = int(time.time() * 1000)
 
-    # 逐条复制：新 id + 原 created_at。插入顺序 = 源顺序，
-    # messages 表 ORDER BY created_at ASC（同值按 rowid）保持序。
-    for src_msg in prefix:
-        message_repo.save(
-            Message(
-                id=f"msg-{uuid.uuid4().hex[:12]}",
-                session_id=new_session.id,
-                role=src_msg.role,
-                content=src_msg.content,
-                created_at=src_msg.created_at,
-                model=src_msg.model,
-                provider=src_msg.provider,
-                tool_calls=src_msg.tool_calls,
-                tool_call_id=src_msg.tool_call_id,
-                reasoning_content=src_msg.reasoning_content,
-            )
+    # 单事务：会话行 + 所有消息行同生共死。sqlite3 默认在首个 DML 处隐式
+    # BEGIN，commit() 前的一切语句属于同一事务；异常时 rollback() 把会话
+    # 行也一并抹掉，无需手工清理孤儿。
+    conn = session_repo.db.get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO sessions (id, title, created_at, updated_at, last_message_at, message_count, fork_root, forked_at_message_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                new_session_id,
+                title or f"Fork: {source.title}",
+                now,
+                now,
+                prefix[-1].created_at if prefix else None,
+                len(prefix),
+                source.id,
+                at_message_id,
+            ),
         )
+        # 逐条复制：插入顺序 = 源顺序，messages 表
+        # ORDER BY created_at ASC（同值按 rowid）保持序。
+        for src_msg in prefix:
+            _insert_forked_message_row(cursor, new_session_id, src_msg)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
-    update_fields: Dict[str, Any] = {"fork_root": source.id, "message_count": len(prefix)}
-    if at_message_id is not None:
-        update_fields["forked_at_message_id"] = at_message_id
-    if prefix:
-        update_fields["last_message_at"] = prefix[-1].created_at
-    session_repo.update(new_session.id, **update_fields)
-
-    forked = session_repo.get(new_session.id)
-    assert forked is not None  # 刚 create 的会话必然存在
+    forked = session_repo.get(new_session_id)
+    if forked is None:  # pragma: no cover — 刚 commit 的会话必然可读
+        raise RuntimeError(
+            f"fork_session: new session {new_session_id} missing right after commit"
+        )
     return forked
 
 
@@ -349,6 +387,64 @@ class MessageRepository:
 
         conn.commit()
         return message
+
+    def replace_prefix_with_continuation(
+        self,
+        session_id: str,
+        delete_message_ids: List[str],
+        continuation_message: Message,
+        new_message_count: int,
+    ) -> None:
+        """原子地用续接消息替换被压缩的消息前缀（M4，CRITICAL-1）。
+
+        三个动作——删除被替代的消息行、插入续接摘要行、更新会话
+        ``message_count``——在**同一事务**中落盘。任何一步失败整体
+        回滚，杜绝旧逐条提交流程中"历史已删、摘要未写入"的崩溃窗口
+        （那会永久丢失历史且没有摘要兜底）。
+
+        Args:
+            session_id: 目标会话 id
+            delete_message_ids: 要被摘要替代的消息 id 列表（压缩前缀）
+            continuation_message: 续接摘要消息（id 由调用方生成）
+            new_message_count: 压缩后的消息总数（写入 sessions.message_count）
+
+        Raises:
+            Exception: 任一 SQL 失败时抛出；事务已回滚，DB 保持调用前状态。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        now = int(time.time() * 1000)
+        try:
+            # sqlite3 默认在首个 DML 处隐式 BEGIN，commit() 前所有语句
+            # 同属一个事务；循环逐条 DELETE 避免 IN (?) 占位符数量上限。
+            for message_id in delete_message_ids:
+                cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+            cursor.execute(
+                """
+                INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    continuation_message.id,
+                    continuation_message.session_id,
+                    continuation_message.role,
+                    continuation_message.content,
+                    continuation_message.model,
+                    continuation_message.provider,
+                    continuation_message.tool_calls,
+                    continuation_message.tool_call_id,
+                    continuation_message.reasoning_content,
+                    continuation_message.created_at,
+                ),
+            )
+            cursor.execute(
+                "UPDATE sessions SET message_count = ?, updated_at = ? WHERE id = ?",
+                (new_message_count, now, session_id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
     def get_by_session(self, session_id: str, limit: int = 100, offset: int = 0) -> List[Message]:
         """获取会话消息列表"""
