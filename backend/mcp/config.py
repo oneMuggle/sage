@@ -33,11 +33,29 @@ import logging
 import os
 import re
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
+
+#: Serializes every read-modify-write cycle on the user config file.
+#: RLock (not Lock) because the pool's add_server holds it around the
+#: duplicate check + upsert pair while upsert/delete re-acquire it
+#: internally — one critical section, no self-deadlock.
+_config_lock = threading.RLock()
+
+
+def config_file_lock() -> threading.RLock:
+    """Process-wide lock guarding user config file RMW cycles.
+
+    Exposed so the REST-facing pool methods can wrap their
+    check-then-act sequences (duplicate check + upsert) in the SAME
+    critical section as the file write — otherwise concurrent routes
+    race the read-modify-write and lose updates.
+    """
+    return _config_lock
 
 #: Server name slug: lowercase alnum / underscore / hyphen, 1..64 chars.
 #: Names become LLM-visible tool prefixes (``mcp__<server>__<tool>``),
@@ -296,21 +314,31 @@ def load_server_configs(path: Path | None = None) -> List[ServerConfig]:
 
 
 def upsert_user_server_config(config: ServerConfig, path: Path | None = None) -> List[ServerConfig]:
-    """Insert or replace one user entry and persist atomically."""
-    configs = [c for c in load_user_server_configs(path) if c.name != config.name]
-    configs.append(config)
-    save_user_server_configs(configs, path)
-    return configs
+    """Insert or replace one user entry and persist atomically.
+
+    The read-modify-write is one critical section under
+    :func:`config_file_lock` — concurrent upserts/deletes serialize so
+    no update is lost to an interleaved stale read.
+    """
+    with _config_lock:
+        configs = [c for c in load_user_server_configs(path) if c.name != config.name]
+        configs.append(config)
+        save_user_server_configs(configs, path)
+        return configs
 
 
 def delete_user_server_config(name: str, path: Path | None = None) -> bool:
-    """Remove a user entry by name; returns True if an entry was removed."""
-    configs = load_user_server_configs(path)
-    remaining = [c for c in configs if c.name != name]
-    if len(remaining) == len(configs):
-        return False
-    save_user_server_configs(remaining, path)
-    return True
+    """Remove a user entry by name; returns True if an entry was removed.
+
+    Serialized under :func:`config_file_lock` (see upsert).
+    """
+    with _config_lock:
+        configs = load_user_server_configs(path)
+        remaining = [c for c in configs if c.name != name]
+        if len(remaining) == len(configs):
+            return False
+        save_user_server_configs(remaining, path)
+        return True
 
 
 # ---- backwards-compat shim -------------------------------------------------

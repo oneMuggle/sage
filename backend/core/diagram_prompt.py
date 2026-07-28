@@ -1,18 +1,44 @@
 """
 Diagram tool system prompt — guides LLM on when and how to use draw.io tools.
 
-Injected into the system prompt when MCP diagram tools (drawio__render_diagram)
-are registered in the tool registry.
+Injected into the system prompt when MCP diagram tools
+(``mcp__drawio__render_diagram``) are registered in the tool registry.
 """
+
+from typing import Any
+
+#: LLM-visible diagram tool name since M3 (pre-M3: ``drawio__render_diagram``).
+DRAWIO_RENDER_TOOL = "mcp__drawio__render_diagram"
+
+#: Namespace prefix of every drawio MCP tool. The prompt-injection gate
+#: scans for this prefix instead of one fixed tool name, so a
+#: server-side tool rename cannot silently disable the prompt again.
+DRAWIO_TOOL_PREFIX = "mcp__drawio__"
+
+
+def registry_has_drawio_tool(registry: Any) -> bool:
+    """True when the registry holds any ``mcp__drawio__*`` tool.
+
+    Prefix scan (not a single ``exists(DRAWIO_RENDER_TOOL)`` check) so
+    adding/renaming tools on the drawio server keeps the gate working.
+    Never raises — a broken registry must not break chat startup.
+    """
+    try:
+        return any(
+            name.startswith(DRAWIO_TOOL_PREFIX) for name in registry.list_names()
+        )
+    except Exception:
+        return False
+
 
 DIAGRAM_TOOL_PROMPT = """
 ## 图表生成能力
 
-你可以使用 draw.io 图表工具生成可视化图表。当用户请求创建图表、流程图、时序图、思维导图、架构图或任何可视化表示时，使用 drawio__render_diagram 工具。
+你可以使用 draw.io 图表工具生成可视化图表。当用户请求创建图表、流程图、时序图、思维导图、架构图或任何可视化表示时，使用 mcp__drawio__render_diagram 工具。
 
 ### 工具说明
 
-**drawio__render_diagram(xml, format?)**
+**mcp__drawio__render_diagram(xml, format?)**
 - xml: 完整的 mxGraphModel XML 字符串
 - format: 可选，"svg"（默认）或 "png"
 

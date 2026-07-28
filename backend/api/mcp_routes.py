@@ -32,7 +32,18 @@ router = APIRouter(tags=["mcp"])
 
 #: env keys containing any of these substrings (case-insensitive) are
 #: redacted in GET responses — never echo secrets to the renderer.
-REDACT_KEY_MARKERS = ("key", "token", "secret", "password")
+#: Note "pat" also masks keys containing "path" (e.g. CHROME_PATH) —
+#: acceptable: over-redaction of a non-secret beats leaking a PAT.
+REDACT_KEY_MARKERS = (
+    "key",
+    "token",
+    "secret",
+    "password",
+    "auth",
+    "credential",
+    "pat",
+    "private",
+)
 REDACTED = "***"
 
 
@@ -143,7 +154,14 @@ def add_mcp_server(payload: ServerConfigIn) -> Dict[str, Any]:
 
 @router.patch("/mcp/servers/{name}")
 def update_mcp_server(name: str, payload: ServerUpdateIn) -> Dict[str, Any]:
-    """Merge-patch enabled/timeout_seconds; starts or stops the server."""
+    """Merge-patch enabled/timeout_seconds; starts or stops the server.
+
+    Timeout semantics: the response timeout is baked into a live client
+    at construction, so changing ``timeout_seconds`` on a RUNNING server
+    triggers a re-discovery (the server is briefly restarted) — the new
+    value takes effect immediately instead of being silently ignored
+    until the next natural reconnect.
+    """
     pool = _pool()
     try:
         record = pool.update_server(

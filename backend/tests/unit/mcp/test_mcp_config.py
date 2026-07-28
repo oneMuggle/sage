@@ -175,3 +175,64 @@ class TestMerge:
         merged = {c.name: c for c in load_server_configs()}
         assert set(merged) == {"drawio", "extra"}
         assert merged["drawio"].enabled is False  # user wins
+
+
+class TestConcurrentFileAccess:
+    """MEDIUM-1: config-file RMW cycles are serialized — no lost updates."""
+
+    def test_concurrent_upserts_no_lost_updates(self, tmp_path):
+        import threading
+
+        path = tmp_path / "mcp_servers.json"
+        barrier = threading.Barrier(10)
+        errors = []
+
+        def worker(i):
+            try:
+                barrier.wait()
+                upsert_user_server_config(
+                    validate_server_config(name=f"srv{i}", command="node"), path
+                )
+            except Exception as exc:  # noqa: BLE001 — collect for assertion
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert errors == []
+        loaded = load_user_server_configs(path)
+        assert sorted(c.name for c in loaded) == [f"srv{i}" for i in range(10)]
+
+    def test_concurrent_upsert_delete_no_corruption(self, tmp_path):
+        import threading
+
+        path = tmp_path / "mcp_servers.json"
+        save_user_server_configs(
+            [validate_server_config(name=f"srv{i}", command="node") for i in range(5)],
+            path,
+        )
+        barrier = threading.Barrier(10)
+
+        def worker(i):
+            barrier.wait()
+            if i % 2 == 0:
+                delete_user_server_config(f"srv{i // 2}", path)
+            else:
+                upsert_user_server_config(
+                    validate_server_config(name=f"new{i}", command="node"), path
+                )
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        # File must parse, and reflect exactly the winners of each RMW.
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        names = [s["name"] for s in raw["servers"]]
+        assert len(names) == len(set(names))  # no duplicates / corruption
+        assert set(names) == {"new1", "new3", "new5", "new7", "new9"}

@@ -8,14 +8,20 @@ Supported methods:
 - ``tools/list``   → one tool named ``$MOCK_TOOL_NAME`` (default "echo")
 - ``tools/call``   → echoes {"tool": ..., "args": ...} as text content
 
-Fault injection: if ``$MOCK_FAIL_MARKER`` points to an existing file the
-server exits with code 1 immediately — simulating a server that refuses
-to start (used to make reconnection fail deterministically).
+Fault injection:
+- ``$MOCK_FAIL_MARKER`` pointing to an existing file → exit 1
+  immediately (server refuses to start; makes reconnect fail
+  deterministically).
+- ``$MOCK_HANG`` set → the server stays alive but NEVER responds
+  (live-but-silent; exercises the client's deadline-bounded read
+  path). It self-terminates after ``$MOCK_HANG_MAX_SECS`` (default 30)
+  so a failed test cannot leave a lingering process.
 """
 
 import json
 import os
 import sys
+import time
 
 
 def _send(message: dict) -> None:
@@ -30,6 +36,15 @@ def main() -> None:
         sys.stderr.write("mock server refusing to start (marker present)\n")
         sys.stderr.flush()
         sys.exit(1)
+
+    if os.environ.get("MOCK_HANG"):
+        sys.stderr.write("mock server hanging (accepts connection, never replies)\n")
+        sys.stderr.flush()
+        # Self-destruct so a failed test cannot leak this process.
+        deadline = time.monotonic() + float(os.environ.get("MOCK_HANG_MAX_SECS", "30"))
+        while time.monotonic() < deadline:
+            time.sleep(0.1)
+        sys.exit(0)
 
     tool_name = os.environ.get("MOCK_TOOL_NAME", "echo")
     server_name = os.environ.get("MOCK_SERVER_NAME", "mock")

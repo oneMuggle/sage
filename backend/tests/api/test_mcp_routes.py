@@ -111,6 +111,38 @@ class TestServerList:
         assert env["PRIVATE_KEY"] == "***"
         assert env["DRAWIO_BASE_URL"] == "http://localhost:8080"
 
+    def test_redaction_covers_all_secret_markers(self, client):
+        # MEDIUM-4: auth/credential/pat/private markers redact too
+        client.post(
+            "/api/v1/mcp/servers",
+            json={
+                "name": "srv",
+                "command": "node",
+                "env": {
+                    "API_TOKEN": "t",
+                    "PRIVATE_KEY": "k",
+                    "GH_PAT": "p",
+                    "AUTH_HEADER": "a",
+                    "CREDENTIAL": "c",
+                    "AWS_CLIENT_SECRET": "s",
+                    "MY_PASSWORD": "pw",
+                    "DRAWIO_BASE_URL": "http://localhost:8080",
+                },
+            },
+        )
+        env = client.get("/api/v1/mcp/servers").json()["servers"][0]["env"]
+        for secret_key in (
+            "API_TOKEN",
+            "PRIVATE_KEY",
+            "GH_PAT",
+            "AUTH_HEADER",
+            "CREDENTIAL",
+            "AWS_CLIENT_SECRET",
+            "MY_PASSWORD",
+        ):
+            assert env[secret_key] == "***", secret_key
+        assert env["DRAWIO_BASE_URL"] == "http://localhost:8080"
+
     def test_list_returns_full_config_shape(self, client):
         client.post(
             "/api/v1/mcp/servers",
@@ -195,6 +227,33 @@ class TestUpdateServer:
         assert resp.status_code == 200
         stored = json.loads(_config_path(tmp_path).read_text(encoding="utf-8"))
         assert stored["servers"][0]["timeout_seconds"] == 99.0
+
+    def test_update_timeout_on_running_server_triggers_rediscovery(
+        self, tmp_path, monkeypatch
+    ):
+        # MEDIUM-5: the new timeout is baked into a fresh client — the
+        # running server must be re-discovered, not silently left on the
+        # old value.
+        monkeypatch.setenv("SAGE_USER_DATA_DIR", str(tmp_path))
+        created = []
+
+        def counting_factory(config):
+            fake = FakeMcpClient(config)
+            created.append(fake)
+            return fake
+
+        reset_pool(McpServerPool(client_factory=counting_factory))
+        try:
+            tc = TestClient(app)
+            tc.post("/api/v1/mcp/servers", json={"name": "srv", "command": "node"})
+            assert len(created) == 1
+
+            resp = tc.patch("/api/v1/mcp/servers/srv", json={"timeout_seconds": 55})
+            assert resp.status_code == 200
+            assert resp.json()["state"] == "ready"
+            assert len(created) == 2  # factory invoked again → re-discovery
+        finally:
+            reset_pool(None)
 
     def test_update_unknown_404(self, client):
         resp = client.patch("/api/v1/mcp/servers/ghost", json={"enabled": False})

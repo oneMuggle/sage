@@ -6,6 +6,7 @@ reconnect, background re-discovery cooldown, status report, runtime
 add/update/remove, and tool fan-out into tracked registries.
 """
 
+import threading
 import time
 
 import pytest
@@ -20,22 +21,37 @@ from backend.tools.registry import ToolRegistry
 class FakeMcpClient:
     """In-process stand-in for McpClient (same surface the pool uses)."""
 
-    def __init__(self, config, tools=None, fail_start=None, fail_call=None):
+    def __init__(
+        self,
+        config,
+        tools=None,
+        fail_start=None,
+        fail_call=None,
+        fail_list_tools=None,
+        start_gate=None,
+    ):
         self.config = config
         self._tools = tools or []
         self._fail_start = fail_start
         self._fail_call = fail_call
+        self._fail_list_tools = fail_list_tools
+        self._start_gate = start_gate
         self._running = False
         self.start_count = 0
+        self.stop_count = 0
         self.calls = []
 
     def start(self):
         self.start_count += 1
+        if self._start_gate is not None:
+            assert self._start_gate.wait(timeout=10), "start_gate never opened"
         if self._fail_start:
             raise McpClientError(self._fail_start)
         self._running = True
 
     def list_tools(self):
+        if self._fail_list_tools:
+            raise McpClientError(self._fail_list_tools)
         return list(self._tools)
 
     def call_tool(self, name, arguments):
@@ -52,6 +68,7 @@ class FakeMcpClient:
         return self._running
 
     def stop(self):
+        self.stop_count += 1
         self._running = False
 
     def die(self):
@@ -380,3 +397,198 @@ class TestNamespacing:
     def test_namespaced_tool_name(self):
         assert namespaced_tool_name("drawio", "render") == "mcp__drawio__render"
         assert namespaced_tool_name("a-b_1", "x") == "mcp__a-b_1__x"
+
+
+class TestProcessLeakPrevention:
+    """HIGH-1: every except path that discards a started client stops it.
+
+    McpClient.start() spawns the subprocess BEFORE the handshake, so a
+    start()/list_tools() failure leaves a live process unless the pool
+    explicitly stops the discarded client.
+    """
+
+    def test_handshake_failure_stops_discarded_client(self):
+        factory = FakeFactory({"s": {"fail_start": "handshake timeout"}})
+        pool = build_pool(factory, [validate_server_config(name="s", command="c")])
+        pool.discover_all()
+        (client,) = factory.created
+        assert client.stop_count == 1  # discarded client was reaped
+        assert pool.get_record("s").state == ServerState.FAILED
+
+    def test_tools_list_failure_stops_running_client(self):
+        factory = FakeFactory(
+            {"s": {"tools": make_tools("t"), "fail_list_tools": "list exploded"}}
+        )
+        pool = build_pool(factory, [validate_server_config(name="s", command="c")])
+        pool.discover_all()
+        (client,) = factory.created
+        assert client.stop_count == 1  # started client was reaped
+        record = pool.get_record("s")
+        assert record.state == ServerState.FAILED
+        assert "list exploded" in record.last_error
+
+    def test_failed_reconnect_stops_discarded_client(self):
+        factory = FakeFactory({"s": {"tools": make_tools("t")}})
+        pool = build_pool(factory, [validate_server_config(name="s", command="c")])
+        pool.discover_all()
+        factory.created[0].die()
+        factory.behavior["s"] = {"fail_start": "still dead"}
+        with pytest.raises(McpClientError, match="不可用"):
+            pool.call_tool("s", "t", {})
+        assert factory.created[1].stop_count == 1  # reconnect discard reaped
+        pool.shutdown_all()
+
+
+class TestDiscoveryConcurrencyGate:
+    """HIGH-2: concurrent reconnects spawn exactly one subprocess."""
+
+    def test_concurrent_call_tool_spawns_exactly_once(self):
+        factory = FakeFactory({"s": {"tools": make_tools("t")}})
+        pool = build_pool(factory, [validate_server_config(name="s", command="c")])
+        pool.discover_all()
+        assert len(factory.created) == 1
+        factory.created[0].die()
+
+        # The reconnect's start() blocks on a gate so all 8 callers pile
+        # up while one discovery is in flight — deterministic contention.
+        gate = threading.Event()
+        factory.behavior["s"] = {"tools": make_tools("t"), "start_gate": gate}
+
+        results = []
+        barrier = threading.Barrier(8)
+
+        def worker():
+            barrier.wait()
+            try:
+                results.append(("ok", pool.call_tool("s", "t", {})))
+            except McpClientError as exc:
+                results.append(("err", exc))
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        time.sleep(0.3)  # let every thread reach the gate or fail fast
+        gate.set()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert len(factory.created) == 2  # initial + exactly ONE reconnect
+        ok = [r for kind, r in results if kind == "ok"]
+        errs = [r for kind, r in results if kind == "err"]
+        assert len(ok) >= 1  # the winner serves the tool call
+        assert all("不可用" in str(e) for e in errs)  # losers fail cleanly
+        # defined end state: the single survivor client is READY
+        assert pool.get_record("s").state == ServerState.READY
+        pool.shutdown_all()
+
+    def test_reconnect_reuses_client_installed_by_racing_thread(self):
+        factory = FakeFactory({"s": {"tools": make_tools("t")}})
+        pool = build_pool(factory, [validate_server_config(name="s", command="c")])
+        pool.discover_all()
+        factory.created[0].die()
+        # Simulate: another thread already reconnected before we checked.
+        fresh = FakeMcpClient(factory.created[0].config, tools=make_tools("t"))
+        fresh.start()
+        pool.get_record("s").client = fresh
+
+        resp = pool._reconnect_once(pool.get_record("s"))
+        assert resp is fresh  # reused, not replaced
+        assert len(factory.created) == 1  # no extra spawn
+        pool.shutdown_all()
+
+
+class TestShutdownGate:
+    """HIGH-3: after shutdown_all, no discovery path may spawn again."""
+
+    def test_post_shutdown_discovery_is_noop(self):
+        factory = FakeFactory({"s": {"tools": make_tools("t")}})
+        pool = build_pool(factory, [validate_server_config(name="s", command="c")])
+        pool.discover_all()
+        assert pool.get_record("s").state == ServerState.READY
+        pool.shutdown_all()
+        spawned = len(factory.created)
+
+        pool._background_rediscover("s")  # stale timer callback
+        pool.discover_one("s")  # late REST call
+        with pytest.raises(McpClientError, match="不可用"):
+            pool.call_tool("s", "t", {})  # late tool call
+
+        assert len(factory.created) == spawned  # nothing spawned
+        assert pool.get_record("s").state == ServerState.READY  # unchanged
+
+    def test_shutdown_flag_beats_in_flight_timer(self):
+        """shutdown_all raises the flag BEFORE canceling timers, so a
+        callback already running still hits the gate in _discover_record."""
+        factory = FakeFactory({"s": {"fail_start": "down"}})
+        pool = build_pool(factory, [validate_server_config(name="s", command="c")])
+        pool.discover_all()
+        assert pool.get_record("s").state == ServerState.FAILED
+        spawned = len(factory.created)
+
+        with pool._lock:
+            pool._shutdown = True  # what shutdown_all does first
+        pool._background_rediscover("s")
+        pool.discover_one("s")
+
+        assert len(factory.created) == spawned
+        assert pool.get_record("s").state == ServerState.FAILED  # unchanged
+
+
+class TestToolMetadataCaps:
+    """MEDIUM-3: tools/list payloads are sanitized before ingestion."""
+
+    def test_tool_cap_keeps_first_100_of_150(self):
+        many = make_tools(*(f"tool{i:03d}" for i in range(150)))
+        factory = FakeFactory({"s": {"tools": many}})
+        pool = build_pool(factory, [validate_server_config(name="s", command="c")])
+        pool.discover_all()
+        record = pool.get_record("s")
+        assert record.tool_count == 100
+        assert record.tool_specs[0]["name"] == "tool000"
+        assert record.tool_specs[-1]["name"] == "tool099"
+
+    def test_invalid_tool_names_skipped_valid_kept(self):
+        specs = [
+            {"name": "good.tool-1_2", "description": "", "inputSchema": {}},
+            {"name": "bad name", "description": "", "inputSchema": {}},  # space
+            {"name": "工具", "description": "", "inputSchema": {}},  # unicode
+            {"name": "", "description": "", "inputSchema": {}},  # empty
+            {"name": "x" * 129, "description": "", "inputSchema": {}},  # overlong
+            {"description": "missing name entirely", "inputSchema": {}},
+            "not-a-dict",
+        ]
+        factory = FakeFactory({"s": {"tools": specs}})
+        pool = build_pool(factory, [validate_server_config(name="s", command="c")])
+        pool.discover_all()
+        record = pool.get_record("s")
+        assert [spec["name"] for spec in record.tool_specs] == ["good.tool-1_2"]
+        assert record.state == ServerState.READY  # server itself still healthy
+
+
+class TestTimeoutPatchRediscovery:
+    """MEDIUM-5: PATCH timeout on a running server must take effect."""
+
+    def test_update_timeout_on_ready_server_triggers_rediscovery(self, monkeypatch):
+        monkeypatch.setattr(pool_mod, "upsert_user_server_config", lambda c, path=None: [])
+        factory = FakeFactory({"s": {"tools": make_tools("t")}})
+        pool = build_pool(
+            factory, [validate_server_config(name="s", command="c", timeout_seconds=30.0)]
+        )
+        pool.discover_all()
+        assert len(factory.created) == 1
+
+        record = pool.update_server("s", timeout_seconds=5.0)
+
+        assert len(factory.created) == 2  # re-discovered → new client
+        assert record.state == ServerState.READY
+        assert record.config.timeout_seconds == 5.0
+
+    def test_update_timeout_same_value_does_not_churn(self, monkeypatch):
+        monkeypatch.setattr(pool_mod, "upsert_user_server_config", lambda c, path=None: [])
+        factory = FakeFactory({"s": {"tools": make_tools("t")}})
+        pool = build_pool(
+            factory, [validate_server_config(name="s", command="c", timeout_seconds=30.0)]
+        )
+        pool.discover_all()
+        pool.update_server("s", timeout_seconds=30.0)  # no-op value
+        assert len(factory.created) == 1  # healthy server untouched

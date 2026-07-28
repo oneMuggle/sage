@@ -36,7 +36,9 @@ last_state_change / attempts`` and feed :class:`McpStatusReport`
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import re
 import threading
 import time
 import weakref
@@ -49,6 +51,7 @@ from backend.mcp.client import McpClient, McpClientError
 from backend.mcp.config import (
     ServerConfig,
     builtin_names,
+    config_file_lock,
     delete_user_server_config,
     load_server_configs,
     upsert_user_server_config,
@@ -62,6 +65,49 @@ REDISCOVERY_COOLDOWN_SECONDS = 60.0
 
 #: Grace added on top of per-server timeout when waiting on executor futures.
 EXECUTOR_GRACE_SECONDS = 5.0
+
+#: Metadata caps for tools/list ingestion. A malicious or buggy server
+#: must not be able to flood the tool registry (and therefore the LLM
+#: context) with unbounded or garbage tool definitions: excess and
+#: invalid specs are skipped + logged, never ingested.
+MAX_TOOLS_PER_SERVER = 100
+MAX_TOOL_NAME_LENGTH = 128
+TOOL_NAME_REGEX = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def sanitize_tool_specs(
+    specs: List[Any], server_name: str
+) -> List[Dict[str, Any]]:
+    """Filter a tools/list payload down to safe, registry-worthy specs.
+
+    Skips (with a log naming the server): non-dict entries, missing /
+    empty / overlong names, and names outside ``[A-Za-z0-9_.-]`` (tool
+    names become LLM-visible identifiers and registry keys). Then caps
+    the total at :data:`MAX_TOOLS_PER_SERVER` (first N win).
+    """
+    kept: List[Dict[str, Any]] = []
+    for spec in specs:
+        name = spec.get("name") if isinstance(spec, dict) else None
+        if (
+            not isinstance(name, str)
+            or not name
+            or len(name) > MAX_TOOL_NAME_LENGTH
+            or not TOOL_NAME_REGEX.match(name)
+        ):
+            logger.warning(
+                "[MCP:%s] skipping tool spec with invalid name %r", server_name, name
+            )
+            continue
+        kept.append(spec)
+    if len(kept) > MAX_TOOLS_PER_SERVER:
+        logger.warning(
+            "[MCP:%s] server advertised %d tools; keeping first %d",
+            server_name,
+            len(kept),
+            MAX_TOOLS_PER_SERVER,
+        )
+        kept = kept[:MAX_TOOLS_PER_SERVER]
+    return kept
 
 
 class ServerState(str, Enum):
@@ -96,6 +142,10 @@ class ServerRecord:
     last_state_change: float = field(default_factory=time.time)
     attempts: int = 0
     client: Optional[Any] = None  # McpClient (or test fake)
+    #: Discovery gate — True while a thread is inside _discover_record
+    #: for this record. Concurrent attempts see it and fail fast instead
+    #: of double-spawning subprocesses (last-writer-wins orphans N-1).
+    discovering: bool = False
 
     def set_state(self, state: ServerState, error: Optional[str] = None) -> None:
         self.state = state
@@ -183,6 +233,10 @@ class McpServerPool:
         self._initial_discovery_done = False
         self._rediscover_at: Dict[str, float] = {}
         self._rediscover_timers: Dict[str, threading.Timer] = {}
+        #: Terminal shutdown flag — once set (under the lock, by
+        #: shutdown_all), every discovery path becomes a no-op so an
+        #: in-flight timer callback can never spawn after Electron exit.
+        self._shutdown = False
 
     # ---- config (re)loading ------------------------------------------------
 
@@ -283,45 +337,87 @@ class McpServerPool:
         return record
 
     def _discover_record(self, record: ServerRecord) -> None:
-        """Start subprocess, handshake, tools/list; update record + registries."""
+        """Start subprocess, handshake, tools/list; update record + registries.
+
+        Single discovery choke point: startup, call-time reconnect, and
+        background timers all funnel through here. Three gates:
+
+        - ``_shutdown`` (pool-level): post-shutdown attempts are no-ops,
+          so an in-flight timer callback never spawns a lingering process.
+        - ``record.discovering`` (per-record): a concurrent attempt finds
+          discovery already running and returns without spawning — N
+          simultaneous reconnects produce exactly one subprocess.
+        - disabled configs short-circuit to DISABLED.
+
+        Every except path that discards a started client stops it —
+        McpClient.start() spawns the subprocess BEFORE the handshake, so
+        dropping the reference without stop() leaks the process.
+        """
         name = record.config.name
         with self._lock:
+            if self._shutdown:
+                logger.debug("[MCP:%s] discovery skipped — pool shut down", name)
+                return
             if not record.config.enabled:
                 record.set_state(ServerState.DISABLED)
                 return
+            if record.discovering:
+                logger.debug("[MCP:%s] discovery already in progress — skipping", name)
+                return
+            record.discovering = True
             record.attempts += 1
             record.set_state(ServerState.DISCOVERING)
             self._stop_record(record)  # stop stale client if any
 
+        client = None
         try:
-            client = self._client_factory(record.config)
-            client.start()
-            tool_specs = client.list_tools()
-        except McpClientError as exc:
-            with self._lock:
-                record.set_state(ServerState.FAILED, error=str(exc))
-            logger.error("[MCP:%s] discovery failed: %s", name, exc)
-            self._unregister_server_tools(name)
-            return
-        except Exception as exc:  # noqa: BLE001 — never let one server crash the pool
-            with self._lock:
-                record.set_state(
-                    ServerState.FAILED,
-                    error=f"{type(exc).__name__}: {exc}",
-                )
-            logger.exception("[MCP:%s] unexpected discovery error", name)
-            self._unregister_server_tools(name)
-            return
+            try:
+                client = self._client_factory(record.config)
+                client.start()
+                tool_specs = sanitize_tool_specs(client.list_tools(), name)
+            except McpClientError as exc:
+                self._stop_discarded_client(client)
+                with self._lock:
+                    record.set_state(ServerState.FAILED, error=str(exc))
+                logger.error("[MCP:%s] discovery failed: %s", name, exc)
+                self._unregister_server_tools(name)
+                return
+            except Exception as exc:  # noqa: BLE001 — never let one server crash the pool
+                self._stop_discarded_client(client)
+                with self._lock:
+                    record.set_state(
+                        ServerState.FAILED,
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                logger.exception("[MCP:%s] unexpected discovery error", name)
+                self._unregister_server_tools(name)
+                return
 
-        with self._lock:
-            record.client = client
-            record.tool_specs = list(tool_specs)
-            record.tool_count = len(tool_specs)
-            record.set_state(ServerState.READY)
-        logger.info(
-            "[MCP:%s] READY — %d tools discovered", name, len(tool_specs)
-        )
-        self._register_server_tools(record)
+            with self._lock:
+                record.client = client
+                record.tool_specs = tool_specs
+                record.tool_count = len(tool_specs)
+                record.set_state(ServerState.READY)
+            logger.info(
+                "[MCP:%s] READY — %d tools discovered", name, len(tool_specs)
+            )
+            self._register_server_tools(record)
+        finally:
+            with self._lock:
+                record.discovering = False
+
+    @staticmethod
+    def _stop_discarded_client(client: Optional[Any]) -> None:
+        """Stop a client discarded by a failed start/handshake/tools-list.
+
+        McpClient.start() spawns Popen before the handshake, so any
+        except path that drops the client reference MUST reap it or the
+        subprocess outlives the error (leak). Suppress: cleanup must
+        never mask the original failure.
+        """
+        if client is not None:
+            with contextlib.suppress(Exception):
+                client.stop()
 
     # ---- tool call path -----------------------------------------------------
 
@@ -364,28 +460,31 @@ class McpServerPool:
             raise
 
     def _reconnect_once(self, record: ServerRecord) -> Any:
-        """ONE immediate reconnect attempt; raises clean error on failure."""
+        """ONE immediate reconnect attempt; raises clean error on failure.
+
+        Funnels through :meth:`_discover_record` so reconnects are gated:
+        if another thread is already discovering this record, this call
+        fails fast with a clean "reconnect in progress" error instead of
+        spawning a second subprocess (N concurrent callers → 1 spawn,
+        N-1 clean errors, 0 orphans).
+        """
         name = record.config.name
         logger.warning("[MCP:%s] client dead — attempting one reconnect", name)
         with self._lock:
-            record.attempts += 1
-            self._stop_record(record)
-        try:
-            client = self._client_factory(record.config)
-            client.start()
-        except Exception as exc:  # noqa: BLE001
-            with self._lock:
-                record.set_state(
-                    ServerState.FAILED,
-                    error=f"reconnect failed: {exc}",
-                )
+            current = record.client
+            if current is not None and current.is_running and not record.discovering:
+                # Another call path already reconnected — reuse it.
+                logger.info("[MCP:%s] reconnect raced — reusing live client", name)
+                return current
+        self._discover_record(record)
+        with self._lock:
+            client = record.client
+            detail = record.last_error
+        if client is None or not client.is_running:
             self._schedule_background_rediscovery(record)
             raise McpClientError(
-                f"MCP 服务器 {name} 不可用: 重连失败 ({exc})"
+                f"MCP 服务器 {name} 不可用: 重连失败 ({detail or 'reconnect in progress'})"
             )
-        with self._lock:
-            record.client = client
-            record.set_state(ServerState.READY)
         logger.info("[MCP:%s] reconnect succeeded", name)
         return client
 
@@ -408,6 +507,8 @@ class McpServerPool:
     def _background_rediscover(self, name: str) -> None:
         with self._lock:
             self._rediscover_timers.pop(name, None)
+            if self._shutdown:
+                return  # stale timer firing after shutdown_all — no spawn
             record = self._records.get(name)
         if record is None or not record.config.enabled:
             return
@@ -422,20 +523,29 @@ class McpServerPool:
         """Persist a new user server and trigger discovery for it.
 
         Raises McpClientError if the name already exists in the merged view.
+
+        The duplicate check + config-file upsert + record insert run as
+        ONE critical section under the config-file lock (shared with the
+        config module's RMW helpers) — closing the check-then-act gap
+        where two concurrent POSTs with the same name could both pass
+        the check and double-discover.
         """
-        with self._lock:
-            if config.name in self._records:
-                raise McpClientError(
-                    f"MCP 服务器名称已存在: {config.name}"
+        with config_file_lock():
+            with self._lock:
+                if config.name in self._records:
+                    raise McpClientError(
+                        f"MCP 服务器名称已存在: {config.name}"
+                    )
+            upsert_user_server_config(config)
+            with self._lock:
+                self._records[config.name] = ServerRecord(
+                    config=config,
+                    state=(
+                        ServerState.DISABLED
+                        if not config.enabled
+                        else ServerState.DISCOVERING
+                    ),
                 )
-        upsert_user_server_config(config)
-        with self._lock:
-            self._records[config.name] = ServerRecord(
-                config=config,
-                state=(
-                    ServerState.DISABLED if not config.enabled else ServerState.DISCOVERING
-                ),
-            )
         if config.enabled:
             self.discover_one(config.name)
         with self._lock:
@@ -451,12 +561,23 @@ class McpServerPool:
 
         Persists a user entry (built-in fields inherited when patching a
         built-in). Raises KeyError if the server is unknown.
+
+        A ``timeout_seconds`` change on a RUNNING (READY) server
+        triggers re-discovery: the timeout is baked into the live
+        client at construction, so only a fresh client picks up the new
+        deadline — silently persisting it would leave the running
+        server on the old value. An unchanged timeout never churns a
+        healthy server.
         """
         with self._lock:
             record = self._records.get(name)
             if record is None:
                 raise KeyError(name)
             base = record.config
+            timeout_changed = (
+                timeout_seconds is not None
+                and float(timeout_seconds) != base.timeout_seconds
+            )
             new_config = validate_server_config(
                 name=base.name,
                 command=base.command,
@@ -478,7 +599,9 @@ class McpServerPool:
                 self._stop_record(record)
                 record.set_state(ServerState.DISABLED)
             self._unregister_server_tools(name)
-        elif record.state in (ServerState.DISABLED, ServerState.FAILED):
+        elif record.state in (ServerState.DISABLED, ServerState.FAILED) or (
+            timeout_changed and record.state == ServerState.READY
+        ):
             self.discover_one(name)
         return record
 
@@ -517,8 +640,19 @@ class McpServerPool:
             self._unregister_server_tools(name)
 
     def shutdown_all(self) -> None:
-        """Stop every client and cancel pending re-discovery timers."""
+        """Terminal shutdown: block future discovery, cancel timers, stop clients.
+
+        Ordering matters: ``_shutdown`` is raised FIRST (under the lock)
+        so an in-flight ``_background_rediscover`` callback that already
+        passed its own check still hits the gate inside
+        :meth:`_discover_record` — canceling timers alone cannot stop a
+        callback that is already running. After this returns the pool
+        never spawns again (late timer callbacks, REST calls, and
+        tool calls all become clean no-ops / errors) — no lingering
+        processes after Electron exit.
+        """
         with self._lock:
+            self._shutdown = True
             for timer in self._rediscover_timers.values():
                 timer.cancel()
             self._rediscover_timers.clear()
