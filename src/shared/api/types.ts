@@ -495,6 +495,26 @@ export interface LaneBoardGroup {
   finished: Lane[];
 }
 
+/** Task summary returned by POST /orchestration/lanes (M5). */
+export interface PlannerTaskOut {
+  task_id: string;
+  name: string;
+  description: string;
+  task_type: string;
+  status: TaskStatus;
+  blocked_by: string[];
+  team_id: string | null;
+  agent_hint: string | null;
+}
+
+/** Response of POST /orchestration/lanes (M5 planner decomposition). */
+export interface CreateLanesResponse {
+  ok: boolean;
+  team_id: string;
+  lanes: Lane[];
+  tasks: PlannerTaskOut[];
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Office document types (Phase 1, plan §3.4)
 // Backend counterpart: backend/office/models.py

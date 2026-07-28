@@ -305,6 +305,14 @@ describe('COMMAND_ROUTES', () => {
   it('builds trigger_evolution as POST /api/v1/evolution/trigger', () => {
     expect(COMMAND_ROUTES.trigger_evolution.path({})).toBe('/api/v1/evolution/trigger');
   });
+
+  it('builds orchestration_create_lane as POST /api/v1/orchestration/lanes (M5)', () => {
+    const r = COMMAND_ROUTES.orchestration_create_lane;
+    expect(r.method).toBe('POST');
+    // Guard: fixed collection path, no args interpolated.
+    expect(r.path({})).toBe('/api/v1/orchestration/lanes');
+    expect(r.path({ goal: 'x', agent: 'researcher' })).toBe('/api/v1/orchestration/lanes');
+  });
 });
 
 describe('settings & preferences IPC routes', () => {

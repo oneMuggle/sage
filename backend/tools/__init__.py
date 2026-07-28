@@ -9,6 +9,7 @@ from typing import Optional
 from backend.domain.tool_policy import ToolPolicy
 
 from .ask_user_tool import AskUserQuestionTool
+from .agent_tool import AgentTool
 from .base import BaseTool, ToolResult, ToolSchema
 from .calculator import CalculatorTool
 from .edit_tool import EditTool
@@ -46,6 +47,7 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
     registry.register(MemorySaveTool(policy=policy))
     registry.register(OfficeListTool(policy=policy))
     registry.register(OfficeReadTool(policy=policy))
+<<<<<<< HEAD
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -57,6 +59,10 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
     registry.register(SkillTool(policy=policy))
     # M2 part B: AskUserQuestion（READ，run_loop 分发前特判 + 提问闸口）
     registry.register(AskUserQuestionTool(policy=policy))
+    # M5: in-loop sub-agent tool (claw-code execute_agent pattern). The
+    # sub-agent itself only ever gets the read-only whitelist — see
+    # agent_tool.SUBAGENT_TOOL_WHITELIST.
+    registry.register(AgentTool(policy=policy))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
@@ -74,6 +80,7 @@ __all__ = [
     "BaseTool",
     "ToolSchema",
     "ToolResult",
+    "AgentTool",
     "TerminalTool",
     "ReadFileTool",
     "WriteFileTool",

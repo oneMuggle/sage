@@ -12,7 +12,7 @@ Provides high-level operations for lane management:
 from __future__ import annotations
 
 import uuid
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from backend.data.orchestration_repo import LaneRepository
 from backend.orchestration.models import (
@@ -35,25 +35,40 @@ class LaneRegistry:
 
     def create_lane(
         self,
-        task_id: str,
+        task_id: Union[str, Lane],
         worktree: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Lane:
         """
         Create a new lane for a task.
 
+        Two calling conventions are supported:
+
+        1. ``create_lane(task_id="task-...", metadata={...})`` — construct a
+           fresh lane for the given task.
+        2. ``create_lane(lane)`` — persist a pre-built ``Lane`` as-is (used
+           by ``Router._create_lane`` which assigns agent/permission/metadata
+           before creation).
+
         Args:
-            task_id: Task to execute
+            task_id: Task ID to execute, or a pre-built Lane
             worktree: Optional isolated filesystem workspace
+            metadata: Optional lane metadata (e.g. {"source": "planner"})
 
         Returns:
             Created Lane object
         """
-        lane_id = f"lane-{uuid.uuid4().hex[:12]}"
-        lane = Lane(
-            lane_id=lane_id,
-            task_id=task_id,
-            worktree=worktree,
-        )
+        if isinstance(task_id, Lane):
+            lane = task_id
+            if metadata:
+                lane.metadata.update(metadata)
+        else:
+            lane = Lane(
+                lane_id=f"lane-{uuid.uuid4().hex[:12]}",
+                task_id=task_id,
+                worktree=worktree,
+                metadata=dict(metadata or {}),
+            )
 
         self.repo.create(lane)
         return lane
