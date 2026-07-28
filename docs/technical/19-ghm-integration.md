@@ -132,22 +132,19 @@ ghm:
   enabled: false # 总开关；ComputePort 不装配，工具不暴露
 ```
 
-### 5.4 切换到 HTTP 模式（**未来**）
+### 5.4 HTTP 模式（已移除，不支持）
 
-```yaml
-ghm:
-  enabled: true
-  adapter: http # 切换到 HTTP（本期会抛 NotImplementedError）
-  http:
-    base_url: 'http://127.0.0.1:8000'
-    timeout_seconds: 30
-```
+`http` adapter 已于 M0 清理中删除（YAGNI；原为空壳，运行时抛
+`NotImplementedError`）。工厂**仅接受** `adapter: subprocess`，
+配置其他值会在**启动时**抛 `ValueError` 并枚举有效值。
+未来如需 HTTP 远程计算适配器，请走 docs/plans 特性提案流程重新引入。
 
 ---
 
 ## 6. operations 声明结构
 
-每个 operation 是 yaml 中的一个条目，subprocess 与 http 模式共享 schema：
+每个 operation 是 yaml 中的一个条目（当前仅 subprocess 模式生效；
+`http_endpoint` 为预留元数据，无对应运行时）：
 
 ```yaml
 operations:
@@ -233,10 +230,9 @@ def _build_chat_service() -> ChatService:
 | `tests/unit/test_compute_domain.py`             | 14     | dataclass / Protocol 一致性         |
 | `tests/unit/test_compute_resolver.py`           | 14     | 4 条解析路径 + 优先级 + 缓存 + 失败 |
 | `tests/unit/test_subprocess_compute_adapter.py` | 24     | 6 个错误分支 + 成功路径 + argv 拼装 |
-| `tests/unit/test_http_compute_adapter.py`       | 3      | 空壳行为 + list_operations 一致     |
 | `tests/unit/test_compute_tool_adapter.py`       | 12     | 路由分发 + 翻译 + 异常降级          |
 | `tests/integration/test_ghm_compute_e2e.py`     | 2      | 端到端真打 ghm                      |
-| **合计**                                        | **69** | —                                   |
+| **合计**                                        | **66** | —                                   |
 
 **E2E 跳过条件**：`@requires_ghm`，仅在 `GHM_PYTHON` 指向的 conda python 可执行 + `GHM_PROJECT_DIR` 存在 + `API_MODE=hex` 时跑。CI 上可设 `GHM_TEST_DISABLED=1` 强制跳过。
 

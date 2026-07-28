@@ -55,6 +55,12 @@ def test_no_duplicate_route_registrations():
     )
     # 扁平化健全性：至少应解析出 /health，防止内部结构变化导致静默通过
     assert counts, "路由扁平化失败：未解析出任何 APIRoute（检查 FastAPI 版本兼容性）"
+    # 更强健全性：经 include_router 注入的 wiki 路由必须出现——若未来 FastAPI
+    # 重命名 _IncludedRouter 致使扁平化整体跳过，此断言先于重复检测失败
+    assert any(path.startswith("/api/v1/wiki") for (_, path) in counts), (
+        "路由扁平化异常：未解析出 include_router 注入的 wiki 路由"
+        "（检查 FastAPI _IncludedRouter 兼容性）"
+    )
 
     # Act
     duplicates = [
