@@ -2,7 +2,12 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useBtwState } from '../../entities/chat/btwState';
 import { resolveEndpoint } from '../../entities/setting/types';
-import { ApiException, type AgentEvent, type ChatConfig } from '../../shared/api';
+import {
+  ApiException,
+  type AgentEvent,
+  type ChatConfig,
+  type ChatOfficeRef,
+} from '../../shared/api';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
@@ -90,7 +95,7 @@ export function useChat() {
   }, [messages, streamingMessageId, streamingContent, streamingReasoning, streamingToolCalls]);
 
   const sendMessage = useCallback(
-    async (content: string, sessionId?: string) => {
+    async (content: string, sessionId?: string, officeRefs?: readonly ChatOfficeRef[]) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid || isLoading || loadingRef.current) return;
 
@@ -399,6 +404,7 @@ export function useChat() {
             },
           },
           config,
+          officeRefs,
         );
         // 存 cancel 用于下次 sendMessage 取消 + interrupt 用
         cancelRef.current = cancel;

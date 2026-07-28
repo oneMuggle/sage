@@ -17,6 +17,42 @@ export interface Session {
   metadata?: Record<string, unknown>;
 }
 
+export interface SessionWorkspaceBinding {
+  sessionId: string;
+  workspacePath: string;
+  generation: number;
+  activatedAt: number;
+  revokedAt: number | null;
+}
+
+export type WorkspaceSearchKind = 'file' | 'office-ppt' | 'office-word' | 'office-excel';
+
+export interface WorkspaceSearchResult {
+  name: string;
+  kind: WorkspaceSearchKind;
+  docType: OfficeDocType | null;
+  docId: string | null;
+  sizeBytes: number;
+  needsImport: boolean;
+  sourcePath: string | null;
+}
+
+export interface WorkspaceSearchResponse {
+  results: WorkspaceSearchResult[];
+  total: number;
+}
+
+export interface ChatOfficeRef {
+  docId: string;
+  docType: OfficeDocType;
+  filename: string;
+}
+
+export interface WorkspaceRevokeResponse {
+  revoked: boolean;
+  generation: number;
+}
+
 export interface Message {
   id: string;
   session_id: string;
