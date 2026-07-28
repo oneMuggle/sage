@@ -224,3 +224,144 @@ async def test_no_remember_does_not_touch_settings(gate, client):
 
     # Assert
     assert SettingsRepository().get(SETTINGS_KEY_RULES) is None
+
+
+# ---------------------------------------------------------------------------
+# FIX-3: remember 通配符规则注入防护
+# ---------------------------------------------------------------------------
+
+
+async def test_remember_with_wildcard_tool_name_is_not_persisted(gate, client):
+    """remember + tool_name="*" → 应答成功但规则不落库（防永久 allow-all）。"""
+    # Arrange
+    req = _pending_request("*")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    # Act
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={"approved": True, "remember": True},
+    )
+    answer = await holder
+
+    # Assert — 本次批准生效, 但 settings 未被写入
+    assert resp.json() == {"ok": True}
+    assert answer.approved is True
+    assert SettingsRepository().get(SETTINGS_KEY_RULES) is None
+
+
+@pytest.mark.parametrize("bad_name", ["*", "term?", "[t]erminal", "wr]ite"])
+async def test_remember_rejects_fnmatch_metacharacters(gate, client, bad_name):
+    """fnmatch 元字符 (* ? [ ]) 一律静默降级为不记住。"""
+    # Arrange
+    req = _pending_request(bad_name)
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    # Act
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={"approved": True, "remember": True},
+    )
+    await holder
+
+    # Assert
+    assert resp.json() == {"ok": True}
+    assert parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES) or []) == []
+
+
+async def test_remember_with_exact_tool_name_still_persisted(gate, client):
+    """回归保护: 精确工具名（无元字符）remember 照常持久化。"""
+    # Arrange
+    req = _pending_request("terminal")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    # Act
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={"approved": True, "remember": True},
+    )
+    await holder
+
+    # Assert
+    assert resp.json() == {"ok": True}
+    rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
+    assert PermissionRule("terminal", "allow") in rules
+
+
+# ---------------------------------------------------------------------------
+# FIX-4: 审批路由 Origin 守卫
+# ---------------------------------------------------------------------------
+
+
+async def test_answer_with_evil_origin_returns_403(gate, client):
+    """带第三方网页 Origin 的 POST answer → 403 forbidden_origin。"""
+    # Arrange / Act
+    resp = await client.post(
+        "/api/v1/permissions/whatever/answer",
+        json={"approved": True},
+        headers={"Origin": "https://evil.com"},
+    )
+
+    # Assert
+    assert resp.status_code == 403
+    assert resp.json() == {"ok": False, "error": "forbidden_origin"}
+
+
+async def test_answer_with_allowed_dev_origin_passes(gate, client):
+    """Electron 开发 Origin (http://localhost:1420) → 200 正常应答。"""
+    # Arrange
+    req = _pending_request()
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    # Act
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={"approved": True},
+        headers={"Origin": "http://localhost:1420"},
+    )
+    answer = await holder
+
+    # Assert
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    assert answer.approved is True
+
+
+async def test_answer_without_origin_header_passes(gate, client):
+    """无 Origin 头（同源 / curl / python）→ 放行, 走正常错误语义。"""
+    # Arrange / Act
+    resp = await client.post(
+        "/api/v1/permissions/whatever/answer", json={"approved": True}
+    )
+
+    # Assert — 放行到业务层, 未知 id 返回 ok=false 而不是 403
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": False, "error": "unknown_or_expired"}
+
+
+async def test_get_pending_with_evil_origin_returns_403(gate, client):
+    """GET /pending 同样受 Origin 守卫保护。"""
+    # Arrange / Act
+    resp = await client.get(
+        "/api/v1/permissions/pending", headers={"Origin": "https://evil.com"}
+    )
+
+    # Assert
+    assert resp.status_code == 403
+    assert resp.json() == {"ok": False, "error": "forbidden_origin"}
+
+
+async def test_get_pending_with_file_origin_passes(gate, client):
+    """打包 Electron 的 file:// Origin → 200。"""
+    # Arrange / Act
+    resp = await client.get(
+        "/api/v1/permissions/pending", headers={"Origin": "file://"}
+    )
+
+    # Assert
+    assert resp.status_code == 200
+    assert resp.json() == []

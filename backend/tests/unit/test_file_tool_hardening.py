@@ -289,3 +289,51 @@ def test_list_dir_outside_workspace_is_allowed_read_write_asymmetry(tmp_path):
     # Assert
     assert result.success is True
     assert result.content["items"][0]["name"] == "f.txt"
+
+
+# ---------------------------------------------------------------------------
+# FIX-6: UTF-16 BOM 误报修复
+# ---------------------------------------------------------------------------
+
+
+def test_read_file_accepts_utf16le_with_bom_despite_nul_bytes(tmp_path):
+    """带 UTF-16 LE BOM 的文件（.reg 导出常见）含 NUL 字节也按文本读取。"""
+    # Arrange — UTF-16LE 编码天然每个 ASCII 字符后跟 NUL
+    target = tmp_path / "export.reg"
+    target.write_bytes("Windows Registry Editor Version 5.00".encode("utf-16"))
+    assert b"\x00" in target.read_bytes()  # 前提: 文件确实含 NUL
+
+    # Act
+    result = ReadFileTool().execute(path=str(target))
+
+    # Assert
+    assert result.success is True
+    assert "Windows Registry Editor" in result.content["content"]
+
+
+def test_read_file_accepts_utf8_bom_file(tmp_path):
+    """UTF-8 BOM 文件按文本读取, BOM 被吃掉不出现在内容里。"""
+    # Arrange
+    target = tmp_path / "bom.txt"
+    target.write_bytes(b"\xef\xbb\xbfhello bom")
+
+    # Act
+    result = ReadFileTool().execute(path=str(target))
+
+    # Assert
+    assert result.success is True
+    assert result.content["content"].startswith("hello bom")
+
+
+def test_read_file_still_rejects_raw_binary_without_bom(tmp_path):
+    """回归保护: 无 BOM 的真二进制（含 NUL）仍被拒绝。"""
+    # Arrange
+    target = tmp_path / "raw.bin"
+    target.write_bytes(b"\x7fELF\x00\x01\x02" + b"\x00" * 100)
+
+    # Act
+    result = ReadFileTool().execute(path=str(target))
+
+    # Assert
+    assert result.success is False
+    assert "binary_file" in (result.error or "")

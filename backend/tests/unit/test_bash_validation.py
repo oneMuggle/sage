@@ -211,3 +211,97 @@ def test_validate_bash_reasons_deduplicated():
     assert result.risk is BashRisk.DESTRUCTIVE
     # "rm -rf 作用于根目录 /" 只出现一次（子串各不同，原因文本不同，各自保留）
     assert len(result.reasons) == len(set(result.reasons))
+
+
+# ---------------------------------------------------------------------------
+# FIX-2: 旗标顺序无关的结构化检测
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "rm -fr ~",  # 交换顺序
+        "rm -r -f /",  # 拆开写
+        "rm -f -r *",  # 拆开写, 反序
+        "rm --recursive --force /",  # 长旗标
+        "rm --force --recursive ~",  # 长旗标反序
+        "rm -Rf /",  # 大写 R 簇（输入小写化后等价 -rf）
+        "rm -rfv ~",  # 簇里夹带 v
+        "rm -r -f --no-preserve-root /",  # 混入无关长旗标
+        "sudo rm -r -f /",  # 前缀 sudo
+        "cd /tmp && rm -fr .",  # 链式命令第二段
+    ],
+)
+def test_validate_bash_rm_flag_order_variants_are_destructive(command):
+    """rm 递归 + 强制旗标任意顺序/组合 + 高危目标 → DESTRUCTIVE。"""
+    # Arrange / Act
+    result = validate_bash(command)
+
+    # Assert
+    assert result.risk is BashRisk.DESTRUCTIVE
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "rm -r somefile",  # 递归但无 force, 相对目标
+        "rm -f somefile",  # force 但无递归
+        "rm -r ./build/cache",  # 递归无 force + 具体目录
+        "rm -rf ./build",  # 递归+force 但目标具体 → 桌面日常操作, 不误报
+        "rm --recursive ./logs",  # 长旗标递归无 force
+    ],
+)
+def test_validate_bash_rm_variants_without_danger_combo_not_destructive(command):
+    """缺递归 / 缺 force / 目标非高危集合 → 不升级为 DESTRUCTIVE（防误报爆炸）。"""
+    # Arrange / Act / Assert
+    assert validate_bash(command).risk is not BashRisk.DESTRUCTIVE
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "dd of=/dev/sda if=/dev/zero",  # of= 在前 —— 旧子串规则漏报
+        "dd of=/dev/nvme0n1 if=img.raw bs=1M",
+        "dd bs=4M if=/dev/zero of=/dev/sdb",  # of= 在后
+        "sudo dd of=/dev/sda if=/dev/zero",
+    ],
+)
+def test_validate_bash_dd_of_device_any_flag_order_destructive(command):
+    """dd 只要 of=/dev/* 即 DESTRUCTIVE（不看 if= 位置）。"""
+    # Arrange / Act
+    result = validate_bash(command)
+
+    # Assert
+    assert result.risk is BashRisk.DESTRUCTIVE
+    assert any("dd" in r for r in result.reasons)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "del /q /s C:\\data",  # 反序 —— 旧子串规则漏报
+        "rd /q /s C:\\dir",  # 反序
+        "DEL /S /Q C:\\x",  # 大写（小写化后命中）
+        "del /s /q C:\\data",  # 原顺序回归保护
+    ],
+)
+def test_validate_bash_del_rd_flag_order_variants_destructive(command):
+    """Windows del/rd 的 /s 与 /q 任意顺序 → DESTRUCTIVE。"""
+    # Arrange / Act
+    result = validate_bash(command)
+
+    # Assert
+    assert result.risk is BashRisk.DESTRUCTIVE
+
+
+def test_validate_bash_echo_rm_rf_is_flagged_accepted_false_positive():
+    """已知局限存档: 字符串匹配看不见引号 —— echo 里的 rm -rf / 也被标记。
+
+    宁可误报不可漏报（见模块 docstring "已知局限"）。
+    """
+    # Arrange / Act
+    result = validate_bash("echo rm -rf /")
+
+    # Assert
+    assert result.risk is BashRisk.DESTRUCTIVE

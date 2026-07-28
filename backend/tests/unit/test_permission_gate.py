@@ -283,3 +283,37 @@ def test_approval_request_to_dict_shape_matches_frontend_contract():
         "message",
         "created_at",
     }
+
+
+def test_summarize_tool_args_redacts_nested_secret_keys():
+    """FIX-5: 脱敏递归进入嵌套 dict/list —— 顶层脱敏挡不住嵌套泄漏。"""
+    # Arrange
+    args = {
+        "config": {"api_key": "sk-12345", "inner": {"auth_token": "tok-9"}},
+        "servers": [{"password": "hunter2"}],
+        "plain": "visible",
+    }
+
+    # Act
+    summary = summarize_tool_args(args)
+
+    # Assert
+    assert "sk-12345" not in summary
+    assert "tok-9" not in summary
+    assert "hunter2" not in summary
+    assert "***" in summary
+    assert "visible" in summary  # 非秘密值不受影响
+
+
+def test_summarize_tool_args_survives_cyclic_structures():
+    """深度封顶切断自引用结构 —— 不爆栈, 返回合法字符串。"""
+    # Arrange
+    cycle: dict = {"name": "x"}
+    cycle["self"] = cycle
+
+    # Act
+    summary = summarize_tool_args({"payload": cycle})
+
+    # Assert
+    assert isinstance(summary, str)
+    assert "x" in summary

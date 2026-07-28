@@ -42,10 +42,43 @@ _SECRET_KEY_RE = re.compile(r"(key|token|password|secret|credential|auth)", re.I
 DEFAULT_APPROVAL_TIMEOUT_S = 300.0
 
 
+#: 脱敏递归深度上限——防自引用结构（``d["self"] = d``）导致无限递归；
+#: 超限的嵌套子树整体替换为占位字符串，同时切断环路。
+MAX_SCRUB_DEPTH = 5
+
+
+def _scrub_value(value: Any, depth: int) -> Any:
+    """递归脱敏：任意深度的 dict/list 里键名命中秘密模式的值 → ``"***"``。
+
+    只处理容器结构（dict/list/tuple）；其它叶子值原样返回，由调用方
+    统一字符串化 + 截断。深度超过 ``MAX_SCRUB_DEPTH`` 的容器整体替换为
+    占位字符串——现实中的工具参数嵌套不会这么深，而这一封顶让循环
+    引用结构不可能撑爆递归。
+    """
+    if isinstance(value, dict):
+        if depth > MAX_SCRUB_DEPTH:
+            return "…(超过嵌套深度上限)"
+        scrubbed: Dict[str, Any] = {}
+        for key, item in value.items():
+            key_str = str(key)
+            if _SECRET_KEY_RE.search(key_str):
+                scrubbed[key_str] = "***"
+            else:
+                scrubbed[key_str] = _scrub_value(item, depth + 1)
+        return scrubbed
+    if isinstance(value, (list, tuple)):  # noqa: UP038 — py3.8 不支持 X | Y isinstance
+        if depth > MAX_SCRUB_DEPTH:
+            return "…(超过嵌套深度上限)"
+        return [_scrub_value(item, depth + 1) for item in value]
+    return value
+
+
 def summarize_tool_args(args: Optional[Dict[str, Any]]) -> str:
     """把工具参数压成可展示的 JSON 字符串。
 
-    - 键名匹配 key/token/password/secret/credential/auth 的值 → ``"***"``
+    - 键名匹配 key/token/password/secret/credential/auth 的值 → ``"***"``，
+      **递归进入嵌套 dict/list**（深度封顶 ``MAX_SCRUB_DEPTH``）——顶层
+      脱敏挡不住 ``{"config": {"api_key": ...}}`` 这类嵌套泄漏。
     - 其余值字符串化后截断到 ``ARG_VALUE_MAX_CHARS``
     - 整体再兜底截断到 1000 字符，防止极端参数撑爆流事件
     """
@@ -57,13 +90,14 @@ def summarize_tool_args(args: Optional[Dict[str, Any]]) -> str:
         if _SECRET_KEY_RE.search(key_str):
             clean[key_str] = "***"
             continue
-        if isinstance(value, str):
-            text = value
+        scrubbed = _scrub_value(value, 1)
+        if isinstance(scrubbed, str):
+            text = scrubbed
         else:
             try:
-                text = json.dumps(value, ensure_ascii=False, default=str)
+                text = json.dumps(scrubbed, ensure_ascii=False, default=str)
             except (TypeError, ValueError):
-                text = str(value)
+                text = str(scrubbed)
         if len(text) > ARG_VALUE_MAX_CHARS:
             text = text[:ARG_VALUE_MAX_CHARS] + "…(已截断)"
         clean[key_str] = text
@@ -228,6 +262,7 @@ __all__ = [
     "ApprovalGate",
     "DEFAULT_APPROVAL_TIMEOUT_S",
     "ARG_VALUE_MAX_CHARS",
+    "MAX_SCRUB_DEPTH",
     "summarize_tool_args",
     "init_permission_gate",
     "get_permission_gate",

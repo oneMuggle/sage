@@ -7,13 +7,15 @@ M1 工具安全加固（移植 claw-code file_ops.rs 的边界/限额设计）:
   ``../`` 穿越与符号链接逃逸）；READ 操作**不做**边界检查——与 claw-code
   的 read-vs-write asymmetry 一致，工作区外只读保持可用。
 - 硬限额: 读 > 5 MiB / 写 > 10 MiB 直接报错（命名常量，不再静默截断到内存）。
-- 二进制检测: 读取前嗅探首 8 KiB 的 NUL 字节，二进制文件报错而非返回乱码。
+- 二进制检测: 读取前嗅探首 8 KiB 的 NUL 字节，二进制文件报错而非返回乱码；
+  但带 UTF-16 / UTF-8 BOM 的文件（如 Windows .reg 导出，Win7 用户常见）
+  天然含 NUL 字节，先识别 BOM 按文本放行并按对应编码解码。
 """
 
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
 
@@ -23,6 +25,29 @@ logger = logging.getLogger(__name__)
 MAX_READ_SIZE_BYTES = 5 * 1024 * 1024  # 5 MiB —— 超过报错，建议 offset/limit 分页
 MAX_WRITE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MiB —— 超过报错
 BINARY_SNIFF_BYTES = 8 * 1024  # 8 KiB —— 二进制嗅探窗口
+
+#: (BOM 字节序列, Python 编码名) —— NUL 嗅探之前先匹配 BOM。
+#: UTF-16 文本（.reg / .ps1 / .csv 导出）每个 ASCII 字符后都跟 NUL 字节，
+#: 不做 BOM 识别会被 NUL 启发式误判为二进制。"utf-16" 解码按 BOM 选字节序
+#: 并吃掉 BOM；"utf-8-sig" 吃掉 UTF-8 BOM。
+_BOM_ENCODINGS: Tuple[Tuple[bytes, str], ...] = (
+    (b"\xef\xbb\xbf", "utf-8-sig"),  # 3 字节 UTF-8 BOM（先于 2 字节项匹配）
+    (b"\xff\xfe", "utf-16"),  # UTF-16 LE BOM
+    (b"\xfe\xff", "utf-16"),  # UTF-16 BE BOM
+)
+
+
+def detect_bom_encoding(file_path: Path) -> Optional[str]:
+    """嗅探文件头 BOM；命中返回对应 Python 编码名，否则 ``None``。"""
+    try:
+        with open(file_path, "rb") as f:
+            head = f.read(4)
+    except OSError:
+        return None
+    for bom, encoding in _BOM_ENCODINGS:
+        if head.startswith(bom):
+            return encoding
+    return None
 
 
 def _path_within_workspace(target: str, workspace_root: str) -> bool:
@@ -43,12 +68,20 @@ def _path_within_workspace(target: str, workspace_root: str) -> bool:
 
 
 def _contains_binary_marker(file_path: Path) -> bool:
-    """嗅探文件首 8 KiB 是否含 NUL 字节（二进制文件启发式）。"""
+    """嗅探文件首 8 KiB 是否含 NUL 字节（二进制文件启发式）。
+
+    BOM 短路: 带 UTF-16 / UTF-8 BOM 的文件按文本放行——UTF-16 编码的
+    文本天然含大量 NUL 字节（如 Windows .reg 导出），NUL 启发式对它们
+    必然误报。无 BOM 的真二进制（PE / 图片等）仍被 NUL 检查拦下。
+    """
     try:
         with open(file_path, "rb") as f:
             head = f.read(BINARY_SNIFF_BYTES)
     except OSError:
         return False
+    for bom, _encoding in _BOM_ENCODINGS:
+        if head.startswith(bom):
+            return False
     return b"\x00" in head
 
 
@@ -109,7 +142,8 @@ class ReadFileTool(BaseTool):
 
         M1: READ 不做 workspace 边界检查（读写非对称，claw-code 设计）;
             超过 ``MAX_READ_SIZE_BYTES`` 直接报错并建议 offset/limit;
-            首 8 KiB 含 NUL → 二进制文件报错。
+            首 8 KiB 含 NUL → 二进制文件报错（带 UTF-16/UTF-8 BOM 的
+            文本文件例外，按 BOM 编码解码）。
         M2: ``policy.max_read_bytes`` 字节上限（≤ 5 MiB 的文件）——超限时
             **流式**读取（先于行切片）并标记 ``truncated=True``。
         """
@@ -140,13 +174,17 @@ class ReadFileTool(BaseTool):
             max_bytes = self._policy.max_read_bytes
             truncated = original_bytes > max_bytes
 
+            # BOM 识别: UTF-16/UTF-8 BOM 文件按对应编码解码（并吃掉 BOM），
+            # 无 BOM 时保持既有 utf-8 行为。
+            encoding = detect_bom_encoding(file_path) or "utf-8"
+
             if truncated:
                 # 流式读取：仅读 max_bytes 字节到内存
                 with open(file_path, "rb") as f:
                     raw_bytes = f.read(max_bytes)
-                content = raw_bytes.decode("utf-8", errors="replace")
+                content = raw_bytes.decode(encoding, errors="replace")
             else:
-                content = file_path.read_text(encoding="utf-8", errors="replace")
+                content = file_path.read_text(encoding=encoding, errors="replace")
 
             lines = content.split("\n")
 
