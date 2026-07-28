@@ -27,8 +27,23 @@ from backend.memory import (
     SemanticMemory,
     WorkingMemory,
 )
+from backend.services.permission_gate import (
+    DEFAULT_APPROVAL_TIMEOUT_S,
+    ApprovalAnswer,
+    ApprovalRequest,
+    get_permission_gate,
+)
 from backend.tools import ToolRegistry, register_all_tools
+from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
+from backend.tools.permissions import (
+    DEFAULT_PERMISSION_MODE,
+    PermissionDecision,
+    PermissionEnforcer,
+    ToolCapability,
+    classify_tool,
+    load_enforcer_from_settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +219,13 @@ class SageAgent:
         self.tool_registry = ToolRegistry()
         register_all_tools(self.tool_registry)
         logger.info(f"工具注册表初始化完成，已注册 {len(self.tool_registry.list())} 个工具")
+
+        # M1 工具安全加固: 权限执行器注入点。
+        # - permission_enforcer: None 时 run_loop 从 settings 现读现建;
+        #   测试 / 特殊场景可直接赋值覆盖。
+        # - approval_timeout: 审批等待秒数; None → gate 默认 300s。
+        self.permission_enforcer: Optional[PermissionEnforcer] = None
+        self.approval_timeout: Optional[float] = None
 
         # 初始化 LLM 客户端
         if llm_config:
@@ -494,6 +516,10 @@ class SageAgent:
                 )
             )
 
+        # M1: 权限执行器在 run 起点构造一次（读 settings: permission_mode /
+        # permission_rules），整轮循环复用——避免每次工具调用都打 DB。
+        enforcer = self._build_permission_enforcer()
+
         try:
             for i in range(effective_max_iterations):
                 yield AgentEvent(state=AgentState.THINKING, iteration=i, agent_id=self.agent_id)
@@ -567,26 +593,65 @@ class SageAgent:
 
                     is_error = False
                     result_content = ""
-                    try:
-                        tool = self.tool_registry.get(tc.name)
-                        if tool is None:
-                            result_content = f"[错误] 工具不存在: {tc.name}"
-                            is_error = True
+
+                    # M1: enforcement-before-dispatch —— 每次工具调用先过权限
+                    # 执行器（deny/allow 规则 → 模式矩阵 → bash 风险升级）。
+                    # 被拒 → 注入错误 ToolResult，循环正常继续（不抛异常）。
+                    decision = enforcer.check(tc.name, args)
+                    if decision.needs_approval:
+                        # 先推 PERMISSION_REQUEST 事件给前端，再 await 审批闸口
+                        approval_req = self._build_approval_request(tc.name, args, decision)
+                        yield AgentEvent(
+                            state=AgentState.PERMISSION_REQUEST,
+                            iteration=i,
+                            permission_request=approval_req.to_dict(),
+                            agent_id=self.agent_id,
+                        )
+                        answer = await self._await_approval_answer(approval_req)
+                        if answer.approved:
+                            decision = PermissionDecision(
+                                allowed=True,
+                                needs_approval=False,
+                                reason=f"{decision.reason}（用户已批准）",
+                            )
                         else:
-                            result = tool.execute(**args)
-                            if hasattr(result, "success") and hasattr(result, "content"):
-                                is_error = not result.success
-                                if result.success:
-                                    result_content = json.dumps(result.content, ensure_ascii=False)
-                                else:
-                                    result_content = result.error or "工具执行失败"
-                            else:
-                                is_error = False
-                                result_content = json.dumps(result, ensure_ascii=False, default=str)
-                    except Exception as e:
-                        logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
-                        result_content = f"[工具错误] {str(e)}"
+                            decision = PermissionDecision(
+                                allowed=False,
+                                needs_approval=False,
+                                reason=f"{decision.reason}（未获批准: {answer.answered_by}）",
+                            )
+
+                    if not decision.allowed:
+                        logger.info(
+                            "工具调用被权限执行器拒绝: tool=%s reason=%s", tc.name, decision.reason
+                        )
+                        result_content = f"权限拒绝: {decision.reason}"
                         is_error = True
+                    else:
+                        try:
+                            tool = self.tool_registry.get(tc.name)
+                            if tool is None:
+                                result_content = f"[错误] 工具不存在: {tc.name}"
+                                is_error = True
+                            else:
+                                result = tool.execute(**args)
+                                if hasattr(result, "success") and hasattr(result, "content"):
+                                    is_error = not result.success
+                                    if result.success:
+                                        result_content = json.dumps(
+                                            result.content, ensure_ascii=False
+                                        )
+                                    else:
+                                        result_content = result.error or "工具执行失败"
+                                else:
+                                    is_error = False
+                                    result_content = json.dumps(
+                                        result, ensure_ascii=False, default=str
+                                    )
+                        except Exception as e:
+                            logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
+                            result_content = f"[工具错误] {str(e)}"
+                            is_error = True
 
                     tool_result = ToolCallResult(
                         tool_call_id=tc.id,
@@ -621,9 +686,63 @@ class SageAgent:
                 self.llm_client = original_llm_client
                 self.llm_config = original_llm_config
 
+    # ------------------------------------------------------------------
+    # M1 工具安全加固: 权限执行辅助
+    # ------------------------------------------------------------------
+
+    def _build_permission_enforcer(self) -> PermissionEnforcer:
+        """构造本轮 run 的权限执行器。
+
+        优先用注入的 ``self.permission_enforcer``（测试 / 特殊装配）；
+        否则从 settings 现读（permission_mode / permission_rules）。
+        settings 不可用时降级为默认模式 workspace_write + 无规则。
+        """
+        if self.permission_enforcer is not None:
+            return self.permission_enforcer
+        try:
+            return load_enforcer_from_settings()
+        except Exception as exc:  # noqa: BLE001 — DB 故障不应阻塞 agent 启动
+            logger.warning("权限执行器从 settings 构造失败，回退默认: %s", exc)
+            return PermissionEnforcer(
+                mode=DEFAULT_PERMISSION_MODE, rules=(), bash_validator=validate_bash
+            )
+
+    def _build_approval_request(
+        self, tool_name: str, args: Dict[str, Any], decision: PermissionDecision
+    ) -> ApprovalRequest:
+        """组装审批请求: 脱敏参数摘要 + bash 风险等级（非 EXECUTE 工具为 safe）。"""
+        risk = "safe"
+        if classify_tool(tool_name) is ToolCapability.EXECUTE:
+            command = args.get("command")
+            if isinstance(command, str) and command.strip():
+                risk = validate_bash(command).risk.value
+        return ApprovalRequest.create(
+            tool_name=tool_name, args=args, risk=risk, message=decision.reason
+        )
+
+    async def _await_approval_answer(self, req: ApprovalRequest) -> ApprovalAnswer:
+        """await 审批闸口应答；gate 未装配时 default-deny（fail-closed）。"""
+        gate = get_permission_gate()
+        if gate is None:
+            logger.warning(
+                "权限审批闸口未初始化，default-deny: request_id=%s tool=%s",
+                req.request_id,
+                req.tool_name,
+            )
+            return ApprovalAnswer(approved=False, remember=False, answered_by="default-deny")
+        timeout = (
+            self.approval_timeout
+            if self.approval_timeout is not None
+            else DEFAULT_APPROVAL_TIMEOUT_S
+        )
+        return await gate.request(req, timeout=timeout)
+
     def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行工具
+
+        M1: 同步入口同样先过权限执行器。同步上下文没有流事件通道，
+        needs_approval 按 default-deny 处理（不静默放行）。
 
         Args:
             tool_name: 工具名称
@@ -633,6 +752,13 @@ class SageAgent:
             工具执行结果
         """
         try:
+            decision = self._build_permission_enforcer().check(tool_name, parameters)
+            if decision.needs_approval or not decision.allowed:
+                return {
+                    "success": False,
+                    "error": f"权限拒绝: {decision.reason}",
+                }
+
             tool = self.tool_registry.get(tool_name)
             if tool is None:
                 raise ToolCallError(tool_name, f"工具不存在: {tool_name}")

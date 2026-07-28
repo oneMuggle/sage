@@ -27,6 +27,7 @@ from backend.api.office_routes import (
     router as office_router,
 )
 from backend.api.orchestration_router import build_router as build_orchestration_router
+from backend.api.permission_routes import router as permission_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
 from backend.api.wiki_routes import router as wiki_router
@@ -174,6 +175,12 @@ async def lifespan(app: FastAPI):
     scheduler_service.start()
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
+
+    # M1 工具安全加固: 全局审批闸口 — agent 循环 await 审批, 路由解析应答
+    from backend.services.permission_gate import init_permission_gate
+
+    app.state.permission_gate = init_permission_gate()
+    logger.info("PermissionGate 已初始化（工具审批闸口）")
 
     # Wiki MCP Server — 在后台启动 Wiki MCP Server
     # 注意：MCP Server 通过 stdio 通信，这里只是验证模块可以导入
@@ -343,6 +350,8 @@ app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
 register_office_exception_handlers(app)
 app.include_router(workspace_router, prefix="/api/v1")
+# M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
+app.include_router(permission_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")

@@ -26,6 +26,10 @@ class AgentState(str, Enum):
     # I4: 流式 LLM 响应时,每个 token chunk 推一个 CONTENT_DELTA 事件,
     # 前端 appendContent 累积,实现逐字流式
     CONTENT_DELTA = "content_delta"
+    # M1 工具安全加固: 工具调用需要用户审批时,在执行前推一个
+    # PERMISSION_REQUEST 事件(携带 permission_request 字段),前端渲染
+    # 审批对话框并 POST /api/v1/permissions/{request_id}/answer。
+    PERMISSION_REQUEST = "permission_request"
     DONE = "done"
     FAILED = "failed"
 
@@ -78,6 +82,9 @@ class AgentEvent:
     tool_result: Optional[ToolCallResult] = None
     error: Optional[str] = None
     agent_id: Optional[str] = None  # 当前执行 agent 的 ID(供前端显示"当前处理 agent")
+    # M1: state=PERMISSION_REQUEST 时携带审批请求快照(ApprovalRequest.to_dict),
+    # 含 request_id / tool_name / args_summary / risk / message / created_at 字段
+    permission_request: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为 JSON 友好的字典。"""
@@ -97,4 +104,6 @@ class AgentEvent:
             d["error"] = self.error
         if self.agent_id is not None:
             d["agent_id"] = self.agent_id
+        if self.permission_request is not None:
+            d["permission_request"] = self.permission_request
         return d
