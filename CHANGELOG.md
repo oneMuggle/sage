@@ -60,6 +60,14 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
   - All changes forward-compatible; existing SKILL.md files unaffected
   - Refs: docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md
 
+### Fixed
+- **fix(win7-bundling): sage_core inner-copy + backendLauncher error handling** (port of main PR #130 + #132)
+  - v0.4.5-alpha.2-win7 NSIS installer crashed at first launch with `ModuleNotFoundError: No module named 'sage_core'` 4-5s after spawn → 30s "backend health timeout" dialog. Root cause: `packages/sage-core/` is hyphen-named but the Python module is underscore-named `sage_core`; `pip install -e` only writes a .pth referencing the CI runner's absolute path (which doesn't exist on end-user machines).
+  - `scripts/bundle-python.ps1`: after `pip install -e sage-core`, also copy the inner `sage_core/` package into `Lib/site-packages/` where `import site` puts it unconditionally. Verify step now canary-imports both `sage_core` and `backend.main` (was just `backend.main`) so the regression is caught at bundle time.
+  - `electron/main.ts`: replace inline `existsSync` + conda fallback with `resolveBackendLaunchCommand()` from a new `electron/backendLauncher.ts` (ported from main). Adds broken-installer detection, `proc.on('error')` listener, `spawnStubProcess` placeholder, `reportedBrokenInstaller` flag (skips misleading 30s dialog), `SAGE_USER_DATA_DIR` env var (was missing).
+  - Adds 13 vitest cases in `electron/__tests__/backendLauncher.test.ts` and 3 Pester AST assertions in `scripts/bundle-python.Tests.ps1`.
+  - Bumps to v0.4.5-alpha.3-win7.
+
 ## [v0.3.0] - 2026-06-23
 
 ### Added

@@ -135,6 +135,34 @@ Describe 'bundle-python.ps1: dead-code cleanup' {
     }
 }
 
+Describe 'bundle-python.ps1: sage_core inner-copy fix (v0.4.5-alpha.3-win7, port of main PR #132)' {
+
+    It 'copies the inner sage_core/ package into embeddable site-packages/' {
+        # The source dir is hyphen-named `sage-core/` but the Python module
+        # is underscore-named `sage_core/`. Python's import machinery is
+        # path-literal and does no hyphen↔underscore normalization. Without
+        # this copy, end-user packaged Win installer hits ModuleNotFoundError
+        # on `import sage_core` at first backend launch (30s timeout dialog).
+        $pattern = '(?s)Copy-Item -Path \$SageCorePkgSrc -Destination \$SageCorePkgDest'
+        $Script:ScriptContent | Should -Match $pattern
+    }
+
+    It 'drops __pycache__ from the runtime sage_core/ copy' {
+        # Mirrors the backend copy block above — runtime copies must not
+        # ship __pycache__ directories (build-machine path leakage + bloat).
+        $pattern = '(?s)\$SageCorePkgDest -Recurse -Directory -Filter "__pycache__"'
+        $Script:ScriptContent | Should -Match $pattern
+    }
+
+    It 'verify step imports sage_core to catch the v0.4.5-alpha.1 regression at bundle time' {
+        # Without this canary, the sage_core inner-copy could regress silently
+        # and end users would hit ModuleNotFoundError only at first launch
+        # (4-5s after spawn → 30s timeout dialog).
+        $pattern = '(?s)import sage_core.*?import backend\.main.*?if \(\$verifyExit -ne 0\)'
+        $Script:ScriptContent | Should -Match $pattern
+    }
+}
+
 Describe 'bundle-python.ps1: requirements pin' {
 
     It 'references backend/requirements-py38.txt' {
