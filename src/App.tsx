@@ -16,6 +16,7 @@ import { Welcome } from './pages/Welcome';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
+import { ApprovalDialog } from './widgets/permission';
 
 // Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
 function ChatRoute() {
@@ -68,6 +69,8 @@ function App() {
           </Route>
         </Routes>
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        {/* M1: 全局工具审批模态框 — 由 permission_request 流事件驱动 */}
+        <ApprovalDialog />
       </NavHistoryProvider>
     </HashRouter>
   );

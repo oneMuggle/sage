@@ -53,6 +53,7 @@ export type {
   OfficeWordParagraphContent,
   OfficeWordReadResult,
   OfficeWordTableContent,
+  PermissionRequest,
   Session,
   SessionWorkspaceBinding,
   Skill,

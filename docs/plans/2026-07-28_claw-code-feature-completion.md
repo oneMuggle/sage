@@ -34,10 +34,15 @@
 - [x] 测试 — 单元（enforcer 矩阵 ~24 例、bash ~20 例、file 加固、gate）+
       API 契约 + run_loop 审批/拒绝/超时集成
 
-### 前端（待实施）
+### 前端（已完成）
 
-- [ ] GUI 审批对话框 — 消费 permission_request 流事件，渲染对话框，
-      POST 应答端点（需同步补 electron/commands.ts COMMAND_ROUTES）
+- [x] GUI 审批对话框 + IPC + e2e（Playwright） — 消费 permission_request
+      流事件，渲染 ApprovalDialog（风险徽章 / 参数预览 / 记住选择），
+      POST 应答端点；electron/commands.ts 补 permissions_pending +
+      permissions_answer 路由（body selector 防 extra 字段 422）；
+      设置页权限模式选择器（preferences KV: permission_mode）；
+      tests/electron/permission-approval.spec.ts 走 stub_backend 审批
+      gate 全链路（批准/拒绝双路径）
 
 ## 涉及的文件与模块
 
@@ -51,6 +56,13 @@
 | Agent | backend/core/legacy/agent.py、agent_state.py | 接线 + 新事件 |
 | 存储 | backend/data/settings_repo.py | 白名单扩 2 key |
 | 装配 | backend/main.py | lifespan + 路由注册 |
+| IPC | electron/commands.ts | permissions_pending / permissions_answer 路由 |
+| 状态 | src/entities/permission/permissionState.ts | 新增 zustand store |
+| 界面 | src/widgets/permission/ApprovalDialog.tsx | 新增全局审批模态框（App.tsx 挂载） |
+| 流事件 | src/features/send-message/useChat.ts、src/shared/api/types.ts | permission_request 接线 + AgentEvent 类型 |
+| 设置 | src/pages/settings/GeneralTab.tsx | 权限模式选择器（preferences KV） |
+| i18n | src/shared/lib/i18n/zh.ts、en.ts | 对话框 + 设置键 |
+| E2E | tests/electron/permission-approval.spec.ts、stub_backend.py | 审批 gate 桩 + Playwright 双路径 |
 
 ## 风险评估
 

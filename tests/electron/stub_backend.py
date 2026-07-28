@@ -15,6 +15,17 @@ Implements key API endpoints used by Tasks 1-10:
 - POST /api/v1/chat/stream (create stream)
 - GET /api/v1/chat/stream/{stream_id} (attach NDJSON stream)
 
+M1 tool security hardening (permission-approval E2E):
+- GET /api/v1/permissions/pending
+- POST /api/v1/permissions/{request_id}/answer
+- GET /api/v1/_test/permission_answers (inspection endpoint for tests)
+
+When the chat/stream POST message contains the marker ``__PERM_TEST__``,
+the attach stream emits ``acting`` → ``permission_request`` and BLOCKS
+(up to 25s) until the matching answer POST resolves the request — mimicking
+the real backend ApprovalGate (backend/services/permission_gate.py).
+After resolution it emits ``observing`` → ``content_delta`` → ``done``.
+
 Supports Task 6 office_refs authorization checks in chat/stream.
 """
 from __future__ import annotations
@@ -25,9 +36,17 @@ import sqlite3
 import threading
 import time
 import uuid
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
+
+#: Marker in the chat message that makes the stub stream emit a
+#: permission_request event and block until answered (M1 E2E).
+PERM_TEST_MARKER = "__PERM_TEST__"
+
+#: How long the gated stream waits for an answer before failing closed
+#: (mirrors backend default-deny semantics; real backend waits 300s).
+PERM_WAIT_TIMEOUT_S = 25.0
 
 
 class StubBackend:
@@ -45,9 +64,23 @@ class StubBackend:
         # type: (str, int) -> None
         self._host = host
         self._port = port
-        self._server = None  # type: Optional[HTTPServer]
+        self._server = None  # type: Optional[ThreadingHTTPServer]
         self._thread = None  # type: Optional[threading.Thread]
         self._db = None  # type: Optional[sqlite3.Connection]
+        # M1 permission-gate state (in-memory; threads share it):
+        #   streams:  stream_id → message (POST /chat/stream 记录的原始消息)
+        #   pending:  request_id → permission_request dict
+        #   events:   request_id → threading.Event (answer 到达时 set)
+        #   verdicts: request_id → bool (approved?) — 供流恢复时读
+        #   answers:  按到达顺序记录所有成功应答 (测试断言用)
+        self._lock = threading.Lock()
+        self._state = {
+            "streams": {},
+            "pending": {},
+            "events": {},
+            "verdicts": {},
+            "answers": [],
+        }  # type: Dict[str, Any]
         self._init_db()
 
     def _init_db(self):
@@ -87,9 +120,14 @@ class StubBackend:
 
     def start(self):
         # type: () -> None
-        """Start the HTTP server in a background daemon thread."""
-        handler_factory = _make_handler(self._db)
-        self._server = HTTPServer((self._host, self._port), handler_factory)
+        """Start the HTTP server in a background daemon thread.
+
+        ThreadingHTTPServer（而非 HTTPServer）：M1 审批流在 GET 流请求里
+        阻塞等待 answer POST 到达 — 单线程服务器会死锁。每个请求一个
+        线程；sqlite 连接已开 check_same_thread=False。
+        """
+        handler_factory = _make_handler(self._db, self._lock, self._state)
+        self._server = ThreadingHTTPServer((self._host, self._port), handler_factory)
         self._port = self._server.server_address[1]
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
@@ -120,10 +158,17 @@ class StubBackend:
         """Return the database connection (for test inspection)."""
         return self._db
 
+    @property
+    def state(self):
+        # type: () -> Dict[str, Any]
+        """Return the in-memory permission-gate state (for test inspection)."""
+        return self._state
 
-def _make_handler(db):
-    # type: (sqlite3.Connection) -> type
-    """Create a request handler class with access to the shared database."""
+
+def _make_handler(db, lock, state):
+    # type: (sqlite3.Connection, threading.Lock, Dict[str, Any]) -> type
+    """Create a request handler class with access to the shared database
+    and the in-memory permission-gate state (M1)."""
 
     class StubHandler(BaseHTTPRequestHandler):
         """HTTP request handler for the stub backend."""
@@ -153,6 +198,169 @@ def _make_handler(db):
                 line = json.dumps(evt, ensure_ascii=False) + "\n"
                 self.wfile.write(line.encode("utf-8"))
                 self.wfile.flush()
+
+        def _write_ndjson_line(self, evt):
+            # type: (Dict[str, Any]) -> None
+            """Write + flush a single NDJSON line (for gated streams)."""
+            line = json.dumps(evt, ensure_ascii=False) + "\n"
+            self.wfile.write(line.encode("utf-8"))
+            self.wfile.flush()
+
+        def _handle_chat_stream_attach(self, stream_id):
+            # type: (str) -> None
+            """Emit the NDJSON stream for an attached chat stream.
+
+            Default: thinking → content_delta → done (pre-M1 behavior).
+            When the POSTed message contains PERM_TEST_MARKER: emit
+            acting → permission_request, BLOCK until the answer POST
+            resolves the gate event (or PERM_WAIT_TIMEOUT_S), then emit
+            observing → content_delta → done — mimicking backend
+            ApprovalGate fail-closed semantics.
+            """
+            with lock:
+                message = state["streams"].get(stream_id, "")
+
+            if PERM_TEST_MARKER not in message:
+                events = [
+                    {
+                        "state": "thinking",
+                        "iteration": 0,
+                        "content": None,
+                        "reasoning": "Stub backend processing",
+                        "tool_call": None,
+                        "tool_result": None,
+                        "error": None,
+                        "agent_id": "stub-agent",
+                    },
+                    {
+                        "state": "content_delta",
+                        "iteration": 0,
+                        "content": "Hello from stub backend",
+                        "reasoning": None,
+                        "tool_call": None,
+                        "tool_result": None,
+                        "error": None,
+                        "agent_id": "stub-agent",
+                    },
+                    {
+                        "state": "done",
+                        "iteration": 0,
+                        "content": "Hello from stub backend",
+                        "reasoning": None,
+                        "tool_call": None,
+                        "tool_result": None,
+                        "error": None,
+                        "agent_id": "stub-agent",
+                    },
+                ]
+                self._send_ndjson(events)
+                return
+
+            # ── M1 gated flow ─────────────────────────────────────────
+            request_id = "perm-{}".format(uuid.uuid4().hex[:12])
+            gate_event = threading.Event()
+            perm_request = {
+                "request_id": request_id,
+                "tool_name": "terminal",
+                "args_summary": json.dumps({"command": "ls -la"}),
+                "risk": "suspicious",
+                "message": "stub gate: execute 能力工具 terminal 需要用户逐次确认",
+                "created_at": time.time(),
+            }
+            with lock:
+                state["pending"][request_id] = perm_request
+                state["events"][request_id] = gate_event
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.end_headers()
+
+            base = {"iteration": 1, "agent_id": "stub-agent"}
+            self._write_ndjson_line(
+                dict(
+                    base,
+                    state="acting",
+                    content=None,
+                    reasoning=None,
+                    tool_call={
+                        "id": "call-stub-1",
+                        "type": "function",
+                        "function": {
+                            "name": "terminal",
+                            "arguments": json.dumps({"command": "ls -la"}),
+                        },
+                    },
+                    tool_result=None,
+                    error=None,
+                )
+            )
+            self._write_ndjson_line(
+                {
+                    "state": "permission_request",
+                    "iteration": 1,
+                    "agent_id": None,
+                    "content": None,
+                    "reasoning": None,
+                    "tool_call": None,
+                    "tool_result": None,
+                    "error": None,
+                    "permission_request": perm_request,
+                }
+            )
+
+            answered = gate_event.wait(PERM_WAIT_TIMEOUT_S)
+            with lock:
+                approved = bool(state["verdicts"].get(request_id, False))
+                state["pending"].pop(request_id, None)
+                state["events"].pop(request_id, None)
+
+            if answered and approved:
+                tool_content = "total 8\ndrwxr-xr-x 2 stub stub 4096 ."
+                final = "已执行 terminal，结果如上。"
+            elif answered:
+                tool_content = "权限拒绝: 用户拒绝了工具调用"
+                final = "好的，已跳过该操作。"
+            else:
+                tool_content = "权限拒绝: 审批超时（fail-closed）"
+                final = "审批超时，已跳过该操作。"
+
+            self._write_ndjson_line(
+                dict(
+                    base,
+                    state="observing",
+                    content=None,
+                    reasoning=None,
+                    tool_call=None,
+                    tool_result={
+                        "tool_call_id": "call-stub-1",
+                        "role": "tool",
+                        "content": tool_content,
+                    },
+                    error=None,
+                )
+            )
+            self._write_ndjson_line(
+                dict(
+                    base,
+                    state="content_delta",
+                    content=final,
+                    reasoning=None,
+                    tool_call=None,
+                    tool_result=None,
+                    error=None,
+                )
+            )
+            self._write_ndjson_line(
+                dict(
+                    base,
+                    state="done",
+                    content=final,
+                    reasoning=None,
+                    tool_call=None,
+                    tool_result=None,
+                    error=None,
+                )
+            )
 
         def _read_body(self):
             # type: () -> bytes
@@ -255,40 +463,21 @@ def _make_handler(db):
             # GET /api/v1/chat/stream/{stream_id}
             m = _match(r"^/api/v1/chat/stream/([^/]+)$", path)
             if m:
-                # Stub: return a simple NDJSON stream with thinking -> content -> done
-                events = [
-                    {
-                        "state": "thinking",
-                        "iteration": 0,
-                        "content": None,
-                        "reasoning": "Stub backend processing",
-                        "tool_call": None,
-                        "tool_result": None,
-                        "error": None,
-                        "agent_id": "stub-agent",
-                    },
-                    {
-                        "state": "content_delta",
-                        "iteration": 0,
-                        "content": "Hello from stub backend",
-                        "reasoning": None,
-                        "tool_call": None,
-                        "tool_result": None,
-                        "error": None,
-                        "agent_id": "stub-agent",
-                    },
-                    {
-                        "state": "done",
-                        "iteration": 0,
-                        "content": "Hello from stub backend",
-                        "reasoning": None,
-                        "tool_call": None,
-                        "tool_result": None,
-                        "error": None,
-                        "agent_id": "stub-agent",
-                    },
-                ]
-                self._send_ndjson(events)
+                self._handle_chat_stream_attach(m.group(1))
+                return
+
+            # GET /api/v1/permissions/pending (M1)
+            if path == "/api/v1/permissions/pending":
+                with lock:
+                    pending = list(state["pending"].values())
+                self._send_json(200, pending)
+                return
+
+            # GET /api/v1/_test/permission_answers (M1 — test inspection only)
+            if path == "/api/v1/_test/permission_answers":
+                with lock:
+                    answers = list(state["answers"])
+                self._send_json(200, {"answers": answers})
                 return
 
             self._send_json(404, {"detail": "stub: no route for {}".format(path)})
@@ -399,7 +588,49 @@ def _make_handler(db):
                         return
 
                 stream_id = str(uuid.uuid4())
+                # M1: remember the message so the attach handler can decide
+                # whether to emit the gated permission_request flow.
+                with lock:
+                    state["streams"][stream_id] = data.get("message", "")
                 self._send_json(200, {"streamId": stream_id})
+                return
+
+            # POST /api/v1/permissions/{request_id}/answer (M1)
+            m = _match(r"^/api/v1/permissions/([^/]+)/answer$", path)
+            if m:
+                request_id = m.group(1)
+                # 与后端 ApprovalAnswerBody extra="forbid" 对齐:
+                # 只接受 approved(bool, 必填) / remember(bool, 可选)
+                extra_keys = set(data.keys()) - {"approved", "remember"}
+                remember = data.get("remember", False)
+                if extra_keys or not isinstance(data.get("approved"), bool) or not isinstance(
+                    remember, bool
+                ):
+                    self._send_json(
+                        422, {"detail": "body must be {approved: bool, remember?: bool}"}
+                    )
+                    return
+                approved = data["approved"]
+                with lock:
+                    known = request_id in state["pending"]
+                    if known:
+                        state["verdicts"][request_id] = approved
+                        state["answers"].append(
+                            {
+                                "request_id": request_id,
+                                "approved": approved,
+                                "remember": remember,
+                            }
+                        )
+                        gate_event = state["events"].get(request_id)
+                    else:
+                        gate_event = None
+                if not known:
+                    self._send_json(200, {"ok": False, "error": "unknown_or_expired"})
+                    return
+                if gate_event is not None:
+                    gate_event.set()
+                self._send_json(200, {"ok": True})
                 return
 
             self._send_json(404, {"detail": "stub: no route for {}".format(path)})

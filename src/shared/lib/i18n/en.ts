@@ -205,4 +205,32 @@ export const en: Record<TranslationKey, string> = {
   'scheduled.toast.update_fail': 'Failed to update task',
   'scheduled.toast.delete_fail': 'Failed to delete task',
   'scheduled.confirm.delete': 'Delete this scheduled task?',
+
+  // ─── M1 tool approval ─────────────
+  'permission.title': 'Tool approval required',
+  'permission.tool': 'Tool',
+  'permission.args': 'Arguments',
+  'permission.risk.safe': 'Safe',
+  'permission.risk.suspicious': 'Suspicious',
+  'permission.risk.destructive': 'Destructive',
+  'permission.remember': 'Remember my choice',
+  'permission.approve': 'Allow',
+  'permission.deny': 'Deny',
+  'permission.toast.failed': 'Failed to submit approval answer',
+
+  // ─── M1 settings: tool permissions ─
+  'settings.section.permission': 'Tool permissions',
+  'settings.permission.mode': 'Permission mode',
+  'settings.permission.mode.read_only': 'Read-only',
+  'settings.permission.mode.read_only.desc': 'Reads only; all writes and execution are denied',
+  'settings.permission.mode.workspace_write': 'Workspace write (default)',
+  'settings.permission.mode.workspace_write.desc':
+    'Writes inside the workspace; execution and out-of-bounds ops ask first',
+  'settings.permission.mode.prompt': 'Ask every time',
+  'settings.permission.mode.prompt.desc': 'Every write or execution requires manual approval',
+  'settings.permission.mode.full_access': 'Full access',
+  'settings.permission.mode.full_access.desc': 'Allow everything, never prompt (use with care)',
+  'settings.permission.rules_hint':
+    'Fine-grained rules (permission_rules JSON) are not editable in the UI yet; checking "Remember my choice" appends a rule automatically.',
+  'settings.permission.load_failed': 'Failed to load permission mode',
 };

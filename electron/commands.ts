@@ -128,6 +128,19 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/preferences/${encodeURIComponent(String(a.key))}`,
   },
 
+  // M1 tool security hardening: 工具审批 gate（backend/api/permission_routes.py）。
+  // permission_request 流事件到达后,渲染进程弹出 ApprovalDialog;用户点
+  // 批准/拒绝 → permissions_answer 应答。pending 端点用于断线重连后补拉。
+  permissions_pending: { method: 'GET', path: () => '/api/v1/permissions/pending' },
+  permissions_answer: {
+    method: 'POST',
+    path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,
+    // 后端 ApprovalAnswerBody 是 extra="forbid" — body 里只允许
+    // approved/remember;requestId 是路径参数,必须从 body 剥掉,否则 422。
+    // (与 workspace_bind 剥 sessionId 同理)
+    body: (a) => ({ approved: a.approved, remember: a.remember }),
+  },
+
   // scheduled tasks (Phase 8)
   scheduled_list_tasks: {
     method: 'GET',

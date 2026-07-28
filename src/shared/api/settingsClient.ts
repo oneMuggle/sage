@@ -13,7 +13,20 @@ import { invoke } from './desktopInvoke';
 
 export const LOAD_TIMEOUT_MS = 5000;
 
-export type PreferenceKey = 'app_settings' | 'theme_mode' | 'theme_preset' | 'current_session_id';
+/**
+ * 合法 preference key — 与后端 SettingsRepository.KEYS 白名单对齐
+ * （backend/data/settings_repo.py）。白名单外的 key → 后端 400。
+ *
+ * permission_mode / permission_rules: M1 工具安全加固（注意 rules 只能
+ * 由后端审批应答 remember=true 追加，前端只读 mode）。
+ */
+export type PreferenceKey =
+  | 'app_settings'
+  | 'theme_mode'
+  | 'theme_preset'
+  | 'current_session_id'
+  | 'permission_mode'
+  | 'permission_rules';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {

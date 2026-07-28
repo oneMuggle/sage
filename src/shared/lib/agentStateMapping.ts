@@ -36,6 +36,10 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
       return '🤔 思考中…';
     case 'acting':
       return toolName ? `🔧 调工具 ${toolName}…` : '🔧 行动中…';
+    case 'permission_request':
+      // M1: 审批卡点 — 占位文本由 ApprovalDialog 模态框承载,
+      // 消息气泡内保留上一个中间态占位,不覆盖
+      return null;
     case 'observing':
       return '👀 观察结果…';
     case 'failed':
@@ -67,6 +71,9 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
       return { iconName: 'Brain', label: '推理中' };
     case 'acting':
       return { iconName: 'Wrench', label: '执行工具' };
+    case 'permission_request':
+      // M1: 等待用户审批 — 指示器显示"等待确认"而非执行阶段
+      return { iconName: 'Wrench', label: '等待确认' };
     case 'observing':
       return { iconName: 'Eye', label: '观察结果' };
     case 'content_delta':

@@ -7,6 +7,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { usePermissionState } from '../../../entities/permission/permissionState';
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
 import { useStore } from '../../../shared/lib/store';
 import { useChat } from '../useChat';
@@ -126,6 +127,8 @@ beforeEach(() => {
     messages: [],
     isLoading: false,
   });
+  // M1: 隔离 permission store,避免用例间对话框状态串扰
+  usePermissionState.setState({ currentRequest: null });
 });
 
 afterEach(() => {
@@ -594,5 +597,176 @@ describe('useChat', () => {
     const final = result.current.messages.find((m) => m.role === 'assistant');
     expect(final?.content).toBe('答案是 2');
     expect(result.current.isLoading).toBe(false);
+  });
+});
+
+// ============================================================================
+// M1 工具安全加固: permission_request 流事件 → permission store 接线
+// ============================================================================
+describe('useChat M1 permission_request wiring', () => {
+  type PermEvt = {
+    payload: {
+      state: string;
+      iteration: number;
+      agent_id?: string | null;
+      content?: string;
+      permission_request?: {
+        request_id: string;
+        tool_name: string;
+        args_summary: string;
+        risk: 'safe' | 'suspicious' | 'destructive';
+        message: string;
+        created_at: number;
+      };
+    };
+  };
+
+  const PERM_PAYLOAD = {
+    request_id: 'perm-req-1',
+    tool_name: 'terminal',
+    args_summary: '{"command": "ls"}',
+    risk: 'suspicious' as const,
+    message: 'execute 能力工具 terminal 需要用户逐次确认',
+    created_at: 1753718400.123,
+  };
+
+  it('permission_request event populates the permission store for the dialog', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-perm' });
+
+    let capturedCb: ((e: PermEvt) => void) | null = null;
+    listenMock.mockImplementationOnce(async (_name: string, cb: (e: PermEvt) => void) => {
+      capturedCb = cb;
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('帮我跑 ls') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(capturedCb).not.toBeNull();
+    expect(usePermissionState.getState().currentRequest).toBeNull();
+
+    // acting → permission_request（后端 gate 开始阻塞等待应答）
+    act(() => {
+      capturedCb!({ payload: { state: 'acting', iteration: 0 } });
+    });
+    act(() => {
+      capturedCb!({
+        payload: {
+          state: 'permission_request',
+          iteration: 0,
+          agent_id: null,
+          permission_request: PERM_PAYLOAD,
+        },
+      });
+    });
+
+    // 对话框数据到位
+    expect(usePermissionState.getState().currentRequest).toEqual(PERM_PAYLOAD);
+    // 且没有污染消息气泡（permission_request 不产生占位文本,保留 acting 占位）
+    const mid = result.current.messages.find((m) => m.role === 'assistant');
+    expect(mid?.content).toBe('🔧 行动中…');
+
+    // 用户批准后后端继续: observing → done
+    act(() => {
+      capturedCb!({ payload: { state: 'observing', iteration: 0 } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 1, content: 'ls 输出' } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+
+    // 流结束 → finishStream 清掉遗留对话框
+    expect(usePermissionState.getState().currentRequest).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('stream error path also resolves a pending permission request', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-perm-fail' });
+
+    let capturedCb: ((e: PermEvt) => void) | null = null;
+    listenMock.mockImplementationOnce(async (_name: string, cb: (e: PermEvt) => void) => {
+      capturedCb = cb;
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('rm -rf /') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => {
+      capturedCb!({
+        payload: {
+          state: 'permission_request',
+          iteration: 0,
+          permission_request: { ...PERM_PAYLOAD, request_id: 'perm-fail' },
+        },
+      });
+    });
+    expect(usePermissionState.getState().currentRequest?.request_id).toBe('perm-fail');
+
+    // failed 事件 → onError + finishStream → resolve()
+    act(() => {
+      capturedCb!({ payload: { state: 'failed', iteration: 0, content: 'boom' } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+
+    expect(usePermissionState.getState().currentRequest).toBeNull();
+  });
+
+  it('permission_request event without payload is ignored (defensive)', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-perm-empty' });
+
+    let capturedCb: ((e: PermEvt) => void) | null = null;
+    listenMock.mockImplementationOnce(async (_name: string, cb: (e: PermEvt) => void) => {
+      capturedCb = cb;
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('hi') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(capturedCb).not.toBeNull();
+
+    // 缺少 permission_request 载荷 → 防御性跳过,不写 store
+    act(() => {
+      capturedCb!({ payload: { state: 'permission_request', iteration: 0 } });
+    });
+    expect(usePermissionState.getState().currentRequest).toBeNull();
+
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 1, content: 'ok' } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+
+    expect(usePermissionState.getState().currentRequest).toBeNull();
   });
 });
