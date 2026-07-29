@@ -56,6 +56,7 @@ import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { resolveBackendLaunchCommand } from './backendLauncher';
+import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -183,6 +184,27 @@ function spawnBackend(): ChildProcess {
   }
 
   // plan.kind === 'spawn' — happy path
+
+  // ── Orphan cleanup (Windows only) ──────────────────────────────────────
+  // A previous Electron main process may have crashed without running
+  // shutdownBackend(), leaving a Python backend still listening on
+  // BACKEND_PORT. On Windows (SO_REUSEADDR) both old and new backends
+  // would bind the same port, and HTTP requests from the frontend may
+  // be routed to the stale process whose DB state is inconsistent —
+  // causing 500 errors and a white screen. Kill any such orphan before
+  // spawning our own backend. No-op on non-Windows platforms.
+  const killResult = killOrphanedBackendOnPort({
+    port: BACKEND_PORT,
+    platform: process.platform,
+    selfPid: process.pid,
+  });
+  if (killResult.kind === 'killed') {
+    logger.info('main: killed orphaned backend process(es) on port', {
+      port: BACKEND_PORT,
+      pids: killResult.pids,
+    });
+  }
+
   const proc = spawn(plan.cmd, plan.args, {
     env: { ...process.env, ...plan.extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],

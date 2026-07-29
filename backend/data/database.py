@@ -19,6 +19,12 @@ class Database:
             env_path = os.environ.get("SAGE_DB_PATH")
             if env_path:
                 db_path = env_path
+                # SAGE_DB_PATH 由 Electron main process 注入 (packaged 模式下
+                # 指向 %APPDATA%/Sage/sage.db)。若该目录尚未被 Electron 创建
+                # (首次启动 / 全新安装), sqlite3.connect() 会因父目录不存在而
+                # 抛 OperationalError: unable to open database file, 进而导致
+                # lifespan 失败 → 后端无法启动 → 前端白屏。防御性创建父目录。
+                Path(db_path).parent.mkdir(parents=True, exist_ok=True)
             else:
                 # 默认路径：项目根目录下的 data/sage.db
                 base_dir = Path(__file__).parent.parent.parent
