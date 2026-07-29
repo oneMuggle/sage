@@ -13,6 +13,7 @@ from backend.tools.bash_validation import validate_bash
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
     DEFAULT_TOOL_CAPABILITY,
+    TOOL_CAPABILITIES,
     PermissionEnforcer,
     PermissionMode,
     PermissionRule,
@@ -404,3 +405,17 @@ def test_classify_tool_m2_agent_surface():
     assert classify_tool("edit_file") is ToolCapability.WRITE
     # EXECUTE: REPL 跑子进程，由审批矩阵门控
     assert classify_tool("repl") is ToolCapability.EXECUTE
+
+
+def test_classify_tool_m5_agent_tool_is_execute():
+    """M5 的 agent 工具显式登记为 EXECUTE，不依赖 fail-safe 默认值。
+
+    派生子代理 = 启动一个自主 LLM 循环（网络 + token + worker 线程至多
+    SUBAGENT_TIMEOUT_S），开放性强于 skill，故与 skill/terminal/repl 同为
+    最严格能力。回归意义：若有人误降为 READ/WRITE，workspace_write 模式下
+    派生子代理将不再需要用户审批。
+    """
+    # Arrange / Act / Assert
+    assert classify_tool("agent") is ToolCapability.EXECUTE
+    # 必须是显式登记，而非落到 fail-safe 默认值
+    assert "agent" in TOOL_CAPABILITIES

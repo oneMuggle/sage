@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import type { Lane, LaneBoardGroup, LaneStatus } from '../../shared/api/types';
+import { useI18n } from '../../shared/lib/i18n';
 
 const STATUS_LABELS: Record<LaneStatus, string> = {
   created: '已创建',
@@ -38,8 +39,11 @@ interface LaneCardProps {
 }
 
 function LaneCard({ lane, onCancel }: LaneCardProps) {
+  const { t } = useI18n();
   const statusLabel = STATUS_LABELS[lane.status] ?? lane.status;
   const statusColor = STATUS_COLORS[lane.status] ?? 'bg-bg-subtle text-text-secondary';
+  // M5: planner / sub-agent lanes carry a metadata.source marker.
+  const source = typeof lane.metadata?.source === 'string' ? lane.metadata.source : null;
 
   const heartbeatLabel = useMemo(() => {
     if (!lane.heartbeat) return '—';
@@ -54,10 +58,28 @@ function LaneCard({ lane, onCancel }: LaneCardProps) {
 
   return (
     <div className="p-3 rounded-lg border border-border bg-bg-surface hover:border-border-hover transition-colors">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between gap-1 mb-1">
         <span className="font-mono text-xs text-text-tertiary truncate">{lane.lane_id}</span>
-        <span className={`px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${statusColor}`}>
-          {statusLabel}
+        <span className="flex items-center gap-1 shrink-0">
+          {source === 'subagent' && (
+            <span
+              data-testid="lane-source-badge"
+              className="px-2 py-0.5 text-xs rounded-full whitespace-nowrap bg-purple-100 text-purple-800"
+            >
+              {t('orchestration.badge.subagent')}
+            </span>
+          )}
+          {source === 'planner' && (
+            <span
+              data-testid="lane-source-badge"
+              className="px-2 py-0.5 text-xs rounded-full whitespace-nowrap bg-indigo-100 text-indigo-800"
+            >
+              {t('orchestration.badge.planner')}
+            </span>
+          )}
+          <span className={`px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${statusColor}`}>
+            {statusLabel}
+          </span>
         </span>
       </div>
       <div className="text-sm text-text-secondary mb-1 truncate">task: {lane.task_id}</div>

@@ -7,7 +7,13 @@
 import { create } from 'zustand';
 
 import { orchestrationClient } from '../../shared/api/orchestrationClient';
-import type { Lane, LaneBoardGroup, LaneEvent, LaneStatus } from '../../shared/api/types';
+import type {
+  CreateLanesResponse,
+  Lane,
+  LaneBoardGroup,
+  LaneEvent,
+  LaneStatus,
+} from '../../shared/api/types';
 
 interface LaneBoardState {
   lanes: Lane[];
@@ -16,6 +22,8 @@ interface LaneBoardState {
   teamIdFilter: string | null;
   load: (teamId?: string) => Promise<void>;
   refresh: () => Promise<void>;
+  /** M5: planner decomposition → tasks + lanes, then refresh the board. */
+  createLane: (goal: string, agent?: string) => Promise<CreateLanesResponse>;
   cancel: (laneId: string, reason?: string) => Promise<void>;
   applyEvent: (event: LaneEvent) => void;
   computeBoard: () => LaneBoardGroup;
@@ -82,6 +90,19 @@ export const useLaneBoardStore = create<LaneBoardState>((set, get) => ({
       set({ lanes, error: null });
     } catch (error: unknown) {
       set({ error: getErrorMessage(error) });
+    }
+  },
+
+  async createLane(goal: string, agent?: string) {
+    try {
+      const created = await orchestrationClient.createLane(agent ? { goal, agent } : { goal });
+      // Refresh so the board reflects the planner-created lanes (their
+      // state/agent bindings are authoritative server-side).
+      await get().refresh();
+      return created;
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error) });
+      throw error;
     }
   },
 

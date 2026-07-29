@@ -158,9 +158,11 @@ messages 表加 `fork_root` / `branch_point` 列，copy-on-write：fork 时仅�
   - [x] fork 路由 + DB copy-on-write + 前端入口
         （决策：改为全量前缀复制而非 CoW；已知限制"自动压缩尚不降低每轮 token"
         见 `docs/technical/35-session-compact-fork.md` §3 / §6）
-- [ ] **M5：编排 E2E**（~4–5 天，`feat/orchestration-e2e`）
-  - [ ] Planner LLM 注入 + lane 创建 API + 前端入口
-  - [ ] in-loop Agent 工具 + LaneBoard 实时子代理可视化
+- [x] **M5：编排 E2E**（~4–5 天，`feat/orchestration-e2e`）
+  - [x] Planner LLM 注入 + lane 创建 API + 前端入口
+  - [x] in-loop Agent 工具 + LaneBoard 实时子代理可视化
+        （决策：`agent` 显式登记为 EXECUTE 能力，与 skill/terminal/repl 同级——
+        见 `docs/technical/36-orchestration-e2e.md` §3）
 - [ ] **M6：生态扩展**（~5–8 天，可拆多个分支）
   - [ ] Hooks 系统（Pre/PostToolUse + decision）
   - [ ] 用量/成本面板

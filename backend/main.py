@@ -7,7 +7,6 @@ import logging
 import os
 import uuid
 from contextlib import asynccontextmanager, suppress
-from typing import List
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -204,46 +203,13 @@ async def lifespan(app: FastAPI):
         app.state.wiki_mcp_server = None
 
     # Phase 2 (multi-agent core): 初始化注册中心 + Planner + Router + HeartbeatMonitor
+    from backend.orchestration.agent_adapter import SeededAgentRegistry
     from backend.orchestration.heartbeat import HeartbeatMonitor
     from backend.orchestration.lane_registry import LaneRegistry
-    from backend.orchestration.models import Agent
     from backend.orchestration.planner import Planner
     from backend.orchestration.router import DispatchStrategy, Router
     from backend.orchestration.task_registry import TaskRegistry
     from backend.orchestration.team_registry import TeamRegistry
-
-    class _AgentRegistryAdapter:
-        """薄适配器：将 AgentRepository (返回 dict) 适配为 Router 期望的 list_agents() 接口。"""
-
-        def __init__(self) -> None:
-            self._repo = AgentRepository()
-
-        def list_agents(self) -> List[Agent]:
-            profiles = self._repo.list_all()
-            agents: List[Agent] = []
-            for p in profiles:
-                if not p.get("enabled", True):
-                    continue
-                # 解析 tools 字段为 capabilities（与现有 AgentProfile 字段对齐）
-                tools = p.get("tools", [])
-                if isinstance(tools, str):
-                    try:
-                        import json as _json
-
-                        tools = _json.loads(tools)
-                    except Exception:
-                        tools = []
-                agents.append(
-                    Agent(
-                        agent_id=p["id"],
-                        name=p.get("name", p["id"]),
-                        status="active",
-                        capabilities=list(tools) if tools else [p.get("role", "general")],
-                        max_concurrent_tasks=2,
-                        default_permission="implement",
-                    )
-                )
-            return agents
 
     app.state.task_registry = TaskRegistry()
     app.state.lane_registry = LaneRegistry()
@@ -254,7 +220,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.router = Router(
         lane_registry=app.state.lane_registry,
-        agent_registry=_AgentRegistryAdapter(),
+        agent_registry=SeededAgentRegistry(AgentRepository()),
         strategy=DispatchStrategy.CAPABILITY_BASED,
     )
     app.state.heartbeat_monitor = HeartbeatMonitor(

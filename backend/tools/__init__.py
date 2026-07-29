@@ -8,6 +8,7 @@ from typing import Optional
 
 from backend.domain.tool_policy import ToolPolicy
 
+from .agent_tool import AgentTool
 from .ask_user_tool import AskUserQuestionTool
 from .base import BaseTool, ToolResult, ToolSchema
 from .calculator import CalculatorTool
@@ -57,6 +58,10 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
     registry.register(SkillTool(policy=policy))
     # M2 part B: AskUserQuestion（READ，run_loop 分发前特判 + 提问闸口）
     registry.register(AskUserQuestionTool(policy=policy))
+    # M5: in-loop sub-agent tool (claw-code execute_agent pattern). The
+    # sub-agent itself only ever gets the read-only whitelist — see
+    # agent_tool.SUBAGENT_TOOL_WHITELIST.
+    registry.register(AgentTool(policy=policy))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
@@ -74,6 +79,7 @@ __all__ = [
     "BaseTool",
     "ToolSchema",
     "ToolResult",
+    "AgentTool",
     "TerminalTool",
     "ReadFileTool",
     "WriteFileTool",

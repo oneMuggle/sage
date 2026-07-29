@@ -1,17 +1,18 @@
 /**
- * IPC client for multi-agent orchestration (Phase 4).
+ * IPC client for multi-agent orchestration (Phase 4 + M5).
  *
  * Translates to backend HTTP via Electron preload:
  *   orchestration_list_lanes       → GET    /api/v1/orchestration/lanes
  *   orchestration_get_lane        → GET    /api/v1/orchestration/lanes/{id}
  *   orchestration_list_lane_events → GET    /api/v1/orchestration/lanes/{id}/events
  *   orchestration_cancel_lane      → POST   /api/v1/orchestration/lanes/{id}/cancel
+ *   orchestration_create_lane      → POST   /api/v1/orchestration/lanes (M5)
  *
  * All methods throw on IPC failure; callers should wrap in try/catch and
  * surface a toast on failure.
  */
 import { invoke } from './desktopInvoke';
-import type { Lane, LaneEvent, LaneStatus } from './types';
+import type { CreateLanesResponse, Lane, LaneEvent, LaneStatus } from './types';
 
 export interface ListLanesParams {
   status?: LaneStatus;
@@ -19,9 +20,19 @@ export interface ListLanesParams {
   limit?: number;
 }
 
+export interface CreateLaneParams {
+  goal: string;
+  agent?: string;
+}
+
 export const orchestrationClient = {
   async listLanes(params: ListLanesParams = {}): Promise<Lane[]> {
     return invoke<Lane[]>('orchestration_list_lanes', { params });
+  },
+
+  /** M5: decompose a goal via the planner and create tasks + lanes. */
+  async createLane(params: CreateLaneParams): Promise<CreateLanesResponse> {
+    return invoke<CreateLanesResponse>('orchestration_create_lane', { ...params });
   },
 
   async getLane(laneId: string): Promise<Lane> {

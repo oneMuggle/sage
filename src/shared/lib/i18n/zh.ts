@@ -218,6 +218,17 @@ export const zh = {
   'welcome.quick.webui_desc': '在浏览器中打开',
   'welcome.quick.webui_unavailable': 'Unavailable',
 
+  // ─── Orchestration (M5) ─────
+  'orchestration.title': '编排看板',
+  'orchestration.subtitle': '输入目标，由 Planner 拆解为任务并创建执行泳道',
+  'orchestration.goal_placeholder': '描述一个目标，例如：调研 X 并生成一份报告',
+  'orchestration.create': '创建编排',
+  'orchestration.creating': '创建中…',
+  'orchestration.badge.subagent': '子代理',
+  'orchestration.badge.planner': '计划',
+  'orchestration.toast.create_success': '已创建 {count} 条泳道',
+  'orchestration.toast.create_fail': '创建编排失败',
+
   // ─── Scheduled Tasks (Phase 8) ─────
   'scheduled.title': '定时任务',
   'scheduled.subtitle': '管理自动发送的消息',

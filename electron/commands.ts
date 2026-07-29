@@ -261,6 +261,12 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}/cancel`,
   },
+  // M5: planner-driven lane creation. Body {goal, agent?} — args are
+  // auto camelToSnake'd by invokeBackend (both keys stay single-segment).
+  orchestration_create_lane: {
+    method: 'POST',
+    path: () => '/api/v1/orchestration/lanes',
+  },
 
   // Office document features (Phase 1.3, plan §4.1.3 step 14).
   // 5 routes for Phase 1.2 backend (3 read + list + delete).

@@ -221,6 +221,17 @@ export const en: Record<TranslationKey, string> = {
   'welcome.quick.webui_desc': 'Open in browser',
   'welcome.quick.webui_unavailable': 'Unavailable',
 
+  // ─── Orchestration (M5) ─────
+  'orchestration.title': 'Orchestration Board',
+  'orchestration.subtitle': 'Describe a goal — the planner decomposes it into tasks and lanes',
+  'orchestration.goal_placeholder': 'Describe a goal, e.g. research X and produce a report',
+  'orchestration.create': 'Create orchestration',
+  'orchestration.creating': 'Creating…',
+  'orchestration.badge.subagent': 'sub-agent',
+  'orchestration.badge.planner': 'planned',
+  'orchestration.toast.create_success': 'Created {count} lane(s)',
+  'orchestration.toast.create_fail': 'Failed to create orchestration',
+
   // ─── Scheduled Tasks (Phase 8) ─────
   'scheduled.title': 'Scheduled Tasks',
   'scheduled.subtitle': 'Manage automated messages',
