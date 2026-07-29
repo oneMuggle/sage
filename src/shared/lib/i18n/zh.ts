@@ -204,6 +204,41 @@ export const zh = {
   'scheduled.toast.update_fail': '更新失败',
   'scheduled.toast.delete_fail': '删除失败',
   'scheduled.confirm.delete': '确定要删除这个定时任务吗？',
+
+  // ─── M1 工具审批 ──────────────────
+  'permission.title': '工具执行审批',
+  'permission.tool': '工具',
+  'permission.args': '参数',
+  'permission.risk.safe': '安全',
+  'permission.risk.suspicious': '可疑',
+  'permission.risk.destructive': '危险',
+  'permission.remember': '记住我的选择',
+  'permission.approve': '允许',
+  'permission.deny': '拒绝',
+  'permission.toast.failed': '审批应答失败',
+
+  // ─── M2 AskUserQuestion ───────────
+  'question.title': '助手需要您的回答',
+  'question.custom.label': '其他',
+  'question.custom.placeholder': '输入自定义回答…',
+  'question.submit': '提交',
+  'question.multi_hint': '（可多选）',
+  'question.toast.failed': '提交回答失败',
+
+  // ─── M1 设置：工具权限 ────────────
+  'settings.section.permission': '工具权限',
+  'settings.permission.mode': '权限模式',
+  'settings.permission.mode.read_only': '只读',
+  'settings.permission.mode.read_only.desc': '仅允许读取；所有写入与执行都被拒绝',
+  'settings.permission.mode.workspace_write': '工作区写入（默认）',
+  'settings.permission.mode.workspace_write.desc': '允许工作区内写入；执行类与越界操作需确认',
+  'settings.permission.mode.prompt': '逐次确认',
+  'settings.permission.mode.prompt.desc': '所有写入与执行操作都需要手动批准',
+  'settings.permission.mode.full_access': '完全访问',
+  'settings.permission.mode.full_access.desc': '允许所有操作，不再弹出审批（谨慎）',
+  'settings.permission.rules_hint':
+    '细粒度规则（permission_rules JSON）暂不支持界面编辑；审批时勾选"记住我的选择"会自动追加规则。',
+  'settings.permission.load_failed': '读取权限模式失败',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

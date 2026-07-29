@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useBtwState } from '../../entities/chat/btwState';
+import { usePermissionState } from '../../entities/permission/permissionState';
+import { useQuestionState } from '../../entities/question/questionState';
 import { resolveEndpoint } from '../../entities/setting/types';
 import {
   ApiException,
@@ -275,6 +277,11 @@ export function useChat() {
         setStreaming(null);
         cancelRef.current = null;
         resetLoading();
+        // M1: 流结束/错误 → 关闭遗留的审批对话框(后端 gate 已超时 fail-closed,
+        // 对话框里的请求必然已失效,不能再让 UI 卡着)
+        usePermissionState.getState().resolve();
+        // M2 part B: 同理关闭遗留的提问对话框(后端 gate 已超时按空应答处理)
+        useQuestionState.getState().resolve();
         // HIGH-4: 清空 ref 让 interrupt 知道当前 stream 已结束
         finishStreamRef.current = null;
       };
@@ -299,6 +306,22 @@ export function useChat() {
                       }
                     : prev,
                 );
+              }
+
+              // M1 工具审批: permission_request 事件 → 写入 permission store,
+              // 全局 ApprovalDialog 弹出。后端 gate 阻塞等待应答(最长 300s,
+              // fail-closed),随后的 observing 事件自然覆盖流式状态。
+              // uiText 分支对该 state 返回 null,不会碰消息气泡占位符。
+              if (evt.state === 'permission_request' && evt.permission_request) {
+                usePermissionState.getState().setFromEvent(evt.permission_request);
+              }
+
+              // M2 part B: ask_user_question 事件 → 写入 question store,
+              // 全局 QuestionDialog 弹出。后端 gate 阻塞等待应答(最长 300s,
+              // 超时 = 空应答软结果),随后的 observing 事件自然覆盖流式状态。
+              // uiText 分支对该 state 返回 null,不会碰消息气泡占位符。
+              if (evt.state === 'ask_user_question' && evt.user_question) {
+                useQuestionState.getState().setFromEvent(evt.user_question);
               }
 
               // 处理 reasoning 事件：累积 reasoning 内容（支持完整事件和增量事件）

@@ -50,6 +50,22 @@ class TestPermissionSystem:
         # Execute should be blocked
         assert not checker.can_execute(AgentAction("execute", "rm -rf /"))
 
+    def test_audit_preset_blocks_real_tool_names_via_capability_table(self):
+        """FIX-1: 只读预设经 M1 能力分类表拦真实工具名 terminal (EXECUTE)。
+
+        旧硬编码名单只有 "execute"/"shell", 真实 EXECUTE 工具 "terminal"
+        会漏过 AUDIT/EXPLAIN 预设。委托 classify_tool 后:
+        - terminal → EXECUTE → 拦
+        - execute_lane 等未登记动作 → 默认 WRITE (fail-safe) → 拦
+        - read_file → READ → 放行
+        """
+        perm = LanePermission(preset=PermissionPreset.AUDIT)
+        checker = PermissionChecker(perm)
+
+        assert not checker.can_execute(AgentAction("terminal", "ls"))
+        assert not checker.can_execute(AgentAction("execute_lane", "lane-1"))
+        assert checker.can_execute(AgentAction("read_file", "/tmp/test.txt"))
+
     def test_implement_preset_allows_writes(self):
         """IMPLEMENT preset can write files."""
         perm = LanePermission(preset=PermissionPreset.IMPLEMENT)

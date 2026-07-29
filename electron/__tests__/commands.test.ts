@@ -303,9 +303,7 @@ describe('settings & preferences IPC routes', () => {
   it('has set_preference route with key encoding', () => {
     const r = COMMAND_ROUTES.set_preference;
     expect(r.method).toBe('PUT');
-    expect(r.path({ key: 'current_session_id' })).toBe(
-      '/api/v1/preferences/current_session_id',
-    );
+    expect(r.path({ key: 'current_session_id' })).toBe('/api/v1/preferences/current_session_id');
   });
 
   it('all settings/preference paths have /api/v1 prefix', () => {
@@ -315,6 +313,96 @@ describe('settings & preferences IPC routes', () => {
       COMMAND_ROUTES.set_settings.path({}),
       COMMAND_ROUTES.get_preference.path({ key: 'theme_mode' }),
       COMMAND_ROUTES.set_preference.path({ key: 'theme_mode' }),
+    ];
+    paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\//));
+  });
+});
+
+describe('permission IPC routes (M1 tool security hardening)', () => {
+  // Backend: backend/api/permission_routes.py — GET /permissions/pending +
+  // POST /permissions/{request_id}/answer（ApprovalAnswerBody extra="forbid"）。
+
+  it('has permissions_pending route: GET /api/v1/permissions/pending', () => {
+    const r = COMMAND_ROUTES.permissions_pending;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({})).toBe('/api/v1/permissions/pending');
+    expect(r.body).toBeUndefined();
+  });
+
+  it('has permissions_answer route: POST with url-encoded requestId path param', () => {
+    const r = COMMAND_ROUTES.permissions_answer;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({ requestId: 'abc-123' })).toBe('/api/v1/permissions/abc-123/answer');
+    // 路径参数必须 url-encode（与 get_session / workspace_bind 同约定）
+    expect(r.path({ requestId: 'id/with slash' })).toBe(
+      '/api/v1/permissions/id%2Fwith%20slash/answer',
+    );
+  });
+
+  // Guard: 后端 ApprovalAnswerBody 是 extra="forbid" — requestId 泄漏进 body
+  // 会触发 422。body selector 必须只保留 approved/remember。
+  it('permissions_answer body selector strips requestId (only approved/remember)', () => {
+    const r = COMMAND_ROUTES.permissions_answer;
+    expect(r.body).toBeDefined();
+    expect(r.body!({ requestId: 'r-1', approved: true, remember: false, extraField: 'x' })).toEqual(
+      { approved: true, remember: false },
+    );
+  });
+
+  it('permission routes use /api/v1 prefix (防 404 guard)', () => {
+    const paths = [
+      COMMAND_ROUTES.permissions_pending.path({}),
+      COMMAND_ROUTES.permissions_answer.path({ requestId: 'x' }),
+    ];
+    paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\//));
+  });
+});
+
+describe('question IPC routes (M2 part B: AskUserQuestion)', () => {
+  // Backend: backend/api/question_routes.py — GET /questions/pending +
+  // POST /questions/{request_id}/answer（QuestionAnswerBody extra="forbid"）。
+
+  it('has questions_pending route: GET /api/v1/questions/pending', () => {
+    const r = COMMAND_ROUTES.questions_pending;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({})).toBe('/api/v1/questions/pending');
+    expect(r.body).toBeUndefined();
+  });
+
+  it('has questions_answer route: POST with url-encoded requestId path param', () => {
+    const r = COMMAND_ROUTES.questions_answer;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({ requestId: 'abc-123' })).toBe('/api/v1/questions/abc-123/answer');
+    // 路径参数必须 url-encode（与 permissions_answer / get_session 同约定）
+    expect(r.path({ requestId: 'id/with slash' })).toBe(
+      '/api/v1/questions/id%2Fwith%20slash/answer',
+    );
+  });
+
+  // Guard: 后端 QuestionAnswerBody 是 extra="forbid" — requestId 泄漏进 body
+  // 会触发 422。body selector 必须只保留 answers/custom。
+  it('questions_answer body selector strips requestId (only answers/custom)', () => {
+    const r = COMMAND_ROUTES.questions_answer;
+    expect(r.body).toBeDefined();
+    expect(
+      r.body!({ requestId: 'r-1', answers: ['PDF'], custom: 'x', extraField: 'boom' }),
+    ).toEqual({ answers: ['PDF'], custom: 'x' });
+  });
+
+  it('questions_answer body selector normalizes missing answers/custom', () => {
+    const r = COMMAND_ROUTES.questions_answer;
+    // Escape 空提交 → answers 缺失归一为 [], custom 缺失归一为 null
+    expect(r.body!({ requestId: 'r-1' })).toEqual({ answers: [], custom: null });
+  });
+
+  it('question routes use /api/v1 prefix (防 404 guard)', () => {
+    const paths = [
+      COMMAND_ROUTES.questions_pending.path({}),
+      COMMAND_ROUTES.questions_answer.path({ requestId: 'x' }),
     ];
     paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\//));
   });

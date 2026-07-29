@@ -472,19 +472,22 @@ async def toggle_agent(agent_id: str, data: AgentToggle):
 
 # ==================== 技能 API (PR-7) ====================
 
-# 进程内单例: adapter 自身带 enabled / usage_count 内存状态,
-# 模块级 cache 让多个请求共享同一份,避免 toggle 后状态错位。
-_skill_adapter_singleton: Optional[object] = None
+# 进程内单例缓存已搬到 ``backend.adapters.out.skill.inproc``（M2b 重构：
+# 断开 tools -> api 的反向 import 链，修 import-linter 违规）。本模块只
+# 保留一个 thin wrapper 委托到 ``inproc.get_singleton()``，保证 REST 路由
+# 与 ``SkillTool`` 共享同一注册表状态（enabled / usage_count 等内存字段）。
 
 
 def _get_skill_adapter():
-    """惰性构造 + 缓存 InprocSkillAdapter 单例。"""
-    global _skill_adapter_singleton
-    if _skill_adapter_singleton is None:
-        from backend.adapters.out.skill import InprocSkillAdapter
+    """委托到 ``inproc.get_singleton()``（M2b 重构）。
 
-        _skill_adapter_singleton = InprocSkillAdapter()
-    return _skill_adapter_singleton
+    返回的 adapter 与 ``backend.tools.skill_tool.SkillTool._resolve_adapter``
+    共享同一缓存 — 即所有 REST 路由与 in-loop 工具调用看到同一份
+    ``InprocSkillAdapter`` 实例（enabled / usage_count 一致）。
+    """
+    from backend.adapters.out.skill.inproc import get_singleton
+
+    return get_singleton()
 
 
 def _skill_to_dict(ext: dict, enabled: bool, usage_count: int) -> dict:

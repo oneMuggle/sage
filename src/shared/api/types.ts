@@ -90,10 +90,64 @@ export type AgentState =
   | 'reasoning' // 新增：携带 LLM 思考/推理过程内容
   | 'reasoning_delta' // 新增：reasoning 增量事件（流式输出）
   | 'acting'
+  | 'permission_request' // M1: 工具审批卡点 — 等待用户批准/拒绝
+  | 'ask_user_question' // M2 part B: AskUserQuestion 卡点 — 等待用户选择/填写
   | 'observing'
   | 'content_delta'
   | 'done'
   | 'failed';
+
+/**
+ * 工具审批请求 — M1 工具安全加固。
+ *
+ * 由后端 ApprovalGate 生成，随 `state: 'permission_request'` 流事件下发
+ * （backend/services/permission_gate.py ApprovalRequest.to_dict()）。
+ * 形态与 `GET /api/v1/permissions/pending` 返回的数组元素一致。
+ */
+export interface PermissionRequest {
+  /** 审批请求唯一 ID（UUID），应答时作为路径参数回传 */
+  request_id: string;
+  /** 触发审批的工具名（如 terminal / file_write） */
+  tool_name: string;
+  /** 脱敏后的参数摘要（JSON 字符串） */
+  args_summary: string;
+  /** 风险分级（backend BashRisk / 工具能力推导） */
+  risk: 'safe' | 'suspicious' | 'destructive';
+  /** 给用户看的审批原因说明 */
+  message: string;
+  /** 创建时间戳（epoch 秒，浮点） */
+  created_at: number;
+}
+
+/** 问题选项 — QuestionDialog 渲染为可选卡片 */
+export interface QuestionOption {
+  /** 选项文本（回传给 agent 的值） */
+  label: string;
+  /** 选项的补充说明（可选） */
+  description?: string | null;
+}
+
+/**
+ * 用户提问请求 — M2 part B: AskUserQuestion。
+ *
+ * 由后端 UserQuestionGate 生成，随 `state: 'ask_user_question'` 流事件下发
+ * （backend/services/question_gate.py QuestionRequest.to_dict()）。
+ * 形态与 `GET /api/v1/questions/pending` 返回的数组元素一致。
+ */
+export interface UserQuestion {
+  /** 提问请求唯一 ID（UUID），应答时作为路径参数回传 */
+  request_id: string;
+  /** 展示给用户的完整问题文本 */
+  question: string;
+  /** 可选短标签（UI chip，如"输出格式"） */
+  header?: string | null;
+  /** 2-4 个选项 */
+  options: QuestionOption[];
+  /** 是否允许多选 */
+  multi_select: boolean;
+  /** 创建时间戳（epoch 秒，浮点） */
+  created_at: number;
+}
 
 /** 流式聊天工具调用 (对应 OpenAI 工具调用格式) */
 export interface AgentToolCall {
@@ -124,6 +178,10 @@ export interface AgentEvent {
   error?: string;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
+  /** M1: state === 'permission_request' 时携带的审批请求详情 */
+  permission_request?: PermissionRequest;
+  /** M2 part B: state === 'ask_user_question' 时携带的提问详情 */
+  user_question?: UserQuestion;
 }
 
 // ==================== 错误类型定义 ====================
