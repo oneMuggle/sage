@@ -133,20 +133,20 @@ messages 表加 `fork_root` / `branch_point` 列，copy-on-write：fork 时仅�
 
 ## 5. 实施步骤
 
-- [ ] **M0：存量缺陷速修**（~0.5 天，`fix/hygiene-2026-07`）
+- [x] **M0：存量缺陷速修**（~0.5 天，`fix/hygiene-2026-07`）
   - [x] 删除 `main.py:348` 重复 wiki_router + 回归（`backend/tests/api/test_router_registration.py`）
   - [x] `chat_stream` RuntimeError → LLMError 分类（关闭 Task 11；`LLMClient._raise_classified_error` 与 `chat()` 共享分类）
   - [x] HttpComputeAdapter：已删除（YAGNI 决策；仅保留 `adapter: subprocess`，docs 已同步）
-  - [ ] 记录 API_MODE hex 回归的收尾条件到 Q4 跟踪项
-- [ ] **M1：工具安全硬化**（~3–5 天，`feat/tool-permission-hardening`）⭐ 最高优先
-  - [ ] PermissionMode + Enforcer + 单测矩阵（参照 claw path_scope_enforcement）
-  - [ ] bash_validation Py3.8 移植 + 破坏性命令警告单测
-  - [ ] file_tool 边界/符号链接/大小守卫
-  - [ ] GUI 审批对话框 + IPC + e2e（Playwright）
-- [ ] **M2：工具面扩展 + Skill 接线**（~4–6 天，`feat/agent-tool-surface`）
-  - [ ] AskUserQuestion 异步挂起 spike（先验证，阻塞则降级为同步确认）
-  - [ ] edit_file / glob / grep / TodoWrite / StructuredOutput / REPL
-  - [ ] SkillPort 接线（消除 skills=None）+ in-loop Skill 工具
+  - [x] 记录 API_MODE hex 回归的收尾条件到 Q4 跟踪项（见 §8）
+- [x] **M1：工具安全硬化**（~3–5 天，`feat/tool-permission-hardening`）⭐ 最高优先
+  - [x] PermissionMode + Enforcer + 单测矩阵（参照 claw path_scope_enforcement）
+  - [x] bash_validation Py3.8 移植 + 破坏性命令警告单测
+  - [x] file_tool 边界/符号链接/大小守卫
+  - [x] GUI 审批对话框 + IPC + e2e（Playwright）
+- [x] **M2：工具面扩展 + Skill 接线**（~4–6 天，`feat/agent-tool-surface`）
+  - [x] AskUserQuestion 异步挂起 spike（先验证，阻塞则降级为同步确认）
+  - [x] edit_file / glob / grep / TodoWrite / StructuredOutput / REPL
+  - [x] SkillPort 接线（消除 skills=None）+ in-loop Skill 工具
 - [ ] **M3：MCP 多服务器**（~3–4 天，`feat/mcp-multi-server`）
   - [ ] 多服务器配置 schema + Settings UI 标签页
   - [ ] lifecycle 状态机接线生产客户端 + 降级报告 + `/mcp/status`
@@ -163,7 +163,8 @@ messages 表加 `fork_root` / `branch_point` 列，copy-on-write：fork 时仅�
   - [ ] SAGE.md/CLAUDE.md 项目指令发现
   - [ ] i18n 补齐 + Mock LLM parity harness
 
-**节奏**：单线程滚动约 3–5 周。M0/M1 可立即开始；M2 依赖 M1 的审批通道（AskUserQuestion 复用 GUI 对话框）。
+**节奏**：单线程滚动约 3–5 周。M0/M1/M2 已完成（见 §9）；M3–M6 四个分支均已开发完毕，
+待逐个 rebase onto main 后合并。
 
 ## 6. 风险评估与依赖
 
@@ -189,6 +190,75 @@ messages 表加 `fork_root` / `branch_point` 列，copy-on-write：fork 时仅�
 2. 涉及 UI 的 M 附 Playwright e2e 用例
 3. CI 全绿 → code-reviewer agent 审查 → 无 CRITICAL/HIGH → 用户 merge
 4. 功能点并入 `docs/technical/` 对应章节后删除本文件中已完成项
+
+## 8. Q4 跟踪：API_MODE hex 收尾条件
+
+M0 记录项。当前 `API_MODE` 默认 `hex`，但 M1/M2 的新工具与闸口一律先注册到
+**legacy registry**（见 §4.4），形成双轨。收尾（即移除 legacy 轨道）需同时满足：
+
+| # | 条件 | 当前状态 |
+|---|---|---|
+| C1 | M1 权限 enforcer 在 hex 路径（`ChatService` → ToolPort）同样生效，非仅 `SageAgent.run_loop` | ⬜ 未做 |
+| C2 | M2 六个新工具 + skill/ask_user 在 hex registry 注册并有对应契约测试 | ⬜ 未做 |
+| C3 | M5 in-loop Agent 工具落地后，子代理走 hex 装配（否则双轨永久化） | ⬜ 阻塞于 M5 |
+| C4 | `API_MODE=legacy` 与默认 hex 两种模式的 pytest 全绿且用例数一致 | 🟡 legacy 509+3 skip（见 `docs/technical/18-hexagonal.md`） |
+| C5 | `backend/api/legacy_routes.py` 与 `core/legacy/` 无生产引用后整体删除 | ⬜ 未做 |
+
+**收尾时机**：M5 完成后评估。在此之前 hex/legacy 双轨是**有意保留**的回滚逃生门，
+不视为技术债缺陷。
+
+## 9. 已完成里程碑记录（M1 / M2）
+
+> 合并顺序异常说明：`feat/agent-tool-surface`（M2，PR #225）是从
+> `feat/tool-permission-hardening`（M1，PR #224）**堆叠切出**的分支。#225 先于
+> #224 被 squash merge 到 main（`2f06e81`），因此 **M1 的全部代码已随 #225 一并进入
+> main**，PR #224 成为冗余，直接关闭而非合并。后续里程碑分支（M3–M6）均从 `aefe910`
+> 独立切出，需各自 rebase onto main。
+
+### M1 — 工具安全加固（已在 main）
+
+- `backend/tools/permissions.py` — PermissionMode / ToolCapability / PermissionDecision /
+  PermissionRule / PermissionEnforcer（规则优先级 deny > allow > ask > 模式矩阵）
+- `backend/tools/bash_validation.py` — BashRisk 三档 + 纯函数 `validate_bash`
+  （claw `bash_validation.rs` 实用子集 + Win7 桌面补充规则）
+- `backend/tools/file_tool.py` 加固 — 读 5 MiB / 写 10 MiB 硬限额、8 KiB NUL 二进制嗅探、
+  WRITE 强制 workspace 边界（realpath 语义，拦 `../` 穿越 + symlink 逃逸）；
+  READ 不强制边界（claw 读写非对称语义）
+- 执行卡点 — `SageAgent.run_loop` / `execute_tool` 在分发**前**检查许可；拒绝注入
+  `权限拒绝: <reason>` 错误 ToolResult，循环优雅继续
+- `backend/services/permission_gate.py` — ApprovalGate（Future 挂起/解析、超时 default-deny、
+  参数脱敏摘要）+ 单例访问器（lifespan 装配）
+- `backend/api/permission_routes.py` — `GET /api/v1/permissions/pending`、
+  `POST /api/v1/permissions/{request_id}/answer`（remember → 规则持久化）
+- 流事件 `AgentState.PERMISSION_REQUEST` + `AgentEvent.permission_request`；
+  settings 白名单扩 `permission_mode`（默认 workspace_write）/ `permission_rules`（默认 `[]`）
+- 前端 — ApprovalDialog（风险徽章 / 参数预览 / 记住选择）+ `permissionState` store +
+  `electron/commands.ts` 双路由（body selector 防 extra 字段 422）+ 设置页权限模式选择器 +
+  `tests/electron/permission-approval.spec.ts`（批准/拒绝双路径）
+- 测试 — enforcer 矩阵 ~24 例、bash ~20 例、file 加固、gate、API 契约、run_loop 审批/拒绝/超时集成
+
+### M2 — agent 工具面扩展（PR #225 @ `2f06e81`）
+
+**part A（6 个工具）**：`edit_tool.py`（精确字符串替换，WRITE，复用 M1 写限额+边界+二进制/BOM 嗅探）、
+`search_tools.py`（glob_search mtime 倒序上限 200 / grep_search content·files 双模式 +
+非法正则干净报错，READ）、`todo_state.py` + `todo_tool.py`（会话级内存桶全量替换语义，READ）、
+`structured_output_tool.py`（会话级载荷 + 可选 schema 校验，jsonschema 可缺省 → 内置最小校验器，READ）、
+`repl_tool.py`（`sys.executable -I` 隔离子进程，100 KiB 输出截断，超时杀进程，EXECUTE 受 M1 矩阵门控）。
+
+**part B（Skill 接线 + AskUserQuestion）**：`_build_chat_service` 关闭 `skills=None` TODO
+（装配 InprocSkillAdapter，与 `/api/v1/skills*` REST 同源）；`skill_tool.py`（EXECUTE，复用 REST 单例，
+脚本走 script_runner 沙箱不旁路）；AskUserQuestion 无需 spike —— M1 ApprovalGate 已证明异步 gate 模式，
+同构复制为 `question_gate.py`（超时 fail-open-ish 空应答，agent 永不挂起）+ `ask_user_tool.py` 纯渲染器 +
+run_loop 分发前特判 + `question_routes.py`（复用 permission Origin 守卫）+ QuestionDialog 前端
+（单选/多选卡片 + "其他"自由文本 + Escape 空提交）+ `question-answer.spec.ts` E2E。
+
+**测试**：part A 单元 edit 16 / search 22 / todo 16 / structured 15 / repl 23 / 能力表 1 +
+run_loop 集成（grep→edit 往返、边界拒绝、repl PROMPT 审批）；part B question gate 21 +
+question routes 13 + skill tool 12 + run_loop question flow 6（pytest），questionState 7 +
+QuestionDialog 12 + useChat 接线 3 + commands guard 4（vitest），question-answer 2 E2E +
+permission/smoke 回归 4 绿。
+
+**行为变更**：READ / list_dir 不再强制 workspace 边界（有意改为 claw 读写非对称），对应旧测试已同步更新。
 
 ---
 
