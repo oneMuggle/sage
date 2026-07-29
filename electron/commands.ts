@@ -9,6 +9,13 @@ export interface CommandRoute {
   path: (args: Record<string, unknown>) => string;
   body?: (args: Record<string, unknown>) => Record<string, unknown>;
   isSse?: boolean;
+  /**
+   * Skip the camelCase→snake_case body translation. For payloads whose
+   * keys are user-defined data rather than JS identifiers — e.g. MCP
+   * server `env` maps, where `PATH` would be mangled into `_p_a_t_h`.
+   * Callers must send snake_case top-level keys themselves.
+   */
+  rawBody?: boolean;
 }
 
 const DEFAULT_WORKSPACE_SEARCH_LIMIT = 20;
@@ -230,6 +237,31 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   office_ppt_generate: { method: 'POST', path: () => '/api/v1/office/ppt/generate' },
   office_word_generate: { method: 'POST', path: () => '/api/v1/office/word/generate' },
   office_excel_generate: { method: 'POST', path: () => '/api/v1/office/excel/generate' },
+
+  // M3: MCP multi-server management (backend/api/mcp_routes.py).
+  // mcp_server_add: args are the full server config, forwarded as body.
+  // mcp_server_update: name goes in the path; body carries only the
+  // merge-patch fields (enabled / timeout_seconds) — extra=forbid on the
+  // backend model means name must NOT leak into the body.
+  mcp_status: { method: 'GET', path: () => '/api/v1/mcp/status' },
+  mcp_servers: { method: 'GET', path: () => '/api/v1/mcp/servers' },
+  // rawBody: env keys are user-defined (API_TOKEN, PATH, …) and must not
+  // pass through camelToSnakeKeys; mcpClient sends snake_case keys.
+  mcp_server_add: { method: 'POST', path: () => '/api/v1/mcp/servers', rawBody: true },
+  mcp_server_update: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      if (a.enabled !== undefined) body.enabled = a.enabled;
+      if (a.timeout_seconds !== undefined) body.timeout_seconds = a.timeout_seconds;
+      return body;
+    },
+  },
+  mcp_server_delete: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
+  },
 };
 
 export class UnknownIpcCommandError extends Error {

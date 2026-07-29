@@ -217,4 +217,39 @@ describe('invokeBackend', () => {
     const init = mockedFetch.mock.calls[0][1] as RequestInit;
     expect(init.body).toBeUndefined();
   });
+
+  // M3: rawBody routes carry user-defined keys (MCP env var names like
+  // PATH / API_TOKEN) that camelToSnakeKeys would mangle (_p_a_t_h).
+  it('rawBody route skips camelCase→snake_case translation', async () => {
+    mockedFetch.mockResolvedValueOnce(mockJsonResponse({ ok: true, name: 'srv' }));
+    await invokeBackend(
+      'mcp_server_add',
+      {
+        name: 'srv',
+        command: 'node',
+        args: ['x.js'],
+        env: { PATH: '/usr/bin', API_TOKEN: 'tok' },
+        enabled: true,
+        required: false,
+        timeout_seconds: 30,
+      },
+      'http://x',
+    );
+    const init = mockedFetch.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(init.body as string);
+    expect(body.env).toEqual({ PATH: '/usr/bin', API_TOKEN: 'tok' });
+    expect(body.timeout_seconds).toBe(30);
+  });
+
+  it('mcp_server_update PATCH body keeps only patch fields, snake keys intact', async () => {
+    mockedFetch.mockResolvedValueOnce(mockJsonResponse({ ok: true }));
+    await invokeBackend('mcp_server_update', { name: 'srv', enabled: false }, 'http://x');
+    expect(mockedFetch).toHaveBeenCalledWith(
+      'http://x/api/v1/mcp/servers/srv',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ enabled: false }),
+      }),
+    );
+  });
 });
