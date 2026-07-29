@@ -28,6 +28,7 @@
 | 32   | [Settings Schema 规范化](./32-settings-canonicalization.md) | 后端 canonicalizer snake↔camel 翻译 + AppSettings 白名单 + 前端 deepMerge + 历史 snake 数据兼容             |
 | 33   | [Office M1–M2 完整收尾](./33-office-m1-m2-completion.md) | session-bound Workspace + ChatOfficeRef 透传 + office_list/read 工具 + Electron→Python stub E2E            |
 | 34   | [MCP 多服务器管理 (M3)](./34-mcp-multi-server.md)    | 多服务器 JSON 配置合并 + 同步池并行发现/故障隔离/重连 + 降级状态报告 + /api/v1/mcp/* + Settings MCP Tab     |
+| 35   | [会话工程：压缩 + 分叉 (M4)](./35-session-compact-fork.md) | 上下文压缩（手动 /compact + 请求层自动阈值）+ 会话分叉全量前缀复制 + sessions 表 fork 两列幂等迁移           |
 
 ---
 
