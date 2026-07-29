@@ -13,11 +13,11 @@ from backend.tools.bash_validation import validate_bash
 from backend.tools.permissions import (
     DEFAULT_PERMISSION_MODE,
     DEFAULT_TOOL_CAPABILITY,
+    TOOL_CAPABILITIES,
     PermissionEnforcer,
     PermissionMode,
     PermissionRule,
     ToolCapability,
-    TOOL_CAPABILITIES,
     classify_tool,
     load_enforcer_from_settings,
     parse_rules,
