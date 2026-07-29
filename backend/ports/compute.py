@@ -4,7 +4,6 @@
 
 - ``SubprocessComputeAdapter`` — 通过 ``ExecutableResolver`` 解析可执行文件后
   spawn 子进程调用 CLI（本期实现）
-- ``HttpComputeAdapter``       — 通过 httpx 调用远程 HTTP 服务（本期预留空壳）
 - ``MockComputeAdapter``       — 测试用内存实现
 
 参见 ``backend.domain.compute`` 中的数据模型。

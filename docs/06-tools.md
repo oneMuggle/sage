@@ -892,7 +892,7 @@ ghm 可执行文件按优先级查找：
 
 ### HTTP 升级（预留）
 
-`HttpComputeAdapter` 是空壳，签名已定但未实现（`execute` 抛 `NotImplementedError`）。未来当 subprocess 冷启动延迟（~600ms）成为瓶颈时，可改 yaml `adapter: http` 并补完该 adapter（约 200 行），sage 会通过 httpx 调 `ghm gui web` 的 HTTP 服务。
+> **M0 决策（2026-07-28）**：原 `HttpComputeAdapter` 空壳已删除（YAGNI），当前仅支持 `adapter: subprocess`。未来若 subprocess 冷启动延迟（~600ms）成为瓶颈，再按当时需求实现 `ComputePort` 的 HTTP 版本（sage 通过 httpx 调 `ghm gui web` 的 HTTP 服务）。
 
 ---
 

@@ -62,11 +62,10 @@ sage 在 hex 架构基础上新增一个 `ComputePort`，通过 `SubprocessCompu
 | `backend/ports/compute.py`                           | `ComputePort` Protocol（`list_operations` + `execute`）               |
 | `backend/adapters/out/compute/_resolver.py`          | `ExecutableResolver`：按优先级解析可执行文件                          |
 | `backend/adapters/out/compute/subprocess_adapter.py` | `SubprocessComputeAdapter`：asyncio subprocess + JSON 解析 + 错误映射 |
-| `backend/adapters/out/compute/http_adapter.py`       | `HttpComputeAdapter`：**预留空壳**，未来实现                          |
 | `backend/adapters/out/compute/mock_adapter.py`       | 测试用内存实现                                                        |
 | `backend/adapters/out/tool/compute_tool_adapter.py`  | `ComputeToolAdapter`：把 ComputePort 桥接为 ToolPort                  |
 | `backend/config/ghm.yaml`                            | ghm 入口路径 + 6 个 operation 声明                                    |
-| `backend/main.py:_build_compute_adapter`             | 装配工厂（按 yaml.adapter 字段选 subprocess/http）                    |
+| `backend/main.py:_build_compute_adapter`             | 装配工厂（按 yaml.adapter 字段选 adapter，当前仅 subprocess）         |
 | `backend/main.py:_build_chat_service`                | 接入：若 ghm 启用则用 ComputeToolAdapter 包装                         |
 
 ---
@@ -133,22 +132,19 @@ ghm:
   enabled: false # 总开关；ComputePort 不装配，工具不暴露
 ```
 
-### 5.4 切换到 HTTP 模式（**未来**）
+### 5.4 HTTP 模式（已移除，不支持）
 
-```yaml
-ghm:
-  enabled: true
-  adapter: http # 切换到 HTTP（本期会抛 NotImplementedError）
-  http:
-    base_url: 'http://127.0.0.1:8000'
-    timeout_seconds: 30
-```
+`http` adapter 已于 M0 清理中删除（YAGNI；原为空壳，运行时抛
+`NotImplementedError`）。工厂**仅接受** `adapter: subprocess`，
+配置其他值会在**启动时**抛 `ValueError` 并枚举有效值。
+未来如需 HTTP 远程计算适配器，请走 docs/plans 特性提案流程重新引入。
 
 ---
 
 ## 6. operations 声明结构
 
-每个 operation 是 yaml 中的一个条目，subprocess 与 http 模式共享 schema：
+每个 operation 是 yaml 中的一个条目（当前仅 subprocess 模式生效；
+`http_endpoint` 为预留元数据，无对应运行时）：
 
 ```yaml
 operations:
@@ -234,10 +230,9 @@ def _build_chat_service() -> ChatService:
 | `tests/unit/test_compute_domain.py`             | 14     | dataclass / Protocol 一致性         |
 | `tests/unit/test_compute_resolver.py`           | 14     | 4 条解析路径 + 优先级 + 缓存 + 失败 |
 | `tests/unit/test_subprocess_compute_adapter.py` | 24     | 6 个错误分支 + 成功路径 + argv 拼装 |
-| `tests/unit/test_http_compute_adapter.py`       | 3      | 空壳行为 + list_operations 一致     |
 | `tests/unit/test_compute_tool_adapter.py`       | 12     | 路由分发 + 翻译 + 异常降级          |
 | `tests/integration/test_ghm_compute_e2e.py`     | 2      | 端到端真打 ghm                      |
-| **合计**                                        | **69** | —                                   |
+| **合计**                                        | **66** | —                                   |
 
 **E2E 跳过条件**：`@requires_ghm`，仅在 `GHM_PYTHON` 指向的 conda python 可执行 + `GHM_PROJECT_DIR` 存在 + `API_MODE=hex` 时跑。CI 上可设 `GHM_TEST_DISABLED=1` 强制跳过。
 
@@ -261,7 +256,7 @@ def _build_chat_service() -> ChatService:
 | --------------------------------------- | ----------------------------------------- | ------------------------------------------------------------- |
 | **接入 ghm-cli.exe 真分发**             | ghm 项目方提供 `ghm-cli.spec` 并出产物    | 改 `ghm.yaml: executable_path` 一行                           |
 | **启用 Tauri sidecar**                  | 桌面应用分发给非开发用户                  | 改 `tauri.conf.json` + 改 `ghm.yaml: sidecar_name`            |
-| **HttpComputeAdapter 真实现**           | subprocess 冷启动延迟 > 2s 影响 chat 体验 | 补完 `http_adapter.py`（约 200 行）+ 启动时拉起 `ghm gui web` |
+| **HTTP 模式 ComputePort 实现**          | subprocess 冷启动延迟 > 2s 影响 chat 体验 | 新写 `ComputePort` 的 HTTP 实现 + 启动时拉起 `ghm gui web`（原 `HttpComputeAdapter` 空壳已于 M0 删除） |
 | **常驻 worker（高频调用优化）**         | HTTP 模式仍不够快                         | ghm 项目侧新增 stdin loop 模式                                |
 | **接入 nozzle-contour / exptube-range** | core 6 项稳定 ≥ 2 周                      | 加 operation 到 yaml + 处理文件 I/O 参数                      |
 

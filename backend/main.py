@@ -78,14 +78,7 @@ def _build_compute_adapter():
         )
 
         return SubprocessComputeAdapter(ghm_cfg)
-    if adapter_type == "http":
-        from backend.adapters.out.compute.http_adapter import HttpComputeAdapter
-
-        logger.warning(
-            "ghm.adapter=http: HttpComputeAdapter 仍是空壳,运行时调用会抛 NotImplementedError"
-        )
-        return HttpComputeAdapter(ghm_cfg)
-    raise ValueError(f"未知的 ghm.adapter 类型: {adapter_type!r}")
+    raise ValueError(f"未知的 ghm.adapter 类型: {adapter_type!r},有效值: 'subprocess'")
 
 
 def _build_chat_service() -> ChatService:
@@ -344,7 +337,6 @@ app.include_router(office_router, prefix="/api/v1")
 register_office_exception_handlers(app)
 app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
-app.include_router(wiki_router, prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"

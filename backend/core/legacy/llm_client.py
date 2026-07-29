@@ -152,6 +152,53 @@ class LLMClient:
             await self._client.aclose()
 
     @staticmethod
+    def _raise_classified_error(exc: Exception) -> None:
+        """把底层异常映射为分类的 ``LLMError`` 并抛出。
+
+        ``chat`` 与 ``chat_stream`` 共享同一套分类规则
+        （见 ``backend.core.errors.LLMErrorType``）:
+
+        - ``httpx.TimeoutException``    → TIMEOUT
+        - ``httpx.ConnectError``        → NETWORK
+        - ``httpx.HTTPStatusError``     → AUTH_FAILED (401) / RATE_LIMITED (429)
+                                          / SERVER_ERROR (5xx) / UNKNOWN (其余)
+        - ``ValueError`` / ``KeyError`` → PARSING（``json.JSONDecodeError`` 是
+                                          ValueError 子类）
+        - 其余异常                        → UNKNOWN
+
+        本方法总是抛出异常，不会正常返回。
+        """
+        if isinstance(exc, httpx.TimeoutException):
+            logger.error(f"LLM 请求超时: {exc}")
+            raise LLMError(LLMErrorType.TIMEOUT, f"请求 LLM 超时: {exc}")
+        if isinstance(exc, httpx.ConnectError):
+            logger.error(f"LLM 连接失败: {exc}")
+            raise LLMError(LLMErrorType.NETWORK, f"无法连接 LLM: {exc}")
+        if isinstance(exc, httpx.HTTPStatusError):
+            status = exc.response.status_code
+            if status == 401:
+                raise LLMError(LLMErrorType.AUTH_FAILED, "API Key 无效或过期", status_code=401)
+            if status == 429:
+                retry_after = None
+                try:
+                    retry_after = int(exc.response.headers.get("retry-after", "0")) or None
+                except (ValueError, TypeError):
+                    retry_after = None
+                raise LLMError(
+                    LLMErrorType.RATE_LIMITED, "请求过于频繁，请稍后再试", retry_after=retry_after
+                )
+            if 500 <= status < 600:
+                raise LLMError(
+                    LLMErrorType.SERVER_ERROR, f"LLM 服务端错误 (HTTP {status})", status_code=status
+                )
+            raise LLMError(LLMErrorType.UNKNOWN, f"LLM HTTP 错误: {status}", status_code=status)
+        if isinstance(exc, (ValueError, KeyError)):  # noqa: UP038  (Py3.8: isinstance 不支持 X | Y)
+            logger.error(f"LLM 响应解析失败: {exc}")
+            raise LLMError(LLMErrorType.PARSING, f"LLM 响应格式异常: {exc}")
+        logger.error(f"LLM 请求未知失败: {exc}")
+        raise LLMError(LLMErrorType.UNKNOWN, f"LLM 请求失败: {exc}")
+
+    @staticmethod
     def _convert_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """转换消息格式"""
         result = []
@@ -253,37 +300,8 @@ class LLMClient:
             response = await client.post("/v1/chat/completions", json=body)
             response.raise_for_status()
             data = response.json()
-        except httpx.TimeoutException as e:
-            logger.error(f"LLM 请求超时: {e}")
-            raise LLMError(LLMErrorType.TIMEOUT, f"请求 LLM 超时: {e}")
-        except httpx.ConnectError as e:
-            logger.error(f"LLM 连接失败: {e}")
-            raise LLMError(LLMErrorType.NETWORK, f"无法连接 LLM: {e}")
-        except httpx.HTTPStatusError as e:
-            status = e.response.status_code
-            if status == 401:
-                raise LLMError(LLMErrorType.AUTH_FAILED, "API Key 无效或过期", status_code=401)
-            elif status == 429:
-                retry_after = None
-                try:
-                    retry_after = int(e.response.headers.get("retry-after", "0")) or None
-                except (ValueError, TypeError):
-                    retry_after = None
-                raise LLMError(
-                    LLMErrorType.RATE_LIMITED, "请求过于频繁，请稍后再试", retry_after=retry_after
-                )
-            elif 500 <= status < 600:
-                raise LLMError(
-                    LLMErrorType.SERVER_ERROR, f"LLM 服务端错误 (HTTP {status})", status_code=status
-                )
-            else:
-                raise LLMError(LLMErrorType.UNKNOWN, f"LLM HTTP 错误: {status}", status_code=status)
-        except (ValueError, KeyError) as e:
-            logger.error(f"LLM 响应解析失败: {e}")
-            raise LLMError(LLMErrorType.PARSING, f"LLM 响应格式异常: {e}")
         except Exception as e:
-            logger.error(f"LLM 请求未知失败: {e}")
-            raise LLMError(LLMErrorType.UNKNOWN, f"LLM 请求失败: {e}")
+            self._raise_classified_error(e)
 
         elapsed = time.time() - start_time
         logger.debug(f"LLM 响应耗时: {elapsed:.2f}s")
@@ -335,13 +353,17 @@ class LLMClient:
         """
         发送聊天请求（流式）
 
-        Note: 流式响应暂抛出 RuntimeError，Task 11 将统一改为 LLMError 分类。
-
         Args:
             messages: 消息列表
 
         Yields:
             每个 chunk 的文本内容
+
+        Raises:
+            LLMError: 与 ``chat()`` 同一套分类规则（Task 11 已关闭）：
+                超时 → TIMEOUT，连接失败 → NETWORK，HTTP 状态码 →
+                AUTH_FAILED / RATE_LIMITED / SERVER_ERROR / UNKNOWN，
+                解析失败 → PARSING。
         """
         client = self._get_client()
 
@@ -381,12 +403,8 @@ class LLMClient:
                     except json.JSONDecodeError:
                         continue
 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"LLM 流式请求 HTTP 错误: {e.response.status_code}")
-            raise RuntimeError(f"LLM 流式请求错误: {e.response.status_code}")
         except Exception as e:
-            logger.error(f"LLM 流式请求失败: {e}")
-            raise RuntimeError(f"LLM 流式请求失败: {e}")
+            self._raise_classified_error(e)
 
     async def complete(self, prompt: str) -> str:
         """

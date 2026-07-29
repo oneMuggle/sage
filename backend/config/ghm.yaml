@@ -11,7 +11,7 @@ ghm:
   # 单次计算超时（秒）
   timeout_seconds: 30
 
-  # adapter 类型：subprocess（本期实现） | http（本期空壳，未来实现）
+  # adapter 类型：subprocess（唯一有效值）
   adapter: subprocess
 
   # ---- subprocess 模式：通过 ExecutableResolver 解析 ghm 入口 ----
@@ -42,14 +42,7 @@ ghm:
 
     path_lookup_name: "ghm-cli"
 
-  # ---- http 模式：本期不实现，预留升级路径 ----
-  http:
-    base_url: "http://127.0.0.1:8000"
-    timeout_seconds: 30
-    # 未来：sage 启动时拉起 `ghm gui web --host 127.0.0.1 --port <auto>`，
-    # 或要求用户预先启动 ghm web 服务（端口可配置）。
-
-  # ---- 6 个 core 计算 operation 声明（subprocess 与 http 模式共享） ----
+  # ---- 6 个 core 计算 operation 声明 ----
   operations:
     - name: compute_shock
       cli_subcommand: ["core", "shock"]
