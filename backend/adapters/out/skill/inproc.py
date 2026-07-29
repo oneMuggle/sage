@@ -347,13 +347,18 @@ class InprocSkillAdapter:
             result.append(item)
         return result
 
+
 #: 进程内单例缓存 (M2b 审查加固: 把单例从 backend.api.legacy_routes 搬
 #: 到此, 避免 tools -> api 的 import-linter 循环链). 旧 _get_skill_adapter
 #: 仍 export 同一单例 (委托此处), 保证 REST 路由与工具共享同一注册表状态.
-_skill_adapter_singleton: Optional["InprocSkillAdapter"] = None
+#:
+#: 注: 故意放在 ``InprocSkillAdapter`` class 之后, 让类型注解可以直接引用
+#: class 本身, 满足 ruff UP037 (在 ``from __future__ import annotations``
+#: 下禁止带引号的 type annotation).
+_skill_adapter_singleton: Optional[InprocSkillAdapter] = None
 
 
-def get_singleton() -> "InprocSkillAdapter":
+def get_singleton() -> InprocSkillAdapter:
     """惰性构造 + 缓存 InprocSkillAdapter 单例."""
     global _skill_adapter_singleton
     if _skill_adapter_singleton is None:
