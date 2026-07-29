@@ -13,7 +13,7 @@ import {
 function makeExecSync(
   script: Record<string, string | ((cmd: string) => string)>,
 ): (cmd: string, _opts?: { encoding: string }) => string {
-  return (cmd: string, _opts?: { encoding: string }): string => {
+  return (cmd: string): string => {
     // Match by prefix so the exact `netstat ... | findstr ...` pipeline works.
     for (const [prefix, response] of Object.entries(script)) {
       if (cmd.startsWith(prefix)) {
