@@ -1112,11 +1112,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             system_content = build_system_base()
             try:
-                from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
+                from backend.core.diagram_prompt import (
+                    DIAGRAM_TOOL_PROMPT,
+                    registry_has_drawio_tool,
+                )
 
-                # Check if diagram MCP tools are registered
+                # Check if any drawio MCP tools are registered. Prefix
+                # scan (mcp__drawio__*) — M3 renamed tools to
+                # mcp__<server>__<tool>, and a fixed-name exists() check
+                # would silently die on the next server-side rename.
                 _registry = getattr(agent, "tool_registry", None)
-                if _registry and _registry.exists("drawio__render_diagram"):
+                if _registry and registry_has_drawio_tool(_registry):
                     system_content += DIAGRAM_TOOL_PROMPT
             except Exception:
                 pass  # Graceful fallback if diagram module unavailable

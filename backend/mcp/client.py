@@ -3,12 +3,23 @@ Synchronous MCP client using subprocess + JSON-RPC 2.0 over stdio.
 
 Communicates with MCP servers (like drawio-mcp-server) via stdin/stdout.
 Implements the MCP handshake (initialize -> initialized -> tools/list -> tools/call).
+
+M3 hardening: the stdout reader lives on a daemon thread feeding a
+queue, so :meth:`McpClient._read_response` is bounded by a real
+deadline (``queue.get(timeout=remaining)``). A live-but-silent server
+can no longer wedge a blocking ``readline()`` forever and hang pool
+discovery / app startup — the request fails at exactly
+``timeout_seconds`` and the caller's ``stop()`` kills the process,
+which unblocks the daemon reader via EOF. Windows-safe (no ``select``
+on pipes).
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import queue
 import subprocess
 import threading
 import time
@@ -17,6 +28,10 @@ from typing import Any, Dict, List, Optional
 from backend.mcp.config import McpServerConfig
 
 logger = logging.getLogger(__name__)
+
+#: Sentinel posted by the stdout reader thread on EOF (server exited or
+#: closed its stdout). Distinct from any real line of bytes.
+_STDOUT_EOF = object()
 
 
 class McpClientError(Exception):
@@ -43,6 +58,11 @@ class McpClient:
         self._initialized = False
         self._stderr_lines: List[str] = []
         self._stderr_thread: Optional[threading.Thread] = None
+        self._stdout_queue: Optional[queue.Queue] = None
+        self._stdout_thread: Optional[threading.Thread] = None
+        # M3: per-server response timeout from config (previously a
+        # hardcoded 60s). Falls back to 60s for configs without the field.
+        self._timeout = float(getattr(config, "timeout_seconds", 60.0) or 60.0)
 
     @property
     def server_name(self) -> str:
@@ -82,12 +102,41 @@ class McpClient:
         self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
         self._stderr_thread.start()
 
+        # Stdout reader thread + queue: the request path must stay
+        # deadline-bounded even if the server goes silent — a blocking
+        # readline() there would hang forever (no select() on Windows
+        # pipes, so a daemon thread + queue is the portable fix).
+        self._stdout_queue = queue.Queue()
+        self._stdout_thread = threading.Thread(target=self._read_stdout_lines, daemon=True)
+        self._stdout_thread.start()
+
         logger.info(
             f"[MCP:{self._config.name}] Started: {self._config.command} {' '.join(self._config.args)}"
         )
 
         # Perform MCP handshake
         self._initialize()
+
+    def _read_stdout_lines(self) -> None:
+        """Feed stdout lines to the response queue until EOF/error.
+
+        Daemon-threaded: the only way out is EOF (stop() kills the
+        process, closing the pipe). Callers never join this thread —
+        they kill the process instead, which releases the readline().
+        """
+        assert self._process is not None
+        assert self._process.stdout is not None
+        assert self._stdout_queue is not None
+        try:
+            while True:
+                line = self._process.stdout.readline()
+                if not line:
+                    break
+                self._stdout_queue.put(line)
+        except (ValueError, OSError):
+            pass  # pipe closed under us (stop() racing) — treat as EOF
+        finally:
+            self._stdout_queue.put(_STDOUT_EOF)
 
     def _read_stderr(self) -> None:
         """Read stderr from the subprocess in a background thread."""
@@ -123,14 +172,23 @@ class McpClient:
         self._initialized = True
 
     def stop(self) -> None:
-        """Stop the MCP server subprocess."""
+        """Stop the MCP server subprocess (terminate → kill → reap).
+
+        After kill() the process is waited on: an unreaped kill leaves
+        a zombie until this Python process exits. Killing also closes
+        the child's stdout, which unblocks the daemon reader thread
+        (it posts EOF and terminates).
+        """
         if self._process:
             try:
                 self._process.stdin.close()  # type: ignore[union-attr]
                 self._process.terminate()
                 self._process.wait(timeout=5)
             except Exception:
-                self._process.kill()
+                with contextlib.suppress(Exception):
+                    self._process.kill()
+                with contextlib.suppress(Exception):
+                    self._process.wait(timeout=5)
             finally:
                 self._process = None
                 self._initialized = False
@@ -207,50 +265,64 @@ class McpClient:
             raise McpClientError(f"Failed to write to MCP server: {exc}")
 
     def _read_response(self, expected_id: int) -> Dict[str, Any]:
-        """Read JSON-RPC messages from stdout until we get the response for expected_id."""
-        assert self._process is not None
-        assert self._process.stdout is not None
-        max_wait = 60  # seconds
-        start = time.monotonic()
+        """Read JSON-RPC messages until the response for expected_id.
 
-        while time.monotonic() - start < max_wait:
-            # Check if process died
-            if self._process.poll() is not None:
-                stderr_tail = "\n".join(self._stderr_lines[-10:])
+        Deadline-bounded: lines arrive via the daemon reader thread's
+        queue and the wait honors the remaining deadline, so a silent
+        server raises McpClientError at exactly ``timeout_seconds``
+        instead of blocking in readline() forever.
+        """
+        assert self._stdout_queue is not None
+        max_wait = self._timeout  # per-server, from ServerConfig.timeout_seconds
+        deadline = time.monotonic() + max_wait
+
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 raise McpClientError(
-                    f"MCP server '{self._config.name}' exited with code {self._process.returncode}.\n"
-                    f"Stderr: {stderr_tail}"
+                    f"MCP server '{self._config.name}' timed out after {max_wait}s"
                 )
+            try:
+                item = self._stdout_queue.get(timeout=remaining)
+            except queue.Empty:
+                raise McpClientError(
+                    f"MCP server '{self._config.name}' timed out after {max_wait}s"
+                )
+
+            if item is _STDOUT_EOF:
+                # Server exited (or closed stdout). Re-post the sentinel
+                # so any later read also sees EOF, then fail cleanly.
+                self._stdout_queue.put(_STDOUT_EOF)
+                returncode = self._process.poll() if self._process else None
+                stderr_tail = "\n".join(self._stderr_lines[-10:])
+                if returncode is not None:
+                    raise McpClientError(
+                        f"MCP server '{self._config.name}' exited with code {returncode}.\n"
+                        f"Stderr: {stderr_tail}"
+                    )
+                raise McpClientError(
+                    f"MCP server '{self._config.name}' closed stdout unexpectedly"
+                )
+
+            text = item.decode("utf-8", errors="replace").strip()
+            if not text:
+                continue
 
             try:
-                line = self._process.stdout.readline()
-                if not line:
-                    time.sleep(0.05)
-                    continue
-
-                text = line.decode("utf-8", errors="replace").strip()
-                if not text:
-                    continue
-
                 message = json.loads(text)
-
-                # Skip notifications (no id field)
-                if "id" not in message:
-                    continue
-
-                # Return the matching response
-                if message["id"] == expected_id:
-                    return message
-
-                # Not our response, skip (shouldn't happen with sync client)
-                logger.warning(
-                    f"[MCP:{self._config.name}] Unexpected response id={message['id']}, expected={expected_id}"
-                )
-
             except json.JSONDecodeError:
                 logger.warning(f"[MCP:{self._config.name}] Invalid JSON: {text[:200]}")
                 continue
-            except (OSError, ValueError) as exc:
-                raise McpClientError(f"Failed to read from MCP server: {exc}")
 
-        raise McpClientError(f"MCP server '{self._config.name}' timed out after {max_wait}s")
+            # Skip notifications (no id field)
+            if "id" not in message:
+                continue
+
+            # Return the matching response
+            if message["id"] == expected_id:
+                return message
+
+            # Not our response, skip (shouldn't happen with sync client)
+            logger.warning(
+                f"[MCP:{self._config.name}] Unexpected response id={message['id']}, expected={expected_id}"
+            )
