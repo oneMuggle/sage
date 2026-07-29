@@ -51,7 +51,8 @@ function LaneCard({ lane, onCancel }: LaneCardProps) {
     const age = Date.now() - lane.heartbeat.last_ping_at;
     if (!lane.heartbeat.transport_alive) return t('orchestration.heartbeat.transportDead');
     if (age < 60_000) return `${Math.floor(age / 1000)}${t('orchestration.heartbeat.secondsAgo')}`;
-    if (age < 3_600_000) return `${Math.floor(age / 60_000)}${t('orchestration.heartbeat.minutesAgo')}`;
+    if (age < 3_600_000)
+      return `${Math.floor(age / 60_000)}${t('orchestration.heartbeat.minutesAgo')}`;
     return `${Math.floor(age / 3_600_000)}${t('orchestration.heartbeat.hoursAgo')}`;
   }, [lane.heartbeat, t]);
 
@@ -187,7 +188,11 @@ export function LaneBoard() {
 
   return (
     <div className="flex gap-4 p-4">
-      <Column title={t('orchestration.column.active')} lanes={board.active} onCancel={handleCancel} />
+      <Column
+        title={t('orchestration.column.active')}
+        lanes={board.active}
+        onCancel={handleCancel}
+      />
       <Column
         title={t('orchestration.column.blocked')}
         lanes={board.blocked}
