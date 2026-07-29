@@ -147,13 +147,17 @@ messages 表加 `fork_root` / `branch_point` 列，copy-on-write：fork 时仅�
   - [x] AskUserQuestion 异步挂起 spike（先验证，阻塞则降级为同步确认）
   - [x] edit_file / glob / grep / TodoWrite / StructuredOutput / REPL
   - [x] SkillPort 接线（消除 skills=None）+ in-loop Skill 工具
-- [ ] **M3：MCP 多服务器**（~3–4 天，`feat/mcp-multi-server`）
-  - [ ] 多服务器配置 schema + Settings UI 标签页
-  - [ ] lifecycle 状态机接线生产客户端 + 降级报告 + `/mcp/status`
-  - [ ] 故障演练：drawio + 第二服务器，杀进程验证隔离
-- [ ] **M4：会话工程**（~3–4 天，`feat/session-compact-fork`）
-  - [ ] compaction 模块 + 自动阈值 + `/compact` 端到端
-  - [ ] fork 路由 + DB copy-on-write + 前端入口
+- [x] **M3：MCP 多服务器**（~3–4 天，`feat/mcp-multi-server`）
+  - [x] 多服务器配置 schema + Settings UI 标签页
+  - [x] lifecycle 状态机接线生产客户端 + 降级报告 + `/mcp/status`
+        （决策：删除异步 lifecycle，在 `mcp/pool.py` 实现同步状态机——见
+        `docs/technical/34-mcp-multi-server.md` §2）
+  - [x] 故障演练：drawio + 第二服务器，杀进程验证隔离
+- [x] **M4：会话工程**（~3–4 天，`feat/session-compact-fork`）
+  - [x] compaction 模块 + 自动阈值 + `/compact` 端到端
+  - [x] fork 路由 + DB copy-on-write + 前端入口
+        （决策：改为全量前缀复制而非 CoW；已知限制"自动压缩尚不降低每轮 token"
+        见 `docs/technical/35-session-compact-fork.md` §3 / §6）
 - [ ] **M5：编排 E2E**（~4–5 天，`feat/orchestration-e2e`）
   - [ ] Planner LLM 注入 + lane 创建 API + 前端入口
   - [ ] in-loop Agent 工具 + LaneBoard 实时子代理可视化

@@ -3,7 +3,7 @@
  */
 
 import { invoke } from './desktopInvoke';
-import type { Message, Session } from './types';
+import type { Message, Session, SessionCompactResult } from './types';
 import { ApiException, handleApiError, isValidSessionId, sanitizeInput, withRetry } from './utils';
 
 export const sessionApi = {
@@ -86,5 +86,46 @@ export const sessionApi = {
         throw handleApiError(error);
       }
     });
+  },
+
+  /**
+   * M4: 压缩会话上下文。
+   *
+   * 刻意**不走 withRetry**：失败路径（502）意味着 LLM 摘要出错，
+   * 重试只会浪费 token；低于地板时后端返回 ok=true/compacted=false。
+   */
+  async compact(sessionId: string): Promise<SessionCompactResult> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    try {
+      return await invoke<SessionCompactResult>('session_compact', { sessionId });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * M4: 从会话分叉。复制 atMessageId 及之前的消息（缺省全部）到新会话。
+   *
+   * 刻意**不走 withRetry**：fork 非幂等，重试会创建重复会话。
+   */
+  async fork(sessionId: string, atMessageId?: string, title?: string): Promise<Session> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    try {
+      return await invoke<Session>('session_fork', { sessionId, atMessageId, title });
+    } catch (error) {
+      throw handleApiError(error);
+    }
   },
 };

@@ -44,6 +44,15 @@ export const zh = {
   'chat.copied': '已复制',
   'chat.delete_confirm': '确定要删除这个会话吗？',
 
+  // ─── M4 会话压缩 / 分叉 ───────────
+  'chat.compact_success': '上下文已压缩：{before} → {after} 条消息（移除 {removed} 条）',
+  'chat.compact_skipped': '对话较短，无需压缩',
+  'chat.compact_failed': '压缩失败：{message}',
+  'chat.fork_from_here': '从此处分叉',
+  'chat.fork_success': '已分叉为新会话',
+  'chat.fork_failed': '分叉失败：{message}',
+  'session.fork_badge': '分叉会话',
+
   // ─── 文件上传 ─────────────────────
   'chat.drop_files': '拖放文件到此处',
   'chat.attach_image': '插入图片',

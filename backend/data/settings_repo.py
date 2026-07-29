@@ -36,6 +36,9 @@ class SettingsRepository:
             # M1 工具安全加固: 权限模式 + 用户规则（见 backend/tools/permissions.py）
             "permission_mode",
             "permission_rules",
+            # M4 会话压缩：token 阈值（env SAGE_COMPACT_THRESHOLD 优先级更高，
+            # 读取口径见 backend/chat/compaction.py:get_compact_threshold）
+            "compact_threshold_tokens",
         }
     )
 

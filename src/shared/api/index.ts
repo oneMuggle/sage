@@ -56,6 +56,7 @@ export type {
   PermissionRequest,
   QuestionOption,
   Session,
+  SessionCompactResult,
   SessionWorkspaceBinding,
   Skill,
   SkillDispatch,

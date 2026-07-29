@@ -27,8 +27,9 @@ export interface SlashCommand {
    * - 'clear': 清空当前对话
    * - 'help': 显示帮助信息
    * - 'skill': 作为 SKILL.md skill 执行,返回内容作为用户消息发送
+   * - 'compact': 调用后端压缩当前会话上下文 (M4, 真实 action 而非提示词)
    */
-  mode: 'prompt' | 'clear' | 'help' | 'skill';
+  mode: 'prompt' | 'clear' | 'help' | 'skill' | 'compact';
   /** 'skill' 模式下需要执行的 SKILL.md 名称（不含 /）。 */
   skillName?: string;
 }
@@ -75,7 +76,7 @@ export const slashCommands: SlashCommand[] = [
     label: '压缩上下文',
     description: '压缩当前对话上下文',
     icon: Minimize2,
-    mode: 'prompt',
+    mode: 'compact',
   },
   {
     name: 'orchestrate',
@@ -170,8 +171,6 @@ export function commandToPrompt(cmd: SlashCommand, args: string): string {
       return '请总结我们当前对话的主要内容，包括关键决策和结论。';
     case 'translate':
       return '请将上一条消息翻译成英文（如果原文是英文则翻译成中文）。';
-    case 'compact':
-      return '请压缩当前对话的上下文，保留关键信息，移除冗余细节。';
     default:
       return args || `/${cmd.name}`;
   }

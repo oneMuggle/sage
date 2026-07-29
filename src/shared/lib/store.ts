@@ -19,6 +19,10 @@ export interface Session {
   message_count: number;
   is_pinned: boolean;
   metadata?: Record<string, unknown>;
+  /** M4: 分叉源会话 id（非分叉会话为 null），侧栏 fork 徽标依赖此字段 */
+  fork_root?: string | null;
+  /** M4: 分叉点消息 id（源会话中的 id）；null = 分叉到源会话末尾 */
+  forked_at_message_id?: string | null;
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）

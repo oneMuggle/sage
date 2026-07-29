@@ -21,19 +21,31 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Set, Union
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
 from backend.api.orch_routes import router as orch_routes_router
+from backend.chat.compaction import (
+    MIN_COMPACT_MESSAGE_COUNT,
+    CompactionError,
+    compact_messages,
+    should_compact,
+)
 from backend.chat.executors import resolve_attachments
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database
-from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+from backend.data.session_repo import (
+    ForkSourceNotFoundError,
+    Message as DbMessage,
+    MessageRepository,
+    SessionRepository,
+    fork_session as fork_session_core,
+)
 from backend.memory import get_memory_manager
 from backend.office.chat_refs import ChatOfficeRef, authorize_chat_office_request
 from backend.office.workspace_errors import (
@@ -419,6 +431,303 @@ def delete_session(session_id: str, repo: SessionRepository = Depends(get_sessio
     if not repo.delete(session_id):
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"status": "ok"}
+
+
+# ==================== 会话压缩 / 分叉 API (M4) ====================
+#
+# 压缩逻辑本体在 backend/chat/compaction.py（对 DB 纯净，便于单测）；
+# 本节只负责装配 LLM 客户端 + 落盘编排。
+
+
+def _build_compaction_llm_callable():
+    """从持久化的 app_settings 装配压缩摘要用的 LLM complete 回调。
+
+    解析顺序: modelSelections.chatModel → 对应 endpoint 的 baseUrl/apiKey。
+    chatModel 未选择 endpoint 时回退到第一个配置完整的 endpoint（桌面端
+    单 endpoint 场景的务实兜底）。
+
+    Returns:
+        ``LLMClient.complete`` 协程函数；无可用配置时返回 ``None``。
+    """
+    from backend.data.settings_repo import SettingsRepository
+
+    try:
+        settings = SettingsRepository().get_json("app_settings")
+    except (ValueError, TypeError):
+        settings = None
+    if not isinstance(settings, dict):
+        return None
+
+    selections = settings.get("modelSelections") or {}
+    chat_sel = selections.get("chatModel") or {}
+    endpoints = settings.get("endpoints") or []
+
+    def _is_complete(ep: Any) -> bool:
+        return isinstance(ep, dict) and bool(ep.get("baseUrl")) and bool(ep.get("apiKey"))
+
+    endpoint = next(
+        (ep for ep in endpoints if isinstance(ep, dict) and ep.get("id") == chat_sel.get("endpointId")),
+        None,
+    )
+    if (endpoint is None or not _is_complete(endpoint)) and endpoints:
+        fallback = next((ep for ep in endpoints if _is_complete(ep)), None)
+        if fallback is not None:
+            logger.info(
+                "[M4] compact: chatModel endpoint 不可用, 回退到 endpoint id=%s",
+                _safe_log_field(fallback.get("id")),
+            )
+            endpoint = fallback
+    if not _is_complete(endpoint):
+        return None
+
+    from backend.core.legacy.llm_client import LLMClient, LLMConfig
+
+    client = LLMClient(
+        LLMConfig(
+            provider="custom",
+            api_key=endpoint["apiKey"],
+            base_url=endpoint["baseUrl"],
+            model=chat_sel.get("modelId") or "gpt-3.5-turbo",
+            temperature=0.3,
+        )
+    )
+    return client.complete
+
+
+def _persist_compaction(
+    session_id: str,
+    messages: List[DbMessage],
+    new_messages: List[Any],
+    removed_count: int,
+) -> int:
+    """把压缩结果落盘：删除被摘要替代的消息行 + 插入续接消息 + 更新计数。
+
+    CRITICAL-1: 全部动作经 ``MessageRepository.replace_prefix_with_continuation``
+    在**单事务**中完成——旧流程逐条自动提交，若在"删完历史"与"写入摘要"
+    之间崩溃会永久丢失历史且没有摘要兜底；现在任何一步失败整体回滚。
+
+    续接消息的 created_at 取第一条保留消息的时间戳 -1ms，保证
+    ORDER BY created_at ASC 下排在保留尾部之前、旧消息之后的位置。
+
+    Args:
+        session_id: 目标会话
+        messages: 压缩前的完整消息列表（升序，来自同一快照）
+        new_messages: compact_messages 返回的新列表（首元素为续接 dict）
+        removed_count: 被替代的消息数（= messages 前缀长度）
+
+    Returns:
+        压缩后的消息总数
+
+    Raises:
+        Exception: 落盘事务失败时抛出（DB 已回滚，保持压缩前状态）。
+    """
+    summary = new_messages[0]
+    first_kept = messages[removed_count] if len(messages) > removed_count else None
+    created_at = (first_kept.created_at - 1) if first_kept is not None else int(time.time() * 1000)
+    continuation = DbMessage(
+        id=str(uuid.uuid4()),
+        session_id=session_id,
+        role=summary["role"],
+        content=summary["content"],
+        created_at=created_at,
+    )
+
+    after = len(new_messages)
+    MessageRepository().replace_prefix_with_continuation(
+        session_id,
+        [stale.id for stale in messages[:removed_count]],
+        continuation,
+        after,
+    )
+    return after
+
+
+async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[dict]) -> None:
+    """聊天请求层的自动压缩钩子（M4）。
+
+    在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
+    LLM 客户端优先用本次请求自带的 llm_config（与聊天同配置），
+    缺省时回退到 app_settings 里的持久化配置。
+
+    已知限制（review HIGH-1）：当前 legacy chat producer 只组装
+    ``[system, attachments?, user]`` 交给 run_loop，**尚未注入持久化历史**，
+    因此自动压缩的实际收益 = 持久化存储有界 + UI / fork 健全性；
+    **每轮 LLM token 节省要等聊天路径开始把持久化历史喂给 run_loop
+    才会生效**（跟进标记见 docs/plans/2026-07-29_session-compact-fork-m4.md
+    §6「已知限制」）。
+
+    本函数**可以抛 CompactionError / 其他异常**——调用方（producer）
+    统一 try/except：压缩失败只记日志，绝不阻塞聊天。
+    """
+    message_repo = MessageRepository()
+    messages = message_repo.get_by_session(session_id, limit=100000)
+    if not should_compact(messages):
+        return
+
+    if llm_config:
+        from backend.core.legacy.llm_client import LLMClient, LLMConfig
+
+        llm_complete = LLMClient(LLMConfig(**llm_config)).complete
+    else:
+        llm_complete = _build_compaction_llm_callable()
+    if llm_complete is None:
+        logger.info(
+            "[M4] session=%s 达到压缩阈值但无 LLM 配置, 跳过自动压缩",
+            _safe_log_field(session_id),
+        )
+        return
+
+    new_messages, removed_count = await compact_messages(messages, llm_complete)
+    after = _persist_compaction(session_id, messages, new_messages, removed_count)
+    logger.info(
+        "[M4] session=%s 自动压缩完成: removed=%s after=%s",
+        _safe_log_field(session_id),
+        removed_count,
+        after,
+    )
+
+
+# 进程内重入护栏（MEDIUM-1 后端兜底）：同一会话并发手动压缩时，两者都会在
+# 对方落盘前通过 should_compact 检查，导致续接消息行重复写入。前端
+# isLoading 守卫是第一道防线，这里是便宜的第二道。
+_compact_in_progress: Set[str] = set()
+
+
+@router.post("/sessions/{session_id}/compact", response_model=dict)
+async def compact_session(session_id: str):
+    """手动压缩会话上下文（M4，对应前端 /compact slash action）。
+
+    - 200 + ``{"ok": true, "compacted": true, "before", "after", "removed"}``
+    - 200 + ``{"ok": true, "compacted": false, "reason", ...}`` — 低于压缩
+      地板（消息数 < 12 或 token 未达阈值），DB 不动
+    - 404 — 会话不存在
+    - 409 + ``{"ok": false, "error": "compact_in_progress"}`` — 同会话压缩
+      正在进行（重复触发）
+    - 502 + ``{"ok": false, "error"}`` — 无 LLM 配置 / 摘要失败 / 落盘失败，
+      DB 不动（落盘走单事务，失败整体回滚）
+    """
+    session_repo = SessionRepository()
+    if session_repo.get(session_id) is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    message_repo = MessageRepository()
+    messages = message_repo.get_by_session(session_id, limit=100000)
+    before = len(messages)
+
+    if not should_compact(messages):
+        reason = (
+            "below_message_floor"
+            if before < MIN_COMPACT_MESSAGE_COUNT
+            else "below_token_threshold"
+        )
+        return {
+            "ok": True,
+            "compacted": False,
+            "reason": reason,
+            "before": before,
+            "after": before,
+            "removed": 0,
+        }
+
+    if session_id in _compact_in_progress:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "ok": False,
+                "error": "compact_in_progress",
+                "message": "该会话正在压缩中，请勿重复触发",
+            },
+        )
+
+    llm_complete = _build_compaction_llm_callable()
+    if llm_complete is None:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "ok": False,
+                "error": "llm_not_configured",
+                "message": "没有可用的 LLM 配置，无法生成压缩摘要",
+            },
+        )
+
+    _compact_in_progress.add(session_id)
+    try:
+        try:
+            new_messages, removed_count = await compact_messages(messages, llm_complete)
+        except CompactionError as exc:
+            logger.warning(
+                "[M4] compact session=%s 失败(DB 未改动): %s", _safe_log_field(session_id), exc
+            )
+            return JSONResponse(
+                status_code=502,
+                content={"ok": False, "error": "compaction_failed", "message": str(exc)},
+            )
+
+        try:
+            after = _persist_compaction(session_id, messages, new_messages, removed_count)
+        except Exception as exc:
+            # 单事务已回滚——DB 保持压缩前状态（CRITICAL-1 的核心保证）。
+            logger.warning(
+                "[M4] compact session=%s 落盘失败(事务已回滚, DB 未改动): %s",
+                _safe_log_field(session_id),
+                exc,
+            )
+            return JSONResponse(
+                status_code=502,
+                content={
+                    "ok": False,
+                    "error": "persist_failed",
+                    "message": "压缩结果落盘失败，数据库未改动",
+                },
+            )
+    finally:
+        _compact_in_progress.discard(session_id)
+
+    logger.info(
+        "[M4] compact session=%s 完成: before=%s after=%s removed=%s",
+        _safe_log_field(session_id),
+        before,
+        after,
+        removed_count,
+    )
+    return {"ok": True, "compacted": True, "before": before, "after": after, "removed": removed_count}
+
+
+class ForkSessionRequest(BaseModel):
+    """POST /sessions/{session_id}/fork 请求体。"""
+
+    at_message_id: Optional[str] = None
+    title: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/fork", response_model=dict)
+async def fork_session(session_id: str, data: ForkSessionRequest):
+    """从当前会话分叉出新会话（M4）。
+
+    复制 ``at_message_id`` 及之前的全部消息（省略时复制全部）到新会话，
+    消息获得新 id 但保留顺序 / 角色 / 内容 / 时间戳。新会话写入
+    ``fork_root=<源 id>`` 与 ``forked_at_message_id``。
+
+    刻意采用**全量前缀复制**而非计划文档最初的 copy-on-write 设计：
+    桌面级会话只有数百条消息，复制更简单安全（详见 docs/plans/2026-07-29_session-compact-fork-m4.md）。
+
+    - 200 + 新会话 JSON（含 fork_root / forked_at_message_id）
+    - 404 + 结构化 detail — 源会话或分叉点消息不存在
+    """
+    try:
+        forked = fork_session_core(
+            SessionRepository(),
+            MessageRepository(),
+            session_id,
+            at_message_id=data.at_message_id,
+            title=data.title,
+        )
+    except ForkSourceNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"type": f"{exc.kind}_not_found", "message": str(exc)},
+        ) from exc
+    return forked.to_dict()
 
 
 # ==================== 消息 API ====================
@@ -1523,6 +1832,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     }
                 )
             messages.append({"role": "user", "content": data.message})
+            # M4 自动压缩: run_loop 之前检查历史是否达到压缩阈值,达到则
+            # 先压缩再继续。整块 try/except 隔离——压缩失败只记日志,
+            # 绝不阻塞本次聊天(流式事件照常产出)。注: AgentEvent 没有
+            # notice 类事件, 本里程碑不向前端推送压缩状态。
+            try:
+                await _maybe_auto_compact_session(data.session_id, llm_config)
+            except Exception as compact_err:
+                logger.warning(
+                    f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"
+                )
+
             # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
             # session metadata。每个落盘独立 try/except,失败只 logger.warning
