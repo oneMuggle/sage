@@ -9,6 +9,8 @@ interface MessageListProps {
   attachments?: Record<string, { name: string; size: number; type: string; dataUrl?: string }[]>;
   /** P1: 当前正在流式输出的消息 ID (用于 ThinkingPanel 自动展开) */
   streamingMessageId?: string | null;
+  /** M4: 消息级分叉回调（提供时 user/assistant 消息显示分叉按钮） */
+  onFork?: (messageId: string) => void;
 }
 
 export function MessageList({
@@ -16,6 +18,7 @@ export function MessageList({
   knowledgeRefs,
   attachments,
   streamingMessageId,
+  onFork,
 }: MessageListProps) {
   if (messages.length === 0) {
     return (
@@ -36,6 +39,7 @@ export function MessageList({
             knowledgeRefs={knowledgeRefs?.[message.id]}
             attachments={attachments?.[message.id]}
             isStreaming={message.id === streamingMessageId}
+            onFork={onFork}
           />
         ))}
       </div>

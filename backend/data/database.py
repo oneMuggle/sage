@@ -98,6 +98,17 @@ class Database:
             cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_content TEXT")
             conn.commit()
 
+        # 数据库迁移 (M4 会话分叉)：为已有数据库的 sessions 表添加
+        # fork_root / forked_at_message_id 列（如果不存在）。两列均可空，
+        # 存量行保持合法；新库走同一 ALTER 分支补齐。
+        cursor.execute("PRAGMA table_info(sessions)")
+        session_columns = [row["name"] for row in cursor.fetchall()]
+        if "fork_root" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN fork_root TEXT")
+        if "forked_at_message_id" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN forked_at_message_id TEXT")
+        conn.commit()
+
         # 情景记忆表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memories_episodic (

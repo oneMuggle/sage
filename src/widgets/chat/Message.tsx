@@ -1,9 +1,19 @@
-import { Copy, ThumbsUp, ThumbsDown, BookOpen, Wrench, Brain, ChevronDown } from 'lucide-react';
+import {
+  Copy,
+  ThumbsUp,
+  ThumbsDown,
+  BookOpen,
+  Wrench,
+  Brain,
+  ChevronDown,
+  GitBranch,
+} from 'lucide-react';
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 
 import { ShikiCodeBlock } from './ShikiCodeBlock';
@@ -15,6 +25,8 @@ interface MessageProps {
   attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
   /** P1: 该消息是否正在流式输出 (用于 ThinkingPanel 自动展开) */
   isStreaming?: boolean;
+  /** M4: 从此消息分叉新会话（非破坏性，无需确认） */
+  onFork?: (messageId: string) => void;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -71,11 +83,15 @@ function MessageComponent({
   knowledgeRefs,
   attachments,
   isStreaming,
+  onFork,
 }: MessageProps) {
+  const { t } = useI18n();
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const isError = message.content?.startsWith('[错误') ?? false;
   const toolCalls: ToolCall[] = message.tool_calls ?? [];
+  // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
+  const canFork = Boolean(onFork) && (isUser || isAssistant);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
@@ -308,29 +324,43 @@ function MessageComponent({
         </div>
 
         {/* Action buttons */}
-        {onFeedback && (
+        {(onFeedback || canFork) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
-            <button
-              onClick={copyToClipboard}
-              className="p-1 rounded hover:bg-bg-hover"
-              title="复制"
-            >
-              <Copy className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => onFeedback(message.id, 'up')}
-              className="p-1 rounded hover:bg-bg-hover"
-              title="有帮助"
-            >
-              <ThumbsUp className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => onFeedback(message.id, 'down')}
-              className="p-1 rounded hover:bg-bg-hover"
-              title="没帮助"
-            >
-              <ThumbsDown className="w-4 h-4" />
-            </button>
+            {onFeedback && (
+              <>
+                <button
+                  onClick={copyToClipboard}
+                  className="p-1 rounded hover:bg-bg-hover"
+                  title="复制"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => onFeedback(message.id, 'up')}
+                  className="p-1 rounded hover:bg-bg-hover"
+                  title="有帮助"
+                >
+                  <ThumbsUp className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => onFeedback(message.id, 'down')}
+                  className="p-1 rounded hover:bg-bg-hover"
+                  title="没帮助"
+                >
+                  <ThumbsDown className="w-4 h-4" />
+                </button>
+              </>
+            )}
+            {canFork && (
+              <button
+                onClick={() => onFork?.(message.id)}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.fork_from_here')}
+                data-testid="fork-message"
+              >
+                <GitBranch className="w-4 h-4" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -346,6 +376,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.isStreaming === next.isStreaming &&
     prev.onFeedback === next.onFeedback &&
     prev.knowledgeRefs === next.knowledgeRefs &&
-    prev.attachments === next.attachments
+    prev.attachments === next.attachments &&
+    prev.onFork === next.onFork
   );
 });

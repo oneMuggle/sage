@@ -1,5 +1,6 @@
-import { Trash2, Pin } from 'lucide-react';
+import { GitBranch, Trash2, Pin } from 'lucide-react';
 
+import { useI18n } from '../../shared/lib/i18n';
 import type { Session } from '../../shared/lib/store';
 
 interface SessionItemProps {
@@ -10,6 +11,7 @@ interface SessionItemProps {
 }
 
 export function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps) {
+  const { t } = useI18n();
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm('确定要删除这个会话吗？')) {
@@ -42,7 +44,20 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
     >
       {/* 会话标题 */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{session.title}</p>
+        <p className="text-sm font-medium flex items-center gap-1 min-w-0">
+          {/* M4: fork 徽标 — session.fork_root 存在时显示，tooltip 带源会话 id */}
+          {session.fork_root && (
+            <span
+              data-testid="fork-badge"
+              aria-label={t('session.fork_badge')}
+              title={`${t('session.fork_badge')} · fork_root: ${session.fork_root}`}
+              className="inline-flex flex-shrink-0"
+            >
+              <GitBranch className="w-3 h-3 text-muted" />
+            </span>
+          )}
+          <span className="truncate">{session.title}</span>
+        </p>
         <p className="text-xs text-muted">{new Date(session.updated_at).toLocaleDateString()}</p>
       </div>
 

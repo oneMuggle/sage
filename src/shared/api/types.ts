@@ -15,6 +15,25 @@ export interface Session {
   message_count: number;
   is_pinned: boolean;
   metadata?: Record<string, unknown>;
+  /** M4: 分叉源会话 id（非分叉会话为 null），侧栏 fork 徽标依赖此字段 */
+  fork_root?: string | null;
+  /** M4: 分叉点消息 id（源会话中的 id）；null = 分叉到源会话末尾 */
+  forked_at_message_id?: string | null;
+}
+
+/** M4: POST /sessions/{id}/compact 响应 */
+export interface SessionCompactResult {
+  ok: boolean;
+  /** 实际执行了压缩时为 true；低于地板时为 false（附 reason） */
+  compacted?: boolean;
+  /** 未压缩原因：below_message_floor | below_token_threshold */
+  reason?: string;
+  /** 失败原因：llm_not_configured | compaction_failed */
+  error?: string;
+  message?: string;
+  before: number;
+  after: number;
+  removed: number;
 }
 
 export interface SessionWorkspaceBinding {

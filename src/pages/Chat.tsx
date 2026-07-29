@@ -1,15 +1,25 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
-import type { ChatOfficeRef } from '../shared/api';
+import { sessionApi, type ChatOfficeRef } from '../shared/api';
+import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
+
+/** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
+function fill(template: string, vars: Record<string, string | number>): string {
+  return Object.entries(vars).reduce(
+    (acc, [key, value]) => acc.replace(`{${key}}`, String(value)),
+    template,
+  );
+}
 
 export function Chat() {
   const {
@@ -30,8 +40,10 @@ export function Chat() {
     currentSessionId,
     setCurrentSessionId,
     createSession,
+    loadSessions,
     isLoading: storeLoading,
   } = useStore();
+  const { t } = useI18n();
   const { settings, isLoading: settingsLoading } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
@@ -113,6 +125,54 @@ export function Chat() {
     }
   };
 
+  // M4: /compact slash action — 调后端压缩当前会话，成功后重载消息
+  // （续接摘要行由后端持久化，重载后即显示在聊天列表中）。
+  // MEDIUM-1: 流式中（isLoading）early-return —— 两个并发手动压缩会在后端
+  // 各自通过 should_compact 检查并写出重复续接行；前端守卫是必须的修复，
+  // 后端 409 compact_in_progress 只是兜底。
+  const handleCompact = async () => {
+    if (!currentSessionId || isLoading) return;
+    try {
+      const result = await sessionApi.compact(currentSessionId);
+      if (result.ok && result.compacted) {
+        toast.success(
+          fill(t('chat.compact_success'), {
+            before: result.before,
+            after: result.after,
+            removed: result.removed,
+          }),
+        );
+        await loadMessages(currentSessionId);
+      } else if (result.ok) {
+        toast.info(t('chat.compact_skipped'));
+      } else {
+        toast.error(fill(t('chat.compact_failed'), { message: result.message ?? result.error ?? '' }));
+      }
+    } catch (e) {
+      toast.error(
+        fill(t('chat.compact_failed'), { message: e instanceof Error ? e.message : String(e) }),
+      );
+    }
+  };
+
+  // M4: 消息级分叉 — 非破坏性操作（无需确认）。成功后切换到新会话
+  // （复用现有 session-switch 路径：setCurrentSessionId → loadMessages effect）。
+  // MEDIUM-1: 流式中（isLoading）early-return —— 流式写入与 fork 前缀复制
+  // 并发会复制出不完整的消息序列，且中途切换会话会打断流式 UI。
+  const handleFork = async (messageId: string) => {
+    if (!currentSessionId || isLoading) return;
+    try {
+      const forked = await sessionApi.fork(currentSessionId, messageId);
+      toast.success(t('chat.fork_success'));
+      void loadSessions(); // 刷新侧栏（含 fork 徽标）
+      setCurrentSessionId(forked.id);
+    } catch (e) {
+      toast.error(
+        fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
+      );
+    }
+  };
+
   // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
   if (error) {
     return (
@@ -153,7 +213,11 @@ export function Chat() {
             <LoadingState label="正在加载对话..." />
           </div>
         ) : (
-          <MessageList messages={messages} streamingMessageId={streamingMessageId} />
+          <MessageList
+            messages={messages}
+            streamingMessageId={streamingMessageId}
+            onFork={handleFork}
+          />
         )}
       </div>
 
@@ -186,6 +250,7 @@ export function Chat() {
       <ChatInput
         onSend={handleSendMessage}
         onInterrupt={interrupt}
+        onCompact={handleCompact}
         isLoading={isLoading}
         disabled={!hasConfig}
         placeholder="输入消息..."

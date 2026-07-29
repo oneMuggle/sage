@@ -1,8 +1,13 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Message as MessageType } from '../../../shared/lib/store';
 import { Message } from '../Message';
+
+// M4: Message 内部使用 useI18n（fork 按钮 title），测试必须挂 provider
+const renderWithI18n = (ui: React.ReactElement) =>
+  render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
 
 describe('Message', () => {
   it('renders plain text content', () => {
@@ -13,7 +18,7 @@ describe('Message', () => {
       content: '你好！',
       created_at: 0,
     };
-    render(<Message message={msg} />);
+    renderWithI18n(<Message message={msg} />);
     expect(screen.getByText('你好！')).toBeInTheDocument();
   });
 
@@ -32,7 +37,7 @@ describe('Message', () => {
         },
       ],
     };
-    const { container } = render(<Message message={msg} />);
+    const { container } = renderWithI18n(<Message message={msg} />);
     expect(container.textContent).toContain('calculator');
     expect(container.textContent).toContain('2');
   });
@@ -45,7 +50,7 @@ describe('Message', () => {
       content: '[错误:auth_failed] API Key 无效',
       created_at: 0,
     };
-    const { container } = render(<Message message={msg} />);
+    const { container } = renderWithI18n(<Message message={msg} />);
     const errorEl = container.querySelector('[data-error="true"]');
     expect(errorEl).toBeInTheDocument();
   });
@@ -61,7 +66,7 @@ describe('Message', () => {
       content: 'hi',
       created_at: 0,
     };
-    const { container } = render(<Message message={msg} />);
+    const { container } = renderWithI18n(<Message message={msg} />);
     const row = container.firstChild as HTMLElement;
     expect(row.className).not.toMatch(/max-w-\[720px\]/);
     expect(row.className).toMatch(/\bw-full\b/);
@@ -77,7 +82,7 @@ describe('Message', () => {
       content: 'hi',
       created_at: 0,
     };
-    const { container } = render(<Message message={msg} />);
+    const { container } = renderWithI18n(<Message message={msg} />);
     // 找 data-error 属性所在的 div(就是气泡)
     const bubble = container.querySelector('div[class*="max-w-2xl"]');
     expect(bubble).toBeTruthy();
@@ -94,7 +99,7 @@ describe('ThinkingPanel', () => {
       created_at: 0,
       reasoning_content: '让我思考一下：6 * 7 = 42',
     };
-    const { container } = render(<Message message={msg} />);
+    const { container } = renderWithI18n(<Message message={msg} />);
     // 应该渲染思考过程按钮
     expect(container.textContent).toContain('思考过程');
     expect(container.textContent).toContain('17'); // 字符数
@@ -108,7 +113,7 @@ describe('ThinkingPanel', () => {
       content: '你好！',
       created_at: 0,
     };
-    const { container } = render(<Message message={msg} />);
+    const { container } = renderWithI18n(<Message message={msg} />);
     // 不应该渲染思考过程按钮
     expect(container.textContent).not.toContain('思考过程');
   });
@@ -122,7 +127,7 @@ describe('ThinkingPanel', () => {
       created_at: 0,
       reasoning_content: '这不是用户的思考过程',
     };
-    const { container } = render(<Message message={msg} />);
+    const { container } = renderWithI18n(<Message message={msg} />);
     // 用户消息不应该渲染思考过程面板
     expect(container.textContent).not.toContain('思考过程');
   });
@@ -136,7 +141,7 @@ describe('ThinkingPanel', () => {
       created_at: 0,
       reasoning_content: '这是思考内容',
     };
-    const { container } = render(<Message message={msg} />);
+    const { container } = renderWithI18n(<Message message={msg} />);
     // 点击展开
     const button = container.querySelector('button');
     expect(button).toBeInTheDocument();

@@ -16,6 +16,25 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def estimate_tokens(text: str) -> int:
+    """
+    估算文本的 Token 数量（中文约 1 字符 = 1 Token，英文约 4 字符 = 1 Token）
+
+    模块级函数，供 WorkingMemory 与会话压缩 (backend/chat/compaction.py)
+    共用同一套估算口径，避免多处实现漂移。
+
+    Args:
+        text: 输入文本
+
+    Returns:
+        估算的 Token 数量
+    """
+    # 简单估算：中文按字符计，英文按单词计
+    chinese_chars = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
+    other_chars = len(text) - chinese_chars
+    return chinese_chars + other_chars // 4 + len(text) // 4
+
+
 class WorkingMemory:
     """
     工作记忆 - 管理当前对话的上下文信息
@@ -94,7 +113,7 @@ class WorkingMemory:
 
     def _estimate_tokens(self, text: str) -> int:
         """
-        估算文本的 Token 数量
+        估算文本的 Token 数量（委托给模块级 ``estimate_tokens``）
 
         Args:
             text: 输入文本
@@ -102,10 +121,7 @@ class WorkingMemory:
         Returns:
             估算的 Token 数量
         """
-        # 简单估算：中文按字符计，英文按单词计
-        chinese_chars = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
-        other_chars = len(text) - chinese_chars
-        return chinese_chars + other_chars // 4 + len(text) // 4
+        return estimate_tokens(text)
 
     def _evict_if_needed(self) -> None:
         """如果超出最大 Token 数，淘汰旧消息"""
