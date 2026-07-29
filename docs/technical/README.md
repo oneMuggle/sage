@@ -27,6 +27,7 @@
 | 30   | [Release Tiers（发布档位分级）](./30-release-tiers.md) | 4 档分级 (alpha/beta/RC/stable) + SemVer 预发布段 + Win7 LTS 派生 + 升档脚本与流程                            |
 | 32   | [Settings Schema 规范化](./32-settings-canonicalization.md) | 后端 canonicalizer snake↔camel 翻译 + AppSettings 白名单 + 前端 deepMerge + 历史 snake 数据兼容             |
 | 33   | [Office M1–M2 完整收尾](./33-office-m1-m2-completion.md) | session-bound Workspace + ChatOfficeRef 透传 + office_list/read 工具 + Electron→Python stub E2E            |
+| 34   | [MCP 多服务器管理 (M3)](./34-mcp-multi-server.md)    | 多服务器 JSON 配置合并 + 同步池并行发现/故障隔离/重连 + 降级状态报告 + /api/v1/mcp/* + Settings MCP Tab     |
 
 ---
 

@@ -64,9 +64,9 @@ export async function invokeBackend(
   };
   if (route.method !== 'GET' && route.method !== 'DELETE') {
     // POST/PUT/PATCH: 把 args 转 snake_case 再序列化(前端 camelCase → 后端 Pydantic)
+    // rawBody 路由跳过转换 — 载荷 key 是用户数据(如 MCP env 变量名)而非 JS 标识符
     const bodyArgs = route.body?.(args) ?? args;
-    const snakeArgs = camelToSnakeKeys(bodyArgs);
-    init.body = JSON.stringify(snakeArgs);
+    init.body = JSON.stringify(route.rawBody ? bodyArgs : camelToSnakeKeys(bodyArgs));
   }
   const res = await fetch(url, init);
   if (!res.ok) {

@@ -88,6 +88,35 @@ export const en: Record<TranslationKey, string> = {
   'settings.section.chat': 'Chat',
   'settings.section.data': 'Data',
 
+  // ─── Settings · MCP ──────────────
+  'settings.mcp.title': 'MCP Servers',
+  'settings.mcp.desc':
+    'Manage external MCP tool servers (Model Context Protocol). Tools register as mcp__server__tool.',
+  'settings.mcp.refresh': 'Refresh',
+  'settings.mcp.empty': 'No MCP servers yet',
+  'settings.mcp.col.name': 'Name',
+  'settings.mcp.col.state': 'State',
+  'settings.mcp.col.tools': 'Tools',
+  'settings.mcp.col.error': 'Last error',
+  'settings.mcp.col.enabled': 'Enabled',
+  'settings.mcp.col.actions': 'Actions',
+  'settings.mcp.state.ready': 'Ready',
+  'settings.mcp.state.discovering': 'Discovering',
+  'settings.mcp.state.failed': 'Failed',
+  'settings.mcp.state.disabled': 'Disabled',
+  'settings.mcp.required': 'Required server',
+  'settings.mcp.delete': 'Delete',
+  'settings.mcp.builtin_hint': 'Built-in server, cannot be deleted',
+  'settings.mcp.add.title': 'Add server',
+  'settings.mcp.add.name': 'Name',
+  'settings.mcp.add.command': 'Command',
+  'settings.mcp.add.args': 'Arguments (space separated)',
+  'settings.mcp.add.required': 'Required',
+  'settings.mcp.add.submit': 'Add',
+  'settings.mcp.error.name_invalid':
+    'Name may only contain lowercase letters, digits, underscores, hyphens (≤64 chars)',
+  'settings.mcp.error.command_required': 'Command is required',
+
   // ─── Decorative themes ───────────
   'theme.name.mint_blue': 'Mint Blue',
   'theme.name.sakura': 'Sakura',

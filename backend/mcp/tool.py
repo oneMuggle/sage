@@ -1,5 +1,11 @@
 """
 MCP tool wrapper — exposes MCP server tools as sage BaseTool instances.
+
+M3: tools bind to the shared :class:`~backend.mcp.pool.McpServerPool`
+(not a per-tool client), so reconnection and failure isolation are
+centralized. Tool names are namespaced ``mcp__<server>__<tool>``
+(pre-M3: ``<server>__<tool>`` — the ``mcp__`` prefix is an LLM-visible
+change that disambiguates MCP tools from built-ins).
 """
 
 from __future__ import annotations
@@ -7,47 +13,31 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
-from backend.mcp.client import McpClient, McpClientError
-from backend.mcp.config import McpServerConfig, get_mcp_server_configs
+from backend.mcp.client import McpClientError
+from backend.mcp.pool import McpServerPool, get_pool, namespaced_tool_name
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
 logger = logging.getLogger(__name__)
 
-# Global registry of active MCP clients (server_name -> client)
-_mcp_clients: Dict[str, McpClient] = {}
-
-
-def _get_or_create_client(config: McpServerConfig) -> McpClient:
-    """Get an existing client or create and start a new one."""
-    if config.name in _mcp_clients:
-        client = _mcp_clients[config.name]
-        if client.is_running:
-            return client
-        # Client died, remove it
-        del _mcp_clients[config.name]
-
-    client = McpClient(config)
-    client.start()
-    _mcp_clients[config.name] = client
-    return client
-
 
 class McpTool(BaseTool):
-    """
-    Wraps a single MCP server tool as a sage BaseTool.
+    """Wraps a single MCP server tool as a sage BaseTool.
 
-    The MCP tool's inputSchema is converted to a sage ToolSchema.
-    execute() calls the MCP server via the shared client.
+    The MCP tool's inputSchema becomes the sage ToolSchema; execute()
+    routes through the pool so a dead server yields a clean per-server
+    error without affecting other servers' tools.
     """
 
-    def __init__(self, client: McpClient, tool_spec: Dict[str, Any]):
+    def __init__(self, pool: McpServerPool, server_name: str, tool_spec: Dict[str, Any]):
         """
         Args:
-            client: The MCP client for this tool's server
+            pool: The shared MCP server pool (client lifecycle owner).
+            server_name: Owning MCP server config name.
             tool_spec: Tool spec from MCP tools/list response
                        {"name": str, "description": str, "inputSchema": dict}
         """
-        self._client = client
+        self._pool = pool
+        self._server_name = server_name
         self._tool_spec = tool_spec
         super().__init__()
 
@@ -57,29 +47,37 @@ class McpTool(BaseTool):
         description = self._tool_spec.get("description", "")
         input_schema = self._tool_spec.get("inputSchema", {})
 
-        # Prefix tool name with server name to avoid conflicts
-        # e.g., "drawio__render_diagram"
-        prefixed_name = f"{self._client.server_name}__{name}"
-
         return ToolSchema(
-            name=prefixed_name,
-            description=f"[MCP:{self._client.server_name}] {description}",
+            name=namespaced_tool_name(self._server_name, name),
+            description=f"[MCP:{self._server_name}] {description}",
             parameters=input_schema,
         )
 
     def execute(self, **kwargs: Any) -> ToolResult:
-        """Call the MCP tool and return the result."""
-        # Strip the server prefix from the tool name for the MCP call
+        """Call the MCP tool via the pool and return the result."""
         mcp_tool_name = self._tool_spec["name"]
 
         try:
-            response = self._client.call_tool(mcp_tool_name, kwargs)
+            response = self._pool.call_tool(self._server_name, mcp_tool_name, kwargs)
         except McpClientError as exc:
-            logger.error(f"MCP tool '{mcp_tool_name}' failed: {exc}")
+            logger.error(
+                "MCP tool '%s' (server=%s) failed: %s",
+                mcp_tool_name,
+                self._server_name,
+                exc,
+            )
             return ToolResult(success=False, error=str(exc))
-        except Exception as exc:
-            logger.error(f"Unexpected error calling MCP tool '{mcp_tool_name}': {exc}")
-            return ToolResult(success=False, error=f"{type(exc).__name__}: {exc}")
+        except Exception as exc:  # noqa: BLE001 — tool errors must not crash the agent
+            logger.error(
+                "Unexpected error calling MCP tool '%s' (server=%s): %s",
+                mcp_tool_name,
+                self._server_name,
+                exc,
+            )
+            return ToolResult(
+                success=False,
+                error=f"MCP 服务器 {self._server_name} 不可用: {type(exc).__name__}: {exc}",
+            )
 
         # Check for MCP-level error
         is_error = response.get("isError", False)
@@ -135,43 +133,26 @@ class McpTool(BaseTool):
 
 
 def register_mcp_tools(registry: Any) -> None:
-    """
-    Discover tools from all configured MCP servers and register them.
+    """Discover configured MCP servers (once) and register their tools.
 
-    Each MCP tool is wrapped as a McpTool and added to the registry.
-    Tool names are prefixed with the server name (e.g., "drawio__render_diagram").
+    Startup discovery runs in parallel inside the pool and is idempotent;
+    the registry is tracked (weak ref) so servers added later via the
+    REST API fan their tools out to live registries without a restart.
     """
-    configs = get_mcp_server_configs()
-    if not configs:
-        logger.info("No MCP servers configured")
+    pool = get_pool()
+    try:
+        pool.ensure_discovered()
+        pool.track_registry(registry)
+        count = pool.register_tools_into(registry)
+    except Exception as exc:  # noqa: BLE001 — MCP must never break startup
+        logger.error("MCP tool registration failed: %s", exc)
         return
-
-    for config in configs:
-        if not config.enabled:
-            continue
-
-        try:
-            client = _get_or_create_client(config)
-            tool_specs = client.list_tools()
-
-            for spec in tool_specs:
-                tool = McpTool(client, spec)
-                registry.register(tool)
-                logger.info(f"Registered MCP tool: {tool.schema.name} " f"(server={config.name})")
-
-            logger.info(f"Registered {len(tool_specs)} tools from MCP server '{config.name}'")
-
-        except McpClientError as exc:
-            logger.error(f"Failed to connect to MCP server '{config.name}': {exc}")
-        except Exception as exc:
-            logger.error(f"Unexpected error registering MCP server '{config.name}': {exc}")
+    if count:
+        logger.info("Registered %d MCP tools into registry", count)
+    else:
+        logger.info("No MCP tools available (no READY servers)")
 
 
 def shutdown_mcp_clients() -> None:
-    """Stop all active MCP server processes."""
-    for name, client in _mcp_clients.items():
-        try:
-            client.stop()
-        except Exception as exc:
-            logger.error(f"Error stopping MCP client '{name}': {exc}")
-    _mcp_clients.clear()
+    """Stop all MCP server processes held by the global pool."""
+    get_pool().shutdown_all()

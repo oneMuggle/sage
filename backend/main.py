@@ -22,6 +22,7 @@ from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
+from backend.api.mcp_routes import router as mcp_router
 from backend.api.office_routes import (
     register_office_exception_handlers,
     router as office_router,
@@ -297,6 +298,14 @@ async def lifespan(app: FastAPI):
         await app.state.heartbeat_monitor.stop()
         logger.info("HeartbeatMonitor 已停止")
 
+    # M3: stop MCP server subprocesses held by the global pool
+    try:
+        from backend.mcp import shutdown_mcp_clients
+
+        shutdown_mcp_clients()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("MCP client shutdown failed: %s", exc)
+
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
     """每 60s 清理一次孤儿流(创建后 5 分钟仍未 done/failed 的)。"""
@@ -376,6 +385,9 @@ else:
 
 # Phase 8: scheduled tasks — mounted for both API modes (independent feature)
 app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
+
+# M3: MCP multi-server management (status / servers CRUD)
+app.include_router(mcp_router, prefix="/api/v1")
 
 
 @app.get("/health")
