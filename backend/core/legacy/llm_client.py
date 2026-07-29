@@ -454,9 +454,6 @@ class LLMClient:
                     logger.debug("usage tracking (stream) skipped: %s", usage_err)
             # ===== M6 USAGE END =====
 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"LLM 流式请求 HTTP 错误: {e.response.status_code}")
-            raise RuntimeError(f"LLM 流式请求错误: {e.response.status_code}")
         except Exception as e:
             self._raise_classified_error(e)
 
