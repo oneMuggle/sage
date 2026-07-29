@@ -22,6 +22,26 @@ from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import LaneStatus
 from backend.tools.agent_tool import AgentTool
+from backend.tools.bash_validation import validate_bash
+from backend.tools.permissions import (
+    PermissionEnforcer,
+    PermissionMode,
+    PermissionRule,
+)
+
+
+def _allow_agent_enforcer() -> PermissionEnforcer:
+    """agent 工具是 EXECUTE 能力（见 TOOL_CAPABILITIES），workspace_write 下
+    默认需要逐次审批。本文件的用例验证的是子代理循环机制而非权限矩阵，
+    故显式放行——权限行为本身由
+    TestAgentToolPermissions.test_agent_tool_needs_approval_without_rule
+    与 test_permissions_enforcer.py 覆盖。
+    """
+    return PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE,
+        rules=[PermissionRule(tool_pattern="agent", decision="allow")],
+        bash_validator=validate_bash,
+    )
 
 
 def _primary_first_turn() -> LLMResponse:
@@ -57,7 +77,9 @@ class TestAgentToolInRunLoop:
     @pytest.mark.asyncio()
     async def test_run_loop_spawns_subagent_lane_and_reaches_done(self):
         # Arrange — primary agent with mocked LLM (side_effect queue).
-        agent = SageAgent()  # no llm_config; injected below
+        agent = SageAgent()
+        agent.permission_enforcer = _allow_agent_enforcer()  # no llm_config; injected below
+        agent.permission_enforcer = _allow_agent_enforcer()
         primary_llm = MagicMock()
         primary_llm.chat = AsyncMock(
             side_effect=[_primary_first_turn(), _primary_final_turn()]
@@ -124,6 +146,7 @@ class TestAgentToolInRunLoop:
     async def test_run_loop_survives_subagent_failure(self):
         """Sub-agent LLM failure → error tool result, primary loop continues."""
         agent = SageAgent()
+        agent.permission_enforcer = _allow_agent_enforcer()
         primary_llm = MagicMock()
         primary_llm.chat = AsyncMock(
             side_effect=[_primary_first_turn(), _primary_final_turn()]
@@ -160,6 +183,7 @@ class TestAgentToolLoopSafety:
         monkeypatch.setattr("backend.tools.agent_tool.SUBAGENT_TIMEOUT_S", 0.2)
 
         agent = SageAgent()
+        agent.permission_enforcer = _allow_agent_enforcer()
         primary_llm = MagicMock()
         primary_llm.chat = AsyncMock(
             side_effect=[_primary_first_turn(), _primary_final_turn()]
@@ -201,6 +225,7 @@ class TestAgentToolLoopSafety:
         """HIGH: the agent tool runs off-loop — a concurrent ticker keeps
         advancing while the (slow) sub-run is awaited."""
         agent = SageAgent()
+        agent.permission_enforcer = _allow_agent_enforcer()
         primary_llm = MagicMock()
         primary_llm.chat = AsyncMock(
             side_effect=[_primary_first_turn(), _primary_final_turn()]
@@ -245,3 +270,53 @@ class TestAgentToolLoopSafety:
         # was NOT blocked inside the agent tool call (a blocking dispatch
         # would starve the ticker for the whole window → ~0 ticks).
         assert ticks["count"] >= 3
+
+
+class TestAgentToolPermissions:
+    """agent 工具的能力分类是安全边界，在 run_loop 层面回归。"""
+
+    @pytest.mark.asyncio()
+    async def test_agent_tool_needs_approval_without_rule(self):
+        """无 allow 规则时，workspace_write 下派生子代理必须被闸口拦截。
+
+        agent 归 EXECUTE（TOOL_CAPABILITIES）。测试环境无审批闸口 →
+        default-deny，注入错误 ToolResult 且循环继续（不抛异常）。
+        若有人把它降为 READ/WRITE，本用例会失败。
+        """
+        # Arrange —— 刻意不注入 _allow_agent_enforcer()，用默认执行器
+        agent = SageAgent()
+        primary_llm = MagicMock()
+        primary_llm.chat = AsyncMock(
+            side_effect=[_primary_first_turn(), _primary_final_turn()]
+        )
+        agent.llm_client = primary_llm
+
+        sub_llm = MagicMock()
+        sub_llm.chat = AsyncMock(side_effect=[_sub_done_turn()])
+        agent.tool_registry.register(AgentTool(llm_client=sub_llm))
+
+        messages = [
+            {"role": "system", "content": "You are Sage."},
+            {"role": "user", "content": "What is 6*7? Delegate if needed."},
+        ]
+
+        # Act
+        events = [event async for event in agent.run_loop(messages, max_iterations=5)]
+
+        # Assert —— 工具调用被拒，但循环优雅走到 DONE
+        observing = [
+            e
+            for e in events
+            if e.state == AgentState.OBSERVING
+            and e.tool_call
+            and e.tool_call.name == "agent"
+        ]
+        assert len(observing) == 1
+        tool_result = observing[0].tool_result
+        assert tool_result is not None
+        assert tool_result.is_error is True
+        assert "权限拒绝" in tool_result.content
+        assert any(e.state == AgentState.DONE for e in events)
+
+        # 子代理从未真正启动
+        sub_llm.chat.assert_not_awaited()
