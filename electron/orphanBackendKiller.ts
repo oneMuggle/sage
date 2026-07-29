@@ -91,9 +91,7 @@ export function killOrphanedBackendOnPort(opts: KillOrphanOpts): KillOrphanResul
     }
   }
 
-  return killedPids.length > 0
-    ? { kind: 'killed', pids: killedPids }
-    : { kind: 'none-found' };
+  return killedPids.length > 0 ? { kind: 'killed', pids: killedPids } : { kind: 'none-found' };
 }
 
 /**
