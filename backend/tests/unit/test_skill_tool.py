@@ -189,19 +189,24 @@ def test_skill_name_is_stripped_before_lookup():
 # ---------------------------------------------------------------------------
 
 
-def test_default_adapter_reuses_rest_routes_singleton(monkeypatch):
-    """adapter=None → 惰性复用 legacy_routes 的模块级单例（同注册表）。"""
+def test_default_adapter_reuses_inproc_singleton(monkeypatch):
+    """adapter=None → 惰性复用 inproc 模块级单例（与 REST 路由共享注册表）。
+
+    M2b 重构：单例缓存搬到 ``backend.adapters.out.skill.inproc``，路由层
+    与工具层都委托到 ``inproc.get_singleton()``。monkeypatch setattr 目标
+    改为 inproc 模块，验证 SkillTool 在不注入 adapter 时复用同一实例。
+    """
     # Arrange
-    import backend.api.legacy_routes as routes_module
+    import backend.adapters.out.skill.inproc as inproc_module
 
     stub = _StubSkillAdapter(names=["review"])
-    monkeypatch.setattr(routes_module, "_skill_adapter_singleton", stub)
+    monkeypatch.setattr(inproc_module, "_skill_adapter_singleton", stub)
     tool = SkillTool()  # 不注入 adapter
 
     # Act
     result = tool.execute(skill="review")
 
-    # Assert — 命中的是 REST 层同一单例
+    # Assert — 命中的是 inproc 层单例（路由层 thin wrapper 也委托此处）
     assert result.success is True
     assert tool._resolve_adapter() is stub
 
