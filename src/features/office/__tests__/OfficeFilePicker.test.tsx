@@ -17,6 +17,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { OfficeFilePicker } from '../OfficeFilePicker';
 
 describe('OfficeFilePicker — delegates to the hook', () => {
@@ -25,12 +26,14 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     const onDropFile = vi.fn();
 
     render(
-      <OfficeFilePicker
-        docType="ppt"
-        workspacePath="/tmp/ws"
-        onPick={onPick}
-        onDropFile={onDropFile}
-      />,
+      <I18nProvider defaultLocale="zh">
+        <OfficeFilePicker
+          docType="ppt"
+          workspacePath="/tmp/ws"
+          onPick={onPick}
+          onDropFile={onDropFile}
+        />
+      </I18nProvider>,
     );
 
     fireEvent.click(screen.getByTestId('office-file-picker-ppt'));
@@ -44,13 +47,15 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     const onDropFile = vi.fn();
 
     render(
-      <OfficeFilePicker
-        docType="word"
-        workspacePath="/tmp/ws"
-        onPick={onPick}
-        onDropFile={onDropFile}
-        disabled
-      />,
+      <I18nProvider defaultLocale="zh">
+        <OfficeFilePicker
+          docType="word"
+          workspacePath="/tmp/ws"
+          onPick={onPick}
+          onDropFile={onDropFile}
+          disabled
+        />
+      </I18nProvider>,
     );
 
     fireEvent.click(screen.getByTestId('office-file-picker-word'));
@@ -65,12 +70,14 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     const onDropFile = vi.fn();
 
     render(
-      <OfficeFilePicker
-        docType="excel"
-        workspacePath={null}
-        onPick={onPick}
-        onDropFile={onDropFile}
-      />,
+      <I18nProvider defaultLocale="zh">
+        <OfficeFilePicker
+          docType="excel"
+          workspacePath={null}
+          onPick={onPick}
+          onDropFile={onDropFile}
+        />
+      </I18nProvider>,
     );
 
     fireEvent.click(screen.getByTestId('office-file-picker-excel'));
@@ -86,12 +93,14 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     const onDropFile = vi.fn();
 
     render(
-      <OfficeFilePicker
-        docType="word"
-        workspacePath="/tmp/ws"
-        onPick={onPick}
-        onDropFile={onDropFile}
-      />,
+      <I18nProvider defaultLocale="zh">
+        <OfficeFilePicker
+          docType="word"
+          workspacePath="/tmp/ws"
+          onPick={onPick}
+          onDropFile={onDropFile}
+        />
+      </I18nProvider>,
     );
 
     const picker = screen.getByTestId('office-file-picker-word');
@@ -116,12 +125,14 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     const onDropFile = vi.fn().mockResolvedValue(undefined);
 
     render(
-      <OfficeFilePicker
-        docType="excel"
-        workspacePath="/tmp/ws"
-        onPick={onPick}
-        onDropFile={onDropFile}
-      />,
+      <I18nProvider defaultLocale="zh">
+        <OfficeFilePicker
+          docType="excel"
+          workspacePath="/tmp/ws"
+          onPick={onPick}
+          onDropFile={onDropFile}
+        />
+      </I18nProvider>,
     );
 
     const picker = screen.getByTestId('office-file-picker-excel');

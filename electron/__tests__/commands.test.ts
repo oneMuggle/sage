@@ -217,6 +217,14 @@ describe('COMMAND_ROUTES', () => {
     }
   });
 
+  // M6 生态扩展: 用量面板路由 (settings GeneralTab → usageApi → GET /api/v1/usage)
+  it('usage_summary is GET /api/v1/usage (M6 usage panel)', () => {
+    const r = COMMAND_ROUTES.usage_summary;
+    expect(r, 'missing route for usage_summary').toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({})).toBe('/api/v1/usage');
+  });
+
   // I2: agent_chat_stream 改为同步 create(JSON 立即返回 streamId),不再是 SSE
   it('agent_chat_stream is now plain POST /api/v1/chat/stream (not SSE)', () => {
     const r = COMMAND_ROUTES.agent_chat_stream;

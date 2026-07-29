@@ -22,6 +22,12 @@ from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequ
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+
+# ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
+from backend.hooks.config import HookConfig, load_hooks
+from backend.hooks.runner import build_payload, run_event_hooks, validate_modified_args
+
+# ===== M6 HOOKS END =====
 from backend.memory import (
     ConsolidationPipeline,
     EpisodicMemory,
@@ -613,6 +619,10 @@ class SageAgent:
                     }
                 )
 
+                # 审查加固: 钩子配置每轮 LLM 响应只加载一次 (原实现每个
+                # tool call 都读一次 settings + 校验, 并行工具批次下 N 倍浪费)
+                m6_hooks = self._load_m6_hooks()
+
                 for tc in response.tool_calls:
                     try:
                         args = (
@@ -622,6 +632,60 @@ class SageAgent:
                         )
                     except json.JSONDecodeError:
                         args = {}
+
+                    # ===== M6 HOOKS BEGIN: pre_tool_use (deny/modify) =====
+                    # 用户自定义钩子 (backend/hooks/)。Fail-open: 钩子故障
+                    # 永不阻断循环, 仅显式 "deny" 拦截执行; "modify" 经 schema
+                    # 再校验后替换参数。与 M1 enforcer 相互独立 — rebase 时
+                    # 两个标记块都保留。
+                    m6_pre = await run_event_hooks(
+                        m6_hooks,
+                        "pre_tool_use",
+                        tc.name,
+                        build_payload("pre_tool_use", tc.name, args),
+                    )
+                    if m6_pre.denied:
+                        m6_deny_content = "hook 拒绝: {}".format(
+                            m6_pre.reason or "denied by hook"
+                        )
+                        m6_deny_req = ToolCallRequest(id=tc.id, name=tc.name, arguments=args)
+                        yield AgentEvent(
+                            state=AgentState.ACTING,
+                            iteration=i,
+                            tool_call=m6_deny_req,
+                            agent_id=self.agent_id,
+                        )
+                        yield AgentEvent(
+                            state=AgentState.OBSERVING,
+                            iteration=i,
+                            tool_call=m6_deny_req,
+                            tool_result=ToolCallResult(
+                                tool_call_id=tc.id,
+                                content=m6_deny_content,
+                                is_error=True,
+                            ),
+                            agent_id=self.agent_id,
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": m6_deny_content,
+                            }
+                        )
+                        continue
+                    if m6_pre.modified and m6_pre.updated_input is not None:
+                        m6_tool = self.tool_registry.get(tc.name)
+                        m6_params = m6_tool.schema.parameters if m6_tool else None
+                        m6_err = validate_modified_args(m6_pre.updated_input, m6_params)
+                        if m6_err is None:
+                            args = m6_pre.updated_input
+                        else:
+                            logger.warning(
+                                "M6 hook modify ignored (schema re-validation failed): %s",
+                                m6_err,
+                            )
+                    # ===== M6 HOOKS END =====
 
                     tool_req = ToolCallRequest(id=tc.id, name=tc.name, arguments=args)
                     yield AgentEvent(
@@ -802,6 +866,22 @@ class SageAgent:
                         }
                     )
 
+                    # ===== M6 HOOKS BEGIN: post_tool_use (observe-only) =====
+                    # 观察/审计专用 — 无法修改工具结果。
+                    await run_event_hooks(
+                        m6_hooks,
+                        "post_tool_use",
+                        tc.name,
+                        build_payload(
+                            "post_tool_use",
+                            tc.name,
+                            args,
+                            tool_output=result_content,
+                            is_error=is_error,
+                        ),
+                    )
+                    # ===== M6 HOOKS END =====
+
             yield AgentEvent(
                 state=AgentState.FAILED,
                 iteration=effective_max_iterations,
@@ -883,6 +963,19 @@ class SageAgent:
             else DEFAULT_QUESTION_TIMEOUT_S
         )
         return await gate.request(req, timeout=timeout)
+
+    # ===== M6 HOOKS BEGIN: config loader (fail-open) =====
+    def _load_m6_hooks(self) -> List[HookConfig]:
+        """加载用户自定义钩子; 任何故障 → 空列表 (fail-open)。"""
+        try:
+            from backend.data.settings_repo import SettingsRepository
+
+            return load_hooks(SettingsRepository())
+        except Exception as exc:
+            logger.warning("M6 hooks load failed (fail-open): %s", exc)
+            return []
+
+    # ===== M6 HOOKS END =====
 
     def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """

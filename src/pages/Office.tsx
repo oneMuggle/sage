@@ -48,6 +48,7 @@ import {
 } from '../features/office';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeDocType } from '../shared/api/types';
+import { useI18n } from '../shared/lib/i18n';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 
 export function Office() {
@@ -55,6 +56,7 @@ export function Office() {
   // local state. AppProviders mounts the provider; Chat.tsx reads from
   // the same context. `?? null` keeps the local consumer contract
   // (which expects `string | null`) unchanged.
+  const { t } = useI18n();
   const workspacePath = useCurrentWorkspace() ?? null;
   const { bind, revoke, status: workspaceStatus, error: workspaceError } =
     useWorkspaceContext();
@@ -103,7 +105,7 @@ export function Office() {
 
   const handleImportAndRead = (docType: OfficeDocType) => async () => {
     if (!workspacePath) {
-      toast.error('请先选择工作区目录');
+      toast.error(t('office.toast.selectWorkspace'));
       return;
     }
     const myReadId = ++readIdRef.current;
@@ -117,13 +119,13 @@ export function Office() {
       // Re-check after the await (refresh may take time; another read
       // could have started in the meantime)
       if (myReadId !== readIdRef.current) return;
-      toast.success('文档读取成功');
+      toast.success(t('office.toast.readSuccess'));
     } catch (e) {
       // If this read is stale, suppress its error toast (a newer read
       // is in flight and the user will see ITS result instead)
       if (myReadId !== readIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`读取失败: ${msg}`);
+      toast.error(`${t('office.toast.readFailed')}: ${msg}`);
       setPreview(null);
     }
   };
@@ -134,7 +136,7 @@ export function Office() {
   // switch mid-read still discards stale data.
   const handleReadDropped = (docType: OfficeDocType) => async (sourcePath: string) => {
     if (!workspacePath) {
-      toast.error('请先选择工作区目录');
+      toast.error(t('office.toast.selectWorkspace'));
       return;
     }
     const myReadId = ++readIdRef.current;
@@ -144,11 +146,11 @@ export function Office() {
       setPreview(toPreview(docType, data));
       await refresh();
       if (myReadId !== readIdRef.current) return;
-      toast.success('文档读取成功');
+      toast.success(t('office.toast.readSuccess'));
     } catch (e) {
       if (myReadId !== readIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`读取失败: ${msg}`);
+      toast.error(`${t('office.toast.readFailed')}: ${msg}`);
       setPreview(null);
     }
   };
@@ -157,11 +159,11 @@ export function Office() {
     try {
       const savedPath = await saveAs(docId);
       if (savedPath) {
-        toast.success(`已另存为 ${savedPath}`);
+        toast.success(`${t('office.toast.savedAs')} ${savedPath}`);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`另存为失败: ${msg}`);
+      toast.error(`${t('office.toast.saveAsFailed')}: ${msg}`);
     }
   };
 
@@ -170,7 +172,7 @@ export function Office() {
       await open(docId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`打开失败: ${msg}`);
+      toast.error(`${t('office.toast.openFailed')}: ${msg}`);
     }
   };
 
@@ -179,7 +181,7 @@ export function Office() {
       await showInFolder(docId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`显示文件夹失败: ${msg}`);
+      toast.error(`${t('office.toast.showInFolderFailed')}: ${msg}`);
     }
   };
 
@@ -187,7 +189,7 @@ export function Office() {
     <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto" data-testid="office-page">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold text-text">Office 文档</h1>
+        <h1 className="text-2xl font-semibold text-text">{t('office.title')}</h1>
         <div className="ml-auto flex items-center gap-2 text-sm text-muted">
           <FolderOpen className="w-4 h-4" />
           {workspacePath ? (
@@ -204,7 +206,7 @@ export function Office() {
               className="px-3 py-1.5 rounded bg-primary text-text-inverse text-sm hover:bg-primary-hover"
               data-testid="office-workspace-pick"
             >
-              选择工作区
+              {t('office.selectWorkspace')}
             </button>
           )}
         </div>
@@ -226,7 +228,7 @@ export function Office() {
 
       {!workspacePath ? (
         <div className="flex items-center justify-center p-12 text-muted text-sm border border-dashed border-border rounded-lg">
-          请先选择工作区目录以开始使用
+          {t('office.emptyState')}
         </div>
       ) : (
         <>
@@ -241,7 +243,9 @@ export function Office() {
                 the dropped file. Both paths go through the hook's managed
                 import + read lifecycle. */}
             <div className="space-y-3">
-              <h2 className="text-sm font-medium text-text-secondary">选择文件</h2>
+              <h2 className="text-sm font-medium text-text-secondary">
+                {t('office.section.pickFile')}
+              </h2>
               <OfficeFilePicker
                 docType="ppt"
                 workspacePath={workspacePath}
@@ -250,7 +254,7 @@ export function Office() {
                 disabled={loading}
               >
                 <span className="flex items-center gap-1.5">
-                  <Presentation className="w-3.5 h-3.5" /> 选择 PowerPoint
+                  <Presentation className="w-3.5 h-3.5" /> {t('office.pick.ppt')}
                 </span>
               </OfficeFilePicker>
               <OfficeFilePicker
@@ -261,7 +265,7 @@ export function Office() {
                 disabled={loading}
               >
                 <span className="flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5" /> 选择 Word
+                  <FileText className="w-3.5 h-3.5" /> {t('office.pick.word')}
                 </span>
               </OfficeFilePicker>
               <OfficeFilePicker
@@ -272,14 +276,16 @@ export function Office() {
                 disabled={loading}
               >
                 <span className="flex items-center gap-1.5">
-                  <FileSpreadsheet className="w-3.5 h-3.5" /> 选择 Excel
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> {t('office.pick.excel')}
                 </span>
               </OfficeFilePicker>
             </div>
 
             {/* Right: preview panel */}
             <div>
-              <h2 className="text-sm font-medium text-text-secondary mb-3">预览</h2>
+              <h2 className="text-sm font-medium text-text-secondary mb-3">
+                {t('office.section.preview')}
+              </h2>
               <OfficePreviewPanel preview={preview} />
             </div>
           </div>
@@ -287,7 +293,7 @@ export function Office() {
           {/* Document list */}
           <div>
             <h2 className="text-sm font-medium text-text-secondary mb-3">
-              历史记录 ({documents.length})
+              {t('office.section.history')} ({documents.length})
             </h2>
             <OfficeDocumentList
               documents={documents}
