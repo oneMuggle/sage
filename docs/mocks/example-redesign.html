@@ -1,0 +1,325 @@
+<!doctype html>
+<!--
+  ============================================================
+  Sage UI Mock · example-redesign（A10 样例，非真实设计提案）
+  ============================================================
+  状态    : 📚 样例（演示 docs/mocks 工作流）
+  创建    : 2026-07-31
+  关联    : docs/plans/2026-07-30_sage-optimization-unified.md §A10
+  预览    : 浏览器直接打开（Tailwind 走 CDN，需联网）
+
+  约定演示：
+  - tailwind.config 与 /tailwind.config.js 逐字段同步
+  - CSS 变量与 /src/index.css 逐字段同步
+  - 本文件用到的所有 class 名可直接搬进 src/ 组件，零翻译
+  - 设计意图以 "设计意图:" 注释就地标注
+  ============================================================
+-->
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sage · Chat 布局 mock（A10 样例）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // ⚠️ 与 /tailwind.config.js 保持同步 —— 「utility 名共享」的核心就在这里。
+  //    mock 里写的 class（bg-surface / text-text-secondary / rounded-radius-lg …）
+  //    与 src/ 组件里的完全一致，实现阶段直接搬。
+  tailwind.config = {
+    darkMode: ['selector', '[data-theme="dark"]'],
+    theme: {
+      extend: {
+        colors: {
+          primary: {
+            DEFAULT: 'rgb(var(--color-primary-rgb) / <alpha-value>)',
+            hover: 'rgb(var(--color-primary-hover-rgb) / <alpha-value>)',
+          },
+          secondary: 'rgb(var(--color-secondary-rgb) / <alpha-value>)',
+          accent: 'rgb(var(--color-accent-rgb) / <alpha-value>)',
+          bg: {
+            DEFAULT: 'rgb(var(--color-bg-rgb) / <alpha-value>)',
+            muted: 'rgb(var(--color-bg-muted-rgb) / <alpha-value>)',
+            subtle: 'rgb(var(--color-bg-subtle-rgb) / <alpha-value>)',
+            hover: 'rgb(var(--color-bg-hover-rgb) / <alpha-value>)',
+            active: 'rgb(var(--color-bg-active-rgb) / <alpha-value>)',
+          },
+          surface: {
+            DEFAULT: 'rgb(var(--color-surface-rgb) / <alpha-value>)',
+            elevated: 'rgb(var(--color-surface-elevated-rgb) / <alpha-value>)',
+            overlay: 'rgb(var(--color-surface-overlay-rgb) / <alpha-value>)',
+          },
+          text: {
+            DEFAULT: 'rgb(var(--color-text-rgb) / <alpha-value>)',
+            secondary: 'rgb(var(--color-text-secondary-rgb) / <alpha-value>)',
+            muted: 'rgb(var(--color-text-muted-rgb) / <alpha-value>)',
+            inverse: 'rgb(var(--color-text-inverse-rgb) / <alpha-value>)',
+          },
+          border: {
+            DEFAULT: 'rgb(var(--color-border-rgb) / <alpha-value>)',
+            hover: 'rgb(var(--color-border-hover-rgb) / <alpha-value>)',
+          },
+          success: 'rgb(var(--color-success-rgb) / <alpha-value>)',
+          error: 'rgb(var(--color-error-rgb) / <alpha-value>)',
+          warning: 'rgb(var(--color-warning-rgb) / <alpha-value>)',
+          info: 'rgb(var(--color-info-rgb) / <alpha-value>)',
+          mem: {
+            accent: 'rgb(var(--color-mem-accent-rgb) / <alpha-value>)',
+            subtle: 'rgb(var(--color-mem-subtle-rgb) / <alpha-value>)',
+          },
+          role: {
+            blue: 'rgb(var(--color-role-blue-rgb) / <alpha-value>)',
+            'blue-text': 'rgb(var(--color-role-blue-text-rgb) / <alpha-value>)',
+            green: 'rgb(var(--color-role-green-rgb) / <alpha-value>)',
+            'green-text': 'rgb(var(--color-role-green-text-rgb) / <alpha-value>)',
+            purple: 'rgb(var(--color-role-purple-rgb) / <alpha-value>)',
+            'purple-text': 'rgb(var(--color-role-purple-text-rgb) / <alpha-value>)',
+            orange: 'rgb(var(--color-role-orange-rgb) / <alpha-value>)',
+            'orange-text': 'rgb(var(--color-role-orange-text-rgb) / <alpha-value>)',
+          },
+        },
+        fontFamily: {
+          sans: ['Inter', 'Noto Sans SC', 'system-ui', '-apple-system', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        },
+        spacing: {
+          'space-1': 'var(--space-1)', 'space-2': 'var(--space-2)', 'space-3': 'var(--space-3)',
+          'space-4': 'var(--space-4)', 'space-5': 'var(--space-5)', 'space-6': 'var(--space-6)',
+          'space-8': 'var(--space-8)',
+        },
+        borderRadius: {
+          'radius-sm': 'var(--radius-sm)', 'radius-md': 'var(--radius-md)',
+          'radius-lg': 'var(--radius-lg)', 'radius-xl': 'var(--radius-xl)',
+          'radius-2xl': 'var(--radius-2xl)',
+        },
+        boxShadow: {
+          sm: 'var(--shadow-sm)', md: 'var(--shadow-md)',
+          lg: 'var(--shadow-lg)', xl: 'var(--shadow-xl)',
+        },
+      },
+    },
+  };
+</script>
+<style>
+  /* ⚠️ 与 /src/index.css 保持同步 —— 同一套 CSS 变量，data-theme 驱动明暗切换。
+     颜色全部变量化，因此绝大多数场景不需要 dark: 变体。 */
+  :root{
+    --color-primary-rgb:79 70 229; --color-primary-hover-rgb:67 56 202;
+    --color-secondary-rgb:16 185 129; --color-accent-rgb:245 158 11;
+    --color-bg-rgb:255 255 255; --color-bg-muted-rgb:249 250 251; --color-bg-subtle-rgb:243 244 246;
+    --color-bg-hover-rgb:243 244 246; --color-bg-active-rgb:224 231 255;
+    --color-surface-rgb:255 255 255; --color-surface-elevated-rgb:255 255 255; --color-surface-overlay-rgb:255 255 255;
+    --color-text-rgb:17 24 39; --color-text-secondary-rgb:107 114 128;
+    --color-text-muted-rgb:156 163 175; --color-text-inverse-rgb:255 255 255;
+    --color-border-rgb:229 231 235; --color-border-hover-rgb:209 213 219;
+    --color-success-rgb:16 185 129; --color-error-rgb:239 68 68;
+    --color-warning-rgb:245 158 11; --color-info-rgb:59 130 246;
+    --color-mem-accent-rgb:59 130 246; --color-mem-subtle-rgb:239 246 255;
+    --color-role-blue-rgb:219 234 254; --color-role-blue-text-rgb:30 64 175;
+    --color-role-green-rgb:209 250 229; --color-role-green-text-rgb:6 95 70;
+    --color-role-purple-rgb:237 233 254; --color-role-purple-text-rgb:91 33 182;
+    --color-role-orange-rgb:254 243 199; --color-role-orange-text-rgb:146 64 14;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+    --space-5:20px; --space-6:24px; --space-8:32px;
+    --radius-sm:3px; --radius-md:6px; --radius-lg:8px; --radius-xl:12px; --radius-2xl:16px;
+    --shadow-sm:0 1px 2px 0 rgba(17 24 39,.05);
+    --shadow-md:0 4px 6px -1px rgba(17 24 39,.1),0 2px 4px -2px rgba(17 24 39,.1);
+  }
+  [data-theme='dark']{
+    --color-primary-rgb:129 140 248; --color-primary-hover-rgb:165 180 252;
+    --color-secondary-rgb:52 211 153; --color-accent-rgb:251 191 36;
+    --color-bg-rgb:15 23 42; --color-bg-muted-rgb:31 41 55; --color-bg-subtle-rgb:55 65 81;
+    --color-bg-hover-rgb:75 85 99; --color-bg-active-rgb:49 46 129;
+    --color-surface-rgb:17 24 39; --color-surface-elevated-rgb:31 41 55; --color-surface-overlay-rgb:55 65 81;
+    --color-text-rgb:249 250 251; --color-text-secondary-rgb:209 213 219;
+    --color-text-muted-rgb:156 163 175; --color-text-inverse-rgb:255 255 255;
+    --color-border-rgb:55 65 81; --color-border-hover-rgb:75 85 99;
+    --color-success-rgb:52 211 153; --color-error-rgb:248 113 113;
+    --color-warning-rgb:251 191 36; --color-info-rgb:96 165 250;
+    --color-mem-accent-rgb:96 165 250; --color-mem-subtle-rgb:30 58 95;
+    --color-role-blue-rgb:30 58 138; --color-role-blue-text-rgb:191 219 254;
+    --color-role-green-rgb:6 78 59; --color-role-green-text-rgb:167 243 208;
+    --color-role-purple-rgb:88 28 135; --color-role-purple-text-rgb:221 214 254;
+    --color-role-orange-rgb:120 53 15; --color-role-orange-text-rgb:253 230 138;
+    --shadow-sm:0 1px 2px 0 rgba(0 0 0,.2);
+    --shadow-md:0 4px 6px -1px rgba(0 0 0,.3),0 2px 4px -2px rgba(0 0 0,.2);
+  }
+  body{ background:rgb(var(--color-bg-rgb)); color:rgb(var(--color-text-rgb)); }
+  /* 原生 <details> 折叠（工具调用卡片用） */
+  details > summary{ list-style:none; }
+  details > summary::-webkit-details-marker{ display:none; }
+  details[open] .chev{ transform:rotate(90deg); }
+  details[open] .when-closed{ display:none; }
+</style>
+</head>
+<body class="font-sans antialiased text-[14px]">
+
+<!-- ====== 评审专用顶栏（仅 mock 演示用，不属于产品） ====== -->
+<div class="flex items-center gap-3 px-space-4 h-11 bg-surface border-b border-border text-[12.5px]">
+  <span class="font-semibold tracking-tight">Sage · Chat 布局 mock</span>
+  <span class="text-text-muted">静态原型 · A10 样例</span>
+  <span class="ml-auto hidden sm:inline text-text-muted">设计意图见就地注释 · 令牌与 tailwind.config.js 共享</span>
+  <button id="themeBtn" class="px-space-3 py-1 rounded-radius-md border border-border bg-bg hover:border-border-hover">◐ 主题</button>
+</div>
+
+<!-- ====== 应用框架 ====== -->
+<div class="flex" style="height:calc(100vh - 44px)">
+
+  <!-- ---------- 侧边栏：宽度沿用 --sidebar-width: 240px ---------- -->
+  <aside class="w-[240px] shrink-0 bg-surface border-r border-border flex flex-col">
+    <div class="px-space-3 pt-space-3 pb-space-2 flex items-center gap-space-2">
+      <div class="w-6 h-6 rounded-radius-md bg-primary/15 grid place-items-center text-primary font-bold text-[13px]">S</div>
+      <div class="font-semibold tracking-tight">Sage</div>
+    </div>
+
+    <div class="px-space-3 pb-space-2">
+      <button class="w-full px-space-3 py-2 rounded-radius-lg bg-primary text-text-inverse text-[13px] font-medium hover:bg-primary-hover flex items-center justify-center gap-space-2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        新建对话
+      </button>
+    </div>
+
+    <!-- 设计意图: 会话列表分「置顶 / 最近」两组；置顶是用户显式标记，不随时间衰减 -->
+    <div class="flex-1 overflow-y-auto px-space-2 mt-space-1 space-y-4">
+      <div>
+        <div class="px-space-2 text-[10.5px] uppercase tracking-[0.07em] text-text-muted font-semibold mb-space-1">置顶</div>
+        <button class="w-full flex items-center gap-space-2 px-space-2 py-2 rounded-radius-lg bg-bg-active text-left">
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[13px] font-medium">后端 8765 端口排查</span>
+            <span class="block truncate text-[11px] text-text-secondary">Default agent · 今天</span>
+          </span>
+        </button>
+      </div>
+      <div>
+        <div class="px-space-2 text-[10.5px] uppercase tracking-[0.07em] text-text-muted font-semibold mb-space-1">最近</div>
+        <div class="space-y-0.5">
+          <button class="w-full flex items-center gap-space-2 px-space-2 py-2 rounded-radius-lg hover:bg-bg-hover text-left">
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[13px] font-medium">周报自动汇总</span>
+              <span class="block truncate text-[11px] text-text-secondary">Orchestration · 昨天</span>
+            </span>
+          </button>
+          <button class="w-full flex items-center gap-space-2 px-space-2 py-2 rounded-radius-lg hover:bg-bg-hover text-left">
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[13px] font-medium">知识库导入 PDF 失败</span>
+              <span class="block truncate text-[11px] text-text-secondary">Knowledge · 周三</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部导航：与 src/pages/ 一一对应 -->
+    <div class="px-space-2 py-space-2 border-t border-border space-y-0.5">
+      <button class="w-full flex items-center gap-space-2 px-space-2 py-1.5 rounded-radius-lg hover:bg-bg-hover text-[13px] text-left">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5M4 19h16M8 16v-5M13 16V8M18 16v-9"/></svg>
+        知识库
+      </button>
+      <button class="w-full flex items-center gap-space-2 px-space-2 py-1.5 rounded-radius-lg hover:bg-bg-hover text-[13px] text-left">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>
+        记忆
+      </button>
+      <button class="w-full flex items-center gap-space-2 px-space-2 py-1.5 rounded-radius-lg hover:bg-bg-hover text-[13px] text-left">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a4 4 0 10-5.4 5.4l-6 6v2h2l6-6a4 4 0 005.4-5.4l-2.3 2.3-2-2 2.3-2.3z"/></svg>
+        技能
+      </button>
+      <button class="w-full flex items-center gap-space-2 px-space-2 py-1.5 rounded-radius-lg hover:bg-bg-hover text-[13px] text-left">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1l1.8-1.4-1.8-3.1-2.1.9a7 7 0 00-1.5-.9L15 4h-3.6l-.3 2.5a7 7 0 00-1.5.9l-2.1-.9-1.8 3.1L7.5 11a7 7 0 000 2l-1.8 1.4 1.8 3.1 2.1-.9a7 7 0 001.5.9L11.4 20H15l.3-2.5a7 7 0 001.5-.9l2.1.9 1.8-3.1-1.8-1.4c.1-.3.1-.7.1-1z"/></svg>
+        设置
+      </button>
+    </div>
+  </aside>
+
+  <!-- ---------- 主区：会话视图 ---------- -->
+  <main class="flex-1 min-w-0 flex flex-col bg-bg">
+    <!-- 顶栏：会话标题 + 所用 agent（设计意图: 模型/权限信息归 composer，顶栏只放"这是哪场对话"） -->
+    <div class="h-12 shrink-0 px-space-5 flex items-center gap-space-2 border-b border-border bg-surface">
+      <span class="font-semibold text-[13.5px] truncate">后端 8765 端口排查</span>
+      <span class="text-text-muted">·</span>
+      <span class="text-[12px] px-space-2 py-0.5 rounded-radius-sm bg-role-purple text-role-purple-text">Default agent</span>
+      <span class="ml-auto text-[11.5px] text-text-muted">3 条消息</span>
+    </div>
+
+    <!-- 消息流 -->
+    <div class="flex-1 overflow-y-auto">
+      <div class="max-w-3xl mx-auto px-space-6 py-space-6 space-y-space-5">
+
+        <!-- 用户消息：右对齐气泡，品牌色实底 -->
+        <div class="flex justify-end">
+          <div class="max-w-[78%] px-space-4 py-space-3 rounded-radius-2xl bg-primary text-text-inverse text-[14px] leading-relaxed">
+            后端起不来，日志显示 8765 端口被占用，怎么处理？
+          </div>
+        </div>
+
+        <!-- 助手消息：左对齐无气泡（设计意图: 长内容不加气泡，减少视觉噪声） -->
+        <div class="flex gap-space-3">
+          <div class="w-7 h-7 shrink-0 rounded-radius-md bg-secondary/15 text-secondary grid place-items-center">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg>
+          </div>
+          <div class="min-w-0 flex-1 space-y-space-3">
+            <div class="text-[14.5px] leading-relaxed">
+              大概率是上一次退出时后端子进程没有被回收。可以先确认占用进程：
+              <code class="font-mono text-[12.5px] px-1 rounded-radius-sm bg-bg-muted border border-border">netstat -ano | findstr 8765</code>
+              ，拿到 PID 后结束它再重启。
+            </div>
+
+            <!-- 设计意图: 工具调用默认折叠 —— 对话主线保持干净，需要审计时一键展开 -->
+            <details class="rounded-radius-lg border border-border bg-bg-muted">
+              <summary class="flex items-center gap-space-2 px-space-3 py-space-2 cursor-pointer select-none">
+                <svg class="chev transition-transform text-text-muted" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+                <span class="text-[12.5px] text-text-secondary">2 个工具调用 · <span class="text-success font-medium">全部成功</span></span>
+                <span class="ml-auto text-[11px] text-text-muted when-closed">展开详情</span>
+              </summary>
+              <div class="px-space-2 pb-space-2 pt-space-1 space-y-space-2 border-t border-border">
+                <div class="flex items-center gap-space-2 rounded-radius-lg border border-border bg-surface px-space-3 py-space-2">
+                  <span class="font-mono text-[12.5px]">shell.exec</span>
+                  <span class="font-mono text-[11.5px] text-text-muted truncate">cmd: "netstat -ano | findstr 8765"</span>
+                  <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded-radius-sm bg-role-green text-role-green-text shrink-0">done</span>
+                </div>
+                <div class="flex items-center gap-space-2 rounded-radius-lg border border-border bg-surface px-space-3 py-space-2">
+                  <span class="font-mono text-[12.5px]">files.read</span>
+                  <span class="font-mono text-[11.5px] text-text-muted truncate">path: backend/main.py</span>
+                  <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded-radius-sm bg-role-green text-role-green-text shrink-0">done</span>
+                </div>
+              </div>
+            </details>
+
+            <!-- 设计意图: 记忆命中就地透出（mem 令牌），用户能知道"它为什么记得" -->
+            <div class="inline-flex items-center gap-space-2 px-space-2 py-1 rounded-radius-md bg-mem-subtle text-mem-accent text-[12px]">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 3-2 4.5-3 6h-8c-1-1.5-3-3-3-6a7 7 0 017-7zM9 19h6M10 22h4"/></svg>
+              记忆命中：该项目后端默认端口为 8765（PYTHON_BACKEND_PORT）
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- composer：模型与审批模式收敛在这里（设计意图: 全局只此一处，避免与顶栏重复） -->
+    <div class="px-space-6 pb-space-5 pt-space-1">
+      <div class="max-w-3xl mx-auto rounded-radius-2xl border border-border bg-surface shadow-sm">
+        <div class="px-space-4 py-space-3 text-[14px] text-text-muted">发消息给 Sage…（/ 打开命令菜单）</div>
+        <div class="flex items-center gap-space-2 px-space-3 pb-space-3">
+          <button class="w-7 h-7 grid place-items-center rounded-radius-md text-text-muted hover:text-text hover:bg-bg-hover" aria-label="附件">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <span class="text-[12px] text-text-secondary">审批: 询问 ▾</span>
+          <span class="ml-auto inline-flex items-center gap-1 px-space-2 py-1 rounded-radius-md bg-bg-muted border border-border text-[12px] text-text-secondary">qwen-max ▾</span>
+          <button class="w-8 h-8 rounded-full bg-primary text-text-inverse grid place-items-center hover:bg-primary-hover" aria-label="发送">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+  // 明暗主题切换：与实现一致，仅翻转 data-theme 属性，颜色全部由 CSS 变量驱动
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    const html = document.documentElement;
+    html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+</script>
+</body>
+</html>
