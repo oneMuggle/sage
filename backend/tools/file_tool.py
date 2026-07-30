@@ -17,6 +17,8 @@ import os
 from pathlib import Path
 from typing import Optional, Tuple
 
+from backend.domain.risk import RiskClass
+
 from .base import BaseTool, ToolResult, ToolSchema
 
 logger = logging.getLogger(__name__)
@@ -211,6 +213,9 @@ class ReadFileTool(BaseTool):
 
 class WriteFileTool(BaseTool):
     """写入文件工具"""
+
+    # A1: 修改工作区文件 — 路径受限 + 模式门禁
+    risk = RiskClass.WRITE_LOCAL
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(

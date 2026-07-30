@@ -8,6 +8,8 @@ import shlex
 import subprocess
 from typing import List
 
+from backend.domain.risk import RiskClass
+
 from .base import BaseTool, ToolResult, ToolSchema
 
 
@@ -17,6 +19,9 @@ class TerminalTool(BaseTool):
 
     注意: Windows 7 上建议使用 PowerShell 命令
     """
+
+    # A1: 执行任意命令 — 模式门禁 + 命令 allowlist 精化
+    risk = RiskClass.EXEC
 
     # 危险命令黑名单
     DANGEROUS_PATTERNS: List[str] = [
