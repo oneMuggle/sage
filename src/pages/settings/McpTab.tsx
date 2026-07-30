@@ -24,7 +24,7 @@ const STATE_BADGE_CLASSES: Record<McpServerState, string> = {
   ready: 'bg-green-500/15 text-green-500',
   discovering: 'bg-amber-500/15 text-amber-500',
   failed: 'bg-red-500/15 text-red-500',
-  disabled: 'bg-gray-500/15 text-gray-400',
+  disabled: 'bg-faint/15 text-faint',
 };
 
 const STATE_LABEL_KEYS: Record<McpServerState, TranslationKey> = {
