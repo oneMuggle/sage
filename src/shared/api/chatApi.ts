@@ -7,6 +7,11 @@ import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
 import type { AgentEvent, ChatConfig, ChatOfficeRef, ChatResponse } from './types';
 import { ApiException, handleApiError, isValidSessionId, sanitizeInput, withRetry } from './utils';
+import { clientLogger } from '../log/client';
+
+// DIAG(2026-07-30): 当 stream 以 FAILED 收尾时,把整轮事件序列推到主进程日志,
+// 便于定位 '为什么 agent 跑到 max_iterations'。仅用于排查,不参与业务逻辑。
+const STREAM_TRACE_MAX = 50;
 
 export const chatApi = {
   async chat(sessionId: string, message: string, config?: ChatConfig): Promise<ChatResponse> {
@@ -139,9 +144,15 @@ export const chatApi = {
       }
     };
 
+    // DIAG(2026-07-30): 整轮事件缓冲,用于 FAILED 时 dump 整链到主进程日志
+    const trace: AgentEvent[] = [];
+
     try {
       unlisten = await listen<AgentEvent>(eventName, (evt) => {
         const payload = evt.payload;
+        // DIAG(2026-07-30): 仅在 state=failed 时 dump 整轮事件,定位 max_iterations 根因
+        trace.push(payload);
+        if (trace.length > STREAM_TRACE_MAX) trace.shift();
         try {
           handlers.onEvent(payload);
         } catch (cbErr) {
@@ -154,6 +165,22 @@ export const chatApi = {
         }
         if (payload.state === 'done' || payload.state === 'failed') {
           if (payload.state === 'failed' && payload.error && handlers.onError) {
+            // DIAG(2026-07-30): stream 以 FAILED 收尾时,把整轮 trace 推到主进程日志
+            // 让主进程侧能看到 LLM 在哪几步反复调工具,从而定位 max_iterations 根因。
+            clientLogger.warn('chatStream: stream ended FAILED', {
+              streamId,
+              error: payload.error,
+              iterations: payload.iteration,
+              agentId: payload.agent_id,
+              traceLen: trace.length,
+              trace: trace.map((e) => ({
+                state: e.state,
+                iteration: e.iteration,
+                agentId: e.agent_id,
+                toolName: e.tool_call?.function?.name,
+                toolResultLen: e.tool_result?.content?.length,
+              })),
+            });
             // payload.error 可能是后端 LLMError.to_dict() 返回的 dict
             // (含 type/message/status_code),不能直接 new Error(dict)
             // (那会让 message 变成 "[object Object]")。
