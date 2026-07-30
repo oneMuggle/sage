@@ -14,6 +14,8 @@ export function Layout() {
     typeof window !== 'undefined' ? window.innerWidth < 768 : false,
   );
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [peeking, setPeeking] = useState(false);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -27,6 +29,25 @@ export function Layout() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // Toggle collapse with keyboard shortcut (Ctrl+B / Cmd+B)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        setCollapsed((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // Auto-hide peeking sidebar after mouse leaves
+  useEffect(() => {
+    if (!peeking) return;
+    const timeout = setTimeout(() => setPeeking(false), 300);
+    return () => clearTimeout(timeout);
+  }, [peeking]);
 
   return (
     <div className="flex h-screen bg-bg">
@@ -65,16 +86,31 @@ export function Layout() {
         </>
       ) : (
         <>
-          {/* 桌面端侧边栏（可调整宽度） */}
-          <ErrorBoundary fallback={(error, reset) => (
-            <div className="w-64 p-4 text-error">
-              Sidebar 错误: {error.message}
-              <button onClick={reset} className="ml-2 text-primary">重试</button>
-            </div>
-          )}>
-            <Sidebar width={width} />
-          </ErrorBoundary>
-          <ResizeDivider onMouseDown={onMouseDown} />
+          {/* Hover-peek sidebar (U2 from OpenWorker) */}
+          {collapsed && (
+            <div
+              className="fixed left-0 top-0 w-1 h-screen z-30"
+              onMouseEnter={() => setPeeking(true)}
+            />
+          )}
+
+          {/* Desktop sidebar */}
+          <div
+            className={`transition-transform duration-200 ${
+              collapsed && !peeking ? '-translate-x-full' : 'translate-x-0'
+            } ${collapsed ? 'fixed z-40 shadow-lg' : 'relative'}`}
+          >
+            <ErrorBoundary fallback={(error, reset) => (
+              <div className="w-64 p-4 text-error">
+                Sidebar 错误: {error.message}
+                <button onClick={reset} className="ml-2 text-primary">重试</button>
+              </div>
+            )}>
+              <Sidebar width={collapsed ? undefined : width} />
+            </ErrorBoundary>
+          </div>
+
+          {!collapsed && <ResizeDivider onMouseDown={onMouseDown} />}
         </>
       )}
 
