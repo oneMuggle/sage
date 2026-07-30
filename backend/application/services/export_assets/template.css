@@ -1,0 +1,556 @@
+/* Sage 会话导出样式 (U18) — 深色/浅色/跟随系统三态主题
+ *
+ * 主题机制:
+ * - :root 默认深色
+ * - :root[data-theme="light"] 覆盖为浅色
+ * - :root[data-theme="auto"] 跟随 prefers-color-scheme
+ * 切换按钮由 template.js 驱动并持久化到 localStorage。
+ */
+
+:root {
+  color-scheme: dark;
+  --bg: #0f1117;
+  --card-bg: #1a1d27;
+  --text: #e4e6eb;
+  --dim: #9096a2;
+  --border: #2a2e3a;
+  --accent: #7aa2f7;
+  --user-bg: #1e2433;
+  --user-border: #3d5a80;
+  --tool-bg: #15171e;
+  --tool-border: #2a2e3a;
+  --tool-header: #cdd3e0;
+  --code-bg: #12141b;
+  --thinking-text: #8b8f9a;
+  --diff-add-bg: #14291c;
+  --diff-add-text: #7ee2a8;
+  --diff-remove-bg: #2d1618;
+  --diff-remove-text: #ff9b9b;
+  --badge-user-bg: #233b6e;
+  --badge-user-text: #bcd2ff;
+  --badge-assistant-bg: #1f3d2e;
+  --badge-assistant-text: #a7e8c6;
+  --badge-system-bg: #3a2f1a;
+  --badge-system-text: #e8cf9a;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  /* hljs (深色) */
+  --syn-keyword: #bb9af7;
+  --syn-string: #9ece6a;
+  --syn-comment: #565f89;
+  --syn-number: #ff9e64;
+  --syn-title: #7aa2f7;
+  --syn-attr: #e0af68;
+  --syn-meta: #8b8f9a;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --card-bg: #ffffff;
+  --text: #1f2328;
+  --dim: #656d76;
+  --border: #d8dee4;
+  --accent: #0969da;
+  --user-bg: #eef4ff;
+  --user-border: #a8c7fa;
+  --tool-bg: #f6f8fa;
+  --tool-border: #d8dee4;
+  --tool-header: #424a53;
+  --code-bg: #f0f2f5;
+  --thinking-text: #6e7781;
+  --diff-add-bg: #e2fbe9;
+  --diff-add-text: #116329;
+  --diff-remove-bg: #ffebe9;
+  --diff-remove-text: #82071e;
+  --badge-user-bg: #dbe7ff;
+  --badge-user-text: #1a4b9f;
+  --badge-assistant-bg: #d3f2df;
+  --badge-assistant-text: #0f5132;
+  --badge-system-bg: #fae9c8;
+  --badge-system-text: #7a4f01;
+  --shadow: 0 1px 3px rgba(31, 35, 40, 0.12);
+  --syn-keyword: #cf222e;
+  --syn-string: #0a3069;
+  --syn-comment: #6e7781;
+  --syn-number: #0550ae;
+  --syn-title: #8250df;
+  --syn-attr: #953800;
+  --syn-meta: #6e7781;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme='auto'] {
+    color-scheme: light;
+    --bg: #f5f6f8;
+    --card-bg: #ffffff;
+    --text: #1f2328;
+    --dim: #656d76;
+    --border: #d8dee4;
+    --accent: #0969da;
+    --user-bg: #eef4ff;
+    --user-border: #a8c7fa;
+    --tool-bg: #f6f8fa;
+    --tool-border: #d8dee4;
+    --tool-header: #424a53;
+    --code-bg: #f0f2f5;
+    --thinking-text: #6e7781;
+    --diff-add-bg: #e2fbe9;
+    --diff-add-text: #116329;
+    --diff-remove-bg: #ffebe9;
+    --diff-remove-text: #82071e;
+    --badge-user-bg: #dbe7ff;
+    --badge-user-text: #1a4b9f;
+    --badge-assistant-bg: #d3f2df;
+    --badge-assistant-text: #0f5132;
+    --badge-system-bg: #fae9c8;
+    --badge-system-text: #7a4f01;
+    --shadow: 0 1px 3px rgba(31, 35, 40, 0.12);
+    --syn-keyword: #cf222e;
+    --syn-string: #0a3069;
+    --syn-comment: #6e7781;
+    --syn-number: #0550ae;
+    --syn-title: #8250df;
+    --syn-attr: #953800;
+    --syn-meta: #6e7781;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+/* ---------- 头部 ---------- */
+
+.export-header {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px 20px 12px;
+}
+
+.header-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.session-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.theme-toggle {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.header-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.info-item {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.info-item strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------- 消息 ---------- */
+
+.messages {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 12px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.message {
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.role-badge {
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.user-badge {
+  background: var(--badge-user-bg);
+  color: var(--badge-user-text);
+}
+
+.assistant-badge {
+  background: var(--badge-assistant-bg);
+  color: var(--badge-assistant-text);
+}
+
+.system-badge {
+  background: var(--badge-system-bg);
+  color: var(--badge-system-text);
+}
+
+.model-name {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 11px;
+}
+
+.user-message {
+  background: var(--user-bg);
+  border: 1px solid var(--user-border);
+  box-shadow: var(--shadow);
+}
+
+.assistant-message {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+}
+
+.system-message {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 8px 14px;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.system-message summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.empty-note {
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--dim);
+  text-align: center;
+}
+
+/* ---------- Markdown ---------- */
+
+.markdown-content {
+  word-break: break-word;
+}
+
+.markdown-content > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-content > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.markdown-content code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.markdown-content :not(pre) > code {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+}
+
+.markdown-content blockquote {
+  margin: 8px 0;
+  padding: 2px 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--dim);
+}
+
+.markdown-content a {
+  color: var(--accent);
+}
+
+.markdown-content img {
+  max-width: 100%;
+}
+
+/* ---------- 思考过程 ---------- */
+
+.thinking-block {
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--tool-bg);
+}
+
+.thinking-block summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 12px;
+  color: var(--thinking-text);
+  font-size: 12px;
+}
+
+.thinking-text {
+  padding: 0 14px 10px;
+  color: var(--thinking-text);
+  font-size: 13px;
+  font-style: italic;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin: 0 12px;
+}
+
+/* ---------- 工具调用 ---------- */
+
+.tool-execution {
+  margin-top: 10px;
+  border: 1px solid var(--tool-border);
+  border-radius: 8px;
+  background: var(--tool-bg);
+  font-size: 13px;
+}
+
+.tool-execution > summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 12px;
+  color: var(--tool-header);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+}
+
+.tool-execution > summary .tool-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tool-execution > summary .tool-path {
+  color: var(--dim);
+}
+
+.tool-body {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--tool-border);
+}
+
+.tool-command {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12.5px;
+  background: var(--code-bg);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.tool-command .prompt {
+  color: var(--accent);
+  user-select: none;
+  margin-right: 6px;
+}
+
+.tool-output,
+.tool-args {
+  background: var(--code-bg);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0 0;
+  overflow-x: auto;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.tool-output-label {
+  display: block;
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+/* ---------- Diff ---------- */
+
+.tool-diff {
+  border: 1px solid var(--tool-border);
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  margin-top: 4px;
+}
+
+.diff-line {
+  padding: 0 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.diff-sign {
+  display: inline-block;
+  width: 14px;
+  user-select: none;
+  opacity: 0.7;
+}
+
+.diff-add {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-text);
+}
+
+.diff-remove {
+  background: var(--diff-remove-bg);
+  color: var(--diff-remove-text);
+}
+
+.diff-context {
+  color: var(--dim);
+}
+
+/* ---------- 语法高亮 (hljs 类名映射) ---------- */
+
+.hljs {
+  color: var(--text);
+  background: transparent;
+}
+
+.hljs-keyword,
+.hljs-built_in,
+.hljs-type,
+.hljs-literal {
+  color: var(--syn-keyword);
+}
+
+.hljs-string,
+.hljs-symbol,
+.hljs-regexp {
+  color: var(--syn-string);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.hljs-number,
+.hljs-variable,
+.hljs-template-variable {
+  color: var(--syn-number);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-section,
+.hljs-name {
+  color: var(--syn-title);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-params {
+  color: var(--syn-attr);
+}
+
+.hljs-meta,
+.hljs-tag {
+  color: var(--syn-meta);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+/* ---------- 页脚 ---------- */
+
+.export-footer {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 16px 20px 32px;
+  color: var(--dim);
+  font-size: 12px;
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+
+@media print {
+  .theme-toggle {
+    display: none;
+  }
+  body {
+    background: #ffffff;
+  }
+}

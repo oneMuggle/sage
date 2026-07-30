@@ -79,6 +79,14 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       return body;
     },
   },
+  // U18: HTML 会话导出 — 后端返回 JSON 信封 {html, filename}，渲染进程
+  // 用 Blob 触发下载。body 只下发 theme：ExportSessionRequest extra=forbid，
+  // 若走默认 camelToSnake 会把 sessionId 带进 body 触发 422。
+  export_session_html: {
+    method: 'POST',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/export`,
+    body: (a) => ({ theme: a.theme ?? 'auto' }),
+  },
 
   // session workspace binding
   workspace_bind: {

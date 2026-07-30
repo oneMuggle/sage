@@ -36,6 +36,18 @@ export interface SessionCompactResult {
   removed: number;
 }
 
+/** U18: POST /sessions/{id}/export 响应（JSON 信封，html 为自包含文档文本） */
+export interface SessionExportResult {
+  /** 自包含导出 HTML 全文（内联 CSS/JS/marked/highlight.js，离线可开） */
+  html: string;
+  /** 建议下载文件名，如 sage-session-<8位id>-<时间戳>.html */
+  filename: string;
+  session_id: string;
+  message_count: number;
+  /** 实际生效主题：auto / dark / light */
+  theme: string;
+}
+
 export interface SessionWorkspaceBinding {
   sessionId: string;
   workspacePath: string;
