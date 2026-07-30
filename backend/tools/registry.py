@@ -46,12 +46,15 @@ class ToolRegistry:
 
         self._tools[tool_name] = tool
         risk = getattr(tool, "risk", RiskClass.READ)
+<<<<<<< HEAD
         # A1: 防御子类误设非法 risk（如 None）— 回退 READ 并告警
         if not isinstance(risk, RiskClass):
             logger.warning(
                 f"工具 {tool_name} 声明的 risk 非法 ({risk!r})，回退 READ"
             )
             risk = RiskClass.READ
+=======
+>>>>>>> 2a006d4f (feat(permission): add RiskClass data-driven permissions (A1))
         self._risks[tool_name] = risk
         logger.info(f"注册工具: {tool_name} (risk={risk.value})")
 
@@ -192,7 +195,11 @@ class ToolRegistry:
         self,
         name: str,
         metadata: Any = None,
+<<<<<<< HEAD
         overrides: Optional[RiskOverrides] = None,
+=======
+        overrides: Optional[Any] = None,
+>>>>>>> 2a006d4f (feat(permission): add RiskClass data-driven permissions (A1))
     ) -> RiskClass:
         """
         解析工具的有效风险（A1）
