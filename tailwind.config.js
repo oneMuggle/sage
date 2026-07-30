@@ -28,6 +28,13 @@ export default {
           muted: 'rgb(var(--color-text-muted-rgb) / <alpha-value>)',
           inverse: 'rgb(var(--color-text-inverse-rgb) / <alpha-value>)',
         },
+        // Semantic ladder (U3 from OpenWorker)
+        ink: 'rgb(var(--color-ink-rgb) / <alpha-value>)',
+        faint: 'rgb(var(--color-faint-rgb) / <alpha-value>)',
+        line: {
+          DEFAULT: 'rgb(var(--color-line-rgb) / <alpha-value>)',
+          strong: 'rgb(var(--color-line-strong-rgb) / <alpha-value>)',
+        },
         border: {
           DEFAULT: 'rgb(var(--color-border-rgb) / <alpha-value>)',
           hover: 'rgb(var(--color-border-hover-rgb) / <alpha-value>)',
