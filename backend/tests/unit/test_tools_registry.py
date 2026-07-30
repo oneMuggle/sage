@@ -129,6 +129,47 @@ def test_registry_get_schemas_for_llm_empty():
     assert reg.get_schemas_for_llm() == []
 
 
+# ---------- profile.tools 白名单(2026-07-30 修复) ----------
+
+
+def test_registry_get_schemas_filters_by_allowed_tools():
+    """allowed_tools 白名单应只暴露列出的工具。
+
+    触发原因:memory_manager profile.tools=['memory_search', 'memory_save'],
+    但 get_schemas_for_llm() 之前忽略 profile.tools,
+    导致 LLM 拿到全部内置工具(list_dir/read_file) → max_iterations_exceeded。
+    """
+    reg = ToolRegistry()
+    reg.register(_DummyTool(name="list_dir"))
+    reg.register(_DummyTool(name="read_file"))
+    reg.register(_DummyTool(name="memory_search"))
+    reg.register(_DummyTool(name="memory_save"))
+
+    schemas = reg.get_schemas_for_llm(allowed_tools=["memory_search", "memory_save"])
+    names = {s["name"] for s in schemas}
+    assert names == {"memory_search", "memory_save"}
+
+
+def test_registry_get_schemas_allowed_tools_none_keeps_legacy_behavior():
+    """allowed_tools=None 时保持向后兼容:返回所有工具。"""
+    reg = ToolRegistry()
+    reg.register(_DummyTool(name="a"))
+    reg.register(_DummyTool(name="b"))
+
+    schemas = reg.get_schemas_for_llm(allowed_tools=None)
+    assert {s["name"] for s in schemas} == {"a", "b"}
+
+
+def test_registry_get_schemas_allowed_tools_empty_returns_empty():
+    """allowed_tools=[] (空白名单) → 不返回任何工具。"""
+    reg = ToolRegistry()
+    reg.register(_DummyTool(name="a"))
+    reg.register(_DummyTool(name="b"))
+
+    schemas = reg.get_schemas_for_llm(allowed_tools=[])
+    assert schemas == []
+
+
 # ---------- register_all_tools 集成 ----------
 
 
