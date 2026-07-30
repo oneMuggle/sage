@@ -338,6 +338,17 @@ body {
   }
 }
 
+/* 淡入动画(仅 opacity,不覆盖 transform — 可安全用于 Radix 浮层,
+   其位置由 inline transform 控制,transform 关键帧会与其冲突) */
+@keyframes fade-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* 动画应用类 */
 .animate-cmdk-enter {
   animation: cmdk-enter 0.15s ease-out;
@@ -349,6 +360,10 @@ body {
 
 .animate-popup-enter {
   animation: popup-enter 0.12s ease-out;
+}
+
+.animate-fade-enter {
+  animation: fade-enter 0.15s ease-out;
 }
 
 /* 尊重减少动画偏好 */
