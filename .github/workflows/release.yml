@@ -117,6 +117,14 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: npx electron-builder --linux AppImage deb --publish never
 
+      - name: Create stable-named Linux artifacts (A8 from OpenWorker)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # Copy versioned artifacts to stable names
+          # Download URLs like releases/latest/download/Sage-latest.AppImage never need updating
+          cp release/*/Sage-*.AppImage release/linux-unpacked/Sage-latest.AppImage || true
+          cp release/*/sage_*_amd64.deb release/linux-unpacked/sage-latest_amd64.deb || true
+
       - name: Fetch VC++ Redistributable (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -152,7 +160,17 @@ jobs:
         env:
           SAGE_RELEASE_BOT_TOKEN: ${{ secrets.SAGE_RELEASE_BOT_TOKEN }}
 
-      - name: Upload artifacts to GitHub Release
+      - name: Create stable-named Windows artifact (A8 from OpenWorker)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Copy versioned artifact to stable name
+          # Download URLs like releases/latest/download/Sage-Setup-latest.exe never need updating
+          Get-ChildItem -Path release -Filter "Sage-Setup-*.exe" -Recurse | ForEach-Object {
+            Copy-Item $_.FullName -Destination "release/win-unpacked/Sage-Setup-latest.exe"
+          }
+
+      - name: Upload artifacts to GitHub Release (versioned)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -170,6 +188,33 @@ jobs:
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for details.
           draft: true
           generate_release_notes: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload stable-named artifacts (A8 from OpenWorker)
+        if: matrix.os == 'ubuntu-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            release/*/Sage-latest.AppImage
+            release/*/sage-latest_amd64.deb
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          draft: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload stable-named Windows installer (A8 from OpenWorker)
+        if: matrix.os == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            release/*/Sage-Setup-latest.exe
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          draft: true
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
