@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
 
 
@@ -87,6 +88,13 @@ class BaseTool(ABC):
     # preserves backwards compatibility -- existing tools are not
     # affected. Set on a subclass to opt in.
     requires_tool_context: bool = False
+
+    # A1: 工具风险声明 — 权限引擎（PermissionEngine）据此做模式门禁，
+    # 取代按工具名硬编码集合的旧模式。默认 READ（无副作用）；有副作
+    # 用的工具必须在子类覆盖（如 WriteFileTool → WRITE_LOCAL、
+    # TerminalTool → EXEC、WebSearchTool → EXTERNAL）。注册表在
+    # register() 时收集该声明，引擎经 declared_risks 注入。
+    risk: RiskClass = RiskClass.READ
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         self._schema: Optional[ToolSchema] = None

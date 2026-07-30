@@ -9,6 +9,8 @@ import builtins
 import logging
 from typing import Any, Dict, List, Optional
 
+from backend.domain.risk import RiskClass, classify as classify_risk
+
 from .base import BaseTool, ToolSchema
 from .context import ToolExecutionContext, current_tool_context
 
@@ -23,24 +25,29 @@ class ToolRegistry:
     - 注册和取消注册工具
     - 根据名称获取工具
     - 列出所有可用工具
+    - A1: 注册时收集工具声明的 ``risk``，供权限引擎数据化门禁
     """
 
     def __init__(self):
         self._tools: Dict[str, BaseTool] = {}
+        # A1: 每个工具注册时声明的风险类别（BaseTool.risk，缺省 READ）
+        self._risks: Dict[str, RiskClass] = {}
 
     def register(self, tool: BaseTool) -> None:
         """
         注册工具
 
         Args:
-            tool: BaseTool 实例
+            tool: BaseTool 实例（通过类属性 ``risk`` 声明风险类别）
         """
         tool_name = tool.name
         if tool_name in self._tools:
             logger.warning(f"工具 {tool_name} 已存在，将被覆盖")
 
         self._tools[tool_name] = tool
-        logger.info(f"注册工具: {tool_name}")
+        risk = getattr(tool, "risk", RiskClass.READ)
+        self._risks[tool_name] = risk
+        logger.info(f"注册工具: {tool_name} (risk={risk.value})")
 
     def unregister(self, name: str) -> bool:
         """
@@ -54,6 +61,7 @@ class ToolRegistry:
         """
         if name in self._tools:
             del self._tools[name]
+            self._risks.pop(name, None)
             logger.info(f"取消注册工具: {name}")
             return True
         return False
@@ -153,7 +161,54 @@ class ToolRegistry:
         """
         return name in self._tools
 
+    def risk_of(self, name: str) -> RiskClass:
+        """
+        获取工具注册时声明的风险类别（A1）
+
+        Args:
+            name: 工具名称
+
+        Returns:
+            声明的 ``RiskClass``；未注册或未声明时按 ``READ`` 处理
+        """
+        return self._risks.get(name, RiskClass.READ)
+
+    def declared_risks(self) -> Dict[str, RiskClass]:
+        """
+        返回 {工具名: 声明风险} 的快照副本（A1）
+
+        供 ``PermissionEngine`` 经 ``declared_risks`` 参数注入，实现
+        数据化权限门禁。返回副本，调用方修改不影响注册表内部状态。
+        """
+        return dict(self._risks)
+
+    def classify(
+        self,
+        name: str,
+        metadata: Any = None,
+        overrides: Optional[Any] = None,
+    ) -> RiskClass:
+        """
+        解析工具的有效风险（A1）
+
+        以本注册表收集的工具声明为 ``declared`` 来源，委托
+        ``backend.domain.risk.classify`` 按优先级解析：
+        用户覆盖 > 注册声明 > 按名兜底表 > 元数据启发式 > READ。
+
+        Args:
+            name:      工具名称
+            metadata:  工具元数据（对象或 dict）
+            overrides: 用户级覆盖解析器（A19，缺省 None）
+
+        Returns:
+            有效 ``RiskClass``
+        """
+        return classify_risk(
+            name, metadata=metadata, overrides=overrides, declared=self._risks
+        )
+
     def clear(self) -> None:
         """清空所有已注册工具"""
         self._tools.clear()
+        self._risks.clear()
         logger.info("清空所有已注册工具")
