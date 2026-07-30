@@ -91,6 +91,7 @@ class ToolRegistry:
     def get_schemas_for_llm(
         self,
         context: Optional[ToolExecutionContext] = None,
+        allowed_tools: Optional[List[str]] = None,
     ) -> builtins.list[Dict[str, Any]]:
         """
         获取适合 LLM 调用的工具 Schema 列表
@@ -106,6 +107,12 @@ class ToolRegistry:
                 through every helper signature. Pass ``None`` explicitly
                 to opt out of the ContextVar lookup and force the
                 "no context" filter behavior.
+            allowed_tools: Whitelist from the active agent profile's
+                ``profile.tools`` field. ``None`` (default) means
+                "no whitelist" -- every tool passing the context filter
+                is exposed (legacy behavior, used when ``SageAgent`` has
+                no profile loaded). An explicit list filters the result
+                to those names only; pass ``[]`` to expose nothing.
 
         Returns:
             包含 name, description, parameters 的字典列表
@@ -121,6 +128,9 @@ class ToolRegistry:
             # to. Normal tools are always visible -- an active context
             # widens the set, never narrows it.
             if tool.requires_tool_context and effective_context is None:
+                continue
+            # profile.tools 白名单:仅当 allowed_tools 显式给出时才过滤
+            if allowed_tools is not None and tool.schema.name not in allowed_tools:
                 continue
             result.append(
                 {
