@@ -6,6 +6,7 @@ import { skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
+import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
@@ -71,7 +72,20 @@ export function ChatInput({
   workspacePath,
 }: ChatInputProps) {
   const { t } = useI18n();
-  const [value, setValue] = useState('');
+
+  // Workspace context — provides sessionId + binding for the @ menu.
+  // Falls back to the legacy `workspacePath` prop for callers that don't
+  // mount the provider (e.g. some legacy tests). Use the optional variant
+  // so legacy tests that don't mount the provider don't throw.
+  const workspaceContext = useOptionalWorkspaceContext();
+  const effectiveWorkspacePath = workspaceContext?.binding?.workspacePath ?? workspacePath;
+  // sessionId is used by the AtFileMenu itself (via useOptionalWorkspaceContext);
+  // expose on the closure so future tests can assert on it.
+  const effectiveSessionId = workspaceContext?.sessionId ?? null;
+
+  // Per-session draft persistence (U13 from OpenWorker)
+  const [value, setValue] = useSessionDraft(effectiveSessionId);
+
   const [cursorPos, setCursorPos] = useState(0);
   const [knowledgeRefs, setKnowledgeRefs] = useState<{ id: string; title: string }[]>([]);
   const [showKnowledgeSelector, setShowKnowledgeSelector] = useState(false);
@@ -85,16 +99,6 @@ export function ChatInput({
   // Task 7 (2026-07-26): managed Office refs attached via the @ menu.
   // Dedupe by docId (immutable state — every update is a new array).
   const [officeRefs, setOfficeRefs] = useState<readonly ChatOfficeRef[]>([]);
-
-  // Workspace context — provides sessionId + binding for the @ menu.
-  // Falls back to the legacy `workspacePath` prop for callers that don't
-  // mount the provider (e.g. some legacy tests). Use the optional variant
-  // so legacy tests that don't mount the provider don't throw.
-  const workspaceContext = useOptionalWorkspaceContext();
-  const effectiveWorkspacePath = workspaceContext?.binding?.workspacePath ?? workspacePath;
-  // sessionId is used by the AtFileMenu itself (via useOptionalWorkspaceContext);
-  // expose on the closure so future tests can assert on it.
-  const effectiveSessionId = workspaceContext?.sessionId ?? null;
 
   // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
