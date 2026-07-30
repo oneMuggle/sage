@@ -5,6 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/sage.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sage - 记忆型 AI 助手</title>
+    <!-- Pre-paint theme script: prevent theme flash (U1 from OpenWorker) -->
+    <script>
+      (function() {
+        try {
+          var mode = localStorage.getItem('sage-theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var resolved = mode === 'dark' || (mode !== 'light' && prefersDark) ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', resolved);
+          if (resolved === 'dark') {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {
+          // Silently fail - ThemeProvider will handle it
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
