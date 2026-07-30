@@ -9,6 +9,7 @@ import subprocess
 from typing import List
 
 from backend.domain.risk import RiskClass
+from backend.domain.shell import SHELL_OPERATORS, has_shell_operators as _has_shell_operators_fn
 
 from .base import BaseTool, ToolResult, ToolSchema
 
@@ -37,7 +38,9 @@ class TerminalTool(BaseTool):
     ]
 
     # Shell 操作符 (A7 from OpenWorker) - 防止 allowlist 绕过
-    SHELL_OPERATORS = (";", "&", "|", ">", "<", "`", "$(", "(", "\n", "\r")
+    # A1: 上提到 backend/domain/shell.py 单一来源,与 PermissionEngine
+    # 共享,消除两处手工同步的漂移风险
+    SHELL_OPERATORS = SHELL_OPERATORS
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -71,7 +74,7 @@ class TerminalTool(BaseTool):
         Returns:
             是否包含 shell 操作符
         """
-        return any(op in command for op in self.SHELL_OPERATORS)
+        return _has_shell_operators_fn(command)
 
     def _is_dangerous(self, command: str) -> bool:
         """

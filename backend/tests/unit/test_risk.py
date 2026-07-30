@@ -213,6 +213,16 @@ class TestRegistryRiskCollection:
         # 未注册工具回落按名表
         assert registry.classify("terminal") is RiskClass.EXEC
 
+    def test_register_invalid_risk_falls_back_to_read(self):
+        """子类误设非法 risk（如 None）→ 回退 READ 不崩溃"""
+        tool = _DummyTool("broken")
+        tool.risk = None  # 非法声明
+
+        registry = ToolRegistry()
+        registry.register(tool)
+
+        assert registry.risk_of("broken") is RiskClass.READ
+
 
 class TestBuiltinToolDeclarations:
     """内置工具风险声明验收测试"""

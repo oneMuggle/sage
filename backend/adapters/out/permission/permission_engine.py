@@ -10,9 +10,10 @@
 - AUTO：完全放行（写入仍受 workspace 路径边界约束）
 - CUSTOM：INTERACTIVE + ``auto_allow_tools`` 白名单自动放行
 
-参数模式精化：写入的 ``path`` 必须落在 ``workspace_root`` 内（所有模式）；
-命令 allowlist 采用 token 精确前缀匹配，且拒绝携带 shell 操作符的命令
-（与 A7 ``TerminalTool.SHELL_OPERATORS`` 一致）。
+参数模式精化：写入的 ``path`` 必须为绝对路径且落在 ``workspace_root``
+内（所有模式）；命令 allowlist 采用 token 精确前缀匹配，且拒绝携带
+shell 操作符的命令（操作符定义与 A7 ``TerminalTool`` 同源，见
+``backend.domain.shell``）。
 
 引擎**只做裁决**；上层（ChatService / agent loop）负责把 ``needs_user``
 裁决路由到 UI 审批，并经 ``allow_*_for_session`` 记录用户选择。
@@ -27,20 +28,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from backend.domain.permission import READ_ONLY_MODES, Decision, PermissionMode
 from backend.domain.risk import RiskClass, RiskOverrides, classify, is_consequential
+from backend.domain.shell import has_shell_operators
 
 if TYPE_CHECKING:
     from backend.tools.registry import ToolRegistry
-
-# Shell 操作符：任一出现即把"一条白名单命令"变成多条。携带这些字符
-# 的命令不得走 allowlist 自动放行 — 必须显式审批。覆盖串联（`;` `&`
-# `&&` `||`）、管道（`|`）、重定向（`>` `<`）、命令替换（`` ` `` `$(`）、
-# 进程替换/分组（`(`）与换行。与 backend/tools/terminal.py (A7) 同步。
-_SHELL_OPERATORS = (";", "&", "|", ">", "<", "`", "$(", "(", "\n", "\r")
-
-
-def _has_shell_operators(command: str) -> bool:
-    """命令是否携带 shell 操作符（串联/管道/重定向/替换/分组）。"""
-    return any(op in command for op in _SHELL_OPERATORS)
 
 
 @dataclass
@@ -52,10 +43,17 @@ class PermissionEngine:
         mode:                  会话级权限模式（缺省 INTERACTIVE）
         allowed_commands:      命令 allowlist（token 精确前缀匹配，免审批）
         auto_allow_tools:      CUSTOM 模式自动放行的工具白名单
-        session_allow_tools:   用户在本次会话批准的工具（运行时累积）
+        session_allow_tools:   用户在本次会话批准的工具（运行时累积；
+                               EXTERNAL 风险工具除外，保持逐次审批。
+                               会话内无界增长，长会话由上层负责重置）
         session_allow_commands: 用户在本次会话批准的完整命令（运行时累积）
         declared_risks:        注册表收集的工具风险声明（``registry.declared_risks()``）
         risk_overrides:        用户级风险覆盖解析器（A19，缺省 None）
+
+    写入工具契约：WRITE_LOCAL 工具的写入路径必须通过名为 ``path`` 的
+    参数传递且为绝对路径（``~`` 除外），否则引擎拒绝或无法施加路径
+    边界。无 ``path`` 参数的状态修改工具（如 memory_save）仅受模式
+    门禁约束 — 新增此类工具时须自行评估资源边界。
     """
 
     workspace_root: Path
@@ -69,7 +67,14 @@ class PermissionEngine:
 
     def __post_init__(self) -> None:
         self.workspace_root = Path(self.workspace_root).expanduser().resolve()
+        # 归一化：允许调用方传裸字符串（如 JSON 配置里的 "auto"）
+        self.mode = PermissionMode(self.mode)
+        # 防御性拷贝：调用方事后修改传入容器不渗透进引擎
+        self.allowed_commands = list(self.allowed_commands)
         self.auto_allow_tools = set(self.auto_allow_tools)
+        self.session_allow_tools = set(self.session_allow_tools)
+        self.session_allow_commands = set(self.session_allow_commands)
+        self.declared_risks = dict(self.declared_risks)
 
     @classmethod
     def from_registry(
@@ -113,9 +118,9 @@ class PermissionEngine:
 
         # 写入路径边界（所有模式）：必须落在 workspace_root 内。
         if is_write:
-            path = arguments.get("path")
-            if path is not None and not self._under_workspace(str(path)):
-                return Decision(False, f"path is not in the workspace: {path}")
+            violation = self._write_path_violation(arguments.get("path"))
+            if violation is not None:
+                return Decision(False, violation)
 
         # 无副作用工具始终放行。
         if not consequential:
@@ -126,20 +131,25 @@ class PermissionEngine:
             return Decision(True, "full access")
 
         # INTERACTIVE / CUSTOM：各类豁免名单精化。
-        exempted = self._allowlisted(tool_name, arguments, is_shell)
+        exempted = self._exemption_decision(tool_name, arguments, is_shell)
         if exempted is not None:
             return exempted
 
         # 其余：询问用户。
         return Decision(False, "requires approval", needs_user=True)
 
-    def _allowlisted(
+    def _exemption_decision(
         self, tool_name: str, arguments: Dict[str, Any], is_shell: bool
     ) -> Optional[Decision]:
         """检查调用是否命中豁免名单；命中返回放行裁决，否则返回 None。
 
         豁免来源（按检查顺序）：命令 allowlist、会话命令记忆、
         会话工具记忆、CUSTOM 模式配置白名单。
+
+        护栏：EXTERNAL 风险工具**不**享受会话工具记忆豁免 — 出网调用
+        一次批准不等于对任意 target（URL）放行，缺少精确 target 绑定
+        前保持逐次审批（参考 OpenWorker permissions.py 的 connector
+        排除；target 绑定能力随 A19 引入）。
         """
         if is_shell:
             command = str(arguments.get("command", ""))
@@ -148,7 +158,9 @@ class PermissionEngine:
             if command and command in self.session_allow_commands:
                 return Decision(True, "command allowed for session")
         if tool_name in self.session_allow_tools:
-            return Decision(True, "tool allowed for session")
+            risk = classify(tool_name, None, self.risk_overrides, self.declared_risks)
+            if risk is not RiskClass.EXTERNAL:
+                return Decision(True, "tool allowed for session")
         if self.mode is PermissionMode.CUSTOM and tool_name in self.auto_allow_tools:
             return Decision(True, "auto-allowed by config")
         return None
@@ -164,6 +176,22 @@ class PermissionEngine:
             self.session_allow_commands.add(command)
 
     # -- 辅助 -------------------------------------------------------------
+    def _write_path_violation(self, path: Any) -> Optional[str]:
+        """校验写入路径边界；违规返回拒绝理由，合规/无路径参数返回 None。
+
+        仅接受绝对路径（``~`` 展开后）：相对路径在引擎（按 workspace
+        解析）与工具（按进程 CWD 解析，见 WriteFileTool）之间解析语义
+        不一致 — 放行"判定在 workspace 内"的相对路径可能造成实际写到
+        workspace 外的静默 bypass，故 fail-closed 直接拒绝。
+        """
+        if path is None:
+            return None
+        if not Path(str(path)).expanduser().is_absolute():
+            return f"write path must be absolute: {path}"
+        if not self._under_workspace(str(path)):
+            return f"path is not in the workspace: {path}"
+        return None
+
     def _candidate(self, path: str) -> Path:
         """相对路径按 workspace_root 解析；绝对路径/``~`` 原样展开。"""
         p = Path(path).expanduser()
@@ -186,7 +214,7 @@ class PermissionEngine:
         token 序列必须是命令 token 序列的精确前缀（``git status``
         匹配 ``git status -s``，但不匹配 ``git statusfoo`` 或裸 ``git``）。
         """
-        if _has_shell_operators(command):
+        if has_shell_operators(command):
             return False
         try:
             argv = shlex.split(command)
