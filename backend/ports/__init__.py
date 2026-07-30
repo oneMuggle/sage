@@ -26,6 +26,14 @@
 
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
 
+from backend.ports.llm import (
+    AssistantTurn,
+    ModelCapabilities,
+    ProviderClient,
+    StreamChunk,
+    TokenUsage,
+)
+
 __all__ = [
     "LLMPort",
     "ToolPort",
@@ -33,4 +41,10 @@ __all__ = [
     "StoragePort",
     "MetricPort",
     "EventPort",
+    # A2: Provider 抽象 + Token 归一化
+    "AssistantTurn",
+    "ModelCapabilities",
+    "ProviderClient",
+    "StreamChunk",
+    "TokenUsage",
 ]

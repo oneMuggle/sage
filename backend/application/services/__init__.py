@@ -5,5 +5,9 @@
 """
 
 from backend.application.services.chat_service import ChatService
+from backend.application.services.provider_router import (
+    ProviderRouter,
+    UnknownProviderError,
+)
 
-__all__ = ["ChatService"]
+__all__ = ["ChatService", "ProviderRouter", "UnknownProviderError"]
