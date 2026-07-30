@@ -26,6 +26,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+import weakref
 from typing import Any, List, Optional
 
 from sage_core import LLMError, Message, Role, ToolCall
@@ -107,6 +108,16 @@ class ChatService:
         )
         # P3.2: 当前活跃 session 计数（用于 sage_active_sessions gauge）
         self._active_session_count: int = 0
+        # WS-C P0-3: system prompt frozen snapshot — 按 session 缓存静态段
+        # （身份 / 工具说明等不随 turn 变化的部分），后续 turn 复用同一字符串
+        # 以保证 LLM 请求前缀稳定、提升 prefix cache 命中率；动态记忆段
+        # 每 turn 拼接在快照之后。key=session_id, value=静态 prompt。
+        # session_id 为空的调用不缓存（见 _run_turn_inner）。
+        self._system_prompt_snapshots: dict[str, str] = {}
+        # WS-C P0-3: 注册到弱引用登记表，使 legacy_routes 压缩落盘完成后
+        # 可通过模块级 invalidate_session_snapshot() 通知所有存活实例失效
+        # 对应 session 的快照（WeakSet 不阻止实例被 GC）。
+        _CHAT_SERVICE_REGISTRY.add(self)
 
     # ------------------------------------------------------------------ #
     # 会话生命周期（含审计事件 + Prometheus 指标）
@@ -233,18 +244,20 @@ class ChatService:
         )
         span.set_attribute("history.size", len(history))
 
-        # Inject system prompt (including diagram tool guidance if available)
-        from backend.agents.profiles import build_system_base
+        # WS-C P0-3: frozen snapshot — system prompt 拆成「静态段 + 动态段」：
+        #   静态段（身份 / 工具说明, 不随 turn 变化）按 session 首次组装后
+        #   缓存复用, 保证 LLM 请求前缀稳定, 提升 prefix cache 命中率;
+        #   动态段（每 turn retrieve 的记忆上下文）逐轮拼接在快照之后,
+        #   注入位置与现状保持一致。session_id 为空则不缓存, 走旧路径。
+        static_content = (
+            self._system_prompt_snapshots.get(session_id) if session_id else None
+        )
+        if static_content is None:
+            static_content = self._build_static_system_prompt()
+            if session_id:
+                self._system_prompt_snapshots[session_id] = static_content
 
-        system_content = build_system_base()
-        try:
-            from backend.core.diagram_prompt import DIAGRAM_TOOL_PROMPT
-
-            # Check if diagram tools are available in the tool registry
-            if self.tools and any("drawio" in t.name for t in self.tools.list()):
-                system_content += DIAGRAM_TOOL_PROMPT
-        except Exception:
-            pass
+        system_content = static_content
 
         # 2.5) 注入记忆上下文到 system prompt (Memory Integration)
         if memory_context and memory_context.has_memories:
@@ -389,17 +402,22 @@ class ChatService:
             span.set_attribute("tokens.prompt", prompt_tokens)
             span.set_attribute("tokens.completion", completion_tokens)
 
-        # 7) 提取并存储记忆 (Memory Integration)
+        # 7) 提取并存储记忆 (Memory Integration) — WS-C P0-2 统一写入路径：
+        #    委派给模块级 extract_and_store_memory（与 legacy /chat/stream
+        #    producer 共用同一实现）。该函数内部捕获全部异常只 warning,
+        #    绝不外抛, 无需再包 try/except。
         if self.memory:
-            try:
-                await self._extract_and_store_memory(
-                    session_id=session_id,
-                    user_message=user_message,
-                    assistant_message=response,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to store memory: {e}")
-                span.set_attribute("memory.store_error", str(e))
+            from backend.memory.extractor import MemoryExtractor
+
+            stored_facts = await extract_and_store_memory(
+                self.memory,
+                MemoryExtractor(llm_client=self.llm),
+                user_message.content or "",
+                response.content or "",
+                session_id,
+                enabled=True,  # hex 路径保持现状行为：有 memory 即写
+            )
+            span.set_attribute("memory.stored_facts", stored_facts)
 
             # 8) 压缩工作记忆 (Memory Integration)
             try:
@@ -416,46 +434,47 @@ class ChatService:
         return [user_message, response]
 
     # ------------------------------------------------------------------ #
-    # 内部辅助：记忆提取与存储 (Memory Integration)
+    # 内部辅助：system prompt 组装 (WS-C P0-3 frozen snapshot)
     # ------------------------------------------------------------------ #
 
-    async def _extract_and_store_memory(
-        self,
-        session_id: str,
-        user_message: Message,
-        assistant_message: Message,
-    ) -> None:
-        """从对话中提取关键信息并存入记忆系统
+    def _build_static_system_prompt(self) -> str:
+        """组装 system prompt 的静态段（身份 + agent 列表 + 图表工具说明）。
 
-        使用 LLM 驱动的事实提取（MemoryExtractor），自动检测对话中的
-        关键信息并存储到记忆系统。当 LLM 不可用时降级为关键词提取。
-
-        Args:
-            session_id: 会话 ID
-            user_message: 用户消息
-            assistant_message: 助手消息
+        返回内容**不包含**任何随 turn 变化的部分（如每轮检索的记忆上下文），
+        因此可按 session 缓存为 frozen snapshot 跨 turn 复用，保证 LLM
+        请求前缀稳定、提升 prefix cache 命中率。
         """
-        if not self.memory:
-            return
+        from backend.agents.profiles import build_system_base
 
-        from backend.memory.extractor import MemoryExtractor
-
-        extractor = MemoryExtractor(llm_client=self.llm)
-        facts = await extractor.extract(
-            user_message=user_message.content or "",
-            assistant_message=assistant_message.content or "",
-        )
-
-        for fact in facts:
-            await self.memory.store(
-                content=fact["content"],
-                session_id=session_id,
-                importance=fact.get("importance", 5),
-                tags=fact.get("tags", ["conversation"]),
+        system_content = build_system_base()
+        try:
+            from backend.core.diagram_prompt import (
+                DIAGRAM_TOOL_PROMPT,
+                DRAWIO_TOOL_PREFIX,
             )
 
-        if facts:
-            logger.debug(f"Extracted {len(facts)} facts for session {session_id}")
+            # Check if diagram tools are available in the tool registry
+            if self.tools and any(
+                tool.name.startswith(DRAWIO_TOOL_PREFIX)
+                for tool in self.tools.list_tools()
+            ):
+                system_content += DIAGRAM_TOOL_PROMPT
+        except Exception:
+            pass
+        return system_content
+
+    def invalidate_session_snapshot(self, session_id: str) -> None:
+        """丢弃指定 session 的 system prompt 静态段快照（下一轮重建）。
+
+        WS-C P0-3 失效点：会话压缩完成后由 legacy_routes 的压缩落盘路径
+        （``_persist_compaction``）经模块级 ``invalidate_session_snapshot()``
+        路由到本方法——压缩只在 legacy_routes 触发（自动 / 手动），
+        ChatService 自身无感知，故采用"模块级登记 + 广播失效"的最小改动
+        方案。代价 = 每次压缩后首轮重建一次静态段，可忽略。
+
+        对未知 / 不存在的 session_id 调用是安全的 no-op。
+        """
+        self._system_prompt_snapshots.pop(session_id, None)
 
     # ------------------------------------------------------------------ #
     # 内部辅助：执行 tool_calls
@@ -561,6 +580,89 @@ class ChatService:
                     {"tool": tc.name, "outcome": "success"},
                 )
         return called >= budget and len(tool_calls) > budget
+
+
+# --------------------------------------------------------------------------- #
+# WS-C P0-2: 统一记忆写入路径（模块级，hex ChatService 与 legacy /chat/stream 共用）
+# --------------------------------------------------------------------------- #
+
+
+async def extract_and_store_memory(
+    memory_port: Optional[MemoryPort],
+    extractor: Any,
+    user_text: str,
+    assistant_text: str,
+    session_id: Optional[str],
+    enabled: bool,
+) -> int:
+    """从一轮对话中提取原子事实并写入记忆系统（best-effort，绝不外抛）。
+
+    WS-C P0-2：此前只有 hex ``ChatService.run_turn`` 触发 MemoryExtractor，
+    legacy /chat/stream producer 不写记忆，导致一半对话数据不进记忆系统。
+    本函数把提取 + 写入的核心逻辑抽成两条路径共用的唯一实现（legacy_routes
+    在 assistant 消息落盘成功后调用，见 ``_extract_legacy_chat_memory``）。
+
+    语义保证：
+    - ``enabled=False``（autoMemory 关）或 ``memory_port is None`` → 立即返回 0；
+    - extractor / store 的任何异常都在内部捕获并 ``logger.warning``，
+      绝不外抛——记忆写入失败不得破坏对话轮次或流式响应。
+
+    Args:
+        memory_port:    MemoryPort 实现（如 MemoryAdapter）；None → 跳过。
+        extractor:      MemoryExtractor 实例（持有各自的 LLM 客户端）。
+        user_text:      用户消息文本。
+        assistant_text: 助手回复文本。
+        session_id:     关联会话 ID，原样透传给 ``memory_port.store``；可为 None。
+        enabled:        autoMemory 开关；False → 跳过（返回 0）。
+
+    Returns:
+        实际写入记忆条数（失败 / 跳过时为 0）。
+    """
+    if not enabled or memory_port is None:
+        return 0
+    stored = 0
+    try:
+        facts = await extractor.extract(
+            user_message=user_text or "",
+            assistant_message=assistant_text or "",
+        )
+        for fact in facts:
+            await memory_port.store(
+                content=fact["content"],
+                session_id=session_id,
+                importance=fact.get("importance", 5),
+                tags=fact.get("tags", ["conversation"]),
+            )
+            stored += 1
+        if stored:
+            logger.debug(f"Extracted {stored} facts for session {session_id}")
+    except Exception as e:
+        logger.warning(f"Failed to extract/store memory: {e}")
+    return stored
+
+
+# --------------------------------------------------------------------------- #
+# WS-C P0-3: frozen snapshot 失效广播（legacy_routes 压缩落点调用）
+# --------------------------------------------------------------------------- #
+
+# 存活 ChatService 实例的弱引用登记表：压缩只在 legacy_routes 发生,
+# ChatService 自身无感知; legacy_routes 压缩落盘后调模块级
+# invalidate_session_snapshot() 广播失效, 各实例下一轮 run_turn 重建快照。
+_CHAT_SERVICE_REGISTRY: weakref.WeakSet[ChatService] = weakref.WeakSet()
+
+
+def invalidate_session_snapshot(session_id: str) -> None:
+    """广播失效：通知所有存活 ChatService 实例丢弃指定 session 的 prompt 快照。
+
+    模块级入口，供 legacy_routes 的压缩落盘路径（``_persist_compaction``，
+    自动 / 手动压缩的唯一落点）调用。未知 session 或无存活实例时是 no-op，
+    任何实例侧异常不影响其他实例。
+    """
+    for service in list(_CHAT_SERVICE_REGISTRY):
+        try:
+            service.invalidate_session_snapshot(session_id)
+        except Exception as e:  # 防御性：单实例失效失败不阻断其余实例
+            logger.warning(f"Failed to invalidate snapshot for session {session_id}: {e}")
 
 
 def _extract_action_target(args: dict) -> str:

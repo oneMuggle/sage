@@ -348,10 +348,12 @@ class SageAgent:
                 logger.warning(f"用户消息持久化失败: {db_err}")
 
             # 对话前：获取记忆上下文
-            memory_context = self.memory_manager.get_context(limit=10)
+            memory_context = self.memory_manager.get_context(
+                limit=10, session_id=session_id
+            )
 
             # 将用户消息添加到工作记忆
-            self.memory_manager.add_to_working("user", message)
+            self.memory_manager.add_to_working("user", message, session_id=session_id)
 
             # 调用 LLM
             if self.llm_client:
@@ -385,14 +387,18 @@ class SageAgent:
                 logger.warning(f"助手消息持久化失败: {db_err}")
 
             # 将助手消息添加到工作记忆
-            self.memory_manager.add_to_working("assistant", assistant_message["content"])
+            self.memory_manager.add_to_working(
+                "assistant", assistant_message["content"], session_id=session_id
+            )
 
             # 对话后：提取关键信息存入情景记忆
             self._extract_and_save_memories(session_id, user_message, assistant_message)
 
             # 对话后：检查是否需要压缩工作记忆
-            if self.memory_manager.working.total_tokens > 3000:
-                self.consolidation.consolidate(self.memory_manager, session_id=session_id)
+            if self.memory_manager.working.total_tokens_for(session_id) > 3000:
+                self.consolidation.consolidate(
+                    self.memory_manager, session_id=session_id
+                )
 
             # 更新会话
             session = self.session_repo.get(session_id)

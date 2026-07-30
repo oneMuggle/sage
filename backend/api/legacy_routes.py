@@ -440,6 +440,20 @@ def _persist_compaction(
         continuation,
         after,
     )
+    # WS-C P0-3: 压缩失效点 — 压缩事务提交后, 通知 hex 路径 ChatService
+    # 实例失效该 session 的 system prompt 快照 (下一轮 run_turn 重建)。
+    # _persist_compaction 是自动 / 手动压缩共用的唯一落盘出口, 挂这里
+    # 一条代码路径覆盖两者。best-effort: 失败只记日志, 不影响压缩结果。
+    try:
+        from backend.application.services.chat_service import invalidate_session_snapshot
+
+        invalidate_session_snapshot(session_id)
+    except Exception as exc:
+        logger.warning(
+            "[M4] session=%s 压缩快照失效失败(忽略): %s",
+            _safe_log_field(session_id),
+            exc,
+        )
     return after
 
 
@@ -486,6 +500,59 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[dict
         removed_count,
         after,
     )
+
+
+# ===== WS-C P0-2: 统一记忆写入路径 (legacy /chat/stream) =====
+async def _extract_legacy_chat_memory(
+    request_id: str,
+    session_id: str,
+    user_text: str,
+    assistant_text: str,
+) -> None:
+    """legacy /chat/stream 在 assistant 消息落盘后 best-effort 提取记忆。
+
+    修复缺陷：此前 legacy producer 持久化 user/assistant 消息后不触发
+    MemoryExtractor, 只有 hex ChatService.run_turn 写记忆, 一半对话数据
+    不进记忆系统。本函数与 hex 路径共用 ``chat_service`` 的模块级
+    ``extract_and_store_memory``, 统一写入语义。
+
+    - 开关：读 app_settings.autoMemory, 缺省 True（与前端 defaultSettings
+      及 hex 路径"有 memory 即写"的现行行为一致）。
+    - 实例：get_memory_manager() 全局单例 + MemoryAdapter 包装（与
+      main.py hex 装配方式一致）；提取 LLM 复用 HttpxLLMAdapter,
+      调用失败时 MemoryExtractor 内部降级为关键词提取。
+    - producer 是 async 协程, 直接 await（复用文件现有异步模式,
+      无需额外 loop 调度）。
+    - 任何异常只 warning 绝不外抛——记忆写入不得影响已完成的流式响应。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        settings = SettingsRepository().get_json("app_settings")
+        enabled = True
+        if isinstance(settings, dict):
+            enabled = bool(settings.get("autoMemory", True))
+        if not enabled:
+            return
+
+        from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+        from backend.adapters.out.memory.adapter import MemoryAdapter
+        from backend.application.services.chat_service import extract_and_store_memory
+        from backend.memory.extractor import MemoryExtractor
+
+        await extract_and_store_memory(
+            MemoryAdapter(get_memory_manager()),
+            MemoryExtractor(llm_client=HttpxLLMAdapter()),
+            user_text,
+            assistant_text,
+            session_id,
+            enabled=True,
+        )
+    except Exception as exc:
+        logger.warning(
+            f"[REQ {request_id}] legacy 记忆提取失败(忽略, 不影响聊天): {exc}"
+        )
+# ===== WS-C P0-2 END =====
 
 
 # 进程内重入护栏（MEDIUM-1 后端兜底）：同一会话并发手动压缩时，两者都会在
@@ -1561,6 +1628,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
             if done_content:
                 assistant_now = int(time.time() * 1000)
+                assistant_persisted = False
                 try:
                     message_repo.save(
                         DbMessage(
@@ -1573,8 +1641,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             model=(llm_config.get("model") if llm_config else "local"),
                         )
                     )
+                    assistant_persisted = True
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
+                # WS-C P0-2: 统一记忆写入路径 — assistant 落盘**成功后**才触发
+                # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
+                # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
+                if assistant_persisted:
+                    await _extract_legacy_chat_memory(
+                        request_id, data.session_id, data.message, done_content
+                    )
                 try:
                     sess = session_repo.get(data.session_id)
                     if sess is not None:

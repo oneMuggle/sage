@@ -39,6 +39,64 @@ class BaseEvolutionTask:
             loop.close()
 
 
+def _write_evolution_log(
+    db,
+    memory_type: str,
+    memory_id: str,
+    operation: str,
+    before_content: str = None,
+    after_content: str = None,
+    reason: str = None,
+) -> None:
+    """
+    写入一条记忆级进化日志 (memories_evolution_log)
+
+    统一 INSERT 入口，供 MemoryConsolidationTask / ImportanceReevaluationTask /
+    MemoryPruningTask 记录记忆级变更。采用 best-effort 语义：写入失败只
+    logger.warning，不让进化任务整体失败（日志缺失可接受，进化中断不可接受）。
+
+    表结构 (PRAGMA table_info 确认):
+        id, memory_type, memory_id, operation,
+        before_content, after_content, reason, created_at
+
+    Args:
+        db: Database 实例
+        memory_type: 记忆类型 (episodic / semantic)
+        memory_id: 记忆 ID（批量操作用 batch:<规则>:<时间戳> 合成 id）
+        operation: 操作类型 (promote / importance_adjust / prune)
+        before_content: 变更前内容或位置描述
+        after_content: 变更后内容或位置描述
+        reason: 变更原因（任务名；批量操作附带规则名）
+    """
+    try:
+        conn = db.get_connection()
+        conn.execute(
+            """
+            INSERT INTO memories_evolution_log
+            (id, memory_type, memory_id, operation, before_content, after_content,
+             reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                str(uuid.uuid4()),
+                memory_type,
+                memory_id,
+                operation,
+                before_content,
+                after_content,
+                reason,
+                # 毫秒时间戳，与 memories_episodic/memories_semantic 仓储层一致
+                int(time.time() * 1000),
+            ),
+        )
+        conn.commit()
+    except Exception as e:
+        logger.warning(
+            f"写入 memories_evolution_log 失败 (operation={operation}, "
+            f"memory_id={memory_id}): {e}"
+        )
+
+
 class DailySummaryTask(BaseEvolutionTask):
     """
     每日摘要任务
@@ -277,6 +335,15 @@ class MemoryPruningTask(BaseEvolutionTask):
         expired_deleted = cursor.rowcount
         total_deleted += expired_deleted
         logger.info(f"删除过期记忆: {expired_deleted} 条")
+        if expired_deleted > 0:
+            _write_evolution_log(
+                self.db,
+                memory_type="episodic",
+                memory_id=f"batch:expired:{now_ts}",
+                operation="prune",
+                before_content=str(expired_deleted),
+                reason="memory_pruning:expired",
+            )
 
         # 2. 删除极低价值且长期未访问的记忆
         cursor.execute(
@@ -291,6 +358,15 @@ class MemoryPruningTask(BaseEvolutionTask):
         low_value_deleted = cursor.rowcount
         total_deleted += low_value_deleted
         logger.info(f"删除低价值记忆: {low_value_deleted} 条")
+        if low_value_deleted > 0:
+            _write_evolution_log(
+                self.db,
+                memory_type="episodic",
+                memory_id=f"batch:low_value:{now_ts}",
+                operation="prune",
+                before_content=str(low_value_deleted),
+                reason="memory_pruning:low_value",
+            )
 
         # 3. 删除孤儿记忆（无关联会话且无重要内容）
         cursor.execute(
@@ -306,6 +382,15 @@ class MemoryPruningTask(BaseEvolutionTask):
         orphaned_deleted = cursor.rowcount
         total_deleted += orphaned_deleted
         logger.info(f"删除孤儿记忆: {orphaned_deleted} 条")
+        if orphaned_deleted > 0:
+            _write_evolution_log(
+                self.db,
+                memory_type="episodic",
+                memory_id=f"batch:orphaned:{now_ts}",
+                operation="prune",
+                before_content=str(orphaned_deleted),
+                reason="memory_pruning:orphaned",
+            )
 
         # 4. 超过上限时删除最旧的
         cursor.execute("SELECT COUNT(*) FROM memories_episodic")
@@ -327,6 +412,15 @@ class MemoryPruningTask(BaseEvolutionTask):
             limit_deleted = cursor.rowcount
             total_deleted += limit_deleted
             logger.info(f"超过上限删除: {limit_deleted} 条")
+            if limit_deleted > 0:
+                _write_evolution_log(
+                    self.db,
+                    memory_type="episodic",
+                    memory_id=f"batch:limit:{now_ts}",
+                    operation="prune",
+                    before_content=str(limit_deleted),
+                    reason="memory_pruning:limit",
+                )
 
         conn.commit()
         logger.info(f"记忆修剪完成，共删除 {total_deleted} 条记忆")
@@ -617,6 +711,15 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
                 logger.debug(
                     f"降低记忆重要性: {memory['id']}, {memory['importance']} -> {new_importance}"
                 )
+                _write_evolution_log(
+                    self.db,
+                    memory_type="episodic",
+                    memory_id=memory["id"],
+                    operation="importance_adjust",
+                    before_content=str(memory["importance"]),
+                    after_content=str(new_importance),
+                    reason="importance_reevaluation",
+                )
 
         # 2. 重评估频繁访问的低重要性记忆
         cursor.execute(
@@ -647,6 +750,15 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
                 total_adjusted += 1
                 logger.debug(
                     f"提高记忆重要性: {memory['id']}, {memory['importance']} -> {new_importance}"
+                )
+                _write_evolution_log(
+                    self.db,
+                    memory_type="episodic",
+                    memory_id=memory["id"],
+                    operation="importance_adjust",
+                    before_content=str(memory["importance"]),
+                    after_content=str(new_importance),
+                    reason="importance_reevaluation",
                 )
 
         conn.commit()
@@ -735,13 +847,44 @@ class MemoryConsolidationTask(BaseEvolutionTask):
             already_exists = any(
                 e.get("content", "")[:50] == memory["content"][:50] for e in existing
             )
-            if not already_exists:
-                self.memory_manager.semantic.save(
+            if already_exists:
+                continue
+
+            try:
+                semantic_id = self.memory_manager.semantic.save(
                     content=memory["content"],
                     summary=memory.get("summary"),
                     tags=_safe_json_loads(memory.get("tags", "[]")),
                 )
+                # 晋升软删：写入 semantic 成功后，把源 episodic 行 is_valid 置 0，
+                # 避免检索出现重复事实。semantic.save 与本 UPDATE 复用同一连接，
+                # 紧随其后 commit 使两者一起持久化；任一步失败则回滚并跳过该条，
+                # 不留半完成状态（源行保持有效，下轮去重检查可识别已写入的语义行）。
+                cursor.execute(
+                    """
+                    UPDATE memories_episodic
+                    SET is_valid = 0
+                    WHERE id = ?
+                """,
+                    [memory["id"]],
+                )
+                conn.commit()
                 promoted += 1
+            except Exception as e:
+                conn.rollback()
+                logger.warning(f"记忆晋升失败，已回滚并跳过: {memory['id']}: {e}")
+                continue
+
+            # 晋升记录落记忆进化日志（best-effort，失败只 warning）
+            _write_evolution_log(
+                self.db,
+                memory_type="episodic",
+                memory_id=memory["id"],
+                operation="promote",
+                before_content=f"episodic:{memory['id']}",
+                after_content=f"semantic:{semantic_id}",
+                reason="memory_consolidation",
+            )
 
         total_consolidated += promoted
         logger.info(f"提升高频记忆到语义记忆: {promoted} 条")

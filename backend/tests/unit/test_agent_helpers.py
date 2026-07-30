@@ -6,7 +6,7 @@ SageAgent 辅助方法测试 (PG1.1 - 覆盖补齐)
 等都是高频入口。本文件为这些"非状态机但很重要"的辅助方法补齐测试。
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -492,8 +492,8 @@ async def test_chat_continues_when_message_save_fails():
 
 
 @pytest.mark.asyncio()
-async def test_chat_triggers_memory_consolidation_when_over_threshold():
-    """工作记忆 token > 3000 时,chat() 应触发 consolidation.consolidate。"""
+async def test_chat_passes_session_id_to_working_memory_calls():
+    """chat() 的工作记忆读写必须全部限定在当前 session。"""
     agent = SageAgent(
         llm_config={
             "provider": "openai",
@@ -503,17 +503,27 @@ async def test_chat_triggers_memory_consolidation_when_over_threshold():
         }
     )
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
-    # 强制 working.total_tokens 超过阈值
-    agent.memory_manager.working.total_tokens = 3001
-    agent.consolidation.consolidate = MagicMock()
+    agent.memory_manager.get_context = MagicMock(return_value="")
+    agent.memory_manager.add_to_working = MagicMock()
+    agent.memory_manager.working.total_tokens_for = MagicMock(return_value=0)
 
-    await agent.chat("s-mem", "hi")
-    agent.consolidation.consolidate.assert_called_once()
+    await agent.chat("session-isolated", "hi")
+
+    agent.memory_manager.get_context.assert_called_once_with(
+        limit=10, session_id="session-isolated"
+    )
+    assert agent.memory_manager.add_to_working.call_args_list == [
+        call("user", "hi", session_id="session-isolated"),
+        call("assistant", "ok", session_id="session-isolated"),
+    ]
+    agent.memory_manager.working.total_tokens_for.assert_called_once_with(
+        "session-isolated"
+    )
 
 
 @pytest.mark.asyncio()
-async def test_chat_skips_consolidation_when_under_threshold():
-    """工作记忆 token ≤ 3000 时,chat() 不应触发 consolidation。"""
+async def test_chat_triggers_memory_consolidation_when_session_over_threshold():
+    """当前 session 的工作记忆 token > 3000 时应触发 consolidation。"""
     agent = SageAgent(
         llm_config={
             "provider": "openai",
@@ -523,10 +533,35 @@ async def test_chat_skips_consolidation_when_under_threshold():
         }
     )
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
-    agent.memory_manager.working.total_tokens = 500
+    agent.memory_manager.working.total_tokens_for = MagicMock(return_value=3001)
+    agent.consolidation.consolidate = MagicMock()
+
+    await agent.chat("s-mem", "hi")
+
+    agent.memory_manager.working.total_tokens_for.assert_called_once_with("s-mem")
+    agent.consolidation.consolidate.assert_called_once_with(
+        agent.memory_manager, session_id="s-mem"
+    )
+
+
+@pytest.mark.asyncio()
+async def test_chat_skips_consolidation_when_session_under_threshold():
+    """当前 session 的工作记忆 token ≤ 3000 时不应触发 consolidation。"""
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
+    agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
+    agent.memory_manager.working.total_tokens_for = MagicMock(return_value=500)
     agent.consolidation.consolidate = MagicMock()
 
     await agent.chat("s-mem-low", "hi")
+
+    agent.memory_manager.working.total_tokens_for.assert_called_once_with("s-mem-low")
     agent.consolidation.consolidate.assert_not_called()
 
 
