@@ -24,6 +24,27 @@ export interface Session {
   forked_at_message_id?: string | null;
 }
 
+/**
+ * A17: 代码变更 diff 载荷（后端 code_diff.py 生成，经 OBSERVING 事件
+ * 的 parsed.metadata 通道下发）。字段与 backend 的
+ * build_code_diff_metadata() 输出保持 1:1。
+ */
+export interface CodeDiff {
+  path: string;
+  is_new_file?: boolean;
+  /** git 风格 unified diff（a/ b/ 头 + @@ hunk） */
+  unified_diff?: string;
+  additions?: number;
+  deletions?: number;
+  /** 双侧均 ≤ 64KB 时随载荷下发；缺失时前端降级渲染 unified_diff */
+  old_content?: string;
+  new_content?: string;
+  /** unified diff 超 32KB 被截断 */
+  diff_truncated?: boolean;
+  /** 整体跳过捕获的原因（如 file_too_large） */
+  skipped?: string;
+}
+
 // 工具调用结构（与后端 AgentEvent 保持一致）
 export interface ToolCall {
   /** 后端 tool_call.id, 用于 observing 事件精确匹配 (HIGH-3 修复) */
@@ -34,6 +55,7 @@ export interface ToolCall {
   metadata?: {
     imageData?: string; // base64 data URL for inline image display
     imageFormat?: string; // 'svg' | 'png'
+    code_diff?: CodeDiff; // A17: write_file/edit_file 代码变更 diff
   };
 }
 

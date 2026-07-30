@@ -24,11 +24,17 @@ class ToolSchema:
 
 @dataclass
 class ToolResult:
-    """工具执行结果"""
+    """工具执行结果
+
+    A17: ``metadata`` 承载**不进 LLM 上下文**的展示层数据(如 code_diff),
+    与 ``content``(LLM 可见)分离,避免大体积 diff 消耗上下文 token。
+    字段语义对齐域模型 ``sage_core.entities.tool.ToolResult.metadata``。
+    """
 
     success: bool  # 是否成功
     content: Any = None  # 返回内容
     error: Optional[str] = None  # 错误信息
+    metadata: Optional[Dict[str, Any]] = None  # A17: 展示层元数据
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -37,6 +43,8 @@ class ToolResult:
             result["content"] = self.content
         if self.error is not None:
             result["error"] = self.error
+        if self.metadata is not None:
+            result["metadata"] = self.metadata
         return result
 
 

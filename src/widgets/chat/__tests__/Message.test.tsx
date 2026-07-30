@@ -42,6 +42,59 @@ describe('Message', () => {
     expect(container.textContent).toContain('2');
   });
 
+  it('A17: renders CodeDiffViewer when tool_call carries code_diff metadata', () => {
+    const msg: MessageType = {
+      id: '1',
+      session_id: 's',
+      role: 'assistant',
+      content: '已修改文件',
+      created_at: 0,
+      tool_calls: [
+        {
+          name: 'write_file',
+          args: { path: '/w/app.py' },
+          result: '{"path": "/w/app.py", "bytes_written": 20}',
+          metadata: {
+            code_diff: {
+              path: '/w/app.py',
+              is_new_file: true,
+              unified_diff: '--- a/w/app.py\n+++ b/w/app.py\n@@ -0,0 +1 @@\n+x = 1',
+              additions: 1,
+              deletions: 0,
+              old_content: '',
+              new_content: 'x = 1\n',
+            },
+          },
+        },
+      ],
+    };
+    const { container } = renderWithI18n(<Message message={msg} />);
+    // CodeDiffViewer 头部渲染文件名与统计徽章
+    expect(container.textContent).toContain('app.py');
+    expect(container.textContent).toContain('+1');
+    // diff 存在时原始 result JSON 被隐藏
+    expect(container.textContent).not.toContain('bytes_written');
+  });
+
+  it('A17: tool_call without code_diff still shows raw result', () => {
+    const msg: MessageType = {
+      id: '1',
+      session_id: 's',
+      role: 'assistant',
+      content: 'ok',
+      created_at: 0,
+      tool_calls: [
+        {
+          name: 'write_file',
+          args: { path: '/w/a.txt' },
+          result: '{"bytes_written": 5}',
+        },
+      ],
+    };
+    const { container } = renderWithI18n(<Message message={msg} />);
+    expect(container.textContent).toContain('bytes_written');
+  });
+
   it('applies error style when content starts with [错误', () => {
     const msg: MessageType = {
       id: '1',

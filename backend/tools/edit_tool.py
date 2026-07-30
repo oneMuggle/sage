@@ -277,6 +277,14 @@ class EditTool(BaseTool):
 
         target.write_bytes(updated_bytes)
 
+        # A17: code diff metadata(展示层,不进 LLM 上下文)。
+        # 延迟导入:backend.application.services 包 __init__ 会经
+        # chat_service 反向导入 backend.tools,顶层导入将形成循环依赖。
+        from backend.application.services.code_diff import build_code_diff_metadata
+
+        diff = build_code_diff_metadata(str(target.resolve()), original, updated)
+        metadata = {"code_diff": diff} if diff is not None else None
+
         return ToolResult(
             success=True,
             content={
@@ -286,4 +294,5 @@ class EditTool(BaseTool):
                 "lines_added": _count_logical_lines(new_string) * replacements,
                 "bytes_written": len(updated_bytes),
             },
+            metadata=metadata,
         )
