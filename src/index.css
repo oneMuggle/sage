@@ -57,6 +57,18 @@
   --color-text-inverse: #ffffff;
   --color-text-inverse-rgb: 255 255 255;
 
+  /* Semantic ladder (U3 from OpenWorker) — 5-level quiet hierarchy */
+  --color-ink: #111827;
+  --color-ink-rgb: 17 24 39;
+  --color-muted: #6b7280;
+  --color-muted-rgb: 107 114 128;
+  --color-faint: #9ca3af;
+  --color-faint-rgb: 156 163 175;
+  --color-line: #e5e7eb;
+  --color-line-rgb: 229 231 235;
+  --color-line-strong: #d1d5db;
+  --color-line-strong-rgb: 209 213 219;
+
   /* Border */
   --color-border: #e5e7eb;
   --color-border-rgb: 229 231 235;
@@ -183,6 +195,18 @@
   --color-text-muted-rgb: 156 163 175;
   --color-text-inverse: #ffffff;
   --color-text-inverse-rgb: 255 255 255;
+
+  /* Semantic ladder (U3 from OpenWorker) — 5-level quiet hierarchy */
+  --color-ink: #f9fafb;
+  --color-ink-rgb: 249 250 251;
+  --color-muted: #d1d5db;
+  --color-muted-rgb: 209 213 219;
+  --color-faint: #9ca3af;
+  --color-faint-rgb: 156 163 175;
+  --color-line: #374151;
+  --color-line-rgb: 55 65 81;
+  --color-line-strong: #4b5563;
+  --color-line-strong-rgb: 75 85 99;
 
   /* Border */
   --color-border: #374151;
