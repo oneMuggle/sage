@@ -3,6 +3,7 @@
  * 显示记忆内容、重要性星级、标签和删除按钮
  */
 import { Memory } from '../../shared/api';
+import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 interface MemoryItemProps {
   memory: Memory;
@@ -37,12 +38,6 @@ function formatTime(timestamp: number): string {
 }
 
 export function MemoryItem({ memory, onDelete }: MemoryItemProps) {
-  const handleDelete = () => {
-    if (confirm('确定要删除这条记忆吗？')) {
-      onDelete(memory.id);
-    }
-  };
-
   const tags = memory.tags || [];
   const memoryType = memory.memory_type || 'episodic';
 
@@ -78,10 +73,13 @@ export function MemoryItem({ memory, onDelete }: MemoryItemProps) {
         <div className="memory-time">{formatTime(memory.created_at)}</div>
       </div>
 
-      {/* 删除按钮 */}
-      <button className="memory-delete-btn" onClick={handleDelete} title="删除记忆">
-        ×
-      </button>
+      {/* 删除按钮 — U12: 两步式确认，不弹 modal */}
+      <TwoStepDelete
+        className="memory-delete-btn p-1"
+        label="删除记忆"
+        armedLabel="确认删除?"
+        onConfirm={() => onDelete(memory.id)}
+      />
     </div>
   );
 }

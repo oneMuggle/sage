@@ -144,6 +144,7 @@ export const en: Record<TranslationKey, string> = {
   // ─── Common ───────────────────────
   'common.skip_to_content': 'Skip to content',
   'common.delete': 'Delete',
+  'common.delete_confirm': 'Delete?',
   'common.cancel': 'Cancel',
   'common.confirm': 'Confirm',
   'common.save': 'Save',
