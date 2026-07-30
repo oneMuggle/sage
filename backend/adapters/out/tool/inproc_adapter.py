@@ -139,9 +139,13 @@ class InprocToolAdapter:
         output_str = "" if raw.content is None else str(raw.content)
         truncated_output, truncation_meta = _truncate_output(output_str, self._policy)
 
+        # A17: 工具层声明的展示层 metadata(如 code_diff)透传到域模型;
+        # 与 output 截断标记合并(截断标记优先,不被工具 metadata 覆盖)。
+        tool_meta = getattr(raw, "metadata", None)
         metadata: Optional[Dict[str, Any]] = None
-        if truncation_meta:
-            metadata = dict(truncation_meta)
+        if tool_meta or truncation_meta:
+            metadata = dict(tool_meta or {})
+            metadata.update(truncation_meta)
 
         # backend.tools.base.ToolResult -> domain.tool.ToolResult
         return ToolResult(

@@ -9,4 +9,6 @@ export type {
 } from './InputCard';
 export { MessageList } from './MessageList';
 export { Message } from './Message';
+export { CodeDiffViewer } from './CodeDiffViewer';
+export type { CodeDiffViewerProps } from './CodeDiffViewer';
 export { ActiveAgentIndicator } from './ActiveAgentIndicator';

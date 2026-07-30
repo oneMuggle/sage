@@ -16,6 +16,7 @@ import remarkGfm from 'remark-gfm';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 
+import { CodeDiffViewer } from './CodeDiffViewer';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
 
 interface MessageProps {
@@ -268,6 +269,10 @@ function MessageComponent({
           <div className="mt-2 flex flex-col gap-1.5">
             {toolCalls.map((tc, idx) => {
               const hasImage = tc.metadata?.imageData;
+              // A17: write_file / edit_file 的 code_diff → CodeDiffViewer
+              const codeDiff = tc.metadata?.code_diff;
+              const hasCodeDiff =
+                !!codeDiff && (!!codeDiff.unified_diff || !!codeDiff.skipped);
               return (
                 <div
                   key={`${tc.name}-${idx}`}
@@ -286,12 +291,15 @@ function MessageComponent({
                         <span className="text-muted">)</span>
                       </>
                     )}
-                    {tc.result !== undefined && tc.result !== '' && !hasImage && (
-                      <>
-                        <span className="text-muted">→</span>
-                        <span className="text-text-primary break-all">{tc.result}</span>
-                      </>
-                    )}
+                    {tc.result !== undefined &&
+                      tc.result !== '' &&
+                      !hasImage &&
+                      !hasCodeDiff && (
+                        <>
+                          <span className="text-muted">→</span>
+                          <span className="text-text-primary break-all">{tc.result}</span>
+                        </>
+                      )}
                   </div>
                   {/* Inline image preview for diagram tools */}
                   {hasImage && (
@@ -302,6 +310,12 @@ function MessageComponent({
                         className="max-w-full rounded border border-border"
                         style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
                       />
+                    </div>
+                  )}
+                  {/* A17: 代码变更 diff 视图(隐藏原始 result JSON,改渲染 diff) */}
+                  {hasCodeDiff && (
+                    <div className="px-2 pb-2">
+                      <CodeDiffViewer diff={codeDiff!} />
                     </div>
                   )}
                 </div>

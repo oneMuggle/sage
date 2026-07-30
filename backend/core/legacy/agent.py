@@ -67,6 +67,42 @@ from backend.tools.permissions import (
 logger = logging.getLogger(__name__)
 
 
+def tool_result_display_content(
+    result_content: str, metadata: Optional[Dict[str, Any]]
+) -> str:
+    """A17: 把工具声明的展示层 metadata 注入 OBSERVING 事件载荷。
+
+    前端 useChat 的 observing 分支已具备 ``parsed.metadata`` 提取能力
+    (与 MCP imageData 同款机制);本函数负责在序列化层把
+    ``ToolResult.metadata`` 合并进结果 JSON。LLM 上下文消息仍使用
+    裸 ``result_content`` —— diff 等大体积展示数据**不**进上下文。
+
+    Rules:
+        - ``metadata`` 为空 → 原样返回;
+        - ``result_content`` 是 JSON dict → 注入/浅合并 ``"metadata"`` 键;
+        - 其他(纯文本/错误串/JSON 数组) → 按 ``{"text", "metadata"}``
+          包裹(与 mcp/tool.py 的既有约定一致)。
+    """
+    if not metadata:
+        return result_content
+    try:
+        parsed = json.loads(result_content)
+    except (TypeError, ValueError):
+        parsed = None
+    if isinstance(parsed, dict):
+        existing = parsed.get("metadata")
+        if isinstance(existing, dict):
+            merged = dict(existing)
+            merged.update(metadata)
+            parsed["metadata"] = merged
+        else:
+            parsed["metadata"] = dict(metadata)
+        return json.dumps(parsed, ensure_ascii=False)
+    return json.dumps(
+        {"text": result_content, "metadata": dict(metadata)}, ensure_ascii=False
+    )
+
+
 class QueryCache:
     """
     简单内存缓存
@@ -703,6 +739,9 @@ class SageAgent:
 
                     is_error = False
                     result_content = ""
+                    # A17: 展示层 metadata(code_diff 等)——仅进 OBSERVING
+                    # 事件供前端渲染,不进 LLM messages 上下文。
+                    result_metadata: Optional[Dict[str, Any]] = None
 
                     # M2 part B: ask_user_question —— 分发前特判（与 M1 审批同构）。
                     # 校验参数 → 发 ASK_USER_QUESTION 事件 → await 提问闸口 →
@@ -839,6 +878,11 @@ class SageAgent:
                                             result_content = json.dumps(
                                                 result.content, ensure_ascii=False
                                             )
+                                            # A17 code_diff — 捕获工具声明的
+                                            # 展示层元数据（不进 LLM 上下文）
+                                            result_metadata = getattr(
+                                                result, "metadata", None
+                                            )
                                         else:
                                             result_content = result.error or "工具执行失败"
                                     else:
@@ -853,7 +897,11 @@ class SageAgent:
 
                     tool_result = ToolCallResult(
                         tool_call_id=tc.id,
-                        content=result_content,
+                        # A17: 展示事件注入 metadata;LLM 上下文(下方
+                        # messages.append)仍用裸 result_content。
+                        content=tool_result_display_content(
+                            result_content, result_metadata
+                        ),
                         is_error=is_error,
                     )
                     yield AgentEvent(

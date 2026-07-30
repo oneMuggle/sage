@@ -15,7 +15,7 @@ M1 工具安全加固（移植 claw-code file_ops.rs 的边界/限额设计）:
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
 
@@ -105,6 +105,65 @@ def _pre_read_checks(file_path: Path, original_bytes: int) -> Optional[ToolResul
             error="binary_file: 检测到二进制文件，不支持读取文本内容",
         )
     return None
+
+
+def _capture_old_content(file_path: Path) -> Optional[str]:
+    """A17: 写前尽力读取旧内容(供 code diff 可视化)。
+
+    返回 ``None`` 表示放弃 diff 捕获(写入本身不受影响):
+    文件超 ``MAX_CAPTURE_BYTES`` / 二进制文件 / 读取失败。
+    BOM 文件按识别编码读取(与 read_file 一致)。
+    """
+    # 延迟导入:backend.application.services 包 __init__ 会经
+    # chat_service 反向导入 backend.tools,顶层导入将形成循环依赖。
+    from backend.application.services.code_diff import should_skip_capture
+
+    try:
+        if should_skip_capture(file_path.stat().st_size):
+            return None
+        if _contains_binary_marker(file_path):
+            return None
+        encoding = detect_bom_encoding(file_path) or "utf-8"
+        return file_path.read_text(encoding=encoding, errors="replace")
+    except OSError:
+        return None
+
+
+def build_write_diff_metadata(
+    file_path: Path,
+    old_content: Optional[str],
+    written: str,
+    append: bool,
+    existed_before: bool,
+) -> Optional[Dict[str, Any]]:
+    """A17: 为 write_file 结果构建 ``{"code_diff": {...}}``。
+
+    Args:
+        file_path:      写入目标(已展开)
+        old_content:    写前捕获的旧内容;``None`` = 捕获被跳过 → 返回 None
+        written:        本次写入的 content 参数
+        append:         是否追加模式(新内容 = 旧 + written)
+        existed_before: 写入前文件是否已存在(→ ``is_new_file`` 语义)
+
+    Returns:
+        ``None`` — 无可展示变更(内容相同/捕获跳过);
+        ``{"code_diff": {...}}`` — 供前端 CodeDiffViewer 渲染。
+    """
+    if old_content is None:
+        return None
+    new_content = old_content + written if append else written
+    # 延迟导入(同 _capture_old_content)
+    from backend.application.services.code_diff import build_code_diff_metadata
+
+    diff = build_code_diff_metadata(
+        str(file_path.resolve()),
+        old_content,
+        new_content,
+        is_new_file=not existed_before,
+    )
+    if diff is None:
+        return None
+    return {"code_diff": diff}
 
 
 class ReadFileTool(BaseTool):
@@ -239,6 +298,8 @@ class WriteFileTool(BaseTool):
         M1: workspace 边界强制（realpath 前缀比对，拦 ``../`` 穿越 + symlink
             逃逸）；未绑定 workspace 时不检查（保留当前行为）+ debug 日志。
             内容超过 ``MAX_WRITE_SIZE_BYTES`` (10 MiB) 直接报错。
+        A17: 写前捕获旧内容、写后生成 unified diff，挂到
+             ``metadata['code_diff']``（展示层数据，不进 LLM 上下文）。
         """
         root = self._policy.workspace_root
         if root:
@@ -270,6 +331,10 @@ class WriteFileTool(BaseTool):
             # 检查目录是否存在
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
+            # A17: 写前尽力捕获旧内容(新文件 → 空串;跳过捕获 → None)
+            existed_before = file_path.is_file()
+            old_content = _capture_old_content(file_path) if existed_before else ""
+
             mode = "a" if append else "w"
             with open(file_path, mode, encoding="utf-8") as f:
                 f.write(content)
@@ -281,6 +346,9 @@ class WriteFileTool(BaseTool):
                     "bytes_written": content_bytes,
                     "mode": mode,
                 },
+                metadata=build_write_diff_metadata(
+                    file_path, old_content, content, append, existed_before
+                ),
             )
 
         except Exception as e:
