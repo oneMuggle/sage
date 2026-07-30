@@ -5,10 +5,150 @@ SQLite 实现
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+# ==================== 语义记忆 FTS5 索引 ====================
+# 独立 FTS5 表（非 external-content）+ jieba 分词文本 + Python 侧显式同步。
+#
+# 历史 "database disk image is malformed" 根因（WS-B 诊断结论）：
+# 旧表使用 external-content 模式（content='memories_semantic'），该模式自身不存储
+# 内容，要求调用方严格遵守同步协议——删除必须通过 'delete' 命令并提供索引时的原始
+# 列值、UPDATE 必须先 'delete' 旧值再 insert 新值。当时的触发器/手动维护使用了
+# plain DELETE 且 FTS rowid 与内容表 rowid 漂移，留下悬空索引条目，破坏 shadow
+# 表 B 树，后续查询即报 malformed。修复：改用独立（存内容）FTS5 表，plain
+# INSERT/UPDATE/DELETE 均合法；写入由 SemanticMemory 单一入口显式同步（无触发器）。
+
+SEMANTIC_FTS_TABLE = "memories_semantic_fts"
+
+
+def _segment_for_index(text: Optional[str]) -> str:
+    """索引侧分词：jieba 搜索引擎模式（cut_for_search），空格连接。
+
+    相比精确模式额外把长词细分出子词（如 "吃火锅" → 同时产出 "火锅"），
+    保证短词查询（"火锅"）能命中包含长词的文本；查询侧用精确模式的
+    tokenize_for_search 即可，因为长词本身也保留在索引中。
+    """
+    if not text:
+        return ""
+    # 延迟导入，避免 backend.data ↔ backend.memory 包级循环依赖
+    import jieba
+
+    return " ".join(w.strip() for w in jieba.cut_for_search(text) if w.strip())
+
+
+def fts_row_texts(
+    content: Optional[str], summary: Optional[str], tags_json: Optional[str]
+) -> Tuple[str, str, str]:
+    """生成一行 memories_semantic 写入 FTS 索引表的 jieba 分词文本三元组。
+
+    FTS5 默认 unicode61 分词器不切分中文（整句成为一个 token），因此索引表写入
+    分词后的文本而非原文，使中文 MATCH 可用。tags 为 JSON 数组字符串，展开为
+    空格连接的标签文本再分词。
+    """
+    tags_text = ""
+    if tags_json:
+        try:
+            tags = json.loads(tags_json)
+            if isinstance(tags, list):
+                tags_text = _segment_for_index(" ".join(str(t) for t in tags))
+        except (json.JSONDecodeError, TypeError):
+            tags_text = ""
+    return (_segment_for_index(content), _segment_for_index(summary), tags_text)
+
+
+def _drop_semantic_fts(cursor: sqlite3.Cursor) -> None:
+    """删除 FTS 虚拟表（连带 shadow 表），并清理残留在 memories_semantic 上的旧 FTS 触发器。"""
+    cursor.execute(f"DROP TABLE IF EXISTS {SEMANTIC_FTS_TABLE}")
+    legacy_triggers = cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger' "
+        "AND tbl_name = 'memories_semantic' AND lower(name) LIKE '%fts%'"
+    ).fetchall()
+    for trigger_row in legacy_triggers:
+        cursor.execute(f'DROP TRIGGER IF EXISTS "{trigger_row[0]}"')
+
+
+def ensure_semantic_fts_schema(conn: sqlite3.Connection) -> bool:
+    """确保 memories_semantic_fts 为健康的独立 FTS5 虚拟表，返回是否发生了重建。
+
+    处理两类坏状态（幂等，可重复调用）：
+    1. 结构不可靠：非虚拟表残留，或旧 external-content 定义（malformed 根因）
+       → drop 后重建为独立表；
+    2. 数据损坏：轻量完整性探测（count(*)）捕获 sqlite3.DatabaseError
+       （含 "malformed" / "corruption found"）→ drop 重建。
+
+    永不抛出：FTS 为非关键路径，任何失败降级为 warning，不阻塞后端启动。
+    重建后调用方应以 force=True 触发 backfill_semantic_fts 回填。
+    """
+    try:
+        cursor = conn.cursor()
+        rebuilt = False
+        row = cursor.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (SEMANTIC_FTS_TABLE,),
+        ).fetchone()
+        if row is not None:
+            schema_sql = (row[0] or "").replace(" ", "").lower()
+            if "virtualtable" not in schema_sql or "content=" in schema_sql:
+                logger.warning(
+                    "memories_semantic_fts 为旧 external-content/残留结构，drop 重建为独立 FTS5 表"
+                )
+                _drop_semantic_fts(cursor)
+                rebuilt = True
+            else:
+                try:
+                    cursor.execute(f"SELECT count(*) FROM {SEMANTIC_FTS_TABLE}")
+                    cursor.fetchone()
+                except sqlite3.DatabaseError as exc:
+                    logger.warning("memories_semantic_fts 损坏（%s），drop 重建", exc)
+                    _drop_semantic_fts(cursor)
+                    rebuilt = True
+        cursor.execute(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS {SEMANTIC_FTS_TABLE} "
+            "USING fts5(content, summary, tags)"
+        )
+        conn.commit()
+        return rebuilt
+    except sqlite3.DatabaseError as exc:
+        logger.warning("语义记忆 FTS 表初始化失败（搜索将降级为 LIKE）: %s", exc)
+        return False
+
+
+def backfill_semantic_fts(conn: sqlite3.Connection, force: bool = False) -> None:
+    """幂等回填：把 memories_semantic 现有行同步进 FTS 索引表（jieba 分词）。
+
+    - force=False：仅当两表行数不一致时回填（正常启动快速跳过，避免全量分词）；
+    - force=True：整体清空重填（ensure_semantic_fts_schema 重建表后使用）。
+
+    覆盖绕过 SemanticMemory 直接写主表的路径（如 evolution 晋升），下次 init_db
+    时被同步进索引。FTS 为非关键路径，失败只记 warning，不影响主表数据与启动。
+    """
+    try:
+        cursor = conn.cursor()
+        if not force:
+            fts_count = cursor.execute(f"SELECT count(*) FROM {SEMANTIC_FTS_TABLE}").fetchone()[0]
+            memory_count = cursor.execute("SELECT count(*) FROM memories_semantic").fetchone()[0]
+            if fts_count == memory_count:
+                return
+        cursor.execute(f"DELETE FROM {SEMANTIC_FTS_TABLE}")
+        rows = cursor.execute(
+            "SELECT rowid, content, summary, tags FROM memories_semantic"
+        ).fetchall()
+        for row in rows:
+            cursor.execute(
+                f"INSERT INTO {SEMANTIC_FTS_TABLE} (rowid, content, summary, tags) "
+                "VALUES (?, ?, ?, ?)",
+                (row[0],) + fts_row_texts(row[1], row[2], row[3]),
+            )
+        conn.commit()
+    except sqlite3.DatabaseError as exc:
+        logger.warning("语义记忆 FTS 回填失败（搜索将降级为 LIKE）: %s", exc)
 
 
 class Database:
@@ -306,20 +446,11 @@ class Database:
             )
         """)
 
-        # FTS5 虚拟表用于语义记忆全文搜索
-        cursor.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS memories_semantic_fts USING fts5(
-                content, summary, tags,
-                content='memories_semantic',
-                content_rowid='rowid'
-            )
-        """)
-
-        # FTS5 同步触发器
-        # 注意：由于 contentless FTS5 表在 UPDATE 时可能出现 "database disk image is malformed"
-        # 错误，暂时禁用所有触发器。FTS 索引由 SemanticMemory 方法手动维护。
-        # 当前 search() 使用 LIKE + jieba 而非 FTS5，所以 FTS 索引暂不使用。
-        # 未来升级 FTS5 中文支持时再启用。
+        # FTS5 独立虚拟表用于语义记忆全文搜索（jieba 分词文本）。
+        # 不再使用 external-content 模式与同步触发器（历史 malformed 根因，详见
+        # ensure_semantic_fts_schema docstring）：写入路径由 SemanticMemory 在
+        # Python 侧显式同步（单一事实来源），此处负责结构检测 + 完整性自愈。
+        fts_rebuilt = ensure_semantic_fts_schema(conn)
 
         # 记忆进化日志表（预留）
         cursor.execute("""
@@ -480,6 +611,10 @@ class Database:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_evolution_memory ON memories_evolution_log(memory_id)"
         )
+
+        # FTS 幂等回填：把 memories_semantic 现有行同步进索引（含绕过 SemanticMemory
+        # 直接写主表的行，如 evolution 晋升；重建后 force 全量重填，否则行数一致即跳过）
+        backfill_semantic_fts(conn, force=fts_rebuilt)
 
         conn.commit()
         print(f"数据库初始化完成: {self.db_path}")  # noqa: T201 (历史遗留, init 阶段一次性输出)

@@ -103,33 +103,46 @@ def test_fallback_summary_without_user_messages() -> None:
     assert "1" in summary
 
 
-def test_save_compressed_raises_due_to_episodic_signature(
+def test_save_compressed_persists_summary(manager: MemoryManager) -> None:
+    """save_compressed 应按 EpisodicMemory 契约保存摘要及会话关联。"""
+    pipe = ConsolidationPipeline()
+
+    memory_id = pipe.save_compressed(
+        episodic_memory=manager.episodic,
+        summary="my summary",
+        session_id="s1",
+        importance=6,
+        message_count=4,
+    )
+
+    saved = manager.episodic.get_by_id(memory_id)
+    assert saved is not None
+    assert saved["content"] == "对话摘要: my summary"
+    assert saved["summary"] == "对话摘要: my summary"
+    assert saved["session_id"] == "s1"
+    assert saved["memory_type"] == "summary"
+
+
+def test_consolidate_full_flow_persists_and_clears_session(
     manager: MemoryManager,
 ) -> None:
-    """save_compressed 调用 episodic.save(summary=...)，但 EpisodicMemory.save 不接受该 kwarg。
-
-    覆盖该路径的入口（确认遗留 API 兼容性问题）。
-    """
+    """consolidate 成功落库后只清空被压缩的 session。"""
     pipe = ConsolidationPipeline()
-    with pytest.raises(TypeError):
-        pipe.save_compressed(
-            episodic_memory=manager.episodic,
-            summary="my summary",
-            session_id="s1",
-            importance=6,
-            message_count=4,
-        )
+    manager.add_to_working("user", "hi", session_id="abc")
+    manager.add_to_working("assistant", "hello", session_id="abc")
+    manager.add_to_working("user", "keep me", session_id="other")
 
+    memory_id = pipe.consolidate(manager, session_id="abc")
 
-def test_consolidate_full_flow_propagates_save_error(
-    manager: MemoryManager,
-) -> None:
-    """consolidate 内部 save_compressed 触发 TypeError，验证错误向上传播。"""
-    pipe = ConsolidationPipeline()
-    manager.add_to_working("user", "hi")
-    manager.add_to_working("assistant", "hello")
-    with pytest.raises(TypeError):
-        pipe.consolidate(manager, session_id="abc")
+    assert memory_id is not None
+    assert manager.working.get_context("abc") == []
+    assert [item["content"] for item in manager.working.get_context("other")] == [
+        "keep me"
+    ]
+    saved = manager.episodic.get_by_id(memory_id)
+    assert saved is not None
+    assert saved["session_id"] == "abc"
+    assert saved["memory_type"] == "summary"
 
 
 def test_consolidate_empty_returns_none(manager: MemoryManager) -> None:

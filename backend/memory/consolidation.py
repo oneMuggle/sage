@@ -32,7 +32,7 @@ class ConsolidationPipeline:
         压缩工作记忆为摘要
 
         Args:
-            messages: 工作记忆中的消息列表
+            messages: 工作记忆中的消息列表（调用方负责按 session 取消息）
 
         Returns:
             生成的摘要内容，如果输入为空则返回 None
@@ -91,7 +91,6 @@ class ConsolidationPipeline:
         """
         return episodic_memory.save(
             content=f"对话摘要: {summary}",
-            summary=summary,
             importance=importance,
             metadata={
                 "source": "consolidation_pipeline",
@@ -105,17 +104,19 @@ class ConsolidationPipeline:
         self, memory_manager, session_id: Optional[str] = None, importance_threshold: int = 5
     ) -> str | None:
         """
-        完整的记忆压缩流程
+        完整的记忆压缩流程（只处理指定会话的工作记忆）
 
         Args:
             memory_manager: MemoryManager 实例
-            session_id: 关联的会话 ID
+            session_id: 关联的会话 ID，透传给 WorkingMemory 的取/清操作；
+                None 表示默认会话
             importance_threshold: 重要性阈值
 
         Returns:
             生成的记忆 ID，或 None
         """
-        working_messages = memory_manager.working.get_context()
+        # 按 session 取工作记忆（None → 默认会话）
+        working_messages = memory_manager.working.get_context(session_id)
         if not working_messages:
             return None
 
@@ -130,10 +131,12 @@ class ConsolidationPipeline:
             message_count=len(working_messages),
         )
 
-        memory_manager.working.clear()
+        # 只清空该会话的工作记忆
+        memory_manager.working.clear(session_id)
 
         logger.info(
-            f"记忆压缩完成: {len(working_messages)} 条消息 → 摘要 (memory_id={memory_id[:8]})"
+            f"记忆压缩完成: session={session_id}, "
+            f"{len(working_messages)} 条消息 → 摘要 (memory_id={memory_id[:8]})"
         )
 
         return memory_id

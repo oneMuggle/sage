@@ -60,7 +60,10 @@ def test_memorize_auto_low_importance_short_goes_to_working(
     manager: MemoryManager,
 ) -> None:
     mid = manager.memorize("short low", memory_type="auto", importance=3)
-    assert mid is None
+    # P0-4: working 路径不再返回 None, 改为合成 id (wm:<session>:<seq>)
+    assert mid is not None
+    assert mid.startswith("wm:")
+    assert mid == "wm:default:1"
     assert len(manager.working.messages) == 1
 
 

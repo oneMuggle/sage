@@ -26,6 +26,10 @@ def get_memory_manager() -> MemoryManager:
     首次调用时创建实例，后续调用返回同一实例。
     这保证了 WorkingMemory 跨请求持久存在。
 
+    WorkingMemory 不在构造时绑定 session（未绑定实例）：
+    会话维度下沉到方法参数（add/get_context/clear 等接受 session_id），
+    多会话共享同一实例且互不串味。
+
     Returns:
         MemoryManager: 全局共享的记忆管理器实例
     """
@@ -37,7 +41,9 @@ def get_memory_manager() -> MemoryManager:
             episodic=EpisodicMemory(db),
             semantic=SemanticMemory(db),
         )
-        logger.info("全局 MemoryManager 单例已创建（WorkingMemory 持久化已启用）")
+        logger.info(
+            "全局 MemoryManager 单例已创建（WorkingMemory 持久化已启用，按 session_id 隔离）"
+        )
     return _memory_manager
 
 
