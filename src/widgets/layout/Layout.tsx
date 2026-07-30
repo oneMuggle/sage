@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 
+import { ErrorBoundary } from '../../app/providers/ErrorBoundary';
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 
 import { ResizeDivider } from './ResizeDivider';
@@ -52,13 +53,27 @@ export function Layout() {
               mobileOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
-            <Sidebar />
+            <ErrorBoundary fallback={(error, reset) => (
+              <div className="p-4 text-error">
+                Sidebar 错误: {error.message}
+                <button onClick={reset} className="ml-2 text-primary">重试</button>
+              </div>
+            )}>
+              <Sidebar />
+            </ErrorBoundary>
           </div>
         </>
       ) : (
         <>
           {/* 桌面端侧边栏（可调整宽度） */}
-          <Sidebar width={width} />
+          <ErrorBoundary fallback={(error, reset) => (
+            <div className="w-64 p-4 text-error">
+              Sidebar 错误: {error.message}
+              <button onClick={reset} className="ml-2 text-primary">重试</button>
+            </div>
+          )}>
+            <Sidebar width={width} />
+          </ErrorBoundary>
           <ResizeDivider onMouseDown={onMouseDown} />
         </>
       )}
@@ -66,7 +81,14 @@ export function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Titlebar />
         <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
-          <Outlet />
+          <ErrorBoundary fallback={(error, reset) => (
+            <div className="flex items-center justify-center h-full text-error">
+              Page 错误: {error.message}
+              <button onClick={reset} className="ml-2 text-primary">重试</button>
+            </div>
+          )}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>
