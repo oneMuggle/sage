@@ -9,7 +9,7 @@ import builtins
 import logging
 from typing import Any, Dict, List, Optional
 
-from backend.domain.risk import RiskClass, classify as classify_risk
+from backend.domain.risk import RiskClass, RiskOverrides, classify as classify_risk
 
 from .base import BaseTool, ToolSchema
 from .context import ToolExecutionContext, current_tool_context
@@ -46,6 +46,12 @@ class ToolRegistry:
 
         self._tools[tool_name] = tool
         risk = getattr(tool, "risk", RiskClass.READ)
+        # A1: 防御子类误设非法 risk（如 None）— 回退 READ 并告警
+        if not isinstance(risk, RiskClass):
+            logger.warning(
+                f"工具 {tool_name} 声明的 risk 非法 ({risk!r})，回退 READ"
+            )
+            risk = RiskClass.READ
         self._risks[tool_name] = risk
         logger.info(f"注册工具: {tool_name} (risk={risk.value})")
 
@@ -186,7 +192,7 @@ class ToolRegistry:
         self,
         name: str,
         metadata: Any = None,
-        overrides: Optional[Any] = None,
+        overrides: Optional[RiskOverrides] = None,
     ) -> RiskClass:
         """
         解析工具的有效风险（A1）

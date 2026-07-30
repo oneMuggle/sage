@@ -94,6 +94,10 @@ class BaseTool(ABC):
     # 用的工具必须在子类覆盖（如 WriteFileTool → WRITE_LOCAL、
     # TerminalTool → EXEC、WebSearchTool → EXTERNAL）。注册表在
     # register() 时收集该声明，引擎经 declared_risks 注入。
+    #
+    # ⚠️ fail-open 警示：注册表无法区分"显式声明 READ"与"继承默认
+    # READ"，漏写 risk 的副作用工具会被静默放行。新增工具务必声明
+    # risk，并同步扩充 test_risk.py 的内置工具验收表。
     risk: RiskClass = RiskClass.READ
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:

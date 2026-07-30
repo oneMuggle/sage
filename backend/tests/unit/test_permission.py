@@ -6,12 +6,10 @@
 
 import pytest
 
-from backend.adapters.out.permission.permission_engine import (
-    PermissionEngine,
-    _has_shell_operators,
-)
+from backend.adapters.out.permission.permission_engine import PermissionEngine
 from backend.domain.permission import READ_ONLY_MODES, Decision, PermissionMode
 from backend.domain.risk import RiskClass
+from backend.domain.shell import has_shell_operators
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.registry import ToolRegistry
 
@@ -71,6 +69,42 @@ class TestDecision:
         assert d.rule == ""
 
 
+class TestEngineConstruction:
+    """引擎构造健壮性测试套件"""
+
+    def test_mode_accepts_bare_string(self, tmp_path):
+        """裸字符串模式（JSON 配置场景）被归一化为枚举"""
+        engine = PermissionEngine(tmp_path, mode="auto")
+
+        assert engine.mode is PermissionMode.AUTO
+        assert engine.evaluate("terminal", {"command": "ls"}).allowed is True
+
+    def test_invalid_mode_rejected(self, tmp_path):
+        """非法模式值 fail-fast"""
+        with pytest.raises(ValueError, match="not a valid"):
+            PermissionEngine(tmp_path, mode="yolo")
+
+    def test_defensive_copies_of_constructor_args(self, tmp_path):
+        """调用方事后修改传入容器不渗透进引擎"""
+        commands = ["git status"]
+        tools = {"write_file"}
+        risks = {"deploy": RiskClass.EXTERNAL}
+        engine = PermissionEngine(
+            tmp_path,
+            allowed_commands=commands,
+            session_allow_tools=tools,
+            declared_risks=risks,
+        )
+
+        commands.append("rm -rf /")
+        tools.add("terminal")
+        risks["deploy"] = RiskClass.READ
+
+        assert engine.allowed_commands == ["git status"]
+        assert engine.session_allow_tools == {"write_file"}
+        assert engine.declared_risks["deploy"] is RiskClass.EXTERNAL
+
+
 class TestHasShellOperators:
     """shell 操作符检测测试套件"""
 
@@ -90,12 +124,19 @@ class TestHasShellOperators:
     )
     def test_detects_operators(self, command):
         """各类操作符均被检出"""
-        assert _has_shell_operators(command) is True
+        assert has_shell_operators(command) is True
 
     @pytest.mark.parametrize("command", ["git status", "pytest -x", "ls -la /tmp"])
     def test_plain_commands_clean(self, command):
         """普通命令不误报"""
-        assert _has_shell_operators(command) is False
+        assert has_shell_operators(command) is False
+
+    def test_terminal_tool_shares_same_source(self):
+        """TerminalTool.SHELL_OPERATORS 与 domain 单一来源一致（防漂移）"""
+        from backend.domain.shell import SHELL_OPERATORS
+        from backend.tools.terminal import TerminalTool
+
+        assert TerminalTool.SHELL_OPERATORS == SHELL_OPERATORS
 
 
 class TestReadOnlyModes:
@@ -143,12 +184,40 @@ class TestInteractiveMode:
         assert decision.allowed is False
         assert decision.needs_user is True
 
-    def test_write_relative_path_resolves_to_workspace(self, tmp_path):
-        """相对路径按 workspace 解析 → 落在内部 → 询问"""
+    def test_write_relative_path_rejected(self, tmp_path):
+        """相对路径 fail-closed 拒绝（引擎按 workspace、工具按 CWD 解析,
+        语义不一致会造成 workspace 外静默写入 bypass）"""
         engine = PermissionEngine(tmp_path)
         decision = engine.evaluate("write_file", {"path": "sub/dir/a.txt"})
 
-        assert decision.needs_user is True
+        assert decision.allowed is False
+        assert decision.needs_user is False
+        assert "absolute" in decision.reason
+
+    def test_write_relative_path_rejected_in_auto_mode(self, tmp_path):
+        """AUTO 模式下相对路径同样被拒"""
+        engine = PermissionEngine(tmp_path, mode=PermissionMode.AUTO)
+        decision = engine.evaluate("write_file", {"path": "a.txt"})
+
+        assert decision.allowed is False
+        assert decision.needs_user is False
+
+    def test_write_drive_relative_path_rejected(self, tmp_path):
+        """Windows 驱动器相对路径（C:evil.txt）非绝对路径 → 拒绝"""
+        engine = PermissionEngine(tmp_path, mode=PermissionMode.AUTO)
+        decision = engine.evaluate("write_file", {"path": "C:evil.txt"})
+
+        assert decision.allowed is False
+        assert "absolute" in decision.reason
+
+    def test_write_home_path_expanded_then_scoped(self, tmp_path):
+        """``~`` 路径先展开再判定 — 家目录不在 workspace → 拒绝"""
+        engine = PermissionEngine(tmp_path)
+        decision = engine.evaluate("write_file", {"path": "~/outside.txt"})
+
+        assert decision.allowed is False
+        assert decision.needs_user is False
+        assert "not in the workspace" in decision.reason
 
     def test_write_outside_workspace_hard_denied(self, tmp_path):
         """workspace 外的写入 → 硬拒绝（不询问）"""
@@ -197,6 +266,24 @@ class TestInteractiveMode:
         decision = engine.evaluate("mystery_tool", {})
 
         assert decision.allowed is True
+
+    def test_none_arguments_treated_as_empty(self, tmp_path):
+        """arguments=None 等价于空 dict（不崩溃）"""
+        engine = PermissionEngine(tmp_path)
+
+        assert engine.evaluate("read_file", None).allowed is True
+        # WRITE_LOCAL 无 path → 跳过路径检查,走模式门禁（询问）
+        decision = engine.evaluate("memory_save", None)
+        assert decision.needs_user is True
+
+    def test_session_allow_cannot_escape_workspace(self, tmp_path):
+        """路径边界先于会话豁免 — 会话批准的工具写 workspace 外仍被硬拒"""
+        engine = PermissionEngine(tmp_path)
+        engine.allow_tool_for_session("write_file")
+        decision = engine.evaluate("write_file", {"path": "/etc/passwd"})
+
+        assert decision.allowed is False
+        assert decision.needs_user is False
 
 
 class TestAutoMode:
@@ -321,6 +408,24 @@ class TestSessionMemory:
 
         assert engine.session_allow_commands == set()
 
+    def test_session_allow_does_not_exempt_external(self, tmp_path):
+        """EXTERNAL 工具不享受会话豁免 — 出网调用保持逐次审批,
+        防止"一次批准 → 对任意 URL 全放行"的数据外泄通道"""
+        engine = PermissionEngine(tmp_path)
+        engine.allow_tool_for_session("web_fetch")
+        decision = engine.evaluate("web_fetch", {"url": "https://example.com"})
+
+        assert decision.allowed is False
+        assert decision.needs_user is True
+
+    def test_session_allow_still_exemptes_write_local(self, tmp_path):
+        """会话豁免对 WRITE_LOCAL 工具仍然生效"""
+        engine = PermissionEngine(tmp_path)
+        engine.allow_tool_for_session("write_file")
+        decision = engine.evaluate("write_file", {"path": str(tmp_path / "a.txt")})
+
+        assert decision.allowed is True
+
 
 class TestCustomMode:
     """CUSTOM 模式测试套件"""
@@ -426,6 +531,19 @@ class TestRegistryIntegration:
         decision = engine.evaluate("shell", {"command": "shell --version"})
 
         assert decision.allowed is True
+
+    def test_from_registry_passes_risk_overrides(self, tmp_path):
+        """from_registry 透传 risk_overrides（A19 预埋）"""
+        registry = ToolRegistry()
+        registry.register(_DummyTool("peek", RiskClass.READ))
+        overrides = lambda name: RiskClass.EXEC if name == "peek" else None  # noqa: E731
+
+        engine = PermissionEngine.from_registry(
+            registry, tmp_path, risk_overrides=overrides
+        )
+        decision = engine.evaluate("peek", {})
+
+        assert decision.needs_user is True
 
     def test_metadata_requires_approval_gates_mcp_like_tool(self, tmp_path):
         """未注册 + 元数据 requires_approval → EXTERNAL 门禁（MCP 场景）"""
