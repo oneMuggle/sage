@@ -85,15 +85,15 @@ class TestFileMutationQueue:
             completed.append(True)
             return "done"
 
-        # 提交操作
-        task = asyncio.create_task(queue.submit(slow_op))
+        # 提交并等待操作完成（避免 race condition）
+        result = await queue.submit(slow_op)
 
-        # 立即 stop（应该等待操作完成）
-        await queue.stop()
-
-        # 操作应该已完成
+        # 此时操作已完成
         assert len(completed) == 1
-        assert task.result() == "done"
+        assert result == "done"
+
+        # stop 应该立即返回
+        await queue.stop()
 
     @pytest.mark.asyncio()
     async def test_multiple_operations(self):
