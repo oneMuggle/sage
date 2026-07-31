@@ -82,10 +82,10 @@ class ToolValidator:
             if isinstance(node, ast.ImportFrom) and node.module:
                 module_name = node.module.split(".")[0]
                 if module_name not in self.ALLOWED_IMPORTS:
-                        return ValidationResult(
-                            False,
-                            f"禁止从模块导入: {node.module} (允许: {', '.join(sorted(self.ALLOWED_IMPORTS))})"
-                        )
+                    return ValidationResult(
+                        False,
+                        f"禁止从模块导入: {node.module} (允许: {', '.join(sorted(self.ALLOWED_IMPORTS))})"
+                    )
 
             # 检查函数调用
             if isinstance(node, ast.Call):
