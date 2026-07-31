@@ -25,7 +25,6 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from sage_core import Message, Role
-from sage_core.repositories import LLMPort
 
 
 @dataclass
