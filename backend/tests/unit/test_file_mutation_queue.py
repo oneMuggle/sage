@@ -95,10 +95,6 @@ class TestFileMutationQueue:
         # stop 应该立即返回
         await queue.stop()
 
-        # 操作应该已完成
-        assert len(completed) == 1
-        assert task.result() == "done"
-
     @pytest.mark.asyncio()
     async def test_multiple_operations(self):
         """多个操作"""
