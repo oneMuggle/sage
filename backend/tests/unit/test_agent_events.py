@@ -4,7 +4,6 @@ Agent 事件系统测试 (A23 from pi)
 测试 Agent 事件发布-订阅架构。
 """
 
-import asyncio
 
 import pytest
 
@@ -14,7 +13,7 @@ from backend.domain.agent_events import AgentEvent, AgentEventBus, AgentEventTyp
 class TestAgentEventBus:
     """AgentEventBus 测试套件"""
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_subscribe_and_publish(self):
         """订阅和发布事件"""
         bus = AgentEventBus()
@@ -35,7 +34,7 @@ class TestAgentEventBus:
         assert received_events[0].type == AgentEventType.MESSAGE_START
         assert received_events[0].data["content"] == "Hello"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_multiple_subscribers(self):
         """多个订阅者"""
         bus = AgentEventBus()
@@ -56,7 +55,7 @@ class TestAgentEventBus:
 
         assert count == 2
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_unsubscribe(self):
         """取消订阅"""
         bus = AgentEventBus()
@@ -74,7 +73,7 @@ class TestAgentEventBus:
         await bus.publish(AgentEvent(type=AgentEventType.AGENT_START))
         assert len(received) == 1  # 不再接收
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_different_event_types(self):
         """不同事件类型"""
         bus = AgentEventBus()
@@ -137,5 +136,5 @@ class TestAgentEventBus:
         assert "Hello" in str(event)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
