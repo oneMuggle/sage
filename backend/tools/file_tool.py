@@ -277,7 +277,7 @@ class WriteFileTool(BaseTool):
 
             # A15: Auto syntax check for Python files
             syntax_error = None
-            if path.endswith('.py') and not append:
+            if path.endswith(".py") and not append:
                 import py_compile
                 try:
                     py_compile.compile(str(file_path), doraise=True)
