@@ -3,11 +3,12 @@
  * 包含同步聊天和流式聊天
  */
 
+import { clientLogger } from '../log/client';
+
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
 import type { AgentEvent, ChatConfig, ChatOfficeRef, ChatResponse } from './types';
 import { ApiException, handleApiError, isValidSessionId, sanitizeInput, withRetry } from './utils';
-import { clientLogger } from '../log/client';
 
 // DIAG(2026-07-30): 当 stream 以 FAILED 收尾时,把整轮事件序列推到主进程日志,
 // 便于定位 '为什么 agent 跑到 max_iterations'。仅用于排查,不参与业务逻辑。
