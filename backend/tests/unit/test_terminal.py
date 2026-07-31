@@ -7,8 +7,6 @@
 - 超时
 """
 
-import sys
-
 import pytest
 
 from backend.tools.terminal import TerminalTool
