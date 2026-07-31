@@ -34,21 +34,21 @@ class ToolValidator:
 
     # 允许导入的模块白名单
     ALLOWED_IMPORTS = {
-        'csv', 'json', 're', 'math', 'pathlib', 'requests', 'datetime',
-        'typing', 'dataclasses', 'collections', 'itertools', 'functools',
-        'string', 'textwrap', 'uuid', 'hashlib', 'base64', 'urllib.parse',
+        "csv", "json", "re", "math", "pathlib", "requests", "datetime",
+        "typing", "dataclasses", "collections", "itertools", "functools",
+        "string", "textwrap", "uuid", "hashlib", "base64", "urllib.parse",
     }
 
     # 禁止调用的函数/方法
     FORBIDDEN_CALLS = {
-        'eval', 'exec', 'compile', '__import__', 'globals', 'locals',
-        'getattr', 'setattr', 'delattr', 'open', 'input', 'breakpoint',
+        "eval", "exec", "compile", "__import__", "globals", "locals",
+        "getattr", "setattr", "delattr", "open", "input", "breakpoint",
     }
 
     # 禁止访问的属性
     FORBIDDEN_ATTRIBUTES = {
-        '__class__', '__bases__', '__subclasses__', '__mro__',
-        '__globals__', '__code__', '__closure__', '__func__',
+        "__class__", "__bases__", "__subclasses__", "__mro__",
+        "__globals__", "__code__", "__closure__", "__func__",
     }
 
     def validate(self, code: str) -> ValidationResult:
@@ -71,7 +71,7 @@ class ToolValidator:
             # 检查 import
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    module_name = alias.name.split('.')[0]
+                    module_name = alias.name.split(".")[0]
                     if module_name not in self.ALLOWED_IMPORTS:
                         return ValidationResult(
                             False,
@@ -81,7 +81,7 @@ class ToolValidator:
             # 检查 from ... import
             if isinstance(node, ast.ImportFrom):
                 if node.module:
-                    module_name = node.module.split('.')[0]
+                    module_name = node.module.split(".")[0]
                     if module_name not in self.ALLOWED_IMPORTS:
                         return ValidationResult(
                             False,
@@ -133,11 +133,11 @@ class ToolValidator:
             # 检查 TOOL_DEFINITION = ...
             if isinstance(node, ast.Assign):
                 for target in node.targets:
-                    if isinstance(target, ast.Name) and target.id == 'TOOL_DEFINITION':
+                    if isinstance(target, ast.Name) and target.id == "TOOL_DEFINITION":
                         has_definition = True
 
             # 检查 def execute(...)
-            if isinstance(node, ast.FunctionDef) and node.name == 'execute':
+            if isinstance(node, ast.FunctionDef) and node.name == "execute":
                 has_execute = True
 
         return has_definition and has_execute
