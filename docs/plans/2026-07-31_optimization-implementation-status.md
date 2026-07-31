@@ -161,7 +161,11 @@
 
 - [ ] **A15 副作用**：`WriteFileTool` 用 `py_compile.compile(..., doraise=True)` 做语法检查，
       默认会在目标目录写出 `__pycache__/*.pyc`——写工具产生了非预期的额外文件。
+      **已实测确认**：写入 `bad.py` / `ok.py` 后目录出现 `__pycache__`。
       建议改用 `ast.parse()`（无副作用）或显式传 `cfile` 到临时目录。**（MEDIUM）**
+- [ ] **A15 测试缺口**：语法检查能力（返回值新增 `syntax_error` 键）**无任何专属测试**
+      （全库 grep `syntax_error` 只命中 `test_tool_validator.py` / `test_calculator.py` 等无关用例）。
+      按项目 testing 规则「新功能必须有测试」，合并前应补齐。**（HIGH）**
 - [ ] **A6 ↔ A19 run_loop 对齐**：合并时需人工确认 A6 的并发改写没有破坏 A19 的
       工具链事件发射时序。
 - [ ] **全量测试未跑**：本次会话只做分支整形，未在整合状态下跑 vitest + pytest 全量。
