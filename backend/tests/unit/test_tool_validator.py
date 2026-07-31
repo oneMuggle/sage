@@ -33,90 +33,90 @@ def execute(param1: str) -> str:
 
     def test_forbidden_import_os(self):
         """禁止导入 os 模块"""
-        code = '''
+        code = """
 import os
 
 TOOL_DEFINITION = {"name": "bad"}
 
 def execute():
     return os.system("ls")
-'''
+"""
         result = validate_tool_code(code)
         assert not result.valid
         assert "禁止导入模块" in result.reason
 
     def test_forbidden_import_subprocess(self):
         """禁止导入 subprocess 模块"""
-        code = '''
+        code = """
 import subprocess
 
 TOOL_DEFINITION = {"name": "bad"}
 
 def execute():
     return subprocess.run(["ls"])
-'''
+"""
         result = validate_tool_code(code)
         assert not result.valid
         assert "禁止导入模块" in result.reason
 
     def test_forbidden_call_eval(self):
         """禁止调用 eval"""
-        code = '''
+        code = """
 TOOL_DEFINITION = {"name": "bad"}
 
 def execute(code: str):
     return eval(code)
-'''
+"""
         result = validate_tool_code(code)
         assert not result.valid
         assert "禁止调用函数" in result.reason
 
     def test_forbidden_call_exec(self):
         """禁止调用 exec"""
-        code = '''
+        code = """
 TOOL_DEFINITION = {"name": "bad"}
 
 def execute(code: str):
     exec(code)
-'''
+"""
         result = validate_tool_code(code)
         assert not result.valid
         assert "禁止调用函数" in result.reason
 
     def test_forbidden_attribute_access(self):
         """禁止访问 __class__ 等属性"""
-        code = '''
+        code = """
 TOOL_DEFINITION = {"name": "bad"}
 
 def execute():
     return "".__class__.__bases__
-'''
+"""
         result = validate_tool_code(code)
         assert not result.valid
         assert "禁止访问属性" in result.reason
 
     def test_missing_tool_definition(self):
         """缺少 TOOL_DEFINITION 应失败"""
-        code = '''
+        code = """
 def execute():
     return "hello"
-'''
+"""
         result = validate_tool_code(code)
         assert not result.valid
         assert "必须导出 TOOL_DEFINITION" in result.reason
 
     def test_missing_execute_function(self):
         """缺少 execute 函数应失败"""
-        code = '''
+        code = """
 TOOL_DEFINITION = {"name": "test"}
-'''
+"""
         result = validate_tool_code(code)
         assert not result.valid
         assert "必须导出 TOOL_DEFINITION" in result.reason
 
     def test_allowed_imports(self):
         """允许的导入应通过"""
-        code = '''
+        code = """
 import json
 import math
 import re
@@ -127,22 +127,22 @@ TOOL_DEFINITION = {"name": "test"}
 
 def execute():
     return json.dumps({"result": "ok"})
-'''
+"""
         result = validate_tool_code(code)
         assert result.valid
 
     def test_syntax_error(self):
         """语法错误应返回失败"""
-        code = '''
+        code = """
 TOOL_DEFINITION = {"name": "test"
 
 def execute():
     return "hello"
-'''
+"""
         result = validate_tool_code(code)
         assert not result.valid
         assert "语法错误" in result.reason
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
