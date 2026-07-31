@@ -51,7 +51,7 @@ class ToolValidator:
         "__globals__", "__code__", "__closure__", "__func__",
     }
 
-    def validate(self, code: str) -> ValidationResult:
+    def validate(self, code: str) -> ValidationResult:  # noqa: PLR0911
         """
         验证工具代码是否安全
 
@@ -79,10 +79,9 @@ class ToolValidator:
                         )
 
             # 检查 from ... import
-            if isinstance(node, ast.ImportFrom):
-                if node.module:
-                    module_name = node.module.split(".")[0]
-                    if module_name not in self.ALLOWED_IMPORTS:
+            if isinstance(node, ast.ImportFrom) and node.module:
+                module_name = node.module.split(".")[0]
+                if module_name not in self.ALLOWED_IMPORTS:
                         return ValidationResult(
                             False,
                             f"禁止从模块导入: {node.module} (允许: {', '.join(sorted(self.ALLOWED_IMPORTS))})"
@@ -98,11 +97,10 @@ class ToolValidator:
                     )
 
             # 检查属性访问
-            if isinstance(node, ast.Attribute):
-                if node.attr in self.FORBIDDEN_ATTRIBUTES:
-                    return ValidationResult(
-                        False,
-                        f"禁止访问属性: {node.attr}"
+            if isinstance(node, ast.Attribute) and node.attr in self.FORBIDDEN_ATTRIBUTES:
+                return ValidationResult(
+                    False,
+                    f"禁止访问属性: {node.attr}"
                     )
 
         # 检查必须导出的内容
@@ -118,10 +116,9 @@ class ToolValidator:
         """获取函数调用的名称"""
         if isinstance(node.func, ast.Name):
             return node.func.id
-        elif isinstance(node.func, ast.Attribute):
+        elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
             # 处理 obj.method() 形式
-            if isinstance(node.func.value, ast.Name):
-                return node.func.attr
+            return node.func.attr
         return None
 
     def _has_required_exports(self, tree: ast.Module) -> bool:
