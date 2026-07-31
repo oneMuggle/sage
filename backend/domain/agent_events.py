@@ -28,7 +28,6 @@ Agent 事件发布-订阅架构 (A23 from pi)
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -116,6 +115,8 @@ class AgentEventBus:
             if event_type in self._subscribers:
                 try:  # noqa: SIM105 — domain purity 禁止引入 contextlib
                     self._subscribers[event_type].remove(callback)
+                except ValueError:
+                    pass
 
         return unsubscribe
 
