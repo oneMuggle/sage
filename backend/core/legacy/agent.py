@@ -22,6 +22,7 @@ from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequ
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+from backend.domain.tool_chain import ToolChainTracker
 
 # ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
 from backend.hooks.config import HookConfig, load_hooks
@@ -572,6 +573,19 @@ class SageAgent:
         # permission_rules），整轮循环复用——避免每次工具调用都打 DB。
         enforcer = self._build_permission_enforcer()
 
+        # A19 Tool Chain Tracking: 本 run 的工具链追踪器。每次工具分发前
+        # start_step、观察到结果后 complete_step，快照经 TOOL_CHAIN_UPDATE
+        # 事件推给前端侧边栏实时渲染（领域层不读时钟，单调时间戳由此传入）。
+        chain_tracker = ToolChainTracker(chain_id=f"chain-{uuid.uuid4().hex[:8]}")
+
+        def _chain_update_event(iteration: int) -> AgentEvent:
+            return AgentEvent(
+                state=AgentState.TOOL_CHAIN_UPDATE,
+                iteration=iteration,
+                tool_chain=chain_tracker.chain.to_dict(),
+                agent_id=self.agent_id,
+            )
+
         try:
             for i in range(effective_max_iterations):
                 yield AgentEvent(state=AgentState.THINKING, iteration=i, agent_id=self.agent_id)
@@ -655,12 +669,17 @@ class SageAgent:
                             m6_pre.reason or "denied by hook"
                         )
                         m6_deny_req = ToolCallRequest(id=tc.id, name=tc.name, arguments=args)
+                        # A19: 被拒工具同样登记一步(开始即错误结束)
+                        m6_deny_step = chain_tracker.start_step(
+                            tc.name, args, now=time.monotonic()
+                        )
                         yield AgentEvent(
                             state=AgentState.ACTING,
                             iteration=i,
                             tool_call=m6_deny_req,
                             agent_id=self.agent_id,
                         )
+                        yield _chain_update_event(i)
                         yield AgentEvent(
                             state=AgentState.OBSERVING,
                             iteration=i,
@@ -672,6 +691,13 @@ class SageAgent:
                             ),
                             agent_id=self.agent_id,
                         )
+                        chain_tracker.complete_step(
+                            m6_deny_step.step_id,
+                            m6_deny_content,
+                            is_error=True,
+                            now=time.monotonic(),
+                        )
+                        yield _chain_update_event(i)
                         messages.append(
                             {
                                 "role": "tool",
@@ -700,6 +726,12 @@ class SageAgent:
                         tool_call=tool_req,
                         agent_id=self.agent_id,
                     )
+
+                    # A19: 登记工具步骤开始并推送工具链快照
+                    chain_step = chain_tracker.start_step(
+                        tc.name, args, now=time.monotonic()
+                    )
+                    yield _chain_update_event(i)
 
                     is_error = False
                     result_content = ""
@@ -863,6 +895,15 @@ class SageAgent:
                         tool_result=tool_result,
                         agent_id=self.agent_id,
                     )
+
+                    # A19: 登记工具步骤结果并推送工具链快照
+                    chain_tracker.complete_step(
+                        chain_step.step_id,
+                        result_content,
+                        is_error=is_error,
+                        now=time.monotonic(),
+                    )
+                    yield _chain_update_event(i)
 
                     messages.append(
                         {

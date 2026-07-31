@@ -48,9 +48,12 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
       return '👀 观察结果…';
     case 'failed':
       return '❌ 失败';
+    // A19: tool_chain_update 是纯元数据事件 — 进度由 ToolChainWidget 侧栏
+    // 承载,不覆盖消息气泡占位符;与 deltas 同组返回 null
     case 'reasoning':
     case 'reasoning_delta':
     case 'content_delta':
+    case 'tool_chain_update':
     case 'idle':
     case 'done':
       return null;
@@ -85,6 +88,9 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
       return { iconName: 'Eye', label: '观察结果' };
     case 'content_delta':
       return { iconName: 'Pencil', label: '生成回答' };
+    case 'tool_chain_update':
+      // A19: 元数据事件 — 不改变指示器阶段(保持 acting/observing 显示)
+      return null;
     case 'idle':
     case 'done':
     case 'failed':

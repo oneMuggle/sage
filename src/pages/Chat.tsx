@@ -11,7 +11,7 @@ import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
-import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
+import { ActiveAgentIndicator, ChatInput, MessageList, ToolChainWidget } from '../widgets/chat';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
@@ -34,6 +34,7 @@ export function Chat() {
     streamingMessageId, // P1: 当前流式消息 ID
     iteration, // P2: ReAct 迭代轮次
     streamingState, // P2: 当前流式状态
+    toolChain, // A19: 工具链实时进度快照
   } = useChat();
 
   const {
@@ -193,7 +194,7 @@ export function Chat() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 relative">
       {/* 页面头部 */}
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
         <h2 className="text-sm font-semibold text-text">对话</h2>
@@ -220,6 +221,9 @@ export function Chat() {
           />
         )}
       </div>
+
+      {/* A19: 工具链实时进度侧栏(浮动面板,工具调用时淡入) */}
+      <ToolChainWidget chain={toolChain} />
 
       {/* 阶段 4 + P2: 流式处理时显示当前活跃 agent + 迭代轮次 + 阶段 */}
       <ActiveAgentIndicator

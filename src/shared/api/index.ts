@@ -63,6 +63,8 @@ export type {
   SkillExecuteRequest,
   SkillExecuteResult,
   ToolCall,
+  ToolChainSnapshot,
+  ToolStepSnapshot,
   UserQuestion,
   WorkspaceSearchKind,
   WorkspaceSearchResponse,

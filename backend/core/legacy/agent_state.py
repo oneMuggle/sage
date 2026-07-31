@@ -34,6 +34,10 @@ class AgentState(str, Enum):
     # ASK_USER_QUESTION 事件(携带 user_question 字段),前端渲染
     # QuestionDialog 并 POST /api/v1/questions/{request_id}/answer。
     ASK_USER_QUESTION = "ask_user_question"
+    # A19 Tool Chain Tracking: 每次工具调用开始/结束时推一个
+    # TOOL_CHAIN_UPDATE 事件(携带 tool_chain 快照字段),前端侧边栏
+    # ToolChainWidget 渲染实时工具链进度(工具名/状态/耗时)。
+    TOOL_CHAIN_UPDATE = "tool_chain_update"
     DONE = "done"
     FAILED = "failed"
 
@@ -92,6 +96,9 @@ class AgentEvent:
     # M2 part B: state=ASK_USER_QUESTION 时携带提问快照(QuestionRequest.to_dict),
     # 含 request_id / question / header / options / multi_select / created_at 字段
     user_question: Optional[Dict[str, Any]] = None
+    # A19: state=TOOL_CHAIN_UPDATE 时携带工具链快照(ToolChain.to_dict),
+    # 含 chain_id / steps / current_step / progress 等字段
+    tool_chain: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为 JSON 友好的字典。"""
@@ -115,4 +122,6 @@ class AgentEvent:
             d["permission_request"] = self.permission_request
         if self.user_question is not None:
             d["user_question"] = self.user_question
+        if self.tool_chain is not None:
+            d["tool_chain"] = self.tool_chain
         return d
