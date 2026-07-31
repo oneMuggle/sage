@@ -234,7 +234,7 @@ class TestRenderExportHtml:
     def test_no_placeholders_left(self):
         html_text = render_export_html(_sample_payload())
         for token in PLACEHOLDERS:
-            assert token not in html_text, "残留占位符: {}".format(token)
+            assert token not in html_text, f"残留占位符: {token}"
         # 资源文件受控,不含任何 {{ 序列
         assert "{{" not in html_text
 
@@ -252,7 +252,7 @@ class TestRenderExportHtml:
     def test_csp_hashes_match_inlined_scripts(self):
         html_text = render_export_html(_sample_payload())
         for item in _expected_script_hashes():
-            assert item in html_text, "CSP 缺少脚本哈希 {}".format(item[:32])
+            assert item in html_text, f"CSP 缺少脚本哈希 {item[:32]}"
 
     def test_title_html_escaped(self):
         payload = _sample_payload()
@@ -320,7 +320,7 @@ class TestExportSessionToHtml:
 class TestExportRoute:
     async def test_returns_json_envelope(self, client):
         session = SessionRepository().create(title="JSON 信封")
-        resp = await client.post("/api/v1/sessions/{}/export".format(session.id))
+        resp = await client.post(f"/api/v1/sessions/{session.id}/export")
         assert resp.status_code == 200
         data = resp.json()
         assert set(data.keys()) == {"html", "filename", "session_id", "message_count", "theme"}
@@ -333,7 +333,7 @@ class TestExportRoute:
     async def test_theme_from_body(self, client):
         session = SessionRepository().create(title="主题请求")
         resp = await client.post(
-            "/api/v1/sessions/{}/export".format(session.id), json={"theme": "dark"}
+            f"/api/v1/sessions/{session.id}/export", json={"theme": "dark"}
         )
         assert resp.status_code == 200
         assert resp.json()["theme"] == "dark"
@@ -341,7 +341,7 @@ class TestExportRoute:
     async def test_unknown_body_keys_rejected(self, client):
         session = SessionRepository().create(title="多余字段")
         resp = await client.post(
-            "/api/v1/sessions/{}/export".format(session.id),
+            f"/api/v1/sessions/{session.id}/export",
             json={"theme": "auto", "bogus": 1},
         )
         assert resp.status_code == 422
@@ -349,7 +349,7 @@ class TestExportRoute:
     async def test_accept_html_returns_file(self, client):
         session = SessionRepository().create(title="HTML 直取")
         resp = await client.post(
-            "/api/v1/sessions/{}/export".format(session.id),
+            f"/api/v1/sessions/{session.id}/export",
             headers={"Accept": "text/html"},
         )
         assert resp.status_code == 200
@@ -367,7 +367,7 @@ class TestExportRoute:
         """Accept 同时含 text/html 与 application/json → JSON 信封(优先级契约)。"""
         session = SessionRepository().create(title="双 Accept")
         resp = await client.post(
-            "/api/v1/sessions/{}/export".format(session.id),
+            f"/api/v1/sessions/{session.id}/export",
             headers={"Accept": "text/html, application/json"},
         )
         assert resp.status_code == 200
@@ -376,37 +376,37 @@ class TestExportRoute:
 
     async def test_empty_body_defaults_theme(self, client):
         session = SessionRepository().create(title="空 body")
-        resp = await client.post("/api/v1/sessions/{}/export".format(session.id), json={})
+        resp = await client.post(f"/api/v1/sessions/{session.id}/export", json={})
         assert resp.status_code == 200
         assert resp.json()["theme"] == "auto"
 
     async def test_invalid_theme_normalized_at_route(self, client):
         session = SessionRepository().create(title="非法主题")
         resp = await client.post(
-            "/api/v1/sessions/{}/export".format(session.id), json={"theme": "rainbow"}
+            f"/api/v1/sessions/{session.id}/export", json={"theme": "rainbow"}
         )
         assert resp.status_code == 200
         assert resp.json()["theme"] == "auto"
 
     async def test_content_disposition_carries_full_filename(self, client):
         session = SessionRepository().create(title="文件名")
-        json_resp = await client.post("/api/v1/sessions/{}/export".format(session.id))
+        json_resp = await client.post(f"/api/v1/sessions/{session.id}/export")
         filename = json_resp.json()["filename"]
 
         html_resp = await client.post(
-            "/api/v1/sessions/{}/export".format(session.id),
+            f"/api/v1/sessions/{session.id}/export",
             headers={"Accept": "text/html"},
         )
-        assert 'filename="{}"'.format(filename) in html_resp.headers["content-disposition"]
+        assert f'filename="{filename}"' in html_resp.headers["content-disposition"]
 
     async def test_html_body_equals_json_envelope_html(self, client):
         """HTML 直取体与 JSON 信封 html 同源(结构一致;exported_at 时戳允许不同)。"""
         session = SessionRepository().create(title="一致性")
         MessageRepository().save(_make_message(session.id, "user", "hello"))
-        json_html = (await client.post("/api/v1/sessions/{}/export".format(session.id))).json()["html"]
+        json_html = (await client.post(f"/api/v1/sessions/{session.id}/export")).json()["html"]
         html_body = (
             await client.post(
-                "/api/v1/sessions/{}/export".format(session.id),
+                f"/api/v1/sessions/{session.id}/export",
                 headers={"Accept": "text/html"},
             )
         ).text
@@ -428,7 +428,7 @@ class TestExportRoute:
         session = SessionRepository().create(title="注入隔离")
         MessageRepository().save(_make_message(session.id, "user", hostile))
 
-        resp = await client.post("/api/v1/sessions/{}/export".format(session.id))
+        resp = await client.post(f"/api/v1/sessions/{session.id}/export")
         html_text = resp.json()["html"]
 
         # base64 字母表不含 <,故未编码的恶意结构在外层 0 命中;
@@ -436,6 +436,6 @@ class TestExportRoute:
         assert html_text.count("<img src=x onerror") == 0
         assert html_text.count("</script><img") == 0
         assert html_text.count('content="0;url=evil"') == 0
-        # 解码后载荷逐字还原(隔离不丢内容)
+        # 解码后载荷逐字还原(隔离不丢内容)  # noqa: ERA001 — 中文注释含括号，被 ruff 误判
         payload = _extract_payload(html_text)
         assert payload["entries"][0]["content"] == hostile

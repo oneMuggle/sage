@@ -72,7 +72,7 @@ def export_session(
         return HTMLResponse(
             content=result.html,
             headers={
-                "Content-Disposition": 'attachment; filename="{}"'.format(result.filename)
+                "Content-Disposition": f'attachment; filename="{result.filename}"'
             },
         )
 

@@ -51,7 +51,7 @@ class SessionNotFoundError(LookupError):
 
     def __init__(self, session_id: str):
         self.session_id = session_id
-        super().__init__("session not found: {}".format(session_id))
+        super().__init__(f"session not found: {session_id}")
 
 
 @dataclass
@@ -172,7 +172,7 @@ def _build_filename(session: Session) -> str:
     """
     short_id = session.id.replace("-", "")[:8] or "session"
     stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(max(0, session.created_at) / 1000))
-    return "{}-session-{}-{}.html".format(APP_NAME, short_id, stamp)
+    return f"{APP_NAME}-session-{short_id}-{stamp}.html"
 
 
 def render_export_html(payload: Dict[str, Any], theme: str = DEFAULT_THEME) -> str:
