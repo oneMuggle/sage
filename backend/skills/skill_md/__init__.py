@@ -7,6 +7,7 @@
 
 from .auto_activation import (
     MAX_AUTO_ACTIVATED_SKILLS,
+    MAX_CONTEXT_BLOCK_CHARS,
     AutoActivationResult,
     auto_activate,
     build_context_block,
@@ -54,6 +55,7 @@ __all__ = [
     "DEFAULT_ENV_DENYLIST",
     "DeleteSkillResult",
     "MAX_AUTO_ACTIVATED_SKILLS",
+    "MAX_CONTEXT_BLOCK_CHARS",
     "SkillMdParseError",
     "SkillMdDeleter",
     "SkillMdNotFoundError",

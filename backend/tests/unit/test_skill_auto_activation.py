@@ -548,3 +548,127 @@ class TestSkillActivationBlockHelper:
         """非空块前置双换行 (便于直接 += 拼接)。"""
         result = _skill_activation_block("hello", _FakeSkillPort(block="BLOCK"))
         assert result == "\n\nBLOCK"
+
+
+# =====================================================================
+# 6. 审查回归 (M2 尺寸闸门 / L1-L4 边界)
+# =====================================================================
+
+
+class TestSizeCap:
+    def test_oversized_skill_skipped_smaller_included(self):
+        """超限技能整块跳过 (first-fit), 后续较小的命中技能仍激活。"""
+        from backend.skills.skill_md.auto_activation import (
+            MAX_CONTEXT_BLOCK_CHARS,
+        )
+
+        docs = [
+            _doc("huge", when_to_use='"trigger"', body="x" * (MAX_CONTEXT_BLOCK_CHARS + 1)),
+            _doc("small", when_to_use='"trigger"', body="small body"),
+        ]
+        result = auto_activate("trigger", docs)
+        assert result.names == ("small",)
+        assert "small body" in result.context_block
+
+    def test_single_oversized_match_yields_empty(self):
+        """唯一命中技能即超限 → 无激活 (显式 slash 调用不受此限)。"""
+        from backend.skills.skill_md.auto_activation import (
+            MAX_CONTEXT_BLOCK_CHARS,
+        )
+
+        docs = [
+            _doc("huge", when_to_use='"trigger"', body="x" * (MAX_CONTEXT_BLOCK_CHARS * 2))
+        ]
+        result = auto_activate("trigger", docs)
+        assert result.activated is False
+
+    def test_bodies_within_cap_all_included(self):
+        """总尺寸未超限的多个技能全部激活。"""
+        docs = [_doc(f"s{i}", when_to_use='"trigger"', body="y" * 1000) for i in range(3)]
+        result = auto_activate("trigger", docs)
+        assert len(result.names) == 3
+
+
+class TestTriggerExtractionEdgeCases:
+    def test_quoted_use_when_phrase_kept(self):
+        """引号提取路径不过滤 use-when 元描述 (参考实现原始行为, 回归保护)。"""
+        triggers = extract_triggers('"Use when reviewing code"')
+        assert "use when reviewing code" in triggers
+
+    def test_curly_quotes_stripped_in_comma_segments(self):
+        """逗号段两端的弯引号被剥离, 不产出死触发词。"""
+        triggers = extract_triggers("“写周报”,总结")
+        assert "写周报" in triggers
+        assert "总结" in triggers
+        assert not any("“" in t or "”" in t for t in triggers)
+
+    def test_all_single_char_triggers_yield_empty(self):
+        """when_to_use 全是单字符 → 无有效触发词 → 不激活。"""
+        triggers = extract_triggers('"a", "b", c')
+        assert triggers == []
+        docs = [_doc("s", when_to_use='"a", "b", c')]
+        assert auto_activate("a b c anything", docs).activated is False
+
+
+class TestLoaderKeyPrecedence:
+    def test_underscore_wins_over_dash_alias(self, tmp_path):
+        """双键共存时 underscore 主键胜出 (loader 与 frontmatter 一致)。"""
+        _write_skill_md(
+            tmp_path,
+            "dual-key",
+            frontmatter_extra=(
+                "when_to_use: '\"underscore wins\"'\n"
+                "when-to-use: '\"dash alias\"'\n"
+            ),
+        )
+        registry = SkillRegistry()
+        SkillMdHotLoader(registry, [tmp_path]).scan_and_load()
+        doc = registry.get("dual-key")._doc
+        assert doc.when_to_use == '"underscore wins"'
+
+    def test_explicit_null_falls_back_to_alias_validation(self):
+        """主键显式 null 时回落校验别名 (L3: 与 loader 取值优先级一致)。"""
+        with pytest.raises(SkillMdParseError, match="when_to_use"):
+            parse(
+                "---\nname: demo\ndescription: demo skill\n"
+                "when_to_use: null\nwhen-to-use: 42\n---\nbody\n"
+            )
+
+
+class TestAdapterDegradationAndReload:
+    def test_adapter_internal_error_degrades_to_empty(self, tmp_path, monkeypatch):
+        """auto_activate 内部故障 → 空结果, 绝不外抛 (best-effort 契约)。"""
+        import backend.skills.skill_md.auto_activation as aa
+
+        adapter = _make_adapter_with_skillmd(tmp_path)
+
+        def _boom(message, docs):
+            raise RuntimeError("simulated internal failure")
+
+        monkeypatch.setattr(aa, "auto_activate", _boom)
+        result = adapter.auto_activate("please review my code")
+        assert result.activated is False
+        assert result.context_block == ""
+
+    def test_hot_reload_updates_when_to_use(self, tmp_path):
+        """热重载后 when_to_use 与自动激活跟随新内容。"""
+        path = _write_skill_md(
+            tmp_path, "evolving", frontmatter_extra='when_to_use: "old trigger"\n'
+        )
+        registry = SkillRegistry()
+        loader = SkillMdHotLoader(registry, [tmp_path])
+        loader.scan_and_load()
+        # YAML 消费外层引号, 字段值为裸短语
+        assert registry.get("evolving")._doc.when_to_use == "old trigger"
+
+        _write_skill_md(
+            tmp_path, "evolving", frontmatter_extra='when_to_use: "new trigger"\n'
+        )
+        assert loader.check_for_updates() == ["evolving"]
+        assert loader.hot_reload("evolving") is True
+
+        doc = registry.get("evolving")._doc
+        assert doc.when_to_use == "new trigger"
+        assert auto_activate("hit new trigger", [doc]).activated is True
+        assert auto_activate("hit old trigger", [doc]).activated is False
+        assert path.is_file()  # 原文件被 helper 原地覆写

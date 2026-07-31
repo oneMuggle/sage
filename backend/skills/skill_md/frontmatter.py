@@ -317,8 +317,12 @@ def parse(text: str) -> Tuple[Dict[str, Any], str]:
     _validate_name(meta.get("name"))
     _validate_description(meta.get("description"))
 
-    # A16: when_to_use 自动激活字段 (下划线为主, 连字符别名兼容 sage 惯例)
-    _validate_when_to_use(meta.get("when_to_use", meta.get("when-to-use")))
+    # A16: when_to_use 自动激活字段 (下划线为主键, 连字符为别名;
+    # 取值优先级与 loader 一致: 主键显式 null 时回落到别名)
+    when_to_use_val = meta.get("when_to_use")
+    if when_to_use_val is None:
+        when_to_use_val = meta.get("when-to-use")
+    _validate_when_to_use(when_to_use_val)
 
     # v2 字段校验
     _validate_requires(meta.get("requires"))

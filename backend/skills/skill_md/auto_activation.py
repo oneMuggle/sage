@@ -24,11 +24,17 @@
 - 触发短语提取支持三种写法 (与 LLM_Simple 对齐):
   引号短语 (``"code review"`` / ``"审查代码"`` / 弯引号)、逗号分隔裸短语
   (``code review, 审查代码``, 兼容中文全角逗号)、以及两者混合。
-- 长度 < 2 的触发词与 ``use when`` 开头的元描述短语被过滤
-  (前者误报率高, 后者是"何时使用"的说明文而非触发词)。
-- 单条消息最多激活 ``MAX_AUTO_ACTIVATED_SKILLS`` 个技能, 防止
-  prompt 膨胀; 超出的技能按 registry 顺序截断 (与 LLM_Simple 行为
-  一致, LLM_Simple 无上限, 此处为防御性收紧)。
+- 长度 < 2 的触发词被过滤 (误报率高); 逗号分隔段中以 ``use when``
+  开头的元描述短语同样被过滤 (与参考实现一致; 注意引号提取路径
+  不做 use-when 过滤, 这是参考实现的原始行为)。
+- 单条消息最多激活 ``MAX_AUTO_ACTIVATED_SKILLS`` 个技能, 且总块
+  尺寸不超过 ``MAX_CONTEXT_BLOCK_CHARS`` 字符, 防止 prompt 膨胀;
+  超限技能按 registry 顺序跳过 (LLM_Simple 无双重上限, 此处为
+  防御性收紧)。被跳过的技能仍可通过显式 slash command 调用。
+- 注入内容是裸 SKILL.md body (与 sage 显式调用路径
+  ``slash_registry`` / ``execute_v2`` v1 fallback 一致), **不**加
+  LLM_Simple ``invoke_prompt`` 的 ``Base directory for this skill:``
+  头 —— 保持同一 body 在不同触发路径下的注入格式自洽。
 """
 
 from __future__ import annotations
@@ -44,6 +50,14 @@ logger = logging.getLogger(__name__)
 
 #: 单条消息最多自动激活的技能数 (防 prompt 膨胀)。
 MAX_AUTO_ACTIVATED_SKILLS = 5
+
+#: 注入块总尺寸上限 (字符)。超限技能整块跳过 (不截断 body,
+#: 避免半截指令误导模型); 显式 slash 调用不受此限。
+MAX_CONTEXT_BLOCK_CHARS = 32_000
+
+#: 每个技能块的 framing 开销估算 (system-reminder 头 + 分隔符,
+#: 用于尺寸闸门投影, 取保守上整)。
+_PER_SKILL_OVERHEAD_CHARS = 256
 
 #: 触发词最小长度 — 单字符短语误报率过高, 与 LLM_Simple 一致跳过。
 _MIN_TRIGGER_LEN = 2
@@ -62,10 +76,12 @@ def extract_triggers(when_to_use: str) -> List[str]:
     提取规则 (移植 LLM_Simple::MainWindow._extract_triggers):
 
     1. 引号短语: ``"keyword"`` / ``“中文关键词”`` — 整条短语作为一个触发词。
-    2. 逗号分隔裸短语: ``code review, 审查代码`` — 每段 strip 引号与空白
-       后作为一个触发词。
-    3. 过滤: 长度 < 2 的短语; ``use when`` 开头的元描述短语
-       (如 ``Use when the user asks to review code``)。
+    2. 逗号分隔裸短语: ``code review, 审查代码`` — 每段 strip 引号
+       (含弯引号) 与空白后作为一个触发词。
+    3. 过滤: 长度 < 2 的短语; 逗号段中 ``use when`` 开头的元描述短语
+       (如 ``Use when the user asks to review code``)。注意: 引号提取
+       路径不做 use-when 过滤 (参考实现原始行为, 长句作子串几乎不
+       命中, 实际危害近零)。
 
     Args:
         when_to_use: frontmatter 字段原文。
@@ -82,8 +98,9 @@ def extract_triggers(when_to_use: str) -> List[str]:
             triggers.append(token)
 
     # 2) 逗号分隔裸短语 (fallback: 引号外的部分也按逗号切)
+    #    strip 含弯引号 (U+201C/U+201D/U+2018/U+2019), 避免产出永不命中的死触发词
     for part in _COMMA_SPLIT_RE.split(when_to_use):
-        token = part.strip().strip('"').strip("'").strip().lower()
+        token = part.strip().strip('"“”‘’\'').strip().lower()
         if (
             token
             and len(token) >= _MIN_TRIGGER_LEN
@@ -120,6 +137,10 @@ def build_context_block(activated: Sequence[SkillMdDocument]) -> str:
 
     多个技能块之间用 ``\\n\\n---\\n\\n`` 分隔, 整体前置一行中文说明,
     便于模型理解这段注入的来源。空序列返回空字符串。
+
+    与 LLM_Simple 的差异: 直接注入裸 ``doc.body``, 不加
+    ``Base directory for this skill:`` 头 —— 与 sage 显式调用路径
+    (slash_registry / execute_v2 v1 fallback) 的注入格式保持自洽。
     """
     if not activated:
         return ""
@@ -176,17 +197,30 @@ def auto_activate(
 
     message_lower = message.lower()
     activated: List[SkillMdDocument] = []
+    projected_chars = 0
     for doc in docs:
         if not doc.when_to_use:
             continue
-        if _matches(message_lower, doc.when_to_use):
-            activated.append(doc)
-            if len(activated) >= MAX_AUTO_ACTIVATED_SKILLS:
-                logger.debug(
-                    "A16 auto-activation cap reached (%d); remaining skills ignored",
-                    MAX_AUTO_ACTIVATED_SKILLS,
-                )
-                break
+        if not _matches(message_lower, doc.when_to_use):
+            continue
+        if len(activated) >= MAX_AUTO_ACTIVATED_SKILLS:
+            logger.debug(
+                "A16 auto-activation count cap reached (%d); remaining skills ignored",
+                MAX_AUTO_ACTIVATED_SKILLS,
+            )
+            break
+        # 尺寸闸门: 投影超限的整块跳过 (不截断 body), 后续较小的
+        # 命中技能仍可参与 (first-fit); 超限技能显式 slash 调用不受影响
+        next_chars = projected_chars + len(doc.body) + _PER_SKILL_OVERHEAD_CHARS
+        if next_chars > MAX_CONTEXT_BLOCK_CHARS:
+            logger.debug(
+                "A16 auto-activation skipping '%s': block would exceed %d chars",
+                doc.name,
+                MAX_CONTEXT_BLOCK_CHARS,
+            )
+            continue
+        activated.append(doc)
+        projected_chars = next_chars
 
     if not activated:
         return AutoActivationResult()
