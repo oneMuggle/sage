@@ -138,10 +138,10 @@ class TestCircuitBreakerReset:
         assert breaker.check("terminal", args) is None
         assert breaker.check("terminal", args) is not None  # 已熔断
 
-        # Act: 成功后清零
+        # Act: 成功后清零  # noqa: ERA001
         breaker.mark_success("terminal", args)
 
-        # Assert: 重新放行
+        # Assert: 重新放行  # noqa: ERA001
         assert breaker.call_count("terminal", args) == 0
         assert breaker.check("terminal", args) is None
 
