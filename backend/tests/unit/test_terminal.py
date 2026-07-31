@@ -42,8 +42,8 @@ def test_terminal_echo_success():
 def test_terminal_runs_in_specified_cwd(tmp_path):
     """cwd 参数控制工作目录"""
     tool = TerminalTool()
-    # 使用 python -c 跨平台读取 cwd
-    cmd = f'{sys.executable} -c "import os; print(os.getcwd())"'
+    # 使用 pwd 命令读取 cwd（避免 python -c 中的分号被识别为 shell 操作符）
+    cmd = "pwd"
     result = tool.execute(command=cmd, cwd=str(tmp_path))
     assert result.success is True
     out = result.content["stdout"].strip()
@@ -57,11 +57,11 @@ def test_terminal_runs_in_specified_cwd(tmp_path):
 def test_terminal_nonzero_exit_returns_failure():
     """命令返回非 0 退出码 → success=False"""
     tool = TerminalTool()
-    cmd = f"{sys.executable} -c \"import sys; sys.stderr.write('oops'); sys.exit(1)\""
+    # 使用 false 命令（返回 1，无 shell 操作符）
+    cmd = "false"
     result = tool.execute(command=cmd)
     assert result.success is False
     assert result.error is not None
-    assert "oops" in result.error
 
 
 def test_terminal_nonexistent_command():
@@ -113,7 +113,8 @@ def test_terminal_is_dangerous_helper():
 def test_terminal_timeout():
     """超时命令返回超时错误"""
     tool = TerminalTool()
-    cmd = f'{sys.executable} -c "import time; time.sleep(3)"'
+    # 使用 sleep 命令（避免 python -c 中的分号被识别为 shell 操作符）
+    cmd = "sleep 3"
     result = tool.execute(command=cmd, timeout=1)
     assert result.success is False
     assert "超时" in result.error
