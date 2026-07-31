@@ -2,8 +2,8 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import { I18nProvider } from '../../../shared/lib/i18n';
 import { FEATURE_UNLOCK_STORAGE_KEY } from '../../../shared/lib/hooks/useFeatureUnlock';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { Sidebar } from '../Sidebar';
 
