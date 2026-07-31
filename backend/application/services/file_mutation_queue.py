@@ -28,6 +28,7 @@ From pi's packages/coding-agent/src/core/tools/file-mutation-queue.ts pattern.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import Any, Callable, Coroutine, Optional
 
 # 操作类型：返回 Any 的异步函数
@@ -73,10 +74,8 @@ class FileMutationQueue:
         # 取消处理器任务
         if self._processor_task:
             self._processor_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._processor_task
-            except asyncio.CancelledError:
-                pass
             self._processor_task = None
 
     async def submit(self, operation: FileOperation) -> Any:
