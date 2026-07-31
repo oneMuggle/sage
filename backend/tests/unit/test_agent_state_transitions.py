@@ -23,9 +23,10 @@ pytestmark = pytest.mark.unit
 # ---------------------- 枚举值 & 字符串继承 ----------------------
 
 
-def test_agent_state_enum_has_ten_states():
-    """状态机应有 10 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
-    CONTENT_DELTA/PERMISSION_REQUEST/ASK_USER_QUESTION/DONE/FAILED。
+def test_agent_state_enum_has_eleven_states():
+    """状态机应有 11 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
+    CONTENT_DELTA/PERMISSION_REQUEST/ASK_USER_QUESTION/TOOL_CHAIN_UPDATE/
+    DONE/FAILED。
 
     CONTENT_DELTA 由 I4 引入,用于流式 LLM 响应 — 每个 token chunk 推一个
     CONTENT_DELTA 事件,前端 appendContent 累积实现逐字渲染。
@@ -34,8 +35,10 @@ def test_agent_state_enum_has_ten_states():
     携带 permission_request 字段,前端渲染审批对话框。
     ASK_USER_QUESTION 由 M2 part B 引入 — ask_user_question 工具向用户
     提问时携带 user_question 字段,前端渲染提问对话框。
+    TOOL_CHAIN_UPDATE 由 A19 工具链追踪引入 — 每次工具调用开始/结束时
+    携带 tool_chain 快照字段,前端 ToolChainWidget 渲染实时进度。
     """
-    assert len(AgentState) == 10
+    assert len(AgentState) == 11
 
 
 def test_agent_state_enum_string_inheritance():
@@ -77,6 +80,7 @@ def test_agent_state_iteration_order():
         "content_delta",
         "permission_request",  # M1 工具安全加固
         "ask_user_question",  # M2 part B: AskUserQuestion
+        "tool_chain_update",  # A19 工具链追踪
         "done",
         "failed",
     ]

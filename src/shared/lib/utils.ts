@@ -50,6 +50,16 @@ export function truncate(text: string, maxLength: number): string {
 }
 
 /**
+ * 格式化工具步骤耗时（A19 Tool Chain Tracking）。
+ * <1s 显示毫秒，≥1s 显示秒（一位小数）；非正值返回占位符。
+ */
+export function formatStepDuration(ms: number): string {
+  if (ms <= 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
  * 复制文本到剪贴板
  */
 export async function copyToClipboard(text: string): Promise<boolean> {

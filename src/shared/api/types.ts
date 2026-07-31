@@ -113,6 +113,7 @@ export type AgentState =
   | 'ask_user_question' // M2 part B: AskUserQuestion 卡点 — 等待用户选择/填写
   | 'observing'
   | 'content_delta'
+  | 'tool_chain_update' // A19: 工具链进度快照 — 侧边栏实时可视化
   | 'done'
   | 'failed';
 
@@ -186,6 +187,52 @@ export interface AgentToolResult {
   content: string;
 }
 
+/**
+ * 工具链步骤快照 — A19 Tool Chain Tracking。
+ *
+ * 与后端 backend/domain/tool_chain.py ToolStep.to_dict() 形状一致，
+ * 随 `state: 'tool_chain_update'` 流事件下发。
+ */
+export interface ToolStepSnapshot {
+  /** 链内自增序号（从 1 开始） */
+  step_id: number;
+  /** 工具名（如 bash / calculator） */
+  tool_name: string;
+  /** 调用参数 */
+  args: Record<string, unknown>;
+  /** 步骤状态 */
+  status: 'pending' | 'running' | 'done' | 'error';
+  /** 结果摘要（后端已截断至 200 字符） */
+  result: string;
+  /** 执行耗时（毫秒） */
+  duration_ms: number;
+  /** 失败时的错误描述 */
+  error_message: string;
+}
+
+/**
+ * 工具链快照 — A19 Tool Chain Tracking。
+ *
+ * 与后端 backend/domain/tool_chain.py ToolChain.to_dict() 形状一致。
+ * 每次工具步骤开始/结束时整链快照下发，前端直接替换渲染。
+ */
+export interface ToolChainSnapshot {
+  /** 链唯一 ID（一次 run 一条链） */
+  chain_id: string;
+  /** 链描述（前端标题） */
+  description: string;
+  /** 步骤列表（按调用顺序） */
+  steps: ToolStepSnapshot[];
+  /** 当前运行中步骤的 step_id（0 表示无运行中步骤） */
+  current_step: number;
+  /** 步骤总数 */
+  total_steps: number;
+  /** 已完成步骤数（done + error） */
+  completed_steps: number;
+  /** 完成进度（0.0 ~ 1.0） */
+  progress: number;
+}
+
 /** 流式聊天事件 (NDJSON 协议的一行) */
 export interface AgentEvent {
   state: AgentState;
@@ -201,6 +248,8 @@ export interface AgentEvent {
   permission_request?: PermissionRequest;
   /** M2 part B: state === 'ask_user_question' 时携带的提问详情 */
   user_question?: UserQuestion;
+  /** A19: state === 'tool_chain_update' 时携带的工具链进度快照 */
+  tool_chain?: ToolChainSnapshot;
 }
 
 // ==================== 错误类型定义 ====================

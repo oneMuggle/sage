@@ -9,6 +9,7 @@ import {
   type AgentEvent,
   type ChatConfig,
   type ChatOfficeRef,
+  type ToolChainSnapshot,
 } from '../../shared/api';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
@@ -64,6 +65,9 @@ export function useChat() {
   // P0: 实时工具调用 — state 驱动 UI 渲染，ref 镜像供 finishStream 读取最新值
   const [streamingToolCalls, setStreamingToolCalls] = useState<ToolCall[]>([]);
   const streamingToolCallsRef = useRef<ToolCall[]>([]);
+  // A19: 工具链实时进度快照 — 每次 tool_chain_update 事件整链替换，
+  // 供 ToolChainWidget 侧栏渲染(工具名/状态/耗时/进度条)
+  const [toolChain, setToolChain] = useState<ToolChainSnapshot | null>(null);
 
   // Phase 6: /btw 补充消息状态
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
@@ -183,6 +187,8 @@ export function useChat() {
       // P0: 重置实时工具调用 state + ref (每次 sendMessage 清空上一轮)
       streamingToolCallsRef.current = [];
       setStreamingToolCalls([]);
+      // A19: 重置工具链快照
+      setToolChain(null);
 
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
@@ -274,6 +280,7 @@ export function useChat() {
         streamingReasoningRef.current = '';
         streamingToolCallsRef.current = [];
         setStreamingToolCalls([]);
+        setToolChain(null);
         setStreaming(null);
         cancelRef.current = null;
         resetLoading();
@@ -322,6 +329,13 @@ export function useChat() {
               // uiText 分支对该 state 返回 null,不会碰消息气泡占位符。
               if (evt.state === 'ask_user_question' && evt.user_question) {
                 useQuestionState.getState().setFromEvent(evt.user_question);
+              }
+
+              // A19 Tool Chain Tracking: 工具链快照事件 → 整链替换 state,
+              // ToolChainWidget 侧栏实时渲染进度。纯元数据事件,
+              // 不影响消息气泡占位符(agentStateToText 对该 state 返回 null)。
+              if (evt.state === 'tool_chain_update' && evt.tool_chain) {
+                setToolChain(evt.tool_chain);
               }
 
               // 处理 reasoning 事件：累积 reasoning 内容（支持完整事件和增量事件）
@@ -565,6 +579,8 @@ export function useChat() {
     iteration: streaming?.iteration ?? 0,
     /** P2: 当前流式状态 (供 ActiveAgentIndicator 显示阶段) */
     streamingState: streaming?.state ?? null,
+    /** A19: 当前 run 的工具链进度快照 (供 ToolChainWidget 侧栏渲染) */
+    toolChain,
     /** Phase 6: /btw 补充消息方法 */
     askBtw,
     /** Phase 6: /btw 是否正在流式输出 */
