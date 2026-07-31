@@ -18,7 +18,7 @@ from backend.application.services.file_mutation_queue import (
 class TestFileMutationQueue:
     """FileMutationQueue 测试套件"""
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_submit_and_execute(self):
         """提交并执行操作"""
         queue = FileMutationQueue()
@@ -29,7 +29,7 @@ class TestFileMutationQueue:
         assert result == "done"
         await queue.stop()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_serial_execution(self):
         """串行执行（无并发）"""
         queue = FileMutationQueue()
@@ -58,7 +58,7 @@ class TestFileMutationQueue:
         assert results == ["op1", "op2"]
         await queue.stop()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_exception_propagation(self):
         """异常传播"""
         queue = FileMutationQueue()
@@ -72,7 +72,7 @@ class TestFileMutationQueue:
 
         await queue.stop()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_stop_waits_for_completion(self):
         """stop 等待所有操作完成"""
         queue = FileMutationQueue()
@@ -95,7 +95,7 @@ class TestFileMutationQueue:
         assert len(completed) == 1
         assert task.result() == "done"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_multiple_operations(self):
         """多个操作"""
         queue = FileMutationQueue()
@@ -117,7 +117,7 @@ class TestFileMutationQueue:
         assert results == [0, 1, 2, 3, 4]
         await queue.stop()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_global_queue(self):
         """全局队列"""
         queue1 = await get_file_mutation_queue()
@@ -128,5 +128,5 @@ class TestFileMutationQueue:
         await shutdown_file_mutation_queue()
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

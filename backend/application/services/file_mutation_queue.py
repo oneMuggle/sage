@@ -122,7 +122,7 @@ class FileMutationQueue:
                 # 标记任务完成
                 self._queue.task_done()
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # 超时检查 _running，继续循环
                 continue
             except asyncio.CancelledError:

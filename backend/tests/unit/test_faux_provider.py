@@ -5,19 +5,19 @@ FauxProvider 测试 (A25 from pi)
 """
 
 import pytest
+from sage_core import Message, Role
 
 from backend.adapters.out.llm.faux_provider import (
     CompletionRequest,
     FauxProvider,
     create_faux_provider,
 )
-from sage_core import Message, Role
 
 
 class TestFauxProvider:
     """FauxProvider 测试套件"""
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_complete_returns_preset_response(self):
         """complete 返回预设响应"""
         faux = FauxProvider(responses=["Hello, world!"])
@@ -28,7 +28,7 @@ class TestFauxProvider:
         assert result.content == "Hello, world!"
         assert faux.call_count == 1
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_complete_cycles_through_responses(self):
         """complete 循环使用响应列表"""
         faux = FauxProvider(responses=["First", "Second", "Third"])
@@ -45,7 +45,7 @@ class TestFauxProvider:
         assert r4.content == "First"
         assert faux.call_count == 4
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_complete_includes_token_usage(self):
         """complete 包含 token 统计"""
         faux = FauxProvider(responses=["Hello world"])
@@ -58,7 +58,7 @@ class TestFauxProvider:
         assert "total" in result.usage
         assert result.usage["total"] == result.usage["input"] + result.usage["output"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_stream_yields_characters(self):
         """stream 逐字符 yield"""
         faux = FauxProvider(responses=["Hi"])
@@ -71,7 +71,7 @@ class TestFauxProvider:
         assert chunks == ["H", "i"]
         assert faux.call_count == 1
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_stream_marks_last_chunk(self):
         """stream 标记最后一个 chunk"""
         faux = FauxProvider(responses=["AB"])
@@ -84,7 +84,7 @@ class TestFauxProvider:
         assert chunks[0].is_done is False
         assert chunks[1].is_done is True
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_chat_compatibility(self):
         """chat 兼容接口"""
         faux = FauxProvider(responses=["Response"])
@@ -96,7 +96,7 @@ class TestFauxProvider:
         assert result.role == Role.ASSISTANT
         assert result.content == "Response"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_chat_stream_compatibility(self):
         """chat_stream 兼容接口"""
         faux = FauxProvider(responses=["Hi"])
@@ -115,7 +115,7 @@ class TestFauxProvider:
         assert isinstance(faux, FauxProvider)
         assert faux.responses == ["Test"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_default_response(self):
         """默认响应"""
         faux = FauxProvider()
@@ -126,5 +126,5 @@ class TestFauxProvider:
         assert result.content == "This is a faux response."
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
