@@ -1,6 +1,9 @@
 # Sage 项目综合优化方案(统一版)
 
-> **状态:** 计划(待启动)
+> **状态:** 已被取代 — 本文为 38 项中间版本，最终执行的是 50 项的
+> `2026-07-30_sage-optimization-final.md`。
+> **实施状态与真实分支映射请看 → [`2026-07-31_optimization-implementation-status.md`](2026-07-31_optimization-implementation-status.md)**
+> （47/50 已实现，3 项跳过；含堆叠链、冲突矩阵与建议合并顺序）
 > **日期:** 2026-07-30
 > **作者:** code-explorer + planner
 > **目标分支:** `main`(release/win7 按需 cherry-pick)
