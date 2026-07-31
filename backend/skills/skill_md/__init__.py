@@ -5,6 +5,13 @@
 ``.loader`` / ``.validation`` / ``.gating``。
 """
 
+from .auto_activation import (
+    MAX_AUTO_ACTIVATED_SKILLS,
+    AutoActivationResult,
+    auto_activate,
+    build_context_block,
+    extract_triggers,
+)
 from .confirm import ConfirmationPort
 from .delete import (
     BuiltinSkillError,
@@ -41,10 +48,12 @@ from .validation import (
 
 __all__ = [
     "ALLOWED_RESOURCE_DIRS",
+    "AutoActivationResult",
     "BuiltinSkillError",
     "ConfirmationPort",
     "DEFAULT_ENV_DENYLIST",
     "DeleteSkillResult",
+    "MAX_AUTO_ACTIVATED_SKILLS",
     "SkillMdParseError",
     "SkillMdDeleter",
     "SkillMdNotFoundError",
@@ -70,6 +79,9 @@ __all__ = [
     "register_skill_md_skills",
     "render_body_with_resources",
     "SkillMdSecurityError",
+    "auto_activate",
+    "build_context_block",
+    "extract_triggers",
     "sanitize_for_logging",
     "validate_base_dir",
     "validate_resource_path",
