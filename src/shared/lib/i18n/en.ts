@@ -387,4 +387,9 @@ export const en: Record<TranslationKey, string> = {
   'orchestration.heartbeat.noHeartbeat': 'no heartbeat',
   'orchestration.lane.task': 'task:',
   'orchestration.lane.agent': 'agent:',
+
+  // ─── Session export (U18 HTML session export) ──────
+  'session.export_failed': 'Export failed: {message}',
+  'session.export_html': 'Export as HTML',
+  'session.export_html_exporting': 'Exporting…',
 };
