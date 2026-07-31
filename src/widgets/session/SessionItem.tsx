@@ -1,4 +1,4 @@
-import { Download, GitBranch, Pin, Trash2 } from 'lucide-react';
+import { Download, GitBranch, Pin } from 'lucide-react';
 import { useState } from 'react';
 
 import { downloadHtmlFile, sessionApi } from '../../shared/api/sessionApi';
@@ -16,13 +16,6 @@ interface SessionItemProps {
 export function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('确定要删除这个会话吗？')) {
-      onDelete();
-    }
-  };
 
   // U18: 导出完整会话为自包含 HTML(离线可开,含工具调用/diff/思考过程)
   const handleExport = async (e: React.MouseEvent) => {

@@ -386,7 +386,7 @@ export const zh = {
   'orchestration.lane.agent': 'agent:',
 
   // ─── 会话导出 (U18 HTML 会话导出) ──────
-  'session.export_failed': '导出失败: {message}',
+  'session.export_failed': '导出失败：{message}',
   'session.export_html': '导出为 HTML',
   'session.export_html_exporting': '正在导出…',
 } as const;
