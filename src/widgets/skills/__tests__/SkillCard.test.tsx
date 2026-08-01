@@ -209,4 +209,28 @@ describe('SkillCard', () => {
     // auto 模式不渲染特殊 chip (避免 UI 噪音)
     expect(screen.queryByText('auto')).not.toBeInTheDocument();
   });
+
+  // ===== U12: 两步式删除确认 =====
+
+  it('删除按钮两步式: 第一次点击 armed, 第二次点击才调用 onDelete (U12)', () => {
+    const onDelete = vi.fn();
+    render(
+      <SkillCard
+        name="web-search"
+        description="x"
+        triggers={['x']}
+        enabled
+        usage_count={0}
+        onToggle={() => undefined}
+        source="skillmd"
+        onDelete={onDelete}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /删除技能 web-search/i }));
+    expect(onDelete).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /确认删除 web-search/i }));
+    expect(onDelete).toHaveBeenCalledWith('web-search');
+  });
 });

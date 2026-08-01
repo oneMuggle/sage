@@ -59,8 +59,8 @@ const Skills: React.FC = () => {
   };
 
   // PR-A Task 5: 删除技能 (optimistic + rollback + toast)
+  // U12: 二次确认已前移到 SkillCard 内的 TwoStepDelete（armed → 确认），此处不再弹 modal
   const handleDelete = async (name: string) => {
-    if (!window.confirm(`确定删除 '${name}'?此操作不可撤销。`)) return;
     // optimistic: 先从 list 里过滤掉
     const prev = skills;
     setSkills(skills.filter((s) => s.name !== name));

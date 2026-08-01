@@ -1,7 +1,8 @@
-import { GitBranch, Trash2, Pin } from 'lucide-react';
+import { GitBranch, Pin } from 'lucide-react';
 
 import { useI18n } from '../../shared/lib/i18n';
 import type { Session } from '../../shared/lib/store';
+import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 interface SessionItemProps {
   session: Session;
@@ -12,13 +13,6 @@ interface SessionItemProps {
 
 export function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps) {
   const { t } = useI18n();
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('确定要删除这个会话吗？')) {
-      onDelete();
-    }
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -64,13 +58,14 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
       {/* 操作按钮 */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {session.is_pinned && <Pin className="w-4 h-4 text-primary" />}
-        <button
-          onClick={handleDelete}
-          className="p-1 rounded hover:bg-error/10 text-error"
-          title="删除"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        {/* U12: 两步式确认删除 — 不弹 modal，armed 后二次点击生效 */}
+        <TwoStepDelete
+          data-testid="delete-session"
+          onConfirm={onDelete}
+          label={t('common.delete')}
+          armedLabel={t('common.delete_confirm')}
+          className="p-1"
+        />
       </div>
     </div>
   );

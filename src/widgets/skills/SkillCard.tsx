@@ -1,7 +1,7 @@
-import { Trash2 } from 'lucide-react';
 import React from 'react';
 
 import type { SkillDispatch } from '../../shared/api';
+import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 interface SkillCardProps {
   name: string;
@@ -123,15 +123,14 @@ const SkillCard: React.FC<SkillCardProps> = ({
 
         {/* 开关 + 删除按钮 (builtin 不显示) */}
         <div className="flex items-center gap-2 ml-4">
+          {/* U12: 两步式确认卸载 — 不弹 modal，armed 后二次点击生效 */}
           {onDelete && source !== 'builtin' && (
-            <button
-              type="button"
-              aria-label={`删除技能 ${name}`}
-              onClick={() => onDelete(name)}
-              className="p-1.5 rounded text-muted hover:text-error hover:bg-error/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <TwoStepDelete
+              onConfirm={() => onDelete(name)}
+              label={`删除技能 ${name}`}
+              armedLabel={`确认删除 ${name}`}
+              className="p-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-error"
+            />
           )}
 
           <label className="relative inline-flex items-center cursor-pointer">
