@@ -55,4 +55,17 @@ describe('ArtifactViewer', () => {
     render(<ArtifactViewer artifact={sample} sessionId="sess_001" onBack={() => {}} />);
     expect(screen.getByText(/File not found/)).toBeInTheDocument();
   });
+
+  it('renders csv cells without trailing carriage return from CRLF input', () => {
+    vi.mocked(useArtifactContent).mockReturnValue({
+      content: { ok: true, kind: 'csv', content: 'a,b\r\n1,2\r\n' }, loading: false,
+    });
+    const { container } = render(
+      <ArtifactViewer artifact={{ ...sample, kind: 'csv' }} sessionId="sess_001" onBack={() => {}} />,
+    );
+    expect(screen.getByText('2')).toBeInTheDocument();
+    const cells = container.querySelectorAll('th, td');
+    expect(cells.length).toBeGreaterThan(0);
+    cells.forEach((c) => expect(c.textContent).not.toContain('\r'));
+  });
 });

@@ -23,7 +23,10 @@ function parseCsv(text: string): string[][] {
       } else cell += ch;
     } else if (ch === '"') quoted = true;
     else if (ch === ',') { row.push(cell); cell = ''; }
-    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    }
     else cell += ch;
   }
   if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
@@ -68,14 +71,14 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
         <button
           className="p-1.5 rounded hover:bg-bg-hover"
           title="复制路径"
-          onClick={() => navigator.clipboard?.writeText(artifact.path)}
+          onClick={() => { void navigator.clipboard?.writeText(artifact.path)?.catch(() => {}); }}
         >
           <Copy className="w-4 h-4" />
         </button>
         <button
           className="p-1.5 rounded hover:bg-bg-hover"
           title="在文件管理器中显示"
-          onClick={() => revealArtifact(sessionId, artifact.id)}
+          onClick={() => { revealArtifact(sessionId, artifact.id).catch(() => {}); }}
         >
           <FolderOpen className="w-4 h-4" />
         </button>
