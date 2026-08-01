@@ -19,6 +19,7 @@ from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapt
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.chat_stream_registry import StreamRegistry
+from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
@@ -571,6 +572,8 @@ app.include_router(build_orchestration_router(), prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
 # M6 生态扩展: 用量/成本面板 (内存态 tracker, 与 API_MODE 无关)
 app.include_router(usage_router, prefix="/api/v1")
+# U18: HTML 会话导出 (POST /sessions/{id}/export, 与 API_MODE 无关)
+app.include_router(export_router, prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":
