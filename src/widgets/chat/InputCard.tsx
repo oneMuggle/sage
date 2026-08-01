@@ -1,6 +1,7 @@
 import { BookOpen, Clock, Image, Paperclip, Send, Square, X } from 'lucide-react';
 import type React from 'react';
 
+import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { FileAttachment } from './FileAttachment';
@@ -129,6 +130,13 @@ export function InputCard({
   const { t } = useI18n();
   const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0;
 
+  // U20: Emacs-style editing keys (Ctrl+A/E/K/U/W, Alt+B/F) in the textarea.
+  const { ref: emacsRef, handleKeyDown: handleEmacsKeyDown } = useEmacsKeybindings({
+    value,
+    onChange,
+    enabled: !disabled,
+  });
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showSlashMenu && slashCommands.length > 0 && !e.shiftKey) {
       if (e.key === 'ArrowDown') {
@@ -150,6 +158,9 @@ export function InputCard({
         return;
       }
     }
+    // U20: Emacs bindings take precedence over plain Enter handling but not
+    // over the slash menu (which owns Arrow/Enter/Escape while open).
+    if (handleEmacsKeyDown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSubmit();
@@ -260,6 +271,7 @@ export function InputCard({
           {atFileMenu}
           <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
             <textarea
+              ref={emacsRef}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyDown}
