@@ -268,6 +268,7 @@ export function Chat() {
         onToggle={() => setRightPanelOpen((v) => !v)}
         iteration={iteration}
         streamingState={streamingState}
+        // ?? [] 为防御:个别测试 mock useChat 时可能缺该字段;生产 hook 保证非空
         toolCalls={streamingToolCalls ?? []}
         isLoading={isLoading}
         sessionId={currentSessionId}

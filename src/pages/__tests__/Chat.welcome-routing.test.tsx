@@ -16,6 +16,7 @@ vi.mock('../../features/send-message/useChat', () => ({
     messages: [],
     loadMessages: vi.fn(),
     interrupt: vi.fn(),
+    streamingToolCalls: [],
   }),
 }));
 
