@@ -26,7 +26,7 @@ export function LoadingState({
         {Array.from({ length: rows }).map((_, i) => (
           <div
             key={i}
-            className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"
+            className="h-4 bg-line rounded animate-pulse"
             style={{ width: `${80 + ((i * 5) % 20)}%` }}
           />
         ))}
@@ -39,7 +39,7 @@ export function LoadingState({
         className="h-5 w-5 border-2 border-t-transparent rounded-full animate-spin border-blue-600"
         aria-hidden
       />
-      <span className="text-sm text-gray-600 dark:text-gray-300">{label}</span>
+      <span className="text-sm text-muted">{label}</span>
     </div>
   );
 }

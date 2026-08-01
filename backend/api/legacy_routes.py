@@ -110,6 +110,11 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     workspace_path: Optional[str] = None
+    # 2026-07-30: 选 agent 的入口。None / 空字符串 → 端点 fallback 到 "primary"。
+    # 真正的路由由 SageAgent(agent_id=...) 内部完成:从 SQLite 读 profile,
+    # 透传到 get_available_tools → ToolRegistry.get_schemas_for_llm(allowed_tools=...)
+    # 这样 memory_manager 之类的窄权限 agent 不会拿到 list_dir/read_file。
+    agent_id: Optional[str] = None
     api_key: Optional[str] = None
 
     api_url: Optional[str] = None
@@ -1314,7 +1319,9 @@ async def chat(
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] orchestrator 助手消息持久化失败: {db_err}")
         else:
-            agent = SageAgent()
+            # 2026-07-30: chat 默认加载 primary profile,让 profile.tools 白名单生效
+            # (memory_manager 之类窄权限 agent 才不会拿到 list_dir/read_file 全部工具)
+            agent = SageAgent(agent_id=data.agent_id or "primary")
             result = await agent.chat(data.session_id, data.message, llm_config=llm_config)
 
         # agent.chat() may return a structured error dict (Task 6 refactor) instead of raising
@@ -1485,7 +1492,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"model={_safe_log_field(llm_config['model'])}"
                 )
 
-            agent = SageAgent()
+            agent = SageAgent(agent_id=data.agent_id or "primary")
 
             # Build system prompt with optional diagram tool guidance
             from backend.agents.profiles import build_system_base
