@@ -7,3 +7,9 @@ export type { InputProps } from './Input';
 
 export { Modal } from './Modal';
 export type { ModalProps } from './Modal';
+
+export { LiveDot } from './LiveDot';
+export type { LiveDotProps, LiveState } from './LiveDot';
+
+export { AttnBadge, ATTN_BADGE_MAX_DISPLAY } from './AttnBadge';
+export type { AttnBadgeProps } from './AttnBadge';

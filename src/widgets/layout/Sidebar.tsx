@@ -3,11 +3,14 @@ import { MessageSquare, Settings, Brain, BookOpen, Network, Sparkles } from 'luc
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
+import { usePermissionState } from '../../entities/permission/permissionState';
+import { useQuestionState } from '../../entities/question/questionState';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { useStore } from '../../shared/lib/store';
+import { AttnBadge, LiveDot, type LiveState } from '../../shared/ui';
 import {
   ConversationsSection,
   CronJobSection,
@@ -52,6 +55,23 @@ export function Sidebar({ width = 240 }: SidebarProps) {
     getId: (s) => s.id,
   });
   const orderedSessionIds = orderedItems.map((s) => s.id);
+
+  // U9: Live-Dot vs Attention-Badge 分离。
+  // 待处理数 = 审批与提问两个串行卡点之和（后端单 agent 循环，各至多 1 项挂起），
+  // 以 AttnBadge（带数字）挂在「对话」导航入口上 —— 语义是"需要你做什么"。
+  const pendingApprovals = usePermissionState((s) => (s.currentRequest != null ? 1 : 0));
+  const pendingQuestions = useQuestionState((s) => (s.currentQuestion != null ? 1 : 0));
+  const attentionCount = pendingApprovals + pendingQuestions;
+
+  // 存活状态：页脚 LiveDot（无数字）只表达"系统是否活着" ——
+  // connected=working（accent 脉冲）、not-configured=sleeping（暗色静态点）；
+  // 连接失败属于"需要注意"语义，改由 AttnBadge 承载（见页脚）。
+  const liveState: LiveState =
+    connectionStatus === 'connected'
+      ? 'working'
+      : connectionStatus === 'not-configured'
+        ? 'sleeping'
+        : 'idle';
 
   useEffect(() => {
     loadSessions();
@@ -160,6 +180,8 @@ export function Sidebar({ width = 240 }: SidebarProps) {
             >
               <Icon className="w-4 h-4" />
               <span>{item.label}</span>
+              {/* U9: 对话入口的待处理数量（AttnBadge，带数字） */}
+              {item.path === '/chat' && <AttnBadge count={attentionCount} />}
             </Link>
           );
         })}
@@ -173,20 +195,20 @@ export function Sidebar({ width = 240 }: SidebarProps) {
       {/* 底部状态栏 */}
       <div className="px-2 pt-2 border-t border-border">
         <div className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted">
-          <div
-            className={clsx(
-              'w-[7px] h-[7px] rounded-full',
-              connectionStatus === 'connected' && 'bg-success',
-              connectionStatus === 'not-configured' && 'bg-warning',
-              connectionStatus === 'error' && 'bg-error',
-            )}
-          ></div>
+          {/* U9: LiveDot 只表达存活（connected=working / not-configured=sleeping，
+              error 时熄灭）；连接失败由下方 AttnBadge 作为"待处理"呈现 */}
+          <LiveDot
+            state={liveState}
+            workingTitle={latency != null ? `已连接 · 延迟 ${latency}ms` : '已连接'}
+            sleepingTitle="未配置端点"
+          />
           <span title={latency != null ? `延迟 ${latency}ms` : ''}>
             {connectionStatus === 'connected' &&
               `已连接${latency != null ? ` · ${latency}ms` : ''}`}
             {connectionStatus === 'not-configured' && '未配置'}
             {connectionStatus === 'error' && '连接失败'}
           </span>
+          {connectionStatus === 'error' && <AttnBadge count={1} title="连接失败,请检查端点配置" />}
           <span className="ml-auto">v0.1.1</span>
         </div>
       </div>
