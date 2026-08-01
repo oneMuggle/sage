@@ -14,10 +14,6 @@ import { ApiException, handleApiError, isValidSessionId, sanitizeInput, withRetr
 // 便于定位 '为什么 agent 跑到 max_iterations'。仅用于排查,不参与业务逻辑。
 const STREAM_TRACE_MAX = 50;
 
-// DIAG(2026-07-30): 当 stream 以 FAILED 收尾时,把整轮事件序列推到主进程日志,
-// 便于定位 '为什么 agent 跑到 max_iterations'。仅用于排查,不参与业务逻辑。
-const STREAM_TRACE_MAX = 50;
-
 export const chatApi = {
   async chat(sessionId: string, message: string, config?: ChatConfig): Promise<ChatResponse> {
     // 安全化消息输入
