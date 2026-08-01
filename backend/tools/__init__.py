@@ -12,6 +12,7 @@ from .ask_user_tool import AskUserQuestionTool
 from .base import BaseTool, ToolResult, ToolSchema
 from .calculator import CalculatorTool
 from .edit_tool import EditTool
+from .file_summary_tool import FileSummaryTool
 from .file_tool import ListDirTool, ReadFileTool, WriteFileTool
 from .memory_tool import MemorySaveTool, MemorySearchTool
 from .office_tool import OfficeListTool, OfficeReadTool
@@ -60,6 +61,8 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
     # M5 (win7 移植): in-loop sub-agent tool (claw-code execute_agent pattern)。
     # 子代理自身只拿只读白名单 — 见 agent_tool.SUBAGENT_TOOL_WHITELIST。
     registry.register(AgentTool(policy=policy))
+    # 2026-08-01: 代码探索工具 - 文件结构摘要（解决大代码库 max_iterations_exceeded）
+    registry.register(FileSummaryTool(policy=policy))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
@@ -96,7 +99,8 @@ __all__ = [
     "ReplTool",
     "SkillTool",
     "AskUserQuestionTool",
-    "AgentTool",
+"AgentTool",
+    "FileSummaryTool",
     "SkillHotLoader",
     "register_all_tools",
 ]
