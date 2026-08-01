@@ -62,20 +62,16 @@ cd /home/fz/project/sage && npm run build
 
 | 服务           | 端口 | 备注                                  |
 | -------------- | ---- | ------------------------------------- |
-| 前端 (Vite)    | 1420 | `vite.config.ts` 锁定；Tauri 默认端口 |
+| 前端 (Vite)    | 1420 | `vite.config.ts` 锁定                 |
 | 后端 (FastAPI) | 8765 | `backend/main.py` 中默认值            |
-| Tauri 桌面     | —    | Rust 1.96.0+ 已装；构建命令见下      |
+| Electron 桌面  | —    | Electron 21.4.4 已装                  |
 
-## Tauri 桌面构建
-
-Rust 工具链已安装（`/home/fz/.cargo/bin/cargo` 1.96.0+；`rustc` 1.96.0+）。
-Tauri 2.1.1 矩阵 + Win7 兼容 fork 详见 `docs/technical/20-win7-tauri-compat.md`。
+## Electron 桌面构建
 
 | 命令 | 用途 |
 | --- | --- |
-| `npm run tauri dev` | 桌面端开发模式（自动启 Vite + 后端 Python 子进程） |
-| `npm run tauri build` | 桌面端生产构建（3 OS 矩阵在 CI 跑，本机只跑当前 OS） |
-| `cargo check --manifest-path src-tauri/Cargo.toml` | 桌面端快速语法/类型检查，不打产物 |
+| `npm run electron:dev` | 桌面端开发模式（自动启 Vite + 后端 Python 子进程） |
+| `npm run electron:build` | 桌面端生产构建 |
 
 ## 双分支长期共存策略（强制）
 
