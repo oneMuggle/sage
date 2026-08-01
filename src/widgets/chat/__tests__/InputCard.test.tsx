@@ -79,7 +79,7 @@ describe('InputCard', () => {
     stopButton.click();
     expect(onInterrupt).toHaveBeenCalledTimes(1);
   });
-  // Autosize: textarea must auto-grow when value spans multiple lines.
+// Autosize: textarea must auto-grow when value spans multiple lines.
   // jsdom does not compute layout, so scrollHeight is not meaningful here.
   // We assert the inline style is updated on value change — the shape that
   // ensures the textarea's height tracks the content visually in a real DOM.
@@ -97,5 +97,42 @@ describe('InputCard', () => {
     // (capped at 200px). jsdom reports a 0 scrollHeight, so the cap branch
     // is exercised — what we care about is that style.height is set.
     expect(textarea.style.height).toMatch(/^\d+px$/);
+  });
+
+  // U20: Emacs-style keybindings wired into the textarea.
+  it('Ctrl+A moves cursor to line start without calling onChange', () => {
+    render(<InputCard {...defaultProps} value="hello world" />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(5, 5);
+
+    const handled = fireEvent.keyDown(textarea, { key: 'a', ctrlKey: true });
+
+    expect(handled).toBe(false); // default prevented
+    expect(textarea.selectionStart).toBe(0);
+    expect(defaultProps.onChange).not.toHaveBeenCalled();
+    expect(defaultProps.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+K kills to end of line via onChange', () => {
+    render(<InputCard {...defaultProps} value="hello world" />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(5, 5);
+
+    fireEvent.keyDown(textarea, { key: 'k', ctrlKey: true });
+
+    expect(defaultProps.onChange).toHaveBeenCalledWith('hello');
+    expect(defaultProps.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Emacs bindings are inert when disabled', () => {
+    render(<InputCard {...defaultProps} value="hello world" disabled />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    // jsdom still dispatches keydown to disabled textareas via fireEvent;
+    // the hook must ignore it because enabled=false.
+    const handled = fireEvent.keyDown(textarea, { key: 'k', ctrlKey: true });
+
+    expect(handled).toBe(true); // default NOT prevented
+    expect(defaultProps.onChange).not.toHaveBeenCalled();
   });
 });
