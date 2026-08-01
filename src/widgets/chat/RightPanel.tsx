@@ -71,7 +71,9 @@ export function RightPanel({
             sessionId={sessionId}
             onRefresh={refresh}
             onSelect={setSelected}
-            onReveal={(a) => sessionId && revealArtifact(sessionId, a.id)}
+            onReveal={(a) => {
+              if (sessionId) revealArtifact(sessionId, a.id).catch(() => {});
+            }}
           />
         )}
       </div>
