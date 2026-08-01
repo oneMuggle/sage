@@ -66,7 +66,19 @@ def create_default_agents() -> List[AgentProfile]:
             system_prompt="你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。",
             # 2026-07-30: 加 list_dir/read_file 让 chat 默认能跑代码 review;
             # max_iterations=15 给 coder 类工作流留出预算(否则会复现 max_iterations_exceeded)
-            tools=["calculator", "memory_search", "memory_save", "list_dir", "read_file"],
+            # 2026-08-01: 加 grep_search/glob_search/file_summary 三件套，
+            # 解决大代码库分析时 max_iterations_exceeded 问题（PR #264）
+            tools=[
+                "calculator",
+                "memory_search",
+                "memory_save",
+                "list_dir",
+                "read_file",
+                # 代码探索三件套（全部 READ 操作，无副作用风险）
+                "grep_search",    # 正则内容搜索（GrepSearchTool）
+                "glob_search",    # glob 文件名搜索（GlobSearchTool）
+                "file_summary",   # 文件结构摘要（FileSummaryTool）
+            ],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
             max_iterations=15,
