@@ -7,6 +7,9 @@ import { useStore } from '../../shared/lib/store';
 
 import { actionCommands, navCommands } from './commandItems';
 
+// ⌘1-9 快捷键跳转 (U6 from OpenWorker)
+const KEYBOARD_SHORTCUTS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -53,6 +56,42 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     .sort((a, b) => (b.last_message_at ?? b.updated_at) - (a.last_message_at ?? a.updated_at))
     .slice(0, 8);
 
+  // ⌘1-9 快捷键跳转 (U6 from OpenWorker)
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && KEYBOARD_SHORTCUTS.includes(e.key)) {
+        e.preventDefault();
+        const index = parseInt(e.key) - 1;
+
+        // 导航命令优先
+        if (index < navCommands.length) {
+          handleNav(navCommands[index].path);
+          return;
+        }
+
+        // 然后是操作命令
+        const actionIndex = index - navCommands.length;
+        if (actionIndex < actionCommands.length) {
+          const cmd = actionCommands[actionIndex];
+          if (cmd.id === 'new-chat') handleNewChat();
+          else if (cmd.id === 'toggle-theme') handleToggleTheme();
+          return;
+        }
+
+        // 最后是最近会话
+        const sessionIndex = index - navCommands.length - actionCommands.length;
+        if (sessionIndex < recentSessions.length) {
+          handleOpenSession(recentSessions[sessionIndex].id);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, recentSessions]);
+
   return (
     <Command.Dialog
       open={open}
@@ -77,8 +116,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
         {/* 导航 */}
         <Command.Group heading="导航" className="mb-1.5">
-          {navCommands.map((item) => {
+          {navCommands.map((item, index) => {
             const Icon = item.icon;
+            const shortcut = KEYBOARD_SHORTCUTS[index];
             return (
               <Command.Item
                 key={item.path}
@@ -87,7 +127,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
               >
                 <Icon className="w-4 h-4 text-text-muted" />
-                <span>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
+                {shortcut && (
+                  <kbd className="ml-auto text-xs text-faint bg-bg-muted px-1.5 py-0.5 rounded border border-line">
+                    ⌘{shortcut}
+                  </kbd>
+                )}
               </Command.Item>
             );
           })}
@@ -95,8 +140,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
         {/* 操作 */}
         <Command.Group heading="操作" className="mb-1.5">
-          {actionCommands.map((cmd) => {
+          {actionCommands.map((cmd, index) => {
             const Icon = cmd.icon;
+            const shortcut = KEYBOARD_SHORTCUTS[navCommands.length + index];
             return (
               <Command.Item
                 key={cmd.id}
@@ -108,10 +154,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
               >
                 <Icon className="w-4 h-4 text-text-muted" />
-                <div>
+                <div className="flex-1">
                   <div className="font-medium">{cmd.label}</div>
                   <div className="text-xs text-text-muted">{cmd.description}</div>
                 </div>
+                {shortcut && (
+                  <kbd className="ml-auto text-xs text-faint bg-bg-muted px-1.5 py-0.5 rounded border border-line">
+                    ⌘{shortcut}
+                  </kbd>
+                )}
               </Command.Item>
             );
           })}
@@ -140,6 +191,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       {/* 底部提示 */}
       <div className="flex items-center justify-between border-t border-border px-3 py-2 text-xs text-text-muted">
         <span>↑↓ 导航</span>
+        <span>⌘1-9 跳转</span>
         <span>↵ 选择</span>
         <span>esc 关闭</span>
       </div>

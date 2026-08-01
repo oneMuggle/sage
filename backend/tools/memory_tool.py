@@ -4,6 +4,7 @@ Memory 工具 - 记忆系统操作
 
 from typing import TYPE_CHECKING, Optional
 
+from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -82,6 +83,9 @@ class MemorySearchTool(BaseTool):
 
 class MemorySaveTool(BaseTool):
     """记忆保存工具"""
+
+    # A1: 修改本地记忆存储 — 模式门禁（无 path 参数，不做路径受限）
+    risk = RiskClass.WRITE_LOCAL
 
     def __init__(self, memory_manager=None, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)

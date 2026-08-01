@@ -201,6 +201,46 @@ def test_get_available_tools_delegates_to_tool_registry():
     agent.tool_registry.get_schemas_for_llm.assert_called_once()
 
 
+def test_get_available_tools_passes_profile_tools_as_whitelist():
+    """profile.tools 白名单应传给 registry.get_schemas_for_llm。
+
+    触发原因:之前 SageAgent 完全忽略 profile.tools 字段,
+    导致 memory_manager(max_iterations=5) 拿到全部工具(list_dir/read_file),
+    真实工作流被截断为 max_iterations_exceeded。
+    """
+    from unittest.mock import MagicMock
+
+    agent = SageAgent()
+    # 注入 profile,模拟加载了 memory_manager 的 profile
+    agent.profile = {
+        "id": "memory_manager",
+        "tools": ["memory_search", "memory_save"],
+        "max_iterations": 5,
+    }
+    # mock registry 验证参数透传
+    agent.tool_registry.get_schemas_for_llm = MagicMock(return_value=[])
+
+    agent.get_available_tools()
+
+    # 关键断言:profile.tools 必须透传到 registry
+    call_kwargs = agent.tool_registry.get_schemas_for_llm.call_args.kwargs
+    assert call_kwargs.get("allowed_tools") == ["memory_search", "memory_save"]
+
+
+def test_get_available_tools_no_profile_uses_no_whitelist():
+    """profile=None 时(向后兼容):allowed_tools=None,返回所有工具。"""
+    from unittest.mock import MagicMock
+
+    agent = SageAgent()
+    assert agent.profile is None  # 兜底场景
+    agent.tool_registry.get_schemas_for_llm = MagicMock(return_value=[])
+
+    agent.get_available_tools()
+
+    call_kwargs = agent.tool_registry.get_schemas_for_llm.call_args.kwargs
+    assert call_kwargs.get("allowed_tools") is None
+
+
 # =============================================================================
 # SageAgent.__init__ with explicit LLM config
 # =============================================================================
