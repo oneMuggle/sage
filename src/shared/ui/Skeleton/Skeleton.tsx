@@ -18,7 +18,7 @@ export function Skeleton({
       role="status"
       aria-busy="true"
       className={clsx(
-        'bg-gray-200 dark:bg-gray-700 animate-pulse',
+        'bg-line animate-pulse',
         circle ? 'rounded-full' : 'rounded',
         className,
       )}

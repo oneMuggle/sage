@@ -17,6 +17,8 @@ import os
 from pathlib import Path
 from typing import Optional, Tuple
 
+from backend.domain.risk import RiskClass
+
 from .base import BaseTool, ToolResult, ToolSchema
 
 logger = logging.getLogger(__name__)
@@ -212,6 +214,9 @@ class ReadFileTool(BaseTool):
 class WriteFileTool(BaseTool):
     """写入文件工具"""
 
+    # A1: 修改工作区文件 — 路径受限 + 模式门禁
+    risk = RiskClass.WRITE_LOCAL
+
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="write_file",
@@ -239,6 +244,7 @@ class WriteFileTool(BaseTool):
         M1: workspace 边界强制（realpath 前缀比对，拦 ``../`` 穿越 + symlink
             逃逸）；未绑定 workspace 时不检查（保留当前行为）+ debug 日志。
             内容超过 ``MAX_WRITE_SIZE_BYTES`` (10 MiB) 直接报错。
+        A15: 写入 .py 文件后自动检查语法（verify after modify）。
         """
         root = self._policy.workspace_root
         if root:
@@ -274,13 +280,26 @@ class WriteFileTool(BaseTool):
             with open(file_path, mode, encoding="utf-8") as f:
                 f.write(content)
 
+            # A15: Auto syntax check for Python files
+            syntax_error = None
+            if path.endswith(".py") and not append:
+                import py_compile
+                try:
+                    py_compile.compile(str(file_path), doraise=True)
+                except py_compile.PyCompileError as e:
+                    syntax_error = str(e)
+
+            result = {
+                "path": str(file_path.resolve()),
+                "bytes_written": content_bytes,
+                "mode": mode,
+            }
+            if syntax_error:
+                result["syntax_error"] = syntax_error
+
             return ToolResult(
                 success=True,
-                content={
-                    "path": str(file_path.resolve()),
-                    "bytes_written": content_bytes,
-                    "mode": mode,
-                },
+                content=result,
             )
 
         except Exception as e:

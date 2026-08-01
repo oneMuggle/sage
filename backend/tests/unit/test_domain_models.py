@@ -278,6 +278,8 @@ class TestDomainPurity:
             "abc",
             "collections",
             "__future__",
+            "asyncio",  # A23: event bus 异步发布
+            "time",  # A23: 事件时间戳
         }
         # 允许 domain 内部互相 import
         allowed_internal = "backend.domain"

