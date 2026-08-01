@@ -53,39 +53,41 @@ describe('Skills page — delete flow', () => {
     expect(screen.queryByRole('button', { name: /删除.*coder/i })).toBeNull();
   });
 
-  it('clicks delete → confirm → calls skillsApi.delete', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('two-step confirm: second click calls skillsApi.delete (U12)', async () => {
     deleteMock.mockResolvedValue({ deleted: true, name: 'web-search' });
 
     listMock.mockResolvedValueOnce([makeSkill('web-search')]);
     renderSkills();
     await waitFor(() => expect(screen.getByText('web-search')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /删除.*web-search/i }));
+    // 第一次点击：仅 armed，不删除
+    fireEvent.click(screen.getByRole('button', { name: /删除技能 web-search/i }));
+    expect(deleteMock).not.toHaveBeenCalled();
 
+    // 第二次点击：确认删除
+    fireEvent.click(screen.getByRole('button', { name: /确认删除 web-search/i }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith('web-search'));
   });
 
-  it('cancels confirm → does NOT call delete', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('single click only arms, does NOT call delete (U12)', async () => {
     listMock.mockResolvedValue([makeSkill('web-search')]);
     renderSkills();
     await waitFor(() => expect(screen.getByText('web-search')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /删除.*web-search/i }));
+    fireEvent.click(screen.getByRole('button', { name: /删除技能 web-search/i }));
 
     expect(deleteMock).not.toHaveBeenCalled();
   });
 
   it('delete fails → keeps original list', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     deleteMock.mockRejectedValue(new Error('cannot delete builtin'));
 
     listMock.mockResolvedValue([makeSkill('web-search')]);
     renderSkills();
     await waitFor(() => expect(screen.getByText('web-search')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /删除.*web-search/i }));
+    fireEvent.click(screen.getByRole('button', { name: /删除技能 web-search/i }));
+    fireEvent.click(screen.getByRole('button', { name: /确认删除 web-search/i }));
 
     await waitFor(() => expect(deleteMock).toHaveBeenCalled());
     // skill 仍在列表里（删除失败回滚 optimistic）
