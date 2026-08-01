@@ -84,14 +84,14 @@ def _parse_python(text: str) -> Dict[str, Any]:
             methods = [
                 n.name
                 for n in ast.iter_child_nodes(node)
-                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
             ]
             classes.append({
                 "name": node.name,
                 "line": node.lineno,
                 "methods": methods,
             })
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             params = [arg.arg for arg in node.args.args]
             functions.append({
                 "name": node.name,
@@ -202,6 +202,31 @@ class FileSummaryTool(BaseTool):
             },
         )
 
+    def _validate_file(self, path: str) -> tuple[Path, int, str]:
+        """验证文件路径并返回 (file_path, original_bytes, encoding)，失败抛 ValueError"""
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("path 不能为空")
+
+        file_path = Path(path).expanduser()
+        if not file_path.exists():
+            raise ValueError(f"文件不存在: {path}")
+        if not file_path.is_file():
+            raise ValueError(f"不是文件: {path}")
+        if not os.access(file_path, os.R_OK):
+            raise ValueError("无读取权限")
+
+        original_bytes = file_path.stat().st_size
+        if original_bytes > MAX_READ_SIZE_BYTES:
+            raise ValueError(
+                f"file_too_large: 文件大小 {original_bytes} 字节超过上限 "
+                f"{MAX_READ_SIZE_BYTES} 字节 (5 MiB)，无法提取摘要"
+            )
+        if _contains_binary_marker(file_path):
+            raise ValueError("binary_file: 二进制文件不支持结构提取")
+
+        encoding = detect_bom_encoding(file_path) or "utf-8"
+        return file_path, original_bytes, encoding
+
     def execute(self, path: str, language: Optional[str] = None, **kwargs) -> ToolResult:
         """
         提取文件结构摘要
@@ -222,32 +247,14 @@ class FileSummaryTool(BaseTool):
                     success=False,
                     error=f"未知参数: {names}（合法参数: path, language）",
                 )
-            if not isinstance(path, str) or not path.strip():
-                return ToolResult(success=False, error="path 不能为空")
 
-            file_path = Path(path).expanduser()
-            if not file_path.exists():
-                return ToolResult(success=False, error=f"文件不存在: {path}")
-            if not file_path.is_file():
-                return ToolResult(success=False, error=f"不是文件: {path}")
-            if not os.access(file_path, os.R_OK):
-                return ToolResult(success=False, error="无读取权限")
+            # 验证文件
+            try:
+                file_path, original_bytes, encoding = self._validate_file(path)
+            except ValueError as e:
+                return ToolResult(success=False, error=str(e))
 
-            original_bytes = file_path.stat().st_size
-            if original_bytes > MAX_READ_SIZE_BYTES:
-                return ToolResult(
-                    success=False,
-                    error=(
-                        f"file_too_large: 文件大小 {original_bytes} 字节超过上限 "
-                        f"{MAX_READ_SIZE_BYTES} 字节 (5 MiB)，无法提取摘要"
-                    ),
-                )
-            if _contains_binary_marker(file_path):
-                return ToolResult(
-                    success=False, error="binary_file: 二进制文件不支持结构提取"
-                )
-
-            encoding = detect_bom_encoding(file_path) or "utf-8"
+            # 读取文件内容
             try:
                 text = file_path.read_text(encoding=encoding, errors="replace")
             except (OSError, UnicodeError) as e:
