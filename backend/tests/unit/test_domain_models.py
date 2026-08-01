@@ -278,6 +278,10 @@ class TestDomainPurity:
             "abc",
             "collections",
             "__future__",
+            # A4 wake.py: uuid 生成 wake id, datetime 生成 UTC 时间戳 —
+            # 纯值生成标准库, 无 I/O 无框架依赖, 符合 domain 纯净约束
+            "uuid",
+            "datetime",
         }
         # 允许 domain 内部互相 import
         allowed_internal = "backend.domain"
