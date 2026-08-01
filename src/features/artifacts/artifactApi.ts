@@ -22,8 +22,15 @@ export interface ArtifactContent {
   truncated?: boolean;
 }
 
+function httpError(fn: string, res: Response): Error {
+  return new Error(`${fn} failed: ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`);
+}
+
 export async function listArtifacts(sessionId: string): Promise<Artifact[]> {
   const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts`);
+  if (!res.ok) {
+    throw httpError('listArtifacts', res);
+  }
   const data = await res.json();
   return data.artifacts ?? [];
 }
@@ -33,6 +40,9 @@ export async function readArtifactContent(
   artifactId: string
 ): Promise<ArtifactContent> {
   const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts/${artifactId}/content`);
+  if (!res.ok) {
+    throw httpError('readArtifactContent', res);
+  }
   return res.json();
 }
 
@@ -44,5 +54,8 @@ export async function revealArtifact(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
+  if (!res.ok) {
+    throw httpError('revealArtifact', res);
+  }
   return res.json();
 }
