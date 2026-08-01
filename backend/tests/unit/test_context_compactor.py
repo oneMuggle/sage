@@ -471,7 +471,6 @@ class TestLayer3Summary:
             messages.append(_msg("user", f"message {i} " + "x" * 100))
         return messages
 
-    @pytest.mark.asyncio()
     async def test_summary_replaces_evicted_prefix(self):
         """摘要消息插在 system 之后、最近窗口之前"""
         compactor = self._compactor()
@@ -498,7 +497,6 @@ class TestLayer3Summary:
         assert len(result) == 6
         assert "message 9" in result[-1]["content"]
 
-    @pytest.mark.asyncio()
     async def test_summary_skipped_when_under_budget(self):
         """未超阈值时不调用摘要函数"""
         compactor = self._compactor()
@@ -515,7 +513,6 @@ class TestLayer3Summary:
         assert called is False
         assert result == messages
 
-    @pytest.mark.asyncio()
     async def test_no_eviction_skips_summary(self):
         """消息数 ≤ 窗口大小：无需淘汰，不调用摘要"""
         compactor = self._compactor()
@@ -533,23 +530,36 @@ class TestLayer3Summary:
         assert called is False
         assert len(result) == 4
 
-    @pytest.mark.asyncio()
     async def test_oversized_summary_text_capped(self):
-        """LLM 返回超长摘要 → 兜底截断（M2）"""
+        """LLM 返回超长摘要 → 兜底截断到 MAX_SUMMARY_CHARS（A28 调宽）"""
         compactor = self._compactor()
         messages = self._over_budget_messages(10)
 
         async def summarize(old_messages: List[Dict[str, Any]], prompt: str) -> str:
-            return "s" * 5000
+            return "s" * 9000
 
         result = await compactor.compact_with_summary(messages, summarize)
 
         summary_content = result[1]["content"]
         assert summary_content.startswith(SUMMARY_PREFIX)
         assert "characters truncated" in summary_content
-        assert len(summary_content) < 2200
+        # 6000 字符上限 + 前缀/标记开销
+        assert len(summary_content) < 6200
 
-    @pytest.mark.asyncio()
+    async def test_structured_summary_within_cap_not_truncated(self):
+        """常规结构化摘要（< MAX_SUMMARY_CHARS）不被腰斩"""
+        compactor = self._compactor()
+        messages = self._over_budget_messages(10)
+        digest = "## Goal\nFix login\n## Key Decisions\n- use JWT\n## Next Steps\n1. deploy"
+
+        async def summarize(old_messages: List[Dict[str, Any]], prompt: str) -> str:
+            return digest
+
+        result = await compactor.compact_with_summary(messages, summarize)
+
+        assert digest in result[1]["content"]
+        assert "characters truncated" not in result[1]["content"]
+
     async def test_summary_failure_falls_back_to_window(self):
         """摘要失败 → 回退纯 Layer 2 滑窗"""
         compactor = self._compactor()
@@ -565,6 +575,73 @@ class TestLayer3Summary:
         assert all(
             not str(m.get("content", "")).startswith(SUMMARY_PREFIX) for m in result
         )
+
+
+class TestLayer3OptionalSummarizer:
+    """A28：Layer 3 摘要器可选（无摘要器静默降级 / 注入 BranchSummarizer）"""
+
+    def _compactor(self, branch_summarizer: Any = None) -> ContextCompactor:
+        return ContextCompactor(
+            context_window=400,
+            compact_threshold_ratio=0.5,
+            sliding_window_size=4,
+            branch_summarizer=branch_summarizer,
+        )
+
+    def _over_budget_messages(self, count: int = 10) -> List[Dict[str, Any]]:
+        messages = [_msg("system", "You are Sage.")]
+        for i in range(count):
+            messages.append(_msg("user", f"message {i} " + "x" * 100))
+        return messages
+
+    async def test_no_summarizer_degrades_to_layer2(self):
+        """既无显式 summarize 也无注入 branch_summarizer → 纯 Layer 2"""
+        compactor = self._compactor()
+        messages = self._over_budget_messages()
+
+        result = await compactor.compact_with_summary(messages)
+
+        assert result == compactor.compact(messages)
+        assert all(
+            not str(m.get("content", "")).startswith(SUMMARY_PREFIX) for m in result
+        )
+
+    async def test_injected_branch_summarizer_used_when_no_explicit(self):
+        """构造注入的 branch_summarizer 充当 Layer 3 默认摘要器"""
+
+        class FakeBranchSummarizer:
+            def __init__(self) -> None:
+                self.calls: List[int] = []
+
+            def as_layer3_summarizer(self):
+                async def _summarize(evicted: List[Dict[str, Any]], prompt: str) -> str:
+                    self.calls.append(len(evicted))
+                    return "branch summary digest"
+
+                return _summarize
+
+        fake = FakeBranchSummarizer()
+        compactor = self._compactor(fake)
+
+        result = await compactor.compact_with_summary(self._over_budget_messages())
+
+        assert fake.calls == [6]  # 10 条 - 窗口 4 条
+        assert result[1]["content"].startswith(SUMMARY_PREFIX)
+        assert "branch summary digest" in result[1]["content"]
+
+    async def test_explicit_summarize_takes_precedence_over_injected(self):
+        class UnusedBranchSummarizer:
+            def as_layer3_summarizer(self):
+                raise AssertionError("不应使用注入的摘要器")
+
+        compactor = self._compactor(UnusedBranchSummarizer())
+
+        async def explicit(old_messages: List[Dict[str, Any]], prompt: str) -> str:
+            return "explicit wins"
+
+        result = await compactor.compact_with_summary(self._over_budget_messages(), explicit)
+
+        assert "explicit wins" in result[1]["content"]
 
 
 # ── 摘要 prompt ──────────────────────────────────────────
