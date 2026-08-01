@@ -42,6 +42,44 @@ describe('Message', () => {
     expect(container.textContent).toContain('2');
   });
 
+  it('renders humanized tool call title instead of raw args dump (U8)', () => {
+    // Arrange
+    const msg: MessageType = {
+      id: '1',
+      session_id: 's',
+      role: 'assistant',
+      content: '正在写文件...',
+      created_at: 0,
+      tool_calls: [{ name: 'write_file', args: { path: 'src/App.tsx', content: 'export {}' } }],
+    };
+
+    // Act
+    const { container } = renderWithI18n(<Message message={msg} />);
+
+    // Assert — 人性化标题 + 保留原始工具名(调试用)
+    expect(container.textContent).toContain('Write');
+    expect(container.textContent).toContain('src/App.tsx');
+    expect(container.textContent).toContain('write_file');
+    // 原始 args JSON dump 不再渲染（write_file 的 content 会撑爆卡片）
+    expect(container.textContent).not.toContain('export {}');
+    expect(container.textContent).not.toContain('{"path"');
+  });
+
+  it('shows external scope chip for web tools (U8)', () => {
+    const msg: MessageType = {
+      id: '1',
+      session_id: 's',
+      role: 'assistant',
+      content: '搜索中...',
+      created_at: 0,
+      tool_calls: [{ name: 'web_search', args: { query: 'tauri v2' } }],
+    };
+    const { container } = renderWithI18n(<Message message={msg} />);
+    expect(container.textContent).toContain('Search');
+    expect(container.textContent).toContain('tauri v2');
+    expect(container.textContent).toContain('external');
+  });
+
   it('applies error style when content starts with [错误', () => {
     const msg: MessageType = {
       id: '1',

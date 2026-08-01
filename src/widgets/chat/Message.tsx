@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 
@@ -71,6 +72,44 @@ function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStream
         </div>
       )}
     </div>
+  );
+}
+
+/** U8: humanized tool call title — "Write **src/App.tsx**" / "Run `pytest`"
+ *  代替原来的 write_file({"path":...}) 技术化展示。
+ *  - 无 scope 的动作（文件操作）：对象加粗
+ *  - 有 scope 的动作（shell / 网络）：对象用 code chip + scope 标签
+ *    （local = 本机执行，external = 请求会离开本机）
+ */
+function ToolCallTitle({ name, args }: { name: string; args: Record<string, unknown> }) {
+  const human = humanizeToolCall(name, args);
+  return (
+    <>
+      <span className="text-text-secondary">
+        {human.verb}
+        {human.object !== '' && (
+          <>
+            {' '}
+            {human.scope ? (
+              <code className="rounded bg-bg-hover px-1 py-0.5 font-mono text-[11px] text-text break-all">
+                {human.object}
+              </code>
+            ) : (
+              <strong className="font-semibold text-text break-all">{human.object}</strong>
+            )}
+          </>
+        )}
+      </span>
+      {human.scope && (
+        <span
+          className={`rounded px-1 py-0.5 text-[10px] leading-none ${
+            human.scope === 'external' ? 'bg-warning/10 text-warning' : 'bg-bg-hover text-muted'
+          }`}
+        >
+          {human.scope}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -274,19 +313,11 @@ function MessageComponent({
                   key={`${tc.name}-${idx}`}
                   className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-[12px]"
                 >
-                  {/* Tool call header */}
-                  <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 font-mono">
+                  {/* Tool call header — U8: humanized title + 弱化的原始工具名(调试用) */}
+                  <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
                     <Wrench className="w-3 h-3 text-primary shrink-0" />
-                    <span className="font-semibold text-primary">{tc.name}</span>
-                    {!hasImage && (
-                      <>
-                        <span className="text-muted">(</span>
-                        <span className="text-text-secondary break-all">
-                          {JSON.stringify(tc.args)}
-                        </span>
-                        <span className="text-muted">)</span>
-                      </>
-                    )}
+                    <ToolCallTitle name={tc.name} args={tc.args} />
+                    <span className="font-mono text-[10px] text-muted">{tc.name}</span>
                     {tc.result !== undefined && tc.result !== '' && !hasImage && (
                       <>
                         <span className="text-muted">→</span>
