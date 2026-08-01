@@ -23,12 +23,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from sage_core import SkillResult, SkillSpec
 from sage_core.repositories import SkillPort  # noqa: F401  (structural typing target)
 
 from backend.skills.registry import SkillRegistry as _SkillRegistry
+
+if TYPE_CHECKING:
+    from backend.skills.skill_md.auto_activation import AutoActivationResult
 
 
 class InprocSkillAdapter:
@@ -175,6 +178,56 @@ class InprocSkillAdapter:
         if not self._registry.exists(name):
             return
         self._usage_count[name] = self._usage_count.get(name, 0) + 1
+
+    # ========== A16: Skill Auto-Activation ==========
+
+    def auto_activate(self, message: str) -> AutoActivationResult:
+        """按用户消息自动匹配 SKILL.md 的 ``when_to_use``, 返回注入上下文块。
+
+        聊天层 (``ChatService._run_turn_inner`` 步骤 2.6) 在组装本轮
+        system prompt 前结构性探测并调用本方法, 把命中技能的 body
+        作为动态段追加 —— 不进 frozen snapshot, 不写 storage。
+
+        参与自动匹配的候选过滤 (全部满足):
+          - SKILL.md 技能 (builtin 无 ``when_to_use`` 字段, 天然排除)
+          - enabled (``set_enabled(False)`` 的技能不参与)
+          - ``dispatch.disable_model_invocation`` 为 False (v2 元数据:
+            作者显式声明"禁止模型自动触发"时尊重该意图)
+
+        Returns:
+            ``AutoActivationResult`` (``names`` + ``context_block``)。
+
+        Note:
+            永不外抛 —— 聊天层按 best-effort 语义依赖本契约,
+            任何内部故障降级为空结果 (只 debug 日志)。
+        """
+        # 延迟导入避免循环 (与本模块其他 skill_md 引用同策略)
+        from backend.skills.skill_md.auto_activation import (
+            AutoActivationResult as _Result,
+            auto_activate,
+        )
+        from backend.skills.skill_md.skill import SkillMdSkill
+
+        if not message:
+            return _Result()
+        try:
+            docs = []
+            for schema in self._registry.list():
+                skill = self._registry.get(schema.name)
+                if not isinstance(skill, SkillMdSkill):
+                    continue
+                if not self.is_enabled(schema.name):
+                    continue
+                doc = skill._doc
+                if doc.dispatch.disable_model_invocation:
+                    continue
+                docs.append(doc)
+            return auto_activate(message, docs)
+        except Exception as exc:  # noqa: BLE001 — best-effort 契约
+            import logging
+
+            logging.getLogger(__name__).debug("A16 auto_activate failed: %s", exc)
+            return _Result()
 
     # ========== M10: slash command 暴露 ==========
 
@@ -326,6 +379,8 @@ class InprocSkillAdapter:
                 # 仅在 SKILL.md 时输出扩展字段
                 doc = skill._doc  # type: ignore[attr-defined]
                 item["body"] = doc.body
+                # A16: 自动激活触发场景原文，空串表示不参与自动激活
+                item["when_to_use"] = doc.when_to_use
                 item["base_dir"] = str(doc.base_dir) if doc.base_dir is not None else None
                 item["version"] = doc.version
                 # agentskills.io spec optional fields (PR-84): 让 API consumer

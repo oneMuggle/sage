@@ -53,6 +53,10 @@ class SkillMdDocument:
     name: str
     description: str
     triggers: List[str] = field(default_factory=list)
+    # A16: Skill Auto-Activation — frontmatter ``when_to_use`` 原文。
+    # 聊天层据此提取触发短语, 自动匹配用户消息并注入技能 body。
+    # 空字符串 = 不参与自动激活 (builtin 与未声明该字段的 SKILL.md)。
+    when_to_use: str = ""
     body: str = ""
     base_dir: Optional[Path] = None
     version: Optional[str] = None
