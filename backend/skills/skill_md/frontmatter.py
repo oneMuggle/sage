@@ -121,6 +121,35 @@ def _validate_description(description: Any) -> str:
     return description
 
 
+def _validate_when_to_use(when_to_use: Any) -> str:
+    """校验 when_to_use 字段(A16 Skill Auto-Activation, optional)。
+
+    提供时必须为字符串, 长度 ≤ 1024。该字段原文透传给
+    ``auto_activation.extract_triggers`` 提取触发短语, 用于自动
+    匹配用户消息; 未提供时技能不参与自动激活。
+
+    Args:
+        when_to_use: 来自 YAML 的值(可能为 None)。
+
+    Returns:
+        字符串, 或空字符串(字段未提供时)。
+
+    Raises:
+        SkillMdParseError: 提供了但不是字符串, 或长度超过 1024 字符。
+    """
+    if when_to_use is None:
+        return ""
+    if not isinstance(when_to_use, str):
+        raise SkillMdParseError(
+            f"frontmatter 'when_to_use' must be a string, got {type(when_to_use).__name__}"
+        )
+    if len(when_to_use) > 1024:
+        raise SkillMdParseError(
+            f"frontmatter 'when_to_use' must be <= 1024 chars, got {len(when_to_use)} chars"
+        )
+    return when_to_use
+
+
 def _validate_requires(requires: Any) -> Dict[str, Any]:
     """校验 requires 字段（v2）。"""
     if requires is None:
@@ -287,6 +316,13 @@ def parse(text: str) -> Tuple[Dict[str, Any], str]:
 
     _validate_name(meta.get("name"))
     _validate_description(meta.get("description"))
+
+    # A16: when_to_use 自动激活字段 (下划线为主键, 连字符为别名;
+    # 取值优先级与 loader 一致: 主键显式 null 时回落到别名)
+    when_to_use_val = meta.get("when_to_use")
+    if when_to_use_val is None:
+        when_to_use_val = meta.get("when-to-use")
+    _validate_when_to_use(when_to_use_val)
 
     # v2 字段校验
     _validate_requires(meta.get("requires"))

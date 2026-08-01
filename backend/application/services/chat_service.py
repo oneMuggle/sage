@@ -264,6 +264,17 @@ class ChatService:
             system_content += "\n\n以下是相关的记忆上下文:\n"
             system_content += memory_context.format()
 
+        # 2.6) A16: Skill Auto-Activation —— 扫描用户消息匹配 SKILL.md
+        #      ``when_to_use`` 触发短语, 命中技能的 body 注入本轮 system
+        #      prompt 动态段 (不进 frozen snapshot 缓存, 不写 storage,
+        #      下一轮按新消息重新匹配)。best-effort: 任何故障静默降级。
+        activation_block = _skill_activation_block(
+            user_message.content or "", self.skills
+        )
+        if activation_block:
+            system_content += activation_block
+            span.set_attribute("skills.auto_activated", True)
+
         # Prepend system message to history
         system_msg = Message(role=Role.SYSTEM, content=system_content)
         history = [system_msg] + list(history)
@@ -580,6 +591,36 @@ class ChatService:
                     {"tool": tc.name, "outcome": "success"},
                 )
         return called >= budget and len(tool_calls) > budget
+
+
+# --------------------------------------------------------------------------- #
+# A16: Skill Auto-Activation（when_to_use 自动匹配注入）
+# --------------------------------------------------------------------------- #
+
+
+def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> str:
+    """计算本轮用户消息自动激活的技能上下文块（含前导换行，可直接追加）。
+
+    结构性探测：仅当 skills adapter 实现 ``auto_activate(message)`` 扩展
+    方法（``InprocSkillAdapter``）时生效；纯 ``SkillPort`` mock / 其他
+    实现无此属性 → 返回空串。adapter 返回对象的 ``context_block`` 属性
+    非字符串（含 mock 返回值）同样视为无激活。
+
+    任何失败（adapter 抛错 / 返回类型异常）都降级为空串 —— 注入失败
+    绝不能破坏对话轮次（与记忆上下文注入同语义）。
+    """
+    if not message or skills is None:
+        return ""
+    auto_activate = getattr(skills, "auto_activate", None)
+    if not callable(auto_activate):
+        return ""
+    try:
+        result = auto_activate(message)
+        block = getattr(result, "context_block", "")
+    except Exception as exc:
+        logger.debug(f"A16 skill auto-activation skipped: {exc}")
+        return ""
+    return f"\n\n{block}" if isinstance(block, str) and block else ""
 
 
 # --------------------------------------------------------------------------- #

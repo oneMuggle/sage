@@ -202,6 +202,12 @@ class SkillMdHotLoader:
             else [],
         )
 
+        # A16: when_to_use 自动激活字段 (下划线为主键, 连字符为别名;
+        # frontmatter.parse 已校验类型, 此处缺失即空串 = 不参与自动激活)
+        when_to_use_val = meta.get("when_to_use")
+        if when_to_use_val is None:
+            when_to_use_val = meta.get("when-to-use")
+
         # agentskills.io spec optional fields (Task 4)
         license_val = meta.get("license")
         compatibility_val = meta.get("compatibility")
@@ -213,6 +219,7 @@ class SkillMdHotLoader:
             triggers=list(meta.get("triggers", []))
             if isinstance(meta.get("triggers"), list)
             else [],
+            when_to_use=when_to_use_val if isinstance(when_to_use_val, str) else "",
             body=body,
             base_dir=path.parent,
             version=str(meta["version"]) if "version" in meta else None,
