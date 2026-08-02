@@ -284,6 +284,9 @@ export function useChat() {
         useQuestionState.getState().resolve();
         // HIGH-4: 清空 ref 让 interrupt 知道当前 stream 已结束
         finishStreamRef.current = null;
+        // 流结束后刷新侧栏会话列表（获取自动生成的标题）
+        // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
+        void useStore.getState().loadSessions();
       };
       // HIGH-4: 注册 finishStream 到 ref 供 interrupt 调用
       finishStreamRef.current = finishStream;
@@ -295,6 +298,13 @@ export function useChat() {
           content,
           {
             onEvent: (evt) => {
+              // 会话标题更新事件 (producer 在 DONE 前推送)
+              // 立即刷新侧栏会话列表, 这样 DONE 到达时标题已可见
+              if (evt.type === 'session_updated') {
+                void useStore.getState().loadSessions();
+                return;
+              }
+
               // 阶段 4: 累积 agent_id + 迭代轮次 (供前端显示"当前处理 agent")
               if (evt.agent_id || evt.iteration) {
                 setStreaming((prev) =>

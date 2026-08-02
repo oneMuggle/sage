@@ -445,6 +445,20 @@ class ChatService:
                 logger.warning(f"Failed to compress working memory: {e}")
                 span.set_attribute("memory.compress_error", str(e))
 
+            # 9) 标题自动生成：首轮对话后 (message_count <= 2)
+            try:
+                session_data = await self.storage.get_session(session_id)
+                if session_data and session_data.get("message_count", 0) <= 2:
+                    from backend.chat.title_generator import TitleGenerator
+
+                    title = await TitleGenerator(self.llm).generate(
+                        user_message.content or "", response.content or ""
+                    )
+                    if title:
+                        await self.storage.update_session(session_id, title=title)
+            except Exception as e:
+                logger.warning(f"标题生成失败: {e}")
+
         run.emit(
             "run_end",
             session_id=session_id,
