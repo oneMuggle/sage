@@ -950,8 +950,7 @@ async def execute_skill(name: str, data: SkillExecuteRequest):
             detail={"type": "skill_not_found", "message": f"skill '{name}' not found"},
         )
     result = await adapter.execute(name, data.action, data.args)
-    if result.success:
-        adapter.bump_usage(name)
+    # 使用计数已由 adapter.execute() 成功路径自动 bump（含 DB 持久化）
     return {
         "success": result.success,
         "content": result.content,

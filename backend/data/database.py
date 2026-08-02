@@ -299,6 +299,23 @@ class Database:
             )
         """)
 
+        # 技能使用统计表（借鉴 hermes-agent 的 .usage.json 概念）:
+        # 按技能名聚合 use_count / success_count / last_used_at,
+        # 供技能生命周期（curator）与前端使用统计使用。
+        # registry（InprocSkillAdapter）是技能来源真相, 本表只记聚合统计。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS skill_usage (
+                name TEXT PRIMARY KEY,
+                use_count INTEGER DEFAULT 0,
+                success_count INTEGER DEFAULT 0,
+                last_used_at INTEGER
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_skill_usage_last_used
+            ON skill_usage(last_used_at DESC)
+        """)
+
         # 用户偏好表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS preferences (
@@ -310,6 +327,29 @@ class Database:
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER
             )
+        """)
+
+        # 用户画像表 (USER.md 概念, 借鉴 hermes-agent):
+        # 持久化"关于用户的知识"（偏好 / 沟通风格 / 工作习惯 / 身份）,
+        # 与通用记忆分离, 以冻结快照方式始终注入 system prompt。
+        # category 取值: preference / communication_style / workflow_habit / identity
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_profile (
+                id TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'preference',
+                importance INTEGER DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_profile_category
+            ON user_profile(category)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_profile_importance
+            ON user_profile(importance DESC)
         """)
 
         # Office 文档表 (Phase 1, plan §4.1.2 step 10)
