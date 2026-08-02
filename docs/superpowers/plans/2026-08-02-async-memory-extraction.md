@@ -65,8 +65,12 @@ def queue():
     reset_memory_extraction_queue()
 
 
-def _req(memory=None, enabled=True, text="用户想吃火锅"):
-    memory = memory if memory is not None else AsyncMock(spec=object)
+_DUMMY_MEMORY = AsyncMock(spec=object)
+
+
+def _req(memory="default", enabled=True, text="用户想吃火锅"):
+    if memory == "default":
+        memory = _DUMMY_MEMORY
     return ExtractionRequest(
         memory_port=memory,
         extractor=AsyncMock(),
