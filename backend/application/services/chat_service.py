@@ -61,6 +61,16 @@ _DEFAULT_HISTORY_LIMIT = 20
 # 默认 LLM 调用计数 label
 _DEFAULT_MODEL_LABEL = "default"
 
+# 技能 Nudge（借鉴 hermes-agent ``_iters_since_skill`` 的轻量版）:
+# 单轮工具调用数达到阈值且未自动激活任何技能时, 在 assistant 回复末尾
+# 追加一句"建议保存为技能"的提示。best-effort: 仅在 hex 路径生效,
+# 阈值 4 以下不触发, 避免打扰简单对话。
+SKILL_NUDGE_TOOL_CALL_THRESHOLD = 4
+SKILL_NUDGE_SUFFIX = (
+    "\n\n💡 这个任务涉及多次工具调用。"
+    "如果它可能是你会重复的流程，可以考虑把它保存为一个技能（SKILL.md）。"
+)
+
 # OTel tracer（P3.3：用于在 span 上记录关键属性）
 _tracer = get_tracer("chat_service")
 
@@ -391,6 +401,20 @@ class ChatService:
             )
             span.set_attribute("tool_calls.count", len(response.tool_calls))
 
+        # 4.5) 技能 Nudge（best-effort）: 单轮工具调用 ≥ 阈值且未自动激活技能
+        #      时, 在 assistant 回复末尾追加"建议保存为技能"的提示。
+        #      仅在 response 有正文时生效; 任何异常降级跳过, 不破坏对话轮次。
+        try:
+            if (
+                response.content
+                and len(response.tool_calls or []) >= SKILL_NUDGE_TOOL_CALL_THRESHOLD
+                and not activation_block
+            ):
+                response.content = (response.content or "") + SKILL_NUDGE_SUFFIX
+                span.set_attribute("skills.nudge_applied", True)
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.debug(f"Skill nudge skipped: {exc}")
+
         # 5) 持久化 assistant response（即使触发了 tool_calls，
         #    仍把 LLM 原始的 assistant message 落库）
         await self.storage.append_message(session_id, response)
@@ -432,7 +456,8 @@ class ChatService:
                 self.memory,
                 MemoryExtractor(llm_client=self.llm),
                 user_message.content or "",
-                response.content or "",
+                # 剥离技能 nudge 后缀, 避免提示文本被提取为"记忆事实"（review LOW）
+                (response.content or "").replace(SKILL_NUDGE_SUFFIX, ""),
                 session_id,
                 enabled=True,  # hex 路径保持现状行为：有 memory 即写
             )
@@ -785,14 +810,35 @@ async def extract_and_store_memory(
             user_message=user_text or "",
             assistant_message=assistant_text or "",
         )
+        # 用户画像类事实类别（extractor 产出）→ 路由到 store_profile
+        profile_categories = ("preference", "goal")
+        # 结构性探测 store_profile（MemoryPort 协议外的扩展方法）:
+        # 用**类级** hasattr（而非实例 getattr）—— 无 spec 的 Mock 在实例上
+        # 会自动创建任意属性, 类级探测可避免误判为"已实现"（review MEDIUM）。
+        store_profile = (
+            getattr(memory_port, "store_profile", None)
+            if hasattr(type(memory_port), "store_profile")
+            else None
+        )
         for fact in facts:
-            await memory_port.store(
-                content=fact["content"],
-                session_id=session_id,
-                importance=fact.get("importance", 5),
-                tags=fact.get("tags", ["conversation"]),
-            )
-            stored += 1
+            category = fact.get("category", "fact")
+            if category in profile_categories and callable(store_profile):
+                pid = await store_profile(
+                    content=fact["content"],
+                    category=category,
+                    importance=fact.get("importance", 5),
+                    session_id=session_id,
+                )
+                if pid:
+                    stored += 1
+            else:
+                await memory_port.store(
+                    content=fact["content"],
+                    session_id=session_id,
+                    importance=fact.get("importance", 5),
+                    tags=fact.get("tags", ["conversation"]),
+                )
+                stored += 1
         if stored:
             logger.debug(f"Extracted {stored} facts for session {session_id}")
     except Exception as e:

@@ -38,9 +38,17 @@ def setup_test_db(tmp_db_path):
     from backend.application.services.wake_store import reset_wake_store
     from backend.memory.registry import reset_memory_manager
 
+    # UserProfileStore 单例同样绑定全局 Database, 必须随临时库重置
+    from backend.memory.user_profile import reset_user_profile
+
+    # SkillUsageStore 单例同理
+    from backend.skills.usage import reset_usage_store
+
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
     db_mod._db.init_db()
     reset_wake_store()
+    reset_user_profile()
+    reset_usage_store()
     # PR-3: 与生产 lifespan 保持一致, 启动时种子化 4 个默认 agent.
     # 测试不走 FastAPI lifespan, 显式调一次以模拟.
     from backend.data.agent_repo import AgentRepository

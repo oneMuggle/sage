@@ -83,16 +83,26 @@ def _episodic_rows() -> list:
     ).fetchall()
 
 
+def _profile_rows() -> list:
+    """user_profile 表全部画像行（preference/goal 类事实的新落点）。"""
+    conn = get_database().get_connection()
+    return conn.execute("SELECT content, category FROM user_profile").fetchall()
+
+
 @pytest.mark.asyncio()
 async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(client):
-    """一次成功 chat 后 memories_episodic 出现提取条目（autoMemory 缺省 True）。"""
+    """一次成功 chat 后提取条目落库（autoMemory 缺省 True）。
+
+    ``_FIXED_FACTS`` 的 category=preference → 按分类路由写入 ``user_profile``
+    （USER.md 概念）而非通用 episodic 记忆。
+    """
     session_id = str(uuid.uuid4())
     user_message = "我特别喜欢吃火锅,尤其是四川麻辣口味的,以后请多给我推荐火锅店"
 
     # mock 掉 MemoryExtractor.extract（类方法级 patch）：
     # helper 在调用点才 from backend.memory.extractor import MemoryExtractor,
     # patch 类属性后实例化拿到的就是 mock 版 extract, 其余链路
-    # （MemoryAdapter.store → MemoryManager.memorize → episodic.save）全部走真实实现。
+    # （MemoryAdapter.store_profile → UserProfileStore.add）全部走真实实现。
     with patch(
         "backend.memory.extractor.MemoryExtractor.extract",
         new=AsyncMock(return_value=_FIXED_FACTS),
@@ -108,16 +118,11 @@ async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(clie
     assert extract_kwargs["user_message"] == user_message
     assert "火锅" in extract_kwargs["assistant_message"]
 
-    # memories_episodic 出现提取条目, 且行级 session_id 已落表
-    # (WS-A 修复 MemoryManager.memorize 的 session_id 透传后启用此断言)
-    rows = _episodic_rows()
+    # preference 事实 → user_profile 表（分类路由）
+    rows = _profile_rows()
     matched = [r for r in rows if "用户喜欢吃火锅" in r["content"]]
-    assert matched, (
-        f"memories_episodic 未出现提取条目: {[dict(r) for r in rows]}"
-    )
-    assert any(
-        r["session_id"] == session_id for r in matched
-    ), f"提取条目行级 session_id 未落表: {[dict(r) for r in matched]}"
+    assert matched, f"user_profile 未出现提取画像: {[dict(r) for r in rows]}"
+    assert matched[0]["category"] == "preference"
 
 
 @pytest.mark.asyncio()
