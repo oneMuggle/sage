@@ -76,6 +76,13 @@ async def _run_chat_stream(client, session_id: str, message: str) -> str:
     return attach.text
 
 
+async def _await_extraction() -> None:
+    """等后台记忆提取 worker 消费完队列（提取已异步化）。"""
+    from backend.memory.async_extractor import get_memory_extraction_queue
+
+    await get_memory_extraction_queue().drain(timeout=5.0)
+
+
 def _episodic_rows() -> list:
     conn = get_database().get_connection()
     return conn.execute(
@@ -108,6 +115,9 @@ async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(clie
         new=AsyncMock(return_value=_FIXED_FACTS),
     ) as mock_extract:
         attach_text = await _run_chat_stream(client, session_id, user_message)
+
+    # 等后台 worker 消费完提取请求（submit 已异步化）
+    await _await_extraction()
 
     # 流正常完成
     assert '"state": "done"' in attach_text or '"state":"done"' in attach_text
@@ -153,6 +163,9 @@ async def test_legacy_chat_stream_extraction_failure_does_not_break_stream(clien
         new=AsyncMock(side_effect=RuntimeError("extractor boom")),
     ):
         attach_text = await _run_chat_stream(client, session_id, "我喜欢吃火锅, 请记住这一点")
+
+    # 等后台 worker 消费完提取请求（submit 已异步化）
+    await _await_extraction()
 
     # 流未被记忆提取错误打断
     assert '"state": "done"' in attach_text or '"state":"done"' in attach_text
