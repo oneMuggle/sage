@@ -18,6 +18,7 @@ from backend.adapters.out.memory.adapter import MemoryAdapter
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
+from backend.api.artifact_routes import router as artifact_router
 from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
@@ -381,6 +382,8 @@ app.include_router(wiki_router, prefix="/api/v1")
 app.include_router(usage_router, prefix="/api/v1")
 # U18: HTML 会话导出 (POST /sessions/{id}/export, 与 API_MODE 无关)
 app.include_router(export_router, prefix="/api/v1")
+# Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
+app.include_router(artifact_router, prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":

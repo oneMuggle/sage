@@ -565,6 +565,8 @@ export function useChat() {
     iteration: streaming?.iteration ?? 0,
     /** P2: 当前流式状态 (供 ActiveAgentIndicator 显示阶段) */
     streamingState: streaming?.state ?? null,
+    /** P0: 当前流式工具调用列表 (供 ProgressSection 显示实时工具进度) */
+    streamingToolCalls,
     /** Phase 6: /btw 补充消息方法 */
     askBtw,
     /** Phase 6: /btw 是否正在流式输出 */

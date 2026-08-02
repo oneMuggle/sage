@@ -92,6 +92,7 @@ vi.mock('../../features/send-message/useChat', () => ({
     streamingMessageId: null,
     iteration: 0,
     streamingState: null,
+    streamingToolCalls: [],
   }),
 }));
 

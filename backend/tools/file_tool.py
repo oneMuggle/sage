@@ -17,7 +17,9 @@ import os
 from pathlib import Path
 from typing import Optional, Tuple
 
+from backend.data import artifact_repo
 from backend.domain.risk import RiskClass
+from backend.tools.context import current_tool_context
 
 from .base import BaseTool, ToolResult, ToolSchema
 
@@ -85,6 +87,38 @@ def _contains_binary_marker(file_path: Path) -> bool:
         if head.startswith(bom):
             return False
     return b"\x00" in head
+
+
+def detect_artifact_kind(path: str) -> str:
+    """根据文件扩展名检测产物类型。"""
+    ext = Path(path).suffix.lower()
+    if ext in (".md", ".markdown"):
+        return "markdown"
+    if ext in (".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".css", ".html", ".sh"):
+        return "code"
+    if ext in (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"):
+        return "image"
+    if ext in (".csv", ".tsv"):
+        return "csv"
+    return "text"
+
+
+def _record_artifact_safely(resolved_path: str, size: int) -> None:
+    """写入成功后记录产物;任何失败都静默,不影响写入结果。"""
+    try:
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return
+        p = Path(resolved_path)
+        artifact_repo.record_artifact(
+            session_id=ctx.session_id,
+            path=str(p),
+            name=p.name,
+            kind=detect_artifact_kind(resolved_path),
+            size=size,
+        )
+    except Exception:  # noqa: BLE001 — 记录产物失败绝不阻断写入
+        logger.debug("write_file: 记录产物失败", exc_info=True)
 
 
 def _pre_read_checks(file_path: Path, original_bytes: int) -> Optional[ToolResult]:
@@ -296,6 +330,9 @@ class WriteFileTool(BaseTool):
             }
             if syntax_error:
                 result["syntax_error"] = syntax_error
+
+            # 记录产物(供 Chat 右侧 Artifacts 面板展示)
+            _record_artifact_safely(result["path"], content_bytes)
 
             return ToolResult(
                 success=True,

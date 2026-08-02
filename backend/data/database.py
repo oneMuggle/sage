@@ -413,6 +413,24 @@ class Database:
             )
         """)
 
+        # 产物表:追踪 AI 工具调用(write_file)生成的文件
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS artifacts (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                tool_call_id TEXT,
+                path TEXT NOT NULL,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                size INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artifacts_session
+            ON artifacts(session_id, created_at DESC)
+        """)
+
         # Agent 配置表 (PR-3)
         # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan
         # 启动时由 backend/data/agent_repo.py:AgentRepository.seed_defaults_if_empty 种子化
