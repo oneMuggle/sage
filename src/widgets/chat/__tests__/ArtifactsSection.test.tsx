@@ -1,8 +1,9 @@
 // src/widgets/chat/__tests__/ArtifactsSection.test.tsx
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { ArtifactsSection } from '../artifacts/ArtifactsSection';
+
 import type { Artifact } from '../../../features/artifacts/artifactApi';
+import { ArtifactsSection } from '../artifacts/ArtifactsSection';
 
 const arts: Artifact[] = [
   { id: 'a1', session_id: 's', tool_call_id: null, path: '/a.md', name: 'a.md', kind: 'markdown', size: 100, created_at: 1 },

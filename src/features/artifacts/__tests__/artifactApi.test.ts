@@ -1,5 +1,6 @@
 // src/features/artifacts/__tests__/artifactApi.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { listArtifacts, readArtifactContent, revealArtifact } from '../artifactApi';
 
 describe('artifactApi', () => {

@@ -1,5 +1,6 @@
 // src/features/artifacts/useArtifactContent.ts
 import { useState, useEffect } from 'react';
+
 import { readArtifactContent, type ArtifactContent } from './artifactApi';
 
 export function useArtifactContent(sessionId: string, artifactId: string | null) {

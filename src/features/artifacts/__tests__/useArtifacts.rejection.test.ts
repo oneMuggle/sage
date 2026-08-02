@@ -12,8 +12,8 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../artifactApi', () => ({ listArtifacts: vi.fn() }));
 
-import { useArtifacts } from '../useArtifacts';
 import { listArtifacts } from '../artifactApi';
+import { useArtifacts } from '../useArtifacts';
 
 const mkArt = (id: string) => ({
   id, session_id: 's', tool_call_id: null, path: `/${id}.md`, name: `${id}.md`,

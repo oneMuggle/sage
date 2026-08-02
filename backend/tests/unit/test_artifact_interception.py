@@ -1,7 +1,7 @@
 # backend/tests/unit/test_artifact_interception.py
-from backend.tools import file_tool
-from backend.tools.context import ToolExecutionContext, set_tool_context, reset_tool_context
 from backend.data import artifact_repo
+from backend.tools import file_tool
+from backend.tools.context import ToolExecutionContext, reset_tool_context, set_tool_context
 
 
 def test_detect_artifact_kind():

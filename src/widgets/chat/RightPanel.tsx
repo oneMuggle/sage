@@ -1,12 +1,14 @@
 // src/widgets/chat/RightPanel.tsx
 import { useState } from 'react';
-import type { ToolCall } from '../../shared/lib/store';
+
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
-import { ProgressSection } from './progress/ProgressSection';
-import { ArtifactsSection } from './artifacts/ArtifactsSection';
+import type { ToolCall } from '../../shared/lib/store';
+
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
+import { ArtifactsSection } from './artifacts/ArtifactsSection';
+import { ProgressSection } from './progress/ProgressSection';
 
 interface RightPanelProps {
   open: boolean;

@@ -4,8 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../artifactApi', () => ({ readArtifactContent: vi.fn() }));
 
-import { useArtifactContent } from '../useArtifactContent';
 import { readArtifactContent } from '../artifactApi';
+import { useArtifactContent } from '../useArtifactContent';
 
 describe('useArtifactContent', () => {
   beforeEach(() => {

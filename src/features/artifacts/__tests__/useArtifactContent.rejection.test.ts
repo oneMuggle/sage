@@ -13,8 +13,8 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../artifactApi', () => ({ readArtifactContent: vi.fn() }));
 
-import { useArtifactContent } from '../useArtifactContent';
 import { readArtifactContent } from '../artifactApi';
+import { useArtifactContent } from '../useArtifactContent';
 
 describe('useArtifactContent error resilience', () => {
   it('does not crash and surfaces an error-shaped content when readArtifactContent rejects', async () => {

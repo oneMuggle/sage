@@ -5,9 +5,9 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('../../../features/artifacts/useArtifactContent', () => ({ useArtifactContent: vi.fn() }));
 vi.mock('../../../features/artifacts/artifactApi', () => ({ revealArtifact: vi.fn() }));
 
-import { ArtifactViewer } from '../artifacts/ArtifactViewer';
-import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
 import type { Artifact } from '../../../features/artifacts/artifactApi';
+import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';
+import { ArtifactViewer } from '../artifacts/ArtifactViewer';
 
 const sample: Artifact = {
   id: 'a1', session_id: 'sess_001', tool_call_id: null, path: '/tmp/test.md',

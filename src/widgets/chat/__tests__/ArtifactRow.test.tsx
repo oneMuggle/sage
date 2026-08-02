@@ -1,8 +1,9 @@
 // src/widgets/chat/__tests__/ArtifactRow.test.tsx
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { ArtifactRow } from '../artifacts/ArtifactRow';
+
 import type { Artifact } from '../../../features/artifacts/artifactApi';
+import { ArtifactRow } from '../artifacts/ArtifactRow';
 
 const sample: Artifact = {
   id: 'a1', session_id: 'sess_001', tool_call_id: null, path: '/tmp/test.md',

@@ -1,5 +1,6 @@
 // src/widgets/chat/artifacts/ArtifactViewer.tsx
 import { ArrowLeft, Copy, FolderOpen } from 'lucide-react';
+
 import type { Artifact } from '../../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../../features/artifacts/artifactApi';
 import { useArtifactContent } from '../../../features/artifacts/useArtifactContent';

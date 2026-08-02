@@ -1,6 +1,8 @@
 // src/widgets/chat/artifacts/ArtifactsSection.tsx
 import { RefreshCw, FolderOpen } from 'lucide-react';
+
 import type { Artifact } from '../../../features/artifacts/artifactApi';
+
 import { ArtifactRow } from './ArtifactRow';
 
 interface ArtifactsSectionProps {

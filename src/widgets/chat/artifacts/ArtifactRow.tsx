@@ -1,5 +1,6 @@
 // src/widgets/chat/artifacts/ArtifactRow.tsx
 import { FileText, FileCode, FileImage, FileSpreadsheet, File } from 'lucide-react';
+
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 
 interface ArtifactRowProps {

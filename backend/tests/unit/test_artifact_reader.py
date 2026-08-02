@@ -1,5 +1,4 @@
 # backend/tests/unit/test_artifact_reader.py
-from pathlib import Path
 from unittest.mock import patch
 
 from backend.data import artifact_reader, artifact_repo
