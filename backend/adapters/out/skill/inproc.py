@@ -326,6 +326,9 @@ class InprocSkillAdapter:
                     continue
                 if not self.is_enabled(schema.name):
                     continue
+                # 归档技能不参与自动激活（spec：可用性 = enabled ∧ ¬archived）
+                if self.is_archived(schema.name):
+                    continue
                 doc = skill._doc
                 if doc.dispatch.disable_model_invocation:
                     continue
@@ -364,6 +367,9 @@ class InprocSkillAdapter:
         Raises:
             LookupError: 命令未注册 (路由层转 404)
         """
+        # 归档技能的 slash command 不可用（路由层转 404 command_not_found）
+        if self._command_archived(command):
+            raise LookupError(f"slash command archived: {command!r}")
         result = await self._slash_registry.execute_command(
             command_name=command,
             args=tuple(args),
@@ -383,11 +389,20 @@ class InprocSkillAdapter:
         )
 
     def list_slash_commands(self) -> List[str]:
-        """列出所有已注册的 slash command (M10)。
+        """列出所有已注册的 slash command (M10)，排除已归档技能。
 
         用于前端自动补全 / chat 输入提示。
         """
-        return self._slash_registry.list_commands()
+        return [
+            cmd
+            for cmd in self._slash_registry.list_commands()
+            if not self._command_archived(cmd)
+        ]
+
+    def _command_archived(self, command: str) -> bool:
+        """slash command 对应的技能是否已归档。"""
+        resolved = self._slash_registry.resolve(command)
+        return resolved is not None and self.is_archived(resolved.name)
 
     # ========== Skills management: SKILL.md 删除 (PR-A) ==========
 
