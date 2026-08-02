@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -16,6 +16,8 @@ import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
 import { TaskTreeSection } from '../widgets/chat/progress/TaskTreeSection';
+import { RightPanel } from '../widgets/chat/RightPanel';
+import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
@@ -41,7 +43,9 @@ export function Chat() {
     taskBoard, // Multi-Agent Orchestration: 编排任务板
     resumeOrchestration, // Wave 3: resume 恢复流入口（计划卡恢复按钮）
     clearTaskBoard, // Wave 3: 取消执行后清空任务板
+    streamingToolCalls, // 右侧面板 Progress: 实时流式工具调用
   } = useChat();
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
 
   const {
     currentSessionId,
@@ -265,6 +269,7 @@ export function Chat() {
           >
             + 新对话
           </button>
+          <RightPanelToggle open={rightPanelOpen} onClick={() => setRightPanelOpen((v) => !v)} />
         </div>
       </div>
 
@@ -334,6 +339,18 @@ export function Chat() {
         disabled={!hasConfig}
         placeholder="输入消息..."
         workspacePath={workspacePath}
+      />
+
+      {/* Artifacts Panel: 右侧抽屉（fixed 定位，叠加在页面右缘） */}
+      <RightPanel
+        open={rightPanelOpen}
+        onToggle={() => setRightPanelOpen((v) => !v)}
+        iteration={iteration}
+        streamingState={streamingState}
+        // ?? [] 为防御:个别测试 mock useChat 时可能缺该字段;生产 hook 保证非空
+        toolCalls={streamingToolCalls ?? []}
+        isLoading={isLoading}
+        sessionId={currentSessionId}
       />
     </div>
   );
