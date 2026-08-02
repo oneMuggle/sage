@@ -450,18 +450,25 @@ class ChatService:
         #    producer 共用同一实现）。该函数内部捕获全部异常只 warning,
         #    绝不外抛, 无需再包 try/except。
         if self.memory:
+            from backend.memory.async_extractor import (
+                ExtractionRequest,
+                get_memory_extraction_queue,
+            )
             from backend.memory.extractor import MemoryExtractor
 
-            stored_facts = await extract_and_store_memory(
-                self.memory,
-                MemoryExtractor(llm_client=self.llm),
-                user_message.content or "",
-                # 剥离技能 nudge 后缀, 避免提示文本被提取为"记忆事实"（review LOW）
-                (response.content or "").replace(SKILL_NUDGE_SUFFIX, ""),
-                session_id,
-                enabled=True,  # hex 路径保持现状行为：有 memory 即写
+            # 记忆提取异步化：投递到后台队列由单 worker 串行消费，
+            # 不阻塞本轮聊天响应（提取含一次 LLM 调用）。
+            get_memory_extraction_queue().submit(
+                ExtractionRequest(
+                    memory_port=self.memory,
+                    extractor=MemoryExtractor(llm_client=self.llm),
+                    user_text=user_message.content or "",
+                    # 剥离技能 nudge 后缀, 避免提示文本被提取为"记忆事实"（review LOW）
+                    assistant_text=(response.content or "").replace(SKILL_NUDGE_SUFFIX, ""),
+                    session_id=session_id,
+                    enabled=True,  # hex 路径保持现状行为：有 memory 即写
+                )
             )
-            span.set_attribute("memory.stored_facts", stored_facts)
 
             # 8) 压缩工作记忆 (Memory Integration)
             try:
