@@ -37,15 +37,27 @@ class MemoryAdapter:
         embedder: 文本向量化器
     """
 
-    def __init__(self, memory_manager: MemoryManager):
+    def __init__(self, memory_manager: MemoryManager, user_profile=None):
         """初始化记忆适配器
 
         Args:
             memory_manager: MemoryManager 实例,提供三层记忆的管理功能
+            user_profile: 可选 UserProfileStore 实例;缺省用全局单例
+                ``get_user_profile()``（与 get_memory_manager 同模式）。
         """
         self.memory_manager = memory_manager
         self.consolidation = ConsolidationPipeline()
         self.embedder = HashEmbedder(dimensions=256)
+        # 用户画像（USER.md 概念）: 缺省惰性取全局单例,失败时降级为 None
+        self.user_profile = user_profile
+        if self.user_profile is None:
+            try:
+                from backend.memory.user_profile import get_user_profile
+
+                self.user_profile = get_user_profile()
+            except Exception as exc:  # pragma: no cover - 防御性兜底
+                logger.warning(f"UserProfileStore 初始化失败: {exc}")
+                self.user_profile = None
 
         # 初始化向量存储（需要 Database 实例）
         # 从 MemoryManager 中获取 db（EpisodicMemory 持有 db 引用）
@@ -106,24 +118,36 @@ class MemoryAdapter:
             k=60,
         )
 
-        # 4. 分层：高重要性 → core，其余 → episodic/semantic
-        core: List[dict] = []
+        # 4. 分层：用户画像（始终注入）+ 高重要性 → core，其余 → episodic/semantic
+        # core 槽位按画像 / 检索命中**独立预算**（画像 3 + 检索 2 = 5），
+        # 避免画像条目挤掉本轮检索到的高重要性事实（review MEDIUM）。
+        _CORE_PROFILE_LIMIT = 3
+        _CORE_RETRIEVED_LIMIT = 2
+        core_profile: List[dict] = []
+        core_retrieved: List[dict] = []
         episodic: List[dict] = []
         semantic: List[dict] = []
+        # 4.1 持久用户画像（USER.md 概念）——冻结快照条目（char 受限），
+        #     不依赖本轮检索命中（hermes 冻结快照语义）
+        if self.user_profile is not None:
+            core_profile = self.user_profile.get_core_items()
+        # 4.2 检索命中中的高重要性事实补入 core（独立预算）
         for item in fused[: limit * 2]:
             importance = item.get("importance", 5)
             if importance >= 8:
-                core.append(item)
+                core_retrieved.append(item)
             elif item.get("memory_type") == "semantic" or item.get("category") == "fact":
                 semantic.append(item)
             else:
                 episodic.append(item)
 
+        core = core_profile[:_CORE_PROFILE_LIMIT] + core_retrieved[:_CORE_RETRIEVED_LIMIT]
+
         return MemoryContext(
             working=keyword_results.get("working", []),
             episodic=episodic[:limit],
             semantic=semantic[:limit],
-            core=core[:5],  # 核心记忆最多 5 条
+            core=core[: _CORE_PROFILE_LIMIT + _CORE_RETRIEVED_LIMIT],
         )
 
     async def store(
@@ -195,6 +219,52 @@ class MemoryAdapter:
             self.vector_store.add(memory_id, content, memory_type=memory_type)
 
         return memory_id or ""
+
+    async def store_profile(
+        self,
+        content: str,
+        category: str = "preference",
+        importance: int = 5,
+        session_id: Optional[str] = None,
+    ) -> str:
+        """存储用户画像（USER.md 概念, MemoryPort 协议外的扩展方法）。
+
+        把"关于用户的知识"写入持久画像库, 而非通用三层记忆。
+        ``extract_and_store_memory`` 通过结构性探测（``getattr``）调用本方法;
+        未实现时自动降级到 ``store()``（向后兼容）。
+
+        画像库**不可用**（init 失败）时也降级到 ``store()``——偏好事实
+        不因画像库故障而丢失（review MEDIUM）。
+
+        Args:
+            content: 画像内容（一句话）。
+            category: 类别, 见 ``UserProfileStore.VALID_CATEGORIES``。
+            importance: 重要性 1-10。
+            session_id: 可选会话 ID（降级到 store() 时透传）。
+
+        Returns:
+            画像 ID；写入被跳过（重复/安全拦截）时返回空串；
+            画像库不可用降级到 store() 时返回通用记忆 ID。
+        """
+        if self.user_profile is None:
+            logger.warning("UserProfileStore 不可用, 降级到通用记忆 store()")
+            return await self.store(
+                content=content,
+                session_id=session_id or "",
+                importance=importance,
+                tags=[category],
+            )
+        try:
+            pid = self.user_profile.add(content, category=category, importance=importance)
+            return pid or ""
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.warning(f"User profile store failed: {exc}")
+            return await self.store(
+                content=content,
+                session_id=session_id or "",
+                importance=importance,
+                tags=[category],
+            )
 
     async def compress(self, session_id: str) -> None:
         """压缩工作记忆

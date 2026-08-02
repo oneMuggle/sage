@@ -327,3 +327,97 @@ class TestMemoryContextIntegration:
         """测试 MemoryContext.has_memories 为 False"""
         context = MemoryContext(working=[], episodic=[], semantic=[])
         assert context.has_memories is False
+
+
+class TestClassifyConsistency:
+    """测试 adapter.store 的分类与模块级 classify_memory_type 完全一致（消除规则漂移）"""
+
+    @pytest.mark.parametrize(
+        ("importance", "content", "expected"),
+        [
+            (9, "短事实", "semantic"),
+            (8, "boundary", "semantic"),  # 边界：>=8 → semantic
+            (2, "短", "working"),
+            (4, "x" * 100, "working"),  # 短 (<200) 且 <5 → working
+            (5, "x" * 100, "episodic"),  # 边界：importance==5 不算 working
+            (7, "x" * 300, "episodic"),
+            (3, "x" * 300, "episodic"),  # 长内容 (>=200) 即使低重要性也不算 episodic
+        ],
+    )
+    @pytest.mark.asyncio()
+    async def test_store_classification_matches_module_function(
+        self, adapter, mock_memory_manager, importance, content, expected
+    ):
+        from backend.memory.manager import classify_memory_type
+
+        # Arrange
+        mock_memory_manager.memorize.return_value = "mid"
+
+        # Act
+        await adapter.store(content=content, session_id="s", importance=importance)
+
+        # Assert: adapter 落库类型 == 模块级统一分类函数
+        call_kwargs = mock_memory_manager.memorize.call_args[1]
+        assert call_kwargs["memory_type"] == expected
+        assert expected == classify_memory_type("auto", importance, content)
+
+
+class TestMemoryAdapterProfileIntegration:
+    """用户画像接入（USER.md 概念）"""
+
+    @pytest.mark.asyncio()
+    async def test_retrieve_reserves_core_slots_for_retrieved_facts(
+        self, adapter, mock_memory_manager
+    ):
+        """画像条目不挤掉检索命中的高重要性事实（review MEDIUM #2）。"""
+        # 画像库有 6 条（超 core 上限）
+        profile = Mock()
+        profile.get_core_items.return_value = [
+            {"content": f"画像{i}", "category": "preference", "importance": 8} for i in range(6)
+        ]
+        adapter.user_profile = profile
+        adapter.vector_store = None  # 走纯关键词融合, 简化
+        # 检索命中一条高重要性事实
+        mock_memory_manager.recall.return_value = {
+            "working": [],
+            "episodic": [{"content": "检索到的高重要事实", "importance": 9}],
+            "semantic": [],
+        }
+
+        context = await adapter.retrieve("q", "s", limit=5)
+        contents = [c["content"] for c in context.core]
+        # 检索事实保留在 core（独立预算, 不被 6 条画像挤掉）
+        assert "检索到的高重要事实" in contents
+        # 画像最多占 3 槽 + 检索最多 2 槽 = 总上限 5
+        assert len(contents) <= 5
+        assert sum(1 for c in contents if c.startswith("画像")) <= 3
+
+    @pytest.mark.asyncio()
+    async def test_store_profile_writes_to_profile_store(self, adapter):
+        """store_profile 委托 UserProfileStore.add, 返回画像 ID。"""
+        profile = Mock()
+        profile.add.return_value = "profile-id-1"
+        adapter.user_profile = profile
+
+        pid = await adapter.store_profile("用户偏好X", category="preference", importance=7)
+        assert pid == "profile-id-1"
+        profile.add.assert_called_once_with(
+            "用户偏好X", category="preference", importance=7
+        )
+
+    @pytest.mark.asyncio()
+    async def test_store_profile_falls_back_when_profile_unavailable(
+        self, adapter, mock_memory_manager
+    ):
+        """画像库不可用 → 降级到通用 store(), 偏好事实不丢（review MEDIUM #4）。"""
+        adapter.user_profile = None
+        mock_memory_manager.memorize.return_value = "mid"
+
+        pid = await adapter.store_profile(
+            "用户偏好X", category="preference", importance=7, session_id="s"
+        )
+        assert pid == "mid"  # store() 的返回值
+        mock_memory_manager.memorize.assert_called_once()
+        # store() 把 tags=[category] 放进 metadata
+        call_kwargs = mock_memory_manager.memorize.call_args[1]
+        assert call_kwargs["metadata"]["tags"] == ["preference"]

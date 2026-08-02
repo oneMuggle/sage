@@ -304,8 +304,21 @@ class MemoryManager:
         """
         parts = []
 
-        # 获取工作记忆上下文
-        working_context = self.working.get_context(limit=limit)
+# 用户画像（USER.md 概念）: 持久画像快照置于上下文顶部（best-effort）。
+        # 让 legacy SageAgent（经 memory_manager.get_context）与 hex
+        # ChatService（经 MemoryAdapter.retrieve → MemoryContext.core）都能
+        # 注入同一份用户知识。快照冻结于 load(), 中途写入不改（保 prefix cache）。
+        try:
+            from backend.memory.user_profile import get_user_profile
+
+            profile_snapshot = get_user_profile().get_snapshot()
+            if profile_snapshot:
+                parts.append(profile_snapshot)
+        except Exception as exc:
+            logger.debug(f"用户画像快照注入失败: {exc}")
+
+        # 获取工作记忆上下文（按 session 隔离）
+        working_context = self.working.get_context(session_id, limit=limit)
         if working_context:
             parts.append("【当前对话】")
             for msg in working_context:
