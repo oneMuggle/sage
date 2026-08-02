@@ -116,8 +116,8 @@ async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(clie
     ) as mock_extract:
         attach_text = await _run_chat_stream(client, session_id, user_message)
 
-    # 等后台 worker 消费完提取请求（submit 已异步化）
-    await _await_extraction()
+        # 等后台 worker 消费完提取请求（submit 已异步化）
+        await _await_extraction()
 
     # 流正常完成
     assert '"state": "done"' in attach_text or '"state":"done"' in attach_text
@@ -164,8 +164,8 @@ async def test_legacy_chat_stream_extraction_failure_does_not_break_stream(clien
     ):
         attach_text = await _run_chat_stream(client, session_id, "我喜欢吃火锅, 请记住这一点")
 
-    # 等后台 worker 消费完提取请求（submit 已异步化）
-    await _await_extraction()
+        # 等后台 worker 消费完提取请求（submit 已异步化）
+        await _await_extraction()
 
     # 流未被记忆提取错误打断
     assert '"state": "done"' in attach_text or '"state":"done"' in attach_text
