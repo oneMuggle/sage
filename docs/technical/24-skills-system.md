@@ -658,3 +658,49 @@ window.electronAPI.skills.importSkills(paths: string[])  // → ImportResult
 不使用 flat top-level(避免与 `windowControls` 模式冲突)。
 
 参见 design spec: `docs/superpowers/specs/2026-07-01-skills-load-new-design.md`
+
+## 10.11 技能使用跟踪 + 技能 Nudge (2026-08-02, PR #269)
+
+### 10.11.1 SkillUsageStore（持久化聚合统计）
+
+`backend/skills/usage.py` — 按技能名聚合 `use_count / success_count / last_used_at`，
+持久化到 SQLite `skill_usage` 表（借鉴 hermes-agent `.usage.json` 概念）：
+
+```sql
+CREATE TABLE skill_usage (
+    name TEXT PRIMARY KEY,
+    use_count INTEGER DEFAULT 0,
+    success_count INTEGER DEFAULT 0,
+    last_used_at INTEGER   -- ms epoch
+);
+```
+
+- **best-effort**：DB 写入失败只 warning，绝不抛错（使用统计是辅助数据）。
+- **UPSERT 幂等**：按 `name` 主键增量累加。
+- 全局单例 `get_usage_store()` / `reset_usage_store()`（测试用）。
+
+### 10.11.2 计数接入点（InprocSkillAdapter）
+
+`bump_usage()` 现已在**全部执行路径**的成功分支自动调用：
+
+| 路径 | 调用点 |
+|------|--------|
+| `execute()`（REST + SkillTool + 任何调用方） | 成功即 bump |
+| `execute_command()`（slash command） | 成功即 bump |
+| `auto_activate()`（A16 自动激活） | 命中即 bump |
+
+- 移除 `execute_skill` 路由的显式 `bump_usage`（集中到 adapter，避免重复计数）。
+- **重启不归零**：`__init__` 从 `skill_usage` 表回填 `_usage_count`（`_hydrate_usage_from_db`）。
+- 前端 `list_skills` 已读 `adapter.usage_count()`，自动受益。
+
+### 10.11.3 技能 Nudge（ChatService）
+
+复杂轮次（单轮工具调用 ≥ 4 且未自动激活技能）时，在 assistant 回复末尾追加
+"建议保存为技能"提示（`SKILL_NUDGE_SUFFIX`）。best-effort，阈值 4 以下不触发。
+nudge 文本在喂给记忆提取器前被剥离（避免被提取为"记忆事实"）。
+
+### 10.11.4 相关文件
+
+- 新增：`backend/skills/usage.py`、`backend/tests/unit/test_skill_usage_tracking.py`
+- 修改：`backend/adapters/out/skill/inproc.py`、`backend/api/legacy_routes.py`、`backend/application/services/chat_service.py`
+- 新表：`skill_usage`（`database.py` 幂等建表）
