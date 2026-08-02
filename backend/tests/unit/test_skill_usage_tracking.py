@@ -98,12 +98,25 @@ class TestSkillUsageStore:
     def test_get_missing_returns_none(self, store):
         assert store.get("nonexistent") is None
 
-    def test_get_all_sorted_by_last_used(self, store):
-        store.bump("a", success=True)
-        store.bump("b", success=True)
+    def test_get_all_sorted_by_last_used(self, db):
+        """按 last_used_at 降序（显式写不同时间戳, 不依赖时钟毫秒粒度）。
+
+        修复 CI flaky：``bump`` 连续两次在同一毫秒写入时 last_used_at 并列,
+        ``ORDER BY last_used_at DESC`` 顺序不确定。
+        """
+        store = SkillUsageStore(db)
+        conn = db.get_connection()
+        conn.execute(
+            "INSERT INTO skill_usage (name, use_count, success_count, last_used_at) "
+            "VALUES ('a', 1, 1, 1000)"
+        )
+        conn.execute(
+            "INSERT INTO skill_usage (name, use_count, success_count, last_used_at) "
+            "VALUES ('b', 1, 1, 2000)"
+        )
+        conn.commit()
         names = [s["name"] for s in store.get_all()]
-        # b 后写入 → last_used_at 更大, 排前面
-        assert names[0] == "b"
+        assert names[0] == "b"  # b 的 last_used_at 更大, 排前面
 
     def test_persists_across_store_instances(self, db):
         s1 = SkillUsageStore(db)
