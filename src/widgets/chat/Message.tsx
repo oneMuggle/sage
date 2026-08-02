@@ -7,6 +7,8 @@ import {
   Brain,
   ChevronDown,
   GitBranch,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
@@ -113,6 +115,35 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
   );
 }
 
+/** 工具调用结果可折叠面板 — 大文件内容默认收起，避免刷屏
+ *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
+ */
+function ToolCallResult({ result }: { result: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isLarge = result.length > 300;
+
+  if (!isLarge) {
+    return <span className="text-text-primary break-all">{result}</span>;
+  }
+
+  return (
+    <div className="w-full">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
+      >
+        {isExpanded ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+        <span>{isExpanded ? '收起' : `展开 (${result.length} 字符)`}</span>
+      </button>
+      {isExpanded && (
+        <pre className="mt-1 p-2 bg-bg-subtle border border-border rounded-radius-sm text-[11px] text-text-secondary overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all font-mono">
+          {result}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 // MEDIUM-5: React.memo 包装,自定义比较函数避免 ReactMarkdown 重解析
 // - 仅当 message 引用变、isStreaming 变化、knowledgeRefs/attachments 引用变时才重渲染
 // - 在每个 content_delta 触发 N 条历史消息重渲染的场景下,这是关键优化
@@ -189,6 +220,45 @@ function MessageComponent({
                 <span className="truncate max-w-24">{file.name}</span>
               </span>
             ))}
+          </div>
+        )}
+
+        {/* 工具调用展示（ReAct 模式）— 在消息内容之前，因为工具调用先于最终回答 */}
+        {toolCalls.length > 0 && (
+          <div className="mb-2 flex flex-col gap-1.5">
+            {toolCalls.map((tc, idx) => {
+              const hasImage = tc.metadata?.imageData;
+              return (
+                <div
+                  key={`${tc.name}-${idx}`}
+                  className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-[12px]"
+                >
+                  {/* Tool call header — U8: humanized title + 弱化的原始工具名(调试用) */}
+                  <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
+                    <Wrench className="w-3 h-3 text-primary shrink-0" />
+                    <ToolCallTitle name={tc.name} args={tc.args} />
+                    <span className="font-mono text-[10px] text-muted">{tc.name}</span>
+                  </div>
+                  {/* Tool result — 大文件内容可折叠 */}
+                  {tc.result !== undefined && tc.result !== '' && !hasImage && (
+                    <div className="px-2 pb-1.5">
+                      <ToolCallResult result={tc.result} />
+                    </div>
+                  )}
+                  {/* Inline image preview for diagram tools */}
+                  {hasImage && (
+                    <div className="px-2 pb-2">
+                      <img
+                        src={tc.metadata!.imageData}
+                        alt={`Diagram from ${tc.name}`}
+                        className="max-w-full rounded border border-border"
+                        style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -302,45 +372,6 @@ function MessageComponent({
             <p className="whitespace-pre-wrap">{message.content}</p>
           )}
         </div>
-
-        {/* 工具调用展示（ReAct 模式） */}
-        {toolCalls.length > 0 && (
-          <div className="mt-2 flex flex-col gap-1.5">
-            {toolCalls.map((tc, idx) => {
-              const hasImage = tc.metadata?.imageData;
-              return (
-                <div
-                  key={`${tc.name}-${idx}`}
-                  className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-[12px]"
-                >
-                  {/* Tool call header — U8: humanized title + 弱化的原始工具名(调试用) */}
-                  <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
-                    <Wrench className="w-3 h-3 text-primary shrink-0" />
-                    <ToolCallTitle name={tc.name} args={tc.args} />
-                    <span className="font-mono text-[10px] text-muted">{tc.name}</span>
-                    {tc.result !== undefined && tc.result !== '' && !hasImage && (
-                      <>
-                        <span className="text-muted">→</span>
-                        <span className="text-text-primary break-all">{tc.result}</span>
-                      </>
-                    )}
-                  </div>
-                  {/* Inline image preview for diagram tools */}
-                  {hasImage && (
-                    <div className="px-2 pb-2">
-                      <img
-                        src={tc.metadata!.imageData}
-                        alt={`Diagram from ${tc.name}`}
-                        className="max-w-full rounded border border-border"
-                        style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
 
         {/* 底部信息 */}
         <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
