@@ -104,7 +104,7 @@ class MemoryExtractionQueue:
         while True:
             try:
                 request = await asyncio.wait_for(self._queue.get(), timeout=0.5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break
