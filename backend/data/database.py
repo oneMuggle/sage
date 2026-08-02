@@ -316,6 +316,17 @@ class Database:
             ON skill_usage(last_used_at DESC)
         """)
 
+        # 技能生命周期（curator）表：归档软标记（spec 2026-08-02-skill-curator-lifecycle）。
+        # 独立于 skill_usage —— 从未使用的技能无 usage 行但同样可归档，需以 name
+        # 独立寻址。archived_at 记归档时刻（ms epoch），未归档为 NULL。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS skill_lifecycle (
+                name TEXT PRIMARY KEY,
+                archived INTEGER DEFAULT 0,
+                archived_at INTEGER
+            )
+        """)
+
         # 用户偏好表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS preferences (
