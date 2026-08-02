@@ -164,6 +164,12 @@ async def lifespan(app: FastAPI):
     )
     logger.info("ChatStreamRegistry 已初始化(后台 sweeper 每 60s 清理孤儿流)")
 
+    # 记忆提取异步化：后台单 worker 消费提取队列，不阻塞聊天响应
+    from backend.memory.async_extractor import get_memory_extraction_queue
+
+    get_memory_extraction_queue().start()
+    logger.info("MemoryExtractionQueue 已启动（记忆提取后台 worker）")
+
     # Phase 8: scheduled tasks service — load JSON, start APScheduler
     from pathlib import Path
 
@@ -297,6 +303,15 @@ async def lifespan(app: FastAPI):
     # A4: stop WakeScheduler before tearing down chat services
     if hasattr(app.state, "wake_scheduler") and app.state.wake_scheduler is not None:
         await app.state.wake_scheduler.stop()
+
+    # 记忆提取：优雅排空在途提取（best-effort，超时 5s 丢弃）
+    try:
+        from backend.memory.async_extractor import get_memory_extraction_queue
+
+        await get_memory_extraction_queue().drain(timeout=5.0)
+        get_memory_extraction_queue().stop()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("MemoryExtractionQueue shutdown failed: %s", exc)
 
     # Phase 2: stop HeartbeatMonitor background task
     if hasattr(app.state, "heartbeat_monitor") and app.state.heartbeat_monitor is not None:

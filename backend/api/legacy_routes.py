@@ -516,18 +516,18 @@ async def _extract_legacy_chat_memory(
 ) -> None:
     """legacy /chat/stream 在 assistant 消息落盘后 best-effort 提取记忆。
 
-    修复缺陷：此前 legacy producer 持久化 user/assistant 消息后不触发
-    MemoryExtractor, 只有 hex ChatService.run_turn 写记忆, 一半对话数据
-    不进记忆系统。本函数与 hex 路径共用 ``chat_service`` 的模块级
-    ``extract_and_store_memory``, 统一写入语义。
+    记忆提取异步化：本函数只做廉价装配（读 autoMemory 开关、构建
+    MemoryAdapter / MemoryExtractor），然后把耗时的 LLM 提取投递到
+    后台队列（``get_memory_extraction_queue().submit``），由单 worker
+    串行消费，不阻塞流式请求收尾。
 
     - 开关：读 app_settings.autoMemory, 缺省 True（与前端 defaultSettings
       及 hex 路径"有 memory 即写"的现行行为一致）。
     - 实例：get_memory_manager() 全局单例 + MemoryAdapter 包装（与
       main.py hex 装配方式一致）；提取 LLM 复用 HttpxLLMAdapter,
       调用失败时 MemoryExtractor 内部降级为关键词提取。
-    - producer 是 async 协程, 直接 await（复用文件现有异步模式,
-      无需额外 loop 调度）。
+    - 函数保持 async 签名（调用点 await 不变），但 submit 非阻塞,
+      装配完立即返回。
     - 任何异常只 warning 绝不外抛——记忆写入不得影响已完成的流式响应。
     """
     try:
@@ -542,16 +542,23 @@ async def _extract_legacy_chat_memory(
 
         from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
         from backend.adapters.out.memory.adapter import MemoryAdapter
-        from backend.application.services.chat_service import extract_and_store_memory
+        from backend.memory.async_extractor import (
+            ExtractionRequest,
+            get_memory_extraction_queue,
+        )
         from backend.memory.extractor import MemoryExtractor
 
-        await extract_and_store_memory(
-            MemoryAdapter(get_memory_manager()),
-            MemoryExtractor(llm_client=HttpxLLMAdapter()),
-            user_text,
-            assistant_text,
-            session_id,
-            enabled=True,
+        # 记忆提取异步化：廉价装配（读设置/建 adapter）仍在本函数内完成，
+        # 仅把耗时的 LLM 提取投递到后台队列，不阻塞流式请求收尾。
+        get_memory_extraction_queue().submit(
+            ExtractionRequest(
+                memory_port=MemoryAdapter(get_memory_manager()),
+                extractor=MemoryExtractor(llm_client=HttpxLLMAdapter()),
+                user_text=user_text,
+                assistant_text=assistant_text,
+                session_id=session_id,
+                enabled=True,
+            )
         )
     except Exception as exc:
         logger.warning(

@@ -40,6 +40,7 @@
 | 2026-07-24 | [Office M1–M2 Chat-Read Design](./2026-07-24-office-m1-m2-chat-read-design.md) | 已实施的 `@` Office 摘要注入子集 |
 | 2026-07-24 | [Office Staging Sweep Design](./2026-07-24-office-staging-sweep-design.md) | Workspace staging orphan sweep 设计 |
 | 2026-07-25 | [Office M1–M2 Completion Design](./2026-07-25-office-m1-m2-completion-design.md) | 完整 session Workspace、Office list/read tools 与跨进程 E2E 设计 |
+| 2026-08-02 | [记忆提取异步化 Design](./2026-08-02-memory-extraction-async-design.md) | hex + legacy 记忆提取脱离聊天响应关键路径 |
 
 ## 与其他目录关系
 

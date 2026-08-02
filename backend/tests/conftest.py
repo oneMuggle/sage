@@ -49,6 +49,11 @@ def setup_test_db(tmp_db_path):
     reset_wake_store()
     reset_user_profile()
     reset_usage_store()
+    # MemoryExtractionQueue 单例绑定全局事件循环，必须随测试重置
+    # （取消残留 worker，避免跨测试泄漏 + "task was destroyed" 警告）
+    from backend.memory.async_extractor import reset_memory_extraction_queue
+
+    reset_memory_extraction_queue()
     # PR-3: 与生产 lifespan 保持一致, 启动时种子化 4 个默认 agent.
     # 测试不走 FastAPI lifespan, 显式调一次以模拟.
     from backend.data.agent_repo import AgentRepository
