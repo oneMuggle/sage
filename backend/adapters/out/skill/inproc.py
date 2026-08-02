@@ -23,7 +23,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+import time
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
 
 from sage_core import SkillResult, SkillSpec
 from sage_core.repositories import SkillPort  # noqa: F401  (structural typing target)
@@ -87,6 +88,11 @@ class InprocSkillAdapter:
         # （"重启不归零"）; 运行期 bump 同时写内存 + DB。
         self._usage_count: Dict[str, int] = {}
         self._hydrate_usage_from_db()
+        # 归档策展状态（spec 2026-08-02-skill-curator-lifecycle）：DB 为持久真相，
+        # 内存 Set 为热缓存（auto_activate / slash / list 读它，零 DB）；
+        # 启动从 skill_lifecycle 表回填（重启不丢）。
+        self._archived: Set[str] = set()
+        self._hydrate_archived_from_db()
         # M10: slash command 索引 (从 registry 一次性构建)
         from backend.skills.skill_md.slash_registry import SlashCommandRegistry
 
@@ -216,6 +222,70 @@ class InprocSkillAdapter:
             import logging
 
             logging.getLogger(__name__).debug(f"技能使用计数回填跳过: {exc}")
+
+    # ========== Skill 生命周期 (curator): active/stale/archived ==========
+
+    def _hydrate_archived_from_db(self) -> None:
+        """从 ``skill_lifecycle`` 表回填归档集合（best-effort，重启不丢）。
+
+        仅收 registry 中真实存在的技能（仿 ``_hydrate_usage_from_db``）。
+        """
+        try:
+            from backend.skills.lifecycle import get_lifecycle_store
+
+            for name in get_lifecycle_store().get_archived_names():
+                if name and self._registry.exists(name):
+                    self._archived.add(name)
+        except Exception as exc:  # pragma: no cover - 防御性兜底
+            import logging
+
+            logging.getLogger(__name__).debug(f"技能归档状态回填跳过: {exc}")
+
+    def is_archived(self, name: str) -> bool:
+        """技能是否已归档（内存热缓存，O(1)）。"""
+        return name in self._archived
+
+    def set_archived(self, name: str, archived: bool) -> bool:
+        """设置归档状态。返回 False 表示技能名不存在（路由层 → 404）。
+
+        DB 持久真相 + 内存热缓存双写（仿 ``set_enabled``，但持久化到
+        ``skill_lifecycle`` 表，重启不丢）。DB 写失败只 warning（best-effort），
+        内存态仍更新以保证本次会话一致。
+        """
+        if not self._registry.exists(name):
+            return False
+        try:
+            from backend.skills.lifecycle import get_lifecycle_store
+
+            get_lifecycle_store().set_archived(name, archived)
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            import logging
+
+            logging.getLogger(__name__).warning(
+                f"Skill lifecycle persist failed for {name!r}: {exc}"
+            )
+        if archived:
+            self._archived.add(name)
+        else:
+            self._archived.discard(name)
+        return True
+
+    def lifecycle_map(self) -> Dict[str, str]:
+        """批量计算全量 name → lifecycle（active/stale/archived）。
+
+        active/stale 读取时即时算（对 ``now`` 比较 ``skill_usage.last_used_at``），
+        archived 取内存缓存。供 ``list_skills_extended`` 一次性调用（非热路径）。
+        """
+        from backend.skills.lifecycle import classify_lifecycle
+        from backend.skills.usage import get_usage_store
+
+        usage = {row["name"]: row for row in get_usage_store().get_all()}
+        now_ms = int(time.time() * 1000)
+        result: Dict[str, str] = {}
+        for name in self._registry.list_names():
+            last = (usage.get(name) or {}).get("last_used_at")
+            result[name] = classify_lifecycle(last, name in self._archived, now_ms)
+        return result
 
     # ========== A16: Skill Auto-Activation ==========
 
@@ -409,6 +479,8 @@ class InprocSkillAdapter:
         # 延迟导入避免循环 (skill_md 依赖 base, base 在更早的初始化阶段)
         from backend.skills.skill_md.skill import SkillMdSkill
 
+        # 生命周期态一次性批量计算（active/stale 读时算，archived 取内存缓存）
+        lifecycles = self.lifecycle_map()
         result: List[Dict[str, Any]] = []
         for schema in self._registry.list():
             skill = self._registry.get(schema.name)
@@ -446,6 +518,8 @@ class InprocSkillAdapter:
                     "user_invocable_name": dp.user_invocable_name,
                     "command_dispatch": dp.command_dispatch,
                 }
+            # 生命周期态（active/stale/archived）— builtin 与 skillmd 一律计算
+            item["lifecycle"] = lifecycles.get(schema.name, "stale")
             result.append(item)
         return result
 
