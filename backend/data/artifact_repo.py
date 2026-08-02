@@ -78,11 +78,11 @@ def record_artifact(
 
 
 def list_artifacts(session_id: str) -> List[Artifact]:
-    """列出指定 session 的所有产物,按 created_at 降序。"""
+    """列出指定 session 的所有产物,按 created_at 降序;同毫秒记录用 rowid 兜底防排序 flaky。"""
     db = get_database()
     conn = db.get_connection()
     cursor = conn.execute(
-        "SELECT * FROM artifacts WHERE session_id = ? ORDER BY created_at DESC",
+        "SELECT * FROM artifacts WHERE session_id = ? ORDER BY created_at DESC, rowid DESC",
         (session_id,),
     )
     return [Artifact.from_row(row) for row in cursor.fetchall()]
