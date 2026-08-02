@@ -159,3 +159,24 @@ async def test_submit_filters_disabled_and_none(queue):
     assert queue.skipped == 2
     assert queue.pending() == 0
     assert mock_extract.await_count == 0
+
+
+@pytest.mark.asyncio()
+async def test_worker_survives_idle_timeout(queue):
+    """worker 空闲超过 wait_for(get, 0.5s) 超时后仍存活（回归 C1：UP041）。"""
+    with patch(
+        "backend.application.services.chat_service.extract_and_store_memory",
+        new=AsyncMock(),
+    ):
+        queue.submit(_req())
+        await queue.drain()
+    await asyncio.sleep(0.6)  # 空闲超过 wait_for 超时窗口
+    assert queue._worker_task is not None
+    assert not queue._worker_task.done()
+    with patch(
+        "backend.application.services.chat_service.extract_and_store_memory",
+        new=AsyncMock(),
+    ) as mock_extract:
+        queue.submit(_req())
+        await queue.drain()
+        assert mock_extract.await_count == 1

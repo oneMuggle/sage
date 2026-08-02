@@ -104,7 +104,7 @@ class MemoryExtractionQueue:
         while True:
             try:
                 request = await asyncio.wait_for(self._queue.get(), timeout=0.5)
-            except TimeoutError:
+            except asyncio.TimeoutError:  # noqa: UP041 — py3.10/3.8 中 asyncio.TimeoutError ≠ builtin TimeoutError
                 continue
             except asyncio.CancelledError:
                 break
