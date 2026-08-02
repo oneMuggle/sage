@@ -314,6 +314,8 @@ export interface Skill {
   allowed_tools?: string[];
   // SKILL.md v2 DispatchMode (M9) — builtin 时不存在
   dispatch?: SkillDispatch;
+  // 生命周期态（curator）— active=近期在用 / stale=冷（含从未用）/ archived=用户归档
+  lifecycle?: 'active' | 'stale' | 'archived';
 }
 
 export interface SkillExecuteRequest {
