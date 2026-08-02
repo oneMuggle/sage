@@ -19,6 +19,9 @@ interface SkillCardProps {
   dispatch?: SkillDispatch;
   // PR-A Task 5: 删除回调 — builtin 不传 (由父组件 Skills.tsx 控制)
   onDelete?: (name: string) => void;
+  // 生命周期（curator）：active/stale/archived badge + 归档回调
+  lifecycle?: 'active' | 'stale' | 'archived';
+  onArchive?: (name: string, archived: boolean) => void;
 }
 
 const SkillCard: React.FC<SkillCardProps> = ({
@@ -34,6 +37,8 @@ const SkillCard: React.FC<SkillCardProps> = ({
   base_dir,
   dispatch,
   onDelete,
+  lifecycle,
+  onArchive,
 }) => {
   // M9: 用户可调用的 slash command — 仅在显式声明 user_invocable_name 时渲染,
   // name 回退策略在 chat 层处理 (避免前端做映射)
@@ -48,7 +53,7 @@ const SkillCard: React.FC<SkillCardProps> = ({
     <div
       className={`bg-surface rounded-lg shadow-md p-4 border-2 transition-all ${
         enabled ? 'border-primary' : 'border-border opacity-75'
-      }`}
+      } ${lifecycle === 'archived' ? 'opacity-60' : ''}`}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
@@ -83,6 +88,19 @@ const SkillCard: React.FC<SkillCardProps> = ({
                 title={`命令调度模式: ${dispatchChip}`}
               >
                 {dispatchChip}
+              </span>
+            )}
+            {lifecycle && (
+              <span
+                className={`px-2 py-0.5 text-xs rounded-full ${
+                  lifecycle === 'active'
+                    ? 'bg-primary/20 text-primary'
+                    : lifecycle === 'archived'
+                      ? 'bg-accent/20 text-accent'
+                      : 'bg-bg-subtle text-muted'
+                }`}
+              >
+                {lifecycle === 'active' ? '活跃' : lifecycle === 'archived' ? '已归档' : '已冷'}
               </span>
             )}
           </div>
@@ -123,6 +141,17 @@ const SkillCard: React.FC<SkillCardProps> = ({
 
         {/* 开关 + 删除按钮 (builtin 不显示) */}
         <div className="flex items-center gap-2 ml-4">
+          {/* 生命周期：归档 / 取消归档（软标记，可逆） */}
+          {onArchive && (
+            <button
+              type="button"
+              onClick={() => onArchive(name, lifecycle !== 'archived')}
+              className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:text-text transition-colors"
+              aria-label={lifecycle === 'archived' ? `取消归档 ${name}` : `归档 ${name}`}
+            >
+              {lifecycle === 'archived' ? '取消归档' : '归档'}
+            </button>
+          )}
           {/* U12: 两步式确认卸载 — 不弹 modal，armed 后二次点击生效 */}
           {onDelete && source !== 'builtin' && (
             <TwoStepDelete

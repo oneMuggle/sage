@@ -928,6 +928,34 @@ async def toggle_skill(name: str, data: SkillToggle):
     return _skill_to_dict(ext, adapter.is_enabled(name), adapter.usage_count(name))
 
 
+class SkillArchive(BaseModel):
+    """``POST /skills/{name}/archive`` 请求体。"""
+
+    archived: StrictBool
+
+
+@router.post("/skills/{name}/archive")
+async def archive_skill(name: str, data: SkillArchive):
+    """归档 / 取消归档技能（软标记，可逆；区别于物理 delete）。
+
+    - 200 + 完整 skill dict（含新 lifecycle）
+    - 404 + 结构化 detail（技能名不存在）
+    - 422（FastAPI 自动）— archived 缺失 / 类型错
+
+    归档技能从 auto_activate / slash 候选排除（adapter 层），文件不动、可恢复。
+    """
+    adapter = _get_skill_adapter()
+    if not adapter.set_archived(name, data.archived):
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "skill_not_found", "message": f"skill '{name}' not found"},
+        )
+    # 返回完整 skill dict（与 toggle 一致）—— lifecycle 已由 list_skills_extended 注入
+    ext = next((e for e in adapter.list_skills_extended() if e["name"] == name), None)
+    assert ext is not None  # set_archived 已 guard
+    return _skill_to_dict(ext, adapter.is_enabled(name), adapter.usage_count(name))
+
+
 class SkillExecuteRequest(BaseModel):
     """``POST /skills/{name}/execute`` 请求体。
 
