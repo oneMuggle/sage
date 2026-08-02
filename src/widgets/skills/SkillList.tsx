@@ -9,9 +9,11 @@ interface SkillListProps {
   onToggle: (name: string, enabled: boolean) => void;
   // PR-A Task 5: 删除回调 — 透传给 SkillCard (builtin 内部不显示)
   onDelete?: (name: string) => void;
+  // 生命周期：归档 / 取消归档回调 — 透传给 SkillCard
+  onArchive?: (name: string, archived: boolean) => void;
 }
 
-const SkillList: React.FC<SkillListProps> = ({ skills, onToggle, onDelete }) => {
+const SkillList: React.FC<SkillListProps> = ({ skills, onToggle, onDelete, onArchive }) => {
   if (skills.length === 0) {
     return (
       <div className="text-center py-8">
@@ -36,6 +38,8 @@ const SkillList: React.FC<SkillListProps> = ({ skills, onToggle, onDelete }) => 
           version={skill.version}
           base_dir={skill.base_dir}
           onDelete={onDelete}
+          lifecycle={skill.lifecycle}
+          onArchive={onArchive}
         />
       ))}
     </div>
