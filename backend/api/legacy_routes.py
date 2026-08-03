@@ -1908,7 +1908,7 @@ class LearnRequest(BaseModel):
 
 
 @router.post("/learn")
-async def learn_from_conversation(request: LearnRequest):
+async def learn_from_session(request: LearnRequest):
     """User explicitly triggers review of current conversation.
 
     Enqueues a review event with trigger_type="explicit_learn".
@@ -1916,14 +1916,36 @@ async def learn_from_conversation(request: LearnRequest):
     and generate a skill draft via ReviewService.
 
     - 200 + ``{"status": "queued", "message": "..."}``
+    - 404 — session_id does not exist
     - 422 (FastAPI 自动) — session_id 缺失
+
+    .. note:: I-2 follow-up
+        The worker currently receives ``messages: []`` as a placeholder
+        and does not yet load the full conversation history from
+        ``session_id``. LLM therefore runs with empty context and may
+        produce low-quality or hallucinated drafts. A follow-up task
+        should have the worker call ``MessageRepository.get_by_session``
+        to populate the messages list before invoking ReviewService.
     """
+    # I-2 fix: validate session existence before enqueueing — avoids
+    # wasting LLM tokens on reviews for non-existent sessions.
+    session_repo = SessionRepository()
+    if session_repo.get(request.session_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session not found: {request.session_id}",
+        )
+
     review_queue = get_review_queue()
     review_queue.enqueue(
         trigger_type="explicit_learn",
         session_id=request.session_id,
         context={
-            "messages": [],  # Will be loaded by the worker from session_id
+            # TODO(I-2): worker should load conversation history via
+            # MessageRepository.get_by_session(session_id) instead of
+            # passing an empty list. The LLM currently receives no
+            # conversation context, producing low-quality drafts.
+            "messages": [],
             "user_prompt": request.prompt,
         },
     )
@@ -1963,6 +1985,8 @@ async def approve_skill_draft(draft_id: str):
     """User approves skill draft → write to SKILL.md on disk.
 
     - 200 + ``{"status": "approved", "skill_name": ..., "draft_id": ...}``
+    - 400 — invalid skill name (path traversal / separators / empty);
+      draft status NOT updated (follow-up: regenerate or edit the draft)
     - 404 — draft not found
     - 500 — file-system write failure (status NOT updated)
     """
@@ -1971,10 +1995,30 @@ async def approve_skill_draft(draft_id: str):
     if draft is None:
         raise HTTPException(status_code=404, detail="Draft not found")
 
+    # I-1 fix: validate name *before* touching the filesystem so that
+    # drafts with un-writable names (LLM hallucinations like "../foo")
+    # get a clean 400 instead of an opaque 500 OSError.
+    from backend.skills.review_service import ReviewService
+
+    try:
+        ReviewService._validate_skill_name(draft.name)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid skill name: {exc}",
+        ) from exc
+
     try:
         skill_loader = get_skill_loader()
         skill_loader.write(draft.name, draft.content)
-    except (PermissionError, OSError, ValueError) as exc:
+    except ValueError as exc:
+        # Skill loader rejected the name (caught separately from OSError
+        # so the route can return 400 for invalid names vs 500 for FS errors).
+        logger.error("Failed to write skill %s: %s", draft.name, exc)
+        raise HTTPException(
+            status_code=400, detail=f"Failed to write skill: {exc}"
+        ) from exc
+    except (PermissionError, OSError) as exc:
         logger.error("Failed to write skill %s: %s", draft.name, exc)
         raise HTTPException(
             status_code=500, detail=f"Failed to write skill: {exc}"

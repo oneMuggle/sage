@@ -22,6 +22,22 @@ def client():
     return TestClient(app)
 
 
+def _mock_session_exists(session_id: str):
+    """Return a mock SessionRepository whose .get() returns a session
+    for the given id (or None if session_id is ``"nonexistent"``)."""
+    mock_repo = Mock()
+    mock_session = Mock()
+    mock_session.id = session_id
+
+    def _get(sid: str):
+        if sid == "nonexistent":
+            return None
+        return mock_session
+
+    mock_repo.get.side_effect = _get
+    return mock_repo
+
+
 class TestLearnEndpoint:
     """POST /learn endpoint tests."""
 
@@ -32,6 +48,9 @@ class TestLearnEndpoint:
         with patch(
             "backend.api.legacy_routes.get_review_queue",
             return_value=mock_queue,
+        ), patch(
+            "backend.api.legacy_routes.SessionRepository",
+            return_value=_mock_session_exists("session_1"),
         ):
             response = client.post(
                 "/learn",
@@ -61,6 +80,9 @@ class TestLearnEndpoint:
         with patch(
             "backend.api.legacy_routes.get_review_queue",
             return_value=mock_queue,
+        ), patch(
+            "backend.api.legacy_routes.SessionRepository",
+            return_value=_mock_session_exists("session_2"),
         ):
             response = client.post(
                 "/learn",
@@ -102,6 +124,9 @@ class TestLearnEndpoint:
         with patch(
             "backend.api.legacy_routes.get_review_queue",
             return_value=mock_queue,
+        ), patch(
+            "backend.api.legacy_routes.SessionRepository",
+            return_value=_mock_session_exists("session_3"),
         ):
             response = client.post(
                 "/learn",
@@ -112,3 +137,46 @@ class TestLearnEndpoint:
             data = response.json()
             assert "message" in data
             assert isinstance(data["message"], str)
+
+
+# ------------------------------------------------------------------ #
+# I-2 fix: session existence check
+# ------------------------------------------------------------------ #
+
+
+class TestLearnEndpointSessionValidation:
+    """POST /learn must return 404 for non-existent sessions."""
+
+    def test_learn_nonexistent_session_returns_404(self, client):
+        """POST /learn returns 404 when session_id doesn't exist in DB."""
+        mock_queue = Mock()
+
+        with patch(
+            "backend.api.legacy_routes.get_review_queue",
+            return_value=mock_queue,
+        ), patch(
+            "backend.api.legacy_routes.SessionRepository",
+            return_value=_mock_session_exists("nonexistent"),
+        ):
+            response = client.post(
+                "/learn",
+                json={"session_id": "nonexistent", "prompt": "test"},
+            )
+
+        assert response.status_code == 404
+        # Enqueue must NOT be called for non-existent sessions
+        mock_queue.enqueue.assert_not_called()
+
+    def test_learn_404_response_includes_session_id(self, client):
+        """404 detail message mentions the missing session_id."""
+        with patch(
+            "backend.api.legacy_routes.SessionRepository",
+            return_value=_mock_session_exists("nonexistent"),
+        ):
+            response = client.post(
+                "/learn",
+                json={"session_id": "nonexistent"},
+            )
+
+        assert response.status_code == 404
+        assert "nonexistent" in response.json()["detail"]

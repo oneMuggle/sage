@@ -208,6 +208,124 @@ class TestApproveSkillDraft:
 
 
 # ------------------------------------------------------------------ #
+# I-1 fix: invalid skill name → 400 (not 500)
+# ------------------------------------------------------------------ #
+
+
+class TestApproveSkillDraftNameValidation:
+    """POST /skill-drafts/{id}/approve must return 400 for invalid skill names.
+
+    Invalid names include path traversal sequences (``..``), directory
+    separators (``/``, ``\\``), and empty strings. These would otherwise
+    surface as opaque 500 errors from the OS / skill loader.
+    """
+
+    def _approve_with_name(self, client, name: str):
+        """Helper: set up mocks for a draft with the given name, call approve."""
+        draft = _make_draft("draft-xyz", name=name, content="# X")
+
+        mock_store = MagicMock()
+        mock_store.get.return_value = draft
+
+        mock_loader = MagicMock()
+
+        return client.post(
+            "/skill-drafts/draft-xyz/approve",
+            # patch only the stores; ReviewService._validate_skill_name is
+            # the real static method — we want to exercise it.
+            headers={},
+            # We need to patch at call time, so we do it inside this helper.
+        ), mock_store, mock_loader
+
+    def test_approve_path_traversal_returns_400(self, client):
+        """Skill name containing '..' is rejected with 400."""
+        draft = _make_draft("draft-evil", name="../etc/passwd", content="# Evil")
+
+        mock_store = MagicMock()
+        mock_store.get.return_value = draft
+
+        mock_loader = MagicMock()
+
+        with patch(
+            "backend.api.legacy_routes.get_skill_draft_store",
+            return_value=mock_store,
+        ), patch(
+            "backend.api.legacy_routes.get_skill_loader",
+            return_value=mock_loader,
+        ):
+            response = client.post("/skill-drafts/draft-evil/approve")
+
+        assert response.status_code == 400
+        # The draft must NOT be approved or written when name is invalid
+        mock_loader.write.assert_not_called()
+        mock_store.update_status.assert_not_called()
+
+    def test_approve_directory_separator_returns_400(self, client):
+        """Skill name containing '/' or '\\' is rejected with 400."""
+        draft = _make_draft("draft-slash", name="foo/bar", content="# Slash")
+
+        mock_store = MagicMock()
+        mock_store.get.return_value = draft
+
+        mock_loader = MagicMock()
+
+        with patch(
+            "backend.api.legacy_routes.get_skill_draft_store",
+            return_value=mock_store,
+        ), patch(
+            "backend.api.legacy_routes.get_skill_loader",
+            return_value=mock_loader,
+        ):
+            response = client.post("/skill-drafts/draft-slash/approve")
+
+        assert response.status_code == 400
+        mock_loader.write.assert_not_called()
+        mock_store.update_status.assert_not_called()
+
+    def test_approve_empty_name_returns_400(self, client):
+        """Empty skill name is rejected with 400."""
+        draft = _make_draft("draft-empty", name="", content="# Empty")
+
+        mock_store = MagicMock()
+        mock_store.get.return_value = draft
+
+        mock_loader = MagicMock()
+
+        with patch(
+            "backend.api.legacy_routes.get_skill_draft_store",
+            return_value=mock_store,
+        ), patch(
+            "backend.api.legacy_routes.get_skill_loader",
+            return_value=mock_loader,
+        ):
+            response = client.post("/skill-drafts/draft-empty/approve")
+
+        assert response.status_code == 400
+        mock_loader.write.assert_not_called()
+        mock_store.update_status.assert_not_called()
+
+    def test_approve_invalid_name_detail_mentions_name(self, client):
+        """400 response detail mentions the invalid name for debugging."""
+        draft = _make_draft("draft-x", name="../bad", content="# X")
+
+        mock_store = MagicMock()
+        mock_store.get.return_value = draft
+
+        with patch(
+            "backend.api.legacy_routes.get_skill_draft_store",
+            return_value=mock_store,
+        ), patch(
+            "backend.api.legacy_routes.get_skill_loader",
+            return_value=MagicMock(),
+        ):
+            response = client.post("/skill-drafts/draft-x/approve")
+
+        assert response.status_code == 400
+        detail = response.json()["detail"]
+        assert "../bad" in detail or "Invalid skill name" in detail
+
+
+# ------------------------------------------------------------------ #
 # POST /skill-drafts/{id}/reject
 # ------------------------------------------------------------------ #
 

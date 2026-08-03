@@ -133,6 +133,12 @@ class ReviewService:
         for key in _REQUIRED_FIELDS:
             _ = parsed[key]
 
+        # Validate skill name for safe filesystem storage (I-1 fix).
+        # Catches LLM hallucinations like "../etc/cron.d/backdoor" or
+        # "foo/bar" before the draft enters the store, so the user can
+        # never reach approve_skill_draft with an un-writable name.
+        self._validate_skill_name(parsed["name"])
+
         return SkillDraft(
             id=str(uuid.uuid4()),
             name=parsed["name"],
@@ -149,6 +155,33 @@ class ReviewService:
     # ------------------------------------------------------------------ #
     # Internal helpers
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _validate_skill_name(name: str) -> None:
+        """Validate a skill name for safe filesystem storage.
+
+        Raises ``ValueError`` if the name is empty, contains path
+        traversal sequences, or includes directory separators. This
+        prevents LLM-generated drafts with invalid names (e.g.
+        ``"../etc/passwd"``, ``"foo/bar"``, ``""``) from being stored
+        and later failing approval with opaque OS errors.
+
+        Args:
+            name: The skill name to validate.
+
+        Raises:
+            ValueError: The name is invalid for filesystem storage.
+        """
+        if not name or not name.strip():
+            raise ValueError("Skill name must not be empty")
+        if ".." in name:
+            raise ValueError(
+                f"Skill name must not contain path traversal sequences: {name!r}"
+            )
+        if "/" in name or "\\" in name:
+            raise ValueError(
+                f"Skill name must not contain directory separators: {name!r}"
+            )
 
     def _parse_llm_output(self, output: str) -> Dict[str, Any]:
         """Extract and parse JSON from LLM output.
