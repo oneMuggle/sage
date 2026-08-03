@@ -93,7 +93,52 @@ def test_rejects_output_dir_that_is_a_file(tmp_path):
 def test_rejects_unsupported_doc_type(tmp_path):
     result = _tool().execute(doc_type="pdf", output_dir=str(tmp_path), filename="a.pdf", content={})
     assert result.success is False
-    assert result.error == "unsupported_doc_type: pdf"
+
+
+def test_accepts_uppercase_doc_type(tmp_path):
+    """doc_type 大小写容错：Word/WORD → word（T6 实测模型传大写）。"""
+    result = _tool().execute(
+        doc_type="Word",
+        output_dir=str(tmp_path),
+        filename="a.docx",
+        content={"title": "t", "paragraphs": [{"text": "hi"}]},
+    )
+    assert result.success is True
+    assert (tmp_path / "a.docx").exists()
+
+
+def test_word_content_as_plain_text(tmp_path):
+    """content 纯字符串 → 自动包装为 Word 正文段落（"写入一句话"场景）。"""
+    result = _tool().execute(
+        doc_type="word",
+        output_dir=str(tmp_path),
+        filename="天气.docx",
+        content="今天天气很好",
+    )
+    assert result.success is True
+    target = tmp_path / "天气.docx"
+    assert target.exists()
+    parsed = read_docx(target, workspace_path="")
+    assert any(p.text == "今天天气很好" for p in parsed.paragraphs)
+
+
+def test_excel_content_plain_text_still_rejected(tmp_path):
+    """excel 不接受纯文本 content（需 sheets 结构）——保持严格。"""
+    result = _tool().execute(
+        doc_type="excel", output_dir=str(tmp_path), filename="a.xlsx", content="today"
+    )
+    assert result.success is False
+
+
+def test_schema_content_declares_nested_structure():
+    """content 的 JSON Schema 应内联声明 word/excel/ppt 的嵌套结构。"""
+    tool = _tool()
+    content_props = tool.schema.parameters["properties"]["content"]["properties"]
+    assert "title" in content_props
+    assert "paragraphs" in content_props
+    assert "tables" in content_props
+    assert "sheets" in content_props
+    assert "slides" in content_props
 
 
 def test_output_dir_required():
