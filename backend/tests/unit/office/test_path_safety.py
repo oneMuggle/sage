@@ -22,6 +22,7 @@ from backend.office.models import OfficeDocType
 from backend.office.path_safety import (
     is_within,
     managed_document_path,
+    resolve_output_path,
     resolve_within,
     validate_supported_filename,
 )
@@ -234,12 +235,6 @@ def test_validate_supported_filename_accepts_valid_name_and_appends_missing_ext(
     assert validate_supported_filename("file", OfficeDocType.WORD) == "file.docx"
     assert validate_supported_filename("report.pptx", OfficeDocType.PPT) == "report.pptx"
     assert validate_supported_filename("sheet.xlsx", OfficeDocType.EXCEL) == "sheet.xlsx"
-
-
-import pytest
-
-from backend.office.models import OfficeDocType
-from backend.office.path_safety import OfficePathError, resolve_output_path
 
 
 def test_resolve_output_path_appends_canonical_extension(tmp_path):

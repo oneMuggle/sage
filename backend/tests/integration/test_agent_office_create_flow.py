@@ -63,7 +63,7 @@ def _office_agent(workspace_out: Path) -> SageAgent:
                         id="call_office",
                         name="office_create",
                         arguments=(
-                            '{"doc_type": "word", "output_dir": "%s", '
+                            '{"doc_type": "word", "output_dir": "%s", '  # noqa: UP031  # JSON 模板保留 % 占位
                             '"filename": "天气.docx", "content": {"title": "天气", '
                             '"paragraphs": [{"text": "今天天气很好"}]}}'
                             % str(workspace_out)

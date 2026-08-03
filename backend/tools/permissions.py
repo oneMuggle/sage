@@ -321,6 +321,10 @@ def make_office_path_boundary(
             return _ask("office_create 无法解析会话工作区边界，需人工审批")
         if not root:
             return None
+        return _check_output_dir(args, root)
+
+    def _check_output_dir(args: Dict[str, Any], root: str) -> Optional[PermissionDecision]:
+        """校验 ``args["output_dir"]`` 是否落在 ``root`` 内；外 → ask，内/缺失 → None。"""
         output_dir = args.get("output_dir")
         if not isinstance(output_dir, str) or not output_dir.strip():
             return None
