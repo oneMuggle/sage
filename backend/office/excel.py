@@ -195,7 +195,7 @@ def read_xlsx(
 # ──────────────────────────────────────────────────────────────────────
 
 
-def generate_xlsx(req) -> Path:
+def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
     Per user Q6, uses both openpyxl (low-level sheet creation) and pandas
@@ -207,15 +207,15 @@ def generate_xlsx(req) -> Path:
 
     from .errors import OfficeGenerateError
     from .models import OfficeDocType
-    from .path_safety import managed_document_path
+    from .path_safety import managed_document_path, resolve_output_path
     from .storage import validate_workspace
 
-    workspace = validate_workspace(Path(req.workspace_path))
-    doc_id = uuid.uuid4().hex
-    # Compose the full file path with one validated call. Raises
-    # OfficePathError on filename separators, parent traversal, wrong
-    # extension, doc_id injection, or any path that escapes the workspace.
-    output_path = managed_document_path(workspace, OfficeDocType.EXCEL, doc_id, req.filename)
+    if output_dir is not None:
+        output_path = resolve_output_path(output_dir, OfficeDocType.EXCEL, req.filename)
+    else:
+        workspace = validate_workspace(Path(req.workspace_path))
+        doc_id = uuid.uuid4().hex
+        output_path = managed_document_path(workspace, OfficeDocType.EXCEL, doc_id, req.filename)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
