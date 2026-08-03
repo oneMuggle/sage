@@ -6,6 +6,7 @@ import {
   Languages,
   Minimize2,
   BookOpen,
+  GraduationCap,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -26,8 +27,9 @@ export interface SlashCommand {
    * - 'help': 显示帮助信息
    * - 'skill': 作为 SKILL.md skill 执行,返回内容作为用户消息发送
    * - 'compact': 调用后端压缩当前会话上下文 (M4, 真实 action 而非提示词)
+   * - 'learn': 触发 Background Review 当前会话,产生技能草案候选 (Task 12)
    */
-  mode: 'prompt' | 'clear' | 'help' | 'skill' | 'compact';
+  mode: 'prompt' | 'clear' | 'help' | 'skill' | 'compact' | 'learn';
   /** 'skill' 模式下需要执行的 SKILL.md 名称（不含 /）。 */
   skillName?: string;
 }
@@ -75,6 +77,13 @@ export const slashCommands: SlashCommand[] = [
     description: '压缩当前对话上下文',
     icon: Minimize2,
     mode: 'compact',
+  },
+  {
+    name: 'learn',
+    label: '学习对话',
+    description: '从当前对话中学习,生成技能草案候选',
+    icon: GraduationCap,
+    mode: 'learn',
   },
 ];
 

@@ -37,31 +37,25 @@ const SkillDraftList: React.FC = () => {
     return () => window.clearInterval(interval);
   }, [fetchDrafts]);
 
-  const handleApprove = useCallback(
-    async (draft: SkillDraft) => {
-      try {
-        await skillDraftsApi.approve(draft.id);
-        setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
-        toast.success(`已批准 ${draft.name}`);
-      } catch (err) {
-        toast.error(`批准失败: ${(err as Error).message}`);
-      }
-    },
-    [],
-  );
+  const handleApprove = useCallback(async (draft: SkillDraft) => {
+    try {
+      await skillDraftsApi.approve(draft.id);
+      setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+      toast.success(`已批准 ${draft.name}`);
+    } catch (err) {
+      toast.error(`批准失败: ${(err as Error).message}`);
+    }
+  }, []);
 
-  const handleReject = useCallback(
-    async (draft: SkillDraft) => {
-      try {
-        await skillDraftsApi.reject(draft.id);
-        setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
-        toast.success(`已拒绝 ${draft.name}`);
-      } catch (err) {
-        toast.error(`拒绝失败: ${(err as Error).message}`);
-      }
-    },
-    [],
-  );
+  const handleReject = useCallback(async (draft: SkillDraft) => {
+    try {
+      await skillDraftsApi.reject(draft.id);
+      setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+      toast.success(`已拒绝 ${draft.name}`);
+    } catch (err) {
+      toast.error(`拒绝失败: ${(err as Error).message}`);
+    }
+  }, []);
 
   if (loading) {
     return (

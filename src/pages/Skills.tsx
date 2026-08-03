@@ -1,5 +1,6 @@
 import { RefreshCw, RotateCw, Upload } from 'lucide-react';
 import React, { useCallback, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { skillsApi, type Skill } from '../shared/api';
@@ -10,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shared/ui/Tabs';
 import { SkillDraftList, SkillList } from '../widgets/skills';
 
 const Skills: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -17,6 +19,19 @@ const Skills: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [rescanLoading, setRescanLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+
+  // Task 12 (2026-08-03): Read initial tab from URL search params.
+  // Supports cross-page navigation (e.g. /learn in Chat → /skills?tab=drafts).
+  // Valid values: 'skills' | 'drafts'. Defaults to 'skills'.
+  const initialTab = searchParams.get('tab') === 'drafts' ? 'drafts' : 'skills';
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+  const handleTabChange = useCallback(
+    (value: string) => {
+      setActiveTab(value);
+      setSearchParams(value === 'skills' ? {} : { tab: value }, { replace: true });
+    },
+    [setSearchParams],
+  );
 
   const loadSkills = useCallback(async () => {
     setLoading(true);
@@ -229,7 +244,11 @@ const Skills: React.FC = () => {
         </div>
       </div>
 
-      <Tabs defaultValue="skills" className="flex-1 flex flex-col overflow-hidden">
+      <Tabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="flex-1 flex flex-col overflow-hidden"
+      >
         <div className="px-5 pt-3 border-b border-border bg-surface flex-shrink-0">
           <TabsList>
             <TabsTrigger value="skills">技能</TabsTrigger>

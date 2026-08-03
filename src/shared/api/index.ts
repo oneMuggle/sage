@@ -8,6 +8,7 @@
 export { agentsApi } from './agentsApi';
 export { chatApi } from './chatApi';
 export { knowledgeApi } from './knowledgeApi';
+export { learnApi } from './learnApi';
 export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
 export { officeApi } from './officeApi';
@@ -38,6 +39,7 @@ export type {
   ChatResponse,
   ChatOfficeRef,
   KnowledgeDoc,
+  LearnResponse,
   Memory,
   Message,
   OfficeDeleteResponse,

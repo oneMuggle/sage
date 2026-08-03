@@ -268,6 +268,15 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/skill-drafts/${encodeURIComponent(String(a.draft_id))}/reject`,
   },
 
+  // Background Review: explicit learn trigger (Task 12)
+  // src/pages/Chat.tsx onLearn callback invokes learnApi.trigger(sessionId)
+  // which routes through this IPC name. Backend endpoint at
+  // backend/api/legacy_routes.py:1910 (POST /learn).
+  trigger_learn: {
+    method: 'POST',
+    path: () => '/api/v1/learn',
+  },
+
   // orchestration (Phase 4: multi-agent coordination)
   orchestration_list_lanes: {
     method: 'GET',

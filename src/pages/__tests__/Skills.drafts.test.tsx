@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Skill } from '../../shared/api/types';
@@ -33,9 +34,11 @@ vi.mock('../../shared/api', () => ({
 
 function renderSkills() {
   return render(
-    <I18nProvider defaultLocale="zh">
-      <Skills />
-    </I18nProvider>,
+    <MemoryRouter>
+      <I18nProvider defaultLocale="zh">
+        <Skills />
+      </I18nProvider>
+    </MemoryRouter>,
   );
 }
 

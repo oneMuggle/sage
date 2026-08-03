@@ -382,6 +382,18 @@ export interface SkillDraftRejectResponse {
   draft_id: string;
 }
 
+/**
+ * Response shape of POST /learn (Background Review explicit trigger).
+ *
+ * Backend enqueues a review event with trigger_type="explicit_learn".
+ * The Background Review worker picks it up and produces skill draft(s)
+ * that appear in the Skills page "Pending Drafts" tab.
+ */
+export interface LearnResponse {
+  status: 'queued';
+  message: string;
+}
+
 // ==================== Agents 类型定义 ====================
 
 export interface AgentProfile {

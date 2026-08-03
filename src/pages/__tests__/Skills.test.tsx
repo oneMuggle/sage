@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Skill } from '../../shared/api/types';
@@ -42,9 +43,11 @@ const sampleSkills: Skill[] = [
 
 function renderSkills() {
   return render(
-    <I18nProvider defaultLocale="zh">
-      <Skills />
-    </I18nProvider>,
+    <MemoryRouter>
+      <I18nProvider defaultLocale="zh">
+        <Skills />
+      </I18nProvider>
+    </MemoryRouter>,
   );
 }
 
