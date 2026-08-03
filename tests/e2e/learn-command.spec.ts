@@ -189,9 +189,7 @@ async function installMock(
 // ----------------------------- tests -----------------------------
 
 test.describe('/learn command flow', () => {
-  test('/learn slash command triggers review and navigates to Pending Drafts', async ({
-    page,
-  }) => {
+  test('/learn slash command triggers review and navigates to Pending Drafts', async ({ page }) => {
     // Set up mock: configured settings so ChatInput is enabled.
     // No sessions initially — the user can still type "/" because the input
     // is enabled (disabled=false when hasConfig=true).
