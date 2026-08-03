@@ -128,10 +128,12 @@ class PermissionEnforcer:
 - 落在 workspace 外 → 返回 `_ask("写入工作区外的路径 <resolved>，需要用户确认")`；
 - 无 workspace_root（未绑定）→ 返回 `None`（与 `write_file` 未绑定时的跳过边界检查语义一致）。
 
-**装配（`backend/core/legacy/agent.py::_build_permission_enforcer`）：**
+**装配（`backend/core/legacy/agent.py`）：**
 
-- 构造 enforcer 时从 `ToolPolicy.workspace_root` 取边界，注入 `path_boundary_validator`。
-- `_build_permission_enforcer` 的 `PermissionEnforcer(...)` 兜底分支同样注入。
+- **边界来源是当前会话的 workspace 绑定**（`session_workspace` 表），**而非 `ToolPolicy.workspace_root`**——后者在 legacy 链路运行时恒为 `None`（agent 用默认 `ToolPolicy()`，`register_all_tools(self.tool_registry)` 不传 policy，仅 hex 链路注入）。
+- 注入的 validator 经闭包持有 `boundary_resolver: Callable[[], Optional[str]]`：在回调内读 `current_tool_context().session_id`，查 `get_workspace_binding(get_database().get_connection(), session_id)` 取 `workspace_path`；会话未绑定 → 返回 `None`（不检查边界，与 `write_file` 未绑定跳过边界语义一致）。
+- 运行时 `enforcer.check` 发生在 `set_tool_context` 块内（`legacy_routes.py` producer），故 `current_tool_context()` 在回调执行时可用。
+- `_build_permission_enforcer` 的注入分支与 `PermissionEnforcer(...)` 兜底分支都传入该 validator。
 
 ### 3.5 改动点 ④：注册（`backend/tools/__init__.py::register_all_tools`）
 
