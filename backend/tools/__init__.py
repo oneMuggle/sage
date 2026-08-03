@@ -16,6 +16,7 @@ from .edit_tool import EditTool
 from .file_summary_tool import FileSummaryTool
 from .file_tool import ListDirTool, ReadFileTool, WriteFileTool
 from .memory_tool import MemorySaveTool, MemorySearchTool
+from .office_create_tool import OfficeCreateTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .registry import ToolRegistry
 from .repl_tool import ReplTool
@@ -48,6 +49,9 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
     registry.register(MemorySaveTool(policy=policy))
     registry.register(OfficeListTool(policy=policy))
     registry.register(OfficeReadTool(policy=policy))
+    # T5: office_create —— 任意路径生成 Office 文档，写工作区外由 M1 权限执行器
+    # 的 path_boundary_validator 升级为审批（agent._office_boundary_resolver）。
+    registry.register(OfficeCreateTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -94,6 +98,7 @@ __all__ = [
     "MemorySaveTool",
     "OfficeListTool",
     "OfficeReadTool",
+    "OfficeCreateTool",
     "EditTool",
     "GlobSearchTool",
     "GrepSearchTool",
