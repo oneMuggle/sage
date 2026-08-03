@@ -6,6 +6,7 @@ success rates (<60% after >=10 uses) trigger review event enqueue.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import sqlite3
 import tempfile
@@ -15,7 +16,6 @@ import pytest
 
 from backend.skills.review_queue import reset_review_queue
 from backend.skills.usage import SkillUsageStore, reset_usage_store
-
 
 # ------------------------------------------------------------------ #
 # Fixtures
@@ -65,10 +65,8 @@ def temp_db_path():
 
     yield db_path
 
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(db_path)
-    except OSError:
-        pass
 
 
 # ------------------------------------------------------------------ #

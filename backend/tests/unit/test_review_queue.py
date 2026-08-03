@@ -7,10 +7,10 @@ import time
 
 import pytest
 
-from backend.skills.review_queue import ReviewEvent, ReviewQueue
+from backend.skills.review_queue import ReviewQueue
 
 
-@pytest.fixture
+@pytest.fixture()
 def db_path():
     """Create a temporary database file for testing."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:

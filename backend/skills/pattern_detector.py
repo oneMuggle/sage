@@ -66,7 +66,7 @@ class PatternDetector:
         for sig, count in counter.most_common():
             if count >= threshold:
                 matching_calls = [
-                    tc for tc, s in zip(tool_calls, signatures) if s == sig
+                    tc for tc, s in zip(tool_calls, signatures, strict=False) if s == sig
                 ]
                 return {
                     "signature": sig,

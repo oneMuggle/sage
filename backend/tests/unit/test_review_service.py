@@ -1,7 +1,6 @@
 """Tests for ReviewService with LLM-driven skill draft generation."""
 
 import json
-import time
 from unittest.mock import AsyncMock, Mock
 
 import pytest

@@ -74,7 +74,7 @@ class ReviewService:
         from pathlib import Path
 
         template_path = Path(__file__).parent / "prompts" / "review.txt"
-        with open(template_path, "r", encoding="utf-8") as fh:
+        with open(template_path, encoding="utf-8") as fh:
             return Template(fh.read())
 
     # ------------------------------------------------------------------ #

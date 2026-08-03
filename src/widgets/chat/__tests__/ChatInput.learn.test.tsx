@@ -14,8 +14,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { slashCommands } from '../slashCommands';
 import { ChatInput } from '../ChatInput';
+import { slashCommands } from '../slashCommands';
 
 vi.mock('../../../shared/lib/hooks/useFileUpload', () => ({
   useFileUpload: () => ({

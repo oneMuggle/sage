@@ -134,7 +134,7 @@ class TestListSkillDrafts:
 
 
 # ------------------------------------------------------------------ #
-# POST /skill-drafts/{id}/approve
+# POST /skill-drafts/{id}/approve  # noqa: ERA001
 # ------------------------------------------------------------------ #
 
 
@@ -326,7 +326,7 @@ class TestApproveSkillDraftNameValidation:
 
 
 # ------------------------------------------------------------------ #
-# POST /skill-drafts/{id}/reject
+# POST /skill-drafts/{id}/reject  # noqa: ERA001
 # ------------------------------------------------------------------ #
 
 

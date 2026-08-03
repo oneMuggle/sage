@@ -2,6 +2,7 @@
 
 Tests the complete flow from event enqueue to draft creation.
 """
+import contextlib
 import os
 import sqlite3
 import tempfile
@@ -15,7 +16,7 @@ from backend.skills.review_queue import ReviewQueue
 from backend.skills.review_service import ReviewService
 
 
-@pytest.fixture
+@pytest.fixture()
 def temp_db():
     """Create a temporary database with required tables."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -58,13 +59,11 @@ def temp_db():
 
     yield db_path
 
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(db_path)
-    except OSError:
-        pass
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_llm_provider():
     """Mock LLM provider that returns a valid skill draft JSON."""
     provider = Mock()
@@ -194,7 +193,7 @@ def test_queue_handles_db_error_on_insert(temp_db, mock_llm_provider):
     event = queue._dequeue_next()
     assert event is not None
 
-    with pytest.raises(Exception):
+    with pytest.raises(sqlite3.OperationalError, match="unable to open"):
         queue._process_event(event)
 
 

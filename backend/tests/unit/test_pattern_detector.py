@@ -1,9 +1,7 @@
 """Unit tests for PatternDetector — repeated tool trace detection."""
 
-import pytest
 
 from backend.skills.pattern_detector import PatternDetector
-
 
 # ---------------------------------------------------------------------------
 # Signature extraction

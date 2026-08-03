@@ -1,5 +1,4 @@
 """Unit tests for SkillDraftStore CRUD operations."""
-import json
 import sqlite3
 
 import pytest
@@ -30,18 +29,18 @@ CREATE TABLE IF NOT EXISTS skill_drafts (
 
 def _make_draft(**overrides) -> SkillDraft:
     """Create a SkillDraft with sensible defaults, overridable."""
-    defaults = dict(
-        id="draft-001",
-        name="test-skill",
-        description="A test skill",
-        when_to_use="When testing",
-        content="# Test\n\n## Steps\n\n1. Test",
-        trigger_type="complex_turn",
-        source_session_id="session_1",
-        source_context={"tool_calls": ["grep", "read"]},
-        status="pending",
-        created_at=1_000_000,
-    )
+    defaults = {
+        "id": "draft-001",
+        "name": "test-skill",
+        "description": "A test skill",
+        "when_to_use": "When testing",
+        "content": "# Test\n\n## Steps\n\n1. Test",
+        "trigger_type": "complex_turn",
+        "source_session_id": "session_1",
+        "source_context": {"tool_calls": ["grep", "read"]},
+        "status": "pending",
+        "created_at": 1_000_000,
+    }
     defaults.update(overrides)
     return SkillDraft(**defaults)
 
