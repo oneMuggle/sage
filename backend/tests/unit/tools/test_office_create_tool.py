@@ -8,6 +8,7 @@ import pytest
 
 from backend.domain.tool_policy import ToolPolicy
 from backend.office.excel import read_xlsx
+from backend.office.models import OfficeDocType
 from backend.office.word import read_docx
 from backend.tools.office_create_tool import OfficeCreateTool
 
@@ -32,7 +33,8 @@ def test_schema_requires_no_tool_context_and_exposes_fields():
     assert tool.requires_tool_context is False
     props = tool.schema.parameters["properties"]
     assert set(props.keys()) == {"doc_type", "output_dir", "filename", "content"}
-    assert props["doc_type"]["enum"] == ["word", "excel", "ppt"]
+    # doc_type 合法取值必须与 models.OfficeDocType 枚举一致（单一事实来源）
+    assert props["doc_type"]["enum"] == [t.value for t in OfficeDocType]
 
 
 def test_create_word_to_output_dir(tmp_path):
@@ -93,3 +95,58 @@ def test_rejects_output_dir_that_is_a_file(tmp_path):
 def test_rejects_unsupported_doc_type(tmp_path):
     result = _tool().execute(doc_type="pdf", output_dir=str(tmp_path), filename="a.pdf", content={})
     assert result.success is False
+    assert result.error == "unsupported_doc_type: pdf"
+
+
+def test_output_dir_required():
+    result = _tool().execute(
+        doc_type="word", output_dir=None, filename="a.docx",
+        content={"title": "t", "paragraphs": []},
+    )
+    assert result.success is False
+    assert result.error == "output_dir_required"
+
+
+def test_filename_required(tmp_path):
+    result = _tool().execute(
+        doc_type="word", output_dir=str(tmp_path), filename="  ",
+        content={"title": "t", "paragraphs": []},
+    )
+    assert result.success is False
+    assert result.error == "filename_required"
+
+
+def test_content_required(tmp_path):
+    result = _tool().execute(
+        doc_type="word", output_dir=str(tmp_path), filename="a.docx", content={},
+    )
+    assert result.success is False
+    assert result.error == "content_required"
+
+
+def test_rejects_output_dir_outside_workspace_when_bound(tmp_path, tmp_path_factory):
+    workspace = tmp_path
+    outside = tmp_path_factory.mktemp("outside")
+    result = _tool(workspace_root=str(workspace)).execute(
+        doc_type="word",
+        output_dir=str(outside),
+        filename="a.docx",
+        content={"title": "t", "paragraphs": [{"text": "x"}]},
+    )
+    assert result.success is False
+    assert "path_outside_workspace" in result.error
+    assert not (outside / "a.docx").exists()
+
+
+def test_allows_output_dir_inside_workspace_when_bound(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    result = _tool(workspace_root=str(workspace)).execute(
+        doc_type="word",
+        output_dir=str(workspace),
+        filename="b.docx",
+        content={"title": "t", "paragraphs": [{"text": "x"}]},
+    )
+    assert result.success is True
+    assert (workspace / "b.docx").exists()
+
