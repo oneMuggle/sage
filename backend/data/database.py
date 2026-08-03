@@ -662,6 +662,47 @@ class Database:
             ON orchestration_teams(status)
         """)
 
+        # ==================== Background Review 表 ====================
+        # Task 4 of 2026-08-02-background-review:
+        # review_events 与 skill_drafts 表放在主初始化路径, 确保任何进程启动
+        # 时都可用, 无需依赖 ReviewQueue 自己的 _initialize_db。
+
+        # review_events: 审查事件队列表
+        # ReviewQueue 入队/出队的持久化载体。与 ReviewQueue._initialize_db
+        # 中的 schema 保持一致 (CREATE TABLE IF NOT EXISTS 幂等)。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS review_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trigger_type TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                context TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at INTEGER NOT NULL,
+                processed_at INTEGER,
+                error_message TEXT
+            )
+        """)
+
+        # skill_drafts: 技能草稿表
+        # Background Review 在会话结束提炼出的候选技能, 等待用户审阅后
+        # 决定是否晋升为正式技能 (写入 skills 表)。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS skill_drafts (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                when_to_use TEXT NOT NULL,
+                content TEXT NOT NULL,
+                trigger_type TEXT NOT NULL,
+                source_session_id TEXT,
+                source_context TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at INTEGER NOT NULL,
+                reviewed_at INTEGER,
+                reviewed_by_user_id TEXT
+            )
+        """)
+
         # 创建索引
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC)"
