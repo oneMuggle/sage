@@ -300,7 +300,7 @@ class Database:
         """)
 
         # 技能使用统计表（借鉴 hermes-agent 的 .usage.json 概念）:
-        # 按技能名聚合 use_count / success_count / last_used_at,
+        # 按技能名聚合 use_count / success_count / fail_count / last_used_at,
         # 供技能生命周期（curator）与前端使用统计使用。
         # registry（InprocSkillAdapter）是技能来源真相, 本表只记聚合统计。
         cursor.execute("""
@@ -308,6 +308,7 @@ class Database:
                 name TEXT PRIMARY KEY,
                 use_count INTEGER DEFAULT 0,
                 success_count INTEGER DEFAULT 0,
+                fail_count INTEGER DEFAULT 0,
                 last_used_at INTEGER
             )
         """)
@@ -315,6 +316,15 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_skill_usage_last_used
             ON skill_usage(last_used_at DESC)
         """)
+
+        # 数据库迁移：为已有数据库的 skill_usage 表添加 fail_count 列
+        # （Task 1: background-review 2026-08-02）。
+        cursor.execute("PRAGMA table_info(skill_usage)")
+        skill_usage_columns = [row["name"] for row in cursor.fetchall()]
+        if "fail_count" not in skill_usage_columns:
+            cursor.execute(
+                "ALTER TABLE skill_usage ADD COLUMN fail_count INTEGER DEFAULT 0"
+            )
 
         # 技能生命周期（curator）表：归档软标记（spec 2026-08-02-skill-curator-lifecycle）。
         # 独立于 skill_usage —— 从未使用的技能无 usage 行但同样可归档，需以 name
@@ -650,6 +660,47 @@ class Database:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_orch_teams_status
             ON orchestration_teams(status)
+        """)
+
+        # ==================== Background Review 表 ====================
+        # Task 4 of 2026-08-02-background-review:
+        # review_events 与 skill_drafts 表放在主初始化路径, 确保任何进程启动
+        # 时都可用, 无需依赖 ReviewQueue 自己的 _initialize_db。
+
+        # review_events: 审查事件队列表
+        # ReviewQueue 入队/出队的持久化载体。与 ReviewQueue._initialize_db
+        # 中的 schema 保持一致 (CREATE TABLE IF NOT EXISTS 幂等)。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS review_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trigger_type TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                context TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at INTEGER NOT NULL,
+                processed_at INTEGER,
+                error_message TEXT
+            )
+        """)
+
+        # skill_drafts: 技能草稿表
+        # Background Review 在会话结束提炼出的候选技能, 等待用户审阅后
+        # 决定是否晋升为正式技能 (写入 skills 表)。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS skill_drafts (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                when_to_use TEXT NOT NULL,
+                content TEXT NOT NULL,
+                trigger_type TEXT NOT NULL,
+                source_session_id TEXT,
+                source_context TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at INTEGER NOT NULL,
+                reviewed_at INTEGER,
+                reviewed_by_user_id TEXT
+            )
         """)
 
         # 创建索引

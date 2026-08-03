@@ -40,6 +40,12 @@ interface ChatInputProps {
    * IPC + toast + 重载消息）。未提供时 /compact 静默无操作。
    */
   onCompact?: () => void;
+  /**
+   * Task 12 (2026-08-03): /learn slash action 回调。由 Chat 页面实现
+   * （调用 learnApi + toast + 跳转到 Pending Drafts tab）。未提供时
+   * /learn 静默无操作。
+   */
+  onLearn?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -66,6 +72,7 @@ export function ChatInput({
   onInterrupt,
   onClear,
   onCompact,
+  onLearn,
   isLoading = false,
   disabled = false,
   placeholder,
@@ -244,6 +251,16 @@ export function ChatInput({
         return;
       }
 
+      // Task 12 (2026-08-03): /learn 触发 Background Review，
+      // 由 Chat 页面负责调用 learnApi + toast + 跳转到 Pending Drafts tab。
+      // 对齐 /compact 的守卫：流式/禁用态下为 no-op。
+      if (cmd.mode === 'learn') {
+        if (isLoading || disabled) return;
+        setValue('');
+        onLearn?.();
+        return;
+      }
+
       if (cmd.mode === 'help') {
         const helpText = slashCommands.map((c) => `/${c.name} — ${c.description}`).join('\n');
         setValue('');
@@ -282,7 +299,7 @@ export function ChatInput({
       setValue('');
       onSend(prompt);
     },
-    [value, onSend, onClear, onCompact, slashCommands, isLoading, disabled],
+    [value, onSend, onClear, onCompact, onLearn, slashCommands, isLoading, disabled],
   );
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

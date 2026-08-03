@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
-import { sessionApi, type ChatOfficeRef } from '../shared/api';
+import { sessionApi, learnApi, type ChatOfficeRef } from '../shared/api';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
@@ -150,12 +150,29 @@ export function Chat() {
       } else if (result.ok) {
         toast.info(t('chat.compact_skipped'));
       } else {
-        toast.error(fill(t('chat.compact_failed'), { message: result.message ?? result.error ?? '' }));
+        toast.error(
+          fill(t('chat.compact_failed'), { message: result.message ?? result.error ?? '' }),
+        );
       }
     } catch (e) {
       toast.error(
         fill(t('chat.compact_failed'), { message: e instanceof Error ? e.message : String(e) }),
       );
+    }
+  };
+
+  // Task 12 (2026-08-03): /learn slash action — 触发 Background Review
+  // 当前会话，产生技能草案候选。成功后跳转到 Skills 页面的 Pending Drafts tab。
+  // 与 /compact 对齐：流式中 early-return。
+  const handleLearn = async () => {
+    if (!currentSessionId || isLoading) return;
+    try {
+      toast.info('Reviewing...');
+      await learnApi.trigger(currentSessionId);
+      toast.success('Review queued — check Pending Drafts');
+      navigate('/skills?tab=drafts');
+    } catch (e) {
+      toast.error(`Review failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -256,6 +273,7 @@ export function Chat() {
         onSend={handleSendMessage}
         onInterrupt={interrupt}
         onCompact={handleCompact}
+        onLearn={handleLearn}
         isLoading={isLoading}
         disabled={!hasConfig}
         placeholder="输入消息..."

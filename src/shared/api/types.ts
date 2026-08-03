@@ -343,6 +343,57 @@ export interface DeleteSkillResult {
   base_dir?: string;
 }
 
+/**
+ * Skill draft produced by the Background Review pipeline.
+ *
+ * Mirrors the backend `SkillDraft` dataclass / `_draft_to_dict` shape
+ * (see `backend/api/legacy_routes.py`). Drafts live in a SQLite table
+ * and are surfaced to the user for approval/rejection via the
+ * "Pending Drafts" tab on the Skills page.
+ */
+export interface SkillDraft {
+  id: string;
+  name: string;
+  description: string;
+  when_to_use: string;
+  content: string;
+  trigger_type: string;
+  source_session_id: string;
+  source_context: Record<string, unknown>;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: number;
+}
+
+/** Response shape of GET /skill-drafts. */
+export interface SkillDraftListResponse {
+  drafts: SkillDraft[];
+}
+
+/** Response shape of POST /skill-drafts/{id}/approve. */
+export interface SkillDraftApproveResponse {
+  status: 'approved';
+  skill_name: string;
+  draft_id: string;
+}
+
+/** Response shape of POST /skill-drafts/{id}/reject. */
+export interface SkillDraftRejectResponse {
+  status: 'rejected';
+  draft_id: string;
+}
+
+/**
+ * Response shape of POST /learn (Background Review explicit trigger).
+ *
+ * Backend enqueues a review event with trigger_type="explicit_learn".
+ * The Background Review worker picks it up and produces skill draft(s)
+ * that appear in the Skills page "Pending Drafts" tab.
+ */
+export interface LearnResponse {
+  status: 'queued';
+  message: string;
+}
+
 // ==================== Agents 类型定义 ====================
 
 export interface AgentProfile {
