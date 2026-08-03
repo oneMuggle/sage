@@ -222,7 +222,18 @@ def format_agents_for_prompt() -> str:
     return "\n\n你可以向用户介绍以下可用 Agent：\n" + "\n".join(lines)
 
 
+#: 默认 system prompt 的工具能力声明——明确告知 LLM 可调用的 Office 创建
+#: 能力，避免其凭训练先验回复"没有创建本地文件的权限"（T6 Electron 实测
+#: 暴露）。工具/能力变化时手动维护，与 legacy_routes 的 DIAGRAM_TOOL_PROMPT
+#: 同模式。
+_OFFICE_CREATE_CAPABILITY_PROMPT = (
+    "\n\n你可以创建 Office 文档：当用户要求生成 Word/Excel/PPT 文件时，"
+    "调用 office_create 工具（提供 doc_type / output_dir / filename / 内容结构）。"
+    "写入工作区外（如桌面）时，用户会看到确认框，批准后才会真正写入。"
+)
+
+
 def build_system_base() -> str:
-    """构建 system prompt 基础部分（身份 + agent 列表）。"""
+    """构建 system prompt 基础部分（身份 + 工具能力声明 + agent 列表）。"""
     base = "你是 Sage，一个智能 AI 助手。"
-    return base + format_agents_for_prompt()
+    return base + _OFFICE_CREATE_CAPABILITY_PROMPT + format_agents_for_prompt()
