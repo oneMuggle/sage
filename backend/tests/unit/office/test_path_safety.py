@@ -234,3 +234,38 @@ def test_validate_supported_filename_accepts_valid_name_and_appends_missing_ext(
     assert validate_supported_filename("file", OfficeDocType.WORD) == "file.docx"
     assert validate_supported_filename("report.pptx", OfficeDocType.PPT) == "report.pptx"
     assert validate_supported_filename("sheet.xlsx", OfficeDocType.EXCEL) == "sheet.xlsx"
+
+
+import pytest
+
+from backend.office.models import OfficeDocType
+from backend.office.path_safety import OfficePathError, resolve_output_path
+
+
+def test_resolve_output_path_appends_canonical_extension(tmp_path):
+    out = resolve_output_path(str(tmp_path), OfficeDocType.WORD, "天气")
+    assert out.name == "天气.docx"
+    assert out.parent == tmp_path.resolve()
+
+
+def test_resolve_output_path_keeps_correct_extension(tmp_path):
+    out = resolve_output_path(str(tmp_path), OfficeDocType.EXCEL, "data.xlsx")
+    assert out.name == "data.xlsx"
+
+
+def test_resolve_output_path_expands_home(monkeypatch, tmp_path):
+    home = tmp_path / "fake-home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    out = resolve_output_path("~/Desktop", OfficeDocType.PPT, "slides")
+    assert out.parent == (home / "Desktop").resolve()
+    assert out.name == "slides.pptx"
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["../evil.docx", "a/b.docx", "a\\b.docx", "bad.txt", ".."],
+)
+def test_resolve_output_path_rejects_unsafe_filename(tmp_path, filename):
+    with pytest.raises(OfficePathError):
+        resolve_output_path(str(tmp_path), OfficeDocType.WORD, filename)
