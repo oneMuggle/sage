@@ -3,3 +3,4 @@
  */
 export { default as SkillList } from './SkillList';
 export { default as SkillCard } from './SkillCard';
+export { default as SkillDraftList } from './SkillDraftList';

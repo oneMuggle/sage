@@ -93,9 +93,89 @@ core = core_profile[:_CORE_PROFILE_LIMIT] + core_retrieved[:_CORE_RETRIEVED_LIMI
   `backend/data/database.py`（新表 `user_profile`）
 - 新表：`user_profile`（幂等建表）
 
-## 4. 后续工作（未实施）
+## 4. Background Review 自主进化系统（2026-08-03 实施）
+
+系统自动检测"值得提炼为技能"的对话模式，异步生成技能草稿，等待用户审批。
+
+### 4.1 信号检测
+
+`backend/skills/pattern_detector.py` — 四种触发源：
+
+| 信号 | 触发条件 | 阈值 |
+|------|----------|------|
+| 复杂对话轮次 | 单轮 tool_calls 数量 ≥ N | `COMPLEX_TURN_THRESHOLD = 5` |
+| 低成功率技能 | 某技能失败率超过阈值 | `FAIL_RATE_THRESHOLD = 0.5`（至少 3 次调用） |
+| 重复模式 | 相同 tool 组合在窗口内反复出现 | `REPEAT_THRESHOLD = 3` 次/窗口 |
+| /learn 命令 | 用户显式触发 | 任意时刻 |
+
+`ChatService` 在每轮响应后调用 `record_signal()`，信号写入 `review_events` 表。
+
+### 4.2 异步审查队列
+
+`backend/skills/review_queue.py` — 后台单线程 worker + SQLite 持久化：
+
+- `enqueue(event)` 写入 `review_events` 表
+- Worker 每 `POLL_INTERVAL_S=5` 秒取一批未处理事件（FIFO + `id` 升序去重）
+- 成组交给 `ReviewService.generate_draft()` 生成技能草稿
+- 处理完标记 `processed_at`；进程退出时 `drain()` 安全排空
+
+### 4.3 LLM 驱动的技能草稿生成
+
+`backend/skills/review_service.py`：
+
+- 从 `review_events` + `skill_usage` + `working_memory` 聚合上下文
+- 调用 LLM（prompt 模板 `backend/skills/prompts/review.txt`）生成 SKILL.md 草稿
+- 草稿写入 `skill_drafts` 表（`SkillDraftStore`，CRUD 封装）
+
+### 4.4 审批队列
+
+- **API**: `POST /review/trigger`（/learn 触发）、`GET /skill-drafts`（列出草稿）、
+  `POST /skill-drafts/:id/approve`、`POST /skill-drafts/:id/reject`
+- **前端**: Skills 页面新增 "Pending Drafts" 标签页（`SkillDraftList.tsx`），
+  轮询草稿列表，Approve/Reject 按钮
+- **ChatInput**: `/learn` 斜杠命令（`slashCommands.ts` + `Chat.tsx` handleLearn）
+
+### 4.5 数据库 schema
+
+`backend/data/database.py` 新增两张表（幂等建表）：
+
+```sql
+CREATE TABLE IF NOT EXISTS review_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    payload TEXT,
+    processed_at INTEGER,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS skill_drafts (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    source_events TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at INTEGER NOT NULL,
+    reviewed_at INTEGER
+);
+```
+
+### 4.6 相关文件
+
+| 文件 | 职责 |
+|------|------|
+| `backend/skills/pattern_detector.py` | 信号检测（复杂轮次/重复模式/失败率） |
+| `backend/skills/review_queue.py` | 异步队列 + SQLite 持久化 + worker |
+| `backend/skills/review_service.py` | LLM 调用 + 上下文聚合 + 草稿生成 |
+| `backend/skills/draft_store.py` | skill_drafts 表 CRUD |
+| `backend/skills/prompts/review.txt` | LLM prompt 模板 |
+| `backend/skills/usage.py` | `fail_count` 列（成功率跟踪） |
+| `backend/api/legacy_routes.py` | /review/trigger + /skill-drafts API |
+| `src/widgets/skills/SkillDraftList.tsx` | Pending Drafts UI 组件 |
+| `src/widgets/chat/ChatInput.tsx` | /learn 斜杠命令 |
+| `src/pages/Chat.tsx` | handleLearn IPC 调用 |
+| `electron/commands.ts` | trigger_learn IPC handler |
+
+## 5. 后续工作（未实施）
 
 - 记忆提取异步化（legacy 已非阻塞，hex 收益有限，留待 API_MODE=hex 启用后）
 - Skill curator 生命周期（active/stale/archived）
-- Background review 自主进化
-- /learn 命令（需 skill_manage 创建工具 + 前端 UI）

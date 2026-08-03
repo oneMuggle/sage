@@ -57,6 +57,9 @@ from backend.office.workspace_errors import (
 from backend.orchestration.chat_dispatcher import _classify_orchestration_mode
 from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs, get_scheduler
+from backend.skills.draft_store import get_skill_draft_store
+from backend.skills.loader import get_skill_loader
+from backend.skills.review_queue import get_review_queue
 
 logger = logging.getLogger(__name__)
 
@@ -2218,6 +2221,177 @@ def get_evolution_status():
         return scheduler.get_task_status()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Background Review (Background Review) ====================
+#
+# /learn: 用户显式触发当前会话的 review,产生技能草案候选。
+# 与 Task 8 的自动 signal detection (complex_turn / low_success_rate)
+# 互补 — 本端点是 manual trigger,trigger_type="explicit_learn"。
+
+
+class LearnRequest(BaseModel):
+    """POST /learn 请求体。
+
+    - session_id: 要 review 的会话 (必填)
+    - prompt: 用户附加的提示,传给 LLM 作为 review 上下文 (可选)
+    """
+
+    session_id: str
+    prompt: str = ""
+
+
+@router.post("/learn")
+async def learn_from_session(request: LearnRequest):
+    """User explicitly triggers review of current conversation.
+
+    Enqueues a review event with trigger_type="explicit_learn".
+    The background worker will pull it, load conversation history,
+    and generate a skill draft via ReviewService.
+
+    - 200 + ``{"status": "queued", "message": "..."}``
+    - 404 — session_id does not exist
+    - 422 (FastAPI 自动) — session_id 缺失
+
+    .. note:: I-2 follow-up
+        The worker currently receives ``messages: []`` as a placeholder
+        and does not yet load the full conversation history from
+        ``session_id``. LLM therefore runs with empty context and may
+        produce low-quality or hallucinated drafts. A follow-up task
+        should have the worker call ``MessageRepository.get_by_session``
+        to populate the messages list before invoking ReviewService.
+    """
+    # I-2 fix: validate session existence before enqueueing — avoids
+    # wasting LLM tokens on reviews for non-existent sessions.
+    session_repo = SessionRepository()
+    if session_repo.get(request.session_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session not found: {request.session_id}",
+        )
+
+    review_queue = get_review_queue()
+    review_queue.enqueue(
+        trigger_type="explicit_learn",
+        session_id=request.session_id,
+        context={
+            # TODO(I-2): worker should load conversation history via
+            # MessageRepository.get_by_session(session_id) instead of
+            # passing an empty list. The LLM currently receives no
+            # conversation context, producing low-quality drafts.
+            "messages": [],
+            "user_prompt": request.prompt,
+        },
+    )
+    logger.info(
+        "/learn: enqueued explicit_learn for session=%s",
+        _safe_log_field(request.session_id),
+    )
+    return {"status": "queued", "message": "Review started"}
+
+
+# ------------------------------------------------------------------ #
+# Skill Draft Approval Queue (Task 10)
+#
+# REST endpoints for reviewing skill drafts produced by the Background
+# Review pipeline.
+#
+# - GET  /skill-drafts                 → list drafts (optional status filter)
+# - POST /skill-drafts/{id}/approve    → approve draft + write SKILL.md to disk
+# - POST /skill-drafts/{id}/reject     → reject draft
+# ------------------------------------------------------------------ #
+
+
+@router.get("/skill-drafts")
+async def list_skill_drafts(status: str = "pending"):
+    """List skill drafts by status.
+
+    - 200 + ``{"drafts": [...]}``
+    - Query param ``status`` defaults to ``"pending"``.
+    """
+    draft_store = get_skill_draft_store()
+    drafts = draft_store.list(status=status)
+    return {"drafts": [_draft_to_dict(d) for d in drafts]}
+
+
+@router.post("/skill-drafts/{draft_id}/approve")
+async def approve_skill_draft(draft_id: str):
+    """User approves skill draft → write to SKILL.md on disk.
+
+    - 200 + ``{"status": "approved", "skill_name": ..., "draft_id": ...}``
+    - 400 — invalid skill name (path traversal / separators / empty);
+      draft status NOT updated (follow-up: regenerate or edit the draft)
+    - 404 — draft not found
+    - 500 — file-system write failure (status NOT updated)
+    """
+    draft_store = get_skill_draft_store()
+    draft = draft_store.get(draft_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    # I-1 fix: validate name *before* touching the filesystem so that
+    # drafts with un-writable names (LLM hallucinations like "../foo")
+    # get a clean 400 instead of an opaque 500 OSError.
+    from backend.skills.review_service import ReviewService
+
+    try:
+        ReviewService._validate_skill_name(draft.name)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid skill name: {exc}",
+        ) from exc
+
+    try:
+        skill_loader = get_skill_loader()
+        skill_loader.write(draft.name, draft.content)
+    except ValueError as exc:
+        # Skill loader rejected the name (caught separately from OSError
+        # so the route can return 400 for invalid names vs 500 for FS errors).
+        logger.error("Failed to write skill %s: %s", draft.name, exc)
+        raise HTTPException(
+            status_code=400, detail=f"Failed to write skill: {exc}"
+        ) from exc
+    except (PermissionError, OSError) as exc:
+        logger.error("Failed to write skill %s: %s", draft.name, exc)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to write skill: {exc}"
+        ) from exc
+
+    draft_store.update_status(draft_id, "approved")
+    return {"status": "approved", "skill_name": draft.name, "draft_id": draft_id}
+
+
+@router.post("/skill-drafts/{draft_id}/reject")
+async def reject_skill_draft(draft_id: str):
+    """User rejects skill draft → mark as rejected.
+
+    - 200 + ``{"status": "rejected", "draft_id": ...}``
+    - 404 — draft not found
+    """
+    draft_store = get_skill_draft_store()
+    draft = draft_store.get(draft_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    draft_store.update_status(draft_id, "rejected")
+    return {"status": "rejected", "draft_id": draft_id}
+
+
+def _draft_to_dict(draft) -> dict:
+    """Serialize a SkillDraft dataclass to a JSON-safe dict."""
+    return {
+        "id": draft.id,
+        "name": draft.name,
+        "description": draft.description,
+        "when_to_use": draft.when_to_use,
+        "content": draft.content,
+        "trigger_type": draft.trigger_type,
+        "source_session_id": draft.source_session_id,
+        "source_context": draft.source_context,
+        "status": draft.status,
+        "created_at": draft.created_at,
+    }
 
 
 # ==================== 记忆 API ====================

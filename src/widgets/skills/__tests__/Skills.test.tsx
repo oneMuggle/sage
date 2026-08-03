@@ -9,6 +9,7 @@
  * See `electron/preload.ts:90-96` and Task 4 IPC bridge.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -59,10 +60,12 @@ beforeEach(() => {
 
 const renderWithToast = () =>
   render(
-    <>
-      <Skills />
-      <Toaster />
-    </>,
+    <MemoryRouter>
+      <>
+        <Skills />
+        <Toaster />
+      </>
+    </MemoryRouter>,
   );
 
 describe('Skills page — Rescan + Import buttons', () => {

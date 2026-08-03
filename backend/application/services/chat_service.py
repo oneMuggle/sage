@@ -419,16 +419,44 @@ class ChatService:
         # 4.5) 技能 Nudge（best-effort）: 单轮工具调用 ≥ 阈值且未自动激活技能
         #      时, 在 assistant 回复末尾追加"建议保存为技能"的提示。
         #      仅在 response 有正文时生效; 任何异常降级跳过, 不破坏对话轮次。
+        #
+        #      4.5.1) Background Review 信号检测：同一条件触发
+        #      review event enqueue（complex_turn），供后台 worker 分析
+        #      并可能生成新技能草稿。best-effort：review queue 不可用时
+        #      静默降级，不影响对话热路径。
         try:
-            if (
-                response.content
-                and len(response.tool_calls or []) >= SKILL_NUDGE_TOOL_CALL_THRESHOLD
+            tool_call_count = len(response.tool_calls or [])
+            is_complex_turn = (
+                tool_call_count >= SKILL_NUDGE_TOOL_CALL_THRESHOLD
                 and not activation_block
-            ):
+            )
+
+            if response.content and is_complex_turn:
                 response.content = (response.content or "") + SKILL_NUDGE_SUFFIX
                 span.set_attribute("skills.nudge_applied", True)
+
+            # 4.5.1) Background Review: enqueue complex_turn signal
+            if is_complex_turn:
+                from backend.skills.review_queue import get_review_queue
+
+                review_queue = get_review_queue()
+                # ToolCall 数据类不可直接 JSON 序列化，转为 dict
+                tool_calls_serialized = [
+                    {"name": tc.name, "args": tc.args}
+                    for tc in (response.tool_calls or [])
+                ]
+                review_queue.enqueue(
+                    trigger_type="complex_turn",
+                    session_id=session_id,
+                    context={
+                        "tool_calls": tool_calls_serialized,
+                        "tool_call_count": tool_call_count,
+                        "threshold": SKILL_NUDGE_TOOL_CALL_THRESHOLD,
+                    },
+                )
+                span.set_attribute("review.complex_turn_enqueued", True)
         except Exception as exc:  # noqa: BLE001 - best-effort 契约
-            logger.debug(f"Skill nudge skipped: {exc}")
+            logger.debug(f"Skill nudge / review signal skipped: {exc}")
 
         # 5) 持久化 assistant response（即使触发了 tool_calls，
         #    仍把 LLM 原始的 assistant message 落库）

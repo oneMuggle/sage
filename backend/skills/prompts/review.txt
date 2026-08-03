@@ -1,0 +1,18 @@
+你是一个技能策展人。根据以下对话轨迹，提炼出一个可复用的技能。
+
+触发类型：$trigger_type
+对话上下文：
+$conversation_context
+
+请输出一个 JSON 对象，包含：
+{
+  "name": "技能名称（kebab-case）",
+  "description": "一句话描述",
+  "when_to_use": "何时使用这个技能（触发条件）",
+  "content": "技能的完整 SKILL.md 内容（markdown 格式）"
+}
+
+要求：
+1. 技能应该是可复用的模式，不是单次操作
+2. when_to_use 应该明确、具体
+3. content 应该包含完整的步骤和示例

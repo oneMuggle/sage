@@ -91,6 +91,17 @@ class TestSkillUsageStore:
         assert stat["use_count"] == 3
         assert stat["success_count"] == 2
 
+    def test_bump_tracks_failures(self, store):
+        """fail_count 列正确累计失败次数（Task 1: background-review）。"""
+        store.bump("search", success=False)
+        store.bump("search", success=False)
+        store.bump("search", success=True)
+
+        stat = store.get("search")
+        assert stat["use_count"] == 3
+        assert stat["fail_count"] == 2
+        assert stat["success_count"] == 1
+
     def test_bump_empty_name_noop(self, store):
         store.bump("", success=True)
         assert store.get_all() == []
