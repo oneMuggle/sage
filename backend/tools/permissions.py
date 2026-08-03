@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from backend.tools.base import _is_safe_path
 from backend.tools.bash_validation import BashRisk, validate_bash
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "todo_write": ToolCapability.READ,
     "structured_output": ToolCapability.READ,
     "write_file": ToolCapability.WRITE,
+    "office_create": ToolCapability.WRITE,
     "edit_file": ToolCapability.WRITE,
     "terminal": ToolCapability.EXECUTE,
     "repl": ToolCapability.EXECUTE,
@@ -183,10 +185,14 @@ class PermissionEnforcer:
         mode: PermissionMode,
         rules: Sequence[PermissionRule],
         bash_validator: Optional[Callable[[str], Any]] = None,
+        path_boundary_validator: Optional[
+            Callable[[str, Dict[str, Any]], Optional[PermissionDecision]]
+        ] = None,
     ) -> None:
         self._mode = mode
         self._rules: Tuple[PermissionRule, ...] = tuple(rules)
         self._bash_validator = bash_validator
+        self._path_boundary_validator = path_boundary_validator
 
     @property
     def mode(self) -> PermissionMode:
@@ -227,7 +233,18 @@ class PermissionEnforcer:
             return _ask(f"规则 ask '{matched['ask']}' 命中工具 {tool_name}")
 
         # --- 4. 模式矩阵 ----------------------------------------------------
-        return self._mode_decision(tool_name, capability, bash_result)
+        decision = self._mode_decision(tool_name, capability, bash_result)
+        # path boundary override（M1 架构对称扩展）：非 FULL_ACCESS 且原决策
+        # 为 allow 时，边界校验可把"写工作区外"升级为 ask/deny。
+        if (
+            decision.allowed
+            and self._mode is not PermissionMode.FULL_ACCESS
+            and self._path_boundary_validator is not None
+        ):
+            override = self._path_boundary_validator(tool_name, args)
+            if override is not None:
+                return override
+        return decision
 
     def _validate_execute_command(
         self, capability: ToolCapability, args: Dict[str, Any]
@@ -279,6 +296,35 @@ class PermissionEnforcer:
         return _ask(reason)
 
 
+def make_office_path_boundary(
+    boundary_resolver: Optional[Callable[[], Optional[str]]] = None,
+) -> Callable[[str, Dict[str, Any]], Optional[PermissionDecision]]:
+    """构造 ``office_create`` 的 path-boundary 校验器。
+
+    ``boundary_resolver`` 每次调用返回当前会话 workspace_root（``None`` 表示
+    未绑定 → 不检查边界，与 write_file 未绑定语义一致）。返回的校验器仅对
+    ``office_create`` 且带非空 ``output_dir`` 参数生效：目标目录 resolve 后
+    落在 workspace 内 → ``None``（放行）；在外 → ``ask``（写工作区外需确认）。
+    """
+
+    def _validator(tool_name: str, args: Dict[str, Any]) -> Optional[PermissionDecision]:
+        if tool_name != "office_create":
+            return None
+        if boundary_resolver is None:
+            return None
+        root = boundary_resolver()
+        if not root:
+            return None
+        output_dir = args.get("output_dir")
+        if not isinstance(output_dir, str) or not output_dir.strip():
+            return None
+        if _is_safe_path(output_dir, root):
+            return None
+        return _ask(f"office_create 写入工作区外的路径 {output_dir}，需要用户确认")
+
+    return _validator
+
+
 # ---------------------------------------------------------------------------
 # 从 settings 构造 enforcer（agent 运行起点调用）
 # ---------------------------------------------------------------------------
@@ -313,11 +359,15 @@ def parse_rules(raw: Any) -> List[PermissionRule]:
     return rules
 
 
-def load_enforcer_from_settings(repo: Optional[Any] = None) -> PermissionEnforcer:
+def load_enforcer_from_settings(
+    repo: Optional[Any] = None,
+    path_boundary_validator: Optional[Callable] = None,
+) -> PermissionEnforcer:
     """从 settings_repo 读取模式 + 规则，构造 enforcer（注入 bash 校验器）。
 
     Args:
         repo: 可注入的 ``SettingsRepository``（测试用）；``None`` 时新建。
+        path_boundary_validator: 透传给 ``PermissionEnforcer`` 的边界校验回调。
 
     任何读取 / 解析失败都降级为默认 enforcer（workspace_write + 无规则），
     并记 warning——权限系统失效时 fail-safe 比 fail-open 好，但也不能让
@@ -344,7 +394,12 @@ def load_enforcer_from_settings(repo: Optional[Any] = None) -> PermissionEnforce
         mode = DEFAULT_PERMISSION_MODE
         rules = []
 
-    return PermissionEnforcer(mode=mode, rules=rules, bash_validator=validate_bash)
+    return PermissionEnforcer(
+        mode=mode,
+        rules=rules,
+        bash_validator=validate_bash,
+        path_boundary_validator=path_boundary_validator,
+    )
 
 
 __all__ = [
@@ -360,5 +415,6 @@ __all__ = [
     "DEFAULT_PERMISSION_MODE",
     "classify_tool",
     "parse_rules",
+    "make_office_path_boundary",
     "load_enforcer_from_settings",
 ]
