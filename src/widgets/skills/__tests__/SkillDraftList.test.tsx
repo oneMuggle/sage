@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { skillDraftsApi } from '../../../shared/api';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import SkillDraftList from '../SkillDraftList';
 
@@ -94,9 +93,7 @@ describe('SkillDraftList component', () => {
     fireEvent.click(approveBtn);
 
     await waitFor(() => expect(approveMock).toHaveBeenCalledWith('d1'));
-    await waitFor(() =>
-      expect(screen.queryByText('alpha-skill')).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByText('alpha-skill')).not.toBeInTheDocument());
   });
 
   it('reject button calls API and removes draft from list', async () => {
@@ -112,9 +109,7 @@ describe('SkillDraftList component', () => {
     fireEvent.click(rejectBtn);
 
     await waitFor(() => expect(rejectMock).toHaveBeenCalledWith('d1'));
-    await waitFor(() =>
-      expect(screen.queryByText('alpha-skill')).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByText('alpha-skill')).not.toBeInTheDocument());
   });
 
   it('polls every 10s', async () => {
