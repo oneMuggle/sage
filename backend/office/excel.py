@@ -198,6 +198,10 @@ def read_xlsx(
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
+    ``output_dir`` 提供时写入该任意目录（信任的用户指定目录，经
+    :func:`resolve_output_path` 校验文件名）；``None`` 时保持现状写
+    workspace 沙箱（``<workspace>/office/excel/<uuid>/<name>``）。
+
     Per user Q6, uses both openpyxl (low-level sheet creation) and pandas
     (DataFrame-based row writing for ergonomic bulk insert).
     """

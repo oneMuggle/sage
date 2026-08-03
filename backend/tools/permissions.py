@@ -305,6 +305,9 @@ def make_office_path_boundary(
     未绑定 → 不检查边界，与 write_file 未绑定语义一致）。返回的校验器仅对
     ``office_create`` 且带非空 ``output_dir`` 参数生效：目标目录 resolve 后
     落在 workspace 内 → ``None``（放行）；在外 → ``ask``（写工作区外需确认）。
+
+    ``boundary_resolver`` 抛异常（DB 故障等）时 **fail-closed**：升级为 ask，
+    绝不因无法解析边界而静默放行越界写入。
     """
 
     def _validator(tool_name: str, args: Dict[str, Any]) -> Optional[PermissionDecision]:
@@ -312,7 +315,10 @@ def make_office_path_boundary(
             return None
         if boundary_resolver is None:
             return None
-        root = boundary_resolver()
+        try:
+            root = boundary_resolver()
+        except Exception:  # noqa: BLE001 — 解析失败必须 fail-closed（升级审批）
+            return _ask("office_create 无法解析会话工作区边界，需人工审批")
         if not root:
             return None
         output_dir = args.get("output_dir")

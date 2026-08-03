@@ -7,9 +7,11 @@ existing ``office_list`` / ``office_read`` (which need an @-mention to bind a
 always visible and a plain question ("create a word doc on my desktop") can
 trigger it directly.
 
-Writing outside the session workspace is gated by ``path_boundary_validator``
-in the M1 ``PermissionEnforcer`` (see permissions.py) -- the tool itself is a
-pure executor and performs no permission decisions.
+Writing outside the session workspace is gated by two complementary layers:
+(1) ``path_boundary_validator`` in the M1 ``PermissionEnforcer`` (see
+permissions.py) upgrades a cross-workspace write to approval in the legacy
+agent chain; (2) ``BaseTool._enforce_workspace`` in ``execute()`` rejects the
+write outright when ``policy.workspace_root`` is bound (the hex chain).
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.file_tool import _record_artifact_safely
 
 #: doc_type 参数合法取值（与 models.OfficeDocType 对齐）
-_VALID_DOC_TYPES = ("word", "excel", "ppt")
+_VALID_DOC_TYPES = tuple(t.value for t in OfficeDocType)
 
 
 class OfficeCreateTool(BaseTool):
@@ -102,6 +104,12 @@ class OfficeCreateTool(BaseTool):
         if not isinstance(content, dict) or not content:
             return ToolResult(success=False, error="content_required")
 
+        # --- 工作区边界：policy.workspace_root 绑定（hex 链）时拒绝越界写入 ----
+        # 未绑定（legacy 链）时 ``_enforce_workspace`` 返回 None，零行为变化。
+        blocked = self._enforce_workspace(output_dir)
+        if blocked is not None:
+            return blocked
+
         doc_type_enum = OfficeDocType(doc_type)
 
         # --- 路径守卫：目录必须是目录；目标文件已存在则拒绝（不覆盖） ------
@@ -136,18 +144,18 @@ class OfficeCreateTool(BaseTool):
         except Exception as exc:
             return ToolResult(success=False, error=f"generate_failed: {exc}")
 
+        stat = output.stat()
+
         # --- 记录 Artifacts（无 tool_context 时静默跳过，不阻断结果） ------
-        try:
-            _record_artifact_safely(str(output), output.stat().st_size)
-        except Exception:
-            pass
+        # ``_record_artifact_safely`` 内部已吞掉一切异常，无需再包一层。
+        _record_artifact_safely(str(output), stat.st_size)
 
         return ToolResult(
             success=True,
             content={
                 "path": str(output),
                 "filename": output.name,
-                "bytes": output.stat().st_size,
+                "bytes": stat.st_size,
             },
         )
 

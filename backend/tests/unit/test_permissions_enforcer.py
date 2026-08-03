@@ -503,3 +503,21 @@ def test_path_boundary_without_validator_unaffected(tmp_path):
     enforcer = PermissionEnforcer(mode=PermissionMode.WORKSPACE_WRITE, rules=[])
     decision = enforcer.check("office_create", {"output_dir": str(tmp_path)})
     assert decision.allowed is True  # 无 validator 时保持旧行为
+
+
+def test_path_boundary_resolver_exception_fails_closed(tmp_path):
+    """边界解析抛异常（DB 故障等）时 fail-closed：升级为人工审批，不放行越界写入。"""
+
+    def _boom() -> str:
+        raise RuntimeError("db down")
+
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(_boom),
+    )
+    decision = enforcer.check("office_create", {"output_dir": str(tmp_path)})
+    assert decision.allowed is False
+    assert decision.needs_approval is True
+    assert "无法解析会话工作区边界" in decision.reason
+

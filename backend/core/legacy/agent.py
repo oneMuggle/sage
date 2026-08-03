@@ -926,19 +926,21 @@ class SageAgent:
     # ------------------------------------------------------------------
 
     def _office_boundary_resolver(self) -> Optional[str]:
-        """从当前会话绑定解析 workspace_root；未绑定返回 None。"""
+        """从当前会话绑定解析 workspace_root；未绑定返回 None。
+
+        DB / 上下文查询失败时向上抛异常，不在此吞掉——校验器侧
+        （``make_office_path_boundary``）会把解析失败升级为 ask（fail-closed），
+        避免 DB 故障时静默放行工作区外写入。
+        """
         ctx = current_tool_context()
         if ctx is None or not ctx.session_id:
             return None
-        try:
-            from backend.office.session_workspace import get_workspace_binding
+        from backend.office.session_workspace import get_workspace_binding
 
-            binding = get_workspace_binding(
-                get_database().get_connection(), ctx.session_id
-            )
-            return binding.workspace_path if binding is not None else None
-        except Exception:
-            return None
+        binding = get_workspace_binding(
+            get_database().get_connection(), ctx.session_id
+        )
+        return binding.workspace_path if binding is not None else None
 
     def _build_permission_enforcer(self) -> PermissionEnforcer:
         """构造本轮 run 的权限执行器。
