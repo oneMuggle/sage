@@ -20,6 +20,10 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Background Review: 低成功率检测阈值
+MIN_USAGE_THRESHOLD = 10  # 至少使用 10 次后才评估
+SUCCESS_RATE_THRESHOLD = 0.6  # 成功率低于 60% 触发 review
+
 
 def _now_ms() -> int:
     """当前时间（ms epoch）。"""
@@ -80,6 +84,50 @@ class SkillUsageStore:
             conn.commit()
         except Exception as exc:  # noqa: BLE001 - best-effort 契约
             logger.warning(f"Skill usage persist failed for {name!r}: {exc}")
+
+        # Background Review: 低成功率检测（best-effort，不影响主路径）
+        # 每次 bump 后检查，达到 MIN_USAGE_THRESHOLD 且成功率低于阈值
+        # 则 enqueue review。
+        self._check_low_success_rate(name)
+
+    def _check_low_success_rate(self, name: str) -> None:
+        """若使用次数达标且成功率低于阈值，enqueue low_success_rate review。
+
+        best-effort：任何异常只 warning，不抛错。
+        """
+        try:
+            stats = self.get(name)
+            if stats is None:
+                return
+            use_count = stats.get("use_count", 0)
+            if use_count < MIN_USAGE_THRESHOLD:
+                return
+            success_count = stats.get("success_count", 0)
+            success_rate = success_count / use_count if use_count > 0 else 0.0
+            if success_rate < SUCCESS_RATE_THRESHOLD:
+                from backend.skills.review_queue import get_review_queue
+
+                review_queue = get_review_queue()
+                review_queue.enqueue(
+                    trigger_type="low_success_rate",
+                    session_id="",  # 调用方无 session 上下文，留空
+                    context={
+                        "skill_name": name,
+                        "success_rate": round(success_rate, 3),
+                        "use_count": use_count,
+                        "success_count": success_count,
+                        "fail_count": stats.get("fail_count", 0),
+                    },
+                )
+                logger.info(
+                    "Enqueued low_success_rate review for %r "
+                    "(rate=%.2f, uses=%d)",
+                    name,
+                    success_rate,
+                    use_count,
+                )
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.debug(f"Low success rate check skipped for {name!r}: {exc}")
 
     def get(self, name: str) -> Optional[Dict[str, Any]]:
         """读取单个技能的聚合统计。"""

@@ -254,3 +254,42 @@ class ReviewQueue:
 
         self.draft_store.insert(draft)
         logger.info("Created skill draft: %s (id=%s)", draft.name, draft.id)
+
+
+# ------------------------------------------------------------------ #
+# Global singleton (same pattern as get_usage_store)
+# ------------------------------------------------------------------ #
+
+_review_queue: Optional[ReviewQueue] = None
+
+
+def get_review_queue(db_path: Optional[str] = None) -> ReviewQueue:
+    """Return the global ReviewQueue singleton.
+
+    Args:
+        db_path: Database path for the queue.  Only used on first call
+            when creating the singleton.  Subsequent calls ignore this
+            parameter and return the existing instance.
+    """
+    global _review_queue
+    if _review_queue is None:
+        if db_path is None:
+            # Default: colocate with the main application database
+            import os
+
+            from backend.data.database import get_database
+
+            db = get_database()
+            db_path = getattr(db, "db_path", None) or os.path.join(
+                os.path.dirname(__file__), "..", "data", "sage.db"
+            )
+        _review_queue = ReviewQueue(db_path)
+    return _review_queue
+
+
+def reset_review_queue() -> None:
+    """Reset the global ReviewQueue singleton (test only)."""
+    global _review_queue
+    if _review_queue is not None:
+        _review_queue.stop()
+    _review_queue = None
