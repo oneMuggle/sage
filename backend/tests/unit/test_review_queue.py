@@ -66,6 +66,42 @@ class TestEnqueueDequeue:
         assert event2.trigger_type == "second"
         assert event3 is None
 
+    def test_dequeue_fifo_tie_breaker_by_id(self, db_path):
+        """Events with identical created_at timestamps are ordered by id ASC."""
+        queue = ReviewQueue(db_path)
+
+        # Insert events with the same timestamp directly (bypassing time.time)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """INSERT INTO review_events
+                   (trigger_type, session_id, context, status, created_at)
+                   VALUES (?, ?, ?, 'pending', ?)""",
+                ("first", "s1", "{}", 1000000),
+            )
+            conn.execute(
+                """INSERT INTO review_events
+                   (trigger_type, session_id, context, status, created_at)
+                   VALUES (?, ?, ?, 'pending', ?)""",
+                ("second", "s2", "{}", 1000000),  # same timestamp
+            )
+            conn.execute(
+                """INSERT INTO review_events
+                   (trigger_type, session_id, context, status, created_at)
+                   VALUES (?, ?, ?, 'pending', ?)""",
+                ("third", "s3", "{}", 1000000),  # same timestamp
+            )
+
+        # All three have identical created_at; id ASC must break the tie
+        event1 = queue._dequeue_next()
+        event2 = queue._dequeue_next()
+        event3 = queue._dequeue_next()
+
+        assert event1.trigger_type == "first"
+        assert event2.trigger_type == "second"
+        assert event3.trigger_type == "third"
+        # Verify ids are strictly ascending
+        assert event1.id < event2.id < event3.id
+
     def test_dequeue_skips_processing_events(self, db_path):
         """Dequeue only returns pending events, not already-processing ones."""
         queue = ReviewQueue(db_path)
@@ -210,6 +246,31 @@ class TestDrain:
             ).fetchall()
         # Both should be done (processed by drain loop or worker)
         statuses = [r[0] for r in rows]
+        assert all(s == "done" for s in statuses)
+
+    def test_drain_without_worker(self, db_path):
+        """stop(drain=True) without start() processes events via drain loop only.
+
+        This exercises the drain code path directly — no worker thread exists,
+        so all events must be processed by the drain loop in stop().
+        """
+        queue = ReviewQueue(db_path)
+        # Enqueue events but NEVER call start() — no worker thread
+        queue.enqueue(trigger_type="drain1", session_id="s1", context={})
+        queue.enqueue(trigger_type="drain2", session_id="s2", context={})
+        queue.enqueue(trigger_type="drain3", session_id="s3", context={})
+
+        # worker_thread is None, so join() is skipped, drain=True enters loop
+        queue.stop(drain=True)
+
+        with sqlite3.connect(db_path) as conn:
+            rows = conn.execute(
+                "SELECT status FROM review_events ORDER BY id"
+            ).fetchall()
+
+        statuses = [r[0] for r in rows]
+        assert len(statuses) == 3
+        # All events processed by the drain loop
         assert all(s == "done" for s in statuses)
 
 

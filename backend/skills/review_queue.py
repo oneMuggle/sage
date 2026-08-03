@@ -90,13 +90,21 @@ class ReviewQueue:
         """Pop the oldest pending event and mark it 'processing'.
 
         Returns None if the queue is empty.
+
+        NOTE: This uses a separate SELECT + UPDATE (not SELECT ... FOR UPDATE)
+        which is a TOCTOU race in multi-worker scenarios. This is safe because
+        ReviewQueue is designed for a single background worker thread — only
+        one consumer ever calls _dequeue_next(). If multi-worker support is
+        added in the future, this must be replaced with an atomic
+        SELECT-and-UPDATE pattern (e.g. UPDATE ... RETURNING or a transaction
+        with row-level locking).
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 """SELECT id, trigger_type, session_id, context, status, created_at
                    FROM review_events
                    WHERE status = 'pending'
-                   ORDER BY created_at ASC
+                   ORDER BY created_at ASC, id ASC
                    LIMIT 1"""
             )
             row = cursor.fetchone()
@@ -167,7 +175,14 @@ class ReviewQueue:
         self._wake.set()  # Wake the worker so it can exit
         if self.worker_thread:
             self.worker_thread.join(timeout=5)
+            if self.worker_thread.is_alive():
+                logger.warning(
+                    "ReviewQueue worker did not exit within 5s; "
+                    "skipping drain to avoid concurrent DB access"
+                )
+                drain = False
         if drain:
+            # Worker is confirmed dead — safe to access DB without concurrency
             while True:
                 event = self._dequeue_next()
                 if event is None:
