@@ -20,6 +20,7 @@ from backend.tools.permissions import (
     ToolCapability,
     classify_tool,
     load_enforcer_from_settings,
+    make_office_path_boundary,
     parse_rules,
 )
 
@@ -419,3 +420,104 @@ def test_classify_tool_m5_agent_tool_is_execute():
     assert classify_tool("agent") is ToolCapability.EXECUTE
     # 必须是显式登记，而非落到 fail-safe 默认值
     assert "agent" in TOOL_CAPABILITIES
+
+
+# ---------------------------------------------------------------------------
+# M1 扩展：path_boundary_validator（office_create 写工作区外升级审批）
+# ---------------------------------------------------------------------------
+
+
+def test_office_create_registered_as_write_capability():
+    assert TOOL_CAPABILITIES["office_create"] is ToolCapability.WRITE
+
+
+def test_path_boundary_within_workspace_allows(tmp_path):
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(lambda: str(tmp_path)),
+    )
+    decision = enforcer.check("office_create", {"output_dir": str(tmp_path / "sub")})
+    assert decision.allowed is True
+    assert decision.needs_approval is False
+
+
+def test_path_boundary_outside_workspace_asks(tmp_path, tmp_path_factory):
+    workspace = tmp_path
+    outside = tmp_path_factory.mktemp("outside")
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(lambda: str(workspace)),
+    )
+    decision = enforcer.check("office_create", {"output_dir": str(outside)})
+    assert decision.allowed is False
+    assert decision.needs_approval is True
+    assert "工作区外" in decision.reason
+
+
+def test_path_boundary_unbound_workspace_allows(tmp_path):
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(lambda: None),
+    )
+    decision = enforcer.check("office_create", {"output_dir": str(tmp_path)})
+    assert decision.allowed is True
+
+
+def test_path_boundary_read_only_mode_denies(tmp_path):
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.READ_ONLY,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(lambda: str(tmp_path)),
+    )
+    decision = enforcer.check("office_create", {"output_dir": str(tmp_path)})
+    assert decision.allowed is False
+    assert decision.needs_approval is False
+
+
+def test_path_boundary_full_access_mode_bypasses_validation(tmp_path):
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.FULL_ACCESS,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(lambda: str(tmp_path)),
+    )
+    # 即使 target 在 workspace 外，FULL_ACCESS 也放行（用户已确认语义）
+    decision = enforcer.check("office_create", {"output_dir": "/tmp/elsewhere"})
+    assert decision.allowed is True
+    assert decision.needs_approval is False
+
+
+def test_path_boundary_ignores_non_office_tools(tmp_path):
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(lambda: str(tmp_path)),
+    )
+    decision = enforcer.check("write_file", {"path": "/tmp/x"})
+    assert decision.allowed is True  # 不干预其他工具
+
+
+def test_path_boundary_without_validator_unaffected(tmp_path):
+    enforcer = PermissionEnforcer(mode=PermissionMode.WORKSPACE_WRITE, rules=[])
+    decision = enforcer.check("office_create", {"output_dir": str(tmp_path)})
+    assert decision.allowed is True  # 无 validator 时保持旧行为
+
+
+def test_path_boundary_resolver_exception_fails_closed(tmp_path):
+    """边界解析抛异常（DB 故障等）时 fail-closed：升级为人工审批，不放行越界写入。"""
+
+    def _boom() -> str:
+        raise RuntimeError("db down")
+
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(_boom),
+    )
+    decision = enforcer.check("office_create", {"output_dir": str(tmp_path)})
+    assert decision.allowed is False
+    assert decision.needs_approval is True
+    assert "无法解析会话工作区边界" in decision.reason
+

@@ -62,6 +62,7 @@ from backend.tools.permissions import (
     ToolCapability,
     classify_tool,
     load_enforcer_from_settings,
+    make_office_path_boundary,
 )
 
 logger = logging.getLogger(__name__)
@@ -904,21 +905,42 @@ class SageAgent:
     # M1 工具安全加固: 权限执行辅助
     # ------------------------------------------------------------------
 
+    def _office_boundary_resolver(self) -> Optional[str]:
+        """从当前会话绑定解析 workspace_root；未绑定返回 None。
+
+        DB / 上下文查询失败时向上抛异常，不在此吞掉——校验器侧
+        （``make_office_path_boundary``）会把解析失败升级为 ask（fail-closed），
+        避免 DB 故障时静默放行工作区外写入。
+        """
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return None
+        from backend.office.session_workspace import get_workspace_binding
+
+        binding = get_workspace_binding(
+            get_database().get_connection(), ctx.session_id
+        )
+        return binding.workspace_path if binding is not None else None
+
     def _build_permission_enforcer(self) -> PermissionEnforcer:
         """构造本轮 run 的权限执行器。
 
-        优先用注入的 ``self.permission_enforcer``（测试 / 特殊装配）；
-        否则从 settings 现读（permission_mode / permission_rules）。
-        settings 不可用时降级为默认模式 workspace_write + 无规则。
+        优先用注入的 ``self.permission_enforcer``；否则从 settings 现读。
+        office_create 的 path boundary 校验器注入：边界来自当前会话绑定
+        （``_office_boundary_resolver``），写工作区外升级为 ask。
         """
         if self.permission_enforcer is not None:
             return self.permission_enforcer
+        validator = make_office_path_boundary(self._office_boundary_resolver)
         try:
-            return load_enforcer_from_settings()
+            return load_enforcer_from_settings(path_boundary_validator=validator)
         except Exception as exc:  # noqa: BLE001 — DB 故障不应阻塞 agent 启动
             logger.warning("权限执行器从 settings 构造失败，回退默认: %s", exc)
             return PermissionEnforcer(
-                mode=DEFAULT_PERMISSION_MODE, rules=(), bash_validator=validate_bash
+                mode=DEFAULT_PERMISSION_MODE,
+                rules=(),
+                bash_validator=validate_bash,
+                path_boundary_validator=validator,
             )
 
     def _build_approval_request(
