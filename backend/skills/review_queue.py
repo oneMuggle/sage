@@ -1,4 +1,5 @@
 """ReviewQueue: SQLite-backed async review event queue with background worker."""
+import asyncio
 import json
 import logging
 import sqlite3
@@ -34,6 +35,11 @@ class ReviewQueue:
         self.worker_thread: Optional[threading.Thread] = None
         self.running: bool = False
         self._wake: threading.Event = threading.Event()
+        # Optional collaborators — injected by the bootstrap layer
+        # (see Task 7 brief). When either is None, _process_event
+        # degrades to a no-op with an error log.
+        self.review_service: object = None  # ReviewService (late import)
+        self.draft_store: object = None  # SkillDraftStore (late import)
         self._initialize_db()
 
     # ------------------------------------------------------------------ #
@@ -211,8 +217,40 @@ class ReviewQueue:
                 self._wake.wait(timeout=1.0)
 
     def _process_event(self, event: ReviewEvent) -> None:
-        """Process a review event.
+        """Process a review event by calling ReviewService and storing the draft.
 
-        Placeholder — Task 5 will wire this to ReviewService.generate_draft().
+        Calls ``ReviewService.generate_draft()`` (async) to produce a
+        ``SkillDraft``, then persists it via ``SkillDraftStore.insert()``.
+
+        Raises:
+            Any exception raised by the LLM provider or the draft store
+            propagates unchanged — the caller (_worker_loop) is
+            responsible for marking the event as failed.
         """
+        if not self.review_service or not self.draft_store:
+            logger.error(
+                "ReviewService or SkillDraftStore not configured; "
+                "skipping event %s",
+                event.trigger_type,
+            )
+            return
+
         logger.info("Processing review event: %s", event.trigger_type)
+
+        # Merge event-level session_id into the context dict so that
+        # ReviewService.generate_draft() can populate
+        # SkillDraft.source_session_id correctly.
+        enriched_context = dict(event.context)
+        enriched_context.setdefault("session_id", event.session_id)
+
+        # generate_draft is async; run it in a one-shot event loop
+        # from the sync worker thread.
+        draft = asyncio.run(
+            self.review_service.generate_draft(
+                trigger_type=event.trigger_type,
+                context=enriched_context,
+            )
+        )
+
+        self.draft_store.insert(draft)
+        logger.info("Created skill draft: %s (id=%s)", draft.name, draft.id)
