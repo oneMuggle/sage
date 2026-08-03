@@ -1,6 +1,6 @@
 """SkillUsageStore - 技能使用统计持久化（借鉴 hermes-agent .usage.json）
 
-按技能名聚合 ``use_count / success_count / last_used_at``，供技能生命周期
+按技能名聚合 ``use_count / success_count / fail_count / last_used_at``，供技能生命周期
 （curator）与前端使用统计使用。registry（``InprocSkillAdapter``）是技能来源
 真相，本表只记聚合统计，不定义技能本身。
 
@@ -33,7 +33,7 @@ class SkillUsageStore:
         >>> store = SkillUsageStore(db)
         >>> store.bump("search", success=True)
         >>> store.get("search")
-        {"name": "search", "use_count": 1, "success_count": 1, "last_used_at": ...}
+        {"name": "search", "use_count": 1, "success_count": 1, "fail_count": 0, "last_used_at": ...}
         >>> store.get_all()
         [{"name": "search", "use_count": 1, ...}]
     """
@@ -47,7 +47,7 @@ class SkillUsageStore:
         self.db = db
 
     def bump(self, name: str, success: bool = True) -> None:
-        """技能使用次数 +1（成功时 success_count 同步 +1）。
+        """技能使用次数 +1（成功时 success_count +1；失败时 fail_count +1）。
 
         best-effort：DB 不可用 / 表不存在时只 warning，不抛错。
         """
@@ -61,13 +61,21 @@ class SkillUsageStore:
             conn = self.db.get_connection()
             now = _now_ms()
             conn.execute(
-                "INSERT INTO skill_usage (name, use_count, success_count, last_used_at) "
-                "VALUES (?, 1, ?, ?) "
+                "INSERT INTO skill_usage (name, use_count, success_count, fail_count, last_used_at) "
+                "VALUES (?, 1, ?, ?, ?) "
                 "ON CONFLICT(name) DO UPDATE SET "
                 "use_count = use_count + 1, "
                 "success_count = success_count + ?, "
+                "fail_count = fail_count + ?, "
                 "last_used_at = excluded.last_used_at",
-                (name, 1 if success else 0, now, 1 if success else 0),
+                (
+                    name,
+                    1 if success else 0,
+                    0 if success else 1,
+                    now,
+                    1 if success else 0,
+                    0 if success else 1,
+                ),
             )
             conn.commit()
         except Exception as exc:  # noqa: BLE001 - best-effort 契约
@@ -81,7 +89,7 @@ class SkillUsageStore:
 
                 self.db = get_database()
             row = self.db.get_connection().execute(
-                "SELECT name, use_count, success_count, last_used_at "
+                "SELECT name, use_count, success_count, fail_count, last_used_at "
                 "FROM skill_usage WHERE name = ?",
                 (name,),
             ).fetchone()
@@ -100,7 +108,7 @@ class SkillUsageStore:
 
                 self.db = get_database()
             rows = self.db.get_connection().execute(
-                "SELECT name, use_count, success_count, last_used_at "
+                "SELECT name, use_count, success_count, fail_count, last_used_at "
                 "FROM skill_usage ORDER BY last_used_at DESC"
             ).fetchall()
             return [dict(r) for r in rows]
