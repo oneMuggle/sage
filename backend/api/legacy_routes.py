@@ -54,6 +54,8 @@ from backend.office.workspace_errors import (
     WorkspaceSessionNotFoundError,
 )
 from backend.scheduler import get_evolution_logs, get_scheduler
+from backend.skills.draft_store import get_skill_draft_store
+from backend.skills.loader import get_skill_loader
 from backend.skills.review_queue import get_review_queue
 
 logger = logging.getLogger(__name__)
@@ -1930,6 +1932,83 @@ async def learn_from_conversation(request: LearnRequest):
         _safe_log_field(request.session_id),
     )
     return {"status": "queued", "message": "Review started"}
+
+
+# ------------------------------------------------------------------ #
+# Skill Draft Approval Queue (Task 10)
+#
+# REST endpoints for reviewing skill drafts produced by the Background
+# Review pipeline.
+#
+# - GET  /skill-drafts                 → list drafts (optional status filter)
+# - POST /skill-drafts/{id}/approve    → approve draft + write SKILL.md to disk
+# - POST /skill-drafts/{id}/reject     → reject draft
+# ------------------------------------------------------------------ #
+
+
+@router.get("/skill-drafts")
+async def list_skill_drafts(status: str = "pending"):
+    """List skill drafts by status.
+
+    - 200 + ``{"drafts": [...]}``
+    - Query param ``status`` defaults to ``"pending"``.
+    """
+    draft_store = get_skill_draft_store()
+    drafts = draft_store.list(status=status)
+    return {"drafts": [_draft_to_dict(d) for d in drafts]}
+
+
+@router.post("/skill-drafts/{draft_id}/approve")
+async def approve_skill_draft(draft_id: str):
+    """User approves skill draft → write to SKILL.md on disk.
+
+    - 200 + ``{"status": "approved", "skill_name": ..., "draft_id": ...}``
+    - 404 — draft not found
+    - 500 — file-system write failure (status NOT updated)
+    """
+    draft_store = get_skill_draft_store()
+    draft = draft_store.get(draft_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    try:
+        skill_loader = get_skill_loader()
+        skill_loader.write(draft.name, draft.content)
+    except (PermissionError, OSError, ValueError) as exc:
+        logger.error("Failed to write skill %s: %s", draft.name, exc)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to write skill: {exc}"
+        ) from exc
+
+    draft_store.update_status(draft_id, "approved")
+    return {"status": "approved", "skill_name": draft.name, "draft_id": draft_id}
+
+
+@router.post("/skill-drafts/{draft_id}/reject")
+async def reject_skill_draft(draft_id: str):
+    """User rejects skill draft → mark as rejected.
+
+    - 200 + ``{"status": "rejected", "draft_id": ...}``
+    """
+    draft_store = get_skill_draft_store()
+    draft_store.update_status(draft_id, "rejected")
+    return {"status": "rejected", "draft_id": draft_id}
+
+
+def _draft_to_dict(draft) -> dict:
+    """Serialize a SkillDraft dataclass to a JSON-safe dict."""
+    return {
+        "id": draft.id,
+        "name": draft.name,
+        "description": draft.description,
+        "when_to_use": draft.when_to_use,
+        "content": draft.content,
+        "trigger_type": draft.trigger_type,
+        "source_session_id": draft.source_session_id,
+        "source_context": draft.source_context,
+        "status": draft.status,
+        "created_at": draft.created_at,
+    }
 
 
 # ==================== 记忆 API ====================

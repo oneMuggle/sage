@@ -129,3 +129,39 @@ class SkillDraftStore:
             status=status,
             created_at=created_at,
         )
+
+
+# ------------------------------------------------------------------ #
+# Global singleton (same pattern as get_review_queue / get_usage_store)
+# ------------------------------------------------------------------ #
+
+_skill_draft_store: Optional["SkillDraftStore"] = None
+
+
+def get_skill_draft_store(db_path: Optional[str] = None) -> "SkillDraftStore":
+    """Return the global SkillDraftStore singleton.
+
+    Args:
+        db_path: Database path for the store. Only used on first call
+            when creating the singleton. Subsequent calls ignore this
+            parameter and return the existing instance.
+    """
+    global _skill_draft_store
+    if _skill_draft_store is None:
+        if db_path is None:
+            import os
+
+            from backend.data.database import get_database
+
+            db = get_database()
+            db_path = getattr(db, "db_path", None) or os.path.join(
+                os.path.dirname(__file__), "..", "data", "sage.db"
+            )
+        _skill_draft_store = SkillDraftStore(db_path)
+    return _skill_draft_store
+
+
+def reset_skill_draft_store() -> None:
+    """Reset the global SkillDraftStore singleton (test only)."""
+    global _skill_draft_store
+    _skill_draft_store = None
