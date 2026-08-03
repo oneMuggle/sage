@@ -54,6 +54,7 @@ from backend.office.workspace_errors import (
     WorkspaceSessionNotFoundError,
 )
 from backend.scheduler import get_evolution_logs, get_scheduler
+from backend.skills.review_queue import get_review_queue
 
 logger = logging.getLogger(__name__)
 
@@ -1884,6 +1885,51 @@ async def get_evolution_status():
         return scheduler.get_task_status()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Background Review (Background Review) ====================
+#
+# /learn: 用户显式触发当前会话的 review,产生技能草案候选。
+# 与 Task 8 的自动 signal detection (complex_turn / low_success_rate)
+# 互补 — 本端点是 manual trigger,trigger_type="explicit_learn"。
+
+
+class LearnRequest(BaseModel):
+    """POST /learn 请求体。
+
+    - session_id: 要 review 的会话 (必填)
+    - prompt: 用户附加的提示,传给 LLM 作为 review 上下文 (可选)
+    """
+
+    session_id: str
+    prompt: str = ""
+
+
+@router.post("/learn")
+async def learn_from_conversation(request: LearnRequest):
+    """User explicitly triggers review of current conversation.
+
+    Enqueues a review event with trigger_type="explicit_learn".
+    The background worker will pull it, load conversation history,
+    and generate a skill draft via ReviewService.
+
+    - 200 + ``{"status": "queued", "message": "..."}``
+    - 422 (FastAPI 自动) — session_id 缺失
+    """
+    review_queue = get_review_queue()
+    review_queue.enqueue(
+        trigger_type="explicit_learn",
+        session_id=request.session_id,
+        context={
+            "messages": [],  # Will be loaded by the worker from session_id
+            "user_prompt": request.prompt,
+        },
+    )
+    logger.info(
+        "/learn: enqueued explicit_learn for session=%s",
+        _safe_log_field(request.session_id),
+    )
+    return {"status": "queued", "message": "Review started"}
 
 
 # ==================== 记忆 API ====================
