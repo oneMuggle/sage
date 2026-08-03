@@ -37,6 +37,20 @@ from backend.tools.file_tool import _record_artifact_safely
 _VALID_DOC_TYPES = tuple(t.value for t in OfficeDocType)
 
 
+def _check_content(content: Any) -> Optional[ToolResult]:
+    """校验 content：非空 dict 或非空字符串（字符串由 ``_normalize_content``
+    包装为 word 段落）。拆开 isinstance 避免 UP038（union 语法 3.10+）。"""
+    if content is None:
+        return ToolResult(success=False, error="content_required")
+    if isinstance(content, str):
+        if not content.strip():
+            return ToolResult(success=False, error="content_required")
+        return None
+    if not isinstance(content, dict) or not content:
+        return ToolResult(success=False, error="content_required")
+    return None
+
+
 class OfficeCreateTool(BaseTool):
     """Generate an Office document (word/excel/ppt) to a target directory."""
 
@@ -61,13 +75,17 @@ class OfficeCreateTool(BaseTool):
                     "doc_type": {
                         "type": "string",
                         "enum": list(_VALID_DOC_TYPES),
-                        "description": "Document type to create.",
+                        "description": (
+                            "Document type (case-insensitive: word/Word/WORD "
+                            "are all accepted)."
+                        ),
                     },
                     "output_dir": {
                         "type": "string",
                         "description": (
-                            "Target directory (absolute or ~-prefixed, e.g. "
-                            "~/Desktop). Directory is created if missing."
+                            "Target directory — ABSOLUTE path or ~-prefixed "
+                            "(e.g. /home/user/Desktop or ~/Desktop). Do NOT use "
+                            "a bare relative name like '桌面'. Created if missing."
                         ),
                     },
                     "filename": {
@@ -79,7 +97,92 @@ class OfficeCreateTool(BaseTool):
                     },
                     "content": {
                         "type": "object",
-                        "description": "Structured content keyed by doc_type.",
+                        "description": (
+                            "Structured content as a JSON object, keyed by "
+                            "doc_type: word → {title, paragraphs:[{text, "
+                            "heading?}], tables:[{headers, rows[]}]}; excel → "
+                            "{sheets:[{name, headers[], rows[]}]}; ppt → "
+                            "{slides:[{title, bullets[], notes?}]}. A plain "
+                            "string is also accepted for word (treated as body "
+                            "text)."
+                        ),
+                        "properties": {
+                            "title": {
+                                "type": "string",
+                                "description": "word 文档标题。",
+                            },
+                            "paragraphs": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "text": {"type": "string"},
+                                        "heading": {
+                                            "type": ["string", "null"],
+                                            "description": "'h1'/'h2'/'h3' 或 null",
+                                        },
+                                    },
+                                    "required": ["text"],
+                                },
+                                "description": "word 段落列表。",
+                            },
+                            "tables": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "headers": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                        "rows": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "array",
+                                                "items": {"type": "string"},
+                                            },
+                                        },
+                                    },
+                                },
+                                "description": "word 表格列表。",
+                            },
+                            "sheets": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": "string"},
+                                        "headers": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                        "rows": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "array",
+                                                "items": {"type": "string"},
+                                            },
+                                        },
+                                    },
+                                },
+                                "description": "excel 工作表列表。",
+                            },
+                            "slides": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "title": {"type": "string"},
+                                        "bullets": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                        "notes": {"type": "string"},
+                                    },
+                                },
+                                "description": "ppt 幻灯片列表。",
+                            },
+                        },
                     },
                 },
                 "required": ["doc_type", "output_dir", "filename", "content"],
@@ -94,6 +197,9 @@ class OfficeCreateTool(BaseTool):
         content: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> ToolResult:
+        # doc_type 大小写容错（T6 实测模型传 "Word"）：归一化后再校验。
+        if isinstance(doc_type, str):
+            doc_type = doc_type.lower()
         error = self._check_params(doc_type, output_dir, filename, content)
         if error is not None:
             return error
@@ -102,7 +208,31 @@ class OfficeCreateTool(BaseTool):
         error = self._check_path(output_dir, filename, doc_type_enum, target_dir)
         if error is not None:
             return error
+        content = self._normalize_content(doc_type_enum, filename, content)
+        if content is None:
+            return ToolResult(success=False, error="content_required")
         return self._generate_document(doc_type_enum, filename, content, target_dir)
+
+    @staticmethod
+    def _normalize_content(
+        doc_type_enum: OfficeDocType,
+        filename: str,
+        content: Any,
+    ) -> Optional[Dict[str, Any]]:
+        """把 LLM 常见的简化 content 归一化为结构化 dict。
+
+        - 纯字符串 content（"今天天气很好"）→ word 正文段落（标题取文件名主名）。
+        - 其它类型保持原样（pydantic 校验兜底）。
+
+        Returns:
+            归一化的 dict；excel/ppt 收到纯字符串时返回 None（保持严格）。
+        """
+        if isinstance(content, str) and content.strip():
+            if doc_type_enum is OfficeDocType.WORD:
+                title = Path(filename).stem or "文档"
+                return {"title": title, "paragraphs": [{"text": content.strip()}]}
+            return None
+        return content
 
     @staticmethod
     def _check_params(
@@ -118,9 +248,7 @@ class OfficeCreateTool(BaseTool):
             return ToolResult(success=False, error="output_dir_required")
         if not isinstance(filename, str) or not filename.strip():
             return ToolResult(success=False, error="filename_required")
-        if not isinstance(content, dict) or not content:
-            return ToolResult(success=False, error="content_required")
-        return None
+        return _check_content(content)
 
     def _check_path(
         self,
