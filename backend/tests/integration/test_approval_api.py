@@ -245,3 +245,16 @@ class TestRejectSkillDraft:
         data = response.json()
         assert "draft_id" in data
         assert data["draft_id"] == "draft-abc"
+
+    def test_reject_not_found_returns_404(self, client):
+        """Rejecting a non-existent draft returns 404."""
+        mock_store = MagicMock()
+        mock_store.get.return_value = None
+
+        with patch(
+            "backend.api.legacy_routes.get_skill_draft_store",
+            return_value=mock_store,
+        ):
+            response = client.post("/skill-drafts/missing-id/reject")
+
+        assert response.status_code == 404

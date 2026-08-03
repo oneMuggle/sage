@@ -1989,8 +1989,13 @@ async def reject_skill_draft(draft_id: str):
     """User rejects skill draft → mark as rejected.
 
     - 200 + ``{"status": "rejected", "draft_id": ...}``
+    - 404 — draft not found
     """
     draft_store = get_skill_draft_store()
+    draft = draft_store.get(draft_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
     draft_store.update_status(draft_id, "rejected")
     return {"status": "rejected", "draft_id": draft_id}
 
