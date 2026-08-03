@@ -94,7 +94,24 @@ class OfficeCreateTool(BaseTool):
         content: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> ToolResult:
-        # --- 参数校验（fail-fast） -----------------------------------------
+        error = self._check_params(doc_type, output_dir, filename, content)
+        if error is not None:
+            return error
+        doc_type_enum = OfficeDocType(doc_type)
+        target_dir = Path(output_dir).expanduser().resolve()
+        error = self._check_path(output_dir, filename, doc_type_enum, target_dir)
+        if error is not None:
+            return error
+        return self._generate_document(doc_type_enum, filename, content, target_dir)
+
+    @staticmethod
+    def _check_params(
+        doc_type: Optional[str],
+        output_dir: Optional[str],
+        filename: Optional[str],
+        content: Optional[Dict[str, Any]],
+    ) -> Optional[ToolResult]:
+        """fail-fast 参数校验；返回错误 ToolResult 或 None（通过）。"""
         if doc_type not in _VALID_DOC_TYPES:
             return ToolResult(success=False, error=f"unsupported_doc_type: {doc_type}")
         if not isinstance(output_dir, str) or not output_dir.strip():
@@ -103,17 +120,24 @@ class OfficeCreateTool(BaseTool):
             return ToolResult(success=False, error="filename_required")
         if not isinstance(content, dict) or not content:
             return ToolResult(success=False, error="content_required")
+        return None
 
-        # --- 工作区边界：policy.workspace_root 绑定（hex 链）时拒绝越界写入 ----
-        # 未绑定（legacy 链）时 ``_enforce_workspace`` 返回 None，零行为变化。
+    def _check_path(
+        self,
+        output_dir: str,
+        filename: str,
+        doc_type_enum: OfficeDocType,
+        target_dir: Path,
+    ) -> Optional[ToolResult]:
+        """工作区边界 + 路径守卫；返回错误 ToolResult 或 None（通过）。
+
+        - 工作区边界：``policy.workspace_root`` 绑定（hex 链）时拒绝越界写入；
+          未绑定（legacy 链）时 ``_enforce_workspace`` 返回 None，零行为变化。
+        - 目录必须是目录；目标文件已存在则拒绝（不覆盖）。
+        """
         blocked = self._enforce_workspace(output_dir)
         if blocked is not None:
             return blocked
-
-        doc_type_enum = OfficeDocType(doc_type)
-
-        # --- 路径守卫：目录必须是目录；目标文件已存在则拒绝（不覆盖） ------
-        target_dir = Path(output_dir).expanduser().resolve()
         if target_dir.exists() and not target_dir.is_dir():
             return ToolResult(success=False, error="output_dir_not_directory")
         try:
@@ -126,8 +150,16 @@ class OfficeCreateTool(BaseTool):
                 success=False,
                 error=f"file_exists: {target_file} 已存在，请更换文件名",
             )
+        return None
 
-        # --- 构造生成请求并执行（复用生成器 + Pydantic 校验） --------------
+    def _generate_document(
+        self,
+        doc_type_enum: OfficeDocType,
+        filename: str,
+        content: Dict[str, Any],
+        target_dir: Path,
+    ) -> ToolResult:
+        """构造生成请求并执行（复用生成器 + Pydantic 校验），返回结果。"""
         payload: Dict[str, Any] = dict(content)
         payload["workspace_path"] = ""
         payload["filename"] = filename
