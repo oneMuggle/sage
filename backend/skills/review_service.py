@@ -122,6 +122,11 @@ class ReviewService:
             messages=messages,
         )
 
+        if not turn.text:
+            raise ValueError(
+                "LLM provider returned an AssistantTurn with empty or None text"
+            )
+
         parsed = self._parse_llm_output(turn.text)
 
         # Validate required fields — raises KeyError if missing

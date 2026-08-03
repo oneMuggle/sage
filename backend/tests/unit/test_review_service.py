@@ -185,6 +185,30 @@ class TestErrorHandling:
             await service.generate_draft(trigger_type="t", context={})
 
     @pytest.mark.asyncio()
+    async def test_none_text_raises_value_error(self):
+        """LLM returning an AssistantTurn with text=None raises ValueError."""
+        from backend.skills.review_service import ReviewService
+
+        provider = Mock()
+        provider.complete = AsyncMock(return_value=_make_mock_turn(None))
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="empty or None text"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
+    async def test_empty_string_text_raises_value_error(self):
+        """LLM returning an AssistantTurn with text='' raises ValueError."""
+        from backend.skills.review_service import ReviewService
+
+        provider = Mock()
+        provider.complete = AsyncMock(return_value=_make_mock_turn(""))
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="empty or None text"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
     async def test_llm_provider_exception_propagates(self):
         """If the LLM provider raises, the exception propagates to caller."""
         from backend.skills.review_service import ReviewService
