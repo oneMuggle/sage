@@ -6,7 +6,8 @@ import { skillsApi, type Skill } from '../shared/api';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { RetryButton } from '../shared/ui/RetryButton';
-import { SkillList } from '../widgets/skills';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shared/ui/Tabs';
+import { SkillDraftList, SkillList } from '../widgets/skills';
 
 const Skills: React.FC = () => {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -228,52 +229,65 @@ const Skills: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5">
-        {error && (
-          <div className="mb-4 p-3 rounded-radius-sm bg-error/10 text-error text-sm flex items-center justify-between">
-            <span>{error}</span>
-            <div className="flex items-center gap-2">
-              <RetryButton onRetry={loadSkills} label="重试" className="!px-2 !py-1 !text-xs" />
-              <button onClick={() => setError(null)} className="text-error hover:underline">
-                关闭
-              </button>
+      <Tabs defaultValue="skills" className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-5 pt-3 border-b border-border bg-surface flex-shrink-0">
+          <TabsList>
+            <TabsTrigger value="skills">技能</TabsTrigger>
+            <TabsTrigger value="drafts">Pending Drafts</TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="skills" className="flex-1 overflow-y-auto p-5">
+          {error && (
+            <div className="mb-4 p-3 rounded-radius-sm bg-error/10 text-error text-sm flex items-center justify-between">
+              <span>{error}</span>
+              <div className="flex items-center gap-2">
+                <RetryButton onRetry={loadSkills} label="重试" className="!px-2 !py-1 !text-xs" />
+                <button onClick={() => setError(null)} className="text-error hover:underline">
+                  关闭
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 统计信息 */}
+          <div className="flex gap-3 mb-5">
+            <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">
+              <p className="text-xs text-muted">已启用技能</p>
+              <p className="text-xl font-bold font-mono text-primary mt-1">
+                {enabledCount} / {skills.length}
+              </p>
+            </div>
+            <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">
+              <p className="text-xs text-muted">总使用次数</p>
+              <p className="text-xl font-bold font-mono text-success mt-1">{totalUsage}</p>
             </div>
           </div>
-        )}
 
-        {/* 统计信息 */}
-        <div className="flex gap-3 mb-5">
-          <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">
-            <p className="text-xs text-muted">已启用技能</p>
-            <p className="text-xl font-bold font-mono text-primary mt-1">
-              {enabledCount} / {skills.length}
-            </p>
+          {/* 搜索框 */}
+          <div className="mb-4">
+            <input
+              type="text"
+              placeholder="搜索技能..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full max-w-[320px] px-3 py-1.5 border border-border rounded-radius-sm text-sm bg-surface text-text"
+            />
           </div>
-          <div className="flex-1 p-3.5 border border-border rounded-radius-sm bg-surface">
-            <p className="text-xs text-muted">总使用次数</p>
-            <p className="text-xl font-bold font-mono text-success mt-1">{totalUsage}</p>
-          </div>
-        </div>
 
-        {/* 搜索框 */}
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="搜索技能..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full max-w-[320px] px-3 py-1.5 border border-border rounded-radius-sm text-sm bg-surface text-text"
+          {/* 技能列表 */}
+          <SkillList
+            skills={filteredSkills}
+            onToggle={handleToggle}
+            onDelete={handleDelete}
+            onArchive={handleArchive}
           />
-        </div>
+        </TabsContent>
 
-        {/* 技能列表 */}
-        <SkillList
-          skills={filteredSkills}
-          onToggle={handleToggle}
-          onDelete={handleDelete}
-          onArchive={handleArchive}
-        />
-      </div>
+        <TabsContent value="drafts" className="flex-1 overflow-y-auto p-5">
+          <SkillDraftList />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

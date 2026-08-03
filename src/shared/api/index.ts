@@ -12,6 +12,7 @@ export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
+export { skillDraftsApi } from './skillDraftsApi';
 export { workspaceApi } from './workspaceApi';
 export { skillsApi } from './skillsApi';
 export { themeCssClient } from './themeCssClient';
@@ -60,6 +61,10 @@ export type {
   SessionWorkspaceBinding,
   Skill,
   SkillDispatch,
+  SkillDraft,
+  SkillDraftApproveResponse,
+  SkillDraftListResponse,
+  SkillDraftRejectResponse,
   SkillExecuteRequest,
   SkillExecuteResult,
   ToolCall,
