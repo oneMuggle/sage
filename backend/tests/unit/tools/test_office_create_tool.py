@@ -141,6 +141,22 @@ def test_schema_content_declares_nested_structure():
     assert "slides" in content_props
 
 
+def test_rejects_relative_output_dir(tmp_path):
+    """相对路径 output_dir（"Desktop"）应拒绝——避免静默写到 cwd 而非真实桌面。
+
+    T6 实测：LLM 传 output_dir="Desktop"，工具 resolve 到 <cwd>/Desktop 而非
+    ~/Desktop。明确错误提示让 LLM 重试用 ~/Desktop / 绝对路径。
+    """
+    result = _tool().execute(
+        doc_type="word",
+        output_dir="Desktop",
+        filename="a.docx",
+        content={"title": "t", "paragraphs": [{"text": "hi"}]},
+    )
+    assert result.success is False
+    assert result.error.startswith("output_dir_relative")
+
+
 def test_output_dir_required():
     result = _tool().execute(
         doc_type="word", output_dir=None, filename="a.docx",
