@@ -6,7 +6,9 @@
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "vite",
+    "predev": "npm run build:electron",
     "build": "tsc && vite build",
+    "prebuild": "npm run build:electron",
     "build:analyze": "vite build --mode production && npx vite-bundle-visualizer",
     "preview": "vite preview",
     "lint": "eslint . --ignore-pattern dist-electron",
