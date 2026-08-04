@@ -27,6 +27,31 @@ import type { LogLevel } from '../src/shared/log/levels';
 /** UnlistenFn signature mirrors Tauri 2.x for drop-in Phase 2 compatibility. */
 export type UnlistenFn = () => void;
 
+/**
+ * Gap D (T1): typed shape of `window.electronAPI.memory`. Each method
+ * forwards to its matching snake_case IPC cmd in electron/commands.ts
+ * (which translates to a backend route via invoke.ts). The renderer
+ * callers (`src/shared/api/memoryClient.ts` / future SettingsMemoryTab)
+ * consume this contract — types here, runtime in the `electronAPI.memory`
+ * object below.
+ *
+ * 6 of the 9 backing endpoints already exist (search / save / list /
+ * delete / auto_memory get+put). The remaining 3 (findByTurn via
+ * {turn_id}, getProfile, getSummary via {session_id}) ship in later
+ * tasks; calling them now returns 404 — expected for T1.
+ */
+type MemoryApi = {
+  search: (args: { query: string; type?: string }) => Promise<unknown>;
+  save: (args: { content: string; importance?: number; category?: string }) => Promise<unknown>;
+  list: (args: { page?: number; page_size?: number; type?: string }) => Promise<unknown>;
+  delete: (args: { memory_id: string }) => Promise<unknown>;
+  getAutoMemory: () => Promise<unknown>;
+  setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
+  findByTurn: (args: { turn_id: string }) => Promise<unknown>;
+  getProfile: () => Promise<unknown>;
+  getSummary: (args: { session_id: string }) => Promise<unknown>;
+};
+
 const electronAPI = {
   /**
    * Renderer-side log bridge — forwards to main process for file persistence.
@@ -119,6 +144,39 @@ const electronAPI = {
     importSkills: (paths: string[]) =>
       ipcRenderer.invoke('skills:import', paths) as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,
+
+  /**
+   * Gap D (T1): Memory CRUD + preferences + traceability IPC bridge.
+   * Each method translates to the matching snake_case cmd in
+   * electron/commands.ts — see MemoryApi type above for param shapes.
+   * Post-T1 the renderer wraps these into a typed `memoryClient` (T2),
+   * wires settings UI (T5), and exposes profile/summary helpers (T6).
+   */
+  memory: {
+    search: (args: { query: string; type?: string }) =>
+      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_search', args }),
+    save: (args: { content: string; importance?: number; category?: string }) =>
+      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_save', args }),
+    list: (args: { page?: number; page_size?: number; type?: string }) =>
+      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_list', args }),
+    delete: (args: { memory_id: string }) =>
+      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_delete', args }),
+    getAutoMemory: () =>
+      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_auto', args: {} }),
+    // Backend stores boolean prefs as 'true'/'false' strings (Pydantic str model);
+    // stringify here so renderer can pass a real boolean without thinking about it.
+    setAutoMemory: (args: { value: boolean }) =>
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'memory_set_auto',
+        args: { value: String(args.value) },
+      }),
+    findByTurn: (args: { turn_id: string }) =>
+      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_find_by_turn', args }),
+    getProfile: () =>
+      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_profile', args: {} }),
+    getSummary: (args: { session_id: string }) =>
+      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_summary', args }),
+  } satisfies MemoryApi,
 
   /**
    * T13 (2026-07-02): Log management bridge — Diagnostics card on Settings page.
