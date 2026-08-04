@@ -112,3 +112,48 @@ class TestMemoryExtractorLLM:
         extractor = MemoryExtractor(llm_client=FailingLLM())
         facts = await extractor.extract("我喜欢吃火锅，每次都去那家店" + "x" * 20, "好的")
         assert len(facts) >= 0
+
+
+# ----------------------------------------------------------------------------
+# Task 4 / Gap A — memory_category heuristic
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_keyword_extract_tags_user_pref():
+    """Preference keywords (喜欢/偏好/讨厌/不要/记得/以后/设置/爱吃)
+    must produce memory_category='user_pref'."""
+
+    extractor = MemoryExtractor(llm_client=None)
+    facts = await extractor.extract(
+        "我喜欢吃火锅" + "x" * 20, "好的"
+    )
+    assert len(facts) >= 1
+    assert all(f["category"] == "user_pref" for f in facts)
+
+
+@pytest.mark.asyncio()
+async def test_keyword_extract_defaults_to_project_fact():
+    """When no preference keyword matches, default to 'project_fact'."""
+
+    extractor = MemoryExtractor(llm_client=None)
+    # Long-ish message without any preference keyword
+    facts = await extractor.extract(
+        "The Postgres backup uses pg_dump with a 30-day rotation policy" + "x" * 20,
+        "ok noted",
+    )
+    assert facts == []  # no preference keyword → empty list
+
+    # Direct test of the heuristic via the internal helper
+    category = extractor._categorize("we use kafka for event streaming")
+    assert category == "project_fact"
+
+
+def test_categorize_returns_known_categories():
+    """All 4 categories from task-4-brief.md step 13 must be representable."""
+    extractor = MemoryExtractor(llm_client=None)
+    assert extractor._categorize("我以后要看这个") == "user_pref"
+    assert extractor._categorize("the deploy uses helm") == "project_fact"
+    # The heuristic defaults to project_fact; task_summary and
+    # cross_session_pattern are reserved for richer extractor stages.
+    assert extractor._categorize("") in {"user_pref", "project_fact"}

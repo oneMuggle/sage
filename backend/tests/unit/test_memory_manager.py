@@ -212,3 +212,51 @@ def test_classify_low_importance_short() -> None:
 def test_classify_default_episodic() -> None:
     mgr = MemoryManager.__new__(MemoryManager)
     assert mgr._classify_memory_type("x" * 300, 5) == "episodic"
+
+
+# ----------------------------------------------------------------------------
+# Task 4 / Gap A — async remember() threads traceability through to episodic.
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_remember_threads_source_turn_id(manager: MemoryManager) -> None:
+    """aremember() must persist source_turn_id on the episodic row."""
+    mid = await manager.aremember(
+        "user prefers tea",
+        session_id="sess-1",
+        source_turn_id="turn-7",
+    )
+    found = manager.episodic.get_by_id(mid)
+    assert found is not None
+    assert found["source_turn_id"] == "turn-7"
+
+
+@pytest.mark.asyncio()
+async def test_remember_threads_memory_category(manager: MemoryManager) -> None:
+    """aremember() must persist memory_category on the episodic row."""
+    mid = await manager.aremember(
+        "用户偏好咖啡",
+        session_id="sess-1",
+        memory_category="user_pref",
+    )
+    found = manager.episodic.get_by_id(mid)
+    assert found is not None
+    assert found["memory_category"] == "user_pref"
+
+
+@pytest.mark.asyncio()
+async def test_remember_threads_all_traceability(manager: MemoryManager) -> None:
+    """All three traceability fields pass through in one call."""
+    mid = await manager.aremember(
+        "user mentioned azure on a friday",
+        session_id="sess-1",
+        source_turn_id="turn-9",
+        source_message_id="msg-3",
+        memory_category="cross_session_pattern",
+    )
+    found = manager.episodic.get_by_id(mid)
+    assert found is not None
+    assert found["source_turn_id"] == "turn-9"
+    assert found["source_message_id"] == "msg-3"
+    assert found["memory_category"] == "cross_session_pattern"

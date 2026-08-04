@@ -164,7 +164,7 @@ class MemoryExtractor:
                             {
                                 "content": f"用户{sentence.strip()}",
                                 "importance": 7,
-                                "category": "preference",
+                                "category": self._categorize(sentence),
                                 "tags": ["preference"],
                             }
                         )
@@ -172,3 +172,41 @@ class MemoryExtractor:
                 break
 
         return facts[:3]
+
+    # ------------------------------------------------------------------
+    # Task 4 / Gap A — memory_category heuristic
+    # ------------------------------------------------------------------
+    #
+    # Simple keyword-based bucketing that maps a fact string to one of:
+    # - ``user_pref`` — explicit user preference/habit/identity
+    # - ``project_fact`` — anything else (default)
+    #
+    # ``task_summary`` and ``cross_session_pattern`` are reserved for
+    # richer extractor stages (LLM post-processing, multi-session
+    # detectors) that ship in later milestones. The heuristic here just
+    # needs to never mislabel an explicit preference as project_fact.
+
+    _USER_PREF_KEYWORDS = (
+        "喜欢",
+        "偏好",
+        "讨厌",
+        "不要",
+        "记得",
+        "以后",
+        "设置",
+        "爱吃",
+        "不爱",
+        "想",
+        "希望",
+        "需要",
+    )
+
+    def _categorize(self, text: str) -> str:
+        """Map a fact string to its ``memory_category``.
+
+        Preference keywords → ``user_pref``; otherwise → ``project_fact``.
+        """
+        for kw in self._USER_PREF_KEYWORDS:
+            if kw in text:
+                return "user_pref"
+        return "project_fact"

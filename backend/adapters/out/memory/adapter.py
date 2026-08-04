@@ -125,7 +125,14 @@ class MemoryAdapter:
         )
 
     async def store(
-        self, content: str, session_id: str, importance: int = 5, tags: Optional[List[str]] = None
+        self,
+        content: str,
+        session_id: str,
+        importance: int = 5,
+        tags: Optional[List[str]] = None,
+        source_turn_id: Optional[str] = None,
+        source_message_id: Optional[str] = None,
+        memory_category: Optional[str] = None,
     ) -> str:
         """存储记忆
 
@@ -133,11 +140,20 @@ class MemoryAdapter:
         同时将记忆内容向量化存入 VectorStore，供后续向量检索使用。
         写入前进行安全扫描（Hermes 风格），阻止可疑内容。
 
+        Task 4 / Gap A — ``source_turn_id`` / ``source_message_id`` /
+        ``memory_category`` are forwarded through ``metadata`` so the
+        MemoryManager → EpisodicMemory chain persists them in the new
+        traceability columns.
+
         Args:
             content: 要存储的记忆内容
             session_id: 关联的会话 ID
             importance: 重要性评分 (1-10),默认 5
             tags: 可选的标签列表,用于分类和检索
+            source_turn_id: 该事实来源的 turn ID
+            source_message_id: 该事实来源的 message ID
+            memory_category: 事实分类（user_pref / project_fact / task_summary /
+                cross_session_pattern — 由调用方/extractor 决定）
 
         Returns:
             str: 生成的记忆 ID,对于工作记忆返回空字符串
@@ -155,8 +171,14 @@ class MemoryAdapter:
             )
             return ""
 
-        # 构建元数据
-        metadata = {"session_id": session_id, "tags": tags or []}
+        # 构建元数据（含可追溯性字段）
+        metadata = {
+            "session_id": session_id,
+            "tags": tags or [],
+            "source_turn_id": source_turn_id,
+            "source_message_id": source_message_id,
+            "memory_category": memory_category,
+        }
 
         # 调用 MemoryManager.memorize() 存储记忆
         memory_id = self.memory_manager.memorize(

@@ -8,20 +8,36 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from datetime import datetime
-from typing import Dict, List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from backend.data.database import get_database
 
 logger = logging.getLogger(__name__)
 
 
-class BaseEvolutionTask:
-    """进化任务基类"""
+def _utcnow_iso() -> str:
+    """ISO 8601 UTC now — for evolution_completed event timestamps."""
+    return datetime.now(timezone.utc).isoformat()
 
-    def __init__(self, db=None, memory_manager=None):
+
+class BaseEvolutionTask:
+    """进化任务基类
+
+    Subclasses can:
+
+    - set ``self._hooks`` to a ``HookRegistry`` instance to receive
+      ``evolution_completed`` events after each successful run.
+    - leave ``self._hooks`` unset; the helper will silently no-op so
+      existing tests / callers don't need to be modified.
+    """
+
+    def __init__(self, db=None, memory_manager=None, hooks: Optional[Any] = None):
         self.db = db or get_database()
         self.memory_manager = memory_manager
+        # Optional — see ``_emit_evolution_completed``. Set externally
+        # by ``create_evolution_tasks(hooks=...)`` or by the lifespan.
+        self._hooks = hooks
 
     async def run_async(self):
         """异步执行任务（子类实现）"""
@@ -38,6 +54,28 @@ class BaseEvolutionTask:
         finally:
             loop.close()
 
+    async def _emit_evolution_completed(self, items_processed: int) -> None:
+        """Fire ``evolution_completed`` hook (Task 4 / Gap A).
+
+        Best-effort: any exception in the hook registry is logged but does
+        not propagate. If no ``_hooks`` is attached, this is a no-op.
+        """
+        hooks = getattr(self, "_hooks", None)
+        if hooks is None:
+            return
+        try:
+            await hooks.emit(
+                "evolution_completed",
+                {
+                    "task_name": type(self).__name__,
+                    "items_processed": items_processed,
+                    "duration_ms": 0,  # populated by caller when available
+                    "timestamp": _utcnow_iso(),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 — must not break the task
+            logger.warning("evolution_completed hook emit failed: %s", exc)
+
 
 class DailySummaryTask(BaseEvolutionTask):
     """
@@ -49,8 +87,15 @@ class DailySummaryTask(BaseEvolutionTask):
     3. 保存到情景记忆 (importance=6)
     """
 
-    def __init__(self, db=None, memory_manager=None, llm_client=None, config: dict = None):
-        super().__init__(db, memory_manager)
+    def __init__(
+        self,
+        db=None,
+        memory_manager=None,
+        llm_client=None,
+        config: dict = None,
+        hooks: Optional[Any] = None,
+    ):
+        super().__init__(db, memory_manager, hooks=hooks)
         self.llm = llm_client
         self.config = config or {}
         self.min_messages = self.config.get("min_messages", 3)
@@ -156,6 +201,10 @@ class DailySummaryTask(BaseEvolutionTask):
             status="success",
         )
 
+        # Task 4 / Gap A — emit lifecycle hook for downstream watchers
+        # (background review, audit log, UI toast).
+        await self._emit_evolution_completed(items_processed=processed)
+
         return processed
 
     async def _generate_summary(self, messages: List[dict]) -> str | None:
@@ -250,8 +299,14 @@ class MemoryPruningTask(BaseEvolutionTask):
     3. 超过上限(1000条)时删除最旧最不重要的
     """
 
-    def __init__(self, db=None, memory_manager=None, config: dict = None):
-        super().__init__(db, memory_manager)
+    def __init__(
+        self,
+        db=None,
+        memory_manager=None,
+        config: dict = None,
+        hooks: Optional[Any] = None,
+    ):
+        super().__init__(db, memory_manager, hooks=hooks)
         self.config = config or {}
         self.max_memories = self.config.get("max_memories", 1000)
 
@@ -338,6 +393,9 @@ class MemoryPruningTask(BaseEvolutionTask):
             status="success",
         )
 
+        # Task 4 / Gap A — emit lifecycle hook for downstream watchers.
+        await self._emit_evolution_completed(items_processed=total_deleted)
+
         return total_deleted
 
     async def _log_evolution(
@@ -378,8 +436,15 @@ class PreferenceLearningTask(BaseEvolutionTask):
     3. 保存到语义记忆
     """
 
-    def __init__(self, db=None, memory_manager=None, llm_client=None, config: dict = None):
-        super().__init__(db, memory_manager)
+    def __init__(
+        self,
+        db=None,
+        memory_manager=None,
+        llm_client=None,
+        config: dict = None,
+        hooks: Optional[Any] = None,
+    ):
+        super().__init__(db, memory_manager, hooks=hooks)
         self.llm = llm_client
         self.config = config or {}
 
@@ -570,8 +635,14 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
     2. 低重要性(<=4)但频繁访问 -> 提高重要性
     """
 
-    def __init__(self, db=None, memory_manager=None, config: dict = None):
-        super().__init__(db, memory_manager)
+    def __init__(
+        self,
+        db=None,
+        memory_manager=None,
+        config: dict = None,
+        hooks: Optional[Any] = None,
+    ):
+        super().__init__(db, memory_manager, hooks=hooks)
         self.config = config or {}
 
     async def run_async(self):
@@ -701,8 +772,14 @@ class MemoryConsolidationTask(BaseEvolutionTask):
     类似人脑在睡眠期间整合记忆的过程。
     """
 
-    def __init__(self, db=None, memory_manager=None, config: dict = None):
-        super().__init__(db, memory_manager)
+    def __init__(
+        self,
+        db=None,
+        memory_manager=None,
+        config: dict = None,
+        hooks: Optional[Any] = None,
+    ):
+        super().__init__(db, memory_manager, hooks=hooks)
         self.config = config or {}
         self.promotion_threshold = self.config.get("promotion_access_count", 5)
         self.decay_days = self.config.get("decay_days", 30)
@@ -783,12 +860,19 @@ def _safe_json_loads(s: str) -> list:
         return []
 
 
-def create_evolution_tasks(config: dict = None) -> Dict[str, BaseEvolutionTask]:
+def create_evolution_tasks(
+    config: dict = None, hooks: Any = None
+) -> Dict[str, BaseEvolutionTask]:
     """
     创建所有进化任务
 
+    Task 4 / Gap A — accepts an optional ``hooks`` (HookRegistry) and
+    threads it through to every task so they can emit
+    ``evolution_completed`` events after each successful run.
+
     Args:
         config: 配置字典
+        hooks: 可选的 HookRegistry,所有任务都会绑定此 hook 注册表
 
     Returns:
         任务名称到任务的映射
@@ -800,22 +884,30 @@ def create_evolution_tasks(config: dict = None) -> Dict[str, BaseEvolutionTask]:
 
     # 每日摘要任务
     if config.get("daily_summary", {}).get("enabled", True):
-        tasks["daily_summary"] = DailySummaryTask(db=db, config=config.get("daily_summary", {}))
+        tasks["daily_summary"] = DailySummaryTask(
+            db=db, config=config.get("daily_summary", {}), hooks=hooks
+        )
 
     # 记忆修剪任务
     if config.get("memory_pruning", {}).get("enabled", True):
-        tasks["memory_pruning"] = MemoryPruningTask(db=db, config=config.get("memory_pruning", {}))
+        tasks["memory_pruning"] = MemoryPruningTask(
+            db=db, config=config.get("memory_pruning", {}), hooks=hooks
+        )
 
     # 偏好学习任务
     if config.get("preference_learning", {}).get("enabled", True):
         tasks["preference_learning"] = PreferenceLearningTask(
-            db=db, config=config.get("preference_learning", {})
+            db=db,
+            config=config.get("preference_learning", {}),
+            hooks=hooks,
         )
 
     # 重要性重评估任务
     if config.get("importance_reevaluation", {}).get("enabled", True):
         tasks["importance_reevaluation"] = ImportanceReevaluationTask(
-            db=db, config=config.get("importance_reevaluation", {})
+            db=db,
+            config=config.get("importance_reevaluation", {}),
+            hooks=hooks,
         )
 
     # 记忆整合任务（"做梦"）— 默认启用，每周运行
@@ -831,6 +923,7 @@ def create_evolution_tasks(config: dict = None) -> Dict[str, BaseEvolutionTask]:
             db=db,
             memory_manager=mm,
             config=config.get("memory_consolidation", {}),
+            hooks=hooks,
         )
 
     return tasks

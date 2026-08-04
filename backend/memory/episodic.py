@@ -43,6 +43,9 @@ class EpisodicMemory:
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         memory_type: str = "conversation",
+        source_turn_id: Optional[str] = None,
+        source_message_id: Optional[str] = None,
+        memory_category: Optional[str] = None,
     ) -> str:
         """
         保存情景记忆
@@ -53,6 +56,10 @@ class EpisodicMemory:
             metadata: 额外元数据
             session_id: 关联的会话 ID
             memory_type: 记忆类型
+            source_turn_id: 该事实来源的 turn ID（Task 4 / Gap A 可追溯性）
+            source_message_id: 该事实来源的 message ID（Task 4 / Gap A）
+            memory_category: 事实分类（user_pref / project_fact / task_summary /
+                cross_session_pattern — 由 extractor 决定）
 
         Returns:
             生成的记忆 ID
@@ -76,10 +83,24 @@ class EpisodicMemory:
         cursor.execute(
             """
             INSERT INTO memories_episodic
-            (id, content, summary, session_id, memory_type, importance, tags, created_at, is_valid)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            (id, content, summary, session_id, memory_type, importance, tags,
+             created_at, is_valid,
+             source_turn_id, source_message_id, memory_category)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
         """,
-            (memory_id, content, summary, session_id, memory_type, importance, tags, now),
+            (
+                memory_id,
+                content,
+                summary,
+                session_id,
+                memory_type,
+                importance,
+                tags,
+                now,
+                source_turn_id,
+                source_message_id,
+                memory_category,
+            ),
         )
 
         conn.commit()

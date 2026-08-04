@@ -133,6 +133,105 @@ async def lifespan(app: FastAPI):
     db.init_db()
     app.state.db = db
 
+    # ---------------------------------------------------------------
+    # Task 4 / Gap A — wire memory lifecycle hooks + evolution scheduler.
+    # ---------------------------------------------------------------
+    from backend.data.settings_repo import SettingsRepository
+    from backend.memory.hooks import HookRegistry
+    from backend.memory.lifecycle import MemoryLifecycleManager
+    from backend.scheduler.cron import EvolutionScheduler
+    from backend.scheduler.evolution import create_evolution_tasks
+
+    class _AsyncSettingsAdapter:
+        """Thin async wrapper so MemoryLifecycleManager can ``await``
+        ``prefs.get(...)`` — the underlying SettingsRepository is sync."""
+
+        def __init__(self, inner: SettingsRepository) -> None:
+            self._inner = inner
+
+        async def get(self, key: str):
+            return self._inner.get(key)
+
+    hooks = HookRegistry()
+    preferences_repo = _AsyncSettingsAdapter(SettingsRepository(db=db))
+    lifecycle = MemoryLifecycleManager(
+        memory_manager=get_memory_manager(),
+        hooks=hooks,
+        preferences_repo=preferences_repo,
+    )
+    app.state.hooks = hooks
+    app.state.lifecycle = lifecycle
+    logger.info("MemoryLifecycleManager 已绑定 HookRegistry")
+
+    # Evolution scheduler — single thread, registers all enabled tasks.
+    evolution_scheduler = EvolutionScheduler()
+    evolution_tasks = create_evolution_tasks(hooks=hooks)
+
+    def _make_runner(task):
+        async def _run_once() -> int:
+            try:
+                result = await task.run_async()
+                return int(result) if result is not None else 0
+            except Exception as exc:  # noqa: BLE001 — never crash scheduler
+                logger.warning(
+                    "evolution task %s failed: %s", type(task).__name__, exc
+                )
+                return 0
+
+        return _run_once
+
+    for task_name, task in evolution_tasks.items():
+        evolution_scheduler.add_task(
+            name=task_name,
+            task=_make_runner(task),
+            schedule="daily",
+            hour=3,
+            minute=0,
+        )
+    evolution_scheduler.start()
+    app.state.evolution_scheduler = evolution_scheduler
+    logger.info(
+        "EvolutionScheduler 已启动 (注册 %d 个任务)", len(evolution_tasks)
+    )
+
+    # Session-end watchdog — every 60s, find sessions whose updated_at
+    # is older than 30 min and fire on_session_end.
+    async def _session_watchdog() -> None:
+        from datetime import datetime, timedelta, timezone
+
+        while True:
+            try:
+                await asyncio.sleep(60)
+                cutoff_ts = int(
+                    (datetime.now(timezone.utc) - timedelta(minutes=30)).timestamp()
+                )
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id FROM sessions WHERE updated_at < ? LIMIT 50",
+                    (cutoff_ts,),
+                )
+                stale_ids = [row["id"] for row in cursor.fetchall()]
+                for sid in stale_ids:
+                    try:
+                        await lifecycle.on_session_end(sid)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "session_watchdog: on_session_end(%s) failed: %s",
+                            sid,
+                            exc,
+                        )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("session_watchdog unexpected error: %s", exc)
+
+    watchdog_task = asyncio.create_task(
+        _session_watchdog(), name="session-watchdog"
+    )
+    app.state.session_watchdog = watchdog_task
+    logger.info("Session-end watchdog 已启动 (60s 周期)")
+
     # PR-3: agents 表种子化 (空表时插 4 个默认 agent, 幂等)
     from backend.data.agent_repo import AgentRepository
 
@@ -283,6 +382,25 @@ async def lifespan(app: FastAPI):
         shutdown_mcp_clients()
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         logger.warning("MCP client shutdown failed: %s", exc)
+
+    # Task 4 / Gap A — stop the session-end watchdog so its 60 s
+    # asyncio.sleep loop doesn't outlive the process.
+    if hasattr(app.state, "session_watchdog") and app.state.session_watchdog is not None:
+        app.state.session_watchdog.cancel()
+        with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
+            await app.state.session_watchdog
+        logger.info("Session-end watchdog 已停止")
+
+    # Task 4 / Gap A — stop the evolution scheduler thread.
+    if (
+        hasattr(app.state, "evolution_scheduler")
+        and app.state.evolution_scheduler is not None
+    ):
+        try:
+            app.state.evolution_scheduler.stop()
+            logger.info("EvolutionScheduler 已停止")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("EvolutionScheduler stop failed: %s", exc)
 
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:

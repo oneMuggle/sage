@@ -115,11 +115,13 @@ class TestMemoryAdapterStore:
         )
 
         # Assert
-        mock_memory_manager.memorize.assert_called_once_with(
-            content="用户喜欢吃火锅",
-            importance=7,
-            metadata={"session_id": "session-123", "tags": ["preference", "food"]},
-        )
+        mock_memory_manager.memorize.assert_called_once()
+        call_kwargs = mock_memory_manager.memorize.call_args[1]
+        assert call_kwargs["content"] == "用户喜欢吃火锅"
+        assert call_kwargs["importance"] == 7
+        meta = call_kwargs["metadata"]
+        assert meta["session_id"] == "session-123"
+        assert meta["tags"] == ["preference", "food"]
         assert memory_id == "memory-id-123"
 
     @pytest.mark.asyncio()
@@ -161,6 +163,34 @@ class TestMemoryAdapterStore:
         # Assert
         call_kwargs = mock_memory_manager.memorize.call_args[1]
         assert call_kwargs["metadata"]["tags"] == []
+
+    @pytest.mark.asyncio()
+    async def test_store_forwards_traceability_to_memorize(
+        self, adapter, mock_memory_manager
+    ):
+        """Task 4 / Gap A — store() must forward traceability params
+        (source_turn_id / source_message_id / memory_category) via the
+        metadata dict so the MemoryManager → EpisodicMemory chain picks
+        them up when writing the row."""
+        # Arrange
+        mock_memory_manager.memorize.return_value = "memory-id-trace"
+
+        # Act
+        await adapter.store(
+            content="用户偏好咖啡",
+            session_id="session-1",
+            importance=7,
+            source_turn_id="turn-7",
+            source_message_id="msg-42",
+            memory_category="user_pref",
+        )
+
+        # Assert
+        call_kwargs = mock_memory_manager.memorize.call_args[1]
+        meta = call_kwargs["metadata"]
+        assert meta["source_turn_id"] == "turn-7"
+        assert meta["source_message_id"] == "msg-42"
+        assert meta["memory_category"] == "user_pref"
 
 
 class TestMemoryAdapterCompress:

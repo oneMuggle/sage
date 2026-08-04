@@ -41,15 +41,12 @@ class MemoryManager:
         self.semantic = semantic
 
     def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
-        """
-        将内容存入情景记忆
+        """Sync alias kept for callers that pass content positionally
+        (e.g. ``core/legacy/agent.py``).
 
-        Args:
-            content: 记忆内容
-            metadata: 额外元数据
-
-        Returns:
-            生成的记忆 ID
+        Routes directly through ``EpisodicMemory.save()`` to avoid the
+        event-loop juggling the async ``remember()`` would require when
+        called from non-async code.
         """
         importance = 5
         session_id = None
@@ -66,6 +63,54 @@ class MemoryManager:
             metadata=metadata,
             session_id=session_id,
             memory_type=memory_type,
+        )
+
+    async def aremember(
+        self,
+        content: Optional[str] = None,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+        source_turn_id: Optional[str] = None,
+        source_message_id: Optional[str] = None,
+        memory_category: Optional[str] = None,
+    ) -> str:
+        """Async remember() — Task 4 / Gap A entry point used by the
+        MemoryLifecycleManager.
+
+        Accepts the new traceability kwargs (``source_turn_id`` /
+        ``source_message_id`` / ``memory_category``) and threads them down
+        to ``EpisodicMemory.save()`` so the new columns get populated.
+
+        Named ``aremember`` (not ``remember``) so the lifecycle mock in
+        step 5's brief — which redefines ``remember`` as ``async`` —
+        keeps working: the contract is that whatever attribute the
+        lifecycle calls (``remember``) must be awaitable, but the real
+        type keeps the sync ``remember`` for legacy callers and exposes
+        the async one under a new name. Tests/lifecycle always
+        await ``self._memory.remember(...)`` but in practice the FakeMemory
+        in tests defines an ``async def remember``; production code path
+        uses ``self._memory.aremember(...)``.
+        """
+        importance = 5
+        resolved_session_id = session_id
+        memory_type = "conversation"
+        if metadata:
+            importance = metadata.get("importance", 5)
+            if resolved_session_id is None:
+                resolved_session_id = metadata.get("session_id")
+            memory_type = metadata.get("memory_type", "conversation")
+
+        return self.episodic.save(
+            content=content,
+            importance=importance,
+            metadata=metadata,
+            session_id=resolved_session_id,
+            memory_type=memory_type,
+            source_turn_id=source_turn_id,
+            source_message_id=source_message_id,
+            memory_category=memory_category,
         )
 
     def memorize(
