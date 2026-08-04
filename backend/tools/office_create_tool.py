@@ -246,6 +246,16 @@ class OfficeCreateTool(BaseTool):
             return ToolResult(success=False, error=f"unsupported_doc_type: {doc_type}")
         if not isinstance(output_dir, str) or not output_dir.strip():
             return ToolResult(success=False, error="output_dir_required")
+        # 相对路径（非绝对、非 ~ 开头）拒绝——避免静默 resolve 到 cwd 而非
+        # 用户真实目录（T6 实测 LLM 传 "Desktop" 落到 <cwd>/Desktop）。
+        if not Path(output_dir).is_absolute() and not output_dir.startswith("~"):
+            return ToolResult(
+                success=False,
+                error=(
+                    "output_dir_relative: 请用绝对路径或以 ~ 开头"
+                    f"（如 ~/Desktop），而非 {output_dir!r}"
+                ),
+            )
         if not isinstance(filename, str) or not filename.strip():
             return ToolResult(success=False, error="filename_required")
         return _check_content(content)
