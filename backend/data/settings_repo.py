@@ -21,6 +21,11 @@ class SettingsRepository:
             "theme_mode",
             "theme_preset",
             "current_session_id",
+            # Task 2 (Gap B) — MemoryLifecycleManager auto_memory preference gate.
+            # Surfaced via /api/v1/preferences/auto_memory (GET/PUT) backed by
+            # memory_get_auto / memory_set_auto IPC commands. Default True;
+            # when False, ChatService skips _extract_and_store_memory + compress.
+            "auto_memory",
         }
     )
 

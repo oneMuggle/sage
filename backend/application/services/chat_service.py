@@ -390,23 +390,51 @@ class ChatService:
             span.set_attribute("tokens.completion", completion_tokens)
 
         # 7) 提取并存储记忆 (Memory Integration)
+        # Gate via auto_memory flag (caches 30s, default True). Lifecycle wrapper
+        # exposes is_auto_memory_enabled(); legacy MemoryManager does not, so
+        # hasattr() lets tests/older call sites pass through unchanged.
         if self.memory:
-            try:
-                await self._extract_and_store_memory(
-                    session_id=session_id,
-                    user_message=user_message,
-                    assistant_message=response,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to store memory: {e}")
-                span.set_attribute("memory.store_error", str(e))
+            if hasattr(self.memory, "is_auto_memory_enabled"):
+                try:
+                    auto_enabled = await self.memory.is_auto_memory_enabled()
+                except Exception as e:  # noqa: BLE001 — fail-open
+                    logger.warning(f"auto_memory gate read failed, defaulting True: {e}")
+                    auto_enabled = True
+                if not auto_enabled:
+                    logger.debug("auto_memory disabled, skipping extraction")
+                else:
+                    try:
+                        await self._extract_and_store_memory(
+                            session_id=session_id,
+                            user_message=user_message,
+                            assistant_message=response,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to store memory: {e}")
+                        span.set_attribute("memory.store_error", str(e))
+                    try:
+                        await self.memory.compress(session_id)
+                    except Exception as e:
+                        logger.warning(f"Failed to compress working memory: {e}")
+                        span.set_attribute("memory.compress_error", str(e))
+            else:
+                # Legacy path: MemoryManager doesn't have lifecycle wrapper yet
+                try:
+                    await self._extract_and_store_memory(
+                        session_id=session_id,
+                        user_message=user_message,
+                        assistant_message=response,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to store memory: {e}")
+                    span.set_attribute("memory.store_error", str(e))
 
-            # 8) 压缩工作记忆 (Memory Integration)
-            try:
-                await self.memory.compress(session_id)
-            except Exception as e:
-                logger.warning(f"Failed to compress working memory: {e}")
-                span.set_attribute("memory.compress_error", str(e))
+                # 8) 压缩工作记忆 (Memory Integration)
+                try:
+                    await self.memory.compress(session_id)
+                except Exception as e:
+                    logger.warning(f"Failed to compress working memory: {e}")
+                    span.set_attribute("memory.compress_error", str(e))
 
         run.emit(
             "run_end",

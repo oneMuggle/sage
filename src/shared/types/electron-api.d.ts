@@ -125,6 +125,34 @@ export interface OfficeElectronApiBridge {
   showOfficeDocumentInFolder: (ref: OfficeManagedRef) => Promise<void>;
 }
 
+/**
+ * Memory bridge exposed at `window.electronAPI.memory`. Task 1 wired the
+ * IPC commands; Task 2 (Gap B) types the shape and lands the Settings UI
+ * toggle that calls `getAutoMemory` / `setAutoMemory`. The remaining 3
+ * methods (`findByTurn`, `getProfile`, `getSummary`) type-stub for T5/T6.
+ */
+export interface MemoryElectronApiBridge {
+  search: (args: { query: string; type?: string }) => Promise<unknown>;
+  save: (args: {
+    content: string;
+    importance?: number;
+    category?: string;
+  }) => Promise<unknown>;
+  list: (args: {
+    page?: number;
+    page_size?: number;
+    type?: string;
+  }) => Promise<unknown>;
+  delete: (args: { memory_id: string }) => Promise<unknown>;
+  /** GET /api/v1/preferences/auto_memory → "true" | "false" | null (default True). */
+  getAutoMemory: () => Promise<unknown>;
+  /** PUT /api/v1/preferences/auto_memory with body { value: boolean }. */
+  setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
+  findByTurn: (args: { turn_id: string }) => Promise<unknown>;
+  getProfile: () => Promise<unknown>;
+  getSummary: (args: { session_id: string }) => Promise<unknown>;
+}
+
 export interface ElectronAPI {
   invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>;
   /**
@@ -140,6 +168,14 @@ export interface ElectronAPI {
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
   office: OfficeElectronApiBridge;
+  /**
+   * Memory IPC bridge (Gap B + Gap D). Surfaced via `electron/preload.ts`
+   * which delegates to `sage:invoke` IPC commands defined in
+   * `electron/commands.ts`. Backend wiring lives in
+   * `backend/memory/lifecycle.py` (auto_memory gate) and the existing
+   * `/api/v1/memory/*` endpoints (T1 wired the IPC routes).
+   */
+  memory: MemoryElectronApiBridge;
   /**
    * Phase 6 (2026-06-27): Native folder picker (used by LLM Wiki and Office).
    * Returns absolute path string, or null if user cancelled.
