@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from backend.agents.profiles import get_enabled_agent
+from backend.agents.profiles import build_system_base, get_enabled_agent
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse
@@ -60,6 +60,23 @@ def test_get_enabled_agent_returns_none_for_missing():
     """不存在的 agent_id 应返回 None。"""
     profile = get_enabled_agent("nonexistent-agent-xyz")
     assert profile is None
+
+
+# =============================================================================
+# build_system_base 声明 office_create 工具能力
+# =============================================================================
+
+
+def test_build_system_base_declares_office_create_capability():
+    """默认 system prompt 应声明 office_create 能力，引导 LLM 自动调用。
+
+    用户直接提问"帮我在桌面创建 Word 文档"时，LLM 需要知道存在该工具，
+    否则凭训练先验倾向回复"没有创建本地文件的权限"（T6 Electron 实测）。
+    """
+    prompt = build_system_base()
+    assert prompt.startswith("你是 Sage，一个智能 AI 助手。")
+    assert "office_create" in prompt
+    assert "Office" in prompt
 
 
 # =============================================================================
