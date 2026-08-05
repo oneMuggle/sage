@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
@@ -17,9 +17,13 @@ import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
 
 // Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
+// Gap E (Task 5): allow mounting when the URL carries ?session=… (click-to-trace
+// from the Memory page) — Chat applies the session param on mount.
 function ChatRoute() {
   const currentSessionId = useStore((s) => s.currentSessionId);
-  if (!currentSessionId) {
+  const [searchParams] = useSearchParams();
+  const sessionParam = searchParams.get('session');
+  if (!currentSessionId && !sessionParam) {
     return <Navigate to="/welcome" replace />;
   }
   return <Chat />;

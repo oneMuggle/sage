@@ -123,6 +123,65 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // evolution
   trigger_evolution: { method: 'POST', path: () => '/api/v1/evolution/trigger' },
 
+  // Gap D — memory CRUD + preferences + traceability IPC wiring (T1).
+  // 6 of the 9 endpoints already exist on the backend; the 3 with
+  // path placeholders (find_by_turn, get_summary) and the /profile endpoint
+  // are added in later tasks — calling them now returns 404, which is
+  // expected for T1 (renderer callers added in T2/T5/T6).
+  // Paths with {turn_id}/{session_id} are template strings — invoke.ts
+  // substitutes them from args via extractPathParams(). Routes with
+  // query-string args (memory_search, memory_list) build the URL via
+  // path: (a) => … matching the existing get_memories convention.
+  memory_search: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a?.query !== undefined && a.query !== null) {
+        params.set('query', String(a.query));
+      }
+      const limit = (a?.limit as number) ?? 20;
+      params.set('limit', String(limit));
+      if (a?.type) params.set('type', String(a.type));
+      const qs = params.toString();
+      return `/api/v1/memory/search${qs ? `?${qs}` : ''}`;
+    },
+  },
+  memory_save: { method: 'POST', path: () => '/api/v1/memory/save' },
+  memory_list: {
+    method: 'GET',
+    path: (a) => {
+      const page = (a?.page as number) ?? 1;
+      const pageSize = (a?.page_size as number) ?? 20;
+      const memoryType = a?.type as string | null;
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      if (memoryType) params.set('type', memoryType);
+      return `/api/v1/memory/list?${params.toString()}`;
+    },
+  },
+  memory_delete: { method: 'POST', path: () => '/api/v1/memory/delete' },
+  memory_get_auto: { method: 'GET', path: () => '/api/v1/preferences/auto_memory' },
+  memory_set_auto: { method: 'PUT', path: () => '/api/v1/preferences/auto_memory' },
+  memory_get_retrieval: {
+    method: 'GET',
+    path: () => '/api/v1/preferences/memory_retrieval',
+  },
+  memory_set_retrieval: {
+    method: 'PUT',
+    path: () => '/api/v1/preferences/memory_retrieval',
+  },
+  memory_find_by_turn: {
+    method: 'GET',
+    path: () => '/api/v1/memory/by-turn/{turn_id}',
+  },
+  memory_get_profile: { method: 'GET', path: () => '/api/v1/memory/profile' },
+  memory_get_summary: {
+    method: 'GET',
+    path: () => '/api/v1/memory/summary/{session_id}',
+  },
+
   // settings & preferences
   get_settings: { method: 'GET', path: () => '/api/v1/settings' },
   set_settings: { method: 'PUT', path: () => '/api/v1/settings' },

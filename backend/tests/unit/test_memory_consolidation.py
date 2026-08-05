@@ -103,33 +103,36 @@ def test_fallback_summary_without_user_messages() -> None:
     assert "1" in summary
 
 
-def test_save_compressed_raises_due_to_episodic_signature(
-    manager: MemoryManager,
-) -> None:
-    """save_compressed 调用 episodic.save(summary=...)，但 EpisodicMemory.save 不接受该 kwarg。
-
-    覆盖该路径的入口（确认遗留 API 兼容性问题）。
-    """
+def test_save_compressed_persists_summary(manager: MemoryManager) -> None:
+    """save_compressed 调用 episodic.save(summary=...)。EpisodicMemory.save 现在接受
+    该 kwarg（F2 修复）— 摘要被持久化到 summary 列，而不是抛 TypeError。"""
     pipe = ConsolidationPipeline()
-    with pytest.raises(TypeError):
-        pipe.save_compressed(
-            episodic_memory=manager.episodic,
-            summary="my summary",
-            session_id="s1",
-            importance=6,
-            message_count=4,
-        )
+    memory_id = pipe.save_compressed(
+        episodic_memory=manager.episodic,
+        summary="my summary",
+        session_id="s1",
+        importance=6,
+        message_count=4,
+    )
+    assert memory_id
+    found = manager.episodic.get_by_id(memory_id)
+    assert found is not None
+    assert found["summary"] == "my summary"
+    assert found["session_id"] == "s1"
+    assert found["importance"] == 6
 
 
-def test_consolidate_full_flow_propagates_save_error(
-    manager: MemoryManager,
-) -> None:
-    """consolidate 内部 save_compressed 触发 TypeError，验证错误向上传播。"""
+def test_consolidate_full_flow_succeeds(manager: MemoryManager) -> None:
+    """consolidate 走通完整流程（F2 修复）：工作记忆压缩为摘要存入情景记忆并返回
+    memory_id，而不是抛 TypeError。"""
     pipe = ConsolidationPipeline()
     manager.add_to_working("user", "hi")
     manager.add_to_working("assistant", "hello")
-    with pytest.raises(TypeError):
-        pipe.consolidate(manager, session_id="abc")
+    memory_id = pipe.consolidate(manager, session_id="abc")
+    assert memory_id
+    assert len(manager.working.messages) == 0
+    recent = manager.episodic.get_recent(limit=5)
+    assert any(r["id"] == memory_id for r in recent)
 
 
 def test_consolidate_empty_returns_none(manager: MemoryManager) -> None:

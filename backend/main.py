@@ -82,7 +82,7 @@ def _build_compute_adapter():
     raise ValueError(f"未知的 ghm.adapter 类型: {adapter_type!r},有效值: 'subprocess'")
 
 
-def _build_chat_service() -> ChatService:
+def _build_chat_service(lifecycle=None) -> ChatService:
     """工厂：装配 7 个 ports（6 个生产 adapter + 1 个暂未实现 placeholder）。
 
     - llm:     HttpxLLMAdapter（包装既有 LLMClient）
@@ -92,6 +92,8 @@ def _build_chat_service() -> ChatService:
     - metrics: PrometheusMetricAdapter
     - events:  FileEventAdapter（写 audit jsonl）
     - memory:  MemoryAdapter（包装 MemoryManager，提供三层记忆系统）
+    - lifecycle: 可选的 MemoryLifecycleManager（Task 4 / Gap A）— 让 run_turn
+      驱动 set_current_turn，从而在生产路径上填充 source_turn_id。
 
     装配在每次依赖注入时被调用——单例化由调用方（如 ``app.state``）自行管理。
     """
@@ -122,7 +124,23 @@ def _build_chat_service() -> ChatService:
         metrics=PrometheusMetricAdapter(),
         events=FileEventAdapter(),
         memory=memory_adapter,  # MemoryPort for memory integration
+        lifecycle=lifecycle,  # Task 4 / Gap A — optional MemoryLifecycleManager
     )
+
+
+def _build_lifecycle_extractor():
+    """生产用的记忆事实提取器 — LLM 驱动（与 legacy ``_extract_and_store_memory``
+    同级），而非 keyword-only 降级。
+
+    ``MemoryExtractor`` 需要 ``llm_client``（支持 ``chat()``）;
+    ``HttpxLLMAdapter`` 是 ``_build_chat_service`` 里用的同一个生产 adapter，
+    构造无副作用（不发起网络请求）。Important-3 (final review)：之前
+    ``MemoryLifecycleManager`` 没传 ``extractor=``，导致生命周期路径静默退化
+    成 ``MemoryExtractor(llm_client=None)`` 的关键词启发式。"""
+    from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+    from backend.memory.extractor import MemoryExtractor
+
+    return MemoryExtractor(llm_client=HttpxLLMAdapter())
 
 
 @asynccontextmanager
@@ -132,6 +150,143 @@ async def lifespan(app: FastAPI):
     db = Database()
     db.init_db()
     app.state.db = db
+
+    # ---------------------------------------------------------------
+    # Task 4 / Gap A — wire memory lifecycle hooks + evolution scheduler.
+    # ---------------------------------------------------------------
+    from backend.data.settings_repo import SettingsRepository
+    from backend.memory.hooks import HookRegistry
+    from backend.memory.lifecycle import MemoryLifecycleManager
+    from backend.scheduler.cron import EvolutionScheduler
+    from backend.scheduler.evolution import create_evolution_tasks
+
+    class _AsyncSettingsAdapter:
+        """Thin async wrapper so MemoryLifecycleManager can ``await``
+        ``prefs.get(...)`` — the underlying SettingsRepository is sync."""
+
+        def __init__(self, inner: SettingsRepository) -> None:
+            self._inner = inner
+
+        async def get(self, key: str):
+            return self._inner.get(key)
+
+    hooks = HookRegistry()
+    preferences_repo = _AsyncSettingsAdapter(SettingsRepository(db=db))
+    lifecycle = MemoryLifecycleManager(
+        memory_manager=get_memory_manager(),
+        hooks=hooks,
+        preferences_repo=preferences_repo,
+        extractor=_build_lifecycle_extractor(),  # Important-3 — LLM-backed facts
+    )
+    app.state.hooks = hooks
+    app.state.lifecycle = lifecycle
+    # Gap E (Task 5) — cache the MemoryPort adapter so the by-turn / profile /
+    # summary endpoints don't rebuild (and re-init the VectorStore) per request.
+    app.state.memory_port = MemoryAdapter(get_memory_manager())
+    logger.info("MemoryLifecycleManager 已绑定 HookRegistry")
+
+    # Evolution scheduler — single thread, registers all enabled tasks.
+    evolution_scheduler = EvolutionScheduler()
+    evolution_tasks = create_evolution_tasks(hooks=hooks)
+
+    def _make_runner(task):
+        async def _run_once() -> int:
+            try:
+                result = await task.run_async()
+                if result is None:
+                    return 0
+                if isinstance(result, dict):
+                    # Defensive: some task implementations return a dict
+                    # (e.g. {"total": n}) — normalize to int so the scheduler
+                    # never logs a spurious TypeError on a successful run.
+                    return int(result.get("total", 0) or 0)
+                return int(result)
+            except Exception as exc:  # noqa: BLE001 — never crash scheduler
+                logger.warning(
+                    "evolution task %s failed: %s", type(task).__name__, exc
+                )
+                return 0
+
+        return _run_once
+
+    for task_name, task in evolution_tasks.items():
+        evolution_scheduler.add_task(
+            name=task_name,
+            task=_make_runner(task),
+            schedule="daily",
+            hour=3,
+            minute=0,
+        )
+    evolution_scheduler.start()
+    app.state.evolution_scheduler = evolution_scheduler
+    logger.info(
+        "EvolutionScheduler 已启动 (注册 %d 个任务)", len(evolution_tasks)
+    )
+
+    # Session-end watchdog — every 60s, find sessions whose updated_at
+    # is older than 30 min and fire on_session_end.
+    async def _fetch_stale_session_ids(cutoff_ts: int) -> List[str]:
+        """Return session ids whose ``updated_at`` is older than ``cutoff_ts``.
+
+        Runs the synchronous SQLite SELECT through ``asyncio.to_thread`` so
+        the event loop is not stalled by disk I/O. The DB connection is
+        acquired lazily *inside* the worker thread (via
+        ``db.get_connection``) — this keeps the single-connection / WAL /
+        ``check_same_thread=False`` contract intact: only one thread at a
+        time holds the connection, and ``sqlite3`` itself serialises its
+        internal mutex.
+        """
+        def _query() -> List[str]:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM sessions WHERE updated_at < ? LIMIT 50",
+                (cutoff_ts,),
+            )
+            return [row["id"] for row in cursor.fetchall()]
+
+        return await asyncio.to_thread(_query)
+
+    async def _session_watchdog() -> None:
+        from datetime import datetime, timedelta, timezone
+
+        while True:
+            try:
+                await asyncio.sleep(60)
+                cutoff_ts = int(
+                    (datetime.now(timezone.utc) - timedelta(minutes=30)).timestamp()
+                )
+                try:
+                    stale_ids = await _fetch_stale_session_ids(cutoff_ts)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "session_watchdog: stale-id query failed: %s", exc
+                    )
+                    continue
+                for sid in stale_ids:
+                    try:
+                        await lifecycle.on_session_end(sid)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "session_watchdog: on_session_end(%s) failed: %s",
+                            sid,
+                            exc,
+                        )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("session_watchdog unexpected error: %s", exc)
+
+    watchdog_task = asyncio.create_task(
+        _session_watchdog(), name="session-watchdog"
+    )
+    app.state.session_watchdog = watchdog_task
+    # Test hook: expose the query helper so async-blocking tests can hit it
+    # directly without waiting 60 s for the next watchdog tick. Production
+    # callers should not depend on this attribute; it is prefixed with ``_``
+    # to mark it as internal.
+    app.state._watchdog_query_fn = _fetch_stale_session_ids
+    logger.info("Session-end watchdog 已启动 (60s 周期)")
 
     # PR-3: agents 表种子化 (空表时插 4 个默认 agent, 幂等)
     from backend.data.agent_repo import AgentRepository
@@ -245,12 +400,19 @@ async def lifespan(app: FastAPI):
     logger.info("Multi-agent core 已装配（Planner + Router + HeartbeatMonitor 已启动）")
 
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
-    api_mode = os.environ.get("API_MODE", "hex").lower()
+    # Important-1 (final review): 默认值与路由装配对齐 — 实际 serving 的是
+    # legacy 路由（PG-A1 临时默认），lifespan 不该默认构建一个无人使用的
+    # hex ChatService（误导"已装配"）。API_MODE=hex 时行为不变。
+    api_mode = os.environ.get("API_MODE", "legacy").lower()
     if api_mode == "hex":
         from backend.api.hex_routes import get_chat_service
 
-        app.dependency_overrides[get_chat_service] = _build_chat_service
-        app.state.chat_service = _build_chat_service()
+        # Wire the MemoryLifecycleManager into ChatService so run_turn drives
+        # set_current_turn (F4 — production caller for source_turn_id).
+        app.dependency_overrides[get_chat_service] = lambda: _build_chat_service(
+            lifecycle=lifecycle
+        )
+        app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
         logger.info("Hex 模式：ChatService 已装配（/chat 走 hex_routes，其余走 legacy_routes）")
     else:
         logger.info("Legacy 模式：全部端点走 legacy_routes")
@@ -283,6 +445,25 @@ async def lifespan(app: FastAPI):
         shutdown_mcp_clients()
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         logger.warning("MCP client shutdown failed: %s", exc)
+
+    # Task 4 / Gap A — stop the session-end watchdog so its 60 s
+    # asyncio.sleep loop doesn't outlive the process.
+    if hasattr(app.state, "session_watchdog") and app.state.session_watchdog is not None:
+        app.state.session_watchdog.cancel()
+        with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
+            await app.state.session_watchdog
+        logger.info("Session-end watchdog 已停止")
+
+    # Task 4 / Gap A — stop the evolution scheduler thread.
+    if (
+        hasattr(app.state, "evolution_scheduler")
+        and app.state.evolution_scheduler is not None
+    ):
+        try:
+            app.state.evolution_scheduler.stop()
+            logger.info("EvolutionScheduler 已停止")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("EvolutionScheduler stop failed: %s", exc)
 
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
@@ -326,10 +507,10 @@ async def add_request_id_header(request: Request, call_next):
 
 
 # 路由装配（P2 双轨）：
-# - API_MODE=hex（默认）：先注册 hex（/chat 走 ChatService），
+# - API_MODE=hex：先注册 hex（/chat 走 ChatService），
 #   再注册 legacy（/sessions、/memory、/evolution、/interrupt）。
 #   FastAPI 按注册顺序匹配——hex 的 /chat 优先命中，其余走 legacy。
-# - API_MODE=legacy：仅注册 legacy。
+# - API_MODE=legacy（默认）：仅注册 legacy。
 # 通用 LLM 代理（/api/v1/llm/*）在两种模式下都注册 — 浏览器到 LLM 的
 # 测试连接 / 拉取模型调用都走它，与 API_MODE 无关（见 llm_proxy_routes.py）。
 #

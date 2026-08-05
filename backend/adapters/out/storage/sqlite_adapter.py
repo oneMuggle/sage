@@ -189,10 +189,16 @@ class SqliteStorageAdapter:
 
     # ----- 消息 -----
 
-    async def append_message(self, session_id: str, message: Message) -> None:
-        """向会话追加一条消息（自动补 id/timestamp）。"""
+    async def append_message(self, session_id: str, message: Message) -> str:
+        """向会话追加一条消息（自动补 id/timestamp）。
+
+        Returns:
+            持久化后生成的消息 id（Gap E：记忆提取用它作为
+            ``source_message_id``，让前端 ``data-turn-id`` 可精确命中）。
+        """
         row = _domain_to_data_message(session_id, message)
         self._messages.save(row)
+        return row.id
 
     async def get_messages(
         self,

@@ -5,10 +5,45 @@ SQLite 实现
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
+    """Add source_turn_id / source_message_id / memory_category columns and
+    supporting indexes to ``memories_episodic``.
+
+    Idempotent — safe to call on every startup. Used by :meth:`Database.init_db`
+    after the base schema is created so legacy DBs (pre-Task 4) pick up the
+    new columns without a separate migration tool.
+    """
+    cur = db.execute("PRAGMA table_info(memories_episodic)")
+    existing_cols = {row[1] for row in cur.fetchall()}
+
+    new_cols = {
+        "source_turn_id": "TEXT",
+        "source_message_id": "TEXT",
+        "memory_category": "TEXT",
+    }
+    for col, typedef in new_cols.items():
+        if col not in existing_cols:
+            db.execute(f"ALTER TABLE memories_episodic ADD COLUMN {col} {typedef}")
+            logger.info("migration: added memories_episodic.%s", col)
+
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mem_episodic_session_turn "
+        "ON memories_episodic(session_id, source_turn_id)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mem_episodic_category "
+        "ON memories_episodic(memory_category)"
+    )
+    db.commit()
 
 
 class Database:
@@ -124,6 +159,12 @@ class Database:
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
             )
         """)
+
+        # Task 4 / Gap A — idempotent migration: add source_turn_id /
+        # source_message_id / memory_category columns + indexes for memory
+        # traceability (which turn/message a fact came from; which category).
+        # Safe to call on every startup — see _migrate_memory_traceability.
+        _migrate_memory_traceability(conn)
 
         # 技能表
         cursor.execute("""
