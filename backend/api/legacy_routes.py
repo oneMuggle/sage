@@ -1531,7 +1531,7 @@ async def get_memories_by_turn(turn_id: str, request: Request):
     """按来源 turn 查询记忆（可追溯性：从记忆点击跳回产生它的轮次）。"""
     memory_port = _get_memory_port(request)
     memories = await memory_port.find_by_turn(turn_id)
-    return {"memories": [m for m in memories]}
+    return {"memories": list(memories)}
 
 
 @router.get("/memory/profile")
@@ -1543,8 +1543,8 @@ async def get_user_profile(request: Request):
     facts = await memory_port.find_by_category("project_fact", limit=50)
     return {
         "preferences": [m for m in prefs if m.get("importance", 0) >= 7],
-        "decisions": [m for m in decisions],
-        "facts": [m for m in facts],
+        "decisions": list(decisions),
+        "facts": list(facts),
         "total_count": len(prefs) + len(decisions) + len(facts),
     }
 
@@ -1554,7 +1554,7 @@ async def get_session_summary(session_id: str, request: Request):
     """按会话聚合 task_summary 记忆（会话摘要 Tab）。"""
     memory_port = _get_memory_port(request)
     summaries = await memory_port.find_by_category_and_session("task_summary", session_id)
-    return {"summaries": [m for m in summaries], "session_id": session_id}
+    return {"summaries": list(summaries), "session_id": session_id}
 
 
 # ==================== 记忆 SSE 流 (Task 6) ====================

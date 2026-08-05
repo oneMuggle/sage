@@ -88,7 +88,7 @@ async def test_sse_endpoint_streams_memory_written_events():
             memory_category="user_pref",
             session_id="s1",
             turn_id="t1",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(timezone.utc),  # noqa: UP017 — py38: datetime.UTC is 3.11+
         ),
     )
 

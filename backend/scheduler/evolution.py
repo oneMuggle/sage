@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def _utcnow_iso() -> str:
     """ISO 8601 UTC now — for evolution_completed event timestamps."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(timezone.utc).isoformat()  # noqa: UP017 — py38: datetime.UTC is 3.11+
 
 
 class BaseEvolutionTask:

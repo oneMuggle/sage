@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def utcnow() -> datetime:
     """Timezone-aware UTC now — keeps event timestamps unambiguous."""
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc)  # noqa: UP017 — py38: datetime.UTC is 3.11+
 
 
 @dataclass
@@ -130,10 +130,7 @@ class MemoryLifecycleManager:
             self._auto_memory_cache = True
             self._cache_timestamp = now
             return True
-        if val is None:
-            enabled = True
-        else:
-            enabled = str(val).lower() == "true"
+        enabled = True if val is None else str(val).lower() == "true"
         self._auto_memory_cache = enabled
         self._cache_timestamp = now
         return enabled
@@ -167,10 +164,7 @@ class MemoryLifecycleManager:
             self._memory_retrieval_cache = True
             self._retrieval_cache_timestamp = now
             return True
-        if val is None:
-            enabled = True
-        else:
-            enabled = str(val).lower() == "true"
+        enabled = True if val is None else str(val).lower() == "true"
         self._memory_retrieval_cache = enabled
         self._retrieval_cache_timestamp = now
         return enabled
@@ -248,7 +242,7 @@ class MemoryLifecycleManager:
                     "on_turn_complete: emit memory_written failed", exc_info=exc
                 )
 
-    def _split_messages(self, messages: list) -> "tuple[str, str]":
+    def _split_messages(self, messages: list) -> tuple[str, str]:
         """Derive the last user and assistant message texts from a turn.
 
         Accepts both plain dicts (``{"role", "content"}`` — the original

@@ -254,7 +254,7 @@ async def lifespan(app: FastAPI):
             try:
                 await asyncio.sleep(60)
                 cutoff_ts = int(
-                    (datetime.now(timezone.utc) - timedelta(minutes=30)).timestamp()
+                    (datetime.now(timezone.utc) - timedelta(minutes=30)).timestamp()  # noqa: UP017 — py38: datetime.UTC is 3.11+
                 )
                 try:
                     stale_ids = await _fetch_stale_session_ids(cutoff_ts)

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../pages/Memory';
-import { toast } from 'sonner';
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn() },

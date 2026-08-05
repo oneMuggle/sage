@@ -21,7 +21,6 @@ import pytest
 from backend.application.services.chat_service import ChatService
 from backend.tools.memory_tool import MemorySaveTool, MemorySearchTool
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -105,8 +104,8 @@ def test_inproc_adapter_exposes_memory_tools_to_llm():
     LLM 接收 `tools` 数组 → 模型选择 tool → ChatService 解析 →
     ``ToolPort.execute('memory_search', ...)`` 落到 ``MemorySearchTool``.
     """
-    from backend.tools import ToolRegistry, register_all_tools
     from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
+    from backend.tools import ToolRegistry, register_all_tools
 
     registry = ToolRegistry()
     register_all_tools(registry)
@@ -128,7 +127,7 @@ def test_inproc_adapter_exposes_memory_tools_to_llm():
 # ---------------------------------------------------------------------- #
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_chat_service_run_turn_passes_memory_tools_to_llm():
     """``ChatService.run_turn`` 必须把工具 spec 作为 ``tools`` 转发给 ``LLMPort.chat``.
 
@@ -139,9 +138,9 @@ async def test_chat_service_run_turn_passes_memory_tools_to_llm():
     ``run_turn``; ``LLMPort.chat`` 是 AsyncMock, 调用后 assert ``tools``
     实参.
     """
-    from backend.tools import ToolRegistry, register_all_tools
     from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
     from backend.domain.message import Message, Role
+    from backend.tools import ToolRegistry, register_all_tools
 
     # 装配 ToolPort
     registry = ToolRegistry()

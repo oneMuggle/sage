@@ -25,14 +25,14 @@ def _adapter() -> MemoryAdapter:
 # ==================== MemoryPort query methods ====================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_find_by_turn_returns_empty_when_no_match():
     adapter = _adapter()
     result = await adapter.find_by_turn("nonexistent-turn")
     assert result == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_find_by_turn_returns_memories_for_turn():
     adapter = _adapter()
     await adapter.store(
@@ -56,7 +56,7 @@ async def test_find_by_turn_returns_memories_for_turn():
     assert "KISS" in results[0]["content"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_find_by_category_filters_correctly():
     adapter = _adapter()
     await adapter.store(
@@ -74,7 +74,7 @@ async def test_find_by_category_filters_correctly():
     assert prefs[0]["memory_category"] == "user_pref"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_find_by_category_respects_limit():
     adapter = _adapter()
     for i in range(3):
@@ -90,7 +90,7 @@ async def test_find_by_category_respects_limit():
     assert len(results) == 2
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_find_by_category_and_session_filters_by_session():
     adapter = _adapter()
     await adapter.store(
@@ -114,7 +114,7 @@ async def test_find_by_category_and_session_filters_by_session():
     assert results[0]["session_id"] == "sA"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_find_by_category_excludes_invalid_memories():
     adapter = _adapter()
     mid = await adapter.store(
@@ -130,7 +130,7 @@ async def test_find_by_category_excludes_invalid_memories():
 # ==================== HTTP endpoints ====================
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_profile_endpoint_empty(client):
     resp = await client.get("/api/v1/memory/profile")
     assert resp.status_code == 200
@@ -138,7 +138,7 @@ async def test_profile_endpoint_empty(client):
     assert body == {"preferences": [], "decisions": [], "facts": [], "total_count": 0}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_profile_endpoint_groups_by_category(client):
     adapter = _adapter()
     await adapter.store(
@@ -163,7 +163,7 @@ async def test_profile_endpoint_groups_by_category(client):
     assert body["total_count"] == 3
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_by_turn_endpoint_returns_memories(client):
     adapter = _adapter()
     await adapter.store(
@@ -182,14 +182,14 @@ async def test_by_turn_endpoint_returns_memories(client):
     assert "KISS" in body["memories"][0]["content"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_by_turn_endpoint_returns_empty_for_unknown_turn(client):
     resp = await client.get("/api/v1/memory/by-turn/no-such-turn")
     assert resp.status_code == 200
     assert resp.json() == {"memories": []}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_summary_endpoint_filters_by_session(client):
     adapter = _adapter()
     await adapter.store(
@@ -215,7 +215,7 @@ async def test_summary_endpoint_filters_by_session(client):
     assert "sA" in body["summaries"][0]["content"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_delete_accepts_memory_id_alias(client):
     """Gap E — the renderer bridge (T1) calls delete with ``{ memory_id }``
     while the legacy request model only accepted ``{ id }``. Accept both."""
@@ -229,7 +229,7 @@ async def test_delete_accepts_memory_id_alias(client):
     assert resp.json() == {"status": "ok"}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_delete_requires_an_id(client):
     resp = await client.post("/api/v1/memory/delete", json={})
     assert resp.status_code == 422

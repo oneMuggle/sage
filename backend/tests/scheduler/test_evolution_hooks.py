@@ -62,7 +62,8 @@ async def test_daily_summary_emits_evolution_completed(tmp_db_path, hooks):
     ev = events[0]
     assert ev["task_name"] == "DailySummaryTask"
     assert ev["items_processed"] == 0
-    assert "duration_ms" in ev and ev["duration_ms"] >= 0
+    assert "duration_ms" in ev
+    assert ev["duration_ms"] >= 0
     # ISO 8601 timestamp parses cleanly
     assert datetime.fromisoformat(ev["timestamp"])
 
@@ -154,7 +155,8 @@ async def test_preference_learning_emits_evolution_completed(tmp_db_path, hooks)
     ev = events[0]
     assert ev["task_name"] == "PreferenceLearningTask"
     assert ev["items_processed"] == 0
-    assert "duration_ms" in ev and ev["duration_ms"] >= 0
+    assert "duration_ms" in ev
+    assert ev["duration_ms"] >= 0
     assert datetime.fromisoformat(ev["timestamp"])
     assert result == 0
 
@@ -179,7 +181,8 @@ async def test_importance_reevaluation_emits_evolution_completed(tmp_db_path, ho
     ev = events[0]
     assert ev["task_name"] == "ImportanceReevaluationTask"
     assert ev["items_processed"] >= 0
-    assert "duration_ms" in ev and ev["duration_ms"] >= 0
+    assert "duration_ms" in ev
+    assert ev["duration_ms"] >= 0
     assert datetime.fromisoformat(ev["timestamp"])
 
 
@@ -213,6 +216,7 @@ async def test_memory_consolidation_emits_evolution_completed(tmp_db_path, hooks
     ev = events[0]
     assert ev["task_name"] == "MemoryConsolidationTask"
     assert ev["items_processed"] >= 0
-    assert "duration_ms" in ev and ev["duration_ms"] >= 0
+    assert "duration_ms" in ev
+    assert ev["duration_ms"] >= 0
     assert datetime.fromisoformat(ev["timestamp"])
     assert isinstance(result, int)
