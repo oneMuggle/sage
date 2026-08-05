@@ -410,7 +410,27 @@ class ChatService:
         # exposes is_auto_memory_enabled(); legacy MemoryManager does not, so
         # hasattr() lets tests/older call sites pass through unchanged.
         if self.memory:
-            if hasattr(self.memory, "is_auto_memory_enabled"):
+            if self._lifecycle is not None:
+                # Task 6 — production end-of-turn path: the lifecycle hook does
+                # extraction + persist + emits one memory_written per fact (gate
+                # handled internally via is_auto_memory_enabled). source_message_id
+                # threads the persisted assistant/user message id so click-to-trace
+                # highlights the exact producing message.
+                try:
+                    await self._lifecycle.on_turn_complete(
+                        session_id,
+                        [user_message, response],
+                        source_message_id=assistant_message_id or user_message_id,
+                    )
+                except Exception as e:  # noqa: BLE001 — never break the turn
+                    logger.warning(f"on_turn_complete failed: {e}")
+                    span.set_attribute("memory.store_error", str(e))
+                try:
+                    await self.memory.compress(session_id)
+                except Exception as e:  # noqa: BLE001 — never break the turn
+                    logger.warning(f"Failed to compress working memory: {e}")
+                    span.set_attribute("memory.compress_error", str(e))
+            elif hasattr(self.memory, "is_auto_memory_enabled"):
                 try:
                     auto_enabled = await self.memory.is_auto_memory_enabled()
                 except Exception as e:  # noqa: BLE001 — fail-open

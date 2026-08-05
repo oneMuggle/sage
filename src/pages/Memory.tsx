@@ -11,7 +11,8 @@
  * 渲染层复用 MemoryCard（含点击跳回产生该记忆的会话/轮次）。
  */
 import { Search } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { useStore } from '../shared/lib/store';
 import { MemoryCard, type MemoryItem } from '../widgets/memory/MemoryCard';
@@ -62,6 +63,92 @@ export function Memory() {
     };
   }, []);
 
+  // 最新值 refs —— SSE 轮询回退需要读到"当前"的 tab / search / typeFilter，
+  // 而不用把 interval 依赖进 effect 导致反复重建。
+  const tabRef = useRef(tab);
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
+  const searchRef = useRef(search);
+  useEffect(() => {
+    searchRef.current = search;
+  }, [search]);
+  const typeFilterRef = useRef(typeFilter);
+  useEffect(() => {
+    typeFilterRef.current = typeFilter;
+  }, [typeFilter]);
+
+  /** 重新加载"所有记忆" Tab 列表（SSE 轮询回退用；其它 Tab 不覆盖）。 */
+  const reloadAll = useCallback(() => {
+    if (tabRef.current !== 'all') return;
+    const api = window.electronAPI;
+    if (!api?.memory) return;
+    const q = searchRef.current.trim();
+    const promise = q
+      ? api.memory.search({ query: q, type: typeFilterRef.current || undefined })
+      : api.memory.list({ page: 1, page_size: 50, type: typeFilterRef.current || undefined });
+    promise
+      .then((data) => {
+        if (mountedRef.current) setMemories(toItems(data));
+      })
+      .catch(() => {
+        if (mountedRef.current) setMemories([]);
+      });
+  }, []);
+
+  // Task 6 — 实时新记忆：订阅 SSE memory_written 事件（经 Electron relay
+  // 转发）。事件到达 → toast「🧠 已记住: ...」+ 把新记忆 prepend 到列表头部。
+  // subscribe 不存在或抛错（SSE 不可用）→ 回退到 30s setInterval 轮询 reloadAll。
+  useEffect(() => {
+    const api = window.electronAPI;
+    let unsub: (() => void) | null = null;
+    let pollId: number | null = null;
+
+    if (api?.memory?.subscribe) {
+      try {
+        unsub = api.memory.subscribe((event: unknown) => {
+          let data: Record<string, unknown>;
+          try {
+            data =
+              typeof event === 'string'
+                ? (JSON.parse(event) as Record<string, unknown>)
+                : ((event ?? {}) as Record<string, unknown>);
+          } catch {
+            return; // 非 JSON 事件直接忽略
+          }
+          const content = typeof data.content === 'string' ? data.content : '';
+          if (!content) return;
+          toast.success(`🧠 已记住: ${content}`);
+          setMemories((prev) => [
+            {
+              id: typeof data.memory_id === 'string' ? data.memory_id : `sse-${Date.now()}`,
+              content,
+              importance: typeof data.importance === 'number' ? data.importance : 5,
+              memory_category:
+                typeof data.memory_category === 'string' ? data.memory_category : undefined,
+              session_id: typeof data.session_id === 'string' ? data.session_id : undefined,
+              source_turn_id: typeof data.turn_id === 'string' ? data.turn_id : undefined,
+              created_at: typeof data.timestamp === 'string' ? data.timestamp : Date.now(),
+            },
+            ...prev,
+          ]);
+        });
+      } catch (e) {
+        console.warn('[Memory] SSE subscribe failed, falling back to polling', e);
+        unsub = null;
+      }
+    }
+
+    if (!unsub) {
+      pollId = window.setInterval(reloadAll, 30_000);
+    }
+
+    return () => {
+      unsub?.();
+      if (pollId !== null) window.clearInterval(pollId);
+    };
+  }, [reloadAll]);
+
   useEffect(() => {
     let cancelled = false;
     const api = window.electronAPI;
@@ -111,9 +198,7 @@ export function Memory() {
         })
         .then((data) => {
           if (!cancelled) {
-            setSummaries(
-              toItems((data as { summaries?: unknown } | undefined)?.summaries),
-            );
+            setSummaries(toItems((data as { summaries?: unknown } | undefined)?.summaries));
           }
         })
         .catch(() => {
@@ -125,22 +210,12 @@ export function Memory() {
       return;
     }
 
-    // all tab
-    const q = search.trim();
-    const promise = q
-      ? api.memory.search({ query: q, type: typeFilter || undefined })
-      : api.memory.list({ page: 1, page_size: 50, type: typeFilter || undefined });
-    promise
-      .then((data) => {
-        if (!cancelled) setMemories(toItems(data));
-      })
-      .catch(() => {
-        if (!cancelled) setMemories([]);
-      });
+    // all tab — 复用 reloadAll（SSE 轮询回退也走同一加载逻辑）
+    reloadAll();
     return () => {
       cancelled = true;
     };
-  }, [tab, search, typeFilter, currentSessionId]);
+  }, [tab, search, typeFilter, currentSessionId, reloadAll]);
 
   const handleDelete = async (id: string) => {
     const api = window.electronAPI;

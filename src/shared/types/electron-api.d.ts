@@ -133,16 +133,8 @@ export interface OfficeElectronApiBridge {
  */
 export interface MemoryElectronApiBridge {
   search: (args: { query: string; type?: string }) => Promise<unknown>;
-  save: (args: {
-    content: string;
-    importance?: number;
-    category?: string;
-  }) => Promise<unknown>;
-  list: (args: {
-    page?: number;
-    page_size?: number;
-    type?: string;
-  }) => Promise<unknown>;
+  save: (args: { content: string; importance?: number; category?: string }) => Promise<unknown>;
+  list: (args: { page?: number; page_size?: number; type?: string }) => Promise<unknown>;
   delete: (args: { memory_id: string }) => Promise<unknown>;
   /** GET /api/v1/preferences/auto_memory → "true" | "false" | null (default True). */
   getAutoMemory: () => Promise<unknown>;
@@ -151,6 +143,12 @@ export interface MemoryElectronApiBridge {
   findByTurn: (args: { turn_id: string }) => Promise<unknown>;
   getProfile: () => Promise<unknown>;
   getSummary: (args: { session_id: string }) => Promise<unknown>;
+  /**
+   * Task 6 — subscribe to backend memory_written SSE events (via main relay).
+   * The callback receives the raw JSON string payload of each SSE event;
+   * returns an unsubscribe function that closes the relay connection.
+   */
+  subscribe: (callback: (event: unknown) => void) => () => void;
 }
 
 export interface ElectronAPI {

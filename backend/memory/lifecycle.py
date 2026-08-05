@@ -150,7 +150,12 @@ class MemoryLifecycleManager:
     # caller (ChatService / EvolutionScheduler / session watchdog) is never
     # blocked by a memory hiccup.
 
-    async def on_turn_complete(self, session_id: str, messages: list) -> None:
+    async def on_turn_complete(
+        self,
+        session_id: str,
+        messages: list,
+        source_message_id: Optional[str] = None,
+    ) -> None:
         """End-of-turn hook: extract facts and emit ``memory_written``.
 
         Gated by ``is_auto_memory_enabled()``. Facts are extracted from the
@@ -160,6 +165,12 @@ class MemoryLifecycleManager:
         ``memory_category`` into the episodic row — and one
         ``memory_written`` event is emitted per fact tagged with the current
         turn id (set via ``set_current_turn`` earlier in the turn).
+
+        Task 6: ``source_message_id`` (the persisted assistant/user message
+        id captured by ChatService) is threaded into the episodic row so the
+        Memory page's click-to-trace can highlight the exact producing
+        message (Chat renders ``data-turn-id={message.id}``) — same
+        capability the legacy ``_extract_and_store_memory`` path had.
         """
         if not await self.is_auto_memory_enabled():
             return
@@ -171,7 +182,9 @@ class MemoryLifecycleManager:
             return
         for fact in facts or []:
             try:
-                memory_id = await self._persist_fact(session_id, fact)
+                memory_id = await self._persist_fact(
+                    session_id, fact, source_message_id=source_message_id
+                )
             except Exception as exc:  # noqa: BLE001 — one bad fact must not stop the rest
                 logger.exception("on_turn_complete: persist failed", exc_info=exc)
                 continue
@@ -196,24 +209,42 @@ class MemoryLifecycleManager:
                 )
 
     def _split_messages(self, messages: list) -> "tuple[str, str]":
-        """Derive the last user and assistant message texts from a turn."""
+        """Derive the last user and assistant message texts from a turn.
+
+        Accepts both plain dicts (``{"role", "content"}`` — the original
+        contract, still used by tests) and ``backend.domain.message.Message``
+        domain objects (the production ``ChatService.run_turn`` payload,
+        Task 6). ``getattr`` / dict-access are tried so neither shape
+        breaks the end-of-turn hook.
+        """
         user_msg = ""
         assistant_msg = ""
         for m in messages or []:
-            role = m.get("role", "")
-            content = m.get("content", "")
+            if isinstance(m, dict):
+                role = m.get("role", "")
+                content = m.get("content", "") or ""
+            else:
+                role = getattr(m, "role", "")
+                content = getattr(m, "content", "") or ""
             if role == "user":
                 user_msg = content
             elif role == "assistant":
                 assistant_msg = content
         return user_msg, assistant_msg
 
-    async def _persist_fact(self, session_id: str, fact: dict) -> Optional[str]:
+    async def _persist_fact(
+        self,
+        session_id: str,
+        fact: dict,
+        source_message_id: Optional[str] = None,
+    ) -> Optional[str]:
         """Persist one extracted fact through the real ``MemoryManager.aremember``.
 
         Returns the persisted memory id (or ``None`` if the memory object has
         no ``aremember`` / the store produced no id). ``source_turn_id`` and
-        ``memory_category`` ride along so the episodic row is traceable.
+        ``memory_category`` ride along so the episodic row is traceable;
+        ``source_message_id`` (Task 6) lets the UI highlight the exact
+        producing message.
         """
         aremember = getattr(self._memory, "aremember", None)
         if aremember is None:
@@ -225,6 +256,7 @@ class MemoryLifecycleManager:
             content=fact.get("content", ""),
             session_id=session_id,
             source_turn_id=self._current_turn_id,
+            source_message_id=source_message_id,
             memory_category=fact.get("category", "project_fact"),
             metadata={"importance": fact.get("importance", 5)},
         )

@@ -1530,3 +1530,71 @@ async def get_session_summary(session_id: str, request: Request):
     memory_port = _get_memory_port(request)
     summaries = await memory_port.find_by_category_and_session("task_summary", session_id)
     return {"summaries": [m for m in summaries], "session_id": session_id}
+
+
+# ==================== 记忆 SSE 流 (Task 6) ====================
+
+
+@router.get("/memory/events")
+async def memory_events(request: Request):
+    """SSE 流：订阅 ``memory_written`` 生命周期事件 (Task 6)。
+
+    每个连接持有独立的 ``asyncio.Queue(maxsize=100)``；进程内
+    HookRegistry 触发 ``memory_written`` 时把事件序列化后推给连接。
+    15s 无事件时发心跳 ``: heartbeat`` 保持连接。客户端断开
+    (``request.is_disconnected()``) 或请求取消时在 ``finally`` 注销
+    监听器，避免 per-connection 闭包泄漏。
+
+    Electron 主进程 (``electron/main.ts``) 通过 EventSource 消费此流，
+    再通过 IPC ``sage:memory:event`` 转发给渲染进程。
+    """
+    from backend.memory.hooks import HookRegistry
+    from backend.memory.lifecycle import MemoryWriteEvent
+
+    hooks: HookRegistry = getattr(request.app.state, "hooks", None)
+    if hooks is None:
+        raise HTTPException(
+            status_code=503,
+            detail="memory hook registry not initialized",
+        )
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+
+    def on_memory_written(event: object) -> None:
+        """Hook 监听器（同步）：入队；队列满则丢弃并告警，绝不上抛。"""
+        try:
+            queue.put_nowait(event)
+        except asyncio.QueueFull:
+            logger.warning("memory events queue full, dropping event")
+
+    hooks.on("memory_written", on_memory_written)
+
+    async def event_stream():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:  # noqa: UP041 — Py3.10 asyncio.TimeoutError
+                    yield ": heartbeat\n\n"
+                    continue
+                if not isinstance(event, MemoryWriteEvent):
+                    continue
+                payload = json.dumps(
+                    {
+                        "memory_id": event.memory_id,
+                        "content": event.content,
+                        "memory_type": event.memory_type,
+                        "memory_category": event.memory_category,
+                        "session_id": event.session_id,
+                        "turn_id": event.turn_id,
+                        "timestamp": event.timestamp.isoformat(),
+                    },
+                    ensure_ascii=False,
+                )
+                yield f"data: {payload}\n\n"
+        finally:
+            hooks.off("memory_written", on_memory_written)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

@@ -50,6 +50,8 @@ type MemoryApi = {
   findByTurn: (args: { turn_id: string }) => Promise<unknown>;
   getProfile: () => Promise<unknown>;
   getSummary: (args: { session_id: string }) => Promise<unknown>;
+  /** Task 6 — subscribe to backend memory_written SSE events (via main relay). */
+  subscribe: (callback: (event: unknown) => void) => () => void;
 };
 
 const electronAPI = {
@@ -161,8 +163,7 @@ const electronAPI = {
       ipcRenderer.invoke('sage:invoke', { cmd: 'memory_list', args }),
     delete: (args: { memory_id: string }) =>
       ipcRenderer.invoke('sage:invoke', { cmd: 'memory_delete', args }),
-    getAutoMemory: () =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_auto', args: {} }),
+    getAutoMemory: () => ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_auto', args: {} }),
     // Backend stores boolean prefs as 'true'/'false' strings (Pydantic str model);
     // stringify here so renderer can pass a real boolean without thinking about it.
     setAutoMemory: (args: { value: boolean }) =>
@@ -172,10 +173,26 @@ const electronAPI = {
       }),
     findByTurn: (args: { turn_id: string }) =>
       ipcRenderer.invoke('sage:invoke', { cmd: 'memory_find_by_turn', args }),
-    getProfile: () =>
-      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_profile', args: {} }),
+    getProfile: () => ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_profile', args: {} }),
     getSummary: (args: { session_id: string }) =>
       ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_summary', args }),
+    /**
+     * Task 6 — real-time memory events. Asks main to open an EventSource to
+     * the backend SSE endpoint, then relays each `sage:memory:event` payload
+     * (a JSON string) to the callback. Returns an unsubscribe function that
+     * detaches the listener and tells main to close the connection.
+     */
+    subscribe: (callback: (event: unknown) => void) => {
+      ipcRenderer.invoke('sage:memory:subscribe').catch((e) => {
+        console.error('[preload] memory subscribe failed:', e);
+      });
+      const listener = (_e: IpcRendererEvent, data: unknown) => callback(data);
+      ipcRenderer.on('sage:memory:event', listener);
+      return () => {
+        ipcRenderer.off('sage:memory:event', listener);
+        ipcRenderer.invoke('sage:memory:unsubscribe').catch(() => undefined);
+      };
+    },
   } satisfies MemoryApi,
 
   /**
