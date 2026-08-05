@@ -5,6 +5,7 @@ Memory Manager - 记忆管理器
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from typing import Any, Dict, List, Optional
@@ -92,6 +93,17 @@ class MemoryManager:
         await ``self._memory.remember(...)`` but in practice the FakeMemory
         in tests defines an ``async def remember``; production code path
         uses ``self._memory.aremember(...)``.
+
+        Implementation note — async event-loop safety: ``EpisodicMemory.save``
+        is a synchronous ``sqlite3`` INSERT (cursor.execute + commit). If
+        invoked directly on the event-loop thread it stalls every other
+        coroutine while the disk fsyncs. We therefore run it through
+        ``asyncio.to_thread`` so the blocking I/O is offloaded to a worker
+        thread; the awaited coroutine yields and the loop keeps servicing
+        other requests. The DB connection is acquired lazily inside the
+        worker thread via ``EpisodicMemory.save → self.db.get_connection``,
+        so the single-connection / WAL contract (and ``check_same_thread=
+        False``) is preserved without any threading-model change.
         """
         importance = 5
         resolved_session_id = session_id
@@ -102,7 +114,12 @@ class MemoryManager:
                 resolved_session_id = metadata.get("session_id")
             memory_type = metadata.get("memory_type", "conversation")
 
-        return self.episodic.save(
+        # Snapshot kwargs in the closure so the worker thread sees the same
+        # values the caller intended — defensive against any mutation
+        # between scheduling and execution.
+        episodic = self.episodic
+        return await asyncio.to_thread(
+            episodic.save,
             content=content,
             importance=importance,
             metadata=metadata,

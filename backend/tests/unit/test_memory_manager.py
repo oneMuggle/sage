@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
+
 import pytest
 
 from backend.data.database import Database
@@ -260,3 +263,85 @@ async def test_remember_threads_all_traceability(manager: MemoryManager) -> None
     assert found["source_turn_id"] == "turn-9"
     assert found["source_message_id"] == "msg-3"
     assert found["memory_category"] == "cross_session_pattern"
+
+
+# ----------------------------------------------------------------------------
+# Code review fix — aremember() must not block the event loop.
+#
+# EpisodicMemory.save() is a synchronous SQLite INSERT; if aremember() awaited
+# it directly on the asyncio thread, a slow disk fsync would stall the entire
+# event loop. The fix wraps save() in ``asyncio.to_thread`` and re-acquires
+# the DB connection *inside* the worker thread so the existing
+# ``check_same_thread=False`` / single-connection contract is preserved.
+#
+# These tests prove the implementation actually off-loads the work to a
+# worker thread (the synchronous save() must NOT run on the event loop
+# thread that owns the awaiting coroutine).
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aremember_does_not_block_event_loop(
+    manager: MemoryManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """aremember() must not run EpisodicMemory.save on the event-loop thread.
+
+    We monkey-patch EpisodicMemory.save with a probe that records the
+    thread it is invoked on, then assert the thread is different from the
+    asyncio event loop's thread.
+    """
+
+    event_loop_thread_id = threading.get_ident()
+    save_thread_id: dict[str, int | None] = {"value": None}
+    original_save = manager.episodic.save
+
+    def _probe_save(*args, **kwargs):
+        save_thread_id["value"] = threading.get_ident()
+        return original_save(*args, **kwargs)
+
+    monkeypatch.setattr(manager.episodic, "save", _probe_save)
+    # The rebinding on the instance is sufficient because Python attribute
+    # lookup walks the instance dict before the class.
+
+    # Yield control to the loop so the captured thread id is the loop's.
+    await asyncio.sleep(0)
+
+    mid = await manager.aremember(
+        "non-blocking probe",
+        session_id="probe-sess",
+        source_turn_id="probe-turn",
+    )
+
+    assert mid, "aremember should return a memory id"
+    assert save_thread_id["value"] is not None, "save was never called"
+    assert save_thread_id["value"] != event_loop_thread_id, (
+        "EpisodicMemory.save ran on the event-loop thread; "
+        "aremember() must wrap it in asyncio.to_thread"
+    )
+
+
+@pytest.mark.asyncio()
+async def test_aremember_to_thread_preserves_save_contract(
+    manager: MemoryManager,
+) -> None:
+    """The to_thread wrapper must still persist all fields end-to-end.
+
+    Sanity check: after wrapping in asyncio.to_thread the visible contract
+    (memory id returned, row findable, traceability fields populated)
+    remains identical to the synchronous ``remember()`` path.
+    """
+    mid = await manager.aremember(
+        "wrap test",
+        session_id="wrap-sess",
+        source_turn_id="wrap-turn",
+        source_message_id="wrap-msg",
+        memory_category="user_pref",
+    )
+    assert mid
+    found = manager.episodic.get_by_id(mid)
+    assert found is not None
+    assert found["content"] == "wrap test"
+    assert found["session_id"] == "wrap-sess"
+    assert found["source_turn_id"] == "wrap-turn"
+    assert found["source_message_id"] == "wrap-msg"
+    assert found["memory_category"] == "user_pref"

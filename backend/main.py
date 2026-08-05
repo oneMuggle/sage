@@ -196,6 +196,28 @@ async def lifespan(app: FastAPI):
 
     # Session-end watchdog — every 60s, find sessions whose updated_at
     # is older than 30 min and fire on_session_end.
+    async def _fetch_stale_session_ids(cutoff_ts: int) -> List[str]:
+        """Return session ids whose ``updated_at`` is older than ``cutoff_ts``.
+
+        Runs the synchronous SQLite SELECT through ``asyncio.to_thread`` so
+        the event loop is not stalled by disk I/O. The DB connection is
+        acquired lazily *inside* the worker thread (via
+        ``db.get_connection``) — this keeps the single-connection / WAL /
+        ``check_same_thread=False`` contract intact: only one thread at a
+        time holds the connection, and ``sqlite3`` itself serialises its
+        internal mutex.
+        """
+        def _query() -> List[str]:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM sessions WHERE updated_at < ? LIMIT 50",
+                (cutoff_ts,),
+            )
+            return [row["id"] for row in cursor.fetchall()]
+
+        return await asyncio.to_thread(_query)
+
     async def _session_watchdog() -> None:
         from datetime import datetime, timedelta, timezone
 
@@ -205,13 +227,13 @@ async def lifespan(app: FastAPI):
                 cutoff_ts = int(
                     (datetime.now(timezone.utc) - timedelta(minutes=30)).timestamp()
                 )
-                conn = db.get_connection()
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT id FROM sessions WHERE updated_at < ? LIMIT 50",
-                    (cutoff_ts,),
-                )
-                stale_ids = [row["id"] for row in cursor.fetchall()]
+                try:
+                    stale_ids = await _fetch_stale_session_ids(cutoff_ts)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "session_watchdog: stale-id query failed: %s", exc
+                    )
+                    continue
                 for sid in stale_ids:
                     try:
                         await lifecycle.on_session_end(sid)
@@ -230,6 +252,11 @@ async def lifespan(app: FastAPI):
         _session_watchdog(), name="session-watchdog"
     )
     app.state.session_watchdog = watchdog_task
+    # Test hook: expose the query helper so async-blocking tests can hit it
+    # directly without waiting 60 s for the next watchdog tick. Production
+    # callers should not depend on this attribute; it is prefixed with ``_``
+    # to mark it as internal.
+    app.state._watchdog_query_fn = _fetch_stale_session_ids
     logger.info("Session-end watchdog 已启动 (60s 周期)")
 
     # PR-3: agents 表种子化 (空表时插 4 个默认 agent, 幂等)
