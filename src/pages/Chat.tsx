@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
@@ -65,6 +65,35 @@ export function Chat() {
   const hasConfig =
     Boolean(chatEndpoint?.baseUrl) && Boolean(settings.modelSelections.chatModel.modelId);
   const showConfigWarning = !hasConfig;
+
+  // Gap E (Task 5) — click-to-trace from the Memory page:
+  //   /chat?session={session_id}&highlight_turn={turn_id}
+  const [searchParams] = useSearchParams();
+  const highlightTurn = searchParams.get('highlight_turn');
+  const sessionParam = searchParams.get('session');
+
+  // URL 带 session → 切换到该会话（记忆卡片跳转来源）。
+  useEffect(() => {
+    if (sessionParam && sessionParam !== currentSessionId) {
+      setCurrentSessionId(sessionParam);
+    }
+  }, [sessionParam, currentSessionId, setCurrentSessionId]);
+
+  // 高亮产生该记忆的轮次对应消息：滚动到 [data-turn-id="..."] 并加 2s 高亮环。
+  // 消息加载完成后执行（依赖 messages），带 150ms 延迟让自动滚底先完成，
+  // 避免两个滚动互相覆盖。
+  useEffect(() => {
+    if (!highlightTurn || !messages.length) return;
+    const timer = window.setTimeout(() => {
+      const el = document.querySelector(`[data-turn-id="${highlightTurn}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-blue-500');
+        window.setTimeout(() => el.classList.remove('ring-2', 'ring-blue-500'), 2000);
+      }
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [highlightTurn, messages]);
 
   useEffect(() => {
     if (currentSessionId) {
