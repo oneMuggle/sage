@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
+
 import pytest
 
 from backend.data.database import Database
@@ -212,3 +215,168 @@ def test_classify_low_importance_short() -> None:
 def test_classify_default_episodic() -> None:
     mgr = MemoryManager.__new__(MemoryManager)
     assert mgr._classify_memory_type("x" * 300, 5) == "episodic"
+
+
+# ----------------------------------------------------------------------------
+# Task 4 / Gap A — async remember() threads traceability through to episodic.
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_remember_threads_source_turn_id(manager: MemoryManager) -> None:
+    """aremember() must persist source_turn_id on the episodic row."""
+    mid = await manager.aremember(
+        "user prefers tea",
+        session_id="sess-1",
+        source_turn_id="turn-7",
+    )
+    found = manager.episodic.get_by_id(mid)
+    assert found is not None
+    assert found["source_turn_id"] == "turn-7"
+
+
+@pytest.mark.asyncio()
+async def test_remember_threads_memory_category(manager: MemoryManager) -> None:
+    """aremember() must persist memory_category on the episodic row."""
+    mid = await manager.aremember(
+        "用户偏好咖啡",
+        session_id="sess-1",
+        memory_category="user_pref",
+    )
+    found = manager.episodic.get_by_id(mid)
+    assert found is not None
+    assert found["memory_category"] == "user_pref"
+
+
+@pytest.mark.asyncio()
+async def test_remember_threads_all_traceability(manager: MemoryManager) -> None:
+    """All three traceability fields pass through in one call."""
+    mid = await manager.aremember(
+        "user mentioned azure on a friday",
+        session_id="sess-1",
+        source_turn_id="turn-9",
+        source_message_id="msg-3",
+        memory_category="cross_session_pattern",
+    )
+    found = manager.episodic.get_by_id(mid)
+    assert found is not None
+    assert found["source_turn_id"] == "turn-9"
+    assert found["source_message_id"] == "msg-3"
+    assert found["memory_category"] == "cross_session_pattern"
+
+
+# ----------------------------------------------------------------------------
+# Code review fix — aremember() must not block the event loop.
+#
+# EpisodicMemory.save() is a synchronous SQLite INSERT; if aremember() awaited
+# it directly on the asyncio thread, a slow disk fsync would stall the entire
+# event loop. The fix wraps save() in ``asyncio.to_thread`` and re-acquires
+# the DB connection *inside* the worker thread so the existing
+# ``check_same_thread=False`` / single-connection contract is preserved.
+#
+# These tests prove the implementation actually off-loads the work to a
+# worker thread (the synchronous save() must NOT run on the event loop
+# thread that owns the awaiting coroutine).
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aremember_does_not_block_event_loop(
+    manager: MemoryManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """aremember() must not run EpisodicMemory.save on the event-loop thread.
+
+    We monkey-patch EpisodicMemory.save with a probe that records the
+    thread it is invoked on, then assert the thread is different from the
+    asyncio event loop's thread.
+    """
+
+    event_loop_thread_id = threading.get_ident()
+    save_thread_id: dict[str, int | None] = {"value": None}
+    original_save = manager.episodic.save
+
+    def _probe_save(*args, **kwargs):
+        save_thread_id["value"] = threading.get_ident()
+        return original_save(*args, **kwargs)
+
+    monkeypatch.setattr(manager.episodic, "save", _probe_save)
+    # The rebinding on the instance is sufficient because Python attribute
+    # lookup walks the instance dict before the class.
+
+    # Yield control to the loop so the captured thread id is the loop's.
+    await asyncio.sleep(0)
+
+    mid = await manager.aremember(
+        "non-blocking probe",
+        session_id="probe-sess",
+        source_turn_id="probe-turn",
+    )
+
+    assert mid, "aremember should return a memory id"
+    assert save_thread_id["value"] is not None, "save was never called"
+    assert save_thread_id["value"] != event_loop_thread_id, (
+        "EpisodicMemory.save ran on the event-loop thread; "
+        "aremember() must wrap it in asyncio.to_thread"
+    )
+
+
+@pytest.mark.asyncio()
+async def test_aremember_to_thread_preserves_save_contract(
+    manager: MemoryManager,
+) -> None:
+    """The to_thread wrapper must still persist all fields end-to-end.
+
+    Sanity check: after wrapping in asyncio.to_thread the visible contract
+    (memory id returned, row findable, traceability fields populated)
+    remains identical to the synchronous ``remember()`` path.
+    """
+    mid = await manager.aremember(
+        "wrap test",
+        session_id="wrap-sess",
+        source_turn_id="wrap-turn",
+        source_message_id="wrap-msg",
+        memory_category="user_pref",
+    )
+    assert mid
+    found = manager.episodic.get_by_id(mid)
+    assert found is not None
+    assert found["content"] == "wrap test"
+    assert found["session_id"] == "wrap-sess"
+    assert found["source_turn_id"] == "wrap-turn"
+    assert found["source_message_id"] == "wrap-msg"
+    assert found["memory_category"] == "user_pref"
+
+
+# ----------------------------------------------------------------------------
+# F2 — MemoryManager gains async consolidate() / snapshot() wrappers so the
+# MemoryLifecycleManager (and the session-end watchdog in main.py) can drive
+# real consolidation/snapshot without calling methods that don't exist.
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_consolidate_compresses_working_memory(
+    manager: MemoryManager,
+) -> None:
+    """MemoryManager.consolidate(session_id) compresses working memory into
+    episodic (delegates to ConsolidationPipeline) and returns a memory id."""
+    manager.add_to_working(
+        "user", "hello consolidation test message worth remembering"
+    )
+    memory_id = await manager.consolidate("sess-c")
+    assert memory_id is None or isinstance(memory_id, str)
+    # working memory cleared after consolidation
+    assert len(manager.working.messages) == 0
+    # episodic now holds the compressed summary
+    recent = manager.episodic.get_recent(limit=5)
+    assert len(recent) >= 1
+    assert "摘要" in recent[0]["content"] or "对话" in recent[0]["content"]
+
+
+@pytest.mark.asyncio()
+async def test_snapshot_does_not_raise(manager: MemoryManager) -> None:
+    """MemoryManager.snapshot(session_id) persists working memory state and
+    must not raise even when working memory is empty."""
+    await manager.snapshot("sess-s")  # empty working memory — no-op, no raise
+    manager.add_to_working("user", "hello snapshot me")
+    await manager.snapshot("sess-s")  # must not raise

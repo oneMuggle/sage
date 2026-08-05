@@ -48,6 +48,34 @@ export function camelToSnakeKeys(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Extract `{name}` placeholders from a route template path. Used by
+ * invokeBackend to substitute path params from args and strip them
+ * from the request body so they don't get sent twice.
+ *
+ * Example: `extractPathParams('/api/v1/memory/by-turn/{turn_id}', { turn_id: 't1' })`
+ *   → `{ turn_id: 't1' }`
+ *
+ * Only top-level keys matching template placeholders are returned;
+ * missing placeholders are silently skipped (the backend will 404 for
+ * malformed paths, which surfaces as a clear failure to the renderer).
+ */
+function extractPathParams(
+  route: string,
+  args: Record<string, unknown>,
+): Record<string, string> {
+  const matches = route.match(/\{(\w+)\}/g) || [];
+  const result: Record<string, string> = {};
+  for (const m of matches) {
+    const key = m.slice(1, -1);
+    if (key in args) {
+      const v = args[key];
+      if (v !== null && v !== undefined) result[key] = String(v);
+    }
+  }
+  return result;
+}
+
 export async function invokeBackend(
   cmd: string,
   args: Record<string, unknown> = {},
@@ -57,7 +85,20 @@ export async function invokeBackend(
   if (!route) {
     throw new UnknownIpcCommandError(cmd);
   }
-  const url = `${backendUrl}${route.path(args)}`;
+  // Build the path template, then substitute {name} placeholders from
+  // args (Gap D: memory_find_by_turn / memory_get_summary use
+  // {turn_id}/{session_id}). Mutating a local copy keeps the caller's
+  // args object untouched (immutability rule).
+  let path = route.path(args);
+  const pathParams = extractPathParams(path, args);
+  for (const [k, v] of Object.entries(pathParams)) {
+    path = path.replace(`{${k}}`, encodeURIComponent(v));
+  }
+  const url = `${backendUrl}${path}`;
+  // Strip path params from the body so they are not sent twice
+  // (once in the URL, once in the JSON body).
+  const bodyArgs: Record<string, unknown> = { ...args };
+  for (const k of Object.keys(pathParams)) delete bodyArgs[k];
   const init: import('node-fetch').RequestInit = {
     method: route.method,
     headers: { 'Content-Type': 'application/json' },
@@ -65,8 +106,8 @@ export async function invokeBackend(
   if (route.method !== 'GET' && route.method !== 'DELETE') {
     // POST/PUT/PATCH: 把 args 转 snake_case 再序列化(前端 camelCase → 后端 Pydantic)
     // rawBody 路由跳过转换 — 载荷 key 是用户数据(如 MCP env 变量名)而非 JS 标识符
-    const bodyArgs = route.body?.(args) ?? args;
-    init.body = JSON.stringify(route.rawBody ? bodyArgs : camelToSnakeKeys(bodyArgs));
+    const routeBody = route.body?.(bodyArgs) ?? bodyArgs;
+    init.body = JSON.stringify(route.rawBody ? routeBody : camelToSnakeKeys(routeBody));
   }
   const res = await fetch(url, init);
   if (!res.ok) {

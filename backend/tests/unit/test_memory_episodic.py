@@ -116,3 +116,44 @@ def test_search_increments_access_count(episodic: EpisodicMemory) -> None:
 
 def test_get_by_id_missing_returns_none(episodic: EpisodicMemory) -> None:
     assert episodic.get_by_id("nope") is None
+
+
+# ----------------------------------------------------------------------------
+# Task 4 / Gap A — traceability columns (source_turn_id / source_message_id /
+# memory_category). All keyword-only; default None preserves backward compat.
+# ----------------------------------------------------------------------------
+
+
+def test_save_with_source_turn_and_message_id(episodic: EpisodicMemory) -> None:
+    mid = episodic.save(
+        "user mentioned azure",
+        session_id="sess-1",
+        source_turn_id="turn-7",
+        source_message_id="msg-42",
+    )
+    found = episodic.get_by_id(mid)
+    assert found is not None
+    assert found["source_turn_id"] == "turn-7"
+    assert found["source_message_id"] == "msg-42"
+
+
+def test_save_with_memory_category(episodic: EpisodicMemory) -> None:
+    mid = episodic.save(
+        "用户偏好咖啡",
+        session_id="sess-1",
+        memory_category="user_pref",
+    )
+    found = episodic.get_by_id(mid)
+    assert found is not None
+    assert found["memory_category"] == "user_pref"
+
+
+def test_save_defaults_traceability_to_none(episodic: EpisodicMemory) -> None:
+    """When the new params are omitted, the columns must remain NULL —
+    keeps backward compat with every existing caller."""
+    mid = episodic.save("plain fact")
+    found = episodic.get_by_id(mid)
+    assert found is not None
+    assert found["source_turn_id"] is None
+    assert found["source_message_id"] is None
+    assert found["memory_category"] is None
