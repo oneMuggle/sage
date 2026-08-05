@@ -66,6 +66,13 @@ describe('Memory page', () => {
     expect(screen.getByText('会话摘要')).toBeInTheDocument();
   });
 
+  it('includes cross_session_pattern in the type filter dropdown', () => {
+    renderPage();
+    const select = screen.getByLabelText('按类型筛选');
+    expect(select).toHaveTextContent('跨会话模式');
+    expect(select).toHaveTextContent('用户偏好');
+  });
+
   it('loads memories via memory.list on the all tab', async () => {
     mocks.list.mockResolvedValue([BASE_ROW]);
     renderPage();
@@ -89,7 +96,9 @@ describe('Memory page', () => {
   it('loads session summaries when summary tab selected', async () => {
     mocks.invoke.mockResolvedValue([{ id: 's1', title: '会话1' }]);
     mocks.getSummary.mockResolvedValue({
-      summaries: [{ ...BASE_ROW, id: 'su1', content: '会话总结内容', memory_category: 'task_summary' }],
+      summaries: [
+        { ...BASE_ROW, id: 'su1', content: '会话总结内容', memory_category: 'task_summary' },
+      ],
       session_id: 's1',
     });
     renderPage();

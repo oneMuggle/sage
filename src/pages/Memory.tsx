@@ -11,7 +11,7 @@
  * 渲染层复用 MemoryCard（含点击跳回产生该记忆的会话/轮次）。
  */
 import { Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useStore } from '../shared/lib/store';
 import { MemoryCard, type MemoryItem } from '../widgets/memory/MemoryCard';
@@ -40,6 +40,7 @@ const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'project_fact', label: '项目事实' },
   { value: 'task_summary', label: '任务总结' },
   { value: 'decision', label: '决策' },
+  { value: 'cross_session_pattern', label: '跨会话模式' },
 ];
 
 export function Memory() {
@@ -52,7 +53,17 @@ export function Memory() {
   const [typeFilter, setTypeFilter] = useState('');
   const currentSessionId = useStore((s) => s.currentSessionId);
 
+  // 卸载守卫：异步响应回来时组件已卸载则跳过 setState。
+  const mountedRef = useRef(true);
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     const api = window.electronAPI;
     if (!api?.memory) {
       setMemories([]);
@@ -69,13 +80,17 @@ export function Memory() {
             decisions?: unknown;
             facts?: unknown;
           };
-          setMemories([
-            ...toItems(profile.preferences),
-            ...toItems(profile.decisions),
-            ...toItems(profile.facts),
-          ]);
+          if (!cancelled) {
+            setMemories([
+              ...toItems(profile.preferences),
+              ...toItems(profile.decisions),
+              ...toItems(profile.facts),
+            ]);
+          }
         })
-        .catch(() => setMemories([]));
+        .catch(() => {
+          if (!cancelled) setMemories([]);
+        });
       return;
     }
 
@@ -84,6 +99,7 @@ export function Memory() {
         .invoke('list_sessions', { limit: 50, offset: 0 })
         .then((raw) => {
           const list = Array.isArray(raw) ? (raw as SessionInfo[]) : [];
+          if (cancelled) return;
           setSessions(list);
           const target = currentSessionId || list[0]?.id || '';
           setSelectedSession(target);
@@ -93,14 +109,18 @@ export function Memory() {
           }
           return api.memory.getSummary({ session_id: target });
         })
-        .then((data) =>
-          setSummaries(
-            toItems((data as { summaries?: unknown } | undefined)?.summaries),
-          ),
-        )
+        .then((data) => {
+          if (!cancelled) {
+            setSummaries(
+              toItems((data as { summaries?: unknown } | undefined)?.summaries),
+            );
+          }
+        })
         .catch(() => {
-          setSessions([]);
-          setSummaries([]);
+          if (!cancelled) {
+            setSessions([]);
+            setSummaries([]);
+          }
         });
       return;
     }
@@ -110,7 +130,16 @@ export function Memory() {
     const promise = q
       ? api.memory.search({ query: q, type: typeFilter || undefined })
       : api.memory.list({ page: 1, page_size: 50, type: typeFilter || undefined });
-    promise.then((data) => setMemories(toItems(data))).catch(() => setMemories([]));
+    promise
+      .then((data) => {
+        if (!cancelled) setMemories(toItems(data));
+      })
+      .catch(() => {
+        if (!cancelled) setMemories([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [tab, search, typeFilter, currentSessionId]);
 
   const handleDelete = async (id: string) => {
@@ -132,11 +161,11 @@ export function Memory() {
     if (!api?.memory) return;
     try {
       const data = await api.memory.getSummary({ session_id: sessionId });
-      setSummaries(
-        toItems((data as { summaries?: unknown } | undefined)?.summaries),
-      );
+      if (mountedRef.current) {
+        setSummaries(toItems((data as { summaries?: unknown } | undefined)?.summaries));
+      }
     } catch {
-      setSummaries([]);
+      if (mountedRef.current) setSummaries([]);
     }
   };
 
@@ -201,16 +230,12 @@ export function Memory() {
         summaries.length === 0 ? (
           <p className="text-gray-500 text-center py-8">暂无会话摘要</p>
         ) : (
-          summaries.map((m) => (
-            <MemoryCard key={m.id} memory={m} onDelete={handleDelete} />
-          ))
+          summaries.map((m) => <MemoryCard key={m.id} memory={m} onDelete={handleDelete} />)
         )
       ) : memories.length === 0 ? (
         <p className="text-gray-500 text-center py-8">暂无记忆</p>
       ) : (
-        memories.map((m) => (
-          <MemoryCard key={m.id} memory={m} onDelete={handleDelete} />
-        ))
+        memories.map((m) => <MemoryCard key={m.id} memory={m} onDelete={handleDelete} />)
       )}
     </div>
   );

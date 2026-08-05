@@ -219,7 +219,9 @@ class ChatService:
                 logger.warning("run_turn: set_current_turn failed: %s", exc)
 
         # 1) 持久化 user message
-        await self.storage.append_message(session_id, user_message)
+        # Gap E — capture the persisted message id so extracted facts can point
+        # at the real message (Chat renders it as data-turn-id={message.id}).
+        user_message_id = await self.storage.append_message(session_id, user_message)
         self.events.emit(
             "chat_message_sent",
             {"session_id": session_id, "role": Role.USER.value},
@@ -374,7 +376,8 @@ class ChatService:
 
         # 5) 持久化 assistant response（即使触发了 tool_calls，
         #    仍把 LLM 原始的 assistant message 落库）
-        await self.storage.append_message(session_id, response)
+        # Gap E — capture the persisted assistant message id for source_message_id.
+        assistant_message_id = await self.storage.append_message(session_id, response)
         self.events.emit(
             "chat_response_completed",
             {"session_id": session_id},
@@ -421,6 +424,8 @@ class ChatService:
                             session_id=session_id,
                             user_message=user_message,
                             assistant_message=response,
+                            user_message_id=user_message_id,
+                            assistant_message_id=assistant_message_id,
                         )
                     except Exception as e:
                         logger.warning(f"Failed to store memory: {e}")
@@ -437,6 +442,8 @@ class ChatService:
                         session_id=session_id,
                         user_message=user_message,
                         assistant_message=response,
+                        user_message_id=user_message_id,
+                        assistant_message_id=assistant_message_id,
                     )
                 except Exception as e:
                     logger.warning(f"Failed to store memory: {e}")
@@ -465,6 +472,8 @@ class ChatService:
         session_id: str,
         user_message: Message,
         assistant_message: Message,
+        user_message_id: Optional[str] = None,
+        assistant_message_id: Optional[str] = None,
     ) -> None:
         """从对话中提取关键信息并存入记忆系统
 
@@ -475,6 +484,8 @@ class ChatService:
             session_id: 会话 ID
             user_message: 用户消息
             assistant_message: 助手消息
+            user_message_id: 已持久化的用户消息 id（Gap E，可追溯性）
+            assistant_message_id: 已持久化的助手消息 id（Gap E，可追溯性）
         """
         if not self.memory:
             return
@@ -498,6 +509,11 @@ class ChatService:
                 # path (adapter.store → memorize → episodic.save).
                 memory_category=fact.get("category", "project_fact"),
                 source_turn_id=getattr(self, "_current_turn_id", None),
+                # Gap E — point at the ACTUAL stored message so the Memory
+                # page's click-to-trace (highlight_turn) can match Chat's
+                # data-turn-id={message.id} instead of being a silent no-op.
+                # Prefer the assistant reply; fall back to the user message.
+                source_message_id=assistant_message_id or user_message_id,
             )
 
         if facts:
