@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
@@ -225,3 +226,37 @@ class MemoryAdapter:
             logger.debug(
                 f"Skipping compression: tokens={self.memory_manager.working.total_tokens} <= 3000"
             )
+
+    # ------------------------------------------------------------------ #
+    # Task 5 / Gap E — traceability queries (by-turn / category / session)
+    # ------------------------------------------------------------------ #
+    # The underlying EpisodicMemory methods are synchronous SQLite calls;
+    # they run in a worker thread via asyncio.to_thread so the event loop
+    # stays responsive (consistent with commit a7baaf98's offload policy).
+
+    async def find_by_turn(
+        self, turn_id: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """返回 source_turn_id == turn_id 的所有记忆（最新在前）。"""
+        return await asyncio.to_thread(
+            self.memory_manager.episodic.find_by_turn, turn_id, limit
+        )
+
+    async def find_by_category(
+        self, category: str, *, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """返回按 memory_category 过滤的记忆（最新在前）。"""
+        return await asyncio.to_thread(
+            self.memory_manager.episodic.find_by_category, category, limit=limit
+        )
+
+    async def find_by_category_and_session(
+        self, category: str, session_id: str, *, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """返回按 category AND session_id 过滤的记忆（最新在前）。"""
+        return await asyncio.to_thread(
+            self.memory_manager.episodic.find_by_category_and_session,
+            category,
+            session_id,
+            limit=limit,
+        )

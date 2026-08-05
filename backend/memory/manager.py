@@ -207,6 +207,7 @@ class MemoryManager:
                 content=content,
                 importance=importance,
                 metadata=meta,
+                session_id=meta.get("session_id"),
                 source_turn_id=meta.get("source_turn_id"),
                 source_message_id=meta.get("source_message_id"),
                 memory_category=meta.get("memory_category"),

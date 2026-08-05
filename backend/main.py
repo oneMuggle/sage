@@ -164,6 +164,9 @@ async def lifespan(app: FastAPI):
     )
     app.state.hooks = hooks
     app.state.lifecycle = lifecycle
+    # Gap E (Task 5) — cache the MemoryPort adapter so the by-turn / profile /
+    # summary endpoints don't rebuild (and re-init the VectorStore) per request.
+    app.state.memory_port = MemoryAdapter(get_memory_manager())
     logger.info("MemoryLifecycleManager 已绑定 HookRegistry")
 
     # Evolution scheduler — single thread, registers all enabled tasks.

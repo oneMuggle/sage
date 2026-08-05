@@ -336,6 +336,91 @@ class EpisodicMemory:
             return memory
         return None
 
+    def _row_to_dict(self, row: Any) -> Dict[str, Any]:
+        """把 sqlite3.Row 转成 dict，并解析 tags JSON（新查询方法的公共辅助）。"""
+        memory = dict(row)
+        if memory.get("tags"):
+            try:
+                memory["tags"] = json.loads(memory["tags"])
+            except json.JSONDecodeError:
+                memory["tags"] = []
+        return memory
+
+    def find_by_turn(self, turn_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """按来源 turn 查询记忆（Task 5 / Gap E 可追溯性）。
+
+        Args:
+            turn_id: 产生该记忆的 turn ID（source_turn_id 列）
+            limit: 返回数量限制，默认 50
+
+        Returns:
+            匹配的记忆列表，按创建时间倒序
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM memories_episodic
+            WHERE source_turn_id = ? AND is_valid = 1
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (turn_id, limit),
+        )
+        return [self._row_to_dict(row) for row in cursor.fetchall()]
+
+    def find_by_category(
+        self, category: str, *, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """按记忆分类查询记忆（Task 5 / Gap E）。
+
+        Args:
+            category: 记忆分类（user_pref / project_fact / task_summary /
+                cross_session_pattern / decision）
+            limit: 返回数量限制，默认 50
+
+        Returns:
+            匹配的记忆列表，按创建时间倒序
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM memories_episodic
+            WHERE memory_category = ? AND is_valid = 1
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (category, limit),
+        )
+        return [self._row_to_dict(row) for row in cursor.fetchall()]
+
+    def find_by_category_and_session(
+        self, category: str, session_id: str, *, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """按分类 + 会话查询记忆（Task 5 / Gap E，会话摘要用）。
+
+        Args:
+            category: 记忆分类
+            session_id: 会话 ID
+            limit: 返回数量限制，默认 50
+
+        Returns:
+            匹配的记忆列表，按创建时间倒序
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM memories_episodic
+            WHERE memory_category = ? AND session_id = ? AND is_valid = 1
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (category, session_id, limit),
+        )
+        return [self._row_to_dict(row) for row in cursor.fetchall()]
+
     def count(self) -> int:
         """
         获取记忆总数

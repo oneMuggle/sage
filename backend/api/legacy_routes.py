@@ -1408,7 +1408,17 @@ class MemorySaveRequest(BaseModel):
 
 
 class MemoryDeleteRequest(BaseModel):
-    id: str
+    id: Optional[str] = None
+    # Gap E (Task 5): the renderer bridge (T1) sends { memory_id } — the
+    # preload's `delete(args: { memory_id })` passes it straight through.
+    # Accept both spellings so the Memory page delete works end-to-end.
+    memory_id: Optional[str] = None
+
+    def resolve_id(self) -> Optional[str]:
+        """优先 memory_id（渲染器桥），兼容 legacy { id }。"""
+        if self.memory_id and self.id and self.memory_id != self.id:
+            raise HTTPException(status_code=422, detail="memory id mismatch")
+        return self.memory_id or self.id
 
 
 @router.get("/memory/search")
@@ -1442,9 +1452,12 @@ async def delete_memory(data: MemoryDeleteRequest):
     """删除记忆"""
     try:
         mm = get_memory_manager()
+        target_id = data.resolve_id()
+        if not target_id:
+            raise HTTPException(status_code=422, detail="memory id required")
         # 尝试从所有类型中删除
         for mtype in ["episodic", "semantic"]:
-            if mm.delete_memory(data.id, mtype):
+            if mm.delete_memory(target_id, mtype):
                 return {"status": "ok"}
         raise HTTPException(status_code=404, detail="记忆不存在")
     except HTTPException:
@@ -1467,3 +1480,53 @@ async def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] 
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 记忆可追溯性 API (Gap E / Task 5) ====================
+
+
+def _get_memory_port(request: Request):
+    """返回 MemoryAdapter（MemoryPort 实现）。
+
+    生产路径：``main.py`` lifespan 把 adapter 挂在 ``app.state.memory_port``。
+    测试路径（不走 lifespan）：惰性构造一个绑定当前 MemoryManager 的
+    adapter —— conftest 已把 MemoryManager 重置到临时 DB，因此查询
+    打到测试库。
+    """
+    port = getattr(request.app.state, "memory_port", None)
+    if port is not None:
+        return port
+    from backend.adapters.out.memory.adapter import MemoryAdapter
+
+    return MemoryAdapter(get_memory_manager())
+
+
+@router.get("/memory/by-turn/{turn_id}")
+async def get_memories_by_turn(turn_id: str, request: Request):
+    """按来源 turn 查询记忆（可追溯性：从记忆点击跳回产生它的轮次）。"""
+    memory_port = _get_memory_port(request)
+    memories = await memory_port.find_by_turn(turn_id)
+    return {"memories": [m for m in memories]}
+
+
+@router.get("/memory/profile")
+async def get_user_profile(request: Request):
+    """用户档案聚合：偏好（importance>=7）+ 决策 + 项目事实。"""
+    memory_port = _get_memory_port(request)
+    prefs = await memory_port.find_by_category("user_pref", limit=50)
+    decisions = await memory_port.find_by_category("decision", limit=20)
+    facts = await memory_port.find_by_category("project_fact", limit=50)
+    return {
+        "preferences": [m for m in prefs if m.get("importance", 0) >= 7],
+        "decisions": [m for m in decisions],
+        "facts": [m for m in facts],
+        "total_count": len(prefs) + len(decisions) + len(facts),
+    }
+
+
+@router.get("/memory/summary/{session_id}")
+async def get_session_summary(session_id: str, request: Request):
+    """按会话聚合 task_summary 记忆（会话摘要 Tab）。"""
+    memory_port = _get_memory_port(request)
+    summaries = await memory_port.find_by_category_and_session("task_summary", session_id)
+    return {"summaries": [m for m in summaries], "session_id": session_id}

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from backend.domain.memory import MemoryContext
 
@@ -108,5 +108,57 @@ class MemoryPort(Protocol):
 
         Example:
             >>> await memory_port.compress("session-123")
+        """
+        ...
+
+    # ------------------------------------------------------------------ #
+    # Task 5 / Gap E — traceability queries
+    # ------------------------------------------------------------------ #
+    # Return the raw episodic rows (dicts) rather than a dedicated
+    # ``MemoryItem`` — the legacy /memory/* endpoints already serialize
+    # the SQLite rows directly, and the frontend MemoryCard consumes the
+    # same shape (id / content / importance / memory_category /
+    # session_id / source_turn_id / created_at).
+
+    async def find_by_turn(self, turn_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """返回所有 source_turn_id == turn_id 的记忆（最新在前）。
+
+        Args:
+            turn_id: 产生这些记忆的 turn ID
+            limit: 返回数量限制，默认 50
+
+        Returns:
+            记忆 dict 列表（每项含 id/content/importance/memory_category/
+            source_turn_id 等 episodic 列）
+        """
+        ...
+
+    async def find_by_category(
+        self, category: str, *, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """返回按 memory_category 过滤的记忆（最新在前）。
+
+        Args:
+            category: 记忆分类（user_pref / project_fact / task_summary /
+                cross_session_pattern / decision）
+            limit: 返回数量限制，默认 50
+
+        Returns:
+            记忆 dict 列表
+        """
+        ...
+
+    async def find_by_category_and_session(
+        self, category: str, session_id: str, *, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """返回按 category AND session_id 过滤的记忆（最新在前）。
+
+        Args:
+            category: 记忆分类
+            session_id: 会话 ID
+            limit: 返回数量限制，默认 50
+
+        Returns:
+            记忆 dict 列表
         """
         ...
