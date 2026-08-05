@@ -8,13 +8,19 @@ import { MemoryTab } from '../MemoryTab';
 const mocks = vi.hoisted(() => ({
   getAutoMemory: vi.fn(),
   setAutoMemory: vi.fn(),
+  getMemoryRetrieval: vi.fn(),
+  setMemoryRetrieval: vi.fn(),
 }));
 
 beforeEach(() => {
   mocks.getAutoMemory.mockReset();
   mocks.setAutoMemory.mockReset();
+  mocks.getMemoryRetrieval.mockReset();
+  mocks.setMemoryRetrieval.mockReset();
   mocks.getAutoMemory.mockResolvedValue(null);
   mocks.setAutoMemory.mockResolvedValue(undefined);
+  mocks.getMemoryRetrieval.mockResolvedValue(null);
+  mocks.setMemoryRetrieval.mockResolvedValue(undefined);
 
   // Install electronAPI stub on window
   Object.defineProperty(window, 'electronAPI', {
@@ -23,6 +29,8 @@ beforeEach(() => {
       memory: {
         getAutoMemory: (...args: unknown[]) => mocks.getAutoMemory(...args),
         setAutoMemory: (...args: unknown[]) => mocks.setAutoMemory(...args),
+        getMemoryRetrieval: (...args: unknown[]) => mocks.getMemoryRetrieval(...args),
+        setMemoryRetrieval: (...args: unknown[]) => mocks.setMemoryRetrieval(...args),
       },
     },
   });
@@ -51,10 +59,7 @@ const baseSettings = {
 function renderTab() {
   return render(
     <MemoryRouter>
-      <MemoryTab
-        settings={baseSettings}
-        updateSettings={vi.fn().mockResolvedValue(undefined)}
-      />
+      <MemoryTab settings={baseSettings} updateSettings={vi.fn().mockResolvedValue(undefined)} />
     </MemoryRouter>,
   );
 }
@@ -101,8 +106,58 @@ describe('MemoryTab', () => {
     ) as HTMLElement;
     await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
     fireEvent.click(toggle);
+    await waitFor(() => expect(mocks.setAutoMemory).toHaveBeenCalledWith({ value: false }));
+  });
+
+  it('renders the memoryRetrieval toggle as checked when getMemoryRetrieval returns "true"', async () => {
+    mocks.getMemoryRetrieval.mockResolvedValue('true');
+    renderTab();
+    const row = await screen.findByText('记忆检索注入');
+    const toggle = row.parentElement!.parentElement!.querySelector(
+      '[role="switch"]',
+    ) as HTMLElement;
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
+  });
+
+  it('renders the memoryRetrieval toggle as unchecked when getMemoryRetrieval returns "false"', async () => {
+    mocks.getMemoryRetrieval.mockResolvedValue('false');
+    renderTab();
+    const row = await screen.findByText('记忆检索注入');
+    const toggle = row.parentElement!.parentElement!.querySelector(
+      '[role="switch"]',
+    ) as HTMLElement;
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
+  });
+
+  it('toggling 记忆检索注入 calls setMemoryRetrieval and NOT setAutoMemory (independent)', async () => {
+    mocks.getAutoMemory.mockResolvedValue('true');
+    mocks.getMemoryRetrieval.mockResolvedValue('true');
+    renderTab();
+    const row = await screen.findByText('记忆检索注入');
+    const toggle = row.parentElement!.parentElement!.querySelector(
+      '[role="switch"]',
+    ) as HTMLElement;
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
+    fireEvent.click(toggle);
     await waitFor(() =>
-      expect(mocks.setAutoMemory).toHaveBeenCalledWith({ value: false }),
+      expect(mocks.setMemoryRetrieval).toHaveBeenCalledWith({ value: false }),
     );
+    // The auto_memory IPC must NOT be touched by this toggle.
+    expect(mocks.setAutoMemory).not.toHaveBeenCalled();
+  });
+
+  it('toggling 自动记忆沉淀 calls setAutoMemory and NOT setMemoryRetrieval (independent)', async () => {
+    mocks.getAutoMemory.mockResolvedValue('true');
+    mocks.getMemoryRetrieval.mockResolvedValue('true');
+    renderTab();
+    const row = await screen.findByText('自动记忆沉淀');
+    const toggle = row.parentElement!.parentElement!.querySelector(
+      '[role="switch"]',
+    ) as HTMLElement;
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
+    fireEvent.click(toggle);
+    await waitFor(() => expect(mocks.setAutoMemory).toHaveBeenCalledWith({ value: false }));
+    // The memory_retrieval IPC must NOT be touched by this toggle.
+    expect(mocks.setMemoryRetrieval).not.toHaveBeenCalled();
   });
 });

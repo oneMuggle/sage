@@ -106,6 +106,117 @@ async def test_invalidate_auto_memory_cache_forces_re_read():
 
 
 # ===========================================================================
+# Important-2 (final review) — memory_retrieval preference gate
+#
+# The Settings UI's "记忆检索注入" toggle must be independent of "自动记忆
+# 沉淀" (auto_memory). The lifecycle exposes a second 30s-cached gate, default
+# True (backward compat: retrieval was always on), fail-open on read errors.
+# ===========================================================================
+
+
+@pytest.mark.asyncio()
+async def test_is_memory_retrieval_enabled_default_true_when_pref_missing():
+    """When preferences table has no memory_retrieval key, default to True."""
+
+    class FakePrefs:
+        async def get(self, key: str):  # noqa: ARG002
+            return None
+
+    mgr = MemoryLifecycleManager(
+        memory_manager=None, hooks=None, preferences_repo=FakePrefs()
+    )
+    assert await mgr.is_memory_retrieval_enabled() is True
+
+
+@pytest.mark.asyncio()
+async def test_is_memory_retrieval_enabled_respects_pref_false():
+    """When pref value is 'false', returns False."""
+
+    class FakePrefs:
+        async def get(self, key: str):
+            return "false"
+
+    mgr = MemoryLifecycleManager(
+        memory_manager=None, hooks=None, preferences_repo=FakePrefs()
+    )
+    assert await mgr.is_memory_retrieval_enabled() is False
+
+
+@pytest.mark.asyncio()
+async def test_is_memory_retrieval_enabled_independent_of_auto_memory():
+    """auto_memory=false must NOT flip memory_retrieval (the two gates are
+    independent — the whole point of Important-2)."""
+
+    class Prefs:
+        async def get(self, key: str):
+            # auto_memory disabled, memory_retrieval unset → default True
+            if key == "auto_memory":
+                return "false"
+            return None
+
+    mgr = MemoryLifecycleManager(
+        memory_manager=None, hooks=None, preferences_repo=Prefs()
+    )
+    assert await mgr.is_auto_memory_enabled() is False
+    assert await mgr.is_memory_retrieval_enabled() is True
+
+
+@pytest.mark.asyncio()
+async def test_is_memory_retrieval_enabled_caches_for_30s():
+    """Reading the pref three times within 30s should hit the cache (call_count == 1)."""
+    call_count = 0
+
+    class CountingPrefs:
+        async def get(self, key: str):
+            nonlocal call_count
+            call_count += 1
+            return "true"
+
+    mgr = MemoryLifecycleManager(
+        memory_manager=None, hooks=None, preferences_repo=CountingPrefs()
+    )
+    await mgr.is_memory_retrieval_enabled()
+    await mgr.is_memory_retrieval_enabled()
+    await mgr.is_memory_retrieval_enabled()
+    assert call_count == 1
+
+
+@pytest.mark.asyncio()
+async def test_is_memory_retrieval_enabled_defaults_true_on_read_error():
+    """When prefs.get raises, default to True (fail-open, never block ChatService)."""
+
+    class FailingPrefs:
+        async def get(self, key: str):  # noqa: ARG002
+            raise RuntimeError("db locked")
+
+    mgr = MemoryLifecycleManager(
+        memory_manager=None, hooks=None, preferences_repo=FailingPrefs()
+    )
+    assert await mgr.is_memory_retrieval_enabled() is True
+
+
+@pytest.mark.asyncio()
+async def test_invalidate_memory_retrieval_cache_forces_re_read():
+    """invalidate_memory_retrieval_cache() drops the cache so next read hits DB."""
+    call_count = 0
+
+    class CountingPrefs:
+        async def get(self, key: str):
+            nonlocal call_count
+            call_count += 1
+            return "true"
+
+    mgr = MemoryLifecycleManager(
+        memory_manager=None, hooks=None, preferences_repo=CountingPrefs()
+    )
+    await mgr.is_memory_retrieval_enabled()
+    assert call_count == 1
+    mgr.invalidate_memory_retrieval_cache()
+    await mgr.is_memory_retrieval_enabled()
+    assert call_count == 2
+
+
+# ===========================================================================
 # Task 4 / Gap A — lifecycle hook entry points
 #
 # F1/F2 fix: these tests now exercise the REAL MemoryManager (not a

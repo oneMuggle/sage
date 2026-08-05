@@ -164,6 +164,14 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   memory_delete: { method: 'POST', path: () => '/api/v1/memory/delete' },
   memory_get_auto: { method: 'GET', path: () => '/api/v1/preferences/auto_memory' },
   memory_set_auto: { method: 'PUT', path: () => '/api/v1/preferences/auto_memory' },
+  memory_get_retrieval: {
+    method: 'GET',
+    path: () => '/api/v1/preferences/memory_retrieval',
+  },
+  memory_set_retrieval: {
+    method: 'PUT',
+    path: () => '/api/v1/preferences/memory_retrieval',
+  },
   memory_find_by_turn: {
     method: 'GET',
     path: () => '/api/v1/memory/by-turn/{turn_id}',

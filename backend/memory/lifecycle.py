@@ -79,6 +79,7 @@ class MemoryLifecycleManager:
 
     _AUTO_MEMORY_TTL = 30.0
     _AUTO_MEMORY_KEY = "auto_memory"
+    _MEMORY_RETRIEVAL_KEY = "memory_retrieval"
 
     def __init__(
         self,
@@ -92,6 +93,8 @@ class MemoryLifecycleManager:
         self._prefs = preferences_repo
         self._auto_memory_cache: Optional[bool] = None
         self._cache_timestamp: float = 0.0
+        self._memory_retrieval_cache: Optional[bool] = None
+        self._retrieval_cache_timestamp: float = 0.0
         self._current_turn_id: Optional[str] = None
         # F1 — MemoryExtractor produces fact dicts from a turn's messages.
         # Default to the keyword-only extractor (no LLM) so on_turn_complete
@@ -139,6 +142,43 @@ class MemoryLifecycleManager:
         """Force next read to hit DB (debug/testing helper)."""
         self._auto_memory_cache = None
         self._cache_timestamp = 0.0
+
+    async def is_memory_retrieval_enabled(self) -> bool:
+        """Read memory_retrieval preference with 30s cache; default True.
+
+        Important-2 (final review): the "记忆检索注入" gate is INDEPENDENT
+        of ``auto_memory``. Default True (backward compatible — retrieval
+        was always on before this gate existed). Fail-open: any exception
+        reading the preference is logged and treated as True so a
+        preferences-table hiccup can never block ChatService.
+        """
+        now = time.monotonic()
+        if (
+            self._memory_retrieval_cache is not None
+            and (now - self._retrieval_cache_timestamp) < self._AUTO_MEMORY_TTL
+        ):
+            return self._memory_retrieval_cache
+        try:
+            val = await self._prefs.get(self._MEMORY_RETRIEVAL_KEY)
+        except Exception as exc:  # noqa: BLE001 — fail-open by design
+            logger.warning(
+                "memory_retrieval pref read failed, defaulting True: %s", exc
+            )
+            self._memory_retrieval_cache = True
+            self._retrieval_cache_timestamp = now
+            return True
+        if val is None:
+            enabled = True
+        else:
+            enabled = str(val).lower() == "true"
+        self._memory_retrieval_cache = enabled
+        self._retrieval_cache_timestamp = now
+        return enabled
+
+    def invalidate_memory_retrieval_cache(self) -> None:
+        """Force next read to hit DB (debug/testing helper)."""
+        self._memory_retrieval_cache = None
+        self._retrieval_cache_timestamp = 0.0
 
     # ------------------------------------------------------------------
     # Hook entry points (Task 4 / Gap A)

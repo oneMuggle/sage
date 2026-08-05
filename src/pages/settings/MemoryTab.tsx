@@ -24,6 +24,11 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
   // Source of truth = backend preference via IPC bridge.
   // null = not yet loaded OR backend returned null (default True).
   const [autoMemoryLoaded, setAutoMemoryLoaded] = useState<boolean | null>(null);
+  // Important-2: the "记忆检索注入" toggle drives its OWN preference
+  // (memory_retrieval) — independent of auto_memory. Before this fix both
+  // toggles shared autoMemoryLoaded + handleAutoMemoryChange, so flipping
+  // one flipped the other.
+  const [memoryRetrievalLoaded, setMemoryRetrievalLoaded] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +59,32 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const api = window.electronAPI;
+      if (!api) {
+        if (!cancelled) setMemoryRetrievalLoaded(true);
+        return;
+      }
+      try {
+        const raw = await api.memory.getMemoryRetrieval();
+        if (cancelled) return;
+        if (raw === null || raw === undefined) {
+          setMemoryRetrievalLoaded(true);
+          return;
+        }
+        setMemoryRetrievalLoaded(String(raw).toLowerCase() === 'true');
+      } catch {
+        if (!cancelled) setMemoryRetrievalLoaded(true);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleAutoMemoryChange = async (next: boolean) => {
     setAutoMemoryLoaded(next);
     // Keep the AppSettings-level autoMemory in sync for legacy consumers.
@@ -74,6 +105,18 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
     }
   };
 
+  const handleMemoryRetrievalChange = async (next: boolean) => {
+    setMemoryRetrievalLoaded(next);
+    try {
+      const api = window.electronAPI;
+      if (!api) return;
+      await api.memory.setMemoryRetrieval({ value: next });
+    } catch {
+      // Best-effort: revert local state if the backend write fails.
+      setMemoryRetrievalLoaded(!next);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section>
@@ -87,18 +130,15 @@ export function MemoryTab({ settings, updateSettings }: EndpointsTabProps) {
           />
         </SettingRow>
         <SettingRow label="自动记忆沉淀" desc="每轮对话后自动提取并保存有价值的点">
-          <Toggle
-            value={autoMemoryLoaded ?? true}
-            onChange={handleAutoMemoryChange}
-          />
+          <Toggle value={autoMemoryLoaded ?? true} onChange={handleAutoMemoryChange} />
         </SettingRow>
         <SettingRow label="同步到内部服务器" desc="联网时将记忆增量同步到企业内部服务器">
           <Toggle value={settings.autoMemory} onChange={(v) => updateSettings({ autoMemory: v })} />
         </SettingRow>
         <SettingRow label="记忆检索注入" desc="对话时自动注入相关记忆到上下文">
           <Toggle
-            value={autoMemoryLoaded ?? true}
-            onChange={handleAutoMemoryChange}
+            value={memoryRetrievalLoaded ?? true}
+            onChange={handleMemoryRetrievalChange}
           />
         </SettingRow>
       </section>

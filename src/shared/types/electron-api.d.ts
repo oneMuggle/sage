@@ -140,6 +140,10 @@ export interface MemoryElectronApiBridge {
   getAutoMemory: () => Promise<unknown>;
   /** PUT /api/v1/preferences/auto_memory with body { value: boolean }. */
   setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
+  /** Important-2 — GET /api/v1/preferences/memory_retrieval → "true" | "false" | null (default True). */
+  getMemoryRetrieval: () => Promise<unknown>;
+  /** Important-2 — PUT /api/v1/preferences/memory_retrieval with body { value: boolean }. */
+  setMemoryRetrieval: (args: { value: boolean }) => Promise<unknown>;
   findByTurn: (args: { turn_id: string }) => Promise<unknown>;
   getProfile: () => Promise<unknown>;
   getSummary: (args: { session_id: string }) => Promise<unknown>;

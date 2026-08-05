@@ -26,6 +26,13 @@ class SettingsRepository:
             # memory_get_auto / memory_set_auto IPC commands. Default True;
             # when False, ChatService skips _extract_and_store_memory + compress.
             "auto_memory",
+            # Important-2 (final review) — independent "记忆检索注入" gate.
+            # Surfaced via /api/v1/preferences/memory_retrieval (GET/PUT) backed
+            # by memory_get_retrieval / memory_set_retrieval IPC commands.
+            # Default True; when False, ChatService skips memory.retrieve
+            # (no memory injection into the LLM context). Independent of
+            # auto_memory — toggling one must never flip the other.
+            "memory_retrieval",
         }
     )
 

@@ -47,6 +47,10 @@ type MemoryApi = {
   delete: (args: { memory_id: string }) => Promise<unknown>;
   getAutoMemory: () => Promise<unknown>;
   setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
+  /** Important-2 — independent "记忆检索注入" preference (GET/PUT
+   *  /api/v1/preferences/memory_retrieval). Independent of auto_memory. */
+  getMemoryRetrieval: () => Promise<unknown>;
+  setMemoryRetrieval: (args: { value: boolean }) => Promise<unknown>;
   findByTurn: (args: { turn_id: string }) => Promise<unknown>;
   getProfile: () => Promise<unknown>;
   getSummary: (args: { session_id: string }) => Promise<unknown>;
@@ -171,6 +175,13 @@ const electronAPI = {
     setAutoMemory: (args: { value: boolean }) =>
       ipcRenderer.invoke('sage:invoke', {
         cmd: 'memory_set_auto',
+        args: { value: String(args.value) },
+      }),
+    getMemoryRetrieval: () =>
+      ipcRenderer.invoke('sage:invoke', { cmd: 'memory_get_retrieval', args: {} }),
+    setMemoryRetrieval: (args: { value: boolean }) =>
+      ipcRenderer.invoke('sage:invoke', {
+        cmd: 'memory_set_retrieval',
         args: { value: String(args.value) },
       }),
     findByTurn: (args: { turn_id: string }) =>

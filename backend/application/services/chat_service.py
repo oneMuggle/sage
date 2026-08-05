@@ -231,12 +231,24 @@ class ChatService:
         memory_context: Optional[MemoryContext] = None
         if self.memory:
             try:
-                memory_context = await self.memory.retrieve(
-                    query=user_message.content,
-                    session_id=session_id,
-                    limit=5,
-                )
-                span.set_attribute("memory.has_memories", memory_context.has_memories)
+                # Important-2 (final review) — memory_retrieval preference
+                # gate. The Settings UI's "记忆检索注入" toggle drives this
+                # independently of auto_memory. Lifecycle exposes
+                # is_memory_retrieval_enabled() (30s-cached, default True,
+                # fail-open); the legacy path (no lifecycle) keeps retrieval
+                # unconditionally enabled for backward compat.
+                retrieval_enabled = True
+                if self._lifecycle is not None:
+                    retrieval_enabled = (
+                        await self._lifecycle.is_memory_retrieval_enabled()
+                    )
+                if retrieval_enabled:
+                    memory_context = await self.memory.retrieve(
+                        query=user_message.content,
+                        session_id=session_id,
+                        limit=5,
+                    )
+                    span.set_attribute("memory.has_memories", memory_context.has_memories)
             except Exception as e:
                 logger.warning(f"Failed to retrieve memories: {e}")
                 span.set_attribute("memory.error", str(e))
