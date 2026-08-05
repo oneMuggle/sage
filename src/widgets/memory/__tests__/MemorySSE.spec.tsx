@@ -38,8 +38,8 @@ beforeEach(() => {
   mocks.getProfile.mockResolvedValue({ preferences: [], decisions: [], facts: [] });
   mocks.getSummary.mockResolvedValue({ summaries: [] });
   mocks.invoke.mockResolvedValue([]);
-  // Default: subscribe works and returns an unsubscribe function.
-  mocks.subscribe.mockImplementation(() => () => {});
+  // Default: subscribe succeeds (main relay OK) and returns an unsubscribe fn.
+  mocks.subscribe.mockResolvedValue(() => {});
 
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
@@ -71,7 +71,7 @@ describe('MemoryPage SSE integration', () => {
     const captured: Array<(evt: unknown) => void> = [];
     mocks.subscribe.mockImplementation((cb: (evt: unknown) => void) => {
       captured.push(cb);
-      return () => {};
+      return Promise.resolve(() => {});
     });
     mocks.list.mockResolvedValue([BASE_ROW]);
 
@@ -97,20 +97,44 @@ describe('MemoryPage SSE integration', () => {
     expect(await screen.findByText('新记忆内容')).toBeInTheDocument();
   });
 
-  it('falls back to polling when subscribe throws (SSE unavailable)', () => {
+  it('falls back to polling when subscribe resolves null (main relay unavailable)', async () => {
+    // REAL failure mode: preload's invoke rejects (or main reports
+    // { subscribed: false }) → subscribe resolves null, NOT a sync throw.
     vi.useFakeTimers();
-    mocks.subscribe.mockImplementation(() => {
-      throw new Error('SSE unavailable');
-    });
+    mocks.subscribe.mockResolvedValue(null);
     mocks.list.mockResolvedValue([]);
 
     renderPage();
+    // Flush the subscribe promise resolution (Memory.tsx starts polling in .then).
+    await act(async () => {});
+    const callsAfterMount = mocks.list.mock.calls.length;
+    expect(callsAfterMount).toBeGreaterThanOrEqual(1);
+
+    // Advance past the 30s polling interval — the list must be reloaded.
     act(() => {
       vi.advanceTimersByTime(30_000);
     });
+    await act(async () => {});
 
-    // Polling fallback reloads the list every 30s.
-    expect(mocks.list).toHaveBeenCalled();
+    expect(mocks.list.mock.calls.length).toBeGreaterThan(callsAfterMount);
+    vi.useRealTimers();
+  });
+
+  it('falls back to polling when subscribe rejects', async () => {
+    vi.useFakeTimers();
+    mocks.subscribe.mockRejectedValue(new Error('main relay crashed'));
+    mocks.list.mockResolvedValue([]);
+
+    renderPage();
+    await act(async () => {});
+    const callsAfterMount = mocks.list.mock.calls.length;
+
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    await act(async () => {});
+
+    expect(mocks.list.mock.calls.length).toBeGreaterThan(callsAfterMount);
     vi.useRealTimers();
   });
 });

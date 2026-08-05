@@ -50,8 +50,10 @@ type MemoryApi = {
   findByTurn: (args: { turn_id: string }) => Promise<unknown>;
   getProfile: () => Promise<unknown>;
   getSummary: (args: { session_id: string }) => Promise<unknown>;
-  /** Task 6 — subscribe to backend memory_written SSE events (via main relay). */
-  subscribe: (callback: (event: unknown) => void) => () => void;
+  /** Task 6 — subscribe to backend memory_written SSE events (via main relay).
+   *  Resolves to an unsubscribe function, or `null` when the main relay could
+   *  not be established (renderer should fall back to polling). */
+  subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
 };
 
 const electronAPI = {
@@ -179,13 +181,26 @@ const electronAPI = {
     /**
      * Task 6 — real-time memory events. Asks main to open an EventSource to
      * the backend SSE endpoint, then relays each `sage:memory:event` payload
-     * (a JSON string) to the callback. Returns an unsubscribe function that
-     * detaches the listener and tells main to close the connection.
+     * (a JSON string) to the callback. Returns an unsubscribe function, or
+     * `null` if the main relay could not be established (invoke rejected or
+     * main reported { subscribed: false }) — the renderer must fall back to
+     * polling in that case instead of silently dead-airing.
      */
-    subscribe: (callback: (event: unknown) => void) => {
-      ipcRenderer.invoke('sage:memory:subscribe').catch((e) => {
+    subscribe: async (callback: (event: unknown) => void) => {
+      let result: { subscribed?: boolean; error?: string } | undefined;
+      try {
+        result = (await ipcRenderer.invoke('sage:memory:subscribe')) as {
+          subscribed?: boolean;
+          error?: string;
+        };
+      } catch (e) {
         console.error('[preload] memory subscribe failed:', e);
-      });
+        return null;
+      }
+      if (!result?.subscribed) {
+        console.warn('[preload] memory subscribe unavailable:', result?.error ?? 'unknown');
+        return null;
+      }
       const listener = (_e: IpcRendererEvent, data: unknown) => callback(data);
       ipcRenderer.on('sage:memory:event', listener);
       return () => {

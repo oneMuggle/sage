@@ -47,7 +47,7 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import http from 'node:http';
 import fetch from 'node-fetch';
-import { EventSource } from 'eventsource';
+import EventSource from 'eventsource';
 import { invokeBackend } from './invoke';
 import { relayChatStream, relayNdjsonToEvent } from './relay';
 import { streamControllers } from './commands';
@@ -488,7 +488,18 @@ function registerIpcHandlers(): void {
     if (memoryEventSources.has(sender.id)) {
       return { subscribed: true };
     }
-    const es = new EventSource(`${BACKEND_URL}/api/v1/memory/events`);
+    let es: EventSource;
+    try {
+      es = new EventSource(`${BACKEND_URL}/api/v1/memory/events`);
+    } catch (e) {
+      // Guard: if the EventSource implementation cannot even construct here
+      // (e.g. a future package upgrade that again requires `globalThis.fetch`
+      // which Electron 21 main / Node 16 lacks), surface it so the renderer's
+      // preload can report SSE-unavailable and the Memory page falls back to
+      // polling instead of silently dead-airing.
+      logger.error('memory SSE construction failed', { err: String(e) });
+      return { subscribed: false, error: String(e) };
+    }
     es.onmessage = (msg) => {
       if (!sender.isDestroyed()) {
         sender.send('sage:memory:event', msg.data);

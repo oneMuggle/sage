@@ -145,10 +145,11 @@ export interface MemoryElectronApiBridge {
   getSummary: (args: { session_id: string }) => Promise<unknown>;
   /**
    * Task 6 — subscribe to backend memory_written SSE events (via main relay).
-   * The callback receives the raw JSON string payload of each SSE event;
-   * returns an unsubscribe function that closes the relay connection.
+   * The callback receives the raw JSON string payload of each SSE event.
+   * Resolves to an unsubscribe function, or `null` when the relay could not
+   * be established (caller should fall back to polling).
    */
-  subscribe: (callback: (event: unknown) => void) => () => void;
+  subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
 }
 
 export interface ElectronAPI {

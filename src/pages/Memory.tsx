@@ -98,15 +98,22 @@ export function Memory() {
 
   // Task 6 — 实时新记忆：订阅 SSE memory_written 事件（经 Electron relay
   // 转发）。事件到达 → toast「🧠 已记住: ...」+ 把新记忆 prepend 到列表头部。
-  // subscribe 不存在或抛错（SSE 不可用）→ 回退到 30s setInterval 轮询 reloadAll。
+  // subscribe 解析为 null / 拒绝 / 不存在（SSE 不可用）→ 回退到 30s
+  // setInterval 轮询 reloadAll。
   useEffect(() => {
     const api = window.electronAPI;
+    let cancelled = false;
     let unsub: (() => void) | null = null;
     let pollId: number | null = null;
 
+    const startPolling = () => {
+      if (cancelled) return;
+      pollId = window.setInterval(reloadAll, 30_000);
+    };
+
     if (api?.memory?.subscribe) {
-      try {
-        unsub = api.memory.subscribe((event: unknown) => {
+      api.memory
+        .subscribe((event: unknown) => {
           let data: Record<string, unknown>;
           try {
             data =
@@ -132,18 +139,30 @@ export function Memory() {
             },
             ...prev,
           ]);
+        })
+        .then((u) => {
+          if (cancelled) {
+            u?.();
+            return;
+          }
+          if (u) {
+            unsub = u;
+          } else {
+            // subscribe resolved null → SSE 不可用 → 轮询回退
+            console.warn('[Memory] SSE unavailable, falling back to polling');
+            startPolling();
+          }
+        })
+        .catch((e) => {
+          console.warn('[Memory] SSE subscribe failed, falling back to polling', e);
+          startPolling();
         });
-      } catch (e) {
-        console.warn('[Memory] SSE subscribe failed, falling back to polling', e);
-        unsub = null;
-      }
-    }
-
-    if (!unsub) {
-      pollId = window.setInterval(reloadAll, 30_000);
+    } else {
+      startPolling();
     }
 
     return () => {
+      cancelled = true;
       unsub?.();
       if (pollId !== null) window.clearInterval(pollId);
     };
