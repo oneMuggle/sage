@@ -245,7 +245,7 @@ async def lifespan(app: FastAPI):
             )
             return [row["id"] for row in cursor.fetchall()]
 
-        return await asyncio.to_thread(_query)
+        return await asyncio.get_event_loop().run_in_executor(None, _query)
 
     async def _session_watchdog() -> None:
         from datetime import datetime, timedelta, timezone

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -121,16 +122,20 @@ class MemoryManager:
         # values the caller intended — defensive against any mutation
         # between scheduling and execution.
         episodic = self.episodic
-        return await asyncio.to_thread(
-            episodic.save,
-            content=content,
-            importance=importance,
-            metadata=metadata,
-            session_id=resolved_session_id,
-            memory_type=memory_type,
-            source_turn_id=source_turn_id,
-            source_message_id=source_message_id,
-            memory_category=memory_category,
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            functools.partial(
+                episodic.save,
+                content=content,
+                importance=importance,
+                metadata=metadata,
+                session_id=resolved_session_id,
+                memory_type=memory_type,
+                source_turn_id=source_turn_id,
+                source_message_id=source_message_id,
+                memory_category=memory_category,
+            ),
         )
 
     async def consolidate(self, session_id: Optional[str] = None) -> Any:
@@ -148,7 +153,8 @@ class MemoryManager:
 
             self._consolidation_pipeline = ConsolidationPipeline()
         pipeline = self._consolidation_pipeline
-        return await asyncio.to_thread(pipeline.consolidate, self, session_id)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, pipeline.consolidate, self, session_id)
 
     async def snapshot(self, session_id: Optional[str] = None) -> None:
         """Async pre-compress snapshot (F2).
@@ -164,7 +170,8 @@ class MemoryManager:
             if save is not None:
                 save()
 
-        await asyncio.to_thread(_snap)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _snap)
 
     def memorize(
         self,
