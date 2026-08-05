@@ -1218,8 +1218,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
             if done_content:
                 assistant_now = int(time.time() * 1000)
+                assistant_message_id: Optional[str] = None
                 try:
-                    message_repo.save(
+                    saved = message_repo.save(
                         DbMessage(
                             id=str(uuid.uuid4()),
                             session_id=data.session_id,
@@ -1230,6 +1231,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             model=(llm_config.get("model") if llm_config else "local"),
                         )
                     )
+                    assistant_message_id = getattr(saved, "id", None)
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
                 try:
@@ -1242,6 +1244,29 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
+                # Important-1 (final review) — 生产聊天路径驱动生命周期:
+                # 让 legacy /chat/stream (renderer 唯一聊天命令) 也触发
+                # on_turn_complete → 提取 + 持久化 + memory_written → SSE
+                # /memory/events → 前端实时 toast/prepend。source_message_id
+                # 用真实持久化的 assistant 消息 id,保证 MemoryCard
+                # click-to-trace 命中 Chat 的 data-turn-id。auto_memory gate
+                # 在 lifecycle 内部处理 — 该开关从此对生产路径生效。
+                # 全程 try/except — 记忆系统故障绝不打断聊天流。
+                lifecycle = getattr(request.app.state, "lifecycle", None)
+                if lifecycle is not None:
+                    try:
+                        await lifecycle.on_turn_complete(
+                            data.session_id,
+                            [
+                                {"role": "user", "content": data.message},
+                                {"role": "assistant", "content": done_content},
+                            ],
+                            source_message_id=assistant_message_id,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
+                        )
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "

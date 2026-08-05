@@ -384,7 +384,10 @@ async def lifespan(app: FastAPI):
     logger.info("Multi-agent core 已装配（Planner + Router + HeartbeatMonitor 已启动）")
 
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
-    api_mode = os.environ.get("API_MODE", "hex").lower()
+    # Important-1 (final review): 默认值与路由装配对齐 — 实际 serving 的是
+    # legacy 路由（PG-A1 临时默认），lifespan 不该默认构建一个无人使用的
+    # hex ChatService（误导"已装配"）。API_MODE=hex 时行为不变。
+    api_mode = os.environ.get("API_MODE", "legacy").lower()
     if api_mode == "hex":
         from backend.api.hex_routes import get_chat_service
 
@@ -488,10 +491,10 @@ async def add_request_id_header(request: Request, call_next):
 
 
 # 路由装配（P2 双轨）：
-# - API_MODE=hex（默认）：先注册 hex（/chat 走 ChatService），
+# - API_MODE=hex：先注册 hex（/chat 走 ChatService），
 #   再注册 legacy（/sessions、/memory、/evolution、/interrupt）。
 #   FastAPI 按注册顺序匹配——hex 的 /chat 优先命中，其余走 legacy。
-# - API_MODE=legacy：仅注册 legacy。
+# - API_MODE=legacy（默认）：仅注册 legacy。
 # 通用 LLM 代理（/api/v1/llm/*）在两种模式下都注册 — 浏览器到 LLM 的
 # 测试连接 / 拉取模型调用都走它，与 API_MODE 无关（见 llm_proxy_routes.py）。
 #
