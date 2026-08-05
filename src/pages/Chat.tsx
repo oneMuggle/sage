@@ -72,18 +72,24 @@ export function Chat() {
   const highlightTurn = searchParams.get('highlight_turn');
   const sessionParam = searchParams.get('session');
 
-  // URL 带 session → 切换到该会话（记忆卡片跳转来源）。
+  // 只在到达 /chat 时把 URL 的 session 应用一次（ref 守卫），之后用户
+  // 在侧栏自由切换会话不受 URL 参数干扰。
+  const appliedSessionRef = useRef<string | null>(null);
   useEffect(() => {
-    if (sessionParam && sessionParam !== currentSessionId) {
+    if (!sessionParam || appliedSessionRef.current === sessionParam) return;
+    appliedSessionRef.current = sessionParam;
+    if (sessionParam !== currentSessionId) {
       setCurrentSessionId(sessionParam);
     }
   }, [sessionParam, currentSessionId, setCurrentSessionId]);
 
   // 高亮产生该记忆的轮次对应消息：滚动到 [data-turn-id="..."] 并加 2s 高亮环。
   // 消息加载完成后执行（依赖 messages），带 150ms 延迟让自动滚底先完成，
-  // 避免两个滚动互相覆盖。
+  // 避免两个滚动互相覆盖。highlightAppliedRef 保证每个 turn 只高亮一次。
+  const highlightAppliedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!highlightTurn || !messages.length) return;
+    if (!highlightTurn || !messages.length || highlightAppliedRef.current === highlightTurn) return;
+    highlightAppliedRef.current = highlightTurn;
     const timer = window.setTimeout(() => {
       const el = document.querySelector(`[data-turn-id="${highlightTurn}"]`);
       if (el) {
