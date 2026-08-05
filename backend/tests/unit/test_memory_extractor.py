@@ -61,7 +61,9 @@ class TestMemoryExtractorLLM:
         assert len(facts) == 1
         assert facts[0]["content"] == "用户喜欢吃火锅"
         assert facts[0]["importance"] == 8
-        assert facts[0]["category"] == "preference"
+        # F4 — the old-vocabulary category 'preference' must be normalized to
+        # the new taxonomy 'user_pref'.
+        assert facts[0]["category"] == "user_pref"
 
     @pytest.mark.asyncio()
     async def test_extract_with_markdown_code_block(self):
@@ -157,3 +159,41 @@ def test_categorize_returns_known_categories():
     # The heuristic defaults to project_fact; task_summary and
     # cross_session_pattern are reserved for richer extractor stages.
     assert extractor._categorize("") in {"user_pref", "project_fact"}
+
+
+@pytest.mark.asyncio()
+async def test_llm_extract_normalizes_category_vocabulary():
+    """F4 — LLM path emits the OLD vocabulary (preference/fact/goal/event);
+    the extractor must normalize it to the new taxonomy
+    (user_pref/project_fact/task_summary/cross_session_pattern)."""
+
+    class MockLLM:
+        async def chat(self, messages, **kwargs):
+            from backend.domain.message import Message
+
+            return Message(
+                role="assistant",
+                content=(
+                    '[{"content":"用户喜欢Python","importance":6,"category":"preference",'
+                    '"tags":["编程"]},'
+                    '{"content":"部署用helm","importance":5,"category":"fact","tags":["运维"]},'
+                    '{"content":"用户目标是一个月内上线","importance":6,"category":"goal",'
+                    '"tags":["目标"]},'
+                    '{"content":"今天完成了登录模块","importance":5,"category":"event",'
+                    '"tags":["任务"]}]'
+                ),
+            )
+
+    extractor = MemoryExtractor(llm_client=MockLLM())
+    facts = await extractor.extract(
+        "我喜欢用Python编程，已经学了一年多了" + "x" * 20,
+        "很好",
+    )
+    cats = {f["category"] for f in facts}
+    assert "user_pref" in cats  # preference → user_pref
+    assert "project_fact" in cats  # fact → project_fact
+    # goal → cross_session_pattern (or project_fact), event → task_summary
+    assert "cross_session_pattern" in cats or "project_fact" in cats
+    assert "task_summary" in cats
+    # old vocabulary must never leak through
+    assert not (cats & {"preference", "fact", "goal", "event"})

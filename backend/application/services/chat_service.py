@@ -90,6 +90,7 @@ class ChatService:
         permission_preset: Optional[PermissionPreset] = None,  # M3 权限预设
         permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
         permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
+        lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -98,6 +99,8 @@ class ChatService:
         self.metrics = metrics
         self.events = events
         self.memory = memory  # MemoryPort for memory integration
+        self._lifecycle = lifecycle
+        self._current_turn_id: Optional[str] = None
         self._tool_policy = tool_policy or ToolPolicy()
         # M3: 构造 LanePermission；缺省 IMPLEMENT 保持向后兼容
         self._permission = LanePermission(
@@ -204,6 +207,16 @@ class ChatService:
         run = RunEventScope(self.events, uuid.uuid4().hex)
         run.emit("run_start", session_id=session_id)
         run.emit("turn_start", session_id=session_id)
+
+        # F4 — expose the current turn id so memory extraction can tag stored
+        # facts with the producing turn; also drive the lifecycle's
+        # set_current_turn (production caller for the traceability hook).
+        self._current_turn_id = run.run_id
+        if self._lifecycle is not None:
+            try:
+                self._lifecycle.set_current_turn(run.run_id)
+            except Exception as exc:  # noqa: BLE001 — never break the turn
+                logger.warning("run_turn: set_current_turn failed: %s", exc)
 
         # 1) 持久化 user message
         await self.storage.append_message(session_id, user_message)
@@ -480,6 +493,11 @@ class ChatService:
                 session_id=session_id,
                 importance=fact.get("importance", 5),
                 tags=fact.get("tags", ["conversation"]),
+                # F4 — persist the extracted category + the producing turn so
+                # the traceability columns get populated on the production
+                # path (adapter.store → memorize → episodic.save).
+                memory_category=fact.get("category", "project_fact"),
+                source_turn_id=getattr(self, "_current_turn_id", None),
             )
 
         if facts:

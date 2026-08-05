@@ -71,20 +71,36 @@ class MemoryLifecycleManager:
     - ``invalidate_auto_memory_cache()``: test/debug helper that forces the
       next ``is_auto_memory_enabled()`` call to re-read.
 
-    Hook surface (``memory.remember``, ``memory.compress``) is intentionally
-    passthrough today; HookRegistry integration ships in Task 6.
+    Hook surface (``on_turn_complete`` / ``on_session_end`` /
+    ``on_pre_compress``) is wired to ``HookRegistry`` and emits
+    ``memory_written`` / ``session_ended`` / ``pre_compress`` events;
+    all three are non-raising by contract.
     """
 
     _AUTO_MEMORY_TTL = 30.0
     _AUTO_MEMORY_KEY = "auto_memory"
 
-    def __init__(self, memory_manager: Any, hooks: Any, preferences_repo: Any) -> None:
+    def __init__(
+        self,
+        memory_manager: Any,
+        hooks: Any,
+        preferences_repo: Any,
+        extractor: Optional[Any] = None,
+    ) -> None:
         self._memory = memory_manager
         self._hooks = hooks
         self._prefs = preferences_repo
         self._auto_memory_cache: Optional[bool] = None
         self._cache_timestamp: float = 0.0
         self._current_turn_id: Optional[str] = None
+        # F1 — MemoryExtractor produces fact dicts from a turn's messages.
+        # Default to the keyword-only extractor (no LLM) so on_turn_complete
+        # works out of the box; callers with an LLM may inject a richer one.
+        if extractor is None:
+            from backend.memory.extractor import MemoryExtractor
+
+            extractor = MemoryExtractor(llm_client=None)
+        self._extractor = extractor
 
     def set_current_turn(self, turn_id: str) -> None:
         self._current_turn_id = turn_id
@@ -137,61 +153,96 @@ class MemoryLifecycleManager:
     async def on_turn_complete(self, session_id: str, messages: list) -> None:
         """End-of-turn hook: extract facts and emit ``memory_written``.
 
-        Gated by ``is_auto_memory_enabled()``. Each fact returned by
-        ``memory.remember`` triggers one ``memory_written`` event tagged
-        with the current turn id (set via ``set_current_turn`` earlier in
-        the turn).
+        Gated by ``is_auto_memory_enabled()``. Facts are extracted from the
+        turn's messages via ``MemoryExtractor`` (keyword fallback by default,
+        injectable for LLM-backed extraction), persisted through the real
+        ``MemoryManager.aremember`` — threading ``source_turn_id`` and
+        ``memory_category`` into the episodic row — and one
+        ``memory_written`` event is emitted per fact tagged with the current
+        turn id (set via ``set_current_turn`` earlier in the turn).
         """
         if not await self.is_auto_memory_enabled():
             return
+        user_msg, assistant_msg = self._split_messages(messages)
         try:
-            # ``aremember`` is the async, traceability-aware entry point
-            # (Task 4 / Gap A). The legacy sync ``remember`` is still
-            # available for non-async callers like ``core/legacy/agent.py``.
-            remember = getattr(self._memory, "aremember", None)
-            if remember is None:
-                # Fallback: some fakes (tests) expose ``remember`` as async;
-                # honor that too so existing tests keep passing.
-                remember = self._memory.remember
-            extracted = await remember(
-                session_id=session_id,
-                messages=messages,
-                source_turn_id=self._current_turn_id,
-            )
+            facts = await self._extractor.extract(user_msg, assistant_msg)
         except Exception as exc:  # noqa: BLE001 — never raise into caller
-            logger.exception("on_turn_complete: memory.remember failed", exc_info=exc)
+            logger.exception("on_turn_complete: fact extraction failed", exc_info=exc)
             return
-
-        for mem in extracted or []:
+        for fact in facts or []:
+            try:
+                memory_id = await self._persist_fact(session_id, fact)
+            except Exception as exc:  # noqa: BLE001 — one bad fact must not stop the rest
+                logger.exception("on_turn_complete: persist failed", exc_info=exc)
+                continue
+            if not memory_id:
+                continue
             try:
                 await self._hooks.emit(
                     "memory_written",
                     MemoryWriteEvent(
-                        memory_id=mem.id,
-                        content=mem.content,
-                        memory_type=getattr(mem, "type", "episodic"),
-                        memory_category=getattr(mem, "category", "project_fact"),
+                        memory_id=memory_id,
+                        content=fact.get("content", ""),
+                        memory_type="episodic",
+                        memory_category=fact.get("category", "project_fact"),
                         session_id=session_id,
                         turn_id=self._current_turn_id,
                         timestamp=utcnow(),
                     ),
                 )
             except Exception as exc:  # noqa: BLE001 — hook failures are non-fatal
-                logger.exception("on_turn_complete: emit memory_written failed", exc_info=exc)
+                logger.exception(
+                    "on_turn_complete: emit memory_written failed", exc_info=exc
+                )
+
+    def _split_messages(self, messages: list) -> "tuple[str, str]":
+        """Derive the last user and assistant message texts from a turn."""
+        user_msg = ""
+        assistant_msg = ""
+        for m in messages or []:
+            role = m.get("role", "")
+            content = m.get("content", "")
+            if role == "user":
+                user_msg = content
+            elif role == "assistant":
+                assistant_msg = content
+        return user_msg, assistant_msg
+
+    async def _persist_fact(self, session_id: str, fact: dict) -> Optional[str]:
+        """Persist one extracted fact through the real ``MemoryManager.aremember``.
+
+        Returns the persisted memory id (or ``None`` if the memory object has
+        no ``aremember`` / the store produced no id). ``source_turn_id`` and
+        ``memory_category`` ride along so the episodic row is traceable.
+        """
+        aremember = getattr(self._memory, "aremember", None)
+        if aremember is None:
+            logger.warning(
+                "on_turn_complete: memory has no aremember(); skipping persist"
+            )
+            return None
+        return await aremember(
+            content=fact.get("content", ""),
+            session_id=session_id,
+            source_turn_id=self._current_turn_id,
+            memory_category=fact.get("category", "project_fact"),
+            metadata={"importance": fact.get("importance", 5)},
+        )
 
     async def on_session_end(self, session_id: str) -> None:
         """End-of-session hook: consolidate + emit ``session_ended``.
 
-        Currently does *not* gate on ``auto_memory`` — session-end
-        consolidation is considered housekeeping that should always run,
-        regardless of the per-turn extraction toggle.
+        Consolidation is driven through the real ``MemoryManager.consolidate``
+        (async wrapper over ``ConsolidationPipeline``). The ``session_ended``
+        event fires ONLY after consolidation succeeds — on failure we log and
+        return without emitting, so watchers are never told consolidation
+        succeeded when it failed.
         """
         try:
             await self._memory.consolidate(session_id)
         except Exception as exc:  # noqa: BLE001 — never raise into caller
             logger.exception("on_session_end: memory.consolidate failed", exc_info=exc)
-            # Still emit session_ended so watchers can record the closure,
-            # but skip if even the emit call itself blows up.
+            return
         try:
             await self._hooks.emit(
                 "session_ended",
@@ -203,15 +254,19 @@ class MemoryLifecycleManager:
     async def on_pre_compress(self, session_id: str) -> None:
         """Pre-compress hook: snapshot + emit ``pre_compress``.
 
-        Mirrors ``on_session_end`` but is invoked *before* a context-window
-        compression event (e.g. before ``ConsolidationPipeline`` runs),
-        giving listeners (audit logs, background review) a chance to read
-        the current state first.
+        Fires before a context-window compression event (e.g. before
+        ``ConsolidationPipeline`` runs), giving listeners (audit logs,
+        background review) a chance to read the current state first. The
+        snapshot is driven through the real ``MemoryManager.snapshot``
+        (persists the working-memory state). ``pre_compress`` is emitted only
+        after the snapshot succeeds — on failure we log and return without
+        emitting.
         """
         try:
             await self._memory.snapshot(session_id)
         except Exception as exc:  # noqa: BLE001 — never raise into caller
             logger.exception("on_pre_compress: memory.snapshot failed", exc_info=exc)
+            return
         try:
             await self._hooks.emit(
                 "pre_compress",

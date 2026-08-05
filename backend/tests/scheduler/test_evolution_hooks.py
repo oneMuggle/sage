@@ -19,7 +19,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from backend.memory.hooks import HookRegistry
-from backend.scheduler.evolution import DailySummaryTask, MemoryPruningTask
+from backend.scheduler.evolution import (
+    DailySummaryTask,
+    ImportanceReevaluationTask,
+    MemoryConsolidationTask,
+    MemoryPruningTask,
+    PreferenceLearningTask,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -119,3 +125,94 @@ async def test_task_runs_without_hooks_attr(tmp_db_path):
     task = MemoryPruningTask(db=db)
     # _hooks deliberately not set
     await task.run_async()  # must not raise
+
+
+# ----------------------------------------------------------------------------
+# F5 — the remaining three tasks must also emit evolution_completed after a
+# successful run (only DailySummaryTask and MemoryPruningTask did before).
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_preference_learning_emits_evolution_completed(tmp_db_path, hooks):
+    """PreferenceLearningTask emits evolution_completed even when there is no
+    feedback to learn from (items_processed=0 is still a successful run)."""
+    from backend.data.database import Database
+
+    db = Database(db_path=tmp_db_path)
+    db.init_db()
+
+    events: list[dict] = []
+    hooks.on("evolution_completed", lambda p: events.append(p))
+
+    task = PreferenceLearningTask(db=db)
+    task._hooks = hooks  # type: ignore[attr-defined]
+
+    result = await task.run_async()
+
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["task_name"] == "PreferenceLearningTask"
+    assert ev["items_processed"] == 0
+    assert "duration_ms" in ev and ev["duration_ms"] >= 0
+    assert datetime.fromisoformat(ev["timestamp"])
+    assert result == 0
+
+
+@pytest.mark.asyncio()
+async def test_importance_reevaluation_emits_evolution_completed(tmp_db_path, hooks):
+    """ImportanceReevaluationTask emits evolution_completed after success."""
+    from backend.data.database import Database
+
+    db = Database(db_path=tmp_db_path)
+    db.init_db()
+
+    events: list[dict] = []
+    hooks.on("evolution_completed", lambda p: events.append(p))
+
+    task = ImportanceReevaluationTask(db=db)
+    task._hooks = hooks  # type: ignore[attr-defined]
+
+    await task.run_async()
+
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["task_name"] == "ImportanceReevaluationTask"
+    assert ev["items_processed"] >= 0
+    assert "duration_ms" in ev and ev["duration_ms"] >= 0
+    assert datetime.fromisoformat(ev["timestamp"])
+
+
+@pytest.mark.asyncio()
+async def test_memory_consolidation_emits_evolution_completed(tmp_db_path, hooks):
+    """MemoryConsolidationTask emits evolution_completed after success and
+    returns an int (items processed) rather than a raw dict."""
+    from backend.data.database import Database
+    from backend.memory.episodic import EpisodicMemory
+    from backend.memory.manager import MemoryManager
+    from backend.memory.semantic import SemanticMemory
+    from backend.memory.working import WorkingMemory
+
+    db = Database(db_path=tmp_db_path)
+    db.init_db()
+    manager = MemoryManager(
+        working=WorkingMemory(max_size=10, max_tokens=2000),
+        episodic=EpisodicMemory(db),
+        semantic=SemanticMemory(db),
+    )
+
+    events: list[dict] = []
+    hooks.on("evolution_completed", lambda p: events.append(p))
+
+    task = MemoryConsolidationTask(db=db, memory_manager=manager)
+    task._hooks = hooks  # type: ignore[attr-defined]
+
+    result = await task.run_async()
+
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["task_name"] == "MemoryConsolidationTask"
+    assert ev["items_processed"] >= 0
+    assert "duration_ms" in ev and ev["duration_ms"] >= 0
+    assert datetime.fromisoformat(ev["timestamp"])
+    assert isinstance(result, int)

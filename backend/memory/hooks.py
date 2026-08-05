@@ -75,3 +75,36 @@ class HookRegistry:
                     event,
                     exc_info=exc,
                 )
+
+    def emit_sync(self, event: str, payload: object) -> None:
+        """Synchronous emit (task-4-brief step 3 interface).
+
+        Two contexts:
+
+        - Inside a running event loop: schedule the async ``emit`` via
+          ``asyncio.ensure_future`` and return immediately — listeners run
+          on the loop (fire-and-forget, non-blocking).
+        - No running loop (plain sync caller, e.g. an evolution task's
+          ``run()``): run the async ``emit`` to completion via
+          ``asyncio.run`` so listeners have fired when this returns.
+
+        Listener errors are already swallowed by ``emit``; scheduling /
+        loop errors are logged and swallowed here too so a misbehaving loop
+        can never break a synchronous caller. Later Task 6 (SSE) will
+        consume this from sync call sites.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        try:
+            if loop is not None:
+                asyncio.ensure_future(self.emit(event, payload))
+            else:
+                asyncio.run(self.emit(event, payload))
+        except Exception as exc:  # noqa: BLE001 — emit_sync must never raise
+            logger.exception(
+                "emit_sync(%r) failed; listeners may not have fired",
+                event,
+                exc_info=exc,
+            )

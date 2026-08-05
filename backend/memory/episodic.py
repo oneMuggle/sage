@@ -46,6 +46,7 @@ class EpisodicMemory:
         source_turn_id: Optional[str] = None,
         source_message_id: Optional[str] = None,
         memory_category: Optional[str] = None,
+        summary: Optional[str] = None,
     ) -> str:
         """
         保存情景记忆
@@ -60,6 +61,9 @@ class EpisodicMemory:
             source_message_id: 该事实来源的 message ID（Task 4 / Gap A）
             memory_category: 事实分类（user_pref / project_fact / task_summary /
                 cross_session_pattern — 由 extractor 决定）
+            summary: 可选的摘要覆盖；省略时由 content 自动生成（向后兼容）。
+                ConsolidationPipeline.save_compressed 传入真实摘要，避免把
+                "对话摘要: ..." 前缀再包一层。
 
         Returns:
             生成的记忆 ID
@@ -74,11 +78,10 @@ class EpisodicMemory:
         tags = "[]"
         if metadata and "tags" in metadata:
             tags = json.dumps(metadata["tags"], ensure_ascii=False)
-        elif metadata and "tags" in metadata:
-            tags = json.dumps(metadata.get("tags", []), ensure_ascii=False)
 
-        # 生成摘要
-        summary = self._generate_summary(content)
+        # 生成摘要（F2 — 允许调用方覆盖，如 ConsolidationPipeline）
+        if summary is None:
+            summary = self._generate_summary(content)
 
         cursor.execute(
             """

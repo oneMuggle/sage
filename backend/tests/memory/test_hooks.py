@@ -73,3 +73,42 @@ async def test_emit_with_no_listeners_is_noop():
     reg = HookRegistry()
     # must NOT raise
     await reg.emit("nobody", "p")
+
+
+# ----------------------------------------------------------------------------
+# F6 — emit_sync (spec'd in task-4-brief.md step 3 but absent). Later Task 6
+# (SSE) will consume it from synchronous call sites.
+# ----------------------------------------------------------------------------
+
+
+def test_emit_sync_without_running_loop_runs_to_completion():
+    """emit_sync() with no running event loop runs listeners synchronously
+    to completion (via asyncio.run)."""
+    reg = HookRegistry()
+    calls: list[str] = []
+    reg.on("test", lambda x: calls.append(x))
+    reg.emit_sync("test", "p")
+    assert calls == ["p"]
+
+
+def test_emit_sync_inside_running_loop_schedules_listeners():
+    """emit_sync() called from inside a running loop must schedule the async
+    listeners on that loop (fire-and-forget) without blocking the caller."""
+    import asyncio
+
+    reg = HookRegistry()
+    calls: list[str] = []
+
+    async def async_listener(x):
+        calls.append(x)
+
+    reg.on("test", async_listener)
+
+    async def main():
+        reg.emit_sync("test", "p")
+        # give the scheduled task a chance to run
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    asyncio.run(main())
+    assert calls == ["p"]

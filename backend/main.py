@@ -82,7 +82,7 @@ def _build_compute_adapter():
     raise ValueError(f"未知的 ghm.adapter 类型: {adapter_type!r},有效值: 'subprocess'")
 
 
-def _build_chat_service() -> ChatService:
+def _build_chat_service(lifecycle=None) -> ChatService:
     """工厂：装配 7 个 ports（6 个生产 adapter + 1 个暂未实现 placeholder）。
 
     - llm:     HttpxLLMAdapter（包装既有 LLMClient）
@@ -92,6 +92,8 @@ def _build_chat_service() -> ChatService:
     - metrics: PrometheusMetricAdapter
     - events:  FileEventAdapter（写 audit jsonl）
     - memory:  MemoryAdapter（包装 MemoryManager，提供三层记忆系统）
+    - lifecycle: 可选的 MemoryLifecycleManager（Task 4 / Gap A）— 让 run_turn
+      驱动 set_current_turn，从而在生产路径上填充 source_turn_id。
 
     装配在每次依赖注入时被调用——单例化由调用方（如 ``app.state``）自行管理。
     """
@@ -122,6 +124,7 @@ def _build_chat_service() -> ChatService:
         metrics=PrometheusMetricAdapter(),
         events=FileEventAdapter(),
         memory=memory_adapter,  # MemoryPort for memory integration
+        lifecycle=lifecycle,  # Task 4 / Gap A — optional MemoryLifecycleManager
     )
 
 
@@ -171,7 +174,14 @@ async def lifespan(app: FastAPI):
         async def _run_once() -> int:
             try:
                 result = await task.run_async()
-                return int(result) if result is not None else 0
+                if result is None:
+                    return 0
+                if isinstance(result, dict):
+                    # Defensive: some task implementations return a dict
+                    # (e.g. {"total": n}) — normalize to int so the scheduler
+                    # never logs a spurious TypeError on a successful run.
+                    return int(result.get("total", 0) or 0)
+                return int(result)
             except Exception as exc:  # noqa: BLE001 — never crash scheduler
                 logger.warning(
                     "evolution task %s failed: %s", type(task).__name__, exc
@@ -375,8 +385,12 @@ async def lifespan(app: FastAPI):
     if api_mode == "hex":
         from backend.api.hex_routes import get_chat_service
 
-        app.dependency_overrides[get_chat_service] = _build_chat_service
-        app.state.chat_service = _build_chat_service()
+        # Wire the MemoryLifecycleManager into ChatService so run_turn drives
+        # set_current_turn (F4 — production caller for source_turn_id).
+        app.dependency_overrides[get_chat_service] = lambda: _build_chat_service(
+            lifecycle=lifecycle
+        )
+        app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
         logger.info("Hex 模式：ChatService 已装配（/chat 走 hex_routes，其余走 legacy_routes）")
     else:
         logger.info("Legacy 模式：全部端点走 legacy_routes")

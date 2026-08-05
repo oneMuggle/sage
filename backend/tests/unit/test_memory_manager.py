@@ -345,3 +345,38 @@ async def test_aremember_to_thread_preserves_save_contract(
     assert found["source_turn_id"] == "wrap-turn"
     assert found["source_message_id"] == "wrap-msg"
     assert found["memory_category"] == "user_pref"
+
+
+# ----------------------------------------------------------------------------
+# F2 — MemoryManager gains async consolidate() / snapshot() wrappers so the
+# MemoryLifecycleManager (and the session-end watchdog in main.py) can drive
+# real consolidation/snapshot without calling methods that don't exist.
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_consolidate_compresses_working_memory(
+    manager: MemoryManager,
+) -> None:
+    """MemoryManager.consolidate(session_id) compresses working memory into
+    episodic (delegates to ConsolidationPipeline) and returns a memory id."""
+    manager.add_to_working(
+        "user", "hello consolidation test message worth remembering"
+    )
+    memory_id = await manager.consolidate("sess-c")
+    assert memory_id is None or isinstance(memory_id, str)
+    # working memory cleared after consolidation
+    assert len(manager.working.messages) == 0
+    # episodic now holds the compressed summary
+    recent = manager.episodic.get_recent(limit=5)
+    assert len(recent) >= 1
+    assert "摘要" in recent[0]["content"] or "对话" in recent[0]["content"]
+
+
+@pytest.mark.asyncio()
+async def test_snapshot_does_not_raise(manager: MemoryManager) -> None:
+    """MemoryManager.snapshot(session_id) persists working memory state and
+    must not raise even when working memory is empty."""
+    await manager.snapshot("sess-s")  # empty working memory — no-op, no raise
+    manager.add_to_working("user", "hello snapshot me")
+    await manager.snapshot("sess-s")  # must not raise

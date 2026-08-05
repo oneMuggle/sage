@@ -54,7 +54,9 @@ class BaseEvolutionTask:
         finally:
             loop.close()
 
-    async def _emit_evolution_completed(self, items_processed: int) -> None:
+    async def _emit_evolution_completed(
+        self, items_processed: int, duration_ms: int = 0
+    ) -> None:
         """Fire ``evolution_completed`` hook (Task 4 / Gap A).
 
         Best-effort: any exception in the hook registry is logged but does
@@ -69,7 +71,7 @@ class BaseEvolutionTask:
                 {
                     "task_name": type(self).__name__,
                     "items_processed": items_processed,
-                    "duration_ms": 0,  # populated by caller when available
+                    "duration_ms": duration_ms,
                     "timestamp": _utcnow_iso(),
                 },
             )
@@ -103,6 +105,7 @@ class DailySummaryTask(BaseEvolutionTask):
     async def run_async(self):
         """执行每日摘要"""
         logger.info("开始执行每日摘要任务...")
+        start = time.monotonic()
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -203,7 +206,10 @@ class DailySummaryTask(BaseEvolutionTask):
 
         # Task 4 / Gap A — emit lifecycle hook for downstream watchers
         # (background review, audit log, UI toast).
-        await self._emit_evolution_completed(items_processed=processed)
+        await self._emit_evolution_completed(
+            items_processed=processed,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
 
         return processed
 
@@ -313,6 +319,7 @@ class MemoryPruningTask(BaseEvolutionTask):
     async def run_async(self):
         """执行记忆修剪"""
         logger.info("开始执行记忆修剪任务...")
+        start = time.monotonic()
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -394,7 +401,10 @@ class MemoryPruningTask(BaseEvolutionTask):
         )
 
         # Task 4 / Gap A — emit lifecycle hook for downstream watchers.
-        await self._emit_evolution_completed(items_processed=total_deleted)
+        await self._emit_evolution_completed(
+            items_processed=total_deleted,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
 
         return total_deleted
 
@@ -451,6 +461,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
     async def run_async(self):
         """执行偏好学习"""
         logger.info("开始执行偏好学习任务...")
+        start = time.monotonic()
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -493,6 +504,10 @@ class PreferenceLearningTask(BaseEvolutionTask):
 
         if not feedback_messages:
             logger.info("没有发现新的反馈，跳过")
+            await self._emit_evolution_completed(
+                items_processed=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
             return 0
 
         # 2. 分析偏好模式
@@ -500,6 +515,10 @@ class PreferenceLearningTask(BaseEvolutionTask):
 
         if not preferences:
             logger.info("无法分析出明确偏好")
+            await self._emit_evolution_completed(
+                items_processed=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
             return 0
 
         # 3. 保存到语义记忆
@@ -546,6 +565,12 @@ class PreferenceLearningTask(BaseEvolutionTask):
             description=f"偏好学习完成，分析出 {len(preferences)} 个偏好维度",
             status="success",
             after_state=profile_text,
+        )
+
+        # Task 4 / Gap A — emit lifecycle hook for downstream watchers.
+        await self._emit_evolution_completed(
+            items_processed=len(preferences),
+            duration_ms=int((time.monotonic() - start) * 1000),
         )
 
         return len(preferences)
@@ -648,6 +673,7 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
     async def run_async(self):
         """执行重要性重评估"""
         logger.info("开始执行重要性重评估任务...")
+        start = time.monotonic()
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -730,6 +756,12 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
             status="success",
         )
 
+        # Task 4 / Gap A — emit lifecycle hook for downstream watchers.
+        await self._emit_evolution_completed(
+            items_processed=total_adjusted,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+
         return total_adjusted
 
     async def _log_evolution(
@@ -787,6 +819,7 @@ class MemoryConsolidationTask(BaseEvolutionTask):
     async def run_async(self):
         """执行记忆整合"""
         logger.info("开始执行记忆整合任务（做梦）...")
+        start = time.monotonic()
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -843,11 +876,15 @@ class MemoryConsolidationTask(BaseEvolutionTask):
         conn.commit()
         logger.info(f"记忆整合完成，共处理 {total_consolidated} 条记忆")
 
-        return {
-            "promoted": promoted,
-            "decayed": decayed,
-            "total": total_consolidated,
-        }
+        # Task 4 / Gap A — emit lifecycle hook for downstream watchers.
+        await self._emit_evolution_completed(
+            items_processed=total_consolidated,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+
+        # F5 — return an int (total items processed), matching the other
+        # tasks, so the scheduler runner's ``int(result)`` conversion works.
+        return total_consolidated
 
 
 def _safe_json_loads(s: str) -> list:

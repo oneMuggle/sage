@@ -40,6 +40,9 @@ class MemoryManager:
         self.working = working
         self.episodic = episodic
         self.semantic = semantic
+        # Lazily-created ConsolidationPipeline (F2) — built on first use so
+        # the constructor stays lightweight and test-friendly.
+        self._consolidation_pipeline = None
 
     def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """Sync alias kept for callers that pass content positionally
@@ -130,6 +133,39 @@ class MemoryManager:
             memory_category=memory_category,
         )
 
+    async def consolidate(self, session_id: Optional[str] = None) -> Any:
+        """Async session-end consolidation (F2).
+
+        Thin wrapper over :class:`ConsolidationPipeline` so the
+        MemoryLifecycleManager / session-end watchdog can drive real
+        consolidation without the pipeline being coupled into the lifecycle.
+        The synchronous ``ConsolidationPipeline.consolidate`` is offloaded to
+        a worker thread via ``asyncio.to_thread`` so the event loop is not
+        stalled by the SQLite work.
+        """
+        if self._consolidation_pipeline is None:
+            from backend.memory.consolidation import ConsolidationPipeline
+
+            self._consolidation_pipeline = ConsolidationPipeline()
+        pipeline = self._consolidation_pipeline
+        return await asyncio.to_thread(pipeline.consolidate, self, session_id)
+
+    async def snapshot(self, session_id: Optional[str] = None) -> None:
+        """Async pre-compress snapshot (F2).
+
+        Persists the current working-memory state to the
+        ``working_memory_snapshot`` table (no-op when the working memory was
+        built without a db — the persistent-snapshot feature is opt-in).
+        Offloaded to a worker thread to keep the event loop responsive.
+        """
+
+        def _snap() -> None:
+            save = getattr(self.working, "_save_snapshot", None)
+            if save is not None:
+                save()
+
+        await asyncio.to_thread(_snap)
+
     def memorize(
         self,
         content: str,
@@ -163,7 +199,18 @@ class MemoryManager:
             meta = metadata or {}
             if tags:
                 meta["tags"] = tags
-            return self.episodic.save(content=content, importance=importance, metadata=meta)
+            # F3 — forward traceability fields from metadata so the
+            # adapter.store → memorize → episodic.save chain actually
+            # populates the three new columns instead of silently dropping
+            # them (the fields default to None when absent → backward compat).
+            return self.episodic.save(
+                content=content,
+                importance=importance,
+                metadata=meta,
+                source_turn_id=meta.get("source_turn_id"),
+                source_message_id=meta.get("source_message_id"),
+                memory_category=meta.get("memory_category"),
+            )
 
         elif memory_type == "semantic":
             return self.semantic.save(content=content, summary=None, tags=tags)
