@@ -57,8 +57,8 @@ export function MemoryCard({
   };
 
   const categoryLabel = memory.memory_category
-    ? CATEGORY_LABELS[memory.memory_category] ?? memory.memory_category
-    : memory.memory_type ?? 'episodic';
+    ? (CATEGORY_LABELS[memory.memory_category] ?? memory.memory_category)
+    : (memory.memory_type ?? 'episodic');
 
   return (
     <div className="border rounded-lg p-4 mb-2 bg-white dark:bg-gray-800">
