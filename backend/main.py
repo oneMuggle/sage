@@ -128,6 +128,21 @@ def _build_chat_service(lifecycle=None) -> ChatService:
     )
 
 
+def _build_lifecycle_extractor():
+    """生产用的记忆事实提取器 — LLM 驱动（与 legacy ``_extract_and_store_memory``
+    同级），而非 keyword-only 降级。
+
+    ``MemoryExtractor`` 需要 ``llm_client``（支持 ``chat()``）;
+    ``HttpxLLMAdapter`` 是 ``_build_chat_service`` 里用的同一个生产 adapter，
+    构造无副作用（不发起网络请求）。Important-3 (final review)：之前
+    ``MemoryLifecycleManager`` 没传 ``extractor=``，导致生命周期路径静默退化
+    成 ``MemoryExtractor(llm_client=None)`` 的关键词启发式。"""
+    from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+    from backend.memory.extractor import MemoryExtractor
+
+    return MemoryExtractor(llm_client=HttpxLLMAdapter())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理。"""
@@ -161,6 +176,7 @@ async def lifespan(app: FastAPI):
         memory_manager=get_memory_manager(),
         hooks=hooks,
         preferences_repo=preferences_repo,
+        extractor=_build_lifecycle_extractor(),  # Important-3 — LLM-backed facts
     )
     app.state.hooks = hooks
     app.state.lifecycle = lifecycle
