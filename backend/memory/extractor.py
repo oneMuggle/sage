@@ -28,7 +28,9 @@ EXTRACTION_PROMPT = """从以下对话中提取值得记住的关键事实。每
 以 JSON 数组格式输出，每项包含：
 - content: 事实内容（一句话，中文）
 - importance: 重要性 1-10（偏好/身份类 7-9，普通事实 4-6）
-- category: preference/fact/goal/event 之一
+- category: user_pref / project_fact / decision / task_summary / cross_session_pattern 之一
+  （user_pref=用户偏好习惯；project_fact=项目/工作相关事实；decision=重要决策；
+   task_summary=任务完成摘要；cross_session_pattern=跨会话模式）
 - tags: 相关标签（1-3 个）
 
 如果没有值得提取的事实，返回空数组 []。
@@ -144,7 +146,16 @@ class MemoryExtractor:
                     {
                         "content": str(fact["content"])[:200],
                         "importance": min(max(int(fact.get("importance", 5)), 1), 10),
-                        "category": fact.get("category", "fact"),
+                        # F4 — LLM may still emit the old vocabulary
+                        # (preference/fact/goal/event) or an unknown category;
+                        # normalize to the new taxonomy (user_pref /
+                        # project_fact / decision / task_summary /
+                        # cross_session_pattern), falling back to the keyword
+                        # heuristic.
+                        "category": self._normalize_category(
+                            str(fact.get("category", "project_fact")),
+                            content=str(fact["content"]),
+                        ),
                         "tags": fact.get("tags", [])[:3],
                     }
                 )
@@ -164,7 +175,7 @@ class MemoryExtractor:
                             {
                                 "content": f"用户{sentence.strip()}",
                                 "importance": 7,
-                                "category": "preference",
+                                "category": self._categorize(sentence),
                                 "tags": ["preference"],
                             }
                         )
@@ -172,3 +183,68 @@ class MemoryExtractor:
                 break
 
         return facts[:3]
+
+    # ------------------------------------------------------------------
+    # Task 4 / Gap A — memory_category heuristic
+    # ------------------------------------------------------------------
+    #
+    # Simple keyword-based bucketing that maps a fact string to one of:
+    # - ``user_pref`` — explicit user preference/habit/identity
+    # - ``project_fact`` — anything else (default)
+    #
+    # ``task_summary`` and ``cross_session_pattern`` are reserved for
+    # richer extractor stages (LLM post-processing, multi-session
+    # detectors) that ship in later milestones. The heuristic here just
+    # needs to never mislabel an explicit preference as project_fact.
+
+    _USER_PREF_KEYWORDS = (
+        "喜欢",
+        "偏好",
+        "讨厌",
+        "不要",
+        "记得",
+        "以后",
+        "设置",
+        "爱吃",
+        "不爱",
+        "想",
+        "希望",
+        "需要",
+    )
+
+    # F4 — old-vocabulary → new-taxonomy mapping for LLM-extracted facts.
+    _CATEGORY_MAP = {
+        "preference": "user_pref",
+        "fact": "project_fact",
+        "goal": "cross_session_pattern",  # 长期目标跨越多个会话
+        "event": "task_summary",  # 单次事件 → 任务完成摘要
+    }
+    _KNOWN_CATEGORIES = {
+        "user_pref",
+        "project_fact",
+        "decision",
+        "task_summary",
+        "cross_session_pattern",
+    }
+
+    def _categorize(self, text: str) -> str:
+        """Map a fact string to its ``memory_category``.
+
+        Preference keywords → ``user_pref``; otherwise → ``project_fact``.
+        """
+        for kw in self._USER_PREF_KEYWORDS:
+            if kw in text:
+                return "user_pref"
+        return "project_fact"
+
+    def _normalize_category(self, category: str, content: str = "") -> str:
+        """Reconcile any category string to the new taxonomy (F4).
+
+        Known new-vocabulary categories pass through unchanged; old-vocabulary
+        values (``preference``/``fact``/``goal``/``event``) are mapped; anything
+        else falls back to the keyword heuristic.
+        """
+        mapped = self._CATEGORY_MAP.get(category, category)
+        if mapped in self._KNOWN_CATEGORIES:
+            return mapped
+        return self._categorize(content)

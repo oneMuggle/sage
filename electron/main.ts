@@ -47,6 +47,7 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import http from 'node:http';
 import fetch from 'node-fetch';
+import EventSource from 'eventsource';
 import { invokeBackend } from './invoke';
 import { relayChatStream, relayNdjsonToEvent } from './relay';
 import { streamControllers } from './commands';
@@ -469,6 +470,66 @@ function registerIpcHandlers(): void {
       return { ok: true };
     },
   );
+
+  // ─── Task 6: memory SSE relay ───────────────────────────────────────────
+  // Backend exposes GET /api/v1/memory/events (text/event-stream, 15s
+  // heartbeat). The renderer cannot reach the backend HTTP port directly
+  // (contextIsolation + no nodeIntegration), so main opens an EventSource
+  // per window and re-emits each payload to the renderer over
+  // `sage:memory:event`. `eventsource` package (not the Node global — even
+  // Node 25 lacks it, and Electron 21 embeds Node 16) is used deliberately.
+  const memoryEventSources = new Map<number, EventSource>();
+
+  ipcMain.handle('sage:memory:subscribe', (evt) => {
+    const sender = evt.sender;
+    // Idempotent: React StrictMode double-mount calls subscribe twice; a
+    // second call while a connection exists is a no-op (unsubscribe is the
+    // only way to close it).
+    if (memoryEventSources.has(sender.id)) {
+      return { subscribed: true };
+    }
+    let es: EventSource;
+    try {
+      es = new EventSource(`${BACKEND_URL}/api/v1/memory/events`);
+    } catch (e) {
+      // Guard: if the EventSource implementation cannot even construct here
+      // (e.g. a future package upgrade that again requires `globalThis.fetch`
+      // which Electron 21 main / Node 16 lacks), surface it so the renderer's
+      // preload can report SSE-unavailable and the Memory page falls back to
+      // polling instead of silently dead-airing.
+      logger.error('memory SSE construction failed', { err: String(e) });
+      return { subscribed: false, error: String(e) };
+    }
+    es.onmessage = (msg) => {
+      if (!sender.isDestroyed()) {
+        sender.send('sage:memory:event', msg.data);
+      }
+    };
+    es.onerror = (err) => {
+      logger.error('memory SSE error', { err: String(err) });
+      // Don't close — EventSource auto-reconnects on transient failures.
+    };
+    // Safety net: if the window dies without calling unsubscribe, drop the
+    // connection instead of leaking it until app quit.
+    sender.once('destroyed', () => {
+      const live = memoryEventSources.get(sender.id);
+      if (live) {
+        live.close();
+        memoryEventSources.delete(sender.id);
+      }
+    });
+    memoryEventSources.set(sender.id, es);
+    return { subscribed: true };
+  });
+
+  ipcMain.handle('sage:memory:unsubscribe', (evt) => {
+    const es = memoryEventSources.get(evt.sender.id);
+    if (es) {
+      es.close();
+      memoryEventSources.delete(evt.sender.id);
+    }
+    return { unsubscribed: true };
+  });
 
   // ─── Phase 5: Window controls IPC handlers ─────────────────────────────
   // These handlers back the custom titlebar buttons (minimize/maximize/close)
