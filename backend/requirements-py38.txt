@@ -5,13 +5,15 @@
 #
 # Python 3.8 兼容关键约束：
 # - pydantic 钉 1.x（2.x 要求 3.9+）
-# - fastapi 钉 0.85+（与 pydantic 1.x 兼容）
+# - fastapi 钉 0.109.0（0.93+ 才支持 lifespan kwarg，此前 kwargs 被 **extra 静默吞掉；
+#   0.109 官方支持 py3.8 + pydantic 1.x，与 main 对齐）
 # - 其他依赖跟随 backend/requirements.txt 但带 == 版本
 # - opentelemetry 1.27.0 支持 3.8（要 verify 实际包）
 # - ruff 钉 0.x，mypy 钉 1.x，import-linter 钉 2.0（py3.8 兼容，2.1+ 要 py3.9+）
 
 # Core
-fastapi==0.85.0      # py38 兼容 (与 pydantic 1.x 配)
+fastapi==0.109.0     # lifespan kwarg 需 0.93+；0.109 支持 py3.8 + pydantic 1.x（与 main 对齐）
+starlette==0.35.1    # fastapi 0.109 硬依赖 (>=0.35,<0.36)；TestClient 走 httpx2
 uvicorn==0.20.0      # py38 兼容
 pydantic==1.10.13    # 1.x 最后版本, 2.x 要求 3.9+
 
@@ -27,8 +29,8 @@ sqlite-vec>=0.1.9
 # HTTP
 httpx==0.26.0
 python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
-requests>=2.32.3,<3.0  # starlette==0.20.4 testclient on py38 (main uses httpx2); >=2.32.3 规避 CVE-2023-32681 / CVE-2024-35195
-anyio<4.0  # starlette==0.20.4 testclient uses anyio.start_blocking_portal, removed in anyio 4.0
+# requests 依赖已移除 — starlette 0.35.1 TestClient 走 httpx（上面已 pin），无代码 import requests
+anyio==3.7.1  # fastapi 0.109 / starlette 0.35.1 要求 anyio>=3.7.1,<5.0（沿用已装版本，最小变更）
 
 # Observability
 # ⚠️ 0.22.0+ require Python >=3.9 (per PyPI metadata), so on Win7 LTS
