@@ -1218,8 +1218,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
             if done_content:
                 assistant_now = int(time.time() * 1000)
+                assistant_message_id: Optional[str] = None
                 try:
-                    message_repo.save(
+                    saved = message_repo.save(
                         DbMessage(
                             id=str(uuid.uuid4()),
                             session_id=data.session_id,
@@ -1230,6 +1231,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             model=(llm_config.get("model") if llm_config else "local"),
                         )
                     )
+                    assistant_message_id = getattr(saved, "id", None)
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
                 try:
@@ -1242,6 +1244,29 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
+                # Important-1 (final review) — 生产聊天路径驱动生命周期:
+                # 让 legacy /chat/stream (renderer 唯一聊天命令) 也触发
+                # on_turn_complete → 提取 + 持久化 + memory_written → SSE
+                # /memory/events → 前端实时 toast/prepend。source_message_id
+                # 用真实持久化的 assistant 消息 id,保证 MemoryCard
+                # click-to-trace 命中 Chat 的 data-turn-id。auto_memory gate
+                # 在 lifecycle 内部处理 — 该开关从此对生产路径生效。
+                # 全程 try/except — 记忆系统故障绝不打断聊天流。
+                lifecycle = getattr(request.app.state, "lifecycle", None)
+                if lifecycle is not None:
+                    try:
+                        await lifecycle.on_turn_complete(
+                            data.session_id,
+                            [
+                                {"role": "user", "content": data.message},
+                                {"role": "assistant", "content": done_content},
+                            ],
+                            source_message_id=assistant_message_id,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
+                        )
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "
@@ -1408,7 +1433,17 @@ class MemorySaveRequest(BaseModel):
 
 
 class MemoryDeleteRequest(BaseModel):
-    id: str
+    id: Optional[str] = None
+    # Gap E (Task 5): the renderer bridge (T1) sends { memory_id } — the
+    # preload's `delete(args: { memory_id })` passes it straight through.
+    # Accept both spellings so the Memory page delete works end-to-end.
+    memory_id: Optional[str] = None
+
+    def resolve_id(self) -> Optional[str]:
+        """优先 memory_id（渲染器桥），兼容 legacy { id }。"""
+        if self.memory_id and self.id and self.memory_id != self.id:
+            raise HTTPException(status_code=422, detail="memory id mismatch")
+        return self.memory_id or self.id
 
 
 @router.get("/memory/search")
@@ -1442,9 +1477,12 @@ async def delete_memory(data: MemoryDeleteRequest):
     """删除记忆"""
     try:
         mm = get_memory_manager()
+        target_id = data.resolve_id()
+        if not target_id:
+            raise HTTPException(status_code=422, detail="memory id required")
         # 尝试从所有类型中删除
         for mtype in ["episodic", "semantic"]:
-            if mm.delete_memory(data.id, mtype):
+            if mm.delete_memory(target_id, mtype):
                 return {"status": "ok"}
         raise HTTPException(status_code=404, detail="记忆不存在")
     except HTTPException:
@@ -1467,3 +1505,121 @@ async def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] 
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 记忆可追溯性 API (Gap E / Task 5) ====================
+
+
+def _get_memory_port(request: Request):
+    """返回 MemoryAdapter（MemoryPort 实现）。
+
+    生产路径：``main.py`` lifespan 把 adapter 挂在 ``app.state.memory_port``。
+    测试路径（不走 lifespan）：惰性构造一个绑定当前 MemoryManager 的
+    adapter —— conftest 已把 MemoryManager 重置到临时 DB，因此查询
+    打到测试库。
+    """
+    port = getattr(request.app.state, "memory_port", None)
+    if port is not None:
+        return port
+    from backend.adapters.out.memory.adapter import MemoryAdapter
+
+    return MemoryAdapter(get_memory_manager())
+
+
+@router.get("/memory/by-turn/{turn_id}")
+async def get_memories_by_turn(turn_id: str, request: Request):
+    """按来源 turn 查询记忆（可追溯性：从记忆点击跳回产生它的轮次）。"""
+    memory_port = _get_memory_port(request)
+    memories = await memory_port.find_by_turn(turn_id)
+    return {"memories": list(memories)}
+
+
+@router.get("/memory/profile")
+async def get_user_profile(request: Request):
+    """用户档案聚合：偏好（importance>=7）+ 决策 + 项目事实。"""
+    memory_port = _get_memory_port(request)
+    prefs = await memory_port.find_by_category("user_pref", limit=50)
+    decisions = await memory_port.find_by_category("decision", limit=20)
+    facts = await memory_port.find_by_category("project_fact", limit=50)
+    return {
+        "preferences": [m for m in prefs if m.get("importance", 0) >= 7],
+        "decisions": list(decisions),
+        "facts": list(facts),
+        "total_count": len(prefs) + len(decisions) + len(facts),
+    }
+
+
+@router.get("/memory/summary/{session_id}")
+async def get_session_summary(session_id: str, request: Request):
+    """按会话聚合 task_summary 记忆（会话摘要 Tab）。"""
+    memory_port = _get_memory_port(request)
+    summaries = await memory_port.find_by_category_and_session("task_summary", session_id)
+    return {"summaries": list(summaries), "session_id": session_id}
+
+
+# ==================== 记忆 SSE 流 (Task 6) ====================
+
+
+@router.get("/memory/events")
+async def memory_events(request: Request):
+    """SSE 流：订阅 ``memory_written`` 生命周期事件 (Task 6)。
+
+    每个连接持有独立的 ``asyncio.Queue(maxsize=100)``；进程内
+    HookRegistry 触发 ``memory_written`` 时把事件序列化后推给连接。
+    15s 无事件时发心跳 ``: heartbeat`` 保持连接。客户端断开
+    (``request.is_disconnected()``) 或请求取消时在 ``finally`` 注销
+    监听器，避免 per-connection 闭包泄漏。
+
+    Electron 主进程 (``electron/main.ts``) 通过 EventSource 消费此流，
+    再通过 IPC ``sage:memory:event`` 转发给渲染进程。
+    """
+    from backend.memory.hooks import HookRegistry
+    from backend.memory.lifecycle import MemoryWriteEvent
+
+    hooks: HookRegistry = getattr(request.app.state, "hooks", None)
+    if hooks is None:
+        raise HTTPException(
+            status_code=503,
+            detail="memory hook registry not initialized",
+        )
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+
+    def on_memory_written(event: object) -> None:
+        """Hook 监听器（同步）：入队；队列满则丢弃并告警，绝不上抛。"""
+        try:
+            queue.put_nowait(event)
+        except asyncio.QueueFull:
+            logger.warning("memory events queue full, dropping event")
+
+    hooks.on("memory_written", on_memory_written)
+
+    async def event_stream():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:  # noqa: UP041 — Py3.10 asyncio.TimeoutError
+                    yield ": heartbeat\n\n"
+                    continue
+                if not isinstance(event, MemoryWriteEvent):
+                    continue
+                payload = json.dumps(
+                    {
+                        "memory_id": event.memory_id,
+                        "content": event.content,
+                        "memory_type": event.memory_type,
+                        "memory_category": event.memory_category,
+                        "session_id": event.session_id,
+                        "turn_id": event.turn_id,
+                        "timestamp": event.timestamp.isoformat(),
+                    },
+                    ensure_ascii=False,
+                )
+                yield f"data: {payload}\n\n"
+        finally:
+            hooks.off("memory_written", on_memory_written)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

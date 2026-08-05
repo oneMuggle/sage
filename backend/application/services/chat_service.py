@@ -90,6 +90,7 @@ class ChatService:
         permission_preset: Optional[PermissionPreset] = None,  # M3 权限预设
         permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
         permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
+        lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -98,6 +99,8 @@ class ChatService:
         self.metrics = metrics
         self.events = events
         self.memory = memory  # MemoryPort for memory integration
+        self._lifecycle = lifecycle
+        self._current_turn_id: Optional[str] = None
         self._tool_policy = tool_policy or ToolPolicy()
         # M3: 构造 LanePermission；缺省 IMPLEMENT 保持向后兼容
         self._permission = LanePermission(
@@ -205,8 +208,20 @@ class ChatService:
         run.emit("run_start", session_id=session_id)
         run.emit("turn_start", session_id=session_id)
 
+        # F4 — expose the current turn id so memory extraction can tag stored
+        # facts with the producing turn; also drive the lifecycle's
+        # set_current_turn (production caller for the traceability hook).
+        self._current_turn_id = run.run_id
+        if self._lifecycle is not None:
+            try:
+                self._lifecycle.set_current_turn(run.run_id)
+            except Exception as exc:  # noqa: BLE001 — never break the turn
+                logger.warning("run_turn: set_current_turn failed: %s", exc)
+
         # 1) 持久化 user message
-        await self.storage.append_message(session_id, user_message)
+        # Gap E — capture the persisted message id so extracted facts can point
+        # at the real message (Chat renders it as data-turn-id={message.id}).
+        user_message_id = await self.storage.append_message(session_id, user_message)
         self.events.emit(
             "chat_message_sent",
             {"session_id": session_id, "role": Role.USER.value},
@@ -216,12 +231,24 @@ class ChatService:
         memory_context: Optional[MemoryContext] = None
         if self.memory:
             try:
-                memory_context = await self.memory.retrieve(
-                    query=user_message.content,
-                    session_id=session_id,
-                    limit=5,
-                )
-                span.set_attribute("memory.has_memories", memory_context.has_memories)
+                # Important-2 (final review) — memory_retrieval preference
+                # gate. The Settings UI's "记忆检索注入" toggle drives this
+                # independently of auto_memory. Lifecycle exposes
+                # is_memory_retrieval_enabled() (30s-cached, default True,
+                # fail-open); the legacy path (no lifecycle) keeps retrieval
+                # unconditionally enabled for backward compat.
+                retrieval_enabled = True
+                if self._lifecycle is not None:
+                    retrieval_enabled = (
+                        await self._lifecycle.is_memory_retrieval_enabled()
+                    )
+                if retrieval_enabled:
+                    memory_context = await self.memory.retrieve(
+                        query=user_message.content,
+                        session_id=session_id,
+                        limit=5,
+                    )
+                    span.set_attribute("memory.has_memories", memory_context.has_memories)
             except Exception as e:
                 logger.warning(f"Failed to retrieve memories: {e}")
                 span.set_attribute("memory.error", str(e))
@@ -361,7 +388,8 @@ class ChatService:
 
         # 5) 持久化 assistant response（即使触发了 tool_calls，
         #    仍把 LLM 原始的 assistant message 落库）
-        await self.storage.append_message(session_id, response)
+        # Gap E — capture the persisted assistant message id for source_message_id.
+        assistant_message_id = await self.storage.append_message(session_id, response)
         self.events.emit(
             "chat_response_completed",
             {"session_id": session_id},
@@ -390,23 +418,75 @@ class ChatService:
             span.set_attribute("tokens.completion", completion_tokens)
 
         # 7) 提取并存储记忆 (Memory Integration)
+        # Gate via auto_memory flag (caches 30s, default True). Lifecycle wrapper
+        # exposes is_auto_memory_enabled(); legacy MemoryManager does not, so
+        # hasattr() lets tests/older call sites pass through unchanged.
         if self.memory:
-            try:
-                await self._extract_and_store_memory(
-                    session_id=session_id,
-                    user_message=user_message,
-                    assistant_message=response,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to store memory: {e}")
-                span.set_attribute("memory.store_error", str(e))
+            if self._lifecycle is not None:
+                # Task 6 — production end-of-turn path: the lifecycle hook does
+                # extraction + persist + emits one memory_written per fact (gate
+                # handled internally via is_auto_memory_enabled). source_message_id
+                # threads the persisted assistant/user message id so click-to-trace
+                # highlights the exact producing message.
+                try:
+                    await self._lifecycle.on_turn_complete(
+                        session_id,
+                        [user_message, response],
+                        source_message_id=assistant_message_id or user_message_id,
+                    )
+                except Exception as e:  # noqa: BLE001 — never break the turn
+                    logger.warning(f"on_turn_complete failed: {e}")
+                    span.set_attribute("memory.store_error", str(e))
+                try:
+                    await self.memory.compress(session_id)
+                except Exception as e:  # noqa: BLE001 — never break the turn
+                    logger.warning(f"Failed to compress working memory: {e}")
+                    span.set_attribute("memory.compress_error", str(e))
+            elif hasattr(self.memory, "is_auto_memory_enabled"):
+                try:
+                    auto_enabled = await self.memory.is_auto_memory_enabled()
+                except Exception as e:  # noqa: BLE001 — fail-open
+                    logger.warning(f"auto_memory gate read failed, defaulting True: {e}")
+                    auto_enabled = True
+                if not auto_enabled:
+                    logger.debug("auto_memory disabled, skipping extraction")
+                else:
+                    try:
+                        await self._extract_and_store_memory(
+                            session_id=session_id,
+                            user_message=user_message,
+                            assistant_message=response,
+                            user_message_id=user_message_id,
+                            assistant_message_id=assistant_message_id,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to store memory: {e}")
+                        span.set_attribute("memory.store_error", str(e))
+                    try:
+                        await self.memory.compress(session_id)
+                    except Exception as e:
+                        logger.warning(f"Failed to compress working memory: {e}")
+                        span.set_attribute("memory.compress_error", str(e))
+            else:
+                # Legacy path: MemoryManager doesn't have lifecycle wrapper yet
+                try:
+                    await self._extract_and_store_memory(
+                        session_id=session_id,
+                        user_message=user_message,
+                        assistant_message=response,
+                        user_message_id=user_message_id,
+                        assistant_message_id=assistant_message_id,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to store memory: {e}")
+                    span.set_attribute("memory.store_error", str(e))
 
-            # 8) 压缩工作记忆 (Memory Integration)
-            try:
-                await self.memory.compress(session_id)
-            except Exception as e:
-                logger.warning(f"Failed to compress working memory: {e}")
-                span.set_attribute("memory.compress_error", str(e))
+                # 8) 压缩工作记忆 (Memory Integration)
+                try:
+                    await self.memory.compress(session_id)
+                except Exception as e:
+                    logger.warning(f"Failed to compress working memory: {e}")
+                    span.set_attribute("memory.compress_error", str(e))
 
         run.emit(
             "run_end",
@@ -424,6 +504,8 @@ class ChatService:
         session_id: str,
         user_message: Message,
         assistant_message: Message,
+        user_message_id: Optional[str] = None,
+        assistant_message_id: Optional[str] = None,
     ) -> None:
         """从对话中提取关键信息并存入记忆系统
 
@@ -434,6 +516,8 @@ class ChatService:
             session_id: 会话 ID
             user_message: 用户消息
             assistant_message: 助手消息
+            user_message_id: 已持久化的用户消息 id（Gap E，可追溯性）
+            assistant_message_id: 已持久化的助手消息 id（Gap E，可追溯性）
         """
         if not self.memory:
             return
@@ -452,6 +536,16 @@ class ChatService:
                 session_id=session_id,
                 importance=fact.get("importance", 5),
                 tags=fact.get("tags", ["conversation"]),
+                # F4 — persist the extracted category + the producing turn so
+                # the traceability columns get populated on the production
+                # path (adapter.store → memorize → episodic.save).
+                memory_category=fact.get("category", "project_fact"),
+                source_turn_id=getattr(self, "_current_turn_id", None),
+                # Gap E — point at the ACTUAL stored message so the Memory
+                # page's click-to-trace (highlight_turn) can match Chat's
+                # data-turn-id={message.id} instead of being a silent no-op.
+                # Prefer the assistant reply; fall back to the user message.
+                source_message_id=assistant_message_id or user_message_id,
             )
 
         if facts:

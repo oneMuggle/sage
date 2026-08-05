@@ -43,6 +43,10 @@ class EpisodicMemory:
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         memory_type: str = "conversation",
+        source_turn_id: Optional[str] = None,
+        source_message_id: Optional[str] = None,
+        memory_category: Optional[str] = None,
+        summary: Optional[str] = None,
     ) -> str:
         """
         保存情景记忆
@@ -53,6 +57,13 @@ class EpisodicMemory:
             metadata: 额外元数据
             session_id: 关联的会话 ID
             memory_type: 记忆类型
+            source_turn_id: 该事实来源的 turn ID（Task 4 / Gap A 可追溯性）
+            source_message_id: 该事实来源的 message ID（Task 4 / Gap A）
+            memory_category: 事实分类（user_pref / project_fact / task_summary /
+                cross_session_pattern — 由 extractor 决定）
+            summary: 可选的摘要覆盖；省略时由 content 自动生成（向后兼容）。
+                ConsolidationPipeline.save_compressed 传入真实摘要，避免把
+                "对话摘要: ..." 前缀再包一层。
 
         Returns:
             生成的记忆 ID
@@ -67,19 +78,32 @@ class EpisodicMemory:
         tags = "[]"
         if metadata and "tags" in metadata:
             tags = json.dumps(metadata["tags"], ensure_ascii=False)
-        elif metadata and "tags" in metadata:
-            tags = json.dumps(metadata.get("tags", []), ensure_ascii=False)
 
-        # 生成摘要
-        summary = self._generate_summary(content)
+        # 生成摘要（F2 — 允许调用方覆盖，如 ConsolidationPipeline）
+        if summary is None:
+            summary = self._generate_summary(content)
 
         cursor.execute(
             """
             INSERT INTO memories_episodic
-            (id, content, summary, session_id, memory_type, importance, tags, created_at, is_valid)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            (id, content, summary, session_id, memory_type, importance, tags,
+             created_at, is_valid,
+             source_turn_id, source_message_id, memory_category)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
         """,
-            (memory_id, content, summary, session_id, memory_type, importance, tags, now),
+            (
+                memory_id,
+                content,
+                summary,
+                session_id,
+                memory_type,
+                importance,
+                tags,
+                now,
+                source_turn_id,
+                source_message_id,
+                memory_category,
+            ),
         )
 
         conn.commit()
@@ -311,6 +335,91 @@ class EpisodicMemory:
             self._update_access(memory_id)
             return memory
         return None
+
+    def _row_to_dict(self, row: Any) -> Dict[str, Any]:
+        """把 sqlite3.Row 转成 dict，并解析 tags JSON（新查询方法的公共辅助）。"""
+        memory = dict(row)
+        if memory.get("tags"):
+            try:
+                memory["tags"] = json.loads(memory["tags"])
+            except json.JSONDecodeError:
+                memory["tags"] = []
+        return memory
+
+    def find_by_turn(self, turn_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """按来源 turn 查询记忆（Task 5 / Gap E 可追溯性）。
+
+        Args:
+            turn_id: 产生该记忆的 turn ID（source_turn_id 列）
+            limit: 返回数量限制，默认 50
+
+        Returns:
+            匹配的记忆列表，按创建时间倒序
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM memories_episodic
+            WHERE source_turn_id = ? AND is_valid = 1
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (turn_id, limit),
+        )
+        return [self._row_to_dict(row) for row in cursor.fetchall()]
+
+    def find_by_category(
+        self, category: str, *, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """按记忆分类查询记忆（Task 5 / Gap E）。
+
+        Args:
+            category: 记忆分类（user_pref / project_fact / task_summary /
+                cross_session_pattern / decision）
+            limit: 返回数量限制，默认 50
+
+        Returns:
+            匹配的记忆列表，按创建时间倒序
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM memories_episodic
+            WHERE memory_category = ? AND is_valid = 1
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (category, limit),
+        )
+        return [self._row_to_dict(row) for row in cursor.fetchall()]
+
+    def find_by_category_and_session(
+        self, category: str, session_id: str, *, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """按分类 + 会话查询记忆（Task 5 / Gap E，会话摘要用）。
+
+        Args:
+            category: 记忆分类
+            session_id: 会话 ID
+            limit: 返回数量限制，默认 50
+
+        Returns:
+            匹配的记忆列表，按创建时间倒序
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM memories_episodic
+            WHERE memory_category = ? AND session_id = ? AND is_valid = 1
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (category, session_id, limit),
+        )
+        return [self._row_to_dict(row) for row in cursor.fetchall()]
 
     def count(self) -> int:
         """

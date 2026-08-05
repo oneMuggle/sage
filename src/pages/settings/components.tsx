@@ -39,10 +39,13 @@ export function SettingRow({ label, desc, children }: SettingRowProps) {
 export function Toggle({ value, onChange }: ToggleProps) {
   return (
     <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      onClick={() => onChange(!value)}
       className={`w-9 h-5 rounded-full relative transition-colors ${
         value ? 'bg-primary' : 'bg-border'
       }`}
-      onClick={() => onChange(!value)}
     >
       <span
         className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-text-inverse transition-transform ${

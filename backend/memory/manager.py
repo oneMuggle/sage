@@ -5,7 +5,9 @@ Memory Manager - 记忆管理器
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import functools
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -39,17 +41,17 @@ class MemoryManager:
         self.working = working
         self.episodic = episodic
         self.semantic = semantic
+        # Lazily-created ConsolidationPipeline (F2) — built on first use so
+        # the constructor stays lightweight and test-friendly.
+        self._consolidation_pipeline = None
 
     def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
-        """
-        将内容存入情景记忆
+        """Sync alias kept for callers that pass content positionally
+        (e.g. ``core/legacy/agent.py``).
 
-        Args:
-            content: 记忆内容
-            metadata: 额外元数据
-
-        Returns:
-            生成的记忆 ID
+        Routes directly through ``EpisodicMemory.save()`` to avoid the
+        event-loop juggling the async ``remember()`` would require when
+        called from non-async code.
         """
         importance = 5
         session_id = None
@@ -67,6 +69,109 @@ class MemoryManager:
             session_id=session_id,
             memory_type=memory_type,
         )
+
+    async def aremember(
+        self,
+        content: Optional[str] = None,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+        source_turn_id: Optional[str] = None,
+        source_message_id: Optional[str] = None,
+        memory_category: Optional[str] = None,
+    ) -> str:
+        """Async remember() — Task 4 / Gap A entry point used by the
+        MemoryLifecycleManager.
+
+        Accepts the new traceability kwargs (``source_turn_id`` /
+        ``source_message_id`` / ``memory_category``) and threads them down
+        to ``EpisodicMemory.save()`` so the new columns get populated.
+
+        Named ``aremember`` (not ``remember``) so the lifecycle mock in
+        step 5's brief — which redefines ``remember`` as ``async`` —
+        keeps working: the contract is that whatever attribute the
+        lifecycle calls (``remember``) must be awaitable, but the real
+        type keeps the sync ``remember`` for legacy callers and exposes
+        the async one under a new name. Tests/lifecycle always
+        await ``self._memory.remember(...)`` but in practice the FakeMemory
+        in tests defines an ``async def remember``; production code path
+        uses ``self._memory.aremember(...)``.
+
+        Implementation note — async event-loop safety: ``EpisodicMemory.save``
+        is a synchronous ``sqlite3`` INSERT (cursor.execute + commit). If
+        invoked directly on the event-loop thread it stalls every other
+        coroutine while the disk fsyncs. We therefore run it through
+        ``asyncio.to_thread`` so the blocking I/O is offloaded to a worker
+        thread; the awaited coroutine yields and the loop keeps servicing
+        other requests. The DB connection is acquired lazily inside the
+        worker thread via ``EpisodicMemory.save → self.db.get_connection``,
+        so the single-connection / WAL contract (and ``check_same_thread=
+        False``) is preserved without any threading-model change.
+        """
+        importance = 5
+        resolved_session_id = session_id
+        memory_type = "conversation"
+        if metadata:
+            importance = metadata.get("importance", 5)
+            if resolved_session_id is None:
+                resolved_session_id = metadata.get("session_id")
+            memory_type = metadata.get("memory_type", "conversation")
+
+        # Snapshot kwargs in the closure so the worker thread sees the same
+        # values the caller intended — defensive against any mutation
+        # between scheduling and execution.
+        episodic = self.episodic
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            functools.partial(
+                episodic.save,
+                content=content,
+                importance=importance,
+                metadata=metadata,
+                session_id=resolved_session_id,
+                memory_type=memory_type,
+                source_turn_id=source_turn_id,
+                source_message_id=source_message_id,
+                memory_category=memory_category,
+            ),
+        )
+
+    async def consolidate(self, session_id: Optional[str] = None) -> Any:
+        """Async session-end consolidation (F2).
+
+        Thin wrapper over :class:`ConsolidationPipeline` so the
+        MemoryLifecycleManager / session-end watchdog can drive real
+        consolidation without the pipeline being coupled into the lifecycle.
+        The synchronous ``ConsolidationPipeline.consolidate`` is offloaded to
+        a worker thread via ``asyncio.to_thread`` so the event loop is not
+        stalled by the SQLite work.
+        """
+        if self._consolidation_pipeline is None:
+            from backend.memory.consolidation import ConsolidationPipeline
+
+            self._consolidation_pipeline = ConsolidationPipeline()
+        pipeline = self._consolidation_pipeline
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, pipeline.consolidate, self, session_id)
+
+    async def snapshot(self, session_id: Optional[str] = None) -> None:
+        """Async pre-compress snapshot (F2).
+
+        Persists the current working-memory state to the
+        ``working_memory_snapshot`` table (no-op when the working memory was
+        built without a db — the persistent-snapshot feature is opt-in).
+        Offloaded to a worker thread to keep the event loop responsive.
+        """
+
+        def _snap() -> None:
+            save = getattr(self.working, "_save_snapshot", None)
+            if save is not None:
+                save()
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _snap)
 
     def memorize(
         self,
@@ -101,7 +206,19 @@ class MemoryManager:
             meta = metadata or {}
             if tags:
                 meta["tags"] = tags
-            return self.episodic.save(content=content, importance=importance, metadata=meta)
+            # F3 — forward traceability fields from metadata so the
+            # adapter.store → memorize → episodic.save chain actually
+            # populates the three new columns instead of silently dropping
+            # them (the fields default to None when absent → backward compat).
+            return self.episodic.save(
+                content=content,
+                importance=importance,
+                metadata=meta,
+                session_id=meta.get("session_id"),
+                source_turn_id=meta.get("source_turn_id"),
+                source_message_id=meta.get("source_message_id"),
+                memory_category=meta.get("memory_category"),
+            )
 
         elif memory_type == "semantic":
             return self.semantic.save(content=content, summary=None, tags=tags)

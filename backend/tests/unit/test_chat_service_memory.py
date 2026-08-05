@@ -275,6 +275,35 @@ class TestChatServiceMemoryStorage:
         # Assert 验证记忆未被存储 (因为对话太短)
         assert not mock_memory.store.called
 
+    @pytest.mark.asyncio()
+    async def test_chat_service_forwards_category_and_turn_to_store(
+        self, chat_service_with_memory, mock_memory, mock_llm
+    ):
+        """F4 — ChatService must pass the extracted ``memory_category`` (and
+        the current turn id) through to ``memory.store`` so the traceability
+        columns get populated on the production path."""
+        # Arrange
+        user_content = "我喜欢吃火锅，以后记得推荐火锅店给我。我很喜欢四川口味的火锅，请推荐地道的四川火锅店" + "x" * 20
+        assistant_content = "好的，记住了，您喜欢吃火锅，特别是四川麻辣口味" + "x" * 20
+
+        user_message = Message(role=Role.USER, content=user_content)
+        mock_llm.chat.side_effect = [
+            Message(role=Role.ASSISTANT, content=assistant_content),  # 主 chat
+            Message(
+                role=Role.ASSISTANT,
+                content='[{"content":"用户喜欢吃火锅","importance":7,"category":"preference","tags":["火锅"]}]',
+            ),  # 提取（旧词表 category=preference）
+        ]
+
+        # Act
+        await chat_service_with_memory.run_turn("session-123", user_message)
+
+        # Assert
+        assert mock_memory.store.called
+        call_kwargs = mock_memory.store.call_args[1]
+        assert call_kwargs["memory_category"] == "user_pref"
+        assert call_kwargs["source_turn_id"]  # non-None turn id
+
 
 class TestChatServiceMemoryCompression:
     """测试记忆压缩功能"""

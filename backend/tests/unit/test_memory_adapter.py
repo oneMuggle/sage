@@ -115,11 +115,13 @@ class TestMemoryAdapterStore:
         )
 
         # Assert
-        mock_memory_manager.memorize.assert_called_once_with(
-            content="用户喜欢吃火锅",
-            importance=7,
-            metadata={"session_id": "session-123", "tags": ["preference", "food"]},
-        )
+        mock_memory_manager.memorize.assert_called_once()
+        call_kwargs = mock_memory_manager.memorize.call_args[1]
+        assert call_kwargs["content"] == "用户喜欢吃火锅"
+        assert call_kwargs["importance"] == 7
+        meta = call_kwargs["metadata"]
+        assert meta["session_id"] == "session-123"
+        assert meta["tags"] == ["preference", "food"]
         assert memory_id == "memory-id-123"
 
     @pytest.mark.asyncio()
@@ -161,6 +163,73 @@ class TestMemoryAdapterStore:
         # Assert
         call_kwargs = mock_memory_manager.memorize.call_args[1]
         assert call_kwargs["metadata"]["tags"] == []
+
+    @pytest.mark.asyncio()
+    async def test_store_forwards_traceability_to_memorize(
+        self, adapter, mock_memory_manager
+    ):
+        """Task 4 / Gap A — store() must forward traceability params
+        (source_turn_id / source_message_id / memory_category) via the
+        metadata dict so the MemoryManager → EpisodicMemory chain picks
+        them up when writing the row."""
+        # Arrange
+        mock_memory_manager.memorize.return_value = "memory-id-trace"
+
+        # Act
+        await adapter.store(
+            content="用户偏好咖啡",
+            session_id="session-1",
+            importance=7,
+            source_turn_id="turn-7",
+            source_message_id="msg-42",
+            memory_category="user_pref",
+        )
+
+        # Assert
+        call_kwargs = mock_memory_manager.memorize.call_args[1]
+        meta = call_kwargs["metadata"]
+        assert meta["source_turn_id"] == "turn-7"
+        assert meta["source_message_id"] == "msg-42"
+        assert meta["memory_category"] == "user_pref"
+
+    @pytest.mark.asyncio()
+    async def test_store_persists_traceability_to_db(self, tmp_db_path):
+        """F3 — end-to-end: storing via the REAL MemoryAdapter → REAL
+        MemoryManager → EpisodicMemory must populate the three traceability
+        columns in the actual DB (not just a mocked memorize hop)."""
+        from backend.data.database import Database
+        from backend.memory.episodic import EpisodicMemory
+        from backend.memory.manager import MemoryManager
+        from backend.memory.semantic import SemanticMemory
+        from backend.memory.working import WorkingMemory
+
+        db = Database(db_path=tmp_db_path)
+        db.init_db()
+        manager = MemoryManager(
+            working=WorkingMemory(max_size=10, max_tokens=2000),
+            episodic=EpisodicMemory(db),
+            semantic=SemanticMemory(db),
+        )
+        real_adapter = MemoryAdapter(manager)
+        mid = await real_adapter.store(
+            content="用户偏好咖啡",
+            session_id="sess-1",
+            importance=7,
+            source_turn_id="turn-7",
+            source_message_id="msg-42",
+            memory_category="user_pref",
+        )
+        assert mid, "store() must return a memory id"
+
+        row = db.get_connection().execute(
+            "SELECT source_turn_id, source_message_id, memory_category "
+            "FROM memories_episodic WHERE id = ?",
+            (mid,),
+        ).fetchone()
+        assert row is not None, "stored row not found in memories_episodic"
+        assert row["source_turn_id"] == "turn-7"
+        assert row["source_message_id"] == "msg-42"
+        assert row["memory_category"] == "user_pref"
 
 
 class TestMemoryAdapterCompress:
