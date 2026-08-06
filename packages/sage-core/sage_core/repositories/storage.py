@@ -21,8 +21,11 @@ class StoragePort(Protocol):
     实现层负责把 domain ``Message`` 与底层行表示互转。
     """
 
-    async def append_message(self, session_id: str, message: Message) -> None:
-        """向会话追加一条消息。"""
+    async def append_message(self, session_id: str, message: Message) -> str:
+        """向会话追加一条消息，返回持久化后的消息 id（Gap E）。
+
+        调用方忽略返回值时行为与之前一致（向后兼容）。
+        """
         ...
 
     async def get_messages(

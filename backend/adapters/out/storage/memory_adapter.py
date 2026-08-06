@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -88,11 +89,15 @@ class MemoryStorageAdapter:
 
     # ----- 消息 -----
 
-    async def append_message(self, session_id: str, message: Message) -> None:
+    async def append_message(self, session_id: str, message: Message) -> str:
         if session_id not in self._sessions:
             # 自动建会话（与既有 api 行为兼容：append 未知 session 不报错）
             self._sessions[session_id] = _SessionState(title="")
         self._sessions[session_id].messages.append(message)
+        # Gap E — 返回生成的 id，与 SqliteStorageAdapter 签名一致。
+        # 说明：in-memory double 不持久化该 id（domain Message 无 id 字段），
+        # 仅用于返回值对齐；真实路径以 SQLite 落库的 id 为准。
+        return str(uuid.uuid4())
 
     async def get_messages(
         self,
