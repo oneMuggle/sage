@@ -33,6 +33,7 @@
 | 37   | [生态扩展 (M6)](./37-ecosystem-extensions.md)      | Hooks（pre/post 工具执行）+ 用量/成本面板 + SAGE.md/CLAUDE.md 项目上下文发现 + i18n 清扫 + 零依赖 mock LLM parity harness |
 | 38   | [Artifacts Panel（产物面板）](./38-artifacts-panel.md) | Chat 右侧抽屉双 Tab：AI 工具调用进度 + write_file 产物追踪/多格式预览/文件管理器定位                                       |
 | 39   | [记忆系统与用户画像](./39-memory-user-profile.md) | 三层记忆（Working/Episodic/Semantic）+ RRF 融合 + UserProfileStore(USER.md) 冻结快照/分类路由/core 独立预算 |
+| 40   | [代码探索工具三件套](./40-code-exploration-tools.md) | grep_search / glob_search / file_summary：primary agent 工具白名单扩展 + ast 解析 + ReDoS 缓解 |
 
 ---
 
