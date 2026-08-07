@@ -50,6 +50,8 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ### Added
 
+- **feat: add sage doctor CLI for installation/env self-check** — `python -m backend.cli.doctor` 命令入口，覆盖 8 项 CRITICAL / WARN / INFO 三级检查（conda_env / backend_health / sqlite_writable / config_integrity / port_backend / port_frontend / py_version_match / disk_space）。退出码 0/1/2 对应 OK / WARN / CRITICAL，可直接接入 shell / CI / 监控。`--json` 参数输出机器可读报告（timestamp + python_version + platform + checks + summary）。electron 启动前自动跑（`electron/doctor.ts` 5 秒硬超时 + SIGTERM→SIGKILL 双保险 + fail-open），结果通过 `logger.info('main: doctor check complete', ...)` 写入 NDJSON 启动日志；`SAGE_DOCTOR_ON_START=false` 可跳过（CI / 轻量 smoke 用）。模块 stdlib-only（无新增第三方依赖），Py3.8 + Py3.11 兼容，`release/win7` 可直接 cherry-pick。详见 `docs/technical/41-sage-doctor.md` + `docs/user-manual/11-sage-doctor.md`。
+
 ### Fixed
 
 ### Changed

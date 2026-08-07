@@ -34,6 +34,7 @@
 | 38   | [Artifacts Panel（产物面板）](./38-artifacts-panel.md) | Chat 右侧抽屉双 Tab：AI 工具调用进度 + write_file 产物追踪/多格式预览/文件管理器定位                                       |
 | 39   | [记忆系统与用户画像](./39-memory-user-profile.md) | 三层记忆（Working/Episodic/Semantic）+ RRF 融合 + UserProfileStore(USER.md) 冻结快照/分类路由/core 独立预算 |
 | 40   | [代码探索工具三件套](./40-code-exploration-tools.md) | grep_search / glob_search / file_summary：primary agent 工具白名单扩展 + ast 解析 + ReDoS 缓解 |
+| 41   | [sage doctor](./41-sage-doctor.md) | 安装/环境级 self-check CLI：8 项检查（conda env / backend health / SQLite writable / config integrity / ports / py version / disk space）+ 退出码 0/1/2 + electron 启动前自动跑（5s 超时，fail-open） |
 
 ---
 
