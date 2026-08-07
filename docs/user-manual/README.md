@@ -14,6 +14,7 @@
 | 06   | [诊断与日志](./06-diagnostics.md)                       | 日志文件位置 / 查看方式 / 反馈问题步骤 / 保留策略 / 隐私说明            |
 | 07   | [产物面板 (Artifacts Panel)](./07-artifacts-panel.md) | Chat 右侧抽屉 Artifacts Tab：write_file 写盘追踪 / 多格式预览 / 在文件管理器中定位 |
 | 08   | [技能生命周期 (Skills Lifecycle)](./08-skill-lifecycle.md) | 技能 active/stale/archived 三态徽章 / 手动归档与取消归档 / 与删除的区别 |
+| 11   | [sage doctor CLI](./11-sage-doctor.md) | 安装/环境级 self-check：Win7 LTS、白屏、conda 错配一键诊断（退出码 0/1/2 + --json 机器可读） |
 
 ---
 
