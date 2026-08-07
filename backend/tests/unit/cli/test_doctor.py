@@ -1,4 +1,5 @@
 """sage doctor — protocol + main() + exit code + JSON output tests."""
+# ruff: noqa: ERA001 — section divider comments (===) are not commented-out code
 from __future__ import annotations
 
 import dataclasses
@@ -421,7 +422,7 @@ class TestMain:
 
 
 # ============================================================
-# _import_all_checks
+# _import_all_checks  # noqa: ERA001 — section dividers, not commented-out code
 # ============================================================
 
 

@@ -1,4 +1,5 @@
 """Tests for backend.cli.checks.backend_health.BackendHealthCheck."""
+# ruff: noqa: SIM117 — multiple with contexts are clearer in test mocks
 from __future__ import annotations
 
 import json
@@ -92,7 +93,7 @@ class TestBackendHealthCheck:
                 check.run()
         assert "8765" in captured_url[0]
 
-    def test_uses_custom_port_from_env(self, check):
+    def test_uses_custom_port_from_env(self, check):  # noqa: SIM117 — multiple with contexts are clearer here
         with mock.patch.dict("os.environ", {"PYTHON_BACKEND_PORT": "9999"}):
             with mock.patch("urllib.request.urlopen") as m:
                 captured_url = []

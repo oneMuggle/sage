@@ -1,4 +1,5 @@
 """Tests for backend.cli.checks.sqlite_writable.SqliteWritableCheck."""
+# ruff: noqa: PTH101 — os.chmod is required to simulate read-only directories (Path.chmod lacks equivalent semantic)
 from __future__ import annotations
 
 import os

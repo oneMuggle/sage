@@ -27,7 +27,6 @@ import enum
 import json
 import platform
 import sys
-from datetime import timezone
 from typing import Optional, Protocol, runtime_checkable
 
 
@@ -123,7 +122,7 @@ def _summarize(results: list) -> dict:
 def _format_text(results: list) -> str:
     """人类可读文本报告。"""
     lines: list = []
-    timestamp = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")  # noqa: UP017 — datetime.timezone.utc for Py3.8/3.10 compat (UP017 only triggers on datetime.UTC)
     lines.append(f"sage doctor - {timestamp}")
     lines.append("=" * 60)
     for r in results:
@@ -144,7 +143,7 @@ def _format_text(results: list) -> str:
 def _format_json(results: list) -> str:
     """JSON 报告(机器可读)。"""
     payload: dict = {
-        "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),  # noqa: UP017 — datetime.timezone.utc for Py3.8/3.10 compat
         "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "platform": platform.system().lower(),
         "checks": [r.to_dict() for r in results],

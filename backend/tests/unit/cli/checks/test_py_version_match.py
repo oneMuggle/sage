@@ -1,4 +1,5 @@
 """Tests for backend.cli.checks.py_version_match.PyVersionMatchCheck."""
+# ruff: noqa: SIM117 — nested with blocks are intentional for clarity in tests
 from __future__ import annotations
 
 from types import SimpleNamespace

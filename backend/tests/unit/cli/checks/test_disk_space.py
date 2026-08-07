@@ -1,4 +1,5 @@
 """Tests for backend.cli.checks.disk_space.DiskSpaceCheck."""
+# ruff: noqa: SIM117 — nested with blocks are intentional for clarity in tests
 from __future__ import annotations
 
 import os

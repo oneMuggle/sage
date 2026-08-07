@@ -39,7 +39,7 @@ def _parse_python_requirement(req_path: Path):
     return None
 
 
-def _compare(current: tuple, op: str, target: tuple) -> bool:
+def _compare(current: tuple, op: str, target: tuple) -> bool:  # noqa: PLR0911 — 8 operators (>=, <=, ==, !=, >, <, ~=, !)
     """满足约束返回 True。"""
     if op == ">=":
         return current >= target
