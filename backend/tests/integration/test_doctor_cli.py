@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 
 import pytest
 
@@ -17,7 +18,8 @@ import pytest
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
-SAGE_BACKEND_PY = "/home/fz/anaconda3/envs/sage-backend/bin/python"
+# Use sys.executable — works in CI (where conda env is activated) and locally.
+SAGE_BACKEND_PY = sys.executable
 
 
 def _run_doctor(*args, timeout=15):
