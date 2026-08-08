@@ -232,13 +232,14 @@ def _exit_code(results: list) -> int:
 
 **注意**: 这是 **INFO 级别**，不是 WARN — dev 模式启动失败用户能立刻看到（Vite 终端输出），不需要 doctor 报警。
 
-### 41.3.7 `py_version_match` — Python 版本 vs `backend/requirements.txt`
+### 41.3.7 `py_version_match` — Python 版本 vs 后端声明的 python 约束（requirements / environment.yml）
 
 **严重级别**: CRITICAL（不满足约束）/ INFO（未声明或满足）
 
 **检测逻辑**:
 
-- 解析 `backend/requirements.txt`，正则匹配 `python(>=|<=|==|~=|!=|>|<)<version>`
+- 按优先级解析 python 约束：`requirements-py38.txt` → `requirements.txt` → `environment.yml`（win7 LTS 的生效规范是 `requirements-py38.txt`；main 上该文件残留时同样先被查询，首个命中约束者胜出）
+- `requirements.txt` 正则匹配 `python(>=|<=|==|~=|!=|>|<)<version>`；`environment.yml` 解析 `dependencies:` 下的 `- python=3.11`（conda 单 `=` 等价于精确锁定）
 - 与当前 `(sys.version_info.major, sys.version_info.minor)` 比较
 - 算符支持：`>=` / `<=` / `==` / `~=` / `!=` / `>` / `<`
 - 未声明约束 → INFO（"未声明 python 版本约束"）
@@ -247,7 +248,9 @@ def _exit_code(results: list) -> int:
 
 **fix_hint**: `切到正确的 conda 环境`
 
-**Win7 LTS 关键性**: main 用户用 py38 环境跑会立刻暴露（requirements.txt 写 `python>=3.11`）。
+**约束声明位置说明**: `requirements.txt` 无法写裸 `python==3.11`（pip 会把它当 PyPI 包解析），因此 python 版本约束的规范声明位置是 `backend/environment.yml` 的 `- python=3.11`。若多个文件同时声明，靠前来源优先（首个命中约束者胜出）。
+
+**Win7 LTS 关键性**: main 用户误用 py38 环境跑会立刻暴露（environment.yml 声明 `python=3.11`）。
 
 ### 41.3.8 `disk_space` — `SAGE_USER_DATA_DIR` 所在分区剩余空间
 

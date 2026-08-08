@@ -13,7 +13,7 @@
 - 后端 8765 端口被占用（孤儿进程）
 - 用户数据目录 (`~/.sage`) 不可写
 - 配置文件损坏
-- Python 版本与 `requirements.txt` 不匹配
+- Python 版本与后端声明的 python 约束（requirements / environment.yml）不匹配
 - 磁盘剩余空间 < 500MB
 - ...
 
@@ -52,13 +52,14 @@ sage doctor - 2026-08-07 01:17:44
              fix: python backend/main.py
 [CRITICAL] sqlite_writable        目录不存在: /home/fz/.sage
              fix: mkdir -p /home/fz/.sage
+[CRITICAL] py_version_match       Python 3.10 不满足 environment.yml 约束 python==3.11
+             fix: 切到正确的 conda 环境
 [    INFO] config_integrity       尚无配置文件（首次安装）
 [    INFO] port_backend           8765 端口空闲
 [    INFO] port_frontend          1420 端口空闲（启动 npm run dev 会监听此端口）
-[    INFO] py_version_match       backend/requirements.txt 未声明 python 版本约束
 [    INFO] disk_space             剩余空间 497.0 GB: /home/fz/.sage
 ============================================================
-总计: 8 项检查 (CRITICAL: 2, WARN: 1, INFO: 5)
+总计: 8 项检查 (CRITICAL: 3, WARN: 1, INFO: 4)
 ```
 
 ### 11.3.2 JSON 模式（机器可读）
