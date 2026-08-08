@@ -12,6 +12,9 @@
 | 04   | [SKILL.md 编写指南](./04-skill-md-authoring.md)          | 自定义技能: frontmatter 字段 / scripts/ 脚本 / gating 条件 / dispatch   |
 | 05   | [从 builtin 迁移到 SKILL.md](./05-skill-md-migration.md) | 内置技能转 SKILL.md 的路径与限制                                        |
 | 06   | [诊断与日志](./06-diagnostics.md)                       | 日志文件位置 / 查看方式 / 反馈问题步骤 / 保留策略 / 隐私说明            |
+| 07   | [自定义标题栏与前进后退](./07-titlebar.md)               | 自定义标题栏 / 前进后退导航 / 窗口控制按钮                              |
+| 08   | [/btw 补充消息 + @文件提及](./08-btw-at-file.md)         | 并行"顺便问"浮层 / @文件提及上下文注入                                  |
+| 09   | [侧边栏分组与会话排序](./09-sider.md)                    | 侧边栏分组 / 会话拖拽重排 / 折叠与持久化                                |
 | 10   | [sage doctor](./10-sage-doctor.md)                      | 一键环境体检 CLI：何时使用 / 文本与 JSON 模式 / 退出码 / 8 项检查结果速查 |
 
 ---
