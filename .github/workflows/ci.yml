@@ -79,8 +79,8 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           environment-file: backend/environment.yml
-          python-version: '3.11'
-          activate-environment: sage-backend
+          python-version: '3.8'
+          activate-environment: sage-backend-py38
           channels: conda-forge
 
       - name: Cache pip

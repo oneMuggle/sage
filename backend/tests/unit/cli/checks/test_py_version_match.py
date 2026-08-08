@@ -11,6 +11,8 @@ from backend.cli.checks import py_version_match as pv_mod
 from backend.cli.checks.py_version_match import (
     PyVersionMatchCheck,
     _compare,
+    _find_python_constraint,
+    _parse_environment_yml,
     _parse_python_requirement,
 )
 from backend.cli.doctor import Severity
@@ -81,6 +83,77 @@ class TestParsePythonRequirement:
         assert _parse_python_requirement(p) is None
 
 
+class TestParseEnvironmentYml:
+    def test_returns_none_when_file_missing(self, tmp_path):
+        assert _parse_environment_yml(tmp_path / "missing.yml") is None
+
+    def test_parses_conda_python_eq(self, tmp_path):
+        """conda 用单 ``=``：``- python=3.11`` → 等价于 ``==3.11``。"""
+        p = tmp_path / "environment.yml"
+        p.write_text("name: sage-backend\ndependencies:\n  - python=3.11\n  - pip\n")
+        assert _parse_environment_yml(p) == ("==", (3, 11))
+
+    def test_parses_conda_python_double_eq(self, tmp_path):
+        p = tmp_path / "environment.yml"
+        p.write_text("dependencies:\n  - python==3.8\n")
+        assert _parse_environment_yml(p) == ("==", (3, 8))
+
+    def test_returns_none_when_no_python_line(self, tmp_path):
+        p = tmp_path / "environment.yml"
+        p.write_text("dependencies:\n  - fastapi==0.109.0\n")
+        assert _parse_environment_yml(p) is None
+
+    def test_ignores_pip_package_with_python_prefix(self, tmp_path):
+        """python-multipart / python-dotenv 等包名不误匹配。"""
+        p = tmp_path / "environment.yml"
+        p.write_text("dependencies:\n  - python-dotenv==1.0.0\n")
+        assert _parse_environment_yml(p) is None
+
+    def test_returns_none_on_oserror(self, tmp_path):
+        p = mock.Mock()
+        p.exists.return_value = True
+        p.read_text.side_effect = OSError("perm denied")
+        assert _parse_environment_yml(p) is None
+
+
+class TestFindPythonConstraint:
+    def test_requirements_win_over_environment_yml(self, tmp_path):
+        (tmp_path / "requirements.txt").write_text("python>=3.11\n")
+        (tmp_path / "environment.yml").write_text("dependencies:\n  - python=3.8\n")
+        src, parsed = _find_python_constraint(tmp_path)
+        assert src == "requirements.txt"
+        assert parsed == (">=", (3, 11))
+
+    def test_falls_back_to_environment_yml(self, tmp_path):
+        (tmp_path / "requirements.txt").write_text("fastapi==0.109.0\n")
+        (tmp_path / "environment.yml").write_text("dependencies:\n  - python=3.8\n")
+        src, parsed = _find_python_constraint(tmp_path)
+        assert src == "environment.yml"
+        assert parsed == ("==", (3, 8))
+
+    def test_none_when_nothing_declared(self, tmp_path):
+        (tmp_path / "requirements.txt").write_text("fastapi==0.109.0\n")
+        (tmp_path / "environment.yml").write_text("name: sage-backend\n")
+        assert _find_python_constraint(tmp_path) == (None, None)
+
+    def test_py38_without_constraint_falls_to_requirements(self, tmp_path):
+        """requirements-py38.txt 存在但无约束 → 继续尝试 requirements.txt。"""
+        (tmp_path / "requirements-py38.txt").write_text("fastapi==0.85.0\n")
+        (tmp_path / "requirements.txt").write_text("python>=3.11\n")
+        (tmp_path / "environment.yml").write_text("dependencies:\n  - python=3.8\n")
+        src, parsed = _find_python_constraint(tmp_path)
+        assert src == "requirements.txt"
+        assert parsed == (">=", (3, 11))
+
+    def test_py38_with_constraint_wins(self, tmp_path):
+        """requirements-py38.txt 带约束 → 优先于 requirements.txt（win7 LTS 路径）。"""
+        (tmp_path / "requirements-py38.txt").write_text("python==3.8\n")
+        (tmp_path / "requirements.txt").write_text("python>=3.11\n")
+        src, parsed = _find_python_constraint(tmp_path)
+        assert src == "requirements-py38.txt"
+        assert parsed == ("==", (3, 8))
+
+
 class TestCompare:
     def test_gte(self):
         assert _compare((3, 11), ">=", (3, 11)) is True
@@ -113,21 +186,40 @@ class TestCompare:
 
 class TestPyVersionMatchCheck:
     def test_prefers_requirements_py38(self, check):
-        """Win7 LTS: the check must parse backend/requirements-py38.txt, not
-        requirements.txt — the py38 variant is the active dependency spec on
-        the win7 branch."""
+        """Win7 LTS: the check must try backend/requirements-py38.txt first,
+        not requirements.txt — the py38 variant is the active dependency spec
+        on the win7 branch."""
         with mock.patch.object(pv_mod, "_parse_python_requirement") as m:
             m.return_value = None
             check.run()
-        called_path = m.call_args.args[0]
-        assert called_path.name == "requirements-py38.txt"
+        first_called_path = m.call_args_list[0].args[0]
+        assert first_called_path.name == "requirements-py38.txt"
 
     def test_info_when_no_python_constraint(self, check):
         with mock.patch.object(pv_mod, "_parse_python_requirement", return_value=None):
-            result = check.run()
+            with mock.patch.object(pv_mod, "_parse_environment_yml", return_value=None):
+                result = check.run()
         assert result.severity == Severity.INFO
         assert "未声明" in result.message
         assert check.name == "py_version_match"
+
+    def test_uses_environment_yml_fallback(self, check):
+        """requirements 无约束时回退 environment.yml 声明。"""
+        with mock.patch.object(pv_mod, "_parse_python_requirement", return_value=None):
+            with mock.patch.object(pv_mod, "_parse_environment_yml", return_value=("==", (3, 11))):
+                with _patch_py_version(3, 11):
+                    result = check.run()
+        assert result.severity == Severity.INFO
+        assert "满足" in result.message
+        assert "environment.yml" in result.message
+
+    def test_environment_yml_constraint_mismatch(self, check):
+        with mock.patch.object(pv_mod, "_parse_python_requirement", return_value=None):
+            with mock.patch.object(pv_mod, "_parse_environment_yml", return_value=("==", (3, 11))):
+                with _patch_py_version(3, 8):
+                    result = check.run()
+        assert result.severity == Severity.CRITICAL
+        assert "不满足" in result.message
 
     def test_info_when_version_matches(self, check):
         with mock.patch.object(pv_mod, "_parse_python_requirement", return_value=(">=", (3, 11))):
