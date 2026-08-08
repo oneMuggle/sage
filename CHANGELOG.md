@@ -49,6 +49,7 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ## [Unreleased]
 
 ### Added
+- feat(cli): add sage doctor for installation/env self-check (port of main PR #283; win7 适配: conda_env 跨平台路径匹配 + py_version_match 优先 requirements-py38.txt)
 - feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)
 - feat(wiki): gate folder picker Browse button behind `appSettings.wiki.useFolderPicker` (default true; set false to fall back to plain text input — see §8 rollback in plan)
 - feat(skills): conform `backend/skills/skill_md/` to agentskills.io spec

@@ -12,6 +12,7 @@
 | 04   | [SKILL.md 编写指南](./04-skill-md-authoring.md)          | 自定义技能: frontmatter 字段 / scripts/ 脚本 / gating 条件 / dispatch   |
 | 05   | [从 builtin 迁移到 SKILL.md](./05-skill-md-migration.md) | 内置技能转 SKILL.md 的路径与限制                                        |
 | 06   | [诊断与日志](./06-diagnostics.md)                       | 日志文件位置 / 查看方式 / 反馈问题步骤 / 保留策略 / 隐私说明            |
+| 10   | [sage doctor](./10-sage-doctor.md)                      | 一键环境体检 CLI：何时使用 / 文本与 JSON 模式 / 退出码 / 8 项检查结果速查 |
 
 ---
 

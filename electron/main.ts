@@ -58,6 +58,7 @@ import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { resolveBackendLaunchCommand } from './backendLauncher';
 import { killOrphanedBackendOnPort } from './orphanBackendKiller';
+import { runDoctorCheck } from './doctor';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -793,6 +794,26 @@ function shutdownBackend(): void {
 app.whenReady().then(async () => {
   // Step 3: prune log files older than 7 days on every cold start
   cleanupOlderThan(7);
+  // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
+  // fail-open by design: doctor never blocks the app from launching — its output
+  // is captured into the NDJSON startup log so the user can diagnose degraded
+  // experiences via Show Logs. Hard 5s timeout is enforced inside runDoctorCheck.
+  if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
+    try {
+      const doctorSummary = await runDoctorCheck(
+        process.env.SAGE_PYTHON ?? 'python',
+        process.cwd(),
+      );
+      logger.info('main: doctor check complete', doctorSummary);
+      if (doctorSummary.status === 'critical') {
+        logger.warn('main: doctor reported CRITICAL — user may see degraded experience', {
+          summary: doctorSummary.summary,
+        });
+      }
+    } catch (err) {
+      logger.warn('main: doctor check threw', { error: String(err) });
+    }
+  }
   registerIpcHandlers();
   // Phase 4 lightweight smoke test path: skip backend spawn + health wait
   // (CI doesn't have the sage-backend conda env; main renderer still loads
