@@ -231,13 +231,14 @@ def _exit_code(results: list) -> int:
 
 **注意**: 这是 **INFO 级别**，不是 WARN — dev 模式启动失败用户能立刻看到（Vite 终端输出），不需要 doctor 报警。
 
-### 38.3.7 `py_version_match` — Python 版本 vs `backend/requirements.txt`
+### 38.3.7 `py_version_match` — Python 版本 vs 后端声明的 python 约束（requirements / environment.yml）
 
 **严重级别**: CRITICAL（不满足约束）/ INFO（未声明或满足）
 
 **检测逻辑**:
 
-- 解析 `backend/requirements-py38.txt`（win7 分支优先；不存在则回退 `requirements.txt`），正则匹配 `python(>=|<=|==|~=|!=|>|<)<version>`
+- 按优先级解析 python 约束：`requirements-py38.txt` → `requirements.txt` → `environment.yml`（首个命中约束者胜出）
+- `requirements(-py38).txt` 正则匹配 `python(>=|<=|==|~=|!=|>|<)<version>`；`environment.yml` 解析 `dependencies:` 下的 `- python=3.8`（conda 单 `=` 等价于精确锁定）
 - 与当前 `(sys.version_info.major, sys.version_info.minor)` 比较
 - 算符支持：`>=` / `<=` / `==` / `~=` / `!=` / `>` / `<`
 - 未声明约束 → INFO（"未声明 python 版本约束"）
@@ -246,7 +247,9 @@ def _exit_code(results: list) -> int:
 
 **fix_hint**: `切到正确的 conda 环境`
 
-**Win7 LTS 关键性**: py38 环境是 win7 分支的契约——若 py38 环境被装进 Py3.11 解释器，此 check 在声明约束后立即暴露。当前 win7 的 `requirements-py38.txt` 尚未声明 python 约束（pip 会把裸 `python==3.8` 当 PyPI 包解析，故不能写进 requirements 文件），返回 INFO 属预期。
+**约束声明位置说明**: `requirements(-py38).txt` 无法写裸 `python==3.8`（pip 会把它当 PyPI 包解析），因此 python 版本约束的规范声明位置是 `backend/environment.yml` 的 `- python=3.8`。
+
+**Win7 LTS 关键性**: py38 环境是 win7 分支的契约——win7 的 `environment.yml` 已声明 `python=3.8`，若 py38 环境被装进 Py3.11 解释器，此 check 会立即报 CRITICAL。
 
 ### 38.3.8 `disk_space` — `SAGE_USER_DATA_DIR` 所在分区剩余空间
 
