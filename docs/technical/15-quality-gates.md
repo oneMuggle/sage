@@ -50,7 +50,7 @@ Sage 项目使用四层质量门禁：
 
 | 工具          | 版本   | 配置文件                          | 备注                                               |
 | ------------- | ------ | --------------------------------- | -------------------------------------------------- |
-| Python        | 3.11   | `backend/environment.yml`         | conda env `sage-backend`                           |
+| Python        | 3.8    | `backend/environment.yml`         | conda env `sage-backend-py38`                      |
 | Node          | 25     | `package.json` engines            | 通过 nvm 管理                                      |
 | pytest        | 7.4.4  | `backend/pytest.ini`              | + pytest-asyncio 0.23.3 + pytest-cov 5.0.0         |
 | respx         | 0.21.1 | `backend/requirements.txt`        | LLM HTTP mock                                      |
@@ -114,7 +114,7 @@ A: backend 约 3-4 分钟（conda 安装 + 测试），frontend 约 2-3 分钟�
 ```bash
 # 1. 安装 conda env
 conda env create -f backend/environment.yml
-conda activate sage-backend
+conda activate sage-backend-py38
 
 # 2. 安装 npm deps
 npm install
