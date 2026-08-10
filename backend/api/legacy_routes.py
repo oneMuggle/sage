@@ -63,6 +63,42 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# §1.2 修复（PR #294）配套：全局 SQLite 串行化锁。
+#
+# Why: 34 个 `async def` handler 降级为 `def` 后，FastAPI 自动把它们 dispatch 到 anyio
+# threadpool（默认 40 worker 线程）。`backend/data/database.py` 维护**单例**
+# `sqlite3.Connection(check_same_thread=False)`，多线程并发访问同一连接会触发
+# `cannot start a transaction within a transaction` 异常（实测，30 并发 session POST
+# 即触发）。`busy_timeout=5000` 只能吸收 SQLITE_BUSY 锁冲突，不能吸收应用层事务嵌套错误。
+#
+# How: 用一个模块级 `threading.Lock` 串行化所有走 `_db._connection` 的写操作。锁
+# 在 threadpool worker 线程内等待，**不阻塞事件循环**（事件循环的 SSE/chat handler
+# 仍能持续响应）。这把"事件循环上串行跑 sync"语义平移到了"threadpool 上串行跑 sync"，
+# 既修了 §1.2 阻塞问题，又避开单连接多线程冲突。
+#
+# Future: 计划在 PR B 把单连接拆成 thread-local connection pool（每 thread 一个
+# sqlite3.Connection），那时可移除本锁。详见 `docs/plans/2026-08-09_*.md` §1.2。
+import functools
+import threading
+
+_db_lock = threading.Lock()
+
+
+def with_db_lock(func):
+    """装饰器：把 sync 函数包在全局 `_db_lock` 内,串行化 SQLite 访问。
+
+    适用对象：34 个降级为 `def` 的 FastAPI handler —— 它们跑在 anyio threadpool,
+    内部 `SessionRepository`/`MessageRepository` 等 sync 调用必须串行访问单连接。
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with _db_lock:
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
 def _safe_log_field(value: object, max_length: int = 64) -> str:
     """Sanitize a user-controlled field for safe logging.
 
@@ -290,14 +326,16 @@ def get_agent() -> SageAgent:
 
 
 @router.post("/sessions", response_model=dict)
-async def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_session_repo)):
+@with_db_lock
+def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_session_repo)):
     """创建新会话"""
     session = repo.create(title=data.title, parent_id=data.parent_id)
     return session.to_dict()
 
 
 @router.get("/sessions", response_model=List[dict])
-async def list_sessions(
+@with_db_lock
+def list_sessions(
     limit: int = 100, offset: int = 0, repo: SessionRepository = Depends(get_session_repo)
 ):
     """获取会话列表"""
@@ -306,7 +344,8 @@ async def list_sessions(
 
 
 @router.get("/sessions/{session_id}", response_model=dict)
-async def get_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
+@with_db_lock
+def get_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
     """获取单个会话"""
     session = repo.get(session_id)
     if not session:
@@ -315,7 +354,8 @@ async def get_session(session_id: str, repo: SessionRepository = Depends(get_ses
 
 
 @router.patch("/sessions/{session_id}", response_model=dict)
-async def update_session(
+@with_db_lock
+def update_session(
     session_id: str, data: SessionUpdate, repo: SessionRepository = Depends(get_session_repo)
 ):
     """更新会话"""
@@ -335,7 +375,8 @@ async def update_session(
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
+@with_db_lock
+def delete_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
     """删除会话"""
     if not repo.delete(session_id):
         raise HTTPException(status_code=404, detail="会话不存在")
@@ -684,7 +725,8 @@ class ForkSessionRequest(BaseModel):
 
 
 @router.post("/sessions/{session_id}/fork", response_model=dict)
-async def fork_session(session_id: str, data: ForkSessionRequest):
+@with_db_lock
+def fork_session(session_id: str, data: ForkSessionRequest):
     """从当前会话分叉出新会话（M4）。
 
     复制 ``at_message_id`` 及之前的全部消息（省略时复制全部）到新会话，
@@ -717,7 +759,8 @@ async def fork_session(session_id: str, data: ForkSessionRequest):
 
 
 @router.post("/messages/{message_id}/delete")
-async def delete_message(message_id: str):
+@with_db_lock
+def delete_message(message_id: str):
     """删除单条消息（物理删除，非软删）。
 
     对应 Tauri command ``delete_message`` (PR-2):
@@ -750,7 +793,8 @@ async def delete_message(message_id: str):
 
 
 @router.get("/agents")
-async def list_agents():
+@with_db_lock
+def list_agents():
     """列出所有 agent (含 disabled), 按 id 排序。
 
     对应 Tauri command ``list_agents`` (PR-3)。
@@ -761,7 +805,8 @@ async def list_agents():
 
 
 @router.get("/agents/{agent_id}")
-async def get_agent_by_id(agent_id: str):
+@with_db_lock
+def get_agent_by_id(agent_id: str):
     """按 id 取单个 agent。
 
     命名注意: 不能叫 ``get_agent`` — 与本文件 line 136 的 dependency
@@ -781,7 +826,8 @@ async def get_agent_by_id(agent_id: str):
 
 
 @router.patch("/agents/{agent_id}")
-async def update_agent(agent_id: str, data: AgentUpdate):
+@with_db_lock
+def update_agent(agent_id: str, data: AgentUpdate):
     """部分更新 agent (PR-4)。
 
     - 200 + 更新后完整 profile
@@ -832,7 +878,8 @@ async def update_agent(agent_id: str, data: AgentUpdate):
 
 
 @router.patch("/agents/{agent_id}/toggle")
-async def toggle_agent(agent_id: str, data: AgentToggle):
+@with_db_lock
+def toggle_agent(agent_id: str, data: AgentToggle):
     """启用/禁用 agent (PR-5)。
 
     - 200 + 更新后完整 profile (含 enabled / updated_at 新值)
@@ -896,7 +943,8 @@ def _skill_to_dict(ext: dict, enabled: bool, usage_count: int) -> dict:
 
 
 @router.get("/skills")
-async def list_skills():
+@with_db_lock
+def list_skills():
     """列出所有已注册技能 (含 disabled 与 usage_count + SKILL.md 扩展字段)。"""
     adapter = _get_skill_adapter()
     return [
@@ -912,7 +960,8 @@ class SkillToggle(BaseModel):
 
 
 @router.post("/skills/{name}/toggle")
-async def toggle_skill(name: str, data: SkillToggle):
+@with_db_lock
+def toggle_skill(name: str, data: SkillToggle):
     """启用 / 禁用技能 (PR-7)。
 
     - 200 + 完整 skill dict (含新 enabled)
@@ -938,7 +987,8 @@ class SkillArchive(BaseModel):
 
 
 @router.post("/skills/{name}/archive")
-async def archive_skill(name: str, data: SkillArchive):
+@with_db_lock
+def archive_skill(name: str, data: SkillArchive):
     """归档 / 取消归档技能（软标记，可逆；区别于物理 delete）。
 
     - 200 + 完整 skill dict（含新 lifecycle）
@@ -1042,7 +1092,8 @@ async def execute_slash_command(data: SkillCommandRequest):
 
 
 @router.get("/skills/commands")
-async def list_slash_commands():
+@with_db_lock
+def list_slash_commands():
     """列出所有已注册的 slash command (M10)。
 
     用于前端自动补全 / chat 输入提示。
@@ -1056,7 +1107,8 @@ async def list_slash_commands():
 
 
 @router.post("/skills/{name}/delete")
-async def delete_skill(name: str):
+@with_db_lock
+def delete_skill(name: str):
     """物理删除一个 SKILL.md 技能 (用户主动管理, PR-A Task 3)。
 
     - 200 + ``{"deleted": true, "name": ..., "base_dir": ...}``
@@ -1091,7 +1143,8 @@ async def delete_skill(name: str):
 
 
 @router.post("/skills/rescan")
-async def rescan_skills():
+@with_db_lock
+def rescan_skills():
     """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载新 SKILL.md。
 
     - 200 + ``{"loaded": [{"name", "source", "path"}], "skipped": [...], "total_loaded": int}``
@@ -1170,7 +1223,8 @@ class LegacyPreferenceItem(BaseModel):
 
 
 @router.get("/settings")
-async def legacy_get_settings() -> Optional[dict]:
+@with_db_lock
+def legacy_get_settings() -> Optional[dict]:
     """读取持久化的 settings；不存在返回 null。
 
     翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
@@ -1199,7 +1253,8 @@ async def legacy_get_settings() -> Optional[dict]:
 
 
 @router.put("/settings", response_model=LegacySettingsResponse)
-async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse:
+@with_db_lock
+def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse:
     """持久化 settings 到 preferences 表。
 
     v3.1 修复：合并而非覆盖。
@@ -1253,7 +1308,8 @@ async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsRe
 
 
 @router.get("/preferences/{key}", response_model=LegacyPreferenceItem)
-async def legacy_get_preference(key: str) -> LegacyPreferenceItem:
+@with_db_lock
+def legacy_get_preference(key: str) -> LegacyPreferenceItem:
     """通用 KV 读取（白名单限定 key）。"""
     from backend.data.settings_repo import SettingsRepository
 
@@ -1264,7 +1320,8 @@ async def legacy_get_preference(key: str) -> LegacyPreferenceItem:
 
 
 @router.put("/preferences/{key}", response_model=LegacyPreferenceItem)
-async def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPreferenceItem:
+@with_db_lock
+def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPreferenceItem:
     """通用 KV 写入（白名单限定 key）。"""
     from backend.data.settings_repo import SettingsRepository
 
@@ -1825,7 +1882,8 @@ def _ndjson(d: dict) -> str:
 
 
 @router.post("/interrupt")
-async def interrupt(agent: SageAgent = Depends(get_agent)):
+@with_db_lock
+def interrupt(agent: SageAgent = Depends(get_agent)):
     """中断 Agent"""
     agent.interrupt()
     return {"status": "ok"}
@@ -1835,7 +1893,8 @@ async def interrupt(agent: SageAgent = Depends(get_agent)):
 
 
 @router.get("/sessions/{session_id}/messages", response_model=List[dict])
-async def get_messages(session_id: str, limit: int = 100, offset: int = 0):
+@with_db_lock
+def get_messages(session_id: str, limit: int = 100, offset: int = 0):
     """获取会话消息"""
     repo = MessageRepository()
     messages = repo.get_by_session(session_id, limit=limit, offset=offset)
@@ -1846,7 +1905,8 @@ async def get_messages(session_id: str, limit: int = 100, offset: int = 0):
 
 
 @router.get("/evolution/logs", response_model=List[EvolutionLogResponse])
-async def list_evolution_logs(limit: int = 50, offset: int = 0):
+@with_db_lock
+def list_evolution_logs(limit: int = 50, offset: int = 0):
     """获取进化日志列表"""
     try:
         db = get_database()
@@ -1856,7 +1916,8 @@ async def list_evolution_logs(limit: int = 50, offset: int = 0):
 
 
 @router.post("/evolution/trigger", response_model=TriggerResponse)
-async def trigger_evolution(data: TriggerEvolutionRequest):
+@with_db_lock
+def trigger_evolution(data: TriggerEvolutionRequest):
     """手动触发进化任务"""
     try:
         scheduler = get_scheduler()
@@ -1880,7 +1941,8 @@ async def trigger_evolution(data: TriggerEvolutionRequest):
 
 
 @router.get("/evolution/status", response_model=List[EvolutionStatusResponse])
-async def get_evolution_status():
+@with_db_lock
+def get_evolution_status():
     """获取进化任务状态"""
     try:
         scheduler = get_scheduler()
@@ -1908,7 +1970,8 @@ class LearnRequest(BaseModel):
 
 
 @router.post("/learn")
-async def learn_from_session(request: LearnRequest):
+@with_db_lock
+def learn_from_session(request: LearnRequest):
     """User explicitly triggers review of current conversation.
 
     Enqueues a review event with trigger_type="explicit_learn".
@@ -1971,7 +2034,8 @@ async def learn_from_session(request: LearnRequest):
 
 
 @router.get("/skill-drafts")
-async def list_skill_drafts(status: str = "pending"):
+@with_db_lock
+def list_skill_drafts(status: str = "pending"):
     """List skill drafts by status.
 
     - 200 + ``{"drafts": [...]}``
@@ -1983,7 +2047,8 @@ async def list_skill_drafts(status: str = "pending"):
 
 
 @router.post("/skill-drafts/{draft_id}/approve")
-async def approve_skill_draft(draft_id: str):
+@with_db_lock
+def approve_skill_draft(draft_id: str):
     """User approves skill draft → write to SKILL.md on disk.
 
     - 200 + ``{"status": "approved", "skill_name": ..., "draft_id": ...}``
@@ -2031,7 +2096,8 @@ async def approve_skill_draft(draft_id: str):
 
 
 @router.post("/skill-drafts/{draft_id}/reject")
-async def reject_skill_draft(draft_id: str):
+@with_db_lock
+def reject_skill_draft(draft_id: str):
     """User rejects skill draft → mark as rejected.
 
     - 200 + ``{"status": "rejected", "draft_id": ...}``
@@ -2086,7 +2152,8 @@ class MemoryDeleteRequest(BaseModel):
 
 
 @router.get("/memory/search")
-async def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
+@with_db_lock
+def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
     """搜索记忆"""
     try:
         mm = get_memory_manager()
@@ -2096,7 +2163,8 @@ async def search_memory(query: str, limit: int = 20, type: Optional[str] = None)
 
 
 @router.post("/memory/save")
-async def save_memory(data: MemorySaveRequest):
+@with_db_lock
+def save_memory(data: MemorySaveRequest):
     """保存记忆"""
     try:
         mm = get_memory_manager()
@@ -2112,7 +2180,8 @@ async def save_memory(data: MemorySaveRequest):
 
 
 @router.post("/memory/delete")
-async def delete_memory(data: MemoryDeleteRequest):
+@with_db_lock
+def delete_memory(data: MemoryDeleteRequest):
     """删除记忆"""
     try:
         mm = get_memory_manager()
@@ -2128,7 +2197,8 @@ async def delete_memory(data: MemoryDeleteRequest):
 
 
 @router.get("/memory/list")
-async def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] = None):
+@with_db_lock
+def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] = None):
     """获取记忆列表"""
     try:
         mm = get_memory_manager()
