@@ -7,7 +7,7 @@
 
 ## 11.1 什么是 sage doctor？
 
-`sage doctor` 是 Sage 自带的一键环境体检命令。它运行 8 项安装/环境级检查并报告 CRITICAL / WARN / INFO 三级结果，覆盖最常见的"装好起不来"场景：
+`sage doctor` 是 Sage 自带的一键环境体检命令。它运行 13 项安装/环境级检查并报告 CRITICAL / WARN / INFO 三级结果，覆盖最常见的"装好起不来"场景：
 
 - 当前 Python 不在 Sage conda 环境
 - 后端 8765 端口被占用（孤儿进程）
@@ -59,7 +59,7 @@ sage doctor - 2026-08-07 01:17:44
 [    INFO] port_frontend          1420 端口空闲（启动 npm run dev 会监听此端口）
 [    INFO] disk_space             剩余空间 497.0 GB: /home/fz/.sage
 ============================================================
-总计: 8 项检查 (CRITICAL: 3, WARN: 1, INFO: 4)
+总计: 13 项检查 (CRITICAL: 3, WARN: 1, INFO: 9)
 ```
 
 ### 11.3.2 JSON 模式（机器可读）
@@ -107,7 +107,7 @@ if [ $? -eq 2 ]; then
 fi
 ```
 
-## 11.5 8 项检查结果速查
+## 11.5 13 项检查结果速查
 
 ### 11.5.1 CRITICAL — 必须修复
 
@@ -135,6 +135,11 @@ fi
 | `port_backend` / `port_frontend` | 端口空闲 — 正常 |
 | `py_version_match` (未声明) | `requirements.txt` 没写 `python>=...` 约束 — 正常 |
 | `disk_space` | 磁盘充足 — 正常 |
+| `llm_config` (部分/全部有 `apiKey`) | 设置页已配置 endpoint — 正常 |
+| `mcp_servers` (无配置) | 暂未启用 MCP server — 正常 |
+| `heavy_deps` | 三个重依赖均可 import — 正常 |
+| `log_dir_size` (< 500MB) | 日志目录未膨胀 — 正常 |
+| `frontend_dist` (dev 模式) | 未检测到 `dist/` 与 `dist-electron/` — 正常(走 vite dev server) |
 
 ## 11.6 Electron 自动 doctor
 
@@ -155,7 +160,7 @@ fi
    grep '"main: doctor check complete"' ~/AppData/Roaming/sage/logs/sage-2026-08-07.ndjson
    ```
 
-4. 对照上方 [§11.5 8 项检查结果速查](#115-8-项检查结果速查) 找 root cause
+4. 对照上方 [§11.5 13 项检查结果速查](#115-13-项检查结果速查) 找 root cause
 
 ### 11.6.2 跳过自动 doctor
 
