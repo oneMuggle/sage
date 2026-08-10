@@ -17,6 +17,9 @@ from pathlib import Path
 
 import pytest
 
+# legacy_routes.py 路径(相对本测试文件位置,跨 cwd 都稳定)
+LEGACY_ROUTES_PATH = Path(__file__).resolve().parent.parent.parent / "api" / "legacy_routes.py"
+
 # `async def` 但无 await 的 handler 是事件循环阻塞风险点。
 # 本测试维护一份"必须 keep_async"的精确白名单(7 个,L580/L974/1015/1105/1284/1400/1763)。
 # 所有其他 async def 必须有 await,否则应降级为 def。
@@ -66,7 +69,7 @@ def _is_router_endpoint(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 def test_async_handlers_must_have_await():
     """所有 async def 路由函数必须含至少一个 await,否则应降级为 def。"""
-    src_path = Path("backend/api/legacy_routes.py")
+    src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
 
@@ -92,7 +95,7 @@ def test_keep_async_handlers_actually_async():
     防御性:如果有人把 compact_session/chat/chat_stream_create 等改成 def,
     SSE/Stream 端点会立即失效。本测试守住这一边界。
     """
-    src_path = Path("backend/api/legacy_routes.py")
+    src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
     name_to_func = {f.name: f for f in funcs}
@@ -107,7 +110,7 @@ def test_keep_async_handlers_actually_async():
 
 def test_async_handler_count_matches_design():
     """legacy_routes.py 应有 7 个 async def handler(PR #294 §1.2 修复后)。"""
-    src_path = Path("backend/api/legacy_routes.py")
+    src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
     async_endpoints = [
@@ -128,7 +131,7 @@ def test_async_handlers_count_invariant_against_internal_helpers():
     设计意图:chat_stream_create 内部定义 `async def producer()` 等 helper,
     这些 helper 不是 FastAPI 路由,统计时必须排除掉。
     """
-    src_path = Path("backend/api/legacy_routes.py")
+    src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
     async_endpoints = [

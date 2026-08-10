@@ -72,7 +72,7 @@ async def test_health_latency_under_concurrent_session_crud(client):
     50 并发选择:修复后 lock 串行化让单批负载完成在 100ms 内,50 个足够
     让 /health 探针采集到至少 30 个样本。
     """
-    CONCURRENT = 50  # 增加负载以确保探针采集足够样本
+    CONCURRENT = 200  # 增加负载以确保探针采集足够样本(修复前 50 不够 — 负载太快完成,样本不足)
     health_samples: List[float] = []
     write_tasks: List[asyncio.Task] = []
 
@@ -85,7 +85,7 @@ async def test_health_latency_under_concurrent_session_crud(client):
             assert r.status_code == 200
             health_samples.append(elapsed_ms)
             # 短间隔,模拟高频探针
-            await asyncio.sleep(0.005)
+            await asyncio.sleep(0.002)
 
     # 启动 /health 探针后台任务
     stop = asyncio.Event()
