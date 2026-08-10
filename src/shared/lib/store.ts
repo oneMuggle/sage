@@ -161,16 +161,6 @@ export const useStore = create<StoreState>((set, _get) => ({
   },
 }));
 
-// ==================== 懒加载页面组件 ====================
-// 使用 React.lazy 懒加载页面组件，减少初始加载时间
-// 注意: 实际的懒加载组件在各自页面文件中
-
-export const LazyChat = () => import('../../pages/Chat');
-export const LazySettings = () => import('../../pages');
-export const LazyMemory = () => import('../../pages/Memory');
-export const LazySkills = () => import('../../pages/Skills');
-export const LazyKnowledge = () => import('../../pages/Knowledge');
-
 // ==================== 缓存策略 ====================
 
 // 消息缓存 (内存中缓存)

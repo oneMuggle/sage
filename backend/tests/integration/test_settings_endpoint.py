@@ -82,12 +82,8 @@ async def test_put_settings_persists_and_get_returns():
             "streaming": True,
             "autoMemory": True,
             "confirmDelete": True,
-            "compactMode": False,
             "maxContext": 4096,
             "temperature": 0.7,
-            "proxyMode": "system",
-            "proxyUrl": "",
-            "tlsVersion": "1.2",
         }
         put_resp = await ac.put("/api/v1/settings", json=payload)
         assert put_resp.status_code == 200

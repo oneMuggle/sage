@@ -88,12 +88,6 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">外观</h3>
-        <SettingRow label="紧凑模式" desc="减少间距，在同一屏幕内显示更多内容">
-          <Toggle
-            value={settings.compactMode}
-            onChange={(v) => updateSettings({ compactMode: v })}
-          />
-        </SettingRow>
         <SettingRow label="流式输出" desc="逐字显示 AI 回复，而非等待全部生成完成">
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
         </SettingRow>
