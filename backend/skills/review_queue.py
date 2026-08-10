@@ -243,6 +243,43 @@ class ReviewQueue:
         enriched_context = dict(event.context)
         enriched_context.setdefault("session_id", event.session_id)
 
+        # fix/security-perf-quickwins (2026-08-09, §1.3a d): for explicit_learn
+        # triggers the route only enqueues an empty messages=[] placeholder
+        # (route-side keeps the API surface small; we don't want to ship N
+        # message rows in the request body). Load the conversation history
+        # here from MessageRepository so the LLM prompt template actually
+        # has something to summarize. Other trigger types (e.g. complex_turn)
+        # only need tool-call metadata, so we don't load messages for them.
+        if (
+            event.trigger_type == "explicit_learn"
+            and not enriched_context.get("messages")
+        ):
+            try:
+                from backend.data.session_repo import MessageRepository
+
+                message_repo = MessageRepository()
+                db_messages = message_repo.get_by_session(event.session_id)
+                # Serialize to {role, content} dicts — ReviewService dumps the
+                # whole context as JSON into the prompt template, so anything
+                # we put here is visible to the LLM.
+                enriched_context["messages"] = [
+                    {"role": m.role, "content": m.content} for m in db_messages
+                ]
+                logger.info(
+                    "Loaded %d message(s) for session %s (explicit_learn)",
+                    len(db_messages),
+                    event.session_id,
+                )
+            except Exception as exc:  # noqa: BLE001 - best-effort, do not break the worker
+                # Fall through with whatever messages were enqueued (empty list
+                # in current callers). The LLM will get low-quality context but
+                # the worker must stay alive and keep draining the queue.
+                logger.warning(
+                    "Failed to load messages for session %s: %s",
+                    event.session_id,
+                    exc,
+                )
+
         # generate_draft is async; run it in a one-shot event loop
         # from the sync worker thread.
         draft = asyncio.run(

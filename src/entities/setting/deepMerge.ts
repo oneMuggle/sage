@@ -6,8 +6,34 @@
  * - 双方都是 array (e.g. endpoints[]) → 按 id 去重, 同 id 走字段比较, 不同 console.warn
  * - 标量 / array leaf → override 完全替换 base
  * - 字段值深度不等 (对象对象比较) → console.warn + remote wins
+ *
+ * 安全防护 (fix/security-perf-quickwins, 2026-08-09):
+ * - **原型污染 denylist**: __proto__ / prototype / constructor 键一律跳过, 防止
+ *   override 来源不可信时通过 deepMerge 篡改 Object.prototype.
+ * - **路径级敏感值脱敏**: 冲突告警里 apiKey / password / secret / token /
+ *   authorization 字段值以 `<redacted>` 代替, 避免泄漏到 console 日志.
  */
 type ConflictPolicy = 'remote-wins' | 'local-wins';
+
+const PROTO_DENYLIST: ReadonlySet<string> = new Set([
+  '__proto__',
+  'prototype',
+  'constructor',
+]);
+
+// 路径中任意段命中这些字段名 → 视为敏感值, 告警时整段 redact.
+const SENSITIVE_FIELD_RE = /(?:^|\.)(?:apiKey|api_key|password|secret|token|authorization)(?:$|\.|\[)/i;
+
+function isSensitivePath(path: string): boolean {
+  return SENSITIVE_FIELD_RE.test(path);
+}
+
+function redactForLog(v: unknown): unknown {
+  if (v === null || v === undefined) return v;
+  const t = typeof v;
+  if (t === 'string' || t === 'number' || t === 'boolean') return '<redacted>';
+  return '<redacted>';
+}
 
 export interface DeepMergeOptions {
   policy?: ConflictPolicy;
@@ -41,6 +67,8 @@ function _merge(
     const keys = new Set([...Object.keys(base), ...Object.keys(override)]);
     const result: Record<string, unknown> = {};
     for (const k of keys) {
+      // 跳过 prototype 污染键: 既不读 base 也不读 override, 直接丢.
+      if (PROTO_DENYLIST.has(k)) continue;
       const sub = currentPath ? `${currentPath}.${k}` : k;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       result[k] = _merge((base as any)[k], (override as any)[k], sub, policy, onConflict);
@@ -52,9 +80,12 @@ function _merge(
     if (onConflict) {
       onConflict(currentPath, base, override);
     } else {
+      const logValue = isSensitivePath(currentPath)
+        ? `base=${JSON.stringify(redactForLog(base))} override=${JSON.stringify(redactForLog(override))}`
+        : `base=${JSON.stringify(base)} override=${JSON.stringify(override)}`;
       console.warn(
         `[deepMerge] conflict on '${currentPath}': ` +
-          `base=${JSON.stringify(base)} override=${JSON.stringify(override)}; ${policy}`,
+          `${logValue}; ${policy}`,
       );
     }
     return policy === 'remote-wins' ? override : base;

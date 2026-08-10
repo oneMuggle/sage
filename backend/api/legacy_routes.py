@@ -1919,13 +1919,12 @@ async def learn_from_session(request: LearnRequest):
     - 404 — session_id does not exist
     - 422 (FastAPI 自动) — session_id 缺失
 
-    .. note:: I-2 follow-up
-        The worker currently receives ``messages: []`` as a placeholder
-        and does not yet load the full conversation history from
-        ``session_id``. LLM therefore runs with empty context and may
-        produce low-quality or hallucinated drafts. A follow-up task
-        should have the worker call ``MessageRepository.get_by_session``
-        to populate the messages list before invoking ReviewService.
+    .. note:: fix/security-perf-quickwins §1.3a d (2026-08-09)
+        The route enqueues ``messages: []`` as a placeholder and the
+        background worker loads the full conversation history from
+        ``session_id`` via ``MessageRepository.get_by_session`` before
+        invoking ``ReviewService``. This keeps the HTTP request body
+        small while still giving the LLM a complete context to summarize.
     """
     # I-2 fix: validate session existence before enqueueing — avoids
     # wasting LLM tokens on reviews for non-existent sessions.
@@ -1941,10 +1940,13 @@ async def learn_from_session(request: LearnRequest):
         trigger_type="explicit_learn",
         session_id=request.session_id,
         context={
-            # TODO(I-2): worker should load conversation history via
-            # MessageRepository.get_by_session(session_id) instead of
-            # passing an empty list. The LLM currently receives no
-            # conversation context, producing low-quality drafts.
+            # fix/security-perf-quickwins (2026-08-09, §1.3a d): the worker
+            # now loads conversation history from MessageRepository before
+            # invoking ReviewService (see backend/skills/review_queue.py
+            # _process_event). The empty placeholder below is intentional —
+            # it signals to the worker that loading is required, and also
+            # keeps the request body small (no point shipping N messages
+            # over HTTP when the worker can read them from the DB).
             "messages": [],
             "user_prompt": request.prompt,
         },

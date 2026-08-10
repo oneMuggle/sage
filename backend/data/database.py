@@ -183,6 +183,10 @@ class Database:
             # 启用 WAL 模式提高并发性能
             self._connection.execute("PRAGMA journal_mode=WAL")
             self._connection.execute("PRAGMA busy_timeout=5000")
+            # fix/security-perf-quickwins (2026-08-09): 启用外键约束。否则
+            # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
+            # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
+            self._connection.execute("PRAGMA foreign_keys=ON")
         return self._connection
 
     def close(self):
@@ -719,6 +723,20 @@ class Database:
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_episodic_session ON memories_episodic(session_id)"
+        )
+        # fix/security-perf-quickwins (2026-08-09): 补 4 个查询/清理热路径索引,
+        # 见 docs/plans/2026-08-09_feature-optimization-proposal.md §1.3a c.
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_episodic_expires ON memories_episodic(expires_at)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tool_usage_session ON tool_usage(session_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_review_events_status ON review_events(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_skill_drafts_status ON skill_drafts(status)"
         )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(is_enabled)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name)")
