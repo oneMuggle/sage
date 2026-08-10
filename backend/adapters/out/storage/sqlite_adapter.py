@@ -6,19 +6,22 @@
 设计要点
 --------
 
-- **不改持久化层**：保留 ``SessionRepository`` / ``MessageRepository`` 与
-  ``Database`` 不动；adapter 只做翻译 + 装配 id/timestamps。
-- **直接调用同步方法**而不额外套 ``asyncio.to_thread``：FastAPI handler 已经
-  处于事件循环，SQLite 同步调用在线程内非阻塞且不耗 IO 等待；为追求透明、未来
-  切到线程池或 async driver 时再换。
-- **tool_calls 持久化格式**：list → JSON 字符串（与既有 messages.tool_calls
-  TEXT 字段一致），读取时反序列化。
-- **list_sessions**：返回 ``[{"id", "title", "message_count", ...}]`` 形式字典
-  列表；与 ``MemoryStorageAdapter`` 的 dict 形状对齐。
+- **PR B §1.2**:所有 async 方法包 asyncio.to_thread + self._lock 实例级锁,
+  让 chat_service / session_service 这条 keep_async 路径在事件循环上不被
+  同步 SQLite 写阻塞（PR A 已修 legacy_routes 直接 repo 路径,本 PR 修
+  service→adapter 路径）。锁独立于 PR A 的 _db_lock（保护 handler 直接
+  repo 路径）,两把锁分别正确工作。
+- **不改持久化层**:保留 SessionRepository / MessageRepository 与 Database 不动;
+  adapter 只做翻译 + 装配 id/timestamps + offload 到 threadpool。
+- **tool_calls 持久化格式**:list → JSON 字符串(与既有 messages.tool_calls
+  TEXT 字段一致),读取时反序列化。
+- **list_sessions**:返回 [{"id", "title", "message_count", ...}] 形式字典列表;
+  与 MemoryStorageAdapter 的 dict 形状对齐。
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -123,22 +126,37 @@ class SqliteStorageAdapter:
         # 默认使用全局仓储（向后兼容）；依赖注入便于单测替换。
         self._sessions: SessionRepository = session_repo or SessionRepository()
         self._messages: MessageRepository = message_repo or MessageRepository()
+        # PR B §1.2: 实例级锁保护多线程并发 SQLite 单例连接访问。
+        # 串行化 _sync_X 调用,避免 "cannot start a transaction within a transaction"。
+        # NOTE: 选用 asyncio.Lock（brief 原建议 threading.Lock + async with 是 Python
+        # 不兼容的语法组合,threading.Lock 没有 __aenter__/__aexit__）。asyncio.Lock
+        # 与 brief "async with self._lock" 模板天然匹配,且不阻塞事件循环等待锁,
+        # 满足"事件循环只在 adapter 包装那几行 Python 字节码上跑"的设计目标。
+        self._lock = asyncio.Lock()
 
     # ----- 会话 -----
 
     async def create_session(self, title: str = "") -> str:
         """创建新会话，返回会话 ID。
 
-        备注：``SessionRepository.create`` 不接受空字符串标题，这里统一
-        替换为 ``"新对话"`` 默认值。
+        PR B §1.2: async 包装负责调度,实际逻辑在 _sync_create_session 跑 threadpool。
         """
+        async with self._lock:
+            return await asyncio.to_thread(self._sync_create_session, title)
+
+    def _sync_create_session(self, title: str) -> str:
+        """create_session 的同步实现,跑在 threadpool worker。"""
         safe_title = title if title else _DEFAULT_TITLE
         session = self._sessions.create(title=safe_title)
-        # 显式 str()：SessionRepository 在非 strict 模块，session.id 被推断为 Any
+        # 显式 str():SessionRepository 在非 strict 模块，session.id 被推断为 Any
         return str(session.id)
 
     async def list_sessions(self) -> List[Dict[str, Any]]:
         """列出当前所有会话（已过滤归档），返回 dict 列表。"""
+        async with self._lock:
+            return await asyncio.to_thread(self._sync_list_sessions)
+
+    def _sync_list_sessions(self) -> List[Dict[str, Any]]:
         sessions = self._sessions.list(limit=1000, offset=0)
         return [
             {
@@ -154,6 +172,10 @@ class SqliteStorageAdapter:
 
     async def get_session(self, session_id: str) -> Dict[str, Any] | None:
         """按 ID 取单个会话;不存在返 ``None``。"""
+        async with self._lock:
+            return await asyncio.to_thread(self._sync_get_session, session_id)
+
+    def _sync_get_session(self, session_id: str) -> Dict[str, Any] | None:
         s = self._sessions.get(session_id)
         if s is None:
             return None
@@ -172,6 +194,14 @@ class SqliteStorageAdapter:
         ``is_pinned`` 字段是 bool,持久化层需要 0/1 int,这里做转换。
         其他字段(如 ``title``)原样转发。
         """
+        async with self._lock:
+            return await asyncio.to_thread(self._sync_update_session, session_id, fields)
+
+    def _sync_update_session(self, session_id: str, fields: Dict[str, Any]) -> int:
+        """update_session 的同步实现。
+
+        is_pinned 字段是 bool,持久化层需要 0/1 int,这里做转换。
+        """
         kwargs: Dict[str, Any] = {}
         if "title" in fields and fields["title"] is not None:
             kwargs["title"] = fields["title"]
@@ -185,6 +215,10 @@ class SqliteStorageAdapter:
 
     async def delete_session(self, session_id: str) -> int:
         """按 ID 删除会话;返受影响行数(0=不存在,1=已删除)。"""
+        async with self._lock:
+            return await asyncio.to_thread(self._sync_delete_session, session_id)
+
+    def _sync_delete_session(self, session_id: str) -> int:
         return 1 if self._sessions.delete(session_id) else 0
 
     # ----- 消息 -----
@@ -197,6 +231,11 @@ class SqliteStorageAdapter:
             ``source_message_id``，让前端 ``data-turn-id`` 可精确命中）。
         """
         row = _domain_to_data_message(session_id, message)
+        async with self._lock:
+            return await asyncio.to_thread(self._sync_append_message, row)
+
+    def _sync_append_message(self, row: _DataMessage) -> str:
+        """append_message 的同步实现。"""
         self._messages.save(row)
         return row.id
 
@@ -209,6 +248,11 @@ class SqliteStorageAdapter:
 
         实现：先取全部历史，然后取尾部 ``limit`` 条并保持时间正序。
         """
+        async with self._lock:
+            return await asyncio.to_thread(self._sync_get_messages, session_id, limit)
+
+    def _sync_get_messages(self, session_id: str, limit: int) -> List[Message]:
+        """get_messages 的同步实现。"""
         if limit <= 0:
             return []
         # 先用较大窗口把会话消息取回来（按 created_at ASC 升序）
