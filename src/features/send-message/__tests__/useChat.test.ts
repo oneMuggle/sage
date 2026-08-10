@@ -53,7 +53,6 @@ function seedActiveEndpoint(): void {
     streaming: true,
     autoMemory: true,
     confirmDelete: true,
-    compactMode: false,
     endpoints: [
       {
         id: 'ep-1',
@@ -71,9 +70,6 @@ function seedActiveEndpoint(): void {
     },
     maxContext: 4096,
     temperature: 0.7,
-    proxyMode: 'system',
-    proxyUrl: '',
-    tlsVersion: '1.2',
     version: SETTINGS_VERSION,
   };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
@@ -89,7 +85,6 @@ function seedActiveEndpointWithUrl(baseUrl: string): void {
     streaming: true,
     autoMemory: true,
     confirmDelete: true,
-    compactMode: false,
     endpoints: [
       {
         id: 'ep-1',
@@ -107,7 +102,6 @@ function seedActiveEndpointWithUrl(baseUrl: string): void {
     },
     maxContext: 4096,
     temperature: 0.7,
-    tlsVersion: '1.2',
     version: SETTINGS_VERSION,
   };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));

@@ -23,15 +23,11 @@ _DEBUG_POLLUTION = os.environ.get("DEBUG_LEGACY_POLLUTION", "").lower() in ("1",
 # snake_case → camelCase 字段名映射 (单源)
 # 修改 AppSettings (src/entities/setting/types.ts) 字段时必须同步更新此处
 ALIASES: Dict[str, str] = {
-    # 顶层 8 个 snake 历史字段 (legacy schema 残留)
+    # 顶层 snake 历史字段 (legacy schema 残留)
     "model_selections": "modelSelections",
     "max_context": "maxContext",
-    "proxy_mode": "proxyMode",
-    "proxy_url": "proxyUrl",
-    "tls_version": "tlsVersion",
     "auto_memory": "autoMemory",
     "confirm_delete": "confirmDelete",
-    "compact_mode": "compactMode",
     # modelSelections 子层
     "chat_model": "chatModel",
     "vision_model": "visionModel",
@@ -52,14 +48,10 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "streaming",
         "autoMemory",
         "confirmDelete",
-        "compactMode",
         "endpoints",
         "modelSelections",
         "maxContext",
         "temperature",
-        "proxyMode",
-        "proxyUrl",
-        "tlsVersion",
         "wiki",
         "version",
     }

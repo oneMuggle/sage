@@ -122,7 +122,6 @@ def test_validate_settings_shape_accepts_clean_camel_case() -> None:
         "streaming": True,
         "autoMemory": True,
         "confirmDelete": True,
-        "compactMode": False,
         "endpoints": [],
         "modelSelections": {
             "chatModel": {"endpointId": None, "modelId": None},
@@ -131,9 +130,6 @@ def test_validate_settings_shape_accepts_clean_camel_case() -> None:
         },
         "maxContext": 4096,
         "temperature": 0.7,
-        "proxyMode": "system",
-        "proxyUrl": "x",
-        "tlsVersion": "1.2",
         "wiki": {"useFolderPicker": True},
         "version": "3.0.0",
     }

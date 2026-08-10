@@ -1,4 +1,4 @@
-import { Globe, MessageCircle, Star } from 'lucide-react';
+import { Globe, Star } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -64,15 +64,6 @@ export function Welcome() {
   );
 
   const quickActions: QuickAction[] = [
-    {
-      id: 'feedback',
-      icon: <MessageCircle className="w-4 h-4" />,
-      labelKey: 'welcome.quick.feedback' as TranslationKey,
-      descKey: 'welcome.quick.feedback_desc' as TranslationKey,
-      onClick: () => {
-        toast.info('反馈功能开发中…');
-      },
-    },
     {
       id: 'github',
       icon: <Star className="w-4 h-4" />,

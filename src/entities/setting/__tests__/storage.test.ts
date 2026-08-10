@@ -47,10 +47,10 @@ describe('settings storage (async)', () => {
 
     it('后端失败时降级 localStorage', async () => {
       mockGetSettings.mockResolvedValue(null);
-      const local = { ...DEFAULT_SETTINGS, compactMode: true };
+      const local = { ...DEFAULT_SETTINGS, confirmDelete: false };
       localStorage.setItem(CACHE_KEY, JSON.stringify(local));
       const r = await loadSettings();
-      expect(r.compactMode).toBe(true);
+      expect(r.confirmDelete).toBe(false);
     });
   });
 

@@ -13,15 +13,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useActivityStore } from '../../entities/wiki/activity-store';
-import { useLintStore } from '../../entities/wiki/lint-store';
-import {
-  mockActivities,
-  mockLintItems,
-  mockResearchTasks,
-  mockReviewItems,
-} from '../../entities/wiki/mock-data';
-import { useResearchStore } from '../../entities/wiki/research-store';
-import { useReviewStore } from '../../entities/wiki/review-store';
+import { mockActivities } from '../../entities/wiki/mock-data';
 import { useWikiStore } from '../../entities/wiki/store';
 import { settingsClient } from '../../shared/api/settingsClient';
 import {
@@ -250,10 +242,7 @@ export function WikiProjectPicker() {
   const [useFolderPicker, setUseFolderPicker] = useState(true);
 
   const setErrorGlobal = useWikiStore((s) => s.setError);
-  const setLintItems = useLintStore((s) => s.setItems);
-  const setReviewItems = useReviewStore((s) => s.setItems);
   const setActivities = useActivityStore((s) => s.setItems);
-  const setResearchTasks = useResearchStore((s) => s.setTasks);
 
   // 加载最近项目
   useEffect(() => {
@@ -397,10 +386,7 @@ export function WikiProjectPicker() {
     });
 
     // 填充其他 store 的模拟数据
-    setLintItems(mockLintItems);
-    setReviewItems(mockReviewItems);
     setActivities(mockActivities);
-    setResearchTasks(mockResearchTasks);
   };
 
   return (
