@@ -127,3 +127,7 @@ chat-*.png
 # MCP Server build artifacts
 packages/drawio-mcp-server/node_modules/
 packages/drawio-mcp-server/dist/
+
+# §1.3c 仓库卫生
+桌面/
+Desktop/
