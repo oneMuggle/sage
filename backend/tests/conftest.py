@@ -182,6 +182,44 @@ def sample_user_query():
     return "What is the capital of France?"
 
 
+def ensure_session(db, session_id: str, title: str = "Test Session") -> str:
+    """Idempotently create a session row in the test DB.
+
+    Tests that insert child rows referencing ``session_id`` (messages,
+    memories_episodic) used to silently succeed because ``PRAGMA
+    foreign_keys=ON`` was off in the test DB. Once that pragma is enabled
+    (§1.3a item c), the inserts correctly fail unless the parent session
+    row exists. Call this helper from tests to satisfy the FK.
+
+    Usage:
+        def test_something(setup_test_db):
+            ensure_session(setup_test_db, "sess-1")
+            # ... insert child rows referencing "sess-1"
+    """
+    import time
+
+    ts = int(time.time())
+    conn = db.get_connection()
+    conn.execute(
+        "INSERT OR IGNORE INTO sessions (id, title, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?)",
+        (session_id, title, ts, ts),
+    )
+    conn.commit()
+    return session_id
+
+
+@pytest.fixture()
+def sample_session(setup_test_db):
+    """Pre-create a default ``sess-1`` session row for tests that need a
+    FK-referenced session but don't care about the specific session_id.
+
+    See :func:`ensure_session` for the underlying helper that lets tests
+    create other session_ids explicitly.
+    """
+    return ensure_session(setup_test_db, "sess-1")
+
+
 @pytest.fixture()
 def tmp_data_dir(tmp_path):
     """临时数据目录（避免污染真实 data/）—— 直接返回 tmp_path 便于测试中使用"""

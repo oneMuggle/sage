@@ -39,6 +39,8 @@ beforeEach(() => {
 const baseSettings = {
   streaming: true,
   autoMemory: true,
+  // §1.3b f: independent field — "同步到内部服务器" is NOT autoMemory.
+  memoryServerSync: false,
   confirmDelete: true,
   compactMode: false,
   endpoints: [],
@@ -159,5 +161,67 @@ describe('MemoryTab', () => {
     await waitFor(() => expect(mocks.setAutoMemory).toHaveBeenCalledWith({ value: false }));
     // The memory_retrieval IPC must NOT be touched by this toggle.
     expect(mocks.setMemoryRetrieval).not.toHaveBeenCalled();
+  });
+});
+
+describe('MemoryTab (fix/security-perf-quickwins §1.3b f, cherry-picked)', () => {
+  it('renders the 同步到内部服务器 toggle bound to memoryServerSync, NOT autoMemory', () => {
+    // autoMemory=true (GeneralTab semantics) but memoryServerSync=false.
+    // Pre-fix this was wrongly tied to autoMemory, so the toggle would
+    // render in the ON state here.
+    const updateSettings = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MemoryRouter>
+        <MemoryTab settings={baseSettings} updateSettings={updateSettings} />
+      </MemoryRouter>,
+    );
+
+    const labelEl = screen.getByText('同步到内部服务器');
+    const settingRow = labelEl.parentElement!.parentElement!;
+    const toggle = settingRow.querySelector('button');
+    expect(toggle).not.toBeNull();
+    expect(toggle!.className).toContain('bg-border');
+
+    // Clicking it should update memoryServerSync, NOT autoMemory.
+    fireEvent.click(toggle!);
+    expect(updateSettings).toHaveBeenCalledWith({ memoryServerSync: true });
+    const calls = updateSettings.mock.calls;
+    for (const call of calls) {
+      expect(call[0]).not.toHaveProperty('autoMemory');
+    }
+  });
+
+  it('reflects the memoryServerSync value when already true (independent of autoMemory)', () => {
+    const settings = { ...baseSettings, autoMemory: false, memoryServerSync: true };
+    render(
+      <MemoryRouter>
+        <MemoryTab settings={settings} updateSettings={vi.fn().mockResolvedValue(undefined)} />
+      </MemoryRouter>,
+    );
+
+    const labelEl = screen.getByText('同步到内部服务器');
+    const settingRow = labelEl.parentElement!.parentElement!;
+    const toggle = settingRow.querySelector('button');
+    // ON state — driven by memoryServerSync=true, despite autoMemory=false.
+    expect(toggle!.className).toContain('bg-primary');
+  });
+
+  it('does NOT hardcode the %APPDATA%\\Sage\\memory.db path display', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <MemoryTab settings={baseSettings} updateSettings={vi.fn().mockResolvedValue(undefined)} />
+      </MemoryRouter>,
+    );
+
+    // Old bug: there was a readOnly <input value="%APPDATA%\\Sage\\memory.db">.
+    // New behavior: only a generic descriptive span. No string match for the
+    // hardcoded path anywhere in the rendered tree.
+    expect(container.textContent).not.toContain('%APPDATA%');
+    expect(container.textContent).not.toContain('Sage\\memory.db');
+
+    const inputs = container.querySelectorAll('input');
+    for (const input of inputs) {
+      expect(input.getAttribute('value')).not.toContain('%APPDATA%');
+    }
   });
 });

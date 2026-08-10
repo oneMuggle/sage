@@ -12,6 +12,7 @@ from backend.memory.episodic import EpisodicMemory
 from backend.memory.manager import MemoryManager
 from backend.memory.semantic import SemanticMemory
 from backend.memory.working import WorkingMemory
+from backend.tests.conftest import ensure_session
 
 pytestmark = pytest.mark.unit
 
@@ -42,6 +43,8 @@ def test_remember_stores_in_episodic(manager: MemoryManager) -> None:
 
 
 def test_remember_with_metadata(manager: MemoryManager) -> None:
+    # §1.3a: FK enforcement — parent session row must exist.
+    ensure_session(manager.episodic.db, "sx")
     mid = manager.remember(
         "session-bound",
         metadata={"importance": 9, "session_id": "sx", "memory_type": "note"},

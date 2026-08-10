@@ -12,6 +12,7 @@ from backend.memory.episodic import EpisodicMemory
 from backend.memory.manager import MemoryManager
 from backend.memory.semantic import SemanticMemory
 from backend.memory.working import WorkingMemory
+from backend.tests.conftest import ensure_session
 
 pytestmark = pytest.mark.unit
 
@@ -107,6 +108,8 @@ def test_save_compressed_persists_summary(manager: MemoryManager) -> None:
     """save_compressed 调用 episodic.save(summary=...)。EpisodicMemory.save 现在接受
     该 kwarg（F2 修复）— 摘要被持久化到 summary 列，而不是抛 TypeError。"""
     pipe = ConsolidationPipeline()
+    # §1.3a: FK enforcement — parent session row must exist.
+    ensure_session(manager.episodic.db, "s1")
     memory_id = pipe.save_compressed(
         episodic_memory=manager.episodic,
         summary="my summary",
@@ -126,6 +129,8 @@ def test_consolidate_full_flow_succeeds(manager: MemoryManager) -> None:
     """consolidate 走通完整流程（F2 修复）：工作记忆压缩为摘要存入情景记忆并返回
     memory_id，而不是抛 TypeError。"""
     pipe = ConsolidationPipeline()
+    # §1.3a: FK enforcement — parent session must exist.
+    ensure_session(manager.episodic.db, "abc")
     manager.add_to_working("user", "hi")
     manager.add_to_working("assistant", "hello")
     memory_id = pipe.consolidate(manager, session_id="abc")

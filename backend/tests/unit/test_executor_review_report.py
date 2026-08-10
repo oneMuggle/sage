@@ -63,7 +63,11 @@ def _sample_assertions() -> List[Assertion]:
 
 class TestSubmitWithReport:
     def test_returns_review_report(self):
-        ex = _make_executor()
+        # §1.3a: PRAGMA foreign_keys=ON — EventRecorder writes a real
+        # orchestration_lane_events row that FKs to orchestration_lanes.
+        # These tests don't check event recording, so use a mock recorder
+        # to avoid the parent-row FK requirement.
+        ex = _make_executor(with_recorder=True)
         report = ex.submit_with_report(
             lane_id="lane-1",
             task_id="task-1",
@@ -73,7 +77,7 @@ class TestSubmitWithReport:
         assert report.lane_id == "lane-1"
 
     def test_report_carries_assertions(self):
-        ex = _make_executor()
+        ex = _make_executor(with_recorder=True)
         report = ex.submit_with_report(
             lane_id="lane-1",
             task_id="task-1",
@@ -82,7 +86,7 @@ class TestSubmitWithReport:
         assert len(report.assertions) == 2
 
     def test_report_has_projection_lineage(self):
-        ex = _make_executor()
+        ex = _make_executor(with_recorder=True)
         report = ex.submit_with_report(
             lane_id="lane-1",
             task_id="task-1",
@@ -93,7 +97,7 @@ class TestSubmitWithReport:
         assert report.projection_lineage[0].view == "ops_full"
 
     def test_content_hash_is_valid(self):
-        ex = _make_executor()
+        ex = _make_executor(with_recorder=True)
         report = ex.submit_with_report(
             lane_id="lane-1",
             task_id="task-1",
@@ -103,13 +107,13 @@ class TestSubmitWithReport:
         assert report.content_hash == report.compute_hash()
 
     def test_canonical_id_deterministic_for_same_inputs(self):
-        ex = _make_executor()
+        ex = _make_executor(with_recorder=True)
         r1 = ex.submit_with_report("lane-1", "task-1", _sample_assertions())
         r2 = ex.submit_with_report("lane-1", "task-1", _sample_assertions())
         assert r1.canonical_id == r2.canonical_id
 
     def test_canonical_id_includes_lane_id(self):
-        ex = _make_executor()
+        ex = _make_executor(with_recorder=True)
         report = ex.submit_with_report(
             lane_id="lane-xyz",
             task_id="task-1",
@@ -118,7 +122,7 @@ class TestSubmitWithReport:
         assert "lane-xyz" in report.canonical_id
 
     def test_reviewer_id_default(self):
-        ex = _make_executor()
+        ex = _make_executor(with_recorder=True)
         report = ex.submit_with_report(
             lane_id="lane-1",
             task_id="task-1",
@@ -127,7 +131,7 @@ class TestSubmitWithReport:
         assert report.reviewer_id == "system"
 
     def test_reviewer_id_override(self):
-        ex = _make_executor()
+        ex = _make_executor(with_recorder=True)
         report = ex.submit_with_report(
             lane_id="lane-1",
             task_id="task-1",
@@ -137,7 +141,7 @@ class TestSubmitWithReport:
         assert report.reviewer_id == "alice"
 
     def test_empty_assertions_still_valid(self):
-        ex = _make_executor()
+        ex = _make_executor(with_recorder=True)
         report = ex.submit_with_report(lane_id="lane-1", task_id="task-1", assertions=[])
         assert report.assertions == []
         assert report.content_hash == report.compute_hash()

@@ -133,3 +133,47 @@ describe('deepMerge', () => {
     expect(merged.endpoints).toHaveLength(1);
   });
 });
+
+describe('deepMerge security (fix/security-perf-quickwins)', () => {
+  it('__proto__ 键被 denylist 过滤, 不能污染 Object.prototype', () => {
+    const malicious = JSON.parse('{"__proto__":{"polluted":true}}');
+    const merged = deepMerge<Record<string, unknown>>({}, malicious as Record<string, unknown>);
+    // 合并结果不含 __proto__ 字段
+    expect(Object.keys(merged)).not.toContain('__proto__');
+    // Object.prototype 未被污染
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('constructor 键被 denylist 过滤', () => {
+    const malicious = JSON.parse('{"constructor":{"prototype":{"polluted":true}}}');
+    const merged = deepMerge<Record<string, unknown>>({}, malicious as Record<string, unknown>);
+    expect(Object.keys(merged)).not.toContain('constructor');
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('apiKey 字段冲突时 console.warn 不泄漏密钥明文', () => {
+    const local = { endpoints: [{ id: 'e1', apiKey: 'sk-LOCAL-SECRET' }] };
+    const remote = { endpoints: [{ id: 'e1', apiKey: 'sk-REMOTE-SECRET' }] };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    deepMerge(local, remote);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = warn.mock.calls[0]?.[0] ?? '';
+    expect(message).toMatch(/conflict on 'endpoints\[e1\]\.apiKey'/);
+    expect(message).not.toContain('sk-LOCAL-SECRET');
+    expect(message).not.toContain('sk-REMOTE-SECRET');
+    expect(message).toContain('<redacted>');
+    warn.mockRestore();
+  });
+
+  it('非敏感字段冲突时仍打印明文（行为不变）', () => {
+    const local = { endpoints: [{ id: 'e1', baseUrl: 'https://old.com' }] };
+    const remote = { endpoints: [{ id: 'e1', baseUrl: 'https://new.com' }] };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    deepMerge(local, remote);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = warn.mock.calls[0]?.[0] ?? '';
+    expect(message).toContain('https://old.com');
+    expect(message).toContain('https://new.com');
+    warn.mockRestore();
+  });
+});
