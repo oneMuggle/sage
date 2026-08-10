@@ -104,6 +104,12 @@ async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(clie
     （USER.md 概念）而非通用 episodic 记忆。
     """
     session_id = str(uuid.uuid4())
+    # §1.3a: PRAGMA foreign_keys=ON — messages.session_id FKs to sessions.id.
+    # Pre-create the session row so producer persistence succeeds and the
+    # memory extraction pipeline is reached.
+    from backend.tests.conftest import ensure_session as _ensure_session
+
+    _ensure_session(get_database(), session_id)
     user_message = "我特别喜欢吃火锅,尤其是四川麻辣口味的,以后请多给我推荐火锅店"
 
     # mock 掉 MemoryExtractor.extract（类方法级 patch）：
@@ -143,6 +149,10 @@ async def test_legacy_chat_stream_skips_extraction_when_auto_memory_disabled(cli
     SettingsRepository().set_json("app_settings", {"autoMemory": False})
 
     session_id = str(uuid.uuid4())
+    # §1.3a: FK enforcement — session row must exist before messages.
+    from backend.tests.conftest import ensure_session as _ensure_session
+
+    _ensure_session(get_database(), session_id)
     with patch(
         "backend.memory.extractor.MemoryExtractor.extract",
         new=AsyncMock(return_value=_FIXED_FACTS),
@@ -158,6 +168,10 @@ async def test_legacy_chat_stream_skips_extraction_when_auto_memory_disabled(cli
 async def test_legacy_chat_stream_extraction_failure_does_not_break_stream(client):
     """提取过程抛错只 warning：流照常完成, 不写记忆, 不 500。"""
     session_id = str(uuid.uuid4())
+    # §1.3a: FK enforcement — session row must exist before messages.
+    from backend.tests.conftest import ensure_session as _ensure_session
+
+    _ensure_session(get_database(), session_id)
     with patch(
         "backend.memory.extractor.MemoryExtractor.extract",
         new=AsyncMock(side_effect=RuntimeError("extractor boom")),
@@ -177,6 +191,10 @@ async def test_legacy_chat_stream_extraction_failure_does_not_break_stream(clien
 async def test_legacy_chat_stream_assistant_persist_failure_skips_extraction(client):
     """assistant 落盘失败时不触发提取（不产生无对应消息的脏记忆）。"""
     session_id = str(uuid.uuid4())
+    # §1.3a: FK enforcement — session row must exist before messages.
+    from backend.tests.conftest import ensure_session as _ensure_session
+
+    _ensure_session(get_database(), session_id)
 
     with (
         patch(
