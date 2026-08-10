@@ -185,6 +185,12 @@ def _import_all_checks() -> None:
         "port_frontend",
         "py_version_match",
         "disk_space",
+        # §1.5 二期扩容(2026-08-10)
+        "llm_config",
+        "mcp_servers",
+        "heavy_deps",
+        "log_dir_size",
+        "frontend_dist",
     ):
         importlib.import_module(f"{pkg}.{mod_name}")
 
