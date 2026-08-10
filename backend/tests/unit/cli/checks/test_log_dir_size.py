@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -47,21 +46,23 @@ class TestDirSize:
         assert _dir_size(tmp_path) == 350
 
     def test_skips_unreadable_files(self, tmp_path):
-        """模拟 os.walk 期间某个文件 getsize 抛 OSError → 跳过该文件,继续累加其它。"""
+        """模拟 stat() 抛 OSError → 跳过该文件,继续累加其它。"""
         (tmp_path / "a.log").write_bytes(b"x" * 100)
         (tmp_path / "b.log").write_bytes(b"y" * 200)
 
         # 用 wraps 保留原函数,只在调用次数为 1 时抛错
-        original = os.path.getsize
+        from pathlib import Path
+
+        original_stat = Path.stat
         call_count = {"n": 0}
 
-        def selective_getsize(p):
+        def selective_stat(self, *args, **kwargs):
             call_count["n"] += 1
             if call_count["n"] == 1:
                 raise OSError("perm denied")
-            return original(p)
+            return original_stat(self, *args, **kwargs)
 
-        with mock.patch("os.path.getsize", side_effect=selective_getsize):
+        with mock.patch.object(Path, "stat", selective_stat):
             assert _dir_size(tmp_path) == 200  # a 跳过(100 字节),b 计入(200 字节)
         assert call_count["n"] == 2
 

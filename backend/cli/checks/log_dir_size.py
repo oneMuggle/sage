@@ -49,9 +49,9 @@ def _dir_size(path: Path) -> int:
     total = 0
     for root, _dirs, files in os.walk(str(path)):
         for fname in files:
-            fpath = os.path.join(root, fname)
+            fpath = Path(root) / fname
             try:
-                total += os.path.getsize(fpath)
+                total += fpath.stat().st_size
             except OSError:
                 # 权限不足/文件被并发删除 → 跳过,不算入
                 continue

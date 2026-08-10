@@ -37,15 +37,12 @@ def _load_app_settings_json(db_path):
 
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2)
-    except sqlite3.OperationalError:
-        return None
-    try:
         row = conn.execute(
             "SELECT value FROM preferences WHERE key = ?",
             (_APP_SETTINGS_KEY,),
         ).fetchone()
     except sqlite3.OperationalError:
-        # schema 还没建好(no such table: preferences)
+        # DB 不可读 / schema 还没建好(no such table: preferences)
         return None
     finally:
         conn.close()
