@@ -86,20 +86,16 @@ class SettingsRequest(BaseModel):
     class Config:
         extra = "forbid"
 
-    # ----- AppSettings 13 fields (canonical, src/entities/setting/types.ts) -----
+    # ----- AppSettings fields (canonical, src/entities/setting/types.ts) -----
     # noqa: N815 — camelCase 是为了与 AppSettings TypeScript interface 字段一一对齐；
     # 字段名经过 to_camel/validate_settings_shape 链路进入存储。
     streaming: Optional[bool] = None
     autoMemory: Optional[bool] = None  # noqa: N815
     confirmDelete: Optional[bool] = None  # noqa: N815
-    compactMode: Optional[bool] = None  # noqa: N815
     endpoints: Optional[List[dict]] = None
     modelSelections: Optional[dict] = None  # noqa: N815
     maxContext: Optional[int] = None  # noqa: N815
     temperature: Optional[float] = None
-    proxyMode: Optional[str] = None  # noqa: N815  # 'system' | 'custom' | 'direct'
-    proxyUrl: Optional[str] = None  # noqa: N815
-    tlsVersion: Optional[str] = None  # noqa: N815  # '1.2' | '1.3'
     wiki: Optional[dict] = None
     version: Optional[str] = None
 

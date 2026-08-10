@@ -49,7 +49,6 @@ export interface AppSettings {
   streaming: boolean;
   autoMemory: boolean;
   confirmDelete: boolean;
-  compactMode: boolean;
 
   // Memory — separate field from autoMemory (which is "auto-extract in
   // conversation"). memoryServerSync is the planned "sync to internal
@@ -63,11 +62,6 @@ export interface AppSettings {
   modelSelections: ModelSelections;
   maxContext: number;
   temperature: number;
-
-  // Network
-  proxyMode: 'system' | 'custom' | 'direct';
-  proxyUrl: string;
-  tlsVersion: '1.2' | '1.3';
 
   // Wiki
   wiki: WikiSettings;
@@ -102,7 +96,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   streaming: true,
   autoMemory: true,
   confirmDelete: true,
-  compactMode: false,
 
   // Memory
   memoryServerSync: false,
@@ -112,11 +105,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   modelSelections: DEFAULT_MODEL_SELECTIONS,
   maxContext: 4096,
   temperature: 0.7,
-
-  // Network
-  proxyMode: 'system',
-  proxyUrl: 'http://proxy.internal:3128',
-  tlsVersion: '1.2',
 
   // Wiki
   wiki: {

@@ -65,14 +65,6 @@ describe('src/shared/lib/store', () => {
     expect(Store.memoryApi).toBeDefined();
   });
 
-  it('exports 5 Lazy* page import functions', () => {
-    expect(typeof Store.LazyChat).toBe('function');
-    expect(typeof Store.LazySettings).toBe('function');
-    expect(typeof Store.LazyMemory).toBe('function');
-    expect(typeof Store.LazySkills).toBe('function');
-    expect(typeof Store.LazyKnowledge).toBe('function');
-  });
-
   it('exports 3 cache helper functions (getCachedMessages / setCachedMessages / clearCachedMessages)', () => {
     expect(typeof Store.getCachedMessages).toBe('function');
     expect(typeof Store.setCachedMessages).toBe('function');

@@ -29,21 +29,17 @@ from backend.data.settings_canonicalizer import (
     to_camel,
 )
 
-# 前端 AppSettings 13 顶层字段 (camelCase).
+# 前端 AppSettings 顶层字段 (camelCase).
 # 修改 src/entities/setting/types.ts:AppSettings 时必须同步 LEGAL_TOP_KEYS.
 EXPECTED_TOP_KEYS = frozenset(
     {
         "streaming",
         "autoMemory",
         "confirmDelete",
-        "compactMode",
         "endpoints",
         "modelSelections",
         "maxContext",
         "temperature",
-        "proxyMode",
-        "proxyUrl",
-        "tlsVersion",
         "wiki",
         "version",
     }
