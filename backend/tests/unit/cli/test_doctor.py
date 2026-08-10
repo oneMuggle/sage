@@ -321,9 +321,9 @@ class TestMain:
         data = json.loads(out)
         assert "checks" in data
         assert "summary" in data
-        assert len(data["checks"]) == 8
+        assert len(data["checks"]) == 13
 
-    def test_main_runs_all_eight_checks(self, capsys):
+    def test_main_runs_all_thirteen_checks(self, capsys):
         main([])
         out = capsys.readouterr().out
         expected_names = [
@@ -335,6 +335,11 @@ class TestMain:
             "port_frontend",
             "py_version_match",
             "disk_space",
+            "llm_config",
+            "mcp_servers",
+            "heavy_deps",
+            "log_dir_size",
+            "frontend_dist",
         ]
         for n in expected_names:
             assert n in out, f"missing check: {n}"
