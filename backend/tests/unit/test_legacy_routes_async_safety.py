@@ -66,7 +66,7 @@ def _has_await(func: ast.AsyncFunctionDef) -> bool:
     return any(isinstance(node, ast.Await) for node in ast.walk(func))
 
 
-def _is_router_endpoint(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def _is_router_endpoint(func: object) -> bool:
     """判断是否为 FastAPI 路由端点（顶层函数）。
 
     排除条件：函数名以 `_` 开头（私有 helper,不是 FastAPI 路由）。

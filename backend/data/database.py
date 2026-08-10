@@ -54,6 +54,19 @@ def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     db.commit()
 
 
+def _warm_jieba() -> None:
+    """预热 jieba 词典；缺失或损坏时不阻塞后端启动。"""
+    try:
+        import jieba
+
+        list(jieba.cut("__warmup__"))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("database: jieba warmup skipped (non-fatal): %s", exc)
+
+
+_warm_jieba()
+
+
 class Database:
     """SQLite 数据库管理"""
 
@@ -455,7 +468,6 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_agents_role ON agents(role)
         """)
 
-        # 语义记忆表（用于 FTS5 全文搜索）
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memories_semantic (
                 id TEXT PRIMARY KEY,
@@ -465,21 +477,6 @@ class Database:
                 created_at INTEGER NOT NULL
             )
         """)
-
-        # FTS5 虚拟表用于语义记忆全文搜索
-        cursor.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS memories_semantic_fts USING fts5(
-                content, summary, tags,
-                content='memories_semantic',
-                content_rowid='rowid'
-            )
-        """)
-
-        # FTS5 同步触发器
-        # 注意：由于 contentless FTS5 表在 UPDATE 时可能出现 "database disk image is malformed"
-        # 错误，暂时禁用所有触发器。FTS 索引由 SemanticMemory 方法手动维护。
-        # 当前 search() 使用 LIKE + jieba 而非 FTS5，所以 FTS 索引暂不使用。
-        # 未来升级 FTS5 中文支持时再启用。
 
         # 记忆进化日志表（预留）
         cursor.execute("""
