@@ -88,7 +88,7 @@ async def create_session(self, title: str = "") -> str:
                   │ anyio default threadpool (40 worker threads)        │
                   │   ┌────────────────────────────────────────────┐    │
                   │   │ SqliteStorageAdapter._sync_create_session()│    │
-                  │   │   ├─ self._lock (threading.Lock)           │    │
+                  │   │   ├─ self._lock (asyncio.Lock)             │    │
                   │   │   └─ SessionRepository.create() [blocking] │    │
                   │   └────────────────────────────────────────────┘    │
                   │                                                      │
@@ -107,7 +107,7 @@ class SqliteStorageAdapter:
     ) -> None:
         self._sessions: SessionRepository = session_repo or SessionRepository()
         self._messages: MessageRepository = message_repo or MessageRepository()
-        self._lock = threading.Lock()  # 实例级锁,保护多线程 SQLite 访问
+        self._lock = asyncio.Lock()  # 实例级锁,保护并发 SQLite 单例连接(adapter 是 async def,async with 需 async-native lock)
     
     async def create_session(self, title: str = "") -> str:
         async with self._lock:
@@ -146,7 +146,7 @@ class MemoryStorageAdapter:
 
 ### 3.4 锁归属（关键设计决策）
 
-**SqliteStorageAdapter 自带 `self._lock = threading.Lock()` 实例级锁**，**不是** PR A 的 `_db_lock` 模块锁。
+**SqliteStorageAdapter 自带 `self._lock = asyncio.Lock()` 实例级锁**，**不是** PR A 的 `_db_lock` 模块锁(`threading.Lock`)。两把锁类型不同:PR A 的保护 sync `def` handler(走 threadpool),PR B 的保护 async def adapter(走事件循环+threadpool offload)。
 
 理由：
 
@@ -226,7 +226,7 @@ class SqliteStorageAdapter:
 | `_sync_X` 抛 `sqlite3.OperationalError` | `asyncio.to_thread` 不吞异常 → bubble up → FastAPI → 500（与原行为一致） |
 | `_sync_X` 抛 `sqlite3.IntegrityError`（UNIQUE 冲突等） | 同上,传播 |
 | `_sync_X` 抛 `ValueError` / `TypeError`（业务校验） | 同上 |
-| `_lock` 等待超时 | 无超时（threading.Lock 无 timeout 参数）；实际等待时间是锁 FIFO 长度 × 单次 SQLite 写延迟（~10ms）→ 50 并发最长 ~500ms,远低于 SSE handler 的 keepalive 阈值 |
+| `_lock` 等待超时 | 无超时（`asyncio.Lock` 无 timeout 参数）；实际等待时间是锁 FIFO 长度 × 单次 SQLite 写延迟（~10ms）→ 50 并发最长 ~500ms,远低于 SSE handler 的 keepalive 阈值 |
 | `asyncio.to_thread` 自身失败 | stdlib 异常处理路径,理论不可达 |
 | CancelledError（客户端断连） | asyncio 内置处理：`to_thread` 返回的 future 被 cancel → `_sync_X` 不被中断（线程继续跑完）,调用者收到 `CancelledError` |
 
