@@ -9,6 +9,9 @@ export function Memory() {
   const [showNewMemory, setShowNewMemory] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // Bump after a successful save to refresh the MemoryBrowser without a
+  // full page reload (fix/security-perf-quickwins §1.3b g).
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const handleExport = async () => {
     setExporting(true);
@@ -70,9 +73,13 @@ export function Memory() {
         </div>
       )}
 
-      {showNewMemory && <NewMemoryModal onClose={() => setShowNewMemory(false)} />}
+      <NewMemoryModal
+        isOpen={showNewMemory}
+        onClose={() => setShowNewMemory(false)}
+        onSaved={() => setRefreshKey((k) => k + 1)}
+      />
 
-      <MemoryBrowser initialType="all" />
+      <MemoryBrowser initialType="all" refreshKey={refreshKey} />
     </div>
   );
 }

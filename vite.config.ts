@@ -80,8 +80,13 @@ export default defineConfig({
     // Phase 4: exclude Playwright Electron smoke tests (run separately via
     // `npx playwright test tests/electron/smoke.spec.ts`, not Vitest).
     // Phase 6 (2026-06-27): also exclude ./e2e/ (wiki-folder-picker Playwright spec).
+    // Phase 7 (2026-08-09): also exclude .claude/worktrees/** — local parallel
+    // agent worktrees contain full src copies; without this Vitest discovers
+    // duplicate test files and runs each suite 7+ times with cross-environment
+    // state pollution (see fix/security-perf-quickwins).
     exclude: [
       '**/node_modules/**',
+      '**/.claude/**',
       '**/dist/**',
       '**/dist-electron/**',
       'tests/electron/**',

@@ -51,6 +51,13 @@ export interface AppSettings {
   confirmDelete: boolean;
   compactMode: boolean;
 
+  // Memory — separate field from autoMemory (which is "auto-extract in
+  // conversation"). memoryServerSync is the planned "sync to internal
+  // server" feature; UI exposes it but the backend endpoint is not yet
+  // wired up — see docs/plans/2026-08-09_feature-optimization-proposal.md
+  // §1.4 for the cleanup decision.
+  memoryServerSync: boolean;
+
   // Endpoint & Model
   endpoints: EndpointConfig[];
   modelSelections: ModelSelections;
@@ -96,6 +103,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoMemory: true,
   confirmDelete: true,
   compactMode: false,
+
+  // Memory
+  memoryServerSync: false,
 
   // Endpoint & Model
   endpoints: [],

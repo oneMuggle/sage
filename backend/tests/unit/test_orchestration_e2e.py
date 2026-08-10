@@ -226,6 +226,7 @@ class TestRouter:
 
         # Use a real LaneRegistry with an in-memory DB
         import tempfile
+        import time
 
         from backend.data.database import Database
 
@@ -251,6 +252,25 @@ class TestRouter:
                 description="Implement feature X",
                 task_type="coding",
             )
+
+            # §1.3a: PRAGMA foreign_keys=ON — orchestration_lanes.task_id
+            # FKs to orchestration_tasks.task_id. The router only persists
+            # the lane, not the task, so pre-insert the parent row.
+            db.get_connection().execute(
+                """
+                INSERT INTO orchestration_tasks
+                (task_id, name, description, status, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    task.task_id,
+                    task.name,
+                    task.description,
+                    task.status.value,
+                    int(time.time() * 1000),
+                ),
+            )
+            db.get_connection().commit()
 
             decision = asyncio.run(router.route_task(task))
             assert decision.agent_id == "coder"

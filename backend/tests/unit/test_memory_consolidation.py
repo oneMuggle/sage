@@ -12,6 +12,7 @@ from backend.memory.episodic import EpisodicMemory
 from backend.memory.manager import MemoryManager
 from backend.memory.semantic import SemanticMemory
 from backend.memory.working import WorkingMemory
+from backend.tests.conftest import ensure_session
 
 pytestmark = pytest.mark.unit
 
@@ -106,6 +107,8 @@ def test_fallback_summary_without_user_messages() -> None:
 def test_save_compressed_persists_summary(manager: MemoryManager) -> None:
     """save_compressed 应按 EpisodicMemory 契约保存摘要及会话关联。"""
     pipe = ConsolidationPipeline()
+    # §1.3a: FK enforcement — parent session row must exist.
+    ensure_session(manager.episodic.db, "s1")
 
     memory_id = pipe.save_compressed(
         episodic_memory=manager.episodic,
@@ -128,6 +131,9 @@ def test_consolidate_full_flow_persists_and_clears_session(
 ) -> None:
     """consolidate 成功落库后只清空被压缩的 session。"""
     pipe = ConsolidationPipeline()
+    # §1.3a: FK enforcement — both parent sessions must exist.
+    ensure_session(manager.episodic.db, "abc")
+    ensure_session(manager.episodic.db, "other")
     manager.add_to_working("user", "hi", session_id="abc")
     manager.add_to_working("assistant", "hello", session_id="abc")
     manager.add_to_working("user", "keep me", session_id="other")

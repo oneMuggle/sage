@@ -22,6 +22,7 @@ from backend.scheduler.evolution import (
     MemoryPruningTask,
     _write_evolution_log,
 )
+from backend.tests.conftest import ensure_session
 
 SECONDS_PER_DAY = 24 * 3600
 
@@ -208,6 +209,9 @@ class TestMemoryPruningLog:
 
     async def test_prune_writes_summary_logs_per_rule(self, setup_test_db):
         db = setup_test_db
+        # §1.3a: FK enforcement — parent session row for "sess-orphan" must
+        # exist before the episodic insert below.
+        ensure_session(db, "sess-orphan")
         now = _now_s()
         old = now - 31 * SECONDS_PER_DAY
         # 规则一，已过期记忆
