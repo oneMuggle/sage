@@ -183,7 +183,6 @@ from typing import Any
 import pytest
 
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
-from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 
 
 @pytest.mark.asyncio()
@@ -369,4 +368,4 @@ async def test_memory_adapter_offloads_to_worker_no_lock():
     assert all(tid != main_thread_id for tid in observed_thread_ids), (
         f"有 task 跑在主线程: {observed_thread_ids}"
     )
-    # 注意:不验证执行区间不重叠(无锁,可重叠)
+    # 注:无锁设计,执行区间可重叠,本断言不约束并发序列化
