@@ -301,3 +301,72 @@ def _make_message(role: str, content: str) -> Any:
     from sage_core import Message, Role
 
     return Message(role=Role(role), content=content)
+
+
+# ============================================================================
+# PR B §1.2 - MemoryStorageAdapter 也用 asyncio.to_thread 包装(无锁)
+# ============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_memory_adapter_uses_to_thread():
+    """验证 MemoryStorageAdapter 7 个方法都通过 asyncio.to_thread(无锁)。"""
+    adapter = MemoryStorageAdapter()
+    call_log: list[str] = []
+
+    original_to_thread = asyncio.to_thread
+
+    async def spy_to_thread(func, *args, **kwargs):
+        call_log.append(func.__name__)
+        return await original_to_thread(func, *args, **kwargs)
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(asyncio, "to_thread", spy_to_thread)
+    try:
+        sid = await adapter.create_session(title="t")
+        await adapter.list_sessions()
+        await adapter.get_session(sid)
+        await adapter.update_session(sid, title="new")
+        await adapter.append_message(sid, _make_message("user", "hi"))
+        await adapter.get_messages(sid, limit=10)
+        await adapter.delete_session(sid)
+    finally:
+        monkey.undo()
+
+    expected_sync_names = {
+        "_sync_create_session",
+        "_sync_list_sessions",
+        "_sync_get_session",
+        "_sync_update_session",
+        "_sync_delete_session",
+        "_sync_append_message",
+        "_sync_get_messages",
+    }
+    actual_sync_names = set(call_log)
+    assert expected_sync_names.issubset(actual_sync_names), (
+        f"Memory 下列 _sync_X 未通过 to_thread: {expected_sync_names - actual_sync_names}"
+    )
+
+
+@pytest.mark.asyncio()
+async def test_memory_adapter_offloads_to_worker_no_lock():
+    """MemoryStorageAdapter 包 to_thread 但无锁,并发执行,所有 thread_id != 主线程。"""
+    main_thread_id = threading.get_ident()
+    adapter = MemoryStorageAdapter()
+    observed_thread_ids: list[int] = []
+
+    original_sync = adapter._sync_create_session
+
+    def probed_sync(title: str) -> str:
+        observed_thread_ids.append(threading.get_ident())
+        return original_sync(title)
+
+    adapter._sync_create_session = probed_sync  # type: ignore[method-assign]
+
+    await asyncio.gather(*[adapter.create_session(title=f"t{i}") for i in range(10)])
+
+    assert len(observed_thread_ids) == 10
+    assert all(tid != main_thread_id for tid in observed_thread_ids), (
+        f"有 task 跑在主线程: {observed_thread_ids}"
+    )
+    # 注意:不验证执行区间不重叠(无锁,可重叠)
