@@ -229,3 +229,53 @@ async def test_multi_degrades_to_single_when_plan_has_one_task():
     states = [e["state"] for e in events]
     assert "task_plan" not in states
     assert "dispatch_subagents" not in registered_tools
+
+
+@pytest.mark.asyncio()
+async def test_multi_mode_injects_plan_block_into_run_loop_system_content():
+    """plan 块注入 system prompt：conductor（run_loop）收到的 system_content 含任务目标。"""
+    captured_messages: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        captured_messages.extend(messages)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="已完成")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: None}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch("backend.orchestration.planner.Planner") as MockPlanner:
+            MockPlanner.return_value.decompose_request = _mock_plan()
+
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                events = await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "我需要学习量化交易，先搜集相关资料后整理学习资料和操作指南",
+                        "orchestration_mode": "force_multi",
+                        "api_key": "sk-test",
+                        "api_url": "https://example.com/v1",
+                    },
+                )
+
+    # 确保确实走了 multi 路径（task_plan 已产出）
+    assert any(e["state"] == "task_plan" for e in events), (
+        "plan 注入测试必须走 multi 路径"
+    )
+    assert captured_messages, "run_loop 必须收到 messages"
+    system_content = captured_messages[0]["content"]
+    assert "以下为已确认的任务计划" in system_content, (
+        "conductor 的 system_content 必须含计划引导块"
+    )
+    # 计划块内带出 mock plan 的子任务目标（description），验证真实注入
+    assert "目标：researcher" in system_content
+    assert "目标：writer" in system_content

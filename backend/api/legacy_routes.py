@@ -1613,11 +1613,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 build_llm_client_from_settings,
             )
 
-            mode = await _classify_orchestration_mode(
-                data.message,
-                data.orchestration_mode or "auto",
-                llm_client=build_llm_client_from_settings(),
-            )
+            try:
+                mode = await _classify_orchestration_mode(
+                    data.message,
+                    data.orchestration_mode or "auto",
+                    llm_client=build_llm_client_from_settings(),
+                )
+            except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
+                logger.warning("编排语义判定失败，降级 single: %s", exc)
+                mode = "single"
             run_id: Optional[str] = None
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import ChatDispatcher
@@ -1626,12 +1630,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 from backend.orchestration.team_registry import TeamRegistry
                 from backend.tools.subagent_tool import DispatchSubagentsTool
 
-                plan = await Planner(
-                    task_registry=TaskRegistry(),
-                    team_registry=TeamRegistry(),
-                    llm_client=build_llm_client_from_settings(),
-                ).decompose_request(data.message)
-                plan_tasks = list(plan.tasks if plan else [])
+                try:
+                    plan = await Planner(
+                        task_registry=TaskRegistry(),
+                        team_registry=TeamRegistry(),
+                        llm_client=build_llm_client_from_settings(),
+                    ).decompose_request(data.message)
+                    plan_tasks = list(plan.tasks if plan else [])
+                except Exception as exc:  # noqa: BLE001 — 编排规划失败必须降级 single
+                    logger.warning("编排规划失败，降级 single: %s", exc)
+                    mode = "single"
+                    plan_tasks = []
                 if len(plan_tasks) <= 1:
                     # LLM 没拆开（或降级单任务）→ 视为没开编排
                     mode = "single"
