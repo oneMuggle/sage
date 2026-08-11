@@ -79,13 +79,17 @@ router = APIRouter()
 # Future: 计划在 PR B 把单连接拆成 thread-local connection pool（每 thread 一个
 # sqlite3.Connection），那时可移除本锁。详见 `docs/plans/2026-08-09_*.md` §1.2。
 import functools
-import threading
 
-_db_lock = threading.Lock()
+# PR B §1.2 (CRITICAL fix): 共用 backend.data.database._SQLITE_LOCK,
+# 而不是本模块私有的 threading.Lock。PR B 的 SqliteStorageAdapter._sync_X
+# 在 to_thread worker 内获取同一把锁,两条路径才能在同一 sqlite3.Connection
+# (check_same_thread=False) 上互斥,避免 "cannot start a transaction within
+# a transaction"。
+from backend.data.database import _SQLITE_LOCK
 
 
 def with_db_lock(func):
-    """装饰器：把 sync 函数包在全局 `_db_lock` 内,串行化 SQLite 访问。
+    """装饰器：把 sync 函数包在全局 `_SQLITE_LOCK` 内,串行化 SQLite 访问。
 
     适用对象：34 个降级为 `def` 的 FastAPI handler —— 它们跑在 anyio threadpool,
     内部 `SessionRepository`/`MessageRepository` 等 sync 调用必须串行访问单连接。
@@ -93,7 +97,7 @@ def with_db_lock(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        with _db_lock:
+        with _SQLITE_LOCK:
             return func(*args, **kwargs)
 
     return wrapper
