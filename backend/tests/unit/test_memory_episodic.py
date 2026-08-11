@@ -133,6 +133,9 @@ def test_get_by_id_missing_returns_none(episodic: EpisodicMemory) -> None:
 
 
 def test_save_with_source_turn_and_message_id(episodic: EpisodicMemory) -> None:
+    # win7 sync #290: PRAGMA foreign_keys=ON — memories_episodic.session_id
+    # FKs to sessions.id. Pre-create the parent row so the insert succeeds.
+    ensure_session(episodic.db, "sess-1")
     mid = episodic.save(
         "user mentioned azure",
         session_id="sess-1",
@@ -146,6 +149,9 @@ def test_save_with_source_turn_and_message_id(episodic: EpisodicMemory) -> None:
 
 
 def test_save_with_memory_category(episodic: EpisodicMemory) -> None:
+    # win7 sync #290: PRAGMA foreign_keys=ON — memories_episodic.session_id
+    # FKs to sessions.id. Pre-create the parent row so the insert succeeds.
+    ensure_session(episodic.db, "sess-1")
     mid = episodic.save(
         "用户偏好咖啡",
         session_id="sess-1",

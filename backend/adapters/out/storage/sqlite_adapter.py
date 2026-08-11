@@ -6,19 +6,25 @@
 设计要点
 --------
 
-- **不改持久化层**：保留 ``SessionRepository`` / ``MessageRepository`` 与
-  ``Database`` 不动；adapter 只做翻译 + 装配 id/timestamps。
-- **直接调用同步方法**而不额外套 ``asyncio.to_thread``：FastAPI handler 已经
-  处于事件循环，SQLite 同步调用在线程内非阻塞且不耗 IO 等待；为追求透明、未来
-  切到线程池或 async driver 时再换。
-- **tool_calls 持久化格式**：list → JSON 字符串（与既有 messages.tool_calls
-  TEXT 字段一致），读取时反序列化。
-- **list_sessions**：返回 ``[{"id", "title", "message_count", ...}]`` 形式字典
-  列表；与 ``MemoryStorageAdapter`` 的 dict 形状对齐。
+- **PR B §1.2**:所有 async 方法包 _to_thread,让 chat_service /
+  session_service 这条 keep_async 路径在事件循环上不被同步 SQLite 写阻塞
+  (PR A 已修 legacy_routes 直接 repo 路径,本 PR 修 service→adapter 路径)。
+  实际的 SQLite 访问在 ``_sync_X`` 内持有
+  ``backend.data.database._SQLITE_LOCK`` —— 与 PR A 的 ``@with_db_lock``
+  **同一把 module-level threading.Lock**,因为两条路径共用同一个
+  ``sqlite3.Connection(check_same_thread=False)``,必须互斥才能避免
+  "cannot start a transaction within a transaction"。
+- **不改持久化层**:保留 SessionRepository / MessageRepository 与 Database 不动;
+  adapter 只做翻译 + 装配 id/timestamps + offload 到 threadpool。
+- **tool_calls 持久化格式**:list → JSON 字符串(与既有 messages.tool_calls
+  TEXT 字段一致),读取时反序列化。
+- **list_sessions**:返回 [{"id", "title", "message_count", ...}] 形式字典列表;
+  与 MemoryStorageAdapter 的 dict 形状对齐。
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -27,6 +33,7 @@ from typing import Any, Dict, List, Optional
 from sage_core import Message, Role, ToolCall
 from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
 
+from backend.data.database import _SQLITE_LOCK
 from backend.data.session_repo import (
     Message as _DataMessage,
     MessageRepository,
@@ -34,6 +41,18 @@ from backend.data.session_repo import (
 )
 
 _DEFAULT_TITLE = "新对话"
+
+
+async def _to_thread(func, *args, **kwargs):
+    """Py3.8 兼容的 ``_to_thread`` 等价物。
+
+    NOTE (win7 sync #295): main 直接用 ``_to_thread``(3.9+ API),
+    win7 是 Py3.8,改用 ``get_running_loop().run_in_executor(None, ...)``
+    等价实现——``_to_thread`` 本身正是这个薄封装。行为一致:
+    函数跑在默认 ThreadPoolExecutor worker,不阻塞事件循环。
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 
 # ============================================================================
@@ -123,23 +142,43 @@ class SqliteStorageAdapter:
         # 默认使用全局仓储（向后兼容）；依赖注入便于单测替换。
         self._sessions: SessionRepository = session_repo or SessionRepository()
         self._messages: MessageRepository = message_repo or MessageRepository()
+        # PR B §1.2 (CRITICAL fix): 不再持有实例级锁。
+        # 早先版本用 per-instance asyncio.Lock,有两个致命缺陷:
+        #   1) asyncio.Lock 只串行化 event loop 上的协程,而 _sync_X 跑在
+        #      to_thread worker 里,与 PR A 的 sync def handler 共享同一个
+        #      sqlite3.Connection —— 两条路径互不可见,仍会并发。
+        #   2) per-instance 意味着如果 DI 每请求新建一个 adapter,连 PR B
+        #      自己的串行化也失效。
+        # 现在改为在 _sync_X 内持有 module-level backend.data.database
+        # ._SQLITE_LOCK,与 PR A 的 @with_db_lock 共用同一把锁。
 
     # ----- 会话 -----
 
     async def create_session(self, title: str = "") -> str:
         """创建新会话，返回会话 ID。
 
-        备注：``SessionRepository.create`` 不接受空字符串标题，这里统一
-        替换为 ``"新对话"`` 默认值。
+        PR B §1.2: async 包装负责调度,实际逻辑在 _sync_create_session 跑 threadpool。
+        """
+        return await _to_thread(self._sync_create_session, title)
+
+    def _sync_create_session(self, title: str) -> str:
+        """create_session 的同步实现,跑在 threadpool worker。
+
+        PR B §1.2 (CRITICAL fix): 加 _SQLITE_LOCK,与 PR A 共享锁。
         """
         safe_title = title if title else _DEFAULT_TITLE
-        session = self._sessions.create(title=safe_title)
-        # 显式 str()：SessionRepository 在非 strict 模块，session.id 被推断为 Any
-        return str(session.id)
+        with _SQLITE_LOCK:
+            session = self._sessions.create(title=safe_title)
+            # 显式 str():SessionRepository 在非 strict 模块，session.id 被推断为 Any
+            return str(session.id)
 
     async def list_sessions(self) -> List[Dict[str, Any]]:
         """列出当前所有会话（已过滤归档），返回 dict 列表。"""
-        sessions = self._sessions.list(limit=1000, offset=0)
+        return await _to_thread(self._sync_list_sessions)
+
+    def _sync_list_sessions(self) -> List[Dict[str, Any]]:
+        with _SQLITE_LOCK:
+            sessions = self._sessions.list(limit=1000, offset=0)
         return [
             {
                 "id": s.id,
@@ -154,7 +193,11 @@ class SqliteStorageAdapter:
 
     async def get_session(self, session_id: str) -> Dict[str, Any] | None:
         """按 ID 取单个会话;不存在返 ``None``。"""
-        s = self._sessions.get(session_id)
+        return await _to_thread(self._sync_get_session, session_id)
+
+    def _sync_get_session(self, session_id: str) -> Dict[str, Any] | None:
+        with _SQLITE_LOCK:
+            s = self._sessions.get(session_id)
         if s is None:
             return None
         return {
@@ -172,20 +215,34 @@ class SqliteStorageAdapter:
         ``is_pinned`` 字段是 bool,持久化层需要 0/1 int,这里做转换。
         其他字段(如 ``title``)原样转发。
         """
+        return await _to_thread(self._sync_update_session, session_id, fields)
+
+    def _sync_update_session(self, session_id: str, fields: Dict[str, Any]) -> int:
+        """update_session 的同步实现。
+
+        is_pinned 字段是 bool,持久化层需要 0/1 int,这里做转换。
+
+        PR B §1.2 (CRITICAL fix): 加 _SQLITE_LOCK,与 PR A 共享锁。
+        """
         kwargs: Dict[str, Any] = {}
         if "title" in fields and fields["title"] is not None:
             kwargs["title"] = fields["title"]
         if "is_pinned" in fields and fields["is_pinned"] is not None:
             kwargs["is_pinned"] = 1 if fields["is_pinned"] else 0
-        if not kwargs:
-            # 没有任何字段要更新:走一遍 get 让调用方拿到当前快照,但返 1
-            # (语义:会话存在,所以"更新请求"被受理;若不存在,get 返 None)
-            return 1 if self._sessions.get(session_id) is not None else 0
-        return 1 if self._sessions.update(session_id, **kwargs) else 0
+        with _SQLITE_LOCK:
+            if not kwargs:
+                # 没有任何字段要更新:走一遍 get 让调用方拿到当前快照,但返 1
+                # (语义:会话存在,所以"更新请求"被受理;若不存在,get 返 None)
+                return 1 if self._sessions.get(session_id) is not None else 0
+            return 1 if self._sessions.update(session_id, **kwargs) else 0
 
     async def delete_session(self, session_id: str) -> int:
         """按 ID 删除会话;返受影响行数(0=不存在,1=已删除)。"""
-        return 1 if self._sessions.delete(session_id) else 0
+        return await _to_thread(self._sync_delete_session, session_id)
+
+    def _sync_delete_session(self, session_id: str) -> int:
+        with _SQLITE_LOCK:
+            return 1 if self._sessions.delete(session_id) else 0
 
     # ----- 消息 -----
 
@@ -197,7 +254,15 @@ class SqliteStorageAdapter:
             ``source_message_id``，让前端 ``data-turn-id`` 可精确命中）。
         """
         row = _domain_to_data_message(session_id, message)
-        self._messages.save(row)
+        return await _to_thread(self._sync_append_message, row)
+
+    def _sync_append_message(self, row: _DataMessage) -> str:
+        """append_message 的同步实现。
+
+        PR B §1.2 (CRITICAL fix): 加 _SQLITE_LOCK,与 PR A 共享锁。
+        """
+        with _SQLITE_LOCK:
+            self._messages.save(row)
         return row.id
 
     async def get_messages(
@@ -209,10 +274,18 @@ class SqliteStorageAdapter:
 
         实现：先取全部历史，然后取尾部 ``limit`` 条并保持时间正序。
         """
+        return await _to_thread(self._sync_get_messages, session_id, limit)
+
+    def _sync_get_messages(self, session_id: str, limit: int) -> List[Message]:
+        """get_messages 的同步实现。
+
+        PR B §1.2 (CRITICAL fix): 加 _SQLITE_LOCK,与 PR A 共享锁。
+        """
         if limit <= 0:
             return []
         # 先用较大窗口把会话消息取回来（按 created_at ASC 升序）
-        history = self._messages.get_by_session(session_id, limit=10_000, offset=0)
+        with _SQLITE_LOCK:
+            history = self._messages.get_by_session(session_id, limit=10_000, offset=0)
         if len(history) > limit:
             history = history[-limit:]
         return [_data_to_domain_message(row) for row in history]

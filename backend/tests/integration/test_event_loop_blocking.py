@@ -169,6 +169,79 @@ async def test_concurrent_session_list_completes(client):
     assert total_ms < 5000, f"50 并发 GET 总耗时 {total_ms:.0f}ms 过长"
 
 
+@pytest.mark.asyncio()
+async def test_cross_path_concurrent_no_sqlite_programming_error(client):
+    """PR B §1.2 跨路径并发回归:PR A (sync def handler 直连 repo) + PR B
+    (async adapter → to_thread) 同时打同一个 sqlite3.Connection,不能报错。
+
+    修复前:PR B 用 per-instance ``asyncio.Lock``,PR A 用 module-level
+    ``threading.Lock``。两把锁互不可见,而底层是同一个
+    ``sqlite3.Connection(check_same_thread=False)`` —— PR A handler 跑
+    SELECT 的同时 PR B worker 跑 INSERT,可触发
+    "cannot start a transaction within a transaction"。
+
+    修复后:两者共用 ``backend.data.database._SQLITE_LOCK``,所有同步
+    SQLite 访问串行化。
+
+    NOTE(实现偏差):brief 原本建议用 ``POST /api/v1/chat/stream`` 作为 PR B
+    路径,但 ``main.py`` 的 ``_API_MODE`` 默认是 ``legacy``,hex_router 未挂载,
+    且 legacy ``/chat/stream`` 走的是 ``SessionRepository``(仍是 PR A 路径)
+    —— 那样测不到 adapter。这里直接驱动 ``SqliteStorageAdapter``,才真正让
+    两条路径并发。
+    """
+    import sqlite3
+
+    from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
+
+    PR_A_COUNT = 20
+    PR_B_COUNT = 20
+
+    adapter = SqliteStorageAdapter()
+
+    # PR A:HTTP handler(sync def + @with_db_lock,跑在 anyio threadpool)
+    pr_a_tasks = [
+        asyncio.create_task(client.post(SESSIONS_URL, json={"title": f"pr_a_{i}"}))
+        for i in range(PR_A_COUNT)
+    ]
+    # PR B:adapter(async + asyncio.to_thread + _SQLITE_LOCK)
+    pr_b_tasks = [
+        asyncio.create_task(adapter.create_session(title=f"pr_b_{i}"))
+        for i in range(PR_B_COUNT)
+    ]
+
+    responses = await asyncio.gather(*pr_a_tasks, *pr_b_tasks, return_exceptions=True)
+
+    sqlite_errors: List[BaseException] = []
+    other_errors: List[BaseException] = []
+    success_count = 0
+    for r in responses:
+        if isinstance(r, BaseException):
+            # OperationalError 同样是连接竞争的表现形式之一
+            if isinstance(r, sqlite3.ProgrammingError | sqlite3.OperationalError):
+                sqlite_errors.append(r)
+            else:
+                other_errors.append(r)
+        else:
+            success_count += 1
+
+    assert not sqlite_errors, (
+        f"跨路径并发暴露 SQLite 连接竞争(PR A + PR B 锁未共享):\n"
+        f"  sqlite errors: {len(sqlite_errors)}\n"
+        f"  first: {sqlite_errors[0]!r}\n"
+        f"  other errors: {len(other_errors)}"
+    )
+    assert success_count >= PR_A_COUNT + PR_B_COUNT - 5, (
+        f"太多非 SQLite 失败: {len(other_errors)} 个 ({other_errors[:3]!r})\n"
+        f"  success={success_count}, expected~{PR_A_COUNT + PR_B_COUNT}"
+    )
+
+    # PR B 侧额外验证:20 个 create_session 必须产出 20 个唯一 ID
+    pr_b_ids = [r for r in responses[PR_A_COUNT:] if isinstance(r, str)]
+    assert len(set(pr_b_ids)) == len(pr_b_ids), (
+        f"SqliteStorageAdapter 并发产出重复 session ID: {len(set(pr_b_ids))} != {len(pr_b_ids)}"
+    )
+
+
 if __name__ == "__main__":
     # 允许 `python backend/tests/integration/test_event_loop_blocking.py` 直接跑
     pytest.main([__file__, "-v", "-s"])
