@@ -118,15 +118,17 @@ export function Chat() {
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
       officeRefs?: readonly ChatOfficeRef[];
+      orchestrationMode?: 'auto' | 'force_multi' | 'force_single';
     },
   ) => {
     clearError();
     const officeRefs = options?.officeRefs;
+    const orchestrationMode = options?.orchestrationMode;
     if (!currentSessionId) {
       const sessionId = await createSession();
-      await sendMessage(content, sessionId, officeRefs);
+      await sendMessage(content, sessionId, officeRefs, orchestrationMode);
     } else {
-      await sendMessage(content, undefined, officeRefs);
+      await sendMessage(content, undefined, officeRefs, orchestrationMode);
     }
   };
 

@@ -7,6 +7,8 @@ import {
   Minimize2,
   BookOpen,
   GraduationCap,
+  Network,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -84,6 +86,20 @@ export const slashCommands: SlashCommand[] = [
     description: '从当前对话中学习,生成技能草案候选',
     icon: GraduationCap,
     mode: 'learn',
+  },
+  {
+    name: 'orchestrate',
+    label: '多 agent 编排',
+    description: '强制多 agent 编排：拆解子任务并行执行',
+    icon: Network,
+    mode: 'prompt',
+  },
+  {
+    name: 'single',
+    label: '单 agent',
+    description: '强制单 agent 回答，跳过编排',
+    icon: UserRound,
+    mode: 'prompt',
   },
 ];
 
