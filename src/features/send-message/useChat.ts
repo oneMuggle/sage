@@ -97,7 +97,12 @@ export function useChat() {
   }, [messages, streamingMessageId, streamingContent, streamingReasoning, streamingToolCalls]);
 
   const sendMessage = useCallback(
-    async (content: string, sessionId?: string, officeRefs?: readonly ChatOfficeRef[]) => {
+    async (
+      content: string,
+      sessionId?: string,
+      officeRefs?: readonly ChatOfficeRef[],
+      orchestrationMode?: ChatConfig['orchestrationMode'],
+    ) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid || isLoading || loadingRef.current) return;
 
@@ -194,6 +199,8 @@ export function useChat() {
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
         // 不再靠 URL 启发式。详见 docs/plans/2026-06-17_thinking-passthrough.md
         provider: inferProviderFromBaseUrl(chatEndpoint.baseUrl),
+        // 由 /orchestrate /single 斜杠命令传入;普通消息 undefined → 后端 auto
+        orchestrationMode,
       };
 
       const appendContent = (next: string): void => {
