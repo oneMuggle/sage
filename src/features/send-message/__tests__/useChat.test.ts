@@ -976,8 +976,24 @@ describe('useChat taskBoard', () => {
               ],
             },
           });
-          cb({ payload: { state: 'task_status', iteration: 0, run_id: 'orch-1', task_id: 't1', status: 'running' } });
-          cb({ payload: { state: 'task_status', iteration: 0, run_id: 'orch-1', task_id: 't1', status: 'done' } });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              status: 'running',
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              status: 'done',
+            },
+          });
           cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
         });
         return vi.fn();
@@ -1026,7 +1042,15 @@ describe('useChat taskBoard', () => {
             },
           });
           // 旧 run 的 task_status → 应被忽略（statuses 保持空）
-          cb({ payload: { state: 'task_status', iteration: 0, run_id: 'orch-OLD', task_id: 't1', status: 'done' } });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-OLD',
+              task_id: 't1',
+              status: 'done',
+            },
+          });
           cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
         });
         return vi.fn();
@@ -1078,7 +1102,10 @@ describe('useChat taskBoard', () => {
       )
       // 第二条消息不推 task_plan → taskBoard 保持 null
       .mockImplementationOnce(
-        async (_name: string, cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void) => {
+        async (
+          _name: string,
+          cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
+        ) => {
           Promise.resolve().then(() => {
             cb({ payload: { state: 'done', iteration: 0, content: 'r2' } });
           });
