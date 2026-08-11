@@ -3,7 +3,7 @@
  */
 
 import { invoke } from './desktopInvoke';
-import type { AgentProfile, AgentUpdate } from './types';
+import type { AgentCreate, AgentProfile, AgentUpdate } from './types';
 import { handleApiError, withRetry } from './utils';
 
 export const agentsApi = {
@@ -53,6 +53,28 @@ export const agentsApi = {
     return withRetry(async () => {
       try {
         return await invoke<AgentProfile>('update_agent', { id, update });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 创建自定义 agent（US-4 角色可扩展）。
+   *
+   * 后端 `POST /api/v1/agents`：200 + 完整 profile；409 id 已存在；422 role 校验。
+   * 走无显式 body 的 IPC 路由 —— invoke 把 payload 整对象递归 camelToSnakeKeys
+   * （`modelConfigData` → `model_config_data`，自动对齐后端 AgentCreate 字段）。
+   *
+   * @throws 后端 409 / 422 经 handleApiError 包装
+   */
+  async create(payload: AgentCreate): Promise<AgentProfile> {
+    return withRetry(async () => {
+      try {
+        return await invoke<AgentProfile>(
+          'create_agent',
+          payload as unknown as Record<string, unknown>,
+        );
       } catch (error) {
         throw handleApiError(error);
       }

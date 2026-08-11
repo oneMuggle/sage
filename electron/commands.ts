@@ -39,6 +39,26 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // /api/v1 下 —— 去掉前缀会全部 404。commands.test.ts 有 guard 测试
   // 防止漏前缀。
   agent_chat_stream: { method: 'POST', path: () => '/api/v1/chat/stream' },
+  list_agents: { method: 'GET', path: () => '/api/v1/agents' },
+  get_agent: {
+    method: 'GET',
+    path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}`,
+  },
+  update_agent: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}`,
+    // 后端 update body 是 extra="forbid" — id 是路径参数，必须从 body 剥掉，
+    // 否则 422（与 permissions_answer 剥 requestId 同理）。显式 body 后
+    // invoke 仍会递归 camelToSnakeKeys（electron/invoke.ts L68-69），
+    // update 内部 systemPrompt → system_prompt 自动转换。
+    body: (a) => (a.update as Record<string, unknown>) ?? {},
+  },
+  toggle_agent: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/agents/${encodeURIComponent(String(a.id))}/toggle`,
+    body: (a) => ({ enabled: a.enabled }),
+  },
+  create_agent: { method: 'POST', path: () => '/api/v1/agents' },
   attach_chat_stream: {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/${encodeURIComponent(String(a.streamId))}`,

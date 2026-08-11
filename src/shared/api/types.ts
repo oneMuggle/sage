@@ -437,6 +437,20 @@ export interface AgentUpdate {
   description?: string;
 }
 
+/** POST /agents 请求体（US-4 角色可扩展）。 */
+export interface AgentCreate {
+  id: string;
+  name: string;
+  role?: string;
+  system_prompt?: string;
+  tools?: string[];
+  memory_access?: string[];
+  modelConfigData?: Record<string, unknown>;
+  maxIterations?: number;
+  enabled?: boolean;
+  description?: string;
+}
+
 // ─── Scheduled Tasks (Phase 8) ───────────────────────────────
 
 export type ScheduleKind = 'once' | 'recurring';
