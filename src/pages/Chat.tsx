@@ -37,6 +37,7 @@ export function Chat() {
     iteration, // P2: ReAct 迭代轮次
     streamingState, // P2: 当前流式状态
     streamingToolCalls, // 右侧面板 Progress: 实时流式工具调用
+    taskBoard, // Multi-Agent Orchestration: 编排任务板
   } = useChat();
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
 
@@ -290,6 +291,7 @@ export function Chat() {
         toolCalls={streamingToolCalls ?? []}
         isLoading={isLoading}
         sessionId={currentSessionId}
+        taskBoard={taskBoard ?? null}
       />
     </div>
   );

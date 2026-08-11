@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
+import type { TaskBoard } from '../../features/send-message/useChat';
 import type { ToolCall } from '../../shared/lib/store';
 
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
@@ -18,12 +19,13 @@ interface RightPanelProps {
   toolCalls: ToolCall[];
   isLoading: boolean;
   sessionId: string | null;
+  taskBoard?: TaskBoard | null;   // 新增：编排任务板
 }
 
 type Tab = 'progress' | 'artifacts';
 
 export function RightPanel({
-  open, iteration, streamingState, toolCalls, isLoading, sessionId,
+  open, iteration, streamingState, toolCalls, isLoading, sessionId, taskBoard,
 }: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('progress');
   const [selected, setSelected] = useState<Artifact | null>(null);
@@ -65,6 +67,7 @@ export function RightPanel({
             streamingState={streamingState}
             toolCalls={toolCalls}
             isLoading={isLoading}
+            taskBoard={taskBoard}
           />
         ) : (
           <ArtifactsSection
