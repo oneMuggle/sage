@@ -274,6 +274,16 @@ class TriggerResponse(BaseModel):
     message: str
 
 
+#: agent role 白名单（PATCH/POST 共用）。
+_VALID_AGENT_ROLES = {
+    "coordinator",
+    "researcher",
+    "coder",
+    "memory_manager",
+    "writer",
+}
+
+
 class AgentToggle(BaseModel):
     """PATCH /agents/{id}/toggle 请求体 (PR-5)。
 
@@ -318,6 +328,27 @@ class AgentUpdate(BaseModel):
 
     enabled: Optional[bool] = None
 
+    description: Optional[str] = None
+
+
+class AgentCreate(BaseModel):
+    """POST /agents 请求体（US-4 角色可扩展）。
+
+    id / name 必填；其余字段带默认值。
+    ``model_config_data`` 字段名避开 Pydantic 保留名（同 AgentUpdate）。
+    """
+
+    model_config = {"protected_namespaces": ()}
+
+    id: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=64)
+    role: str = "general"
+    system_prompt: str = ""
+    tools: Optional[List[str]] = None
+    memory_access: Optional[List[str]] = None
+    model_config_data: Optional[dict] = None
+    max_iterations: Optional[int] = None
+    enabled: Optional[bool] = None
     description: Optional[str] = None
 
 
@@ -849,7 +880,7 @@ def update_agent(agent_id: str, data: AgentUpdate):
     from backend.data.agent_repo import AgentRepository
 
     # 字段级校验: role 白名单
-    valid_roles = {"coordinator", "researcher", "coder", "memory_manager"}
+    valid_roles = _VALID_AGENT_ROLES
     if data.role is not None and data.role not in valid_roles:
         raise HTTPException(
             status_code=422,
@@ -916,6 +947,62 @@ def toggle_agent(agent_id: str, data: AgentToggle):
 
     repo.set_enabled(agent_id, data.enabled)
     return repo.get(agent_id)
+
+
+@router.post("/agents")
+@with_db_lock
+def create_agent(data: AgentCreate):
+    """创建自定义 agent（US-4）。
+
+    - 200 + 完整 profile
+    - 409 + 结构化 detail（id 已存在）
+    - 422 — role 白名单 / max_iterations 范围
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    if data.role not in _VALID_AGENT_ROLES and data.role != "general":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_role",
+                "message": (
+                    f"role must be one of {sorted(_VALID_AGENT_ROLES)} "
+                    f"or 'general', got {data.role!r}"
+                ),
+            },
+        )
+
+    if data.max_iterations is not None and not (1 <= data.max_iterations <= 50):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_max_iterations",
+                "message": f"max_iterations must be in 1..50, got {data.max_iterations}",
+            },
+        )
+
+    repo = AgentRepository()
+    if repo.get(data.id) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "type": "agent_already_exists",
+                "message": f"agent {data.id!r} already exists",
+            },
+        )
+
+    payload = data.model_dump(exclude_none=True)
+    if "model_config_data" in payload:
+        payload["model_config"] = payload.pop("model_config_data")
+    payload.setdefault("tools", [])
+    payload.setdefault("memory_access", [])
+    payload.setdefault("model_config", {})
+    payload.setdefault("max_iterations", 10)
+    payload.setdefault("enabled", True)
+    payload.setdefault("description", "")
+
+    repo.upsert(payload)
+    return repo.get(data.id)
 
 
 # ==================== 技能 API (PR-7) ====================
