@@ -53,6 +53,7 @@ from backend.office.workspace_errors import (
     WorkspacePathMismatchError,
     WorkspaceSessionNotFoundError,
 )
+from backend.orchestration.chat_dispatcher import _classify_orchestration_mode
 from backend.scheduler import get_evolution_logs, get_scheduler
 from backend.skills.draft_store import get_skill_draft_store
 from backend.skills.loader import get_skill_loader
@@ -1601,6 +1602,83 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             from backend.agents.profiles import build_system_base
 
             system_content = build_system_base()
+
+            # ===== Multi-Agent Orchestration (spec 2026-08-11) =====
+            # tool-toggle 门: 语义判定（独立轻量 LLM 二分类）决定 mode。
+            # single → 不注册 dispatch_subagents 工具、不跑 decompose_request
+            #          （简单任务结构上无法被过度拆解 — 硬约束 2）
+            # multi  → 复用 Planner 预规划 + conductor 经 dispatch 工具执行
+            #          （复杂任务必出 task_plan + 必注册工具 — 硬约束 1）
+            from backend.orchestration.llm_factory import (
+                build_llm_client_from_settings,
+            )
+
+            mode = await _classify_orchestration_mode(
+                data.message,
+                data.orchestration_mode or "auto",
+                llm_client=build_llm_client_from_settings(),
+            )
+            run_id: Optional[str] = None
+            if mode == "multi":
+                from backend.orchestration.chat_dispatcher import ChatDispatcher
+                from backend.orchestration.planner import Planner
+                from backend.orchestration.task_registry import TaskRegistry
+                from backend.orchestration.team_registry import TeamRegistry
+                from backend.tools.subagent_tool import DispatchSubagentsTool
+
+                plan = await Planner(
+                    task_registry=TaskRegistry(),
+                    team_registry=TeamRegistry(),
+                    llm_client=build_llm_client_from_settings(),
+                ).decompose_request(data.message)
+                plan_tasks = list(plan.tasks if plan else [])
+                if len(plan_tasks) <= 1:
+                    # LLM 没拆开（或降级单任务）→ 视为没开编排
+                    mode = "single"
+                else:
+                    run_id = f"orch-{uuid.uuid4()}"
+                    dispatcher = ChatDispatcher(
+                        stream_id=stream_id,
+                        entry_queue=entry.queue,
+                        run_id=run_id,
+                        llm_config=llm_config,
+                    )
+                    agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
+                    if (
+                        agent.profile is not None
+                        and agent.profile.get("tools") is not None
+                    ):
+                        agent.profile["tools"].append("dispatch_subagents")
+                    # 计划块注入 system prompt —— conductor 依据计划调用工具
+                    # 注: system_content 已在插入点之前由 build_system_base()
+                    # 赋值（L1598），这里只追加计划块，不再重新赋值（否则覆盖）。
+                    plan_block = "\n".join(
+                        f"- {i}. [{t.parameters.get('agent_hint', 'primary')}] "
+                        f"{t.name}: {t.description}"
+                        for i, t in enumerate(plan_tasks, 1)
+                    )
+                    system_content += (
+                        "\n\n以下为已确认的任务计划，请调用 dispatch_subagents "
+                        "工具并行执行这些子任务（可合并/调整）。不要复述计划，直接执行。\n"
+                        + plan_block
+                    )
+                    # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
+                    await entry.queue.put(
+                        {
+                            "state": "task_plan",
+                            "run_id": run_id,
+                            "plan": [
+                                {
+                                    "task_id": f"t{i}",
+                                    "agent_id": t.parameters.get(
+                                        "agent_hint", "primary"
+                                    ),
+                                    "goal": t.description or t.name,
+                                }
+                                for i, t in enumerate(plan_tasks, 1)
+                            ],
+                        }
+                    )
             try:
                 from backend.core.diagram_prompt import (
                     DIAGRAM_TOOL_PROMPT,

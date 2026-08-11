@@ -72,6 +72,15 @@ def setup_test_db(tmp_db_path):
     # 会在跨测试文件时泄漏. 在 autouse setup 中强制清空.
     from backend.main import app
 
+    # M1-M2 修复同上;同时确保 app.state.streams 已初始化: 测试不走 FastAPI
+    # lifespan(ASGITransport 默认不触发), 直接自建 AsyncClient 的测试
+    # (如 test_chat_orchestration_stream) 依赖注册表已存在。与 client fixture
+    # 的兜底逻辑保持一致(conftest.py client fixture 内也做了同样 init)。
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        from backend.api.chat_stream_registry import StreamRegistry
+
+        app.state.streams = StreamRegistry()
+
     if hasattr(app.state, "streams") and app.state.streams is not None:
         for entry in list(app.state.streams._entries.values()):
             if entry.task is not None and not entry.task.done():
