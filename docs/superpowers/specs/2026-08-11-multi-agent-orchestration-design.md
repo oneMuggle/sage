@@ -2,7 +2,7 @@
 
 - **Date:** 2026-08-11
 - **Branch:** `feat/multi-agent-orchestration` (基于 `origin/main`)
-- **Status:** Draft, 待用户 review
+- **Status:** 已实施（2026-08-11，PR 分支 `feat/multi-agent-orchestration` 全 11 任务完成；实现细节见 `docs/technical/42-chat-multi-agent-orchestration.md`）
 - **Author:** Claude (brainstorming with user)
 
 ## 1. 背景与目标
