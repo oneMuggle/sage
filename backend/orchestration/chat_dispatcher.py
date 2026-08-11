@@ -32,6 +32,43 @@ MAX_SUBAGENT_RESULT_CHARS = 50 * 1024
 #: task_status.output_preview 上限（UI 展开预览）。
 MAX_OUTPUT_PREVIEW_CHARS = 500
 
+#: 编排语义判定 prompt（轻量二分类）：LLM 只需回答 multi / single。
+_CLASSIFY_PROMPT = """判断以下用户消息是否需要多 agent 协作（拆解为多个子任务、由不同角色并行执行）才能最好地完成。
+只需返回一个词：multi 或 single。
+- multi：复杂任务、多步骤、需要搜集资料/研究/并行工作。例如"我需要学习量化交易，先搜集相关资料后，整理一份学习资料和操作指南"。
+- single：简单问答、单步请求。例如"今天天气怎么样"、"解释什么是递归"。
+
+用户消息: {message}
+
+答案:"""
+
+
+async def _classify_orchestration_mode(
+    message: str,
+    orchestration_mode: str,
+    llm_client: Optional[Any] = None,
+) -> str:
+    """语义判定消息是否进编排（multi）还是单 agent（single）。
+
+    - ``force_multi`` / ``force_single``：用户 override，直接定，跳过 LLM
+    - ``auto``：轻量 LLM 二分类；无 client / 失败 → ``single``（= 没开编排）
+
+    这是 tool-toggle 门的判定源：mode=single 时 producer 不注册
+    dispatch_subagents 工具（简单任务在结构上无法被过度拆解）。
+    """
+    if orchestration_mode == "force_multi":
+        return "multi"
+    if orchestration_mode == "force_single":
+        return "single"
+    if llm_client is None:
+        return "single"
+    try:
+        response = await llm_client.complete(_CLASSIFY_PROMPT.format(message=message))
+        return "multi" if "multi" in (response or "").strip().lower() else "single"
+    except Exception as exc:  # noqa: BLE001 — 判定失败必须降级，绝不阻塞聊天
+        logger.warning("编排语义判定失败，降级 single: %s", exc)
+        return "single"
+
 
 @dataclass
 class ChatTaskState:

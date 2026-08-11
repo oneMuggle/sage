@@ -186,6 +186,11 @@ class ChatRequest(BaseModel):
     # legacy_routes 模块加载完毕时自动被 Pydantic v2 调用.
     office_refs: List[ChatOfficeRef] = Field(default_factory=list)
 
+    # Multi-Agent Orchestration (spec 2026-08-11): 编排模式开关。
+    # auto（默认）—— 轻量 LLM 二分类决定；force_multi / force_single ——
+    # 用户斜杠命令 /orchestrate / /single 覆盖，跳过语义判定。
+    orchestration_mode: str = "auto"
+
 
 class MessageResponse(BaseModel):
     id: str
