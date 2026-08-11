@@ -60,10 +60,10 @@ async def create_session(self, title: str = "") -> str:
 - 不改 `StoragePort` 接口签名（保持 async,调用者无感）
 - 不改 `chat_service` / `session_service`（它们只是 await adapter,改 adapter 它们自动受益）
 - 不改 `SessionRepository` / `MessageRepository` 底层（保持同步,to_thread 内部直接调）
-- 不引入新锁原语（用 stdlib `threading.Lock`）
+- 不引入新锁原语 —— 统一到单一 module-level `threading.Lock`,放在 `backend/data/database.py` 模块级 `_SQLITE_LOCK`,adapter 与 handler 共享同一把
 - 不引入异步 SQLite 驱动（如 aiosqlite）——保持同步 driver + threadpool offload 模式
-- 不做 connection pool —— 单例 `SessionRepository` + 实例级锁已正确
-- 不动 PR A 的 `_db_lock`（在 `backend/api/legacy_routes.py:84`）——两把锁各管各的、互不干扰
+- 不做 connection pool —— 单例 `SessionRepository` + 模块级锁已正确
+- 改 PR A 的 `_db_lock` 共享方式：让 `legacy_routes.py` 改 import `backend.data.database._SQLITE_LOCK as _db_lock`,两条路径在同一把锁上互斥,避免同连接事务竞争
 
 ## 2. 用户故事
 
@@ -146,37 +146,31 @@ class MemoryStorageAdapter:
 
 ### 3.4 锁归属（关键设计决策）
 
-**SqliteStorageAdapter 自带 `self._lock = asyncio.Lock()` 实例级锁**，**不是** PR A 的 `_db_lock` 模块锁(`threading.Lock`)。两把锁类型不同:PR A 的保护 sync `def` handler(走 threadpool),PR B 的保护 async def adapter(走事件循环+threadpool offload)。
+**两把锁已统一为 module-level `backend.data.database._SQLITE_LOCK = threading.Lock()`**,PR A handler(`@with_db_lock` 装饰器)和 PR B `SqliteStorageAdapter._sync_X`(在 `asyncio.to_thread` worker 内)共享同一把锁。
 
 理由：
 
-- PR A 的 `_db_lock` 定义在 `backend/api/legacy_routes.py:84`，归属 api 层
-- SqliteStorageAdapter 是 `backend/adapters/out/storage/sqlite_adapter.py`（adapter 层）
-- 让 adapter 反向依赖 api 层的锁违反分层（adapter → api 反向依赖）
-- 单例 `SqliteStorageAdapter` 全局只 1 个实例（`backend/main.py` DI 注入），实例级锁等价于模块级锁
-- handler 上的 `@with_db_lock`（PR A 加的）继续保护 handler 直接走 `Depends(get_session_repo)` 的路径；adapter 的 `self._lock` 独立保护走 `chat_service → adapter` 的路径
-- **已知未消除的并发风险**：两把锁都针对同一 SQLite 单例连接（`backend.data.database.get_database()` 返回的 `Database` 内部 `sqlite3.Connection(check_same_thread=False)`）。理论上：
-  - 路径 A（handler → repo）和路径 B（chat_service → adapter）如果**同时并发**，会同时获取各自的锁、然后在同一 connection 上并发执行 SQL，仍可能触发 `'cannot start a transaction within a transaction'`
-  - PR A 的实施数据（50 并发 session POST 全成功）显示实际场景下两路径很少同时打 SQL，但**理论风险存在**
-  - **本 PR 不合并锁**——避免修改 PR A 的稳定代码。如未来出现 connection 错误，follow-up PR 可把锁统一搬到 `backend/data/database.py` 模块（database 层 → 唯一所有访问源必经之地），让 adapter 和 handler 共用一把模块级锁
-- `MemoryStorageAdapter` 不加锁：纯内存 dict 操作，无并发问题
-
-`MemoryStorageAdapter` 不加锁：纯内存 dict 操作，无并发问题。
+- 单一 lock 在所有同步 SQLite 写必经之路上,串行化访问同一 `sqlite3.Connection(check_same_thread=False)`
+- 必须用 `threading.Lock` 而不是 `asyncio.Lock`: `_sync_X` 跑在线程池 worker 线程上,与 PR A 的 sync def handler 共享同一线程上下文; `asyncio.Lock` 只能保护 event loop 上的协程,看不到 worker 线程
+- 锁位置选 `backend/data/database.py` 模块:database 层是所有 SQLite 访问的必经之地(adapter 通过 SessionRepository/MessageRepository、handler 直接 repo 都收敛到这里),放这里最自然
+- PR A 的 `_db_lock` (在 `backend/api/legacy_routes.py`) 现在改 import `_SQLITE_LOCK as _db_lock`,`@with_db_lock` 装饰器 / `with _db_lock:` 调用点不动
+- `MemoryStorageAdapter` 不加锁:纯内存 dict 操作,无并发问题
 
 ## 4. 组件与改动清单
 
 | Component | Action | 改动量预估 |
 |---|---|---|
-| `backend/adapters/out/storage/sqlite_adapter.py` | 改写 | 7 个 async 方法 → 7 个包装 + 7 个 `_sync_X` 同步助手,加 `self._lock`,docstring 更新 |
-| `backend/adapters/out/storage/memory_adapter.py` | 改写 | 7 个 async 方法 → 7 个包装 + 7 个 `_sync_X` 同步助手,docstring 更新 |
+| `backend/data/database.py` | **新增** | 模块级 `_SQLITE_LOCK = threading.Lock()`,所有 SQLite 写必经之路 |
+| `backend/adapters/out/storage/sqlite_adapter.py` | 改写 | 7 个 async 方法 → 7 个包装 + 7 个 `_sync_X` 同步助手,`_sync_X` 内 `with _SQLITE_LOCK:`,移除 `self._lock`,docstring 更新 |
+| `backend/adapters/out/storage/memory_adapter.py` | 改写 | 7 个 async 方法 → 7 个包装 + 7 个 `_sync_X` 同步助手,`_sync_create_session` 改 `uuid.uuid4()`,docstring 更新 |
 | `backend/ports/storage.py` (StoragePort) | **不动** | 接口签名不变 |
 | `backend/application/services/chat_service.py` | **不动** | 仍 `await storage.X()`,adapter 自动 offload |
 | `backend/application/services/session_service.py` | **不动** | 同上 |
 | `backend/main.py` | **不动** | DI 注入不变 |
 | `backend/data/session_repo.py` | **不动** | SessionRepository 保持同步实现 |
-| `backend/api/legacy_routes.py` | **不动** | PR A 的 `_db_lock` / `@with_db_lock` 继续保护直接 repo 路径 |
-| `backend/tests/unit/test_memory_storage_adapter.py` | 扩展 | 新增 6-8 个单元测试 |
-| `backend/tests/integration/test_event_loop_blocking.py` | 扩展 | 新增 1 个 chat_stream 场景 |
+| `backend/api/legacy_routes.py` | **改** | 改 `_db_lock` 为 `from backend.data.database import _SQLITE_LOCK as _db_lock`,`@with_db_lock` 装饰器签名不变 |
+| `backend/tests/unit/test_memory_storage_adapter.py` | 扩展 | 新增 6-8 个单元测试 + 1 个并发无重复 ID 测试 |
+| `backend/tests/integration/test_event_loop_blocking.py` | 扩展 | 新增 1 个跨路径并发回归测试(PR A handler + PR B adapter) |
 
 **预计 diff**：~200 行新增（含注释和测试），0 行删除（改写 = 原方法名保留,内部实现替换）。
 

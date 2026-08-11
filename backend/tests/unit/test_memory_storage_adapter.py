@@ -26,7 +26,7 @@ async def test_create_session_returns_unique_id() -> None:
     sid1 = await storage.create_session(title="first")
     sid2 = await storage.create_session(title="second")
     assert sid1 != sid2
-    # 默认 id 形如 mem-1/mem-2（counter 自增）
+    # 默认 id 形如 mem-<uuid4>
     assert sid1.startswith("mem-")
     assert sid2.startswith("mem-")
 
@@ -254,20 +254,26 @@ async def test_to_thread_actually_offloads_to_worker():
 
 @pytest.mark.asyncio()
 async def test_concurrent_writes_are_serialized_by_lock():
-    """N=20 并发 create_session,实际执行时间不重叠(锁串行)。"""
+    """N=20 并发 create_session,实际执行时间不重叠(锁串行)。
+
+    NOTE: 探针挂在 ``adapter._sessions.create`` 而不是 ``_sync_create_session``。
+    因为 CRITICAL fix 后锁在 ``_sync_create_session`` **内部**(``with
+    _SQLITE_LOCK:``),若探针包在 ``_sync_create_session`` 外层,sleep 就落在锁
+    外,测不到串行化。挂到 repo 层才保证 sleep 在临界区内。
+    """
     adapter = SqliteStorageAdapter()
     N = 20
     execution_log: list[tuple[float, float]] = []
 
-    original_sync = adapter._sync_create_session
+    original_create = adapter._sessions.create
 
-    def probed_sync(title: str) -> str:
+    def probed_create(*args: Any, **kwargs: Any) -> Any:
         start = time.perf_counter()
         time.sleep(0.005)  # 模拟 SQLite 写延迟,放大可观察窗口
         execution_log.append((start, time.perf_counter()))
-        return original_sync(title)
+        return original_create(*args, **kwargs)
 
-    adapter._sync_create_session = probed_sync  # type: ignore[method-assign]
+    adapter._sessions.create = probed_create  # type: ignore[method-assign]
 
     await asyncio.gather(*[adapter.create_session(title=f"t{i}") for i in range(N)])
 
@@ -279,6 +285,23 @@ async def test_concurrent_writes_are_serialized_by_lock():
         assert cur_start >= prev_end, (
             f"锁失效:task {i} 在 {prev_end:.4f} 结束前就开始了 {cur_start:.4f}"
         )
+
+
+@pytest.mark.asyncio()
+async def test_memory_adapter_concurrent_creates_no_duplicate_ids():
+    """HIGH fix regression: 10 并发 create_session 必须返回 10 个唯一 ID。
+
+    修复前: ``_counter += 1`` 的 4 字节码序列让 GIL 切换,两个 worker 拿到
+    同一 self._counter 值,产生重复 "mem-N" session ID。
+
+    修复后: ``_sync_create_session`` 用 uuid.uuid4(),概率碰撞可忽略。
+    """
+    adapter = MemoryStorageAdapter()
+    N = 10
+    ids = await asyncio.gather(*(adapter.create_session(f"t-{i}") for i in range(N)))
+    assert len(set(ids)) == N, (
+        f"MemoryStorageAdapter 产生重复 session ID: {len(set(ids))} != {N}\n  ids: {ids}"
+    )
 
 
 @pytest.mark.asyncio()

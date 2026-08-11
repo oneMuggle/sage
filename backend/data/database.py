@@ -9,10 +9,19 @@ import json
 import logging
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# Module-level SQLite 写锁(PR B §1.2 fix):被所有同步 SQLite 写共享,
+# 包括 PR A 的 legacy_routes.py handler(用 @with_db_lock 装饰器)和
+# PR B 的 SqliteStorageAdapter._sync_X(在 asyncio.to_thread worker 内执行)。
+# 必须用 threading.Lock 而不是 asyncio.Lock,因为 _sync_X 跑在线程池 worker
+# 上,与 PR A 的 sync def handler 共享同一线程上下文;asyncio.Lock 只能保护
+# event loop 上的协程,看不到 worker 线程。
+_SQLITE_LOCK = threading.Lock()
 
 # ==================== 语义记忆 FTS5 索引 ====================
 # 独立 FTS5 表（非 external-content）+ jieba 分词文本 + Python 侧显式同步。

@@ -15,7 +15,9 @@ PR B §1.2 设计要点
 --------
 - 会话存储为 dict[session_id, _SessionState],每会话内消息按追加顺序保存。
 - get_messages(limit) 返回"最后" limit 条且保持时间正序。
-- create_session 计数器自增 ID 形如 mem-1 / mem-2,避免与真实 UUID 格式冲突。
+- create_session 生成 ID 形如 mem-<uuid4>,避免与真实 UUID 格式冲突。
+  (原自增计数器实现有 RMW 竞态:`self._counter += 1` 是 4 条字节码,
+  GIL 可在中间切换,两个 to_thread worker 会拿到同一个值并产出重复 ID。)
 - delete_session 级联清理该会话的所有消息。
 """
 
@@ -46,7 +48,6 @@ class MemoryStorageAdapter:
 
     def __init__(self) -> None:
         self._sessions: Dict[str, _SessionState] = {}
-        self._counter: int = 0
 
     # ----- 会话 -----
 
@@ -54,8 +55,9 @@ class MemoryStorageAdapter:
         return await asyncio.to_thread(self._sync_create_session, title)
 
     def _sync_create_session(self, title: str) -> str:
-        self._counter += 1
-        session_id = f"mem-{self._counter}"
+        # PR B §1.2 (HIGH fix): 用 uuid4 而非自增计数器 —— `self._counter += 1`
+        # 的 read-modify-write 不是原子操作,并发 to_thread worker 会产出重复 ID。
+        session_id = f"mem-{uuid.uuid4()}"
         self._sessions[session_id] = _SessionState(title=title)
         return session_id
 
