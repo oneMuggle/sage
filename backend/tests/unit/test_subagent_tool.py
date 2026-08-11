@@ -76,7 +76,7 @@ class TestRunLoopSpecialCase:
     @pytest.mark.asyncio()
     async def test_run_loop_dispatches_via_execute_async(self):
         from backend.core.legacy.agent import SageAgent
-        from backend.core.legacy.agent_state import AgentEvent, AgentState
+        from backend.core.legacy.agent_state import AgentState
         from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
 
         dispatcher = _make_dispatcher("子 agent 聚合结果")

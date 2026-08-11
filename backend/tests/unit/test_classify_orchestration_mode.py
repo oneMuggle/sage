@@ -71,7 +71,7 @@ async def test_auto_handles_braces_in_user_message():
     现改用 str.replace,带大括号的复杂任务应正常返回 multi。
     """
     client = _client_returning("multi")
-    msg = "complex task {with braces} and JSON {\"key\": \"value\"}"
+    msg = 'complex task {with braces} and JSON {"key": "value"}'
     assert await _classify_orchestration_mode(msg, "auto", client) == "multi"
     client.complete.assert_awaited_once()
     # 验证 prompt 中确实把整段消息原样替换进去了,没有被当成 format 占位符

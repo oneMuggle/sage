@@ -95,7 +95,7 @@ class ChatDispatcher:
     def __init__(
         self,
         stream_id: str,
-        entry_queue: "asyncio.Queue[Dict[str, Any]]",
+        entry_queue: asyncio.Queue[Dict[str, Any]],
         run_id: str,
         llm_config: Optional[Dict[str, Any]] = None,
     ) -> None:
