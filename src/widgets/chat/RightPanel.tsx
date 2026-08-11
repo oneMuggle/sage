@@ -19,13 +19,19 @@ interface RightPanelProps {
   toolCalls: ToolCall[];
   isLoading: boolean;
   sessionId: string | null;
-  taskBoard?: TaskBoard | null;   // 新增：编排任务板
+  taskBoard?: TaskBoard | null; // 新增：编排任务板
 }
 
 type Tab = 'progress' | 'artifacts';
 
 export function RightPanel({
-  open, iteration, streamingState, toolCalls, isLoading, sessionId, taskBoard,
+  open,
+  iteration,
+  streamingState,
+  toolCalls,
+  isLoading,
+  sessionId,
+  taskBoard,
 }: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('progress');
   const [selected, setSelected] = useState<Artifact | null>(null);
@@ -60,7 +66,11 @@ export function RightPanel({
 
       <div className="h-[calc(100%-2.5rem)]">
         {selected && sessionId ? (
-          <ArtifactViewer artifact={selected} sessionId={sessionId} onBack={() => setSelected(null)} />
+          <ArtifactViewer
+            artifact={selected}
+            sessionId={sessionId}
+            onBack={() => setSelected(null)}
+          />
         ) : tab === 'progress' ? (
           <ProgressSection
             iteration={iteration}

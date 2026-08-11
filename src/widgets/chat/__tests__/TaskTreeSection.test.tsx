@@ -27,7 +27,16 @@ describe('TaskTreeSection', () => {
   it('shows completion summary', () => {
     const board = makeBoard({
       statuses: {
-        t1: { state: 'task_status', run_id: 'orch-1', task_id: 't1', status: 'done', agent_id: 'researcher', goal: '搜集资料', error: null, output_preview: '完成' },
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'done',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: '完成',
+        },
       },
     });
     render(<TaskTreeSection board={board} />);
@@ -37,7 +46,16 @@ describe('TaskTreeSection', () => {
   it('renders running spinner for in-flight task', () => {
     const board = makeBoard({
       statuses: {
-        t1: { state: 'task_status', run_id: 'orch-1', task_id: 't1', status: 'running', agent_id: 'researcher', goal: '搜集资料', error: null, output_preview: null },
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'running',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: null,
+        },
       },
     });
     render(<TaskTreeSection board={board} />);
@@ -47,7 +65,16 @@ describe('TaskTreeSection', () => {
   it('shows output_preview expandable for done task', () => {
     const board = makeBoard({
       statuses: {
-        t1: { state: 'task_status', run_id: 'orch-1', task_id: 't1', status: 'done', agent_id: 'researcher', goal: '搜集资料', error: null, output_preview: '调研结论摘要' },
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'done',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: '调研结论摘要',
+        },
       },
     });
     render(<TaskTreeSection board={board} />);

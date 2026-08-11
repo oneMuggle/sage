@@ -9,7 +9,7 @@ interface ProgressSectionProps {
   streamingState: string | null;
   toolCalls: ToolCall[];
   isLoading: boolean;
-  taskBoard?: TaskBoard | null;   // 新增：编排任务板（null/缺省 = 无编排）
+  taskBoard?: TaskBoard | null; // 新增：编排任务板（null/缺省 = 无编排）
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -26,7 +26,7 @@ export function ProgressSection({
   isLoading,
   taskBoard,
 }: ProgressSectionProps) {
-  const stateLabel = streamingState ? STATE_LABELS[streamingState] ?? streamingState : null;
+  const stateLabel = streamingState ? (STATE_LABELS[streamingState] ?? streamingState) : null;
 
   return (
     <div className="p-3 space-y-2 text-sm">
