@@ -63,7 +63,12 @@ async def _classify_orchestration_mode(
     if llm_client is None:
         return "single"
     try:
-        response = await llm_client.complete(_CLASSIFY_PROMPT.format(message=message))
+        # str.replace, NOT .format(): user message may contain literal { / }
+        # (JSON / code snippets / template strings) which would make .format()
+        # raise KeyError/IndexError and silently downgrade to single with a
+        # misleading "判定失败" log.
+        prompt = _CLASSIFY_PROMPT.replace("{message}", message)
+        response = await llm_client.complete(prompt)
         return "multi" if "multi" in (response or "").strip().lower() else "single"
     except Exception as exc:  # noqa: BLE001 — 判定失败必须降级，绝不阻塞聊天
         logger.warning("编排语义判定失败，降级 single: %s", exc)
