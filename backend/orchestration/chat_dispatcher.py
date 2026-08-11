@@ -8,10 +8,6 @@ conductor（主 LLM）经 ``dispatch_subagents`` 工具调用本 dispatcher，�
 子 agent 用 ``SageAgent(agent_id=...)`` 非 bare 构造：bare=True 会留空
 tool_registry（子 agent 需要 profile 白名单工具，如 researcher 的
 web_search / writer 的 write_file）。
-
-本模块还导出 ``_classify_orchestration_mode``（tool-toggle 门的语义判定，
-Task 3 实现），供 ``/chat/stream`` producer 复用 —— 放在这里便于单元测试，
-与 producer 解耦。
 """
 
 from __future__ import annotations
@@ -81,11 +77,27 @@ class ChatDispatcher:
         """
         states: List[ChatTaskState] = []
         for index, raw in enumerate(tasks):
-            state = ChatTaskState(
-                task_id=f"t{index + 1}",
-                agent_id=raw.get("agent_id", "primary"),
-                goal=raw.get("goal", ""),
-            )
+            # 缺 agent_id（malformed input）→ 失败事件占位，不抛穿整次 dispatch。
+            # 让 conductor 看到 status=failed + error，能定位 producer bug。
+            try:
+                state = ChatTaskState(
+                    task_id=f"t{index + 1}",
+                    agent_id=raw["agent_id"],
+                    goal=raw.get("goal", ""),
+                )
+            except KeyError as exc:
+                state = ChatTaskState(
+                    task_id=f"t{index + 1}",
+                    agent_id="<missing>",
+                    goal=raw.get("goal", ""),
+                )
+                self._states[state.task_id] = state
+                states.append(state)
+                self._emit_task_status(state)  # queued (status 仍是 "queued")
+                state.status = "failed"
+                state.error = f"missing required key: {exc.args[0]}"
+                self._emit_task_status(state)  # failed
+                continue
             self._states[state.task_id] = state
             states.append(state)
             self._emit_task_status(state)  # queued
@@ -109,7 +121,7 @@ class ChatDispatcher:
                     state.finished_at = time.time()
                     self._emit_task_status(state)
 
-        await asyncio.gather(*(_run_one(s) for s in states))
+        await asyncio.gather(*(_run_one(s) for s in states if s.status != "failed"))
         return self._aggregate(states)
 
     async def _run_subagent(self, state: ChatTaskState) -> str:

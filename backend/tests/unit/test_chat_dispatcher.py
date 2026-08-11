@@ -189,8 +189,10 @@ async def test_dispatch_unknown_agent_fails_fast():
         async def run_loop(self, messages, max_iterations=None, llm_config=None):
             raise AssertionError("未知 agent 不应被构造")
 
+    # 关键：chat_dispatcher 在模块顶部 from-import 创建本地绑定，
+    # patch 必须打在 chat_dispatcher 模块里的符号，不能打 profiles 路径。
     with patch(
-        "backend.agents.profiles.get_enabled_agent", return_value=None
+        "backend.orchestration.chat_dispatcher.get_enabled_agent", return_value=None
     ), patch(
         "backend.orchestration.chat_dispatcher.SageAgent",
         return_value=_ShouldNotRun(),
@@ -206,3 +208,25 @@ async def test_dispatch_unknown_agent_fails_fast():
     assert "ghost_agent" in aggregated
     # 修复前：child 被构造、run_loop 抛 AssertionError → 错误信息不符 → 本断言 RED
     assert "不存在或已禁用" in aggregated
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_missing_agent_id_key_fails():
+    """缺 agent_id 键（malformed input）→ KeyError → failed 状态事件，错误含 agent_id。"""
+    queue = _make_queue()
+
+    class _ShouldNotRun:
+        async def run_loop(self, messages, max_iterations=None, llm_config=None):
+            raise AssertionError("缺 agent_id 的任务不应触发 SageAgent.run_loop")
+
+    with patch(
+        "backend.orchestration.chat_dispatcher.SageAgent",
+        return_value=_ShouldNotRun(),
+    ):
+        dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-test")
+        aggregated = await dispatcher.dispatch([{}])
+
+    events = _collect_events(queue, 2)
+    assert events[0]["status"] == "queued"
+    assert events[-1]["status"] == "failed"
+    assert "agent_id" in aggregated
