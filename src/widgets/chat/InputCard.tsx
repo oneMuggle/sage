@@ -1,4 +1,5 @@
 import { BookOpen, Clock, Image, Paperclip, Send, Square, X } from 'lucide-react';
+import { useEffect } from 'react';
 import type React from 'react';
 
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
@@ -136,6 +137,18 @@ export function InputCard({
     onChange,
     enabled: !disabled,
   });
+
+  // Autosize: textarea grows with content up to the 200px cap.
+  // Without this, content past one line scrolls inside the textarea and
+  // visually only the last line is visible. Resetting height to 'auto'
+  // first lets scrollHeight report the full content height.
+  useEffect(() => {
+    const el = emacsRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const next = Math.min(el.scrollHeight, 200);
+    el.style.height = `${next}px`;
+  }, [value, emacsRef]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showSlashMenu && slashCommands.length > 0 && !e.shiftKey) {
@@ -278,8 +291,7 @@ export function InputCard({
               placeholder={placeholder}
               disabled={disabled}
               autoFocus={autoFocus}
-              rows={1}
-              className="flex-1 resize-none border-none bg-transparent outline-none text-sm text-text disabled:opacity-50 max-h-[200px] placeholder:text-muted"
+              className="flex-1 resize-none border-none bg-transparent outline-none text-sm text-text disabled:opacity-50 max-h-[200px] overflow-y-auto placeholder:text-muted"
               aria-label="message input"
             />
 
