@@ -190,7 +190,10 @@ class ChatRequest(BaseModel):
     # Multi-Agent Orchestration (spec 2026-08-11): 编排模式开关。
     # auto（默认）—— 轻量 LLM 二分类决定；force_multi / force_single ——
     # 用户斜杠命令 /orchestrate / /single 覆盖，跳过语义判定。
-    orchestration_mode: str = "auto"
+    # Optional: 兼容渲染进程 IPC payload 里显式 null(undefined ?? null 序列化的产物)。
+    # Pydantic 默认值只在字段缺失时生效，显式 null 仍按类型校验 →
+    # 不加 Optional 会被 422 拒绝。业务层 `data.orchestration_mode or "auto"` 已兜底。
+    orchestration_mode: Optional[str] = "auto"
 
 
 class MessageResponse(BaseModel):
