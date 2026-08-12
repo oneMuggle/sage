@@ -12,7 +12,7 @@ Covers the previously dead ``llm_client=None`` path:
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -231,6 +231,56 @@ class TestPlannerHostileInputs:
 
         assert len(sanitized[0]["description"]) == MAX_TASK_DESCRIPTION_CHARS
         assert MAX_TASK_DESCRIPTION_CHARS == 4000
+
+    def test_sanitize_drops_unknown_agent_hints(self):
+        """F4: LLM 产出的已下线角色（content_writer/editor）必须被丢弃。
+
+        修复前 agent_hint 照单全收 → ChatDispatcher._run_subagent 对未知
+        角色返回 get_enabled_agent()==None 而快速失败（spec §5.1），整个
+        子任务 failed。这里在 planner 源头静默丢弃非法值，conductor 用
+        默认角色继续执行。
+        """
+        planner = _make_planner()
+
+        sanitized = planner._sanitize_tasks(
+            [
+                {"title": "Legit", "description": "ok", "agent_hint": "researcher"},
+                {"title": "Ghost", "description": "ok", "agent_hint": "content_writer"},
+                {"title": "Blank", "description": "ok", "agent_hint": "  "},
+            ]
+        )
+
+        assert sanitized[0]["parameters"]["agent_hint"] == "researcher"
+        assert "agent_hint" not in sanitized[1]["parameters"]
+        assert "agent_hint" not in sanitized[2]["parameters"]
+
+    def test_sanitize_drops_disabled_keeps_custom_agents(self):
+        """F4: 校验走 get_enabled_agent（SQLite 运行时状态）—— 已注册但
+        禁用的 agent 丢弃，SQLite 里的自定义 agent 保留。"""
+        planner = _make_planner()
+
+        def fake_get(agent_id: str):
+            # 模拟 SQLite: content_writer 已禁用,my_custom 是自定义启用 agent
+            if agent_id == "content_writer":
+                return None
+            if agent_id == "my_custom":
+                return {"id": "my_custom", "enabled": True}
+            return {"id": agent_id, "enabled": True}
+
+        with patch(
+            "backend.agents.profiles.get_enabled_agent", side_effect=fake_get
+        ):
+            sanitized = planner._sanitize_tasks(
+                [
+                    {"title": "A", "description": "ok", "agent_hint": "researcher"},
+                    {"title": "B", "description": "ok", "agent_hint": "content_writer"},
+                    {"title": "C", "description": "ok", "agent_hint": "my_custom"},
+                ]
+            )
+
+        assert sanitized[0]["parameters"]["agent_hint"] == "researcher"
+        assert "agent_hint" not in sanitized[1]["parameters"]
+        assert sanitized[2]["parameters"]["agent_hint"] == "my_custom"
 
     @pytest.mark.asyncio()
     async def test_description_cap_survives_full_decomposition(self):

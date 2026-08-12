@@ -1663,7 +1663,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 binding_generation=_auth_result.binding_generation,
                 office_doc_scope=_auth_result.office_doc_scope,
             )
-            _tool_ctx_token = set_tool_context(_tool_ctx)
+        else:
+            # F2 (2026-08-12): 普通聊天（无 office 授权）也设置上下文 —— 否则
+            # write_file 等工具的 artifact 记录会因 current_tool_context() 为
+            # None 静默早退，产物无法在 Artifacts 面板展示。binding_generation
+            # = 0 表示无 workspace 绑定；office 工具不在普通聊天 profile 白名单
+            # （primary/researcher/coder/memory_manager/writer 均无）。
+            _tool_ctx = ToolExecutionContext(
+                session_id=data.session_id,
+                stream_id=stream_id,
+                binding_generation=0,
+                office_doc_scope=frozenset(),
+            )
+        _tool_ctx_token = set_tool_context(_tool_ctx)
         try:
             llm_config = None
             if data.api_key and data.api_url:

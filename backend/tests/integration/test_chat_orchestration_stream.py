@@ -351,3 +351,51 @@ async def test_explicit_null_orchestration_mode_does_not_422():
     assert classify_args.args[1] == "auto", (
         f"classifier 第二个参数应落到默认 'auto', 实际 {classify_args.args[1]!r}"
     )
+
+
+@pytest.mark.asyncio()
+async def test_plain_chat_sets_tool_context_for_artifact_recording():
+    """普通聊天（无 office 授权）也必须设置 ToolExecutionContext —— 否则
+    write_file 等工具的 artifact 记录因 current_tool_context() 为 None 静默
+    早退，产物无法在 Artifacts 面板展示（F2 回归防护）。"""
+    captured_ctx = {}
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.tools.context import current_tool_context
+
+        captured_ctx["ctx"] = current_tool_context()
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="普通回答")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: None}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch(
+            "backend.api.legacy_routes._classify_orchestration_mode",
+            return_value="single",
+        ):
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "帮我整理一份学习资料",
+                        "orchestration_mode": "auto",
+                    },
+                )
+
+    ctx = captured_ctx.get("ctx")
+    assert ctx is not None, (
+        "普通聊天必须设置 ToolExecutionContext（修复前为 None，artifacts 不落库）"
+    )
+    assert ctx.session_id == "s"
+    assert ctx.binding_generation == 0, "无 workspace 绑定 → generation 0"
+    assert ctx.office_doc_scope == frozenset(), "无 office 授权 → 空 scope"
