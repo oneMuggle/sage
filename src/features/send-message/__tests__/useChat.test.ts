@@ -1131,4 +1131,191 @@ describe('useChat taskBoard', () => {
       expect(result.current.taskBoard).toBeNull();
     });
   });
+
+  // 进度可视化 P0-2 (2026-08-12): task_progress 初始化 → task_status 重算 5 元组。
+  // M3 (code-review): reducer 是"总分一致"核心逻辑，必须有单测兜底。
+  it('seeds progress from task_progress then recomputes on task_status', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-3' });
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            run_id?: string;
+            plan?: Array<{ task_id: string; agent_id: string; goal: string }>;
+            task_id?: string;
+            status?: string;
+            total?: number;
+            done?: number;
+            running?: number;
+            queued?: number;
+            failed?: number;
+          };
+        }) => void,
+      ) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'task_plan',
+              iteration: 0,
+              run_id: 'orch-1',
+              plan: [
+                { task_id: 't1', agent_id: 'researcher', goal: 'g1' },
+                { task_id: 't2', agent_id: 'writer', goal: 'g2' },
+              ],
+            },
+          });
+          // 初始化: total=2, 全 queued
+          cb({
+            payload: {
+              state: 'task_progress',
+              iteration: 0,
+              run_id: 'orch-1',
+              total: 2,
+              done: 0,
+              running: 0,
+              queued: 2,
+              failed: 0,
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              status: 'running',
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              status: 'done',
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('complex task');
+    });
+
+    await waitFor(() => {
+      expect(result.current.taskBoard?.progress).toBeDefined();
+    });
+    // task_progress 初始化 total=2;随后 t1 running→done,reducer 实时重算。
+    // total 保留初始化值 2(plan 数),done=1(t1 终态),queued/running/failed=0。
+    expect(result.current.taskBoard?.progress).toEqual({
+      total: 2,
+      done: 1,
+      running: 0,
+      queued: 0,
+      failed: 0,
+    });
+  });
+
+  it('falls back to statuses-driven progress when no task_progress arrives', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-4' });
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            run_id?: string;
+            plan?: Array<{ task_id: string; agent_id: string; goal: string }>;
+            task_id?: string;
+            status?: string;
+          };
+        }) => void,
+      ) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'task_plan',
+              iteration: 0,
+              run_id: 'orch-1',
+              plan: [
+                { task_id: 't1', agent_id: 'researcher', goal: 'g1' },
+                { task_id: 't2', agent_id: 'writer', goal: 'g2' },
+              ],
+            },
+          });
+          // 老 run: 无 task_progress,只靠 task_status 推。
+          // 并发 2 个 running → done,reducer 从 statuses 去重数推 total。
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              status: 'running',
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't2',
+              status: 'running',
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              status: 'done',
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't2',
+              status: 'done',
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('complex task');
+    });
+
+    await waitFor(() => {
+      expect(result.current.taskBoard?.progress).toBeDefined();
+    });
+    // 无 task_progress → total 从 statuses 去重数(2)推出
+    expect(result.current.taskBoard?.progress).toEqual({
+      total: 2,
+      done: 2,
+      running: 0,
+      queued: 0,
+      failed: 0,
+    });
+  });
 });

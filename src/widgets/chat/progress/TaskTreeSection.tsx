@@ -35,10 +35,15 @@ export function TaskTreeSection({ board }: TaskTreeSectionProps) {
   const queued = progress?.queued ?? 0;
   const failed = progress?.failed ?? 0;
   const inFlight = running + queued;
+  // 进度可视化 L2 修正 (2026-08-12): 全部完成时不再显示"等待结果中"，
+  // 避免与下方 "完成 6/6" 自相矛盾。
+  const allDone = doneCount > 0 && doneCount === total && inFlight === 0;
 
   return (
     <div className="space-y-1" data-testid="task-tree">
-      <div className="text-xs text-text-secondary">已拆解为 {total} 个子任务,等待结果中…</div>
+      {!allDone && (
+        <div className="text-xs text-text-secondary">已拆解为 {total} 个子任务,等待结果中…</div>
+      )}
       <div className="text-xs text-text-secondary">
         完成 {doneCount}/{total}
         {inFlight > 0 && ` · ${inFlight} 个进行中`}

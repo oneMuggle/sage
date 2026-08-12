@@ -56,9 +56,9 @@ describe('ProgressSection', () => {
         taskBoard={taskBoard}
       />,
     );
-    // 编排摘要出现
+    // 编排摘要出现（"进行中" = queued + running，与 TaskTreeSection 口径一致）
     expect(screen.getByTestId('task-progress-summary')).toHaveTextContent(/编排任务 1\/4 完成/);
-    expect(screen.getByTestId('task-progress-summary')).toHaveTextContent(/2 个进行中/);
+    expect(screen.getByTestId('task-progress-summary')).toHaveTextContent(/3 个进行中/);
     // "等待输入"不出现
     expect(screen.queryByText(/等待输入/)).not.toBeInTheDocument();
   });
