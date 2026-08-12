@@ -100,8 +100,9 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
     //     (current standard "spin up the conda env" workflow)
     //   - set   → use that path as a raw Python interpreter that ALREADY has
     //     `backend` and `sage_core` on its path (e.g. a developer running
-    //     `pip install -e` into a system Python). Args become `-m uvicorn ...`
-    //     because there is no conda subcommand namespace to delegate to.
+    //     `pip install -e` into a system Python). Args become `-m backend.main`
+    //     (the same entry as dev-conda), so the `__main__` block runs and
+    //     setup_logging() is wired up in every launch mode.
     //
     // The previous implementation paired SAGE_PYTHON's value with conda-flavoured
     // args (`['run', '-n', 'sage-backend', 'python', '-m', 'backend.main']`),
@@ -113,16 +114,12 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
       return {
         kind: 'spawn',
         cmd: sagePythonOverride,
-        args: [
-          '-m',
-          'uvicorn',
-          'backend.main:app',
-          '--host',
-          '127.0.0.1',
-          '--port',
-          String(opts.port),
-        ],
-        extraEnv: { SAGE_DB_PATH: opts.sageDbPath, SAGE_USER_DATA_DIR: opts.sageUserDataDir },
+        args: ['-m', 'backend.main'],
+        extraEnv: {
+          SAGE_DB_PATH: opts.sageDbPath,
+          SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+          PYTHON_BACKEND_PORT: String(opts.port),
+        },
         reason: 'dev-conda-overridden',
       };
     }
@@ -155,16 +152,11 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
       return {
         kind: 'spawn',
         cmd: pyExe,
-        args: [
-          '-m',
-          'uvicorn',
-          'backend.main:app',
-          '--host',
-          '127.0.0.1',
-          '--port',
-          String(opts.port),
-        ],
-        extraEnv: packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+        args: ['-m', 'backend.main'],
+        extraEnv: {
+          ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+          PYTHON_BACKEND_PORT: String(opts.port),
+        },
         reason: 'packaged-win32-bundled',
       };
     }
@@ -187,16 +179,11 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
       return {
         kind: 'spawn',
         cmd: pyBin,
-        args: [
-          '-m',
-          'uvicorn',
-          'backend.main:app',
-          '--host',
-          '127.0.0.1',
-          '--port',
-          String(opts.port),
-        ],
-        extraEnv: packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+        args: ['-m', 'backend.main'],
+        extraEnv: {
+          ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+          PYTHON_BACKEND_PORT: String(opts.port),
+        },
         reason: 'packaged-linux-bundled',
       };
     }
