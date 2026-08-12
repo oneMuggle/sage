@@ -31,7 +31,6 @@ interface PanelHeaderProps {
   onClose: () => void;
 }
 
-// ⚠️ 必须 export,PanelHeader.test.tsx 要直接 import 它
 export function PanelHeader({ tab, onTabChange, onClose }: PanelHeaderProps) {
   // list 视图:Progress / Artifacts tabs + × 按钮
   if (tab !== undefined && onTabChange) {
