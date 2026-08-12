@@ -14,7 +14,9 @@ export type AgentState =
   | 'failed'
   // Multi-Agent Orchestration (2026-08-11)
   | 'task_plan'
-  | 'task_status';
+  | 'task_status'
+  // 进度可视化 P0-2 (2026-08-12): 整盘概览,见 types.ts TaskProgressEvent。
+  | 'task_progress';
 
 // 窄类型事件接口 —— useChat taskBoard 状态机的数据类型。
 // AgentState / AgentEvent（宽松字段）见 types.ts —— 双处保持一致。
@@ -41,6 +43,17 @@ export interface TaskStatusEvent {
   goal: string;
   error: string | null;
   output_preview: string | null;
+}
+
+/** 进度可视化 P0-2 (2026-08-12): 整盘概览,与 types.ts TaskProgressEvent 同形。 */
+export interface TaskProgressEvent {
+  state: 'task_progress';
+  run_id: string;
+  total: number;
+  done: number;
+  running: number;
+  queued: number;
+  failed: number;
 }
 
 export interface ToolCallRequestFE {
@@ -74,6 +87,12 @@ export interface AgentEvent {
   status?: TaskStatusValue;
   goal?: string;
   output_preview?: string | null;
+  // 进度可视化 P0-2 (2026-08-12): 5 元组快照字段,与 TaskProgressEvent 对齐。
+  total?: number;
+  done?: number;
+  running?: number;
+  queued?: number;
+  failed?: number;
 }
 
 export async function* parseNDJSONStream(
