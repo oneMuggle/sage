@@ -116,6 +116,8 @@ export const chatApi = {
       thinkingBudget: config?.thinkingBudget ?? null,
       // Task 7: forwarded as-is. Backend authorizes before reading.
       officeRefs: officeRefs ?? [],
+      // Multi-Agent Orchestration: undefined → null,后端默认 auto
+      orchestrationMode: config?.orchestrationMode ?? null,
     });
     const eventName = `chat-stream-${streamId}`;
 

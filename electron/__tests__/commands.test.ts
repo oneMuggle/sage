@@ -492,3 +492,30 @@ describe('UnknownIpcCommandError', () => {
     expect(err.name).toBe('UnknownIpcCommandError');
   });
 });
+
+describe('agent_* IPC commands', () => {
+  it('registers all five agent commands with /api/v1-prefixed paths', () => {
+    const required = ['list_agents', 'get_agent', 'update_agent', 'toggle_agent', 'create_agent'];
+    for (const cmd of required) {
+      const route = COMMAND_ROUTES[cmd];
+      expect(route).toBeDefined();
+      // path 签名统一 (args: Record<string, unknown>) => string —— 传 { id: 'test' }
+      //（list/create 的实现忽略参数）
+      expect(route.path({ id: 'test' })).toMatch(/^\/api\/v1\//);
+    }
+  });
+
+  it('strips id from update_agent body (extra=forbid)', () => {
+    const route = COMMAND_ROUTES['update_agent'];
+    expect(route.path({ id: 'x' })).toBe('/api/v1/agents/x');
+    expect(route.body?.({ id: 'x', update: { systemPrompt: 'p' } })).toEqual({
+      systemPrompt: 'p',
+    });
+  });
+
+  it('strips id from toggle_agent body', () => {
+    const route = COMMAND_ROUTES['toggle_agent'];
+    expect(route.path({ id: 'x' })).toBe('/api/v1/agents/x/toggle');
+    expect(route.body?.({ id: 'x', enabled: false })).toEqual({ enabled: false });
+  });
+});

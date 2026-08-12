@@ -9,6 +9,8 @@ import {
   type AgentEvent,
   type ChatConfig,
   type ChatOfficeRef,
+  type TaskPlanItem,
+  type TaskStatusEvent,
 } from '../../shared/api';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
@@ -34,6 +36,13 @@ function inferProviderFromBaseUrl(baseUrl: string | undefined): string | undefin
   if (u.includes('anthropic.com')) return 'claude';
   // Ollama / 局域网 / 其它 OpenAI 兼容代理 → 后端默认 'custom'
   return undefined;
+}
+
+/** Multi-Agent Orchestration: 编排任务板聚合状态（task_plan/task_status 消费结果） */
+export interface TaskBoard {
+  runId: string;
+  plan: TaskPlanItem[];
+  statuses: Record<string, TaskStatusEvent>;
 }
 
 export function useChat() {
@@ -64,6 +73,8 @@ export function useChat() {
   // P0: 实时工具调用 — state 驱动 UI 渲染，ref 镜像供 finishStream 读取最新值
   const [streamingToolCalls, setStreamingToolCalls] = useState<ToolCall[]>([]);
   const streamingToolCallsRef = useRef<ToolCall[]>([]);
+  // Multi-Agent Orchestration: 编排任务板聚合状态（task_plan/task_status 消费结果）
+  const [taskBoard, setTaskBoard] = useState<TaskBoard | null>(null);
 
   // Phase 6: /btw 补充消息状态
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
@@ -97,7 +108,12 @@ export function useChat() {
   }, [messages, streamingMessageId, streamingContent, streamingReasoning, streamingToolCalls]);
 
   const sendMessage = useCallback(
-    async (content: string, sessionId?: string, officeRefs?: readonly ChatOfficeRef[]) => {
+    async (
+      content: string,
+      sessionId?: string,
+      officeRefs?: readonly ChatOfficeRef[],
+      orchestrationMode?: ChatConfig['orchestrationMode'],
+    ) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid || isLoading || loadingRef.current) return;
 
@@ -183,6 +199,8 @@ export function useChat() {
       // P0: 重置实时工具调用 state + ref (每次 sendMessage 清空上一轮)
       streamingToolCallsRef.current = [];
       setStreamingToolCalls([]);
+      // 新消息开始时清空编排任务板（与 streamingToolCalls 清空同处）
+      setTaskBoard(null);
 
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
@@ -194,6 +212,8 @@ export function useChat() {
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
         // 不再靠 URL 启发式。详见 docs/plans/2026-06-17_thinking-passthrough.md
         provider: inferProviderFromBaseUrl(chatEndpoint.baseUrl),
+        // 由 /orchestrate /single 斜杠命令传入;普通消息 undefined → 后端 auto
+        orchestrationMode,
       };
 
       const appendContent = (next: string): void => {
@@ -332,6 +352,28 @@ export function useChat() {
               // uiText 分支对该 state 返回 null,不会碰消息气泡占位符。
               if (evt.state === 'ask_user_question' && evt.user_question) {
                 useQuestionState.getState().setFromEvent(evt.user_question);
+              }
+
+              // Multi-Agent Orchestration: task_plan 事件 → 初始化编排任务板。
+              // 与 permission_request 一样"先消费、不进内容累加器" —
+              // 不产生消息气泡占位文本,后续 uiText 分支不会命中。
+              if (evt.state === 'task_plan' && evt.run_id && evt.plan) {
+                setTaskBoard({ runId: evt.run_id, plan: evt.plan, statuses: {} });
+                return;
+              }
+              // Multi-Agent Orchestration: task_status 事件 → 按 run_id 匹配合并进任务板。
+              // 旧 run 的 task_status 直接忽略（prev 为 null 或 runId 不匹配都返回原值）。
+              // 后端 task_status 载荷含 TaskStatusEvent 全字段,故宽松 AgentEvent 可直接 cast。
+              if (evt.state === 'task_status' && evt.run_id && evt.task_id) {
+                // 闭包内 TS 不保留 evt 字段的 narrowing,先捕获为 const
+                const runId = evt.run_id;
+                const taskId = evt.task_id;
+                setTaskBoard((prev) =>
+                  prev && prev.runId === runId
+                    ? { ...prev, statuses: { ...prev.statuses, [taskId]: evt as TaskStatusEvent } }
+                    : prev,
+                );
+                return;
               }
 
               // 处理 reasoning 事件：累积 reasoning 内容（支持完整事件和增量事件）
@@ -577,6 +619,8 @@ export function useChat() {
     streamingState: streaming?.state ?? null,
     /** P0: 当前流式工具调用列表 (供 ProgressSection 显示实时工具进度) */
     streamingToolCalls,
+    /** Multi-Agent Orchestration: 编排任务板 (供 TaskTreeSection 渲染任务树) */
+    taskBoard,
     /** Phase 6: /btw 补充消息方法 */
     askBtw,
     /** Phase 6: /btw 是否正在流式输出 */

@@ -53,6 +53,7 @@ from backend.office.workspace_errors import (
     WorkspacePathMismatchError,
     WorkspaceSessionNotFoundError,
 )
+from backend.orchestration.chat_dispatcher import _classify_orchestration_mode
 from backend.scheduler import get_evolution_logs, get_scheduler
 from backend.skills.draft_store import get_skill_draft_store
 from backend.skills.loader import get_skill_loader
@@ -186,6 +187,11 @@ class ChatRequest(BaseModel):
     # legacy_routes 模块加载完毕时自动被 Pydantic v2 调用.
     office_refs: List[ChatOfficeRef] = Field(default_factory=list)
 
+    # Multi-Agent Orchestration (spec 2026-08-11): 编排模式开关。
+    # auto（默认）—— 轻量 LLM 二分类决定；force_multi / force_single ——
+    # 用户斜杠命令 /orchestrate / /single 覆盖，跳过语义判定。
+    orchestration_mode: str = "auto"
+
 
 class MessageResponse(BaseModel):
     id: str
@@ -268,6 +274,16 @@ class TriggerResponse(BaseModel):
     message: str
 
 
+#: agent role 白名单（PATCH/POST 共用）。
+_VALID_AGENT_ROLES = {
+    "coordinator",
+    "researcher",
+    "coder",
+    "memory_manager",
+    "writer",
+}
+
+
 class AgentToggle(BaseModel):
     """PATCH /agents/{id}/toggle 请求体 (PR-5)。
 
@@ -312,6 +328,27 @@ class AgentUpdate(BaseModel):
 
     enabled: Optional[bool] = None
 
+    description: Optional[str] = None
+
+
+class AgentCreate(BaseModel):
+    """POST /agents 请求体（US-4 角色可扩展）。
+
+    id / name 必填；其余字段带默认值。
+    ``model_config_data`` 字段名避开 Pydantic 保留名（同 AgentUpdate）。
+    """
+
+    model_config = {"protected_namespaces": ()}
+
+    id: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=64)
+    role: str = "general"
+    system_prompt: str = ""
+    tools: Optional[List[str]] = None
+    memory_access: Optional[List[str]] = None
+    model_config_data: Optional[dict] = None
+    max_iterations: Optional[int] = None
+    enabled: Optional[bool] = None
     description: Optional[str] = None
 
 
@@ -843,7 +880,7 @@ def update_agent(agent_id: str, data: AgentUpdate):
     from backend.data.agent_repo import AgentRepository
 
     # 字段级校验: role 白名单
-    valid_roles = {"coordinator", "researcher", "coder", "memory_manager"}
+    valid_roles = _VALID_AGENT_ROLES
     if data.role is not None and data.role not in valid_roles:
         raise HTTPException(
             status_code=422,
@@ -910,6 +947,62 @@ def toggle_agent(agent_id: str, data: AgentToggle):
 
     repo.set_enabled(agent_id, data.enabled)
     return repo.get(agent_id)
+
+
+@router.post("/agents")
+@with_db_lock
+def create_agent(data: AgentCreate):
+    """创建自定义 agent（US-4）。
+
+    - 200 + 完整 profile
+    - 409 + 结构化 detail（id 已存在）
+    - 422 — role 白名单 / max_iterations 范围
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    if data.role not in _VALID_AGENT_ROLES and data.role != "general":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_role",
+                "message": (
+                    f"role must be one of {sorted(_VALID_AGENT_ROLES)} "
+                    f"or 'general', got {data.role!r}"
+                ),
+            },
+        )
+
+    if data.max_iterations is not None and not (1 <= data.max_iterations <= 50):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_max_iterations",
+                "message": f"max_iterations must be in 1..50, got {data.max_iterations}",
+            },
+        )
+
+    repo = AgentRepository()
+    if repo.get(data.id) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "type": "agent_already_exists",
+                "message": f"agent {data.id!r} already exists",
+            },
+        )
+
+    payload = data.model_dump(exclude_none=True)
+    if "model_config_data" in payload:
+        payload["model_config"] = payload.pop("model_config_data")
+    payload.setdefault("tools", [])
+    payload.setdefault("memory_access", [])
+    payload.setdefault("model_config", {})
+    payload.setdefault("max_iterations", 10)
+    payload.setdefault("enabled", True)
+    payload.setdefault("description", "")
+
+    repo.upsert(payload)
+    return repo.get(data.id)
 
 
 # ==================== 技能 API (PR-7) ====================
@@ -1596,6 +1689,92 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             from backend.agents.profiles import build_system_base
 
             system_content = build_system_base()
+
+            # ===== Multi-Agent Orchestration (spec 2026-08-11) =====
+            # tool-toggle 门: 语义判定（独立轻量 LLM 二分类）决定 mode。
+            # single → 不注册 dispatch_subagents 工具、不跑 decompose_request
+            #          （简单任务结构上无法被过度拆解 — 硬约束 2）
+            # multi  → 复用 Planner 预规划 + conductor 经 dispatch 工具执行
+            #          （复杂任务必出 task_plan + 必注册工具 — 硬约束 1）
+            from backend.orchestration.llm_factory import (
+                build_llm_client_from_settings,
+            )
+
+            try:
+                mode = await _classify_orchestration_mode(
+                    data.message,
+                    data.orchestration_mode or "auto",
+                    llm_client=build_llm_client_from_settings(),
+                )
+            except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
+                logger.warning("编排语义判定失败，降级 single: %s", exc)
+                mode = "single"
+            run_id: Optional[str] = None
+            if mode == "multi":
+                from backend.orchestration.chat_dispatcher import ChatDispatcher
+                from backend.orchestration.planner import Planner
+                from backend.orchestration.task_registry import TaskRegistry
+                from backend.orchestration.team_registry import TeamRegistry
+                from backend.tools.subagent_tool import DispatchSubagentsTool
+
+                try:
+                    plan = await Planner(
+                        task_registry=TaskRegistry(),
+                        team_registry=TeamRegistry(),
+                        llm_client=build_llm_client_from_settings(),
+                    ).decompose_request(data.message)
+                    plan_tasks = list(plan.tasks if plan else [])
+                except Exception as exc:  # noqa: BLE001 — 编排规划失败必须降级 single
+                    logger.warning("编排规划失败，降级 single: %s", exc)
+                    mode = "single"
+                    plan_tasks = []
+                if len(plan_tasks) <= 1:
+                    # LLM 没拆开（或降级单任务）→ 视为没开编排
+                    mode = "single"
+                else:
+                    run_id = f"orch-{uuid.uuid4()}"
+                    dispatcher = ChatDispatcher(
+                        stream_id=stream_id,
+                        entry_queue=entry.queue,
+                        run_id=run_id,
+                        llm_config=llm_config,
+                    )
+                    agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
+                    if (
+                        agent.profile is not None
+                        and agent.profile.get("tools") is not None
+                    ):
+                        agent.profile["tools"].append("dispatch_subagents")
+                    # 计划块注入 system prompt —— conductor 依据计划调用工具
+                    # 注: system_content 已在插入点之前由 build_system_base()
+                    # 赋值（L1598），这里只追加计划块，不再重新赋值（否则覆盖）。
+                    plan_block = "\n".join(
+                        f"- {i}. [{t.parameters.get('agent_hint', 'primary')}] "
+                        f"{t.name}: {t.description}"
+                        for i, t in enumerate(plan_tasks, 1)
+                    )
+                    system_content += (
+                        "\n\n以下为已确认的任务计划，请调用 dispatch_subagents "
+                        "工具并行执行这些子任务（可合并/调整）。不要复述计划，直接执行。\n"
+                        + plan_block
+                    )
+                    # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
+                    await entry.queue.put(
+                        {
+                            "state": "task_plan",
+                            "run_id": run_id,
+                            "plan": [
+                                {
+                                    "task_id": f"t{i}",
+                                    "agent_id": t.parameters.get(
+                                        "agent_hint", "primary"
+                                    ),
+                                    "goal": t.description or t.name,
+                                }
+                                for i, t in enumerate(plan_tasks, 1)
+                            ],
+                        }
+                    )
             try:
                 from backend.core.diagram_prompt import (
                     DIAGRAM_TOOL_PROMPT,

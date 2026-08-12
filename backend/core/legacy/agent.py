@@ -832,6 +832,16 @@ class SageAgent:
                                         result = await asyncio.get_running_loop().run_in_executor(
                                             None, functools.partial(tool.execute, **args)
                                         )
+                                    elif tc.name == "dispatch_subagents":
+                                        # Multi-agent orchestration: this tool is
+                                        # async by design — child agents run
+                                        # concurrently on the event loop
+                                        # (ChatDispatcher gather) and push
+                                        # task_status straight to the stream
+                                        # queue. Sync execute() cannot do that.
+                                        # Same minimal special-case as "agent";
+                                        # general tool dispatch stays inline.
+                                        result = await tool.execute_async(**args)
                                     else:
                                         result = tool.execute(**args)
                                     if hasattr(result, "success") and hasattr(result, "content"):

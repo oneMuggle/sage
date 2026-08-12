@@ -126,7 +126,10 @@ export type AgentState =
   | 'observing'
   | 'content_delta'
   | 'done'
-  | 'failed';
+  | 'failed'
+  // Multi-Agent Orchestration (2026-08-11)
+  | 'task_plan'
+  | 'task_status';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -198,6 +201,33 @@ export interface AgentToolResult {
   content: string;
 }
 
+// ─── Multi-Agent Orchestration 窄类型事件 (2026-08-11) ─────────────────
+// 与 llmStream.ts 双处一致 —— useChat taskBoard 状态机的数据类型。
+export interface TaskPlanItem {
+  task_id: string;
+  agent_id: string;
+  goal: string;
+}
+
+export interface TaskPlanEvent {
+  state: 'task_plan';
+  run_id: string;
+  plan: TaskPlanItem[];
+}
+
+export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed';
+
+export interface TaskStatusEvent {
+  state: 'task_status';
+  run_id: string;
+  task_id: string;
+  status: TaskStatusValue;
+  agent_id: string;
+  goal: string;
+  error: string | null;
+  output_preview: string | null;
+}
+
 /** 流式聊天事件 (NDJSON 协议的一行) */
 export interface AgentEvent {
   state: AgentState;
@@ -217,6 +247,13 @@ export interface AgentEvent {
   type?: string;
   subtype?: string;
   title?: string;
+  // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
+  run_id?: string;
+  plan?: TaskPlanItem[];
+  task_id?: string;
+  status?: TaskStatusValue;
+  goal?: string;
+  output_preview?: string | null;
 }
 
 // ==================== 错误类型定义 ====================
@@ -244,6 +281,8 @@ export interface ChatConfig {
   provider?: string;
   reasoningEffort?: 'low' | 'medium' | 'high';
   thinkingBudget?: number;
+  /** Multi-Agent Orchestration: auto | force_multi | force_single（缺省 auto） */
+  orchestrationMode?: 'auto' | 'force_multi' | 'force_single';
 }
 
 // ==================== Memory 类型定义 ====================
@@ -433,6 +472,20 @@ export interface AgentUpdate {
   memory_access?: string[];
   model_config?: AgentProfile['model_config'];
   max_iterations?: number;
+  enabled?: boolean;
+  description?: string;
+}
+
+/** POST /agents 请求体（US-4 角色可扩展）。 */
+export interface AgentCreate {
+  id: string;
+  name: string;
+  role?: string;
+  system_prompt?: string;
+  tools?: string[];
+  memory_access?: string[];
+  modelConfigData?: Record<string, unknown>;
+  maxIterations?: number;
   enabled?: boolean;
   description?: string;
 }

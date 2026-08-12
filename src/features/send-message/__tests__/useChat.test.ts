@@ -941,3 +941,194 @@ describe('useChat M2 ask_user_question wiring', () => {
     expect(useQuestionState.getState().currentQuestion).toBeNull();
   });
 });
+
+// ============================================================================
+// Multi-Agent Orchestration: task_plan / task_status 流事件 → taskBoard 聚合
+// ============================================================================
+describe('useChat taskBoard', () => {
+  it('accumulates task_plan then task_status into board', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-1' });
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            run_id?: string;
+            plan?: Array<{ task_id: string; agent_id: string; goal: string }>;
+            task_id?: string;
+            status?: string;
+          };
+        }) => void,
+      ) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'task_plan',
+              iteration: 0,
+              run_id: 'orch-1',
+              plan: [
+                { task_id: 't1', agent_id: 'researcher', goal: 'g1' },
+                { task_id: 't2', agent_id: 'writer', goal: 'g2' },
+              ],
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              status: 'running',
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              status: 'done',
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('complex task');
+    });
+
+    await waitFor(() => {
+      expect(result.current.taskBoard).not.toBeNull();
+    });
+    expect(result.current.taskBoard?.runId).toBe('orch-1');
+    expect(result.current.taskBoard?.plan).toHaveLength(2);
+    expect(result.current.taskBoard?.statuses.t1?.status).toBe('done');
+  });
+
+  it('ignores task_status with mismatched run_id', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-2' });
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            run_id?: string;
+            plan?: Array<{ task_id: string; agent_id: string; goal: string }>;
+            task_id?: string;
+            status?: string;
+          };
+        }) => void,
+      ) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'task_plan',
+              iteration: 0,
+              run_id: 'orch-1',
+              plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'g1' }],
+            },
+          });
+          // 旧 run 的 task_status → 应被忽略（statuses 保持空）
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'orch-OLD',
+              task_id: 't1',
+              status: 'done',
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('complex');
+    });
+
+    await waitFor(() => {
+      expect(result.current.taskBoard).not.toBeNull();
+    });
+    expect(Object.keys(result.current.taskBoard?.statuses ?? {})).toHaveLength(0);
+  });
+
+  it('clears taskBoard on new message', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValue({ streamId: 'stream-3' });
+    listenMock
+      .mockImplementationOnce(
+        async (
+          _name: string,
+          cb: (e: {
+            payload: {
+              state: string;
+              iteration: number;
+              content?: string;
+              run_id?: string;
+              plan?: Array<{ task_id: string; agent_id: string; goal: string }>;
+            };
+          }) => void,
+        ) => {
+          Promise.resolve().then(() => {
+            cb({
+              payload: {
+                state: 'task_plan',
+                iteration: 0,
+                run_id: 'orch-1',
+                plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'g1' }],
+              },
+            });
+            cb({ payload: { state: 'done', iteration: 0, content: 'r1' } });
+          });
+          return vi.fn();
+        },
+      )
+      // 第二条消息不推 task_plan → taskBoard 保持 null
+      .mockImplementationOnce(
+        async (
+          _name: string,
+          cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
+        ) => {
+          Promise.resolve().then(() => {
+            cb({ payload: { state: 'done', iteration: 0, content: 'r2' } });
+          });
+          return vi.fn();
+        },
+      );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    await act(async () => {
+      await result.current.sendMessage('m1');
+    });
+    await waitFor(() => {
+      expect(result.current.taskBoard).not.toBeNull();
+    });
+
+    // 第二条消息开始时 taskBoard 被清空（streamingToolCalls 清空同处）
+    await act(async () => {
+      await result.current.sendMessage('m2');
+    });
+    await waitFor(() => {
+      expect(result.current.taskBoard).toBeNull();
+    });
+  });
+});

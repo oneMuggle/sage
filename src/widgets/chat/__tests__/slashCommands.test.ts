@@ -90,3 +90,19 @@ describe('M4: /compact is a real action (not a prompt)', () => {
     expect(commandToPrompt(compact, '')).toBe('/compact');
   });
 });
+
+describe('orchestration slash commands', () => {
+  it('registers orchestrate with prompt mode', () => {
+    const cmd = slashCommands.find((c) => c.name === 'orchestrate');
+    expect(cmd).toBeDefined();
+    expect(cmd!.mode).toBe('prompt');
+    expect(cmd!.description).toMatch(/编排|子任务|multi/i);
+  });
+
+  it('registers single with prompt mode', () => {
+    const cmd = slashCommands.find((c) => c.name === 'single');
+    expect(cmd).toBeDefined();
+    expect(cmd!.mode).toBe('prompt');
+    expect(cmd!.description).toMatch(/单 agent|单任务|关闭/i);
+  });
+});
