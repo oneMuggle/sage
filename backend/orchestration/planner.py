@@ -14,6 +14,44 @@ from backend.orchestration.models import Task, Team
 from backend.orchestration.task_registry import TaskRegistry
 from backend.orchestration.team_registry import TeamRegistry
 
+logger = logging.getLogger(__name__)
+
+# Hard cap on planner-emitted tasks (LLM output is truncated to this).
+MAX_PLAN_TASKS = 8
+
+
+def _is_dispatchable_agent(agent_id: str) -> bool:
+    """agent_id 当前是否可被 ChatDispatcher 派发（存在且启用）。
+
+    F4 (2026-08-12): LLM 可能产出已下线/不存在的角色（如 content_writer、
+    editor），若照单全收，ChatDispatcher._run_subagent 会因
+    ``get_enabled_agent()`` 返回 None 而快速失败（spec §5.1），整批子任务
+    failed。这里在 planner 源头静默丢弃非法 hint，conductor 后续以默认
+    角色执行。
+
+    判定用与 _run_subagent 完全相同的 ``get_enabled_agent()``（读 SQLite
+    运行时状态），保证 planner 放行的 hint 一定能成功派发：
+    - 内存注册表 ``get_agent_registry()`` 不反映 SQLite enabled 状态
+      （toggle_agent 禁用后仍残留，用它校验会漏掉"已注册但禁用"一半）
+    - 自定义 agent 只存 SQLite 不在内存注册表，必须走 SQLite 查询
+
+    延迟 import 避免任何循环引用；每任务一次 SQLite 查询（≤8 任务，
+    开销可忽略）。
+    """
+    from backend.agents.profiles import get_enabled_agent
+
+    return get_enabled_agent(agent_id) is not None
+
+# Hard cap on a single task description (titles are capped at 200; the
+# description was previously bounded only by the LLM max_tokens).
+MAX_TASK_DESCRIPTION_CHARS = 4000
+
+# task_type values the rest of the orchestration layer understands.
+KNOWN_TASK_TYPES = frozenset({"general", "research", "coding", "analysis", "testing"})
+
+# Matches ```json ... ``` / ``` ... ``` fences some models emit anyway.
+_CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+
 
 @dataclass
 class Plan:
@@ -185,14 +223,110 @@ Return ONLY valid JSON, no additional text."""
     ) -> Tuple[List[Dict[str, Any]], str]:
         """Parse LLM response into tasks and reasoning."""
         try:
-            # Extract JSON from response
-            data = json.loads(response)
-            tasks = data.get("tasks", [])
-            reasoning = data.get("reasoning", "LLM decomposition")
-            return tasks, reasoning
-        except json.JSONDecodeError:
-            # Fallback to simple decomposition
-            return self._simple_decompose(response)
+            data = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            return None
+
+        if not isinstance(data, dict):
+            return None
+
+        raw_tasks = data.get("tasks")
+        if not isinstance(raw_tasks, list) or not raw_tasks:
+            return None
+
+        reasoning = data.get("reasoning")
+        if not isinstance(reasoning, str) or not reasoning:
+            reasoning = "LLM decomposition"
+
+        return self._sanitize_tasks(raw_tasks), reasoning
+
+    def _sanitize_tasks(self, raw_tasks: List[Any]) -> List[Dict[str, Any]]:
+        """Validate/clean LLM-emitted tasks into registry-ready dicts.
+
+        Guarantees: at most MAX_PLAN_TASKS tasks; blocked_by only references
+        earlier tasks in the list (structurally acyclic); every task has a
+        non-empty name and description; names capped at 200 chars and
+        descriptions at MAX_TASK_DESCRIPTION_CHARS.
+        """
+        sanitized: List[Dict[str, Any]] = []
+        id_map: Dict[str, str] = {}  # LLM-provided id -> positional placeholder
+
+        for index, raw in enumerate(raw_tasks[:MAX_PLAN_TASKS]):
+            if not isinstance(raw, dict):
+                continue
+
+            title = raw.get("title") or raw.get("name")
+            description = raw.get("description")
+            if not isinstance(title, str) or not title.strip():
+                if isinstance(description, str) and description.strip():
+                    title = description.strip()[:60]
+                else:
+                    title = f"Task {index + 1}"
+            if not isinstance(description, str) or not description.strip():
+                description = title
+
+            task_type = raw.get("task_type", "general")
+            if task_type not in KNOWN_TASK_TYPES:
+                task_type = "general"
+
+            # Placeholder id used for dependency resolution; the registry
+            # assigns the real id at creation time (callers re-map via the
+            # returned order — blocked_by here uses placeholder tokens that
+            # decompose_request's caller resolves). Simpler contract: we
+            # resolve dependencies to *positional indexes* encoded as
+            # "prev:<n>" tokens, then map to real ids post-creation.
+            provided_id = raw.get("id")
+            placeholder = f"idx:{index}"
+            if isinstance(provided_id, str) and provided_id.strip():
+                id_map[provided_id.strip()] = placeholder
+            id_map[f"t{index + 1}"] = placeholder  # common default scheme
+
+            agent_hint = raw.get("agent_hint")
+            parameters: Dict[str, Any] = {}
+            if (
+                isinstance(agent_hint, str)
+                and agent_hint.strip()
+                and _is_dispatchable_agent(agent_hint.strip())
+            ):
+                # F4 (2026-08-12): 只接受可派发角色，非法 hint 静默丢弃
+                # （见 _is_dispatchable_agent docstring）。
+                parameters["agent_hint"] = agent_hint.strip()
+
+            sanitized.append(
+                {
+                    "name": title.strip()[:200],
+                    "description": description.strip()[:MAX_TASK_DESCRIPTION_CHARS],
+                    "task_type": task_type,
+                    "parameters": parameters,
+                    "blocked_by": [],  # resolved below, once all ids are known
+                    "_placeholder": placeholder,
+                    "_raw_depends_on": raw.get("depends_on") or [],
+                }
+            )
+
+        # Second pass: resolve depends_on to placeholders of EARLIER tasks
+        # only (forward references / cycles are dropped — keeps a DAG).
+        seen_placeholders = set()
+        for item in sanitized:
+            resolved: List[str] = []
+            deps = item.pop("_raw_depends_on")
+            placeholder = item["_placeholder"]
+            if isinstance(deps, list):
+                for dep in deps:
+                    if not isinstance(dep, str):
+                        continue
+                    target = id_map.get(dep.strip())
+                    if (
+                        target is not None
+                        and target in seen_placeholders
+                        and target not in resolved
+                        and target != placeholder
+                    ):
+                        resolved.append(target)
+            item["blocked_by"] = resolved
+            seen_placeholders.add(placeholder)
+
+        return sanitized
 
     def _simple_decompose(
         self,

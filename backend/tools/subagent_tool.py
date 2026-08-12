@@ -19,14 +19,16 @@ from typing import Any, Dict, List
 
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
-#: 工具参数 schema —— 钳制子任务数量 ≤4（与并发上限 4 对齐）。
+#: 工具参数 schema —— 单次调用最多 8 个任务（= MAX_PLAN_TASKS）。maxItems 管
+#: "单次调用任务数"，与 ChatDispatcher 的并发上限（信号量 4）解耦：并发由
+#: 调度器独立兜底，8 个任务即使全并发也只同时跑 4 个，其余排队。
 INPUT_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
         "tasks": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 4,
+            "maxItems": 8,
             "items": {
                 "type": "object",
                 "properties": {
@@ -42,7 +44,7 @@ INPUT_SCHEMA: Dict[str, Any] = {
 
 _TOOL_DESCRIPTION = (
     "并行派发子 agent 执行任务。适用于已拆解为多个子任务的复杂目标："
-    "传入 [{agent_id, goal}] 列表（最多 4 个），每个子 agent 独立运行并把"
+    "传入 [{agent_id, goal}] 列表（最多 8 个），每个子 agent 独立运行并把"
     "结果聚合返回。agent_id 必须是已启用的角色（如 researcher / writer）。"
 )
 

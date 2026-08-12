@@ -29,6 +29,10 @@ MAX_CONCURRENT_SUBAGENTS = 4
 #: 单子结果截断上限 —— 聚合 markdown 进 conductor 上下文，防止灌爆。
 MAX_SUBAGENT_RESULT_CHARS = 50 * 1024
 
+#: 聚合 markdown 总上限（F3 2026-08-12）—— maxItems 放宽到 8 后，8 项最坏
+#: 8×50KB=400KB，必须整体兜底，防止一次性灌爆 conductor 上下文。
+MAX_AGGREGATE_CHARS = 120 * 1024
+
 #: task_status.output_preview 上限（UI 展开预览）。
 MAX_OUTPUT_PREVIEW_CHARS = 500
 
@@ -105,31 +109,40 @@ class ChatDispatcher:
         self.llm_config = llm_config
         self._states: Dict[str, ChatTaskState] = {}
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_SUBAGENTS)
+        # F1 (2026-08-12): run 内全局递增的 task 计数器。修复前每次 dispatch
+        # 调用都从 t1 重编号，与 producer 计划的全局编号 t1..tN 错位 —— 前端
+        # 按 task_id 合并 status，计划 t4-t6 永远收不到更新（UI 恒显 3/6）。
+        self._next_task_index = 0
 
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
         """并行执行子任务，返回聚合 markdown（截断后进 conductor 上下文）。
 
         Args:
-            tasks: ``[{"agent_id": ..., "goal": ...}]``。按传入顺序编号
-                ``t{index+1}``（与 producer 的 task_plan 契约一致）。
+            tasks: ``[{"agent_id": ..., "goal": ...}]``。task_id 按 run 内
+                全局递增分配（``t{run_sequence}``），跨多次 dispatch 调用唯一，
+                与 producer 的 task_plan 编号 t1..tN 对齐。
 
         Returns:
             聚合 markdown：每个子结果截断 MAX_SUBAGENT_RESULT_CHARS 后拼接；
             单任务失败以错误摘要参与聚合，其余任务继续（错误隔离）。
         """
         states: List[ChatTaskState] = []
-        for index, raw in enumerate(tasks):
+        for raw in tasks:
             # 缺 agent_id（malformed input）→ 失败事件占位，不抛穿整次 dispatch。
             # 让 conductor 看到 status=failed + error，能定位 producer bug。
+            # F1 (2026-08-12): task_id 从 run 内全局计数器分配（跨调用唯一，
+            # 与计划编号 t1..tN 对齐），不再按本次调用内 index 重编号。
+            task_id = f"t{self._next_task_index + 1}"
+            self._next_task_index += 1
             try:
                 state = ChatTaskState(
-                    task_id=f"t{index + 1}",
+                    task_id=task_id,
                     agent_id=raw["agent_id"],
                     goal=raw.get("goal", ""),
                 )
             except KeyError as exc:
                 state = ChatTaskState(
-                    task_id=f"t{index + 1}",
+                    task_id=task_id,
                     agent_id="<missing>",
                     goal=raw.get("goal", ""),
                 )
@@ -258,4 +271,12 @@ class ChatDispatcher:
                 blocks.append(f"{header_item}\n\n[失败] {err}")
             else:
                 blocks.append(f"{header_item}\n\n[状态: {state.status}]")
-        return header + "\n\n".join(blocks)
+        result = header + "\n\n".join(blocks)
+        # F3 (2026-08-12): maxItems 放宽到 8 后单批聚合体积翻倍，整体截断兜底
+        # （保留头部进度摘要 + 前部子任务），防一次性灌爆 conductor 上下文。
+        if len(result) > MAX_AGGREGATE_CHARS:
+            result = (
+                result[:MAX_AGGREGATE_CHARS]
+                + "\n\n[聚合结果超过上限，已截断；详见各子任务输出]"
+            )
+        return result

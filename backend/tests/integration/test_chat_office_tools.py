@@ -7,8 +7,9 @@ Verifies the legacy producer correctly:
    ``set_tool_context`` before ``agent.run_loop`` starts.
 3. Calls ``reset_tool_context`` in ``finally`` so the ContextVar does not
    leak across requests.
-4. With no binding / no refs, no context is set and Office schemas stay
-   hidden from ``get_schemas_for_llm``.
+4. With no binding / no refs, a context with an empty office scope is
+   still set (F2: ordinary chat needs it for artifact recording) and
+   Office schemas stay hidden from ``get_schemas_for_llm``.
 5. A rebind between authorization and tool execution fails closed (stale
    generation in the context produces empty list / not-found results).
 
@@ -96,9 +97,12 @@ def _registry_size() -> int:
 
 
 @pytest.mark.asyncio()
-async def test_no_binding_no_refs_does_not_set_tool_context(client, tmp_path: Path):
-    """Legacy path (no refs, no binding) -> producer does not set context.
-    The Office tools stay hidden from get_schemas_for_llm.
+async def test_no_binding_sets_empty_scope_tool_context(client, tmp_path: Path):
+    """Legacy path (no refs, no binding) -> producer sets a context with
+    an empty office scope. F2 (2026-08-12): 普通聊天也必须设置
+    ToolExecutionContext（binding_generation=0 + 空 scope），否则 write_file
+    等工具的 artifact 记录因 current_tool_context() 为 None 静默早退。
+    Office 工具仍因空 scope 从 get_schemas_for_llm 隐藏。
     """
     conn = _get_db_connection()
     _insert_session(conn, SESSION_ID)
@@ -106,8 +110,8 @@ async def test_no_binding_no_refs_does_not_set_tool_context(client, tmp_path: Pa
     captured_contexts: List[object] = []
 
     async def mock_run_loop(messages, **kwargs):
-        # Inside the producer task, current_tool_context() should be None
-        # because there was no binding to authorize.
+        # Inside the producer task, current_tool_context() must be set even
+        # without a binding — empty scope, generation 0.
         captured_contexts.append(current_tool_context())
         yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
 
@@ -123,8 +127,12 @@ async def test_no_binding_no_refs_does_not_set_tool_context(client, tmp_path: Pa
         attach = await client.get(f"{CHAT_STREAM_PATH}/{stream_id}")
         assert attach.status_code == 200
 
-    # No binding -> no context was set inside the producer.
-    assert captured_contexts == [None]
+    # No binding -> still a context, but generation 0 + empty scope.
+    assert len(captured_contexts) == 1
+    ctx = captured_contexts[0]
+    assert ctx is not None
+    assert ctx.binding_generation == 0
+    assert ctx.office_doc_scope == frozenset()
 
 
 # ──────────────────────────────────────────────────────────────────────
