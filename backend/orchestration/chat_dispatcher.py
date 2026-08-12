@@ -218,16 +218,44 @@ class ChatDispatcher:
         return None
 
     def _aggregate(self, states: List[ChatTaskState]) -> str:
-        """聚合 markdown：成功子结果 + 失败摘要，每项截断。"""
+        """聚合 markdown：成功子结果 + 失败摘要，每项截断。
+
+        P0-1（进度可视化）：首部追加「已收到 X/N 子任务结果」摘要，
+        让 conductor 看到还没齐时不要急着汇总。所有子任务完成时
+        header 退化为单行声明，不展示"仍在并行运行"等干扰信息。
+        """
+        total = len(states)
+        done = sum(1 for s in states if s.status == "done")
+        failed = sum(1 for s in states if s.status == "failed")
+        in_flight = total - done - failed
+
+        if in_flight > 0:
+            header = (
+                f"## 子任务进度摘要（部分完成）\n\n"
+                f"- 已收到 {done}/{total} 子任务结果"
+                + (f"（{failed} 失败）" if failed else "")
+                + f",{in_flight} 个仍在并行运行。\n"
+                f"- 提醒：在剩余 {in_flight} 个子任务未完成前，"
+                f"本次回答只能基于当前结果。"
+                f"请等待所有子任务完成后给出最终汇总。\n\n"
+            )
+        else:
+            header = (
+                f"## 子任务进度摘要（全部完成）\n\n"
+                f"- 已收到 {done}/{total} 子任务结果"
+                + (f"（{failed} 失败）" if failed else "")
+                + "。\n\n"
+            )
+
         blocks: List[str] = []
         for state in states:
-            header = f"## 子任务 {state.task_id}（{state.agent_id}）"
+            header_item = f"## 子任务 {state.task_id}（{state.agent_id}）"
             if state.status == "done" and state.output:
                 body = state.output[:MAX_SUBAGENT_RESULT_CHARS]
-                blocks.append(f"{header}\n\n{body}")
+                blocks.append(f"{header_item}\n\n{body}")
             elif state.status == "failed":
                 err = (state.error or "未知错误")[:MAX_SUBAGENT_RESULT_CHARS]
-                blocks.append(f"{header}\n\n[失败] {err}")
+                blocks.append(f"{header_item}\n\n[失败] {err}")
             else:
-                blocks.append(f"{header}\n\n[状态: {state.status}]")
-        return "\n\n".join(blocks)
+                blocks.append(f"{header_item}\n\n[状态: {state.status}]")
+        return header + "\n\n".join(blocks)

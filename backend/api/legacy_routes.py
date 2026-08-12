@@ -1778,6 +1778,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             ],
                         }
                     )
+                    # 进度可视化 P0-2 (2026-08-12): task_plan 之后立即推
+                    # 一次 task_progress 初始化事件,前端 taskBoard 在子
+                    # agent 跑之前就能拿到 total,UI 可立即渲染"已拆解为 N
+                    # 个子任务,等待结果中…"。后续 5 元组由 reducer 从
+                    # task_status 实时聚合。
+                    await entry.queue.put(
+                        {
+                            "state": "task_progress",
+                            "run_id": run_id,
+                            "total": len(plan_tasks),
+                            "done": 0,
+                            "running": 0,
+                            "queued": len(plan_tasks),
+                            "failed": 0,
+                        }
+                    )
             try:
                 from backend.core.diagram_prompt import (
                     DIAGRAM_TOOL_PROMPT,

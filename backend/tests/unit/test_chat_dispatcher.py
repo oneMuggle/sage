@@ -230,3 +230,83 @@ async def test_dispatch_missing_agent_id_key_fails():
     assert events[0]["status"] == "queued"
     assert events[-1]["status"] == "failed"
     assert "agent_id" in aggregated
+
+
+# =========================================================================
+# 进度可视化 P0-1 (2026-08-12): _aggregate 头部进度摘要
+# =========================================================================
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_includes_progress_header_when_partial():
+    """3 子任务中 1 done + 2 running,聚合 markdown 头部含 '已收到 1/3' 与提示文。"""
+    queue = _make_queue()
+    fake = _FakeSageAgent(results=["唯一完成的结果"], delay=0.0)
+
+    with patch("backend.orchestration.chat_dispatcher.SageAgent", return_value=fake):
+        dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-test")
+        aggregated = await dispatcher.dispatch(
+            [
+                {"agent_id": "researcher", "goal": "正常"},
+                {"agent_id": "writer", "goal": None},  # 缺键 → failed
+                {"agent_id": "writer", "goal": "另一个"},
+            ]
+        )
+
+    # 上面 3 任务实际是 2 done + 1 failed,全完成路径;校验 header 存在
+    # 且不出现 "仍在并行运行" 字眼(避免 partial 路径串扰)。
+    assert "## 子任务进度摘要" in aggregated
+    assert "已收到" in aggregated
+    assert "仍在并行运行" not in aggregated
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_partial_shows_inflight_notice():
+    """部分完成路径:header 出现 "仍在并行运行" + 请等待所有子任务。"""
+    from backend.orchestration.chat_dispatcher import ChatDispatcher, ChatTaskState
+
+    queue = _make_queue()
+    dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-test")
+    # 1 done + 1 running + 1 queued
+    states = [
+        ChatTaskState(
+            task_id="t1", agent_id="researcher", goal="g1",
+            status="done", output="前 1 完成的结果",
+        ),
+        ChatTaskState(
+            task_id="t2", agent_id="researcher", goal="g2",
+            status="running",
+        ),
+        ChatTaskState(
+            task_id="t3", agent_id="researcher", goal="g3",
+            status="queued",
+        ),
+    ]
+    aggregated = dispatcher._aggregate(states)
+
+    assert "## 子任务进度摘要（部分完成）" in aggregated
+    assert "已收到 1/3 子任务结果" in aggregated
+    assert "2 个仍在并行运行" in aggregated
+    assert "请等待所有子任务完成后给出最终汇总" in aggregated
+    assert "## 子任务 t1" in aggregated
+    assert "前 1 完成的结果" in aggregated
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_all_done_omits_inflight_notice():
+    """全部完成路径:header 简化,不出现 "仍在并行运行"。"""
+    from backend.orchestration.chat_dispatcher import ChatDispatcher, ChatTaskState
+
+    queue = _make_queue()
+    dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-test")
+    states = [
+        ChatTaskState(task_id="t1", agent_id="r", goal="g1", status="done", output="a"),
+        ChatTaskState(task_id="t2", agent_id="r", goal="g2", status="done", output="b"),
+        ChatTaskState(task_id="t3", agent_id="r", goal="g3", status="done", output="c"),
+    ]
+    aggregated = dispatcher._aggregate(states)
+
+    assert "## 子任务进度摘要（全部完成）" in aggregated
+    assert "已收到 3/3 子任务结果" in aggregated
+    assert "仍在并行运行" not in aggregated
+    assert "请等待" not in aggregated

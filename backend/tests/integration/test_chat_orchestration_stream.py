@@ -113,6 +113,30 @@ async def test_multi_mode_emits_task_plan_and_registers_dispatch_tool():
     # 子 agent 跑之前 task_plan 先到（计划先展示）
     assert states.index("task_plan") < states.index("done")
 
+    # 进度可视化 P0-2 (2026-08-12): task_progress 紧随 task_plan 之前,
+    # 让前端 taskBoard 在子 agent 跑之前就拿到 total 渲染头部。
+    assert "task_progress" in states, (
+        f"task_progress 必出，实际 events={states}"
+    )
+    tp_event = next(e for e in events if e["state"] == "task_progress")
+    assert tp_event["run_id"] == plan_event["run_id"]
+    assert tp_event["total"] == 2
+    assert tp_event["queued"] == 2
+    assert tp_event["done"] == 0
+    assert tp_event["running"] == 0
+    assert tp_event["failed"] == 0
+    # 顺序约束:task_progress 必须在 task_plan 之后、首个 task_status 之前
+    plan_idx = states.index("task_plan")
+    tp_idx = states.index("task_progress")
+    assert plan_idx < tp_idx, "task_progress 必须在 task_plan 之后"
+    first_status_idx = next(
+        (i for i, s in enumerate(states) if s == "task_status"),
+        len(states),
+    )
+    assert tp_idx < first_status_idx, (
+        "task_progress 必须在首个 task_status 之前(否则前端拿不到 total)"
+    )
+
     assert "dispatch_subagents" in registered_tools, (
         "force_multi 必须注册 dispatch 工具（硬约束 1）"
     )
