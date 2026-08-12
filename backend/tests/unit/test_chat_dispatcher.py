@@ -14,6 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from backend.orchestration.chat_dispatcher import (
+    MAX_AGGREGATE_CHARS,
     MAX_CONCURRENT_SUBAGENTS,
     MAX_SUBAGENT_RESULT_CHARS,
     ChatDispatcher,
@@ -310,3 +311,78 @@ async def test_aggregate_all_done_omits_inflight_notice():
     assert "已收到 3/3 子任务结果" in aggregated
     assert "仍在并行运行" not in aggregated
     assert "请等待" not in aggregated
+
+
+# =========================================================================
+# 修复 F1 (2026-08-12): task_id 跨 dispatch 调用全局递增
+# =========================================================================
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_task_ids_continue_across_calls():
+    """多次 dispatch 调用 task_id 全局递增 —— 修复前每次从 t1 重编号，
+    计划 t4-t6 永远收不到 status 事件（UI 恒显 3/6）。"""
+    queue = _make_queue()
+    fake = _FakeSageAgent(results=["a", "b", "c", "d", "e"])
+
+    with patch("backend.orchestration.chat_dispatcher.SageAgent", return_value=fake):
+        dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-test")
+        await dispatcher.dispatch(
+            [{"agent_id": "researcher", "goal": f"g{i}"} for i in range(3)]
+        )
+        await dispatcher.dispatch(
+            [{"agent_id": "researcher", "goal": f"g{i}"} for i in range(2)]
+        )
+
+    events = _collect_events(queue, 15)
+    task_ids = [e["task_id"] for e in events]
+    # 第一次派发 t1-t3、第二次派发 t4-t5 —— 全局唯一，无碰撞
+    assert set(task_ids) == {"t1", "t2", "t3", "t4", "t5"}
+    # 与 producer 计划编号（t1..tN）对齐：第二次调用的首个任务必须是 t4
+    assert task_ids[0] == "t1"
+    assert task_ids[9] == "t4"
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_task_ids_skip_malformed_consumes_counter():
+    """malformed 任务（缺 agent_id）也消耗全局计数器，不挤占后续合法任务编号。"""
+    queue = _make_queue()
+    fake = _FakeSageAgent(results=["ok"])
+
+    with patch("backend.orchestration.chat_dispatcher.SageAgent", return_value=fake):
+        dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-test")
+        # 第 1 个缺 agent_id（failed 占位 t1），第 2 个正常（t2）
+        aggregated = await dispatcher.dispatch([{}, {"agent_id": "researcher", "goal": "g"}])
+
+    assert "t1" in aggregated  # malformed 占位
+    assert "## 子任务 t2" in aggregated  # 合法任务编号未被 t1 挤占
+    events = _collect_events(queue, 5)  # t1: queued+failed; t2: queued+running+done
+    task_ids = {e["task_id"] for e in events}
+    assert task_ids == {"t1", "t2"}
+
+
+# =========================================================================
+# F3 (2026-08-12): 聚合总上限（maxItems 4→8 后单批最多 8 项，防灌爆上下文）
+# =========================================================================
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_aggregate_total_capped():
+    """8 个子任务各接近单任务上限 → 聚合总长度被 MAX_AGGREGATE_CHARS 截断。"""
+    queue = _make_queue()
+    big = "x" * MAX_SUBAGENT_RESULT_CHARS  # 每项接近单任务 50KB 上限
+    fake = _FakeSageAgent(results=[big] * 8)
+
+    with patch("backend.orchestration.chat_dispatcher.SageAgent", return_value=fake):
+        dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-test")
+        aggregated = await dispatcher.dispatch(
+            [{"agent_id": "researcher", "goal": f"g{i}"} for i in range(8)]
+        )
+
+    assert len(aggregated) <= MAX_AGGREGATE_CHARS + 200, (
+        f"聚合总长 {len(aggregated)} 超过上限 {MAX_AGGREGATE_CHARS}"
+    )
+    assert "已截断" in aggregated  # 尾部提示让 conductor 知道结果不完整
+    # 截断必须保留头部进度摘要（header 是前缀，切片不砍它）——
+    # 否则 conductor 失去"8 个结果已收到"的计数锚点。
+    assert "已收到 8/8 子任务结果" in aggregated

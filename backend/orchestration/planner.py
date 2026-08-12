@@ -29,6 +29,29 @@ logger = logging.getLogger(__name__)
 # Hard cap on planner-emitted tasks (LLM output is truncated to this).
 MAX_PLAN_TASKS = 8
 
+
+def _is_dispatchable_agent(agent_id: str) -> bool:
+    """agent_id 当前是否可被 ChatDispatcher 派发（存在且启用）。
+
+    F4 (2026-08-12): LLM 可能产出已下线/不存在的角色（如 content_writer、
+    editor），若照单全收，ChatDispatcher._run_subagent 会因
+    ``get_enabled_agent()`` 返回 None 而快速失败（spec §5.1），整批子任务
+    failed。这里在 planner 源头静默丢弃非法 hint，conductor 后续以默认
+    角色执行。
+
+    判定用与 _run_subagent 完全相同的 ``get_enabled_agent()``（读 SQLite
+    运行时状态），保证 planner 放行的 hint 一定能成功派发：
+    - 内存注册表 ``get_agent_registry()`` 不反映 SQLite enabled 状态
+      （toggle_agent 禁用后仍残留，用它校验会漏掉"已注册但禁用"一半）
+    - 自定义 agent 只存 SQLite 不在内存注册表，必须走 SQLite 查询
+
+    延迟 import 避免任何循环引用；每任务一次 SQLite 查询（≤8 任务，
+    开销可忽略）。
+    """
+    from backend.agents.profiles import get_enabled_agent
+
+    return get_enabled_agent(agent_id) is not None
+
 # Hard cap on a single task description (titles are capped at 200; the
 # description was previously bounded only by the LLM max_tokens).
 MAX_TASK_DESCRIPTION_CHARS = 4000
@@ -303,7 +326,13 @@ Output format — return ONLY valid JSON, no markdown fences, no extra text:
 
             agent_hint = raw.get("agent_hint")
             parameters: Dict[str, Any] = {}
-            if isinstance(agent_hint, str) and agent_hint.strip():
+            if (
+                isinstance(agent_hint, str)
+                and agent_hint.strip()
+                and _is_dispatchable_agent(agent_hint.strip())
+            ):
+                # F4 (2026-08-12): 只接受可派发角色，非法 hint 静默丢弃
+                # （见 _is_dispatchable_agent docstring）。
                 parameters["agent_hint"] = agent_hint.strip()
 
             sanitized.append(

@@ -31,7 +31,10 @@ class TestSchema:
     def test_schema_tasks_cardinality(self):
         tasks = INPUT_SCHEMA["properties"]["tasks"]
         assert tasks["minItems"] == 1
-        assert tasks["maxItems"] == 4
+        # F3 (2026-08-12): maxItems 4→8（= MAX_PLAN_TASKS）。maxItems 管"单次
+        # 调用任务数"、并发上限管"同时运行数"，二者解耦。修复前 4 与并发上限
+        # 强绑定 → 6 任务计划被迫拆多批派发（"4 轮"诱因）。
+        assert tasks["maxItems"] == 8
         assert tasks["items"]["properties"]["goal"]["maxLength"] == 2000
         assert tasks["items"]["required"] == ["agent_id", "goal"]
 
