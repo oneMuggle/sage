@@ -139,4 +139,17 @@ describe('logger', () => {
     expect(levels).not.toContain('info');
     expect(levels).toContain('error');
   });
+
+  it('setLogLevel ignores invalid level and keeps logging', async () => {
+    const mod = await import('../logger');
+    mod.setLogLevel('bogus' as never);
+    mod.logger.error('still-visible-error');
+
+    const today = new Date().toISOString().slice(0, 10);
+    const file = join(tmpDir, 'logs', `sage-${today}.ndjson`);
+    if (!existsSync(file)) throw new Error('no NDJSON written');
+    const lines = readFileSync(file, 'utf-8').trim().split('\n').filter(Boolean);
+    const levels = lines.map((l) => JSON.parse(l).level);
+    expect(levels).toContain('error');  // logging still works
+  });
 });

@@ -109,8 +109,9 @@ function logIt(level: LogLevel, msg: string, meta?: unknown, source: string = SO
   }
 }
 
-/** 运行时切换日志级别(日志基线修复 #2)。同步 electron-log 文件 transport。 */
+/** 运行时切换日志级别(日志基线修复 #2)。无效级别忽略,保持 CURRENT_LEVEL 不变;同步 electron-log 文件 transport。 */
 export function setLogLevel(level: LogLevel): void {
+  if (!(level in LOG_LEVELS)) return; // 无效级别:忽略,保持 CURRENT_LEVEL 不变
   CURRENT_LEVEL = level;
   try {
     log.transports.file.level = level;
