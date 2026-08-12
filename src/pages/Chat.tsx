@@ -125,8 +125,11 @@ export function Chat() {
   }, [pendingMessage, currentSessionId, sendMessage, settingsLoading, storeLoading]);
 
   const handleNewSession = async () => {
-    const sessionId = await createSession();
-    setCurrentSessionId(sessionId);
+    // 与 Sidebar 的 "+ 新对话" 行为对齐:跳到欢迎页由用户输入后再创建会话。
+    // 必须清空 currentSessionId,否则 ChatRoute 因为 sessionId 非空仍会
+    // 渲染 Chat 页,导致跳到 /welcome 后又被重定向回 /chat。
+    setCurrentSessionId(null);
+    navigate('/welcome');
   };
 
   const handleSendMessage = async (

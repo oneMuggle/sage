@@ -96,7 +96,9 @@ export function Sidebar({ width = 240 }: SidebarProps) {
             onSelect={(id) => {
               setCurrentSessionId(id);
               if (location.pathname !== '/chat') {
-                window.location.href = '/chat';
+                // SPA navigation: avoid `window.location.href` which would
+                // trigger a full page reload and produce a visible flash.
+                navigate('/chat');
               }
             }}
             onDelete={(id) => deleteSession(id)}

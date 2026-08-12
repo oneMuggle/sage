@@ -1,4 +1,5 @@
 import { BookOpen, Clock, Image, Paperclip, Send, Square, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import type React from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
@@ -128,6 +129,20 @@ export function InputCard({
 }: InputCardProps) {
   const { t } = useI18n();
   const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0;
+
+  // Autosize: textarea grows with content up to the 200px cap.
+  // Without this, content past one line scrolls inside the textarea and
+  // visually only the last line is visible. Resetting height to 'auto'
+  // first lets scrollHeight report the full content height.
+  // (win7 适配: 用普通 textareaRef,不依赖 main 的 U20 emacs 绑定)
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const next = Math.min(el.scrollHeight, 200);
+    el.style.height = `${next}px`;
+  }, [value]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showSlashMenu && slashCommands.length > 0 && !e.shiftKey) {
@@ -260,14 +275,14 @@ export function InputCard({
           {atFileMenu}
           <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
             <textarea
+              ref={textareaRef}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               disabled={disabled}
               autoFocus={autoFocus}
-              rows={1}
-              className="flex-1 resize-none border-none bg-transparent outline-none text-sm text-text disabled:opacity-50 max-h-[200px] placeholder:text-muted"
+              className="flex-1 resize-none border-none bg-transparent outline-none text-sm text-text disabled:opacity-50 max-h-[200px] overflow-y-auto placeholder:text-muted"
               aria-label="message input"
             />
 
