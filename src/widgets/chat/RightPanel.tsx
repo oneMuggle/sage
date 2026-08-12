@@ -1,6 +1,6 @@
 // src/widgets/chat/RightPanel.tsx
-import { useState } from 'react';
 import { X } from 'lucide-react';
+import { useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
