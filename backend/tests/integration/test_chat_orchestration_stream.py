@@ -279,3 +279,51 @@ async def test_multi_mode_injects_plan_block_into_run_loop_system_content():
     # 计划块内带出 mock plan 的子任务目标（description），验证真实注入
     assert "目标：researcher" in system_content
     assert "目标：writer" in system_content
+
+
+@pytest.mark.asyncio()
+async def test_explicit_null_orchestration_mode_does_not_422():
+    """explicit null orchestration_mode 必须被接受（IPC `?? null` 序列化路径）。
+
+    回归: 渲染进程 chatApi.ts:120 把 undefined ?? null 序列化进 IPC body。
+    修复前 Pydantic 把 null 当显式赋值校验 → 422。修复后 schema 改
+    Optional[str] = "auto", 业务层 `data.orchestration_mode or "auto"` 兜底。
+    """
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: None}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch(
+            "backend.api.legacy_routes._classify_orchestration_mode",
+            return_value="single",
+        ) as mock_classify:
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                resp = await ac.post(
+                    CHAT_STREAM_PATH,
+                    json={
+                        "session_id": "s",
+                        "message": "今天天气怎么样",
+                        "orchestration_mode": None,  # explicit null —— IPC `?? null` 产物
+                    },
+                )
+
+    assert resp.status_code == 200, (
+        f"explicit null orchestration_mode 不应 422, 实际 {resp.status_code}: {resp.text}"
+    )
+    # 业务层用 `data.orchestration_mode or "auto"`,所以 classifier 收到 "auto"
+    mock_classify.assert_awaited_once()
+    classify_args = mock_classify.await_args
+    assert classify_args.args[1] == "auto", (
+        f"classifier 第二个参数应落到默认 'auto', 实际 {classify_args.args[1]!r}"
+    )
