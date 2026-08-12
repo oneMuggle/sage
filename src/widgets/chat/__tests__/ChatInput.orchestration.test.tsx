@@ -50,7 +50,9 @@ describe('ChatInput — /orchestrate override', () => {
     const onSend = vi.fn();
     renderWithI18n(<ChatInput onSend={onSend} />);
 
-    fireEvent.change(screen.getByPlaceholderText(/输入消息/), { target: { value: '/orchestrate' } });
+    fireEvent.change(screen.getByPlaceholderText(/输入消息/), {
+      target: { value: '/orchestrate' },
+    });
     fireEvent.mouseDown(screen.getByRole('button', { name: /\/orchestrate/ }));
 
     expect(onSend).toHaveBeenCalledTimes(1);
@@ -63,7 +65,9 @@ describe('ChatInput — /single override', () => {
     const onSend = vi.fn();
     renderWithI18n(<ChatInput onSend={onSend} />);
 
-    fireEvent.change(screen.getByPlaceholderText(/输入消息/), { target: { value: '/single 今天天气' } });
+    fireEvent.change(screen.getByPlaceholderText(/输入消息/), {
+      target: { value: '/single 今天天气' },
+    });
     fireEvent.mouseDown(screen.getByRole('button', { name: /\/single/ }));
 
     expect(onSend).toHaveBeenCalledWith('今天天气', { orchestrationMode: 'force_single' });
