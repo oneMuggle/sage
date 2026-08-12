@@ -2,6 +2,7 @@
 Sage 后端测试 - 共享 fixtures
 """
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -84,16 +85,14 @@ def setup_test_db(tmp_db_path):
     if hasattr(app.state, "streams") and app.state.streams is not None:
         for entry in list(app.state.streams._entries.values()):
             if entry.task is not None and not entry.task.done():
-                try:
+                # pytest-asyncio 0.23.3 默认 function-scope event loop:
+                # 上一个测试文件结束时 close loop,残留 task 的 cancel
+                # 会在已关闭 loop 上触发 _check_closed → RuntimeError。
+                # entry 持有的 Queue 随 Python GC 释放,跳过 cancel 不影响隔离。
+                # 现象: 跨文件异步测试 ERROR 100% 触发,
+                # 典型 fixture 名 setup_test_db 的 ERROR at setup。
+                with contextlib.suppress(RuntimeError):
                     entry.task.cancel()
-                except RuntimeError:
-                    # pytest-asyncio 0.23.3 默认 function-scope event loop:
-                    # 上一个测试文件结束时会 close loop,残留 task 的 cancel
-                    # 会在已关闭的 loop 上触发 _check_closed → RuntimeError。
-                    # entry 持有的 Queue 会随 Python GC 释放,跳过 cancel 不影响隔离。
-                    # 复现:backend/tests/integration/test_chat_service_permission.py
-                    #       ::test_audit_preset_denies_write_file(ERROR 100% 触发)。
-                    pass
         app.state.streams._entries.clear()
 
     yield db_mod._db
@@ -125,16 +124,14 @@ async def client():
     if hasattr(app.state, "streams") and app.state.streams is not None:
         for entry in list(app.state.streams._entries.values()):
             if entry.task is not None and not entry.task.done():
-                try:
+                # pytest-asyncio 0.23.3 默认 function-scope event loop:
+                # 上一个测试文件结束时 close loop,残留 task 的 cancel
+                # 会在已关闭 loop 上触发 _check_closed → RuntimeError。
+                # entry 持有的 Queue 随 Python GC 释放,跳过 cancel 不影响隔离。
+                # 现象: 跨文件异步测试 ERROR 100% 触发,
+                # 典型 fixture 名 setup_test_db 的 ERROR at setup。
+                with contextlib.suppress(RuntimeError):
                     entry.task.cancel()
-                except RuntimeError:
-                    # pytest-asyncio 0.23.3 默认 function-scope event loop:
-                    # 上一个测试文件结束时会 close loop,残留 task 的 cancel
-                    # 会在已关闭的 loop 上触发 _check_closed → RuntimeError。
-                    # entry 持有的 Queue 会随 Python GC 释放,跳过 cancel 不影响隔离。
-                    # 复现:backend/tests/integration/test_chat_service_permission.py
-                    #       ::test_audit_preset_denies_write_file(ERROR 100% 触发)。
-                    pass
         app.state.streams._entries.clear()
 
 
