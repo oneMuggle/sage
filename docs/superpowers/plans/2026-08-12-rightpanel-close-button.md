@@ -26,8 +26,9 @@
 
 | 文件 | 操作 | 责任 |
 |---|---|---|
-| `src/widgets/chat/RightPanel.tsx` | 修改 | 抽 `PanelHeader` 子组件 + 加 × 按钮 + 接入 `onToggle` |
-| `src/widgets/chat/__tests__/RightPanel.test.tsx` | 修改 | 新增 close button 测试用例 |
+| `src/widgets/chat/RightPanel.tsx` | 修改 | 抽 `PanelHeader` 子组件(导出) + 加 × 按钮 + 接入 `onToggle` |
+| `src/widgets/chat/__tests__/RightPanel.test.tsx` | 修改 | 新增 close button list 视图测试(3 用例)+ tab switch 1 用例 |
+| `src/widgets/chat/__tests__/PanelHeader.test.tsx` | 新增 | PanelHeader 独立单元测试(list + viewer 两个分支) |
 | `docs/superpowers/specs/2026-08-12-rightpanel-close-button-design.md` | 已存在 | 设计来源,本次实施依据 |
 | `src/widgets/chat/RightPanelToggle.tsx` | **不改** | 顶部切换按钮,本次不涉及 |
 | `src/pages/Chat.tsx` | **不改** | 父组件已传 `onToggle` |
@@ -155,7 +156,8 @@ interface PanelHeaderProps {
   onClose: () => void;
 }
 
-function PanelHeader({ tab, onTabChange, onClose }: PanelHeaderProps) {
+// ⚠️ 必须 export,PanelHeader.test.tsx 要直接 import 它
+export function PanelHeader({ tab, onTabChange, onClose }: PanelHeaderProps) {
   // list 视图:Progress / Artifacts tabs + × 按钮
   if (tab !== undefined && onTabChange) {
     return (
@@ -337,11 +339,82 @@ npx vitest run src/widgets/chat/__tests__/RightPanel.test.tsx
 
 Expected: 所有测试绿(旧 2 + 新 3 个)。
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: 创建 PanelHeader 独立测试文件**
+
+Create: `src/widgets/chat/__tests__/PanelHeader.test.tsx`
+
+```tsx
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { PanelHeader } from '../RightPanel';
+
+describe('PanelHeader', () => {
+  describe('list view (with tab + onTabChange)', () => {
+    const listProps = {
+      tab: 'progress' as const,
+      onTabChange: vi.fn(),
+      onClose: vi.fn(),
+    };
+
+    it('renders Progress and Artifacts tabs', () => {
+      render(<PanelHeader {...listProps} />);
+      expect(screen.getByText('Progress')).toBeInTheDocument();
+      expect(screen.getByText('Artifacts')).toBeInTheDocument();
+    });
+
+    it('renders close button with aria-label', () => {
+      render(<PanelHeader {...listProps} />);
+      expect(
+        screen.getByRole('button', { name: '关闭右侧面板' })
+      ).toBeInTheDocument();
+    });
+
+    it('clicking close button invokes onClose', () => {
+      const onClose = vi.fn();
+      render(<PanelHeader {...listProps} onClose={onClose} />);
+      fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('viewer view (no tab props)', () => {
+    it('renders close button with aria-label', () => {
+      render(<PanelHeader onClose={vi.fn()} />);
+      expect(
+        screen.getByRole('button', { name: '关闭右侧面板' })
+      ).toBeInTheDocument();
+    });
+
+    it('does not render tab buttons', () => {
+      render(<PanelHeader onClose={vi.fn()} />);
+      expect(screen.queryByText('Progress')).not.toBeInTheDocument();
+      expect(screen.queryByText('Artifacts')).not.toBeInTheDocument();
+    });
+
+    it('clicking close button invokes onClose', () => {
+      const onClose = vi.fn();
+      render(<PanelHeader onClose={onClose} />);
+      fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+```
+
+- [ ] **Step 7: 运行完整测试套件**
+
+Run:
+```bash
+npx vitest run src/widgets/chat/__tests__/RightPanel.test.tsx src/widgets/chat/__tests__/PanelHeader.test.tsx
+```
+
+Expected: 所有测试绿 —— RightPanel 旧 2 + 新 4,PanelHeader 6 个用例。
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/widgets/chat/RightPanel.tsx src/widgets/chat/__tests__/RightPanel.test.tsx
-git commit -m "feat(rightpanel): ArtifactViewer 视图加 × 按钮"
+git add src/widgets/chat/RightPanel.tsx src/widgets/chat/__tests__/RightPanel.test.tsx src/widgets/chat/__tests__/PanelHeader.test.tsx
+git commit -m "feat(rightpanel): ArtifactViewer 视图加 × 按钮 + PanelHeader 独立测试"
 ```
 
 ---
@@ -377,13 +450,11 @@ cd /home/fz/project/sage && npx eslint src/widgets/chat/RightPanel.tsx src/widge
 
 Expected: 0 errors,0 warnings。
 
-- [ ] **Step 3: 切 feature 分支 + cherry-pick 走 PR 流程**
+- [ ] **Step 3: 直接在 feat 分支上 push + 开 PR**
 
-按 `feature-branch-workflow` 规范,**3 个 feat commit 当前在 main 上,需回退到 feature 分支**:
+⚠️ **不要 reset/cherry-pick** —— 3 个 feat commit 本就在 `feat/rightpanel-close-button` 分支上(从 spec commit 后切出),直接 push 即可:
 
 ```bash
-git switch -c feat/rightpanel-close-button <spec-commit-sha>   # 从 spec 之前切出
-git cherry-pick <feat-commit-1> <feat-commit-2> <feat-commit-3>
 git push -u origin feat/rightpanel-close-button
 gh pr create --title "feat(rightpanel): 面板内添加 × 关闭按钮" \
   --body "Closes #<issue>. 见 docs/superpowers/specs/2026-08-12-rightpanel-close-button-design.md 与 docs/superpowers/plans/2026-08-12-rightpanel-close-button.md。"
@@ -411,12 +482,12 @@ git branch -d feat/rightpanel-close-button
 
 | Task | commit 数 | 累计行数 |
 |---|---|---|
-| T1 Red 测试 | 0 (与 T2 一起提交) | +35 行 (测试) |
+| T1 Red 测试 | 0 (与 T2 一起提交) | +40 行 (RightPanel 测试) |
 | T2 接通 onToggle | 1 | +2 行 (RightPanel.tsx) |
-| T3 抽 PanelHeader + list × | 1 | +45 行 (PanelHeader 子组件) |
-| T4 viewer × | 1 | +8 行 (RightPanel.tsx 顶部 viewer header) |
+| T3 抽 PanelHeader + list × | 1 | +45 行 (PanelHeader 子组件,export) |
+| T4 viewer × + PanelHeader 独立测试 | 1 | +8 行 (RightPanel.tsx) + 60 行 (PanelHeader.test.tsx) |
 | T5 PR | 0 (push/merge) | 0 |
-| **合计** | **3 commit** | **+90 行** |
+| **合计** | **3 commit** | **+155 行** |
 
 ## Self-Review
 
