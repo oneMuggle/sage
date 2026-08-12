@@ -232,6 +232,7 @@ function packagedEnv(
   return {
     SAGE_DB_PATH: sageDbPath,
     SAGE_USER_DATA_DIR: sageUserDataDir,
+    SAGE_LOG_LEVEL: process.env.SAGE_LOG_LEVEL ?? 'info',
     PYTHONPATH: [join(resourcesPath, 'backend'), join(resourcesPath, 'sage-core')].join(sep),
   };
 }

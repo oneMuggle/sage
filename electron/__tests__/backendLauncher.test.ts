@@ -34,7 +34,10 @@ describe('resolveBackendLaunchCommand', () => {
       });
       // No PYTHONPATH in dev (conda handles it via env name)
       if (plan.kind === 'spawn') {
-        expect(plan.extraEnv).toEqual({ SAGE_DB_PATH: '/mock/sage.db', SAGE_USER_DATA_DIR: '/mock/userData' });
+        expect(plan.extraEnv).toEqual({
+          SAGE_DB_PATH: '/mock/sage.db',
+          SAGE_USER_DATA_DIR: '/mock/userData',
+        });
         expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
     });
@@ -118,6 +121,8 @@ describe('resolveBackendLaunchCommand', () => {
         expect(plan.extraEnv).toEqual({
           SAGE_DB_PATH: '/mock/sage.db',
           SAGE_USER_DATA_DIR: '/mock/userData',
+          // test env has no SAGE_LOG_LEVEL set → `?? 'info'` fallback applies
+          SAGE_LOG_LEVEL: 'info',
           // Win uses ';' as PYTHONPATH separator
           PYTHONPATH: '/mock/resources/backend;/mock/resources/sage-core',
           PYTHON_BACKEND_PORT: '8765',
