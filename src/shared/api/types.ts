@@ -96,7 +96,12 @@ export type AgentState =
   | 'failed'
   // Multi-Agent Orchestration (2026-08-11)
   | 'task_plan'
-  | 'task_status';
+  | 'task_status'
+  // 进度可视化 P0-2 (2026-08-12): 整盘概览事件,在 task_plan 之后立刻
+  // 推送一次,前端 taskBoard 渲染"已拆解为 N 个子任务"头部信息时不必
+  // 等待 subtask 状态切换就能拿到 total。后续 5 元组也可由前端 reducer
+  // 实时从 task_status 聚合,本事件只承担初始化职责。
+  | 'task_progress';
 
 /** 流式聊天工具调用 (对应 OpenAI 工具调用格式) */
 export interface AgentToolCall {
@@ -143,6 +148,22 @@ export interface TaskStatusEvent {
   output_preview: string | null;
 }
 
+/** 进度可视化 P0-2 (2026-08-12): 整盘概览事件。
+ *
+ * 后端在 `task_plan` 之后立即推送一次 (total=N, done=0, running=0,
+ * queued=N, failed=0),后续也可在 task_status 状态切换时同步更新。
+ * 字段是 5 元组,前端 taskBoard.progress 字段与之一一对应。
+ */
+export interface TaskProgressEvent {
+  state: 'task_progress';
+  run_id: string;
+  total: number;
+  done: number;
+  running: number;
+  queued: number;
+  failed: number;
+}
+
 /** 流式聊天事件 (NDJSON 协议的一行) */
 export interface AgentEvent {
   state: AgentState;
@@ -165,6 +186,12 @@ export interface AgentEvent {
   status?: TaskStatusValue;
   goal?: string;
   output_preview?: string | null;
+  // 进度可视化 P0-2 (2026-08-12): 5 元组快照字段,与 TaskProgressEvent 对齐。
+  total?: number;
+  done?: number;
+  running?: number;
+  queued?: number;
+  failed?: number;
 }
 
 // ==================== 错误类型定义 ====================

@@ -61,6 +61,7 @@ export type {
   SkillExecuteResult,
   TaskPlanEvent,
   TaskPlanItem,
+  TaskProgressEvent,
   TaskStatusEvent,
   TaskStatusValue,
   ToolCall,

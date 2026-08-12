@@ -8,6 +8,7 @@ import {
   type ChatConfig,
   type ChatOfficeRef,
   type TaskPlanItem,
+  type TaskProgressEvent,
   type TaskStatusEvent,
 } from '../../shared/api';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
@@ -41,6 +42,17 @@ export interface TaskBoard {
   runId: string;
   plan: TaskPlanItem[];
   statuses: Record<string, TaskStatusEvent>;
+  // 进度可视化 P0-2 (2026-08-12): 5 元组快照,初值由 task_progress 事件
+  // 注入,后续 reducer 在每次 task_status 流入时实时聚合更新。让
+  // ProgressSection/TaskTreeSection 在 task_status 还没到齐前就能渲染
+  // "已拆解为 N 个子任务,等待结果中…"。in_flight = running + queued。
+  progress?: {
+    total: number;
+    done: number;
+    running: number;
+    queued: number;
+    failed: number;
+  };
 }
 
 export function useChat() {
@@ -331,13 +343,58 @@ export function useChat() {
               // Multi-Agent Orchestration: task_status 事件 → 按 run_id 匹配合并进任务板。
               // 旧 run 的 task_status 直接忽略（prev 为 null 或 runId 不匹配都返回原值）。
               // 后端 task_status 载荷含 TaskStatusEvent 全字段,故宽松 AgentEvent 可直接 cast。
+              // 进度可视化 P0-2 (2026-08-12): 同步重算 progress 5 元组,让
+              // ProgressSection 无需等待 task_progress 就能实时反映 done/queued。
               if (evt.state === 'task_status' && evt.run_id && evt.task_id) {
                 // 闭包内 TS 不保留 evt 字段的 narrowing,先捕获为 const
                 const runId = evt.run_id;
                 const taskId = evt.task_id;
+                setTaskBoard((prev) => {
+                  if (!prev || prev.runId !== runId) return prev;
+                  const nextStatuses = {
+                    ...prev.statuses,
+                    [taskId]: evt as TaskStatusEvent,
+                  };
+                  const counts = { done: 0, running: 0, queued: 0, failed: 0 };
+                  for (const st of Object.values(nextStatuses)) {
+                    if (st.status === 'done') counts.done++;
+                    else if (st.status === 'running') counts.running++;
+                    else if (st.status === 'queued') counts.queued++;
+                    else if (st.status === 'failed') counts.failed++;
+                  }
+                  const total = Math.max(
+                    prev.progress?.total ?? 0,
+                    Object.keys(nextStatuses).length,
+                  );
+                  return {
+                    ...prev,
+                    statuses: nextStatuses,
+                    progress: { total, ...counts },
+                  };
+                });
+                return;
+              }
+              // 进度可视化 P0-2 (2026-08-12): task_progress 整盘概览事件。
+              // 后端在 task_plan 之后立即推一次(total=N,全 queued),前端
+              // 据此初始化 progress;后续 task_status 触发时由上面 reducer
+              // 实时聚合覆盖,保持单一数据源。AgentEvent 在宽松字段下
+              // 5 元组都是 optional,运行时真有数据(后端 SSE 保证),此处
+              // 用 TaskProgressEvent 收紧类型避免反复 ?? 0 退化。
+              if (evt.state === 'task_progress' && evt.run_id) {
+                const runId = evt.run_id;
+                const tp = evt as TaskProgressEvent;
                 setTaskBoard((prev) =>
                   prev && prev.runId === runId
-                    ? { ...prev, statuses: { ...prev.statuses, [taskId]: evt as TaskStatusEvent } }
+                    ? {
+                        ...prev,
+                        progress: {
+                          total: tp.total ?? 0,
+                          done: tp.done ?? 0,
+                          running: tp.running ?? 0,
+                          queued: tp.queued ?? 0,
+                          failed: tp.failed ?? 0,
+                        },
+                      }
                     : prev,
                 );
                 return;

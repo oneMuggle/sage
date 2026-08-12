@@ -1334,6 +1334,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         "\n\n以下为已确认的任务计划，请调用 dispatch_subagents "
                         "工具并行执行这些子任务（可合并/调整）。不要复述计划，直接执行。\n"
                         + plan_block
+                        # 进度可视化 P0-2 后置 (2026-08-12): 强化"必须全量执行完
+                        # 才汇总"约束。dispatch_subagents 每次调用可能只派发部分
+                        # 子任务（分批/合并），若聚合头只反映"本批已收到 X/X"，
+                        # LLM 可能误以为全部完成而提前总结。这里显式给出总数 N，
+                        # 要求必须等到 N 个全部有结果才输出最终汇总。
+                        + "\n\n必须执行完计划中的全部"
+                        + str(len(plan_tasks))
+                        + " 个子任务，等到所有子任务都返回结果后，才能输出最终汇总。"
+                        "若本次 dispatch 只执行了部分子任务，请继续调用工具执行剩余任务，"
+                        "不要提前给出结论。"
                     )
                     # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
                     await entry.queue.put(
@@ -1350,6 +1360,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 }
                                 for i, t in enumerate(plan_tasks, 1)
                             ],
+                        }
+                    )
+                    # 进度可视化 P0-2 (2026-08-12): task_plan 之后立即推
+                    # 一次 task_progress 初始化事件,前端 taskBoard 在子
+                    # agent 跑之前就能拿到 total,UI 可立即渲染"已拆解为 N
+                    # 个子任务,等待结果中…"。后续 5 元组由 reducer 从
+                    # task_status 实时聚合。
+                    await entry.queue.put(
+                        {
+                            "state": "task_progress",
+                            "run_id": run_id,
+                            "total": len(plan_tasks),
+                            "done": 0,
+                            "running": 0,
+                            "queued": len(plan_tasks),
+                            "failed": 0,
                         }
                     )
             try:

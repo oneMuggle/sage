@@ -22,13 +22,32 @@ interface TaskTreeSectionProps {
 }
 
 export function TaskTreeSection({ board }: TaskTreeSectionProps) {
-  const doneCount = board.plan.filter((p) => board.statuses[p.task_id]?.status === 'done').length;
-  const total = board.plan.length;
+  const total = board.progress?.total ?? board.plan.length;
+  const doneCount =
+    board.progress?.done ??
+    board.plan.filter((p) => board.statuses[p.task_id]?.status === 'done').length;
+  // 进度可视化 P0-2 (2026-08-12): 5 元组快照,优先从 progress 取 done/
+  // running/queued/failed,后续 ProgressSection 与 TaskTreeSection 文案
+  // 共享同一数据源(避免"总分不一致"的视觉冲突)。fallback 到实时聚合
+  // 兼容老 run(只有 task_status 流入没 task_progress 的情况)。
+  const progress = board.progress;
+  const running = progress?.running ?? 0;
+  const queued = progress?.queued ?? 0;
+  const failed = progress?.failed ?? 0;
+  const inFlight = running + queued;
+  // 进度可视化 L2 修正 (2026-08-12): 全部完成时不再显示"等待结果中"，
+  // 避免与下方 "完成 6/6" 自相矛盾。
+  const allDone = doneCount > 0 && doneCount === total && inFlight === 0;
 
   return (
     <div className="space-y-1" data-testid="task-tree">
+      {!allDone && (
+        <div className="text-xs text-text-secondary">已拆解为 {total} 个子任务,等待结果中…</div>
+      )}
       <div className="text-xs text-text-secondary">
-        子任务 {doneCount}/{total} 完成
+        完成 {doneCount}/{total}
+        {inFlight > 0 && ` · ${inFlight} 个进行中`}
+        {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
       </div>
       {board.plan.map((item) => {
         const st = board.statuses[item.task_id];
