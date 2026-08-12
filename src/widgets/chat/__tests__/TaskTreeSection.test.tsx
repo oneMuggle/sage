@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TaskTreeSection } from '../progress/TaskTreeSection';
+import { describe, expect, it } from 'vitest';
+
 import type { TaskBoard } from '../../../features/send-message/useChat';
+import { TaskTreeSection } from '../progress/TaskTreeSection';
 
 function makeBoard(overrides: Partial<TaskBoard> = {}): TaskBoard {
   return {

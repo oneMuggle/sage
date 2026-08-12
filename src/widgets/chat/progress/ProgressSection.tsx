@@ -1,7 +1,8 @@
 // src/widgets/chat/progress/ProgressSection.tsx
-import type { ToolCall } from '../../../shared/lib/store';
-// Multi-Agent Orchestration: 编排任务板聚合状态
 import type { TaskBoard } from '../../../features/send-message/useChat';
+import type { ToolCall } from '../../../shared/lib/store';
+
+// Multi-Agent Orchestration: 编排任务板聚合状态
 import { TaskTreeSection } from './TaskTreeSection';
 
 interface ProgressSectionProps {
