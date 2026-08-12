@@ -1,5 +1,6 @@
 // src/widgets/chat/RightPanel.tsx
 import { useState } from 'react';
+import { X } from 'lucide-react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
@@ -26,6 +27,7 @@ type Tab = 'progress' | 'artifacts';
 
 export function RightPanel({
   open,
+  onToggle,        // ← 新增
   iteration,
   streamingState,
   toolCalls,
