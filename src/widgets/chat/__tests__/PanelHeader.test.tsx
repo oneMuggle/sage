@@ -18,9 +18,7 @@ describe('PanelHeader', () => {
 
     it('renders close button with aria-label', () => {
       render(<PanelHeader {...listProps} />);
-      expect(
-        screen.getByRole('button', { name: '关闭右侧面板' })
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '关闭右侧面板' })).toBeInTheDocument();
     });
 
     it('clicking close button invokes onClose', () => {
@@ -34,9 +32,7 @@ describe('PanelHeader', () => {
   describe('viewer view (no tab props)', () => {
     it('renders close button with aria-label', () => {
       render(<PanelHeader onClose={vi.fn()} />);
-      expect(
-        screen.getByRole('button', { name: '关闭右侧面板' })
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '关闭右侧面板' })).toBeInTheDocument();
     });
 
     it('does not render tab buttons', () => {

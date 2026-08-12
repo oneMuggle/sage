@@ -250,96 +250,19 @@ git commit -m "feat(rightpanel): 抽 PanelHeader 子组件 + list 视图加 × �
 
 ---
 
-## Task 4: Green — ArtifactViewer 视图加 PanelHeader + 高度修正
+## Task 4: Green — PanelHeader 独立单元测试 + 清理作者备忘注释
 
 **Files:**
-- Modify: `src/widgets/chat/RightPanel.tsx:67-94` (在 `<div className="h-[calc(100%-2.5rem)]">` 内 viewer 分支前)
+- Create: `src/widgets/chat/__tests__/PanelHeader.test.tsx` (新增)
+- Modify: `src/widgets/chat/RightPanel.tsx` (移除 `// ⚠️ 必须 export` 作者备忘注释)
 
 **Interfaces:**
-- Consumes: `<PanelHeader>` 已存在
-- Produces: viewer 视图调用 `<PanelHeader onClose={onToggle} />`
+- Consumes: `<PanelHeader>` 已 export (Task 3 完成)
+- Produces: PanelHeader.test.tsx 含 list + viewer 两分支 6 个 vitest 用例
 
-- [ ] **Step 1: 在 viewer 视图分支顶部加 PanelHeader + 高度修正**
+> **Task 4 scope 收窄说明:** Task 3 implementer 已把 viewer-mode PanelHeader 在 RightPanel.tsx 调用层接好 (`selected ? <PanelHeader onClose={onToggle}/> : ...`),所以本 Task 不需要再改 RightPanel.tsx 的 JSX。ArtifactViewer 内部已有完整 header (返回 + 文件名 + 复制 + 文件管理器),与外部 PanelHeader viewer-mode 的 × 按钮功能互补不冲突 (外部 × 关闭整个面板,内部 ArrowLeft 返回列表)。无需高度修正。
 
-修改 `<div className="h-[calc(100%-2.5rem)]">` 内部 JSX 为:
-
-```tsx
-<div className="h-[calc(100%-2.5rem)]">
-  {selected && sessionId ? (
-    <>
-      <PanelHeader onClose={onToggle} />
-      <div className="h-[calc(100%-2.5rem)]">
-        <ArtifactViewer
-          artifact={selected}
-          sessionId={sessionId}
-          onBack={() => setSelected(null)}
-        />
-      </div>
-    </>
-  ) : tab === 'progress' ? (
-    <ProgressSection
-      iteration={iteration}
-      streamingState={streamingState}
-      toolCalls={toolCalls}
-      isLoading={isLoading}
-      taskBoard={taskBoard}
-    />
-  ) : (
-    <ArtifactsSection
-      artifacts={artifacts}
-      loading={loading}
-      sessionId={sessionId}
-      onRefresh={refresh}
-      onSelect={setSelected}
-      onReveal={(a) => {
-        if (sessionId) revealArtifact(sessionId, a.id).catch(() => {});
-      }}
-    />
-  )}
-</div>
-```
-
-外层 `<div className="h-[calc(100%-2.5rem)]">` 占满 aside 剩余空间;viewer 分支内 header 2.5rem + viewer 容器 `h-[calc(100%-2.5rem)]` = 总高度填满 ✅。Progress / Artifacts 分支不变。
-
-- [ ] **Step 2: 检查 ArtifactViewer 是否依赖固定父高度**
-
-Read: `src/widgets/chat/artifacts/ArtifactViewer.tsx`
-
-如果内部用了 `h-full` 或类似充满父容器,Step 1 的双层 `h-[calc(100%-2.5rem)]` 正确。如果用了 `h-screen` 这类绝对高度,需记录 follow-up issue。本次双层结构是兜底方案,**应能 work**。
-
-- [ ] **Step 3: 可视化验证**
-
-启动 dev server:
-```bash
-cd /home/fz/project/sage && npm run dev
-```
-
-打开 http://localhost:1420 手工验证:
-1. 进入 Chat 页 → 点顶部 PanelRight 图标 → RightPanel 滑出,显示 Progress/Artifacts tabs + 右上 ×
-2. 点 × → 面板滑出收起 ✅
-3. 再点 PanelRight → 面板滑出,点 Artifacts tab → × 仍在 ✅
-4. (如果有 artifact)点某个 artifact 进入 viewer 视图 → × 仍在 viewer header ✅
-5. 点 viewer × → 面板收起 ✅
-
-- [ ] **Step 4: 运行 TS 类型检查**
-
-Run:
-```bash
-npx tsc --noEmit
-```
-
-Expected: 0 errors。
-
-- [ ] **Step 5: 运行完整 RightPanel 测试套件**
-
-Run:
-```bash
-npx vitest run src/widgets/chat/__tests__/RightPanel.test.tsx
-```
-
-Expected: 所有测试绿(旧 2 + 新 3 个)。
-
-- [ ] **Step 6: 创建 PanelHeader 独立测试文件**
+- [ ] **Step 1: 创建 PanelHeader 独立测试文件**
 
 Create: `src/widgets/chat/__tests__/PanelHeader.test.tsx`
 
@@ -401,23 +324,34 @@ describe('PanelHeader', () => {
 });
 ```
 
-- [ ] **Step 7: 运行完整测试套件**
+- [ ] **Step 2: 移除 RightPanel.tsx 中的作者备忘注释**
+
+在 `src/widgets/chat/RightPanel.tsx` 中,`export function PanelHeader` 上方有 brief 留下的 `// ⚠️ 必须 export,PanelHeader.test.tsx 要直接 import 它` 注释。export 已就位、test 文件本步骤即创建,删除该注释减少噪音。
+
+- [ ] **Step 3: 运行完整测试套件**
 
 Run:
 ```bash
 npx vitest run src/widgets/chat/__tests__/RightPanel.test.tsx src/widgets/chat/__tests__/PanelHeader.test.tsx
 ```
 
-Expected: 所有测试绿 —— RightPanel 旧 2 + 新 4,PanelHeader 6 个用例。
+Expected: RightPanel 5/5 全绿 + PanelHeader 6/6 全绿 = 11/11。
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 4: 运行 TS 类型检查**
 
+Run:
 ```bash
-git add src/widgets/chat/RightPanel.tsx src/widgets/chat/__tests__/RightPanel.test.tsx src/widgets/chat/__tests__/PanelHeader.test.tsx
-git commit -m "feat(rightpanel): ArtifactViewer 视图加 × 按钮 + PanelHeader 独立测试"
+npx tsc --noEmit -p . 2>&1 | head -20
 ```
 
----
+Expected: 0 errors。
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/widgets/chat/__tests__/PanelHeader.test.tsx src/widgets/chat/RightPanel.tsx
+git commit -m "feat(rightpanel): PanelHeader 独立单元测试覆盖 list + viewer 两分支"
+```
 
 ## Task 5: 收尾 — AI code review + lint + PR
 
