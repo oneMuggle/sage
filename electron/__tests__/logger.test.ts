@@ -121,4 +121,22 @@ describe('logger', () => {
     expect(JSON.parse(lines[0])).toEqual({ existing: true });
     expect(JSON.parse(lines[1]).msg).toBe('appended');
   });
+
+  it('setLogLevel switches level at runtime', async () => {
+    // beforeEach 已设 SAGE_LOG_LEVEL=debug 并 resetModules,导入时级别为 debug
+    const mod = await import('../logger');
+    mod.setLogLevel('error');
+
+    mod.logger.info('hidden-info');
+    mod.logger.error('shown-error');
+
+    const today = new Date().toISOString().slice(0, 10);
+    const file = join(tmpDir, 'logs', `sage-${today}.ndjson`);
+    if (!existsSync(file)) throw new Error('no NDJSON written');
+
+    const lines = readFileSync(file, 'utf-8').trim().split('\n').filter(Boolean);
+    const levels = lines.map((l) => JSON.parse(l).level);
+    expect(levels).not.toContain('info');
+    expect(levels).toContain('error');
+  });
 });

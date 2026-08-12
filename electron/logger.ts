@@ -45,7 +45,7 @@ function resolveLevel(): LogLevel {
 }
 
 const LOG_DIR = resolveLogDir();
-const CURRENT_LEVEL = resolveLevel();
+let CURRENT_LEVEL = resolveLevel();
 
 try {
   mkdirSync(LOG_DIR, { recursive: true });
@@ -106,6 +106,16 @@ function logIt(level: LogLevel, msg: string, meta?: unknown, source: string = SO
     if (electronLogMethod) electronLogMethod.call(log, `[${source}] ${msg}`);
   } catch {
     /* ignore */
+  }
+}
+
+/** 运行时切换日志级别(日志基线修复 #2)。同步 electron-log 文件 transport。 */
+export function setLogLevel(level: LogLevel): void {
+  CURRENT_LEVEL = level;
+  try {
+    log.transports.file.level = level;
+  } catch {
+    /* electron-log transport 在测试/无 electron 环境可能未配置,忽略 */
   }
 }
 
