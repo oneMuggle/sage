@@ -141,9 +141,45 @@ conductor 的工具入口，`execute_async` 调 `ChatDispatcher.dispatch`。工�
 
 ### 9.2 conductor 不提前汇总的约束
 
-`ChatDispatcher.dispatch()` 阻塞 `asyncio.gather` 全部终态后才 `_aggregate`,聚合 markdown 头只能反映"本批已收到 X/X"。conductor 分批派发时(`dispatch_subagents` 工具 schema 钳制每批 ≤4)会看到多个"本批 X/X 完成",可能误判"全部完成"而提前总结。**真正的杠杆在 plan 注入块的显式总数 N + 全量执行约束**(见 §5.3)。`_aggregate` 的 partial header 保留为防御性(单测覆盖),非生产可达路径。
+`ChatDispatcher.dispatch()` 阻塞 `asyncio.gather` 全部终态后才 `_aggregate`,聚合 markdown 头只能反映"本批已收到 X/X"。conductor 分批派发时(`dispatch_subagents` 工具 schema 钳制每批 ≤8,PR #302 后)会看到多个"本批 X/X 完成",可能误判"全部完成"而提前总结。**真正的杠杆在 plan 注入块的显式总数 N + 全量执行约束**(见 §5.3)。`_aggregate` 的 partial header 保留为防御性(单测覆盖),非生产可达路径。
 
 ### 9.3 已知局限
 
 - **plan 数 ≠ 实际派发数**：conductor 可合并/调整任务，当派发数少于 plan 时 UI 可能停在 "X/N"(N 为 plan 数)。这是 LLM 行为边界，未强制收敛。
 - **老客户端不向后兼容**：`task_progress` 是新增 `AgentState` 变体，旧前端 `agentStateToText`/`agentStateToPhase` 的 `assertNever` 会抛异常。bundled 部署下前后端同版本，不可达；若未来前后端分离部署需同版本升级。
+
+## 10. 修复记录：task_id 碰撞 + artifacts 落库 + maxItems 解耦 + agent_hint 校验（PR #302，2026-08-12）
+
+> 归档自 `docs/plans/2026-08-12_orchestration-task-id-and-artifacts.md`（已删除）。
+> 背景现象：用户实测复杂任务（"学习量化交易…"）编排时 UI 任务板恒显"完成 3/6"、最终回复声称生成 `Quant_Trading_Comprehensive_Manual.md` 但 Artifacts 面板无入口、"4 轮"派发。
+
+### 10.1 F1 — task_id 全局递增
+
+**症状**：UI 恒显 3/6（6 任务真实完成）。**根因**：`ChatDispatcher` 每次 dispatch 调用从 `t1` 重编号（`task_id=f"t{index+1}"`，index 是本次调用内下标），而计划 task_id 是全局 `t1..tN`（§5.3）。前端 reducer 按 task_id 合并、任务板按 plan 的 task_id 查状态 → 计划里 t4/t5/t6 永远收不到 status 事件。
+
+**修复**：`__init__` 加 `self._next_task_index = 0`，每分配一个任务用 `f"t{self._next_task_index + 1}"` 后 `+= 1`（**含 malformed KeyError 分支**，占位也消耗计数器，避免挤占后续合法编号）。conductor 同一 run 内多次派发 → task_id 全局唯一，与计划编号对齐。
+
+### 10.2 F2 — 普通聊天 artifacts 落库
+
+**症状**：回复声称生成 `Quant_Trading_Comprehensive_Manual.md`，Artifacts 面板无入口，仓库根却出现文件。**根因**：producer 只在 `_auth_result is not None`（有 office 授权）时 `set_tool_context`；普通聊天无 refs + 无 binding → ctx 为 None → `file_tool._record_artifact_safely` 因 `current_tool_context() is None` 静默早退 → artifacts 表恒空。
+
+**修复**：producer 无条件设置 `ToolExecutionContext`。无授权分支用 `ToolExecutionContext(session_id=data.session_id, stream_id=stream_id, binding_generation=0, office_doc_scope=frozenset())`，finally 里 `reset_tool_context` 保证不泄漏。office 工具仍因空 scope 从 `get_schemas_for_llm` 隐藏（防御纵深保留）。
+
+### 10.3 F3 — maxItems 与并发解耦 + 聚合总上限
+
+**根因**：`maxItems:4` 与 `MAX_CONCURRENT_SUBAGENTS=4` 概念耦合。maxItems 管"单次调用任务数"，信号量管"同时运行数"，二者正交。计划上限 8 被派发钳到 4 → 6 任务强制 3 批（"4 轮"现象诱因）。
+
+**修复**：`maxItems 4→8`（= `MAX_PLAN_TASKS`，注释说明解耦）；`ChatDispatcher` 新增 `MAX_AGGREGATE_CHARS=120KB`，`_aggregate` 返回前对整体截断 + 尾部"[聚合结果超过上限，已截断]"提示（保留头部进度摘要），防 8 项最坏 8×50KB=400KB 灌爆 conductor 上下文。
+
+### 10.4 F4 — planner agent_hint 校验到可派发角色
+
+**根因**：planner `_sanitize_tasks` 对 LLM 产出的 `agent_hint` 照单全收，`content_writer`/`editor` 等不存在角色 → `ChatDispatcher._run_subagent` 的 `get_enabled_agent()==None` 快速失败（spec §5.1）→ 整批子任务 failed。
+
+**修复**：`_sanitize_tasks` 用 `_is_dispatchable_agent()`（延迟 import `get_enabled_agent()`，读 SQLite 运行时状态）校验，不在合法集 → 丢弃 hint，conductor 用默认角色。
+
+> **实现要点**：不要用 `get_agent_registry()`（内存默认注册表）校验 —— 它不反映 SQLite enabled 状态（`toggle_agent` 禁用后仍残留），且不含自定义 agent（只存 SQLite）。`get_enabled_agent()` 与 `_run_subagent` 派发判定完全一致，保证 planner 放行的 hint 一定能成功派发。
+
+### 10.5 已知遗留
+
+- **task_id 对齐仅在连续按序整批派发时成立**：conductor 合并/乱序/跳过重试会错位（§9.3 plan≠派发 同族）。F3 放宽 maxItems 后 ≤8 任务可单批全派缓解，未根除；后续建议把计划 task_id 随工具调用传入或按 (agent_id, goal) 匹配。
+- **无绑定会话 write_file 落 cwd**：普通聊天无 workspace_root 时 write_file 以相对路径落到进程 cwd（仓库根曾出现调试产物）。建议后续单独治理（如无绑定会话默认限制写入目录）。
