@@ -45,6 +45,8 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'content_delta':
     case 'idle':
     case 'done':
+    case 'task_plan': // Multi-Agent Orchestration: 编排事件态,不占消息气泡占位
+    case 'task_status':
       return null;
     default:
       return assertNever(state);
@@ -74,6 +76,8 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'idle':
     case 'done':
     case 'failed':
+    case 'task_plan': // Multi-Agent Orchestration: 编排事件态,无 UI 阶段展示
+    case 'task_status':
       return null;
     default:
       return assertNever(state);

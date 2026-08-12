@@ -6,6 +6,8 @@ import {
   Languages,
   Minimize2,
   BookOpen,
+  Network,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -73,6 +75,20 @@ export const slashCommands: SlashCommand[] = [
     label: '压缩上下文',
     description: '压缩当前对话上下文',
     icon: Minimize2,
+    mode: 'prompt',
+  },
+  {
+    name: 'orchestrate',
+    label: '多 agent 编排',
+    description: '强制多 agent 编排：拆解子任务并行执行',
+    icon: Network,
+    mode: 'prompt',
+  },
+  {
+    name: 'single',
+    label: '单 agent',
+    description: '强制单 agent 回答，跳过编排',
+    icon: UserRound,
     mode: 'prompt',
   },
 ];

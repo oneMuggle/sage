@@ -573,7 +573,18 @@ class SageAgent:
                             result_content = f"[错误] 工具不存在: {tc.name}"
                             is_error = True
                         else:
-                            result = tool.execute(**args)
+                            if tc.name == "dispatch_subagents":
+                                # Multi-agent orchestration: this tool is
+                                # async by design — child agents run
+                                # concurrently on the event loop
+                                # (ChatDispatcher gather) and push
+                                # task_status straight to the stream
+                                # queue. Sync execute() cannot do that.
+                                # Minimal special-case; general tool dispatch
+                                # stays inline.
+                                result = await tool.execute_async(**args)
+                            else:
+                                result = tool.execute(**args)
                             if hasattr(result, "success") and hasattr(result, "content"):
                                 is_error = not result.success
                                 if result.success:

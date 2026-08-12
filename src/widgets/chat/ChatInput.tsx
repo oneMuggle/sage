@@ -30,6 +30,11 @@ interface ChatInputProps {
        * so the LLM can see the office doc summaries.
        */
       officeRefs?: readonly ChatOfficeRef[];
+      /**
+       * Multi-Agent Orchestration: /orchestrate → force_multi、/single → force_single。
+       * 普通消息不传（undefined → 后端 auto）。
+       */
+      orchestrationMode?: 'auto' | 'force_multi' | 'force_single';
     },
   ) => void;
   onInterrupt?: () => void;
@@ -251,6 +256,23 @@ export function ChatInput({
             onSend(prompt);
             setValue('');
           });
+        return;
+      }
+
+      // Multi-Agent Orchestration override（tool-toggle 门的手动逃生门）:
+      // /orchestrate → force_multi、/single → force_single。正文随消息发送；
+      // 纯命令无正文 → 用法提示（对齐 help/skill 命令的处理模式）。
+      if (cmd.name === 'orchestrate' || cmd.name === 'single') {
+        const parts = value.split(/\s+/);
+        const args = parts.slice(1).join(' ');
+        setValue('');
+        if (!args) {
+          onSend(`用法：/${cmd.name} 你的任务描述`);
+          return;
+        }
+        onSend(args, {
+          orchestrationMode: cmd.name === 'orchestrate' ? 'force_multi' : 'force_single',
+        });
         return;
       }
 

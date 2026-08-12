@@ -288,12 +288,12 @@ async def lifespan(app: FastAPI):
     app.state._watchdog_query_fn = _fetch_stale_session_ids
     logger.info("Session-end watchdog 已启动 (60s 周期)")
 
-    # PR-3: agents 表种子化 (空表时插 4 个默认 agent, 幂等)
+    # PR-3: agents 表种子化 — 用 ensure_default_agents 替代 seed_defaults_if_empty:
+    # 首次启动插全量默认集, 已存在的 DB 增量补 writer 等新增默认角色。
+    from backend.agents.profiles import ensure_default_agents
     from backend.data.agent_repo import AgentRepository
 
-    seeded = AgentRepository().seed_defaults_if_empty()
-    if seeded:
-        logger.info("已种子化 %d 个默认 agent (primary/researcher/coder/memory_manager)", seeded)
+    ensure_default_agents()
 
     # I2: chat 流注册表 — 拆分 /chat/stream 为 create + attach,避免 LLM 被调两次
     app.state.streams = StreamRegistry()

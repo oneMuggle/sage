@@ -102,7 +102,38 @@ def create_default_agents() -> List[AgentProfile]:
             model_config=AgentModelConfig(model="gpt-3.5-turbo", temperature=0.5),
             max_iterations=5,
         ),
+        AgentProfile(
+            id="writer",
+            name="写作 Agent",
+            role="writer",
+            description="负责把研究资料整理成结构化的学习资料/操作指南等 markdown 文档",
+            system_prompt=(
+                "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
+                "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
+            ),
+            tools=["read_file", "write_file", "memory_search"],
+            memory_access=["semantic"],
+            model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
+            max_iterations=10,
+        ),
     ]
+
+
+def ensure_default_agents() -> int:
+    """确保所有默认 agent（含 writer）都存在。
+
+    ``seed_defaults_if_empty`` 只在表为空时插，已存在的 DB 不会自动补
+    writer —— 本函数逐个检查缺失的默认 id 并补插。返回补插条数。
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    repo = AgentRepository()
+    inserted = 0
+    for agent in create_default_agents():
+        if repo.get(agent.id) is None:
+            repo.upsert(agent.to_dict())
+            inserted += 1
+    return inserted
 
 
 # 全局 Agent 注册表
