@@ -1754,6 +1754,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         entry_queue=entry.queue,
                         run_id=run_id,
                         llm_config=llm_config,
+                        total_tasks=len(plan_tasks),
                     )
                     agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
                     if (

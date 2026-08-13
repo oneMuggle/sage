@@ -188,3 +188,130 @@ async def test_dispatch_lane_mirrored_with_retry_count():
     assert lane.metadata["retry_count"] == 1
     assert lane.metadata["task_id"] == "t1"
     assert "最终成功" in aggregated
+
+
+_REVIEW_OUTPUT = (
+    "[FACT] 资料已完整覆盖量化交易基础 (confidence: 0.9)\n"
+    "[HYPOTHESIS] 回测结果可外推 (confidence: 0.5)\n"
+)
+
+
+class _ReviewSageAgent(_FakeSageAgent):
+    """reviewer 专用 fake：产出 assertion 文本。"""
+
+    def __init__(self, content: str = _REVIEW_OUTPUT):
+        super().__init__(results=[content])
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_runs_review_when_all_planned_tasks_dispatched():
+    """total_tasks 达标 → 聚合追加复核块 + review lane SUCCEEDED。"""
+    from backend.orchestration.lane_registry import LaneRegistry
+    from backend.orchestration.task_registry import TaskRegistry
+
+    queue = _make_queue()
+    lane_registry = LaneRegistry()
+    task_registry = TaskRegistry()
+    sub_fake = _FakeSageAgent(results=["研究结果"])
+    rev_fake = _ReviewSageAgent()
+
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch(
+        "backend.orchestration.subagent_runner.SageAgent",
+        side_effect=[sub_fake, rev_fake],
+    ):
+        dispatcher = ChatDispatcher(
+            stream_id="s1",
+            entry_queue=queue,
+            run_id="orch-review",
+            lane_registry=lane_registry,
+            task_registry=task_registry,
+            total_tasks=1,
+        )
+        aggregated = await dispatcher.dispatch(
+            [{"agent_id": "researcher", "goal": "调研量化交易"}]
+        )
+
+    assert "## 复核结果（reviewer）" in aggregated
+    assert "verdict: pass" in aggregated
+    assert "2 条 assertion" in aggregated
+    # review lane 落库 SUCCEEDED
+    review_lane = lane_registry.get_lane("lane-review-orch-review")
+    assert review_lane is not None
+    assert review_lane.status.value == "succeeded"
+    # 子任务 lane 也 SUCCEEDED
+    assert lane_registry.get_lane("lane-t1").status.value == "succeeded"
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_review_fail_on_negative_evidence():
+    """NEGATIVE_EVIDENCE 高置信 → verdict fail，block 要求修复。"""
+    queue = _make_queue()
+    rev_fake = _ReviewSageAgent(
+        content="[NEGATIVE_EVIDENCE] 缺少回测数据支撑 (confidence: 0.9)\n"
+    )
+
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch(
+        "backend.orchestration.subagent_runner.SageAgent",
+        side_effect=[_FakeSageAgent(results=["研究结果"]), rev_fake],
+    ):
+        dispatcher = ChatDispatcher(
+            stream_id="s1", entry_queue=queue, run_id="orch-review-fail", total_tasks=1
+        )
+        aggregated = await dispatcher.dispatch(
+            [{"agent_id": "researcher", "goal": "调研量化交易"}]
+        )
+
+    assert "verdict: fail" in aggregated
+    assert "修复" in aggregated
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_review_failure_skips_without_blocking():
+    """reviewer 崩溃 → 跳过验证，聚合不变，不抛异常。"""
+    queue = _make_queue()
+
+    class _BrokenReview(_FakeSageAgent):
+        async def run_loop(self, messages, max_iterations=None, llm_config=None):
+            raise RuntimeError("reviewer boom")
+
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch(
+        "backend.orchestration.subagent_runner.SageAgent",
+        side_effect=[_FakeSageAgent(results=["研究结果"]), _BrokenReview()],
+    ):
+        dispatcher = ChatDispatcher(
+            stream_id="s1", entry_queue=queue, run_id="orch-review-skip", total_tasks=1
+        )
+        aggregated = await dispatcher.dispatch(
+            [{"agent_id": "researcher", "goal": "调研量化交易"}]
+        )
+
+    assert "研究结果" in aggregated
+    assert "## 复核结果" not in aggregated
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_no_review_when_total_tasks_unset():
+    """total_tasks 未设（None）→ 不跑 review，聚合无复核块。"""
+    queue = _make_queue()
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch(
+        "backend.orchestration.subagent_runner.SageAgent",
+        return_value=_FakeSageAgent(results=["研究结果"]),
+    ):
+        dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-plain")
+        aggregated = await dispatcher.dispatch(
+            [{"agent_id": "researcher", "goal": "调研量化交易"}]
+        )
+
+    assert "## 复核结果" not in aggregated
