@@ -123,9 +123,9 @@ CREATE TABLE orch_tasks (
 ### 5.3 P0-3 scratch 隔离
 
 - run 开始建 `data_dir/orch_scratch/<run_id>/<task_id>/`（`data_dir` 沿用现有约定；`orch_scratch` 根 + `.gitignore` 条目）。
-- 子 agent 运行时 `ToolExecutionContext.workspace_root` 指向其 scratch 目录（复用 F2 的无条件 set_tool_context 模式），`write_file` 被 `file_tool._path_within_workspace` 边界检查锁进 scratch。
+- 边界机制（非 ToolExecutionContext——该 context 无 workspace 字段，已核实）：`SageAgent.__init__` 增 `policy: ToolPolicy` 参数透传给 `register_all_tools`（`backend/tools/__init__.py:42-43`，现默认 `ToolPolicy()` → `workspace_root=None` → write_file 跳过边界检查 → 落 cwd，即 §10.5 已知 bug 根因）。subagent_runner 以 `ToolPolicy(workspace_root=scratch_dir, ...)` 构建子 agent，`write_file` 即被 `file_tool.py:283` 的 `_path_within_workspace` 边界检查锁进 scratch。
 - 成功产物经既有 `_record_artifact_safely` 落 artifacts（路径指向 scratch 持久位置）。
-- 越界写 → `write_file` 权限拒绝，子 agent 自愈。
+- 越界写 → `write_file` 权限拒绝（"path_outside_workspace"），子 agent 自愈。
 
 ### 5.4 Wave 1 测试
 
