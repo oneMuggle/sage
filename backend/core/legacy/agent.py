@@ -22,6 +22,7 @@ from backend.core.legacy.agent_state import AgentEvent, AgentState, ToolCallRequ
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
+from backend.domain.tool_policy import ToolPolicy
 
 # ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
 from backend.hooks.config import HookConfig, load_hooks
@@ -200,6 +201,7 @@ class SageAgent:
         llm_config: Optional[Dict[str, Any]] = None,
         agent_id: Optional[str] = None,
         bare: bool = False,
+        policy: Optional[ToolPolicy] = None,
     ):
         """初始化 SageAgent。
 
@@ -212,6 +214,9 @@ class SageAgent:
                 被 AgentTool 立刻丢弃。bare 实例仅支持 ``run_loop``；
                 ``chat()`` 需要完整构造（memory_manager/consolidation 在
                 bare 模式下为 None）。现有调用方默认 bare=False，行为不变。
+            policy: M2 工具策略；非 bare 构造时透传给
+                ``register_all_tools``（P0-3 scratch 隔离注入点）。
+                ``None`` 时 register_all_tools 使用默认策略，行为不变。
         """
         self.session_repo = SessionRepository()
         self.message_repo = MessageRepository()
@@ -256,7 +261,7 @@ class SageAgent:
 
             # 初始化工具注册表
             self.tool_registry = ToolRegistry()
-            register_all_tools(self.tool_registry)
+            register_all_tools(self.tool_registry, policy=policy)
             logger.info(f"工具注册表初始化完成，已注册 {len(self.tool_registry.list())} 个工具")
 
         # M1 工具安全加固: 权限执行器注入点。
