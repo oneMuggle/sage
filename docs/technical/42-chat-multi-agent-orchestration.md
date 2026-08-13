@@ -80,7 +80,7 @@ ChatDispatcher.dispatch(tasks)
 
 ### 5.1 ChatDispatcher（`backend/orchestration/chat_dispatcher.py`）
 
-轻量子 agent 执行器，纯内存、单次聊天 run 生命周期内存在，**不持久化、不建 lane、不写 lane 表**（与 lane 编排层互不干扰）。子 agent 用 `SageAgent(agent_id=...)` 非 bare 构造（bare 会留空 tool_registry，子 agent 需要 profile 白名单工具，如 researcher 的 web_search / writer 的 write_file）。
+轻量子 agent 执行器，单次聊天 run 生命周期内存在。Wave 1（P0-1/P0-3，2026-08-13）起子任务不再内联 `SageAgent.run_loop`，而是经 `LaneExecutor` 执行并**写 lane/task 镜像表**（与 lane 编排层共享同一执行语义，详见 §11；§5.1 旧文"不建 lane、不写 lane 表"已修正）。子 agent 用 `SageAgent(agent_id=...)` 非 bare 构造（bare 会留空 tool_registry，子 agent 需要 profile 白名单工具，如 researcher 的 web_search / writer 的 write_file）。
 
 关键常量：`MAX_CONCURRENT_SUBAGENTS=4`（并发上限，多出的排队）、`MAX_SUBAGENT_RESULT_CHARS=50*1024`（聚合 markdown 进 conductor 上下文的截断上限）、`MAX_OUTPUT_PREVIEW_CHARS=500`。
 
@@ -183,3 +183,45 @@ conductor 的工具入口，`execute_async` 调 `ChatDispatcher.dispatch`。工�
 
 - **task_id 对齐仅在连续按序整批派发时成立**：conductor 合并/乱序/跳过重试会错位（§9.3 plan≠派发 同族）。F3 放宽 maxItems 后 ≤8 任务可单批全派缓解，未根除；后续建议把计划 task_id 随工具调用传入或按 (agent_id, goal) 匹配。
 - **无绑定会话 write_file 落 cwd**：普通聊天无 workspace_root 时 write_file 以相对路径落到进程 cwd（仓库根曾出现调试产物）。建议后续单独治理（如无绑定会话默认限制写入目录）。
+
+## 11. 执行控制层（Wave 1 P0，2026-08-13）
+
+> 归档自 `docs/superpowers/plans/2026-08-13-orchestration-execution-control-wave1.md`。
+> 背景：§9/§10 时代子任务由 ChatDispatcher 内联 `SageAgent.run_loop` 直接执行——无 RecoveryPolicy 结构化重试、无复核、无文件隔离。本波把执行职责下沉到既有 lane 层：`SubagentRunner`（真实 agent runner）+ `LaneExecutor.execute_lane`（重试/事件已实现），并补 reviewer 验证环与 scratch 目录隔离。分支 `feat/orchestration-execution-control-wave1`，2026-08-13。
+
+### 11.1 子任务经 LaneExecutor 执行（P0-1）
+
+`ChatDispatcher._run_subagent` 不再内联 run_loop，而是为每个子任务建 Task + Lane，经 `LaneExecutor` 执行（`backend/orchestration/subagent_runner.py` 新建）：
+
+- `TaskRegistry.create_task` + `mark_running`；`LaneRegistry.create_lane`（`lane-<task_id>`）
+- TaskPacket 带 `RecoveryPolicy(on_failure="retry", max_retries=2)`——重试语义由 lane 执行循环承担
+- `SubagentRunner` 作为 `LaneExecutor.agent_runner`：构造 `SageAgent(agent_id=..., policy=<ToolPolicy>)` 跑 `run_loop`，返回 `{"status":"succeeded","output":<DONE content>}`
+- `run_lane_with_retry` 封装 `execute_lane` 重试循环：executor 返回 `{"status":"retrying"}` 时再调 `execute_lane`，`retry_count` 累积在 `lane.metadata`，max_retries 耗尽后 executor 返回 failed 终态
+
+### 11.2 task_status 事件增 retry_count（P0-1 透传）
+
+`ChatTaskState.retry_count` 回填自 `lane.metadata["retry_count"]`，`_emit_task_status` 把 `retry_count` 放进 `task_status` 事件。前端 `TaskStatusEvent` 接口（`src/shared/api/types.ts:225`）未声明 `retry_count`——SSE JSON 多出的运行时键被忽略，新字段天然兼容，不涉及前端改动。
+
+### 11.3 lane 镜像事实落地（范围修正）
+
+Wave 1 起 ChatDispatcher 子任务**确实写 lane/task 表**（§5.1 旧文"不建 lane、不写 lane 表"已修正）。原因：`LaneRepository`/`TaskRepository` 仅 SQLite（无内存模式），ChatDispatcher 路由 `LaneExecutor` 必然落库。spec 原计划 Wave 3 的 P2-10 相应收窄为 board 端点 + API `/lanes` 可执行。
+
+### 11.4 scratch 隔离（P0-3）
+
+每个子任务建隔离目录 `<data_dir>/orch_scratch/<run_id>/<task_id>/`（`data_dir = get_database().db_path` 的父目录，即 `<repo>/data/`），子 agent 以 `ToolPolicy(workspace_root=<scratch_dir>)` 构造——write_file 等文件工具被 `file_tool._path_within_workspace` 边界检查锁进 scratch，越界写返回 `path_outside_workspace` 拒绝。`data/orch_scratch/` 已加入根 `.gitignore`（运行时产物，不入库）。
+
+### 11.5 reviewer 角色 + 聚合后验证环（P0-2）
+
+- **reviewer profile**（Task 4）：`create_default_agents()` 增 `reviewer`（`backend/agents/profiles.py`，无工具，system prompt 要求输出 `[FACT|HYPOTHESIS|NEGATIVE_EVIDENCE] <断言> (confidence: 0-1)` assertions）；`_VALID_AGENT_ROLES` 增 `"reviewer"`（`backend/api/legacy_routes.py`）
+- **验证环**（Task 5）：`ChatDispatcher` 增 `total_tasks` 构造参——`_next_task_index >= total_tasks`（本次派发已覆盖 plan 全部任务）时跑 `_run_review`：reviewer 子任务经 LaneExecutor 执行（不带 packet → `_get_recovery_policy` 给 `{on_failure:"fail", max_retries:0}`，复核失败 fail-fast 不重试），`_parse_assertions` 解析断言，`executor.submit_with_report` 落 `ReviewReport`（content-hashed + `lane.review.submitted` 事件），verdict markdown 块（pass/fail + 指令）追加进聚合 → 进 conductor 上下文；reviewer 失败降级跳过（绝不阻塞聊天）
+- **`task_review` NDJSON 事件延后 Wave 2**：新增 `AgentState` 变体会触发前端 `agentStateToText`/`agentStateToPhase` 的 `assertNever` 断裂（§9.3 已知限制同族）。Wave 1 复核结论以 markdown 进聚合 + ReviewReport 落库，纯后端成立
+
+### 11.6 模块 docstring 同步
+
+`ChatDispatcher` 模块 docstring 同步更新——不再宣称"不建 lane/不写 lane 表"，如实描述 lane 镜像、`run_lane_with_retry` 重试、`retry_count` 回填、scratch 隔离、task_status 事件兼容。
+
+### 11.7 已知限制与延后项
+
+- **派发数 < plan 总数时 review 永不触发**：`total_tasks` 门控依赖 `_next_task_index >= total_tasks`，conductor 合并/跳过任务时复核跳过——P0-2 核心功能缺口，已知
+- **多批派发边缘二次 create_lane IntegrityError → 静默降级**：gate 累计达 total_tasks 后再次 dispatch 会重复 `create_lane("lane-review-<run_id>")` 抛 IntegrityError，`dispatch` 捕获后跳过复核（正常单批路径不可达，`_reviewed` 守卫未做）
+- **review task 必须手动 mark_running**：`mark_completed`/`mark_failed` 均要求 RUNNING 态，`_run_review` 中显式 `mark_running` 保证 review 任务状态机一致

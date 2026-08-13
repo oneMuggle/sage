@@ -131,3 +131,6 @@ packages/drawio-mcp-server/dist/
 # §1.3c 仓库卫生
 桌面/
 Desktop/
+
+# 编排子任务隔离目录（运行时产物）
+data/orch_scratch/
