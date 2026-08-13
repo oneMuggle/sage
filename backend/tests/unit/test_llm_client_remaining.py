@@ -495,8 +495,12 @@ async def test_chat_stream_skips_invalid_json_lines():
 
 
 @pytest.mark.asyncio()
-async def test_chat_stream_http_error_raises_runtime_error():
-    """chat_stream HTTP 错误时抛 RuntimeError（保留旧行为, Task 11 将统一为 LLMError）."""
+async def test_chat_stream_http_error_raises_llm_error():
+    """chat_stream HTTP 500 错误时抛 LLMError(SERVER_ERROR).
+
+    _raise_classified_error 把 httpx.HTTPStatusError 按 status_code 分类：
+    5xx → LLMErrorType.SERVER_ERROR。消息格式为 "LLM 服务端错误 (HTTP 500)"。
+    """
     client = LLMClient(_make_config())
     mock_http = AsyncMock()
 
@@ -514,15 +518,21 @@ async def test_chat_stream_http_error_raises_runtime_error():
 
     with (
         patch.object(client, "_get_client", return_value=mock_http),
-        pytest.raises(RuntimeError) as exc_info,
+        pytest.raises(LLMError) as exc_info,
     ):
         await _drain_stream(client.chat_stream([{"role": "user", "content": "hi"}]))
+    assert exc_info.value.type == LLMErrorType.SERVER_ERROR
+    assert exc_info.value.status_code == 500
     assert "500" in str(exc_info.value)
 
 
 @pytest.mark.asyncio()
-async def test_chat_stream_other_exception_raises_runtime_error():
-    """chat_stream 其他异常时也抛 RuntimeError."""
+async def test_chat_stream_other_exception_raises_llm_error():
+    """chat_stream 其他异常（非 httpx/ValueError/KeyError）时抛 LLMError(UNKNOWN).
+
+    _raise_classified_error 把无法识别的异常统一映射为
+    LLMErrorType.UNKNOWN,消息格式为 "LLM 请求失败: <原异常信息>"。
+    """
     client = LLMClient(_make_config())
     mock_http = AsyncMock()
 
@@ -535,9 +545,11 @@ async def test_chat_stream_other_exception_raises_runtime_error():
 
     with (
         patch.object(client, "_get_client", return_value=mock_http),
-        pytest.raises(RuntimeError),
+        pytest.raises(LLMError) as exc_info,
     ):
         await _drain_stream(client.chat_stream([{"role": "user", "content": "hi"}]))
+    assert exc_info.value.type == LLMErrorType.UNKNOWN
+    assert "stream failed" in str(exc_info.value)
 
 
 # ============================================================================
