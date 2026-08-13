@@ -62,6 +62,45 @@ PROXY_INTERNAL_HEADERS: FrozenSet[str] = frozenset({"x-llm-provider-url"})
 PROXY_TIMEOUT_SECONDS: float = 60.0
 
 
+def build_upstream_url(provider_url: str, path: str, query: str = "") -> str:
+    """把 ``provider_url`` + ``path`` 拼成上游 URL,自动去重 ``/v1`` 段。
+
+    用户在「端点」UI 填 baseURL,常见两种习惯:
+
+    - **裸 host** —— ``https://api.openai.com``
+    - **含 ``/v1``** —— ``https://api.openai.com/v1``(OpenAI 文档示例)
+
+    前端 ``fetchModels`` / ``testChatCompletion`` 固定拼 ``/v1/models``、
+    ``/v1/chat/completions``。若 user 填的 baseURL 已含 ``/v1``,朴素拼接
+    会得到 ``https://api.openai.com/v1/v1/models``,上游网关返回
+    ``Invalid URL (GET /v1/v1/models)`` 404。
+
+    修复:若 provider_url 以 ``/v1`` 结尾,且 path 已含 ``/v1`` 段,则剥掉
+    path 的前导 ``/v1``(只在 path 顶层去一次,不递归)。其他 path 段保持
+    原样;query string 原样附加在末尾。
+
+    Args:
+        provider_url: 上游根 URL,可能含也可能不含 ``/v1`` 后缀。
+        path: FastAPI ``path:path`` 捕获的子路径,例如 ``v1/models``。
+        query: 完整 query string(不含前导 ``?``),空字符串表示无。
+
+    Returns:
+        拼接后的完整上游 URL。
+    """
+    base = provider_url.rstrip("/")
+    raw_path = path or ""
+    normalized = posixpath.normpath("/" + raw_path.lstrip("/"))
+
+    # 去重:baseURL 已含 ``/v1`` + path 顶层是 ``/v1...`` → 剥 path 前导 ``/v1``
+    if base.endswith("/v1") and (normalized == "/v1" or normalized.startswith("/v1/")):
+        normalized = normalized[3:] or "/"
+
+    upstream_url = f"{base}{normalized}"
+    if query:
+        upstream_url = f"{upstream_url}?{query}"
+    return upstream_url
+
+
 def _filter_request_headers(request: Request) -> Dict[str, str]:
     """复制请求头到 dict,过滤 hop-by-hop 与代理内部头。"""
     return {
@@ -161,17 +200,9 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
             },
         )
 
-    # 2. 规范化 path(``posixpath.normpath`` 把 ``..``/``.`` 折叠,但永远不产生 ``/..`` —
-    #    路径在语法上被约束在上游根内,不会"逃出")。空 path → ``/``。
-    raw_path = path or ""
-    normalized = posixpath.normpath("/" + raw_path.lstrip("/"))
-
-    # 3. 重建上游 URL(保留查询串,去掉上游末尾斜杠避免双斜杠)
-    base = provider_url.rstrip("/")
-    qs = request.url.query
-    upstream_url = f"{base}{normalized}"
-    if qs:
-        upstream_url = f"{upstream_url}?{qs}"
+    # 2. 重建上游 URL — 委托给 ``build_upstream_url``,自动去重 ``/v1`` 段
+    #    (用户 baseURL 已含 ``/v1`` 时,避免 ``/v1/v1/models``)。
+    upstream_url = build_upstream_url(provider_url, path, request.url.query)
 
     # 4. 透传头部与 body
     fwd_headers = _filter_request_headers(request)
