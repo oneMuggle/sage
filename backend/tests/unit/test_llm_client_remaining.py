@@ -26,10 +26,7 @@ import pytest
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.legacy.llm_client import LLMClient, LLMConfig
 
-pytestmark = [
-    pytest.mark.unit,
-    pytest.mark.xfail(reason="respx mock 与 httpx 客户端不兼容，预存在问题"),
-]
+pytestmark = [pytest.mark.unit]
 
 
 def _make_config(**overrides) -> LLMConfig:
@@ -495,8 +492,8 @@ async def test_chat_stream_skips_invalid_json_lines():
 
 
 @pytest.mark.asyncio()
-async def test_chat_stream_http_error_raises_runtime_error():
-    """chat_stream HTTP 错误时抛 RuntimeError（保留旧行为, Task 11 将统一为 LLMError）."""
+async def test_chat_stream_http_error_raises_llm_error():
+    """chat_stream HTTP 500 错误时抛 LLMError(SERVER_ERROR)."""
     client = LLMClient(_make_config())
     mock_http = AsyncMock()
 
@@ -513,15 +510,17 @@ async def test_chat_stream_http_error_raises_runtime_error():
     mock_http.stream = _stream_ctx
 
     with patch.object(client, "_get_client", return_value=mock_http), pytest.raises(
-        RuntimeError
+        LLMError
     ) as exc_info:
         await _drain_stream(client.chat_stream([{"role": "user", "content": "hi"}]))
+    assert exc_info.value.type == LLMErrorType.SERVER_ERROR
+    assert exc_info.value.status_code == 500
     assert "500" in str(exc_info.value)
 
 
 @pytest.mark.asyncio()
-async def test_chat_stream_other_exception_raises_runtime_error():
-    """chat_stream 其他异常时也抛 RuntimeError."""
+async def test_chat_stream_other_exception_raises_llm_error():
+    """chat_stream 其他异常时抛 LLMError(UNKNOWN)."""
     client = LLMClient(_make_config())
     mock_http = AsyncMock()
 
@@ -533,9 +532,11 @@ async def test_chat_stream_other_exception_raises_runtime_error():
     mock_http.stream = _stream_ctx
 
     with patch.object(client, "_get_client", return_value=mock_http), pytest.raises(
-        RuntimeError
-    ):
+        LLMError
+    ) as exc_info:
         await _drain_stream(client.chat_stream([{"role": "user", "content": "hi"}]))
+    assert exc_info.value.type == LLMErrorType.UNKNOWN
+    assert "stream failed" in str(exc_info.value)
 
 
 # ============================================================================

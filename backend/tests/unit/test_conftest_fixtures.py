@@ -4,10 +4,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [
-    pytest.mark.unit,
-    pytest.mark.xfail(reason="respx mock 与 httpx 客户端不兼容，预存在问题"),
-]
+pytestmark = [pytest.mark.unit]
 
 
 def test_sample_messages_shape(sample_messages):
