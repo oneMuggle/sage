@@ -23,13 +23,12 @@ backport branch.
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path, PurePath
 
 from .errors import OfficePathError
 from .models import OfficeDocType
-
-import logging
 
 logger = logging.getLogger(__name__)
 

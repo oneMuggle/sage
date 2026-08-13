@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 from dataclasses import dataclass
@@ -14,8 +15,6 @@ from backend.office.path_safety import managed_document_path, resolve_within
 from backend.office.session_workspace import get_workspace_binding
 from backend.office.storage import list_documents
 from backend.office.workspace_errors import WorkspaceNotBoundError, WorkspaceRevokedError
-
-import logging
 
 logger = logging.getLogger(__name__)
 

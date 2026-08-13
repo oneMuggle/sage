@@ -19,6 +19,7 @@ These omissions are intentional per plan §1.3 "non-goals".
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -35,8 +36,6 @@ from .models import (
     WordParagraphContent,
     WordTableContent,
 )
-
-import logging
 
 logger = logging.getLogger(__name__)
 

@@ -22,6 +22,7 @@ These omissions are intentional per plan §1.3 "non-goals".
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import Any, List, Optional
@@ -37,8 +38,6 @@ from .models import (
     OfficeDocumentSummary,
     OfficeExcelReadResult,
 )
-
-import logging
 
 logger = logging.getLogger(__name__)
 

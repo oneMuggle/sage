@@ -26,6 +26,7 @@ Public surface:
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from typing import Any, Dict, List, Optional
 
@@ -36,8 +37,6 @@ from backend.office.session_workspace import (
     get_document_in_workspace,
 )
 from backend.office.storage import document_path, list_documents
-
-import logging
 
 logger = logging.getLogger(__name__)
 

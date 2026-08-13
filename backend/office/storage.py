@@ -19,6 +19,7 @@ so tests can use `:memory:` and production uses the real Database.get_connection
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 from typing import List
@@ -26,8 +27,6 @@ from typing import List
 from .errors import OfficePathError
 from .models import OfficeDocType, OfficeDocumentSummary
 from .path_safety import managed_document_directory, resolve_within, validate_doc_id
-
-import logging
 
 logger = logging.getLogger(__name__)
 

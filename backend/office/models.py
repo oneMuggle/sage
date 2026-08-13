@@ -9,12 +9,11 @@ the response shapes defined here.
 
 from __future__ import annotations
 
+import logging
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
-
-import logging
 
 logger = logging.getLogger(__name__)
 
