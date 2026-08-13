@@ -71,6 +71,10 @@ from .workspace_errors import (
     WorkspaceSessionNotFoundError,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # Bound the doc id and filename to keep logs/keys sane and reject trivially
 # malformed payloads at the API boundary. 256 chars is generous for a UUIDv4
 # plus a filename extension and any path prefix the frontend might prepend.

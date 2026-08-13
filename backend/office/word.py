@@ -36,6 +36,10 @@ from .models import (
     WordTableContent,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _extract_heading_level(style_name: str) -> int:
     """Extract heading level from python-docx style name.

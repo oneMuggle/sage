@@ -37,6 +37,10 @@ from backend.office.workspace_errors import (
     WorkspaceSessionNotFoundError,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _now_ms(now_ms: Optional[int]) -> int:
     """Default ``now_ms`` to wall-clock when caller doesn't supply one."""

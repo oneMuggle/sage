@@ -38,6 +38,10 @@ from .models import (
     OfficeExcelReadResult,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _cell_value_to_str(value: Any) -> str:
     """Convert any cell value to its string representation.

@@ -27,6 +27,10 @@ from .errors import OfficePathError
 from .models import OfficeDocType, OfficeDocumentSummary
 from .path_safety import managed_document_directory, resolve_within, validate_doc_id
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def validate_workspace(path: Path) -> Path:
     """Validate a workspace directory.

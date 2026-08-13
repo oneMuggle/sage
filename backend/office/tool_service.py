@@ -37,6 +37,10 @@ from backend.office.session_workspace import (
 )
 from backend.office.storage import document_path, list_documents
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # Reader imports are deferred per doc_type so a broken optional dependency
 # (python-pptx / python-docx / openpyxl) does not crash the whole module
 # at import time. Each reader function is imported only on the code path

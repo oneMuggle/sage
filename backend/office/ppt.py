@@ -41,6 +41,10 @@ from .models import (
 from .path_safety import managed_document_path, resolve_output_path, validate_supported_filename
 from .storage import validate_workspace
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _extract_slide_title(slide) -> Optional[str]:
     """Get the slide title from the title placeholder or first text shape."""

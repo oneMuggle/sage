@@ -15,6 +15,10 @@ from backend.office.session_workspace import get_workspace_binding
 from backend.office.storage import list_documents
 from backend.office.workspace_errors import WorkspaceNotBoundError, WorkspaceRevokedError
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 _MAX_QUERY_CODE_POINTS = 200
 _MIN_LIMIT = 1
 _MAX_LIMIT = 50

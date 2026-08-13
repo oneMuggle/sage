@@ -18,6 +18,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class OfficeError(Exception):
     """Base class for all office-domain errors."""
