@@ -50,6 +50,7 @@ Public surface:
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -70,6 +71,8 @@ from .workspace_errors import (
     WorkspacePathMismatchError,
     WorkspaceSessionNotFoundError,
 )
+
+logger = logging.getLogger(__name__)
 
 # Bound the doc id and filename to keep logs/keys sane and reject trivially
 # malformed payloads at the API boundary. 256 chars is generous for a UUIDv4

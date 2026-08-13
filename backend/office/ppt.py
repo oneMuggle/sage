@@ -22,6 +22,7 @@ These omissions are intentional per plan §1.3 "non-goals".
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -40,6 +41,8 @@ from .models import (
 )
 from .path_safety import managed_document_path, resolve_output_path, validate_supported_filename
 from .storage import validate_workspace
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_slide_title(slide) -> Optional[str]:

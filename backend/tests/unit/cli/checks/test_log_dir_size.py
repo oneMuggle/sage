@@ -79,6 +79,20 @@ class TestResolveLogDir:
         assert p.name == "logs"
         assert p.parent.name == "backend"
 
+    def test_uses_sage_user_data_dir_when_log_dir_unset(self, tmp_path):
+        """SAGE_LOG_DIR 未设时,回退到 $SAGE_USER_DATA_DIR/logs(与 setup_logging 一致)。"""
+        with mock.patch.dict(os.environ, {"SAGE_USER_DATA_DIR": str(tmp_path)}, clear=True):
+            assert _resolve_log_dir() == tmp_path / "logs"
+
+    def test_sage_log_dir_wins_over_user_data(self, tmp_path):
+        """SAGE_LOG_DIR 优先级仍最高,即使同时设了 SAGE_USER_DATA_DIR。"""
+        with mock.patch.dict(
+            os.environ,
+            {"SAGE_LOG_DIR": str(tmp_path / "custom"), "SAGE_USER_DATA_DIR": str(tmp_path)},
+            clear=True,
+        ):
+            assert _resolve_log_dir() == tmp_path / "custom"
+
 
 class TestLogDirSizeCheck:
     def test_info_when_log_dir_missing(self, check, tmp_path):
