@@ -1,7 +1,7 @@
 """``SubagentRunner`` — 编排子任务的真实 agent 执行 runner（Wave 1 P0-1/P0-3）。
 
 把子任务执行从 ChatDispatcher 内联的 ``SageAgent.run_loop`` 提升为
-``LaneExecutor.agent_runner`` 契约的 callable，使 RecoveryPolicy 重试/backoff
+``LaneExecutor.agent_runner`` 契约的 callable，使 RecoveryPolicy 重试
 在 lane 执行循环中生效。子 agent 以 ``ToolPolicy(workspace_root=scratch_dir)``
 构造（P0-3 隔离）：write_file 被 ``file_tool._path_within_workspace`` 边界检查
 锁进 scratch 目录，越界写返回 ``path_outside_workspace`` 拒绝。

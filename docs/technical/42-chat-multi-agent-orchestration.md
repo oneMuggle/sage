@@ -186,21 +186,21 @@ conductor 的工具入口，`execute_async` 调 `ChatDispatcher.dispatch`。工�
 
 ## 11. 执行控制层（Wave 1 P0，2026-08-13）
 
-> 归档自 `docs/superpowers/plans/2026-08-13-orchestration-execution-control-wave1.md`（已删除）。
-> 背景：§9/§10 时代子任务由 ChatDispatcher 内联 `SageAgent.run_loop` 直接执行——无 RecoveryPolicy 结构化重试、无复核、无文件隔离。本波把执行职责下沉到既有 lane 层：`SubagentRunner`（真实 agent runner）+ `LaneExecutor.execute_lane`（重试/backoff/事件已实现），并补 reviewer 验证环与 scratch 目录隔离。分支 `feat/orchestration-execution-control-wave1`，2026-08-13。
+> 归档自 `docs/superpowers/plans/2026-08-13-orchestration-execution-control-wave1.md`。
+> 背景：§9/§10 时代子任务由 ChatDispatcher 内联 `SageAgent.run_loop` 直接执行——无 RecoveryPolicy 结构化重试、无复核、无文件隔离。本波把执行职责下沉到既有 lane 层：`SubagentRunner`（真实 agent runner）+ `LaneExecutor.execute_lane`（重试/事件已实现），并补 reviewer 验证环与 scratch 目录隔离。分支 `feat/orchestration-execution-control-wave1`，2026-08-13。
 
 ### 11.1 子任务经 LaneExecutor 执行（P0-1）
 
 `ChatDispatcher._run_subagent` 不再内联 run_loop，而是为每个子任务建 Task + Lane，经 `LaneExecutor` 执行（`backend/orchestration/subagent_runner.py` 新建）：
 
 - `TaskRegistry.create_task` + `mark_running`；`LaneRegistry.create_lane`（`lane-<task_id>`）
-- TaskPacket 带 `RecoveryPolicy(on_failure="retry", max_retries=2)`——重试/backoff 语义由 lane 执行循环承担
+- TaskPacket 带 `RecoveryPolicy(on_failure="retry", max_retries=2)`——重试语义由 lane 执行循环承担
 - `SubagentRunner` 作为 `LaneExecutor.agent_runner`：构造 `SageAgent(agent_id=..., policy=<ToolPolicy>)` 跑 `run_loop`，返回 `{"status":"succeeded","output":<DONE content>}`
 - `run_lane_with_retry` 封装 `execute_lane` 重试循环：executor 返回 `{"status":"retrying"}` 时再调 `execute_lane`，`retry_count` 累积在 `lane.metadata`，max_retries 耗尽后 executor 返回 failed 终态
 
 ### 11.2 task_status 事件增 retry_count（P0-1 透传）
 
-`ChatTaskState.retry_count` 回填自 `lane.metadata["retry_count"]`，`_emit_task_status` 把 `retry_count` 放进 `task_status` 事件。前端 `TaskStatusEvent` 是松散字段（`run_id`/`task_id`/`status` 等），新字段天然兼容，不涉及前端改动。
+`ChatTaskState.retry_count` 回填自 `lane.metadata["retry_count"]`，`_emit_task_status` 把 `retry_count` 放进 `task_status` 事件。前端 `TaskStatusEvent` 接口（`src/shared/api/types.ts:225`）未声明 `retry_count`——SSE JSON 多出的运行时键被忽略，新字段天然兼容，不涉及前端改动。
 
 ### 11.3 lane 镜像事实落地（范围修正）
 

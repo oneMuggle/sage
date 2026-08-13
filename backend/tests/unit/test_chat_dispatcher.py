@@ -137,7 +137,7 @@ async def test_dispatch_retry_exhausted_isolated():
     assert failed == {"t2"}
     assert "正常结果" in aggregated
     assert "MAX_RETRIES_EXCEEDED" in aggregated or "transient failure" in aggregated
-    assert fake.calls >= 3  # t2: 首次 + retry_count=1 + retry_count=2
+    assert fake.calls >= 3  # 4 次 = t1 成功×1 + t2 首次+重试×2
 
 
 @pytest.mark.asyncio()
