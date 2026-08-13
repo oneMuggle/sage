@@ -15,8 +15,11 @@ Error → HTTP status mapping:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class OfficeError(Exception):

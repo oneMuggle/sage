@@ -20,12 +20,19 @@ _LOG_DIR_ENV = "SAGE_LOG_DIR"
 
 
 def _resolve_log_dir() -> Path:
-    """解析日志目录:$SAGE_LOG_DIR 优先,否则 backend/logs/(相对此文件位置)。"""
-    import os
+    """解析日志目录。
 
+    优先级(与 backend/utils/logging.py 的 setup_logging 一致):
+    1. $SAGE_LOG_DIR(测试/重载用 env override)
+    2. $SAGE_USER_DATA_DIR/logs(packaged Electron 注入,实际写日志位置)
+    3. backend/logs/(相对此文件位置,dev/裸后端兜底)
+    """
     env = os.environ.get(_LOG_DIR_ENV)
     if env:
         return Path(env)
+    user_data = os.environ.get("SAGE_USER_DATA_DIR")
+    if user_data:
+        return Path(user_data) / "logs"
     # backend/cli/checks/<this>.py → backend/logs/
     return Path(__file__).resolve().parents[2] / "logs"
 

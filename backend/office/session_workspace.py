@@ -21,6 +21,7 @@ Public surface:
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -36,6 +37,8 @@ from backend.office.workspace_errors import (
     WorkspaceNotBoundError,
     WorkspaceSessionNotFoundError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _now_ms(now_ms: Optional[int]) -> int:

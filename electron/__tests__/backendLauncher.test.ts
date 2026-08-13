@@ -34,7 +34,10 @@ describe('resolveBackendLaunchCommand', () => {
       });
       // No PYTHONPATH in dev (conda handles it via env name)
       if (plan.kind === 'spawn') {
-        expect(plan.extraEnv).toEqual({ SAGE_DB_PATH: '/mock/sage.db', SAGE_USER_DATA_DIR: '/mock/userData' });
+        expect(plan.extraEnv).toEqual({
+          SAGE_DB_PATH: '/mock/sage.db',
+          SAGE_USER_DATA_DIR: '/mock/userData',
+        });
         expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
     });
@@ -42,14 +45,15 @@ describe('resolveBackendLaunchCommand', () => {
     it('honors SAGE_PYTHON env override (e.g. "python3") for power devs', () => {
       // When SAGE_PYTHON is set, we treat it as a raw interpreter that already
       // has `backend` and `sage_core` importable. Args drop the conda
-      // subcommand shell and go straight to uvicorn.
+      // subcommand shell and go straight to `-m backend.main`, the same entry
+      // dev-conda uses — so the `__main__` block (and setup_logging()) runs.
       const plan = resolveBackendLaunchCommand(
         makeOpts({ isPackaged: false, env: { SAGE_PYTHON: 'python3' } }),
       );
       expect(plan).toMatchObject({
         kind: 'spawn',
         cmd: 'python3',
-        args: ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', '8765'],
+        args: ['-m', 'backend.main'],
         reason: 'dev-conda-overridden',
       });
       if (plan.kind === 'spawn') {
@@ -60,6 +64,7 @@ describe('resolveBackendLaunchCommand', () => {
         expect(plan.extraEnv).toEqual({
           SAGE_DB_PATH: '/mock/sage.db',
           SAGE_USER_DATA_DIR: '/mock/userData',
+          PYTHON_BACKEND_PORT: '8765',
         });
         expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
@@ -109,15 +114,18 @@ describe('resolveBackendLaunchCommand', () => {
       expect(plan).toMatchObject({
         kind: 'spawn',
         cmd: '/mock/resources/python/python.exe',
-        args: ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', '8765'],
+        args: ['-m', 'backend.main'],
         reason: 'packaged-win32-bundled',
       });
       if (plan.kind === 'spawn') {
         expect(plan.extraEnv).toEqual({
           SAGE_DB_PATH: '/mock/sage.db',
           SAGE_USER_DATA_DIR: '/mock/userData',
+          // test env has no SAGE_LOG_LEVEL set → `?? 'info'` fallback applies
+          SAGE_LOG_LEVEL: 'info',
           // Win uses ';' as PYTHONPATH separator
           PYTHONPATH: '/mock/resources/backend;/mock/resources/sage-core',
+          PYTHON_BACKEND_PORT: '8765',
         });
       }
     });
@@ -144,7 +152,7 @@ describe('resolveBackendLaunchCommand', () => {
       }
     });
 
-    it('passes port from opts through to uvicorn args', () => {
+    it('passes port via PYTHON_BACKEND_PORT env (not CLI args)', () => {
       const plan = resolveBackendLaunchCommand(
         makeOpts({
           platform: 'win32',
@@ -155,8 +163,15 @@ describe('resolveBackendLaunchCommand', () => {
       );
       expect(plan).toMatchObject({
         kind: 'spawn',
-        args: expect.arrayContaining(['--port', '9999']),
+        cmd: '/mock/resources/python/python.exe',
+        args: ['-m', 'backend.main'],
       });
+      if (plan.kind === 'spawn') {
+        // Port now travels via PYTHON_BACKEND_PORT env — backend/main.py's
+        // `__main__` block reads it — not via uvicorn `--port` CLI args.
+        expect(plan.extraEnv.PYTHON_BACKEND_PORT).toBe('9999');
+        expect(plan.args).not.toContain('--port');
+      }
     });
   });
 
@@ -179,6 +194,9 @@ describe('resolveBackendLaunchCommand', () => {
       if (plan.kind === 'spawn') {
         // Linux uses ':' as PYTHONPATH separator (not ';')
         expect(plan.extraEnv.PYTHONPATH).toBe('/mock/resources/backend:/mock/resources/sage-core');
+        // Port travels via PYTHON_BACKEND_PORT env on packaged linux too
+        expect(plan.extraEnv.PYTHON_BACKEND_PORT).toBe('8765');
+        expect(plan.args).toEqual(['-m', 'backend.main']);
       }
     });
 

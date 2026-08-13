@@ -23,11 +23,14 @@ backport branch.
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path, PurePath
 
 from .errors import OfficePathError
 from .models import OfficeDocType
+
+logger = logging.getLogger(__name__)
 
 # Reuse the exact regex already enforced by the storage layer.
 _DOC_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")

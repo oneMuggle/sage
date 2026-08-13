@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { saveCurrentSessionId } from '../../entities/session/storage';
 import { invoke } from '../api/desktopInvoke';
+import { clientLogger } from '../log/client';
 
 // Re-export API modules for convenience
 export { sessionApi, messageApi, chatApi, memoryApi } from '../api';
@@ -86,7 +87,7 @@ export const useStore = create<StoreState>((set, _get) => ({
       const sessions = await invoke<Session[]>('list_sessions');
       set({ sessions });
     } catch (error) {
-      console.error('加载会话列表失败:', error);
+      clientLogger.error('store.loadSessions failed', { error: String(error) });
     }
   },
 
@@ -106,7 +107,7 @@ export const useStore = create<StoreState>((set, _get) => ({
       }));
       return session.id;
     } catch (error) {
-      console.error('创建会话失败:', error);
+      clientLogger.error('store.createSession failed', { error: String(error) });
       throw error;
     }
   },
@@ -121,7 +122,7 @@ export const useStore = create<StoreState>((set, _get) => ({
         messages: state.currentSessionId === id ? [] : state.messages,
       }));
     } catch (error) {
-      console.error('删除会话失败:', error);
+      clientLogger.error('store.deleteSession failed', { error: String(error) });
     }
   },
 
@@ -132,7 +133,7 @@ export const useStore = create<StoreState>((set, _get) => ({
       const messages = await invoke<Message[]>('get_messages', { sessionId });
       set({ messages, isLoading: false });
     } catch (error) {
-      console.error('加载消息失败:', error);
+      clientLogger.error('store.loadMessages failed', { error: String(error) });
       set({ isLoading: false });
     }
   },

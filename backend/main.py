@@ -554,9 +554,25 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
 
+    from backend.utils.logging import setup_logging
+
     port = int(os.environ.get("PYTHON_BACKEND_PORT", "8765"))
     # v2: 把本机后端地址注入环境变量,让 backend.core.legacy.llm_client.LLMConfig
     # 知道走哪个 proxy URL(默认 http://127.0.0.1:8765,所以在大多数情况下是
     # no-op,但允许 dev/CI 通过环境变量覆盖)。
     os.environ.setdefault("BACKEND_URL", f"http://127.0.0.1:{port}")
-    uvicorn.run(app, host="127.0.0.1", port=port)
+
+    # 日志基线修复 #1: 启用 setup_logging()。此前从未被调用,根 logger 保持
+    # 默认 WARNING 且无文件 handler → 后端模块 logger.* 的 INFO/DEBUG 全丢。
+    # SAGE_LOG_LEVEL 由 Electron 注入(取值 debug/info/warn/error,小写),
+    # 需显式映射到大写 LOG_LEVELS key(尤其 warn → WARNING,upper() 会得到 WARN)。
+    _LEVEL_MAP = {"debug": "DEBUG", "info": "INFO", "warn": "WARNING", "error": "ERROR"}
+    _level = _LEVEL_MAP.get(os.environ.get("SAGE_LOG_LEVEL", "info").lower(), "INFO")
+    setup_logging(log_level=_level)
+
+    # uvicorn 自带 logger 默认 WARNING 且无 handler;显式放行到 INFO 并传播到
+    # 根 logger,否则 log_config=None 后 access log 会被 uvicorn 自身级别过滤。
+    for _name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        logging.getLogger(_name).setLevel(logging.INFO)
+
+    uvicorn.run(app, host="127.0.0.1", port=port, log_config=None)
