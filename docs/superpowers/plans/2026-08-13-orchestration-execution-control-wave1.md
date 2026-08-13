@@ -241,6 +241,59 @@ async def test_run_lane_with_retry_returns_failed_terminal():
 
     assert result["status"] == "failed"
     assert "MAX_RETRIES_EXCEEDED" in result["error"]
+
+
+@pytest.mark.asyncio()
+async def test_lane_executor_runs_real_subagent_runner():
+    """LaneExecutor + SubagentRunner 集成（spec §5.4）：真实 runner 产出
+    DONE content → 任务 COMPLETED、lane SUCCEEDED。"""
+    from backend.orchestration.executor import LaneExecutor
+    from backend.orchestration.lane_registry import LaneRegistry
+    from backend.orchestration.models import (
+        Lane,
+        RecoveryPolicy,
+        Task,
+        TaskPacket,
+    )
+    from backend.orchestration.subagent_runner import SubagentRunner
+    from backend.orchestration.task_registry import TaskRegistry
+
+    lane_registry = LaneRegistry()
+    task_registry = TaskRegistry()
+    fake = _FakeSageAgent(content="调研完成")
+
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch("backend.orchestration.subagent_runner.SageAgent", return_value=fake):
+        task = task_registry.create_task(
+            Task(
+                task_id="task-it",
+                name="集成测试",
+                description="go",
+                parameters={"goal": "调研 X"},
+                packet=TaskPacket(
+                    objective="调研 X",
+                    recovery_policy=RecoveryPolicy(on_failure="retry", max_retries=2),
+                ),
+            )
+        )
+        task_registry.mark_running("task-it")
+        lane = Lane(lane_id="lane-it", task_id="task-it", agent_id="researcher")
+        lane_registry.create_lane(lane)
+
+        executor = LaneExecutor(
+            lane_registry=lane_registry,
+            task_registry=task_registry,
+            agent_runner=SubagentRunner(),
+        )
+        result = await executor.execute_lane(lane, "researcher")
+
+    assert result["status"] == "succeeded"
+    assert result["result"]["output"] == "调研完成"
+    assert lane_registry.get_lane("lane-it").status.value == "succeeded"
+    assert task_registry.get_task("task-it").status.value == "completed"
+    assert fake.calls == 1
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -344,7 +397,7 @@ async def run_lane_with_retry(
 - [ ] **Step 4: 运行确认通过**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_subagent_runner.py -v`
-Expected: 4 PASS。
+Expected: 5 PASS。
 
 - [ ] **Step 5: Commit**
 
@@ -559,7 +612,6 @@ import 区新增：
 
 ```python
 from pathlib import Path
-import uuid
 
 from backend.data.database import get_database
 from backend.orchestration.events import EventRecorder
@@ -821,18 +873,6 @@ class _ReviewSageAgent(_FakeSageAgent):
         super().__init__(results=[content])
 
 
-def _review_fake(content: str = _REVIEW_OUTPUT) -> _ReviewSageAgent:
-    fake = _ReviewSageAgent(content)
-    patch_stack = (
-        patch(
-            "backend.orchestration.subagent_runner.get_enabled_agent",
-            return_value=_DUMMY_PROFILE,
-        ),
-        patch("backend.orchestration.subagent_runner.SageAgent", return_value=fake),
-    )
-    return fake, patch_stack
-
-
 @pytest.mark.asyncio()
 async def test_dispatch_runs_review_when_all_planned_tasks_dispatched():
     """total_tasks 达标 → 聚合追加复核块 + review lane SUCCEEDED。"""
@@ -1014,6 +1054,9 @@ Expected: 新增 4 测 FAIL——`total_tasks` 参数不存在 / `_run_review` �
             parameters={"goal": review_goal},
         )
         self.task_registry.create_task(task)
+        # 置 RUNNING：executor 成功路径 mark_completed / 失败路径 mark_failed
+        # 都要求 RUNNING 态（否则 review task 停在 CREATED，状态机不一致）。
+        self.task_registry.mark_running(task_id)
         lane = Lane(lane_id=lane_id, task_id=task_id, agent_id="reviewer", metadata={})
         self.lane_registry.create_lane(lane)
 
@@ -1142,6 +1185,13 @@ git commit -m "docs(orch): 42 章节记录执行控制层 P0 接线"
 
 ## 自审记录
 
-- **Spec 覆盖**：P0-1（Task 2+3+5 接线）、P0-2（Task 4+5）、P0-3（Task 1+3）全覆盖；spec §8 降级链（reviewer 失败跳过、retry 耗尽进聚合）在测试断言。
+- **Spec 覆盖**：P0-1（Task 2+3+5 接线）、P0-2（Task 4+5）、P0-3（Task 1+3）全覆盖；spec §5.4 四项测试清单（重试单测 / LaneExecutor+subagent_runner 集成 / reviewer 复核 / scratch）逐一映射到 Task 3 / Task 2 `test_lane_executor_runs_real_subagent_runner` / Task 5 / Task 1+3；spec §8 降级链（reviewer 失败跳过、retry 耗尽进聚合）在测试断言。
 - **范围修正已在 Global Constraints 声明**：lane 镜像提前（repo 无内存模式）；`task_review` 事件延后（前端 assertNever 断裂）。
-- **类型一致性**：`SubagentRunner.__call__` 返回 dict（Task 2）→ ChatDispatcher `_run_subagent` 读取 `result["result"]["output"]`（Task 3）一致；`total_tasks` 门控在 Task 3 定义、Task 5 消费一致。
+- **类型一致性（实测核对）**：
+  - `LaneExecutor.__init__(lane_registry, task_registry, event_recorder=None, agent_runner=None)`；成功返回 `{"status":"succeeded","lane_id",...,"result": <runner 返回>}` → SubagentRunner 返回 `{"status","output"}` 落 `result` 键，ChatDispatcher 读 `result["result"]["output"]` 一致。
+  - `TaskRegistry.create_task(Task)` 接受预构建 Task；`mark_running(task_id)` 存在；review/子任务任务都先 `mark_running`（`mark_completed`/`mark_failed` 均要求 RUNNING 态）。
+  - `_get_recovery_policy` 对 `task.packet is None` 返回 `{on_failure:"fail", max_retries:0}` → review 任务无 packet 安全（失败 fail-fast 不重试）。
+  - `_validate_permissions` 走默认 `implement` preset → 所有角色（含 reviewer）通过。
+  - `LaneEventRepository` 仅 SQLite（无内存模式）→ Task 5 断言 review lane SUCCEEDED 而非事件内部；REVIEW_SUBMITTED 事件本体由既有 executor 测试覆盖。
+  - `LaneStatus.CREATED/READY/RUNNING/SUCCEEDED`、`TaskStatus.COMPLETED` 枚举成员确认存在。
+  - scratch 边界拒绝（`path_outside_workspace`）已有工具级测试（`test_file_tool_hardening.py:146`、`test_edit_tool.py:217`）→ 本波只测 ToolPolicy 透传（Task 1）+ scratch 目录创建（Task 3），不重复测 file_tool。
