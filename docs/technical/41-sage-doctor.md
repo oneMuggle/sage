@@ -327,7 +327,10 @@ def _exit_code(results: list) -> int:
 
 **检测逻辑**:
 
-- 路径解析：`$SAGE_LOG_DIR` env 优先（测试用），否则 `backend/logs/`
+- 路径解析（**三级优先级**,与 `backend/utils/logging.py:setup_logging` 的 `SAGE_USER_DATA_DIR` 分支一致,Task 4 修复）:
+  1. `$SAGE_LOG_DIR`（测试/重载用 env override）
+  2. `$SAGE_USER_DATA_DIR/logs`（packaged Electron 注入,backend 实际写日志位置）
+  3. `backend/logs/`（相对 `backend/cli/checks/log_dir_size.py` 位置,dev/裸后端兜底）
 - `os.walk` 递归累计所有文件 `os.path.getsize()`,跳过 `OSError`（权限不足 / 并发删除）
 - 阈值：
   - `WARN_THRESHOLD_BYTES = 500 * 1024 * 1024`（500 MB）
@@ -337,6 +340,18 @@ def _exit_code(results: list) -> int:
 **fix_hint (CRITICAL)**: `清理 <path> 下的旧日志文件,或接入 log rotation`
 
 > NDJSON 启动日志 + `backend/utils_logging.py` 落盘无 TTL,长期运行用户报障"磁盘满"频次不低。
+
+#### 日志路径优先级（Task 4,PR #306）
+
+`_resolve_log_dir()` 与 `setup_logging()` 的目标场景解析保持一致（packaged 下 backend 实际写日志到第二级）:
+
+| 优先级 | 来源 | 场景 |
+|---|---|---|
+| 1 | `$SAGE_LOG_DIR` | 测试 / 重载用 env override |
+| 2 | `$SAGE_USER_DATA_DIR/logs` | packaged Electron 注入（backend 实际写日志位置） |
+| 3 | `backend/logs/` | dev / 裸后端兜底 |
+
+> 修复前仅 1 + 3 两级：packaged 模式日志实际写在 `$SAGE_USER_DATA_DIR/logs/`，doctor 却看 `backend/logs/` → 永远 INFO 误报。Task 4 补上第 2 级后与真实写日志位置对齐。
 
 ### 41.3.13 `frontend_dist` — 前端 `dist/` 产物可用性（Electron 启动前置条件）
 
@@ -531,7 +546,7 @@ doctor 跑完后通过 `logger.info('main: doctor check complete', doctorSummary
 | `backend/tests/unit/cli/checks/test_llm_config.py` | DB 不存在 / 无 endpoint / 部分有 apiKey / 全部有 apiKey / 全部缺 apiKey / nested+flat endpoints / JSON 损坏 |
 | `backend/tests/unit/cli/checks/test_mcp_servers.py` | 无配置 / 全部可解析 / PATH 命令 / 绝对路径不可执行 / 绝对路径缺失 / disabled server / JSON 损坏 |
 | `backend/tests/unit/cli/checks/test_heavy_deps.py` | 全部可导入 / 单个失败 / 多个失败 / `find_spec` vs `import_module` 分层 |
-| `backend/tests/unit/cli/checks/test_log_dir_size.py` | 目录不存在 / < 500MB / ≥ 500MB WARN / ≥ 2GB CRITICAL / 边界 / `_dir_size` 抛 OSError / `_human_bytes` |
+| `backend/tests/unit/cli/checks/test_log_dir_size.py` | 目录不存在 / < 500MB / ≥ 500MB WARN / ≥ 2GB CRITICAL / 边界 / `_dir_size` 抛 OSError / `_human_bytes` / SAGE_USER_DATA_DIR 回退 / SAGE_LOG_DIR 优先于 SAGE_USER_DATA_DIR |
 | `backend/tests/unit/cli/checks/test_frontend_dist.py` | 二者皆无 / electron 已构建但 dist 缺失 CRITICAL / dist 缺失 WARN / 异常小 WARN / 正常 INFO |
 
 **总计**: **191 个测试全绿**（unit + integration,§1.5 扩容 +71 个）
