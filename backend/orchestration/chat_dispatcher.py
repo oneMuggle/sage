@@ -1,25 +1,33 @@
 """ChatDispatcher — 轻量子 agent 执行器（Multi-Agent Orchestration 方案 C）。
 
 conductor（主 LLM）经 ``dispatch_subagents`` 工具调用本 dispatcher，把
-``[{agent_id, goal}]`` 并行派发给子 ``SageAgent``。纯内存，单次聊天 run
-生命周期内存在，不持久化 —— 与 ``backend/orchestration/`` 的 lane 编排层
-互不干扰（不建 lane、不写 lane 表）。
-
-子 agent 用 ``SageAgent(agent_id=...)`` 非 bare 构造：bare=True 会留空
-tool_registry（子 agent 需要 profile 白名单工具，如 researcher 的
-web_search / writer 的 write_file）。
+``[{agent_id, goal}]`` 并行派发给子 agent。Wave 1（P0-1/P0-3）起子任务经
+``LaneExecutor`` 执行：每个子任务在 lane_registry 产生 lane 镜像，
+``RecoveryPolicy(on_failure="retry", max_retries=2)`` 提供重试，重试次数
+回填 task_status 事件的 ``retry_count`` 字段；子 agent 以
+``ToolPolicy(workspace_root=<scratch_dir>)`` 构建，文件工具被锁进
+``<data_dir>/orch_scratch/<run_id>/<task_id>`` 隔离目录。task_status 事件
+仍推送 entry_queue，前端进度可视化字段保持兼容。
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from backend.agents.profiles import build_system_base, get_enabled_agent
-from backend.core.legacy.agent import SageAgent
+from backend.data.database import get_database
+from backend.orchestration.events import EventRecorder
+from backend.orchestration.executor import LaneExecutor
+from backend.orchestration.lane_registry import LaneRegistry
+from backend.orchestration.models import Lane, RecoveryPolicy, Task, TaskPacket
+from backend.orchestration.report_schema import Assertion, AssertionType
+from backend.orchestration.subagent_runner import SubagentRunner, run_lane_with_retry
+from backend.orchestration.task_registry import TaskRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +53,9 @@ _CLASSIFY_PROMPT = """判断以下用户消息是否需要多 agent 协作（拆
 用户消息: {message}
 
 答案:"""
+
+#: scratch 根目录名（data_dir 下）。
+SCRATCH_ROOT = "orch_scratch"
 
 
 async def _classify_orchestration_mode(
@@ -91,6 +102,7 @@ class ChatTaskState:
     error: Optional[str] = None
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
+    retry_count: int = 0
 
 
 class ChatDispatcher:
@@ -102,11 +114,21 @@ class ChatDispatcher:
         entry_queue: asyncio.Queue[Dict[str, Any]],
         run_id: str,
         llm_config: Optional[Dict[str, Any]] = None,
+        lane_registry: Optional[Any] = None,
+        task_registry: Optional[Any] = None,
+        event_recorder: Optional[EventRecorder] = None,
+        total_tasks: Optional[int] = None,
     ) -> None:
         self.stream_id = stream_id
         self.entry_queue = entry_queue
         self.run_id = run_id
         self.llm_config = llm_config
+        # P0-1：子任务经 LaneExecutor 执行（lane 镜像 + RecoveryPolicy 重试）。
+        self.lane_registry = lane_registry or LaneRegistry()
+        self.task_registry = task_registry or TaskRegistry()
+        self.event_recorder = event_recorder or EventRecorder()
+        # P0-2：总任务数门控 —— 达到 plan 总量后跑 reviewer 验证环（Task 5）。
+        self.total_tasks = total_tasks
         self._states: Dict[str, ChatTaskState] = {}
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_SUBAGENTS)
         # F1 (2026-08-12): run 内全局递增的 task 计数器。修复前每次 dispatch
@@ -177,33 +199,73 @@ class ChatDispatcher:
                     self._emit_task_status(state)
 
         await asyncio.gather(*(_run_one(s) for s in states if s.status != "failed"))
-        return self._aggregate(states)
+        aggregated = self._aggregate(states)
+        # P0-2 验证环：仅当本次调用已覆盖 plan 全部任务后跑 reviewer；
+        # 失败降级跳过（绝不阻塞聊天）。
+        if self.total_tasks and self._next_task_index >= self.total_tasks:
+            try:
+                review = await self._run_review(aggregated)
+                aggregated = aggregated + review["block"]
+            except Exception as exc:  # noqa: BLE001 — 复核失败降级
+                logger.warning("编排复核失败，跳过验证: %s", exc)
+        return aggregated
 
     async def _run_subagent(self, state: ChatTaskState) -> str:
-        """跑单个子 SageAgent.run_loop，收集 DONE content。"""
-        # spec §5.1: agent_id 不合法（不存在/禁用）→ 快速失败，错误进聚合
-        # （conductor 可改派/重试），而不是拿 base prompt 跑一个无身份的 child。
-        child_profile = get_enabled_agent(state.agent_id)
-        if child_profile is None:
-            raise RuntimeError(
-                f"agent {state.agent_id!r} 不存在或已禁用，无法派发"
-            )
-        child_system = build_system_base()
-        if child_profile.get("system_prompt"):
-            child_system += "\n\n" + child_profile["system_prompt"]
+        """经 LaneExecutor 执行子任务（P0-1）：创建 lane+task，复用重试策略。
 
-        child = SageAgent(agent_id=state.agent_id)
-        messages = [
-            {"role": "system", "content": child_system},
-            {"role": "user", "content": state.goal},
-        ]
-        collected: List[str] = []
-        async for evt in child.run_loop(messages, llm_config=self.llm_config):
-            if evt.state.value == "done" and evt.content:
-                collected.append(evt.content)
-        if not collected:
-            raise RuntimeError("子 agent 未产出 DONE content")
-        return "\n\n".join(collected)
+        子 agent 以 ToolPolicy(workspace_root=<scratch_dir>) 构建（P0-3）——
+        write_file 等文件工具被锁进隔离目录，越界写返回 path_outside_workspace。
+        """
+        task_id = f"task-{state.task_id}"
+        lane_id = f"lane-{state.task_id}"
+        scratch_dir = self._scratch_dir_for(state)
+        scratch_dir.mkdir(parents=True, exist_ok=True)
+
+        task = Task(
+            task_id=task_id,
+            name=f"Subtask {state.task_id}",
+            description=state.goal,
+            parameters={
+                "goal": state.goal,
+                "agent_id": state.agent_id,
+                "scratch_dir": str(scratch_dir),
+            },
+            packet=TaskPacket(
+                objective=state.goal,
+                recovery_policy=RecoveryPolicy(on_failure="retry", max_retries=2),
+            ),
+        )
+        self.task_registry.create_task(task)
+        self.task_registry.mark_running(task_id)
+
+        lane = Lane(
+            lane_id=lane_id,
+            task_id=task_id,
+            agent_id=state.agent_id,
+            metadata={"task_id": state.task_id},
+        )
+        self.lane_registry.create_lane(lane)
+
+        executor = LaneExecutor(
+            lane_registry=self.lane_registry,
+            task_registry=self.task_registry,
+            event_recorder=self.event_recorder,
+            agent_runner=SubagentRunner(self.llm_config),
+        )
+        result = await run_lane_with_retry(executor, lane, state.agent_id)
+
+        # 重试信息回填 state → task_status 事件携带
+        state.retry_count = lane.metadata.get("retry_count", 0) if lane.metadata else 0
+        if result.get("status") == "failed":
+            raise RuntimeError(result.get("error", "subtask failed"))
+        if result.get("status") != "succeeded":
+            raise RuntimeError(f"subtask unexpected status: {result.get('status')}")
+        return result["result"]["output"]
+
+    def _scratch_dir_for(self, state: ChatTaskState) -> Path:
+        """子任务隔离目录：``<data_dir>/orch_scratch/<run_id>/<task_id>``。"""
+        data_dir = Path(get_database().db_path).parent
+        return data_dir / SCRATCH_ROOT / self.run_id / state.task_id
 
     def _emit_task_status(self, state: ChatTaskState) -> None:
         """推 task_status 事件；队列满/关闭静默降级（进度尽力而为）。"""
@@ -215,6 +277,7 @@ class ChatDispatcher:
             "agent_id": state.agent_id,
             "goal": state.goal,
             "error": state.error,
+            "retry_count": state.retry_count,
             "output_preview": self._preview(state),
         }
         try:
@@ -280,3 +343,102 @@ class ChatDispatcher:
                 + "\n\n[聚合结果超过上限，已截断；详见各子任务输出]"
             )
         return result
+
+    def _parse_assertions(self, raw: str) -> List[Assertion]:
+        """解析 reviewer 输出的 assertion 行 → ``list[Assertion]``。
+
+        容忍非严格格式：行前缀 ``[FACT|HYPOTHESIS|NEGATIVE_EVIDENCE]``，可选
+        ``(confidence: 0-1)`` 后缀。无法解析 / 未知 kind / 空 statement 的行
+        跳过；confidence 解析失败归 0.0 并夹紧到 [0.0, 1.0]（绝不 raise）。
+        返回 ``Assertion`` 对象 —— ``LaneExecutor.submit_with_report`` 直接把它
+        们交给 ``ReviewReport``，dict 会因缺少 ``to_dict()`` 崩溃。
+        """
+        pattern = re.compile(
+            r"^\[(FACT|HYPOTHESIS|NEGATIVE_EVIDENCE)\]\s*(.+?)"
+            r"(?:\s*\(confidence:\s*([0-9.]+)\))?\s*$"
+        )
+        assertions: List[Assertion] = []
+        for line in raw.splitlines():
+            m = pattern.match(line.strip())
+            if not m:
+                continue
+            try:
+                atype = AssertionType(m.group(1).lower())
+            except ValueError:
+                continue  # 未知 kind → 跳过
+            try:
+                confidence = float(m.group(3)) if m.group(3) else 0.0
+            except ValueError:
+                confidence = 0.0
+            confidence = max(0.0, min(1.0, confidence))
+            try:
+                assertions.append(
+                    Assertion(type=atype, statement=m.group(2), confidence=confidence)
+                )
+            except ValueError:
+                continue  # 空 statement 等 → 跳过
+        return assertions
+
+    def _review_block(self, verdict: str, count: int) -> str:
+        """复核结论 markdown（追加进聚合，进入 conductor 上下文）。"""
+        if verdict == "fail":
+            instruction = "存在关键 NEGATIVE_EVIDENCE，请修复后再给出最终汇总。"
+        else:
+            instruction = "全部断言通过，可给出最终汇总。"
+        return (
+            "\n\n## 复核结果（reviewer）\n\n"
+            f"- verdict: {verdict}（{count} 条 assertion）\n"
+            f"- {instruction}"
+        )
+
+    async def _run_review(self, aggregated: str) -> dict:
+        """P0-2 验证环：reviewer 子 agent 复核聚合 → ReviewReport + markdown 块。
+
+        reviewer 失败（raise）由 dispatch 捕获 → 跳过验证（降级不阻塞）。
+        review task 不带 packet → executor ``_get_recovery_policy`` 给出
+        ``{on_failure: "fail", max_retries: 0}``（reviewer 不重试）。
+        """
+        review_goal = (
+            "复核以下多 agent 子任务聚合结果，逐条给出 assertion。\n"
+            + aggregated[:MAX_SUBAGENT_RESULT_CHARS]
+        )
+        lane_id = f"lane-review-{self.run_id}"
+        task_id = f"task-review-{self.run_id}"
+
+        task = Task(
+            task_id=task_id,
+            name=f"Review {self.run_id}",
+            description=review_goal,
+            parameters={"goal": review_goal},
+        )
+        self.task_registry.create_task(task)
+        # 置 RUNNING：executor 成功路径 mark_completed / 失败路径 mark_failed
+        # 都要求 RUNNING 态（否则 review task 停在 CREATED，状态机不一致）。
+        self.task_registry.mark_running(task_id)
+        lane = Lane(lane_id=lane_id, task_id=task_id, agent_id="reviewer", metadata={})
+        self.lane_registry.create_lane(lane)
+
+        executor = LaneExecutor(
+            lane_registry=self.lane_registry,
+            task_registry=self.task_registry,
+            event_recorder=self.event_recorder,
+            agent_runner=SubagentRunner(self.llm_config),
+        )
+        result = await run_lane_with_retry(executor, lane, "reviewer")
+        if result.get("status") != "succeeded":
+            raise RuntimeError(result.get("error", "reviewer 未产出内容"))
+        raw = result["result"]["output"]
+
+        assertions = self._parse_assertions(raw)
+        executor.submit_with_report(lane_id, task_id, assertions, reviewer_id="reviewer")
+        verdict = (
+            "fail"
+            if any(
+                a.type == AssertionType.NEGATIVE_EVIDENCE and a.confidence >= 0.7
+                for a in assertions
+            )
+            else "pass"
+        )
+        block = self._review_block(verdict, len(assertions))
+        logger.info("编排复核完成: verdict=%s, assertions=%d", verdict, len(assertions))
+        return {"verdict": verdict, "block": block}

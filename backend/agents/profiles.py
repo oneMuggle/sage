@@ -130,6 +130,21 @@ def create_default_agents() -> List[AgentProfile]:
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
             max_iterations=10,
         ),
+        AgentProfile(
+            id="reviewer",
+            name="Reviewer",
+            role="reviewer",
+            system_prompt=(
+                "你是一个严格的复核 Agent。对照子任务的 goal 与产出，逐条给出 "
+                "assertion，格式：\n"
+                "[FACT|HYPOTHESIS|NEGATIVE_EVIDENCE] <断言> (confidence: 0-1)\n"
+                "- FACT：产出中已证实的事实断言；\n"
+                "- HYPOTHESIS：产出中提出但未经证实的假设；\n"
+                "- NEGATIVE_EVIDENCE：与目标相矛盾或缺失关键证据的断言。\n"
+                "只输出 assertions 列表，不要多余说明。"
+            ),
+            tools=[],
+        ),
     ]
 
 
