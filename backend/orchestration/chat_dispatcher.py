@@ -1,7 +1,7 @@
 """ChatDispatcher — 轻量子 agent 执行器（Multi-Agent Orchestration 方案 C）。
 
 conductor（主 LLM）经 ``dispatch_subagents`` 工具调用本 dispatcher，把
-``[{agent_id, goal}]`` 并行派发给子 agent。Wave 1（P0-1/P0-3）起子任务经
+``[{task_id, agent_id, goal}]`` 并行派发给子 agent。Wave 1（P0-1/P0-3）起子任务经
 ``LaneExecutor`` 执行：每个子任务在 lane_registry 产生 lane 镜像，
 ``RecoveryPolicy(on_failure="retry", max_retries=2)`` 提供重试，重试次数
 回填 task_status 事件的 ``retry_count`` 字段；子 agent 以
@@ -13,12 +13,13 @@ conductor（主 LLM）经 ``dispatch_subagents`` 工具调用本 dispatcher，�
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from backend.data.database import get_database
 from backend.orchestration.events import EventRecorder
@@ -156,14 +157,44 @@ class ChatDispatcher:
         # 记录首次 dispatch 时间（resume 场景前端展示用）。
         self._reviewed: bool = False
         self._first_dispatch_at: Optional[float] = None
+        # P2-7 (2026-08-14): 计划权威 —— 首 dispatch 从 orch_runs.plan_json 读权威
+        # 计划建索引；_dispatched_plan_ids 记录已派发的计划 task_id（review 门用）。
+        self._plan_by_id: Dict[str, dict] = {}
+        self._plan_loaded = False
+        self._dispatched_plan_ids: Set[str] = set()
+
+    def _ensure_plan_loaded(self) -> None:
+        """首 dispatch 时从 orch_runs.plan_json 读权威计划建索引（DB 单源）。
+
+        计划卡 update_plan 在派发前落库 → 首派发即读到编辑后计划。读库失败/空 →
+        _plan_by_id 保持空，后续走未知/缺省路由（不强制闭环）。只建一次。
+        """
+        if self._plan_loaded:
+            return
+        self._plan_loaded = True
+        try:
+            run = self._orch_run_repo.get(self.run_id)
+            if run and run.plan_json:
+                raw = json.loads(run.plan_json)
+                tasks = raw.get("tasks", []) if isinstance(raw, dict) else []
+                self._plan_by_id = {
+                    t["task_id"]: t
+                    for t in tasks
+                    if isinstance(t, dict) and t.get("task_id")
+                }
+        except Exception as exc:  # noqa: BLE001 — 读库失败降级，不阻塞派发
+            logger.warning("计划权威索引构建失败 run=%s err=%s", self.run_id, exc)
 
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
         """并行执行子任务，返回聚合 markdown（截断后进 conductor 上下文）。
 
+        P2-7 (2026-08-14): 三态路由 —— task_id 匹配计划 → goal/agent 以计划
+        为准（计划权威，DB 单源）；未知 task_id → 回退 tool-passed 值（允许
+        conductor 动态加任务）；缺 task_id → 自分配（计数器仅作缺省，跳过计划
+        已占编号）。匹配计划的 task_id 与 producer 的 task_plan 编号 t1..tN 对齐。
+
         Args:
-            tasks: ``[{"agent_id": ..., "goal": ...}]``。task_id 按 run 内
-                全局递增分配（``t{run_sequence}``），跨多次 dispatch 调用唯一，
-                与 producer 的 task_plan 编号 t1..tN 对齐。
+            tasks: ``[{"task_id": ..., "agent_id": ..., "goal": ...}]``。
 
         Returns:
             聚合 markdown：每个子结果截断 MAX_SUBAGENT_RESULT_CHARS 后拼接；
@@ -175,33 +206,35 @@ class ChatDispatcher:
         if self._first_dispatch_at is None:
             self._first_dispatch_at = time.time()
             self._mark_run_dispatched(int(self._first_dispatch_at * 1000))
+        # P2-7: 首 dispatch 从 orch_runs.plan_json 读权威计划建索引（只建一次）。
+        self._ensure_plan_loaded()
         states: List[ChatTaskState] = []
         for raw in tasks:
-            # 缺 agent_id（malformed input）→ 失败事件占位，不抛穿整次 dispatch。
-            # 让 conductor 看到 status=failed + error，能定位 producer bug。
-            # F1 (2026-08-12): task_id 从 run 内全局计数器分配（跨调用唯一，
-            # 与计划编号 t1..tN 对齐），不再按本次调用内 index 重编号。
-            task_id = f"t{self._next_task_index + 1}"
-            self._next_task_index += 1
-            try:
-                state = ChatTaskState(
-                    task_id=task_id,
-                    agent_id=raw["agent_id"],
-                    goal=raw.get("goal", ""),
-                )
-            except KeyError as exc:
-                state = ChatTaskState(
-                    task_id=task_id,
-                    agent_id="<missing>",
-                    goal=raw.get("goal", ""),
-                )
-                self._states[state.task_id] = state
-                states.append(state)
-                self._emit_task_status(state)  # queued (status 仍是 "queued")
-                state.status = "failed"
-                state.error = f"missing required key: {exc.args[0]}"
-                self._emit_task_status(state)  # failed
-                continue
+            raw_task_id = raw.get("task_id")
+            if raw_task_id and raw_task_id in self._plan_by_id:
+                # P2-7 计划权威：goal/agent 以计划为准（覆盖 tool-passed；计划卡
+                # 编辑在派发前生效的杠杆点）。depends_on 直接随 plan_json 透传（A4 不用）。
+                plan_item = self._plan_by_id[raw_task_id]
+                task_id = raw_task_id
+                agent_id = str(plan_item.get("agent_id", raw.get("agent_id", "primary")))
+                goal = str(plan_item.get("goal", raw.get("goal", "")))
+                self._dispatched_plan_ids.add(task_id)
+            elif raw_task_id:
+                # 未知 task_id（不在计划）→ 回退 tool-passed 值，允许 conductor 动态加任务。
+                task_id = raw_task_id
+                agent_id = str(raw.get("agent_id", "primary"))
+                goal = str(raw.get("goal", ""))
+            else:
+                # 缺 task_id（malformed/旧客户端）→ 自分配（保留 _next_task_index 作缺省计数器）。
+                # 跳过循环：候选号撞计划编号或已用状态则递增（计划权威下 t1..tN 已占用）。
+                task_id = f"t{self._next_task_index + 1}"
+                while task_id in self._plan_by_id or task_id in self._states:
+                    self._next_task_index += 1
+                    task_id = f"t{self._next_task_index + 1}"
+                self._next_task_index += 1
+                agent_id = str(raw.get("agent_id", "primary"))
+                goal = str(raw.get("goal", ""))
+            state = ChatTaskState(task_id=task_id, agent_id=agent_id, goal=goal)
             self._states[state.task_id] = state
             states.append(state)
             self._emit_task_status(state)  # queued
@@ -232,18 +265,21 @@ class ChatDispatcher:
         # Wave 2 P1-4: 加 _reviewed 一次性守卫 —— 同一 run 只 review 一次，
         # 二次触发会撞 review 落库唯一约束（IntegrityError）；review 抛异常则
         # 复位 _reviewed，下次 dispatch 可重试。
-        if (
-            self.total_tasks
-            and self._next_task_index >= self.total_tasks
-            and not self._reviewed
-        ):
-            self._reviewed = True
-            try:
-                review = await self._run_review(aggregated)
-                aggregated = aggregated + review["block"]
-            except Exception as exc:  # noqa: BLE001 — 复核失败降级
-                self._reviewed = False
-                logger.warning("编排复核失败，跳过验证: %s", exc)
+        if self.total_tasks and not self._reviewed:
+            if self._plan_by_id:
+                # 计划权威下：计划全部 task_id 已派发 → 触发验证环
+                plan_covered = set(self._plan_by_id).issubset(self._dispatched_plan_ids)
+            else:
+                # 无计划（DB 空/读失败）→ 回退旧门（计数器覆盖 total）
+                plan_covered = self._next_task_index >= self.total_tasks
+            if plan_covered:
+                self._reviewed = True
+                try:
+                    review = await self._run_review(aggregated)
+                    aggregated = aggregated + review["block"]
+                except Exception as exc:  # noqa: BLE001 — 复核失败降级
+                    self._reviewed = False
+                    logger.warning("编排复核失败，跳过验证: %s", exc)
         return aggregated
 
     async def _run_subagent(self, state: ChatTaskState) -> str:
