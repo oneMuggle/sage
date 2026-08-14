@@ -228,7 +228,7 @@ Wave 1 起 ChatDispatcher 子任务**确实写 lane/task 表**（§5.1 旧文"�
 
 ## 12. Wave 2 — 编排计划生命周期（Plan Lifecycle）
 
-> 本章节归档 PR #<待填>。承接 Wave 1 §11.7 的 7 项 triage 与 spec §6。
+> 本章节归档 PR #315。承接 Wave 1 §11.7 的 7 项 triage 与 spec §6。
 
 ### 12.1 持久化与恢复（P1-4）
 
