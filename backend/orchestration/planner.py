@@ -193,6 +193,82 @@ class Planner:
             reasoning=reasoning,
         )
 
+    async def decompose_from_template(
+        self,
+        template_id: str,
+        request: str,
+    ) -> Plan:
+        """按内置模板确定性拆解（P2-8）—— 不走 LLM，可复现。
+
+        模板不存在 → ``ValueError``（caller 降级 single）。stage goal 的
+        ``{request}`` 用 ``str.replace`` 替换（同 classify，防 .format() 抛错）；
+        无占位符则追加 ``\n目标: {request}``。``agent_hint`` 仅当角色可派发时
+        写入（复用 F4 校验，否则回退 conductor 默认角色）。
+        """
+        import uuid
+
+        from backend.orchestration.templates import get_template
+
+        template = get_template(template_id)
+        if template is None:
+            raise ValueError(f"unknown orchestration template: {template_id}")
+
+        team = self.team_registry.create_team(
+            name=f"Template {template.name}: {request[:50]}",
+            metadata={
+                "original_request": request,
+                "source": "template",
+                "template": template_id,
+            },
+        )
+
+        created_tasks: List[Task] = []
+        stage_to_task: Dict[str, str] = {}
+        for stage in template.stages:
+            goal = (
+                stage.goal.replace("{request}", request)
+                if "{request}" in stage.goal
+                else f"{stage.goal}\n目标: {request}"
+            )
+            parameters: Dict[str, Any] = {}
+            if _is_dispatchable_agent(stage.agent_id):
+                parameters["agent_hint"] = stage.agent_id
+            task = Task(
+                task_id=f"task-{uuid.uuid4().hex[:12]}",
+                name=stage.id,  # 模板 stage 序号 t1..tN（depends_on 引用它）
+                description=goal,
+                task_type="general",
+                parameters=parameters,
+                blocked_by=[],
+                team_id=team.team_id,
+            )
+            self.task_registry.create_task(task)
+            created_tasks.append(task)
+            stage_to_task[stage.id] = task.task_id
+            self.team_registry.add_task(team.team_id, task.task_id)
+
+        # 第二遍：stage.id 依赖 → 真实 task_id（只引更早任务，保 DAG）。
+        created_by_id = {t.task_id: t for t in created_tasks}
+        for stage, task in zip(template.stages, created_tasks):
+            resolved = [stage_to_task[dep] for dep in stage.depends_on if dep in stage_to_task]
+            if not resolved:
+                continue
+            task.blocked_by = resolved
+            self.task_registry.repo.update(task)
+            for dep_id in resolved:
+                dep_task = created_by_id.get(dep_id)
+                if dep_task is not None and task.task_id not in dep_task.blocks:
+                    dep_task.blocks.append(task.task_id)
+                    self.task_registry.repo.update(dep_task)
+
+        return Plan(
+            plan_id=f"plan-{uuid.uuid4().hex[:12]}",
+            team_id=team.team_id,
+            tasks=created_tasks,
+            original_request=request,
+            reasoning=f"template: {template_id}",
+        )
+
     async def _decompose_with_llm(
         self,
         request: str,
