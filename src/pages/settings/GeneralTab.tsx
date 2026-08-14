@@ -98,6 +98,9 @@ function NumberField({
         data-testid={dataTestId}
         value={value}
         onChange={(e) => {
+          // 空输入 = 不修改：Number('') === 0 会经 n >= 0 守卫提交 0，
+          // 落库后 load_orch_settings() 读到 0 → asyncio.Semaphore(0) → 编排挂死。
+          if (e.target.value === '') return;
           const n = Number(e.target.value);
           if (Number.isFinite(n) && n >= 0) onChange(Math.floor(n));
         }}
@@ -145,7 +148,9 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
           label="最大并发子任务数"
           dataTestId="orch-max-concurrent"
           value={settings.orch.maxConcurrentSubagents}
-          onChange={(v) => updateSettings({ orch: { ...settings.orch, maxConcurrentSubagents: v } })}
+          onChange={(v) =>
+            updateSettings({ orch: { ...settings.orch, maxConcurrentSubagents: v } })
+          }
         />
         <NumberField
           label="聚合结果上限（字符）"
@@ -157,7 +162,9 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
           label="单结果截断上限（字符）"
           dataTestId="orch-max-subagent-result"
           value={settings.orch.maxSubagentResultChars}
-          onChange={(v) => updateSettings({ orch: { ...settings.orch, maxSubagentResultChars: v } })}
+          onChange={(v) =>
+            updateSettings({ orch: { ...settings.orch, maxSubagentResultChars: v } })
+          }
         />
         <NumberField
           label="子任务重试次数"

@@ -94,4 +94,14 @@ describe('GeneralTab 编排 section', () => {
       orch: expect.objectContaining({ maxRetries: 5, maxConcurrentSubagents: 4 }),
     });
   });
+
+  it('清空输入不提交 0 — 防 Semaphore(0) 编排挂死', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-concurrent'), { target: { value: '' } });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('orch-max-aggregate'), { target: { value: '' } });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+  });
 });
