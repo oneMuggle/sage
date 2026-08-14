@@ -9,6 +9,8 @@ Mount under ``/api/v1`` from ``backend/main.py``. Provides:
   listing/detail (state, agent, metadata, heartbeat).
 - ``GET /orchestration/lanes/{id}/events`` — lane event history.
 - ``POST /orchestration/lanes/{id}/cancel`` — manual cancellation.
+- ``GET /orchestration/board`` — LaneBoard 监控快照（active/blocked/finished +
+  freshness_summary，Wave 3 B3 暴露 HTTP）。
 
 Registries are constructed per-request (they are thin SQLite wrappers over
 the shared ``get_database()`` singleton) so test fixtures that swap the DB
