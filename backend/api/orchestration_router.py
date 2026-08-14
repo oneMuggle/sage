@@ -387,6 +387,14 @@ def build_router() -> APIRouter:
         assert refreshed is not None  # Just updated, should exist
         return _to_lane_out(refreshed)
 
+    @router.get("/board")
+    async def board() -> Dict[str, Any]:
+        """LaneBoard 监控快照（M4 交付但未暴露 HTTP — P2-10 补暴露）。"""
+        from backend.orchestration.lane_board import LaneBoardBuilder
+
+        builder = LaneBoardBuilder(lane_registry=LaneRegistry())
+        return builder.build_snapshot(actor="http-api").to_dict()
+
     return router
 
 
