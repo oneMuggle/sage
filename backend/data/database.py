@@ -794,7 +794,8 @@ class Database:
                 status TEXT NOT NULL DEFAULT 'running',
                 created_at INTEGER NOT NULL,
                 plan_json TEXT NOT NULL,
-                final_summary TEXT
+                final_summary TEXT,
+                dispatched_at INTEGER
             )
             """
         )

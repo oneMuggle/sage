@@ -87,6 +87,13 @@ import functools
 # 在 to_thread worker 内获取同一把锁,两条路径才能在同一 sqlite3.Connection
 # (check_same_thread=False) 上互斥,避免 "cannot start a transaction within
 # a transaction"。
+#
+# 注意:with_db_lock 必须定义在本模块(而非 database.py)。FastAPI 在
+# get_typed_signature 里用 ``call.__globals__`` 解析 `from __future__ import
+# annotations` 产生的字符串注解(wrapper.__globals__ 是**定义装饰器的模块**
+# 的 dict)。若 decorator 定义在 database.py,本文件 34 个带 body 模型的
+# handler(ChatRequest 等)会报 PydanticUndefinedAnnotation。orch_routes.py
+# 因此也保留同构的本地定义,共用同一把 _SQLITE_LOCK。
 from backend.data.database import _SQLITE_LOCK
 
 
@@ -1802,6 +1809,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                                     "agent_hint", "primary"
                                                 ),
                                                 "goal": t.description or t.name,
+                                                # P1-6 (2026-08-14): 依赖透传。
+                                                # 落库 plan_json 与 task_plan 事件
+                                                # 保持同构,resume 重建的 run 才能
+                                                # 渲染依赖关系。
+                                                "depends_on": list(t.blocked_by),
                                             }
                                             for i, t in enumerate(plan_tasks, 1)
                                         ],

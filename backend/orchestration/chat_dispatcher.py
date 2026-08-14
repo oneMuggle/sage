@@ -165,9 +165,11 @@ class ChatDispatcher:
             单任务失败以错误摘要参与聚合，其余任务继续（错误隔离）。
         """
         # Wave 2 P1-4: 首次 dispatch 时间戳（放函数开头，resume 场景多轮
-        # dispatch 只记第一次）。
+        # dispatch 只记第一次）。P1-5: 同步落库 dispatched_at —— update_plan
+        # 据此返回 409（编辑生效窗口 = 首次派发前）。落库失败降级不阻塞。
         if self._first_dispatch_at is None:
             self._first_dispatch_at = time.time()
+            self._mark_run_dispatched(int(self._first_dispatch_at * 1000))
         states: List[ChatTaskState] = []
         for raw in tasks:
             # 缺 agent_id（malformed input）→ 失败事件占位，不抛穿整次 dispatch。
@@ -343,6 +345,15 @@ class ChatDispatcher:
             ))
         except Exception as exc:  # noqa: BLE001 — 降级铁律
             logger.warning("orch_run 落库失败 run_id=%s err=%s", self.run_id, exc)
+
+    def _mark_run_dispatched(self, dispatched_at: int) -> None:
+        """首次派发落库 dispatched_at（幂等）。run 行不存在则跳过,失败降级。"""
+        try:
+            self._orch_run_repo.mark_dispatched(self.run_id, dispatched_at)
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.warning(
+                "orch_run 派发标记失败 run_id=%s err=%s", self.run_id, exc
+            )
 
     def _persist_task_state(self, state: ChatTaskState) -> None:
         """状态迁移同步写库；写失败降级（logger.warning，绝不阻塞聊天）。"""

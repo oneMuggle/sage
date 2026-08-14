@@ -40,6 +40,17 @@ def test_upsert_and_get_roundtrip(repo):
     assert fetched.created_at == 1700000000000
     assert fetched.plan_json == '{"tasks":[]}'
     assert fetched.final_summary is None
+    assert fetched.dispatched_at is None
+
+
+def test_upsert_roundtrips_dispatched_at(repo):
+    """dispatched_at 非默认值也完整 roundtrip。"""
+    repo.upsert(OrchRun(
+        run_id="orch-disp", session_id="s", status="running",
+        created_at=1000, plan_json="{}", dispatched_at=1234,
+    ))
+    fetched = repo.get("orch-disp")
+    assert fetched.dispatched_at == 1234
 
 
 def test_get_missing_returns_none(repo):
@@ -87,3 +98,21 @@ def test_finalize_sets_status_and_summary(repo):
     fetched = repo.get("orch-fin")
     assert fetched.status == "completed"
     assert fetched.final_summary == "all done"
+
+
+def test_mark_dispatched_first_write_wins(repo):
+    """mark_dispatched 幂等：首次写入生效,后续调用不覆盖（first-dispatch-wins）。"""
+    repo.upsert(OrchRun(
+        run_id="orch-md", session_id="s", status="running",
+        created_at=1, plan_json="{}",
+    ))
+    repo.mark_dispatched("orch-md", 111)
+    repo.mark_dispatched("orch-md", 222)
+    fetched = repo.get("orch-md")
+    assert fetched.dispatched_at == 111
+
+
+def test_mark_dispatched_missing_run_is_noop(repo):
+    """不存在的 run → mark_dispatched 静默跳过（不抛异常）。"""
+    repo.mark_dispatched("orch-none", 111)  # 不应抛异常
+    assert repo.get("orch-none") is None
