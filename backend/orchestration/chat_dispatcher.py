@@ -44,6 +44,10 @@ MAX_AGGREGATE_CHARS = 120 * 1024
 #: task_status.output_preview 上限（UI 展开预览）。
 MAX_OUTPUT_PREVIEW_CHARS = 500
 
+#: Wave 2 Minor 2 fix (2026-08-14): 防御性 retry 循环上限 —— 防未来 executor
+#: 退化（一直返回 retrying）导致 _run_subagent 无限循环 hang。
+MAX_LANE_ITERATIONS = 8
+
 #: 编排语义判定 prompt（轻量二分类）：LLM 只需回答 multi / single。
 _CLASSIFY_PROMPT = """判断以下用户消息是否需要多 agent 协作（拆解为多个子任务、由不同角色并行执行）才能最好地完成。
 只需返回一个词：multi 或 single。
@@ -135,6 +139,18 @@ class ChatDispatcher:
         # 调用都从 t1 重编号，与 producer 计划的全局编号 t1..tN 错位 —— 前端
         # 按 task_id 合并 status，计划 t4-t6 永远收不到更新（UI 恒显 3/6）。
         self._next_task_index = 0
+        # Wave 2 P1-4: repo 复用 LaneRepository 模式（self.db = get_database()）。
+        # 构造不接 db_path —— 测试经 SAGE_DB_PATH env + 重置 _db 单例切 tmp DB。
+        from backend.data.orch_run_repo import OrchRunRepository
+        from backend.data.orch_task_repo import OrchTaskRepository
+
+        self._orch_run_repo = OrchRunRepository()
+        self._orch_task_repo = OrchTaskRepository()
+        # Wave 2 P1-4 (2026-08-14): review 一次性守卫 —— 防重复 review 触发
+        # IntegrityError（同一 run 二次 review 会撞唯一约束）；_first_dispatch_at
+        # 记录首次 dispatch 时间（resume 场景前端展示用）。
+        self._reviewed: bool = False
+        self._first_dispatch_at: Optional[float] = None
 
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
         """并行执行子任务，返回聚合 markdown（截断后进 conductor 上下文）。
@@ -148,6 +164,12 @@ class ChatDispatcher:
             聚合 markdown：每个子结果截断 MAX_SUBAGENT_RESULT_CHARS 后拼接；
             单任务失败以错误摘要参与聚合，其余任务继续（错误隔离）。
         """
+        # Wave 2 P1-4: 首次 dispatch 时间戳（放函数开头，resume 场景多轮
+        # dispatch 只记第一次）。P1-5: 同步落库 dispatched_at —— update_plan
+        # 据此返回 409（编辑生效窗口 = 首次派发前）。落库失败降级不阻塞。
+        if self._first_dispatch_at is None:
+            self._first_dispatch_at = time.time()
+            self._mark_run_dispatched(int(self._first_dispatch_at * 1000))
         states: List[ChatTaskState] = []
         for raw in tasks:
             # 缺 agent_id（malformed input）→ 失败事件占位，不抛穿整次 dispatch。
@@ -202,11 +224,20 @@ class ChatDispatcher:
         aggregated = self._aggregate(states)
         # P0-2 验证环：仅当本次调用已覆盖 plan 全部任务后跑 reviewer；
         # 失败降级跳过（绝不阻塞聊天）。
-        if self.total_tasks and self._next_task_index >= self.total_tasks:
+        # Wave 2 P1-4: 加 _reviewed 一次性守卫 —— 同一 run 只 review 一次，
+        # 二次触发会撞 review 落库唯一约束（IntegrityError）；review 抛异常则
+        # 复位 _reviewed，下次 dispatch 可重试。
+        if (
+            self.total_tasks
+            and self._next_task_index >= self.total_tasks
+            and not self._reviewed
+        ):
+            self._reviewed = True
             try:
                 review = await self._run_review(aggregated)
                 aggregated = aggregated + review["block"]
             except Exception as exc:  # noqa: BLE001 — 复核失败降级
+                self._reviewed = False
                 logger.warning("编排复核失败，跳过验证: %s", exc)
         return aggregated
 
@@ -253,6 +284,18 @@ class ChatDispatcher:
             agent_runner=SubagentRunner(self.llm_config),
         )
         result = await run_lane_with_retry(executor, lane, state.agent_id)
+        # Wave 2 Minor 2 fix: 防御性 max-iteration guard。run_lane_with_retry
+        # 理论上内循环会收敛（max_retries 耗尽 → failed 终态），但防未来
+        # executor 退化一直返回 retrying 导致 hang，调用层设硬上限。
+        iterations = 0
+        while result.get("status") == "retrying":
+            iterations += 1
+            if iterations >= MAX_LANE_ITERATIONS:
+                raise RuntimeError(
+                    f"MAX_ITERATIONS_EXCEEDED: retry loop exceeded "
+                    f"max_iterations={MAX_LANE_ITERATIONS}"
+                )
+            result = await run_lane_with_retry(executor, lane, state.agent_id)
 
         # 重试信息回填 state → task_status 事件携带
         state.retry_count = lane.metadata.get("retry_count", 0) if lane.metadata else 0
@@ -284,6 +327,51 @@ class ChatDispatcher:
             self.entry_queue.put_nowait(event)
         except Exception:  # noqa: BLE001
             logger.debug("task_status 推送失败（队列满/关闭），忽略")
+        # Wave 2 P1-4: 状态迁移同步写库。失败在 _persist_task_state 内部降级，
+        # 绝不阻塞聊天进度推送。
+        self._persist_task_state(state)
+
+    def init_orch_run(self, session_id: str, plan_json: str) -> None:
+        """由 caller (legacy_routes) 在第一次 dispatch 前调一次。失败降级。"""
+        try:
+            from backend.data.orch_run_repo import OrchRun
+
+            self._orch_run_repo.upsert(OrchRun(
+                run_id=self.run_id,
+                session_id=session_id or "",
+                status="running",
+                created_at=int(time.time() * 1000),
+                plan_json=plan_json,
+            ))
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.warning("orch_run 落库失败 run_id=%s err=%s", self.run_id, exc)
+
+    def _mark_run_dispatched(self, dispatched_at: int) -> None:
+        """首次派发落库 dispatched_at（幂等）。run 行不存在则跳过,失败降级。"""
+        try:
+            self._orch_run_repo.mark_dispatched(self.run_id, dispatched_at)
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.warning(
+                "orch_run 派发标记失败 run_id=%s err=%s", self.run_id, exc
+            )
+
+    def _persist_task_state(self, state: ChatTaskState) -> None:
+        """状态迁移同步写库；写失败降级（logger.warning，绝不阻塞聊天）。"""
+        try:
+            self._orch_task_repo.upsert_state(
+                task_id=state.task_id,
+                run_id=self.run_id,
+                agent_id=state.agent_id,
+                goal=state.goal,
+                status=state.status,
+                retry_count=state.retry_count,
+                error=state.error,
+                output_preview=self._preview(state),
+                started_at=int(state.started_at * 1000) if state.started_at else None,
+                finished_at=int(state.finished_at * 1000) if state.finished_at else None,
+            )
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.warning("orch_task 落库失败 task_id=%s err=%s", state.task_id, exc)
 
     def _preview(self, state: ChatTaskState) -> Optional[str]:
         """done → output 前 500 字；failed → error 前 500 字。"""
@@ -379,15 +467,20 @@ class ChatDispatcher:
                 continue  # 空 statement 等 → 跳过
         return assertions
 
-    def _review_block(self, verdict: str, count: int) -> str:
-        """复核结论 markdown（追加进聚合，进入 conductor 上下文）。"""
-        if verdict == "fail":
-            instruction = "存在关键 NEGATIVE_EVIDENCE，请修复后再给出最终汇总。"
-        else:
-            instruction = "全部断言通过，可给出最终汇总。"
+    def _review_block(self, verdict: str, count: int, note: str = "") -> str:
+        """复核结论 markdown（追加进聚合，进入 conductor 上下文）。
+
+        Wave 2 Minor 1 fix: 新增 note 参数 —— 0-parse 等特殊失败原因备注行。
+        """
+        note_line = f"- 备注：{note}\n" if note else ""
+        instruction = (
+            "存在关键 NEGATIVE_EVIDENCE 或无可解析 assertion，请修复后再给出最终汇总。"
+            if verdict == "fail"
+            else "全部断言通过，可给出最终汇总。"
+        )
         return (
             "\n\n## 复核结果（reviewer）\n\n"
-            f"- verdict: {verdict}（{count} 条 assertion）\n"
+            f"- verdict: {verdict}（{count} 条 assertion）\n{note_line}"
             f"- {instruction}"
         )
 
@@ -431,14 +524,51 @@ class ChatDispatcher:
 
         assertions = self._parse_assertions(raw)
         executor.submit_with_report(lane_id, task_id, assertions, reviewer_id="reviewer")
-        verdict = (
-            "fail"
-            if any(
-                a.type == AssertionType.NEGATIVE_EVIDENCE and a.confidence >= 0.7
-                for a in assertions
+        # Wave 2 Minor 1 fix: 0-parse → verdict=fail（消除 vacuous pass ——
+        # reviewer 什么都没产出却判 pass 的静默假阳性）。
+        if len(assertions) == 0:
+            verdict = "fail"
+            review_note = "reviewer 未产出任何可解析 assertion"
+        else:
+            verdict = (
+                "fail"
+                if any(
+                    a.type == AssertionType.NEGATIVE_EVIDENCE and a.confidence >= 0.7
+                    for a in assertions
+                )
+                else "pass"
             )
-            else "pass"
+            review_note = ""
+        block = self._review_block(verdict, len(assertions), note=review_note)
+        # Wave 2: task_review NDJSON 事件契约（spec §5.2）—— verdict 产出后
+        # 立即推 entry_queue，前端 TaskReviewEvent 消费展示。
+        self._emit_task_review(
+            task_id=task_id,
+            verdict=verdict,
+            assertion_count=len(assertions),
+            summary=review_note or f"{verdict}（{len(assertions)} 条 assertion）",
         )
-        block = self._review_block(verdict, len(assertions))
         logger.info("编排复核完成: verdict=%s, assertions=%d", verdict, len(assertions))
-        return {"verdict": verdict, "block": block}
+        return {"verdict": verdict, "block": block, "assertion_count": len(assertions)}
+
+    def _emit_task_review(
+        self,
+        task_id: str,
+        verdict: str,
+        assertion_count: int,
+        summary: str,
+    ) -> None:
+        """推 task_review NDJSON 事件；队列满/关闭静默降级（spec §8）。"""
+        event: Dict[str, Any] = {
+            "state": "task_review",
+            "run_id": self.run_id,
+            "task_id": task_id,
+            "reviewer_id": "reviewer",
+            "verdict": verdict,
+            "assertion_count": assertion_count,
+            "summary": summary,
+        }
+        try:
+            self.entry_queue.put_nowait(event)
+        except Exception:  # noqa: BLE001 — 降级铁律
+            logger.debug("task_review 推送失败（队列满/关闭），忽略")

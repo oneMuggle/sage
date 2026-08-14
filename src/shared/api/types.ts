@@ -134,7 +134,9 @@ export type AgentState =
   // 推送一次,前端 taskBoard 渲染"已拆解为 N 个子任务"头部信息时不必
   // 等待 subtask 状态切换就能拿到 total。后续 5 元组也可由前端 reducer
   // 实时从 task_status 聚合,本事件只承担初始化职责。
-  | 'task_progress';
+  | 'task_progress'
+  // Wave 2 (2026-08-14): reviewer 复核结论事件,见 TaskReviewEvent。
+  | 'task_review';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -212,6 +214,8 @@ export interface TaskPlanItem {
   task_id: string;
   agent_id: string;
   goal: string;
+  // P1-6 (2026-08-14): 依赖透传 —— 后端 task_plan 事件带 depends_on。
+  depends_on?: string[];
 }
 
 export interface TaskPlanEvent {
@@ -249,6 +253,23 @@ export interface TaskProgressEvent {
   failed: number;
 }
 
+/** Wave 2 (2026-08-14): reviewer 复核结论事件（spec §5.2）。
+ *
+ * 后端 ``_run_review`` 产出 verdict 后推送到 NDJSON 流,前端据此展示
+ * "复核通过 / 存在疑问"等结论。字段与 backend ``_emit_task_review`` 一致。
+ */
+export type ReviewVerdict = 'pass' | 'fail';
+
+export interface TaskReviewEvent {
+  state: 'task_review';
+  run_id: string;
+  task_id: string;
+  reviewer_id: string;
+  verdict: ReviewVerdict;
+  assertion_count: number;
+  summary: string;
+}
+
 /** 流式聊天事件 (NDJSON 协议的一行) */
 export interface AgentEvent {
   state: AgentState;
@@ -281,6 +302,11 @@ export interface AgentEvent {
   running?: number;
   queued?: number;
   failed?: number;
+  // Wave 2 (2026-08-14): task_review 事件 4 可选字段（仅 state='task_review' 时携带）。
+  reviewer_id?: string;
+  verdict?: ReviewVerdict;
+  assertion_count?: number;
+  summary?: string;
 }
 
 // ==================== 错误类型定义 ====================

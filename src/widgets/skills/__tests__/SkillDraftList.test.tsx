@@ -65,8 +65,10 @@ describe('SkillDraftList component', () => {
     listMock.mockResolvedValue({ drafts: [] });
     renderDraftList();
 
-    await waitFor(() => expect(listMock).toHaveBeenCalled());
-    expect(screen.getByText(/暂无待审草稿/i)).toBeInTheDocument();
+    // findByText 等待 mock resolve → setState → 重渲染 全链路完成,
+    // 而非仅等待 mock 被调用(waitFor(listMock) 在 CPU 争用下会在
+    // loading→empty 状态迁移完成前就放行,造成全量并行套件下 flaky)。
+    expect(await screen.findByText(/暂无待审草稿/i)).toBeInTheDocument();
   });
 
   it('renders draft cards from API', async () => {
