@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
+from backend.api.orch_routes import router as orch_routes_router
 from backend.chat.compaction import (
     MIN_COMPACT_MESSAGE_COUNT,
     CompactionError,
@@ -2462,3 +2463,9 @@ def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] = None
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Wave 2 P1-4 (2026-08-14): 编排 run 读取/resume/计划更新端点挂载。
+# orch_routes 用独立 APIRouter(prefix="/orch")，经 include_router 并入
+# legacy_router → main.py 挂载后最终前缀 /api/v1/orch。
+router.include_router(orch_routes_router)

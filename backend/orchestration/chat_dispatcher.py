@@ -142,6 +142,11 @@ class ChatDispatcher:
 
         self._orch_run_repo = OrchRunRepository()
         self._orch_task_repo = OrchTaskRepository()
+        # Wave 2 P1-4 (2026-08-14): review 一次性守卫 —— 防重复 review 触发
+        # IntegrityError（同一 run 二次 review 会撞唯一约束）；_first_dispatch_at
+        # 记录首次 dispatch 时间（resume 场景前端展示用）。
+        self._reviewed: bool = False
+        self._first_dispatch_at: Optional[float] = None
 
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
         """并行执行子任务，返回聚合 markdown（截断后进 conductor 上下文）。
@@ -155,6 +160,10 @@ class ChatDispatcher:
             聚合 markdown：每个子结果截断 MAX_SUBAGENT_RESULT_CHARS 后拼接；
             单任务失败以错误摘要参与聚合，其余任务继续（错误隔离）。
         """
+        # Wave 2 P1-4: 首次 dispatch 时间戳（放函数开头，resume 场景多轮
+        # dispatch 只记第一次）。
+        if self._first_dispatch_at is None:
+            self._first_dispatch_at = time.time()
         states: List[ChatTaskState] = []
         for raw in tasks:
             # 缺 agent_id（malformed input）→ 失败事件占位，不抛穿整次 dispatch。
@@ -209,11 +218,20 @@ class ChatDispatcher:
         aggregated = self._aggregate(states)
         # P0-2 验证环：仅当本次调用已覆盖 plan 全部任务后跑 reviewer；
         # 失败降级跳过（绝不阻塞聊天）。
-        if self.total_tasks and self._next_task_index >= self.total_tasks:
+        # Wave 2 P1-4: 加 _reviewed 一次性守卫 —— 同一 run 只 review 一次，
+        # 二次触发会撞 review 落库唯一约束（IntegrityError）；review 抛异常则
+        # 复位 _reviewed，下次 dispatch 可重试。
+        if (
+            self.total_tasks
+            and self._next_task_index >= self.total_tasks
+            and not self._reviewed
+        ):
+            self._reviewed = True
             try:
                 review = await self._run_review(aggregated)
                 aggregated = aggregated + review["block"]
             except Exception as exc:  # noqa: BLE001 — 复核失败降级
+                self._reviewed = False
                 logger.warning("编排复核失败，跳过验证: %s", exc)
         return aggregated
 
