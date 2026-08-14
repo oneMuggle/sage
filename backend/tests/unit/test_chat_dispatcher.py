@@ -14,10 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.orchestration.chat_dispatcher import (
-    MAX_CONCURRENT_SUBAGENTS,
-    ChatDispatcher,
-)
+from backend.orchestration.chat_dispatcher import ChatDispatcher
 from backend.orchestration.orch_settings import OrchSettings
 
 _DUMMY_PROFILE = {"system_prompt": "你是测试子 agent", "tools": []}
@@ -160,7 +157,7 @@ async def test_dispatch_retry_exhausted_isolated():
 
 @pytest.mark.asyncio()
 async def test_dispatch_concurrency_capped_at_four():
-    """5 个任务，并发上限 4 —— 最大同时 active ≤ 4。"""
+    """5 个任务，并发上限 = settings.max_concurrent_subagents（默认 4）—— 最大 active ≤ 上限。"""
     queue = _make_queue()
     fake = _FakeSageAgent(results=["ok"] * 5, delay=0.01)
 
@@ -170,7 +167,8 @@ async def test_dispatch_concurrency_capped_at_four():
             [{"agent_id": "researcher", "goal": f"任务{i}"} for i in range(5)]
         )
 
-    assert fake.max_active <= MAX_CONCURRENT_SUBAGENTS
+    # P2-9: semaphore 由 settings 驱动，断言对齐实例配置而非模块常量。
+    assert fake.max_active <= dispatcher.settings.max_concurrent_subagents
 
 
 @pytest.mark.asyncio()
