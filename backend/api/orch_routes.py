@@ -57,6 +57,8 @@ class OrchRunDetail(BaseModel):
     created_at: int
     plan: List[Dict[str, Any]]
     tasks: List[Dict[str, Any]]
+    # Wave 3 A9: resume 恢复流原始请求
+    original_request: Optional[str] = None
 
 
 class PlanUpdateRequest(BaseModel):
@@ -68,6 +70,7 @@ class ResumeResponse(BaseModel):
     new_run_id: str
     session_id: str
     plan: List[Dict[str, Any]]
+    original_request: Optional[str] = None
 
 
 @router.get("/runs", response_model=List[OrchRunSummary])
@@ -117,6 +120,7 @@ def get_run(run_id: str) -> OrchRunDetail:
         created_at=run.created_at,
         plan=plan,
         tasks=tasks,
+        original_request=run.original_request,
     )
 
 
@@ -134,6 +138,7 @@ def resume_run(run_id: str) -> ResumeResponse:
         status="running",
         created_at=int(time.time() * 1000),
         plan_json=run.plan_json,
+        original_request=run.original_request,
     ))
     plan = json.loads(run.plan_json).get("tasks", [])
     return ResumeResponse(
@@ -141,6 +146,7 @@ def resume_run(run_id: str) -> ResumeResponse:
         new_run_id=new_run_id,
         session_id=run.session_id,
         plan=plan,
+        original_request=run.original_request,
     )
 
 

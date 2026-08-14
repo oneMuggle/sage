@@ -408,8 +408,11 @@ class ChatDispatcher:
         # 绝不阻塞聊天进度推送。
         self._persist_task_state(state)
 
-    def init_orch_run(self, session_id: str, plan_json: str) -> None:
-        """由 caller (legacy_routes) 在第一次 dispatch 前调一次。失败降级。"""
+    def init_orch_run(self, session_id: str, plan_json: str, original_request: str = "") -> None:
+        """由 caller (legacy_routes) 在第一次 dispatch 前调一次。失败降级。
+
+        original_request: resume 恢复流的原始请求（前端逐字重发）。
+        """
         try:
             from backend.data.orch_run_repo import OrchRun
 
@@ -419,6 +422,7 @@ class ChatDispatcher:
                 status="running",
                 created_at=int(time.time() * 1000),
                 plan_json=plan_json,
+                original_request=original_request or None,
             ))
         except Exception as exc:  # noqa: BLE001 — 降级铁律
             logger.warning("orch_run 落库失败 run_id=%s err=%s", self.run_id, exc)

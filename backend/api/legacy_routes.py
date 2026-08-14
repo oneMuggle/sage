@@ -1848,6 +1848,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     },
                                     ensure_ascii=False,
                                 ),
+                                # Wave 3 A9: resume 恢复流逐字重发原始请求。
+                                original_request=data.message,
                             )
                     except Exception as exc:  # noqa: BLE001 — 降级铁律
                         logger.warning("dispatcher.init_orch_run 失败: %s", exc)
