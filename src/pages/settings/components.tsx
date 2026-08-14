@@ -13,7 +13,7 @@ export interface EndpointsTabProps {
 
 export interface SettingRowProps {
   label: string;
-  desc: string;
+  desc?: string;
   children: React.ReactNode;
 }
 
@@ -29,7 +29,9 @@ export function SettingRow({ label, desc, children }: SettingRowProps) {
     <div className="flex items-center justify-between py-3 border-b border-border">
       <div>
         <div className="text-sm text-text">{label}</div>
-        <div className="text-xs text-muted mt-0.5">{desc}</div>
+        {desc ? (
+          <div className="text-xs text-muted mt-0.5">{desc}</div>
+        ) : null}
       </div>
       <div>{children}</div>
     </div>
