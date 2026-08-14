@@ -156,3 +156,36 @@ def update_plan(run_id: str, body: PlanUpdateRequest) -> Dict[str, Any]:
     run.plan_json = json.dumps({"tasks": body.plan, "reasoning": ""}, ensure_ascii=False)
     repo.upsert(run)
     return {"ok": True, "run_id": run_id, "plan": body.plan}
+
+
+class CancelRunRequest(BaseModel):
+    reason: str = "user_cancelled"
+
+
+class CancelRunResponse(BaseModel):
+    ok: bool
+    run_id: str
+    status: str
+
+
+@router.post("/runs/{run_id}/cancel", response_model=CancelRunResponse)
+@with_db_lock
+def cancel_run(run_id: str, body: Optional[CancelRunRequest] = None) -> CancelRunResponse:
+    """Run 级取消：置 cancelled + 停 dispatcher 新任务（running 不硬杀）。"""
+    repo = OrchRunRepository()
+    run = repo.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    if run.status in ("cancelled", "completed", "failed"):
+        raise HTTPException(status_code=409, detail=f"run already in terminal state: {run.status}")
+    repo.update_status(run_id, "cancelled")
+    # 进程内注册表定位 dispatcher 并置位（同步 set event，无需 await）。
+    try:
+        from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+        dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
+        if dispatcher is not None:
+            dispatcher.cancel()
+    except Exception:  # noqa: BLE001 — 注册表命中失败不阻塞状态落库
+        pass
+    return CancelRunResponse(ok=True, run_id=run_id, status="cancelled")

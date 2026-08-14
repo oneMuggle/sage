@@ -109,6 +109,19 @@ class OrchRunRepository:
         )
         conn.commit()
 
+    def update_status(self, run_id: str, status: str) -> None:
+        """run 状态更新（P2-9/A8 cancel 端点用）—— 只改 status，不碰其他字段。
+
+        终态校验（cancelled/completed/failed 拒绝再次取消）由调用方负责。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE orch_runs SET status = ? WHERE run_id = ?",
+            (status, run_id),
+        )
+        conn.commit()
+
     def finalize(self, run_id: str, status: str, final_summary: Optional[str]) -> None:
         conn = self.db.get_connection()
         cursor = conn.cursor()

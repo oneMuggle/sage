@@ -117,6 +117,11 @@ class ChatTaskState:
     retry_count: int = 0
 
 
+# P2-9 (2026-08-14): 进程内活动 dispatcher 注册表 —— 供 run 级 cancel 端点
+# 定位并置位取消事件。producer 在构造后注册、finally 注销（长连接结束即删）。
+_ACTIVE_DISPATCHERS: Dict[str, ChatDispatcher] = {}
+
+
 class ChatDispatcher:
     """并行执行子任务并向聊天流推送 task_status 事件的轻量调度器。"""
 
@@ -168,6 +173,15 @@ class ChatDispatcher:
         self._plan_by_id: Dict[str, dict] = {}
         self._plan_loaded = False
         self._dispatched_plan_ids: Set[str] = set()
+        # P2-9 (2026-08-14): 取消事件 —— cancel() 幂等 set；_run_one 开头检查。
+        self._cancelled = asyncio.Event()
+
+    def cancel(self) -> bool:
+        """置位取消事件。幂等：已 set 返回 False，否则 True。"""
+        if self._cancelled.is_set():
+            return False
+        self._cancelled.set()
+        return True
 
     def _ensure_plan_loaded(self) -> None:
         """首 dispatch 时从 orch_runs.plan_json 读权威计划建索引（DB 单源）。
@@ -247,6 +261,15 @@ class ChatDispatcher:
 
         async def _run_one(state: ChatTaskState) -> None:
             async with self._semaphore:
+                # P2-9 (2026-08-14): 取消后 queued 任务不再启动（转 cancelled）。守卫在
+                # acquire 之后 —— 排队等槽的任务 cancel 前已越过入口，拿到槽后再判一次
+                # 才真正短路；running 子任务已过守卫不硬杀（SubagentRunner 无中断通道），
+                # 尽力放行，已完成结果仍入聚合。
+                if self._cancelled.is_set():
+                    state.status = "cancelled"
+                    state.error = "cancelled by user"
+                    self._emit_task_status(state)
+                    return
                 state.status = "running"
                 state.started_at = time.time()
                 self._emit_task_status(state)
@@ -264,7 +287,9 @@ class ChatDispatcher:
                     state.finished_at = time.time()
                     self._emit_task_status(state)
 
-        await asyncio.gather(*(_run_one(s) for s in states if s.status != "failed"))
+        await asyncio.gather(
+            *(_run_one(s) for s in states if s.status not in ("failed", "cancelled"))
+        )
         aggregated = self._aggregate(states)
         # P0-2 验证环：仅当本次调用已覆盖 plan 全部任务后跑 reviewer；
         # 失败降级跳过（绝不阻塞聊天）。

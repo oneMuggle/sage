@@ -1736,7 +1736,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 mode = "single"
             run_id: Optional[str] = None
             if mode == "multi":
-                from backend.orchestration.chat_dispatcher import ChatDispatcher
+                from backend.orchestration.chat_dispatcher import (
+                    _ACTIVE_DISPATCHERS,
+                    ChatDispatcher,
+                )
                 from backend.orchestration.planner import Planner
                 from backend.orchestration.task_registry import TaskRegistry
                 from backend.orchestration.team_registry import TeamRegistry
@@ -1785,6 +1788,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         total_tasks=len(plan_tasks),
                         settings=load_orch_settings(),
                     )
+                    # P2-9 (2026-08-14): 进程内注册表登记 —— 长连接期间 run 级
+                    # cancel 端点能定位到本 dispatcher 并置位取消事件。
+                    _ACTIVE_DISPATCHERS[run_id] = dispatcher
                     agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
                     if (
                         agent.profile is not None
@@ -2095,6 +2101,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             )
             await entry.queue.put({"error": e.to_dict(), "state": "failed"})
         finally:
+            # P2-9 (2026-08-14): 长连接结束注销注册表条目（run 级 cancel 不再命中）。
+            # run_id 为 None（single 路径）时跳过 —— 从未注册过。
+            if run_id:
+                _ACTIVE_DISPATCHERS.pop(run_id, None)
             # Task 9 (M1-M2): always reset the tool context so the
             # ContextVar never leaks into the next producer invocation.
             if _tool_ctx_token is not None:
