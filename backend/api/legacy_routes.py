@@ -1742,15 +1742,34 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 from backend.orchestration.team_registry import TeamRegistry
                 from backend.tools.subagent_tool import DispatchSubagentsTool
 
+                # P2-8 (2026-08-14): orchestration_mode=template:<id> → 确定性模板拆解。
+                orchestration_mode = data.orchestration_mode or "auto"
+                template_id = (
+                    orchestration_mode.split(":", 1)[1]
+                    if orchestration_mode.startswith("template:")
+                    else None
+                )
                 try:
-                    plan = await Planner(
-                        task_registry=TaskRegistry(),
-                        team_registry=TeamRegistry(),
-                        llm_client=build_llm_client_from_settings(),
-                    ).decompose_request(data.message)
+                    if template_id is not None:
+                        plan = await Planner(
+                            task_registry=TaskRegistry(),
+                            team_registry=TeamRegistry(),
+                            llm_client=build_llm_client_from_settings(),
+                        ).decompose_from_template(template_id, data.message)
+                    else:
+                        plan = await Planner(
+                            task_registry=TaskRegistry(),
+                            team_registry=TeamRegistry(),
+                            llm_client=build_llm_client_from_settings(),
+                        ).decompose_request(data.message)
                     plan_tasks = list(plan.tasks if plan else [])
-                except Exception as exc:  # noqa: BLE001 — 编排规划失败必须降级 single
-                    logger.warning("编排规划失败，降级 single: %s", exc)
+                except Exception as exc:  # noqa: BLE001 — 模板/规划失败降级 single
+                    if template_id is not None:
+                        logger.warning(
+                            "编排模板 %s 拆解失败，降级 single: %s", template_id, exc
+                        )
+                    else:
+                        logger.warning("编排规划失败，降级 single: %s", exc)
                     mode = "single"
                     plan_tasks = []
                 if len(plan_tasks) <= 1:

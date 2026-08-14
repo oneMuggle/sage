@@ -8,13 +8,14 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 from httpx import ASGITransport
 
 from backend.main import app
+from backend.orchestration.chat_dispatcher import _classify_orchestration_mode
 
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
 
@@ -472,3 +473,102 @@ async def test_task_plan_event_includes_depends_on():
     # t1 无依赖 → 空 list;t2 blocked_by=["t1"] → depends_on=["t1"]
     assert plan_event["plan"][0]["depends_on"] == []
     assert plan_event["plan"][1]["depends_on"] == ["t1"]
+
+
+"""P2-8 — orchestration_mode=template:<id> 走模板拆解。"""
+
+
+@pytest.mark.asyncio()
+async def test_classify_template_prefix_is_multi():
+    """template: 前缀 → 直接 multi（跳过 LLM 二分类）。"""
+    mode = await _classify_orchestration_mode(
+        "随便一句话", "template:research-write", llm_client=None
+    )
+    assert mode == "multi"
+
+
+@pytest.mark.asyncio()
+async def test_classify_unknown_template_still_multi():
+    """未知模板 id 也判 multi（降级在 decompose 层，不在这里）。"""
+    mode = await _classify_orchestration_mode("x", "template:nope", llm_client=None)
+    assert mode == "multi"
+
+
+@pytest.mark.asyncio()
+async def test_template_mode_decomposes_via_deterministic_template():
+    """P2-8: orchestration_mode=template:research-write → decompose_from_template
+    拆解出 task_plan（2 任务、goal 含用户请求）。"""
+    registered_tools: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="已完成模板任务执行")
+
+    async def _decompose_from_template(template_id, request):
+        from backend.orchestration.models import Task
+
+        return type(
+            "Plan",
+            (),
+            {
+                "plan_id": "p1",
+                "team_id": "team1",
+                "tasks": [
+                    Task(
+                        task_id="t1",
+                        name="t1",
+                        description=f"搜集资料\n目标: {request}",
+                        parameters={"agent_hint": "researcher"},
+                    ),
+                    Task(
+                        task_id="t2",
+                        name="t2",
+                        description=f"撰写报告\n目标: {request}",
+                        parameters={"agent_hint": "writer"},
+                    ),
+                ],
+                "original_request": request,
+                "reasoning": "template research-write",
+            },
+        )()
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch("backend.orchestration.planner.Planner") as MockPlanner:
+            MockPlanner.return_value.decompose_from_template = AsyncMock(
+                side_effect=_decompose_from_template
+            )
+
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                events = await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "我需要学习量化交易并整理操作手册",
+                        "orchestration_mode": "template:research-write",
+                        "api_key": "sk-test",
+                        "api_url": "https://example.com/v1",
+                    },
+                )
+
+    states = [e["state"] for e in events]
+    assert "task_plan" in states, f"template 模式必出 task_plan，实际 events={states}"
+    plan_event = next(e for e in events if e["state"] == "task_plan")
+    assert len(plan_event["plan"]) == 2
+    goals = " ".join(p["goal"] for p in plan_event["plan"])
+    assert "我需要学习量化交易并整理操作手册" in goals, (
+        f"task goal 必须含用户请求，实际 goals={goals!r}"
+    )
+    # 路由校验：必须是 decompose_from_template（不是 decompose_request）
+    MockPlanner.return_value.decompose_from_template.assert_awaited_once_with(
+        "research-write", "我需要学习量化交易并整理操作手册"
+    )

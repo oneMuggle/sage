@@ -72,11 +72,17 @@ async def _classify_orchestration_mode(
     """语义判定消息是否进编排（multi）还是单 agent（single）。
 
     - ``force_multi`` / ``force_single``：用户 override，直接定，跳过 LLM
+    - ``template:<id>``：模板即强制编排 → ``multi``（跳过 LLM；模板不存在
+      时降级 single 由 decompose 层负责，这里不校验存在性）
     - ``auto``：轻量 LLM 二分类；无 client / 失败 → ``single``（= 没开编排）
 
     这是 tool-toggle 门的判定源：mode=single 时 producer 不注册
     dispatch_subagents 工具（简单任务在结构上无法被过度拆解）。
     """
+    # P2-8 (2026-08-14): template:<id> 即强制编排 —— 跳过 LLM 二分类。
+    # 模板存在性在 decompose_from_template 校验（不存在 → 降级 single）。
+    if orchestration_mode.startswith("template:"):
+        return "multi"
     if orchestration_mode == "force_multi":
         return "multi"
     if orchestration_mode == "force_single":
