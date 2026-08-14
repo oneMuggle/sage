@@ -55,7 +55,6 @@ async def test_decompose_from_template_resolves_stages():
     plan = await _planner().decompose_from_template("research-write", "写一篇报告")
     assert plan.reasoning == "template: research-write"
     assert len(plan.tasks) == 2
-    by_stage = {plan.tasks[0].name: plan.tasks[0], plan.tasks[1].name: plan.tasks[1]}
     # {request} 已替换
     assert "写一篇报告" in plan.tasks[0].description
     assert plan.tasks[1].blocked_by == [plan.tasks[0].task_id]
@@ -89,7 +88,7 @@ async def test_decompose_from_template_skips_undispatchable_role():
 
 @pytest.mark.asyncio()
 async def test_decompose_from_template_unknown_raises():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="unknown orchestration template"):
         await _planner().decompose_from_template("nope", "目标")
 
 
