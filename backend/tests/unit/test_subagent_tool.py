@@ -125,7 +125,6 @@ class TestRunLoopSpecialCase:
 
 
 # P2-7 — dispatch_subagents schema 要求每任务带 task_id。
-from backend.tools.subagent_tool import INPUT_SCHEMA
 
 
 def test_input_schema_requires_task_id():
