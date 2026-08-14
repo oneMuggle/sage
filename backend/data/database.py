@@ -534,6 +534,49 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_evolution_memory ON memories_evolution_log(memory_id)"
         )
 
+        # Wave 2 P1-4 (2026-08-14): 编排 run / task 持久化表, 供 resume 端点重建 ChatDispatcher。
+        # schema 与 spec §4 verbatim, 幂等 (CREATE TABLE IF NOT EXISTS)。
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orch_runs (
+                run_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'running',
+                created_at INTEGER NOT NULL,
+                plan_json TEXT NOT NULL,
+                final_summary TEXT,
+                dispatched_at INTEGER
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_runs_session ON orch_runs(session_id)"
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orch_tasks (
+                task_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES orch_runs(run_id),
+                agent_id TEXT NOT NULL,
+                goal TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'queued',
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                error TEXT,
+                output_preview TEXT,
+                blocked_by TEXT,
+                scratch_dir TEXT,
+                started_at INTEGER,
+                finished_at INTEGER
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_tasks_run ON orch_tasks(run_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_tasks_status ON orch_tasks(status)"
+        )
+
         conn.commit()
         print(f"数据库初始化完成: {self.db_path}")  # noqa: T201 (历史遗留, init 阶段一次性输出)
 

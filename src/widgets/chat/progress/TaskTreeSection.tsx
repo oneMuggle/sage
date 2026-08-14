@@ -53,11 +53,25 @@ export function TaskTreeSection({ board }: TaskTreeSectionProps) {
         const st = board.statuses[item.task_id];
         const status: TaskStatusValue = st?.status ?? 'queued';
         const preview = st?.output_preview ?? st?.error ?? null;
+        // P1-6 (2026-08-14): depends_on 透传 —— 有依赖的任务缩进 + 标记行。
+        const dependsOn = item.depends_on ?? [];
+        const hasDeps = dependsOn.length > 0;
         return (
           <div
             key={item.task_id}
-            className="flex flex-col gap-1 px-2 py-1 rounded text-xs bg-bg-hover"
+            data-testid={`task-tree-item-${item.task_id}`}
+            className={`flex flex-col gap-1 px-2 py-1 rounded text-xs bg-bg-hover ${
+              hasDeps ? 'ml-4' : ''
+            }`}
           >
+            {hasDeps && (
+              <div
+                className="text-text-tertiary text-[10px]"
+                data-testid={`task-tree-deps-${item.task_id}`}
+              >
+                ↳ 依赖 {dependsOn.join(', ')}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <span title={STATUS_TITLE[status]} className="w-4 text-center">
                 {STATUS_ICON[status]}

@@ -60,6 +60,23 @@ class _FakeSageAgent:
             self.active -= 1
 
 
+class _BrokenReview(_FakeSageAgent):
+    """Wave 2 Minor T5 M1 fix: 真 async gen — 先 yield 一次再 raise。
+
+    保持 async gen 协议（yield → raise），注入 RuntimeError 时不触发
+    "coroutine never awaited" RuntimeWarning；exc 可注入（默认 "reviewer boom"
+    兼容既有 reviewer 崩溃测试的零参构造）。
+    """
+
+    def __init__(self, exc: Exception | None = None) -> None:
+        self.exc = exc if exc is not None else RuntimeError("reviewer boom")
+
+    async def run_loop(self, messages=None, max_iterations=None, llm_config=None):
+        # 必须先 yield 一次（async gen 协议），然后抛
+        yield {"state": "task_review_partial", "text": "starting"}
+        raise self.exc
+
+
 def _make_queue():
     return asyncio.Queue()
 
@@ -275,10 +292,6 @@ async def test_dispatch_review_fail_on_negative_evidence():
 async def test_dispatch_review_failure_skips_without_blocking():
     """reviewer 崩溃 → 跳过验证，聚合不变，不抛异常。"""
     queue = _make_queue()
-
-    class _BrokenReview(_FakeSageAgent):
-        async def run_loop(self, messages, max_iterations=None, llm_config=None):
-            raise RuntimeError("reviewer boom")
 
     with patch(
         "backend.orchestration.subagent_runner.get_enabled_agent",

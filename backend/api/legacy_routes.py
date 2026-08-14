@@ -28,6 +28,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
+from backend.api.orch_routes import router as orch_routes_router
 from backend.chat.executors import resolve_attachments
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
@@ -71,6 +72,13 @@ import functools
 # 在 to_thread worker 内获取同一把锁,两条路径才能在同一 sqlite3.Connection
 # (check_same_thread=False) 上互斥,避免 "cannot start a transaction within
 # a transaction"。
+#
+# 注意:with_db_lock 必须定义在本模块(而非 database.py)。FastAPI 在
+# get_typed_signature 里用 ``call.__globals__`` 解析 `from __future__ import
+# annotations` 产生的字符串注解(wrapper.__globals__ 是**定义装饰器的模块**
+# 的 dict)。若 decorator 定义在 database.py,本文件 34 个带 body 模型的
+# handler(ChatRequest 等)会报 PydanticUndefinedAnnotation。orch_routes.py
+# 因此也保留同构的本地定义,共用同一把 _SQLITE_LOCK。
 from backend.data.database import _SQLITE_LOCK
 
 
@@ -1360,6 +1368,36 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         "不要提前给出结论。"
                     )
                     # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
+                    # Wave 2 P1-4: 首次 dispatch 前把 run + plan 落库,供 resume 端点重建。
+                    # 失败降级（logger.warning）,绝不阻塞聊天。
+                    try:
+                        if dispatcher is not None and hasattr(dispatcher, "init_orch_run"):
+                            dispatcher.init_orch_run(
+                                session_id=data.session_id,
+                                plan_json=json.dumps(
+                                    {
+                                        "tasks": [
+                                            {
+                                                "task_id": f"t{i}",
+                                                "agent_id": t.parameters.get(
+                                                    "agent_hint", "primary"
+                                                ),
+                                                "goal": t.description or t.name,
+                                                # P1-6 (2026-08-14): 依赖透传。
+                                                # 落库 plan_json 与 task_plan 事件
+                                                # 保持同构,resume 重建的 run 才能
+                                                # 渲染依赖关系。
+                                                "depends_on": list(t.blocked_by),
+                                            }
+                                            for i, t in enumerate(plan_tasks, 1)
+                                        ],
+                                        "reasoning": plan.reasoning if plan else "",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            )
+                    except Exception as exc:  # noqa: BLE001 — 降级铁律
+                        logger.warning("dispatcher.init_orch_run 失败: %s", exc)
                     await entry.queue.put(
                         {
                             "state": "task_plan",
@@ -1371,6 +1409,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                         "agent_hint", "primary"
                                     ),
                                     "goal": t.description or t.name,
+                                    # P1-6 (2026-08-14): 依赖透传 —— 前端可渲染
+                                    # 任务依赖关系（TaskTreeSection 缩进）。
+                                    "depends_on": list(t.blocked_by),
                                 }
                                 for i, t in enumerate(plan_tasks, 1)
                             ],
@@ -1913,3 +1954,8 @@ async def memory_events(request: Request):
             hooks.off("memory_written", on_memory_written)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+# Wave 2 P1-4 (2026-08-14): 编排 run 读取/resume/计划更新端点挂载。
+# orch_routes 用独立 APIRouter(prefix="/orch")，经 include_router 并入
+# legacy_router → main.py 挂载后最终前缀 /api/v1/orch。
+router.include_router(orch_routes_router)

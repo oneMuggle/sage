@@ -40,6 +40,7 @@ function inferProviderFromBaseUrl(baseUrl: string | undefined): string | undefin
 /** Multi-Agent Orchestration: 编排任务板聚合状态（task_plan/task_status 消费结果） */
 export interface TaskBoard {
   runId: string;
+  // P1-6 (2026-08-14): plan item 允许 depends_on? 可选字段（无依赖的老 run 兼容）。
   plan: TaskPlanItem[];
   statuses: Record<string, TaskStatusEvent>;
   // 进度可视化 P0-2 (2026-08-12): 5 元组快照,初值由 task_progress 事件
@@ -53,6 +54,9 @@ export interface TaskBoard {
     queued: number;
     failed: number;
   };
+  // P1-5 (2026-08-14): 首次派发时间戳（首个 task_status 触发）。非 null 即
+  // "已派发" —— PlanCard 据此锁定编辑（plan_update 端点派发后返回 409）。
+  dispatchedAt?: number | null;
 }
 
 export function useChat() {
@@ -370,6 +374,9 @@ export function useChat() {
                     ...prev,
                     statuses: nextStatuses,
                     progress: { total, ...counts },
+                    // P1-5: 首个 task_status = 派发已开始,记录时间戳供
+                    // PlanCard 锁定（派发后 plan_update 后端返回 409）。
+                    dispatchedAt: prev.dispatchedAt ?? Date.now(),
                   };
                 });
                 return;

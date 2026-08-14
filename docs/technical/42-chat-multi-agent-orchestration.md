@@ -225,3 +225,50 @@ Wave 1 起 ChatDispatcher 子任务**确实写 lane/task 表**（§5.1 旧文"�
 - **派发数 < plan 总数时 review 永不触发**：`total_tasks` 门控依赖 `_next_task_index >= total_tasks`，conductor 合并/跳过任务时复核跳过——P0-2 核心功能缺口，已知
 - **多批派发边缘二次 create_lane IntegrityError → 静默降级**：gate 累计达 total_tasks 后再次 dispatch 会重复 `create_lane("lane-review-<run_id>")` 抛 IntegrityError，`dispatch` 捕获后跳过复核（正常单批路径不可达，`_reviewed` 守卫未做）
 - **review task 必须手动 mark_running**：`mark_completed`/`mark_failed` 均要求 RUNNING 态，`_run_review` 中显式 `mark_running` 保证 review 任务状态机一致
+
+## 12. Wave 2 — 编排计划生命周期（Plan Lifecycle）
+
+> 本章节归档 PR #315。承接 Wave 1 §11.7 的 7 项 triage 与 spec §6。
+
+### 12.1 持久化与恢复（P1-4）
+
+- 新增 `orch_runs` / `orch_tasks` 两张表（schema 见 spec §4）
+- `OrchRunRepository` / `OrchTaskRepository` 提供 CRUD + list
+- `ChatDispatcher` 在每次状态迁移同步写库；写失败降级为仅内存态（`logger.warning`，绝不阻塞聊天）
+- `POST /api/v1/orch/runs/{run_id}/resume` 从持久化 `plan_json` 重建新 run（新 run_id + session_id 透传）
+
+### 12.2 计划卡（P1-5）
+
+- 前端拦截 `TaskPlanEvent` 渲染可交互计划卡
+- 每行：状态图标 + agent_id 徽标 + goal `textarea`（可编辑）+ 删除按钮（≥1 行守卫）
+- 头部按钮：开始（派发后转"已开始执行（计划锁定）"）/ 取消
+- 编辑走 `plan_update` IPC（`POST /api/v1/orch/runs/{run_id}/plan`）
+- **编辑生效窗口 = 首次派发前**：`ChatDispatcher` 首次 dispatch 时把 `orch_runs.dispatched_at` 落库（first-dispatch-wins，写库失败降级 `logger.warning` 不阻塞聊天）；`update_plan` 对已派发 run 返回 409 —— 锁与 `status` 生命周期解耦（`status` 终态也为 409）
+
+### 12.3 DAG 依赖透传（P1-6）
+
+- `task_plan` 事件 `plan` item 增 `depends_on: string[]`（planner `_sanitize_tasks` 已把 `blocked_by` 解析为真实 task_id，Wave 2 仅做透传）
+- 前端 `TaskTreeSection` 显示依赖：父级无缩进，子级 `ml-4` + "↳ 依赖 t1" 提示
+- 不强制拓扑执行（与 spec §3.1 "DAG 只展示不强制" 决策一致）
+
+### 12.4 task_review 事件契约（spec §5.2 补完）
+
+- `TaskReviewEvent` schema: `{state: "task_review", run_id, task_id, reviewer_id, verdict, assertion_count, summary}`
+- `_run_review` 末尾 push 到 `entry_queue`
+- 前端 `TaskReviewEvent` 类型 + `AgentState` 增 `'task_review'` 分支
+
+### 12.5 Wave 1 final-review 顺手项收口
+
+- 空 assertion 解析 → verdict: fail（"无可解析 assertion"）+ 触发 conductor 修复（消除 vacuous pass）
+- `_BrokenReview` 改真 async gen（先 yield 一次再 raise，消 RuntimeWarning）
+- `run_lane_with_retry(max_iterations=8)` 防御性 guard
+- spec §5.4 集成级 retry 测试补：`test_multi_task_with_retry_persists_retry_count`
+- `_reviewed` 一次性守卫：同一 run 只跑一次 review（`dispatch` 多轮/多次调用时 gate 重触发直接跳过），避免二次 review 落库撞唯一约束
+
+### 12.6 已知限制与延后项（→ Wave 3）
+
+- **计划卡视图接线**：`PlanCard` / `PlanCardList` 组件已交付 + 8 单测覆盖，但未接入任何视图（plan T5 无 wiring step）—— 后端链路（409 锁定 / 4 IPC / electron 路由）已就绪，聊天流内渲染入口、历史列表入口与 resume UX 归 Wave 3 统一设计
+- P2-7 派发 task_id 对齐根治（`dispatch_subagents` 工具 schema 必填 `task_id`）
+- P2-8 确定性模板（`OrchestrationTemplate`）
+- P2-9 配置化（`app_settings` 增 `orch.*` 段）
+- P2-10 休眠层接入（chat 镜像 lane + API lane 可执行 + LaneBoard 监控端点）

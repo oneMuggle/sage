@@ -48,6 +48,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'task_plan': // Multi-Agent Orchestration: 编排事件态,不占消息气泡占位
     case 'task_status':
     case 'task_progress': // 进度可视化 P0-2 (2026-08-12): 概览事件,不渲染到消息气泡
+    case 'task_review': // Wave 2 (2026-08-14): 复核结论事件,不渲染到消息气泡
       return null;
     default:
       return assertNever(state);
@@ -80,6 +81,7 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'task_plan': // Multi-Agent Orchestration: 编排事件态,无 UI 阶段展示
     case 'task_status':
     case 'task_progress': // 进度可视化 P0-2 (2026-08-12): 概览事件,无 UI 阶段展示
+    case 'task_review': // Wave 2 (2026-08-14): 复核结论事件,无 UI 阶段展示
       return null;
     default:
       return assertNever(state);
