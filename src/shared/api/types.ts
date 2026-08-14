@@ -214,6 +214,8 @@ export interface TaskPlanItem {
   task_id: string;
   agent_id: string;
   goal: string;
+  // P1-6 (2026-08-14): 依赖透传 —— 后端 task_plan 事件带 depends_on。
+  depends_on?: string[];
 }
 
 export interface TaskPlanEvent {

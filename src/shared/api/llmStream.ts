@@ -26,6 +26,8 @@ export interface TaskPlanItem {
   task_id: string;
   agent_id: string;
   goal: string;
+  // P1-6 (2026-08-14): 依赖透传 —— 与 types.ts 双处一致。
+  depends_on?: string[];
 }
 
 export interface TaskPlanEvent {

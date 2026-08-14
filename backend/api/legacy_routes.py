@@ -1823,6 +1823,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                         "agent_hint", "primary"
                                     ),
                                     "goal": t.description or t.name,
+                                    # P1-6 (2026-08-14): 依赖透传 —— 前端可渲染
+                                    # 任务依赖关系（TaskTreeSection 缩进）。
+                                    "depends_on": list(t.blocked_by),
                                 }
                                 for i, t in enumerate(plan_tasks, 1)
                             ],

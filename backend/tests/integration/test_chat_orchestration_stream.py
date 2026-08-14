@@ -399,3 +399,76 @@ async def test_plain_chat_sets_tool_context_for_artifact_recording():
     assert ctx.session_id == "s"
     assert ctx.binding_generation == 0, "无 workspace 绑定 → generation 0"
     assert ctx.office_doc_scope == frozenset(), "无 office 授权 → 空 scope"
+
+
+@pytest.mark.asyncio()
+async def test_task_plan_event_includes_depends_on():
+    """P1-6 (2026-08-14): task_plan 事件透传 depends_on（来自 Task.blocked_by）。"""
+    registered_tools: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="done")
+
+    async def _decompose_with_deps(message, context=None):
+        from backend.orchestration.models import Task
+
+        return type(
+            "Plan",
+            (),
+            {
+                "plan_id": "p1",
+                "team_id": "team1",
+                "tasks": [
+                    Task(
+                        task_id="t1",
+                        name="任务 1",
+                        description="目标：researcher",
+                        parameters={"agent_hint": "researcher"},
+                        blocked_by=[],
+                    ),
+                    Task(
+                        task_id="t2",
+                        name="任务 2",
+                        description="目标：writer",
+                        parameters={"agent_hint": "writer"},
+                        blocked_by=["t1"],
+                    ),
+                ],
+                "original_request": message,
+                "reasoning": "test",
+            },
+        )()
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch("backend.orchestration.planner.Planner") as MockPlanner:
+            MockPlanner.return_value.decompose_request = _decompose_with_deps
+
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                events = await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "先搜集资料再整理（两任务依赖）",
+                        "orchestration_mode": "force_multi",
+                        "api_key": "sk-test",
+                        "api_url": "https://example.com/v1",
+                    },
+                )
+
+    plan_event = next(e for e in events if e["state"] == "task_plan")
+    assert len(plan_event["plan"]) == 2
+    # t1 无依赖 → 空 list;t2 blocked_by=["t1"] → depends_on=["t1"]
+    assert plan_event["plan"][0]["depends_on"] == []
+    assert plan_event["plan"][1]["depends_on"] == ["t1"]
