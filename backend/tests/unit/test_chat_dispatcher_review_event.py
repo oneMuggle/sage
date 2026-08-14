@@ -31,9 +31,9 @@ def _dispatcher(settings: OrchSettings | None = None) -> ChatDispatcher:
 async def test_run_review_emits_task_review_event():
     """_run_review 末尾 push task_review NDJSON 事件到 entry_queue。"""
     dispatcher = _dispatcher()
-    # mock 掉 _run_review 内 lane/executor 调用，直接调底层逻辑。
-    with patch.object(dispatcher, "_parse_assertions", return_value=[]), patch(
-        "backend.orchestration.chat_dispatcher.run_lane_with_retry",
+    # mock 掉 review 环内 lane/executor 调用，直接测 _run_review 委托路径。
+    with patch("backend.orchestration.review.parse_assertions", return_value=[]), patch(
+        "backend.orchestration.review.run_lane_with_retry",
         new=AsyncMock(return_value={
             "status": "succeeded",
             "result": {"output": ""},
@@ -58,8 +58,8 @@ async def test_run_review_emits_task_review_event():
 async def test_zero_assertion_parse_triggers_fail():
     """0-parse → verdict=fail + summary 含'未产出'。"""
     dispatcher = _dispatcher()
-    with patch.object(dispatcher, "_parse_assertions", return_value=[]), patch(
-        "backend.orchestration.chat_dispatcher.run_lane_with_retry",
+    with patch("backend.orchestration.review.parse_assertions", return_value=[]), patch(
+        "backend.orchestration.review.run_lane_with_retry",
         new=AsyncMock(return_value={
             "status": "succeeded",
             "result": {"output": ""},
@@ -73,12 +73,12 @@ async def test_zero_assertion_parse_triggers_fail():
 @pytest.mark.asyncio()
 async def test_review_pass_with_fact_assertion():
     """[FACT] 类断言 → verdict=pass。"""
-    from backend.orchestration.chat_dispatcher import Assertion, AssertionType
+    from backend.orchestration.report_schema import Assertion, AssertionType
 
     dispatcher = _dispatcher()
     fake = [Assertion(type=AssertionType.FACT, statement="ok", confidence=0.9)]
-    with patch.object(dispatcher, "_parse_assertions", return_value=fake), patch(
-        "backend.orchestration.chat_dispatcher.run_lane_with_retry",
+    with patch("backend.orchestration.review.parse_assertions", return_value=fake), patch(
+        "backend.orchestration.review.run_lane_with_retry",
         new=AsyncMock(return_value={
             "status": "succeeded",
             "result": {"output": ""},
@@ -91,7 +91,7 @@ async def test_review_pass_with_fact_assertion():
 @pytest.mark.asyncio()
 async def test_review_fail_with_negative_evidence_high_confidence():
     """[NEGATIVE_EVIDENCE] confidence>=0.7 → verdict=fail。"""
-    from backend.orchestration.chat_dispatcher import Assertion, AssertionType
+    from backend.orchestration.report_schema import Assertion, AssertionType
 
     dispatcher = _dispatcher()
     fake = [
@@ -101,8 +101,8 @@ async def test_review_fail_with_negative_evidence_high_confidence():
             confidence=0.8,
         )
     ]
-    with patch.object(dispatcher, "_parse_assertions", return_value=fake), patch(
-        "backend.orchestration.chat_dispatcher.run_lane_with_retry",
+    with patch("backend.orchestration.review.parse_assertions", return_value=fake), patch(
+        "backend.orchestration.review.run_lane_with_retry",
         new=AsyncMock(return_value={
             "status": "succeeded",
             "result": {"output": ""},
