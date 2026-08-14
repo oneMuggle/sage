@@ -486,9 +486,16 @@ async def _execute_plan_lanes(
                     on_failure="retry", max_retries=settings.max_retries
                 ),
             )
-            task_registry.repo.update(task)
             scratch_dir = scratch_root_dir / lane.lane_id
             scratch_dir.mkdir(parents=True, exist_ok=True)
+            # P0-3 工作区隔离接线：SubagentRunner 只读
+            # task.parameters["goal"] / ["scratch_dir"]（chat_dispatcher.py
+            # 同款写法）。不写则子 agent 收空 user message 且拿不到 scratch
+            # 根，隔离静默失效。必须与 packet 一起落库，故 repo.update 挪到
+            # scratch 目录创建之后。
+            task.parameters["goal"] = goal
+            task.parameters["scratch_dir"] = str(scratch_dir)
+            task_registry.repo.update(task)
             task_registry.mark_running(lane.task_id)
             lane_registry.mark_running(lane.lane_id)
             executor = LaneExecutor(
@@ -530,8 +537,11 @@ async def _execute_plan_lanes(
         task = task_registry.get_task(lane.task_id)
         if task is not None and getattr(task, "result", None) is not None:
             outputs.append(str(task.result))
-        elif task is not None and getattr(task, "error", None):
-            outputs.append(f"[failed] {task.error}")
+        elif task is not None and task.parameters.get("error"):
+            # Task 无 .error 字段 —— mark_failed 把失败证据写进
+            # parameters["error"]（brief 原文 getattr(task, "error") 恒 None，
+            # 该分支死代码，失败 lane 的错误从不进聚合）。
+            outputs.append(f"[failed] {task.parameters['error']}")
     aggregated = "\n\n".join(outputs)
     if not aggregated:
         return None
