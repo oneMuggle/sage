@@ -296,7 +296,10 @@ class ChatDispatcher:
         # Wave 2 P1-4: 加 _reviewed 一次性守卫 —— 同一 run 只 review 一次，
         # 二次触发会撞 review 落库唯一约束（IntegrityError）；review 抛异常则
         # 复位 _reviewed，下次 dispatch 可重试。
-        if self.total_tasks and not self._reviewed:
+        # P2-9/A8 fix round 1 (2026-08-14): 取消后不再拉 reviewer —— 单批全量
+        # dispatch 中 cancel 时 plan_covered 已满足，跳过验证环避免浪费 token /
+        # 落 review / 给已取消 run 推 task_review 事件。
+        if self.total_tasks and not self._reviewed and not self._cancelled.is_set():
             if self._plan_by_id:
                 # 计划权威下：计划全部 task_id 已派发 → 触发验证环
                 plan_covered = set(self._plan_by_id).issubset(self._dispatched_plan_ids)
@@ -461,17 +464,22 @@ class ChatDispatcher:
         P0-1（进度可视化）：首部追加「已收到 X/N 子任务结果」摘要，
         让 conductor 看到还没齐时不要急着汇总。所有子任务完成时
         header 退化为单行声明，不展示"仍在并行运行"等干扰信息。
+        P2-9/A8 fix round 1 (2026-08-14)：cancelled 从 in_flight 扣除，
+        聚合头单列「已取消」—— 取消的任务不再显示为"仍在并行运行"，
+        避免误导 conductor 继续等待/重复 dispatch。
         """
         total = len(states)
         done = sum(1 for s in states if s.status == "done")
         failed = sum(1 for s in states if s.status == "failed")
-        in_flight = total - done - failed
+        cancelled = sum(1 for s in states if s.status == "cancelled")
+        in_flight = total - done - failed - cancelled
 
         if in_flight > 0:
             header = (
                 f"## 子任务进度摘要（部分完成）\n\n"
                 f"- 已收到 {done}/{total} 子任务结果"
                 + (f"（{failed} 失败）" if failed else "")
+                + (f"（{cancelled} 已取消）" if cancelled else "")
                 + f",{in_flight} 个仍在并行运行。\n"
                 f"- 提醒：在剩余 {in_flight} 个子任务未完成前，"
                 f"本次回答只能基于当前结果。"
@@ -482,6 +490,7 @@ class ChatDispatcher:
                 f"## 子任务进度摘要（全部完成）\n\n"
                 f"- 已收到 {done}/{total} 子任务结果"
                 + (f"（{failed} 失败）" if failed else "")
+                + (f"（{cancelled} 已取消）" if cancelled else "")
                 + "。\n\n"
             )
 

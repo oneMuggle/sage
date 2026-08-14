@@ -86,3 +86,79 @@ async def test_cancel_during_run_short_circuits_queued(tmp_path, monkeypatch):
     assert d._states["t2"].status == "cancelled"
     assert d._states["t2"].error == "cancelled by user"
     assert ran == ["t1"]  # t2 未调 _run_subagent
+
+
+@pytest.mark.asyncio()
+async def test_cancel_before_dispatch_skips_review_loop(tmp_path, monkeypatch):
+    """取消后验证环不触发：plan_covered 已满足也不拉 reviewer。
+
+    回归 A8 fix round 1 —— 单批全量 dispatch 时 _next_task_index 覆盖
+    total_tasks → plan_covered=True；修复前取消后仍会调 _run_review 拉
+    reviewer（浪费 token + 落 review + 给已取消 run 推 task_review 事件）。
+    """
+    _init_tmp_db(tmp_path, monkeypatch)
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=asyncio.Queue(),
+        run_id="orch-test",
+        total_tasks=1,
+    )
+    ran = []
+    review_calls = []
+
+    async def fake_run(state):
+        ran.append(state.task_id)
+
+    async def fake_review(aggregated):
+        review_calls.append(aggregated)
+        return {"verdict": "pass", "block": "\n\n[复核通过]", "assertion_count": 0}
+
+    d._run_subagent = fake_run
+    d._run_review = fake_review
+    d.cancel()
+    # 缺 task_id → 自分配路径 → _next_task_index=1 覆盖 total_tasks=1 → plan_covered=True。
+    # 取消后 review 门必须拦下（不触发 _run_review）。
+    await d.dispatch([{"agent_id": "r", "goal": "g"}])
+    assert ran == []  # queued 全转 cancelled，未调 _run_subagent
+    assert review_calls == []  # 取消后绝不拉 reviewer
+    assert d._reviewed is False  # 门被跳过，未置位一次性守卫
+
+
+def test_aggregate_in_flight_excludes_cancelled():
+    """_aggregate 把 cancelled 从 in_flight 扣除，聚合头单列「已取消」。
+
+    回归 A8 fix round 1 —— 修复前 cancelled 计入 in_flight，取消的任务仍
+    显示"仍在并行运行"，误导 conductor 继续等待/重复 dispatch。
+    """
+    from backend.orchestration.chat_dispatcher import ChatTaskState
+
+    d = ChatDispatcher(stream_id="s1", entry_queue=asyncio.Queue(), run_id="orch-test")
+    terminal = [
+        ChatTaskState(task_id="t1", agent_id="r", goal="g1", status="done", output="ok"),
+        ChatTaskState(
+            task_id="t2",
+            agent_id="r",
+            goal="g2",
+            status="cancelled",
+            error="cancelled by user",
+        ),
+        ChatTaskState(task_id="t3", agent_id="r", goal="g3", status="failed", error="boom"),
+    ]
+    result = d._aggregate(terminal)
+    assert "仍在并行运行" not in result  # in_flight=0 → 全部完成
+    assert "（1 已取消）" in result  # 聚合头单列已取消
+    assert "[状态: cancelled]" in result  # cancelled 子任务块仍展示
+
+    partial = [
+        ChatTaskState(task_id="t1", agent_id="r", goal="g1", status="running"),
+        ChatTaskState(
+            task_id="t2",
+            agent_id="r",
+            goal="g2",
+            status="cancelled",
+            error="cancelled by user",
+        ),
+    ]
+    result2 = d._aggregate(partial)
+    assert ",1 个仍在并行运行" in result2  # in_flight=1（仅 running），cancelled 不计
+    assert "（1 已取消）" in result2
