@@ -1786,6 +1786,31 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         "不要提前给出结论。"
                     )
                     # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
+                    # Wave 2 P1-4: 首次 dispatch 前把 run + plan 落库,供 resume 端点重建。
+                    # 失败降级（logger.warning）,绝不阻塞聊天。
+                    try:
+                        if dispatcher is not None and hasattr(dispatcher, "init_orch_run"):
+                            dispatcher.init_orch_run(
+                                session_id=data.session_id,
+                                plan_json=json.dumps(
+                                    {
+                                        "tasks": [
+                                            {
+                                                "task_id": f"t{i}",
+                                                "agent_id": t.parameters.get(
+                                                    "agent_hint", "primary"
+                                                ),
+                                                "goal": t.description or t.name,
+                                            }
+                                            for i, t in enumerate(plan_tasks, 1)
+                                        ],
+                                        "reasoning": plan.reasoning if plan else "",
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            )
+                    except Exception as exc:  # noqa: BLE001 — 降级铁律
+                        logger.warning("dispatcher.init_orch_run 失败: %s", exc)
                     await entry.queue.put(
                         {
                             "state": "task_plan",

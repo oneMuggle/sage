@@ -135,6 +135,13 @@ class ChatDispatcher:
         # 调用都从 t1 重编号，与 producer 计划的全局编号 t1..tN 错位 —— 前端
         # 按 task_id 合并 status，计划 t4-t6 永远收不到更新（UI 恒显 3/6）。
         self._next_task_index = 0
+        # Wave 2 P1-4: repo 复用 LaneRepository 模式（self.db = get_database()）。
+        # 构造不接 db_path —— 测试经 SAGE_DB_PATH env + 重置 _db 单例切 tmp DB。
+        from backend.data.orch_run_repo import OrchRunRepository
+        from backend.data.orch_task_repo import OrchTaskRepository
+
+        self._orch_run_repo = OrchRunRepository()
+        self._orch_task_repo = OrchTaskRepository()
 
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
         """并行执行子任务，返回聚合 markdown（截断后进 conductor 上下文）。
@@ -284,6 +291,42 @@ class ChatDispatcher:
             self.entry_queue.put_nowait(event)
         except Exception:  # noqa: BLE001
             logger.debug("task_status 推送失败（队列满/关闭），忽略")
+        # Wave 2 P1-4: 状态迁移同步写库。失败在 _persist_task_state 内部降级，
+        # 绝不阻塞聊天进度推送。
+        self._persist_task_state(state)
+
+    def init_orch_run(self, session_id: str, plan_json: str) -> None:
+        """由 caller (legacy_routes) 在第一次 dispatch 前调一次。失败降级。"""
+        try:
+            from backend.data.orch_run_repo import OrchRun
+
+            self._orch_run_repo.upsert(OrchRun(
+                run_id=self.run_id,
+                session_id=session_id or "",
+                status="running",
+                created_at=int(time.time() * 1000),
+                plan_json=plan_json,
+            ))
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.warning("orch_run 落库失败 run_id=%s err=%s", self.run_id, exc)
+
+    def _persist_task_state(self, state: ChatTaskState) -> None:
+        """状态迁移同步写库；写失败降级（logger.warning，绝不阻塞聊天）。"""
+        try:
+            self._orch_task_repo.upsert_state(
+                task_id=state.task_id,
+                run_id=self.run_id,
+                agent_id=state.agent_id,
+                goal=state.goal,
+                status=state.status,
+                retry_count=state.retry_count,
+                error=state.error,
+                output_preview=self._preview(state),
+                started_at=int(state.started_at * 1000) if state.started_at else None,
+                finished_at=int(state.finished_at * 1000) if state.finished_at else None,
+            )
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.warning("orch_task 落库失败 task_id=%s err=%s", state.task_id, exc)
 
     def _preview(self, state: ChatTaskState) -> Optional[str]:
         """done → output 前 500 字；failed → error 前 500 字。"""
