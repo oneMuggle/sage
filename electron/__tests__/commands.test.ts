@@ -518,4 +518,33 @@ describe('agent_* IPC commands', () => {
     expect(route.path({ id: 'x' })).toBe('/api/v1/agents/x/toggle');
     expect(route.body?.({ id: 'x', enabled: false })).toEqual({ enabled: false });
   });
+
+  // ===== Wave 2 P1-4/P1-5: orchestration run lifecycle (2026-08-14) =====
+  it('orchestration_list_runs is GET /api/v1/orch/runs with limit param', () => {
+    const route = COMMAND_ROUTES['orchestration_list_runs'];
+    expect(route.method).toBe('GET');
+    expect(route.path({ params: { limit: 5 } })).toBe('/api/v1/orch/runs?limit=5');
+    expect(route.path({})).toBe('/api/v1/orch/runs?limit=50');
+  });
+
+  it('orchestration_get_run is GET /api/v1/orch/runs/{run_id} (url-encoded)', () => {
+    const route = COMMAND_ROUTES['orchestration_get_run'];
+    expect(route.method).toBe('GET');
+    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc');
+    expect(route.path({ run_id: 'a/b' })).toBe('/api/v1/orch/runs/a%2Fb');
+  });
+
+  it('orchestration_resume_run is POST /api/v1/orch/runs/{run_id}/resume', () => {
+    const route = COMMAND_ROUTES['orchestration_resume_run'];
+    expect(route.method).toBe('POST');
+    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc/resume');
+  });
+
+  it('orchestration_update_plan is POST /api/v1/orch/runs/{run_id}/plan with plan body', () => {
+    const route = COMMAND_ROUTES['orchestration_update_plan'];
+    expect(route.method).toBe('POST');
+    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc/plan');
+    const plan = [{ task_id: 't1', agent_id: 'primary', goal: 'g' }];
+    expect(route.body?.({ run_id: 'orch-abc', plan })).toEqual({ plan });
+  });
 });
