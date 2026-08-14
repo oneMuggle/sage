@@ -16,7 +16,9 @@ export type AgentState =
   | 'task_plan'
   | 'task_status'
   // 进度可视化 P0-2 (2026-08-12): 整盘概览,见 types.ts TaskProgressEvent。
-  | 'task_progress';
+  | 'task_progress'
+  // Wave 2 (2026-08-14): reviewer 复核结论事件,见 types.ts TaskReviewEvent。
+  | 'task_review';
 
 // 窄类型事件接口 —— useChat taskBoard 状态机的数据类型。
 // AgentState / AgentEvent（宽松字段）见 types.ts —— 双处保持一致。
@@ -56,6 +58,19 @@ export interface TaskProgressEvent {
   failed: number;
 }
 
+/** Wave 2 (2026-08-14): reviewer 复核结论事件,与 types.ts TaskReviewEvent 同形。 */
+export type ReviewVerdict = 'pass' | 'fail';
+
+export interface TaskReviewEvent {
+  state: 'task_review';
+  run_id: string;
+  task_id: string;
+  reviewer_id: string;
+  verdict: ReviewVerdict;
+  assertion_count: number;
+  summary: string;
+}
+
 export interface ToolCallRequestFE {
   id: string;
   type: 'function';
@@ -93,6 +108,11 @@ export interface AgentEvent {
   running?: number;
   queued?: number;
   failed?: number;
+  // Wave 2 (2026-08-14): task_review 事件 4 可选字段（仅 state='task_review' 时携带）。
+  reviewer_id?: string;
+  verdict?: ReviewVerdict;
+  assertion_count?: number;
+  summary?: string;
 }
 
 export async function* parseNDJSONStream(
