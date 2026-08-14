@@ -25,6 +25,7 @@ from backend.orchestration.events import EventRecorder
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import Lane, RecoveryPolicy, Task, TaskPacket
+from backend.orchestration.orch_settings import OrchSettings, load_orch_settings
 from backend.orchestration.report_schema import Assertion, AssertionType
 from backend.orchestration.subagent_runner import SubagentRunner, run_lane_with_retry
 from backend.orchestration.task_registry import TaskRegistry
@@ -122,11 +123,15 @@ class ChatDispatcher:
         task_registry: Optional[Any] = None,
         event_recorder: Optional[EventRecorder] = None,
         total_tasks: Optional[int] = None,
+        settings: Optional[OrchSettings] = None,
     ) -> None:
         self.stream_id = stream_id
         self.entry_queue = entry_queue
         self.run_id = run_id
         self.llm_config = llm_config
+        # P2-9 (2026-08-14): 执行参数配置化 —— 模块常量改实例引用。
+        # 不传 → load_orch_settings() 从持久化 app_settings 回落默认。
+        self.settings = settings or load_orch_settings()
         # P0-1：子任务经 LaneExecutor 执行（lane 镜像 + RecoveryPolicy 重试）。
         self.lane_registry = lane_registry or LaneRegistry()
         self.task_registry = task_registry or TaskRegistry()
@@ -134,7 +139,7 @@ class ChatDispatcher:
         # P0-2：总任务数门控 —— 达到 plan 总量后跑 reviewer 验证环（Task 5）。
         self.total_tasks = total_tasks
         self._states: Dict[str, ChatTaskState] = {}
-        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_SUBAGENTS)
+        self._semaphore = asyncio.Semaphore(self.settings.max_concurrent_subagents)
         # F1 (2026-08-12): run 内全局递增的 task 计数器。修复前每次 dispatch
         # 调用都从 t1 重编号，与 producer 计划的全局编号 t1..tN 错位 —— 前端
         # 按 task_id 合并 status，计划 t4-t6 永远收不到更新（UI 恒显 3/6）。
@@ -263,7 +268,9 @@ class ChatDispatcher:
             },
             packet=TaskPacket(
                 objective=state.goal,
-                recovery_policy=RecoveryPolicy(on_failure="retry", max_retries=2),
+                recovery_policy=RecoveryPolicy(
+                    on_failure="retry", max_retries=self.settings.max_retries
+                ),
             ),
         )
         self.task_registry.create_task(task)
@@ -290,10 +297,10 @@ class ChatDispatcher:
         iterations = 0
         while result.get("status") == "retrying":
             iterations += 1
-            if iterations >= MAX_LANE_ITERATIONS:
+            if iterations >= self.settings.max_lane_iterations:
                 raise RuntimeError(
                     f"MAX_ITERATIONS_EXCEEDED: retry loop exceeded "
-                    f"max_iterations={MAX_LANE_ITERATIONS}"
+                    f"max_iterations={self.settings.max_lane_iterations}"
                 )
             result = await run_lane_with_retry(executor, lane, state.agent_id)
 
@@ -308,7 +315,7 @@ class ChatDispatcher:
     def _scratch_dir_for(self, state: ChatTaskState) -> Path:
         """子任务隔离目录：``<data_dir>/orch_scratch/<run_id>/<task_id>``。"""
         data_dir = Path(get_database().db_path).parent
-        return data_dir / SCRATCH_ROOT / self.run_id / state.task_id
+        return data_dir / self.settings.scratch_root / self.run_id / state.task_id
 
     def _emit_task_status(self, state: ChatTaskState) -> None:
         """推 task_status 事件；队列满/关闭静默降级（进度尽力而为）。"""
@@ -415,19 +422,19 @@ class ChatDispatcher:
         for state in states:
             header_item = f"## 子任务 {state.task_id}（{state.agent_id}）"
             if state.status == "done" and state.output:
-                body = state.output[:MAX_SUBAGENT_RESULT_CHARS]
+                body = state.output[: self.settings.max_subagent_result_chars]
                 blocks.append(f"{header_item}\n\n{body}")
             elif state.status == "failed":
-                err = (state.error or "未知错误")[:MAX_SUBAGENT_RESULT_CHARS]
+                err = (state.error or "未知错误")[: self.settings.max_subagent_result_chars]
                 blocks.append(f"{header_item}\n\n[失败] {err}")
             else:
                 blocks.append(f"{header_item}\n\n[状态: {state.status}]")
         result = header + "\n\n".join(blocks)
         # F3 (2026-08-12): maxItems 放宽到 8 后单批聚合体积翻倍，整体截断兜底
         # （保留头部进度摘要 + 前部子任务），防一次性灌爆 conductor 上下文。
-        if len(result) > MAX_AGGREGATE_CHARS:
+        if len(result) > self.settings.max_aggregate_chars:
             result = (
-                result[:MAX_AGGREGATE_CHARS]
+                result[: self.settings.max_aggregate_chars]
                 + "\n\n[聚合结果超过上限，已截断；详见各子任务输出]"
             )
         return result

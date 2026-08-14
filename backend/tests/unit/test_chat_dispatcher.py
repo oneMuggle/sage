@@ -18,6 +18,7 @@ from backend.orchestration.chat_dispatcher import (
     MAX_CONCURRENT_SUBAGENTS,
     ChatDispatcher,
 )
+from backend.orchestration.orch_settings import OrchSettings
 
 _DUMMY_PROFILE = {"system_prompt": "你是测试子 agent", "tools": []}
 
@@ -322,9 +323,30 @@ async def test_dispatch_no_review_when_total_tasks_unset():
         "backend.orchestration.subagent_runner.SageAgent",
         return_value=_FakeSageAgent(results=["研究结果"]),
     ):
-        dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-plain")
+        dispatcher = ChatDispatcher(
+            stream_id="s1", entry_queue=queue, run_id="orch-plain"
+        )
         aggregated = await dispatcher.dispatch(
             [{"agent_id": "researcher", "goal": "调研量化交易"}]
         )
 
     assert "## 复核结果" not in aggregated
+
+
+# P2-9 (2026-08-14) — dispatcher 注入 OrchSettings：构造注入覆盖默认；缺省回落。
+def test_dispatcher_injects_settings():
+    """构造传入 settings → 实例用它（semaphore/retry/scratch）。"""
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=asyncio.Queue(),
+        run_id="orch-test",
+        settings=OrchSettings(max_concurrent_subagents=1, scratch_root="custom"),
+    )
+    assert d._semaphore._value == 1
+    assert d.settings.scratch_root == "custom"
+
+
+def test_dispatcher_defaults_settings_when_omitted():
+    """不传 settings → load_orch_settings() 回落默认。"""
+    d = ChatDispatcher(stream_id="s1", entry_queue=asyncio.Queue(), run_id="orch-test")
+    assert d.settings.max_concurrent_subagents == 4

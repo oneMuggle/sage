@@ -55,6 +55,7 @@ from backend.office.workspace_errors import (
     WorkspaceSessionNotFoundError,
 )
 from backend.orchestration.chat_dispatcher import _classify_orchestration_mode
+from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs, get_scheduler
 from backend.skills.draft_store import get_skill_draft_store
 from backend.skills.loader import get_skill_loader
@@ -1763,6 +1764,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         run_id=run_id,
                         llm_config=llm_config,
                         total_tasks=len(plan_tasks),
+                        settings=load_orch_settings(),
                     )
                     agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
                     if (
