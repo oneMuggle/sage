@@ -333,7 +333,12 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // / plan 更新,对应 backend/api/orch_routes.py 的 /api/v1/orch/runs 4 端点。
   orchestration_list_runs: {
     method: 'GET',
-    path: (a) => `/api/v1/orch/runs?limit=${a?.params?.limit ?? 50}`,
+    path: (a) => {
+      // params 显式 cast（tsconfig.electron.json 下 a.params 推导为 '{}'，
+      // 直接 .limit 报 TS2339）—— 与 orchestration_list_lanes 同构。
+      const params = (a?.params as Record<string, unknown>) ?? {};
+      return `/api/v1/orch/runs?limit=${params.limit ?? 50}`;
+    },
   },
   orchestration_get_run: {
     method: 'GET',
