@@ -21,7 +21,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Optional, Set, Union
+from typing import Any, Dict, Optional, Set, Union
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -203,6 +203,11 @@ class ChatRequest(BaseModel):
     # Pydantic 默认值只在字段缺失时生效，显式 null 仍按类型校验 →
     # 不加 Optional 会被 422 拒绝。业务层 `data.orchestration_mode or "auto"` 已兜底。
     orchestration_mode: Optional[str] = "auto"
+
+    # Wave 3 A10 (2026-08-14): resume 恢复流 —— plan_override 非空时跳过 LLM
+    # 拆解，直接用存储计划建 dispatcher；run_id 复用 resume 返回的 new_run_id。
+    plan_override: Optional[List[Dict[str, Any]]] = None
+    run_id: Optional[str] = None
 
 
 class MessageResponse(BaseModel):
@@ -1725,15 +1730,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 build_llm_client_from_settings,
             )
 
-            try:
-                mode = await _classify_orchestration_mode(
-                    data.message,
-                    data.orchestration_mode or "auto",
-                    llm_client=build_llm_client_from_settings(),
-                )
-            except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
-                logger.warning("编排语义判定失败，降级 single: %s", exc)
-                mode = "single"
+            # A10 (2026-08-14): plan_override 非空 → 视为 force_multi，跳过语义判定。
+            if data.plan_override:
+                mode = "multi"
+            else:
+                try:
+                    mode = await _classify_orchestration_mode(
+                        data.message,
+                        data.orchestration_mode or "auto",
+                        llm_client=build_llm_client_from_settings(),
+                    )
+                except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
+                    logger.warning("编排语义判定失败，降级 single: %s", exc)
+                    mode = "single"
             run_id: Optional[str] = None
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import (
@@ -1745,47 +1754,78 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 from backend.orchestration.team_registry import TeamRegistry
                 from backend.tools.subagent_tool import DispatchSubagentsTool
 
-                # P2-8 (2026-08-14): orchestration_mode=template:<id> → 确定性模板拆解。
-                orchestration_mode = data.orchestration_mode or "auto"
-                template_id = (
-                    orchestration_mode.split(":", 1)[1]
-                    if orchestration_mode.startswith("template:")
-                    else None
-                )
-                try:
-                    if template_id is not None:
-                        plan = await Planner(
-                            task_registry=TaskRegistry(),
-                            team_registry=TeamRegistry(),
-                            llm_client=build_llm_client_from_settings(),
-                        ).decompose_from_template(template_id, data.message)
-                    else:
-                        plan = await Planner(
-                            task_registry=TaskRegistry(),
-                            team_registry=TeamRegistry(),
-                            llm_client=build_llm_client_from_settings(),
-                        ).decompose_request(data.message)
-                    plan_tasks = list(plan.tasks if plan else [])
-                except Exception as exc:  # noqa: BLE001 — 模板/规划失败降级 single
-                    if template_id is not None:
-                        logger.warning(
-                            "编排模板 %s 拆解失败，降级 single: %s", template_id, exc
-                        )
-                    else:
-                        logger.warning("编排规划失败，降级 single: %s", exc)
-                    mode = "single"
-                    plan_tasks = []
-                if len(plan_tasks) <= 1:
-                    # LLM 没拆开（或降级单任务）→ 视为没开编排
-                    mode = "single"
+                if data.plan_override:
+                    # A10 (2026-08-14): override 路径 —— items 自带 task_id，
+                    # 直接透传，不重枚举；run_id 复用 resume 返回的 new_run_id。
+                    plan_tasks = data.plan_override
+                    run_id = data.run_id or f"orch-{uuid.uuid4()}"
                 else:
+                    # P2-8 (2026-08-14): orchestration_mode=template:<id> → 确定性模板拆解。
+                    orchestration_mode = data.orchestration_mode or "auto"
+                    template_id = (
+                        orchestration_mode.split(":", 1)[1]
+                        if orchestration_mode.startswith("template:")
+                        else None
+                    )
+                    try:
+                        if template_id is not None:
+                            plan = await Planner(
+                                task_registry=TaskRegistry(),
+                                team_registry=TeamRegistry(),
+                                llm_client=build_llm_client_from_settings(),
+                            ).decompose_from_template(template_id, data.message)
+                        else:
+                            plan = await Planner(
+                                task_registry=TaskRegistry(),
+                                team_registry=TeamRegistry(),
+                                llm_client=build_llm_client_from_settings(),
+                            ).decompose_request(data.message)
+                        plan_tasks = list(plan.tasks if plan else [])
+                    except Exception as exc:  # noqa: BLE001 — 模板/规划失败降级 single
+                        if template_id is not None:
+                            logger.warning(
+                                "编排模板 %s 拆解失败，降级 single: %s", template_id, exc
+                            )
+                        else:
+                            logger.warning("编排规划失败，降级 single: %s", exc)
+                        mode = "single"
+                        plan_tasks = []
                     run_id = f"orch-{uuid.uuid4()}"
+                if len(plan_tasks) <= 1 and not data.plan_override:
+                    # LLM 没拆开（或降级单任务）→ 视为没开编排；
+                    # override 单任务仍保持 multi（恢复流尊重用户指定计划）。
+                    mode = "single"
+                if mode == "multi":
+                    # 归一为 {task_id, agent_id, goal, depends_on} 列表 —— 下游
+                    # plan_block / init / task_plan 事件同构。override 路径透传
+                    # 自带 task_id；decompose 路径从 Task 对象重新编号 t1..tN。
+                    plan_items: List[Dict[str, Any]]
+                    if data.plan_override:
+                        plan_items = [
+                            {
+                                "task_id": str(it["task_id"]),
+                                "agent_id": str(it.get("agent_id", "primary")),
+                                "goal": str(it.get("goal", "")),
+                                "depends_on": list(it.get("depends_on") or []),
+                            }
+                            for it in data.plan_override
+                        ]
+                    else:
+                        plan_items = [
+                            {
+                                "task_id": f"t{i}",
+                                "agent_id": t.parameters.get("agent_hint", "primary"),
+                                "goal": t.description or t.name,
+                                "depends_on": list(t.blocked_by),
+                            }
+                            for i, t in enumerate(plan_tasks, 1)
+                        ]
                     dispatcher = ChatDispatcher(
                         stream_id=stream_id,
                         entry_queue=entry.queue,
                         run_id=run_id,
                         llm_config=llm_config,
-                        total_tasks=len(plan_tasks),
+                        total_tasks=len(plan_items),
                         settings=load_orch_settings(),
                     )
                     # P2-9 (2026-08-14): 进程内注册表登记 —— 长连接期间 run 级
@@ -1801,9 +1841,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 注: system_content 已在插入点之前由 build_system_base()
                     # 赋值（L1598），这里只追加计划块，不再重新赋值（否则覆盖）。
                     plan_block = "\n".join(
-                        f"- {i}. [{t.parameters.get('agent_hint', 'primary')}] "
-                        f"{t.name}: {t.description}"
-                        for i, t in enumerate(plan_tasks, 1)
+                        f"- {i}. [{it['agent_id']}] {it['goal']}"
+                        for i, it in enumerate(plan_items, 1)
                     )
                     system_content += (
                         "\n\n以下为已确认的任务计划，请调用 dispatch_subagents "
@@ -1815,7 +1854,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         # LLM 可能误以为全部完成而提前总结。这里显式给出总数 N，
                         # 要求必须等到 N 个全部有结果才输出最终汇总。
                         + "\n\n必须执行完计划中的全部"
-                        + str(len(plan_tasks))
+                        + str(len(plan_items))
                         + " 个子任务，等到所有子任务都返回结果后，才能输出最终汇总。"
                         "若本次 dispatch 只执行了部分子任务，请继续调用工具执行剩余任务，"
                         "不要提前给出结论。"
@@ -1823,29 +1862,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
                     # Wave 2 P1-4: 首次 dispatch 前把 run + plan 落库,供 resume 端点重建。
                     # 失败降级（logger.warning）,绝不阻塞聊天。
+                    # A10: reasoning 捕获 —— override 路径 plan 未定义 → 常量
+                    # "plan_override"；decompose 路径 plan.reasoning（可为空串）。
+                    # 避免 override 路径直接引用未定义的 plan 抛 NameError。
+                    reasoning = (
+                        "plan_override"
+                        if data.plan_override
+                        else (plan.reasoning if plan else "")
+                    )
                     try:
                         if dispatcher is not None and hasattr(dispatcher, "init_orch_run"):
                             dispatcher.init_orch_run(
                                 session_id=data.session_id,
                                 plan_json=json.dumps(
-                                    {
-                                        "tasks": [
-                                            {
-                                                "task_id": f"t{i}",
-                                                "agent_id": t.parameters.get(
-                                                    "agent_hint", "primary"
-                                                ),
-                                                "goal": t.description or t.name,
-                                                # P1-6 (2026-08-14): 依赖透传。
-                                                # 落库 plan_json 与 task_plan 事件
-                                                # 保持同构,resume 重建的 run 才能
-                                                # 渲染依赖关系。
-                                                "depends_on": list(t.blocked_by),
-                                            }
-                                            for i, t in enumerate(plan_tasks, 1)
-                                        ],
-                                        "reasoning": plan.reasoning if plan else "",
-                                    },
+                                    {"tasks": plan_items, "reasoning": reasoning},
                                     ensure_ascii=False,
                                 ),
                                 # Wave 3 A9: resume 恢复流逐字重发原始请求。
@@ -1857,19 +1887,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         {
                             "state": "task_plan",
                             "run_id": run_id,
-                            "plan": [
-                                {
-                                    "task_id": f"t{i}",
-                                    "agent_id": t.parameters.get(
-                                        "agent_hint", "primary"
-                                    ),
-                                    "goal": t.description or t.name,
-                                    # P1-6 (2026-08-14): 依赖透传 —— 前端可渲染
-                                    # 任务依赖关系（TaskTreeSection 缩进）。
-                                    "depends_on": list(t.blocked_by),
-                                }
-                                for i, t in enumerate(plan_tasks, 1)
-                            ],
+                            "plan": plan_items,
                         }
                     )
                     # 进度可视化 P0-2 (2026-08-12): task_plan 之后立即推
@@ -1881,10 +1899,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         {
                             "state": "task_progress",
                             "run_id": run_id,
-                            "total": len(plan_tasks),
+                            "total": len(plan_items),
                             "done": 0,
                             "running": 0,
-                            "queued": len(plan_tasks),
+                            "queued": len(plan_items),
                             "failed": 0,
                         }
                     )

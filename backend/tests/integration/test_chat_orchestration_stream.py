@@ -572,3 +572,61 @@ async def test_template_mode_decomposes_via_deterministic_template():
     MockPlanner.return_value.decompose_from_template.assert_awaited_once_with(
         "research-write", "我需要学习量化交易并整理操作手册"
     )
+
+
+"""Wave 3 A10 — plan_override 跳过 LLM 拆解，task_id 沿用不重枚举。"""
+
+
+@pytest.mark.asyncio()
+async def test_override_path_skips_decompose_and_preserves_task_id():
+    """A10: POST /chat/stream 带 plan_override + run_id → 跳过 decompose，
+    task_plan 首事件沿用 override task_id、total_tasks==1、run_id 复用。"""
+    registered_tools: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="恢复执行完成")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            events = await _stream_events(
+                ac,
+                {
+                    "session_id": "s",
+                    "message": "继续执行恢复任务",
+                    "plan_override": [
+                        {"task_id": "t1", "agent_id": "researcher", "goal": "G"}
+                    ],
+                    "run_id": "orch-reused",
+                },
+            )
+
+    states = [e["state"] for e in events]
+    assert "task_plan" in states, f"override 必出 task_plan，实际 events={states}"
+    plan_event = next(e for e in events if e["state"] == "task_plan")
+    # run_id 复用 resume 返回的 new_run_id
+    assert plan_event["run_id"] == "orch-reused"
+    # task_id 沿用 override 自带值，不重枚举
+    assert len(plan_event["plan"]) == 1
+    assert plan_event["plan"][0]["task_id"] == "t1"
+    assert plan_event["plan"][0]["agent_id"] == "researcher"
+    assert plan_event["plan"][0]["goal"] == "G"
+    assert plan_event["plan"][0]["depends_on"] == []
+    # task_progress total 用 len(plan_items)==1
+    tp_event = next(e for e in events if e["state"] == "task_progress")
+    assert tp_event["run_id"] == "orch-reused"
+    assert tp_event["total"] == 1
+    assert tp_event["queued"] == 1
+    # override 也算 multi：dispatch 工具必注册
+    assert "dispatch_subagents" in registered_tools
