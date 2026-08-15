@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
-import { sessionApi, learnApi, type ChatOfficeRef } from '../shared/api';
+import { sessionApi, learnApi, type ChatOfficeRef, type TaskPlanItem } from '../shared/api';
+import { orchRunClient } from '../shared/api/orchRunClient';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
@@ -38,6 +39,8 @@ export function Chat() {
     streamingState, // P2: 当前流式状态
     streamingToolCalls, // 右侧面板 Progress: 实时流式工具调用
     taskBoard, // Multi-Agent Orchestration: 编排任务板
+    resumeOrchestration, // Wave 3: resume 恢复流入口（计划卡恢复按钮）
+    clearTaskBoard, // Wave 3: 取消执行后清空任务板
   } = useChat();
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
 
@@ -200,6 +203,16 @@ export function Chat() {
     }
   };
 
+  // Wave 3 C3 (2026-08-15): 计划卡"开始执行" → updatePlan 落库后由后端派发。
+  // 409（派发竞态）→ 保持编辑态，TaskBoard 首 task_status 事件会锁。
+  const handlePlanStart = async (runId: string, plan: TaskPlanItem[]) => {
+    try {
+      await orchRunClient.updatePlan(runId, plan);
+    } catch {
+      // 409（派发竞态）→ 保持编辑态，TaskBoard 首 status 事件会锁
+    }
+  };
+
   // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
   if (error) {
     return (
@@ -297,6 +310,13 @@ export function Chat() {
         isLoading={isLoading}
         sessionId={currentSessionId}
         taskBoard={taskBoard ?? null}
+        onResumeRun={(runId) => {
+          void resumeOrchestration(runId);
+        }}
+        onCancelExecution={(runId) => {
+          void orchRunClient.cancelRun(runId).then(() => clearTaskBoard());
+        }}
+        onPlanStart={handlePlanStart}
       />
     </div>
   );

@@ -6,6 +6,12 @@ vi.mock('../../../features/artifacts/useArtifacts', () => ({
   useArtifacts: vi.fn(() => ({ artifacts: [], loading: false, refresh: vi.fn() })),
 }));
 
+// C3 (2026-08-15): RightPanel → ProgressSection → PlanCardList 渲染链挂载即调
+// orchRunClient.listRuns();mock 掉避免真实 IPC 抛错。
+vi.mock('../../../shared/api/orchRunClient', () => ({
+  orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },
+}));
+
 import { RightPanel } from '../RightPanel';
 
 const props = {
