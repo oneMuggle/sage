@@ -110,7 +110,12 @@ await sendMessage(content, undefined, undefined, 'force_multi', {
 - **NULL original_request**：占位文案作为 user 消息 + toast.info 提示。
 - 前端 vitest 覆盖 3 项全场景；后端无改动，回归跑一遍确认不破坏。
 
-## 7. 不在范围内
+## 7. 实施后归档
+
+三项实现 + 测试落地后，更新 `docs/technical/42-chat-multi-agent-orchestration.md` §13.7：
+把 3 项已知限制标记为已完成（沿用 M4 的 `~~strike~~ ✅` 格式），删除本 plan 文件。
+
+## 8. 不在范围内
 
 - ❌ 后端 update_plan 幂等增强（已安全）
 - ❌ C4 之外的编排功能新增
