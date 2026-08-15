@@ -9,8 +9,10 @@
  * Wave 3 C4 (2026-08-15) —— 交互接线：
  * - 开始执行：内部先 orchRunClient.updatePlan(runId, items) 落库，
  *   成功后本地锁定（locallyLocked）+ onStart(items)。
- * - 取消语义随 locked：未派发 → onCancel()（仅前端清理）；
- *   已派发 → orchRunClient.cancelRun(runId) + onCancelled()。
+ * - 取消（C4+H1, 2026-08-15）：任意阶段都委托上层 onCancel()，
+ *   由 Chat.handleCancelRun 统一调 cancelRun（未派发时后端置
+ *   cancelled + dispatcher.cancel() 阻止自动派发，避免空转烧 token）
+ *   + 清空 taskBoard；取消失败也照常清理（.catch 兜底）。
  */
 import { useState } from 'react';
 
@@ -21,19 +23,11 @@ interface PlanCardProps {
   runId: string;
   plan: TaskPlanItem[];
   locked: boolean; // 派发后转 true
-  onCancel: () => void;
+  onCancel: () => void; // C4+H1：任意阶段取消 → 委托上层统一 cancelRun + 清空 taskBoard
   onStart: (updatedPlan: TaskPlanItem[]) => void;
-  onCancelled?: () => void; // C4：取消执行成功后的回调（前端清空 taskBoard）
 }
 
-export function PlanCard({
-  runId,
-  plan: initialPlan,
-  locked,
-  onCancel,
-  onStart,
-  onCancelled,
-}: PlanCardProps) {
+export function PlanCard({ runId, plan: initialPlan, locked, onCancel, onStart }: PlanCardProps) {
   const [items, setItems] = useState(initialPlan);
   // C4：开始执行落库成功后的本地锁定（后端首 status 事件到达前防重复点击）。
   const [locallyLocked, setLocallyLocked] = useState(false);
@@ -59,12 +53,10 @@ export function PlanCard({
     onStart(items);
   };
 
+  // C4+H1 (2026-08-15): 任意阶段（未派发/已锁定）取消都委托上层 onCancel ——
+  // Chat.handleCancelRun 统一调 cancelRun（阻止后端自动派发）+ 清空 taskBoard。
   const handleCancel = () => {
-    if (effectiveLocked) {
-      void orchRunClient.cancelRun(runId).then(() => onCancelled?.());
-    } else {
-      onCancel();
-    }
+    onCancel();
   };
 
   return (

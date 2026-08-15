@@ -2,8 +2,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-// Wave 3 C4 (2026-08-15): PlanCard handleStart/handleCancel 内部调
-// orchRunClient.updatePlan/cancelRun;mock 掉避免真实 IPC 抛错。
+// Wave 3 C4+H1 (2026-08-15): PlanCard handleStart 内部调
+// orchRunClient.updatePlan;取消语义统一委托上层 onCancel
+// （Chat.handleCancelRun 负责 cancelRun + 清空 taskBoard），
+// 故本文件断言"不调 cancelRun + onCancel 被调"。
 vi.mock('../../../shared/api/orchRunClient', () => ({
   orchRunClient: {
     cancelRun: vi.fn(),
@@ -74,11 +76,11 @@ describe('PlanCard (P1-5)', () => {
   });
 });
 
-// ===== Wave 3 C4 (2026-08-15): 交互接线 —— 开始执行落库 + 取消语义随 locked =====
-describe('PlanCard 接线 (Wave 3 C4)', () => {
+// ===== Wave 3 C4+H1 (2026-08-15): 交互接线 —— 开始执行落库 + 取消统一委托上层 =====
+describe('PlanCard 接线 (Wave 3 C4+H1)', () => {
   const plan = [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }];
 
-  it('未派发：取消 → onCancel（不调后端）', () => {
+  it('未派发：取消 → onCancel 委托（不调后端）', () => {
     const onCancel = vi.fn();
     render(
       <PlanCard runId="r1" plan={plan} locked={false} onCancel={onCancel} onStart={vi.fn()} />,
@@ -88,27 +90,14 @@ describe('PlanCard 接线 (Wave 3 C4)', () => {
     expect(orchRunClient.cancelRun).not.toHaveBeenCalled();
   });
 
-  it('已派发：按钮文案「取消执行」→ cancelRun + onCancelled', async () => {
-    const onCancelled = vi.fn();
-    vi.mocked(orchRunClient.cancelRun).mockResolvedValue({
-      ok: true,
-      run_id: 'r1',
-      status: 'cancelled',
-    });
-    render(
-      <PlanCard
-        runId="r1"
-        plan={plan}
-        locked
-        onCancel={() => {}}
-        onStart={vi.fn()}
-        onCancelled={onCancelled}
-      />,
-    );
+  it('已派发：按钮文案「取消执行」→ 同样 onCancel 委托（统一取消语义）', () => {
+    const onCancel = vi.fn();
+    render(<PlanCard runId="r1" plan={plan} locked onCancel={onCancel} onStart={vi.fn()} />);
     expect(screen.getByTestId('plan-cancel')).toHaveTextContent('取消执行');
     fireEvent.click(screen.getByTestId('plan-cancel'));
-    await waitFor(() => expect(orchRunClient.cancelRun).toHaveBeenCalledWith('r1'));
-    expect(onCancelled).toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalled();
+    // H1：cancelRun 不在 PlanCard 内部调（统一交给上层 Chat.handleCancelRun）
+    expect(orchRunClient.cancelRun).not.toHaveBeenCalled();
   });
 
   it('开始执行 → updatePlan 落库 + 本地锁定', async () => {

@@ -214,6 +214,19 @@ export function Chat() {
     }
   };
 
+  // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
+  // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
+  // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
+  // M1：取消失败也照常清理，避免计划卡永久锁定 + unhandled rejection。
+  const handleCancelRun = async (runId: string) => {
+    try {
+      await orchRunClient.cancelRun(runId);
+    } catch {
+      // 409（run 已终态）等 → 前端照常清空计划卡（board 信息过时）
+    }
+    clearTaskBoard();
+  };
+
   // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
   if (error) {
     return (
@@ -314,10 +327,10 @@ export function Chat() {
         onResumeRun={(runId) => {
           void resumeOrchestration(runId);
         }}
-        // C4 (2026-08-15): 未派发取消 → PlanCard.onCancel 仅清前端(taskBoard);
-        // 已派发取消 → PlanCard 内部 cancelRun + onCancelled → 同样清 taskBoard。
-        // 后端 cancelRun 调用归 PlanCard 内聚,上层不再直接调。
-        onCancelExecution={() => clearTaskBoard()}
+        // C4+H1 (2026-08-15): 任意阶段取消都走 handleCancelRun ——
+        // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
+        // 自动派发）+ 清空 taskBoard。
+        onCancelExecution={(runId) => void handleCancelRun(runId)}
         onPlanStart={handlePlanStart}
       />
     </div>

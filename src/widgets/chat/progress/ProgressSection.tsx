@@ -77,16 +77,15 @@ export function ProgressSection({
       {taskBoard == null ? (
         <PlanCardList onResume={onResumeRun ?? (() => {})} />
       ) : taskBoard.dispatchedAt ? (
-        <TaskTreeSection board={taskBoard} />
+        <TaskTreeSection board={taskBoard} onCancel={() => onCancelExecution?.(taskBoard.runId)} />
       ) : (
         <PlanCard
           runId={taskBoard.runId}
           plan={taskBoard.plan}
           locked={false}
+          // C4+H1 (2026-08-15): 任意阶段取消都回落 onCancelExecution →
+          // Chat.handleCancelRun 统一 cancelRun + 清空 taskBoard。
           onCancel={() => onCancelExecution?.(taskBoard.runId)}
-          // C4: 已派发(locked)取消 → PlanCard 内部 cancelRun + onCancelled,
-          // 统一回落 onCancelExecution(上层 clearTaskBoard)。
-          onCancelled={() => onCancelExecution?.(taskBoard.runId)}
           onStart={(updated) => onPlanStart?.(taskBoard.runId, updated)}
         />
       )}
