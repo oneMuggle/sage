@@ -6,7 +6,6 @@ import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
 import type { TaskBoard } from '../../features/send-message/useChat';
-import type { TaskPlanItem } from '../../shared/api/types';
 import type { ToolCall } from '../../shared/lib/store';
 
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
@@ -23,9 +22,10 @@ interface RightPanelProps {
   sessionId: string | null;
   taskBoard?: TaskBoard | null; // 新增：编排任务板
   // Wave 3 (2026-08-14): 历史恢复 / 计划卡接线回调透传。
+  // M4 (2026-08-15): onPlanStart 已删 —— PlanCard.handleStart 内部
+  // 自调 updatePlan 落库，派发由后端驱动，前端无需计划开始回调。
   onResumeRun?: (runId: string) => void;
   onCancelExecution?: (runId: string) => void;
-  onPlanStart?: (runId: string, plan: TaskPlanItem[]) => void;
 }
 
 type Tab = 'progress' | 'artifacts';
@@ -93,7 +93,6 @@ export function RightPanel({
   taskBoard,
   onResumeRun,
   onCancelExecution,
-  onPlanStart,
 }: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('progress');
   const [selected, setSelected] = useState<Artifact | null>(null);
@@ -129,7 +128,6 @@ export function RightPanel({
             taskBoard={taskBoard}
             onResumeRun={onResumeRun}
             onCancelExecution={onCancelExecution}
-            onPlanStart={onPlanStart}
           />
         ) : (
           <ArtifactsSection
