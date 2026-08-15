@@ -52,8 +52,28 @@ def mock_planner_llm(monkeypatch):
     return client
 
 
+@pytest.fixture()
+def _stub_background_exec(monkeypatch):
+    """Isolate lane lifecycle from B2 wait=false background execution.
+
+    Wave 3 B2 (P2-10) made ``POST /lanes`` (wait=false) fire execution in the
+    background via ``asyncio.create_task``. These M5 tests assert lanes stay in
+    ``created`` after creation — without an execution-phase LLM the background
+    executor fails lanes to ``failed`` on the next event-loop turn, making the
+    lifecycle assertions flaky/order-dependent. Stub the executor so
+    create → list / detail / events / cancel remain deterministic.
+    """
+
+    async def _noop_exec(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "backend.api.orchestration_router._execute_plan_lanes", _noop_exec
+    )
+
+
 class TestCreateLanes:
-    @pytest.mark.usefixtures("_no_llm")
+    @pytest.mark.usefixtures("_no_llm", "_stub_background_exec")
     async def test_create_lane_degraded_single_task(self, client):
         """No LLM → single fallback lane, bound to a seeded agent."""
         resp = await client.post(
@@ -76,7 +96,7 @@ class TestCreateLanes:
         assert task["status"] == "created"
         assert task["team_id"] == body["team_id"]
 
-    @pytest.mark.usefixtures("mock_planner_llm")
+    @pytest.mark.usefixtures("mock_planner_llm", "_stub_background_exec")
     async def test_create_lanes_with_mock_llm_two_tasks(self, client):
         """LLM DAG → two lanes, dependency wired between tasks."""
         resp = await client.post(
@@ -90,7 +110,7 @@ class TestCreateLanes:
         # Second task depends on the first (real ids).
         assert tasks[1]["blocked_by"] == [tasks[0]["task_id"]]
 
-    @pytest.mark.usefixtures("_no_llm")
+    @pytest.mark.usefixtures("_no_llm", "_stub_background_exec")
     async def test_created_lane_visible_in_get_endpoints(self, client):
         """GET list/detail/events reflect the created lane."""
         created = (
@@ -113,7 +133,7 @@ class TestCreateLanes:
         events = (await client.get(f"/api/v1/orchestration/lanes/{lane_id}/events")).json()
         assert any(e["event_type"] == "lane.started" for e in events)
 
-    @pytest.mark.usefixtures("_no_llm")
+    @pytest.mark.usefixtures("_no_llm", "_stub_background_exec")
     async def test_cancel_created_lane(self, client):
         """Cancellation still works on planner-created lanes."""
         created = (
@@ -131,7 +151,7 @@ class TestCreateLanes:
         again = await client.post(f"/api/v1/orchestration/lanes/{lane_id}/cancel", json={})
         assert again.status_code == 409
 
-    @pytest.mark.usefixtures("mock_planner_llm")
+    @pytest.mark.usefixtures("mock_planner_llm", "_stub_background_exec")
     async def test_explicit_agent_pins_all_lanes(self, client):
         """?agent=researcher → every lane bound to researcher."""
         resp = await client.post(
