@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
-import { sessionApi, learnApi, type ChatOfficeRef } from '../shared/api';
+import { sessionApi, learnApi, type ChatOfficeRef, type TaskPlanItem } from '../shared/api';
+import { orchRunClient } from '../shared/api/orchRunClient';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
@@ -38,6 +39,8 @@ export function Chat() {
     streamingState, // P2: 当前流式状态
     streamingToolCalls, // 右侧面板 Progress: 实时流式工具调用
     taskBoard, // Multi-Agent Orchestration: 编排任务板
+    resumeOrchestration, // Wave 3: resume 恢复流入口（计划卡恢复按钮）
+    clearTaskBoard, // Wave 3: 取消执行后清空任务板
   } = useChat();
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
 
@@ -121,7 +124,8 @@ export function Chat() {
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
       officeRefs?: readonly ChatOfficeRef[];
-      orchestrationMode?: 'auto' | 'force_multi' | 'force_single';
+      // Wave 3 C6: 放宽为 string —— 编排模式条可传 'template:<id>' 等。
+      orchestrationMode?: string;
     },
   ) => {
     clearError();
@@ -198,6 +202,29 @@ export function Chat() {
         fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
       );
     }
+  };
+
+  // Wave 3 C3 (2026-08-15): 计划卡"开始执行" → updatePlan 落库后由后端派发。
+  // 409（派发竞态）→ 保持编辑态，TaskBoard 首 task_status 事件会锁。
+  const handlePlanStart = async (runId: string, plan: TaskPlanItem[]) => {
+    try {
+      await orchRunClient.updatePlan(runId, plan);
+    } catch {
+      // 409（派发竞态）→ 保持编辑态，TaskBoard 首 status 事件会锁
+    }
+  };
+
+  // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
+  // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
+  // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
+  // M1：取消失败也照常清理，避免计划卡永久锁定 + unhandled rejection。
+  const handleCancelRun = async (runId: string) => {
+    try {
+      await orchRunClient.cancelRun(runId);
+    } catch {
+      // 409（run 已终态）等 → 前端照常清空计划卡（board 信息过时）
+    }
+    clearTaskBoard();
   };
 
   // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
@@ -297,6 +324,14 @@ export function Chat() {
         isLoading={isLoading}
         sessionId={currentSessionId}
         taskBoard={taskBoard ?? null}
+        onResumeRun={(runId) => {
+          void resumeOrchestration(runId);
+        }}
+        // C4+H1 (2026-08-15): 任意阶段取消都走 handleCancelRun ——
+        // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
+        // 自动派发）+ 清空 taskBoard。
+        onCancelExecution={(runId) => void handleCancelRun(runId)}
+        onPlanStart={handlePlanStart}
       />
     </div>
   );
