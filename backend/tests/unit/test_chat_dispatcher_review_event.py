@@ -15,13 +15,15 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from backend.orchestration.chat_dispatcher import ChatDispatcher
+from backend.orchestration.orch_settings import OrchSettings
 
 
-def _dispatcher() -> ChatDispatcher:
+def _dispatcher(settings: OrchSettings | None = None) -> ChatDispatcher:
     return ChatDispatcher(
         stream_id="s1",
         entry_queue=asyncio.Queue(),
         run_id="orch-test",
+        settings=settings,
     )
 
 
@@ -128,18 +130,24 @@ def test_broken_review_yields_then_raises():
 
 @pytest.mark.asyncio()
 async def test_max_lane_iterations_guard_returns_failure():
-    """executor 一直返回 retrying → MAX_LANE_ITERATIONS 后 raise RuntimeError。"""
+    """executor 一直返回 retrying → 注入的 max_lane_iterations 后 raise RuntimeError。
+
+    P2-9 (2026-08-14): guard 读 self.settings.max_lane_iterations（不再读模块常量）。
+    注入 OrchSettings(max_lane_iterations=3)，验证重试循环在第 3 次硬停：
+    run_lane_with_retry 恰好调用 3 次（初始 1 + 循环内 2）即 raise，绝不无限 hang。
+    """
     from backend.orchestration.chat_dispatcher import ChatTaskState
 
-    dispatcher = _dispatcher()
+    dispatcher = _dispatcher(settings=OrchSettings(max_lane_iterations=3))
     state = ChatTaskState(task_id="t1", agent_id="primary", goal="g")
 
+    mock_run = AsyncMock(return_value={"status": "retrying"})
     with patch(
         "backend.orchestration.chat_dispatcher.run_lane_with_retry",
-        new=AsyncMock(return_value={"status": "retrying"}),
-    ), patch(
-        "backend.orchestration.chat_dispatcher.MAX_LANE_ITERATIONS", 3
+        new=mock_run,
     ), pytest.raises(RuntimeError) as exc_info:
         await dispatcher._run_subagent(state)
     msg = str(exc_info.value)
     assert "MAX_ITERATIONS_EXCEEDED" in msg or "retry loop exceeded" in msg
+    # 注入阈值 3 → 恰好 3 次调用后硬停（初始 1 + 循环内 2），无第 4 次调用
+    assert mock_run.call_count == 3

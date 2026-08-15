@@ -96,6 +96,7 @@ export const en: Record<TranslationKey, string> = {
   'settings.section.appearance': 'Appearance',
   'settings.section.chat': 'Chat',
   'settings.section.data': 'Data',
+  'settings.section.orch': 'Orchestration',
 
   // ─── Settings · MCP ──────────────
   'settings.mcp.title': 'MCP Servers',

@@ -2,7 +2,7 @@
 
 方案 C（multi-agent orchestration spec §5.2）：conductor（主 LLM）在
 multi 模式下拿到 ``task_plan`` 后，按计划调用本工具，把
-``[{agent_id, goal}]`` 交给 ``ChatDispatcher`` 并行执行。
+``[{task_id, agent_id, goal}]`` 交给 ``ChatDispatcher`` 并行执行。
 
 关键约束：
 - 本工具是**异步**的（子 agent 需在事件循环上并发 + 直接推 entry.queue），
@@ -32,10 +32,13 @@ INPUT_SCHEMA: Dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
+                    # P2-7 (2026-08-14): conductor 必须回传计划编号 task_id
+                    #（task_plan 事件的 t1..tN），dispatcher 据此与权威计划对齐。
+                    "task_id": {"type": "string"},
                     "agent_id": {"type": "string"},
                     "goal": {"type": "string", "maxLength": 2000},
                 },
-                "required": ["agent_id", "goal"],
+                "required": ["agent_id", "goal", "task_id"],
             },
         }
     },
@@ -44,8 +47,9 @@ INPUT_SCHEMA: Dict[str, Any] = {
 
 _TOOL_DESCRIPTION = (
     "并行派发子 agent 执行任务。适用于已拆解为多个子任务的复杂目标："
-    "传入 [{agent_id, goal}] 列表（最多 8 个），每个子 agent 独立运行并把"
+    "传入 [{task_id, agent_id, goal}] 列表（最多 8 个），每个子 agent 独立运行并把"
     "结果聚合返回。agent_id 必须是已启用的角色（如 researcher / writer）。"
+    "task_id 必须回传 task_plan 中的计划编号（t1..tN）。"
 )
 
 

@@ -54,6 +54,8 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "temperature",
         "wiki",
         "version",
+        # Wave 3 P2-9 (2026-08-14): 编排执行参数段。
+        "orch",
     }
 )
 LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
@@ -91,6 +93,18 @@ LEGAL_MODEL_SELECTIONS_KEYS: FrozenSet[str] = frozenset(
         "chatModel",
         "visionModel",
         "embeddingModel",
+    }
+)
+# orch 段 (OrchSettings + scratchRoot). 前端 interface 只暴露 5 个数值;
+# scratchRoot 是后端配置 (spec 偏差, 见 Wave 3 P2-9 plan §3.3).
+LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
+    {
+        "maxConcurrentSubagents",
+        "maxAggregateChars",
+        "maxSubagentResultChars",
+        "maxRetries",
+        "maxLaneIterations",
+        "scratchRoot",
     }
 )
 
@@ -175,6 +189,15 @@ def validate_settings_shape(settings: dict) -> None:
     if bad_wiki:
         raise ValueError(
             f"unknown wiki field {bad_wiki[0]!r}; " f"allowed: {sorted(LEGAL_WIKI_KEYS)}"
+        )
+
+    orch = settings.get("orch") or {}
+    if not isinstance(orch, dict):
+        raise ValueError("orch is not a dict")
+    bad_orch = [k for k in orch if k not in LEGAL_ORCH_KEYS]
+    if bad_orch:
+        raise ValueError(
+            f"unknown orch field {bad_orch[0]!r}; " f"allowed: {sorted(LEGAL_ORCH_KEYS)}"
         )
 
 

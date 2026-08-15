@@ -137,3 +137,67 @@ async def test_dispatch_first_call_persists_dispatched_at(tmp_path, monkeypatch)
     fetched = dispatcher._orch_run_repo.get("orch-test")
     assert fetched is not None
     assert fetched.dispatched_at is not None
+
+
+# Wave 3 A9 — original_request 列 + update_status（resume 恢复流原始请求）。
+def test_init_orch_run_persists_original_request(tmp_path, monkeypatch):
+    from backend.orchestration.chat_dispatcher import ChatDispatcher
+
+    db = tmp_path / "test.db"
+    monkeypatch.setenv("SAGE_DB_PATH", str(db))
+    monkeypatch.setattr(db_mod, "_db", None)
+    db_mod.get_database().init_db()
+
+    dispatcher = ChatDispatcher(stream_id="s1", entry_queue=asyncio.Queue(), run_id="orch-test")
+    dispatcher.init_orch_run(
+        session_id="s-1",
+        plan_json='{"tasks":[],"reasoning":""}',
+        original_request="帮我写一份报告",
+    )
+    fetched = dispatcher._orch_run_repo.get("orch-test")
+    assert fetched is not None
+    assert fetched.original_request == "帮我写一份报告"
+
+
+def test_update_status_changes_status_only(tmp_path, monkeypatch):
+    """update_status 改 status，不清 final_summary。"""
+    from backend.data.orch_run_repo import OrchRun, OrchRunRepository
+
+    db = tmp_path / "test.db"
+    monkeypatch.setenv("SAGE_DB_PATH", str(db))
+    monkeypatch.setattr(db_mod, "_db", None)
+    db_mod.get_database().init_db()
+
+    repo = OrchRunRepository()
+    repo.upsert(OrchRun(run_id="r1", session_id="s1", status="running", created_at=1, plan_json="{}"))
+    repo.finalize("r1", "completed", "summary")
+    repo.update_status("r1", "cancelled")
+    fetched = repo.get("r1")
+    assert fetched.status == "cancelled"
+    assert fetched.final_summary == "summary"
+
+
+def test_old_db_migrates_original_request_column(tmp_path, monkeypatch):
+    """既有库缺列 → ALTER TABLE 幂等补列。"""
+    import sqlite3
+
+    db = tmp_path / "old.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "CREATE TABLE orch_runs (run_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, "
+        "status TEXT NOT NULL DEFAULT 'running', created_at INTEGER NOT NULL, "
+        "plan_json TEXT NOT NULL, final_summary TEXT, dispatched_at INTEGER)"
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("SAGE_DB_PATH", str(db))
+    monkeypatch.setattr(db_mod, "_db", None)
+    db_mod.get_database().init_db()
+
+    from backend.data.orch_run_repo import OrchRun, OrchRunRepository
+
+    repo = OrchRunRepository()
+    repo.upsert(OrchRun(run_id="r1", session_id="s1", status="running", created_at=1, plan_json="{}"))
+    fetched = repo.get("r1")
+    assert fetched is not None

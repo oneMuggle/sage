@@ -96,6 +96,7 @@ export const zh = {
   'settings.section.appearance': '外观',
   'settings.section.chat': '对话',
   'settings.section.data': '数据',
+  'settings.section.orch': '编排（Orchestration）',
 
   // ─── 设置页 · MCP ─────────────────
   'settings.mcp.title': 'MCP 服务器',

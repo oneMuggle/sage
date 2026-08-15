@@ -36,7 +36,8 @@ class TestSchema:
         # 强绑定 → 6 任务计划被迫拆多批派发（"4 轮"诱因）。
         assert tasks["maxItems"] == 8
         assert tasks["items"]["properties"]["goal"]["maxLength"] == 2000
-        assert tasks["items"]["required"] == ["agent_id", "goal"]
+        # P2-7 (2026-08-14): conductor 必须回传计划编号 task_id → required 三键。
+        assert tasks["items"]["required"] == ["agent_id", "goal", "task_id"]
 
 
 class TestExecuteAsync:
@@ -121,3 +122,14 @@ class TestRunLoopSpecialCase:
         dispatcher.dispatch.assert_awaited_once()  # execute_async 被调（不是 execute）
         observed = [e for e in events if e.state == AgentState.OBSERVING]
         assert observed, "run_loop 应产出 OBSERVING 事件（含 dispatch 结果）"
+
+
+# P2-7 — dispatch_subagents schema 要求每任务带 task_id。
+
+
+def test_input_schema_requires_task_id():
+    """task_id 必填，与 agent_id/goal 同列 required。"""
+    items = INPUT_SCHEMA["properties"]["tasks"]["items"]
+    assert "task_id" in items["properties"]
+    assert items["properties"]["task_id"] == {"type": "string"}
+    assert items["required"] == ["agent_id", "goal", "task_id"]
