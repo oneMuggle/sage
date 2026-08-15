@@ -2011,7 +2011,7 @@ cd /home/fz/project/sage && npx vitest run && npm run tsc && npm run typecheck:e
   - `async run_review(*, run_id, aggregated, task_registry, lane_registry, event_recorder, llm_config, max_chars=50*1024, emit_review=None) -> Dict[str, Any]`，返回 `{"verdict", "block", "assertion_count"}`，内部建 lane/task、`run_lane_with_retry`、`submit_with_report`、0-parse→fail、`emit_review(task_id, verdict, count, summary)` 回调（ChatDispatcher 传 `self._emit_task_review`）。
 - ChatDispatcher._run_review 改为薄委托（保持 P0-2 语义与异常降级不变）。
 
-- [ ] **Step 1: 写失败测试（先建 review.py 的空壳，再测行为）**
+- [x] **Step 1: 写失败测试（先建 review.py 的空壳，再测行为）**
 
 ```python
 # backend/tests/unit/test_review_module.py
@@ -2066,12 +2066,12 @@ async def test_run_review_success_path():
     assert emitted  # emit_review 被调用
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_review_module.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/orchestration/review.py`（搬移 `_parse_assertions` / `_review_block` 逻辑 + 组装 `run_review`；逻辑与现 `ChatDispatcher._run_review` 逐行等价，仅依赖改参数传入）：
 
@@ -2234,12 +2234,12 @@ def _parse_assertions(self, raw: str) -> List[Assertion]:
     return parse_assertions(raw)
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + 回归**
+- [x] **Step 4: 跑测试确认通过 + 回归**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_review_module.py backend/tests/unit/test_chat_dispatcher_review_event.py backend/tests/integration/test_chat_dispatcher_review_event_integration.py -v`
 Expected: 全绿（重构不改变验证环行为）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/orchestration/review.py backend/orchestration/chat_dispatcher.py backend/tests/unit/test_review_module.py
@@ -2263,7 +2263,7 @@ git commit -m "refactor(orch): 提取 review.py 公共验证环 — ChatDispatch
   - `?wait=true`：`await _execute_plan_lanes(...)`，返回的 lanes 带终态（done/failed）+ output/error；`CreateLanesOut.review: Optional[Dict]`。
   - `_execute_plan_lanes(*, plan, lanes, lane_registry, task_registry, event_recorder, llm_config)`（team_id 取 `plan.team_id`）：并行（`asyncio.Semaphore(max_concurrent_subagents)`）、每 lane 隔离 scratch、`mark_running`、`run_lane_with_retry`（max_lane_iterations 防御）、终态落库 + 事件；全部终态后 `run_review` 落 ReviewReport。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_orchestration_router_exec.py
@@ -2343,12 +2343,12 @@ async def test_create_lanes_router_exposes_wait_query():
 
 （`_execute_plan_lanes` 为模块级函数即可被 import 测试；`wait=true` 的 HTTP 层用 `TestClient` 集成测试，见 Step 4。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_orchestration_router_exec.py -v`
 Expected: FAIL — `ImportError: cannot import name '_execute_plan_lanes'`
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `orchestration_router.py`：
 
@@ -2524,7 +2524,7 @@ async def _execute_plan_lanes(
 
 （`llm_config=None`（无配置）时 `SubagentRunner(None)` 会让 execute_lane 失败 → lane failed with 明确错误 —— 与 spec §4.1「无配置 → lane 直接 failed」一致，无需额外分支。）
 
-- [ ] **Step 4: 跑测试确认通过 + 集成**
+- [x] **Step 4: 跑测试确认通过 + 集成**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_orchestration_router_exec.py -v`
 Expected: 2 passed
@@ -2546,7 +2546,7 @@ def test_create_lanes_wait_true_returns_terminal(tmp_path):
 
 （若无 LLM 配置，断言改为「全部 lane 终态（done 或 failed）」，不要求全 done。）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/api/orchestration_router.py backend/tests/unit/test_orchestration_router_exec.py backend/tests/integration/test_orchestration_router_exec_integration.py
@@ -2564,7 +2564,7 @@ git commit -m "feat(orch): P2-10 POST /orchestration/lanes?wait=true 真实执�
 **Interfaces:**
 - Produces: `GET /orchestration/board` → `LaneBoardBuilder.build_snapshot(actor="http-api").to_dict()`（lanes 分 active/blocked/finished + freshness_summary + 汇总）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_board_endpoint.py
@@ -2587,12 +2587,12 @@ def test_board_endpoint_shape():
     assert "freshness_summary" in body
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_board_endpoint.py -v`
 Expected: FAIL — 404（无该端点）
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `orchestration_router.py` `build_router()` 内 `cancel_lane` 之后加：
 
@@ -2608,12 +2608,12 @@ async def board() -> Dict[str, Any]:
 
 （`Dict` import 若缺则顶部补 `from typing import Dict`。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_board_endpoint.py -v`
 Expected: 1 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/api/orchestration_router.py backend/tests/unit/test_board_endpoint.py
