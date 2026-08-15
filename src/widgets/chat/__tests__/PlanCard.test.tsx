@@ -136,7 +136,9 @@ describe('PlanCard §13.7 (C4 双击 + 错误处理)', () => {
 
   it('409 落库失败 → 静默（不 toast）保持编辑态', async () => {
     const toastErrorSpy = vi.spyOn(toast, 'error').mockImplementation(() => '');
-    const err409 = new Error('Backend POST http://x/runs/r1/plan → 409: plan locked after dispatch') as Error & {
+    const err409 = new Error(
+      'Backend POST http://x/runs/r1/plan → 409: plan locked after dispatch',
+    ) as Error & {
       status_code?: number;
     };
     err409.status_code = 409;

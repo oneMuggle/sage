@@ -56,9 +56,7 @@ export function PlanCard({ runId, plan: initialPlan, locked, onCancel }: PlanCar
       startingRef.current = false; // 失败后允许重试
       // 409（派发竞态）→ 静默保持编辑态，TaskBoard 首 status 事件会锁。
       if ((err as InvokeError).status_code === 409) return;
-      toast.error(
-        `计划保存失败：${err instanceof Error ? err.message : String(err)}`,
-      );
+      toast.error(`计划保存失败：${err instanceof Error ? err.message : String(err)}`);
       return;
     }
     setLocallyLocked(true);

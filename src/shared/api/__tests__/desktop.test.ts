@@ -33,12 +33,14 @@ describe('src/shared/api/desktopInvoke', () => {
   });
 
   it('invoke: IPC 剥掉自定义属性后从 message 解析附加 status_code', async () => {
-    const invokeMock = vi.fn().mockRejectedValue(
-      new Error(
-        'Backend POST http://127.0.0.1:8765/api/v1/orch/runs/r1/plan → 409: ' +
-          '{"detail":"plan locked after dispatch"}',
-      ),
-    );
+    const invokeMock = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          'Backend POST http://127.0.0.1:8765/api/v1/orch/runs/r1/plan → 409: ' +
+            '{"detail":"plan locked after dispatch"}',
+        ),
+      );
     (window as unknown as Record<string, unknown>).electronAPI = { invoke: invokeMock };
     await expect(
       DesktopInvoke.invoke('orchestration_update_plan', { runId: 'r1', plan: [] }),

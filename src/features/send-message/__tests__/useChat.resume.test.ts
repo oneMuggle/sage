@@ -135,9 +135,7 @@ describe('useChat.resumeOrchestration (PR C C2)', () => {
       })
       .mockResolvedValueOnce({ streamId: 'stream-resume' });
     listenMock.mockImplementationOnce(async (_n, cb) => {
-      Promise.resolve().then(() =>
-        cb({ payload: { state: 'done', iteration: 0, content: 'ok' } }),
-      );
+      Promise.resolve().then(() => cb({ payload: { state: 'done', iteration: 0, content: 'ok' } }));
       return vi.fn();
     });
 
