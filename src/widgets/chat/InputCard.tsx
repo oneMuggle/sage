@@ -90,6 +90,9 @@ export interface InputCardProps {
   // At file menu (for @mentions)
   atFileMenu?: React.ReactNode;
 
+  // Wave 3 C6: 编排模式条（ChatInput 提供 select，渲染在输入卡顶部）
+  orchModeBar?: React.ReactNode;
+
   // Footer hint
   hint?: string;
 }
@@ -126,6 +129,7 @@ export function InputCard({
   slashSelectedIndex = 0,
   onSlashSelect,
   atFileMenu,
+  orchModeBar,
   hint,
 }: InputCardProps) {
   const { t } = useI18n();
@@ -191,6 +195,8 @@ export function InputCard({
           <p className="text-primary font-medium">{t('chat.drop_files')}</p>
         </div>
       )}
+
+      {orchModeBar}
 
       {images.length > 0 && (
         <div className="flex gap-2 mb-2">

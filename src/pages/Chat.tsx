@@ -124,7 +124,8 @@ export function Chat() {
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
       officeRefs?: readonly ChatOfficeRef[];
-      orchestrationMode?: 'auto' | 'force_multi' | 'force_single';
+      // Wave 3 C6: 放宽为 string —— 编排模式条可传 'template:<id>' 等。
+      orchestrationMode?: string;
     },
   ) => {
     clearError();

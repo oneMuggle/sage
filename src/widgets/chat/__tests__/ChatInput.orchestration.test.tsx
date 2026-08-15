@@ -84,3 +84,34 @@ describe('ChatInput — /single override', () => {
     expect(onSend.mock.calls[0][0]).toMatch(/用法/);
   });
 });
+
+describe('ChatInput — 模板选择器 (Wave 3 C6)', () => {
+  it('选 research-write → 发送带 orchestrationMode=template:research-write', () => {
+    const onSend = vi.fn();
+    renderWithI18n(<ChatInput onSend={onSend} />);
+
+    fireEvent.change(screen.getByPlaceholderText(/输入消息/), {
+      target: { value: '写一份量化学习指南' },
+    });
+    fireEvent.change(screen.getByTestId('orch-mode-select'), {
+      target: { value: 'template:research-write' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }));
+
+    expect(onSend).toHaveBeenCalledWith(
+      '写一份量化学习指南',
+      expect.objectContaining({ orchestrationMode: 'template:research-write' }),
+    );
+  });
+
+  it('默认 auto → 发送不传 orchestrationMode（保持既有 undefined → auto 语义）', () => {
+    const onSend = vi.fn();
+    renderWithI18n(<ChatInput onSend={onSend} />);
+
+    fireEvent.change(screen.getByPlaceholderText(/输入消息/), { target: { value: 'hello' } });
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend.mock.calls[0][1]).not.toHaveProperty('orchestrationMode');
+  });
+});
