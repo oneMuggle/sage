@@ -326,7 +326,7 @@ PR A #316（P2-7/8/9 + run 级 cancel）+ PR B #317（P2-10 休眠层）+ PR C #
 
 ### 13.7 已知限制与延后项
 
-- **M4**：`updatePlan` 双调用（`PlanCard.handleStart` + `Chat.handlePlanStart`）—— 幂等无害，可删 `Chat.handlePlanStart` 收口
+- **M4** ~~`updatePlan` 双调用~~ —— ✅ 已收口（2026-08-15）：删除 `Chat.handlePlanStart` + `onPlanStart` 透传链，`PlanCard.handleStart` 单次 updatePlan 落库即完成（派发由后端 conductor 驱动）
 - **C4 双击竞态**：`handleStart` 连点两次可能双 updatePlan（本地锁定在 await 前）
 - **handleStart 静默吞错**：落库失败（非 409）无用户反馈，保持编辑态安全降级
 - **original_request NULL 兜底**：旧库 NULL 行的 resume 需对 undefined 兜底

@@ -2,7 +2,6 @@
 import { PlanCard } from '../../../components/PlanCard';
 import { PlanCardList } from '../../../components/PlanCardList';
 import type { TaskBoard } from '../../../features/send-message/useChat';
-import type { TaskPlanItem } from '../../../shared/api/types';
 import type { ToolCall } from '../../../shared/lib/store';
 
 // Multi-Agent Orchestration: 编排任务板聚合状态
@@ -15,9 +14,10 @@ interface ProgressSectionProps {
   isLoading: boolean;
   taskBoard?: TaskBoard | null; // 新增：编排任务板（null/缺省 = 无编排）
   // Wave 3 (2026-08-14): 历史恢复 / 计划卡接线回调。
+  // M4 (2026-08-15): onPlanStart 已删 —— PlanCard.handleStart 内部
+  // 自调 updatePlan 落库，派发由后端驱动，前端无需计划开始回调。
   onResumeRun?: (runId: string) => void;
   onCancelExecution?: (runId: string) => void;
-  onPlanStart?: (runId: string, plan: TaskPlanItem[]) => void;
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -34,7 +34,6 @@ export function ProgressSection({
   taskBoard,
   onResumeRun,
   onCancelExecution,
-  onPlanStart,
 }: ProgressSectionProps) {
   const stateLabel = streamingState ? (STATE_LABELS[streamingState] ?? streamingState) : null;
   // 进度可视化 P0-2 (2026-08-12): 编排进行中有 taskBoard 时,用 5 元组
@@ -86,7 +85,6 @@ export function ProgressSection({
           // C4+H1 (2026-08-15): 任意阶段取消都回落 onCancelExecution →
           // Chat.handleCancelRun 统一 cancelRun + 清空 taskBoard。
           onCancel={() => onCancelExecution?.(taskBoard.runId)}
-          onStart={(updated) => onPlanStart?.(taskBoard.runId, updated)}
         />
       )}
     </div>
