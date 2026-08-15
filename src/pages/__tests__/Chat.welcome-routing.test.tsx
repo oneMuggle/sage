@@ -40,6 +40,12 @@ vi.mock('../../features/manage-settings/useSettings', () => ({
   }),
 }));
 
+// C3 (2026-08-15): Chat → ProgressSection → PlanCardList 渲染链挂载即调
+// orchRunClient.listRuns();mock 掉避免真实 IPC 抛错 (unhandled rejection)。
+vi.mock('../../shared/api/orchRunClient', () => ({
+  orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },
+}));
+
 vi.mock('../../shared/api/desktopInvoke', () => ({
   invoke: vi.fn().mockRejectedValue(new Error('not reached')),
 }));
