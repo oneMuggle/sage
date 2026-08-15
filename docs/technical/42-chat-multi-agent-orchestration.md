@@ -267,8 +267,67 @@ Wave 1 起 ChatDispatcher 子任务**确实写 lane/task 表**（§5.1 旧文"�
 
 ### 12.6 已知限制与延后项（→ Wave 3）
 
+> 以下承接项已全部由 Wave 3 收口（PR A #316 + PR B #317 + PR C #318，见 §13）。
+
 - **计划卡视图接线**：`PlanCard` / `PlanCardList` 组件已交付 + 8 单测覆盖，但未接入任何视图（plan T5 无 wiring step）—— 后端链路（409 锁定 / 4 IPC / electron 路由）已就绪，聊天流内渲染入口、历史列表入口与 resume UX 归 Wave 3 统一设计
 - P2-7 派发 task_id 对齐根治（`dispatch_subagents` 工具 schema 必填 `task_id`）
 - P2-8 确定性模板（`OrchestrationTemplate`）
 - P2-9 配置化（`app_settings` 增 `orch.*` 段）
 - P2-10 休眠层接入（chat 镜像 lane + API lane 可执行 + LaneBoard 监控端点）
+
+## 13. Wave 3 — 计划权威 task_id + 模板 + 配置化 + 休眠层 + 前端接线（2026-08-15）
+
+PR A #316（P2-7/8/9 + run 级 cancel）+ PR B #317（P2-10 休眠层）+ PR C #318（前端接线），共 3 个 PR 全量落地，main @ 0b559d20。
+
+### 13.1 P2-7 计划权威 task_id
+
+`task_plan` 的 `task_id` 成为**全局唯一权威标识**（`create_plan` 在计划生成时即落库），`dispatch_subagents` 工具 schema 必填 `task_id`，子任务状态、lane 镜像、cancel 全部以该 id 对齐。根治 Wave 1/2 的"派发侧临时生成 task_id 与计划不一致"问题。
+
+### 13.2 P2-8 确定性模板（OrchestrationTemplate）
+
+用户可在前端选择编排模式：
+
+| 模式 | 语义 |
+|---|---|
+| `auto` | LLM 二分类决定 single/multi（默认，不传 `orchestration_mode` key） |
+| `force_multi` | 强制进入编排 |
+| `template:<id>` | 按预置模板（research-write / gather-analyze-report 等）拆解，不依赖 conductor 自由拆解 |
+
+### 13.3 P2-9 配置化
+
+`app_settings` 新增 `orch.*` 配置段（并发数、超时、模板列表等），后端从配置而非硬编码读取。
+
+### 13.4 P2-10 休眠层接入
+
+- **review.py 公共验证环**：`_run_review` 抽到独立模块，chat 镜像 lane 与 API lane 共用
+- **lanes 真实执行**：`POST /lanes` 支持 `wait=false` 后台执行（带 `_stub_background_exec` fixture 防环境假绿）
+- **LaneBoard 监控端点**：`GET /orchestration/board`，前端 board 轮询/事件源
+
+### 13.5 前端三态视图 + 计划卡接线（PR C）
+
+聊天流内编排按 `taskBoard` 三态渲染（`ProgressSection` / `RightPanel`）：
+
+| taskBoard 状态 | 渲染 | 交互 |
+|---|---|---|
+| `null`（无编排） | `PlanCardList`（历史编排记录） | 点恢复 → resume 流（逐字 original_request） |
+| 未派发（`dispatchedAt` 空） | `PlanCard`（可编辑） | goal textarea 编辑 / 删除行（≥1 守卫）/「开始执行」（updatePlan 落库 → 本地锁定） |
+| 已派发 | `TaskTreeSection` | 任务树 + 进度 5 元组 + 「取消执行」按钮 |
+
+配套：`ChatInput` 模板选择器（auto / force_multi / template:*）+ 恢复流 IPC（`resume_orchestration`）。
+
+### 13.6 统一取消语义（H1/H2/M1）
+
+取消入口（计划卡任意阶段 + 任务树运行中）一律委托上层 `Chat.handleCancelRun(runId)`：
+
+1. `orchRunClient.cancelRun(runId)` —— 后端置 `cancelled` + `dispatcher.cancel()`，**未派发时也阻止自动派发**（避免空转烧 token）；
+2. `try/catch` 兜底 —— 取消失败（409 已终态等）也 `clearTaskBoard()`（M1，防永久锁定 + unhandled rejection）。
+
+设计要点：取消逻辑**不内聚在 PlanCard 组件**，统一走 Chat 层单一入口，三态共用同一路径。
+
+### 13.7 已知限制与延后项
+
+- **M4**：`updatePlan` 双调用（`PlanCard.handleStart` + `Chat.handlePlanStart`）—— 幂等无害，可删 `Chat.handlePlanStart` 收口
+- **C4 双击竞态**：`handleStart` 连点两次可能双 updatePlan（本地锁定在 await 前）
+- **handleStart 静默吞错**：落库失败（非 409）无用户反馈，保持编辑态安全降级
+- **original_request NULL 兜底**：旧库 NULL 行的 resume 需对 undefined 兜底
+- 进度可视化已知局限见 §9.3 / §11.7
