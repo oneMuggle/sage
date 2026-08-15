@@ -19,9 +19,12 @@ const STATUS_TITLE: Record<TaskStatusValue, string> = {
 
 interface TaskTreeSectionProps {
   board: TaskBoard;
+  // Wave 3 H2 (2026-08-15): 运行中编排的取消入口。由上层
+  // (Chat.handleCancelRun) 统一调 cancelRun + 清空 taskBoard。
+  onCancel?: () => void;
 }
 
-export function TaskTreeSection({ board }: TaskTreeSectionProps) {
+export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
   const total = board.progress?.total ?? board.plan.length;
   const doneCount =
     board.progress?.done ??
@@ -44,10 +47,23 @@ export function TaskTreeSection({ board }: TaskTreeSectionProps) {
       {!allDone && (
         <div className="text-xs text-text-secondary">已拆解为 {total} 个子任务,等待结果中…</div>
       )}
-      <div className="text-xs text-text-secondary">
-        完成 {doneCount}/{total}
-        {inFlight > 0 && ` · ${inFlight} 个进行中`}
-        {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs text-text-secondary">
+          完成 {doneCount}/{total}
+          {inFlight > 0 && ` · ${inFlight} 个进行中`}
+          {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
+        </div>
+        {/* Wave 3 H2 (2026-08-15): 运行中取消按钮 —— 全部完成/无 onCancel 时隐藏 */}
+        {!allDone && onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            data-testid="task-tree-cancel"
+            className="px-2 py-1 text-xs border rounded shrink-0"
+          >
+            取消执行
+          </button>
+        )}
       </div>
       {board.plan.map((item) => {
         const st = board.statuses[item.task_id];

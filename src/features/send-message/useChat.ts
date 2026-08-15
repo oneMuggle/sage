@@ -11,6 +11,7 @@ import {
   type TaskProgressEvent,
   type TaskStatusEvent,
 } from '../../shared/api';
+import { orchRunClient } from '../../shared/api/orchRunClient';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
@@ -127,6 +128,7 @@ export function useChat() {
       sessionId?: string,
       officeRefs?: readonly ChatOfficeRef[],
       orchestrationMode?: ChatConfig['orchestrationMode'],
+      opts?: { planOverride?: TaskPlanItem[]; runId?: string },
     ) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid || isLoading || loadingRef.current) return;
@@ -228,6 +230,9 @@ export function useChat() {
         provider: inferProviderFromBaseUrl(chatEndpoint.baseUrl),
         // 由 /orchestrate /single 斜杠命令传入;普通消息 undefined → 后端 auto
         orchestrationMode,
+        // Wave 3: resume 恢复流透传
+        planOverride: opts?.planOverride,
+        runId: opts?.runId,
       };
 
       const appendContent = (next: string): void => {
@@ -523,6 +528,21 @@ export function useChat() {
     [currentSessionId, isLoading, chatEndpoint, settings, addMessage, updateMessage],
   );
 
+  /** Wave 3 (2026-08-14): resume 恢复流 —— resumeRun → sendMessage(original_request, plan_override)。 */
+  const resumeOrchestration = useCallback(
+    async (runId: string) => {
+      const resp = await orchRunClient.resumeRun(runId);
+      await sendMessage(resp.original_request ?? '', undefined, undefined, 'force_multi', {
+        planOverride: resp.plan,
+        runId: resp.new_run_id,
+      });
+    },
+    [sendMessage],
+  );
+
+  /** Wave 3 (2026-08-14): 取消执行后清空任务板。 */
+  const clearTaskBoard = useCallback(() => setTaskBoard(null), []);
+
   const interrupt = useCallback(async () => {
     // PR-6: 先取消前端 listener, 再请求后端中断
     if (cancelRef.current) {
@@ -651,6 +671,10 @@ export function useChat() {
     streamingToolCalls,
     /** Multi-Agent Orchestration: 编排任务板 (供 TaskTreeSection 渲染任务树) */
     taskBoard,
+    /** Wave 3: resume 恢复流入口 (计划卡恢复按钮调用) */
+    resumeOrchestration,
+    /** Wave 3: 取消执行后清空任务板 */
+    clearTaskBoard,
     /** Phase 6: /btw 补充消息方法 */
     askBtw,
     /** Phase 6: /btw 是否正在流式输出 */

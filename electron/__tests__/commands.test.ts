@@ -485,6 +485,12 @@ describe('agent_* IPC commands', () => {
     expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc/resume');
   });
 
+  it('orchestration_cancel_run is POST /api/v1/orch/runs/{run_id}/cancel (PR C C1)', () => {
+    const route = COMMAND_ROUTES['orchestration_cancel_run'];
+    expect(route.method).toBe('POST');
+    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc/cancel');
+  });
+
   it('orchestration_update_plan is POST /api/v1/orch/runs/{run_id}/plan with plan body', () => {
     const route = COMMAND_ROUTES['orchestration_update_plan'];
     expect(route.method).toBe('POST');

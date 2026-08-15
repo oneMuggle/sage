@@ -1,16 +1,21 @@
 // src/components/PlanCardList.tsx
 /**
  * P1-5 历史编排记录列表（Wave 2 2026-08-14）—— 展示已持久化的
- * orch_runs（run_id + status + created_at）,每行提供"恢复"按钮,
- * resume 后把新 run_id + 重建 plan 交还给调用方（onResume）。
+ * orch_runs（run_id + status + created_at）,每行提供"恢复"按钮。
+ *
+ * Wave 3 C5 (2026-08-15) —— 恢复流委托:
+ * onResume 只交 runId 给上层 useChat.resumeOrchestration
+ *（内部完成 resumeRun → sendMessage(original_request, plan_override)，
+ *  恢复原始请求逐字），组件不再内部调 resumeRun。
  */
 import { useEffect, useState } from 'react';
 
 import { orchRunClient, type OrchRunSummary } from '../shared/api/orchRunClient';
-import type { TaskPlanItem } from '../shared/api/types';
 
 interface PlanCardListProps {
-  onResume: (newRunId: string, plan: TaskPlanItem[]) => void;
+  // Wave 3 C5: onResume 只交 runId 给 useChat.resumeOrchestration
+  //（内部完成 resumeRun → sendMessage(original_request, plan_override)）。
+  onResume: (runId: string) => void;
 }
 
 export function PlanCardList({ onResume }: PlanCardListProps) {
@@ -20,10 +25,7 @@ export function PlanCardList({ onResume }: PlanCardListProps) {
     orchRunClient.listRuns().then(setRuns);
   }, []);
 
-  const handleResume = async (runId: string) => {
-    const resp = await orchRunClient.resumeRun(runId);
-    onResume(resp.new_run_id, resp.plan);
-  };
+  const handleResume = (runId: string) => onResume(runId);
 
   return (
     <div className="border rounded p-3 bg-bg-hover" data-testid="plan-card-list">

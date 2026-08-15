@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import { TaskTreeSection } from '../progress/TaskTreeSection';
@@ -124,5 +124,62 @@ describe('TaskTreeSection', () => {
     });
     render(<TaskTreeSection board={board} />);
     expect(screen.getByText(/\(1 失败\)/)).toBeInTheDocument();
+  });
+
+  // Wave 3 H2 (2026-08-15): 运行中编排的取消按钮
+  it('shows cancel button while in-flight and fires onCancel', () => {
+    const onCancel = vi.fn();
+    const board = makeBoard({
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'running',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: null,
+        },
+      },
+    });
+    render(<TaskTreeSection board={board} onCancel={onCancel} />);
+    expect(screen.getByTestId('task-tree-cancel')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('task-tree-cancel'));
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  it('hides cancel button when all done', () => {
+    const board = makeBoard({
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'done',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: null,
+        },
+        t2: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't2',
+          status: 'done',
+          agent_id: 'writer',
+          goal: '整理学习资料',
+          error: null,
+          output_preview: null,
+        },
+      },
+    });
+    render(<TaskTreeSection board={board} onCancel={vi.fn()} />);
+    expect(screen.queryByTestId('task-tree-cancel')).toBeNull();
+  });
+
+  it('hides cancel button when onCancel not provided', () => {
+    render(<TaskTreeSection board={makeBoard()} />);
+    expect(screen.queryByTestId('task-tree-cancel')).toBeNull();
   });
 });
