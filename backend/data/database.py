@@ -545,13 +545,20 @@ class Database:
                 created_at INTEGER NOT NULL,
                 plan_json TEXT NOT NULL,
                 final_summary TEXT,
-                dispatched_at INTEGER
+                dispatched_at INTEGER,
+                original_request TEXT
             )
             """
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_orch_runs_session ON orch_runs(session_id)"
         )
+        # Wave 3 A9 (2026-08-14): original_request 列 —— resume plan_override 恢复流
+        # 用（前端 resumeRun 要拿原始请求逐字重发）。既有库 ALTER 补列，幂等。
+        cursor.execute("PRAGMA table_info(orch_runs)")
+        _orch_cols = {row[1] for row in cursor.fetchall()}
+        if "original_request" not in _orch_cols:
+            cursor.execute("ALTER TABLE orch_runs ADD COLUMN original_request TEXT")
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS orch_tasks (

@@ -1,5 +1,5 @@
 /** Settings version for future migration support */
-export const SETTINGS_VERSION = '3.0.0';
+export const SETTINGS_VERSION = '4.0.0';
 
 /** localStorage key for settings persistence */
 export const SETTINGS_STORAGE_KEY = 'sage-settings';
@@ -43,6 +43,16 @@ export interface WikiSettings {
   useFolderPicker: boolean;
 }
 
+// Wave 3 P2-9 (2026-08-14): 编排执行参数（前端 UI 渲染 5 个数值；scratchRoot
+// 仅后端配置，不在此 interface —— 见 storage 层注释）。
+export interface OrchSettings {
+  maxConcurrentSubagents: number; // 4
+  maxAggregateChars: number; // 120 * 1024
+  maxSubagentResultChars: number; // 50 * 1024
+  maxRetries: number; // 2
+  maxLaneIterations: number; // 8
+}
+
 /** All application settings */
 export interface AppSettings {
   // General
@@ -65,6 +75,9 @@ export interface AppSettings {
 
   // Wiki
   wiki: WikiSettings;
+
+  // Wave 3 P2-9
+  orch: OrchSettings;
 
   // Internal
   version: string;
@@ -91,6 +104,15 @@ const DEFAULT_MODEL_SELECTIONS: ModelSelections = {
 };
 
 /** Sensible defaults for all settings */
+export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
+  maxConcurrentSubagents: 4,
+  maxAggregateChars: 120 * 1024,
+  maxSubagentResultChars: 50 * 1024,
+  maxRetries: 2,
+  maxLaneIterations: 8,
+};
+
+/** Sensible defaults for all settings */
 export const DEFAULT_SETTINGS: AppSettings = {
   // General
   streaming: true,
@@ -110,6 +132,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wiki: {
     useFolderPicker: true,
   },
+
+  // Wave 3 P2-9
+  orch: DEFAULT_ORCH_SETTINGS,
 
   // Internal
   version: SETTINGS_VERSION,

@@ -23,6 +23,7 @@ from backend.data.settings_canonicalizer import (
     LEGAL_ENDPOINT_KEYS,
     LEGAL_MODEL_SELECTION_KEYS,
     LEGAL_MODEL_SELECTIONS_KEYS,
+    LEGAL_ORCH_KEYS,
     LEGAL_TOP_KEYS,
     LEGAL_WIKI_KEYS,
     from_camel,
@@ -42,6 +43,7 @@ EXPECTED_TOP_KEYS = frozenset(
         "temperature",
         "wiki",
         "version",
+        "orch",
     }
 )
 
@@ -104,6 +106,20 @@ def test_legal_model_selections_obj_keys_is_stable() -> None:
         )
         == LEGAL_MODEL_SELECTIONS_KEYS
     )
+
+
+def test_legal_orch_keys_is_stable() -> None:
+    """LEGAL_ORCH_KEYS 是前端 OrchSettings 6 键（含 scratchRoot，后端存）。"""
+    assert frozenset(
+        {
+            "maxConcurrentSubagents",
+            "maxAggregateChars",
+            "maxSubagentResultChars",
+            "maxRetries",
+            "maxLaneIterations",
+            "scratchRoot",
+        }
+    ) == LEGAL_ORCH_KEYS
 
 
 def test_aliases_camel_side_subset_of_legal_keys() -> None:

@@ -1,7 +1,7 @@
 """ChatDispatcher — 轻量子 agent 执行器（Multi-Agent Orchestration 方案 C）。
 
 conductor（主 LLM）经 ``dispatch_subagents`` 工具调用本 dispatcher，把
-``[{agent_id, goal}]`` 并行派发给子 agent。Wave 1（P0-1/P0-3）起子任务经
+``[{task_id, agent_id, goal}]`` 并行派发给子 agent。Wave 1（P0-1/P0-3）起子任务经
 ``LaneExecutor`` 执行：每个子任务在 lane_registry 产生 lane 镜像，
 ``RecoveryPolicy(on_failure="retry", max_retries=2)`` 提供重试，重试次数
 回填 task_status 事件的 ``retry_count`` 字段；子 agent 以
@@ -13,18 +13,20 @@ conductor（主 LLM）经 ``dispatch_subagents`` 工具调用本 dispatcher，�
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from backend.data.database import get_database
 from backend.orchestration.events import EventRecorder
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import Lane, RecoveryPolicy, Task, TaskPacket
+from backend.orchestration.orch_settings import OrchSettings, load_orch_settings
 from backend.orchestration.report_schema import Assertion, AssertionType
 from backend.orchestration.subagent_runner import SubagentRunner, run_lane_with_retry
 from backend.orchestration.task_registry import TaskRegistry
@@ -70,11 +72,17 @@ async def _classify_orchestration_mode(
     """语义判定消息是否进编排（multi）还是单 agent（single）。
 
     - ``force_multi`` / ``force_single``：用户 override，直接定，跳过 LLM
+    - ``template:<id>``：模板即强制编排 → ``multi``（跳过 LLM；模板不存在
+      时降级 single 由 decompose 层负责，这里不校验存在性）
     - ``auto``：轻量 LLM 二分类；无 client / 失败 → ``single``（= 没开编排）
 
     这是 tool-toggle 门的判定源：mode=single 时 producer 不注册
     dispatch_subagents 工具（简单任务在结构上无法被过度拆解）。
     """
+    # P2-8 (2026-08-14): template:<id> 即强制编排 —— 跳过 LLM 二分类。
+    # 模板存在性在 decompose_from_template 校验（不存在 → 降级 single）。
+    if orchestration_mode.startswith("template:"):
+        return "multi"
     if orchestration_mode == "force_multi":
         return "multi"
     if orchestration_mode == "force_single":
@@ -109,6 +117,11 @@ class ChatTaskState:
     retry_count: int = 0
 
 
+# P2-9 (2026-08-14): 进程内活动 dispatcher 注册表 —— 供 run 级 cancel 端点
+# 定位并置位取消事件。producer 在构造后注册、finally 注销（长连接结束即删）。
+_ACTIVE_DISPATCHERS: Dict[str, ChatDispatcher] = {}
+
+
 class ChatDispatcher:
     """并行执行子任务并向聊天流推送 task_status 事件的轻量调度器。"""
 
@@ -122,11 +135,15 @@ class ChatDispatcher:
         task_registry: Optional[Any] = None,
         event_recorder: Optional[EventRecorder] = None,
         total_tasks: Optional[int] = None,
+        settings: Optional[OrchSettings] = None,
     ) -> None:
         self.stream_id = stream_id
         self.entry_queue = entry_queue
         self.run_id = run_id
         self.llm_config = llm_config
+        # P2-9 (2026-08-14): 执行参数配置化 —— 模块常量改实例引用。
+        # 不传 → load_orch_settings() 从持久化 app_settings 回落默认。
+        self.settings = settings or load_orch_settings()
         # P0-1：子任务经 LaneExecutor 执行（lane 镜像 + RecoveryPolicy 重试）。
         self.lane_registry = lane_registry or LaneRegistry()
         self.task_registry = task_registry or TaskRegistry()
@@ -134,7 +151,7 @@ class ChatDispatcher:
         # P0-2：总任务数门控 —— 达到 plan 总量后跑 reviewer 验证环（Task 5）。
         self.total_tasks = total_tasks
         self._states: Dict[str, ChatTaskState] = {}
-        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_SUBAGENTS)
+        self._semaphore = asyncio.Semaphore(self.settings.max_concurrent_subagents)
         # F1 (2026-08-12): run 内全局递增的 task 计数器。修复前每次 dispatch
         # 调用都从 t1 重编号，与 producer 计划的全局编号 t1..tN 错位 —— 前端
         # 按 task_id 合并 status，计划 t4-t6 永远收不到更新（UI 恒显 3/6）。
@@ -151,14 +168,53 @@ class ChatDispatcher:
         # 记录首次 dispatch 时间（resume 场景前端展示用）。
         self._reviewed: bool = False
         self._first_dispatch_at: Optional[float] = None
+        # P2-7 (2026-08-14): 计划权威 —— 首 dispatch 从 orch_runs.plan_json 读权威
+        # 计划建索引；_dispatched_plan_ids 记录已派发的计划 task_id（review 门用）。
+        self._plan_by_id: Dict[str, dict] = {}
+        self._plan_loaded = False
+        self._dispatched_plan_ids: Set[str] = set()
+        # P2-9 (2026-08-14): 取消事件 —— cancel() 幂等 set；_run_one 开头检查。
+        self._cancelled = asyncio.Event()
+
+    def cancel(self) -> bool:
+        """置位取消事件。幂等：已 set 返回 False，否则 True。"""
+        if self._cancelled.is_set():
+            return False
+        self._cancelled.set()
+        return True
+
+    def _ensure_plan_loaded(self) -> None:
+        """首 dispatch 时从 orch_runs.plan_json 读权威计划建索引（DB 单源）。
+
+        计划卡 update_plan 在派发前落库 → 首派发即读到编辑后计划。读库失败/空 →
+        _plan_by_id 保持空，后续走未知/缺省路由（不强制闭环）。只建一次。
+        """
+        if self._plan_loaded:
+            return
+        self._plan_loaded = True
+        try:
+            run = self._orch_run_repo.get(self.run_id)
+            if run and run.plan_json:
+                raw = json.loads(run.plan_json)
+                tasks = raw.get("tasks", []) if isinstance(raw, dict) else []
+                self._plan_by_id = {
+                    t["task_id"]: t
+                    for t in tasks
+                    if isinstance(t, dict) and t.get("task_id")
+                }
+        except Exception as exc:  # noqa: BLE001 — 读库失败降级，不阻塞派发
+            logger.warning("计划权威索引构建失败 run=%s err=%s", self.run_id, exc)
 
     async def dispatch(self, tasks: List[Dict[str, str]]) -> str:
         """并行执行子任务，返回聚合 markdown（截断后进 conductor 上下文）。
 
+        P2-7 (2026-08-14): 三态路由 —— task_id 匹配计划 → goal/agent 以计划
+        为准（计划权威，DB 单源）；未知 task_id → 回退 tool-passed 值（允许
+        conductor 动态加任务）；缺 task_id → 自分配（计数器仅作缺省，跳过计划
+        已占编号）。匹配计划的 task_id 与 producer 的 task_plan 编号 t1..tN 对齐。
+
         Args:
-            tasks: ``[{"agent_id": ..., "goal": ...}]``。task_id 按 run 内
-                全局递增分配（``t{run_sequence}``），跨多次 dispatch 调用唯一，
-                与 producer 的 task_plan 编号 t1..tN 对齐。
+            tasks: ``[{"task_id": ..., "agent_id": ..., "goal": ...}]``。
 
         Returns:
             聚合 markdown：每个子结果截断 MAX_SUBAGENT_RESULT_CHARS 后拼接；
@@ -170,39 +226,50 @@ class ChatDispatcher:
         if self._first_dispatch_at is None:
             self._first_dispatch_at = time.time()
             self._mark_run_dispatched(int(self._first_dispatch_at * 1000))
+        # P2-7: 首 dispatch 从 orch_runs.plan_json 读权威计划建索引（只建一次）。
+        self._ensure_plan_loaded()
         states: List[ChatTaskState] = []
         for raw in tasks:
-            # 缺 agent_id（malformed input）→ 失败事件占位，不抛穿整次 dispatch。
-            # 让 conductor 看到 status=failed + error，能定位 producer bug。
-            # F1 (2026-08-12): task_id 从 run 内全局计数器分配（跨调用唯一，
-            # 与计划编号 t1..tN 对齐），不再按本次调用内 index 重编号。
-            task_id = f"t{self._next_task_index + 1}"
-            self._next_task_index += 1
-            try:
-                state = ChatTaskState(
-                    task_id=task_id,
-                    agent_id=raw["agent_id"],
-                    goal=raw.get("goal", ""),
-                )
-            except KeyError as exc:
-                state = ChatTaskState(
-                    task_id=task_id,
-                    agent_id="<missing>",
-                    goal=raw.get("goal", ""),
-                )
-                self._states[state.task_id] = state
-                states.append(state)
-                self._emit_task_status(state)  # queued (status 仍是 "queued")
-                state.status = "failed"
-                state.error = f"missing required key: {exc.args[0]}"
-                self._emit_task_status(state)  # failed
-                continue
+            raw_task_id = raw.get("task_id")
+            if raw_task_id and raw_task_id in self._plan_by_id:
+                # P2-7 计划权威：goal/agent 以计划为准（覆盖 tool-passed；计划卡
+                # 编辑在派发前生效的杠杆点）。depends_on 直接随 plan_json 透传（A4 不用）。
+                plan_item = self._plan_by_id[raw_task_id]
+                task_id = raw_task_id
+                agent_id = str(plan_item.get("agent_id", raw.get("agent_id", "primary")))
+                goal = str(plan_item.get("goal", raw.get("goal", "")))
+                self._dispatched_plan_ids.add(task_id)
+            elif raw_task_id:
+                # 未知 task_id（不在计划）→ 回退 tool-passed 值，允许 conductor 动态加任务。
+                task_id = raw_task_id
+                agent_id = str(raw.get("agent_id", "primary"))
+                goal = str(raw.get("goal", ""))
+            else:
+                # 缺 task_id（malformed/旧客户端）→ 自分配（保留 _next_task_index 作缺省计数器）。
+                # 跳过循环：候选号撞计划编号或已用状态则递增（计划权威下 t1..tN 已占用）。
+                task_id = f"t{self._next_task_index + 1}"
+                while task_id in self._plan_by_id or task_id in self._states:
+                    self._next_task_index += 1
+                    task_id = f"t{self._next_task_index + 1}"
+                self._next_task_index += 1
+                agent_id = str(raw.get("agent_id", "primary"))
+                goal = str(raw.get("goal", ""))
+            state = ChatTaskState(task_id=task_id, agent_id=agent_id, goal=goal)
             self._states[state.task_id] = state
             states.append(state)
             self._emit_task_status(state)  # queued
 
         async def _run_one(state: ChatTaskState) -> None:
             async with self._semaphore:
+                # P2-9 (2026-08-14): 取消后 queued 任务不再启动（转 cancelled）。守卫在
+                # acquire 之后 —— 排队等槽的任务 cancel 前已越过入口，拿到槽后再判一次
+                # 才真正短路；running 子任务已过守卫不硬杀（SubagentRunner 无中断通道），
+                # 尽力放行，已完成结果仍入聚合。
+                if self._cancelled.is_set():
+                    state.status = "cancelled"
+                    state.error = "cancelled by user"
+                    self._emit_task_status(state)
+                    return
                 state.status = "running"
                 state.started_at = time.time()
                 self._emit_task_status(state)
@@ -220,25 +287,33 @@ class ChatDispatcher:
                     state.finished_at = time.time()
                     self._emit_task_status(state)
 
-        await asyncio.gather(*(_run_one(s) for s in states if s.status != "failed"))
+        await asyncio.gather(
+            *(_run_one(s) for s in states if s.status not in ("failed", "cancelled"))
+        )
         aggregated = self._aggregate(states)
         # P0-2 验证环：仅当本次调用已覆盖 plan 全部任务后跑 reviewer；
         # 失败降级跳过（绝不阻塞聊天）。
         # Wave 2 P1-4: 加 _reviewed 一次性守卫 —— 同一 run 只 review 一次，
         # 二次触发会撞 review 落库唯一约束（IntegrityError）；review 抛异常则
         # 复位 _reviewed，下次 dispatch 可重试。
-        if (
-            self.total_tasks
-            and self._next_task_index >= self.total_tasks
-            and not self._reviewed
-        ):
-            self._reviewed = True
-            try:
-                review = await self._run_review(aggregated)
-                aggregated = aggregated + review["block"]
-            except Exception as exc:  # noqa: BLE001 — 复核失败降级
-                self._reviewed = False
-                logger.warning("编排复核失败，跳过验证: %s", exc)
+        # P2-9/A8 fix round 1 (2026-08-14): 取消后不再拉 reviewer —— 单批全量
+        # dispatch 中 cancel 时 plan_covered 已满足，跳过验证环避免浪费 token /
+        # 落 review / 给已取消 run 推 task_review 事件。
+        if self.total_tasks and not self._reviewed and not self._cancelled.is_set():
+            if self._plan_by_id:
+                # 计划权威下：计划全部 task_id 已派发 → 触发验证环
+                plan_covered = set(self._plan_by_id).issubset(self._dispatched_plan_ids)
+            else:
+                # 无计划（DB 空/读失败）→ 回退旧门（计数器覆盖 total）
+                plan_covered = self._next_task_index >= self.total_tasks
+            if plan_covered:
+                self._reviewed = True
+                try:
+                    review = await self._run_review(aggregated)
+                    aggregated = aggregated + review["block"]
+                except Exception as exc:  # noqa: BLE001 — 复核失败降级
+                    self._reviewed = False
+                    logger.warning("编排复核失败，跳过验证: %s", exc)
         return aggregated
 
     async def _run_subagent(self, state: ChatTaskState) -> str:
@@ -263,7 +338,9 @@ class ChatDispatcher:
             },
             packet=TaskPacket(
                 objective=state.goal,
-                recovery_policy=RecoveryPolicy(on_failure="retry", max_retries=2),
+                recovery_policy=RecoveryPolicy(
+                    on_failure="retry", max_retries=self.settings.max_retries
+                ),
             ),
         )
         self.task_registry.create_task(task)
@@ -290,10 +367,10 @@ class ChatDispatcher:
         iterations = 0
         while result.get("status") == "retrying":
             iterations += 1
-            if iterations >= MAX_LANE_ITERATIONS:
+            if iterations >= self.settings.max_lane_iterations:
                 raise RuntimeError(
                     f"MAX_ITERATIONS_EXCEEDED: retry loop exceeded "
-                    f"max_iterations={MAX_LANE_ITERATIONS}"
+                    f"max_iterations={self.settings.max_lane_iterations}"
                 )
             result = await run_lane_with_retry(executor, lane, state.agent_id)
 
@@ -308,7 +385,7 @@ class ChatDispatcher:
     def _scratch_dir_for(self, state: ChatTaskState) -> Path:
         """子任务隔离目录：``<data_dir>/orch_scratch/<run_id>/<task_id>``。"""
         data_dir = Path(get_database().db_path).parent
-        return data_dir / SCRATCH_ROOT / self.run_id / state.task_id
+        return data_dir / self.settings.scratch_root / self.run_id / state.task_id
 
     def _emit_task_status(self, state: ChatTaskState) -> None:
         """推 task_status 事件；队列满/关闭静默降级（进度尽力而为）。"""
@@ -331,8 +408,11 @@ class ChatDispatcher:
         # 绝不阻塞聊天进度推送。
         self._persist_task_state(state)
 
-    def init_orch_run(self, session_id: str, plan_json: str) -> None:
-        """由 caller (legacy_routes) 在第一次 dispatch 前调一次。失败降级。"""
+    def init_orch_run(self, session_id: str, plan_json: str, original_request: str = "") -> None:
+        """由 caller (legacy_routes) 在第一次 dispatch 前调一次。失败降级。
+
+        original_request: resume 恢复流的原始请求（前端逐字重发）。
+        """
         try:
             from backend.data.orch_run_repo import OrchRun
 
@@ -342,6 +422,7 @@ class ChatDispatcher:
                 status="running",
                 created_at=int(time.time() * 1000),
                 plan_json=plan_json,
+                original_request=original_request or None,
             ))
         except Exception as exc:  # noqa: BLE001 — 降级铁律
             logger.warning("orch_run 落库失败 run_id=%s err=%s", self.run_id, exc)
@@ -387,17 +468,22 @@ class ChatDispatcher:
         P0-1（进度可视化）：首部追加「已收到 X/N 子任务结果」摘要，
         让 conductor 看到还没齐时不要急着汇总。所有子任务完成时
         header 退化为单行声明，不展示"仍在并行运行"等干扰信息。
+        P2-9/A8 fix round 1 (2026-08-14)：cancelled 从 in_flight 扣除，
+        聚合头单列「已取消」—— 取消的任务不再显示为"仍在并行运行"，
+        避免误导 conductor 继续等待/重复 dispatch。
         """
         total = len(states)
         done = sum(1 for s in states if s.status == "done")
         failed = sum(1 for s in states if s.status == "failed")
-        in_flight = total - done - failed
+        cancelled = sum(1 for s in states if s.status == "cancelled")
+        in_flight = total - done - failed - cancelled
 
         if in_flight > 0:
             header = (
                 f"## 子任务进度摘要（部分完成）\n\n"
                 f"- 已收到 {done}/{total} 子任务结果"
                 + (f"（{failed} 失败）" if failed else "")
+                + (f"（{cancelled} 已取消）" if cancelled else "")
                 + f",{in_flight} 个仍在并行运行。\n"
                 f"- 提醒：在剩余 {in_flight} 个子任务未完成前，"
                 f"本次回答只能基于当前结果。"
@@ -408,6 +494,7 @@ class ChatDispatcher:
                 f"## 子任务进度摘要（全部完成）\n\n"
                 f"- 已收到 {done}/{total} 子任务结果"
                 + (f"（{failed} 失败）" if failed else "")
+                + (f"（{cancelled} 已取消）" if cancelled else "")
                 + "。\n\n"
             )
 
@@ -415,19 +502,19 @@ class ChatDispatcher:
         for state in states:
             header_item = f"## 子任务 {state.task_id}（{state.agent_id}）"
             if state.status == "done" and state.output:
-                body = state.output[:MAX_SUBAGENT_RESULT_CHARS]
+                body = state.output[: self.settings.max_subagent_result_chars]
                 blocks.append(f"{header_item}\n\n{body}")
             elif state.status == "failed":
-                err = (state.error or "未知错误")[:MAX_SUBAGENT_RESULT_CHARS]
+                err = (state.error or "未知错误")[: self.settings.max_subagent_result_chars]
                 blocks.append(f"{header_item}\n\n[失败] {err}")
             else:
                 blocks.append(f"{header_item}\n\n[状态: {state.status}]")
         result = header + "\n\n".join(blocks)
         # F3 (2026-08-12): maxItems 放宽到 8 后单批聚合体积翻倍，整体截断兜底
         # （保留头部进度摘要 + 前部子任务），防一次性灌爆 conductor 上下文。
-        if len(result) > MAX_AGGREGATE_CHARS:
+        if len(result) > self.settings.max_aggregate_chars:
             result = (
-                result[:MAX_AGGREGATE_CHARS]
+                result[: self.settings.max_aggregate_chars]
                 + "\n\n[聚合结果超过上限，已截断；详见各子任务输出]"
             )
         return result
