@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { useBtwState } from '../../entities/chat/btwState';
 import { usePermissionState } from '../../entities/permission/permissionState';
@@ -566,7 +567,13 @@ export function useChat() {
   const resumeOrchestration = useCallback(
     async (runId: string) => {
       const resp = await orchRunClient.resumeRun(runId);
-      await sendMessage(resp.original_request ?? '', undefined, undefined, 'force_multi', {
+      // §13.7 (2026-08-15): 旧库 NULL original_request 兜底 —— 占位文案继续 + 提示，
+      // 避免空串被当成正常消息发给 LLM（ChatRequest.message 无非空校验）。
+      const content = resp.original_request ?? '（旧记录无原始请求，已从计划恢复）';
+      if (!resp.original_request) {
+        toast.info('该记录缺少原始请求，已从计划恢复执行');
+      }
+      await sendMessage(content, undefined, undefined, 'force_multi', {
         planOverride: resp.plan,
         runId: resp.new_run_id,
       });

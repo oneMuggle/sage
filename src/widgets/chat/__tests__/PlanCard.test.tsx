@@ -1,6 +1,7 @@
 // src/widgets/chat/__tests__/PlanCard.test.tsx
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Wave 3 C4+H1 (2026-08-15): PlanCard handleStart 内部调
 // orchRunClient.updatePlan;取消语义统一委托上层 onCancel
@@ -91,5 +92,63 @@ describe('PlanCard 接线 (Wave 3 C4+H1)', () => {
     ]);
     // 锁定后开始按钮 disabled + 文案「已开始执行」
     await waitFor(() => expect(screen.getByTestId('plan-start')).toBeDisabled());
+  });
+});
+
+// ===== §13.7 延后项 (2026-08-15): C4 双击守卫 + 错误区分 =====
+describe('PlanCard §13.7 (C4 双击 + 错误处理)', () => {
+  const plan = [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }];
+
+  // 本项目 vitest 未开 clearMocks：同文件 mock 调用计数跨测试累积，
+  // 上游用例的 updatePlan 调用会混入本块 toHaveBeenCalledTimes 断言
+  // （实测双击用例收到 2/4/5 次累积计数）→ 每测前清一次调用计数。
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('双击开始执行 → updatePlan 只调一次（ref 同步防重入）', async () => {
+    vi.mocked(orchRunClient.updatePlan).mockResolvedValue({ ok: true });
+    render(<PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} />);
+    const btn = screen.getByTestId('plan-start');
+    fireEvent.click(btn);
+    fireEvent.click(btn); // 双击：第二击在 await 完成前被同步拦截
+    await waitFor(() => expect(orchRunClient.updatePlan).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(btn).toBeDisabled());
+  });
+
+  it('非 409 落库失败 → toast 提示 + 保持编辑态可重试', async () => {
+    const toastErrorSpy = vi.spyOn(toast, 'error').mockImplementation(() => '');
+    vi.mocked(orchRunClient.updatePlan)
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({ ok: true });
+    render(<PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} />);
+    const btn = screen.getByTestId('plan-start');
+    fireEvent.click(btn);
+    await waitFor(() =>
+      expect(toastErrorSpy).toHaveBeenCalledWith(expect.stringContaining('计划保存失败')),
+    );
+    // ref 已复位 → 再点可成功
+    fireEvent.click(btn);
+    await waitFor(() => expect(orchRunClient.updatePlan).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(btn).toBeDisabled());
+    toastErrorSpy.mockRestore();
+  });
+
+  it('409 落库失败 → 静默（不 toast）保持编辑态', async () => {
+    const toastErrorSpy = vi.spyOn(toast, 'error').mockImplementation(() => '');
+    const err409 = new Error(
+      'Backend POST http://x/runs/r1/plan → 409: plan locked after dispatch',
+    ) as Error & {
+      status_code?: number;
+    };
+    err409.status_code = 409;
+    vi.mocked(orchRunClient.updatePlan).mockRejectedValueOnce(err409);
+    render(<PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} />);
+    const btn = screen.getByTestId('plan-start');
+    fireEvent.click(btn);
+    await waitFor(() => expect(orchRunClient.updatePlan).toHaveBeenCalledTimes(1));
+    expect(toastErrorSpy).not.toHaveBeenCalled();
+    expect(btn).not.toBeDisabled(); // 保持编辑态
+    toastErrorSpy.mockRestore();
   });
 });

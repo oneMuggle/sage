@@ -71,7 +71,13 @@ export async function invokeBackend(
   const res = await fetch(url, init);
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`Backend ${route.method} ${url} → ${res.status}: ${text}`);
+    const err = new Error(`Backend ${route.method} ${url} → ${res.status}: ${text}`) as Error & {
+      status_code?: number;
+    };
+    // §13.7: 附加状态码（进程内契约；main 进程 sage:invoke 会用 new Error(msg)
+    // 重包装剥掉自定义属性，renderer 侧由 desktopInvoke 从 message 解析兜底）。
+    err.status_code = res.status;
+    throw err;
   }
   return res.json();
 }

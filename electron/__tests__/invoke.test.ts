@@ -138,9 +138,12 @@ describe('invokeBackend', () => {
     expect(init.body).toBeUndefined();
   });
 
-  it('throws on non-OK response with status code + body text', async () => {
-    mockedFetch.mockResolvedValueOnce(mockJsonResponse('boom', { ok: false, status: 500 }));
-    await expect(invokeBackend('list_sessions', {}, 'http://x')).rejects.toThrow(/500.*boom/);
+  it('throws on non-OK response with status_code attached', async () => {
+    mockedFetch.mockResolvedValueOnce(mockJsonResponse('boom', { ok: false, status: 409 }));
+    const err = await invokeBackend('list_sessions', {}, 'http://x').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/409.*boom/);
+    expect((err as Error & { status_code?: number }).status_code).toBe(409);
   });
 
   it('GET /api/v1/sessions/:id url-encodes ids with special characters', async () => {

@@ -6,6 +6,7 @@
  * → sendMessage(original_request, 'force_multi', {planOverride, runId})。
  */
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { usePermissionState } from '../../../entities/permission/permissionState';
@@ -118,6 +119,38 @@ describe('useChat.resumeOrchestration (PR C C2)', () => {
     expect(args.orchestrationMode).toBe('force_multi');
     expect(args.plan_override).toEqual(plan);
     expect(args.run_id).toBe('orch-new');
+  });
+
+  it('original_request 缺失 → 占位文案发送 + toast 提示', async () => {
+    seedActiveEndpoint();
+    const plan = [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }];
+    const toastInfoSpy = vi.spyOn(toast, 'info').mockImplementation(() => '');
+    invokeMock
+      .mockResolvedValueOnce({
+        ok: true,
+        new_run_id: 'orch-new',
+        session_id: 's',
+        original_request: null,
+        plan,
+      })
+      .mockResolvedValueOnce({ streamId: 'stream-resume' });
+    listenMock.mockImplementationOnce(async (_n, cb) => {
+      Promise.resolve().then(() => cb({ payload: { state: 'done', iteration: 0, content: 'ok' } }));
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    await act(async () => {
+      await result.current.resumeOrchestration('orch-old');
+    });
+
+    const [, args] = invokeMock.mock.calls[2];
+    expect(args.message).toBe('（旧记录无原始请求，已从计划恢复）');
+    expect(args.orchestrationMode).toBe('force_multi');
+    expect(toastInfoSpy).toHaveBeenCalledWith('该记录缺少原始请求，已从计划恢复执行');
+    toastInfoSpy.mockRestore();
   });
 });
 

@@ -4,7 +4,7 @@
 导出,且 parseNDJSONStream 在纯 jsdom 下可用 ReadableStream 真测。
 */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import * as DesktopEvent from '../desktopEvent';
 import * as DesktopInvoke from '../desktopInvoke';
@@ -24,8 +24,37 @@ describe('src/shared/api/desktopEvent', () => {
 });
 
 describe('src/shared/api/desktopInvoke', () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).electronAPI;
+  });
+
   it('exports invoke function (Electron IPC request)', () => {
     expect(typeof DesktopInvoke.invoke).toBe('function');
+  });
+
+  it('invoke: IPC 剥掉自定义属性后从 message 解析附加 status_code', async () => {
+    const invokeMock = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          'Backend POST http://127.0.0.1:8765/api/v1/orch/runs/r1/plan → 409: ' +
+            '{"detail":"plan locked after dispatch"}',
+        ),
+      );
+    (window as unknown as Record<string, unknown>).electronAPI = { invoke: invokeMock };
+    await expect(
+      DesktopInvoke.invoke('orchestration_update_plan', { runId: 'r1', plan: [] }),
+    ).rejects.toMatchObject({ status_code: 409 });
+  });
+
+  it('invoke: 错误已带 status_code 时保留不重复解析', async () => {
+    const err = new Error('whatever') as Error & { status_code?: number };
+    err.status_code = 500;
+    const invokeMock = vi.fn().mockRejectedValue(err);
+    (window as unknown as Record<string, unknown>).electronAPI = { invoke: invokeMock };
+    await expect(DesktopInvoke.invoke('list_sessions')).rejects.toMatchObject({
+      status_code: 500,
+    });
   });
 });
 
