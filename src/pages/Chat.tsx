@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
-import type { ChatOfficeRef, TaskPlanItem } from '../shared/api';
+import type { ChatOfficeRef } from '../shared/api';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
@@ -161,16 +161,6 @@ export function Chat() {
     }
   };
 
-  // Wave 3 C3 (2026-08-15): 计划卡"开始执行" → updatePlan 落库后由后端派发。
-  // 409（派发竞态）→ 保持编辑态，TaskBoard 首 task_status 事件会锁。
-  const handlePlanStart = async (runId: string, plan: TaskPlanItem[]) => {
-    try {
-      await orchRunClient.updatePlan(runId, plan);
-    } catch {
-      // 409（派发竞态）→ 保持编辑态，TaskBoard 首 status 事件会锁
-    }
-  };
-
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
   // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
@@ -269,7 +259,6 @@ export function Chat() {
           // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
           // 自动派发）+ 清空 taskBoard。
           onCancel={() => void handleCancelRun(taskBoard.runId)}
-          onStart={(updated) => void handlePlanStart(taskBoard.runId, updated)}
         />
       )}
 
