@@ -1,11 +1,12 @@
 // src/widgets/chat/__tests__/PlanCardList.test.tsx
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+// C5 (2026-08-15): handleResume 只回调 onResume(runId)，不再内部调 resumeRun
+//（resume 封装进 useChat.resumeOrchestration，恢复 original_request 逐字）。
 vi.mock('../../../shared/api/orchRunClient', () => ({
   orchRunClient: {
     listRuns: vi.fn(),
-    resumeRun: vi.fn(),
   },
 }));
 
@@ -13,7 +14,6 @@ import { PlanCardList } from '../../../components/PlanCardList';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
 
 const listRunsMock = orchRunClient.listRuns as unknown as ReturnType<typeof vi.fn>;
-const resumeRunMock = orchRunClient.resumeRun as unknown as ReturnType<typeof vi.fn>;
 
 describe('PlanCardList (P1-5)', () => {
   afterEach(() => {
@@ -38,23 +38,14 @@ describe('PlanCardList (P1-5)', () => {
     expect(screen.getByText(/running/)).toBeInTheDocument();
   });
 
-  it('resume button calls onResume with new run + plan', async () => {
+  // ===== Wave 3 C5 (2026-08-15): 恢复流 —— onResume(runId) 委托 useChat.resumeOrchestration =====
+  it('点击恢复 → onResume(runId)（不再内部调 resumeRun）', async () => {
     const onResume = vi.fn();
     listRunsMock.mockResolvedValue([
       { run_id: 'orch-1', session_id: 's1', status: 'done', created_at: 1 },
     ]);
-    resumeRunMock.mockResolvedValue({
-      ok: true,
-      new_run_id: 'orch-new',
-      session_id: 's1',
-      plan: [{ task_id: 't1', agent_id: 'primary', goal: 'g' }],
-    });
     render(<PlanCardList onResume={onResume} />);
     fireEvent.click(await screen.findByTestId('plan-resume-orch-1'));
-    await waitFor(() => {
-      expect(onResume).toHaveBeenCalledWith('orch-new', [
-        { task_id: 't1', agent_id: 'primary', goal: 'g' },
-      ]);
-    });
+    expect(onResume).toHaveBeenCalledWith('orch-1');
   });
 });
