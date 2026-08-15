@@ -313,9 +313,10 @@ export function Chat() {
         onResumeRun={(runId) => {
           void resumeOrchestration(runId);
         }}
-        onCancelExecution={(runId) => {
-          void orchRunClient.cancelRun(runId).then(() => clearTaskBoard());
-        }}
+        // C4 (2026-08-15): 未派发取消 → PlanCard.onCancel 仅清前端(taskBoard);
+        // 已派发取消 → PlanCard 内部 cancelRun + onCancelled → 同样清 taskBoard。
+        // 后端 cancelRun 调用归 PlanCard 内聚,上层不再直接调。
+        onCancelExecution={() => clearTaskBoard()}
         onPlanStart={handlePlanStart}
       />
     </div>

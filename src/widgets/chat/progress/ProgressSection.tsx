@@ -84,6 +84,9 @@ export function ProgressSection({
           plan={taskBoard.plan}
           locked={false}
           onCancel={() => onCancelExecution?.(taskBoard.runId)}
+          // C4: 已派发(locked)取消 → PlanCard 内部 cancelRun + onCancelled,
+          // 统一回落 onCancelExecution(上层 clearTaskBoard)。
+          onCancelled={() => onCancelExecution?.(taskBoard.runId)}
           onStart={(updated) => onPlanStart?.(taskBoard.runId, updated)}
         />
       )}
