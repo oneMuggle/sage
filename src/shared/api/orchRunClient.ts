@@ -22,6 +22,8 @@ export interface OrchRunDetail {
   created_at: number;
   plan: TaskPlanItem[];
   tasks: Array<Record<string, unknown>>;
+  /** 原始用户请求 —— 恢复流（PR C C5）逐字回填依赖它。 */
+  original_request?: string;
 }
 
 export interface ResumeResponse {
@@ -29,6 +31,14 @@ export interface ResumeResponse {
   new_run_id: string;
   session_id: string;
   plan: TaskPlanItem[];
+  /** 原始用户请求（旧库 NULL 行可能缺失,故 optional）。 */
+  original_request?: string;
+}
+
+export interface CancelRunResponse {
+  ok: boolean;
+  run_id: string;
+  status: string;
 }
 
 export const orchRunClient = {
@@ -40,6 +50,9 @@ export const orchRunClient = {
   },
   resumeRun(runId: string): Promise<ResumeResponse> {
     return invoke<ResumeResponse>('orchestration_resume_run', { run_id: runId });
+  },
+  cancelRun(runId: string): Promise<CancelRunResponse> {
+    return invoke<CancelRunResponse>('orchestration_cancel_run', { run_id: runId });
   },
   updatePlan(runId: string, plan: TaskPlanItem[]): Promise<{ ok: boolean }> {
     return invoke<{ ok: boolean }>('orchestration_update_plan', { run_id: runId, plan });
