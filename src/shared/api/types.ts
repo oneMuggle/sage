@@ -334,8 +334,11 @@ export interface ChatConfig {
   provider?: string;
   reasoningEffort?: 'low' | 'medium' | 'high';
   thinkingBudget?: number;
-  /** Multi-Agent Orchestration: auto | force_multi | force_single（缺省 auto） */
-  orchestrationMode?: 'auto' | 'force_multi' | 'force_single';
+  /** Multi-Agent Orchestration: auto | force_multi | force_single | template:<id>（缺省 auto） */
+  orchestrationMode?: string;
+  // Wave 3 (2026-08-14): resume 恢复流 —— plan_override 逐字恢复（跳过 LLM 拆解）。
+  planOverride?: TaskPlanItem[];
+  runId?: string;
 }
 
 // ==================== Memory 类型定义 ====================

@@ -53,3 +53,29 @@ describe('chatApi.chatStream — orchestrationMode (Task 8)', () => {
     );
   });
 });
+
+describe('chatApi.chatStream — plan_override/run_id 透传 (PR C C2)', () => {
+  it('透传 plan_override/run_id 到 agent_chat_stream', async () => {
+    await chatApi.chatStream(SESSION_ID, MESSAGE, BASE_HANDLERS, {
+      orchestrationMode: 'force_multi',
+      planOverride: [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }],
+      runId: 'orch-reused',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'agent_chat_stream',
+      expect.objectContaining({
+        orchestrationMode: 'force_multi',
+        plan_override: [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }],
+        run_id: 'orch-reused',
+      }),
+    );
+  });
+
+  it('缺省时 plan_override/run_id 序列化为 null', async () => {
+    await chatApi.chatStream(SESSION_ID, MESSAGE, BASE_HANDLERS, {});
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'agent_chat_stream',
+      expect.objectContaining({ plan_override: null, run_id: null }),
+    );
+  });
+});

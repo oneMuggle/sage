@@ -118,6 +118,9 @@ export const chatApi = {
       officeRefs: officeRefs ?? [],
       // Multi-Agent Orchestration: undefined → null,后端默认 auto
       orchestrationMode: config?.orchestrationMode ?? null,
+      // Wave 3 A10 (2026-08-14): resume plan_override / run_id 透传。
+      plan_override: config?.planOverride ?? null,
+      run_id: config?.runId ?? null,
     });
     const eventName = `chat-stream-${streamId}`;
 
