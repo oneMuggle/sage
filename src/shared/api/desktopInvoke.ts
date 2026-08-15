@@ -8,9 +8,20 @@
  * 内部委托 `window.electronAPI.invoke`（preload.ts 通过 contextBridge 注入）
  * 主进程（electron/main.ts）再把 invoke 转成对 backend FastAPI 的 HTTP 调用
  *
+ * §13.7 (2026-08-15): 错误规范化 —— main 进程 sage:invoke 用 new Error(msg)
+ * 重包装，Error 自定义属性过不了 Electron 21 IPC，但 message（含 `→ <status>:`）
+ * 可靠。renderer 唯一漏斗在此解析附加 status_code，全局所有调用点可读。
+ *
  * 测试通过 `vi.mock('@/shared/api/desktopInvoke')` 桩化，与底层 transport 解耦
  */
 import type { ElectronAPI } from '../types/electron-api';
+
+/** 跨 IPC 的 HTTP 错误 —— status_code 由本漏斗解析附加。 */
+export interface InvokeError extends Error {
+  status_code?: number;
+}
+
+const STATUS_RE = /→ (\d+):/;
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const api: ElectronAPI | undefined =
@@ -21,5 +32,13 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
         'If running outside Electron (e.g. plain browser), this is expected.',
     );
   }
-  return api.invoke<T>(cmd, args ?? {});
+  try {
+    return await api.invoke<T>(cmd, args ?? {});
+  } catch (err) {
+    if (err instanceof Error && (err as InvokeError).status_code == null) {
+      const m = err.message.match(STATUS_RE);
+      if (m) (err as InvokeError).status_code = Number(m[1]);
+    }
+    throw err;
+  }
 }

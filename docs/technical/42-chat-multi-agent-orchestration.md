@@ -327,7 +327,7 @@ PR A #316（P2-7/8/9 + run 级 cancel）+ PR B #317（P2-10 休眠层）+ PR C #
 ### 13.7 已知限制与延后项
 
 - **M4** ~~`updatePlan` 双调用~~ —— ✅ 已收口（2026-08-15）：删除 `Chat.handlePlanStart` + `onPlanStart` 透传链，`PlanCard.handleStart` 单次 updatePlan 落库即完成（派发由后端 conductor 驱动）
-- **C4 双击竞态**：`handleStart` 连点两次可能双 updatePlan（本地锁定在 await 前）
-- **handleStart 静默吞错**：落库失败（非 409）无用户反馈，保持编辑态安全降级
-- **original_request NULL 兜底**：旧库 NULL 行的 resume 需对 undefined 兜底
+- **C4 双击竞态** ~~`handleStart` 连点两次可能双 updatePlan~~ —— ✅ 已收口（2026-08-15）：`useRef` 同步守卫 await 前置位，双击单次落库
+- **handleStart 静默吞错** ~~落库失败（非 409）无用户反馈~~ —— ✅ 已收口（2026-08-15）：invoke 错误结构带 `status_code`，409 静默保持编辑态、非 409 toast 提示
+- **original_request NULL 兜底** ~~旧库 NULL 行的 resume 需对 undefined 兜底~~ —— ✅ 已收口（2026-08-15）：占位文案 + toast 提示
 - 进度可视化已知局限见 §9.3 / §11.7

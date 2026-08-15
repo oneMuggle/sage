@@ -15,8 +15,10 @@
  *   cancelled + dispatcher.cancel() 阻止自动派发，避免空转烧 token）
  *   + 清空 taskBoard；取消失败也照常清理（.catch 兜底）。
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 
+import type { InvokeError } from '../shared/api/desktopInvoke';
 import { orchRunClient } from '../shared/api/orchRunClient';
 import type { TaskPlanItem } from '../shared/api/types';
 
@@ -42,11 +44,19 @@ export function PlanCard({ runId, plan: initialPlan, locked, onCancel }: PlanCar
     setItems(items.filter((_, i) => i !== idx));
   };
 
+  // §13.7 C4 (2026-08-15): ref 同步守卫 —— await 前置位，双击第二击被拦截
+  // （React 状态更新异步，locallyLocked 在成功后 set 拦不住双击）。
+  const startingRef = useRef(false);
   const handleStart = async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
     try {
       await orchRunClient.updatePlan(runId, items);
-    } catch {
-      // 409（派发竞态）→ 保持编辑态，TaskBoard 首 status 事件会锁
+    } catch (err) {
+      startingRef.current = false; // 失败后允许重试
+      // 409（派发竞态）→ 静默保持编辑态，TaskBoard 首 status 事件会锁。
+      if ((err as InvokeError).status_code === 409) return;
+      toast.error(`计划保存失败：${err instanceof Error ? err.message : String(err)}`);
       return;
     }
     setLocallyLocked(true);
