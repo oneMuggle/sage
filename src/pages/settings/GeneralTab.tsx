@@ -46,7 +46,6 @@ function NumberField({
 export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
   const { settings, updateSettings } = useSettings();
   const { t } = useI18n();
-  const { settings, updateSettings } = useSettings();
 
   return (
     <div className="space-y-6">

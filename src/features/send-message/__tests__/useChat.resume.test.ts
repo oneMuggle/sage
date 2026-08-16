@@ -8,8 +8,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { usePermissionState } from '../../../entities/permission/permissionState';
-import { useQuestionState } from '../../../entities/question/questionState';
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
 import { useStore } from '../../../shared/lib/store';
 import { useChat } from '../useChat';
@@ -78,9 +76,6 @@ beforeEach(() => {
     messages: [],
     isLoading: false,
   });
-  // M1: 隔离 permission/question store,避免用例间状态串扰
-  usePermissionState.setState({ currentRequest: null });
-  useQuestionState.setState({ currentQuestion: null });
 });
 
 describe('useChat.resumeOrchestration (PR C C2)', () => {

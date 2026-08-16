@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_ORCH_SETTINGS } from '../../../entities/setting/types';
 import { MemoryTab } from '../MemoryTab';
 
 const mocks = vi.hoisted(() => ({
@@ -55,6 +56,7 @@ const baseSettings = {
   proxyUrl: '',
   tlsVersion: '1.2' as const,
   wiki: { useFolderPicker: true },
+  orch: DEFAULT_ORCH_SETTINGS,
   version: '3.0.0',
 };
 
