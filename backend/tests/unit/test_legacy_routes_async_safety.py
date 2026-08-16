@@ -29,17 +29,17 @@ LEGACY_ROUTES_PATH = Path(__file__).resolve().parent.parent.parent / "api" / "le
 # win7 另有 4 个 memory 相关 async handler(get_memories_by_turn 等),一并纳入。
 KEEP_ASYNC_HANDLERS = frozenset(
     {
-        "compact_session",  # M4 manual compact,内调 LLM 摘要
-        "execute_skill",  # L599 — skill 执行,内调 LLM
-        "execute_slash_command",  # L641 — slash 命令,内调 LLM
-        "import_skills",  # L734 — 文件上传,内调 LLM
-        "chat",  # L917 — 主 chat 端点,内调 LLM 流
-        "chat_stream_create",  # L1031 — SSE 流,内调 LLM 流
-        "chat_stream_attach",  # L1342 — SSE 续接,内调事件流
-        "get_memories_by_turn",  # L1594 — memory 查询
-        "get_user_profile",  # L1602 — 用户画像
-        "get_session_summary",  # L1617 — 会话摘要
-        "memory_events",  # L1628 — memory 事件流
+        "compact_session",  # L597 — M4 manual compact,内调 LLM 摘要
+        "execute_skill",  # L1026 — skill 执行,内调 LLM
+        "execute_slash_command",  # L1068 — slash 命令,内调 LLM
+        "import_skills",  # L1161 — 文件上传,内调 LLM
+        "chat",  # L1352 — 主 chat 端点,内调 LLM 流
+        "chat_stream_create",  # L1466 — SSE 流,内调 LLM 流
+        "chat_stream_attach",  # L2010 — SSE 续接,内调事件流
+        "get_memories_by_turn",  # L2262 — memory 查询
+        "get_user_profile",  # L2270 — 用户画像
+        "get_session_summary",  # L2285 — 会话摘要
+        "memory_events",  # L2296 — memory 事件流
     }
 )
 

@@ -35,9 +35,11 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(autouse=True)
 def _gate_lifecycle():
     """每个测试独立 gate, 防止跨测试挂起请求泄漏。"""
-    # test_run_loop_ask_user_bypasses_permission_enforcer 会把 settings
-    # 里的 permission_mode 改成 prompt 且不还原 —— 必须还原，否则残留
-    # 影响后续 agent 循环（EXECUTE 工具触发审批挂起直到超时）。
+    # question_gate 是进程级单例；本文件改写 settings.permission_mode
+    # 后写回原值（写后必还）。注意 permission_mode 残留并非跨测试泄漏
+    # 的实际根因——autouse setup_test_db 给每个测试独立 temp DB；真正
+    # 的跨测试残留源是 main.py lifespan 装配的全局 gate（shutdown 已
+    # reset）。
     _repo = SettingsRepository()
     _prev_mode = _repo.get("permission_mode")
     reset_question_gate()
