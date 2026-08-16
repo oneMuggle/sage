@@ -187,6 +187,8 @@ describe('COMMAND_ROUTES', () => {
       'list_sessions',
       'create_session',
       'delete_session',
+      'session_compact',
+      'session_fork',
       'get_messages',
       'delete_message',
     ];
@@ -214,6 +216,14 @@ describe('COMMAND_ROUTES', () => {
         /^(\/api\/v1\/|\/api\/theme\/)/,
       );
     }
+  });
+
+  // M6 生态扩展: 用量面板路由 (settings GeneralTab → usageApi → GET /api/v1/usage)
+  it('usage_summary is GET /api/v1/usage (M6 usage panel)', () => {
+    const r = COMMAND_ROUTES.usage_summary;
+    expect(r, 'missing route for usage_summary').toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({})).toBe('/api/v1/usage');
   });
 
   // I2: agent_chat_stream 改为同步 create(JSON 立即返回 streamId),不再是 SSE
@@ -260,6 +270,31 @@ describe('COMMAND_ROUTES', () => {
     const r = COMMAND_ROUTES.delete_session;
     expect(r.method).toBe('DELETE');
     expect(r.path({ id: 'abc' })).toBe('/api/v1/sessions/abc');
+  });
+
+  // M4: session engineering — compact + fork
+  it('builds session_compact as POST /api/v1/sessions/{sessionId}/compact', () => {
+    const r = COMMAND_ROUTES.session_compact;
+    expect(r.method).toBe('POST');
+    expect(r.path({ sessionId: 's/1' })).toBe('/api/v1/sessions/s%2F1/compact');
+  });
+
+  it('builds session_fork as POST /api/v1/sessions/{sessionId}/fork', () => {
+    const r = COMMAND_ROUTES.session_fork;
+    expect(r.method).toBe('POST');
+    expect(r.path({ sessionId: 's/1' })).toBe('/api/v1/sessions/s%2F1/fork');
+  });
+
+  it('session_fork body maps camelCase args to backend snake_case fields', () => {
+    const r = COMMAND_ROUTES.session_fork;
+    expect(r.body).toBeDefined();
+    // 完整参数
+    expect(r.body!({ sessionId: 's1', atMessageId: 'm-9', title: '分支' })).toEqual({
+      at_message_id: 'm-9',
+      title: '分支',
+    });
+    // 缺省参数不下发（sessionId 走 path 不进 body）
+    expect(r.body!({ sessionId: 's1' })).toEqual({});
   });
 
   it('builds delete_message as POST /api/v1/messages/{id}/delete', () => {
@@ -426,6 +461,96 @@ describe('MCP management IPC routes (M3)', () => {
     expect(COMMAND_ROUTES.mcp_server_delete.path({ name: 'a b' })).toBe(
       '/api/v1/mcp/servers/a%20b',
     );
+  });
+});
+
+describe('permission IPC routes (M1 tool security hardening)', () => {
+  // Backend: backend/api/permission_routes.py — GET /permissions/pending +
+  // POST /permissions/{request_id}/answer（ApprovalAnswerBody extra="forbid"）。
+
+  it('has permissions_pending route: GET /api/v1/permissions/pending', () => {
+    const r = COMMAND_ROUTES.permissions_pending;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({})).toBe('/api/v1/permissions/pending');
+    expect(r.body).toBeUndefined();
+  });
+
+  it('has permissions_answer route: POST with url-encoded requestId path param', () => {
+    const r = COMMAND_ROUTES.permissions_answer;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({ requestId: 'abc-123' })).toBe('/api/v1/permissions/abc-123/answer');
+    // 路径参数必须 url-encode（与 get_session / workspace_bind 同约定）
+    expect(r.path({ requestId: 'id/with slash' })).toBe(
+      '/api/v1/permissions/id%2Fwith%20slash/answer',
+    );
+  });
+
+  // Guard: 后端 ApprovalAnswerBody 是 extra="forbid" — requestId 泄漏进 body
+  // 会触发 422。body selector 必须只保留 approved/remember。
+  it('permissions_answer body selector strips requestId (only approved/remember)', () => {
+    const r = COMMAND_ROUTES.permissions_answer;
+    expect(r.body).toBeDefined();
+    expect(r.body!({ requestId: 'r-1', approved: true, remember: false, extraField: 'x' })).toEqual(
+      { approved: true, remember: false },
+    );
+  });
+
+  it('permission routes use /api/v1 prefix (防 404 guard)', () => {
+    const paths = [
+      COMMAND_ROUTES.permissions_pending.path({}),
+      COMMAND_ROUTES.permissions_answer.path({ requestId: 'x' }),
+    ];
+    paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\//));
+  });
+});
+
+describe('question IPC routes (M2 part B: AskUserQuestion)', () => {
+  // Backend: backend/api/question_routes.py — GET /questions/pending +
+  // POST /questions/{request_id}/answer（QuestionAnswerBody extra="forbid"）。
+
+  it('has questions_pending route: GET /api/v1/questions/pending', () => {
+    const r = COMMAND_ROUTES.questions_pending;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    expect(r.path({})).toBe('/api/v1/questions/pending');
+    expect(r.body).toBeUndefined();
+  });
+
+  it('has questions_answer route: POST with url-encoded requestId path param', () => {
+    const r = COMMAND_ROUTES.questions_answer;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({ requestId: 'abc-123' })).toBe('/api/v1/questions/abc-123/answer');
+    // 路径参数必须 url-encode（与 permissions_answer / get_session 同约定）
+    expect(r.path({ requestId: 'id/with slash' })).toBe(
+      '/api/v1/questions/id%2Fwith%20slash/answer',
+    );
+  });
+
+  // Guard: 后端 QuestionAnswerBody 是 extra="forbid" — requestId 泄漏进 body
+  // 会触发 422。body selector 必须只保留 answers/custom。
+  it('questions_answer body selector strips requestId (only answers/custom)', () => {
+    const r = COMMAND_ROUTES.questions_answer;
+    expect(r.body).toBeDefined();
+    expect(
+      r.body!({ requestId: 'r-1', answers: ['PDF'], custom: 'x', extraField: 'boom' }),
+    ).toEqual({ answers: ['PDF'], custom: 'x' });
+  });
+
+  it('questions_answer body selector normalizes missing answers/custom', () => {
+    const r = COMMAND_ROUTES.questions_answer;
+    // Escape 空提交 → answers 缺失归一为 [], custom 缺失归一为 null
+    expect(r.body!({ requestId: 'r-1' })).toEqual({ answers: [], custom: null });
+  });
+
+  it('question routes use /api/v1 prefix (防 404 guard)', () => {
+    const paths = [
+      COMMAND_ROUTES.questions_pending.path({}),
+      COMMAND_ROUTES.questions_answer.path({ requestId: 'x' }),
+    ];
+    paths.forEach((p) => expect(p).toMatch(/^\/api\/v1\//));
   });
 });
 

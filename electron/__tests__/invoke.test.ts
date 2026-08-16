@@ -90,6 +90,43 @@ describe('invokeBackend', () => {
     );
   });
 
+  // M1 工具审批: requestId 是路径参数,绝不能进 body —
+  // 后端 ApprovalAnswerBody extra="forbid",泄漏即 422。
+  it('permissions_answer POSTs {approved, remember} body and keeps requestId in path only', async () => {
+    mockedFetch.mockResolvedValueOnce(mockJsonResponse({ ok: true }));
+
+    await invokeBackend(
+      'permissions_answer',
+      { requestId: 'req-1', approved: true, remember: true },
+      'http://x',
+    );
+
+    expect(mockedFetch).toHaveBeenCalledWith(
+      'http://x/api/v1/permissions/req-1/answer',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ approved: true, remember: true }),
+      }),
+    );
+    const init = mockedFetch.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(init.body as string);
+    expect(body).not.toHaveProperty('requestId');
+    expect(body).not.toHaveProperty('request_id');
+  });
+
+  it('permissions_pending GETs /api/v1/permissions/pending with no body', async () => {
+    mockedFetch.mockResolvedValueOnce(mockJsonResponse([]));
+    const result = await invokeBackend('permissions_pending', {}, 'http://x');
+    expect(mockedFetch).toHaveBeenCalledWith(
+      'http://x/api/v1/permissions/pending',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    const init = mockedFetch.mock.calls[0][1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(result).toEqual([]);
+  });
+
   it('DELETE sends no body', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse({ ok: true }));
     await invokeBackend('delete_session', { id: 's1' }, 'http://x');

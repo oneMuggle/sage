@@ -28,8 +28,11 @@ from backend.api.office_routes import (
     router as office_router,
 )
 from backend.api.orchestration_router import build_router as build_orchestration_router
+from backend.api.permission_routes import router as permission_router
+from backend.api.question_routes import router as question_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
+from backend.api.usage_routes import router as usage_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
@@ -83,11 +86,12 @@ def _build_compute_adapter():
 
 
 def _build_chat_service(lifecycle=None) -> ChatService:
-    """工厂：装配 7 个 ports（6 个生产 adapter + 1 个暂未实现 placeholder）。
+    """工厂：装配 7 个 ports（7 个生产 adapter）。
 
     - llm:     HttpxLLMAdapter（包装既有 LLMClient）
     - tools:   InprocToolAdapter（如启用 ghm，则用 ComputeToolAdapter 包装合并）
-    - skills:  None（SkillPort 协议未实现；P3 接入）
+    - skills:  InprocSkillAdapter（M2 part B 接线；包装既有 SkillRegistry，
+               与 /api/v1/skills* REST 端点同源）
     - storage: SqliteStorageAdapter（包装既有 SessionRepository / MessageRepository）
     - metrics: PrometheusMetricAdapter
     - events:  FileEventAdapter（写 audit jsonl）
@@ -97,6 +101,13 @@ def _build_chat_service(lifecycle=None) -> ChatService:
 
     装配在每次依赖注入时被调用——单例化由调用方（如 ``app.state``）自行管理。
     """
+    # M2 part B: SkillPort 接线 —— 关闭 skills=None TODO。InprocSkillAdapter
+    # 结构上满足 sage_core.repositories.SkillPort（list_skills / execute），
+    # 构造对 SKILL.md 装载失败容错（guarded），不破坏 hex 模式装配。
+    from backend.adapters.out.skill import InprocSkillAdapter
+
+    skills_adapter = InprocSkillAdapter()
+
     inner_tools = InprocToolAdapter()
     compute = _build_compute_adapter()
     if compute is not None:
@@ -119,7 +130,7 @@ def _build_chat_service(lifecycle=None) -> ChatService:
     return ChatService(
         llm=HttpxLLMAdapter(),
         tools=tools,
-        skills=None,  # SkillPort 协议未实现；P3 接入
+        skills=skills_adapter,  # M2 part B: SkillPort 接线完成
         storage=SqliteStorageAdapter(),
         metrics=PrometheusMetricAdapter(),
         events=FileEventAdapter(),
@@ -324,6 +335,18 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
 
+    # M1 工具安全加固: 全局审批闸口 — agent 循环 await 审批, 路由解析应答
+    from backend.services.permission_gate import init_permission_gate
+
+    app.state.permission_gate = init_permission_gate()
+    logger.info("PermissionGate 已初始化（工具审批闸口）")
+
+    # M2 part B: 全局提问闸口 — agent 循环 await 用户应答, 路由解析应答
+    from backend.services.question_gate import init_question_gate
+
+    app.state.question_gate = init_question_gate()
+    logger.info("QuestionGate 已初始化（AskUserQuestion 提问闸口）")
+
     # Wiki MCP Server — 在后台启动 Wiki MCP Server
     # 注意：MCP Server 通过 stdio 通信，这里只是验证模块可以导入
     # 实际使用时，用户需要单独启动 MCP Server 进程
@@ -433,6 +456,20 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
         app.state.scheduler.shutdown()
 
+    # M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
+    # lifespan 启停）之后 `_global_gate` 残留装配——后续 agent 循环对
+    # EXECUTE 工具调用会把审批挂起直到 300s 超时，测试间互相污染。
+    # （对齐上面 scheduler / HeartbeatMonitor 的 shutdown 清理模式。）
+    try:
+        from backend.services.permission_gate import reset_permission_gate
+        from backend.services.question_gate import reset_question_gate
+
+        reset_permission_gate()
+        reset_question_gate()
+        logger.info("PermissionGate / QuestionGate 单例已清理")
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("PermissionGate/QuestionGate reset failed: %s", exc)
+
     # Phase 2: stop HeartbeatMonitor background task
     if hasattr(app.state, "heartbeat_monitor") and app.state.heartbeat_monitor is not None:
         await app.state.heartbeat_monitor.stop()
@@ -526,8 +563,14 @@ app.include_router(theme_router, prefix="/api/v1/theme")
 app.include_router(office_router, prefix="/api/v1")
 register_office_exception_handlers(app)
 app.include_router(workspace_router, prefix="/api/v1")
+# M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
+app.include_router(permission_router, prefix="/api/v1")
+# M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
+app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
+# M6 生态扩展: 用量/成本面板 (内存态 tracker, 与 API_MODE 无关)
+app.include_router(usage_router, prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":

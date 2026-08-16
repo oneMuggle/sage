@@ -447,3 +447,130 @@ class TestStubBackendLifecycle:
         """conftest fixture sets SAGE_BACKEND_URL."""
         assert os.environ.get("SAGE_BACKEND_URL") == stub_backend.url
         assert stub_backend.url.startswith("http://127.0.0.1:")
+
+
+class TestPermissionGate:
+    """M1: permission_request gated stream + /permissions REST contract.
+
+    The attach stream blocks (up to 25s) between permission_request and
+    observing until POST /permissions/{id}/answer resolves the gate —
+    these tests drive both sides from threads.
+    """
+
+    MARKER_MSG = "please run __PERM_TEST__ ls -la"
+
+    def _create_marker_stream(self, http):
+        session = http.post("/api/v1/sessions", {"title": "Perm Test"})
+        create_resp = http.post(
+            "/api/v1/chat/stream",
+            {"session_id": session["id"], "message": self.MARKER_MSG},
+        )
+        return create_resp["streamId"]
+
+    def _wait_pending_one(self, http, timeout=10.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            pending = http.get("/api/v1/permissions/pending")
+            if len(pending) == 1:
+                return pending[0]
+            time.sleep(0.05)
+        raise AssertionError("permission request did not become pending")
+
+    def test_pending_empty_initially(self, stub_backend):
+        http = _HTTPHelper(stub_backend.url)
+        assert http.get("/api/v1/permissions/pending") == []
+
+    def test_answer_unknown_id_returns_not_ok(self, stub_backend):
+        http = _HTTPHelper(stub_backend.url)
+        resp = http.post(
+            "/api/v1/permissions/nope/answer", {"approved": True, "remember": False}
+        )
+        assert resp == {"ok": False, "error": "unknown_or_expired"}
+
+    def test_answer_rejects_extra_body_fields_with_422(self, stub_backend):
+        http = _HTTPHelper(stub_backend.url)
+        http.post(
+            "/api/v1/permissions/nope/answer",
+            {"approved": True, "remember": False, "evil": 1},
+            expected_status=422,
+        )
+
+    def test_gated_stream_approve_flow(self, stub_backend):
+        import threading
+
+        http = _HTTPHelper(stub_backend.url)
+        stream_id = self._create_marker_stream(http)
+
+        events_box = {}
+
+        def attach():
+            events_box["events"] = http.get_ndjson(
+                "/api/v1/chat/stream/{}".format(stream_id)
+            )
+
+        t = threading.Thread(target=attach)
+        t.start()
+        try:
+            perm = self._wait_pending_one(http)
+            assert perm["tool_name"] == "terminal"
+            assert perm["risk"] == "suspicious"
+            assert "request_id" in perm and "args_summary" in perm
+
+            resp = http.post(
+                "/api/v1/permissions/{}/answer".format(perm["request_id"]),
+                {"approved": True, "remember": True},
+            )
+            assert resp == {"ok": True}
+            t.join(timeout=30)
+            assert not t.is_alive(), "attach stream did not complete after answer"
+        finally:
+            if t.is_alive():
+                t.join(timeout=1)
+
+        states = [e["state"] for e in events_box["events"]]
+        assert states == ["acting", "permission_request", "observing", "content_delta", "done"]
+        perm_evt = events_box["events"][1]
+        assert perm_evt["permission_request"]["tool_name"] == "terminal"
+        done_evt = events_box["events"][-1]
+        assert "已执行" in done_evt["content"]
+
+        inspection = http.get("/api/v1/_test/permission_answers")
+        assert inspection["answers"] == [
+            {"request_id": perm["request_id"], "approved": True, "remember": True}
+        ]
+        # 应答后 pending 清空
+        assert http.get("/api/v1/permissions/pending") == []
+
+    def test_gated_stream_deny_flow(self, stub_backend):
+        import threading
+
+        http = _HTTPHelper(stub_backend.url)
+        stream_id = self._create_marker_stream(http)
+
+        events_box = {}
+
+        def attach():
+            events_box["events"] = http.get_ndjson(
+                "/api/v1/chat/stream/{}".format(stream_id)
+            )
+
+        t = threading.Thread(target=attach)
+        t.start()
+        try:
+            perm = self._wait_pending_one(http)
+            resp = http.post(
+                "/api/v1/permissions/{}/answer".format(perm["request_id"]),
+                {"approved": False},
+            )
+            assert resp == {"ok": True}
+            t.join(timeout=30)
+            assert not t.is_alive()
+        finally:
+            if t.is_alive():
+                t.join(timeout=1)
+
+        done_evt = events_box["events"][-1]
+        assert done_evt["state"] == "done"
+        assert "跳过" in done_evt["content"]
+        observing = events_box["events"][2]
+        assert "权限拒绝" in observing["tool_result"]["content"]

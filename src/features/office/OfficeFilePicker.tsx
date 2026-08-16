@@ -34,6 +34,7 @@ import { FileText, Upload } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import type { OfficeDocType } from '../../shared/api/types';
+import { useI18n } from '../../shared/lib/i18n';
 
 export interface OfficeFilePickerProps {
   docType: OfficeDocType;
@@ -84,6 +85,7 @@ export function OfficeFilePicker({
   children,
   disabled,
 }: OfficeFilePickerProps) {
+  const { t } = useI18n();
   const [isDragging, setIsDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +93,7 @@ export function OfficeFilePicker({
   const handleClick = async () => {
     if (disabled || busy) return;
     if (!workspacePath) {
-      setError('请先选择工作区');
+      setError(t('office.picker.noWorkspace'));
       return;
     }
     setError(null);
@@ -123,19 +125,21 @@ export function OfficeFilePicker({
     setIsDragging(false);
     if (disabled || busy) return;
     if (!workspacePath) {
-      setError('请先选择工作区');
+      setError(t('office.picker.noWorkspace'));
       return;
     }
     const file = e.dataTransfer.files[0];
     if (!file) return;
     if (!hasModernExtension(file.name, docType)) {
-      setError(`不支持的格式: ${file.name}（仅接受 .${DOC_TYPE_MODERN_EXT[docType]}）`);
+      setError(
+        `${t('office.picker.unsupportedFormat')}: ${file.name}${t('office.picker.acceptPrefix')}${DOC_TYPE_MODERN_EXT[docType]}${t('office.picker.acceptSuffix')}`,
+      );
       return;
     }
     // Dropped files have File.path on Electron; null on web
     const filePath = (file as File & { path?: string }).path;
     if (!filePath) {
-      setError('无法获取文件路径（Web 环境下不支持拖拽）');
+      setError(t('office.picker.noFilePath'));
       return;
     }
     setError(null);
@@ -170,9 +174,13 @@ export function OfficeFilePicker({
         <FileText className="w-8 h-8 text-muted" />
       )}
       <div className="text-sm font-medium text-text">
-        {children ?? `选择 ${DOC_TYPE_LABELS[docType]}`}
+        {children ?? `${t('office.picker.select')} ${DOC_TYPE_LABELS[docType]}`}
       </div>
-      <div className="text-xs text-muted">或拖拽 .{DOC_TYPE_MODERN_EXT[docType]} 文件到此</div>
+      <div className="text-xs text-muted">
+        {t('office.picker.dropHintPrefix')}
+        {DOC_TYPE_MODERN_EXT[docType]}
+        {t('office.picker.dropHintSuffix')}
+      </div>
       {error && (
         <div className="text-xs text-error" data-testid="office-file-picker-error">
           {error}

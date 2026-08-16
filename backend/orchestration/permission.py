@@ -10,6 +10,8 @@ from enum import Enum
 from pathlib import Path
 from typing import List
 
+from backend.tools.permissions import ToolCapability, classify_tool
+
 
 class PermissionPreset(str, Enum):
     """Predefined permission profiles for agents."""
@@ -50,16 +52,21 @@ class LanePermission:
         if action.action_type in self.denied_tools:
             return False
 
-        # Audit/Explain presets cannot write, execute, or run lanes
+        # Audit/Explain presets are read-only: reject WRITE / EXECUTE actions.
+        # Delegates to the M1 enforcer's tool capability table
+        # (backend.tools.permissions.classify_tool) instead of a hardcoded
+        # name list — the old list referenced "execute"/"shell" while the
+        # real tool is named "terminal", so read-only presets leaked.
+        # Registered tools resolve to their true capability (terminal →
+        # EXECUTE, write_file → WRITE); unregistered action_types
+        # (execute_lane, or legacy names like "execute"/"shell") fall back
+        # to the fail-safe default WRITE and are blocked just the same.
         if self.preset in (
             PermissionPreset.AUDIT,
             PermissionPreset.EXPLAIN,
-        ) and action.action_type in (
-            "write_file",
-            "delete_file",
-            "execute",
-            "shell",
-            "execute_lane",
+        ) and classify_tool(action.action_type) in (
+            ToolCapability.WRITE,
+            ToolCapability.EXECUTE,
         ):
             return False
 
