@@ -81,6 +81,37 @@ async def test_put_with_unknown_field_rejected(client):
 
 
 @pytest.mark.asyncio()
+async def test_put_survives_legacy_residue_and_cleans_db(client):
+    """existing 里残留前端已删字段 (compactMode/proxyMode 等) → PUT 不再 400,
+    且首次成功保存后 DB 自动净化（残留字段被剥离, 合法字段保留）。"""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "streaming": True,
+            "compactMode": False,
+            "proxyMode": "auto",
+            "proxyUrl": "http://x",
+            "tlsVersion": "1.2",
+            "version": "4.0.0",
+        },
+        category="general",
+    )
+    resp = await client.put(
+        "/api/v1/settings",
+        json={"streaming": True, "temperature": 0.7},
+    )
+    assert resp.status_code == 200
+    stored = SettingsRepository().get_json("app_settings")
+    assert stored is not None
+    assert stored["streaming"] is True
+    assert stored["temperature"] == 0.7
+    assert "compactMode" not in stored
+    assert "proxyMode" not in stored
+    assert "proxyUrl" not in stored
+    assert "tlsVersion" not in stored
+
+
+@pytest.mark.asyncio()
 async def test_put_with_legacy_compat_fields_does_not_400(client):
     """B1 回归: legacy PUT 含 api_base_url / api_key / model 三个 legacy compat 字段
     不再返回 400. 这 3 字段剥离后不进 DB, 但进审计 changed_fields.
