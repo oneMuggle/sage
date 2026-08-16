@@ -128,4 +128,87 @@ describe('testEndpointConnection', () => {
     const headers = new Headers(modelsCall?.init?.headers);
     expect(headers.get('X-LLM-Provider-Url')).toBe(USER_BASE_URL);
   });
+
+  it('chatModel 属于被测端点时用它测聊天', async () => {
+    mockFetch(async (url) => {
+      if (url.endsWith('/v1/models')) {
+        return makeJsonResponse(200, {
+          object: 'list',
+          data: [
+            { id: 'agnes-2.0-flash', object: 'model' },
+            { id: 'agnes-3-flash', object: 'model' },
+          ],
+        });
+      }
+      return makeJsonResponse(200, { choices: [] });
+    });
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY, 'agnes-2.0-flash');
+
+    expect(result.success).toBe(true);
+    const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
+    expect(chatCall).toBeDefined();
+    const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };
+    expect(body.model).toBe('agnes-2.0-flash');
+  });
+
+  it('chatModel 不属于被测端点 → 回退到被测端点第一个 chat 模型', async () => {
+    mockFetch(async (url) => {
+      if (url.endsWith('/v1/models')) {
+        return makeJsonResponse(200, {
+          object: 'list',
+          data: [
+            { id: 'agnes-2.0-flash', object: 'model' },
+            { id: 'agnes-3-flash', object: 'model' },
+          ],
+        });
+      }
+      return makeJsonResponse(200, { choices: [] });
+    });
+
+    // gemini-3-flash-preview 是另一个端点的全局模型,不在被测端点 models 列表
+    const result = await testEndpointConnection(
+      USER_BASE_URL,
+      USER_API_KEY,
+      'gemini-3-flash-preview',
+    );
+
+    expect(result.success).toBe(true);
+    const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
+    expect(chatCall).toBeDefined();
+    const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };
+    expect(body.model).toBe('agnes-2.0-flash'); // 被测端点第一个 chat 模型
+  });
+
+  it('端点第一个模型是 embedding 时回退到第一个非 embedding 模型', async () => {
+    mockFetch(async (url) => {
+      if (url.endsWith('/v1/models')) {
+        return makeJsonResponse(200, {
+          object: 'list',
+          data: [
+            { id: 'text-embedding-3-large', object: 'model' },
+            { id: 'gpt-4o-mini', object: 'model' },
+          ],
+        });
+      }
+      return makeJsonResponse(200, { choices: [] });
+    });
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(true);
+    const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
+    expect(chatCall).toBeDefined();
+    const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };
+    expect(body.model).toBe('gpt-4o-mini'); // 跳过 embedding, 选第一个非 embedding
+  });
+
+  it('chatModel 不在列表且被测端点无模型 → 不测聊天, 仅返回发现结果', async () => {
+    // beforeEach 默认 handler 返回空 data: []
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY, 'some-model');
+
+    expect(result.success).toBe(true);
+    expect(fetchCalls.some((c) => c.url.endsWith('/v1/chat/completions'))).toBe(false);
+    expect(result.message).toContain('0 个模型');
+  });
 });

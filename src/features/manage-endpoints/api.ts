@@ -131,9 +131,19 @@ export async function testEndpointConnection(
     const models = await fetchModels(baseUrl, apiKey);
     const modelDiscovery = `发现 ${models.length} 个模型`;
 
-    // Step 2: Test /chat/completions if a chat model is specified
-    if (chatModel) {
-      const chatResult = await testChatCompletion(baseUrl, apiKey, chatModel);
+    // Step 2: 选定 chat 测试模型
+    // 优先用调用方传入的 chatModel, 但仅当它属于被测端点 (出现在 /v1/models 列表) 时;
+    // 否则回退到被测端点第一个非 embedding 模型。避免「用端点 A 的全局模型测端点 B」
+    // 触发上游网关 503 model_not_found (如 AgnesAI 按 token 分组路由模型), 也避免
+    // 拿纯 embedding 模型打 /chat/completions 触发假失败。
+    let chatTestModel = chatModel;
+    if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
+      chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
+    }
+
+    // Step 3: Test /chat/completions if a chat model is available
+    if (chatTestModel) {
+      const chatResult = await testChatCompletion(baseUrl, apiKey, chatTestModel);
       if (!chatResult.success) {
         return {
           success: false,
@@ -163,6 +173,18 @@ export async function testEndpointConnection(
       latency: Date.now() - start,
     };
   }
+}
+
+/**
+ * 判断模型 id 是否为 embedding 模型 (不适合作 chat 连通性测试)。
+ *
+ * 注意: ``inferCapabilities`` 无条件给所有模型标 ``'chat'``, 所以 fallback 选
+ * 测试模型时不能依赖 capabilities 过滤, 需单独按 id 排除 embedding 模型, 避免
+ * 拿纯 embedding 模型打 ``/chat/completions`` 触发假失败。
+ */
+function isEmbeddingModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return lower.includes('embed') || lower.includes('text-embedding') || lower.includes('vector');
 }
 
 /**

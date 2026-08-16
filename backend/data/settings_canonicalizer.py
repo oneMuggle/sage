@@ -206,6 +206,70 @@ def validate_settings_shape(settings: dict) -> None:
         )
 
 
+def strip_unknown_fields(settings: Any) -> Any:
+    """递归剥离 AppSettings 各层白名单外的字段, 返回干净 dict。
+
+    历史残留场景: 前端 schema 演进删除的旧字段 (compactMode / proxyMode /
+    proxyUrl / tlsVersion 等) 可能残留在已持久化的 app_settings 中。PUT
+    /settings 是合并式校验 (``{**existing, **payload}``), existing 里的残留
+    字段会让 ``validate_settings_shape`` 对整棵合并树报 400, 阻断所有设置保存。
+    本函数在合并后、校验前剥离白名单外字段 —— 残留是废弃数据, 静默丢弃,
+    并在首次成功保存时自动净化 DB。
+
+    各层白名单与 ``validate_settings_shape`` 严格一致:
+    - 顶层 ``LEGAL_TOP_KEYS``
+    - endpoints: ``LEGAL_ENDPOINT_KEYS`` + discoveredModels: ``LEGAL_DISCOVERED_MODEL_KEYS``
+    - modelSelections: ``LEGAL_MODEL_SELECTIONS_KEYS`` + 子 ``LEGAL_MODEL_SELECTION_KEYS``
+    - wiki: ``LEGAL_WIKI_KEYS`` / orch: ``LEGAL_ORCH_KEYS``
+    """
+    if not isinstance(settings, dict):
+        return settings
+
+    out = {k: v for k, v in settings.items() if k in LEGAL_TOP_KEYS}
+
+    eps = out.get("endpoints")
+    if isinstance(eps, list):
+        cleaned_eps: List[Any] = []
+        for ep in eps:
+            if not isinstance(ep, dict):
+                # 类型损坏的端点项 (非 dict): 保留原样, 不静默删除 —— 由
+                # validate_settings_shape 报 400 暴露, 避免无审计的数据丢失。
+                # 净化只针对"白名单外的未知 key", 不针对"类型损坏"。
+                cleaned_eps.append(ep)
+                continue
+            clean_ep = {k: v for k, v in ep.items() if k in LEGAL_ENDPOINT_KEYS}
+            models = clean_ep.get("discoveredModels")
+            if isinstance(models, list):
+                clean_ep["discoveredModels"] = [
+                    {k: v for k, v in m.items() if k in LEGAL_DISCOVERED_MODEL_KEYS}
+                    for m in models
+                    if isinstance(m, dict)
+                ]
+            cleaned_eps.append(clean_ep)
+        out["endpoints"] = cleaned_eps
+
+    ms = out.get("modelSelections")
+    if isinstance(ms, dict):
+        clean_ms = {k: v for k, v in ms.items() if k in LEGAL_MODEL_SELECTIONS_KEYS}
+        for sel_key in ("chatModel", "visionModel", "embeddingModel"):
+            sel = clean_ms.get(sel_key)
+            if isinstance(sel, dict):
+                clean_ms[sel_key] = {
+                    k: v for k, v in sel.items() if k in LEGAL_MODEL_SELECTION_KEYS
+                }
+        out["modelSelections"] = clean_ms
+
+    wiki = out.get("wiki")
+    if isinstance(wiki, dict):
+        out["wiki"] = {k: v for k, v in wiki.items() if k in LEGAL_WIKI_KEYS}
+
+    orch = out.get("orch")
+    if isinstance(orch, dict):
+        out["orch"] = {k: v for k, v in orch.items() if k in LEGAL_ORCH_KEYS}
+
+    return out
+
+
 def detect_legacy_snake_pollution(
     settings: Any,
     path: str = "",
