@@ -21,6 +21,7 @@ import pytest
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
+from backend.data.settings_repo import SettingsRepository
 from backend.services.question_gate import (
     get_question_gate,
     init_question_gate,
@@ -34,9 +35,18 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(autouse=True)
 def _gate_lifecycle():
     """每个测试独立 gate, 防止跨测试挂起请求泄漏。"""
+    # test_run_loop_ask_user_bypasses_permission_enforcer 会把 settings
+    # 里的 permission_mode 改成 prompt 且不还原 —— 必须还原，否则残留
+    # 影响后续 agent 循环（EXECUTE 工具触发审批挂起直到超时）。
+    _repo = SettingsRepository()
+    _prev_mode = _repo.get("permission_mode")
     reset_question_gate()
     yield
     reset_question_gate()
+    if _prev_mode is None:
+        _repo.delete("permission_mode")
+    else:
+        _repo.set("permission_mode", _prev_mode)
 
 
 def _make_response(content: str = "", tool_calls=None) -> LLMResponse:

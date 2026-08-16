@@ -456,6 +456,20 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
         app.state.scheduler.shutdown()
 
+    # M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
+    # lifespan 启停）之后 `_global_gate` 残留装配——后续 agent 循环对
+    # EXECUTE 工具调用会把审批挂起直到 300s 超时，测试间互相污染。
+    # （对齐上面 scheduler / HeartbeatMonitor 的 shutdown 清理模式。）
+    try:
+        from backend.services.permission_gate import reset_permission_gate
+        from backend.services.question_gate import reset_question_gate
+
+        reset_permission_gate()
+        reset_question_gate()
+        logger.info("PermissionGate / QuestionGate 单例已清理")
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("PermissionGate/QuestionGate reset failed: %s", exc)
+
     # Phase 2: stop HeartbeatMonitor background task
     if hasattr(app.state, "heartbeat_monitor") and app.state.heartbeat_monitor is not None:
         await app.state.heartbeat_monitor.stop()

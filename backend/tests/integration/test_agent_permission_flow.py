@@ -37,9 +37,19 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(autouse=True)
 def _gate_lifecycle():
     """每个测试独立 gate, 防止跨测试挂起请求泄漏。"""
+    # settings 里的 permission_mode 会被测试改写（prompt/full_access），
+    # 必须还原，否则残留到后续测试 → 后续 agent 循环读到的权限模式
+    # 与自身 Arrange 不符（例如 agent_tool 的 sub-agent 对 EXECUTE 工具
+    # 触发审批挂起直到超时）。
+    _repo = SettingsRepository()
+    _prev_mode = _repo.get("permission_mode")
     reset_permission_gate()
     yield
     reset_permission_gate()
+    if _prev_mode is None:
+        _repo.delete("permission_mode")
+    else:
+        _repo.set("permission_mode", _prev_mode)
 
 
 def _make_response(content: str = "", tool_calls=None) -> LLMResponse:
