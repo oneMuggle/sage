@@ -30,6 +30,7 @@ import pytest
 
 from backend.core.legacy.agent_state import AgentEvent, AgentState
 from backend.main import app
+from backend.tests.conftest import ensure_session
 
 pytestmark = pytest.mark.integration
 
@@ -100,6 +101,10 @@ async def test_chat_stream_producer_drives_lifecycle_and_traceability(tmp_db_pat
 
         session_id = "00000000-0000-0000-0000-000000000000"
         user_message = "我喜欢吃火锅，每次去成都都要找地道的火锅店，这家真的绝了" + "x" * 10
+
+        # §1.3a FK (#290): /chat/stream 写 messages + memories_episodic 都引用
+        # sessions(id);先建父 session 行,否则两个 INSERT 都抛 IntegrityError。
+        ensure_session(manager.episodic.db, session_id)
 
         with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
             MockAgent.return_value.run_loop = mock_run_loop

@@ -22,6 +22,7 @@ from __future__ import annotations
 import pytest
 
 from backend.memory.lifecycle import MemoryLifecycleManager
+from backend.tests.conftest import ensure_session
 
 pytestmark = pytest.mark.unit
 
@@ -56,6 +57,8 @@ async def test_on_turn_complete_uses_injected_extractor(tmp_db_path):
     from backend.memory.hooks import HookRegistry
 
     manager = _real_memory_manager(tmp_db_path)
+    # §1.3a FK (#290): 持久化 episodic 需父 session 行。
+    ensure_session(manager.episodic.db, "session-9")
     hooks = HookRegistry()
     written: list = []
     hooks.on("memory_written", lambda e: written.append(e))
@@ -119,6 +122,8 @@ async def test_real_extractor_with_mock_llm_produces_llm_backed_facts(tmp_db_pat
     )()
 
     manager = _real_memory_manager(tmp_db_path)
+    # §1.3a FK (#290): 持久化 episodic 需父 session 行。
+    ensure_session(manager.episodic.db, "session-10")
     hooks = HookRegistry()
     written: list = []
     hooks.on("memory_written", lambda e: written.append(e))

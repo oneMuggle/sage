@@ -15,11 +15,18 @@ import pytest
 
 from backend.adapters.out.memory.adapter import MemoryAdapter
 from backend.memory import get_memory_manager
+from backend.tests.conftest import ensure_session
 
 
 def _adapter() -> MemoryAdapter:
     """Fresh adapter bound to the per-test MemoryManager (temp DB)."""
-    return MemoryAdapter(get_memory_manager())
+    manager = get_memory_manager()
+    # §1.3a FK (#290): memories_episodic.session_id → sessions(id) 被强制,
+    # 本文件测试用的合成 session id 必须先在 sessions 表建父行。
+    # ensure_session 幂等 (INSERT OR IGNORE), 一次确保本文件全部测试所需。
+    for sid in ("s1", "sA", "sB"):
+        ensure_session(manager.episodic.db, sid)
+    return MemoryAdapter(manager)
 
 
 # ==================== MemoryPort query methods ====================
