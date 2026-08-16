@@ -33,6 +33,9 @@ class SettingsRepository:
             # (no memory injection into the LLM context). Independent of
             # auto_memory — toggling one must never flip the other.
             "memory_retrieval",
+            # M1 工具安全加固: 权限模式 + 用户规则（见 backend/tools/permissions.py）
+            "permission_mode",
+            "permission_rules",
         }
     )
 

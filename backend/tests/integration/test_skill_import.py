@@ -27,11 +27,12 @@ def _md(name: str, description: str = "Test") -> bytes:
 def _reset_skill_adapter_singleton() -> None:
     """InprocSkillAdapter 是惰性单例, 测试需要 reset 才能读到新 SAGE_SKILLS_DIR。
 
-    单例存在 backend/api/legacy_routes.py 模块全局变量 `_skill_adapter_singleton`。
+    单例存在 ``backend.adapters.out.skill.inproc`` 模块全局变量
+    ``_skill_adapter_singleton``（M2b 重构后从 legacy_routes 搬过来）。
     """
-    import backend.api.legacy_routes as routes_mod
+    import backend.adapters.out.skill.inproc as inproc_mod
 
-    routes_mod._skill_adapter_singleton = None
+    inproc_mod._skill_adapter_singleton = None
 
 
 @pytest.fixture()

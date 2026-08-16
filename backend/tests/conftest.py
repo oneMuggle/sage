@@ -252,9 +252,14 @@ def tmp_data_dir(tmp_path):
 
 @pytest.fixture(autouse=False)
 def reset_skill_adapter():  # noqa: PT004 - 空 yield 是合法的 teardown-only fixture
-    """PR-7: 重置 skills 路由层模块级 adapter 单例 (enabled / usage_count)。"""
-    import backend.api.legacy_routes as routes
+    """M2b: 重置 skills 单例缓存 (enabled / usage_count)。
 
-    routes._skill_adapter_singleton = None
+    单例缓存已在 ``backend.adapters.out.skill.inproc`` 模块下; 路由层只
+    是 thin wrapper 委托. 测试 fixture 必须清 inproc 的模块级缓存,
+    否则 ``SAGE_SKILLS_DIR`` 改动后第二次测试仍读到旧 adapter.
+    """
+    import backend.adapters.out.skill.inproc as inproc_mod
+
+    inproc_mod._skill_adapter_singleton = None
     yield
-    routes._skill_adapter_singleton = None
+    inproc_mod._skill_adapter_singleton = None

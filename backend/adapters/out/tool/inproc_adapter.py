@@ -19,18 +19,32 @@
   截断标记 ``truncated`` 与 ``original_bytes``（若发生 byte 截断）。
 - 工具未注册时返回 ``success=False, error=...``，**不抛异常**，与端口
   契约"失败时 success=False 并携带 error"一致。
+- M1 安全加固: ``execute`` 在分发前过 ``PermissionEnforcer`` 集中执行层
+  （enforcement-before-dispatch choke point）。``API_MODE=hex`` 的
+  ChatService → ToolPort 路径没有流式审批通道，``needs_approval`` 与
+  ``denied`` 一律 default-deny——与 ``core/legacy/agent.py`` 同步
+  ``execute_tool`` 的策略一致，保证换 hex 路径不能绕过权限系统。
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional, Tuple
+import logging
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
 
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools.bash_validation import validate_bash
+from backend.tools.permissions import (
+    DEFAULT_PERMISSION_MODE,
+    PermissionEnforcer,
+    load_enforcer_from_settings,
+)
 from backend.tools.registry import ToolRegistry as _ToolRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class InprocToolAdapter:
@@ -40,11 +54,16 @@ class InprocToolAdapter:
         self,
         registry: Optional[_ToolRegistry] = None,
         policy: Optional[ToolPolicy] = None,
+        enforcer_factory: Optional[Callable[[], PermissionEnforcer]] = None,
     ) -> None:
         # 接受外部注入（用于测试）或使用新建 registry
         self._registry = registry if registry is not None else _ToolRegistry()
         # M2: 中心超时 + byte 截断策略（缺省即 ToolPolicy() 默认）
         self._policy = policy or ToolPolicy()
+        # M1: 权限执行器工厂（测试可注入）。缺省每次 execute 从 settings
+        # 现读现建——settings_repo 是轻量 sqlite KV，逐调用读取换取用户
+        # 规则 / 模式变更即时生效，不做缓存。
+        self._enforcer_factory = enforcer_factory or load_enforcer_from_settings
         # 注册所有内置工具（含 MCP 工具）；M2 把 policy 透传给每个内置工具
         if registry is None:
             from backend.tools import register_all_tools
@@ -75,7 +94,14 @@ class InprocToolAdapter:
 
         工具未注册时返回 ``success=False``；工具执行抛异常时同样捕获并
         转成 ``success=False`` 的结果，不向调用方冒泡。
+
+        M1: 分发前先过权限执行器（enforcement choke point）；被拒时返回
+        ``success=False, error="权限拒绝: ..."``，底层工具根本不被调用。
         """
+        denied = self._enforce_permission(name, args)
+        if denied is not None:
+            return denied
+
         tool = self._registry.get(name)
         if tool is None:
             return ToolResult(
@@ -124,6 +150,41 @@ class InprocToolAdapter:
             error=raw.error,
             metadata=metadata,
         )
+
+    # ------------------------------------------------------------------
+    # M1 工具安全加固: 权限执行 choke point
+    # ------------------------------------------------------------------
+
+    def _enforce_permission(self, name: str, args: Dict[str, Any]) -> Optional[ToolResult]:
+        """分发前许可检查；放行返回 ``None``，拒绝返回错误 ``ToolResult``。
+
+        本 adapter 层没有流式审批通道（审批对话框只存在于 legacy agent
+        事件流），``needs_approval`` 按 default-deny 处理——与同步
+        ``execute_tool`` 同策，绝不静默放行。
+
+        enforcer 构造失败（设置库故障等）降级为默认 workspace_write
+        enforcer：fail-safe（权限系统降级运行）而非 fail-open（整体放行）
+        或整体阻塞（工具全挂）。
+        """
+        try:
+            enforcer = self._enforcer_factory()
+        except Exception as exc:  # noqa: BLE001 — 设置故障不应让工具全挂
+            logger.warning("权限执行器构造失败，回退默认 enforcer: %s", exc)
+            enforcer = PermissionEnforcer(
+                mode=DEFAULT_PERMISSION_MODE, rules=(), bash_validator=validate_bash
+            )
+        decision = enforcer.check(name, args)
+        if decision.needs_approval or not decision.allowed:
+            logger.info(
+                "InprocToolAdapter 权限拒绝: tool=%s reason=%s", name, decision.reason
+            )
+            return ToolResult(
+                success=False,
+                output="",
+                error=f"权限拒绝: {decision.reason}",
+                metadata={"permission_denied": True},
+            )
+        return None
 
 
 def _truncate_output(output: str, policy: ToolPolicy) -> Tuple[str, Dict[str, Any]]:

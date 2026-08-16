@@ -15,6 +15,8 @@ import { Welcome } from './pages/Welcome';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
+import { ApprovalDialog } from './widgets/permission';
+import { QuestionDialog } from './widgets/question';
 
 // Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
 // Gap E (Task 5): allow mounting when the URL carries ?session=… (click-to-trace
@@ -70,6 +72,10 @@ function App() {
           </Route>
         </Routes>
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        {/* M1: 全局工具审批模态框 — 由 permission_request 流事件驱动 */}
+        <ApprovalDialog />
+        {/* M2 part B: 全局提问模态框 — 由 ask_user_question 流事件驱动 */}
+        <QuestionDialog />
       </NavHistoryProvider>
     </HashRouter>
   );

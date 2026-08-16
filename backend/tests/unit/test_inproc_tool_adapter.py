@@ -241,3 +241,182 @@ async def test_default_registry_execute_unknown_tool() -> None:
     result = await adapter.execute("nope", {})
     assert result.success is False
     assert "nope" in (result.error or "")
+
+
+# ============================================================================
+# 5) M1 权限执行 choke point (FIX-1)
+# ============================================================================
+
+from backend.tools.base import ToolResult as BaseToolResult  # noqa: E402
+from backend.tools.bash_validation import validate_bash  # noqa: E402
+from backend.tools.permissions import (  # noqa: E402
+    PermissionEnforcer,
+    PermissionMode,
+    PermissionRule,
+)
+
+
+def _fake_registry_with(*names: str):
+    """构造记录调用情况的假 registry（每个 name 一个记录用假工具）。"""
+    executed: List[Dict[str, Any]] = []
+
+    class _FakeTool:
+        def __init__(self, name: str) -> None:
+            self._name = name
+
+        def execute(self, **kwargs: Any) -> BaseToolResult:
+            executed.append({"name": self._name, "args": kwargs})
+            return BaseToolResult(success=True, content="ok")
+
+    class _FakeRegistry:
+        def __init__(self) -> None:
+            self._tools = {n: _FakeTool(n) for n in names}
+
+        def get(self, name: str) -> Optional[Any]:
+            return self._tools.get(name)
+
+        def list(self) -> List[Any]:
+            return []
+
+    return _FakeRegistry(), executed
+
+
+def _enforcer_for(mode: PermissionMode, rules=()) -> PermissionEnforcer:
+    return PermissionEnforcer(mode=mode, rules=list(rules), bash_validator=validate_bash)
+
+
+async def test_adapter_denies_terminal_under_read_only() -> None:
+    """READ_ONLY 模式 → EXECUTE 能力工具 terminal 被拒，且工具不被执行。"""
+    # Arrange
+    registry, executed = _fake_registry_with("terminal")
+    adapter = InprocToolAdapter(
+        registry=registry,
+        enforcer_factory=lambda: _enforcer_for(PermissionMode.READ_ONLY),
+    )
+
+    # Act
+    result = await adapter.execute("terminal", {"command": "ls"})
+
+    # Assert
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.startswith("权限拒绝")
+    assert executed == []  # choke point: 底层工具根本没被调用
+
+
+async def test_adapter_allows_read_file_under_read_only() -> None:
+    """READ_ONLY 模式 → READ 能力工具 read_file 放行。"""
+    # Arrange
+    registry, executed = _fake_registry_with("read_file")
+    adapter = InprocToolAdapter(
+        registry=registry,
+        enforcer_factory=lambda: _enforcer_for(PermissionMode.READ_ONLY),
+    )
+
+    # Act
+    result = await adapter.execute("read_file", {"path": "/tmp/x"})
+
+    # Assert
+    assert result.success is True
+    assert executed == [{"name": "read_file", "args": {"path": "/tmp/x"}}]
+
+
+async def test_adapter_default_denies_needs_approval_without_gate() -> None:
+    """needs_approval 在 adapter 层没有审批通道 → default-deny（不静默放行）。
+
+    workspace_write 下 EXECUTE 工具 terminal 的矩阵结论是 needs_approval。
+    """
+    # Arrange
+    registry, executed = _fake_registry_with("terminal")
+    adapter = InprocToolAdapter(
+        registry=registry,
+        enforcer_factory=lambda: _enforcer_for(PermissionMode.WORKSPACE_WRITE),
+    )
+
+    # Act
+    result = await adapter.execute("terminal", {"command": "ls"})
+
+    # Assert
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.startswith("权限拒绝")
+    assert executed == []
+
+
+async def test_adapter_allows_terminal_under_full_access() -> None:
+    """FULL_ACCESS 模式 → terminal 放行（矩阵 allow 分支）。"""
+    # Arrange
+    registry, executed = _fake_registry_with("terminal")
+    adapter = InprocToolAdapter(
+        registry=registry,
+        enforcer_factory=lambda: _enforcer_for(PermissionMode.FULL_ACCESS),
+    )
+
+    # Act
+    result = await adapter.execute("terminal", {"command": "ls"})
+
+    # Assert
+    assert result.success is True
+    assert len(executed) == 1
+
+
+async def test_adapter_deny_rule_wins_over_full_access() -> None:
+    """显式 deny 规则优先于 FULL_ACCESS 模式（deny 永远胜出）。"""
+    # Arrange
+    registry, executed = _fake_registry_with("terminal")
+    adapter = InprocToolAdapter(
+        registry=registry,
+        enforcer_factory=lambda: _enforcer_for(
+            PermissionMode.FULL_ACCESS, rules=(PermissionRule("terminal", "deny"),)
+        ),
+    )
+
+    # Act
+    result = await adapter.execute("terminal", {"command": "ls"})
+
+    # Assert
+    assert result.success is False
+    assert result.error is not None
+    assert "deny" in result.error
+    assert executed == []
+
+
+async def test_adapter_destructive_command_denied_under_read_only() -> None:
+    """READ_ONLY + 破坏性命令旗标变体 (rm -fr ~) → bash 校验升级拒绝。"""
+    # Arrange
+    registry, executed = _fake_registry_with("terminal")
+    adapter = InprocToolAdapter(
+        registry=registry,
+        enforcer_factory=lambda: _enforcer_for(PermissionMode.READ_ONLY),
+    )
+
+    # Act
+    result = await adapter.execute("terminal", {"command": "rm -fr ~"})
+
+    # Assert
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.startswith("权限拒绝")
+    assert "破坏性命令" in result.error
+    assert executed == []
+
+
+async def test_adapter_default_factory_loads_enforcer_from_settings() -> None:
+    """缺省工厂从 settings 现读（conftest 临时库 → 默认 workspace_write）。"""
+    # Arrange
+    registry, executed = _fake_registry_with("read_file")
+    adapter = InprocToolAdapter(registry=registry)
+
+    # Act — READ 工具放行
+    ok = await adapter.execute("read_file", {"path": "/tmp/x"})
+    # Act — 未注册工具在权限检查之后才走到注册表查询:
+    # workspace_write 下 terminal(EXECUTE) → needs_approval → default-deny，
+    # 错误是"权限拒绝"而不是"tool not registered"，证明 choke point 在前。
+    denied = await adapter.execute("terminal", {"command": "ls"})
+
+    # Assert
+    assert ok.success is True
+    assert len(executed) == 1
+    assert denied.success is False
+    assert denied.error is not None
+    assert denied.error.startswith("权限拒绝")
