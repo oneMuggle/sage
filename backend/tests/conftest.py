@@ -33,10 +33,15 @@ def tmp_db_path():
 def setup_test_db(tmp_db_path):
     """每个测试自动使用独立临时数据库"""
     import backend.data.database as db_mod
+
+    # A4: WakeStore 单例绑定全局 Database，必须随临时库一起重置，
+    # 否则下一个用例拿到持有已关闭连接的旧 store。
+    from backend.application.services.wake_store import reset_wake_store
     from backend.memory.registry import reset_memory_manager
 
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
     db_mod._db.init_db()
+    reset_wake_store()
     # PR-3: 与生产 lifespan 保持一致, 启动时种子化 4 个默认 agent.
     # 测试不走 FastAPI lifespan, 显式调一次以模拟.
     from backend.data.agent_repo import AgentRepository
@@ -81,6 +86,7 @@ def setup_test_db(tmp_db_path):
     db_mod._db = None
     # 测试结束后也重置 MemoryManager
     reset_memory_manager()
+    reset_wake_store()
 
 
 @pytest_asyncio.fixture

@@ -11,6 +11,7 @@ from typing import List
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sage_core import Message, Role
 
 from backend.adapters.out.event.file_adapter import FileEventAdapter
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
@@ -37,9 +38,12 @@ from backend.api.usage_routes import router as usage_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
+from backend.application.services.wake_store import get_wake_store
 from backend.data.database import Database
 from backend.data.session_repo import MessageRepository, SessionRepository
+from backend.domain.wake import Wake
 from backend.memory import get_memory_manager
+from backend.orchestration.wake_scheduler import WakeScheduler
 from backend.services.scheduler import (
     get_scheduler_service,
     init_scheduler_service,
@@ -136,7 +140,8 @@ def _build_chat_service(lifecycle=None) -> ChatService:
         metrics=PrometheusMetricAdapter(),
         events=FileEventAdapter(),
         memory=memory_adapter,  # MemoryPort for memory integration
-        lifecycle=lifecycle,  # Task 4 / Gap A — optional MemoryLifecycleManager
+lifecycle=lifecycle,  # Task 4 / Gap A — optional MemoryLifecycleManager
+        wake_store=get_wake_store(),  # A4: 会话挂起 / 唤醒注册
     )
 
 
@@ -336,6 +341,33 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
 
+    # A4 Suspend-Resume: wake 仓储 + 唤醒调度器 — tick 扫描到期 wake,
+    # 在对应 session 注入新一轮对话恢复挂起的 agent。resumer 走
+    # ChatService.run_turn（hex 模式装配后可用）；legacy 模式下记录并跳过。
+    app.state.wake_store = get_wake_store()
+
+    async def _resume_session_from_wake(wake: Wake) -> None:
+        chat_service = getattr(app.state, "chat_service", None)
+        if chat_service is None:
+            logger.warning(
+                "wake %s (session=%s) 到期, 但 ChatService 未装配, 跳过恢复",
+                wake.id,
+                wake.session_id,
+            )
+            return
+        content = f"[系统唤醒: {wake.kind.value}] {wake.note or '继续之前挂起的任务。'}"
+        await chat_service.run_turn(
+            wake.session_id, Message(role=Role.USER, content=content)
+        )
+
+    app.state.wake_scheduler = WakeScheduler(
+        store=app.state.wake_store,
+        resumer=_resume_session_from_wake,
+        tick_seconds=15.0,
+    )
+    app.state.wake_scheduler.start()
+    logger.info("WakeScheduler 已初始化并启动（A4 Suspend-Resume，tick=15s）")
+
     # M1 工具安全加固: 全局审批闸口 — agent 循环 await 审批, 路由解析应答
     from backend.services.permission_gate import init_permission_gate
 
@@ -457,7 +489,7 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
         app.state.scheduler.shutdown()
 
-    # M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
+# M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
     # lifespan 启停）之后 `_global_gate` 残留装配——后续 agent 循环对
     # EXECUTE 工具调用会把审批挂起直到 300s 超时，测试间互相污染。
     # （对齐上面 scheduler / HeartbeatMonitor 的 shutdown 清理模式。）
@@ -470,6 +502,10 @@ async def lifespan(app: FastAPI):
         logger.info("PermissionGate / QuestionGate 单例已清理")
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         logger.warning("PermissionGate/QuestionGate reset failed: %s", exc)
+
+    # A4: stop WakeScheduler before tearing down chat services
+    if hasattr(app.state, "wake_scheduler") and app.state.wake_scheduler is not None:
+        await app.state.wake_scheduler.stop()
 
     # Phase 2: stop HeartbeatMonitor background task
     if hasattr(app.state, "heartbeat_monitor") and app.state.heartbeat_monitor is not None:
