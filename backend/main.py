@@ -489,7 +489,7 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
         app.state.scheduler.shutdown()
 
-# M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
+    # M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
     # lifespan 启停）之后 `_global_gate` 残留装配——后续 agent 循环对
     # EXECUTE 工具调用会把审批挂起直到 300s 超时，测试间互相污染。
     # （对齐上面 scheduler / HeartbeatMonitor 的 shutdown 清理模式。）

@@ -96,7 +96,7 @@ class ChatService:
         permission_preset: Optional[PermissionPreset] = None,  # M3 权限预设
         permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
         permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
-lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
+        lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
         wake_store: Optional[WakeStore] = None,  # A4 Suspend-Resume 唤醒仓储
     ) -> None:
         self.llm = llm
