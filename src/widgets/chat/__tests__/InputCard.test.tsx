@@ -79,7 +79,7 @@ describe('InputCard', () => {
     stopButton.click();
     expect(onInterrupt).toHaveBeenCalledTimes(1);
   });
-// Autosize: textarea must auto-grow when value spans multiple lines.
+  // Autosize: textarea must auto-grow when value spans multiple lines.
   // jsdom does not compute layout, so scrollHeight is not meaningful here.
   // We assert the inline style is updated on value change — the shape that
   // ensures the textarea's height tracks the content visually in a real DOM.
