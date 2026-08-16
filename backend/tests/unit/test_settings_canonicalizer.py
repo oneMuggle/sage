@@ -314,3 +314,11 @@ def test_strip_unknown_fields_passes_through_non_dict() -> None:
     assert strip_unknown_fields(None) is None
     assert strip_unknown_fields([]) == []
     assert strip_unknown_fields("junk") == "junk"
+
+
+def test_strip_unknown_fields_preserves_non_dict_endpoint_item() -> None:
+    """类型损坏的端点项 (非 dict) 保留原样,不静默删除 —— 由 validate 报 400 暴露,
+    避免无审计的数据丢失。"""
+    dirty = {"endpoints": ["corrupted", {"id": "e1", "baseUrl": "u", "junk": 1}]}
+    cleaned = strip_unknown_fields(dirty)
+    assert cleaned["endpoints"] == ["corrupted", {"id": "e1", "baseUrl": "u"}]

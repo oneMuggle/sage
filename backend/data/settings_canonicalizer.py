@@ -224,9 +224,13 @@ def strip_unknown_fields(settings: Any) -> Any:
 
     eps = out.get("endpoints")
     if isinstance(eps, list):
-        cleaned_eps: List[dict] = []
+        cleaned_eps: List[Any] = []
         for ep in eps:
             if not isinstance(ep, dict):
+                # 类型损坏的端点项 (非 dict): 保留原样, 不静默删除 —— 由
+                # validate_settings_shape 报 400 暴露, 避免无审计的数据丢失。
+                # 净化只针对"白名单外的未知 key", 不针对"类型损坏"。
+                cleaned_eps.append(ep)
                 continue
             clean_ep = {k: v for k, v in ep.items() if k in LEGAL_ENDPOINT_KEYS}
             models = clean_ep.get("discoveredModels")

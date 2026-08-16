@@ -48,3 +48,31 @@ async def test_hex_put_rejects_unknown_field(client):
     )
     assert resp.status_code == 422
     assert "foo" in resp.text
+
+
+@pytest.mark.asyncio()
+@_HEX_ONLY
+async def test_hex_put_survives_legacy_residue_and_cleans_db(client):
+    """existing 里残留前端已删字段 (compactMode/proxyMode 等) → hex PUT 不再
+    400, 首次成功保存后 DB 自动净化 (残留剥离, 合法字段保留)。"""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "streaming": True,
+            "compactMode": False,
+            "proxyMode": "auto",
+            "version": "4.0.0",
+        },
+        category="general",
+    )
+    resp = await client.put(
+        "/api/v1/settings",
+        json={"streaming": True, "maxContext": 8192},
+    )
+    assert resp.status_code == 200
+    stored = SettingsRepository().get_json("app_settings")
+    assert stored is not None
+    assert stored["streaming"] is True
+    assert stored["maxContext"] == 8192
+    assert "compactMode" not in stored
+    assert "proxyMode" not in stored

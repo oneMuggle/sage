@@ -180,6 +180,29 @@ describe('testEndpointConnection', () => {
     expect(body.model).toBe('agnes-2.0-flash'); // 被测端点第一个 chat 模型
   });
 
+  it('端点第一个模型是 embedding 时回退到第一个非 embedding 模型', async () => {
+    mockFetch(async (url) => {
+      if (url.endsWith('/v1/models')) {
+        return makeJsonResponse(200, {
+          object: 'list',
+          data: [
+            { id: 'text-embedding-3-large', object: 'model' },
+            { id: 'gpt-4o-mini', object: 'model' },
+          ],
+        });
+      }
+      return makeJsonResponse(200, { choices: [] });
+    });
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(true);
+    const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
+    expect(chatCall).toBeDefined();
+    const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };
+    expect(body.model).toBe('gpt-4o-mini'); // 跳过 embedding, 选第一个非 embedding
+  });
+
   it('chatModel 不在列表且被测端点无模型 → 不测聊天, 仅返回发现结果', async () => {
     // beforeEach 默认 handler 返回空 data: []
     const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY, 'some-model');
