@@ -598,7 +598,7 @@ def create_agent(data: AgentCreate):
             },
         )
 
-    payload = data.model_dump(exclude_none=True)
+    payload = data.dict(exclude_none=True)
     if "model_config_data" in payload:
         payload["model_config"] = payload.pop("model_config_data")
     payload.setdefault("tools", [])

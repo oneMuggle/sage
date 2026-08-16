@@ -164,7 +164,18 @@ class SageAgent:
         self,
         llm_config: Optional[Dict[str, Any]] = None,
         agent_id: Optional[str] = None,
+        bare: bool = False,
     ):
+        """初始化 SageAgent。
+
+        Args:
+            llm_config: 可选的 LLM 配置；缺省时 llm_client 为 None。
+            agent_id: 可选的 agent profile id。
+            bare: 轻量构造模式（AgentTool 子代理专用）。跳过记忆栈与
+                ``register_all_tools``（后者会冷启动 MCP list_tools）——
+                这些对只跑 ``run_loop`` 的子代理毫无用处。bare 实例仅
+                支持 ``run_loop``。现有调用方默认 bare=False，行为不变。
+        """
         self.session_repo = SessionRepository()
         self.message_repo = MessageRepository()
         self._interrupted = False
@@ -193,17 +204,23 @@ class SageAgent:
         self._cache = QueryCache(ttl=300, max_size=100)
         logger.info("查询缓存初始化完成，TTL=300秒，最大条目=100")
 
-        # 初始化记忆系统
-        db = get_database()
-        working = WorkingMemory(max_size=20, max_tokens=4000)
-        episodic = EpisodicMemory(db)
-        semantic = SemanticMemory(db)
-        self.memory_manager = MemoryManager(working, episodic, semantic)
+        if bare:
+            # 轻量构造：run_loop 不触碰记忆栈，默认工具注册表也会被
+            # AgentTool 整体替换为只读白名单 —— 两者都跳过。
+            self.memory_manager = None
+            self.tool_registry = ToolRegistry()
+        else:
+            # 初始化记忆系统
+            db = get_database()
+            working = WorkingMemory(max_size=20, max_tokens=4000)
+            episodic = EpisodicMemory(db)
+            semantic = SemanticMemory(db)
+            self.memory_manager = MemoryManager(working, episodic, semantic)
 
-        # 初始化工具注册表
-        self.tool_registry = ToolRegistry()
-        register_all_tools(self.tool_registry)
-        logger.info(f"工具注册表初始化完成，已注册 {len(self.tool_registry.list())} 个工具")
+            # 初始化工具注册表
+            self.tool_registry = ToolRegistry()
+            register_all_tools(self.tool_registry)
+            logger.info(f"工具注册表初始化完成，已注册 {len(self.tool_registry.list())} 个工具")
 
         # 初始化 LLM 客户端
         if llm_config:
@@ -219,8 +236,11 @@ class SageAgent:
             self.llm_client = None
             logger.warning("LLM 未配置，将使用本地模拟响应")
 
-        # 初始化记忆压缩管道
-        self.consolidation = ConsolidationPipeline(llm_client=self.llm_client)
+        # 初始化记忆压缩管道（chat-only；bare 模式跳过）
+        if bare:
+            self.consolidation = None
+        else:
+            self.consolidation = ConsolidationPipeline(llm_client=self.llm_client)
 
     async def chat(
         self, session_id: str, message: str, llm_config: Optional[Dict[str, Any]] = None
