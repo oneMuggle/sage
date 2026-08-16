@@ -1381,7 +1381,11 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     - 整树翻译到 camelCase (to_camel)
     - 白名单校验 (validate_settings_shape) 拒绝白名单外字段 → 400
     """
-    from backend.data.settings_canonicalizer import to_camel, validate_settings_shape
+    from backend.data.settings_canonicalizer import (
+        strip_unknown_fields,
+        to_camel,
+        validate_settings_shape,
+    )
     from backend.data.settings_repo import SettingsRepository
 
     repo = SettingsRepository()
@@ -1405,8 +1409,11 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     legacy_compat_fields = {"api_base_url", "api_key", "model"}
     legacy_compat_payload = {k: payload.pop(k) for k in list(payload) if k in legacy_compat_fields}
 
-    merged = {**existing, **payload}
-    camel_merged = to_camel(merged)
+    # existing 里的历史残留字段（compactMode / proxyMode 等前端已删）会让
+    # validate_settings_shape 对整棵合并树报 400。只剥离 existing 侧的残留，
+    # payload 侧的未知字段仍原样保留并触发 400（与 hex PUT 对齐）。
+    camel_existing = strip_unknown_fields(to_camel(existing))
+    camel_merged = {**camel_existing, **to_camel(payload)}
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
