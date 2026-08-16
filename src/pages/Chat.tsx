@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
+import { PlanCard } from '../components/PlanCard';
+import { PlanCardList } from '../components/PlanCardList';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
@@ -11,8 +13,6 @@ import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
-import { PlanCard } from '../components/PlanCard';
-import { PlanCardList } from '../components/PlanCardList';
 import { TaskTreeSection } from '../widgets/chat/progress/TaskTreeSection';
 
 export function Chat() {
