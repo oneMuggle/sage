@@ -163,29 +163,6 @@ def build_router() -> APIRouter:
     lane_registry = LaneRegistry()
     event_stream = EventStream()
 
-    def _to_lane_out(lane: Lane) -> LaneOut:
-        hb = None
-        if lane.heartbeat:
-            hb = LaneHeartbeatOut(
-                last_ping_at=lane.heartbeat.last_ping_at,
-                transport_alive=lane.heartbeat.transport_alive,
-                status=lane.heartbeat.status.value,
-            )
-        return LaneOut(
-            lane_id=lane.lane_id,
-            task_id=lane.task_id,
-            agent_id=lane.agent_id,
-            status=lane.status,
-            created_at=lane.created_at,
-            started_at=lane.started_at,
-            completed_at=lane.completed_at,
-            worktree=lane.worktree,
-            heartbeat=hb,
-            error=lane.error,
-            permission_preset=lane.permission_preset,
-            metadata=dict(lane.metadata),
-        )
-
     @router.get("/lanes", response_model=List[LaneOut])
     async def list_lanes(
         status: Optional[LaneStatus] = Query(default=None),
