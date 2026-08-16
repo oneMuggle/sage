@@ -11,8 +11,8 @@ import pytest
 from sage_core import Message, Role, ToolCall
 from sage_core.repositories import StoragePort
 
-from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 import backend.adapters.out.storage.memory_adapter as memory_adapter_module
+from backend.adapters.out.storage.memory_adapter import MemoryStorageAdapter
 
 pytestmark = pytest.mark.unit
 
@@ -183,8 +183,8 @@ from typing import Any
 
 import pytest
 
-from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 import backend.adapters.out.storage.sqlite_adapter as sqlite_adapter_module
+from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 
 
 @pytest.mark.asyncio()
