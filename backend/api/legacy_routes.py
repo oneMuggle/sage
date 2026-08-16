@@ -1816,9 +1816,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception:
                 pass  # Graceful fallback if diagram module unavailable
 
-            attachment_block = await resolve_attachments(
-                data.message, data.workspace_path or ""
-            )
+            # ===== M6 PROJECT CONTEXT BEGIN =====
+            # SAGE.md/CLAUDE.md 向上发现 → 注入 system prompt。仅当会话已
+            # 绑定 workspace 时注入; 任何失败静默跳过 (见 backend/chat/
+            # project_context.py)。独立标记块, rebase 友好。
+            try:
+                from backend.chat.project_context import discover_project_context
+                from backend.office.session_workspace import get_workspace_binding
+
+                m6_binding = get_workspace_binding(
+                    get_database().get_connection(), data.session_id
+                )
+                if m6_binding is not None and m6_binding.workspace_path:
+                    m6_context_block = discover_project_context(
+                        m6_binding.workspace_path
+                    ).render()
+                    if m6_context_block:
+                        system_content += "\n\n" + m6_context_block
+            except Exception as m6_ctx_err:
+                logger.debug(f"[REQ {request_id}] M6 project context skipped: {m6_ctx_err}")
+            # ===== M6 PROJECT CONTEXT END =====
+
+            attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
             messages = [{"role": "system", "content": system_content}]
             if attachment_block:
                 messages.append(

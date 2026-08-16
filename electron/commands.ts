@@ -415,6 +415,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
   },
+  // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
+  usage_summary: { method: 'GET', path: () => '/api/v1/usage' },
 };
 
 export class UnknownIpcCommandError extends Error {

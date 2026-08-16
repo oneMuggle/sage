@@ -17,6 +17,7 @@
 import { FolderOpen, FileSpreadsheet, FileText, Presentation, Save } from 'lucide-react';
 
 import type { OfficeDocType, OfficeDocumentSummary } from '../../shared/api/types';
+import { useI18n } from '../../shared/lib/i18n';
 
 const DOC_TYPE_ICONS: Record<OfficeDocType, React.ReactNode> = {
   ppt: <Presentation className="w-4 h-4" />,
@@ -28,12 +29,6 @@ const DOC_TYPE_LABELS: Record<OfficeDocType, string> = {
   ppt: 'PPT',
   word: 'Word',
   excel: 'Excel',
-};
-
-const STATUS_LABELS: Record<OfficeDocumentSummary['status'], string> = {
-  parsed: '已读取',
-  generated: '已生成',
-  edited: '已编辑',
 };
 
 export interface OfficeDocumentListProps {
@@ -54,13 +49,22 @@ export function OfficeDocumentList({
   onOpen,
   onShowInFolder,
 }: OfficeDocumentListProps) {
+  const { t } = useI18n();
+  // Status labels are built inside the component so the translated
+  // strings track the active locale (module-level maps can't call t()).
+  const statusLabels: Record<OfficeDocumentSummary['status'], string> = {
+    parsed: t('office.doc.status.parsed'),
+    generated: t('office.doc.status.generated'),
+    edited: t('office.doc.status.edited'),
+  };
+
   if (loading) {
-    return <div className="text-sm text-muted p-4 text-center">加载中...</div>;
+    return <div className="text-sm text-muted p-4 text-center">{t('common.loading')}</div>;
   }
   if (documents.length === 0) {
     return (
       <div className="text-sm text-muted p-4 text-center border border-dashed border-border rounded-lg">
-        暂无历史文档
+        {t('office.doc.empty')}
       </div>
     );
   }
@@ -79,7 +83,7 @@ export function OfficeDocumentList({
             <div className="text-xs text-muted flex items-center gap-2">
               <span>{DOC_TYPE_LABELS[doc.doc_type]}</span>
               <span>·</span>
-              <span>{STATUS_LABELS[doc.status]}</span>
+              <span>{statusLabels[doc.status]}</span>
               <span>·</span>
               <span>{(doc.metadata.file_size_bytes / 1024).toFixed(1)} KB</span>
               <span>·</span>
@@ -92,7 +96,7 @@ export function OfficeDocumentList({
                 type="button"
                 onClick={() => void onSaveAs(doc.id)}
                 className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                aria-label="Save As"
+                aria-label={t('office.doc.saveAs')}
               >
                 <Save className="w-4 h-4" />
               </button>
@@ -102,7 +106,7 @@ export function OfficeDocumentList({
                 type="button"
                 onClick={() => void onOpen(doc.id)}
                 className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                aria-label="Open"
+                aria-label={t('office.doc.open')}
               >
                 <FileText className="w-4 h-4" />
               </button>
@@ -112,7 +116,7 @@ export function OfficeDocumentList({
                 type="button"
                 onClick={() => void onShowInFolder(doc.id)}
                 className="p-1.5 rounded text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                aria-label="Show in Folder"
+                aria-label={t('office.doc.showInFolder')}
               >
                 <FolderOpen className="w-4 h-4" />
               </button>

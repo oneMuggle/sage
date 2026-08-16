@@ -12,6 +12,7 @@ import type {
   OfficePptReadResult,
   OfficeWordReadResult,
 } from '../../shared/api/types';
+import { useI18n } from '../../shared/lib/i18n';
 
 export type OfficePreviewData =
   | { docType: 'ppt'; data: OfficePptReadResult }
@@ -31,10 +32,11 @@ const HEADING_PADDING: Record<number, string> = {
 };
 
 export function OfficePreviewPanel({ preview }: OfficePreviewPanelProps) {
+  const { t } = useI18n();
   if (!preview) {
     return (
       <div className="flex items-center justify-center p-12 text-muted text-sm border border-dashed border-border rounded-lg">
-        选择一个文件以预览
+        {t('office.preview.empty')}
       </div>
     );
   }
@@ -61,14 +63,19 @@ export function OfficePreviewPanel({ preview }: OfficePreviewPanelProps) {
 }
 
 function PptPreview({ data }: { data: OfficePptReadResult }) {
+  const { t } = useI18n();
   if (data.slides.length === 0) {
-    return <p className="text-muted text-sm">空演示文稿(0 张幻灯片)</p>;
+    return <p className="text-muted text-sm">{t('office.preview.emptyPresentation')}</p>;
   }
   return (
     <ol className="space-y-3">
       {data.slides.map((slide) => (
         <li key={slide.index} className="border border-border rounded p-3">
-          <div className="text-xs text-muted mb-1">第 {slide.index + 1} 页</div>
+          <div className="text-xs text-muted mb-1">
+            {t('office.preview.slidePrefix')}
+            {slide.index + 1}
+            {t('office.preview.slideSuffix')}
+          </div>
           {slide.title && <div className="font-semibold text-text mb-1">{slide.title}</div>}
           {slide.text_blocks.length > 0 && (
             <ul className="text-sm space-y-0.5 list-disc list-inside text-text-secondary">
@@ -79,11 +86,15 @@ function PptPreview({ data }: { data: OfficePptReadResult }) {
           )}
           {(slide.table_count > 0 || slide.image_count > 0) && (
             <div className="text-xs text-muted mt-2">
-              {slide.table_count > 0 && `${slide.table_count} 个表格 `}
-              {slide.image_count > 0 && `${slide.image_count} 个图片`}
+              {slide.table_count > 0 && `${slide.table_count} ${t('office.preview.tableCount')} `}
+              {slide.image_count > 0 && `${slide.image_count} ${t('office.preview.imageCount')}`}
             </div>
           )}
-          {slide.notes && <div className="text-xs text-muted mt-2 italic">备注: {slide.notes}</div>}
+          {slide.notes && (
+            <div className="text-xs text-muted mt-2 italic">
+              {t('office.preview.notes')} {slide.notes}
+            </div>
+          )}
         </li>
       ))}
     </ol>
@@ -91,10 +102,12 @@ function PptPreview({ data }: { data: OfficePptReadResult }) {
 }
 
 function WordPreview({ data }: { data: OfficeWordReadResult }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted">
-        {data.paragraphs.length} 个段落 · {data.tables.length} 个表格 · {data.images} 个图片
+        {data.paragraphs.length} {t('office.preview.paragraphCount')} · {data.tables.length}{' '}
+        {t('office.preview.tableCount')} · {data.images} {t('office.preview.imageCount')}
       </p>
       {data.paragraphs.map((para, i) => (
         <div
@@ -131,8 +144,9 @@ function WordPreview({ data }: { data: OfficeWordReadResult }) {
 }
 
 function ExcelPreview({ data }: { data: OfficeExcelReadResult }) {
+  const { t } = useI18n();
   if (data.sheets.length === 0) {
-    return <p className="text-muted text-sm">空工作簿</p>;
+    return <p className="text-muted text-sm">{t('office.preview.emptyWorkbook')}</p>;
   }
   return (
     <div className="space-y-4">
@@ -141,11 +155,12 @@ function ExcelPreview({ data }: { data: OfficeExcelReadResult }) {
           <h3 className="text-sm font-semibold text-text mb-2">
             {sheet.name}{' '}
             <span className="text-xs font-normal text-muted">
-              ({sheet.max_row} 行 × {sheet.max_col} 列)
+              ({sheet.max_row} {t('office.preview.rowUnit')} × {sheet.max_col}{' '}
+              {t('office.preview.colUnit')})
             </span>
           </h3>
           {sheet.rows.length === 0 ? (
-            <p className="text-xs text-muted">空 sheet</p>
+            <p className="text-xs text-muted">{t('office.preview.emptySheet')}</p>
           ) : (
             <div className="border border-border rounded overflow-x-auto">
               <table className="w-full text-xs">

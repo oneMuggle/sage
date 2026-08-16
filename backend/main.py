@@ -32,6 +32,7 @@ from backend.api.permission_routes import router as permission_router
 from backend.api.question_routes import router as question_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
+from backend.api.usage_routes import router as usage_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
@@ -554,6 +555,8 @@ app.include_router(permission_router, prefix="/api/v1")
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
+# M6 生态扩展: 用量/成本面板 (内存态 tracker, 与 API_MODE 无关)
+app.include_router(usage_router, prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":
