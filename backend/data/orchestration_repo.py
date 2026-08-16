@@ -250,8 +250,9 @@ class LaneRepository:
         cursor.execute(
             """
             INSERT INTO orchestration_lanes
-            (lane_id, task_id, agent_id, status, created_at, worktree)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (lane_id, task_id, agent_id, status, created_at, worktree,
+             permission_preset, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(lane.lane_id),
@@ -260,6 +261,8 @@ class LaneRepository:
                 lane.status.value,
                 lane.created_at,
                 lane.worktree,
+                lane.permission_preset,
+                json.dumps(_to_jsonable(lane.metadata or {})),
             ),
         )
         conn.commit()
@@ -283,7 +286,7 @@ class LaneRepository:
             """
             UPDATE orchestration_lanes
             SET status = ?, agent_id = ?, started_at = ?, completed_at = ?,
-                heartbeat = ?, error = ?
+                heartbeat = ?, error = ?, permission_preset = ?, metadata = ?
             WHERE lane_id = ?
             """,
             (
@@ -293,6 +296,8 @@ class LaneRepository:
                 lane.completed_at,
                 json.dumps(lane.heartbeat.__dict__) if lane.heartbeat else None,
                 lane.error,
+                lane.permission_preset,
+                json.dumps(_to_jsonable(lane.metadata or {})),
                 lane.lane_id,
             ),
         )
@@ -388,6 +393,12 @@ class LaneRepository:
         heartbeat_data = json.loads(row["heartbeat"]) if row["heartbeat"] else None
         heartbeat = LaneHeartbeat(**heartbeat_data) if heartbeat_data else None
 
+        metadata = {}
+        try:
+            metadata = json.loads(row["metadata"]) if row["metadata"] else {}
+        except (json.JSONDecodeError, TypeError):
+            metadata = {}
+
         return Lane(
             lane_id=row["lane_id"],
             task_id=row["task_id"],
@@ -399,6 +410,8 @@ class LaneRepository:
             worktree=row["worktree"],
             heartbeat=heartbeat,
             error=row["error"],
+            permission_preset=row["permission_preset"] or "implement",
+            metadata=metadata if isinstance(metadata, dict) else {},
         )
 
 

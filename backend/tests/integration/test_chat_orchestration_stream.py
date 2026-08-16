@@ -1,0 +1,632 @@
+"""/chat/stream multi-agent 编排集成测试 —— 双失败模式硬约束。
+
+测试 5（复杂任务简单化=0）: force_multi → task_plan 必出 + dispatch 工具必注册
+测试 6（简单任务复杂化=0）: single 路径无 task_plan/task_status + 无 dispatch 工具
+测试 7: force_single 时复杂消息也不进编排
+"""
+
+from __future__ import annotations
+
+import json
+from unittest.mock import AsyncMock, patch
+
+import httpx
+import pytest
+from httpx import ASGITransport
+
+from backend.main import app
+from backend.orchestration.chat_dispatcher import _classify_orchestration_mode
+
+CHAT_STREAM_PATH = "/api/v1/chat/stream"
+
+
+def _mock_plan(agent_hints=("researcher", "writer")):
+    """返回 2-task 的 fake Plan（绕过真实 Planner LLM 调用）。
+
+    注: producer 对 ``decompose_request`` 是 ``await``（真实 Planner 为
+    async def）, 故 mock 必须是 async 函数。
+    """
+
+    async def _decompose(message, context=None):
+        from backend.orchestration.models import Task
+
+        return type(
+            "Plan",
+            (),
+            {
+                "plan_id": "p1",
+                "team_id": "team1",
+                "tasks": [
+                    Task(
+                        task_id=f"t{i + 1}",
+                        name=f"任务 {i + 1}",
+                        description=f"目标：{hint}",
+                        parameters={"agent_hint": hint},
+                    )
+                    for i, hint in enumerate(agent_hints)
+                ],
+                "original_request": message,
+                "reasoning": "test",
+            },
+        )()
+
+    return _decompose
+
+
+async def _stream_events(ac: httpx.AsyncClient, payload: dict) -> list[dict]:
+    create_resp = await ac.post(CHAT_STREAM_PATH, json=payload)
+    assert create_resp.status_code == 200, create_resp.text
+    stream_id = create_resp.json()["streamId"]
+    attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+    assert attach_resp.status_code == 200
+    # attach 返回 NDJSON（每行一个 JSON 对象）——逐行解析为 dict
+    return [
+        json.loads(line)
+        for line in attach_resp.text.splitlines()
+        if line.strip()
+    ]
+
+
+@pytest.mark.asyncio()
+async def test_multi_mode_emits_task_plan_and_registers_dispatch_tool():
+    """复杂任务必进编排：task_plan 事件必出 + dispatch_subagents 工具必注册。"""
+    registered_tools: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(
+            state=AgentState.DONE, iteration=0, content="已完成量化交易学习资料整理"
+        )
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch("backend.orchestration.planner.Planner") as MockPlanner:
+            MockPlanner.return_value.decompose_request = _mock_plan()
+
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                events = await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "我需要学习量化交易，先搜集相关资料后整理学习资料和操作指南",
+                        "orchestration_mode": "force_multi",
+                        "api_key": "sk-test",
+                        "api_url": "https://example.com/v1",
+                    },
+                )
+
+    states = [e["state"] for e in events]
+    assert "task_plan" in states, f"task_plan 必出，实际 events={states}"
+    plan_event = next(e for e in events if e["state"] == "task_plan")
+    assert plan_event["run_id"].startswith("orch-")
+    assert len(plan_event["plan"]) == 2
+    assert [p["task_id"] for p in plan_event["plan"]] == ["t1", "t2"]
+    # 子 agent 跑之前 task_plan 先到（计划先展示）
+    assert states.index("task_plan") < states.index("done")
+
+    # 进度可视化 P0-2 (2026-08-12): task_progress 紧随 task_plan 之前,
+    # 让前端 taskBoard 在子 agent 跑之前就拿到 total 渲染头部。
+    assert "task_progress" in states, (
+        f"task_progress 必出，实际 events={states}"
+    )
+    tp_event = next(e for e in events if e["state"] == "task_progress")
+    assert tp_event["run_id"] == plan_event["run_id"]
+    assert tp_event["total"] == 2
+    assert tp_event["queued"] == 2
+    assert tp_event["done"] == 0
+    assert tp_event["running"] == 0
+    assert tp_event["failed"] == 0
+    # 顺序约束:task_progress 必须在 task_plan 之后、首个 task_status 之前
+    plan_idx = states.index("task_plan")
+    tp_idx = states.index("task_progress")
+    assert plan_idx < tp_idx, "task_progress 必须在 task_plan 之后"
+    first_status_idx = next(
+        (i for i, s in enumerate(states) if s == "task_status"),
+        len(states),
+    )
+    assert tp_idx < first_status_idx, (
+        "task_progress 必须在首个 task_status 之前(否则前端拿不到 total)"
+    )
+
+    assert "dispatch_subagents" in registered_tools, (
+        "force_multi 必须注册 dispatch 工具（硬约束 1）"
+    )
+
+
+@pytest.mark.asyncio()
+async def test_single_mode_has_no_orchestration_events_or_tool():
+    """简单任务复杂化=0：single 路径无编排事件 + 无 dispatch 工具。"""
+    registered_tools: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="今天晴，22 度")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch(
+            "backend.api.legacy_routes._classify_orchestration_mode",
+            return_value="single",
+        ):
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                events = await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "今天天气怎么样",
+                        "orchestration_mode": "auto",
+                    },
+                )
+
+    states = [e["state"] for e in events]
+    assert "task_plan" not in states, f"single 路径不应有 task_plan: {states}"
+    assert "task_status" not in states, f"single 路径不应有 task_status: {states}"
+    assert "dispatch_subagents" not in registered_tools, (
+        "single 路径必须不注册 dispatch 工具（硬约束 2）"
+    )
+
+
+@pytest.mark.asyncio()
+async def test_force_single_skips_orchestration_even_for_complex_message():
+    """用户 /single override：复杂消息也不进编排。"""
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="直接回答")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type("TR", (), {"register": lambda self, tool: None})()
+        instance.profile = {"tools": ["calculator"]}
+
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            events = await _stream_events(
+                ac,
+                {
+                    "session_id": "s",
+                    "message": "我需要学习量化交易，先搜集相关资料后整理学习资料",
+                    "orchestration_mode": "force_single",
+                },
+            )
+
+    states = [e["state"] for e in events]
+    assert "task_plan" not in states
+    assert "task_status" not in states
+
+
+@pytest.mark.asyncio()
+async def test_multi_degrades_to_single_when_plan_has_one_task():
+    """Planner 降级为单任务（LLM 没拆开）→ 视为没开编排，无 task_plan。"""
+    registered_tools: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="单任务输出")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch("backend.orchestration.planner.Planner") as MockPlanner:
+            MockPlanner.return_value.decompose_request = _mock_plan(
+                agent_hints=("researcher",)
+            )
+
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                events = await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "我有个问题",
+                        "orchestration_mode": "force_multi",
+                    },
+                )
+
+    states = [e["state"] for e in events]
+    assert "task_plan" not in states
+    assert "dispatch_subagents" not in registered_tools
+
+
+@pytest.mark.asyncio()
+async def test_multi_mode_injects_plan_block_into_run_loop_system_content():
+    """plan 块注入 system prompt：conductor（run_loop）收到的 system_content 含任务目标。"""
+    captured_messages: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        captured_messages.extend(messages)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="已完成")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: None}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch("backend.orchestration.planner.Planner") as MockPlanner:
+            MockPlanner.return_value.decompose_request = _mock_plan()
+
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                events = await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "我需要学习量化交易，先搜集相关资料后整理学习资料和操作指南",
+                        "orchestration_mode": "force_multi",
+                        "api_key": "sk-test",
+                        "api_url": "https://example.com/v1",
+                    },
+                )
+
+    # 确保确实走了 multi 路径（task_plan 已产出）
+    assert any(e["state"] == "task_plan" for e in events), (
+        "plan 注入测试必须走 multi 路径"
+    )
+    assert captured_messages, "run_loop 必须收到 messages"
+    system_content = captured_messages[0]["content"]
+    assert "以下为已确认的任务计划" in system_content, (
+        "conductor 的 system_content 必须含计划引导块"
+    )
+    # 计划块内带出 mock plan 的子任务目标（description），验证真实注入
+    assert "目标：researcher" in system_content
+    assert "目标：writer" in system_content
+
+
+@pytest.mark.asyncio()
+async def test_explicit_null_orchestration_mode_does_not_422():
+    """explicit null orchestration_mode 必须被接受（IPC `?? null` 序列化路径）。
+
+    回归: 渲染进程 chatApi.ts:120 把 undefined ?? null 序列化进 IPC body。
+    修复前 Pydantic 把 null 当显式赋值校验 → 422。修复后 schema 改
+    Optional[str] = "auto", 业务层 `data.orchestration_mode or "auto"` 兜底。
+    """
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="ok")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: None}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch(
+            "backend.api.legacy_routes._classify_orchestration_mode",
+            return_value="single",
+        ) as mock_classify:
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                resp = await ac.post(
+                    CHAT_STREAM_PATH,
+                    json={
+                        "session_id": "s",
+                        "message": "今天天气怎么样",
+                        "orchestration_mode": None,  # explicit null —— IPC `?? null` 产物
+                    },
+                )
+
+    assert resp.status_code == 200, (
+        f"explicit null orchestration_mode 不应 422, 实际 {resp.status_code}: {resp.text}"
+    )
+    # 业务层用 `data.orchestration_mode or "auto"`,所以 classifier 收到 "auto"
+    mock_classify.assert_awaited_once()
+    classify_args = mock_classify.await_args
+    assert classify_args.args[1] == "auto", (
+        f"classifier 第二个参数应落到默认 'auto', 实际 {classify_args.args[1]!r}"
+    )
+
+
+@pytest.mark.asyncio()
+async def test_plain_chat_sets_tool_context_for_artifact_recording():
+    """普通聊天（无 office 授权）也必须设置 ToolExecutionContext —— 否则
+    write_file 等工具的 artifact 记录因 current_tool_context() 为 None 静默
+    早退，产物无法在 Artifacts 面板展示（F2 回归防护）。"""
+    captured_ctx = {}
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.tools.context import current_tool_context
+
+        captured_ctx["ctx"] = current_tool_context()
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="普通回答")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: None}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch(
+            "backend.api.legacy_routes._classify_orchestration_mode",
+            return_value="single",
+        ):
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "帮我整理一份学习资料",
+                        "orchestration_mode": "auto",
+                    },
+                )
+
+    ctx = captured_ctx.get("ctx")
+    assert ctx is not None, (
+        "普通聊天必须设置 ToolExecutionContext（修复前为 None，artifacts 不落库）"
+    )
+    assert ctx.session_id == "s"
+    assert ctx.binding_generation == 0, "无 workspace 绑定 → generation 0"
+    assert ctx.office_doc_scope == frozenset(), "无 office 授权 → 空 scope"
+
+
+@pytest.mark.asyncio()
+async def test_task_plan_event_includes_depends_on():
+    """P1-6 (2026-08-14): task_plan 事件透传 depends_on（来自 Task.blocked_by）。"""
+    registered_tools: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="done")
+
+    async def _decompose_with_deps(message, context=None):
+        from backend.orchestration.models import Task
+
+        return type(
+            "Plan",
+            (),
+            {
+                "plan_id": "p1",
+                "team_id": "team1",
+                "tasks": [
+                    Task(
+                        task_id="t1",
+                        name="任务 1",
+                        description="目标：researcher",
+                        parameters={"agent_hint": "researcher"},
+                        blocked_by=[],
+                    ),
+                    Task(
+                        task_id="t2",
+                        name="任务 2",
+                        description="目标：writer",
+                        parameters={"agent_hint": "writer"},
+                        blocked_by=["t1"],
+                    ),
+                ],
+                "original_request": message,
+                "reasoning": "test",
+            },
+        )()
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch("backend.orchestration.planner.Planner") as MockPlanner:
+            MockPlanner.return_value.decompose_request = _decompose_with_deps
+
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                events = await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "先搜集资料再整理（两任务依赖）",
+                        "orchestration_mode": "force_multi",
+                        "api_key": "sk-test",
+                        "api_url": "https://example.com/v1",
+                    },
+                )
+
+    plan_event = next(e for e in events if e["state"] == "task_plan")
+    assert len(plan_event["plan"]) == 2
+    # t1 无依赖 → 空 list;t2 blocked_by=["t1"] → depends_on=["t1"]
+    assert plan_event["plan"][0]["depends_on"] == []
+    assert plan_event["plan"][1]["depends_on"] == ["t1"]
+
+
+"""P2-8 — orchestration_mode=template:<id> 走模板拆解。"""
+
+
+@pytest.mark.asyncio()
+async def test_classify_template_prefix_is_multi():
+    """template: 前缀 → 直接 multi（跳过 LLM 二分类）。"""
+    mode = await _classify_orchestration_mode(
+        "随便一句话", "template:research-write", llm_client=None
+    )
+    assert mode == "multi"
+
+
+@pytest.mark.asyncio()
+async def test_classify_unknown_template_still_multi():
+    """未知模板 id 也判 multi（降级在 decompose 层，不在这里）。"""
+    mode = await _classify_orchestration_mode("x", "template:nope", llm_client=None)
+    assert mode == "multi"
+
+
+@pytest.mark.asyncio()
+async def test_template_mode_decomposes_via_deterministic_template():
+    """P2-8: orchestration_mode=template:research-write → decompose_from_template
+    拆解出 task_plan（2 任务、goal 含用户请求）。"""
+    registered_tools: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="已完成模板任务执行")
+
+    async def _decompose_from_template(template_id, request):
+        from backend.orchestration.models import Task
+
+        return type(
+            "Plan",
+            (),
+            {
+                "plan_id": "p1",
+                "team_id": "team1",
+                "tasks": [
+                    Task(
+                        task_id="t1",
+                        name="t1",
+                        description=f"搜集资料\n目标: {request}",
+                        parameters={"agent_hint": "researcher"},
+                    ),
+                    Task(
+                        task_id="t2",
+                        name="t2",
+                        description=f"撰写报告\n目标: {request}",
+                        parameters={"agent_hint": "writer"},
+                    ),
+                ],
+                "original_request": request,
+                "reasoning": "template research-write",
+            },
+        )()
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        with patch("backend.orchestration.planner.Planner") as MockPlanner:
+            MockPlanner.return_value.decompose_from_template = AsyncMock(
+                side_effect=_decompose_from_template
+            )
+
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                events = await _stream_events(
+                    ac,
+                    {
+                        "session_id": "s",
+                        "message": "我需要学习量化交易并整理操作手册",
+                        "orchestration_mode": "template:research-write",
+                        "api_key": "sk-test",
+                        "api_url": "https://example.com/v1",
+                    },
+                )
+
+    states = [e["state"] for e in events]
+    assert "task_plan" in states, f"template 模式必出 task_plan，实际 events={states}"
+    plan_event = next(e for e in events if e["state"] == "task_plan")
+    assert len(plan_event["plan"]) == 2
+    goals = " ".join(p["goal"] for p in plan_event["plan"])
+    assert "我需要学习量化交易并整理操作手册" in goals, (
+        f"task goal 必须含用户请求，实际 goals={goals!r}"
+    )
+    # 路由校验：必须是 decompose_from_template（不是 decompose_request）
+    MockPlanner.return_value.decompose_from_template.assert_awaited_once_with(
+        "research-write", "我需要学习量化交易并整理操作手册"
+    )
+
+
+"""Wave 3 A10 — plan_override 跳过 LLM 拆解，task_id 沿用不重枚举。"""
+
+
+@pytest.mark.asyncio()
+async def test_override_path_skips_decompose_and_preserves_task_id():
+    """A10: POST /chat/stream 带 plan_override + run_id → 跳过 decompose，
+    task_plan 首事件沿用 override task_id、total_tasks==1、run_id 复用。"""
+    registered_tools: list = []
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(state=AgentState.DONE, iteration=0, content="恢复执行完成")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        instance = MockAgent.return_value
+        instance.run_loop = mock_run_loop
+        instance.tool_registry = type(
+            "TR", (), {"register": lambda self, tool: registered_tools.append(tool.name)}
+        )()
+        instance.profile = {"tools": ["calculator"]}
+
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            events = await _stream_events(
+                ac,
+                {
+                    "session_id": "s",
+                    "message": "继续执行恢复任务",
+                    "plan_override": [
+                        {"task_id": "t1", "agent_id": "researcher", "goal": "G"}
+                    ],
+                    "run_id": "orch-reused",
+                },
+            )
+
+    states = [e["state"] for e in events]
+    assert "task_plan" in states, f"override 必出 task_plan，实际 events={states}"
+    plan_event = next(e for e in events if e["state"] == "task_plan")
+    # run_id 复用 resume 返回的 new_run_id
+    assert plan_event["run_id"] == "orch-reused"
+    # task_id 沿用 override 自带值，不重枚举
+    assert len(plan_event["plan"]) == 1
+    assert plan_event["plan"][0]["task_id"] == "t1"
+    assert plan_event["plan"][0]["agent_id"] == "researcher"
+    assert plan_event["plan"][0]["goal"] == "G"
+    assert plan_event["plan"][0]["depends_on"] == []
+    # task_progress total 用 len(plan_items)==1
+    tp_event = next(e for e in events if e["state"] == "task_progress")
+    assert tp_event["run_id"] == "orch-reused"
+    assert tp_event["total"] == 1
+    assert tp_event["queued"] == 1
+    # override 也算 multi：dispatch 工具必注册
+    assert "dispatch_subagents" in registered_tools

@@ -86,20 +86,16 @@ class SettingsRequest(BaseModel):
     class Config:
         extra = "forbid"
 
-    # ----- AppSettings 13 fields (canonical, src/entities/setting/types.ts) -----
+    # ----- AppSettings fields (canonical, src/entities/setting/types.ts) -----
     # noqa: N815 — camelCase 是为了与 AppSettings TypeScript interface 字段一一对齐；
     # 字段名经过 to_camel/validate_settings_shape 链路进入存储。
     streaming: Optional[bool] = None
     autoMemory: Optional[bool] = None  # noqa: N815
     confirmDelete: Optional[bool] = None  # noqa: N815
-    compactMode: Optional[bool] = None  # noqa: N815
     endpoints: Optional[List[dict]] = None
     modelSelections: Optional[dict] = None  # noqa: N815
     maxContext: Optional[int] = None  # noqa: N815
     temperature: Optional[float] = None
-    proxyMode: Optional[str] = None  # noqa: N815  # 'system' | 'custom' | 'direct'
-    proxyUrl: Optional[str] = None  # noqa: N815
-    tlsVersion: Optional[str] = None  # noqa: N815  # '1.2' | '1.3'
     wiki: Optional[dict] = None
     version: Optional[str] = None
 
@@ -259,7 +255,11 @@ async def update_settings(
     legacy_present = [k for k in payload if k in legacy_keys]
     canonical_payload = {k: v for k, v in payload.items() if k not in legacy_keys}
 
-    from backend.data.settings_canonicalizer import to_camel, validate_settings_shape
+    from backend.data.settings_canonicalizer import (
+        strip_unknown_fields,
+        to_camel,
+        validate_settings_shape,
+    )
     from backend.data.settings_repo import SettingsRepository
 
     repo = SettingsRepository()
@@ -270,7 +270,11 @@ async def update_settings(
     # JSON 损坏 / 非 dict 时（如 list / str）→ fallback 到空 dict，避免 merge 时炸
     if not isinstance(existing, dict):
         existing = {}
-    camel_merged = to_camel({**existing, **canonical_payload})
+    # existing 里的历史残留字段（compactMode / proxyMode 等前端已删）会让
+    # validate_settings_shape 对整棵合并树报 400。只剥离 existing 侧的残留，
+    # payload 侧的未知字段仍原样保留并触发 400 —— 静默净化历史残留，严格拒绝新提交。
+    camel_existing = strip_unknown_fields(to_camel(existing))
+    camel_merged = {**camel_existing, **to_camel(canonical_payload)}
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:

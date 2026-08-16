@@ -12,6 +12,7 @@ from backend.memory.episodic import EpisodicMemory
 from backend.memory.manager import MemoryManager
 from backend.memory.semantic import SemanticMemory
 from backend.memory.working import WorkingMemory
+from backend.tests.conftest import ensure_session
 
 pytestmark = pytest.mark.unit
 
@@ -42,6 +43,8 @@ def test_remember_stores_in_episodic(manager: MemoryManager) -> None:
 
 
 def test_remember_with_metadata(manager: MemoryManager) -> None:
+    # §1.3a: FK enforcement — parent session row must exist.
+    ensure_session(manager.episodic.db, "sx")
     mid = manager.remember(
         "session-bound",
         metadata={"importance": 9, "session_id": "sx", "memory_type": "note"},
@@ -225,6 +228,7 @@ def test_classify_default_episodic() -> None:
 @pytest.mark.asyncio()
 async def test_remember_threads_source_turn_id(manager: MemoryManager) -> None:
     """aremember() must persist source_turn_id on the episodic row."""
+    ensure_session(manager.episodic.db, "sess-1")
     mid = await manager.aremember(
         "user prefers tea",
         session_id="sess-1",
@@ -238,6 +242,7 @@ async def test_remember_threads_source_turn_id(manager: MemoryManager) -> None:
 @pytest.mark.asyncio()
 async def test_remember_threads_memory_category(manager: MemoryManager) -> None:
     """aremember() must persist memory_category on the episodic row."""
+    ensure_session(manager.episodic.db, "sess-1")
     mid = await manager.aremember(
         "用户偏好咖啡",
         session_id="sess-1",
@@ -251,6 +256,7 @@ async def test_remember_threads_memory_category(manager: MemoryManager) -> None:
 @pytest.mark.asyncio()
 async def test_remember_threads_all_traceability(manager: MemoryManager) -> None:
     """All three traceability fields pass through in one call."""
+    ensure_session(manager.episodic.db, "sess-1")
     mid = await manager.aremember(
         "user mentioned azure on a friday",
         session_id="sess-1",
@@ -306,6 +312,7 @@ async def test_aremember_does_not_block_event_loop(
     # Yield control to the loop so the captured thread id is the loop's.
     await asyncio.sleep(0)
 
+    ensure_session(manager.episodic.db, "probe-sess")
     mid = await manager.aremember(
         "non-blocking probe",
         session_id="probe-sess",
@@ -330,6 +337,7 @@ async def test_aremember_to_thread_preserves_save_contract(
     (memory id returned, row findable, traceability fields populated)
     remains identical to the synchronous ``remember()`` path.
     """
+    ensure_session(manager.episodic.db, "wrap-sess")
     mid = await manager.aremember(
         "wrap test",
         session_id="wrap-sess",
@@ -360,6 +368,7 @@ async def test_consolidate_compresses_working_memory(
 ) -> None:
     """MemoryManager.consolidate(session_id) compresses working memory into
     episodic (delegates to ConsolidationPipeline) and returns a memory id."""
+    ensure_session(manager.episodic.db, "sess-c")
     manager.add_to_working(
         "user", "hello consolidation test message worth remembering"
     )

@@ -32,6 +32,8 @@
 | 36   | [编排端到端 (M5)](./36-orchestration-e2e.md)        | Planner LLM 注入 + POST /orchestration/lanes + 循环内 agent 子代理（白名单 + 300s 超时 + run_in_executor 卸载）|
 | 37   | [生态扩展 (M6)](./37-ecosystem-extensions.md)      | Hooks（pre/post 工具执行）+ 用量/成本面板 + SAGE.md/CLAUDE.md 项目上下文发现 + i18n 清扫 + 零依赖 mock LLM parity harness |
 | 38   | [sage doctor](./38-sage-doctor.md) | 安装/环境级 self-check CLI：8 项检查（conda env / backend health / SQLite writable / config integrity / ports / py version / disk space）+ 退出码 0/1/2 + electron 启动前自动跑（5s 超时，fail-open）|
+| 42   | [Chat-Native Multi-Agent Orchestration](./42-chat-multi-agent-orchestration.md) | 聊天链路多 agent 编排：语义判定 + tool-toggle 门 + ChatDispatcher 并行子 agent + task_plan/task_status 事件 + 前端任务树 + /orchestrate 与 /single override |
+| 43   | [§1.2 事件循环门禁升级](./43-event-loop-gate.md) | 单点 P99 → 5 轮 P99 中位数门禁：阈值演进 50→100→200→150→400ms 设计历史 + 抗抖动/回归敏感权衡 |
 
 ---
 

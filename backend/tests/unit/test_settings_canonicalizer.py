@@ -18,6 +18,7 @@ from backend.data.settings_canonicalizer import (
     ALIASES,
     detect_legacy_snake_pollution,
     from_camel,
+    strip_unknown_fields,
     to_camel,
     validate_settings_shape,
 )
@@ -122,7 +123,6 @@ def test_validate_settings_shape_accepts_clean_camel_case() -> None:
         "streaming": True,
         "autoMemory": True,
         "confirmDelete": True,
-        "compactMode": False,
         "endpoints": [],
         "modelSelections": {
             "chatModel": {"endpointId": None, "modelId": None},
@@ -131,9 +131,6 @@ def test_validate_settings_shape_accepts_clean_camel_case() -> None:
         },
         "maxContext": 4096,
         "temperature": 0.7,
-        "proxyMode": "system",
-        "proxyUrl": "x",
-        "tlsVersion": "1.2",
         "wiki": {"useFolderPicker": True},
         "version": "3.0.0",
     }
@@ -208,3 +205,120 @@ def test_detect_finds_snake_in_model_selections() -> None:
     paths = detect_legacy_snake_pollution(settings)
     assert "modelSelections.chatModel.endpoint_id" in paths
     assert "modelSelections.chatModel.model_id" in paths
+
+
+# --- strip_unknown_fields ---
+
+
+def test_strip_unknown_fields_drops_top_level_residue() -> None:
+    """历史残留的顶层字段 (compactMode/proxyMode 等前端已删) 应被剥离"""
+    dirty = {
+        "streaming": True,
+        "compactMode": False,
+        "proxyMode": "auto",
+        "proxyUrl": "http://x",
+        "tlsVersion": "1.2",
+        "version": "4.0.0",
+    }
+    assert strip_unknown_fields(dirty) == {
+        "streaming": True,
+        "version": "4.0.0",
+    }
+
+
+def test_strip_unknown_fields_drops_endpoint_residue() -> None:
+    """endpoints / discoveredModels 层级的未知字段应被剥离"""
+    dirty = {
+        "endpoints": [
+            {
+                "id": "e1",
+                "name": "A",
+                "baseUrl": "https://api.example.com",
+                "apiKey": "sk-x",
+                "lastDiscoveredAt": 123,
+                "category": "primary",  # 残留
+                "discoveredModels": [
+                    {"id": "m1", "capabilities": ["chat"], "endpointId": "e1", "extra": 1}
+                ],
+            }
+        ]
+    }
+    cleaned = strip_unknown_fields(dirty)
+    assert cleaned["endpoints"][0] == {
+        "id": "e1",
+        "name": "A",
+        "baseUrl": "https://api.example.com",
+        "apiKey": "sk-x",
+        "lastDiscoveredAt": 123,
+        "discoveredModels": [{"id": "m1", "capabilities": ["chat"], "endpointId": "e1"}],
+    }
+
+
+def test_strip_unknown_fields_drops_model_selection_residue() -> None:
+    """modelSelections 层级未知 key 与未知 selection 字段应被剥离"""
+    dirty = {
+        "modelSelections": {
+            "chatModel": {"endpointId": "e1", "modelId": "m1", "temperature": 0.7},  # 残留
+            "visionModel": {"endpointId": None, "modelId": None},
+            "embeddingModel": {"endpointId": None, "modelId": None},
+            "rerankModel": {"endpointId": None, "modelId": None},  # 残留
+        }
+    }
+    assert strip_unknown_fields(dirty) == {
+        "modelSelections": {
+            "chatModel": {"endpointId": "e1", "modelId": "m1"},
+            "visionModel": {"endpointId": None, "modelId": None},
+            "embeddingModel": {"endpointId": None, "modelId": None},
+        }
+    }
+
+
+def test_strip_unknown_fields_drops_wiki_orch_residue() -> None:
+    """wiki / orch 层级未知字段应被剥离,合法字段保留 (scratchRoot 是后端配置)"""
+    dirty = {
+        "wiki": {"useFolderPicker": True, "showSources": False},  # 残留
+        "orch": {
+            "maxConcurrentSubagents": 4,
+            "maxAggregateChars": 120000,
+            "scratchRoot": "/tmp/scratch",
+            "debugFlag": True,  # 残留
+        },
+    }
+    assert strip_unknown_fields(dirty) == {
+        "wiki": {"useFolderPicker": True},
+        "orch": {
+            "maxConcurrentSubagents": 4,
+            "maxAggregateChars": 120000,
+            "scratchRoot": "/tmp/scratch",
+        },
+    }
+
+
+def test_strip_unknown_fields_keeps_clean_input_unchanged() -> None:
+    """全合法输入应原样保留"""
+    clean = {
+        "streaming": True,
+        "endpoints": [{"id": "e1", "baseUrl": "u", "apiKey": "k", "discoveredModels": []}],
+        "modelSelections": {
+            "chatModel": {"endpointId": "e1", "modelId": "m1"},
+            "visionModel": {"endpointId": None, "modelId": None},
+            "embeddingModel": {"endpointId": None, "modelId": None},
+        },
+        "version": "4.0.0",
+    }
+    assert strip_unknown_fields(clean) == clean
+
+
+def test_strip_unknown_fields_passes_through_non_dict() -> None:
+    """非 dict 输入 (损坏数据) 原样返回,不抛错"""
+    assert strip_unknown_fields(None) is None
+    assert strip_unknown_fields([]) == []
+    assert strip_unknown_fields("junk") == "junk"
+
+
+def test_strip_unknown_fields_preserves_non_dict_endpoint_item() -> None:
+    """类型损坏的端点项 (非 dict) 保留原样,不静默删除 —— 由 validate 报 400 暴露,
+    避免无审计的数据丢失。"""
+    dirty = {"endpoints": ["corrupted", {"id": "e1", "baseUrl": "u", "junk": 1}]}
+    cleaned = strip_unknown_fields(dirty)
+    assert cleaned["endpoints"] == ["corrupted", {"id": "e1", "baseUrl": "u"}]

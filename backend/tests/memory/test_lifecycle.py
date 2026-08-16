@@ -17,6 +17,7 @@ from __future__ import annotations
 import pytest
 
 from backend.memory.lifecycle import MemoryLifecycleManager
+from backend.tests.conftest import ensure_session
 
 pytestmark = pytest.mark.unit
 
@@ -264,6 +265,8 @@ async def test_on_turn_complete_extracts_persists_and_emits(tmp_db_path):
     from backend.memory.lifecycle import MemoryLifecycleManager
 
     manager = _real_memory_manager(tmp_db_path)
+    # §1.3a FK (#290): memories_episodic.session_id → sessions(id) 被强制。
+    ensure_session(manager.episodic.db, "session-1")
     hooks = HookRegistry()
     events: list[object] = []
     hooks.on("memory_written", lambda e: events.append(e))
@@ -317,6 +320,8 @@ async def test_on_session_end_consolidates_and_emits(tmp_db_path):
     from backend.memory.lifecycle import MemoryLifecycleManager
 
     manager = _real_memory_manager(tmp_db_path)
+    # §1.3a FK (#290): consolidate 会把压缩摘要写入 memories_episodic(session_id)。
+    ensure_session(manager.episodic.db, "session-99")
     manager.add_to_working(
         "user", "hello there this is a test message worth remembering"
     )

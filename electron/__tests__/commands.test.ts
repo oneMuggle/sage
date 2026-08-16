@@ -437,3 +437,65 @@ describe('UnknownIpcCommandError', () => {
     expect(err.name).toBe('UnknownIpcCommandError');
   });
 });
+
+describe('agent_* IPC commands', () => {
+  it('registers all five agent commands with /api/v1-prefixed paths', () => {
+    const required = ['list_agents', 'get_agent', 'update_agent', 'toggle_agent', 'create_agent'];
+    for (const cmd of required) {
+      const route = COMMAND_ROUTES[cmd];
+      expect(route).toBeDefined();
+      // path 签名统一 (args: Record<string, unknown>) => string —— 传 { id: 'test' }
+      //（list/create 的实现忽略参数）
+      expect(route.path({ id: 'test' })).toMatch(/^\/api\/v1\//);
+    }
+  });
+
+  it('strips id from update_agent body (extra=forbid)', () => {
+    const route = COMMAND_ROUTES['update_agent'];
+    expect(route.path({ id: 'x' })).toBe('/api/v1/agents/x');
+    expect(route.body?.({ id: 'x', update: { systemPrompt: 'p' } })).toEqual({
+      systemPrompt: 'p',
+    });
+  });
+
+  it('strips id from toggle_agent body', () => {
+    const route = COMMAND_ROUTES['toggle_agent'];
+    expect(route.path({ id: 'x' })).toBe('/api/v1/agents/x/toggle');
+    expect(route.body?.({ id: 'x', enabled: false })).toEqual({ enabled: false });
+  });
+
+  // ===== Wave 2 P1-4/P1-5: orchestration run lifecycle (2026-08-14) =====
+  it('orchestration_list_runs is GET /api/v1/orch/runs with limit param', () => {
+    const route = COMMAND_ROUTES['orchestration_list_runs'];
+    expect(route.method).toBe('GET');
+    expect(route.path({ params: { limit: 5 } })).toBe('/api/v1/orch/runs?limit=5');
+    expect(route.path({})).toBe('/api/v1/orch/runs?limit=50');
+  });
+
+  it('orchestration_get_run is GET /api/v1/orch/runs/{run_id} (url-encoded)', () => {
+    const route = COMMAND_ROUTES['orchestration_get_run'];
+    expect(route.method).toBe('GET');
+    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc');
+    expect(route.path({ run_id: 'a/b' })).toBe('/api/v1/orch/runs/a%2Fb');
+  });
+
+  it('orchestration_resume_run is POST /api/v1/orch/runs/{run_id}/resume', () => {
+    const route = COMMAND_ROUTES['orchestration_resume_run'];
+    expect(route.method).toBe('POST');
+    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc/resume');
+  });
+
+  it('orchestration_cancel_run is POST /api/v1/orch/runs/{run_id}/cancel (PR C C1)', () => {
+    const route = COMMAND_ROUTES['orchestration_cancel_run'];
+    expect(route.method).toBe('POST');
+    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc/cancel');
+  });
+
+  it('orchestration_update_plan is POST /api/v1/orch/runs/{run_id}/plan with plan body', () => {
+    const route = COMMAND_ROUTES['orchestration_update_plan'];
+    expect(route.method).toBe('POST');
+    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc/plan');
+    const plan = [{ task_id: 't1', agent_id: 'primary', goal: 'g' }];
+    expect(route.body?.({ run_id: 'orch-abc', plan })).toEqual({ plan });
+  });
+});

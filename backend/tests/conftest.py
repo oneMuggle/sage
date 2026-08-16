@@ -2,6 +2,7 @@
 Sage 后端测试 - 共享 fixtures
 """
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -50,10 +51,26 @@ def setup_test_db(tmp_db_path):
     # 会在跨测试文件时泄漏. 在 autouse setup 中强制清空.
     from backend.main import app
 
+    # M1-M2 修复同上;同时确保 app.state.streams 已初始化: 测试不走 FastAPI
+    # lifespan(ASGITransport 默认不触发), 直接自建 AsyncClient 的测试
+    # (如 test_chat_orchestration_stream) 依赖注册表已存在。与 client fixture
+    # 的兜底逻辑保持一致(conftest.py client fixture 内也做了同样 init)。
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        from backend.api.chat_stream_registry import StreamRegistry
+
+        app.state.streams = StreamRegistry()
+
     if hasattr(app.state, "streams") and app.state.streams is not None:
         for entry in list(app.state.streams._entries.values()):
             if entry.task is not None and not entry.task.done():
-                entry.task.cancel()
+                # pytest-asyncio 0.23.3 默认 function-scope event loop:
+                # 上一个测试文件结束时 close loop,残留 task 的 cancel
+                # 会在已关闭 loop 上触发 _check_closed → RuntimeError。
+                # entry 持有的 Queue 随 Python GC 释放,跳过 cancel 不影响隔离。
+                # 现象: 跨文件异步测试 ERROR 100% 触发,
+                # 典型 fixture 名 setup_test_db 的 ERROR at setup。
+                with contextlib.suppress(RuntimeError):
+                    entry.task.cancel()
         app.state.streams._entries.clear()
 
     yield db_mod._db
@@ -84,7 +101,14 @@ async def client():
     if hasattr(app.state, "streams") and app.state.streams is not None:
         for entry in list(app.state.streams._entries.values()):
             if entry.task is not None and not entry.task.done():
-                entry.task.cancel()
+                # pytest-asyncio 0.23.3 默认 function-scope event loop:
+                # 上一个测试文件结束时 close loop,残留 task 的 cancel
+                # 会在已关闭 loop 上触发 _check_closed → RuntimeError。
+                # entry 持有的 Queue 随 Python GC 释放,跳过 cancel 不影响隔离。
+                # 现象: 跨文件异步测试 ERROR 100% 触发,
+                # 典型 fixture 名 setup_test_db 的 ERROR at setup。
+                with contextlib.suppress(RuntimeError):
+                    entry.task.cancel()
         app.state.streams._entries.clear()
 
 
@@ -180,6 +204,44 @@ def sample_messages():
 def sample_user_query():
     """测试用用户查询"""
     return "What is the capital of France?"
+
+
+def ensure_session(db, session_id: str, title: str = "Test Session") -> str:
+    """Idempotently create a session row in the test DB.
+
+    Tests that insert child rows referencing ``session_id`` (messages,
+    memories_episodic) used to silently succeed because ``PRAGMA
+    foreign_keys=ON`` was off in the test DB. Once that pragma is enabled
+    (§1.3a item c), the inserts correctly fail unless the parent session
+    row exists. Call this helper from tests to satisfy the FK.
+
+    Usage:
+        def test_something(setup_test_db):
+            ensure_session(setup_test_db, "sess-1")
+            # ... insert child rows referencing "sess-1"
+    """
+    import time
+
+    ts = int(time.time())
+    conn = db.get_connection()
+    conn.execute(
+        "INSERT OR IGNORE INTO sessions (id, title, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?)",
+        (session_id, title, ts, ts),
+    )
+    conn.commit()
+    return session_id
+
+
+@pytest.fixture()
+def sample_session(setup_test_db):
+    """Pre-create a default ``sess-1`` session row for tests that need a
+    FK-referenced session but don't care about the specific session_id.
+
+    See :func:`ensure_session` for the underlying helper that lets tests
+    create other session_ids explicitly.
+    """
+    return ensure_session(setup_test_db, "sess-1")
 
 
 @pytest.fixture()

@@ -25,6 +25,12 @@ export const zh = {
   'chat.new_session': '+ 新对话',
   'chat.placeholder': '输入消息...',
   'chat.send': '发送',
+  // Wave 3 C6: 编排模式条
+  'chat.orchMode.label': '编排模式',
+  'chat.orchMode.auto': '自动（LLM 判定）',
+  'chat.orchMode.forceMulti': '强制编排（LLM 拆解）',
+  'chat.orchMode.templateResearchWrite': '模板：调研与写作',
+  'chat.orchMode.templateGatherAnalyzeReport': '模板：收集-分析-报告',
   'chat.stop': '停止',
   'chat.config_warning': '未配置 API 端点或对话模型',
   'chat.config_warning_action': '前往设置',
@@ -87,6 +93,7 @@ export const zh = {
   'settings.section.appearance': '外观',
   'settings.section.chat': '对话',
   'settings.section.data': '数据',
+  'settings.section.orch': '编排（Orchestration）',
 
   // ─── 设置页 · MCP ─────────────────
   'settings.mcp.title': 'MCP 服务器',

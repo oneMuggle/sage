@@ -21,13 +21,14 @@ import json
 import logging
 import time
 import uuid
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
+from backend.api.orch_routes import router as orch_routes_router
 from backend.chat.executors import resolve_attachments
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
@@ -41,11 +42,60 @@ from backend.office.workspace_errors import (
     WorkspacePathMismatchError,
     WorkspaceSessionNotFoundError,
 )
+from backend.orchestration.chat_dispatcher import _classify_orchestration_mode
+from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs, get_scheduler
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# §1.2 修复（PR #294）配套：全局 SQLite 串行化锁。
+#
+# Why: 34 个 `async def` handler 降级为 `def` 后，FastAPI 自动把它们 dispatch 到 anyio
+# threadpool（默认 40 worker 线程）。`backend/data/database.py` 维护**单例**
+# `sqlite3.Connection(check_same_thread=False)`，多线程并发访问同一连接会触发
+# `cannot start a transaction within a transaction` 异常（实测，30 并发 session POST
+# 即触发）。`busy_timeout=5000` 只能吸收 SQLITE_BUSY 锁冲突，不能吸收应用层事务嵌套错误。
+#
+# How: 用一个模块级 `threading.Lock` 串行化所有走 `_db._connection` 的写操作。锁
+# 在 threadpool worker 线程内等待，**不阻塞事件循环**（事件循环的 SSE/chat handler
+# 仍能持续响应）。这把"事件循环上串行跑 sync"语义平移到了"threadpool 上串行跑 sync"，
+# 既修了 §1.2 阻塞问题，又避开单连接多线程冲突。
+#
+# Future: 计划在 PR B 把单连接拆成 thread-local connection pool（每 thread 一个
+# sqlite3.Connection），那时可移除本锁。详见 `docs/plans/2026-08-09_*.md` §1.2。
+import functools
+
+# PR B §1.2 (CRITICAL fix): 共用 backend.data.database._SQLITE_LOCK,
+# 而不是本模块私有的 threading.Lock。PR B 的 SqliteStorageAdapter._sync_X
+# 在 to_thread worker 内获取同一把锁,两条路径才能在同一 sqlite3.Connection
+# (check_same_thread=False) 上互斥,避免 "cannot start a transaction within
+# a transaction"。
+#
+# 注意:with_db_lock 必须定义在本模块(而非 database.py)。FastAPI 在
+# get_typed_signature 里用 ``call.__globals__`` 解析 `from __future__ import
+# annotations` 产生的字符串注解(wrapper.__globals__ 是**定义装饰器的模块**
+# 的 dict)。若 decorator 定义在 database.py,本文件 34 个带 body 模型的
+# handler(ChatRequest 等)会报 PydanticUndefinedAnnotation。orch_routes.py
+# 因此也保留同构的本地定义,共用同一把 _SQLITE_LOCK。
+from backend.data.database import _SQLITE_LOCK
+
+
+def with_db_lock(func):
+    """装饰器：把 sync 函数包在全局 `_SQLITE_LOCK` 内,串行化 SQLite 访问。
+
+    适用对象：34 个降级为 `def` 的 FastAPI handler —— 它们跑在 anyio threadpool,
+    内部 `SessionRepository`/`MessageRepository` 等 sync 调用必须串行访问单连接。
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with _SQLITE_LOCK:
+            return func(*args, **kwargs)
+
+    return wrapper
 
 
 def _safe_log_field(value: object, max_length: int = 64) -> str:
@@ -123,6 +173,19 @@ class ChatRequest(BaseModel):
     # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
     # 在调 LLM 前同步授权. 空列表 = legacy 路径(attachment_resolver).
     office_refs: List[ChatOfficeRef] = Field(default_factory=list)
+
+    # Multi-Agent Orchestration (spec 2026-08-11): 编排模式开关。
+    # auto（默认）—— 轻量 LLM 二分类决定；force_multi / force_single ——
+    # 用户斜杠命令 /orchestrate / /single 覆盖，跳过语义判定。
+    # Optional: 兼容渲染进程 IPC payload 里显式 null(undefined ?? null 序列化的产物)。
+    # Pydantic 默认值只在字段缺失时生效，显式 null 仍按类型校验 →
+    # 不加 Optional 会被 422 拒绝。业务层 `data.orchestration_mode or "auto"` 已兜底。
+    orchestration_mode: Optional[str] = "auto"
+
+    # Wave 3 A10 (2026-08-14): resume 恢复流 —— plan_override 非空时跳过 LLM
+    # 拆解，直接用存储计划建 dispatcher；run_id 复用 resume 返回的 new_run_id。
+    plan_override: Optional[List[Dict[str, Any]]] = None
+    run_id: Optional[str] = None
 
 
 class MessageResponse(BaseModel):
@@ -206,6 +269,17 @@ class TriggerResponse(BaseModel):
     message: str
 
 
+#: agent role 白名单（PATCH/POST 共用）。
+_VALID_AGENT_ROLES = {
+    "coordinator",
+    "researcher",
+    "coder",
+    "memory_manager",
+    "writer",
+    "reviewer",
+}
+
+
 class AgentToggle(BaseModel):
     """PATCH /agents/{id}/toggle 请求体 (PR-5)。
 
@@ -254,6 +328,27 @@ class AgentUpdate(BaseModel):
     description: Optional[str] = None
 
 
+class AgentCreate(BaseModel):
+    """POST /agents 请求体（US-4 角色可扩展）。
+
+    id / name 必填；其余字段带默认值。
+    ``model_config_data`` 字段名避开 Pydantic 保留名（同 AgentUpdate）。
+    """
+
+    model_config = {"protected_namespaces": ()}
+
+    id: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=64)
+    role: str = "general"
+    system_prompt: str = ""
+    tools: Optional[List[str]] = None
+    memory_access: Optional[List[str]] = None
+    model_config_data: Optional[dict] = None
+    max_iterations: Optional[int] = None
+    enabled: Optional[bool] = None
+    description: Optional[str] = None
+
+
 # ==================== 依赖注入 ====================
 
 
@@ -269,14 +364,16 @@ def get_agent() -> SageAgent:
 
 
 @router.post("/sessions", response_model=dict)
-async def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_session_repo)):
+@with_db_lock
+def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_session_repo)):
     """创建新会话"""
     session = repo.create(title=data.title, parent_id=data.parent_id)
     return session.to_dict()
 
 
 @router.get("/sessions", response_model=List[dict])
-async def list_sessions(
+@with_db_lock
+def list_sessions(
     limit: int = 100, offset: int = 0, repo: SessionRepository = Depends(get_session_repo)
 ):
     """获取会话列表"""
@@ -285,7 +382,8 @@ async def list_sessions(
 
 
 @router.get("/sessions/{session_id}", response_model=dict)
-async def get_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
+@with_db_lock
+def get_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
     """获取单个会话"""
     session = repo.get(session_id)
     if not session:
@@ -294,7 +392,8 @@ async def get_session(session_id: str, repo: SessionRepository = Depends(get_ses
 
 
 @router.patch("/sessions/{session_id}", response_model=dict)
-async def update_session(
+@with_db_lock
+def update_session(
     session_id: str, data: SessionUpdate, repo: SessionRepository = Depends(get_session_repo)
 ):
     """更新会话"""
@@ -314,7 +413,8 @@ async def update_session(
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
+@with_db_lock
+def delete_session(session_id: str, repo: SessionRepository = Depends(get_session_repo)):
     """删除会话"""
     if not repo.delete(session_id):
         raise HTTPException(status_code=404, detail="会话不存在")
@@ -325,7 +425,8 @@ async def delete_session(session_id: str, repo: SessionRepository = Depends(get_
 
 
 @router.post("/messages/{message_id}/delete")
-async def delete_message(message_id: str):
+@with_db_lock
+def delete_message(message_id: str):
     """删除单条消息（物理删除，非软删）。
 
     对应 Tauri command ``delete_message`` (PR-2):
@@ -358,7 +459,8 @@ async def delete_message(message_id: str):
 
 
 @router.get("/agents")
-async def list_agents():
+@with_db_lock
+def list_agents():
     """列出所有 agent (含 disabled), 按 id 排序。
 
     对应 Tauri command ``list_agents`` (PR-3)。
@@ -369,7 +471,8 @@ async def list_agents():
 
 
 @router.get("/agents/{agent_id}")
-async def get_agent_by_id(agent_id: str):
+@with_db_lock
+def get_agent_by_id(agent_id: str):
     """按 id 取单个 agent。
 
     命名注意: 不能叫 ``get_agent`` — 与本文件 line 136 的 dependency
@@ -389,7 +492,8 @@ async def get_agent_by_id(agent_id: str):
 
 
 @router.patch("/agents/{agent_id}")
-async def update_agent(agent_id: str, data: AgentUpdate):
+@with_db_lock
+def update_agent(agent_id: str, data: AgentUpdate):
     """部分更新 agent (PR-4)。
 
     - 200 + 更新后完整 profile
@@ -401,7 +505,7 @@ async def update_agent(agent_id: str, data: AgentUpdate):
     from backend.data.agent_repo import AgentRepository
 
     # 字段级校验: role 白名单
-    valid_roles = {"coordinator", "researcher", "coder", "memory_manager"}
+    valid_roles = _VALID_AGENT_ROLES
     if data.role is not None and data.role not in valid_roles:
         raise HTTPException(
             status_code=422,
@@ -440,7 +544,8 @@ async def update_agent(agent_id: str, data: AgentUpdate):
 
 
 @router.patch("/agents/{agent_id}/toggle")
-async def toggle_agent(agent_id: str, data: AgentToggle):
+@with_db_lock
+def toggle_agent(agent_id: str, data: AgentToggle):
     """启用/禁用 agent (PR-5)。
 
     - 200 + 更新后完整 profile (含 enabled / updated_at 新值)
@@ -467,6 +572,62 @@ async def toggle_agent(agent_id: str, data: AgentToggle):
 
     repo.set_enabled(agent_id, data.enabled)
     return repo.get(agent_id)
+
+
+@router.post("/agents")
+@with_db_lock
+def create_agent(data: AgentCreate):
+    """创建自定义 agent（US-4）。
+
+    - 200 + 完整 profile
+    - 409 + 结构化 detail（id 已存在）
+    - 422 — role 白名单 / max_iterations 范围
+    """
+    from backend.data.agent_repo import AgentRepository
+
+    if data.role not in _VALID_AGENT_ROLES and data.role != "general":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_role",
+                "message": (
+                    f"role must be one of {sorted(_VALID_AGENT_ROLES)} "
+                    f"or 'general', got {data.role!r}"
+                ),
+            },
+        )
+
+    if data.max_iterations is not None and not (1 <= data.max_iterations <= 50):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_max_iterations",
+                "message": f"max_iterations must be in 1..50, got {data.max_iterations}",
+            },
+        )
+
+    repo = AgentRepository()
+    if repo.get(data.id) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "type": "agent_already_exists",
+                "message": f"agent {data.id!r} already exists",
+            },
+        )
+
+    payload = data.dict(exclude_none=True)
+    if "model_config_data" in payload:
+        payload["model_config"] = payload.pop("model_config_data")
+    payload.setdefault("tools", [])
+    payload.setdefault("memory_access", [])
+    payload.setdefault("model_config", {})
+    payload.setdefault("max_iterations", 10)
+    payload.setdefault("enabled", True)
+    payload.setdefault("description", "")
+
+    repo.upsert(payload)
+    return repo.get(data.id)
 
 
 # ==================== 技能 API (PR-7) ====================
@@ -501,7 +662,8 @@ def _skill_to_dict(ext: dict, enabled: bool, usage_count: int) -> dict:
 
 
 @router.get("/skills")
-async def list_skills():
+@with_db_lock
+def list_skills():
     """列出所有已注册技能 (含 disabled 与 usage_count + SKILL.md 扩展字段)。"""
     adapter = _get_skill_adapter()
     return [
@@ -517,7 +679,8 @@ class SkillToggle(BaseModel):
 
 
 @router.post("/skills/{name}/toggle")
-async def toggle_skill(name: str, data: SkillToggle):
+@with_db_lock
+def toggle_skill(name: str, data: SkillToggle):
     """启用 / 禁用技能 (PR-7)。
 
     - 200 + 完整 skill dict (含新 enabled)
@@ -620,7 +783,8 @@ async def execute_slash_command(data: SkillCommandRequest):
 
 
 @router.get("/skills/commands")
-async def list_slash_commands():
+@with_db_lock
+def list_slash_commands():
     """列出所有已注册的 slash command (M10)。
 
     用于前端自动补全 / chat 输入提示。
@@ -634,7 +798,8 @@ async def list_slash_commands():
 
 
 @router.post("/skills/{name}/delete")
-async def delete_skill(name: str):
+@with_db_lock
+def delete_skill(name: str):
     """物理删除一个 SKILL.md 技能 (用户主动管理, PR-A Task 3)。
 
     - 200 + ``{"deleted": true, "name": ..., "base_dir": ...}``
@@ -669,7 +834,8 @@ async def delete_skill(name: str):
 
 
 @router.post("/skills/rescan")
-async def rescan_skills():
+@with_db_lock
+def rescan_skills():
     """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载新 SKILL.md。
 
     - 200 + ``{"loaded": [{"name", "source", "path"}], "skipped": [...], "total_loaded": int}``
@@ -746,7 +912,8 @@ class LegacyPreferenceItem(BaseModel):
 
 
 @router.get("/settings")
-async def legacy_get_settings() -> Optional[dict]:
+@with_db_lock
+def legacy_get_settings() -> Optional[dict]:
     """读取持久化的 settings；不存在返回 null。
 
     翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
@@ -775,7 +942,8 @@ async def legacy_get_settings() -> Optional[dict]:
 
 
 @router.put("/settings", response_model=LegacySettingsResponse)
-async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse:
+@with_db_lock
+def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse:
     """持久化 settings 到 preferences 表。
 
     v3.1 修复：合并而非覆盖。
@@ -787,7 +955,11 @@ async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsRe
     - 整树翻译到 camelCase (to_camel)
     - 白名单校验 (validate_settings_shape) 拒绝白名单外字段 → 400
     """
-    from backend.data.settings_canonicalizer import to_camel, validate_settings_shape
+    from backend.data.settings_canonicalizer import (
+        strip_unknown_fields,
+        to_camel,
+        validate_settings_shape,
+    )
     from backend.data.settings_repo import SettingsRepository
 
     repo = SettingsRepository()
@@ -813,8 +985,12 @@ async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsRe
     # 都不在 LEGAL_TOP_KEYS, 会触发 validate_settings_shape 400, 但它们是合法 legacy schema 字段.
     legacy_compat_fields = {"api_base_url", "api_key", "model"}
     legacy_compat_payload = {k: payload.pop(k) for k in list(payload) if k in legacy_compat_fields}
-    merged = {**existing, **payload}
-    camel_merged = to_camel(merged)
+
+    # existing 里的历史残留字段（compactMode / proxyMode 等前端已删）会让
+    # validate_settings_shape 对整棵合并树报 400。只剥离 existing 侧的残留，
+    # payload 侧的未知字段仍原样保留并触发 400（与 hex PUT 对齐）。
+    camel_existing = strip_unknown_fields(to_camel(existing))
+    camel_merged = {**camel_existing, **to_camel(payload)}
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
@@ -831,7 +1007,8 @@ async def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsRe
 
 
 @router.get("/preferences/{key}", response_model=LegacyPreferenceItem)
-async def legacy_get_preference(key: str) -> LegacyPreferenceItem:
+@with_db_lock
+def legacy_get_preference(key: str) -> LegacyPreferenceItem:
     """通用 KV 读取（白名单限定 key）。"""
     from backend.data.settings_repo import SettingsRepository
 
@@ -842,7 +1019,8 @@ async def legacy_get_preference(key: str) -> LegacyPreferenceItem:
 
 
 @router.put("/preferences/{key}", response_model=LegacyPreferenceItem)
-async def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPreferenceItem:
+@with_db_lock
+def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPreferenceItem:
     """通用 KV 写入（白名单限定 key）。"""
     from backend.data.settings_repo import SettingsRepository
 
@@ -1082,7 +1260,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 binding_generation=_auth_result.binding_generation,
                 office_doc_scope=_auth_result.office_doc_scope,
             )
-            _tool_ctx_token = set_tool_context(_tool_ctx)
+        else:
+            # F2 (2026-08-12): 普通聊天（无 office 授权）也设置上下文 —— 否则
+            # write_file 等工具的 artifact 记录会因 current_tool_context() 为
+            # None 静默早退，产物无法在 Artifacts 面板展示。binding_generation
+            # = 0 表示无 workspace 绑定；office 工具不在普通聊天 profile 白名单
+            # （primary/researcher/coder/memory_manager/writer 均无）。
+            _tool_ctx = ToolExecutionContext(
+                session_id=data.session_id,
+                stream_id=stream_id,
+                binding_generation=0,
+                office_doc_scope=frozenset(),
+            )
+        _tool_ctx_token = set_tool_context(_tool_ctx)
         try:
             llm_config = None
             if data.api_key and data.api_url:
@@ -1111,6 +1301,193 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             from backend.agents.profiles import build_system_base
 
             system_content = build_system_base()
+
+            # ===== Multi-Agent Orchestration (spec 2026-08-11) =====
+            # tool-toggle 门: 语义判定（独立轻量 LLM 二分类）决定 mode。
+            # single → 不注册 dispatch_subagents 工具、不跑 decompose_request
+            #          （简单任务结构上无法被过度拆解 — 硬约束 2）
+            # multi  → 复用 Planner 预规划 + conductor 经 dispatch 工具执行
+            #          （复杂任务必出 task_plan + 必注册工具 — 硬约束 1）
+            from backend.orchestration.llm_factory import (
+                build_llm_client_from_settings,
+            )
+
+            # A10 (2026-08-14): plan_override 非空 → 视为 force_multi，跳过语义判定。
+            if data.plan_override:
+                mode = "multi"
+            else:
+                try:
+                    mode = await _classify_orchestration_mode(
+                        data.message,
+                        data.orchestration_mode or "auto",
+                        llm_client=build_llm_client_from_settings(),
+                    )
+                except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
+                    logger.warning("编排语义判定失败，降级 single: %s", exc)
+                    mode = "single"
+            run_id: Optional[str] = None
+            if mode == "multi":
+                from backend.orchestration.chat_dispatcher import (
+                    _ACTIVE_DISPATCHERS,
+                    ChatDispatcher,
+                )
+                from backend.orchestration.planner import Planner
+                from backend.orchestration.task_registry import TaskRegistry
+                from backend.orchestration.team_registry import TeamRegistry
+                from backend.tools.subagent_tool import DispatchSubagentsTool
+
+                if data.plan_override:
+                    # A10 (2026-08-14): override 路径 —— items 自带 task_id，
+                    # 直接透传，不重枚举；run_id 复用 resume 返回的 new_run_id。
+                    plan_tasks = data.plan_override
+                    run_id = data.run_id or f"orch-{uuid.uuid4()}"
+                else:
+                    # P2-8 (2026-08-14): orchestration_mode=template:<id> → 确定性模板拆解。
+                    orchestration_mode = data.orchestration_mode or "auto"
+                    template_id = (
+                        orchestration_mode.split(":", 1)[1]
+                        if orchestration_mode.startswith("template:")
+                        else None
+                    )
+                    try:
+                        if template_id is not None:
+                            plan = await Planner(
+                                task_registry=TaskRegistry(),
+                                team_registry=TeamRegistry(),
+                                llm_client=build_llm_client_from_settings(),
+                            ).decompose_from_template(template_id, data.message)
+                        else:
+                            plan = await Planner(
+                                task_registry=TaskRegistry(),
+                                team_registry=TeamRegistry(),
+                                llm_client=build_llm_client_from_settings(),
+                            ).decompose_request(data.message)
+                        plan_tasks = list(plan.tasks if plan else [])
+                    except Exception as exc:  # noqa: BLE001 — 模板/规划失败降级 single
+                        if template_id is not None:
+                            logger.warning(
+                                "编排模板 %s 拆解失败，降级 single: %s", template_id, exc
+                            )
+                        else:
+                            logger.warning("编排规划失败，降级 single: %s", exc)
+                        mode = "single"
+                        plan_tasks = []
+                    run_id = f"orch-{uuid.uuid4()}"
+                if len(plan_tasks) <= 1 and not data.plan_override:
+                    # LLM 没拆开（或降级单任务）→ 视为没开编排；
+                    # override 单任务仍保持 multi（恢复流尊重用户指定计划）。
+                    mode = "single"
+                if mode == "multi":
+                    # 归一为 {task_id, agent_id, goal, depends_on} 列表 —— 下游
+                    # plan_block / init / task_plan 事件同构。override 路径透传
+                    # 自带 task_id；decompose 路径从 Task 对象重新编号 t1..tN。
+                    plan_items: List[Dict[str, Any]]
+                    if data.plan_override:
+                        plan_items = [
+                            {
+                                "task_id": str(it["task_id"]),
+                                "agent_id": str(it.get("agent_id", "primary")),
+                                "goal": str(it.get("goal", "")),
+                                "depends_on": list(it.get("depends_on") or []),
+                            }
+                            for it in data.plan_override
+                        ]
+                    else:
+                        plan_items = [
+                            {
+                                "task_id": f"t{i}",
+                                "agent_id": t.parameters.get("agent_hint", "primary"),
+                                "goal": t.description or t.name,
+                                "depends_on": list(t.blocked_by),
+                            }
+                            for i, t in enumerate(plan_tasks, 1)
+                        ]
+                    dispatcher = ChatDispatcher(
+                        stream_id=stream_id,
+                        entry_queue=entry.queue,
+                        run_id=run_id,
+                        llm_config=llm_config,
+                        total_tasks=len(plan_items),
+                        settings=load_orch_settings(),
+                    )
+                    # P2-9 (2026-08-14): 进程内注册表登记 —— 长连接期间 run 级
+                    # cancel 端点能定位到本 dispatcher 并置位取消事件。
+                    _ACTIVE_DISPATCHERS[run_id] = dispatcher
+                    agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
+                    if (
+                        agent.profile is not None
+                        and agent.profile.get("tools") is not None
+                    ):
+                        agent.profile["tools"].append("dispatch_subagents")
+                    # 计划块注入 system prompt —— conductor 依据计划调用工具
+                    # 注: system_content 已在插入点之前由 build_system_base()
+                    # 赋值（L1598），这里只追加计划块，不再重新赋值（否则覆盖）。
+                    plan_block = "\n".join(
+                        f"- {i}. [{it['agent_id']}] {it['goal']}"
+                        for i, it in enumerate(plan_items, 1)
+                    )
+                    system_content += (
+                        "\n\n以下为已确认的任务计划，请调用 dispatch_subagents "
+                        "工具并行执行这些子任务（可合并/调整）。不要复述计划，直接执行。\n"
+                        + plan_block
+                        # 进度可视化 P0-2 后置 (2026-08-12): 强化"必须全量执行完
+                        # 才汇总"约束。dispatch_subagents 每次调用可能只派发部分
+                        # 子任务（分批/合并），若聚合头只反映"本批已收到 X/X"，
+                        # LLM 可能误以为全部完成而提前总结。这里显式给出总数 N，
+                        # 要求必须等到 N 个全部有结果才输出最终汇总。
+                        + "\n\n必须执行完计划中的全部"
+                        + str(len(plan_items))
+                        + " 个子任务，等到所有子任务都返回结果后，才能输出最终汇总。"
+                        "若本次 dispatch 只执行了部分子任务，请继续调用工具执行剩余任务，"
+                        "不要提前给出结论。"
+                    )
+                    # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
+                    # Wave 2 P1-4: 首次 dispatch 前把 run + plan 落库,供 resume 端点重建。
+                    # 失败降级（logger.warning）,绝不阻塞聊天。
+                    # A10: reasoning 捕获 —— override 路径 plan 未定义 → 常量
+                    # "plan_override"；decompose 路径 plan.reasoning（可为空串）。
+                    # 避免 override 路径直接引用未定义的 plan 抛 NameError。
+                    reasoning = (
+                        "plan_override"
+                        if data.plan_override
+                        else (plan.reasoning if plan else "")
+                    )
+                    try:
+                        if dispatcher is not None and hasattr(dispatcher, "init_orch_run"):
+                            dispatcher.init_orch_run(
+                                session_id=data.session_id,
+                                plan_json=json.dumps(
+                                    {"tasks": plan_items, "reasoning": reasoning},
+                                    ensure_ascii=False,
+                                ),
+                                # Wave 3 A9: resume 恢复流逐字重发原始请求。
+                                original_request=data.message,
+                            )
+                    except Exception as exc:  # noqa: BLE001 — 降级铁律
+                        logger.warning("dispatcher.init_orch_run 失败: %s", exc)
+                    await entry.queue.put(
+                        {
+                            "state": "task_plan",
+                            "run_id": run_id,
+                            "plan": plan_items,
+                        }
+                    )
+                    # 进度可视化 P0-2 (2026-08-12): task_plan 之后立即推
+                    # 一次 task_progress 初始化事件,前端 taskBoard 在子
+                    # agent 跑之前就能拿到 total,UI 可立即渲染"已拆解为 N
+                    # 个子任务,等待结果中…"。后续 5 元组由 reducer 从
+                    # task_status 实时聚合。
+                    await entry.queue.put(
+                        {
+                            "state": "task_progress",
+                            "run_id": run_id,
+                            "total": len(plan_items),
+                            "done": 0,
+                            "running": 0,
+                            "queued": len(plan_items),
+                            "failed": 0,
+                        }
+                    )
             try:
                 from backend.core.diagram_prompt import (
                     DIAGRAM_TOOL_PROMPT,
@@ -1274,6 +1651,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             )
             await entry.queue.put({"error": e.to_dict(), "state": "failed"})
         finally:
+            # P2-9 (2026-08-14): 长连接结束注销注册表条目（run 级 cancel 不再命中）。
+            # run_id 为 None（single 路径）时跳过 —— 从未注册过。
+            if run_id:
+                _ACTIVE_DISPATCHERS.pop(run_id, None)
             # Task 9 (M1-M2): always reset the tool context so the
             # ContextVar never leaks into the next producer invocation.
             if _tool_ctx_token is not None:
@@ -1349,7 +1730,8 @@ def _ndjson(d: dict) -> str:
 
 
 @router.post("/interrupt")
-async def interrupt(agent: SageAgent = Depends(get_agent)):
+@with_db_lock
+def interrupt(agent: SageAgent = Depends(get_agent)):
     """中断 Agent"""
     agent.interrupt()
     return {"status": "ok"}
@@ -1359,7 +1741,8 @@ async def interrupt(agent: SageAgent = Depends(get_agent)):
 
 
 @router.get("/sessions/{session_id}/messages", response_model=List[dict])
-async def get_messages(session_id: str, limit: int = 100, offset: int = 0):
+@with_db_lock
+def get_messages(session_id: str, limit: int = 100, offset: int = 0):
     """获取会话消息"""
     repo = MessageRepository()
     messages = repo.get_by_session(session_id, limit=limit, offset=offset)
@@ -1370,7 +1753,8 @@ async def get_messages(session_id: str, limit: int = 100, offset: int = 0):
 
 
 @router.get("/evolution/logs", response_model=List[EvolutionLogResponse])
-async def list_evolution_logs(limit: int = 50, offset: int = 0):
+@with_db_lock
+def list_evolution_logs(limit: int = 50, offset: int = 0):
     """获取进化日志列表"""
     try:
         db = get_database()
@@ -1380,7 +1764,8 @@ async def list_evolution_logs(limit: int = 50, offset: int = 0):
 
 
 @router.post("/evolution/trigger", response_model=TriggerResponse)
-async def trigger_evolution(data: TriggerEvolutionRequest):
+@with_db_lock
+def trigger_evolution(data: TriggerEvolutionRequest):
     """手动触发进化任务"""
     try:
         scheduler = get_scheduler()
@@ -1404,7 +1789,8 @@ async def trigger_evolution(data: TriggerEvolutionRequest):
 
 
 @router.get("/evolution/status", response_model=List[EvolutionStatusResponse])
-async def get_evolution_status():
+@with_db_lock
+def get_evolution_status():
     """获取进化任务状态"""
     try:
         scheduler = get_scheduler()
@@ -1447,7 +1833,8 @@ class MemoryDeleteRequest(BaseModel):
 
 
 @router.get("/memory/search")
-async def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
+@with_db_lock
+def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
     """搜索记忆"""
     try:
         mm = get_memory_manager()
@@ -1457,7 +1844,8 @@ async def search_memory(query: str, limit: int = 20, type: Optional[str] = None)
 
 
 @router.post("/memory/save")
-async def save_memory(data: MemorySaveRequest):
+@with_db_lock
+def save_memory(data: MemorySaveRequest):
     """保存记忆"""
     try:
         mm = get_memory_manager()
@@ -1473,7 +1861,8 @@ async def save_memory(data: MemorySaveRequest):
 
 
 @router.post("/memory/delete")
-async def delete_memory(data: MemoryDeleteRequest):
+@with_db_lock
+def delete_memory(data: MemoryDeleteRequest):
     """删除记忆"""
     try:
         mm = get_memory_manager()
@@ -1492,7 +1881,8 @@ async def delete_memory(data: MemoryDeleteRequest):
 
 
 @router.get("/memory/list")
-async def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] = None):
+@with_db_lock
+def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] = None):
     """获取记忆列表"""
     try:
         mm = get_memory_manager()
@@ -1623,3 +2013,8 @@ async def memory_events(request: Request):
             hooks.off("memory_written", on_memory_written)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+# Wave 2 P1-4 (2026-08-14): 编排 run 读取/resume/计划更新端点挂载。
+# orch_routes 用独立 APIRouter(prefix="/orch")，经 include_router 并入
+# legacy_router → main.py 挂载后最终前缀 /api/v1/orch。
+router.include_router(orch_routes_router)

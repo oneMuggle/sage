@@ -1,5 +1,5 @@
 /** Settings version for future migration support */
-export const SETTINGS_VERSION = '3.0.0';
+export const SETTINGS_VERSION = '4.0.0';
 
 /** localStorage key for settings persistence */
 export const SETTINGS_STORAGE_KEY = 'sage-settings';
@@ -43,13 +43,29 @@ export interface WikiSettings {
   useFolderPicker: boolean;
 }
 
+// Wave 3 P2-9 (2026-08-14): 编排执行参数（前端 UI 渲染 5 个数值；scratchRoot
+// 仅后端配置，不在此 interface —— 见 storage 层注释）。
+export interface OrchSettings {
+  maxConcurrentSubagents: number; // 4
+  maxAggregateChars: number; // 120 * 1024
+  maxSubagentResultChars: number; // 50 * 1024
+  maxRetries: number; // 2
+  maxLaneIterations: number; // 8
+}
+
 /** All application settings */
 export interface AppSettings {
   // General
   streaming: boolean;
   autoMemory: boolean;
   confirmDelete: boolean;
-  compactMode: boolean;
+
+  // Memory — separate field from autoMemory (which is "auto-extract in
+  // conversation"). memoryServerSync is the planned "sync to internal
+  // server" feature; UI exposes it but the backend endpoint is not yet
+  // wired up — see docs/plans/2026-08-09_feature-optimization-proposal.md
+  // §1.4 for the cleanup decision.
+  memoryServerSync: boolean;
 
   // Endpoint & Model
   endpoints: EndpointConfig[];
@@ -57,13 +73,11 @@ export interface AppSettings {
   maxContext: number;
   temperature: number;
 
-  // Network
-  proxyMode: 'system' | 'custom' | 'direct';
-  proxyUrl: string;
-  tlsVersion: '1.2' | '1.3';
-
   // Wiki
   wiki: WikiSettings;
+
+  // Wave 3 P2-9
+  orch: OrchSettings;
 
   // Internal
   version: string;
@@ -90,12 +104,23 @@ const DEFAULT_MODEL_SELECTIONS: ModelSelections = {
 };
 
 /** Sensible defaults for all settings */
+export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
+  maxConcurrentSubagents: 4,
+  maxAggregateChars: 120 * 1024,
+  maxSubagentResultChars: 50 * 1024,
+  maxRetries: 2,
+  maxLaneIterations: 8,
+};
+
+/** Sensible defaults for all settings */
 export const DEFAULT_SETTINGS: AppSettings = {
   // General
   streaming: true,
   autoMemory: true,
   confirmDelete: true,
-  compactMode: false,
+
+  // Memory
+  memoryServerSync: false,
 
   // Endpoint & Model
   endpoints: [],
@@ -103,15 +128,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxContext: 4096,
   temperature: 0.7,
 
-  // Network
-  proxyMode: 'system',
-  proxyUrl: 'http://proxy.internal:3128',
-  tlsVersion: '1.2',
-
   // Wiki
   wiki: {
     useFolderPicker: true,
   },
+
+  // Wave 3 P2-9
+  orch: DEFAULT_ORCH_SETTINGS,
 
   // Internal
   version: SETTINGS_VERSION,

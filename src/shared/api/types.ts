@@ -93,7 +93,17 @@ export type AgentState =
   | 'observing'
   | 'content_delta'
   | 'done'
-  | 'failed';
+  | 'failed'
+  // Multi-Agent Orchestration (2026-08-11)
+  | 'task_plan'
+  | 'task_status'
+  // 进度可视化 P0-2 (2026-08-12): 整盘概览事件,在 task_plan 之后立刻
+  // 推送一次,前端 taskBoard 渲染"已拆解为 N 个子任务"头部信息时不必
+  // 等待 subtask 状态切换就能拿到 total。后续 5 元组也可由前端 reducer
+  // 实时从 task_status 聚合,本事件只承担初始化职责。
+  | 'task_progress'
+  // Wave 2 (2026-08-14): reviewer 复核结论事件,见 TaskReviewEvent。
+  | 'task_review';
 
 /** 流式聊天工具调用 (对应 OpenAI 工具调用格式) */
 export interface AgentToolCall {
@@ -113,6 +123,68 @@ export interface AgentToolResult {
   content: string;
 }
 
+// ─── Multi-Agent Orchestration 窄类型事件 (2026-08-11) ─────────────────
+// 与 llmStream.ts 双处一致 —— useChat taskBoard 状态机的数据类型。
+export interface TaskPlanItem {
+  task_id: string;
+  agent_id: string;
+  goal: string;
+  // P1-6 (2026-08-14): 依赖透传 —— 后端 task_plan 事件带 depends_on。
+  depends_on?: string[];
+}
+
+export interface TaskPlanEvent {
+  state: 'task_plan';
+  run_id: string;
+  plan: TaskPlanItem[];
+}
+
+export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed';
+
+export interface TaskStatusEvent {
+  state: 'task_status';
+  run_id: string;
+  task_id: string;
+  status: TaskStatusValue;
+  agent_id: string;
+  goal: string;
+  error: string | null;
+  output_preview: string | null;
+}
+
+/** 进度可视化 P0-2 (2026-08-12): 整盘概览事件。
+ *
+ * 后端在 `task_plan` 之后立即推送一次 (total=N, done=0, running=0,
+ * queued=N, failed=0),后续也可在 task_status 状态切换时同步更新。
+ * 字段是 5 元组,前端 taskBoard.progress 字段与之一一对应。
+ */
+export interface TaskProgressEvent {
+  state: 'task_progress';
+  run_id: string;
+  total: number;
+  done: number;
+  running: number;
+  queued: number;
+  failed: number;
+}
+
+/** Wave 2 (2026-08-14): reviewer 复核结论事件（spec §5.2）。
+ *
+ * 后端 ``_run_review`` 产出 verdict 后推送到 NDJSON 流,前端据此展示
+ * "复核通过 / 存在疑问"等结论。字段与 backend ``_emit_task_review`` 一致。
+ */
+export type ReviewVerdict = 'pass' | 'fail';
+
+export interface TaskReviewEvent {
+  state: 'task_review';
+  run_id: string;
+  task_id: string;
+  reviewer_id: string;
+  verdict: ReviewVerdict;
+  assertion_count: number;
+  summary: string;
+}
+
 /** 流式聊天事件 (NDJSON 协议的一行) */
 export interface AgentEvent {
   state: AgentState;
@@ -124,6 +196,28 @@ export interface AgentEvent {
   error?: string;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
+  /** 会话元数据更新事件 (非 agent 事件, 由 producer 在流末尾推送) */
+  type?: string;
+  subtype?: string;
+  title?: string;
+  // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 llmStream.ts AgentEvent 同步）
+  run_id?: string;
+  plan?: TaskPlanItem[];
+  task_id?: string;
+  status?: TaskStatusValue;
+  goal?: string;
+  output_preview?: string | null;
+  // 进度可视化 P0-2 (2026-08-12): 5 元组快照字段,与 TaskProgressEvent 对齐。
+  total?: number;
+  done?: number;
+  running?: number;
+  queued?: number;
+  failed?: number;
+  // Wave 2 (2026-08-14): task_review 事件 4 可选字段（仅 state='task_review' 时携带）。
+  reviewer_id?: string;
+  verdict?: ReviewVerdict;
+  assertion_count?: number;
+  summary?: string;
 }
 
 // ==================== 错误类型定义 ====================
@@ -151,6 +245,11 @@ export interface ChatConfig {
   provider?: string;
   reasoningEffort?: 'low' | 'medium' | 'high';
   thinkingBudget?: number;
+  /** Multi-Agent Orchestration: auto | force_multi | force_single | template:<id>（缺省 auto） */
+  orchestrationMode?: string;
+  // Wave 3 (2026-08-14): resume 恢复流 —— plan_override 逐字恢复（跳过 LLM 拆解）。
+  planOverride?: TaskPlanItem[];
+  runId?: string;
 }
 
 // ==================== Memory 类型定义 ====================
@@ -287,6 +386,20 @@ export interface AgentUpdate {
   memory_access?: string[];
   model_config?: AgentProfile['model_config'];
   max_iterations?: number;
+  enabled?: boolean;
+  description?: string;
+}
+
+/** POST /agents 请求体（US-4 角色可扩展）。 */
+export interface AgentCreate {
+  id: string;
+  name: string;
+  role?: string;
+  system_prompt?: string;
+  tools?: string[];
+  memory_access?: string[];
+  modelConfigData?: Record<string, unknown>;
+  maxIterations?: number;
   enabled?: boolean;
   description?: string;
 }

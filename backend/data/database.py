@@ -8,11 +8,19 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Module-level SQLite 写锁(PR B §1.2 fix):被所有同步 SQLite 写共享,
+# 包括 PR A 的 legacy_routes.py handler(用 @with_db_lock 装饰器)和
+# PR B 的 SqliteStorageAdapter._sync_X(在 asyncio.to_thread worker 内执行)。
+# 必须用 threading.Lock 而不是 asyncio.Lock,因为 _sync_X 跑在线程池 worker
+# 上,与 PR A 的 sync def handler 共享同一线程上下文;asyncio.Lock 只能保护
+# event loop 上的协程,看不到 worker 线程。
+_SQLITE_LOCK = threading.Lock()
 
 def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     """Add source_turn_id / source_message_id / memory_category columns and
@@ -78,6 +86,10 @@ class Database:
             # 启用 WAL 模式提高并发性能
             self._connection.execute("PRAGMA journal_mode=WAL")
             self._connection.execute("PRAGMA busy_timeout=5000")
+            # fix/security-perf-quickwins (2026-08-09): 启用外键约束。否则
+            # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
+            # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
+            self._connection.execute("PRAGMA foreign_keys=ON")
         return self._connection
 
     def close(self):
@@ -499,6 +511,17 @@ class Database:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_episodic_session ON memories_episodic(session_id)"
         )
+        # fix/security-perf-quickwins (2026-08-09): 补 4 个查询/清理热路径索引,
+        # 见 docs/plans/2026-08-09_feature-optimization-proposal.md §1.3a c.
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_episodic_expires ON memories_episodic(expires_at)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tool_usage_session ON tool_usage(session_id)"
+        )
+        # NOTE (win7 sync): main 的 idx_review_events_status / idx_skill_drafts_status
+        # 指向 review_events / skill_drafts 表,win7 无此二表,已删除以避免
+        # sqlite3.OperationalError: no such table 导致 DB 初始化崩溃。
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(is_enabled)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name)")
         cursor.execute(
@@ -509,6 +532,56 @@ class Database:
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_evolution_memory ON memories_evolution_log(memory_id)"
+        )
+
+        # Wave 2 P1-4 (2026-08-14): 编排 run / task 持久化表, 供 resume 端点重建 ChatDispatcher。
+        # schema 与 spec §4 verbatim, 幂等 (CREATE TABLE IF NOT EXISTS)。
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orch_runs (
+                run_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'running',
+                created_at INTEGER NOT NULL,
+                plan_json TEXT NOT NULL,
+                final_summary TEXT,
+                dispatched_at INTEGER,
+                original_request TEXT
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_runs_session ON orch_runs(session_id)"
+        )
+        # Wave 3 A9 (2026-08-14): original_request 列 —— resume plan_override 恢复流
+        # 用（前端 resumeRun 要拿原始请求逐字重发）。既有库 ALTER 补列，幂等。
+        cursor.execute("PRAGMA table_info(orch_runs)")
+        _orch_cols = {row[1] for row in cursor.fetchall()}
+        if "original_request" not in _orch_cols:
+            cursor.execute("ALTER TABLE orch_runs ADD COLUMN original_request TEXT")
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orch_tasks (
+                task_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES orch_runs(run_id),
+                agent_id TEXT NOT NULL,
+                goal TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'queued',
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                error TEXT,
+                output_preview TEXT,
+                blocked_by TEXT,
+                scratch_dir TEXT,
+                started_at INTEGER,
+                finished_at INTEGER
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_tasks_run ON orch_tasks(run_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_tasks_status ON orch_tasks(status)"
         )
 
         conn.commit()

@@ -30,6 +30,12 @@ interface ChatInputProps {
        * so the LLM can see the office doc summaries.
        */
       officeRefs?: readonly ChatOfficeRef[];
+      /**
+       * Multi-Agent Orchestration: /orchestrate → force_multi、/single → force_single。
+       * Wave 3 C6: 编排模式条可传 'auto' | 'force_multi' | 'template:<id>'。
+       * 普通消息不传（undefined → 后端 auto）。
+       */
+      orchestrationMode?: string;
     },
   ) => void;
   onInterrupt?: () => void;
@@ -89,6 +95,10 @@ export function ChatInput({
   // sessionId is used by the AtFileMenu itself (via useOptionalWorkspaceContext);
   // expose on the closure so future tests can assert on it.
   const effectiveSessionId = workspaceContext?.sessionId ?? null;
+
+  // Wave 3 C6 (2026-08-15): 编排模式偏好（组件 state —— YAGNI 不写 settings）。
+  // auto = LLM 二分类；force_multi = 强制编排；template:<id> = 确定性模板。
+  const [orchMode, setOrchMode] = useState('auto');
 
   // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
@@ -206,6 +216,9 @@ export function ChatInput({
       attachments: files.length > 0 ? files : undefined,
       images: images.length > 0 ? images : undefined,
       officeRefs: officeRefs.length > 0 ? officeRefs : undefined,
+      // Wave 3 C6: auto 不传键 → 保持既有 undefined → auto 语义；
+      // force_multi / template:<id> 显式透传。
+      ...(orchMode !== 'auto' ? { orchestrationMode: orchMode } : {}),
     });
     setValue('');
     setKnowledgeRefs([]);
@@ -251,6 +264,23 @@ export function ChatInput({
             onSend(prompt);
             setValue('');
           });
+        return;
+      }
+
+      // Multi-Agent Orchestration override（tool-toggle 门的手动逃生门）:
+      // /orchestrate → force_multi、/single → force_single。正文随消息发送；
+      // 纯命令无正文 → 用法提示（对齐 help/skill 命令的处理模式）。
+      if (cmd.name === 'orchestrate' || cmd.name === 'single') {
+        const parts = value.split(/\s+/);
+        const args = parts.slice(1).join(' ');
+        setValue('');
+        if (!args) {
+          onSend(`用法：/${cmd.name} 你的任务描述`);
+          return;
+        }
+        onSend(args, {
+          orchestrationMode: cmd.name === 'orchestrate' ? 'force_multi' : 'force_single',
+        });
         return;
       }
 
@@ -367,6 +397,26 @@ export function ChatInput({
             onClose={handleAtFileClose}
           />
         )
+      }
+      orchModeBar={
+        <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
+          <label className="text-xs text-text-tertiary">{t('chat.orchMode.label')}</label>
+          <select
+            data-testid="orch-mode-select"
+            value={orchMode}
+            onChange={(e) => setOrchMode(e.target.value)}
+            className="px-2 py-0.5 text-xs border border-border rounded bg-bg text-text"
+          >
+            <option value="auto">{t('chat.orchMode.auto')}</option>
+            <option value="force_multi">{t('chat.orchMode.forceMulti')}</option>
+            <option value="template:research-write">
+              {t('chat.orchMode.templateResearchWrite')}
+            </option>
+            <option value="template:gather-analyze-report">
+              {t('chat.orchMode.templateGatherAnalyzeReport')}
+            </option>
+          </select>
+        </div>
       }
       hint={t('chat.hint')}
     />

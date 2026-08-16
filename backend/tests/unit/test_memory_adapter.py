@@ -205,6 +205,15 @@ class TestMemoryAdapterStore:
 
         db = Database(db_path=tmp_db_path)
         db.init_db()
+        # win7 sync #290: main 启用 PRAGMA foreign_keys=ON 后,
+        # memories_episodic.session_id → sessions(id) 的 FK 被强制,
+        # 必须先建 session 再存 memory,否则 INSERT 抛 IntegrityError。
+        db.get_connection().execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?)",
+            ("sess-1", "测试会话", 1700000000000, 1700000000000),
+        )
+        db.get_connection().commit()
         manager = MemoryManager(
             working=WorkingMemory(max_size=10, max_tokens=2000),
             episodic=EpisodicMemory(db),

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { useBtwState } from '../../entities/chat/btwState';
 import { resolveEndpoint } from '../../entities/setting/types';
@@ -7,7 +8,11 @@ import {
   type AgentEvent,
   type ChatConfig,
   type ChatOfficeRef,
+  type TaskPlanItem,
+  type TaskProgressEvent,
+  type TaskStatusEvent,
 } from '../../shared/api';
+import { orchRunClient } from '../../shared/api/orchRunClient';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
@@ -32,6 +37,28 @@ function inferProviderFromBaseUrl(baseUrl: string | undefined): string | undefin
   if (u.includes('anthropic.com')) return 'claude';
   // Ollama / 局域网 / 其它 OpenAI 兼容代理 → 后端默认 'custom'
   return undefined;
+}
+
+/** Multi-Agent Orchestration: 编排任务板聚合状态（task_plan/task_status 消费结果） */
+export interface TaskBoard {
+  runId: string;
+  // P1-6 (2026-08-14): plan item 允许 depends_on? 可选字段（无依赖的老 run 兼容）。
+  plan: TaskPlanItem[];
+  statuses: Record<string, TaskStatusEvent>;
+  // 进度可视化 P0-2 (2026-08-12): 5 元组快照,初值由 task_progress 事件
+  // 注入,后续 reducer 在每次 task_status 流入时实时聚合更新。让
+  // ProgressSection/TaskTreeSection 在 task_status 还没到齐前就能渲染
+  // "已拆解为 N 个子任务,等待结果中…"。in_flight = running + queued。
+  progress?: {
+    total: number;
+    done: number;
+    running: number;
+    queued: number;
+    failed: number;
+  };
+  // P1-5 (2026-08-14): 首次派发时间戳（首个 task_status 触发）。非 null 即
+  // "已派发" —— PlanCard 据此锁定编辑（plan_update 端点派发后返回 409）。
+  dispatchedAt?: number | null;
 }
 
 export function useChat() {
@@ -62,6 +89,8 @@ export function useChat() {
   // P0: 实时工具调用 — state 驱动 UI 渲染，ref 镜像供 finishStream 读取最新值
   const [streamingToolCalls, setStreamingToolCalls] = useState<ToolCall[]>([]);
   const streamingToolCallsRef = useRef<ToolCall[]>([]);
+  // Multi-Agent Orchestration: 编排任务板聚合状态（task_plan/task_status 消费结果）
+  const [taskBoard, setTaskBoard] = useState<TaskBoard | null>(null);
 
   // Phase 6: /btw 补充消息状态
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
@@ -95,7 +124,13 @@ export function useChat() {
   }, [messages, streamingMessageId, streamingContent, streamingReasoning, streamingToolCalls]);
 
   const sendMessage = useCallback(
-    async (content: string, sessionId?: string, officeRefs?: readonly ChatOfficeRef[]) => {
+    async (
+      content: string,
+      sessionId?: string,
+      officeRefs?: readonly ChatOfficeRef[],
+      orchestrationMode?: ChatConfig['orchestrationMode'],
+      opts?: { planOverride?: TaskPlanItem[]; runId?: string },
+    ) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid || isLoading || loadingRef.current) return;
 
@@ -181,6 +216,8 @@ export function useChat() {
       // P0: 重置实时工具调用 state + ref (每次 sendMessage 清空上一轮)
       streamingToolCallsRef.current = [];
       setStreamingToolCalls([]);
+      // 新消息开始时清空编排任务板（与 streamingToolCalls 清空同处）
+      setTaskBoard(null);
 
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
@@ -192,6 +229,11 @@ export function useChat() {
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
         // 不再靠 URL 启发式。详见 docs/plans/2026-06-17_thinking-passthrough.md
         provider: inferProviderFromBaseUrl(chatEndpoint.baseUrl),
+        // 由 /orchestrate /single 斜杠命令传入;普通消息 undefined → 后端 auto
+        orchestrationMode,
+        // Wave 3: resume 恢复流透传
+        planOverride: opts?.planOverride,
+        runId: opts?.runId,
       };
 
       const appendContent = (next: string): void => {
@@ -301,6 +343,75 @@ export function useChat() {
                 );
               }
 
+              // Multi-Agent Orchestration: task_plan 事件 → 初始化编排任务板。
+              // "先消费、不进内容累加器" — 不产生消息气泡占位文本,后续 uiText
+              // 分支不会命中。
+              if (evt.state === 'task_plan' && evt.run_id && evt.plan) {
+                setTaskBoard({ runId: evt.run_id, plan: evt.plan, statuses: {} });
+                return;
+              }
+              // Multi-Agent Orchestration: task_status 事件 → 按 run_id 匹配合并进任务板。
+              // 旧 run 的 task_status 直接忽略（prev 为 null 或 runId 不匹配都返回原值）。
+              // 后端 task_status 载荷含 TaskStatusEvent 全字段,故宽松 AgentEvent 可直接 cast。
+              // 进度可视化 P0-2 (2026-08-12): 同步重算 progress 5 元组,让
+              // ProgressSection 无需等待 task_progress 就能实时反映 done/queued。
+              if (evt.state === 'task_status' && evt.run_id && evt.task_id) {
+                // 闭包内 TS 不保留 evt 字段的 narrowing,先捕获为 const
+                const runId = evt.run_id;
+                const taskId = evt.task_id;
+                setTaskBoard((prev) => {
+                  if (!prev || prev.runId !== runId) return prev;
+                  const nextStatuses = {
+                    ...prev.statuses,
+                    [taskId]: evt as TaskStatusEvent,
+                  };
+                  const counts = { done: 0, running: 0, queued: 0, failed: 0 };
+                  for (const st of Object.values(nextStatuses)) {
+                    if (st.status === 'done') counts.done++;
+                    else if (st.status === 'running') counts.running++;
+                    else if (st.status === 'queued') counts.queued++;
+                    else if (st.status === 'failed') counts.failed++;
+                  }
+                  const total = Math.max(
+                    prev.progress?.total ?? 0,
+                    Object.keys(nextStatuses).length,
+                  );
+                  return {
+                    ...prev,
+                    statuses: nextStatuses,
+                    progress: { total, ...counts },
+                    // P1-5: 首个 task_status = 派发已开始,记录时间戳供
+                    // PlanCard 锁定（派发后 plan_update 后端返回 409）。
+                    dispatchedAt: prev.dispatchedAt ?? Date.now(),
+                  };
+                });
+                return;
+              }
+              // 进度可视化 P0-2 (2026-08-12): task_progress 整盘概览事件。
+              // 后端在 task_plan 之后立即推一次(total=N,全 queued),前端
+              // 据此初始化 progress;后续 task_status 触发时由上面 reducer
+              // 实时聚合覆盖,保持单一数据源。AgentEvent 在宽松字段下
+              // 5 元组都是 optional,运行时真有数据(后端 SSE 保证),此处
+              // 用 TaskProgressEvent 收紧类型避免反复 ?? 0 退化。
+              if (evt.state === 'task_progress' && evt.run_id) {
+                const runId = evt.run_id;
+                const tp = evt as TaskProgressEvent;
+                setTaskBoard((prev) =>
+                  prev && prev.runId === runId
+                    ? {
+                        ...prev,
+                        progress: {
+                          total: tp.total ?? 0,
+                          done: tp.done ?? 0,
+                          running: tp.running ?? 0,
+                          queued: tp.queued ?? 0,
+                          failed: tp.failed ?? 0,
+                        },
+                      }
+                    : prev,
+                );
+                return;
+              }
               // 处理 reasoning 事件：累积 reasoning 内容（支持完整事件和增量事件）
               if ((evt.state === 'reasoning' || evt.state === 'reasoning_delta') && evt.reasoning) {
                 streamingReasoningRef.current = streamingReasoningRef.current + evt.reasoning;
@@ -417,6 +528,27 @@ export function useChat() {
     },
     [currentSessionId, isLoading, chatEndpoint, settings, addMessage, updateMessage],
   );
+
+  /** Wave 3 (2026-08-14): resume 恢复流 —— resumeRun → sendMessage(original_request, plan_override)。 */
+  const resumeOrchestration = useCallback(
+    async (runId: string) => {
+      const resp = await orchRunClient.resumeRun(runId);
+      // §13.7 (2026-08-15): 旧库 NULL original_request 兜底 —— 占位文案继续 + 提示，
+      // 避免空串被当成正常消息发给 LLM（ChatRequest.message 无非空校验）。
+      const content = resp.original_request ?? '（旧记录无原始请求，已从计划恢复）';
+      if (!resp.original_request) {
+        toast.info('该记录缺少原始请求，已从计划恢复执行');
+      }
+      await sendMessage(content, undefined, undefined, 'force_multi', {
+        planOverride: resp.plan,
+        runId: resp.new_run_id,
+      });
+    },
+    [sendMessage],
+  );
+
+  /** Wave 3 (2026-08-14): 取消执行后清空任务板。 */
+  const clearTaskBoard = useCallback(() => setTaskBoard(null), []);
 
   const interrupt = useCallback(async () => {
     // PR-6: 先取消前端 listener, 再请求后端中断
@@ -542,6 +674,14 @@ export function useChat() {
     iteration: streaming?.iteration ?? 0,
     /** P2: 当前流式状态 (供 ActiveAgentIndicator 显示阶段) */
     streamingState: streaming?.state ?? null,
+    /** P0: 当前流式工具调用列表 (供 ProgressSection 显示实时工具进度) */
+    streamingToolCalls,
+    /** Multi-Agent Orchestration: 编排任务板 (供 TaskTreeSection 渲染任务树) */
+    taskBoard,
+    /** Wave 3: resume 恢复流入口 (计划卡恢复按钮调用) */
+    resumeOrchestration,
+    /** Wave 3: 取消执行后清空任务板 */
+    clearTaskBoard,
     /** Phase 6: /btw 补充消息方法 */
     askBtw,
     /** Phase 6: /btw 是否正在流式输出 */

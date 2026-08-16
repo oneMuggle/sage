@@ -9,7 +9,8 @@ vi.mock('../../../shared/api/settingsClient', () => ({
   },
 }));
 
-import { loadSettings, saveSettings, resetSettings } from '../storage';
+import { loadSettings, mergeWithDefaults, saveSettings, resetSettings } from '../storage';
+import type { AppSettings } from '../types';
 import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY } from '../types';
 
 const CACHE_KEY = SETTINGS_STORAGE_KEY; // 'sage-settings'
@@ -47,10 +48,10 @@ describe('settings storage (async)', () => {
 
     it('后端失败时降级 localStorage', async () => {
       mockGetSettings.mockResolvedValue(null);
-      const local = { ...DEFAULT_SETTINGS, compactMode: true };
+      const local = { ...DEFAULT_SETTINGS, confirmDelete: false };
       localStorage.setItem(CACHE_KEY, JSON.stringify(local));
       const r = await loadSettings();
-      expect(r.compactMode).toBe(true);
+      expect(r.confirmDelete).toBe(false);
     });
   });
 
@@ -127,5 +128,14 @@ describe('settings storage (async)', () => {
       // 8 天前的标记 + 后端已有数据 → 清理 local
       expect(mockSetSettings).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('mergeWithDefaults (orch 嵌套 merge)', () => {
+  it('mergeWithDefaults merges orch nested, not replaces', () => {
+    // P2-9: 部分 orch 更新不丢其余键（同 endpoints 的既有 bug 防护）。
+    const merged = mergeWithDefaults({ orch: { maxRetries: 5 } } as Partial<AppSettings>);
+    expect(merged.orch.maxRetries).toBe(5);
+    expect(merged.orch.maxConcurrentSubagents).toBe(4); // 其余键保持默认
   });
 });

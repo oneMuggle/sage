@@ -24,6 +24,7 @@ import pytest
 
 from backend.application.services.chat_service import ChatService
 from backend.domain.message import Message, Role
+from backend.tests.conftest import ensure_session
 
 
 def _real_memory_manager(tmp_db_path):
@@ -102,6 +103,8 @@ async def test_run_turn_with_lifecycle_emits_and_persists(tmp_db_path):
     from backend.memory.lifecycle import MemoryLifecycleManager
 
     manager = _real_memory_manager(tmp_db_path)
+    # §1.3a FK (#290): run_turn 持久化 episodic 需父 session 行。
+    ensure_session(manager.episodic.db, "session-1")
     hooks = HookRegistry()
     written: list = []
     hooks.on("memory_written", lambda e: written.append(e))

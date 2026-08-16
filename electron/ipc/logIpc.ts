@@ -4,7 +4,7 @@ import { shell, clipboard } from 'electron';
 import { readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LogLevel } from '../../src/shared/log/levels';
-import { logger } from '../logger';
+import { logger, setLogLevel } from '../logger';
 import { RATE_LIMIT_WARN_INTERVAL_MS } from '../../src/shared/log/levels';
 import { cleanupOlderThan } from '../logRotate';
 import { getLogDir } from '../logPaths';
@@ -97,6 +97,7 @@ export function registerLogIpc(ipcMain: IpcMain): void {
     'sage:log:set-level',
     async (_evt, payload: { level: LogLevel }) => {
       process.env.SAGE_LOG_LEVEL = payload.level;
+      setLogLevel(payload.level);
       logger.info('main: log level changed', { level: payload.level });
       return { ok: true };
     },

@@ -8,7 +8,13 @@
 import { settingsClient } from '../../shared/api/settingsClient';
 
 import { deepMerge } from './deepMerge';
-import { AppSettings, DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from './types';
+import {
+  AppSettings,
+  DEFAULT_ORCH_SETTINGS,
+  DEFAULT_SETTINGS,
+  SETTINGS_STORAGE_KEY,
+  SETTINGS_VERSION,
+} from './types';
 
 const CACHE_KEY = SETTINGS_STORAGE_KEY;
 const MIGRATION_MARKER = 'sage-settings.migrated_to_backend';
@@ -80,12 +86,15 @@ async function maybeAutoMigrate(remote: AppSettings | null): Promise<void> {
   }
 }
 
-function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
+// 导出为测试钩子（vitest 直接断言嵌套 merge 行为）。
+export function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
   return {
     ...DEFAULT_SETTINGS,
     ...partial,
     endpoints: partial.endpoints ?? DEFAULT_SETTINGS.endpoints,
     modelSelections: partial.modelSelections ?? DEFAULT_SETTINGS.modelSelections,
+    // 嵌套 merge：部分 orch 更新不丢其余键（同 endpoints 的既有 bug 防护）。
+    orch: { ...DEFAULT_ORCH_SETTINGS, ...(partial.orch ?? {}) },
     version: partial.version ?? SETTINGS_VERSION,
   };
 }

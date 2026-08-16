@@ -18,6 +18,10 @@ Error → HTTP status mapping (handled by the routes layer):
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class WorkspaceBindingError(Exception):
     """Base class for all session-workspace binding errors."""

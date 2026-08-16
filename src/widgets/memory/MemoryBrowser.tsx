@@ -15,6 +15,12 @@ type MemoryFilter = 'all' | 'episodic' | 'semantic';
 interface MemoryBrowserProps {
   initialType?: MemoryFilter;
   onNewMemory?: () => void;
+  /**
+   * Bump this value to force a reload from the API. Used by the parent
+   * Memory page to refresh the list after a new memory is saved without
+   * triggering a full page reload (fix/security-perf-quickwins §1.3b g).
+   */
+  refreshKey?: number;
 }
 
 const FILTER_LABELS: Record<MemoryFilter, string> = {
@@ -28,7 +34,7 @@ const TAG_CLASSES: Record<string, string> = {
   semantic: 'bg-warning/10 text-warning',
 };
 
-export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
+export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowserProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +85,14 @@ export function MemoryBrowser({ initialType = 'all' }: MemoryBrowserProps) {
     loadMemories();
     loadStats();
   }, [loadMemories, loadStats]);
+
+  // Parent (Memory.tsx) bumps refreshKey after a successful save to
+  // re-fetch the list without a full page reload.
+  useEffect(() => {
+    if (refreshKey === undefined) return;
+    loadMemories();
+    loadStats();
+  }, [refreshKey, loadMemories, loadStats]);
 
   return (
     <div>

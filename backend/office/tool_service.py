@@ -26,6 +26,7 @@ Public surface:
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from typing import Any, Dict, List, Optional
 
@@ -36,6 +37,8 @@ from backend.office.session_workspace import (
     get_document_in_workspace,
 )
 from backend.office.storage import document_path, list_documents
+
+logger = logging.getLogger(__name__)
 
 # Reader imports are deferred per doc_type so a broken optional dependency
 # (python-pptx / python-docx / openpyxl) does not crash the whole module

@@ -5,9 +5,6 @@ import { useWikiStore } from '../entities/wiki/store';
 import {
   IconSidebar,
   LeftPanel,
-  LintView,
-  ResearchPanel,
-  ReviewView,
   RightPanel,
   SourcesView,
   WikiChat,
@@ -24,8 +21,6 @@ const VIEW_TITLES: Record<string, string> = {
   chat: '对话',
   graph: '图谱',
   insights: '洞察',
-  lint: '质量检查',
-  review: '审核队列',
   sources: '来源文件',
 };
 
@@ -161,16 +156,9 @@ function renderMainView(activeView: string, props: MainViewProps) {
           请先选择项目
         </div>
       );
-    case 'lint':
-      return <LintView />;
-    case 'review':
-      return <ReviewView />;
     case 'sources':
       return <SourcesView />;
     default:
       return <WikiEditor />;
   }
 }
-
-// Export sub-components for backward compatibility
-export { ResearchPanel };

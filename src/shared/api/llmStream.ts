@@ -11,7 +11,67 @@ export type AgentState =
   | 'observing'
   | 'content_delta'
   | 'done'
-  | 'failed';
+  | 'failed'
+  // Multi-Agent Orchestration (2026-08-11)
+  | 'task_plan'
+  | 'task_status'
+  // 进度可视化 P0-2 (2026-08-12): 整盘概览,见 types.ts TaskProgressEvent。
+  | 'task_progress'
+  // Wave 2 (2026-08-14): reviewer 复核结论事件,见 types.ts TaskReviewEvent。
+  | 'task_review';
+
+// 窄类型事件接口 —— useChat taskBoard 状态机的数据类型。
+// AgentState / AgentEvent（宽松字段）见 types.ts —— 双处保持一致。
+export interface TaskPlanItem {
+  task_id: string;
+  agent_id: string;
+  goal: string;
+  // P1-6 (2026-08-14): 依赖透传 —— 与 types.ts 双处一致。
+  depends_on?: string[];
+}
+
+export interface TaskPlanEvent {
+  state: 'task_plan';
+  run_id: string;
+  plan: TaskPlanItem[];
+}
+
+export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed';
+
+export interface TaskStatusEvent {
+  state: 'task_status';
+  run_id: string;
+  task_id: string;
+  status: TaskStatusValue;
+  agent_id: string;
+  goal: string;
+  error: string | null;
+  output_preview: string | null;
+}
+
+/** 进度可视化 P0-2 (2026-08-12): 整盘概览,与 types.ts TaskProgressEvent 同形。 */
+export interface TaskProgressEvent {
+  state: 'task_progress';
+  run_id: string;
+  total: number;
+  done: number;
+  running: number;
+  queued: number;
+  failed: number;
+}
+
+/** Wave 2 (2026-08-14): reviewer 复核结论事件,与 types.ts TaskReviewEvent 同形。 */
+export type ReviewVerdict = 'pass' | 'fail';
+
+export interface TaskReviewEvent {
+  state: 'task_review';
+  run_id: string;
+  task_id: string;
+  reviewer_id: string;
+  verdict: ReviewVerdict;
+  assertion_count: number;
+  summary: string;
+}
 
 export interface ToolCallRequestFE {
   id: string;
@@ -37,6 +97,24 @@ export interface AgentEvent {
   error?: string;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
+  // Multi-Agent Orchestration (2026-08-11): 宽松字段（与 types.ts AgentEvent 同步）
+  run_id?: string;
+  plan?: TaskPlanItem[];
+  task_id?: string;
+  status?: TaskStatusValue;
+  goal?: string;
+  output_preview?: string | null;
+  // 进度可视化 P0-2 (2026-08-12): 5 元组快照字段,与 TaskProgressEvent 对齐。
+  total?: number;
+  done?: number;
+  running?: number;
+  queued?: number;
+  failed?: number;
+  // Wave 2 (2026-08-14): task_review 事件 4 可选字段（仅 state='task_review' 时携带）。
+  reviewer_id?: string;
+  verdict?: ReviewVerdict;
+  assertion_count?: number;
+  summary?: string;
 }
 
 export async function* parseNDJSONStream(

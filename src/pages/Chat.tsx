@@ -1,15 +1,19 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
+import { PlanCard } from '../components/PlanCard';
+import { PlanCardList } from '../components/PlanCardList';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
 import type { ChatOfficeRef } from '../shared/api';
+import { orchRunClient } from '../shared/api/orchRunClient';
 import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
+import { TaskTreeSection } from '../widgets/chat/progress/TaskTreeSection';
 
 export function Chat() {
   const {
@@ -24,6 +28,9 @@ export function Chat() {
     streamingMessageId, // P1: 当前流式消息 ID
     iteration, // P2: ReAct 迭代轮次
     streamingState, // P2: 当前流式状态
+    taskBoard, // Multi-Agent Orchestration: 编排任务板
+    resumeOrchestration, // Wave 3: resume 恢复流入口（计划卡恢复按钮）
+    clearTaskBoard, // Wave 3: 取消执行后清空任务板
   } = useChat();
 
   const {
@@ -125,8 +132,11 @@ export function Chat() {
   }, [pendingMessage, currentSessionId, sendMessage, settingsLoading, storeLoading]);
 
   const handleNewSession = async () => {
-    const sessionId = await createSession();
-    setCurrentSessionId(sessionId);
+    // 与 Sidebar 的 "+ 新对话" 行为对齐:跳到欢迎页由用户输入后再创建会话。
+    // 必须清空 currentSessionId,否则 ChatRoute 因为 sessionId 非空仍会
+    // 渲染 Chat 页,导致跳到 /welcome 后又被重定向回 /chat。
+    setCurrentSessionId(null);
+    navigate('/welcome');
   };
 
   const handleSendMessage = async (
@@ -136,16 +146,32 @@ export function Chat() {
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
       officeRefs?: readonly ChatOfficeRef[];
+      // Wave 3 C6: 放宽为 string —— 编排模式条可传 'template:<id>' 等。
+      orchestrationMode?: string;
     },
   ) => {
     clearError();
     const officeRefs = options?.officeRefs;
+    const orchestrationMode = options?.orchestrationMode;
     if (!currentSessionId) {
       const sessionId = await createSession();
-      await sendMessage(content, sessionId, officeRefs);
+      await sendMessage(content, sessionId, officeRefs, orchestrationMode);
     } else {
-      await sendMessage(content, undefined, officeRefs);
+      await sendMessage(content, undefined, officeRefs, orchestrationMode);
     }
+  };
+
+  // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
+  // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
+  // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
+  // M1：取消失败也照常清理，避免计划卡永久锁定 + unhandled rejection。
+  const handleCancelRun = async (runId: string) => {
+    try {
+      await orchRunClient.cancelRun(runId);
+    } catch {
+      // 409（run 已终态）等 → 前端照常清空计划卡（board 信息过时）
+    }
+    clearTaskBoard();
   };
 
   // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
@@ -216,6 +242,24 @@ export function Chat() {
             </button>
           </span>
         </div>
+      )}
+
+      {/* Wave 3 三态 (win7 适配, 复用 main ProgressSection 分发):
+          无编排 → 历史编排记录; 未派发 → 计划卡(可编辑); 已派发 → 任务树 */}
+      {taskBoard == null ? (
+        <PlanCardList onResume={(runId) => void resumeOrchestration(runId)} />
+      ) : taskBoard.dispatchedAt ? (
+        <TaskTreeSection board={taskBoard} onCancel={() => void handleCancelRun(taskBoard.runId)} />
+      ) : (
+        <PlanCard
+          runId={taskBoard.runId}
+          plan={taskBoard.plan}
+          locked={false}
+          // C4+H1 (2026-08-15): 任意阶段取消都走 handleCancelRun ——
+          // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
+          // 自动派发）+ 清空 taskBoard。
+          onCancel={() => void handleCancelRun(taskBoard.runId)}
+        />
       )}
 
       <ChatInput

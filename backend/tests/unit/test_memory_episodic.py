@@ -6,6 +6,7 @@ import pytest
 
 from backend.data.database import Database
 from backend.memory.episodic import EpisodicMemory
+from backend.tests.conftest import ensure_session
 
 pytestmark = pytest.mark.unit
 
@@ -24,6 +25,9 @@ def test_save_returns_id(episodic: EpisodicMemory) -> None:
 
 
 def test_save_with_metadata_and_session(episodic: EpisodicMemory) -> None:
+    # §1.3a: PRAGMA foreign_keys=ON — memories_episodic.session_id FKs to
+    # sessions.id. Pre-create the parent row so the insert succeeds.
+    ensure_session(episodic.db, "sess-1")
     mid = episodic.save(
         "user prefers tea",
         importance=8,
@@ -63,6 +67,9 @@ def test_search_filters_by_type(episodic: EpisodicMemory) -> None:
 
 
 def test_get_recent_global_and_by_session(episodic: EpisodicMemory) -> None:
+    # §1.3a: FK enforcement — create both parent sessions first.
+    ensure_session(episodic.db, "s1")
+    ensure_session(episodic.db, "s2")
     episodic.save("a", session_id="s1")
     episodic.save("b", session_id="s2")
     episodic.save("c", session_id="s1")
@@ -74,6 +81,7 @@ def test_get_recent_global_and_by_session(episodic: EpisodicMemory) -> None:
 
 
 def test_get_by_session_alias(episodic: EpisodicMemory) -> None:
+    ensure_session(episodic.db, "abc")
     episodic.save("x", session_id="abc")
     results = episodic.get_by_session("abc")
     assert len(results) == 1
@@ -125,6 +133,9 @@ def test_get_by_id_missing_returns_none(episodic: EpisodicMemory) -> None:
 
 
 def test_save_with_source_turn_and_message_id(episodic: EpisodicMemory) -> None:
+    # win7 sync #290: PRAGMA foreign_keys=ON — memories_episodic.session_id
+    # FKs to sessions.id. Pre-create the parent row so the insert succeeds.
+    ensure_session(episodic.db, "sess-1")
     mid = episodic.save(
         "user mentioned azure",
         session_id="sess-1",
@@ -138,6 +149,9 @@ def test_save_with_source_turn_and_message_id(episodic: EpisodicMemory) -> None:
 
 
 def test_save_with_memory_category(episodic: EpisodicMemory) -> None:
+    # win7 sync #290: PRAGMA foreign_keys=ON — memories_episodic.session_id
+    # FKs to sessions.id. Pre-create the parent row so the insert succeeds.
+    ensure_session(episodic.db, "sess-1")
     mid = episodic.save(
         "用户偏好咖啡",
         session_id="sess-1",

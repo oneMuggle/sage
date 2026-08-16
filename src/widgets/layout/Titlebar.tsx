@@ -1,4 +1,3 @@
-import { FeedbackButton } from '../../features/feedback';
 import { detectPlatform, isElectronDesktop } from '../../shared/api/windowControlsClient';
 
 import { TitlebarActions } from './TitlebarActions';
@@ -21,7 +20,6 @@ export function Titlebar() {
     return (
       <div className="flex items-center justify-between px-4 h-10 border-b border-border bg-bg-subtle">
         <TitlebarActions />
-        <FeedbackButton />
       </div>
     );
   }
@@ -31,7 +29,6 @@ export function Titlebar() {
     return (
       <div className="drag flex items-center justify-between px-4 h-10 border-b border-border bg-bg-subtle pt-7">
         <TitlebarActions />
-        <FeedbackButton />
       </div>
     );
   }
@@ -41,7 +38,6 @@ export function Titlebar() {
     <div className="drag flex items-center justify-between px-4 h-9 border-b border-border bg-bg-subtle">
       <TitlebarActions />
       <div className="no-drag flex items-center">
-        <FeedbackButton />
         <WindowControls />
       </div>
     </div>

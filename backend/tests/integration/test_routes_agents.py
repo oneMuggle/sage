@@ -2,9 +2,9 @@
 list_agents 路由集成测试 — 覆盖 GET /api/v1/agents 端点。
 
 对应 Tauri command `list_agents`（PR-3）:
-- 启动 lifespan 时若 agents 表空, 种子化 4 个默认 agent (primary / researcher /
-  coder / memory_manager), 见 backend/agents/profiles.py:create_default_agents()
-- GET /agents → 200 + 4 个 agent profile
+- 启动 lifespan 时若 agents 表空, 种子化 6 个默认 agent (primary / researcher /
+  coder / memory_manager / writer / reviewer), 见 backend/agents/profiles.py:create_default_agents()
+- GET /agents → 200 + 6 个 agent profile
 - 字段完整保留: name / role / system_prompt / tools / memory_access /
   model_config / max_iterations / enabled / description
 - 已 disabled 的 agent 仍在列表中 (仅 enabled=false), 不被过滤
@@ -16,19 +16,19 @@ pytestmark = pytest.mark.integration
 
 PREFIX = "/api/v1"
 
-EXPECTED_DEFAULT_IDS = {"primary", "researcher", "coder", "memory_manager"}
+EXPECTED_DEFAULT_IDS = {"primary", "researcher", "coder", "memory_manager", "writer", "reviewer"}
 
 
 @pytest.mark.asyncio()
 async def test_list_agents_returns_four_defaults_after_lifespan(client):
-    """lifespan 启动后 GET /agents 必返回 4 个默认 agent."""
+    """lifespan 启动后 GET /agents 必返回 6 个默认 agent."""
     resp = await client.get(f"{PREFIX}/agents")
     assert resp.status_code == 200
     agents = resp.json()
     assert isinstance(agents, list)
 
     ids = {a["id"] for a in agents}
-    assert ids == EXPECTED_DEFAULT_IDS, f"期望默认 4 个 agent, 实际 {ids}"
+    assert ids == EXPECTED_DEFAULT_IDS, f"期望默认 6 个 agent, 实际 {ids}"
 
 
 @pytest.mark.asyncio()
@@ -78,13 +78,13 @@ async def test_list_agents_idempotent_across_lifespan(client):
 
     first = await client.get(f"{PREFIX}/agents")
     assert first.status_code == 200
-    assert len(first.json()) == 4
+    assert len(first.json()) == 6
 
     AgentRepository().seed_defaults_if_empty()
 
     second = await client.get(f"{PREFIX}/agents")
     assert second.status_code == 200
-    assert len(second.json()) == 4
+    assert len(second.json()) == 6
 
 
 @pytest.mark.asyncio()

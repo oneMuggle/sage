@@ -25,6 +25,12 @@ export const en: Record<TranslationKey, string> = {
   'chat.new_session': '+ New Chat',
   'chat.placeholder': 'Type a message...',
   'chat.send': 'Send',
+  // Wave 3 C6: orchestration mode bar
+  'chat.orchMode.label': 'Orchestration',
+  'chat.orchMode.auto': 'Auto (LLM decides)',
+  'chat.orchMode.forceMulti': 'Force orchestration (LLM decomposes)',
+  'chat.orchMode.templateResearchWrite': 'Template: research & write',
+  'chat.orchMode.templateGatherAnalyzeReport': 'Template: gather-analyze-report',
   'chat.stop': 'Stop',
   'chat.config_warning': 'API endpoint or chat model not configured',
   'chat.config_warning_action': 'Go to Settings',
@@ -87,6 +93,7 @@ export const en: Record<TranslationKey, string> = {
   'settings.section.appearance': 'Appearance',
   'settings.section.chat': 'Chat',
   'settings.section.data': 'Data',
+  'settings.section.orch': 'Orchestration',
 
   // ─── Settings · MCP ──────────────
   'settings.mcp.title': 'MCP Servers',

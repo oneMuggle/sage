@@ -91,3 +91,25 @@ Sage 桌面壳(Electron 主进程 + React 渲染进程)使用 electron-log 4.x �
    - `backend: stderr` 含 Python ImportError → conda env 缺包
    - `loadFile failed` 含 ENOENT → 安装包损坏,重装
    - `uncaughtException` 含 GPU 错误 → 调整 `app.disableHardwareAcceleration()`
+
+## 29.10 修复记录（2026-08-13,PR #306）
+
+日志基础设施修复（`feature/fix-logging-foundation` → PR #306）让既有日志设施真正生效：后端日志落盘 + 级别运行时可切换 + packaged 模式级别链路闭环。
+
+### 29.10.1 日志级别运行时切换 — `setLogLevel()`（Task 2）
+
+原实现 `CURRENT_LEVEL` 固定为启动时值，级别无法运行时切换。
+
+- `electron/logger.ts` 新增 `setLogLevel(level)`，IPC 收到新级别后更新 `CURRENT_LEVEL`，`shouldLog()` 立即按新级别过滤（新 NDJSON 行用新级别）
+- **非法级别守卫**：`if (level in LOG_LEVELS)` 校验通过才更新 —— 防止非法 IPC 值使 `LOG_LEVELS[CURRENT_LEVEL]` 变 `undefined`、`shouldLog()` 全 false 导致**全部日志静默停摆**
+- 接线：Settings UI → `preload.ts` → `logIpc.ts`（写 `process.env.SAGE_LOG_LEVEL` + 调 `setLogLevel()`）
+- 测试：`logger.test.ts` 7/7（含非法级别回归用例）、`logIpc.test.ts` 2/2
+
+### 29.10.2 packaged 模式 SAGE_LOG_LEVEL 注入（Task 3）
+
+原 packaged 模式后端子进程未显式注入 `SAGE_LOG_LEVEL`，用户在设置页选的级别无法传递到后端（backend 日志恒为默认级别）。
+
+- `electron/backendLauncher.ts` `packagedEnv` 增加 `SAGE_LOG_LEVEL: process.env.SAGE_LOG_LEVEL ?? 'info'`
+- 链路闭环：Settings UI → preload → logIpc（写 `process.env`）→ spawn `env: {...process.env, ...plan.extraEnv}` → 后端 `_LEVEL_MAP`（小写 `warn` → 大写 `WARNING` 显式映射）→ `setup_logging(log_level=...)`
+- 后端日志落盘文件：`backend/logs/sage_YYYYMMDD.log`（下划线命名，与本章 NDJSON 文件不同）
+- 测试：`backendLauncher.test.ts` 13/13
