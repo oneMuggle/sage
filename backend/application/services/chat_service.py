@@ -26,10 +26,14 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Any, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, List, Optional, Union
 
 from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
+
+from backend.application.services.wake_store import WakeStore
+from backend.domain.wake import Wake, WakeKind, to_utc_iso
 
 # Optional memory types (for backward compatibility)
 try:
@@ -67,6 +71,8 @@ _REACT_STEPS_METRIC = "sage_react_steps_per_request"
 _TOOL_INVOCATIONS_METRIC = "sage_tool_invocations_total"
 _ERRORS_METRIC = "sage_errors_total"
 _ACTIVE_SESSIONS_METRIC = "sage_active_sessions"
+# A4 Suspend-Resume: 注册的 wake 计数（kind 维度）
+_WAKES_CREATED_METRIC = "sage_wakes_created_total"
 
 
 class ChatService:
@@ -91,6 +97,7 @@ class ChatService:
         permission_allowed_paths: Optional[List[str]] = None,  # M3 允许的路径
         permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
         lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
+        wake_store: Optional[WakeStore] = None,  # A4 Suspend-Resume 唤醒仓储
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -101,6 +108,7 @@ class ChatService:
         self.memory = memory  # MemoryPort for memory integration
         self._lifecycle = lifecycle
         self._current_turn_id: Optional[str] = None
+        self.wake_store = wake_store  # A4: None 时挂起 API 静默降级为 no-op
         self._tool_policy = tool_policy or ToolPolicy()
         # M3: 构造 LanePermission；缺省 IMPLEMENT 保持向后兼容
         self._permission = LanePermission(
@@ -277,6 +285,17 @@ class ChatService:
         if memory_context and memory_context.has_memories:
             system_content += "\n\n以下是相关的记忆上下文:\n"
             system_content += memory_context.format()
+
+        # 2.6) A16: Skill Auto-Activation —— 扫描用户消息匹配 SKILL.md
+        #      ``when_to_use`` 触发短语, 命中技能的 body 注入本轮 system
+        #      prompt 动态段 (不进 frozen snapshot 缓存, 不写 storage,
+        #      下一轮按新消息重新匹配)。best-effort: 任何故障静默降级。
+        activation_block = _skill_activation_block(
+            user_message.content or "", self.skills
+        )
+        if activation_block:
+            system_content += activation_block
+            span.set_attribute("skills.auto_activated", True)
 
         # Prepend system message to history
         system_msg = Message(role=Role.SYSTEM, content=system_content)
@@ -552,6 +571,102 @@ class ChatService:
             logger.debug(f"Extracted {len(facts)} facts for session {session_id}")
 
     # ------------------------------------------------------------------ #
+    # A4 Suspend-Resume：会话挂起 + 唤醒注册
+    # ------------------------------------------------------------------ #
+
+    async def sleep_for(
+        self,
+        session_id: str,
+        seconds: float,
+        *,
+        note: str = "",
+    ) -> Optional[Wake]:
+        """挂起会话，``seconds`` 秒后由 WakeScheduler 唤醒。
+
+        agent 在长轮询 / 等待外部副作用时调用：注册 TIMER wake 后让出
+        执行权（配合 ``StreamRegistry.suspend``），空闲期间零上下文占用。
+
+        Raises:
+            ValueError: ``seconds`` 为负。
+        """
+        if seconds < 0:
+            raise ValueError(f"seconds must be >= 0, got {seconds}")
+        fire_at = to_utc_iso(
+            datetime.now(timezone.utc) + timedelta(seconds=float(seconds))  # noqa: UP017
+        )
+        return await self._register_wake(
+            Wake.create(session_id, WakeKind.TIMER, fire_at=fire_at, note=note)
+        )
+
+    async def sleep_until(
+        self,
+        session_id: str,
+        when: Union[datetime, str],
+        *,
+        note: str = "",
+    ) -> Optional[Wake]:
+        """挂起会话，直到 ISO-8601 时间戳 ``when``（naive 时间按 UTC 解释）。
+
+        过去的时间戳合法：wake 将在下一轮 scheduler tick 立即被消费。
+
+        Raises:
+            ValueError: 字符串无法解析为 ISO-8601。
+            TypeError:  ``when`` 既不是 datetime 也不是 str。
+        """
+        if isinstance(when, str):
+            try:
+                when = datetime.fromisoformat(when)
+            except ValueError:
+                raise ValueError(f"invalid ISO-8601 timestamp: {when!r}")
+        if not isinstance(when, datetime):
+            raise TypeError(f"when must be datetime or ISO-8601 str, got {type(when)!r}")
+        return await self._register_wake(
+            Wake.create(session_id, WakeKind.TIMER, fire_at=to_utc_iso(when), note=note)
+        )
+
+    async def wake_on(
+        self,
+        session_id: str,
+        job_id: str,
+        *,
+        note: str = "",
+    ) -> Optional[Wake]:
+        """挂起会话，直到后台任务 ``job_id`` 完成。
+
+        任务退出路径调 ``WakeStore.complete_job(job_id)`` 把该 wake 标记
+        为 DUE，下一轮 tick 恢复会话。
+
+        Raises:
+            ValueError: ``job_id`` 为空。
+        """
+        if not job_id or not str(job_id).strip():
+            raise ValueError("job_id must be a non-empty string")
+        return await self._register_wake(
+            Wake.create(session_id, WakeKind.COMPLETION, job_id=str(job_id), note=note)
+        )
+
+    async def _register_wake(self, wake: Wake) -> Optional[Wake]:
+        """落库 wake + 审计事件 + 计数。未装配 wake_store 时降级为 no-op。"""
+        if self.wake_store is None:
+            logger.warning(
+                "wake_store 未装配，跳过唤醒注册（session=%s kind=%s）",
+                wake.session_id,
+                wake.kind.value,
+            )
+            return None
+        self.wake_store.add_wake(wake)
+        self.events.emit(
+            "session_suspended",
+            {
+                "session_id": wake.session_id,
+                "wake_id": wake.id,
+                "kind": wake.kind.value,
+            },
+        )
+        self.metrics.counter(_WAKES_CREATED_METRIC, {"kind": wake.kind.value})
+        return wake
+
+    # ------------------------------------------------------------------ #
     # 内部辅助：执行 tool_calls
     # ------------------------------------------------------------------ #
 
@@ -657,6 +772,34 @@ class ChatService:
         return called >= budget and len(tool_calls) > budget
 
 
+# --------------------------------------------------------------------------- #
+# A16: Skill Auto-Activation（when_to_use 自动匹配注入）
+# --------------------------------------------------------------------------- #
+
+
+def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> str:
+    """计算本轮用户消息自动激活的技能上下文块（含前导换行，可直接追加）。
+
+    结构性探测：仅当 skills adapter 实现 ``auto_activate(message)`` 扩展
+    方法（``InprocSkillAdapter``）时生效；纯 ``SkillPort`` mock / 其他
+    实现无此属性 → 返回空串。adapter 返回对象的 ``context_block`` 属性
+    非字符串（含 mock 返回值）同样视为无激活。
+
+    任何失败（adapter 抛错 / 返回类型异常）都降级为空串 —— 注入失败
+    绝不能破坏对话轮次（与记忆上下文注入同语义）。
+    """
+    if not message or skills is None:
+        return ""
+    auto_activate = getattr(skills, "auto_activate", None)
+    if not callable(auto_activate):
+        return ""
+    try:
+        result = auto_activate(message)
+        block = getattr(result, "context_block", "")
+    except Exception as exc:
+        logger.debug(f"A16 skill auto-activation skipped: {exc}")
+        return ""
+    return f"\n\n{block}" if isinstance(block, str) and block else ""
 def _extract_action_target(args: dict) -> str:
     """从工具参数中提取 ``LanePermission`` 关心的 target。
 

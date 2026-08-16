@@ -1,7 +1,8 @@
 import { BookOpen, Clock, Image, Paperclip, Send, Square, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import type React from 'react';
 
+import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { FileAttachment } from './FileAttachment';
@@ -134,19 +135,25 @@ export function InputCard({
   const { t } = useI18n();
   const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0;
 
+  // U20: Emacs-style editing keys (Ctrl+A/E/K/U/W, Alt+B/F) in the textarea.
+  const { ref: emacsRef, handleKeyDown: handleEmacsKeyDown } = useEmacsKeybindings({
+    value,
+    onChange,
+    enabled: !disabled,
+  });
+
   // Autosize: textarea grows with content up to the 200px cap.
   // Without this, content past one line scrolls inside the textarea and
   // visually only the last line is visible. Resetting height to 'auto'
   // first lets scrollHeight report the full content height.
-  // (win7 适配: 用普通 textareaRef,不依赖 main 的 U20 emacs 绑定)
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // (win7 适配: emacsRef 同时服务 autosize, 与 main #252 最终形态一致)
   useEffect(() => {
-    const el = textareaRef.current;
+    const el = emacsRef.current;
     if (!el) return;
     el.style.height = 'auto';
     const next = Math.min(el.scrollHeight, 200);
     el.style.height = `${next}px`;
-  }, [value]);
+  }, [value, emacsRef]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showSlashMenu && slashCommands.length > 0 && !e.shiftKey) {
@@ -169,6 +176,9 @@ export function InputCard({
         return;
       }
     }
+    // U20: Emacs bindings take precedence over plain Enter handling but not
+    // over the slash menu (which owns Arrow/Enter/Escape while open).
+    if (handleEmacsKeyDown(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSubmit();
@@ -281,7 +291,7 @@ export function InputCard({
           {atFileMenu}
           <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
             <textarea
-              ref={textareaRef}
+              ref={emacsRef}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyDown}

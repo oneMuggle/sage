@@ -48,14 +48,22 @@ class StreamEntry:
                  backpressure 而非 OOM
         task:    跑 producer 协程的 asyncio.Task。客户端断开时**不**取消 —
                  已消耗的 LLM token 不能浪费,让 task 跑完供后续 attach 复用
-        status:  pending → running → done | failed
+        status:  pending → running → done | failed | suspended
         created_at: 单调时间戳(秒),用于 TTL 回收
+        session_id: 所属会话 ID(A4 Suspend-Resume: wake 到期后按 session
+                 恢复对话;未绑定会话时为 None)
+        suspended: A4 挂起标记 — producer 主动调 ``StreamRegistry.suspend()``
+                 后置位,表示该流已让出执行权,等待 wake 触发新一轮对话
+        wake_id: 挂起时注册的唤醒记录 ID(便于排障关联 wakes 表)
     """
 
     queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=1000))
     task: Optional[asyncio.Task] = None
     status: str = "pending"
     created_at: float = field(default_factory=time.time)
+    session_id: Optional[str] = None
+    suspended: bool = False
+    wake_id: Optional[str] = None
 
 
 class StreamRegistry:
@@ -77,6 +85,7 @@ class StreamRegistry:
         stream_id: str,
         queue_maxsize: int = 1000,
         producer: Optional[ProducerFn] = None,
+        session_id: Optional[str] = None,
     ) -> StreamEntry:
         """注册新 stream,可选启动 producer task。
 
@@ -86,6 +95,7 @@ class StreamRegistry:
             producer: 可选协程 `(entry) -> None`,被包装为 task 启动。
                       协程正常返回 → entry.status = 'done'(由调用方设置)
                       协程抛异常 → 框架捕获并设 entry.status = 'failed'
+            session_id: 所属会话 ID(A4 Suspend-Resume 按 session 恢复)
         """
         if stream_id in self._entries:
             raise ValueError(f"streamId already exists: {stream_id}")
@@ -93,6 +103,7 @@ class StreamRegistry:
             queue=asyncio.Queue(maxsize=queue_maxsize),
             status="pending",
             created_at=time.time(),
+            session_id=session_id,
         )
         self._entries[stream_id] = entry
         if producer is not None:
@@ -123,6 +134,40 @@ class StreamRegistry:
             # 无论成功失败,attach 端点都要收到关闭信号
             with contextlib.suppress(asyncio.CancelledError):
                 await entry.queue.put(SENTINEL)
+
+    async def suspend(
+        self,
+        stream_id: str,
+        *,
+        wake_id: Optional[str] = None,
+        note: str = "",
+    ) -> bool:
+        """A4 Suspend-Resume: 挂起一个活跃流。
+
+        由 producer 主动调用(agent 决定"睡一会再干"):
+
+        1. 置 ``entry.suspended = True``,status → ``'suspended'``
+           (``_run_producer`` 的 done 兜底不会覆盖该状态);
+        2. 入队一个 ``state='suspended'`` 事件,已 attach 的客户端能看到
+           挂起原因;**不**入队 SENTINEL —— producer 返回后由框架 finally
+           统一补发,避免重复关闭信号。
+
+        契约: producer 调用本方法后应尽快 return,让出执行权;后续由
+        WakeScheduler 在 wake 到期时恢复该 session 的新一轮对话。
+
+        Returns:
+            ``True`` 挂起成功;``False`` 流不存在或已结束(done/failed)。
+        """
+        entry = self._entries.get(stream_id)
+        if entry is None:
+            return False
+        if entry.status in ("done", "failed"):
+            return False
+        entry.suspended = True
+        entry.status = "suspended"
+        entry.wake_id = wake_id
+        await entry.queue.put({"state": "suspended", "wake_id": wake_id, "note": note})
+        return True
 
     def get(self, stream_id: str) -> StreamEntry | None:
         return self._entries.get(stream_id)

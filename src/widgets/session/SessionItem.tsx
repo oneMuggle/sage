@@ -1,7 +1,10 @@
-import { GitBranch, Trash2, Pin } from 'lucide-react';
+import { Download, GitBranch, Pin } from 'lucide-react';
+import { useState } from 'react';
 
+import { downloadHtmlFile, sessionApi } from '../../shared/api/sessionApi';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Session } from '../../shared/lib/store';
+import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 interface SessionItemProps {
   session: Session;
@@ -12,13 +15,25 @@ interface SessionItemProps {
 
 export function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps) {
   const { t } = useI18n();
-  const handleDelete = (e: React.MouseEvent) => {
+  const [exporting, setExporting] = useState(false);
+
+  // U18: 导出完整会话为自包含 HTML(离线可开,含工具调用/diff/思考过程)
+  const handleExport = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('确定要删除这个会话吗？')) {
-      onDelete();
+    if (exporting) {
+      return;
+    }
+    setExporting(true);
+    try {
+      const result = await sessionApi.exportHtml(session.id);
+      downloadHtmlFile(result.html, result.filename);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      alert(t('session.export_failed').replace('{message}', message));
+    } finally {
+      setExporting(false);
     }
   };
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -64,13 +79,25 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
       {/* 操作按钮 */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {session.is_pinned && <Pin className="w-4 h-4 text-primary" />}
+        {/* U18: 导出完整会话为自包含 HTML */}
         <button
-          onClick={handleDelete}
-          className="p-1 rounded hover:bg-error/10 text-error"
-          title="删除"
+          data-testid="export-session"
+          onClick={handleExport}
+          disabled={exporting}
+          className="p-1 rounded hover:bg-primary/10 text-muted hover:text-primary disabled:opacity-50"
+          title={exporting ? t('session.export_html_exporting') : t('session.export_html')}
+          aria-label={t('session.export_html')}
         >
-          <Trash2 className="w-4 h-4" />
+          <Download className="w-4 h-4" />
         </button>
+        {/* U12: 两步式确认删除 — 不弹 modal，armed 后二次点击生效 */}
+        <TwoStepDelete
+          data-testid="delete-session"
+          onConfirm={onDelete}
+          label={t('common.delete')}
+          armedLabel={t('common.delete_confirm')}
+          className="p-1"
+        />
       </div>
     </div>
   );

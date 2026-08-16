@@ -3,7 +3,7 @@
  */
 
 import { invoke } from './desktopInvoke';
-import type { Message, Session, SessionCompactResult } from './types';
+import type { Message, Session, SessionCompactResult, SessionExportResult } from './types';
 import { ApiException, handleApiError, isValidSessionId, sanitizeInput, withRetry } from './utils';
 
 export const sessionApi = {
@@ -128,4 +128,48 @@ export const sessionApi = {
       throw handleApiError(error);
     }
   },
+
+  /**
+   * U18: 导出会话为自包含 HTML。
+   *
+   * 后端返回 JSON 信封 {html, filename}；调用方用 downloadHtmlFile()
+   * 触发浏览器下载。导出是只读操作，幂等，走 withRetry。
+   */
+  async exportHtml(
+    sessionId: string,
+    theme: 'auto' | 'dark' | 'light' = 'auto',
+  ): Promise<SessionExportResult> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        return await invoke<SessionExportResult>('export_session_html', { sessionId, theme });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
 };
+
+/**
+ * U18: 把导出 HTML 文本作为文件下载（Blob + 临时 <a download>）。
+ *
+ * Electron 渲染进程里 blob: URL 下载走 session 的 will-download 流程，
+ * 弹出系统保存对话框；纯浏览器环境直接进下载目录。
+ */
+export function downloadHtmlFile(html: string, filename: string): void {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

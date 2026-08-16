@@ -1,8 +1,8 @@
 /**
  * MemoryItem 测试
  * - 渲染内容、类型标签、星级
- * - 点击删除按钮且 confirm 通过时触发 onDelete
- * - confirm 取消时不调用 onDelete
+ * - U12 两步式确认：第一次点击 armed，第二次点击触发 onDelete
+ * - 单次点击（仅 armed）不调用 onDelete
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -34,17 +34,17 @@ describe('MemoryItem', () => {
     expect(screen.getByText('重要')).toBeInTheDocument();
   });
 
-  it('calls onDelete when confirm returns true', () => {
+  it('calls onDelete after two-step confirm (click twice, U12)', () => {
     const onDelete = vi.fn();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<MemoryItem memory={baseMemory} onDelete={onDelete} />);
-    fireEvent.click(screen.getByTitle('删除记忆'));
+    fireEvent.click(screen.getByTitle('删除记忆')); // 第一次点击：armed
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTitle('确认删除?')); // 第二次点击：确认
     expect(onDelete).toHaveBeenCalledWith('mem-1');
   });
 
-  it('does not call onDelete when confirm returns false', () => {
+  it('does not call onDelete on a single click (armed only, U12)', () => {
     const onDelete = vi.fn();
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<MemoryItem memory={baseMemory} onDelete={onDelete} />);
     fireEvent.click(screen.getByTitle('删除记忆'));
     expect(onDelete).not.toHaveBeenCalled();

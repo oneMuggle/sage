@@ -148,6 +148,7 @@ export const zh = {
   // ─── 通用 ─────────────────────────
   'common.skip_to_content': '跳到主内容',
   'common.delete': '删除',
+  'common.delete_confirm': '确认删除?',
   'common.cancel': '取消',
   'common.confirm': '确定',
   'common.save': '保存',
@@ -380,6 +381,11 @@ export const zh = {
   'orchestration.heartbeat.noHeartbeat': 'no heartbeat',
   'orchestration.lane.task': 'task:',
   'orchestration.lane.agent': 'agent:',
+
+  // ─── 会话导出 (U18 HTML 会话导出) ──────
+  'session.export_failed': '导出失败：{message}',
+  'session.export_html': '导出为 HTML',
+  'session.export_html_exporting': '正在导出…',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
