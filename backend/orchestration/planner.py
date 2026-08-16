@@ -249,7 +249,8 @@ class Planner:
 
         # 第二遍：stage.id 依赖 → 真实 task_id（只引更早任务，保 DAG）。
         created_by_id = {t.task_id: t for t in created_tasks}
-        for stage, task in zip(template.stages, created_tasks, strict=False):
+        # Py3.8 兼容：zip 无 strict 关键字（main 用 strict=False，长度本已相等）。
+        for stage, task in zip(template.stages, created_tasks):
             resolved = [stage_to_task[dep] for dep in stage.depends_on if dep in stage_to_task]
             if not resolved:
                 continue
