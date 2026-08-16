@@ -60,7 +60,7 @@ class OrchRunDetail(BaseModel):
 
 
 class PlanUpdateRequest(BaseModel):
-    plan: List[Dict[str, Any]] = Field(min_length=1)  # ≥1 行守卫
+    plan: List[Dict[str, Any]] = Field(min_items=1)  # ≥1 行守卫 (pydantic 1 用 min_items)
 
 
 class ResumeResponse(BaseModel):
