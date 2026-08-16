@@ -701,7 +701,7 @@ class ForkSessionRequest(BaseModel):
 
 
 @router.post("/sessions/{session_id}/fork", response_model=dict)
-async def fork_session(session_id: str, data: ForkSessionRequest):
+def fork_session(session_id: str, data: ForkSessionRequest):
     """从当前会话分叉出新会话（M4）。
 
     复制 ``at_message_id`` 及之前的全部消息（省略时复制全部）到新会话，
