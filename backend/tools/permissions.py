@@ -76,6 +76,12 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     # 等待用户输入); run_loop 在分发前特判该工具名并走提问闸口, 不过
     # 权限执行器, 不存在双重审批。
     "ask_user_question": ToolCapability.READ,
+    # M5 (win7 移植): agent 归 EXECUTE —— 派生的子代理是一个自主 LLM 循环
+    # （最多 6 轮 run_loop、发网络请求、占 worker 线程至多 SUBAGENT_TIMEOUT_S），
+    # 开放性 强于 skill。虽然子代理自身只拿只读白名单
+    # （agent_tool.SUBAGENT_TOOL_WHITELIST），但"派生一个自主体"这个动作本身
+    # 按最严格能力对待，与上面 skill 的口径一致。
+    "agent": ToolCapability.EXECUTE,
 }
 
 #: 未知工具默认能力（fail-safe）

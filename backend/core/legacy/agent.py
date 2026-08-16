@@ -5,6 +5,8 @@ SageAgent - 核心对话引擎
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import hashlib
 import json
 import logging
@@ -745,7 +747,26 @@ class SageAgent:
                                     result_content = f"[错误] 工具不存在: {tc.name}"
                                     is_error = True
                                 else:
-                                    if tc.name == "dispatch_subagents":
+                                    if tc.name == "agent":
+                                        # The agent tool blocks (future.result on
+                                        # the sub-run, bounded by
+                                        # SUBAGENT_TIMEOUT_S). Run it on an
+                                        # executor thread so the event loop stays
+                                        # responsive (health endpoint, board
+                                        # polling, other sessions) during the
+                                        # whole sub-run. Minimal special-case —
+                                        # general tool dispatch stays inline.
+                                        # ContextVar note: run_in_executor copies
+                                        # the current context (Python 3.7.1+);
+                                        # harmless here because AgentTool.execute
+                                        # never reads the ToolExecutionContext
+                                        # ContextVar — it builds all of its state
+                                        # itself (verified in
+                                        # backend/tools/agent_tool.py).
+                                        result = await asyncio.get_running_loop().run_in_executor(
+                                            None, functools.partial(tool.execute, **args)
+                                        )
+                                    elif tc.name == "dispatch_subagents":
                                         # Multi-agent orchestration: this tool is
                                         # async by design — child agents run
                                         # concurrently on the event loop
