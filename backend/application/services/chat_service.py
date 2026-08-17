@@ -525,6 +525,7 @@ class ChatService:
                     logger.warning(f"Failed to store memory: {e}")
                     span.set_attribute("memory.store_error", str(e))
 
+            from backend.memory.extractor import MemoryExtractor
             stored_facts = await extract_and_store_memory(
                 self.memory,
                 MemoryExtractor(llm_client=self.llm),
