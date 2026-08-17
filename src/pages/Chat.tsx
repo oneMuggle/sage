@@ -15,9 +15,9 @@ import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
-import { TaskTreeSection } from '../widgets/chat/progress/TaskTreeSection';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
+import { TaskTreeSection } from '../widgets/chat/progress/TaskTreeSection';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
