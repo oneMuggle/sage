@@ -307,10 +307,6 @@ export interface AgentEvent {
   permission_request?: PermissionRequest;
   /** M2 part B: state === 'ask_user_question' 时携带的提问详情 */
   user_question?: UserQuestion;
-  /** 会话元数据更新事件 (非 agent 事件, 由 producer 在流末尾推送) */
-  type?: string;
-  subtype?: string;
-  title?: string;
 }
 
 // ==================== 错误类型定义 ====================
