@@ -319,14 +319,14 @@ jobs:
         env:
           SAGE_SKIP_BACKEND: '1'
           CI: 'true'
-        run: npx playwright test tests/electron/smoke.spec.ts --reporter=line
+        run: npx playwright test e2e/electron/smoke.spec.ts --reporter=line
 
       - name: Upload smoke screenshot
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: electron-smoke-screenshot
-          path: tests/electron/screenshots/*.png
+          path: e2e/electron/screenshots/*.png
           if-no-files-found: ignore
 
   # ========== All-checks aggregator ==========

@@ -5,6 +5,7 @@ from typing import Optional
 
 import httpx
 
+from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -12,6 +13,9 @@ from .base import BaseTool, ToolResult, ToolSchema
 
 class WebSearchTool(BaseTool):
     """网络搜索工具"""
+
+    # A1: 出网调用 — 最严门禁（只读模式禁止，交互模式询问）
+    risk = RiskClass.EXTERNAL
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
@@ -136,6 +140,9 @@ class WebSearchTool(BaseTool):
 
 class WebFetchTool(BaseTool):
     """获取网页内容工具"""
+
+    # A1: 出网调用 — 最严门禁（只读模式禁止，交互模式询问）
+    risk = RiskClass.EXTERNAL
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)

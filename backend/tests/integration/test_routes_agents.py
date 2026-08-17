@@ -49,7 +49,9 @@ async def test_list_agents_profile_preserves_all_fields(client):
     assert isinstance(primary["memory_access"], list)
     assert "working" in primary["memory_access"]
     assert primary["model_config"]["model"] == "gpt-4"
-    assert primary["max_iterations"] == 10
+    # 2026-07-30: primary 默认 max_iterations 从 10 提到 15,
+    # 让 chat 默认 agent 跑代码 review 类工作流时有足够预算(否则 max_iterations_exceeded)
+    assert primary["max_iterations"] == 15
     assert primary["enabled"] is True
     assert primary["description"]  # 非空
 

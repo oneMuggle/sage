@@ -64,10 +64,12 @@ def create_default_agents() -> List[AgentProfile]:
             role="coordinator",
             description="面向用户的协调 Agent，负责意图识别和任务分发",
             system_prompt="你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。",
-            tools=["calculator", "memory_search", "memory_save"],
+            # 2026-07-30: 加 list_dir/read_file 让 chat 默认能跑代码 review;
+            # max_iterations=15 给 coder 类工作流留出预算(否则会复现 max_iterations_exceeded)
+            tools=["calculator", "memory_search", "memory_save", "list_dir", "read_file"],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
-            max_iterations=10,
+            max_iterations=15,
         ),
         AgentProfile(
             id="researcher",
