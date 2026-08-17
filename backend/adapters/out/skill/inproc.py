@@ -83,8 +83,10 @@ class InprocSkillAdapter:
             self._skill_importer = None
         # enabled 状态: 未登记视为 enabled
         self._enabled: Dict[str, bool] = {}
-        # usage_count: 进程内累计,重启归零
+        # usage_count: 进程内累计, 启动时从 skill_usage 表回填持久化计数
+        # （"重启不归零"）; 运行期 bump 同时写内存 + DB。
         self._usage_count: Dict[str, int] = {}
+        self._hydrate_usage_from_db()
         # M10: slash command 索引 (从 registry 一次性构建)
         from backend.skills.skill_md.slash_registry import SlashCommandRegistry
 
@@ -121,6 +123,8 @@ class InprocSkillAdapter:
         - 技能 disabled → success=False
         - 工具未注入(context={}) 大多数 builtin 会返回 success=False
           ("搜索工具不可用" 等),这是 builtin 的设计行为,不在本层包装。
+        - **成功路径自动记使用**（bump_usage + DB 持久化）——
+          覆盖 REST / SkillTool / 任何走本方法的调用方。
         """
         if not self._registry.exists(name):
             return SkillResult(
@@ -143,6 +147,8 @@ class InprocSkillAdapter:
                 success=False,
                 error=f"skill execution failed: {exc}",
             )
+        if raw.success:
+            self.bump_usage(name)
         # skills.base.SkillResult 字段与 domain.skill.SkillResult 一致
         # (success / content / metadata / error),直接构造 domain 版本
         return SkillResult(
@@ -174,10 +180,42 @@ class InprocSkillAdapter:
         return self._usage_count.get(name, 0)
 
     def bump_usage(self, name: str) -> None:
-        """execute 成功时调用,累计 usage_count。"""
+        """execute 成功时调用,累计 usage_count。
+
+        内存态累计（供列表即时读取）+ best-effort 持久化到 ``skill_usage``
+        表（重启不归零）。DB 写入失败只 warning, 不影响热路径。
+        """
         if not self._registry.exists(name):
             return
         self._usage_count[name] = self._usage_count.get(name, 0) + 1
+        try:
+            from backend.skills.usage import get_usage_store
+
+            get_usage_store().bump(name, success=True)
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            import logging
+
+            logging.getLogger(__name__).warning(
+                f"Skill usage persist failed for {name!r}: {exc}"
+            )
+
+    def _hydrate_usage_from_db(self) -> None:
+        """从 ``skill_usage`` 表回填持久化使用计数（best-effort）。
+
+        使 ``usage_count()`` 在进程重启后仍返回历史累计值（review HIGH）。
+        仅回填 registry 中真实存在的技能; DB 不可用 / 表不存在时跳过。
+        """
+        try:
+            from backend.skills.usage import get_usage_store
+
+            for stat in get_usage_store().get_all():
+                name = stat.get("name")
+                if name and self._registry.exists(name):
+                    self._usage_count[name] = int(stat.get("use_count", 0))
+        except Exception as exc:  # pragma: no cover - 防御性兜底
+            import logging
+
+            logging.getLogger(__name__).debug(f"技能使用计数回填跳过: {exc}")
 
     # ========== A16: Skill Auto-Activation ==========
 
@@ -222,7 +260,11 @@ class InprocSkillAdapter:
                 if doc.dispatch.disable_model_invocation:
                     continue
                 docs.append(doc)
-            return auto_activate(message, docs)
+            result = auto_activate(message, docs)
+            # 命中技能记使用（bump_usage + DB 持久化）——自动激活也是"使用"
+            for matched in result.names:
+                self.bump_usage(matched)
+            return result
         except Exception as exc:  # noqa: BLE001 — best-effort 契约
             import logging
 
@@ -256,6 +298,11 @@ class InprocSkillAdapter:
             command_name=command,
             args=tuple(args),
         )
+        # 成功路径自动记使用（bump_usage + DB 持久化）
+        if result.success:
+            resolved = self._slash_registry.resolve(command)
+            if resolved is not None:
+                self.bump_usage(resolved.name)
         # SkillMdSkill.execute_v2 返回 backend.skills.base.SkillResult (含 metadata dict)
         # 路由层需要的是 backend.domain.skill.SkillResult,字段同构,直接构造
         return SkillResult(

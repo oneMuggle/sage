@@ -26,6 +26,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+import weakref
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional, Union
 
@@ -59,6 +60,16 @@ _DEFAULT_HISTORY_LIMIT = 20
 
 # 默认 LLM 调用计数 label
 _DEFAULT_MODEL_LABEL = "default"
+
+# 技能 Nudge（借鉴 hermes-agent ``_iters_since_skill`` 的轻量版）:
+# 单轮工具调用数达到阈值且未自动激活任何技能时, 在 assistant 回复末尾
+# 追加一句"建议保存为技能"的提示。best-effort: 仅在 hex 路径生效,
+# 阈值 4 以下不触发, 避免打扰简单对话。
+SKILL_NUDGE_TOOL_CALL_THRESHOLD = 4
+SKILL_NUDGE_SUFFIX = (
+    "\n\n💡 这个任务涉及多次工具调用。"
+    "如果它可能是你会重复的流程，可以考虑把它保存为一个技能（SKILL.md）。"
+)
 
 # OTel tracer（P3.3：用于在 span 上记录关键属性）
 _tracer = get_tracer("chat_service")
@@ -405,6 +416,20 @@ class ChatService:
             )
             span.set_attribute("tool_calls.count", len(response.tool_calls))
 
+        # 4.5) 技能 Nudge（best-effort）: 单轮工具调用 ≥ 阈值且未自动激活技能
+        #      时, 在 assistant 回复末尾追加"建议保存为技能"的提示。
+        #      仅在 response 有正文时生效; 任何异常降级跳过, 不破坏对话轮次。
+        try:
+            if (
+                response.content
+                and len(response.tool_calls or []) >= SKILL_NUDGE_TOOL_CALL_THRESHOLD
+                and not activation_block
+            ):
+                response.content = (response.content or "") + SKILL_NUDGE_SUFFIX
+                span.set_attribute("skills.nudge_applied", True)
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.debug(f"Skill nudge skipped: {exc}")
+
         # 5) 持久化 assistant response（即使触发了 tool_calls，
         #    仍把 LLM 原始的 assistant message 落库）
         # Gap E — capture the persisted assistant message id for source_message_id.
@@ -500,12 +525,29 @@ class ChatService:
                     logger.warning(f"Failed to store memory: {e}")
                     span.set_attribute("memory.store_error", str(e))
 
-                # 8) 压缩工作记忆 (Memory Integration)
+            # 8) 压缩工作记忆 (Memory Integration) — 仅 win7 legacy path 兜底调用 compress：
+            # hex path (lifecycle 不为 None) 已在 if 分支内部调；
+            # gate path (memory.is_auto_memory_enabled) 已在 elif 分支内部调。
+            if self.memory is not None and self._lifecycle is None and not hasattr(self.memory, "is_auto_memory_enabled"):
                 try:
                     await self.memory.compress(session_id)
                 except Exception as e:
                     logger.warning(f"Failed to compress working memory: {e}")
                     span.set_attribute("memory.compress_error", str(e))
+
+            # 9) 标题自动生成：首轮对话后 (message_count <= 2)
+            try:
+                session_data = await self.storage.get_session(session_id)
+                if session_data and session_data.get("message_count", 0) <= 2:
+                    from backend.chat.title_generator import TitleGenerator
+
+                    title = await TitleGenerator(self.llm).generate(
+                        user_message.content or "", response.content or ""
+                    )
+                    if title:
+                        await self.storage.update_session(session_id, title=title)
+            except Exception as e:
+                logger.warning(f"标题生成失败: {e}")
 
         run.emit(
             "run_end",
@@ -800,6 +842,111 @@ def _skill_activation_block(message: str, skills: Optional[SkillPort]) -> str:
         logger.debug(f"A16 skill auto-activation skipped: {exc}")
         return ""
     return f"\n\n{block}" if isinstance(block, str) and block else ""
+
+
+# --------------------------------------------------------------------------- #
+# WS-C P0-2: 统一记忆写入路径（模块级，hex ChatService 与 legacy /chat/stream 共用）
+# --------------------------------------------------------------------------- #
+
+
+async def extract_and_store_memory(
+    memory_port: Optional[MemoryPort],
+    extractor: Any,
+    user_text: str,
+    assistant_text: str,
+    session_id: Optional[str],
+    enabled: bool,
+) -> int:
+    """从一轮对话中提取原子事实并写入记忆系统（best-effort，绝不外抛）。
+
+    WS-C P0-2：此前只有 hex ``ChatService.run_turn`` 触发 MemoryExtractor，
+    legacy /chat/stream producer 不写记忆，导致一半对话数据不进记忆系统。
+    本函数把提取 + 写入的核心逻辑抽成两条路径共用的唯一实现（legacy_routes
+    在 assistant 消息落盘成功后调用，见 ``_extract_legacy_chat_memory``）。
+
+    语义保证：
+    - ``enabled=False``（autoMemory 关）或 ``memory_port is None`` → 立即返回 0；
+    - extractor / store 的任何异常都在内部捕获并 ``logger.warning``，
+      绝不外抛——记忆写入失败不得破坏对话轮次或流式响应。
+
+    Args:
+        memory_port:    MemoryPort 实现（如 MemoryAdapter）；None → 跳过。
+        extractor:      MemoryExtractor 实例（持有各自的 LLM 客户端）。
+        user_text:      用户消息文本。
+        assistant_text: 助手回复文本。
+        session_id:     关联会话 ID，原样透传给 ``memory_port.store``；可为 None。
+        enabled:        autoMemory 开关；False → 跳过（返回 0）。
+
+    Returns:
+        实际写入记忆条数（失败 / 跳过时为 0）。
+    """
+    if not enabled or memory_port is None:
+        return 0
+    stored = 0
+    try:
+        facts = await extractor.extract(
+            user_message=user_text or "",
+            assistant_message=assistant_text or "",
+        )
+        # 用户画像类事实类别（extractor 产出）→ 路由到 store_profile
+        profile_categories = ("preference", "goal")
+        # 结构性探测 store_profile（MemoryPort 协议外的扩展方法）:
+        # 用**类级** hasattr（而非实例 getattr）—— 无 spec 的 Mock 在实例上
+        # 会自动创建任意属性, 类级探测可避免误判为"已实现"（review MEDIUM）。
+        store_profile = (
+            getattr(memory_port, "store_profile", None)
+            if hasattr(type(memory_port), "store_profile")
+            else None
+        )
+        for fact in facts:
+            category = fact.get("category", "fact")
+            if category in profile_categories and callable(store_profile):
+                pid = await store_profile(
+                    content=fact["content"],
+                    category=category,
+                    importance=fact.get("importance", 5),
+                    session_id=session_id,
+                )
+                if pid:
+                    stored += 1
+            else:
+                await memory_port.store(
+                    content=fact["content"],
+                    session_id=session_id,
+                    importance=fact.get("importance", 5),
+                    tags=fact.get("tags", ["conversation"]),
+                )
+                stored += 1
+        if stored:
+            logger.debug(f"Extracted {stored} facts for session {session_id}")
+    except Exception as e:
+        logger.warning(f"Failed to extract/store memory: {e}")
+    return stored
+
+
+# --------------------------------------------------------------------------- #
+# WS-C P0-3: frozen snapshot 失效广播（legacy_routes 压缩落点调用）
+# --------------------------------------------------------------------------- #
+
+# 存活 ChatService 实例的弱引用登记表：压缩只在 legacy_routes 发生,
+# ChatService 自身无感知; legacy_routes 压缩落盘后调模块级
+# invalidate_session_snapshot() 广播失效, 各实例下一轮 run_turn 重建快照。
+_CHAT_SERVICE_REGISTRY: weakref.WeakSet[ChatService] = weakref.WeakSet()
+
+
+def invalidate_session_snapshot(session_id: str) -> None:
+    """广播失效：通知所有存活 ChatService 实例丢弃指定 session 的 prompt 快照。
+
+    模块级入口，供 legacy_routes 的压缩落盘路径（``_persist_compaction``，
+    自动 / 手动压缩的唯一落点）调用。未知 session 或无存活实例时是 no-op，
+    任何实例侧异常不影响其他实例。
+    """
+    for service in list(_CHAT_SERVICE_REGISTRY):
+        try:
+            service.invalidate_session_snapshot(session_id)
+        except Exception as e:  # 防御性：单实例失效失败不阻断其余实例
+            logger.warning(f"Failed to invalidate snapshot for session {session_id}: {e}")
+
 def _extract_action_target(args: dict) -> str:
     """从工具参数中提取 ``LanePermission`` 关心的 target。
 

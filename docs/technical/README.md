@@ -18,7 +18,7 @@
 | 21   | [LLM 代理路由](./21-llm-proxy.md)                    | `/api/v1/llm/*` 透传上游,绕开浏览器到 Ollama/OpenAI 的 CORS 拦截                                      |
 | 22   | [Agents CRUD 端到端](./22-agents-crud.md)            | list/update/toggle 三层链路 (后端路由 → Electron IPC → 前端 API → UI)                                 |
 | 23   | [Chat 流式响应端到端](./23-chat-streaming.md)        | NDJSON 协议 + Electron IPC event 桥接 + NDJSON relay + chatStream 中间态文案                          |
-| 24   | [Skills 系统端到端](./24-skills-system.md)           | InprocSkillAdapter + 5 路由 + 4 builtin + SKILL.md v2 (gating/scripts/dispatch/slash command) 端到端可见 |
+| 24   | [Skills 系统端到端](./24-skills-system.md)           | InprocSkillAdapter + 5 路由 + 4 builtin + SKILL.md v2 (gating/scripts/dispatch/slash command) + 使用跟踪/Nudge |
 | 25   | [LLM Wiki 集成 (PR-8)](./25-llm-wiki-integration.md) | 4 LLM provider 抽象 + prompt 模板 + LanceDB RAG + 知识图谱 8 阶段实施                                 |
 | 26   | [跨平台打包矩阵](./26-packaging-matrix.md)            | Win7/10/11 NSIS + VCRedist bundling 与 Ubuntu deb 覆盖,用户安装指南                                  |
 | 27   | [多 Agent 编排层 (M1 typed 化)](./27-multi-agent-orchestration.md) | 12 条 PolicyEngine 规则 + Report schema v1 + Approval token 8 项校验门（参考 claw-code）               |
@@ -33,6 +33,7 @@
 | 37   | [生态扩展 (M6)](./37-ecosystem-extensions.md)      | Hooks（pre/post 工具执行）+ 用量/成本面板 + SAGE.md/CLAUDE.md 项目上下文发现 + i18n 清扫 + 零依赖 mock LLM parity harness |
 | 38   | [Artifacts Panel（产物面板）](./38-artifacts-panel.md) | Chat 右侧抽屉双 Tab：AI 工具调用进度 + write_file 产物追踪/多格式预览/文件管理器定位                                       |
 | 38   | [sage doctor](./38-sage-doctor.md) | 安装/环境级 self-check CLI：8 项检查（conda env / backend health / SQLite writable / config integrity / ports / py version / disk space）+ 退出码 0/1/2 + electron 启动前自动跑（5s 超时，fail-open）|
+| 39   | [记忆系统与用户画像](./39-memory-user-profile.md) | 三层记忆（Working/Episodic/Semantic）+ RRF 融合 + UserProfileStore(USER.md) 冻结快照/分类路由/core 独立预算 |
 | 42   | [Chat-Native Multi-Agent Orchestration](./42-chat-multi-agent-orchestration.md) | 聊天链路多 agent 编排：语义判定 + tool-toggle 门 + ChatDispatcher 并行子 agent + task_plan/task_status 事件 + 前端任务树 + /orchestrate 与 /single override |
 | 43   | [§1.2 事件循环门禁升级](./43-event-loop-gate.md) | 单点 P99 → 5 轮 P99 中位数门禁：阈值演进 50→100→200→150→400ms 设计历史 + 抗抖动/回归敏感权衡 |
 

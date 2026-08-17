@@ -124,3 +124,37 @@ async def test_returns_user_and_assistant_messages():
     assert len(result) == 2
     assert result[0].role == Role.USER
     assert result[1].role == Role.ASSISTANT
+
+
+async def test_complex_turn_appends_skill_nudge():
+    """单轮工具调用 ≥ 阈值且未激活技能 → assistant 回复追加技能提示。"""
+    from backend.application.services.chat_service import SKILL_NUDGE_SUFFIX
+
+    llm_response = Message(
+        role=Role.ASSISTANT,
+        content="完成复杂任务",
+        tool_calls=[ToolCall(name="calculator", args={"expression": "2+2"})] * 4,
+    )
+    service = _make_service(llm_responses=[llm_response])
+    sid = await service.storage.create_session()
+
+    await service.run_turn(sid, Message(role=Role.USER, content="do complex thing"))
+
+    msgs = await service.storage.get_messages(sid)
+    assistant_msg = next(m for m in msgs if m.role == Role.ASSISTANT)
+    assert SKILL_NUDGE_SUFFIX in assistant_msg.content
+
+
+async def test_simple_turn_skips_skill_nudge():
+    """低工具调用轮次不追加技能提示。"""
+    from backend.application.services.chat_service import SKILL_NUDGE_SUFFIX
+
+    llm_response = Message(role=Role.ASSISTANT, content="简单回答")
+    service = _make_service(llm_responses=[llm_response])
+    sid = await service.storage.create_session()
+
+    await service.run_turn(sid, Message(role=Role.USER, content="hi"))
+
+    msgs = await service.storage.get_messages(sid)
+    assistant_msg = next(m for m in msgs if m.role == Role.ASSISTANT)
+    assert SKILL_NUDGE_SUFFIX not in assistant_msg.content

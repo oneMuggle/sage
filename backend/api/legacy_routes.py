@@ -1045,8 +1045,7 @@ async def execute_skill(name: str, data: SkillExecuteRequest):
             detail={"type": "skill_not_found", "message": f"skill '{name}' not found"},
         )
     result = await adapter.execute(name, data.action, data.args)
-    if result.success:
-        adapter.bump_usage(name)
+    # 使用计数已由 adapter.execute() 成功路径自动 bump（含 DB 持久化）
     return {
         "success": result.success,
         "content": result.content,
@@ -1893,6 +1892,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             done_reasoning: Optional[str] = None
 
+            # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
+            # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
+            done_event = None
+
             async for evt in agent.run_loop(messages, llm_config=llm_config):
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
                 # 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls,
@@ -1910,8 +1913,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             }
                         )
                         await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
-                    # 最终 DONE 事件保留完整 content (前端 finishStream 需要)
-                    await entry.queue.put(evt.to_dict())
+                    # 暂存 DONE 事件，不立即推入队列 —
+                    # 待 post-loop 标题生成 + session_updated 事件后再推送，
+                    # 保证前端 onDone → loadSessions() 时标题已落盘。
+                    done_event = evt
                 elif evt.state.value == "reasoning" and evt.reasoning:
                     # PR-7b: 累积 reasoning 事件,持久化时一起写入 DB
                     if done_reasoning is None:
@@ -1970,7 +1975,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
-                # Important-1 (final review) — 生产聊天路径驱动生命周期:
+# Important-1 (final review) — 生产聊天路径驱动生命周期:
                 # 让 legacy /chat/stream (renderer 唯一聊天命令) 也触发
                 # on_turn_complete → 提取 + 持久化 + memory_written → SSE
                 # /memory/events → 前端实时 toast/prepend。source_message_id
@@ -1979,7 +1984,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 在 lifecycle 内部处理 — 该开关从此对生产路径生效。
                 # 全程 try/except — 记忆系统故障绝不打断聊天流。
                 lifecycle = getattr(request.app.state, "lifecycle", None)
-                if lifecycle is not None:
+                # #269 契约: assistant 落盘失败 (id None) 时不触发提取 —
+                # 不产生引用不存在消息的脏记忆。仅成功持久化后才驱动
+                # on_turn_complete (提取 + memory_written → SSE)。
+                if lifecycle is not None and assistant_message_id is not None:
                     try:
                         await lifecycle.on_turn_complete(
                             data.session_id,
@@ -1993,6 +2001,38 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         logger.warning(
                             f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
                         )
+
+                # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
+                # 在推送 DONE 事件前完成，确保前端 onDone → loadSessions() 读到新标题。
+                if done_event and sess and sess.message_count <= 2:
+                    try:
+                        from backend.chat.title_generator import TitleGenerator
+                        from backend.orchestration.llm_factory import (
+                            build_llm_client_from_settings,
+                        )
+
+                        title_client = build_llm_client_from_settings()
+                        if title_client:
+                            title = await TitleGenerator(title_client).generate(
+                                data.message, done_content
+                            )
+                            if title:
+                                session_repo.update(data.session_id, title=title)
+                                await entry.queue.put(
+                                    {
+                                        "type": "session_updated",
+                                        "subtype": "title_updated",
+                                        "title": title,
+                                    }
+                                )
+                    except Exception as e:
+                        logger.warning(
+                            f"[REQ {request_id}] 标题生成失败: {e}"
+                        )
+
+                # 推送暂存的 DONE 事件（在 session_updated 之后）
+                if done_event:
+                    await entry.queue.put(done_event.to_dict())
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "

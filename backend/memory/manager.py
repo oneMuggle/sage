@@ -18,6 +18,32 @@ from backend.memory.working import WorkingMemory
 logger = logging.getLogger(__name__)
 
 
+def classify_memory_type(memory_type: str, importance: int, content: str) -> str:
+    """统一的记忆分类规则（MemoryManager 与 MemoryAdapter 共用的单一事实来源）
+
+    Rules (kept compatible with history):
+    - explicit non-auto types pass through
+    - importance >= 8 → semantic
+    - short content (len < 200) and importance < 5 → working
+    - else → episodic
+
+    Args:
+        memory_type: declared type ('working'/'episodic'/'semantic'/'auto')
+        importance: 1-10
+        content: memory content
+
+    Returns:
+        Final memory_type to persist.
+    """
+    if memory_type and memory_type != "auto":
+        return memory_type
+    if importance >= 8:
+        return "semantic"
+    if len(content) < 200 and importance < 5:
+        return "working"
+    return "episodic"
+
+
 class MemoryManager:
     """
     记忆管理器 - 统一管理三层记忆
@@ -304,7 +330,20 @@ class MemoryManager:
         """
         parts = []
 
-        # 获取工作记忆上下文
+# 用户画像（USER.md 概念）: 持久画像快照置于上下文顶部（best-effort）。
+        # 让 legacy SageAgent（经 memory_manager.get_context）与 hex
+        # ChatService（经 MemoryAdapter.retrieve → MemoryContext.core）都能
+        # 注入同一份用户知识。快照冻结于 load(), 中途写入不改（保 prefix cache）。
+        try:
+            from backend.memory.user_profile import get_user_profile
+
+            profile_snapshot = get_user_profile().get_snapshot()
+            if profile_snapshot:
+                parts.append(profile_snapshot)
+        except Exception as exc:
+            logger.debug(f"用户画像快照注入失败: {exc}")
+
+        # 获取工作记忆上下文（按 session 隔离; win7 working.py 当前仅支持单会话, 传 limit）
         working_context = self.working.get_context(limit=limit)
         if working_context:
             parts.append("【当前对话】")
