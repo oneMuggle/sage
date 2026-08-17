@@ -197,6 +197,10 @@ class MemoryAdapter:
             )
             return ""
 
+        # 统一分类（消除规则漂移，与 MemoryManager.classify_memory_type 共用）
+        from backend.memory.manager import classify_memory_type
+        memory_type = classify_memory_type("auto", importance, content)
+
         # 构建元数据（含可追溯性字段）
         metadata = {
             "session_id": session_id,
@@ -204,11 +208,12 @@ class MemoryAdapter:
             "source_turn_id": source_turn_id,
             "source_message_id": source_message_id,
             "memory_category": memory_category,
+            "memory_type": memory_type,
         }
 
-        # 调用 MemoryManager.memorize() 存储记忆
+        # 调用 MemoryManager.memorize() 存储记忆（透传 memory_type 以与 module-level classify 对齐）
         memory_id = self.memory_manager.memorize(
-            content=content, importance=importance, metadata=metadata
+            content=content, memory_type=memory_type, importance=importance, metadata=metadata
         )
 
         # 向量化存储（如果有 VectorStore 且成功生成了 memory_id）
