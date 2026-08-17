@@ -197,6 +197,10 @@ class MemoryAdapter:
             )
             return ""
 
+        # 统一分类（与 MemoryManager 共用模块级 classify_memory_type,消除规则漂移）
+        from backend.memory.manager import classify_memory_type
+        memory_type = classify_memory_type("auto", importance, content)
+
         # 构建元数据（含可追溯性字段）
         metadata = {
             "session_id": session_id,
@@ -206,16 +210,17 @@ class MemoryAdapter:
             "memory_category": memory_category,
         }
 
-        # 调用 MemoryManager.memorize() 存储记忆
+        # 调用 MemoryManager.memorize() 存储记忆（透传分类结果与会话 ID）
         memory_id = self.memory_manager.memorize(
-            content=content, importance=importance, metadata=metadata
+            content=content,
+            memory_type=memory_type,
+            importance=importance,
+            metadata=metadata,
+            session_id=session_id,
         )
 
         # 向量化存储（如果有 VectorStore 且成功生成了 memory_id）
         if self.vector_store is not None and memory_id:
-            memory_type = "episodic"  # memorize() 默认存为 episodic
-            if importance >= 8:
-                memory_type = "semantic"
             self.vector_store.add(memory_id, content, memory_type=memory_type)
 
         return memory_id or ""
