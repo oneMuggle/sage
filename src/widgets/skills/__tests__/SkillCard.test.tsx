@@ -233,4 +233,118 @@ describe('SkillCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /确认删除 web-search/i }));
     expect(onDelete).toHaveBeenCalledWith('web-search');
   });
+
+  // ===== 生命周期 (curator): badge + 归档按钮 =====
+
+  it('lifecycle=active 显示「活跃」badge', () => {
+    render(
+      <SkillCard
+        name="search"
+        description="x"
+        triggers={['x']}
+        enabled
+        usage_count={1}
+        onToggle={() => undefined}
+        lifecycle="active"
+      />,
+    );
+    expect(screen.getByText('活跃')).toBeInTheDocument();
+  });
+
+  it('lifecycle=stale 显示「已冷」badge', () => {
+    render(
+      <SkillCard
+        name="travel"
+        description="x"
+        triggers={['x']}
+        enabled
+        usage_count={0}
+        onToggle={() => undefined}
+        lifecycle="stale"
+      />,
+    );
+    expect(screen.getByText('已冷')).toBeInTheDocument();
+  });
+
+  it('lifecycle=archived 显示「已归档」badge', () => {
+    render(
+      <SkillCard
+        name="coder"
+        description="x"
+        triggers={['x']}
+        enabled
+        usage_count={0}
+        onToggle={() => undefined}
+        lifecycle="archived"
+      />,
+    );
+    expect(screen.getByText('已归档')).toBeInTheDocument();
+  });
+
+  it('未传 lifecycle 时不显示生命周期 badge', () => {
+    render(
+      <SkillCard
+        name="search"
+        description="x"
+        triggers={['x']}
+        enabled
+        usage_count={0}
+        onToggle={() => undefined}
+      />,
+    );
+    expect(screen.queryByText('活跃')).not.toBeInTheDocument();
+    expect(screen.queryByText('已冷')).not.toBeInTheDocument();
+    expect(screen.queryByText('已归档')).not.toBeInTheDocument();
+  });
+
+  it('非归档态点「归档」按钮触发 onArchive(name, true)', () => {
+    const onArchive = vi.fn();
+    render(
+      <SkillCard
+        name="travel"
+        description="x"
+        triggers={['x']}
+        enabled
+        usage_count={0}
+        onToggle={() => undefined}
+        lifecycle="stale"
+        onArchive={onArchive}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /归档 travel/i }));
+    expect(onArchive).toHaveBeenCalledWith('travel', true);
+  });
+
+  it('归档态显示「取消归档」按钮, 点击触发 onArchive(name, false)', () => {
+    const onArchive = vi.fn();
+    render(
+      <SkillCard
+        name="travel"
+        description="x"
+        triggers={['x']}
+        enabled
+        usage_count={0}
+        onToggle={() => undefined}
+        lifecycle="archived"
+        onArchive={onArchive}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /取消归档 travel/i }));
+    expect(onArchive).toHaveBeenCalledWith('travel', false);
+  });
+
+  it('未传 onArchive 时不显示归档按钮', () => {
+    render(
+      <SkillCard
+        name="travel"
+        description="x"
+        triggers={['x']}
+        enabled
+        usage_count={0}
+        onToggle={() => undefined}
+        lifecycle="stale"
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /归档 travel/i })).toBeNull();
+  });
 });

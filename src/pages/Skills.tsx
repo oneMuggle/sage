@@ -74,6 +74,24 @@ const Skills: React.FC = () => {
     }
   };
 
+  // 生命周期：归档 / 取消归档 (optimistic + rollback + toast)
+  const handleArchive = async (name: string, archived: boolean) => {
+    const prev = skills;
+    // optimistic: 立即翻转 lifecycle（服务端响应会纠正为精确值，如 unarchive → stale）
+    setSkills((cur) =>
+      cur.map((s) => (s.name === name ? { ...s, lifecycle: archived ? 'archived' : 'active' } : s)),
+    );
+    try {
+      const updated = await skillsApi.archive(name, archived);
+      setSkills((cur) => cur.map((s) => (s.name === name ? updated : s)));
+      toast.success(archived ? `已归档 ${name}` : `已取消归档 ${name}`);
+    } catch (error) {
+      // 失败: 回滚 + 提示
+      setSkills(prev);
+      toast.error(`归档操作失败: ${(error as Error).message}`);
+    }
+  };
+
   // PR-C Task 6: 重扫磁盘按钮
   const handleRescan = async () => {
     setRescanLoading(true);
@@ -249,7 +267,12 @@ const Skills: React.FC = () => {
         </div>
 
         {/* 技能列表 */}
-        <SkillList skills={filteredSkills} onToggle={handleToggle} onDelete={handleDelete} />
+        <SkillList
+          skills={filteredSkills}
+          onToggle={handleToggle}
+          onDelete={handleDelete}
+          onArchive={handleArchive}
+        />
       </div>
     </div>
   );

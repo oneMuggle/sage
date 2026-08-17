@@ -79,6 +79,20 @@ export const skillsApi = {
   },
 
   /**
+   * 归档 / 取消归档技能（软标记，可逆；POST /api/v1/skills/{name}/archive）。
+   * 归档技能从自动激活 / slash 候选排除，文件不动、可恢复。返回更新后的完整 Skill。
+   */
+  async archive(name: string, archived: boolean): Promise<Skill> {
+    return withRetry(async () => {
+      try {
+        return await invoke<Skill>('archive_skill', { name, archived });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * 重扫磁盘上的 SKILL.md 目录, 增量加载新增的 SKILL.md 文件。
    * 走 IPC bridge `window.electronAPI.skills.rescanSkills()` →
    * main process `skills:rescan` → POST /api/v1/skills/rescan。

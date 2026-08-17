@@ -92,6 +92,7 @@ def _build_adapter_with_skillmd(tmp_path: Path, name: str, body: str = "Skill bo
     adapter._registry = registry
     adapter._enabled = {}
     adapter._usage_count = {}
+    adapter._archived = set()  # curator: 镜像 __init__ 的归档热缓存
     return adapter
 
 
@@ -112,6 +113,7 @@ def _build_adapter_from_existing(tmp_path: Path) -> InprocSkillAdapter:  # noqa:
     adapter._registry = registry
     adapter._enabled = {}
     adapter._usage_count = {}
+    adapter._archived = set()  # curator: 镜像 __init__ 的归档热缓存
     return adapter
 
 
