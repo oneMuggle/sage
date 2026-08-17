@@ -4,16 +4,26 @@
 **不触发** MemoryExtractor，只有 hex ChatService.run_turn 写记忆，
 导致一半对话数据不进记忆系统。
 
-修复后：producer 在 assistant 消息落盘成功后 best-effort 调用
-``chat_service.extract_and_store_memory``（与 hex 路径共用的模块级
-函数），受 app_settings.autoMemory 开关控制（缺省 True，与前端
-默认值及 hex 路径"有 memory 即写"的行为一致）。
+win7 修复路径（与 main 的差异）：
+- main 用 ``chat_service.extract_and_store_memory`` 模块级函数（#271 异步
+  队列版本走 ``async_extractor``）；win7 在 Task 4 / Gap A 起统一走
+  ``MemoryLifecycleManager.on_turn_complete``（见 ``backend/main.py``
+  lifespan 装配 + ``legacy_routes.py`` producer），事实经
+  ``aremember`` 持久化到 ``memories_episodic``（带 memory_category），
+  而非 main 的 user_profile 分类路由。本文件按 win7 生产路径断言。
 
 覆盖：
 1. mock LLM 走完 /chat/stream 端到端 → memories_episodic 出现提取条目
-   （接线不变性：assistant 落盘后才触发提取）
-2. autoMemory=false → 不写入
+   （接线不变性：assistant 落盘成功后才触发提取）
+2. autoMemory=false（preferences.auto_memory）→ 不写入
 3. 提取过程抛错 → 流照常完成, 不写记忆（best-effort 不破坏流式响应）
+4. assistant 落盘失败 → 不触发提取（不产生无对应消息的脏记忆）
+
+测试装配说明：win7 测试不走 FastAPI lifespan（ASGITransport 默认不
+触发），而 producer 只在 ``request.app.state.lifecycle`` 存在时驱动提取。
+每个测试经 ``wired_lifecycle`` fixture 按生产 wiring 补上（用 per-test 已
+重置的 MemoryManager 单例 + SettingsRepository-backed prefs + 真实
+MemoryExtractor——其 ``extract`` 类方法被各测试 patch），用后清回 None。
 """
 
 import asyncio
@@ -22,6 +32,7 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import pytest_asyncio
 
 from backend.core.legacy.agent_state import AgentEvent, AgentState
 from backend.data.database import get_database
@@ -40,6 +51,46 @@ _FIXED_FACTS = [
         "tags": ["preference"],
     }
 ]
+
+
+@pytest_asyncio.fixture()
+async def wired_lifecycle():
+    """Test 不走 FastAPI lifespan → app.state.lifecycle 缺失, producer 的
+    ``lifecycle.on_turn_complete`` 永不触发。按生产装配补上:
+
+    - memory_manager: per-test 已重置的 MemoryManager 单例（setup_test_db
+      autouse 先于本 fixture 执行）
+    - preferences_repo: SettingsRepository-backed async adapter —
+      lifecycle 读 ``auto_memory`` pref（默认 True, 测试 2 置 false）
+    - extractor: 真实 ``MemoryExtractor``（llm_client=None 即可——
+      每个用例对 ``MemoryExtractor.extract`` 的类方法 patch 会覆盖行为）
+
+    用后清回 ``app.state.lifecycle = None``, 防跨文件泄漏。
+    """
+    from backend.data.settings_repo import SettingsRepository
+    from backend.memory import get_memory_manager
+    from backend.memory.extractor import MemoryExtractor
+    from backend.memory.hooks import HookRegistry
+    from backend.memory.lifecycle import MemoryLifecycleManager
+
+    class _AsyncPrefs:
+        """thin async wrapper — lifecycle awaits prefs.get()."""
+
+        def __init__(self, repo: SettingsRepository) -> None:
+            self._repo = repo
+
+        async def get(self, key: str):
+            return self._repo.get(key)
+
+    lifecycle = MemoryLifecycleManager(
+        memory_manager=get_memory_manager(),
+        hooks=HookRegistry(),
+        preferences_repo=_AsyncPrefs(SettingsRepository()),
+        extractor=MemoryExtractor(llm_client=None),
+    )
+    app.state.lifecycle = lifecycle
+    yield lifecycle
+    app.state.lifecycle = None
 
 
 async def _run_chat_stream(client, session_id: str, message: str) -> str:
@@ -79,30 +130,39 @@ async def _run_chat_stream(client, session_id: str, message: str) -> str:
 def _episodic_rows() -> list:
     conn = get_database().get_connection()
     return conn.execute(
-        "SELECT content, session_id FROM memories_episodic WHERE is_valid = 1"
+        "SELECT content, session_id, memory_category "
+        "FROM memories_episodic WHERE is_valid = 1"
     ).fetchall()
 
 
-def _profile_rows() -> list:
-    """user_profile 表全部画像行（preference/goal 类事实的新落点）。"""
-    conn = get_database().get_connection()
-    return conn.execute("SELECT content, category FROM user_profile").fetchall()
+def _ensure_session(session_id: str) -> None:
+    """§1.3a: PRAGMA foreign_keys=ON — messages.session_id FKs 到 sessions.id。
+    user/assistant 消息落盘需要父 session 行；提取链路（assistant 落盘成功
+    后才触发）同样需要它。"""
+    from backend.tests.conftest import ensure_session
+
+    ensure_session(get_database(), session_id)
 
 
 @pytest.mark.asyncio()
-async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(client):
+async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(
+    client, wired_lifecycle
+):
     """一次成功 chat 后提取条目落库（autoMemory 缺省 True）。
 
-    ``_FIXED_FACTS`` 的 category=preference → 按分类路由写入 ``user_profile``
-    （USER.md 概念）而非通用 episodic 记忆。
+    win7 lifecycle 路径把提取事实经 ``aremember`` 持久化到
+    ``memories_episodic``（带 ``memory_category``），而非 main 的
+    ``user_profile`` 分类路由。
     """
     session_id = str(uuid.uuid4())
+    _ensure_session(session_id)
     user_message = "我特别喜欢吃火锅,尤其是四川麻辣口味的,以后请多给我推荐火锅店"
 
     # mock 掉 MemoryExtractor.extract（类方法级 patch）：
     # helper 在调用点才 from backend.memory.extractor import MemoryExtractor,
     # patch 类属性后实例化拿到的就是 mock 版 extract, 其余链路
-    # （MemoryAdapter.store_profile → UserProfileStore.add）全部走真实实现。
+    # （MemoryLifecycleManager._persist_fact → MemoryManager.aremember）
+    # 全部走真实实现。
     with patch(
         "backend.memory.extractor.MemoryExtractor.extract",
         new=AsyncMock(return_value=_FIXED_FACTS),
@@ -113,26 +173,36 @@ async def test_legacy_chat_stream_extracts_memory_after_assistant_persisted(clie
     assert '"state": "done"' in attach_text or '"state":"done"' in attach_text
 
     # 提取被触发, 且传入的就是本轮 user / assistant 文本
+    # （lifecycle 用位置参数调 extract(user_msg, assistant_msg)）
     mock_extract.assert_awaited()
-    extract_kwargs = mock_extract.await_args[1]
-    assert extract_kwargs["user_message"] == user_message
-    assert "火锅" in extract_kwargs["assistant_message"]
+    call_args = mock_extract.await_args
+    assert call_args.args[0] == user_message
+    assert "火锅" in call_args.args[1]
 
-    # preference 事实 → user_profile 表（分类路由）
-    rows = _profile_rows()
+    # 事实落库到 memories_episodic（session 关联 + preference 分类标记）
+    rows = _episodic_rows()
     matched = [r for r in rows if "用户喜欢吃火锅" in r["content"]]
-    assert matched, f"user_profile 未出现提取画像: {[dict(r) for r in rows]}"
-    assert matched[0]["category"] == "preference"
+    assert matched, f"memories_episodic 未出现提取事实: {[dict(r) for r in rows]}"
+    assert matched[0]["session_id"] == session_id
+    assert matched[0]["memory_category"] == "preference"
 
 
 @pytest.mark.asyncio()
-async def test_legacy_chat_stream_skips_extraction_when_auto_memory_disabled(client):
-    """app_settings.autoMemory=false 时不写记忆。"""
+async def test_legacy_chat_stream_skips_extraction_when_auto_memory_disabled(
+    client, wired_lifecycle
+):
+    """preferences.auto_memory=false 时不写记忆。
+
+    lifecycle gate 读的是 ``preferences.auto_memory``（snake_case, Task 2 /
+    Gap B 新增的顶层 key）而非 legacy ``app_settings.autoMemory`` ——
+    win7 生产路径（MemoryLifecycleManager）统一走前者。
+    """
     from backend.data.settings_repo import SettingsRepository
 
-    SettingsRepository().set_json("app_settings", {"autoMemory": False})
+    SettingsRepository().set("auto_memory", "false")
 
     session_id = str(uuid.uuid4())
+    _ensure_session(session_id)
     with patch(
         "backend.memory.extractor.MemoryExtractor.extract",
         new=AsyncMock(return_value=_FIXED_FACTS),
@@ -145,9 +215,12 @@ async def test_legacy_chat_stream_skips_extraction_when_auto_memory_disabled(cli
 
 
 @pytest.mark.asyncio()
-async def test_legacy_chat_stream_extraction_failure_does_not_break_stream(client):
+async def test_legacy_chat_stream_extraction_failure_does_not_break_stream(
+    client, wired_lifecycle
+):
     """提取过程抛错只 warning：流照常完成, 不写记忆, 不 500。"""
     session_id = str(uuid.uuid4())
+    _ensure_session(session_id)
     with patch(
         "backend.memory.extractor.MemoryExtractor.extract",
         new=AsyncMock(side_effect=RuntimeError("extractor boom")),
@@ -161,9 +234,16 @@ async def test_legacy_chat_stream_extraction_failure_does_not_break_stream(clien
 
 
 @pytest.mark.asyncio()
-async def test_legacy_chat_stream_assistant_persist_failure_skips_extraction(client):
-    """assistant 落盘失败时不触发提取（不产生无对应消息的脏记忆）。"""
+async def test_legacy_chat_stream_assistant_persist_failure_skips_extraction(
+    client, wired_lifecycle
+):
+    """assistant 落盘失败时不触发提取（不产生无对应消息的脏记忆）。
+
+    producer 的 lifecycle 调用以 ``assistant_message_id is not None`` 为门：
+    落盘失败 → id 为 None → 不驱动 on_turn_complete（#269 契约）。
+    """
     session_id = str(uuid.uuid4())
+    _ensure_session(session_id)
 
     with patch(
         "backend.memory.extractor.MemoryExtractor.extract",

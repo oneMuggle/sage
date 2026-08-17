@@ -1984,7 +1984,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 在 lifecycle 内部处理 — 该开关从此对生产路径生效。
                 # 全程 try/except — 记忆系统故障绝不打断聊天流。
                 lifecycle = getattr(request.app.state, "lifecycle", None)
-                if lifecycle is not None:
+                # #269 契约: assistant 落盘失败 (id None) 时不触发提取 —
+                # 不产生引用不存在消息的脏记忆。仅成功持久化后才驱动
+                # on_turn_complete (提取 + memory_written → SSE)。
+                if lifecycle is not None and assistant_message_id is not None:
                     try:
                         await lifecycle.on_turn_complete(
                             data.session_id,
