@@ -18,38 +18,6 @@ from backend.memory.working import WorkingMemory
 logger = logging.getLogger(__name__)
 
 
-def classify_memory_type(memory_type: str, importance: int, content: str) -> str:
-    """统一的记忆分类规则（MemoryManager 与 MemoryAdapter 共用的单一事实来源）
-
-    规则（与历史行为保持一致）：
-    - 显式指定的非 auto 类型原样透传
-    - importance >= 8 → semantic（高重要性事实）
-    - 短内容（len < 200）且 importance < 5 → working（低重要性短期记忆）
-    - 其余 → episodic
-
-    Args:
-        memory_type: 调用方声明的目标类型（'working'/'episodic'/'semantic'/'auto'）
-        importance: 重要性评分 1-10
-        content: 记忆内容
-
-    Returns:
-        最终落库的记忆类型
-    """
-    if memory_type and memory_type != "auto":
-        return memory_type
-
-    # 高重要性 → 语义记忆
-    if importance >= 8:
-        return "semantic"
-
-    # 低重要性短记忆 → 工作记忆
-    if len(content) < 200 and importance < 5:
-        return "working"
-
-    # 默认 → 情景记忆
-    return "episodic"
-
-
 class MemoryManager:
     """
     记忆管理器 - 统一管理三层记忆
@@ -324,7 +292,7 @@ class MemoryManager:
 
         return results
 
-    def get_context(self, session_id: Optional[str] = None, limit: int = 10) -> str:
+    def get_context(self, limit: int = 10) -> str:
         """
         获取上下文用于 Agent
 

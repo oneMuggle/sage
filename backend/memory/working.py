@@ -129,28 +129,19 @@ class WorkingMemory:
             old_message = self.messages.popleft()
             self.total_tokens -= old_message.get("tokens", 0)
 
-    def get_context(
-        self, session_id: Optional[Any] = None, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    def get_context(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
-        获取指定会话的当前上下文
-
-        旧形态兼容：单个 int 参数视为 limit（即旧 ``get_context(limit)``）。
+        获取当前上下文
 
         Args:
-            session_id: 会话 ID（None → 默认/绑定会话）
             limit: 可选，限制返回的消息数量
 
         Returns:
             消息列表
         """
-        if isinstance(session_id, int):
-            session_id, limit = None, session_id
-        sid = self._resolve(session_id)
-        msgs = self._session_messages(sid)
         if limit is None:
-            return msgs
-        return msgs[-limit:]
+            return list(self.messages)
+        return list(self.messages)[-limit:]
 
     def get_recent(self, limit: int = 5) -> List[Dict[str, Any]]:
         """
