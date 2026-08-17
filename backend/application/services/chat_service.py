@@ -525,24 +525,15 @@ class ChatService:
                     logger.warning(f"Failed to store memory: {e}")
                     span.set_attribute("memory.store_error", str(e))
 
-            from backend.memory.extractor import MemoryExtractor
-            stored_facts = await extract_and_store_memory(
-                self.memory,
-                MemoryExtractor(llm_client=self.llm),
-                user_message.content or "",
-                # 剥离技能 nudge 后缀, 避免提示文本被提取为"记忆事实"（review LOW）
-                (response.content or "").replace(SKILL_NUDGE_SUFFIX, ""),
-                session_id,
-                enabled=True,  # hex 路径保持现状行为：有 memory 即写
-            )
-            span.set_attribute("memory.stored_facts", stored_facts)
-
-            # 8) 压缩工作记忆 (Memory Integration)
-            try:
-                await self.memory.compress(session_id)
-            except Exception as e:
-                logger.warning(f"Failed to compress working memory: {e}")
-                span.set_attribute("memory.compress_error", str(e))
+            # 8) 压缩工作记忆 (Memory Integration) — 仅 win7 legacy path 兜底调用 compress：
+            # hex path (lifecycle 不为 None) 已在 if 分支内部调；
+            # gate path (memory.is_auto_memory_enabled) 已在 elif 分支内部调。
+            if self.memory is not None and self._lifecycle is None and not hasattr(self.memory, "is_auto_memory_enabled"):
+                try:
+                    await self.memory.compress(session_id)
+                except Exception as e:
+                    logger.warning(f"Failed to compress working memory: {e}")
+                    span.set_attribute("memory.compress_error", str(e))
 
             # 9) 标题自动生成：首轮对话后 (message_count <= 2)
             try:
