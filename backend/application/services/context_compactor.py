@@ -12,7 +12,11 @@ Layer 1 MicroCompact — 按工具类型策略截断（无 LLM 调用）：
     - 其他：通用头/尾字符截断
 Layer 2 Sliding Window — 保留 system prompt + 最近 N 条消息
 Layer 3 LLM Summary — 可选；把被滑窗淘汰的历史消息交给 LLM
-    生成摘要，以一条摘要消息替代被淘汰前缀
+    生成摘要，以一条摘要消息替代被淘汰前缀。摘要器来源二选一
+    （显式传参优先）：
+    - ``compact_with_summary(messages, summarize)`` 显式传入
+    - 构造时注入 ``BranchSummarizer``（A28，结构化分支摘要），
+      两个都没有时 Layer 3 跳过，等价于纯 Layer 2
 
 设计要点
 --------
@@ -23,7 +27,7 @@ Layer 3 LLM Summary — 可选；把被滑窗淘汰的历史消息交给 LLM
   反查前序 assistant 的 ``tool_calls``（按 ``tool_call_id`` 匹配）→
   内容中的 ``<<<TOOL_RESULT>>>\\nTool: <name>`` 标记。
 - **Layer 3 可选且容错**：摘要函数失败时自动回退到纯 Layer 2，
-  不阻塞主流程。
+  不阻塞主流程；无任何可用摘要器时同样静默降级。
 
 Ported from LLM_Simple/agent/context_manager.py (ContextManager)。
 
@@ -34,16 +38,25 @@ Ported from LLM_Simple/agent/context_manager.py (ContextManager)。
     if compactor.should_compact(messages):
         messages = compactor.compact(messages)
 
-    # Layer 1 + 2 + 3（需提供异步 LLM 摘要函数）
+    # Layer 1 + 2 + 3（显式提供异步 LLM 摘要函数）
     async def summarize(old_messages, prompt): ...
     messages = await compactor.compact_with_summary(messages, summarize)
+
+    # Layer 1 + 2 + 3（A28：注入 BranchSummarizer 作为默认摘要器）
+    from backend.application.services.branch_summarizer import BranchSummarizer
+
+    summarizer = BranchSummarizer(llm_complete=client.complete)
+    compactor = ContextCompactor(branch_summarizer=summarizer)
+    messages = await compactor.compact_with_summary(messages)
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Awaitable, Callable, Dict, List, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+
+from backend.application.services.branch_summarizer import BranchSummarizer
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +90,12 @@ _READ_TOOLS = {"read_file", "view"}
 
 # 单个工具结果触发 MicroCompact 的最大字符数
 MAX_RESULT_CHARS = 2000
+
+# Layer 3 摘要文本的兜底上限。宽于 MAX_RESULT_CHARS：结构化摘要
+# （A28 BranchSummarizer 的 Goal/Progress/Decisions/Next Steps +
+# 文件清单 XML）常规就会超过 2000 字符，用工具结果的上限会把
+# 中段的 Key Decisions / Next Steps 砍掉
+MAX_SUMMARY_CHARS = 6000
 
 # 错误感知截断的头部区域字符上限
 _ERROR_HEAD_CHARS = 1000
@@ -132,17 +151,33 @@ class ContextCompactor:
         context_window: int = 131072,
         compact_threshold_ratio: float = 0.75,
         sliding_window_size: int = _DEFAULT_WINDOW_SIZE,
+        branch_summarizer: Optional[BranchSummarizer] = None,
     ) -> None:
+        """初始化压缩器。
+
+        Args:
+            context_window: 模型上下文窗口（token）
+            compact_threshold_ratio: 触发压缩的窗口占比阈值
+            sliding_window_size: Layer 2 滑窗保留的最近消息条数
+            branch_summarizer: A28 可选注入；提供后
+                ``compact_with_summary`` 在未显式传入摘要函数时，
+                用它生成结构化分支摘要（Layer 3 默认摘要器）
+        """
         if context_window <= 0:
             raise ValueError("context_window must be positive")
         if not 0 < compact_threshold_ratio < 1:
             raise ValueError("compact_threshold_ratio must be in (0, 1)")
         if sliding_window_size <= 0:
             raise ValueError("sliding_window_size must be positive")
+        if branch_summarizer is not None and not callable(
+            getattr(branch_summarizer, "as_layer3_summarizer", None)
+        ):
+            raise ValueError("branch_summarizer must provide as_layer3_summarizer()")
 
         self.context_window = context_window
         self.compact_threshold = int(context_window * compact_threshold_ratio)
         self.sliding_window_size = sliding_window_size
+        self.branch_summarizer = branch_summarizer
 
     # ── Token 估算 ─────────────────────────────────────
 
@@ -183,7 +218,7 @@ class ContextCompactor:
     async def compact_with_summary(
         self,
         messages: List[Dict[str, Any]],
-        summarize: Summarizer,
+        summarize: Optional[Summarizer] = None,
     ) -> List[Dict[str, Any]]:
         """三层压缩（含可选的 Layer 3 LLM 摘要）。
 
@@ -192,8 +227,12 @@ class ContextCompactor:
         2. 按滑窗拆分：最近 N 条保留，其余为"被淘汰前缀"
         3. 用 ``summarize(被淘汰消息, prompt)`` 生成摘要消息，
            插在 system 消息之后、最近窗口之前（摘要文本过长时
-           兜底截断到 ``MAX_RESULT_CHARS``）
+           兜底截断到 ``MAX_SUMMARY_CHARS``）
         4. 摘要失败时回退到纯 Layer 2 滑窗结果
+
+        Layer 3 摘要器解析（A28）：显式 ``summarize`` 参数优先；
+        未提供时使用构造注入的 ``branch_summarizer``（BranchSummarizer
+        的结构化分支摘要）；两者皆无时跳过 Layer 3，等价于纯 Layer 2。
         """
         compacted = self._micro_compact(messages)
         if self.estimate_tokens(compacted) <= self.compact_threshold:
@@ -207,9 +246,18 @@ class ContextCompactor:
 
         evicted = others[: -self.sliding_window_size]
         recent = others[-self.sliding_window_size :]
+
+        effective_summarizer = summarize
+        if effective_summarizer is None and self.branch_summarizer is not None:
+            effective_summarizer = self.branch_summarizer.as_layer3_summarizer()
+        if effective_summarizer is None:
+            # 无可用摘要器：静默降级到纯 Layer 2（Layer 3 可选语义）
+            logger.debug("无可用 Layer 3 摘要器，%d 条消息被淘汰且无摘要", len(evicted))
+            return windowed
+
         prompt = self.build_summary_prompt(recent)
         try:
-            summary_text = await summarize(evicted, prompt)
+            summary_text = await effective_summarizer(evicted, prompt)
         except Exception:
             logger.warning(
                 "Layer 3 LLM 摘要失败，回退到 Layer 2 滑窗（%d 条消息被淘汰且无摘要）",
@@ -218,9 +266,11 @@ class ContextCompactor:
             )
             return windowed
 
-        # 兜底：LLM 返回超长摘要时截断，防止摘要消息本身撑爆上下文
-        if len(summary_text) > MAX_RESULT_CHARS:
-            summary_text = self._truncate_generic(summary_text)
+        # 兜底：LLM 返回超长摘要时截断，防止摘要消息本身撑爆上下文。
+        # 用 MAX_SUMMARY_CHARS（宽于工具结果上限），保留头尾各半，
+        # 避免结构化摘要的中段（Key Decisions / Next Steps）被砍
+        if len(summary_text) > MAX_SUMMARY_CHARS:
+            summary_text = self._truncate_generic(summary_text, MAX_SUMMARY_CHARS)
 
         system_msgs, _ = _split_system(compacted)
         summary_msg = {
@@ -449,13 +499,13 @@ class ContextCompactor:
         return "\n".join(kept)
 
     @staticmethod
-    def _truncate_generic(text: str) -> str:
-        """通用截断：保留头/尾各 MAX_RESULT_CHARS/2 字符。"""
-        if len(text) <= MAX_RESULT_CHARS:
+    def _truncate_generic(text: str, max_chars: int = MAX_RESULT_CHARS) -> str:
+        """通用截断：保留头/尾各 ``max_chars``/2 字符。"""
+        if len(text) <= max_chars:
             return text
 
-        half = MAX_RESULT_CHARS // 2
-        skipped = len(text) - MAX_RESULT_CHARS
+        half = max_chars // 2
+        skipped = len(text) - max_chars
         return (
             text[:half]
             + f"\n\n... ({skipped} characters truncated) ...\n\n"

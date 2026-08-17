@@ -18,8 +18,8 @@ const STATUS_COLORS: Record<LaneStatus, string> = {
   blocked: 'bg-yellow-100 text-yellow-800',
   succeeded: 'bg-emerald-100 text-emerald-800',
   failed: 'bg-red-100 text-red-800',
-  stopped: 'bg-gray-200 text-gray-700',
-  cancelled: 'bg-gray-200 text-gray-700',
+  stopped: 'bg-line text-muted',
+  cancelled: 'bg-line text-muted',
 };
 
 interface LaneCardProps {

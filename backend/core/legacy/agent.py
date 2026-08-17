@@ -1036,12 +1036,24 @@ class SageAgent:
         tools are hidden when there is no context, and revealed when one
         is active -- normal tools are always visible.
 
+        When ``self.profile`` is loaded with a non-empty ``tools`` list,
+        that list is passed through as the registry's ``allowed_tools``
+        whitelist so the LLM only sees tools the profile declared.
+        ``profile=None`` or empty ``tools`` keeps the legacy behavior of
+        exposing every tool.
+
         Returns:
             工具 Schema 列表，每个为：
             {"type": "function", "function": {"name", "description", "parameters"}}
         """
+        allowed_tools = (
+            self.profile.get("tools")
+            if self.profile and self.profile.get("tools") is not None
+            else None
+        )
         schemas = self.tool_registry.get_schemas_for_llm(
             context=current_tool_context(),
+            allowed_tools=allowed_tools,
         )
         return [
             {

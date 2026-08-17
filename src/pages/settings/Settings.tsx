@@ -34,46 +34,53 @@ export function Settings() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="h-12 flex items-center px-5 border-b border-border bg-surface flex-shrink-0">
-        <h2 className="text-[18px] font-semibold text-text">设置</h2>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-5">
-        <div className="flex gap-1 border-b border-border mb-5">
+    <div className="flex-1 flex overflow-hidden">
+      {/* Left sub-nav (U15 from OpenWorker) */}
+      <div className="w-52 border-r border-line bg-bg-muted flex-shrink-0">
+        <div className="h-12 flex items-center px-4 border-b border-line">
+          <h2 className="text-[16px] font-semibold text-ink">设置</h2>
+        </div>
+        <nav className="p-2 space-y-1">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               className={clsx(
-                'px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px',
+                'w-full px-3 py-2 text-sm rounded-md transition-colors text-left',
                 activeTab === tab.key
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted hover:text-text',
+                  ? 'bg-primary text-text-inverse font-medium'
+                  : 'text-muted hover:bg-bg-hover hover:text-ink',
               )}
               onClick={() => setActiveTab(tab.key)}
             >
               {tab.label}
             </button>
           ))}
-        </div>
+        </nav>
+      </div>
 
-        {activeTab === 'general' && <GeneralTab resetSettings={resetSettings} />}
-        {activeTab === 'endpoints' && (
-          <EndpointsTab settings={settings} updateSettings={updateSettings} />
-        )}
-        {activeTab === 'models' && (
-          <ModelsTab settings={settings} updateSettings={updateSettings} />
-        )}
-        {activeTab === 'memory' && (
-          <MemoryTab settings={settings} updateSettings={updateSettings} />
-        )}
-        {activeTab === 'mcp' && <McpTab />}
-        {activeTab === 'evolution' && (
-          <div className="space-y-6">
-            <EvolutionPanel />
-            <EvolutionLog />
+{/* Right content panel */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-3xl mx-auto">
+            {activeTab === 'general' && <GeneralTab resetSettings={resetSettings} />}
+            {activeTab === 'endpoints' && (
+              <EndpointsTab settings={settings} updateSettings={updateSettings} />
+            )}
+            {activeTab === 'models' && (
+              <ModelsTab settings={settings} updateSettings={updateSettings} />
+            )}
+            {activeTab === 'memory' && (
+              <MemoryTab settings={settings} updateSettings={updateSettings} />
+            )}
+            {activeTab === 'mcp' && <McpTab />}
+            {activeTab === 'evolution' && (
+              <div className="space-y-6">
+                <EvolutionPanel />
+                <EvolutionLog />
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

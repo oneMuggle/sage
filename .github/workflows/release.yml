@@ -100,6 +100,14 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: npx electron-builder --linux AppImage deb --publish never
 
+      - name: Create stable-named Linux artifacts (A8 from OpenWorker)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # Copy versioned artifacts to stable names
+          # Download URLs like releases/latest/download/Sage-latest.AppImage never need updating
+          cp release/*/Sage-*.AppImage release/linux-unpacked/Sage-latest.AppImage || true
+          cp release/*/sage_*_amd64.deb release/linux-unpacked/sage-latest_amd64.deb || true
+
       - name: Fetch VC++ Redistributable (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -109,7 +117,50 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: npx electron-builder --win nsis --publish never
 
-      - name: Upload artifacts to GitHub Release
+      # === Win7 LTS note ===
+      # The 3 tier-promotion steps below (rc.1 stabilization / promote-stable /
+      # finalize) reference scripts/release/release_branches.py which is NOT
+      # shipped on the win7 branch. Each step's `if` already filters out any
+      # *-win7 tag, so they never execute when win7 LTS tags push here. We keep
+      # them so future cherry-picks from main remain conflict-free, and so
+      # `.github/workflows/release.yml` stays structurally identical to main.
+      - name: Detect rc.1 and create stabilization branch
+        if: startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref_name, '-rc.1') && !endsWith(github.ref_name, '-rc.1-win7')
+        run: |
+          VERSION=$(echo "${{ github.ref_name }}" | sed 's/-rc\.1$//' | sed 's/^v//')
+          python scripts/release/release_branches.py create \
+            --tier rc --tag ${{ github.ref_name }} --version $VERSION
+        env:
+          SAGE_RELEASE_BOT_TOKEN: ${{ secrets.SAGE_RELEASE_BOT_TOKEN }}
+
+      - name: Promote release/stable mirror on stable tag
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha') && !endsWith(github.ref_name, '-win7')
+        run: |
+          python scripts/release/release_branches.py promote-stable \
+            --tier stable --tag ${{ github.ref_name }}
+        env:
+          SAGE_RELEASE_BOT_TOKEN: ${{ secrets.SAGE_RELEASE_BOT_TOKEN }}
+
+      - name: Finalize stabilization branch on stable ship
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha') && !endsWith(github.ref_name, '-win7')
+        run: |
+          VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+          python scripts/release/release_branches.py finalize \
+            --version $VERSION --main-branch main
+        env:
+          SAGE_RELEASE_BOT_TOKEN: ${{ secrets.SAGE_RELEASE_BOT_TOKEN }}
+
+      - name: Create stable-named Windows artifact (A8 from OpenWorker)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Copy versioned artifact to stable name
+          # Download URLs like releases/latest/download/Sage-Setup-latest.exe never need updating
+          Get-ChildItem -Path release -Filter "Sage-Setup-*.exe" -Recurse | ForEach-Object {
+            Copy-Item $_.FullName -Destination "release/win-unpacked/Sage-Setup-latest.exe"
+          }
+
+      - name: Upload artifacts to GitHub Release (versioned)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -127,6 +178,33 @@ jobs:
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for details.
           draft: true
           generate_release_notes: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload stable-named artifacts (A8 from OpenWorker)
+        if: matrix.os == 'ubuntu-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            release/*/Sage-latest.AppImage
+            release/*/sage-latest_amd64.deb
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          draft: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload stable-named Windows installer (A8 from OpenWorker)
+        if: matrix.os == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            release/*/Sage-Setup-latest.exe
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          draft: true
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

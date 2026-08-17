@@ -282,6 +282,9 @@ class TestDomainPurity:
             # 纯值生成标准库, 无 I/O 无框架依赖, 符合 domain 纯净约束
             "uuid",
             "datetime",
+            # A23: event bus 异步发布 + 事件时间戳, 纯异步原语与纪元秒, 也无 I/O
+            "asyncio",
+            "time",
         }
         # 允许 domain 内部互相 import
         allowed_internal = "backend.domain"

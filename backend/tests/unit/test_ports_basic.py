@@ -32,7 +32,7 @@ def test_all_ports_importable() -> None:
 
 
 def test_all_ports_re_exported_in_init() -> None:
-    """``backend.ports.__all__`` 必须包含全部 6 个 port。"""
+    """``backend.ports.__all__`` 必须包含全部 6 个 port + A2 Provider 抽象类型。"""
     from backend.ports import __all__ as ports_all
 
     assert set(ports_all) == {
@@ -42,6 +42,12 @@ def test_all_ports_re_exported_in_init() -> None:
         "StoragePort",
         "MetricPort",
         "EventPort",
+        # A2: Provider 抽象 + Token 归一化
+        "AssistantTurn",
+        "ModelCapabilities",
+        "ProviderClient",
+        "StreamChunk",
+        "TokenUsage",
     }
 
 
