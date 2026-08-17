@@ -1023,7 +1023,8 @@ class SkillArchive(BaseModel):
 
 
 @router.post("/skills/{name}/archive")
-async def archive_skill(name: str, data: SkillArchive):
+@with_db_lock
+def archive_skill(name: str, data: SkillArchive):
     """归档 / 取消归档技能（软标记，可逆；区别于物理 delete）。
 
     - 200 + 完整 skill dict（含新 lifecycle）
@@ -1031,6 +1032,9 @@ async def archive_skill(name: str, data: SkillArchive):
     - 422（FastAPI 自动）— archived 缺失 / 类型错
 
     归档技能从 auto_activate / slash 候选排除（adapter 层），文件不动、可恢复。
+
+    §1.2 win7: 仅 sync SQLite 写（adapter.set_archived/list/is_enabled/usage_count）
+    无真 await → 降级 def + @with_db_lock 串行化单连接访问。
     """
     adapter = _get_skill_adapter()
     if not adapter.set_archived(name, data.archived):
