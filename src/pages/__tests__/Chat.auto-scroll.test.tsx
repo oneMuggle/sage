@@ -136,6 +136,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
       loadMessages: vi.fn(),
+      streamingToolCalls: [],
     });
 
     const { container, rerender } = render(
@@ -168,6 +169,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
       loadMessages: vi.fn(),
+      streamingToolCalls: [],
     });
 
     rerender(
@@ -193,6 +195,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
       loadMessages: vi.fn(),
+      streamingToolCalls: [],
     });
 
     const { container, rerender } = render(
@@ -222,6 +225,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
       loadMessages: vi.fn(),
+      streamingToolCalls: [],
     });
 
     rerender(

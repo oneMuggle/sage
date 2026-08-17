@@ -1,0 +1,28 @@
+// src/widgets/chat/__tests__/RightPanel.test.tsx
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../../../features/artifacts/useArtifacts', () => ({
+  useArtifacts: vi.fn(() => ({ artifacts: [], loading: false, refresh: vi.fn() })),
+}));
+
+import { RightPanel } from '../RightPanel';
+
+const props = {
+  open: true, onToggle: vi.fn(), iteration: 0, streamingState: null,
+  toolCalls: [], isLoading: false, sessionId: 'sess_001',
+};
+
+describe('RightPanel', () => {
+  it('renders both tabs', () => {
+    render(<RightPanel {...props} />);
+    expect(screen.getByText('Progress')).toBeInTheDocument();
+    expect(screen.getByText('Artifacts')).toBeInTheDocument();
+  });
+
+  it('switches to Artifacts tab', () => {
+    render(<RightPanel {...props} />);
+    fireEvent.click(screen.getByText('Artifacts'));
+    expect(screen.getByText(/暂无产物/)).toBeInTheDocument();
+  });
+});
