@@ -26,7 +26,9 @@ Timeouts and residual risk:
   primary ReAct loop continues.
 - The sub-run executes on a worker thread that CANNOT be killed once
   started: after a timeout the abandoned worker runs on until its own
-  ``SUBAGENT_MAX_ITERATIONS`` (6) cap and then drains in the background.
+  iteration cap (``OrchSettings.max_subagent_iterations``, default 6 —
+  falls back to ``SUBAGENT_MAX_ITERATIONS``) and then drains in the
+  background.
   Mitigation: the sub-agent's ``LLMClient`` enforces a per-request httpx
   timeout (``LLMConfig.timeout``, default 60s — see
   ``backend/core/legacy/llm_client.py``), so a hung LLM call cannot wedge a
@@ -59,6 +61,7 @@ from backend.orchestration.events import EventProvenance, EventRecorder, LaneEve
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 from backend.orchestration.models import Task
+from backend.orchestration.orch_settings import load_orch_settings
 from backend.orchestration.task_registry import TaskRegistry
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.calculator import CalculatorTool
@@ -81,8 +84,32 @@ SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
 )
 
 # Sub-agents are focused: small iteration budget, capped answers.
+# ``SUBAGENT_MAX_ITERATIONS`` is the fallback when orch settings are
+# unreadable; the effective budget comes from
+# ``OrchSettings.max_subagent_iterations`` (same default).
 SUBAGENT_MAX_ITERATIONS = 6
 SUBAGENT_ANSWER_CAP = 20_000
+
+
+def _resolve_subagent_iterations() -> int:
+    """Effective sub-agent iteration budget (settings → constant fallback).
+
+    Settings live in user-controlled JSON, so a malformed value or a broken
+    settings backend must never break delegation: any failure — and any
+    non-positive value — falls back to ``SUBAGENT_MAX_ITERATIONS``.
+    """
+    try:
+        value = load_orch_settings().max_subagent_iterations
+    except Exception:  # noqa: BLE001 — 配置读失败回落常量，绝不抛穿
+        logger.warning(
+            "load_orch_settings failed; falling back to SUBAGENT_MAX_ITERATIONS=%d",
+            SUBAGENT_MAX_ITERATIONS,
+            exc_info=True,
+        )
+        return SUBAGENT_MAX_ITERATIONS
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        return SUBAGENT_MAX_ITERATIONS
+    return value
 
 
 def _resolve_timeout() -> float:
@@ -355,7 +382,9 @@ class AgentTool(BaseTool):
         answer = ""
         error: Optional[str] = None
         saw_done = False
-        async for event in subagent.run_loop(messages, max_iterations=SUBAGENT_MAX_ITERATIONS):
+        async for event in subagent.run_loop(
+            messages, max_iterations=_resolve_subagent_iterations()
+        ):
             state = getattr(event, "state", None)
             state_value = getattr(state, "value", state)
             if state_value == "done":

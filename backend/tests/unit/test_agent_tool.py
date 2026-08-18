@@ -190,6 +190,57 @@ class TestAgentToolExecution:
         assert "terminal" not in captured["registry"].list_names()
 
 
+class TestSubagentIterationBudget:
+    """子代理迭代预算读 orch_settings（此前硬编码 SUBAGENT_MAX_ITERATIONS=6）。"""
+
+    @staticmethod
+    def _capturing_tool(captured: dict) -> AgentTool:
+        class _FakeSubagent:
+            def __init__(self, registry):
+                self.llm_client = None
+
+            async def run_loop(self, messages, max_iterations=None):
+                from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+                captured["max_iterations"] = max_iterations
+                yield AgentEvent(state=AgentState.DONE, content="ok")
+
+        return AgentTool(
+            llm_client=_mock_sub_llm(_done_response("unused")),
+            subagent_factory=lambda registry: _FakeSubagent(registry),
+        )
+
+    def test_uses_configured_budget(self, monkeypatch):
+        """orch.maxSubagentIterations=11 → run_loop 收到 11。"""
+        from backend.orchestration.orch_settings import OrchSettings
+
+        monkeypatch.setattr(
+            agent_tool_module,
+            "load_orch_settings",
+            lambda: OrchSettings(max_subagent_iterations=11),
+        )
+        captured: dict = {}
+
+        result = self._capturing_tool(captured).execute(description="d", prompt="p")
+
+        assert result.success is True
+        assert captured["max_iterations"] == 11
+
+    def test_falls_back_to_constant_when_settings_unreadable(self, monkeypatch):
+        """配置读取抛错 → 回落模块常量 6，绝不抛穿到调用方。"""
+
+        def _boom():
+            raise RuntimeError("settings backend down")
+
+        monkeypatch.setattr(agent_tool_module, "load_orch_settings", _boom)
+        captured: dict = {}
+
+        result = self._capturing_tool(captured).execute(description="d", prompt="p")
+
+        assert result.success is True
+        assert captured["max_iterations"] == agent_tool_module.SUBAGENT_MAX_ITERATIONS == 6
+
+
 class TestSubagentTimeout:
     def test_timeout_returns_error_result_and_fails_lane(self, monkeypatch):
         """Hung sub-run → bounded wait, 超时 error ToolResult, lane FAILED."""
