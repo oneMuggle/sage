@@ -54,6 +54,12 @@ from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_as
 #: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
 #: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
 MAX_CONSECUTIVE_UNANSWERED_QUESTIONS = 3
+
+#: ``run_loop`` 的迭代兜底值——仅在既没显式传 ``max_iterations``、
+#: profile 也没有该键时生效（profile 加载失败等降级路径）。
+#: 与 ``agents/profiles.py`` 的 dataclass 默认、``data/database.py``
+#: 的 DB 列默认保持一致，避免降级路径静默砍半预算。
+DEFAULT_MAX_ITERATIONS = 10
 from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
 from backend.tools.permissions import (
@@ -537,7 +543,8 @@ class SageAgent:
         Args:
             messages: 完整消息历史（含 system/user/assistant/tool），会被就地修改
             max_iterations: 最大循环次数，防止死循环。None 时取 profile.max_iterations
-                (若 profile 也不存在, 兜底 5)。显式传入的 int 覆盖 profile 值。
+                (若 profile 也不存在, 兜底 DEFAULT_MAX_ITERATIONS=10)。
+                显式传入的 int 覆盖 profile 值。
             llm_config: 可选的动态 LLM 配置(覆盖初始化时的配置),允许调用方
                 在 agent 实例没有默认 LLM 时通过 per-request 配置运行。
                 如果同时存在 self.llm_client,会临时覆盖并在循环结束后恢复。
@@ -555,11 +562,15 @@ class SageAgent:
         # 每次 run_loop 重置未应答计数(跨会话不累积)
         self._consecutive_unanswered = 0
 
-        # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 5
+        # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 DEFAULT_MAX_ITERATIONS
         effective_max_iterations = (
             max_iterations
             if max_iterations is not None
-            else (self.profile.get("max_iterations", 5) if self.profile else 5)
+            else (
+                self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
+                if self.profile
+                else DEFAULT_MAX_ITERATIONS
+            )
         )
 
         # 如果传入了动态 LLM 配置,临时覆盖

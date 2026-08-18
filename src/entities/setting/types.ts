@@ -51,6 +51,9 @@ export interface OrchSettings {
   maxSubagentResultChars: number; // 50 * 1024
   maxRetries: number; // 2
   maxLaneIterations: number; // 8
+  // 子代理（agent tool）单次委派的 ReAct 迭代预算。默认 6 与后端
+  // ``OrchSettings.max_subagent_iterations`` 默认对齐；用户可在此调整。
+  maxSubagentIterations: number; // 6
 }
 
 /** All application settings */
@@ -110,6 +113,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxSubagentResultChars: 50 * 1024,
   maxRetries: 2,
   maxLaneIterations: 8,
+  maxSubagentIterations: 6,
 };
 
 /** Sensible defaults for all settings */

@@ -17,6 +17,7 @@ _RAW_KEYS = {
     "maxSubagentResultChars": "max_subagent_result_chars",
     "maxRetries": "max_retries",
     "maxLaneIterations": "max_lane_iterations",
+    "maxSubagentIterations": "max_subagent_iterations",
     "scratchRoot": "scratch_root",
 }
 
@@ -28,6 +29,9 @@ class OrchSettings:
     max_subagent_result_chars: int = 50 * 1024
     max_retries: int = 2
     max_lane_iterations: int = 8
+    #: 子代理（agent_tool）单次委派的 ReAct 迭代预算。默认 6 与原
+    #: ``agent_tool.SUBAGENT_MAX_ITERATIONS`` 常量一致，仅开放可配。
+    max_subagent_iterations: int = 6
     scratch_root: str = "orch_scratch"
 
 

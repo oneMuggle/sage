@@ -16,7 +16,11 @@ import {
 } from '../../shared/api';
 import { orchRunClient } from '../../shared/api/orchRunClient';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
-import { mapLLMErrorToText, type LLMErrorResponse } from '../../shared/lib/errorMapping';
+import {
+  mapAgentErrorToText,
+  mapLLMErrorToText,
+  type LLMErrorResponse,
+} from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
 import { chatApi, useStore, type Message, type ToolCall } from '../../shared/lib/store';
 import { useSettings } from '../manage-settings/useSettings';
@@ -271,9 +275,16 @@ export function useChat() {
         };
         if (apiErr.llmError || apiErr.error) {
           setError(mapLLMErrorToText(apiErr.llmError ?? apiErr.error!));
-        } else {
-          setError(err instanceof Error ? err.message : '发送消息失败');
+          return;
         }
+        // 后端 agent.run_loop / agent_tool 在 FAILED 收尾时把 ``payload.error``
+        // 包成 ``new Error(errMsg)``（见 chatApi.ts:198-199），所以这里
+        // 只能从 ``Error.message`` 拿到原始错误码。先查 agent runtime 表
+        // （max_iterations_exceeded / tool_budget_exceeded / subagent_*），
+        // 命中就用中文提示；不命中再退回 ``err.message``（保留网络/HTTP 错误）。
+        const raw = err instanceof Error ? err.message : String(err ?? '');
+        const agentText = mapAgentErrorToText(raw);
+        setError(agentText ?? raw ?? '发送消息失败');
       };
 
       // 把流式最终 content 写回 store.messages,让 derivedMessages 退回

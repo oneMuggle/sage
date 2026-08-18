@@ -109,6 +109,37 @@ async def test_run_loop_respects_max_iterations():
     assert failed[0].error == "max_iterations_exceeded"
 
 
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    ("profile", "label"),
+    [(None, "无 profile"), ({}, "profile 缺 max_iterations 键")],
+)
+async def test_run_loop_default_budget_is_10(profile, label):
+    """未显式传 max_iterations 且 profile 无该键 → 兜底 10。
+
+    此前硬编码 5，与 dataclass 默认（profiles.py）和 DB 列默认
+    （database.py）的 10 不一致，异常降级路径会静默砍半预算。
+    """
+    tool_call = LLMToolCall(id="c", name="calculator", arguments="{}")
+    agent = SageAgent()
+    agent.profile = profile
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(return_value=_make_response(tool_calls=[tool_call]))
+
+    mock_tool = MagicMock()
+    mock_tool.execute = MagicMock(return_value=MagicMock(success=True, content={}, error=None))
+    agent.tool_registry.get = MagicMock(return_value=mock_tool)
+
+    events = [evt async for evt in agent.run_loop([{"role": "user", "content": "x"}])]
+
+    failed = [e for e in events if e.state == AgentState.FAILED]
+    assert len(failed) == 1, label
+    # FAILED 事件的 iteration 字段携带生效的上限
+    assert failed[0].iteration == 10, label
+    # LLM 恰好被调用 10 次（每轮一次），证明预算真实生效
+    assert agent.llm_client.chat.await_count == 10, label
+
+
 # =============================================================================
 # PG1.1 扩展测试 (Task 1.1.2): 工具调用 / 错误恢复 / 边界路径
 # =============================================================================

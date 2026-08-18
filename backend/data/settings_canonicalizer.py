@@ -95,7 +95,7 @@ LEGAL_MODEL_SELECTIONS_KEYS: FrozenSet[str] = frozenset(
         "embeddingModel",
     }
 )
-# orch 段 (OrchSettings + scratchRoot). 前端 interface 只暴露 5 个数值;
+# orch 段 (OrchSettings + scratchRoot). 前端 interface 只暴露 6 个数值;
 # scratchRoot 是后端配置 (spec 偏差, 见 Wave 3 P2-9 plan §3.3).
 LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
     {
@@ -104,6 +104,7 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxSubagentResultChars",
         "maxRetries",
         "maxLaneIterations",
+        "maxSubagentIterations",
         "scratchRoot",
     }
 )
