@@ -59,6 +59,7 @@ import { registerLogIpc } from './ipc/logIpc';
 import { resolveBackendLaunchCommand } from './backendLauncher';
 import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { runDoctorCheck } from './doctor';
+import { mainWindow, setMainWindow } from './mainWindow';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -108,7 +109,24 @@ app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
 app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}`);
 
 let backendProc: ChildProcess | null = null;
-let mainWindow: BrowserWindow | null = null;
+
+// PR-B: backend auto-restart state
+//
+// When the backend subprocess exits unexpectedly (crash, OOM-kill, broken
+// installer re-spawn) we retry up to MAX_RESTART_ATTEMPTS times with
+// exponential backoff (RESTART_BASE_DELAY_MS * 2^n, capped at
+// RESTART_MAX_DELAY_MS) so a transient conda hiccup doesn't white-screen
+// the app. After MAX_RESTART_ATTEMPTS exhausted, the renderer is told via
+// `backend:disconnected { attempt: -1 }` to show a "please restart Sage"
+// banner.
+//
+// `appIsQuitting` is set true in `before-quit` so the user-initiated quit
+// path doesn't trigger a fresh restart loop.
+let restartCount = 0;
+let appIsQuitting = false;
+const MAX_RESTART_ATTEMPTS = 3;
+const RESTART_BASE_DELAY_MS = 1000;
+const RESTART_MAX_DELAY_MS = 8000;
 
 // Set by spawnBackend() when the resolver reports a broken installer, so the
 // startup-failure path in app.whenReady() can SKIP its own dialog (which
@@ -224,6 +242,10 @@ function spawnBackend(): ChildProcess {
   proc.on('exit', (code) => {
     logger.info('main: backend exited', { code });
     backendProc = null;
+    // PR-B: 用户主动 quit 时不重试;否则指数退避自动重 spawn
+    if (!appIsQuitting) {
+      scheduleBackendRestart();
+    }
   });
   // Without an 'error' listener, Node treats spawn-time failures (binary
   // exists but is not executable, ACL block, AV lock, ENOEXEC) as uncaught
@@ -272,6 +294,42 @@ function spawnStubProcess(reason: string): ChildProcess {
     backendProc = null;
   });
   return stub;
+}
+
+/**
+ * PR-B: backend 进程异常退出时,指数退避自动重 spawn,最多 3 次。
+ *
+ * 退避序列 1s/2s/4s。第 3 次后永久失败,通过 IPC 通知 renderer 显示
+ * 「请重启 Sage」横幅。用户在 app quit 触发的 exit 不重试。
+ *
+ * Exported so unit tests can drive restart counter + IPC notifications
+ * without spawning a real Electron process.
+ */
+export function scheduleBackendRestart(): void {
+  if (restartCount >= MAX_RESTART_ATTEMPTS) {
+    logger.error('main: backend restart exhausted', { attempts: restartCount });
+    mainWindow?.webContents.send('backend:disconnected', { attempt: -1 });
+    return;
+  }
+  restartCount++;
+  const delay = Math.min(
+    RESTART_BASE_DELAY_MS * 2 ** (restartCount - 1),
+    RESTART_MAX_DELAY_MS,
+  );
+  logger.warn('main: scheduling backend restart', {
+    attempt: restartCount,
+    delayMs: delay,
+  });
+  mainWindow?.webContents.send('backend:disconnected', { attempt: restartCount });
+  setTimeout(() => {
+    backendProc = spawnBackend();
+    waitForBackend().then((ready) => {
+      if (ready) {
+        restartCount = 0;
+        mainWindow?.webContents.send('backend:reconnected', {});
+      }
+    });
+  }, delay).unref();
 }
 
 /**
@@ -326,7 +384,7 @@ function createMainWindow(): void {
     ? { titleBarStyle: 'hidden' as const, trafficLightPosition: { x: 8, y: 8 } }
     : { frame: false };
 
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: DEFAULT_WINDOW_WIDTH,
     height: DEFAULT_WINDOW_HEIGHT,
     minWidth: MIN_WINDOW_WIDTH,
@@ -341,38 +399,93 @@ function createMainWindow(): void {
       sandbox: false, // Phase 3: keep false for Win7 compat (sandbox needs SUID)
     },
   });
+  setMainWindow(win);
 
   // Open external links in OS browser, not in-app
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url).catch(() => undefined);
     return { action: 'deny' };
   });
 
   if (isDev) {
-    mainWindow.loadURL(VITE_DEV_URL).catch(async (e) => {
+    win.loadURL(VITE_DEV_URL).catch(async (e) => {
       logger.error('main: loadURL failed', { url: VITE_DEV_URL, err: e.message });
       await showStartupFailureDialog({
         reason: '加载前端开发服务失败',
         detail: `URL: ${VITE_DEV_URL}\n错误: ${e.message}`,
       });
     });
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    win.webContents.openDevTools({ mode: 'detach' });
   } else {
     // tsconfig.electron.json uses rootDirs: [electron, src], so the compiled
     // main.js lives at dist-electron/electron/main.js (one extra directory level
     // vs the legacy rootDir: electron setup). Go up two levels to reach dist/.
     const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
-    mainWindow.loadFile(indexHtml).catch(async (e) => {
+    win.loadFile(indexHtml).catch(async (e) => {
       logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
       await showStartupFailureDialog({
         reason: '加载前端资源失败',
         detail: `路径: ${indexHtml}\n错误: ${e.message}`,
       });
     });
+    // Diagnostic: log when page finishes loading (or fails)
+    win.webContents.on('did-finish-load', () => {
+      logger.info('main: frontend did-finish-load', { url: win.webContents.getURL() });
+      // Diagnostic: check if React root is mounted after page loads
+      win.webContents
+        .executeJavaScript(
+          `
+          (function() {
+            const root = document.getElementById('root');
+            const body = document.body;
+            const hasElectronAPI = typeof window.electronAPI !== 'undefined';
+            const apiKeys = hasElectronAPI ? Object.keys(window.electronAPI || {}) : [];
+            return {
+              hasRoot: !!root,
+              rootChildren: root?.children.length || 0,
+              rootInnerHTML: root?.innerHTML?.substring(0, 500) || '',
+              bodyInnerHTML: body?.innerHTML?.substring(0, 500) || '',
+              hasSidebar: !!document.querySelector('[class*="sidebar" i], aside, nav'),
+              hasLayout: !!document.querySelector('[class*="layout" i]'),
+              allElements: document.querySelectorAll('*').length,
+              hasElectronAPI,
+              apiKeys,
+              scripts: Array.from(document.scripts).map(s => s.src || s.textContent?.substring(0, 100) || ''),
+              title: document.title,
+            };
+          })()
+        `,
+        )
+        .then((result) => {
+          logger.info('main: frontend React root check', result);
+        })
+        .catch((e) => {
+          logger.error('main: failed to check React root', { error: e.message });
+        });
+    });
+    win.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      logger.error('main: frontend did-fail-load', { errorCode, errorDescription });
+    });
+    // Diagnostic: capture console messages (JS errors, warnings, logs)
+    win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const logLevel =
+        level === 0 ? 'debug' : level === 1 ? 'info' : level === 2 ? 'warn' : 'error';
+      logger[logLevel]('main: frontend console', { level, message, line, sourceId });
+    });
+    // Diagnostic: capture page crashes (using non-deprecated render-process-gone)
+    win.webContents.on('render-process-gone', (_event, details) => {
+      logger.error('main: frontend render-process-gone', {
+        reason: details.reason,
+        exitCode: details.exitCode,
+      });
+    });
+    win.webContents.on('unresponsive', () => {
+      logger.error('main: frontend unresponsive');
+    });
   }
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  win.on('closed', () => {
+    setMainWindow(null);
   });
 }
 
@@ -874,7 +987,10 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-app.on('before-quit', shutdownBackend);
+app.on('before-quit', () => {
+  appIsQuitting = true;
+  shutdownBackend();
+});
 
 app.on('activate', () => {
   // macOS: re-create window when dock icon clicked

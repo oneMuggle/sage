@@ -39,6 +39,16 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
       const m = err.message.match(STATUS_RE);
       if (m) (err as InvokeError).status_code = Number(m[1]);
     }
-    throw err;
+    // PR-B (2026-08-18): 把后端断开的 ECONNREFUSED / fetch failed / network error
+    // 翻译成中文友好提示，让上层（React Query / UI）拿到稳定的 Error 而非
+    // 裸英文 system error。其他错误（验证失败、HTTP 4xx 等）原样抛出，保持
+    // status_code 属性与原始 message（含 /validation/ 等可读标记）。
+    const raw = err instanceof Error ? err.message : String(err);
+    const isBackendDown =
+      raw.includes('ECONNREFUSED') || raw.includes('fetch failed') || raw.includes('network error');
+    if (isBackendDown) {
+      throw new Error('后端服务未启动或已断开，请稍候自动重连或重启 Sage');
+    }
+    throw err instanceof Error ? err : new Error(raw);
   }
 }

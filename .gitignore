@@ -130,3 +130,6 @@ Desktop/
 
 # 编排子任务隔离目录（运行时产物）
 data/orch_scratch/
+
+# Git worktrees (隔离开发目录)
+.worktrees/
