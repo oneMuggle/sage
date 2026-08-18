@@ -174,6 +174,12 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
           value={settings.orch.maxLaneIterations}
           onChange={(v) => updateSettings({ orch: { ...settings.orch, maxLaneIterations: v } })}
         />
+        <NumberField
+          label="子代理迭代上限"
+          dataTestId="orch-max-subagent-iterations"
+          value={settings.orch.maxSubagentIterations}
+          onChange={(v) => updateSettings({ orch: { ...settings.orch, maxSubagentIterations: v } })}
+        />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>

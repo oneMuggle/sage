@@ -70,13 +70,38 @@ beforeEach(() => {
 });
 
 describe('GeneralTab 编排 section', () => {
-  it('渲染 5 个编排数值输入', () => {
+  it('渲染 6 个编排数值输入（含子代理迭代上限）', () => {
     renderTab();
     expect(screen.getByTestId('orch-max-concurrent')).toBeInTheDocument();
     expect(screen.getByTestId('orch-max-aggregate')).toBeInTheDocument();
     expect(screen.getByTestId('orch-max-subagent-result')).toBeInTheDocument();
     expect(screen.getByTestId('orch-max-retries')).toBeInTheDocument();
     expect(screen.getByTestId('orch-max-lane-iterations')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-max-subagent-iterations')).toBeInTheDocument();
+  });
+
+  it('子代理迭代上限默认 6，修改后 updateSettings 保留其它键', () => {
+    const updateSettings = vi.fn();
+    vi.mocked(useSettings).mockReturnValue({
+      settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
+      isLoading: false,
+      updateSettings,
+      resetSettings: vi.fn(),
+    });
+    renderTab();
+
+    // 默认 6 (与 backend OrchSettings.max_subagent_iterations 默认对齐)
+    const subagentInput = screen.getByTestId('orch-max-subagent-iterations') as HTMLInputElement;
+    expect(subagentInput.value).toBe('6');
+
+    fireEvent.change(subagentInput, { target: { value: '12' } });
+    expect(updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        maxSubagentIterations: 12,
+        maxLaneIterations: 8, // 保留其余键（部分更新契约）
+        maxRetries: 2,
+      }),
+    });
   });
 
   it('修改数值调 updateSettings 且保留其余 orch 键', () => {

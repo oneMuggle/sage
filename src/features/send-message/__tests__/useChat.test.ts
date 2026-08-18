@@ -407,6 +407,107 @@ describe('useChat', () => {
     expect(result.current.messages[0].role).toBe('user');
   }, 15_000);
 
+  it('maps max_iterations_exceeded (stream FAILED with raw code) to actionable Chinese text', async () => {
+    // chatApi.ts:198 把 payload.error 包成 new Error(errMsg)，所以 useChat
+    // 拿到的就是 raw 错误码字符串。这里必须命中 agent runtime 表 →
+    // 中文提示，且不再把裸码暴露给用户。
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-agent-err' });
+    let capturedCb:
+      | ((e: {
+          payload: { state: string; iteration: number; error?: unknown; content?: string };
+        }) => void)
+      | undefined;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: { state: string; iteration: number; error?: unknown; content?: string };
+        }) => void,
+      ) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    await act(async () => {
+      await result.current.sendMessage('big task');
+      // 让 listen mock 把 cb 注册上
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // 模拟后端 run_loop 因 max_iterations 退出 — payload.error 是字符串
+    // 错误码，chatApi.ts:196-199 走 typeof errPayload === 'string' 分支。
+    await act(async () => {
+      capturedCb!({
+        payload: {
+          state: 'failed',
+          iteration: 0,
+          error: 'max_iterations_exceeded',
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.error).toBeTruthy();
+    });
+    // 中文提示 + 不再暴露裸码
+    expect(result.current.error).toMatch(/迭代/);
+    expect(result.current.error).not.toMatch(/max_iterations_exceeded/);
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('passes through unknown stream error message without rewriting it', async () => {
+    // 防御：非 agent runtime 码应原样透传（保留网络/HTTP 错误信息），
+    // 不能因为加了映射表就吞掉原始 message。
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-unknown-err' });
+    let capturedCb:
+      | ((e: {
+          payload: { state: string; iteration: number; error?: unknown; content?: string };
+        }) => void)
+      | undefined;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: { state: string; iteration: number; error?: unknown; content?: string };
+        }) => void,
+      ) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    await act(async () => {
+      await result.current.sendMessage('hello');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      capturedCb!({
+        payload: {
+          state: 'failed',
+          iteration: 0,
+          error: 'socket hang up',
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.error).toBeTruthy();
+    });
+    expect(result.current.error).toBe('socket hang up');
+  });
+
   it('clearError resets the error state', async () => {
     const { result } = renderHook(() => useChat());
 

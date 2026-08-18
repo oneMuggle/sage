@@ -109,7 +109,7 @@ def test_legal_model_selections_obj_keys_is_stable() -> None:
 
 
 def test_legal_orch_keys_is_stable() -> None:
-    """LEGAL_ORCH_KEYS 是前端 OrchSettings 6 键（含 scratchRoot，后端存）。"""
+    """LEGAL_ORCH_KEYS 是前端 OrchSettings 7 键（含 scratchRoot，后端存）。"""
     assert frozenset(
         {
             "maxConcurrentSubagents",
@@ -117,6 +117,7 @@ def test_legal_orch_keys_is_stable() -> None:
             "maxSubagentResultChars",
             "maxRetries",
             "maxLaneIterations",
+            "maxSubagentIterations",
             "scratchRoot",
         }
     ) == LEGAL_ORCH_KEYS
