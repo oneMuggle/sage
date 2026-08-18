@@ -18,6 +18,7 @@ import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
 import { ApprovalDialog } from './widgets/permission';
 import { QuestionDialog } from './widgets/question';
+import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
 
 // Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
 function ChatRoute() {
@@ -54,6 +55,7 @@ function App() {
   return (
     <HashRouter>
       <NavHistoryProvider>
+        <BackendStatusBanner />
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/chat" replace />} />
