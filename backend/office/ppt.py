@@ -39,7 +39,7 @@ from .models import (
     OfficePptReadResult,
     PptSlideContent,
 )
-from .path_safety import managed_document_path, validate_supported_filename
+from .path_safety import managed_document_path, resolve_output_path, validate_supported_filename
 from .storage import validate_workspace
 
 logger = logging.getLogger(__name__)
@@ -236,22 +236,21 @@ def _safe_filename(name: str, default_ext: str) -> str:
     raise OfficePathError(f"Unknown default_ext: {default_ext!r}")
 
 
-def generate_ppt(req) -> Path:
+def generate_ppt(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .pptx file from structured Pydantic input.
 
-    Writes to ``<workspace>/office/ppt/<uuid>/<safe-name>.pptx`` via the
-    :func:`path_safety.managed_document_path` helper, which performs
-    cross-platform containment validation as part of building the path.
+    ``output_dir`` 提供时写入该任意目录（信任的用户指定目录，经
+    :func:`resolve_output_path` 校验文件名）；``None`` 时保持现状写
+    workspace 沙箱（``<workspace>/office/ppt/<uuid>/<name>``，经
+    :func:`path_safety.managed_document_path` 跨平台包含性校验）。
     """
-    workspace = validate_workspace(Path(req.workspace_path))
-
-    import uuid
-
-    doc_id = uuid.uuid4().hex
-    # Compose the full file path with one validated call. Raises
-    # OfficePathError on filename separators, parent traversal, wrong
-    # extension, doc_id injection, or any path that escapes the workspace.
-    output_path = managed_document_path(workspace, OfficeDocType.PPT, doc_id, req.filename)
+    if output_dir is not None:
+        output_path = resolve_output_path(output_dir, OfficeDocType.PPT, req.filename)
+    else:
+        workspace = validate_workspace(Path(req.workspace_path))
+        import uuid
+        doc_id = uuid.uuid4().hex
+        output_path = managed_document_path(workspace, OfficeDocType.PPT, doc_id, req.filename)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:

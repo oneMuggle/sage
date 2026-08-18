@@ -143,6 +143,20 @@ def validate_supported_filename(filename: str, doc_type: OfficeDocType) -> str:
     return filename
 
 
+def resolve_output_path(output_dir: str, doc_type: OfficeDocType, filename: str) -> Path:
+    """Compose an output path under an arbitrary (trusted) target directory.
+
+    Unlike :func:`managed_document_path` (workspace sandbox), ``output_dir``
+    is a user-specified directory (Desktop, Downloads, ...) that the caller
+    has already authorized to write into. The ``filename`` is still validated
+    via :func:`validate_supported_filename` (no separators / traversal /
+    wrong extension), so a hostile filename cannot escape ``output_dir``.
+    """
+    safe_filename = validate_supported_filename(filename, doc_type)
+    target_dir = Path(output_dir).expanduser().resolve()
+    return target_dir / safe_filename
+
+
 def _validate_doc_id(document_id: str) -> str:
     """Enforce the doc-id regex; raise OfficePathError on mismatch."""
     if not _DOC_ID_PATTERN.match(document_id):
@@ -233,4 +247,5 @@ __all__ = [
     "validate_supported_filename",
     "managed_document_directory",
     "managed_document_path",
+    "resolve_output_path",
 ]
