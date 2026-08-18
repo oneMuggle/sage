@@ -11,7 +11,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('child_process', () => {
-  const noop = () => {};
   const eventEmitter = {
     on: vi.fn(),
     once: vi.fn(),

@@ -1,14 +1,19 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, cleanup } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BackendStatusBanner } from './BackendStatusBanner';
 
-const mockListeners = new Map<string, (payload: any) => void>();
+// Test-only payload type — kept loose (no any) so we exercise the component's
+// own narrowing. See `BackendStatusBanner.tsx` payload handlers for the
+// concrete shape; for the seam, `unknown` + assertion in the cb is enough.
+type BackendEventPayload = unknown;
+
+const mockListeners = new Map<string, (payload: BackendEventPayload) => void>();
 
 beforeEach(() => {
   mockListeners.clear();
-  (window as any).electronAPI = {
-    listen: vi.fn((event: string, cb: (payload: any) => void) => {
+  (window as unknown as Record<string, unknown>).electronAPI = {
+    listen: vi.fn((event: string, cb: (payload: BackendEventPayload) => void) => {
       mockListeners.set(event, cb);
       return () => mockListeners.delete(event);
     }),
