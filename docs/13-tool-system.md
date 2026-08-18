@@ -32,4 +32,4 @@ Sage Agent 通过 OpenAI 兼容的 `function_calling` 协议扩展 LLM 能力。
 THINKING → ACTING → OBSERVING → THINKING → ... → DONE/FAILED
 ```
 
-最大迭代 5 次（`max_iterations=5`），由 `agent.run_loop` 强制。
+最大迭代默认 10 次（`DEFAULT_MAX_ITERATIONS=10`，由 `agent.run_loop` 兜底；每个 agent profile 可单独覆盖），由 `agent.run_loop` 强制。子代理（agent tool）的委派预算独立配置：默认 6，落在 `OrchSettings.max_subagent_iterations`（设置 → 通用 → "子代理迭代上限"），后台常量 `SUBAGENT_MAX_ITERATIONS` 仅在配置读失败时兜底。
