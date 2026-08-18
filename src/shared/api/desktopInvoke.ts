@@ -45,9 +45,7 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
     // status_code 属性与原始 message（含 /validation/ 等可读标记）。
     const raw = err instanceof Error ? err.message : String(err);
     const isBackendDown =
-      raw.includes('ECONNREFUSED') ||
-      raw.includes('fetch failed') ||
-      raw.includes('network error');
+      raw.includes('ECONNREFUSED') || raw.includes('fetch failed') || raw.includes('network error');
     if (isBackendDown) {
       throw new Error('后端服务未启动或已断开，请稍候自动重连或重启 Sage');
     }
