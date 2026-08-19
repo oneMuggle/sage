@@ -16,7 +16,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from string import Template
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from backend.domain.message import Message
 
@@ -219,12 +219,12 @@ class ReviewService:
 # to inject a fake — production paths let ``provider=None`` and pick up
 # ``HttpxLLMAdapter`` lazily on the first real ``generate_draft`` call.
 # ------------------------------------------------------------------ #
-_review_service: Optional["ReviewService"] = None
+_review_service: Optional[ReviewService] = None
 
 
 def get_review_service(
     llm_provider: Any = None,
-) -> "ReviewService":
+) -> ReviewService:
     """Return the process-wide ReviewService.
 
     Args:
