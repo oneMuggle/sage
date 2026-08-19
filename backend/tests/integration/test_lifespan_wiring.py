@@ -3,8 +3,7 @@
 Task 4 step 15 — verify the FastAPI lifespan constructs and registers:
 - a single shared ``HookRegistry``
 - a ``MemoryLifecycleManager`` bound to that registry
-- an ``EvolutionScheduler`` whose task set includes the evolution tasks
-  produced by ``create_evolution_tasks``
+- five evolution jobs on the unified ``SchedulerService``
 - a session-end watchdog background task
 
 We use the real ``lifespan`` async-context-manager via FastAPI's
@@ -42,9 +41,15 @@ async def test_lifespan_wires_hooks_and_evolution_scheduler(tmp_db_path):
         # All three objects must be attached to app.state.
         assert hasattr(app.state, "hooks"), "HookRegistry missing from app.state"
         assert hasattr(app.state, "lifecycle"), "MemoryLifecycleManager missing"
-        assert hasattr(
-            app.state, "evolution_scheduler"
-        ), "EvolutionScheduler missing"
+        assert hasattr(app.state, "scheduler"), "SchedulerService missing"
+        evolution_jobs = {
+            job.id
+            for job in app.state.scheduler._scheduler.get_jobs()
+            if job.id.startswith("evolution/")
+        }
+        assert len(evolution_jobs) == 5, (
+            f"Expected five evolution jobs, got {evolution_jobs!r}"
+        )
 
         # The registry must accept subscriptions (sanity).
         app.state.hooks.on("test", lambda _p: None)

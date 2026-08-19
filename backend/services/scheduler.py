@@ -17,7 +17,10 @@ from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+
+if TYPE_CHECKING:
+    from backend.scheduler.evolution import BaseEvolutionTask
 
 try:  # pragma: no cover — py3.11+ runtime branch
     from datetime import UTC as _UTC  # type: ignore[attr-defined]
@@ -104,6 +107,7 @@ class SchedulerService:
         self._lock = threading.Lock()
         self._tasks: Dict[str, ScheduledTask] = {}
         self._scheduler = BackgroundScheduler(daemon=True)
+        self._evolution_tasks: Dict[str, "BaseEvolutionTask"] = {}  # noqa: UP037
         self._load_from_disk()
         self._reschedule_all()
 
@@ -212,6 +216,70 @@ class SchedulerService:
                 raise TaskNotFoundError(task_id)
             task = self._tasks[task_id]
         self._fire(task)
+
+    # ---------- evolution tasks (PR-C §5.1) ----------
+
+    def register_evolution_task(
+        self,
+        name: str,
+        task: "BaseEvolutionTask",  # noqa: UP037
+        cron_expr: Optional[str] = None,
+        *,
+        hour: Optional[int] = None,
+        minute: Optional[int] = None,
+        day_of_week: Optional[str] = None,
+    ) -> None:
+        """注册一个 evolution 任务到 BackgroundScheduler (不写 JSON 持久化)。
+
+        cron_expr (5-field, e.g. "0 3 * * *") 与 hour+minute+(day_of_week)
+        二选一;同时传 → ValueError。job_id 固定 "evolution/<name>",
+        replace_existing=True 允许测试重跑。
+        """
+        if cron_expr and (hour is not None or minute is not None):
+            raise ValueError(
+                "register_evolution_task: cron_expr 与 hour/minute 互斥"
+            )
+        if not cron_expr and (hour is None or minute is None):
+            raise ValueError(
+                "register_evolution_task: 必须传 cron_expr 或 hour+minute"
+            )
+        if cron_expr:
+            expr = cron_expr
+        else:
+            dow = day_of_week if day_of_week is not None else "*"
+            expr = f"{minute} {hour} * * {dow}"
+        trigger = CronTrigger.from_crontab(expr)
+        self._scheduler.add_job(
+            lambda: self._fire_evolution(name, task),
+            trigger=trigger,
+            id=f"evolution/{name}",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=300,
+        )
+        self._evolution_tasks[name] = task
+        logger.info("Evolution task registered: %s (%s)", name, expr)
+
+    def trigger_evolution_task(self, name: str) -> bool:
+        """同步触发一个 evolution 任务(运维/手动用)。"""
+        task = self._evolution_tasks.get(name)
+        if task is None:
+            return False
+        self._fire_evolution(name, task)
+        return True
+
+    def get_evolution_task_names(self) -> List[str]:
+        """已注册的 evolution 任务名列表。"""
+        return list(self._evolution_tasks.keys())
+
+    def _fire_evolution(self, name: str, task: "BaseEvolutionTask") -> None:  # noqa: UP037
+        """APScheduler 触发的实际执行函数。"""
+        try:
+            result = task.run()
+            logger.info("Evolution task %s completed: %s", name, result)
+        except Exception:
+            logger.exception("Evolution task %s failed", name)
 
     def start(self) -> None:
         if not self._scheduler.running:

@@ -1,87 +1,54 @@
 /**
- * EvolutionPanel - 进化状态面板
- * 显示进化系统状态、任务调度信息和手动触发按钮
+ * EvolutionPanel - 进化系统面板 (PR-C §5.1 后)
+ *
+ * §5.1 把 5 个 evolution 任务接到 lifespan 自动 cron 后,不再需要手动
+ * 触发 / 实时状态面板。本组件只展示:后台接管说明 + 最近 N 条 logs
+ * (复用 get_evolution_logs)。
  */
 import React, { useEffect, useState } from 'react';
 
 import { invoke } from '../../shared/api/desktopInvoke';
 
-// Constants
-const STATUS_POLL_INTERVAL_MS = 60_000; // 每分钟刷新一次
-
-// 任务状态类型
-interface TaskStatus {
-  name: string;
-  schedule: string;
-  last_run: string | null;
-  next_run: string | null;
-  running: boolean;
+interface EvolutionLog {
+  id: string;
+  evolution_type: string;
+  description: string;
+  status: string;
+  created_at: number;
+  completed_at?: number | null;
 }
 
-// 任务配置
-const TASK_CONFIG = {
-  daily_summary: { name: '每日摘要', description: '生成每日对话摘要' },
-  memory_pruning: { name: '记忆修剪', description: '清理低价值记忆' },
-  preference_learning: { name: '偏好学习', description: '从反馈中学习用户偏好' },
-  importance_reevaluation: { name: '重要性重评估', description: '重评估记忆重要性' },
+const TASK_DISPLAY: Record<string, string> = {
+  daily_summary: '每日摘要',
+  memory_pruning: '记忆修剪',
+  preference_learning: '偏好学习',
+  importance_reevaluation: '重要性重评估',
+  memory_consolidation: '记忆合并',
 };
 
 export const EvolutionPanel: React.FC = () => {
-  const [tasks, setTasks] = useState<TaskStatus[]>([]);
+  const [logs, setLogs] = useState<EvolutionLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [triggering, setTriggering] = useState<string | null>(null);
 
-  // 获取进化状态
-  const fetchStatus = async () => {
+  const fetchLogs = async () => {
     try {
-      const status = await invoke<TaskStatus[]>('get_evolution_status');
-      setTasks(status);
+      const result = await invoke<EvolutionLog[]>('get_evolution_logs', {
+        limit: 10,
+        offset: 0,
+      });
+      setLogs(result);
     } catch (error) {
-      console.error('获取进化状态失败:', error);
+      console.error('获取进化日志失败:', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchStatus();
-    // 每分钟刷新一次
-    const interval = setInterval(fetchStatus, STATUS_POLL_INTERVAL_MS);
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 60_000);
     return () => clearInterval(interval);
   }, []);
-
-  // 手动触发任务
-  const handleTrigger = async (taskName: string) => {
-    setTriggering(taskName);
-    try {
-      await invoke('trigger_evolution', { taskName });
-      // 刷新状态
-      await fetchStatus();
-    } catch (error) {
-      console.error('触发任务失败:', error);
-    } finally {
-      setTriggering(null);
-    }
-  };
-
-  // 格式化时间
-  const formatTime = (timeStr: string | null): string => {
-    if (!timeStr) return '从未';
-    try {
-      const date = new Date(timeStr);
-      return date.toLocaleString('zh-CN');
-    } catch {
-      return timeStr;
-    }
-  };
-
-  // 获取调度时间描述
-  const getScheduleText = (schedule: string): string => {
-    if (schedule === 'daily') return '每天';
-    if (schedule === 'weekly') return '每周';
-    if (schedule === 'hourly') return '每小时';
-    return schedule;
-  };
 
   if (loading) {
     return (
@@ -93,63 +60,49 @@ export const EvolutionPanel: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* 标题和状态 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-text">进化系统</h2>
-          <p className="text-sm text-muted mt-1">
-            调度器状态: {tasks.some((t) => t.running) ? '运行中' : '已停止'}
-          </p>
-        </div>
+      <div>
+        <h2 className="text-xl font-semibold text-text">进化系统</h2>
+        <p className="text-sm text-muted mt-1">
+          已由后台自动调度(SchedulerService cron 触发),无需手动操作。
+          5 个任务:每日摘要 / 记忆修剪 / 偏好学习 / 重要性重评估 / 记忆合并。
+        </p>
       </div>
 
-      {/* 任务列表 */}
-      <div className="space-y-4">
-        {tasks.map((task) => {
-          const config = TASK_CONFIG[task.name as keyof typeof TASK_CONFIG];
-          return (
-            <div key={task.name} className="bg-surface rounded-lg shadow p-4 border border-border">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-text">{config?.name || task.name}</h3>
-                    <span className="text-xs px-2 py-0.5 bg-bg-subtle text-text-secondary rounded">
-                      {getScheduleText(task.schedule)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted mt-1">{config?.description || ''}</p>
-
-                  {/* 时间信息 */}
-                  <div className="mt-3 grid grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <span className="text-muted">上次执行:</span>
-                      <span className="ml-1 text-text-secondary">{formatTime(task.last_run)}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted">下次执行:</span>
-                      <span className="ml-1 text-text-secondary">{formatTime(task.next_run)}</span>
-                    </div>
-                  </div>
+      <div>
+        <h3 className="text-sm font-medium text-text-secondary mb-3">最近执行记录</h3>
+        {logs.length === 0 ? (
+          <div className="text-center py-8 text-muted">暂无进化日志</div>
+        ) : (
+          <ul className="space-y-2">
+            {logs.map((log) => (
+              <li
+                key={log.id}
+                className="bg-surface rounded-lg shadow p-3 border border-border text-sm"
+              >
+                <div className="flex justify-between">
+                  <span className="font-medium text-text">
+                    {TASK_DISPLAY[log.evolution_type] || log.evolution_type}
+                  </span>
+                  <span
+                    className={
+                      log.status === 'completed' || log.status === 'success'
+                        ? 'text-success'
+                        : log.status === 'failed'
+                          ? 'text-danger'
+                          : 'text-muted'
+                    }
+                  >
+                    {log.status}
+                  </span>
                 </div>
-
-                {/* 手动触发按钮 */}
-                <button
-                  onClick={() => handleTrigger(task.name)}
-                  disabled={triggering === task.name}
-                  className={`ml-4 px-3 py-1.5 text-sm rounded transition-colors ${
-                    triggering === task.name
-                      ? 'bg-bg-subtle text-muted cursor-not-allowed'
-                      : 'bg-primary/10 text-primary hover:bg-primary/20'
-                  }`}
-                >
-                  {triggering === task.name ? '触发中...' : '立即执行'}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        {tasks.length === 0 && <div className="text-center py-8 text-muted">暂无进化任务</div>}
+                <p className="text-xs text-muted mt-1">{log.description}</p>
+                <p className="text-xs text-muted mt-1">
+                  {new Date(log.created_at * 1000).toLocaleString('zh-CN')}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

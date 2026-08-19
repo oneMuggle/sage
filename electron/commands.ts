@@ -187,10 +187,7 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     }),
   },
 
-  // evolution
-  trigger_evolution: { method: 'POST', path: () => '/api/v1/evolution/trigger' },
-
-  // Gap D — memory CRUD + preferences + traceability IPC wiring (T1).
+// Gap D — memory CRUD + preferences + traceability IPC wiring (T1).
   // 6 of the 9 endpoints already exist on the backend; the 3 with
   // path placeholders (find_by_turn, get_summary) and the /profile endpoint
   // are added in later tasks — calling them now returns 404, which is
@@ -251,6 +248,14 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
 
   // settings & preferences
   get_settings: { method: 'GET', path: () => '/api/v1/settings' },
+  get_evolution_logs: {
+    method: 'GET',
+    path: (a) => {
+      const limit = a.limit ?? 50;
+      const offset = a.offset ?? 0;
+      return `/api/v1/evolution/logs?limit=${limit}&offset=${offset}`;
+    },
+  },
   set_settings: { method: 'PUT', path: () => '/api/v1/settings' },
   get_preference: {
     method: 'GET',
@@ -391,6 +396,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const qs = search.toString();
       return `/api/v1/orchestration/lanes${qs ? `?${qs}` : ''}`;
     },
+  },
+  orchestration_create_lane: {
+    method: 'POST',
+    path: () => '/api/v1/orchestration/lanes',
   },
   orchestration_get_lane: {
     method: 'GET',
