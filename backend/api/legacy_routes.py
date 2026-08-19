@@ -2242,7 +2242,8 @@ class LearnRequest(BaseModel):
 
 
 @router.post("/learn")
-async def learn_from_session(request: LearnRequest):
+@with_db_lock
+def learn_from_session(request: LearnRequest):
     """User explicitly triggers review of current conversation.
 
     Enqueues a review event with trigger_type="explicit_learn".
@@ -2303,7 +2304,8 @@ async def learn_from_session(request: LearnRequest):
 
 
 @router.get("/skill-drafts")
-async def list_skill_drafts(status: str = "pending"):
+@with_db_lock
+def list_skill_drafts(status: str = "pending"):
     """List skill drafts by status.
 
     - 200 + ``{"drafts": [...]}``
@@ -2315,7 +2317,8 @@ async def list_skill_drafts(status: str = "pending"):
 
 
 @router.post("/skill-drafts/{draft_id}/approve")
-async def approve_skill_draft(draft_id: str):
+@with_db_lock
+def approve_skill_draft(draft_id: str):
     """User approves skill draft → write to SKILL.md on disk.
 
     - 200 + ``{"status": "approved", "skill_name": ..., "draft_id": ...}``
@@ -2363,7 +2366,8 @@ async def approve_skill_draft(draft_id: str):
 
 
 @router.post("/skill-drafts/{draft_id}/reject")
-async def reject_skill_draft(draft_id: str):
+@with_db_lock
+def reject_skill_draft(draft_id: str):
     """User rejects skill draft → mark as rejected.
 
     - 200 + ``{"status": "rejected", "draft_id": ...}``
