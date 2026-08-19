@@ -40,6 +40,13 @@ _VALID_DAYS = {
     "fri",
     "sat",
     "sun",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
 }
 
 
