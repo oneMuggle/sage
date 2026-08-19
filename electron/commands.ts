@@ -163,6 +163,29 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     },
   },
   delete_memory: { method: 'POST', path: () => '/api/v1/memory/delete' },
+  // PR-C §5.4: front-end memoryApi.ts 调用 invoke('search_memory'|'save_memory'),
+  // 但 commands.ts 没映射 → 前端 404。后端端点已存在 (legacy_routes.py:2479, :2490)。
+  search_memory: {
+    method: 'POST',
+    path: () => '/api/v1/memory/search',
+    // Body 字段: query (required), memory_type?, limit? — 缺省 limit=20
+    body: (a) => ({
+      query: a.query,
+      memory_type: a.memoryType,
+      limit: (a.limit as number) ?? 20,
+    }),
+  },
+  save_memory: {
+    method: 'POST',
+    path: () => '/api/v1/memory/save',
+    // Body 字段: content (required), memory_type?, importance?, tags?
+    body: (a) => ({
+      content: a.content,
+      memory_type: a.memoryType,
+      importance: a.importance,
+      tags: a.tags,
+    }),
+  },
 
   // evolution
   trigger_evolution: { method: 'POST', path: () => '/api/v1/evolution/trigger' },
