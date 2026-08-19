@@ -279,15 +279,17 @@ save_memory: {
 ## 4. 实施步骤(可独立验证的里程碑)
 
 - [x] M1: 建 feature 分支 `fix/memory-evolution-wiring` (from `origin/main`)
-- [ ] M2: §5.4 IPC 桥 — 第一个 commit,因为最简单、改动最小、可独立 verify
-- [ ] M3: §5.2 ReviewQueue 协作对象 — 第二个 commit
-- [ ] M4: §5.1 Evolution 任务排程(C 路线,合并到 SchedulerService) — 第三个 commit
-- [ ] M5: 单元测试覆盖率 ≥ 80%
+- [x] M2: §5.4 IPC 桥 — 第一个 commit,因为最简单、改动最小、可独立 verify
+- [x] M3: §5.2 ReviewQueue 协作对象 — 第二个 commit
+- [x] M4: §5.1 Evolution 任务排程(B 路线独立分支 `fix/scheduler-evolution`) — 第三个分支,5 commits
+- [x] M5: 单元测试覆盖率 ≥ 80%(3 集成 + 8 单测 + 3 回归 = 14 新测试)
 - [ ] M6: code-reviewer agent 检阅 diff
 - [ ] M7: 推送 + 开 PR + 监控 CI 5/5 +skip
 - [ ] M8: cherry-pick 到 `release/win7` LTS 分支 + 开 LTS PR
 - [ ] M9: 撰写 `docs/technical/40-memory-system-wiring.md` 技术文档章节
 - [ ] M10: 写项目记忆 `sage-p0-evolution-wiring-merged-yyyymmdd.md`
+
+✅ §5.1 已实施 — PR `fix/scheduler-evolution` (待 main merge 后定 SHA)
 
 ---
 
