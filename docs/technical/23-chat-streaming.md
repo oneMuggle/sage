@@ -196,3 +196,39 @@ Widget `MessageList.tsx` 无需改,只显示 `messages[].content` 即可看到
   需后端 `/chat/stream` 支持 SSE/逐字 token push
 - 流式中断时的"已生成内容"保留(目前直接清 streaming)
 - 流式状态持久化(刷新页面后从 last_event 续推)
+
+## 9. 流式状态 store 化(2026-08-19)
+
+2026-08-19 起,§4.4 描述的 `useChat` component-local `streaming` /
+`streamingToolCalls` / `taskBoard` 三个 useState 全部迁出至独立 zustand store
+`useChatStreamStore`(文件: `src/features/send-message/chatStreamStore.ts`),
+以保证**路由切换(`/chat` ↔ `/settings`)时流式进度不丢失**:
+
+- store 是 module-singleton(zustand `create` 默认行为),跨 React 组件实例
+  / 跨路由挂载点保留;
+- `useChat` 通过 `useChatStreamStore` 订阅并写回,内部不再持
+  `streaming / streamingToolCalls / taskBoard` 的 useState;
+- `TaskBoardState` 类型从 useChat 提取到 store 文件,`useChat` 仍 re-export
+  `TaskBoard` 别名指向 `TaskBoardState`,对外 API 不变。
+
+**所有 action 校验 `messageId`**,防止上一个流的迟到事件污染下一个流:
+
+| action                | 校验逻辑                                                                                |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `appendContent`       | `prev.streaming?.messageId === messageId` 才拼接,否则返回原 state 静默丢弃              |
+| `replaceContent`      | 同上,匹配才覆盖 `content`                                                              |
+| `appendReasoning`     | 同上,匹配才拼接 `reasoning`                                                            |
+| `setStreamingMeta`    | 同上,匹配才打 patch(state / currentAgentId / iteration)                                |
+| `clearStream`         | 同上,匹配才置 `streaming: null`;`streamingToolCalls` / `taskBoard` 由 reset 路径清理   |
+| `startStream`         | 不校验(本身就是"开始下一条流的入口",无条件覆盖)                                        |
+| `updateTaskBoard`     | `runId` 校验由 updater 闭包内做,store 层不二次校验以保留灵活性                          |
+
+详见 §4.4 验收清单及配套测试:
+
+- `src/features/send-message/__tests__/chatStreamStore.test.ts` (8 例:messageId 校验 / 累积语义 / 一锅端)
+- `src/features/send-message/__tests__/useChat.stream-survives-unmount.test.tsx` (1 例:跨"卸载"存活)
+
+**已知遗留**:`chatStreamStore.ts` 中 `updateTaskBoard(runId, updater)` 的
+`runId` 参数当前未在 store 内部读取(updater 闭包已做匹配),会触发
+`tsc --noEmit` 的 `TS6133 noUnusedParameters` 一行警告;属"无功能影响"
+已知缺陷,已记录待后续 session 清理。
