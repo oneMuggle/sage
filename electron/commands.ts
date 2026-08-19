@@ -187,11 +187,16 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     }),
   },
 
-  // evolution
-  trigger_evolution: { method: 'POST', path: () => '/api/v1/evolution/trigger' },
-
   // settings & preferences
   get_settings: { method: 'GET', path: () => '/api/v1/settings' },
+  get_evolution_logs: {
+    method: 'GET',
+    path: (a) => {
+      const limit = a.limit ?? 50;
+      const offset = a.offset ?? 0;
+      return `/api/v1/evolution/logs?limit=${limit}&offset=${offset}`;
+    },
+  },
   set_settings: { method: 'PUT', path: () => '/api/v1/settings' },
   get_preference: {
     method: 'GET',

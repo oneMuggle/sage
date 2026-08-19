@@ -56,7 +56,7 @@ from backend.office.workspace_errors import (
 )
 from backend.orchestration.chat_dispatcher import _classify_orchestration_mode
 from backend.orchestration.orch_settings import load_orch_settings
-from backend.scheduler import get_evolution_logs, get_scheduler
+from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
 from backend.skills.loader import get_skill_loader
 from backend.skills.review_queue import get_review_queue
@@ -244,12 +244,6 @@ class ChatResponse(BaseModel):
     error: Optional[ChatErrorInfo] = None
 
 
-class TriggerEvolutionRequest(BaseModel):
-    """手动触发进化任务请求"""
-
-    task_name: str
-
-
 class EvolutionLogResponse(BaseModel):
     """进化日志响应"""
 
@@ -270,25 +264,6 @@ class EvolutionLogResponse(BaseModel):
 
     created_at: int
     completed_at: Optional[int] = None
-
-
-class EvolutionStatusResponse(BaseModel):
-    """进化状态响应"""
-
-    name: str
-    schedule: str
-    last_run: Optional[str] = None
-
-    next_run: Optional[str] = None
-
-    running: bool
-
-
-class TriggerResponse(BaseModel):
-    """触发响应"""
-
-    success: bool
-    message: str
 
 
 #: agent role 白名单（PATCH/POST 共用）。
@@ -2236,42 +2211,6 @@ def list_evolution_logs(limit: int = 50, offset: int = 0):
     try:
         db = get_database()
         return get_evolution_logs(db, limit=limit, offset=offset)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/evolution/trigger", response_model=TriggerResponse)
-@with_db_lock
-def trigger_evolution(data: TriggerEvolutionRequest):
-    """手动触发进化任务"""
-    try:
-        scheduler = get_scheduler()
-
-        # 检查任务是否存在
-        task_names = [t["name"] for t in scheduler.get_task_status()]
-        if data.task_name not in task_names:
-            raise HTTPException(status_code=404, detail=f"任务不存在: {data.task_name}")
-
-        # 触发任务
-        success = scheduler.trigger_task(data.task_name)
-
-        if success:
-            return TriggerResponse(success=True, message=f"任务 {data.task_name} 已触发")
-        else:
-            return TriggerResponse(success=False, message=f"任务 {data.task_name} 触发失败")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/evolution/status", response_model=List[EvolutionStatusResponse])
-@with_db_lock
-def get_evolution_status():
-    """获取进化任务状态"""
-    try:
-        scheduler = get_scheduler()
-        return scheduler.get_task_status()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
