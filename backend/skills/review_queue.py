@@ -35,12 +35,47 @@ class ReviewQueue:
         self.worker_thread: Optional[threading.Thread] = None
         self.running: bool = False
         self._wake: threading.Event = threading.Event()
-        # Optional collaborators — injected by the bootstrap layer
-        # (see Task 7 brief). When either is None, _process_event
+        # Optional collaborators — wired by bootstrap_review_collaborators()
+        # at lifespan startup (PR-C §5.2). Setter methods make the injection
+        # idempotent + observable. When either is None, _process_event
         # degrades to a no-op with an error log.
         self.review_service: object = None  # ReviewService (late import)
         self.draft_store: object = None  # SkillDraftStore (late import)
         self._initialize_db()
+
+    def set_review_service(self, review_service: object) -> None:
+        """Inject the LLM-driven ReviewService.
+
+        Idempotent: calling twice with the same instance is a no-op.
+        Calling with a different instance replaces (and logs a warning)
+        — the second case mostly happens during test-suite reload.
+        """
+        if (
+            self.review_service is not None
+            and self.review_service is not review_service
+        ):
+            logger.warning(
+                "ReviewQueue.review_service re-injected (was=%s, now=%s)",
+                type(self.review_service).__name__,
+                type(review_service).__name__,
+            )
+        self.review_service = review_service
+
+    def set_draft_store(self, draft_store: object) -> None:
+        """Inject the SkillDraftStore (persists generated skill drafts).
+
+        Idempotent: same instance is fine; different instance replaces.
+        """
+        if (
+            self.draft_store is not None
+            and self.draft_store is not draft_store
+        ):
+            logger.warning(
+                "ReviewQueue.draft_store re-injected (was=%s, now=%s)",
+                type(self.draft_store).__name__,
+                type(draft_store).__name__,
+            )
+        self.draft_store = draft_store
 
     # ------------------------------------------------------------------ #
     # Database initialization
@@ -242,6 +277,43 @@ class ReviewQueue:
         # SkillDraft.source_session_id correctly.
         enriched_context = dict(event.context)
         enriched_context.setdefault("session_id", event.session_id)
+
+        # fix/security-perf-quickwins (2026-08-09, §1.3a d): for explicit_learn
+        # triggers the route only enqueues an empty messages=[] placeholder
+        # (route-side keeps the API surface small; we don't want to ship N
+        # message rows in the request body). Load the conversation history
+        # here from MessageRepository so the LLM prompt template actually
+        # has something to summarize. Other trigger types (e.g. complex_turn)
+        # only need tool-call metadata, so we don't load messages for them.
+        if (
+            event.trigger_type == "explicit_learn"
+            and not enriched_context.get("messages")
+        ):
+            try:
+                from backend.data.session_repo import MessageRepository
+
+                message_repo = MessageRepository()
+                db_messages = message_repo.get_by_session(event.session_id)
+                # Serialize to {role, content} dicts — ReviewService dumps the
+                # whole context as JSON into the prompt template, so anything
+                # we put here is visible to the LLM.
+                enriched_context["messages"] = [
+                    {"role": m.role, "content": m.content} for m in db_messages
+                ]
+                logger.info(
+                    "Loaded %d message(s) for session %s (explicit_learn)",
+                    len(db_messages),
+                    event.session_id,
+                )
+            except Exception as exc:  # noqa: BLE001 - best-effort, do not break the worker
+                # Fall through with whatever messages were enqueued (empty list
+                # in current callers). The LLM will get low-quality context but
+                # the worker must stay alive and keep draining the queue.
+                logger.warning(
+                    "Failed to load messages for session %s: %s",
+                    event.session_id,
+                    exc,
+                )
 
         # generate_draft is async; run it in a one-shot event loop
         # from the sync worker thread.
