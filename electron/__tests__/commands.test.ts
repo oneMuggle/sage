@@ -323,6 +323,58 @@ describe('COMMAND_ROUTES', () => {
   });
 });
 
+// PR-C §5.4: memory IPC bridge 补全。memoryApi.ts(前端)调 invoke('search_memory'|'save_memory'),
+// 但 commands.ts 没映射 → 前端 404。后端端点 backend/api/legacy_routes.py:2479 (POST /memory/search)
+// + :2490 (POST /memory/save) 已存在, 补 IPC 桥即可。
+describe('memory IPC routes (PR-C §5.4)', () => {
+  it('has search_memory route posting to /api/v1/memory/search', () => {
+    const r = COMMAND_ROUTES.search_memory;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/memory/search');
+  });
+
+  it('search_memory body forwards query/memoryType/limit (with default 20)', () => {
+    const r = COMMAND_ROUTES.search_memory;
+    // Default limit = 20 when caller omits it
+    expect(r.body!({ query: 'pasta' })).toEqual({
+      query: 'pasta',
+      memory_type: undefined,
+      limit: 20,
+    });
+    // Caller-provided limit preserved
+    expect(r.body!({ query: 'pasta', memoryType: 'episodic', limit: 5 })).toEqual({
+      query: 'pasta',
+      memory_type: 'episodic',
+      limit: 5,
+    });
+  });
+
+  it('has save_memory route posting to /api/v1/memory/save', () => {
+    const r = COMMAND_ROUTES.save_memory;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('POST');
+    expect(r.path({})).toBe('/api/v1/memory/save');
+  });
+
+  it('save_memory body forwards content/memoryType/importance/tags', () => {
+    const r = COMMAND_ROUTES.save_memory;
+    expect(
+      r.body!({
+        content: 'user prefers dark mode',
+        memoryType: 'semantic',
+        importance: 7,
+        tags: ['pref', 'ui'],
+      }),
+    ).toEqual({
+      content: 'user prefers dark mode',
+      memory_type: 'semantic',
+      importance: 7,
+      tags: ['pref', 'ui'],
+    });
+  });
+});
+
 describe('settings & preferences IPC routes', () => {
   it('has get_settings route', () => {
     expect(COMMAND_ROUTES.get_settings).toBeDefined();

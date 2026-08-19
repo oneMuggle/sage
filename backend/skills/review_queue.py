@@ -35,12 +35,47 @@ class ReviewQueue:
         self.worker_thread: Optional[threading.Thread] = None
         self.running: bool = False
         self._wake: threading.Event = threading.Event()
-        # Optional collaborators — injected by the bootstrap layer
-        # (see Task 7 brief). When either is None, _process_event
+        # Optional collaborators — wired by bootstrap_review_collaborators()
+        # at lifespan startup (PR-C §5.2). Setter methods make the injection
+        # idempotent + observable. When either is None, _process_event
         # degrades to a no-op with an error log.
         self.review_service: object = None  # ReviewService (late import)
         self.draft_store: object = None  # SkillDraftStore (late import)
         self._initialize_db()
+
+    def set_review_service(self, review_service: object) -> None:
+        """Inject the LLM-driven ReviewService.
+
+        Idempotent: calling twice with the same instance is a no-op.
+        Calling with a different instance replaces (and logs a warning)
+        — the second case mostly happens during test-suite reload.
+        """
+        if (
+            self.review_service is not None
+            and self.review_service is not review_service
+        ):
+            logger.warning(
+                "ReviewQueue.review_service re-injected (was=%s, now=%s)",
+                type(self.review_service).__name__,
+                type(review_service).__name__,
+            )
+        self.review_service = review_service
+
+    def set_draft_store(self, draft_store: object) -> None:
+        """Inject the SkillDraftStore (persists generated skill drafts).
+
+        Idempotent: same instance is fine; different instance replaces.
+        """
+        if (
+            self.draft_store is not None
+            and self.draft_store is not draft_store
+        ):
+            logger.warning(
+                "ReviewQueue.draft_store re-injected (was=%s, now=%s)",
+                type(self.draft_store).__name__,
+                type(draft_store).__name__,
+            )
+        self.draft_store = draft_store
 
     # ------------------------------------------------------------------ #
     # Database initialization

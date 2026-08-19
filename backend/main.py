@@ -192,6 +192,16 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
 
+    # PR-C §5.2: 把 ReviewService + SkillDraftStore 注入到全局 ReviewQueue,
+    # 然后启动后台 worker。否则 hex/legacy 路径 enqueue 的 review_events
+    # 永远在 SQLite 里堆积、不出草稿。和 init_scheduler_service 同 pattern。
+    from backend.skills.review_bootstrap import bootstrap_review_collaborators
+    from backend.skills.review_queue import get_review_queue
+
+    bootstrap_review_collaborators()
+    get_review_queue().start()
+    logger.info("ReviewQueue 协作对象已注入且 worker 已启动")
+
     # A4 Suspend-Resume: wake 仓储 + 唤醒调度器 — tick 扫描到期 wake,
     # 在对应 session 注入新一轮对话恢复挂起的 agent。resumer 走
     # ChatService.run_turn（hex 模式装配后可用）；legacy 模式下记录并跳过。
