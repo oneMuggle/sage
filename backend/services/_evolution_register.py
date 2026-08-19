@@ -50,7 +50,7 @@ _VALID_DAYS = {
 }
 
 
-def _parse_yaml_overrides(
+def _parse_yaml_overrides(  # noqa: PLR0911
     config_path: Optional[Path],
 ) -> Dict[str, Tuple[str, str, str]]:
     """Parse config.yaml → {task_name → (minute, hour, dow)}.
@@ -65,6 +65,9 @@ def _parse_yaml_overrides(
         doc = yaml.safe_load(config_path.read_text("utf-8")) or {}
     except yaml.YAMLError as exc:
         logger.warning("config.yaml 解析失败: %s — 使用默认 cron", exc)
+        return {}
+    except (OSError, UnicodeError) as exc:
+        logger.warning("config.yaml 读取失败: %s — 使用默认 cron", exc)
         return {}
     if not isinstance(doc, dict):
         return {}
@@ -111,6 +114,7 @@ def _parse_yaml_overrides(
 def _register_evolution_tasks(
     scheduler_service: "SchedulerService",  # type: ignore[name-defined]  # noqa: F821
     config_path: Optional[Path] = None,
+    hooks: Optional[object] = None,
 ) -> Dict[str, str]:
     """注册 5 个 evolution 任务到 scheduler_service。返回 name → cron 映射。
 
@@ -123,7 +127,7 @@ def _register_evolution_tasks(
     overrides = _parse_yaml_overrides(config_path)
     from backend.scheduler.evolution import create_evolution_tasks
 
-    tasks = create_evolution_tasks({})
+    tasks = create_evolution_tasks({}, hooks=hooks)
     registered: Dict[str, str] = {}
     for name, task in tasks.items():
         if name not in _DEFAULT_SCHEDULE:

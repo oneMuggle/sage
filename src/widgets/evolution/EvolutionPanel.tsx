@@ -85,7 +85,7 @@ export const EvolutionPanel: React.FC = () => {
                   </span>
                   <span
                     className={
-                      log.status === 'completed'
+                      log.status === 'completed' || log.status === 'success'
                         ? 'text-success'
                         : log.status === 'failed'
                           ? 'text-danger'
@@ -97,7 +97,7 @@ export const EvolutionPanel: React.FC = () => {
                 </div>
                 <p className="text-xs text-muted mt-1">{log.description}</p>
                 <p className="text-xs text-muted mt-1">
-                  {new Date(log.created_at).toLocaleString('zh-CN')}
+                  {new Date(log.created_at * 1000).toLocaleString('zh-CN')}
                 </p>
               </li>
             ))}

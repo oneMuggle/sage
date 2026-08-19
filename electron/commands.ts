@@ -397,6 +397,10 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       return `/api/v1/orchestration/lanes${qs ? `?${qs}` : ''}`;
     },
   },
+  orchestration_create_lane: {
+    method: 'POST',
+    path: () => '/api/v1/orchestration/lanes',
+  },
   orchestration_get_lane: {
     method: 'GET',
     path: (a) => `/api/v1/orchestration/lanes/${encodeURIComponent(String(a.lane_id))}`,

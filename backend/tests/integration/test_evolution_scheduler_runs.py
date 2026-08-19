@@ -116,6 +116,47 @@ def test_yaml_invalid_time_field_skips_that_task(tmp_path, caplog):
     assert any("memory_consolidation" in r.message for r in caplog.records)
 
 
+def test_config_read_error_uses_defaults(tmp_path, monkeypatch, caplog):
+    """Unreadable config files do not block lifespan registration."""
+    from backend.services._evolution_register import _register_evolution_tasks
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("evolution: {}")
+    original_read_text = Path.read_text
+
+    def fail_read_text(self, *args, **kwargs):
+        if self == cfg:
+            raise OSError("permission denied")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_read_text)
+    svc = _make_service(tmp_path)
+    with caplog.at_level(logging.WARNING):
+        registered = _register_evolution_tasks(svc, config_path=cfg)
+
+    assert len(registered) == 5
+    assert any("读取失败" in record.message for record in caplog.records)
+
+
+def test_hooks_are_forwarded_to_evolution_factory(tmp_path, monkeypatch):
+    """The lifespan HookRegistry is shared by all evolution tasks."""
+    import backend.scheduler.evolution as evolution_module
+    from backend.services._evolution_register import _register_evolution_tasks
+
+    hooks = MagicMock()
+    captured = {}
+    original_factory = evolution_module.create_evolution_tasks
+
+    def capture_factory(config=None, hooks=None):
+        captured["hooks"] = hooks
+        return original_factory(config, hooks=hooks)
+
+    monkeypatch.setattr(evolution_module, "create_evolution_tasks", capture_factory)
+    _register_evolution_tasks(_make_service(tmp_path), hooks=hooks)
+
+    assert captured["hooks"] is hooks
+
+
 def test_long_weekday_names_in_yaml_resolved_to_short_for_cron(tmp_path):
     """YAML 用 'sunday'/'monday' 全名 → 实际 cron 用 'sun'/'mon' 短名。
 

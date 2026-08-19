@@ -175,8 +175,6 @@ async def lifespan(app: FastAPI):
     from backend.data.settings_repo import SettingsRepository
     from backend.memory.hooks import HookRegistry
     from backend.memory.lifecycle import MemoryLifecycleManager
-    from backend.scheduler.cron import EvolutionScheduler
-    from backend.scheduler.evolution import create_evolution_tasks
 
     class _AsyncSettingsAdapter:
         """Thin async wrapper so MemoryLifecycleManager can ``await``
@@ -202,44 +200,6 @@ async def lifespan(app: FastAPI):
     # summary endpoints don't rebuild (and re-init the VectorStore) per request.
     app.state.memory_port = MemoryAdapter(get_memory_manager())
     logger.info("MemoryLifecycleManager 已绑定 HookRegistry")
-
-    # Evolution scheduler — single thread, registers all enabled tasks.
-    evolution_scheduler = EvolutionScheduler()
-    evolution_tasks = create_evolution_tasks(hooks=hooks)
-
-    def _make_runner(task):
-        async def _run_once() -> int:
-            try:
-                result = await task.run_async()
-                if result is None:
-                    return 0
-                if isinstance(result, dict):
-                    # Defensive: some task implementations return a dict
-                    # (e.g. {"total": n}) — normalize to int so the scheduler
-                    # never logs a spurious TypeError on a successful run.
-                    return int(result.get("total", 0) or 0)
-                return int(result)
-            except Exception as exc:  # noqa: BLE001 — never crash scheduler
-                logger.warning(
-                    "evolution task %s failed: %s", type(task).__name__, exc
-                )
-                return 0
-
-        return _run_once
-
-    for task_name, task in evolution_tasks.items():
-        evolution_scheduler.add_task(
-            name=task_name,
-            task=_make_runner(task),
-            schedule="daily",
-            hour=3,
-            minute=0,
-        )
-    evolution_scheduler.start()
-    app.state.evolution_scheduler = evolution_scheduler
-    logger.info(
-        "EvolutionScheduler 已启动 (注册 %d 个任务)", len(evolution_tasks)
-    )
 
     # Session-end watchdog — every 60s, find sessions whose updated_at
     # is older than 30 min and fire on_session_end.
@@ -351,6 +311,7 @@ async def lifespan(app: FastAPI):
     _evo_registered = _register_evolution_tasks(
         scheduler_service,
         config_path=Path(__file__).parent / "config.yaml",
+        hooks=hooks,
     )
     logger.info(
         "Evolution tasks scheduled: %d — %s",
@@ -554,17 +515,6 @@ async def lifespan(app: FastAPI):
         with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
             await app.state.session_watchdog
         logger.info("Session-end watchdog 已停止")
-
-    # Task 4 / Gap A — stop the evolution scheduler thread.
-    if (
-        hasattr(app.state, "evolution_scheduler")
-        and app.state.evolution_scheduler is not None
-    ):
-        try:
-            app.state.evolution_scheduler.stop()
-            logger.info("EvolutionScheduler 已停止")
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("EvolutionScheduler stop failed: %s", exc)
 
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
