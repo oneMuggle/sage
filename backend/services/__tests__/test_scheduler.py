@@ -488,3 +488,127 @@ class TestSessionRepoFallbacks:
             content="x",
         )
         assert task.id.startswith("task-")
+
+
+# ------------------------------------------------------------------ #
+# PR-C §5.1: evolution task scheduler wire-up                     #
+# ------------------------------------------------------------------ #
+
+
+class TestRegisterEvolutionTask:
+    """Tests for SchedulerService.register_evolution_task()."""
+
+    def test_cron_expr_only_registers_job(
+        self, scheduler: SchedulerService
+    ) -> None:
+        mock_task = MagicMock()
+        scheduler.register_evolution_task(
+            name="t1", task=mock_task, cron_expr="0 3 * * *"
+        )
+        job = scheduler._scheduler.get_job("evolution/t1")
+        assert job is not None
+        assert scheduler._evolution_tasks["t1"] is mock_task
+
+    def test_hour_minute_builds_cron(
+        self, scheduler: SchedulerService
+    ) -> None:
+        mock_task = MagicMock()
+        scheduler.register_evolution_task(
+            name="t2", task=mock_task, hour=4, minute=30
+        )
+        job = scheduler._scheduler.get_job("evolution/t2")
+        assert job is not None
+        # 验证 cron expr 通过 trigger 的 str repr 包含 30 4
+        trigger_str = str(job.trigger)
+        assert "30" in trigger_str
+        assert "4" in trigger_str
+        # 验证 fields 至少一个含 hour=4 + minute=30 + dow=*
+        all_exprs = []
+        for f in job.trigger.fields:
+            for e in f.expressions:
+                all_exprs.append(str(e))
+        assert "4" in all_exprs
+        assert "30" in all_exprs
+        assert "*" in all_exprs
+
+    def test_hour_minute_day_of_week_builds_cron(
+        self, scheduler: SchedulerService
+    ) -> None:
+        mock_task = MagicMock()
+        scheduler.register_evolution_task(
+            name="t3", task=mock_task,
+            hour=4, minute=30, day_of_week="0",
+        )
+        job = scheduler._scheduler.get_job("evolution/t3")
+        all_exprs = []
+        for f in job.trigger.fields:
+            for e in f.expressions:
+                all_exprs.append(str(e))
+        # dow=0 出现,无 '*'
+        assert "0" in all_exprs
+        assert "4" in all_exprs
+        assert "30" in all_exprs
+
+    def test_cron_and_hour_mutually_exclusive_raises(
+        self, scheduler: SchedulerService
+    ) -> None:
+        mock_task = MagicMock()
+        with pytest.raises(ValueError, match="互斥"):
+            scheduler.register_evolution_task(
+                name="t4", task=mock_task,
+                cron_expr="0 3 * * *", hour=4, minute=30,
+            )
+
+    def test_missing_both_raises(
+        self, scheduler: SchedulerService
+    ) -> None:
+        mock_task = MagicMock()
+        with pytest.raises(ValueError, match="必须传"):
+            scheduler.register_evolution_task(name="t5", task=mock_task)
+
+    def test_replace_existing_overwrites(
+        self, scheduler: SchedulerService
+    ) -> None:
+        t1 = MagicMock(name="t1")
+        t2 = MagicMock(name="t2")
+        scheduler.register_evolution_task(
+            name="t6", task=t1, cron_expr="0 3 * * *"
+        )
+        scheduler.register_evolution_task(
+            name="t6", task=t2, cron_expr="0 4 * * *"
+        )
+        assert scheduler._evolution_tasks["t6"] is t2
+
+
+class TestTriggerEvolutionTask:
+    def test_unknown_name_returns_false(
+        self, scheduler: SchedulerService
+    ) -> None:
+        assert scheduler.trigger_evolution_task("nope") is False
+
+    def test_known_name_runs_task(
+        self, scheduler: SchedulerService
+    ) -> None:
+        mock_task = MagicMock()
+        mock_task.run.return_value = {"status": "ok"}
+        scheduler.register_evolution_task(
+            name="r1", task=mock_task, cron_expr="0 3 * * *"
+        )
+        assert scheduler.trigger_evolution_task("r1") is True
+        mock_task.run.assert_called_once()
+
+
+class TestGetEvolutionTaskNames:
+    def test_empty_initially(
+        self, scheduler: SchedulerService
+    ) -> None:
+        assert scheduler.get_evolution_task_names() == []
+
+    def test_lists_after_register(
+        self, scheduler: SchedulerService
+    ) -> None:
+        for n in ("a", "b", "c"):
+            scheduler.register_evolution_task(
+                name=n, task=MagicMock(), cron_expr="0 3 * * *"
+            )
+        assert set(scheduler.get_evolution_task_names()) == {"a", "b", "c"}
