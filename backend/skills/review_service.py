@@ -207,3 +207,46 @@ class ReviewService:
             raise ValueError(
                 f"Failed to parse LLM output as JSON: {exc}"
             ) from exc
+
+
+# ------------------------------------------------------------------ #
+# Global singleton (same pattern as get_review_queue / get_skill_draft_store)
+#
+# PR-C §5.2: The bootstrap layer (backend.skills.review_bootstrap) needs a
+# module-level factory so it can wire ``ReviewQueue`` against the
+# process-wide LLMClient without forcing every caller to construct one
+# explicitly. Tests can call ``get_review_service(provider=mock_provider)``
+# to inject a fake — production paths let ``provider=None`` and pick up
+# ``HttpxLLMAdapter`` lazily on the first real ``generate_draft`` call.
+# ------------------------------------------------------------------ #
+_review_service: Optional["ReviewService"] = None
+
+
+def get_review_service(
+    llm_provider: Any = None,
+) -> "ReviewService":
+    """Return the process-wide ReviewService.
+
+    Args:
+        llm_provider: An async ``complete()``-compatible object
+            (``ProviderClient`` protocol). If ``None``, a lazy
+            ``HttpxLLMAdapter`` is constructed on first call.
+
+    Subsequent calls ignore the ``llm_provider`` argument and return
+    the cached singleton — this mirrors the behaviour of
+    ``get_review_queue`` and ``get_skill_draft_store``.
+    """
+    global _review_service
+    if _review_service is None:
+        if llm_provider is None:
+            from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+
+            llm_provider = HttpxLLMAdapter()
+        _review_service = ReviewService(llm_provider)
+    return _review_service
+
+
+def reset_review_service() -> None:
+    """Reset the global ``ReviewService`` singleton (test only)."""
+    global _review_service
+    _review_service = None

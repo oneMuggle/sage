@@ -405,3 +405,55 @@ def test_explicit_learn_load_failure_is_swallowed(temp_db, mock_llm_provider):
     drafts = draft_store.list(status="pending")
     assert len(drafts) == 1
     assert drafts[0].name == "test-skill"
+
+
+# --- PR-C §5.2: production-path wiring via bootstrap_review_collaborators
+#
+# Before this fix, ReviewQueue.review_service and .draft_store were left as
+# None in production (only test_review_queue_integration.py set them
+# manually). The bootstrap helper injects them at lifespan startup so that
+# `complex_turn` events enqueued in main.py actually produce drafts without
+# requiring test-only fixtures.
+def test_bootstrap_review_collaborators_wires_singleton(
+    temp_db, mock_llm_provider, monkeypatch
+):
+    """bootstrap_review_collaborators() injects collaborators into the
+    global get_review_queue() singleton. Without this, _process_event
+    in production degrades to a no-op (logs "ReviewService not configured").
+    """
+    from backend.skills import review_queue as rq_module
+
+    monkeypatch.setattr(
+        "backend.data.database.get_database",
+        lambda: type("_FakeDB", (), {"db_path": temp_db})(),
+    )
+
+    # Reset singleton so it picks up the patched get_database + temp db.
+    rq_module.reset_review_queue()
+
+    from backend.skills.review_bootstrap import bootstrap_review_collaborators
+
+    # Inject mocks to avoid pulling a real LLMClient at import time
+    review_service = ReviewService(mock_llm_provider)
+    draft_store = SkillDraftStore(temp_db)
+
+    bootstrap_review_collaborators(
+        queue=rq_module.get_review_queue(),
+        review_service=review_service,
+        draft_store=draft_store,
+    )
+
+    queue = rq_module.get_review_queue()
+    assert queue.review_service is review_service
+    assert queue.draft_store is draft_store
+
+    # Idempotency: re-calling with same collaborators is a no-op (no warning)
+    bootstrap_review_collaborators(
+        queue=queue,
+        review_service=review_service,
+        draft_store=draft_store,
+    )
+    assert queue.review_service is review_service
+    assert queue.draft_store is draft_store
+
+    rq_module.reset_review_queue()
