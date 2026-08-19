@@ -359,12 +359,14 @@ describe('memory IPC routes (PR-C §5.4)', () => {
 
   it('save_memory body forwards content/memoryType/importance/tags', () => {
     const r = COMMAND_ROUTES.save_memory;
-    expect(r.body!({
-      content: 'user prefers dark mode',
-      memoryType: 'semantic',
-      importance: 7,
-      tags: ['pref', 'ui'],
-    })).toEqual({
+    expect(
+      r.body!({
+        content: 'user prefers dark mode',
+        memoryType: 'semantic',
+        importance: 7,
+        tags: ['pref', 'ui'],
+      }),
+    ).toEqual({
       content: 'user prefers dark mode',
       memory_type: 'semantic',
       importance: 7,
