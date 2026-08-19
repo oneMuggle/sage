@@ -23,6 +23,7 @@ import {
 import { logger } from '../../shared/lib/logger';
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
 import { useSettings } from '../manage-settings/useSettings';
+
 import { useChatStreamStore, type TaskBoardState } from './chatStreamStore';
 
 /**

@@ -153,7 +153,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
 
   setTaskBoard: (board) => set({ taskBoard: board }),
 
-  updateTaskBoard: (runId, updater) =>
+  updateTaskBoard: (_runId, updater) =>
     set((prev) => {
       const next = updater(prev.taskBoard);
       // updater 内部已经做了 runId 匹配；store 层不再二次校验以保留灵活性
