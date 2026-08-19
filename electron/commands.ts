@@ -327,6 +327,35 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // user_invocable: true. Used by ChatInput to merge into the slash menu.
   list_slash_commands: { method: 'GET', path: () => '/api/v1/skills/commands' },
 
+  // Background Review: skill drafts approval queue (Task 11)
+  // src/pages/Skills.tsx "Pending Drafts" tab calls skillDraftsApi.list/approve/reject
+  // which route through these IPC names. Backend endpoints at
+  // backend/api/legacy_routes.py:1949-1995.
+  list_skill_drafts: {
+    method: 'GET',
+    path: (a) => {
+      const status = a?.status ? `?status=${encodeURIComponent(String(a.status))}` : '';
+      return `/api/v1/skill-drafts${status}`;
+    },
+  },
+  approve_skill_draft: {
+    method: 'POST',
+    path: (a) => `/api/v1/skill-drafts/${encodeURIComponent(String(a.draft_id))}/approve`,
+  },
+  reject_skill_draft: {
+    method: 'POST',
+    path: (a) => `/api/v1/skill-drafts/${encodeURIComponent(String(a.draft_id))}/reject`,
+  },
+
+  // Background Review: explicit learn trigger (Task 12)
+  // src/pages/Chat.tsx onLearn callback invokes learnApi.trigger(sessionId)
+  // which routes through this IPC name. Backend endpoint at
+  // backend/api/legacy_routes.py:1910 (POST /learn).
+  trigger_learn: {
+    method: 'POST',
+    path: () => '/api/v1/learn',
+  },
+
   // orchestration (Phase 4: multi-agent coordination)
   orchestration_list_lanes: {
     method: 'GET',

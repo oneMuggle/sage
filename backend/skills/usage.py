@@ -1,6 +1,6 @@
 """SkillUsageStore - 技能使用统计持久化（借鉴 hermes-agent .usage.json）
 
-按技能名聚合 ``use_count / success_count / last_used_at``，供技能生命周期
+按技能名聚合 ``use_count / success_count / fail_count / last_used_at``，供技能生命周期
 （curator）与前端使用统计使用。registry（``InprocSkillAdapter``）是技能来源
 真相，本表只记聚合统计，不定义技能本身。
 
@@ -20,6 +20,10 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Background Review: 低成功率检测阈值
+MIN_USAGE_THRESHOLD = 10  # 至少使用 10 次后才评估
+SUCCESS_RATE_THRESHOLD = 0.6  # 成功率低于 60% 触发 review
+
 
 def _now_ms() -> int:
     """当前时间（ms epoch）。"""
@@ -33,7 +37,7 @@ class SkillUsageStore:
         >>> store = SkillUsageStore(db)
         >>> store.bump("search", success=True)
         >>> store.get("search")
-        {"name": "search", "use_count": 1, "success_count": 1, "last_used_at": ...}
+        {"name": "search", "use_count": 1, "success_count": 1, "fail_count": 0, "last_used_at": ...}
         >>> store.get_all()
         [{"name": "search", "use_count": 1, ...}]
     """
@@ -47,7 +51,7 @@ class SkillUsageStore:
         self.db = db
 
     def bump(self, name: str, success: bool = True) -> None:
-        """技能使用次数 +1（成功时 success_count 同步 +1）。
+        """技能使用次数 +1（成功时 success_count +1；失败时 fail_count +1）。
 
         best-effort：DB 不可用 / 表不存在时只 warning，不抛错。
         """
@@ -61,17 +65,69 @@ class SkillUsageStore:
             conn = self.db.get_connection()
             now = _now_ms()
             conn.execute(
-                "INSERT INTO skill_usage (name, use_count, success_count, last_used_at) "
-                "VALUES (?, 1, ?, ?) "
+                "INSERT INTO skill_usage (name, use_count, success_count, fail_count, last_used_at) "
+                "VALUES (?, 1, ?, ?, ?) "
                 "ON CONFLICT(name) DO UPDATE SET "
                 "use_count = use_count + 1, "
                 "success_count = success_count + ?, "
+                "fail_count = fail_count + ?, "
                 "last_used_at = excluded.last_used_at",
-                (name, 1 if success else 0, now, 1 if success else 0),
+                (
+                    name,
+                    1 if success else 0,
+                    0 if success else 1,
+                    now,
+                    1 if success else 0,
+                    0 if success else 1,
+                ),
             )
             conn.commit()
         except Exception as exc:  # noqa: BLE001 - best-effort 契约
             logger.warning(f"Skill usage persist failed for {name!r}: {exc}")
+
+        # Background Review: 低成功率检测（best-effort，不影响主路径）
+        # 每次 bump 后检查，达到 MIN_USAGE_THRESHOLD 且成功率低于阈值
+        # 则 enqueue review。
+        self._check_low_success_rate(name)
+
+    def _check_low_success_rate(self, name: str) -> None:
+        """若使用次数达标且成功率低于阈值，enqueue low_success_rate review。
+
+        best-effort：任何异常只 warning，不抛错。
+        """
+        try:
+            stats = self.get(name)
+            if stats is None:
+                return
+            use_count = stats.get("use_count", 0)
+            if use_count < MIN_USAGE_THRESHOLD:
+                return
+            success_count = stats.get("success_count", 0)
+            success_rate = success_count / use_count if use_count > 0 else 0.0
+            if success_rate < SUCCESS_RATE_THRESHOLD:
+                from backend.skills.review_queue import get_review_queue
+
+                review_queue = get_review_queue()
+                review_queue.enqueue(
+                    trigger_type="low_success_rate",
+                    session_id="",  # 调用方无 session 上下文，留空
+                    context={
+                        "skill_name": name,
+                        "success_rate": round(success_rate, 3),
+                        "use_count": use_count,
+                        "success_count": success_count,
+                        "fail_count": stats.get("fail_count", 0),
+                    },
+                )
+                logger.info(
+                    "Enqueued low_success_rate review for %r "
+                    "(rate=%.2f, uses=%d)",
+                    name,
+                    success_rate,
+                    use_count,
+                )
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.debug(f"Low success rate check skipped for {name!r}: {exc}")
 
     def get(self, name: str) -> Optional[Dict[str, Any]]:
         """读取单个技能的聚合统计。"""
@@ -81,7 +137,7 @@ class SkillUsageStore:
 
                 self.db = get_database()
             row = self.db.get_connection().execute(
-                "SELECT name, use_count, success_count, last_used_at "
+                "SELECT name, use_count, success_count, fail_count, last_used_at "
                 "FROM skill_usage WHERE name = ?",
                 (name,),
             ).fetchone()
@@ -100,7 +156,7 @@ class SkillUsageStore:
 
                 self.db = get_database()
             rows = self.db.get_connection().execute(
-                "SELECT name, use_count, success_count, last_used_at "
+                "SELECT name, use_count, success_count, fail_count, last_used_at "
                 "FROM skill_usage ORDER BY last_used_at DESC"
             ).fetchall()
             return [dict(r) for r in rows]

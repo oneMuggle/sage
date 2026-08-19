@@ -8,10 +8,12 @@
 export { agentsApi } from './agentsApi';
 export { chatApi } from './chatApi';
 export { knowledgeApi } from './knowledgeApi';
+export { learnApi } from './learnApi';
 export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
+export { skillDraftsApi } from './skillDraftsApi';
 export { workspaceApi } from './workspaceApi';
 export { skillsApi } from './skillsApi';
 export { themeCssClient } from './themeCssClient';
@@ -37,6 +39,7 @@ export type {
   ChatResponse,
   ChatOfficeRef,
   KnowledgeDoc,
+  LearnResponse,
   Memory,
   Message,
   OfficeDeleteResponse,
@@ -60,6 +63,10 @@ export type {
   SessionWorkspaceBinding,
   Skill,
   SkillDispatch,
+  SkillDraft,
+  SkillDraftApproveResponse,
+  SkillDraftListResponse,
+  SkillDraftRejectResponse,
   SkillExecuteRequest,
   SkillExecuteResult,
   TaskPlanEvent,

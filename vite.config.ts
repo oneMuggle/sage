@@ -66,6 +66,7 @@ export default defineConfig({
       '**/dist/**',
       '**/dist-electron/**',
       'tests/electron/**',
+      'tests/e2e/**',
       'e2e/**',
     ],
   },
