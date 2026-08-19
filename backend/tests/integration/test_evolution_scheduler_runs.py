@@ -114,3 +114,40 @@ def test_yaml_invalid_time_field_skips_that_task(tmp_path, caplog):
     assert len(registered) == 5
     # 日志有 warning
     assert any("memory_consolidation" in r.message for r in caplog.records)
+
+
+def test_long_weekday_names_in_yaml_resolved_to_short_for_cron(tmp_path):
+    """YAML 用 'sunday'/'monday' 全名 → 实际 cron 用 'sun'/'mon' 短名。
+
+    APScheduler 的 croniter 只认短星期名,YAML 配置为了可读性用全名;
+    注册时必须在 _register_evolution_tasks 内部转换。
+    """
+    from backend.services._evolution_register import _register_evolution_tasks
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(
+        yaml.safe_dump(
+            {
+                "evolution": {
+                    "tasks": {
+                        "importance_reevaluation": {
+                            "time": "04:00",
+                            "day": "sunday",
+                        },
+                        "memory_consolidation": {
+                            "time": "04:30",
+                            "day": "monday",
+                        },
+                    }
+                }
+            }
+        )
+    )
+
+    svc = _make_service(tmp_path)
+    registered = _register_evolution_tasks(svc, config_path=cfg)
+
+    # 全部 5 个任务都注册成功(长星期名没让 APScheduler 抛 ValueError)
+    assert len(registered) == 5
+    assert registered["importance_reevaluation"] == "00 04 * * sun"
+    assert registered["memory_consolidation"] == "30 04 * * mon"

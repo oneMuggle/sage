@@ -130,7 +130,7 @@ def _register_evolution_tasks(
             logger.warning("Unknown evolution task skipped: %s", name)
             continue
         minute, hour, dow = overrides.get(name, _DEFAULT_SCHEDULE[name])
-        cron_expr = f"{minute} {hour} * * {dow}"
+        cron_expr = _to_cron_expr(minute, hour, dow)
         try:
             scheduler_service.register_evolution_task(
                 name=name, task=task, cron_expr=cron_expr
@@ -139,3 +139,25 @@ def _register_evolution_tasks(
         except ValueError as exc:
             logger.warning("Evolution task %s 注册失败: %s", name, exc)
     return registered
+
+
+_LONG_DAY_TO_SHORT = {
+    "monday": "mon",
+    "tuesday": "tue",
+    "wednesday": "wed",
+    "thursday": "thu",
+    "friday": "fri",
+    "saturday": "sat",
+    "sunday": "sun",
+}
+
+
+def _to_cron_expr(minute: str, hour: str, dow: str) -> str:
+    """Map (minute, hour, dow) → 5-field cron. Long weekday names → short.
+
+    APScheduler's croniter only accepts short weekday names ('mon'..'sun')
+    in CronTrigger.from_crontab; YAML configuration may use long names
+    ('monday'..'sunday') for readability, so we normalize here.
+    """
+    short_dow = _LONG_DAY_TO_SHORT.get(str(dow).lower(), dow)
+    return f"{minute} {hour} * * {short_dow}"
