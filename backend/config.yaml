@@ -47,6 +47,10 @@ evolution:
       enabled: true
       day: 'sunday'
       time: '04:00'
+    memory_consolidation:
+      enabled: true
+      day: 'sunday'
+      time: '04:30'
 
 # 调度器配置
 scheduler:

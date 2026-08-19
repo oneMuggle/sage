@@ -342,6 +342,22 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
 
+    # PR-C §5.1: 把 5 个 evolution 任务挂到 lifespan,按 cron 自动跑
+    # (memory_pruning / memory_consolidation / daily_summary /
+    #  preference_learning / importance_reevaluation)。读 config.yaml
+    # evolution.tasks.<name>.time/day 作可选 override,默认 cron 兜底。
+    from backend.services._evolution_register import _register_evolution_tasks
+
+    _evo_registered = _register_evolution_tasks(
+        scheduler_service,
+        config_path=Path(__file__).parent / "config.yaml",
+    )
+    logger.info(
+        "Evolution tasks scheduled: %d — %s",
+        len(_evo_registered),
+        list(_evo_registered.keys()),
+    )
+
     # PR-C §5.2: 把 ReviewService + SkillDraftStore 注入到全局 ReviewQueue,
     # 然后启动后台 worker。否则 hex/legacy 路径 enqueue 的 review_events
     # 永远在 SQLite 里堆积、不出草稿。和 init_scheduler_service 同 pattern。
