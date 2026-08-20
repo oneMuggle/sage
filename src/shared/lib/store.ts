@@ -92,13 +92,7 @@ function mergeLoadedMessages(
     ),
   ];
 
-  return mergedMessages
-    .map((message, index) => ({ message, index }))
-    .sort(
-      (left, right) =>
-        left.message.created_at - right.message.created_at || left.index - right.index,
-    )
-    .map(({ message }) => message);
+  return mergedMessages;
 }
 
 export const useStore = create<StoreState>((set, _get) => ({

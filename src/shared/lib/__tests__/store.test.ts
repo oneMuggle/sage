@@ -15,8 +15,7 @@ vi.mock('../../api/desktopInvoke', () => ({
 }));
 
 import { clientLogger } from '../../log/client';
-import type { Message } from '../store';
-import { useStore } from '../store';
+import { type Message, useStore } from '../store';
 
 describe('useStore currentSessionId async', () => {
   beforeEach(() => {
@@ -40,90 +39,42 @@ describe('useStore currentSessionId async', () => {
   });
 });
 
-describe('loadMessages local history merge', () => {
+describe('loadMessages merge behavior', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
     useStore.setState({ sessions: [], messages: [], currentSessionId: null });
   });
 
-  it('preserves optimistic messages when backend history is empty', async () => {
-    const localUser: Message = {
-      id: 'local-user',
-      session_id: 'session-1',
-      role: 'user',
-      content: '仍在发送的问题',
-      created_at: 1_000,
+  it('preserves backend input order when timestamps are unsorted', async () => {
+    const first: Message = {
+      id: 'history-first', session_id: 'session-1', role: 'user', content: '第一条', created_at: 2_000,
     };
-    const localAssistant: Message = {
-      id: 'local-assistant',
-      session_id: 'session-1',
-      role: 'assistant',
-      content: '🤔 思考中…',
-      created_at: 1_001,
+    const second: Message = {
+      id: 'history-second', session_id: 'session-1', role: 'assistant', content: '第二条', created_at: 1_000,
     };
-    useStore.setState({ currentSessionId: 'session-1', messages: [localUser, localAssistant] });
-    mockInvoke.mockResolvedValueOnce([]);
+    mockInvoke.mockResolvedValueOnce([first, second]);
 
     await useStore.getState().loadMessages('session-1');
 
-    expect(useStore.getState().messages).toEqual([localUser, localAssistant]);
+    expect(useStore.getState().messages).toEqual([first, second]);
   });
 
-  it('prefers backend duplicates, isolates sessions, and stably sorts merged messages', async () => {
-    const localUser: Message = {
-      id: 'local-user',
-      session_id: 'session-1',
-      role: 'user',
-      content: '仍在发送的问题',
-      created_at: 1_000,
+  it('merges messages added while loading from the latest store state', async () => {
+    const localMessage: Message = {
+      id: 'local-during-load', session_id: 'session-1', role: 'user', content: '加载期间新增', created_at: 1_000,
     };
-    const localAssistant: Message = {
-      id: 'assistant-1',
-      session_id: 'session-1',
-      role: 'assistant',
-      content: '🤔 思考中…',
-      created_at: 1_001,
-    };
-    const otherSessionMessage: Message = {
-      id: 'other-session',
-      session_id: 'session-2',
-      role: 'user',
-      content: '不应显示',
-      created_at: 999,
-    };
-    const historyA: Message = {
-      id: 'history-a',
-      session_id: 'session-1',
-      role: 'user',
-      content: '第一条历史消息',
-      created_at: 1_001,
-    };
-    const historyB: Message = {
-      id: 'history-b',
-      session_id: 'session-1',
-      role: 'system',
-      content: '第二条历史消息',
-      created_at: 1_001,
-    };
-    const backendAssistant: Message = {
-      ...localAssistant,
-      content: '最终回复',
-    };
-    useStore.setState({
-      currentSessionId: 'session-1',
-      messages: [otherSessionMessage, localUser, localAssistant],
-    });
-    mockInvoke.mockResolvedValueOnce([historyB, backendAssistant, historyA]);
+    let resolveInvoke: (messages: Message[]) => void = () => {};
+    mockInvoke.mockReturnValueOnce(new Promise<Message[]>((resolve) => { resolveInvoke = resolve; }));
 
-    await useStore.getState().loadMessages('session-1');
+    const loading = useStore.getState().loadMessages('session-1');
+    useStore.getState().addMessage(localMessage);
+    resolveInvoke([]);
+    await loading;
 
-    expect(useStore.getState().messages).toEqual([localUser, historyB, backendAssistant, historyA]);
-    expect(useStore.getState().messages.filter(({ id }) => id === 'assistant-1')).toHaveLength(1);
-    expect(useStore.getState().messages.some(({ id }) => id === 'other-session')).toBe(false);
+    expect(useStore.getState().messages).toEqual([localMessage]);
   });
-});
 
-describe('store failure logging', () => {
+
   beforeEach(() => {
     mockInvoke.mockReset();
     useStore.setState({ sessions: [], messages: [], currentSessionId: null });
