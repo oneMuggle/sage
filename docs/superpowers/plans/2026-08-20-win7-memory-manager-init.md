@@ -452,7 +452,7 @@ ruff check backend/core/legacy/agent.py \
 
 Expected: tests and Ruff pass. If the repository's Ruff config rejects the Python 3.8-compatible import style, follow the existing branch style without changing behavior.
 
-- [ ] **Step 4: Review the complete diff and security-sensitive boundaries**
+- [x] **Step 4: Review the complete diff and security-sensitive boundaries**
 
 Run:
 
@@ -469,7 +469,7 @@ Confirm:
 - the bundle canary fails on missing/empty CA files;
 - no extractor session-provider implementation slipped into the branch.
 
-- [ ] **Step 5: Commit docs/index changes**
+- [x] **Step 5: Commit docs/index changes**
 
 ```bash
 git add docs/superpowers/specs/README.md \
@@ -557,4 +557,4 @@ Open a PR from `fix/main-memory-manager-init` to `main`, explicitly noting that 
 - [ ] Relevant tests and Ruff pass in the correct Python environments.
 - [ ] Win7 PR is opened against `release/win7`; main PR is opened against `main` via cherry-pick.
 - [ ] No merge or deletion of `release/win7` is performed.
-- [ ] Extractor provider propagation is documented as follow-up only.
+- [x] Extractor provider propagation is documented as follow-up only.
