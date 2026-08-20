@@ -15,8 +15,20 @@ import pytest
 @pytest.fixture(autouse=True)
 def _isolate_ssl_env(monkeypatch):
     """Keep SSL environment variables isolated from the test process."""
-    for variable in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+    variables = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE")
+    original = {variable: os.environ.get(variable) for variable in variables}
+    for variable in variables:
         monkeypatch.delenv(variable, raising=False)
+
+    yield
+
+    # The production helper writes directly to os.environ, so explicitly restore
+    # the exact pre-test state rather than relying only on monkeypatch tracking.
+    for variable, value in original.items():
+        if value is None:
+            os.environ.pop(variable, None)
+        else:
+            os.environ[variable] = value
 
 
 def _load_helper():
