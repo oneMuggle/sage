@@ -40,9 +40,9 @@
 | 2026-07-24 | [Office M1–M2 Chat-Read Design](./2026-07-24-office-m1-m2-chat-read-design.md) | 已实施的 `@` Office 摘要注入子集 |
 | 2026-07-24 | [Office Staging Sweep Design](./2026-07-24-office-staging-sweep-design.md) | Workspace staging orphan sweep 设计 |
 | 2026-07-25 | [Office M1–M2 Completion Design](./2026-07-25-office-m1-m2-completion-design.md) | 完整 session Workspace、Office list/read tools 与跨进程 E2E 设计 |
+| 2026-08-02 | [Skill Curator 生命周期 Design](./2026-08-02-skill-curator-lifecycle-design.md) | 技能 active/stale/archived 三态（读时算）+ 软归档动作 |
 | 2026-08-10 | [Storage Adapter asyncio.to_thread Design](./2026-08-10-storage-adapter-to-thread-design.md) | 存储适配器同步 SQLite 写 offload 到线程池，共享 SQLite 锁 |
 | 2026-08-11 | [Chat-Native Multi-Agent Orchestration Design](./2026-08-11-multi-agent-orchestration-design.md) | 聊天链路多 agent 编排：计划先行 + conductor 驱动 + 双失败模式门 |
-| 2026-08-02 | [Skill Curator 生命周期 Design](./2026-08-02-skill-curator-lifecycle-design.md) | 技能 active/stale/archived 三态（读时算）+ 软归档动作 |
 | 2026-08-20 | [Win7 Memory Manager Initialization and SSL Fix](./2026-08-20-win7-memory-manager-init-design.md) | memory tool 注入、Win7 certifi 打包与 SSL CA bootstrap |
 
 ## 与其他目录关系
