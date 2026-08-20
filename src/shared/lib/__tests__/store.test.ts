@@ -85,10 +85,18 @@ describe('loadMessages merge behavior', () => {
 
   it('preserves backend input order when timestamps are unsorted', async () => {
     const first: Message = {
-      id: 'history-first', session_id: 'session-1', role: 'user', content: '第一条', created_at: 2_000,
+      id: 'history-first',
+      session_id: 'session-1',
+      role: 'user',
+      content: '第一条',
+      created_at: 2_000,
     };
     const second: Message = {
-      id: 'history-second', session_id: 'session-1', role: 'assistant', content: '第二条', created_at: 1_000,
+      id: 'history-second',
+      session_id: 'session-1',
+      role: 'assistant',
+      content: '第二条',
+      created_at: 1_000,
     };
     mockInvoke.mockResolvedValueOnce([first, second]);
     useStore.setState({ currentSessionId: 'session-1' });
@@ -100,10 +108,18 @@ describe('loadMessages merge behavior', () => {
 
   it('merges messages added while loading from the latest store state', async () => {
     const localMessage: Message = {
-      id: 'local-during-load', session_id: 'session-1', role: 'user', content: '加载期间新增', created_at: 1_000,
+      id: 'local-during-load',
+      session_id: 'session-1',
+      role: 'user',
+      content: '加载期间新增',
+      created_at: 1_000,
     };
     let resolveInvoke: (messages: Message[]) => void = () => {};
-    mockInvoke.mockReturnValueOnce(new Promise<Message[]>((resolve) => { resolveInvoke = resolve; }));
+    mockInvoke.mockReturnValueOnce(
+      new Promise<Message[]>((resolve) => {
+        resolveInvoke = resolve;
+      }),
+    );
 
     const loading = useStore.getState().loadMessages('session-1');
     useStore.getState().addMessage(localMessage);
@@ -118,20 +134,34 @@ describe('loadMessages merge behavior', () => {
     let resolveSecond: ((messages: Message[]) => void) | undefined;
     mockInvoke
       .mockImplementationOnce(
-        () => new Promise<Message[]>((resolve) => { resolveFirst = resolve; }),
+        () =>
+          new Promise<Message[]>((resolve) => {
+            resolveFirst = resolve;
+          }),
       )
       .mockImplementationOnce(
-        () => new Promise<Message[]>((resolve) => { resolveSecond = resolve; }),
+        () =>
+          new Promise<Message[]>((resolve) => {
+            resolveSecond = resolve;
+          }),
       );
     useStore.setState({ currentSessionId: 'session-1', messages: [] });
 
     const firstLoad = useStore.getState().loadMessages('session-1');
     const secondLoad = useStore.getState().loadMessages('session-1');
     const newestMessage: Message = {
-      id: 'newest', session_id: 'session-1', role: 'assistant', content: 'new history', created_at: 2,
+      id: 'newest',
+      session_id: 'session-1',
+      role: 'assistant',
+      content: 'new history',
+      created_at: 2,
     };
     const staleMessage: Message = {
-      id: 'stale', session_id: 'session-1', role: 'assistant', content: 'old history', created_at: 1,
+      id: 'stale',
+      session_id: 'session-1',
+      role: 'assistant',
+      content: 'old history',
+      created_at: 1,
     };
 
     resolveSecond?.([newestMessage]);
