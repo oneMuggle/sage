@@ -29,6 +29,7 @@ sqlite-vec>=0.1.9
 # HTTP
 httpx==0.26.0
 python-multipart==0.0.9  # required for FastAPI File() / Form() in legacy_routes.py
+certifi>=2024.7.4  # CA bundle required by httpx in the Win7 embeddable Python
 # requests 依赖已移除 — starlette 0.35.1 TestClient 走 httpx（上面已 pin），无代码 import requests
 anyio==3.7.1  # fastapi 0.109 / starlette 0.35.1 要求 anyio>=3.7.1,<5.0（沿用已装版本，最小变更）
 

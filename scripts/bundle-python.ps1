@@ -260,7 +260,8 @@ Write-Host ""
 #     raises ModuleNotFoundError at end-user startup.
 Write-Host "Testing Python imports (backend.main + sage_core canaries)..." -ForegroundColor Green
 $EmbedPython = Join-Path $PythonDir "python.exe"
-$verifyOutput = & $EmbedPython -c "import sys; print(f'Python {sys.version}'); import fastapi; import pydantic; import jieba; import hnswlib; import sage_core; import backend.main; print('All critical imports successful (hnswlib + sage_core + backend.main OK)')" 2>&1
+$verifyCode = "import sys, os, certifi; ca=certifi.where(); assert os.path.isfile(ca) and os.path.getsize(ca) > 0, ca; print(f'Python {sys.version}'); print(f'certifi {certifi.__version__} @ {ca} ({os.path.getsize(ca)} bytes)'); import fastapi; import pydantic; import jieba; import hnswlib; import sage_core; import backend.main; print('All critical imports successful (certifi + hnswlib + sage_core + backend.main OK)')"
+$verifyOutput = & $EmbedPython -c $verifyCode 2>&1
 $verifyExit = $LASTEXITCODE
 Write-Host $verifyOutput
 if ($verifyExit -ne 0) {
