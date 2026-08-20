@@ -70,7 +70,7 @@
   - `assistant-1` appears once and has backend content `最终回复`;
   - the backend historical message remains;
   - the `session-2` local message is excluded;
-  - ordering follows `created_at`, with stable original order for equal timestamps.
+  - ordering follows backend input order, followed by target-session local messages absent from backend; local message order remains stable.
 
 - [ ] **Step 4: Run only the new tests and verify RED.**
 
@@ -104,7 +104,7 @@
   ): Message[] {
     // Start with backend messages, then append only local messages from this
     // session whose IDs are absent from the backend result.
-    // Sort by created_at ascending; rely on stable sort behavior for ties.
+    // Preserve backend input order; preserve local store order for appended messages.
   }
   ```
 
