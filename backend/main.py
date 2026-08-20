@@ -7,10 +7,40 @@ import logging
 import os
 import uuid
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
+from typing import Callable, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sage_core import Message, Role
+
+
+def configure_ssl_ca_bundle(where: Callable[[], str]) -> Optional[str]:
+    """为 ``httpx`` / ``requests`` / ``curl`` 兜底注入 certifi 的 CA bundle。
+
+    返回最终选中的 CA 路径；任何异常（certifi 缺失、文件不存在、文件为空）
+    都吞掉并返回 ``None``，避免阻塞后端启动。只有当对应环境变量尚未
+    设置时（``setdefault``），才写入路径——用户自定义值永远不被覆盖。
+    """
+    try:
+        ca_path = where()
+        ca_file = Path(ca_path)
+        if not ca_file.is_file() or ca_file.stat().st_size <= 0:
+            return None
+        for variable in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+            os.environ.setdefault(variable, ca_path)
+    except Exception:  # noqa: BLE001 — bootstrap failure must not crash import
+        return None
+    return ca_path
+
+
+try:
+    import certifi
+except ImportError:
+    certifi = None  # type: ignore[assignment]
+
+if certifi is not None:
+    configure_ssl_ca_bundle(certifi.where)
 
 from backend.adapters.out.event.file_adapter import FileEventAdapter
 from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter

@@ -61,3 +61,7 @@ openpyxl==3.1.5       # XLSX read/write (low-level), ~1MB wheel
 # pandas for Excel data manipulation (DataFrame ops, aggregation). Requires numpy 1.x.
 # pandas 2.2.3 is the last release that supports numpy 1.24+ which is what we already pin.
 pandas==2.2.3         # DataFrame Excel ops, ~15MB wheel + numpy transitively
+
+# certifi: provides Mozilla CA bundle for httpx / requests / curl SSL verification
+# (LTS Pin 2024.7.4, matches release/win7 PR #348 / PR #347 lxml wheel strategy)
+certifi>=2024.7.4

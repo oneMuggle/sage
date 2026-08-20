@@ -86,3 +86,7 @@ apscheduler==3.10.4
 python-pptx==0.6.23
 python-docx==1.1.2
 openpyxl==3.1.5
+
+# certifi: provides Mozilla CA bundle for httpx / requests / curl SSL verification
+# (LTS Pin 2024.7.4, matches release/win7 PR #348 / PR #347 lxml wheel strategy)
+certifi>=2024.7.4

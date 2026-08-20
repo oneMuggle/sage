@@ -15,9 +15,14 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-import httpx
 
-from backend.main import app
+
+_SSL_BOOTSTRAP_TEST = os.path.join("backend", "tests", "unit", "test_ssl_bootstrap.py")
+
+
+def _is_ssl_bootstrap_test(request):
+    """Keep the AST-only SSL tests free of shared application fixtures."""
+    return str(request.node.fspath).endswith(_SSL_BOOTSTRAP_TEST)
 
 
 @pytest.fixture()
@@ -30,13 +35,22 @@ def tmp_db_path():
 
 
 @pytest.fixture(autouse=True)
-def setup_test_db(tmp_db_path):
-    """每个测试自动使用独立临时数据库"""
+def setup_test_db(request):
+    """每个测试自动使用独立临时数据库。
+
+    AST-only tests must not import the application during collection/setup.
+    """
+    if _is_ssl_bootstrap_test(request):
+        yield None
+        return
+
+    tmp_db_path = request.getfixturevalue("tmp_db_path")
     import backend.data.database as db_mod
 
     # A4: WakeStore 单例绑定全局 Database，必须随临时库一起重置，
     # 否则下一个用例拿到持有已关闭连接的旧 store。
     from backend.application.services.wake_store import reset_wake_store
+    from backend.main import app
     from backend.memory.registry import reset_memory_manager
 
     # UserProfileStore 单例同样绑定全局 Database, 必须随临时库重置
@@ -71,7 +85,6 @@ def setup_test_db(tmp_db_path):
     # M1-M2: 修复 pre-existing 测试隔离问题 — test_chat_stream.py
     # 不使用 client fixture 也未清理 app.state.streams._entries,
     # 会在跨测试文件时泄漏. 在 autouse setup 中强制清空.
-    from backend.main import app
 
     # M1-M2 修复同上;同时确保 app.state.streams 已初始化: 测试不走 FastAPI
     # lifespan(ASGITransport 默认不触发), 直接自建 AsyncClient 的测试
@@ -109,6 +122,10 @@ def setup_test_db(tmp_db_path):
 @pytest_asyncio.fixture
 async def client():
     """提供异步 HTTP 测试客户端"""
+    import httpx
+
+    from backend.main import app
+
     # I2: tests 不走 FastAPI lifespan(ASGITransport 默认不触发),
     # 但 app.state.streams 必须存在否则 /chat/stream/{id} 端点 500。
     # 这里兜底初始化并在测试间清空,保证隔离。
@@ -136,8 +153,6 @@ async def client():
 
 
 # ========== LLM Mock Fixtures (P0-T7) ==========
-import respx
-from httpx import Response
 
 
 @pytest.fixture()
@@ -150,6 +165,9 @@ def mock_llm_ok():
             response = await llm_client.chat(...)
             assert response == expected
     """
+    import respx
+    from httpx import Response
+
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
         mock.post("/v1/chat/completions").mock(
             return_value=Response(
@@ -176,6 +194,9 @@ def mock_llm_ok():
 @pytest.fixture()
 def mock_llm_rate_limit():
     """Mock LLM 返回 429 限流响应"""
+    import respx
+    from httpx import Response
+
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
         mock.post("/v1/chat/completions").mock(
             return_value=Response(
@@ -194,6 +215,9 @@ def mock_llm_timeout():
     ``LLMClient.chat`` 中 ``except httpx.TimeoutException`` 分支，
     确保被映射为 ``LLMErrorType.TIMEOUT`` 而不是 fallback 到 UNKNOWN。
     """
+    import httpx
+    import respx
+
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
         mock.post("/v1/chat/completions").mock(
             side_effect=httpx.TimeoutException("LLM request timed out")
@@ -204,6 +228,9 @@ def mock_llm_timeout():
 @pytest.fixture()
 def mock_llm_server_error():
     """Mock LLM 返回 500 服务端错误"""
+    import respx
+    from httpx import Response
+
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
         mock.post("/v1/chat/completions").mock(
             return_value=Response(
