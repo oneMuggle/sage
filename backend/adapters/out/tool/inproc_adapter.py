@@ -68,7 +68,7 @@ class InprocToolAdapter:
         if registry is None:
             from backend.memory.registry import get_memory_manager
             from backend.tools import register_all_tools
-            from backend.tools.memory_tool import MemorySaveTool, MemorySearchTool
+            from backend.tools.memory_tool import inject_memory_manager
 
             register_all_tools(self._registry, policy=self._policy)
             # 注入共享 MemoryManager：register_all_tools 创建的 MemorySearchTool /
@@ -77,12 +77,9 @@ class InprocToolAdapter:
             # 没有 self.memory_manager 可灌，走 get_memory_manager() 单例
             # 与 reset_memory_manager() 的测试隔离策略对齐。
             # 注入范围限于本构造器自建的 registry——外部注入的 registry
-            # 不在此修改以保留既有契约。
-            _memory_manager = get_memory_manager()
-            _MEMORY_TOOL_TYPES = (MemorySearchTool, MemorySaveTool)
-            for _tool in self._registry._tools.values():
-                if isinstance(_tool, _MEMORY_TOOL_TYPES):
-                    _tool.set_memory_manager(_memory_manager)
+            # 不在此修改以保留既有契约。注入逻辑统一在
+            # ``inject_memory_manager``，仅使用 ``ToolRegistry`` 公开 API。
+            inject_memory_manager(self._registry, get_memory_manager())
 
     def list_tools(self) -> List[ToolSpec]:
         """返回所有已注册工具的 spec（按注册顺序）。"""
