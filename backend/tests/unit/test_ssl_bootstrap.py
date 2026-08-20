@@ -13,22 +13,26 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _isolate_ssl_env(monkeypatch):
-    """Keep SSL environment variables isolated from the test process."""
+def _isolate_ssl_env(request):
+    """Keep SSL environment variables isolated from the test process.
+
+    This fixture deliberately does not depend on pytest's ``monkeypatch``
+    fixture. Its finalizer is therefore registered before a test's
+    ``monkeypatch`` finalizer and runs after it, restoring the state that
+    existed before the test even when production code writes directly to
+    ``os.environ``.
+    """
     variables = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE")
-    original = {variable: os.environ.get(variable) for variable in variables}
+    original = {variable: os.environ[variable] for variable in variables if variable in os.environ}
     for variable in variables:
-        monkeypatch.delenv(variable, raising=False)
+        os.environ.pop(variable, None)
 
-    yield
-
-    # The production helper writes directly to os.environ, so explicitly restore
-    # the exact pre-test state rather than relying only on monkeypatch tracking.
-    for variable, value in original.items():
-        if value is None:
+    def restore_original_environment() -> None:
+        for variable in variables:
             os.environ.pop(variable, None)
-        else:
-            os.environ[variable] = value
+        os.environ.update(original)
+
+    request.addfinalizer(restore_original_environment)
 
 
 def _load_helper():
