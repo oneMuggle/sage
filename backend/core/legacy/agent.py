@@ -268,6 +268,16 @@ class SageAgent:
             # 初始化工具注册表
             self.tool_registry = ToolRegistry()
             register_all_tools(self.tool_registry, policy=policy)
+            # 注入记忆管理器：register_all_tools 创建的 MemorySearchTool /
+            # MemorySaveTool 默认 self.memory=None，runtime 调用会返回
+            # "未初始化"。agent 路径直接把已构造的 self.memory_manager
+            # 灌进去（不是再走 get_memory_manager 单例）以保证 agent 内
+            # 显式记忆栈是工具可见的唯一来源。注入逻辑统一在
+            # ``inject_memory_manager``，仅使用 ``ToolRegistry`` 公开 API
+            # （list_names + get），不触碰私有字典。
+            from backend.tools.memory_tool import inject_memory_manager
+
+            inject_memory_manager(self.tool_registry, self.memory_manager)
             logger.info(f"工具注册表初始化完成，已注册 {len(self.tool_registry.list())} 个工具")
 
         # M1 工具安全加固: 权限执行器注入点。
