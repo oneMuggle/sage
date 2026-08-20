@@ -11,6 +11,7 @@ import { usePermissionState } from '../../../entities/permission/permissionState
 import { useQuestionState } from '../../../entities/question/questionState';
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
 import { useStore } from '../../../shared/lib/store';
+import { useChatStreamStore } from '../chatStreamStore';
 import { useChat } from '../useChat';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
@@ -126,6 +127,7 @@ beforeEach(() => {
   usePermissionState.setState({ currentRequest: null });
   // M2 part B: 同理隔离 question store
   useQuestionState.setState({ currentQuestion: null });
+  useChatStreamStore.getState().resetAll();
 });
 
 afterEach(() => {
@@ -353,8 +355,85 @@ describe('useChat', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it('preserves optimistic messages across route history reload until stream completion', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-route-switch' });
+
+    let capturedCb:
+      | ((e: { payload: { state: string; iteration: number; content?: string } }) => void)
+      | null = null;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
+      ) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result, unmount } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('ping') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const optimisticMessages = useStore.getState().messages;
+    const userMessage = optimisticMessages.find((message) => message.role === 'user');
+    const assistantMessage = optimisticMessages.find((message) => message.role === 'assistant');
+    expect(userMessage).toBeDefined();
+    expect(assistantMessage).toBeDefined();
+    expect(assistantMessage?.content).toBe('🤔 思考中…');
+    expect(capturedCb).not.toBeNull();
+
+    // Route switch: the old Chat instance unmounts and the new instance reloads stale history.
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_settings') return Promise.resolve({ data: null });
+      if (command === 'get_messages') {
+        return Promise.resolve([
+          {
+            id: 'old-history-message',
+            session_id: VALID_SESSION_ID,
+            role: 'user',
+            content: 'old history',
+            created_at: 1,
+          },
+        ]);
+      }
+      return Promise.resolve(undefined);
+    });
+    unmount();
+    renderHook(() => useChat());
+    await act(async () => {
+      await useStore.getState().loadMessages(VALID_SESSION_ID);
+    });
+
+    const afterReload = useStore.getState().messages;
+    expect(afterReload).toEqual(expect.arrayContaining([userMessage, assistantMessage]));
+    expect(afterReload).toHaveLength(3);
+
+    act(() => {
+      capturedCb!({
+        payload: { state: 'done', iteration: 1, content: 'route switch answer' },
+      });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+
+    const finalAssistant = useStore
+      .getState()
+      .messages.find((message) => message.id === assistantMessage?.id);
+    expect(finalAssistant?.content).toBe('route switch answer');
+    expect(useChatStreamStore.getState().streaming).toBeNull();
+  });
+
   // 回归保护: cancel-prev 路径 — sendMessage 必须把 chatStream 返回的
-  // cancel 存进 cancelRef, 下次 sendMessage 时 cancel-prev 块会调用它。
+  // cancel 存进 cancelRef,下次 sendMessage 时 cancel-prev 块会调用它。
   // 真实触发场景: React StrictMode 双调用 / 用户双击 / 路由切换。
   it('stores chatStream cancel into cancelRef for next sendMessage cancellation', async () => {
     seedActiveEndpoint();
