@@ -23,12 +23,12 @@ def configure_ssl_ca_bundle(where: Callable[[], str]) -> Optional[str]:
     """
     try:
         ca_path = where()
+        if not os.path.isfile(ca_path) or os.path.getsize(ca_path) <= 0:
+            return None
+        for variable in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+            os.environ.setdefault(variable, ca_path)
     except Exception:  # noqa: BLE001 — bootstrap failure must not crash import
         return None
-    if not os.path.isfile(ca_path) or os.path.getsize(ca_path) <= 0:
-        return None
-    for variable in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
-        os.environ.setdefault(variable, ca_path)
     return ca_path
 
 
