@@ -32,6 +32,44 @@ describe('useStore currentSessionId async', () => {
     await vi.waitFor(() => expect(mockSave).toHaveBeenCalledWith('abc-123'));
   });
 
+  it('does not apply stale messages after switching sessions', async () => {
+    let resolveMessages: ((messages: Message[]) => void) | undefined;
+    mockInvoke.mockImplementation(
+      () =>
+        new Promise<Message[]>((resolve) => {
+          resolveMessages = resolve;
+        }),
+    );
+    useStore.setState({ currentSessionId: 'session-1', messages: [] });
+
+    const loading = useStore.getState().loadMessages('session-1');
+    useStore.getState().setCurrentSessionId('session-2');
+    const currentMessages = [
+      {
+        id: 'session-2-message',
+        session_id: 'session-2',
+        role: 'user' as const,
+        content: 'current session',
+        created_at: 1,
+      },
+    ];
+    useStore.setState({ messages: currentMessages });
+
+    resolveMessages?.([
+      {
+        id: 'session-1-message',
+        session_id: 'session-1',
+        role: 'user',
+        content: 'stale session',
+        created_at: 1,
+      },
+    ]);
+    await loading;
+
+    expect(useStore.getState().messages).toEqual(currentMessages);
+    expect(useStore.getState().isLoading).toBe(false);
+  });
+
   it('setCurrentSessionId(null) 同步清空', () => {
     useStore.setState({ currentSessionId: 'old' });
     useStore.getState().setCurrentSessionId(null);

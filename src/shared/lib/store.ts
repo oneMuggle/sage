@@ -152,10 +152,14 @@ export const useStore = create<StoreState>((set, _get) => ({
     try {
       set({ isLoading: true });
       const loadedMessages = await invoke<Message[]>('get_messages', { sessionId });
-      set((state) => ({
-        messages: mergeLoadedMessages(loadedMessages, state.messages, sessionId),
-        isLoading: false,
-      }));
+      set((state) =>
+        state.currentSessionId === sessionId
+          ? {
+              messages: mergeLoadedMessages(loadedMessages, state.messages, sessionId),
+              isLoading: false,
+            }
+          : { isLoading: false },
+      );
     } catch (error) {
       clientLogger.error('store.loadMessages failed', { error: String(error) });
       set({ isLoading: false });
