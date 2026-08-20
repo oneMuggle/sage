@@ -65,6 +65,9 @@ hnswlib==0.8.0  # 收紧上界，避免未来版本破坏 ABI
 
 # Office documents
 python-pptx==0.6.23
+# lxml 6.x falls back to a source build on the Windows Python 3.8 runner;
+# pin the last compatible cp38 Windows wheel to avoid requiring libxml2 headers.
+lxml==5.4.0
 python-docx==1.1.2
 openpyxl==3.1.5
 
