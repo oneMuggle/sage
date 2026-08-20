@@ -13,26 +13,36 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _isolate_ssl_env(request):
+def _isolate_ssl_env():
     """Keep SSL environment variables isolated from the test process.
 
     This fixture deliberately does not depend on pytest's ``monkeypatch``
-    fixture. Its finalizer is therefore registered before a test's
-    ``monkeypatch`` finalizer and runs after it, restoring the state that
-    existed before the test even when production code writes directly to
-    ``os.environ``.
+    fixture. Because pytest runs teardown code in LIFO order, this fixture's
+    yield-teardown runs after ``monkeypatch``'s teardown — restoring the
+    state that existed before the test even when production code writes
+    directly to ``os.environ``.
+
+    The pre-test snapshot distinguishes variables that were *present*
+    (possibly empty) from variables that were *absent*, so both cases are
+    restored exactly.
     """
     variables = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE")
+    # Capture pre-test state: only existing entries go into ``original``;
+    # variables that were absent are remembered in ``missing`` so teardown
+    # can pop any stray value the test left behind.
     original = {variable: os.environ[variable] for variable in variables if variable in os.environ}
     for variable in variables:
         os.environ.pop(variable, None)
 
-    def restore_original_environment() -> None:
-        for variable in variables:
-            os.environ.pop(variable, None)
-        os.environ.update(original)
+    yield
 
-    request.addfinalizer(restore_original_environment)
+    # Teardown — runs after ``monkeypatch``'s teardown (LIFO), so we only
+    # need to undo anything our setup or the helper might have written
+    # directly. Restore the exact pre-test state.
+    for variable in variables:
+        os.environ.pop(variable, None)
+    for variable, value in original.items():
+        os.environ[variable] = value
 
 
 def _load_helper():
@@ -45,7 +55,7 @@ def _load_helper():
         if isinstance(node, ast.FunctionDef)
         and node.name == "configure_ssl_ca_bundle"
     )
-    namespace = {"os": os, "Callable": Callable, "Optional": Optional}
+    namespace = {"os": os, "Callable": Callable, "Optional": Optional, "Path": Path}
     module = ast.Module(body=[function], type_ignores=[])
     exec(compile(ast.fix_missing_locations(module), str(source_path), "exec"), namespace)
     return namespace["configure_ssl_ca_bundle"]

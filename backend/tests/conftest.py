@@ -46,11 +46,11 @@ def setup_test_db(request):
 
     tmp_db_path = request.getfixturevalue("tmp_db_path")
     import backend.data.database as db_mod
-    from backend.main import app
 
     # A4: WakeStore 单例绑定全局 Database，必须随临时库一起重置，
     # 否则下一个用例拿到持有已关闭连接的旧 store。
     from backend.application.services.wake_store import reset_wake_store
+    from backend.main import app
     from backend.memory.registry import reset_memory_manager
 
     # UserProfileStore 单例同样绑定全局 Database, 必须随临时库重置
@@ -82,7 +82,6 @@ def setup_test_db(request):
     # M1-M2: 修复 pre-existing 测试隔离问题 — test_chat_stream.py
     # 不使用 client fixture 也未清理 app.state.streams._entries,
     # 会在跨测试文件时泄漏. 在 autouse setup 中强制清空.
-    from backend.main import app
 
     # M1-M2 修复同上;同时确保 app.state.streams 已初始化: 测试不走 FastAPI
     # lifespan(ASGITransport 默认不触发), 直接自建 AsyncClient 的测试
