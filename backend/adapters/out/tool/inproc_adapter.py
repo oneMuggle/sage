@@ -66,9 +66,23 @@ class InprocToolAdapter:
         self._enforcer_factory = enforcer_factory or load_enforcer_from_settings
         # 注册所有内置工具（含 MCP 工具）；M2 把 policy 透传给每个内置工具
         if registry is None:
+            from backend.memory.registry import get_memory_manager
             from backend.tools import register_all_tools
+            from backend.tools.memory_tool import MemorySaveTool, MemorySearchTool
 
             register_all_tools(self._registry, policy=self._policy)
+            # 注入共享 MemoryManager：register_all_tools 创建的 MemorySearchTool /
+            # MemorySaveTool 默认 self.memory=None，runtime 调用会返回
+            # "未初始化"。adapter 是 agent-less 路径（hex API 等），
+            # 没有 self.memory_manager 可灌，走 get_memory_manager() 单例
+            # 与 reset_memory_manager() 的测试隔离策略对齐。
+            # 注入范围限于本构造器自建的 registry——外部注入的 registry
+            # 不在此修改以保留既有契约。
+            _memory_manager = get_memory_manager()
+            _MEMORY_TOOL_TYPES = (MemorySearchTool, MemorySaveTool)
+            for _tool in self._registry._tools.values():
+                if isinstance(_tool, _MEMORY_TOOL_TYPES):
+                    _tool.set_memory_manager(_memory_manager)
 
     def list_tools(self) -> List[ToolSpec]:
         """返回所有已注册工具的 spec（按注册顺序）。"""
