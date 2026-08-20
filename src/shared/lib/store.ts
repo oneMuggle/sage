@@ -78,6 +78,29 @@ interface StoreState {
 
 // ==================== Zustand Store ====================
 
+function mergeLoadedMessages(
+  loadedMessages: Message[],
+  localMessages: Message[],
+  sessionId: string,
+): Message[] {
+  const sessionMessages = loadedMessages.filter((message) => message.session_id === sessionId);
+  const loadedIds = new Set(sessionMessages.map((message) => message.id));
+  const mergedMessages = [
+    ...sessionMessages,
+    ...localMessages.filter(
+      (message) => message.session_id === sessionId && !loadedIds.has(message.id),
+    ),
+  ];
+
+  return mergedMessages
+    .map((message, index) => ({ message, index }))
+    .sort(
+      (left, right) =>
+        left.message.created_at - right.message.created_at || left.index - right.index,
+    )
+    .map(({ message }) => message);
+}
+
 export const useStore = create<StoreState>((set, _get) => ({
   // 初始状态
   sessions: [],
@@ -134,8 +157,11 @@ export const useStore = create<StoreState>((set, _get) => ({
   loadMessages: async (sessionId) => {
     try {
       set({ isLoading: true });
-      const messages = await invoke<Message[]>('get_messages', { sessionId });
-      set({ messages, isLoading: false });
+      const loadedMessages = await invoke<Message[]>('get_messages', { sessionId });
+      set((state) => ({
+        messages: mergeLoadedMessages(loadedMessages, state.messages, sessionId),
+        isLoading: false,
+      }));
     } catch (error) {
       clientLogger.error('store.loadMessages failed', { error: String(error) });
       set({ isLoading: false });
