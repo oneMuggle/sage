@@ -260,8 +260,8 @@ def test_ssl_cert_handles_missing_certifi(monkeypatch):
 ### Bug D: `MemoryExtractor` 用全局默认 LLM（extractor 不复用 session provider）
 
 - 路径：`backend/main.py:149-161` (`_build_lifecycle_extractor()`) + `backend/application/services/chat_service.py:614-638` (`_extract_and_store_memory()`)
-- 现状：两个 extractor 都用 `HttpxLLMAdapter()` 默认配置，**忽略**前端传的 `X-LLM-Provider-Url` / per-request `llm_config`
-- 表现：用户配的是内网 provider，但后台记忆提取仍走 OpenAI 默认 → SSL 502 → 静默降级
+- 现状：lifecycle extractor 直接构造默认 `HttpxLLMAdapter()`；legacy `ChatService` extractor 使用 `ChatService.self.llm`，但当前没有明确保证它继承当前 session 的 provider 配置（包括前端传的 `X-LLM-Provider-Url` / per-request `llm_config`）
+- 表现：用户配的是内网 provider，但后台记忆提取可能仍走 OpenAI 默认 → SSL 502 → 静默降级
 - **为什么不入本 fix**：
   1. PR-A + PR-B + PR-C 已经覆盖了症状（"未初始化" 消除 + Win7 SSL 修好）
   2. extractor 复用 session provider 是**架构改动**：要把 session 解析、配置查找、LLM 客户端工厂全部串起来，超出 bug 修复范围
