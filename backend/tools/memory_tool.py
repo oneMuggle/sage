@@ -2,7 +2,7 @@
 Memory 工具 - 记忆系统操作
 """
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
@@ -12,6 +12,36 @@ from .base import BaseTool, ToolResult, ToolSchema
 # 避免循环导入
 if TYPE_CHECKING:
     pass
+
+#: 内部记忆工具类型元组。production 注入点（``SageAgent`` 构造器、
+#: ``InprocToolAdapter`` 构造器）和回归测试都从这一处导入，避免
+#: 在多个文件里写重复的 ``(MemorySearchTool, MemorySaveTool)`` 字面量。
+#: 实际取值在文件末尾赋值（这两个类在下方定义）。
+MEMORY_TOOL_TYPES: Tuple[type, ...] = ()
+
+
+def inject_memory_manager(registry, memory_manager) -> int:
+    """遍历 registry，把 ``memory_manager`` 灌进所有记忆工具。
+
+    仅通过 ``ToolRegistry`` 的公开 API（``list_names()`` + ``get(name)``）
+    访问工具实例，不触碰私有字典。这是 ``SageAgent`` 构造器、
+    ``InprocToolAdapter`` 默认构造路径共享的注入点。
+
+    Args:
+        registry: ``ToolRegistry`` 实例。
+        memory_manager: ``MemoryManager``（或测试用 fake）。可空但通常
+            非空——调用方需自己决定是否在 manager 缺失时跳过。
+
+    Returns:
+        实际被注入的工具数（== ``MEMORY_TOOL_TYPES`` 命中数）。
+    """
+    injected = 0
+    for name in registry.list_names():
+        tool = registry.get(name)
+        if isinstance(tool, MEMORY_TOOL_TYPES):
+            tool.set_memory_manager(memory_manager)
+            injected += 1
+    return injected
 
 
 class MemorySearchTool(BaseTool):
@@ -151,3 +181,9 @@ class MemorySaveTool(BaseTool):
 
         except Exception as e:
             return ToolResult(success=False, error=f"保存记忆失败: {str(e)}")
+
+
+# ``MEMORY_TOOL_TYPES`` 必须在两个类定义之后填充——上面的类还未声明就
+# 引用会触发 NameError。把元组重新绑定到现有名称是 Python 推荐的
+# "forward reference" 替代方案，避免在类体里写字符串注解。
+MEMORY_TOOL_TYPES = (MemorySearchTool, MemorySaveTool)
