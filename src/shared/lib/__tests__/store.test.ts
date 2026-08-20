@@ -113,6 +113,35 @@ describe('loadMessages merge behavior', () => {
     expect(useStore.getState().messages).toEqual([localMessage]);
   });
 
+  it('keeps the newest history when same-session loads complete out of order', async () => {
+    let resolveFirst: ((messages: Message[]) => void) | undefined;
+    let resolveSecond: ((messages: Message[]) => void) | undefined;
+    mockInvoke
+      .mockImplementationOnce(
+        () => new Promise<Message[]>((resolve) => { resolveFirst = resolve; }),
+      )
+      .mockImplementationOnce(
+        () => new Promise<Message[]>((resolve) => { resolveSecond = resolve; }),
+      );
+    useStore.setState({ currentSessionId: 'session-1', messages: [] });
+
+    const firstLoad = useStore.getState().loadMessages('session-1');
+    const secondLoad = useStore.getState().loadMessages('session-1');
+    const newestMessage: Message = {
+      id: 'newest', session_id: 'session-1', role: 'assistant', content: 'new history', created_at: 2,
+    };
+    const staleMessage: Message = {
+      id: 'stale', session_id: 'session-1', role: 'assistant', content: 'old history', created_at: 1,
+    };
+
+    resolveSecond?.([newestMessage]);
+    await secondLoad;
+    resolveFirst?.([staleMessage]);
+    await firstLoad;
+
+    expect(useStore.getState().messages).toEqual([newestMessage]);
+    expect(useStore.getState().isLoading).toBe(false);
+  });
 
   beforeEach(() => {
     mockInvoke.mockReset();

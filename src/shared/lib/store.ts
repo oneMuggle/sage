@@ -78,6 +78,9 @@ interface StoreState {
 
 // ==================== Zustand Store ====================
 
+const messageLoadGenerations = new Map<string, number>();
+let latestMessageLoadToken = 0;
+
 function mergeLoadedMessages(
   loadedMessages: Message[],
   localMessages: Message[],
@@ -114,7 +117,10 @@ export const useStore = create<StoreState>((set, _get) => ({
 
   // 设置当前会话
   setCurrentSessionId: (id) => {
-    set({ currentSessionId: id });
+    if (_get().currentSessionId !== id) {
+      latestMessageLoadToken += 1;
+      set({ currentSessionId: id, isLoading: false });
+    }
     void saveCurrentSessionId(id);
   },
 
@@ -149,20 +155,27 @@ export const useStore = create<StoreState>((set, _get) => ({
 
   // 加载消息
   loadMessages: async (sessionId) => {
+    const generation = (messageLoadGenerations.get(sessionId) ?? 0) + 1;
+    messageLoadGenerations.set(sessionId, generation);
+    const requestToken = ++latestMessageLoadToken;
+
     try {
       set({ isLoading: true });
       const loadedMessages = await invoke<Message[]>('get_messages', { sessionId });
-      set((state) =>
-        state.currentSessionId === sessionId
-          ? {
-              messages: mergeLoadedMessages(loadedMessages, state.messages, sessionId),
-              isLoading: false,
-            }
-          : { isLoading: false },
-      );
+      set((state) => {
+        const isLatestRequest = messageLoadGenerations.get(sessionId) === generation;
+        if (!isLatestRequest || state.currentSessionId !== sessionId) {
+          return requestToken === latestMessageLoadToken ? { isLoading: false } : {};
+        }
+
+        return {
+          messages: mergeLoadedMessages(loadedMessages, state.messages, sessionId),
+          isLoading: false,
+        };
+      });
     } catch (error) {
       clientLogger.error('store.loadMessages failed', { error: String(error) });
-      set({ isLoading: false });
+      set(() => (requestToken === latestMessageLoadToken ? { isLoading: false } : {}));
     }
   },
 
