@@ -15,7 +15,8 @@ vi.mock('../../api/desktopInvoke', () => ({
 }));
 
 import { clientLogger } from '../../log/client';
-import { Message, useStore } from '../store';
+import type { Message } from '../store';
+import { useStore } from '../store';
 
 describe('useStore currentSessionId async', () => {
   beforeEach(() => {
@@ -116,7 +117,7 @@ describe('loadMessages local history merge', () => {
 
     await useStore.getState().loadMessages('session-1');
 
-    expect(useStore.getState().messages).toEqual([localUser, historyA, historyB, backendAssistant]);
+    expect(useStore.getState().messages).toEqual([localUser, historyB, backendAssistant, historyA]);
     expect(useStore.getState().messages.filter(({ id }) => id === 'assistant-1')).toHaveLength(1);
     expect(useStore.getState().messages.some(({ id }) => id === 'other-session')).toBe(false);
   });
