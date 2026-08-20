@@ -15,7 +15,6 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-import httpx
 
 
 _SSL_BOOTSTRAP_TEST = os.path.join("backend", "tests", "unit", "test_ssl_bootstrap.py")
@@ -121,6 +120,8 @@ def setup_test_db(request):
 @pytest_asyncio.fixture
 async def client():
     """提供异步 HTTP 测试客户端"""
+    import httpx
+
     from backend.main import app
 
     # I2: tests 不走 FastAPI lifespan(ASGITransport 默认不触发),
@@ -150,8 +151,6 @@ async def client():
 
 
 # ========== LLM Mock Fixtures (P0-T7) ==========
-import respx
-from httpx import Response
 
 
 @pytest.fixture()
@@ -164,6 +163,9 @@ def mock_llm_ok():
             response = await llm_client.chat(...)
             assert response == expected
     """
+    import respx
+    from httpx import Response
+
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
         mock.post("/v1/chat/completions").mock(
             return_value=Response(
@@ -190,6 +192,9 @@ def mock_llm_ok():
 @pytest.fixture()
 def mock_llm_rate_limit():
     """Mock LLM 返回 429 限流响应"""
+    import respx
+    from httpx import Response
+
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
         mock.post("/v1/chat/completions").mock(
             return_value=Response(
@@ -208,6 +213,9 @@ def mock_llm_timeout():
     ``LLMClient.chat`` 中 ``except httpx.TimeoutException`` 分支，
     确保被映射为 ``LLMErrorType.TIMEOUT`` 而不是 fallback 到 UNKNOWN。
     """
+    import httpx
+    import respx
+
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
         mock.post("/v1/chat/completions").mock(
             side_effect=httpx.TimeoutException("LLM request timed out")
@@ -218,6 +226,9 @@ def mock_llm_timeout():
 @pytest.fixture()
 def mock_llm_server_error():
     """Mock LLM 返回 500 服务端错误"""
+    import respx
+    from httpx import Response
+
     with respx.mock(base_url="https://api.example.com", assert_all_called=False) as mock:
         mock.post("/v1/chat/completions").mock(
             return_value=Response(
