@@ -17,7 +17,13 @@ if PROJECT_ROOT not in sys.path:
 
 import httpx
 
-from backend.main import app
+
+_SSL_BOOTSTRAP_TEST = os.path.join("backend", "tests", "unit", "test_ssl_bootstrap.py")
+
+
+def _is_ssl_bootstrap_test(request):
+    """Keep the AST-only SSL tests free of shared application fixtures."""
+    return str(request.node.fspath).endswith(_SSL_BOOTSTRAP_TEST)
 
 
 @pytest.fixture()
@@ -30,9 +36,18 @@ def tmp_db_path():
 
 
 @pytest.fixture(autouse=True)
-def setup_test_db(tmp_db_path):
-    """每个测试自动使用独立临时数据库"""
+def setup_test_db(request):
+    """每个测试自动使用独立临时数据库。
+
+    AST-only tests must not import the application during collection/setup.
+    """
+    if _is_ssl_bootstrap_test(request):
+        yield None
+        return
+
+    tmp_db_path = request.getfixturevalue("tmp_db_path")
     import backend.data.database as db_mod
+    from backend.main import app
 
     # A4: WakeStore 单例绑定全局 Database，必须随临时库一起重置，
     # 否则下一个用例拿到持有已关闭连接的旧 store。
@@ -106,6 +121,8 @@ def setup_test_db(tmp_db_path):
 @pytest_asyncio.fixture
 async def client():
     """提供异步 HTTP 测试客户端"""
+    from backend.main import app
+
     # I2: tests 不走 FastAPI lifespan(ASGITransport 默认不触发),
     # 但 app.state.streams 必须存在否则 /chat/stream/{id} 端点 500。
     # 这里兜底初始化并在测试间清空,保证隔离。
