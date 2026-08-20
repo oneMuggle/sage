@@ -80,7 +80,7 @@ describe('useStore currentSessionId async', () => {
 describe('loadMessages merge behavior', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
-    useStore.setState({ sessions: [], messages: [], currentSessionId: null });
+    useStore.setState({ sessions: [], messages: [], currentSessionId: 'session-1' });
   });
 
   it('preserves backend input order when timestamps are unsorted', async () => {
@@ -91,6 +91,7 @@ describe('loadMessages merge behavior', () => {
       id: 'history-second', session_id: 'session-1', role: 'assistant', content: '第二条', created_at: 1_000,
     };
     mockInvoke.mockResolvedValueOnce([first, second]);
+    useStore.setState({ currentSessionId: 'session-1' });
 
     await useStore.getState().loadMessages('session-1');
 
