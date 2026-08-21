@@ -185,13 +185,18 @@ def cancel_run(run_id: str, body: Optional[CancelRunRequest] = None) -> CancelRu
     if run.status in ("cancelled", "completed", "failed"):
         raise HTTPException(status_code=409, detail=f"run already in terminal state: {run.status}")
     repo.update_status(run_id, "cancelled")
-    # 进程内注册表定位 dispatcher 并置位（同步 set event，无需 await）。
+    # 进程内注册表定位 dispatcher 与 primary agent 并置位。
+    # late import 避免 orch_routes ↔ legacy_routes 的模块初始化环。
     try:
-        from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+        from backend.api.legacy_routes import interrupt_run
 
-        dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
-        if dispatcher is not None:
-            dispatcher.cancel()
-    except Exception:  # noqa: BLE001 — 注册表命中失败不阻塞状态落库
-        pass
+        interrupt_run(run_id)
+    except Exception as exc:  # noqa: BLE001 — 注册表命中失败不阻塞状态落库
+        # Durable cancellation remains authoritative; log control-plane failure
+        # so operators can detect a run that may still be executing.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "run cancellation bridge failed for %s: %s", run_id, exc
+        )
     return CancelRunResponse(ok=True, run_id=run_id, status="cancelled")

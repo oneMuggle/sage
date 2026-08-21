@@ -47,7 +47,7 @@ describe('ProgressSection', () => {
         { task_id: 't2', agent_id: 'writer', goal: '整理学习资料' },
       ],
       statuses: {},
-      progress: { total: 4, done: 1, running: 2, queued: 1, failed: 0 },
+      progress: { total: 4, done: 1, running: 2, queued: 1, failed: 0, cancelled: 0 },
       dispatchedAt: Date.now(),
     };
     render(
@@ -71,7 +71,7 @@ describe('ProgressSection', () => {
       runId: 'orch-1',
       plan: [],
       statuses: {},
-      progress: { total: 3, done: 1, running: 0, queued: 1, failed: 1 },
+      progress: { total: 3, done: 1, running: 0, queued: 1, failed: 1, cancelled: 0 },
       dispatchedAt: Date.now(),
     };
     render(
@@ -86,7 +86,26 @@ describe('ProgressSection', () => {
     expect(screen.getByTestId('task-progress-summary')).toHaveTextContent(/\(1 失败\)/);
   });
 
-  // ===== Wave 3 C3 (2026-08-15): 三态接线 =====
+  it('shows cancelled count for cancelled-only and mixed boards', () => {
+    const taskBoard: TaskBoard = {
+      runId: 'orch-cancelled',
+      plan: [],
+      statuses: {},
+      progress: { total: 2, done: 1, running: 0, queued: 0, failed: 0, cancelled: 1 },
+      dispatchedAt: Date.now(),
+    };
+    render(
+      <ProgressSection
+        iteration={0}
+        streamingState={null}
+        toolCalls={[]}
+        isLoading={false}
+        taskBoard={taskBoard}
+      />,
+    );
+    expect(screen.getByTestId('task-progress-summary')).toHaveTextContent('(1 已取消)');
+  });
+
   it('taskBoard == null → 渲染 PlanCardList（历史记录）', () => {
     render(
       <ProgressSection

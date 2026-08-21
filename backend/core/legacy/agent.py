@@ -601,6 +601,21 @@ class SageAgent:
 
         try:
             for i in range(effective_max_iterations):
+                # P0-1 (2026-08-20): 中断检查 —— 每轮迭代顶部消费一次中断信号（one-shot）。
+                # 此前 interrupt() 只置标志位、is_interrupted() 零调用者，run_loop 从不读，
+                # 中断请求完全无效。现在最迟在下一轮迭代开头终止：发 FAILED 事件，
+                # 前端 chatStream 收到 failed 走 onError + onDone 正常收尾。
+                if self.is_interrupted():
+                    self.reset_interrupt()
+                    logger.info("run_loop 被用户中断 (iteration %s)", i)
+                    yield AgentEvent(
+                        state=AgentState.FAILED,
+                        iteration=i,
+                        error="interrupted by user",
+                        agent_id=self.agent_id,
+                    )
+                    return
+
                 yield AgentEvent(state=AgentState.THINKING, iteration=i, agent_id=self.agent_id)
 
                 # Pass available tools to LLM so it can call them

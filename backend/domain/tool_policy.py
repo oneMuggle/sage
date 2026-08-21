@@ -44,6 +44,8 @@ class ToolPolicy:
     max_read_bytes: int = _DEFAULT_MAX_READ_BYTES
     max_tool_calls_per_run: int = _DEFAULT_MAX_TOOL_CALLS_PER_RUN
     workspace_root: Optional[str] = None
+    # Sub-agent-only restrictions; direct tool callers keep legacy behavior.
+    subagent_only: bool = False
 
     @classmethod
     def from_config(cls, cfg: Dict[str, Any]) -> ToolPolicy:
@@ -61,4 +63,5 @@ class ToolPolicy:
                 "max_tool_calls_per_run", defaults.max_tool_calls_per_run
             ),
             workspace_root=cfg.get("workspace_root", defaults.workspace_root),
+            subagent_only=cfg.get("subagent_only", defaults.subagent_only),
         )

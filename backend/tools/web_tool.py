@@ -1,7 +1,10 @@
 """
 Web 工具 - 网络搜索和网页获取
 """
+
+import ipaddress
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -146,7 +149,41 @@ class WebFetchTool(BaseTool):
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
-        self.client = httpx.Client(timeout=30.0)
+        self.client = httpx.Client(
+            timeout=30.0,
+            follow_redirects=False,
+            trust_env=not self._policy.subagent_only,
+        )
+
+    @staticmethod
+    def _literal_ip(url: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+        hostname = urlparse(url).hostname
+        if not hostname:
+            return None
+        try:
+            return ipaddress.ip_address(hostname)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _all_public(addresses: set[ipaddress.IPv4Address | ipaddress.IPv6Address]) -> bool:
+        return bool(addresses) and all(ip.is_global for ip in addresses)
+
+    def _validate_subagent_url(self, url: str) -> str | None:
+        address = self._literal_ip(url)
+        if address is None:
+            return "subagent_web_fetch_blocked: 仅允许访问字面量公共 IP 地址"
+        if not self._all_public({address}):
+            return "subagent_web_fetch_blocked: 仅允许访问公共网络地址"
+        return None
+
+    def _validate_subagent_redirect(self, location: str) -> str | None:
+        address = self._literal_ip(location)
+        if address is None:
+            return "subagent_web_fetch_blocked: 重定向目标必须是字面量公共 IP 地址"
+        if not self._all_public({address}):
+            return "subagent_web_fetch_blocked: 重定向目标不是公共地址"
+        return None
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -176,8 +213,17 @@ class WebFetchTool(BaseTool):
                 return ToolResult(
                     success=False, error="无效的 URL，必须以 http:// 或 https:// 开头"
                 )
+            if self._policy.subagent_only:
+                validation_error = self._validate_subagent_url(url)
+                if validation_error:
+                    return ToolResult(success=False, error=validation_error)
 
             response = self.client.get(url)
+            if self._policy.subagent_only and response.is_redirect:
+                location = response.headers.get("location", "")
+                validation_error = self._validate_subagent_redirect(location)
+                if validation_error:
+                    return ToolResult(success=False, error=validation_error)
             response.raise_for_status()
 
             content = response.text[:max_length]

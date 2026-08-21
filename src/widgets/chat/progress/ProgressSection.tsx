@@ -60,6 +60,9 @@ export function ProgressSection({
             {progress.failed > 0 && (
               <span className="text-error ml-1">({progress.failed} 失败)</span>
             )}
+            {progress.cancelled > 0 && (
+              <span className="text-text-secondary ml-1">({progress.cancelled} 已取消)</span>
+            )}
           </span>
         )}
         {hasTaskBoard && !isDispatched && (

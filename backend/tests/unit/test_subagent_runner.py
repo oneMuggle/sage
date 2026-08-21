@@ -156,3 +156,66 @@ async def test_lane_executor_runs_real_subagent_runner():
     assert lane_registry.get_lane("lane-it").status.value == "succeeded"
     assert task_registry.get_task("task-it").status.value == "completed"
     assert fake.calls == 1
+
+
+@pytest.mark.asyncio()
+async def test_runner_interrupt_event_stops_child():
+    """P0-3: interrupt_event 置位 → watcher 调 child.interrupt() → 抛 interrupted。"""
+    import asyncio
+
+    from backend.orchestration.subagent_runner import SubagentRunner
+
+    interrupt_seen = asyncio.Event()
+
+    class _FakeInterruptibleAgent:
+        def __init__(self):
+            self._flag = False
+
+        def interrupt(self):
+            self._flag = True
+            interrupt_seen.set()
+
+        async def run_loop(self, messages, max_iterations=None, llm_config=None):
+            from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+            yield AgentEvent(state=AgentState.THINKING, iteration=0)
+            await interrupt_seen.wait()  # 阻塞直到 watcher 调到 interrupt()
+            yield AgentEvent(
+                state=AgentState.FAILED, iteration=1, error="interrupted by user"
+            )
+
+    fake = _FakeInterruptibleAgent()
+    event = asyncio.Event()
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch("backend.orchestration.subagent_runner.SageAgent", return_value=fake):
+        runner = SubagentRunner(interrupt_event=event)
+        run_task = asyncio.create_task(runner(_make_task(goal="长任务"), "researcher"))
+        await asyncio.sleep(0)  # 让 runner 进入 run_loop 并挂起在 wait()
+        event.set()
+        with pytest.raises(RuntimeError, match="interrupted by user"):
+            await run_task
+
+
+@pytest.mark.asyncio()
+async def test_runner_surfaces_last_failed_event_error():
+    """P0-3: 子 agent FAILED（非中断）→ RuntimeError 携带事件 error 而非笼统文案。"""
+    from backend.orchestration.subagent_runner import SubagentRunner
+
+    class _FakeFailingAgent:
+        async def run_loop(self, messages, max_iterations=None, llm_config=None):
+            from backend.core.legacy.agent_state import AgentEvent, AgentState
+
+            yield AgentEvent(
+                state=AgentState.FAILED, iteration=0, error="max_iterations_exceeded"
+            )
+
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch(
+        "backend.orchestration.subagent_runner.SageAgent",
+        return_value=_FakeFailingAgent(),
+    ), pytest.raises(RuntimeError, match="max_iterations_exceeded"):
+        await SubagentRunner()(_make_task(), "researcher")
