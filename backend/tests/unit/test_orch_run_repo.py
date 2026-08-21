@@ -116,3 +116,21 @@ def test_mark_dispatched_missing_run_is_noop(repo):
     """不存在的 run → mark_dispatched 静默跳过（不抛异常）。"""
     repo.mark_dispatched("orch-none", 111)  # 不应抛异常
     assert repo.get("orch-none") is None
+
+
+def test_finalize_skips_cancelled_run(repo):
+    """P0-4: 已被 cancelRun 置 cancelled 的 run 不被迟到 finalize 覆盖。"""
+    repo.upsert(OrchRun(
+        run_id="orch-c", session_id="s", status="running",
+        created_at=1, plan_json="{}",
+    ))
+    repo.update_status("orch-c", "cancelled")
+    repo.finalize("orch-c", "completed", "太迟了")
+    fetched = repo.get("orch-c")
+    assert fetched.status == "cancelled"
+    assert fetched.final_summary is None
+
+
+def test_finalize_missing_run_is_noop(repo):
+    """不存在的 run_id finalize 不报错。"""
+    repo.finalize("ghost-run", "completed", "x")  # 无异常即通过

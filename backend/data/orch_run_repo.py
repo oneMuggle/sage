@@ -131,8 +131,11 @@ class OrchRunRepository:
     def finalize(self, run_id: str, status: str, final_summary: Optional[str]) -> None:
         conn = self.db.get_connection()
         cursor = conn.cursor()
+        # P0-4 (2026-08-20): 只闭环仍在 running 的 run —— 已被 cancelRun
+        # 置 cancelled 的 run 不被 producer finally 的迟到 finalize 覆盖。
         cursor.execute(
-            "UPDATE orch_runs SET status = ?, final_summary = ? WHERE run_id = ?",
+            "UPDATE orch_runs SET status = ?, final_summary = ? "
+            "WHERE run_id = ? AND status = 'running'",
             (status, final_summary, run_id),
         )
         conn.commit()

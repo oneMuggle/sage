@@ -6,11 +6,22 @@ vi.mock('../../../features/artifacts/useArtifacts', () => ({
   useArtifacts: vi.fn(() => ({ artifacts: [], loading: false, refresh: vi.fn() })),
 }));
 
+// Progress tab 渲染链含 PlanCardList，挂载即调 orchRunClient.listRuns()；
+// mock 掉避免 unhandled rejection（coverage 模式下 vitest 会因此 exit 1）。
+vi.mock('../../../shared/api/orchRunClient', () => ({
+  orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },
+}));
+
 import { RightPanel } from '../RightPanel';
 
 const props = {
-  open: true, onToggle: vi.fn(), iteration: 0, streamingState: null,
-  toolCalls: [], isLoading: false, sessionId: 'sess_001',
+  open: true,
+  onToggle: vi.fn(),
+  iteration: 0,
+  streamingState: null,
+  toolCalls: [],
+  isLoading: false,
+  sessionId: 'sess_001',
 };
 
 describe('RightPanel', () => {

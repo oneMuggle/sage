@@ -78,6 +78,9 @@ def create_default_agents() -> List[AgentProfile]:
                 "grep_search",    # 正则内容搜索（GrepSearchTool）
                 "glob_search",    # glob 文件名搜索（GlobSearchTool）
                 "file_summary",   # 文件结构摘要（FileSummaryTool）
+                # P0-5 (2026-08-20): 循环内只读子代理工具 —— 让主助手能在
+                # ReAct 循环内派遣子 agent（AgentTool 只读，无写副作用）。
+                "agent",
             ],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
@@ -148,6 +151,20 @@ def create_default_agents() -> List[AgentProfile]:
     ]
 
 
+# P0-5 (2026-08-20): 加 "agent" 之前的 primary 种子工具集合 —— 存量 DB 升级判定。
+# 仅当现有白名单恰好等于旧种子时才追加 agent；用户自定义（任何增删）一律不动。
+_PRIMARY_TOOLS_BEFORE_AGENT = {
+    "calculator",
+    "memory_search",
+    "memory_save",
+    "list_dir",
+    "read_file",
+    "grep_search",
+    "glob_search",
+    "file_summary",
+}
+
+
 def ensure_default_agents() -> int:
     """确保所有默认 agent（含 writer）都存在。
 
@@ -162,6 +179,13 @@ def ensure_default_agents() -> int:
         if repo.get(agent.id) is None:
             repo.upsert(agent.to_dict())
             inserted += 1
+    # P0-5 (2026-08-20): 存量 DB primary 升级 —— 旧种子白名单追加 "agent"。
+    primary = repo.get("primary")
+    if primary is not None:
+        tools = primary.get("tools") or []
+        if set(tools) == _PRIMARY_TOOLS_BEFORE_AGENT:
+            primary["tools"] = tools + ["agent"]
+            repo.upsert(primary)
     return inserted
 
 

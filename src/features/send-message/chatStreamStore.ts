@@ -15,7 +15,7 @@
 
 import { create } from 'zustand';
 
-import type { AgentEvent, TaskPlanItem, TaskStatusEvent } from '../../shared/api';
+import type { AgentEvent, TaskPlanItem, TaskReviewEvent, TaskStatusEvent } from '../../shared/api';
 import type { ToolCall } from '../../shared/lib/store';
 
 /** 流式消息的临时覆盖层（'🤔 思考中…' + LLM 累积的 content/reasoning） */
@@ -41,8 +41,11 @@ export interface TaskBoardState {
     running: number;
     queued: number;
     failed: number;
+    cancelled: number;
   };
   dispatchedAt?: number | null;
+  /** P0-6 (2026-08-20): reviewer 复核结论（每 run 至多一条，后到覆盖先到）。 */
+  review?: TaskReviewEvent | null;
 }
 
 interface ChatStreamStoreState {
@@ -133,9 +136,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
 
   clearStream: (messageId) =>
     set((prev) =>
-      prev.streaming && prev.streaming.messageId === messageId
-        ? { streaming: null }
-        : prev,
+      prev.streaming && prev.streaming.messageId === messageId ? { streaming: null } : prev,
     ),
 
   resetToolCalls: () => set({ streamingToolCalls: [] }),

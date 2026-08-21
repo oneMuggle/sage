@@ -260,10 +260,10 @@ class ChatDispatcher:
 
         async def _run_one(state: ChatTaskState) -> None:
             async with self._semaphore:
-                # P2-9 (2026-08-14): 取消后 queued 任务不再启动（转 cancelled）。守卫在
-                # acquire 之后 —— 排队等槽的任务 cancel 前已越过入口，拿到槽后再判一次
-                # 才真正短路；running 子任务已过守卫不硬杀（SubagentRunner 无中断通道），
-                # 尽力放行，已完成结果仍入聚合。
+                # P2-9 (2026-08-14) + P0-3 (2026-08-20): 取消后 queued 任务不再启动
+                # （转 cancelled）。守卫在 acquire 之后 —— 排队等槽的任务 cancel 前
+                # 已越过入口，拿到槽后再判一次才真正短路；running 子任务经
+                # SubagentRunner interrupt watcher 打断（interrupt_event=self._cancelled）。
                 if self._cancelled.is_set():
                     state.status = "cancelled"
                     state.error = "cancelled by user"
@@ -279,7 +279,9 @@ class ChatDispatcher:
                     state.status = "done"
                     state.output = content
                 except Exception as exc:  # noqa: BLE001 — 单任务失败隔离
-                    state.status = "failed"
+                    # P0-3 (2026-08-20): cancel 触发的异常 → cancelled 而非 failed
+                    # （SubagentRunner 已有 interrupt 通道，见 P0-1/P0-3）。
+                    state.status = "cancelled" if self._cancelled.is_set() else "failed"
                     state.error = str(exc)
                     logger.warning("subagent %s failed: %s", state.task_id, exc)
                 finally:
@@ -357,7 +359,7 @@ class ChatDispatcher:
             lane_registry=self.lane_registry,
             task_registry=self.task_registry,
             event_recorder=self.event_recorder,
-            agent_runner=SubagentRunner(self.llm_config),
+            agent_runner=SubagentRunner(self.llm_config, interrupt_event=self._cancelled),
         )
         result = await run_lane_with_retry(executor, lane, state.agent_id)
         # Wave 2 Minor 2 fix: 防御性 max-iteration guard。run_lane_with_retry

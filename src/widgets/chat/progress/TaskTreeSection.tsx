@@ -8,6 +8,9 @@ const STATUS_ICON: Record<TaskStatusValue, string> = {
   running: '◐',
   done: '✓',
   failed: '✗',
+  // P0-8 (2026-08-20): cancelled 状态渲染 —— 之前未覆盖 cancel 子任务，图标
+  // 退化为 undefined，TaskTreeSection 视觉上与 running 难以区分。
+  cancelled: '⊘',
 };
 
 const STATUS_TITLE: Record<TaskStatusValue, string> = {
@@ -15,6 +18,7 @@ const STATUS_TITLE: Record<TaskStatusValue, string> = {
   running: 'running',
   done: 'done',
   failed: 'failed',
+  cancelled: 'cancelled',
 };
 
 interface TaskTreeSectionProps {
@@ -37,10 +41,11 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
   const running = progress?.running ?? 0;
   const queued = progress?.queued ?? 0;
   const failed = progress?.failed ?? 0;
+  const cancelled = progress?.cancelled ?? 0;
   const inFlight = running + queued;
   // 进度可视化 L2 修正 (2026-08-12): 全部完成时不再显示"等待结果中"，
   // 避免与下方 "完成 6/6" 自相矛盾。
-  const allDone = doneCount > 0 && doneCount === total && inFlight === 0;
+  const allDone = doneCount + failed + cancelled === total && inFlight === 0;
 
   return (
     <div className="space-y-1" data-testid="task-tree">
@@ -52,6 +57,7 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
           完成 {doneCount}/{total}
           {inFlight > 0 && ` · ${inFlight} 个进行中`}
           {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
+          {cancelled > 0 && <span className="text-text-secondary ml-1">({cancelled} 已取消)</span>}
         </div>
         {/* Wave 3 H2 (2026-08-15): 运行中取消按钮 —— 全部完成/无 onCancel 时隐藏 */}
         {!allDone && onCancel && (
@@ -65,6 +71,21 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
           </button>
         )}
       </div>
+      {/* P0-6 (2026-08-20): reviewer 复核结论横幅 —— pass/fail 双色 */}
+      {board.review && (
+        <div
+          data-testid="task-review-banner"
+          className={`px-2 py-1 rounded text-xs ${
+            board.review.verdict === 'pass'
+              ? 'bg-primary/10 text-primary'
+              : 'bg-error/10 text-error'
+          }`}
+        >
+          {board.review.verdict === 'pass'
+            ? `✓ 复核通过（${board.review.assertion_count} 项断言）`
+            : `⚠ 复核存疑（${board.review.assertion_count} 项断言）：${board.review.summary}`}
+        </div>
+      )}
       {board.plan.map((item) => {
         const st = board.statuses[item.task_id];
         const status: TaskStatusValue = st?.status ?? 'queued';
@@ -94,6 +115,15 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
               </span>
               <span className="px-1 rounded bg-primary/10 text-primary">{item.agent_id}</span>
               <span className="text-text-secondary flex-1">{item.goal}</span>
+              {/* P0-7 (2026-08-20): 重试徽章 —— retry_count>0 才显示 */}
+              {(st?.retry_count ?? 0) > 0 && (
+                <span
+                  data-testid={`task-tree-retry-${item.task_id}`}
+                  className="text-text-tertiary text-[10px] shrink-0"
+                >
+                  已重试 ×{st?.retry_count}
+                </span>
+              )}
             </div>
             {preview && status !== 'queued' && (
               <details className="pl-6 text-muted">

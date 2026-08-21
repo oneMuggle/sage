@@ -19,6 +19,7 @@ from typing import Optional, Tuple
 
 from backend.data import artifact_repo
 from backend.domain.risk import RiskClass
+from backend.domain.tool_policy import ToolPolicy
 from backend.tools.context import current_tool_context
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -146,6 +147,10 @@ def _pre_read_checks(file_path: Path, original_bytes: int) -> Optional[ToolResul
 class ReadFileTool(BaseTool):
     """读取文件工具"""
 
+    def __init__(self, policy: Optional[ToolPolicy] = None, *, enforce_workspace: bool = False) -> None:
+        super().__init__(policy=policy)
+        self._enforce_read_workspace = enforce_workspace
+
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="read_file",
@@ -167,7 +172,9 @@ class ReadFileTool(BaseTool):
 
         return _base_is_safe_path(path, allowed_base)
 
-    def execute(self, path: str, offset: int = 1, limit: int = 500, **kwargs) -> ToolResult:
+    def execute(  # noqa: PLR0911 — legacy read path keeps explicit early-return guards
+        self, path: str, offset: int = 1, limit: int = 500, **kwargs
+    ) -> ToolResult:
         """
         读取文件
 
@@ -183,9 +190,15 @@ class ReadFileTool(BaseTool):
         M2: ``policy.max_read_bytes`` 字节上限（≤ 5 MiB 的文件）——超限时
             **流式**读取（先于行切片）并标记 ``truncated=True``。
         """
+        if self._enforce_read_workspace:
+            blocked = self._enforce_workspace(path)
+            if blocked is not None:
+                return blocked
         if self._policy.workspace_root:
             logger.debug(
-                "read_file: workspace_root 已设置但 READ 不做边界检查 (读写非对称): %s", path
+                "read_file: workspace_root 已设置; enforced=%s: %s",
+                self._enforce_read_workspace,
+                path,
             )
         try:
             file_path = Path(path).expanduser()
@@ -346,6 +359,10 @@ class WriteFileTool(BaseTool):
 class ListDirTool(BaseTool):
     """列出目录工具"""
 
+    def __init__(self, policy: Optional[ToolPolicy] = None, *, enforce_workspace: bool = False) -> None:
+        super().__init__(policy=policy)
+        self._enforce_read_workspace = enforce_workspace
+
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="list_dir",
@@ -372,9 +389,15 @@ class ListDirTool(BaseTool):
         M2: ``policy.max_result_items`` 条数上限——超限时截断 ``items``；
             content 含 ``truncated``/``total_items``。
         """
+        if self._enforce_read_workspace:
+            blocked = self._enforce_workspace(path)
+            if blocked is not None:
+                return blocked
         if self._policy.workspace_root:
             logger.debug(
-                "list_dir: workspace_root 已设置但 READ 不做边界检查 (读写非对称): %s", path
+                "list_dir: workspace_root 已设置; enforced=%s: %s",
+                self._enforce_read_workspace,
+                path,
             )
         try:
             dir_path = Path(path).expanduser()

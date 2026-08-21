@@ -95,3 +95,47 @@ async def test_create_agent_endpoint_validates_role():
     ) as ac:
         resp = await ac.post("/api/v1/agents", json=payload)
     assert resp.status_code == 422, resp.text
+
+
+# ---------------------------------------------------------------------------
+# P0-5 (2026-08-20): 解锁 primary profile 的 agent 工具 —— 循环内只读子代理
+# ---------------------------------------------------------------------------
+
+
+def test_primary_seed_contains_agent_tool():
+    """P0-5: primary 种子白名单含循环内子代理工具 agent。"""
+    from backend.agents.profiles import create_default_agents
+
+    primary = next(a for a in create_default_agents() if a.id == "primary")
+    assert "agent" in primary.tools
+
+
+@pytest.mark.asyncio()
+async def test_ensure_upgrades_stale_primary_tools_with_agent():
+    """存量 DB primary 停留在旧种子列表 → ensure 追加 agent。"""
+    from backend.agents.profiles import _PRIMARY_TOOLS_BEFORE_AGENT, ensure_default_agents
+
+    repo = AgentRepository()
+    stale = repo.get("primary")
+    assert stale is not None
+    stale["tools"] = list(_PRIMARY_TOOLS_BEFORE_AGENT)  # 回退旧种子（无 agent）
+    repo.upsert(stale)
+
+    ensure_default_agents()
+
+    assert "agent" in repo.get("primary")["tools"]
+
+
+@pytest.mark.asyncio()
+async def test_ensure_does_not_touch_customized_primary_tools():
+    """用户自定义白名单（≠ 旧种子）→ 绝不自动改动。"""
+    from backend.agents.profiles import ensure_default_agents
+
+    repo = AgentRepository()
+    custom = repo.get("primary")
+    custom["tools"] = ["calculator", "memory_search"]
+    repo.upsert(custom)
+
+    ensure_default_agents()
+
+    assert repo.get("primary")["tools"] == ["calculator", "memory_search"]

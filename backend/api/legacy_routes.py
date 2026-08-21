@@ -23,7 +23,7 @@ import time
 import uuid
 from typing import Any, Dict, Optional, Set, Union
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
@@ -349,6 +349,94 @@ class AgentCreate(BaseModel):
 
 def get_session_repo() -> SessionRepository:
     return SessionRepository()
+
+
+# P0-2 (2026-08-20): stream_id → 本流真实运行实例。旧 /interrupt 用
+# Depends(get_agent) 每次新建空实例，中断信号永远到不了 producer 里
+# 正在跑的 agent。producer 在 run_loop 前登记、finally 注销。
+_ACTIVE_STREAMS: Dict[str, Dict[str, Any]] = {}
+_PENDING_RUN_CANCELLATIONS: Set[str] = set()
+
+
+class InterruptRequest(BaseModel):
+    """/interrupt 请求体 —— stream_id 可选，兼容不带 body 的旧调用方。"""
+
+    stream_id: Optional[str] = None
+
+
+def interrupt_stream(stream_id: Optional[str]) -> str:
+    """中断目标流：主 agent interrupt（+ multi 模式 cancel dispatcher）。
+
+    返回命中标识（"stream"/"none"）供端点回传与测试断言。
+    纯内存注册表操作，不依赖 DB。
+    """
+    if not stream_id:
+        return "none"
+    entry = _ACTIVE_STREAMS.get(stream_id)
+    if entry is None:
+        return "none"
+    entry["cancelled"] = True
+    agent_obj: SageAgent = entry["agent"]
+    agent_obj.interrupt()
+    run_id = entry.get("run_id")
+    if run_id:
+        from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+        dispatcher = entry.get("dispatcher") or _ACTIVE_DISPATCHERS.get(run_id)
+        if dispatcher is not None:
+            dispatcher.cancel()
+    return "stream"
+
+
+def interrupt_run(run_id: str) -> str:
+    """Cancel every active stream belonging to an orchestration run.
+
+    If planning has not bound the run id to its stream yet, retain a pending
+    cancellation token.  The producer consumes it when the dispatcher binds.
+    """
+    matched = False
+    for entry in list(_ACTIVE_STREAMS.values()):
+        if entry.get("run_id") != run_id:
+            continue
+        matched = True
+        entry["cancelled"] = True
+        agent_obj: SageAgent = entry["agent"]
+        agent_obj.interrupt()
+        dispatcher = entry.get("dispatcher")
+        if dispatcher is None:
+            from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+            dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
+        if dispatcher is not None:
+            dispatcher.cancel()
+    if not matched:
+        # P2-9 兼容回退：run 级 cancel 在无 stream entry 时仍直接命中
+        # dispatcher 注册表（如 resume 流或仅注册 dispatcher 的场景）。
+        from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+        if _ACTIVE_DISPATCHERS.get(run_id) is not None:
+            _ACTIVE_DISPATCHERS[run_id].cancel()
+            return "stream"
+        _PENDING_RUN_CANCELLATIONS.add(run_id)
+    return "stream" if matched else "pending"
+
+
+def _finalize_orch_run(
+    run_id: Optional[str], status: str, final_summary: Optional[str]
+) -> None:
+    """P0-4 (2026-08-20): orch run 生命周期闭环（降级型）。
+
+    此前 OrchRunRepository.finalize 生产路径零调用者，orch_runs 永远
+    停留 "running"。single 路径 run_id=None 直接跳过。
+    """
+    if not run_id:
+        return
+    try:
+        from backend.data.orch_run_repo import OrchRunRepository
+
+        OrchRunRepository().finalize(run_id, status, final_summary)
+    except Exception as exc:  # noqa: BLE001 — 闭环失败不影响主流
+        logger.warning("orch run finalize 失败 (%s): %s", run_id, exc)
 
 
 def get_agent() -> SageAgent:
@@ -1602,6 +1690,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             )
         _tool_ctx_token = set_tool_context(_tool_ctx)
         try:
+            # P0-4 (2026-08-20): 终态变量前置到 try 顶部 —— finally 无条件读取
+            # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
+            # CancelledError）会让 finally 触发 UnboundLocalError，既掩盖原始异常
+            # 又跳过后续的 reset_tool_context 清理。
+            done_content: Optional[str] = None
+            run_outcome = "failed"
+
             llm_config = None
             if data.api_key and data.api_url:
                 llm_config = {
@@ -1624,6 +1719,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
 
             agent = SageAgent(agent_id=data.agent_id or "primary")
+            # P0 cancellation: register the primary before any blocking await.
+            _ACTIVE_STREAMS[stream_id] = {
+                "agent": agent,
+                "run_id": None,
+                "dispatcher": None,
+                "cancelled": False,
+            }
 
             # Build system prompt with optional diagram tool guidance
             from backend.agents.profiles import build_system_base
@@ -1654,6 +1756,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
                     mode = "single"
             run_id: Optional[str] = None
+            dispatcher = None
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import (
                     _ACTIVE_DISPATCHERS,
@@ -1741,6 +1844,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # P2-9 (2026-08-14): 进程内注册表登记 —— 长连接期间 run 级
                     # cancel 端点能定位到本 dispatcher 并置位取消事件。
                     _ACTIVE_DISPATCHERS[run_id] = dispatcher
+                    stream_entry = _ACTIVE_STREAMS.get(stream_id)
+                    if stream_entry is not None:
+                        stream_entry["run_id"] = run_id
+                        stream_entry["dispatcher"] = dispatcher
+                        if (
+                            stream_entry.get("cancelled")
+                            or run_id in _PENDING_RUN_CANCELLATIONS
+                        ):
+                            stream_entry["cancelled"] = True
+                            _PENDING_RUN_CANCELLATIONS.discard(run_id)
+                            agent.interrupt()
+                            dispatcher.cancel()
                     agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
                     if (
                         agent.profile is not None
@@ -1898,13 +2013,26 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
-            done_content: Optional[str] = None
-
             done_reasoning: Optional[str] = None
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
+
+            # P0-2 (2026-08-20): registration is created immediately after agent.
+            # Keep the same entry and only refresh late-bound fields here.
+            stream_entry = _ACTIVE_STREAMS.get(stream_id)
+            if stream_entry is not None:
+                stream_entry["run_id"] = run_id
+                stream_entry["dispatcher"] = dispatcher
+                if run_id in _PENDING_RUN_CANCELLATIONS:
+                    stream_entry["cancelled"] = True
+                    _PENDING_RUN_CANCELLATIONS.discard(run_id)
+                    agent.interrupt()
+                    if dispatcher is not None:
+                        dispatcher.cancel()
+                elif stream_entry.get("cancelled") and dispatcher is not None:
+                    dispatcher.cancel()
 
             async for evt in agent.run_loop(messages, llm_config=llm_config):
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
@@ -1927,6 +2055,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 待 post-loop 标题生成 + session_updated 事件后再推送，
                     # 保证前端 onDone → loadSessions() 时标题已落盘。
                     done_event = evt
+                    run_outcome = "completed"
                 elif evt.state.value == "reasoning" and evt.reasoning:
                     # PR-7b: 累积 reasoning 事件,持久化时一起写入 DB
                     if done_reasoning is None:
@@ -2054,6 +2183,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:
                 _ACTIVE_DISPATCHERS.pop(run_id, None)
+            # P0-2 (2026-08-20): 注销流注册表 —— stream 结束 / interrupt 不再命中陈旧实例。
+            _ACTIVE_STREAMS.pop(stream_id, None)
+            # P0-4 (2026-08-20): orch run 终态闭环 —— 让 run 离开 "running"。
+            _finalize_orch_run(run_id, run_outcome, done_content)
             # Task 9 (M1-M2): always reset the tool context so the
             # ContextVar never leaks into the next producer invocation.
             if _tool_ctx_token is not None:
@@ -2130,10 +2263,11 @@ def _ndjson(d: dict) -> str:
 
 @router.post("/interrupt")
 @with_db_lock
-def interrupt(agent: SageAgent = Depends(get_agent)):
-    """中断 Agent"""
-    agent.interrupt()
-    return {"status": "ok"}
+def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
+    """中断 Agent（P0-2: 经 stream_id 定位真实运行的 agent）"""
+    stream_id = data.stream_id if data is not None else None
+    target = interrupt_stream(stream_id)
+    return {"status": "ok", "target": target}
 
 
 # ==================== 消息 API ====================
