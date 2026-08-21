@@ -434,9 +434,11 @@ export function useChat() {
               if (evt.state === 'task_review' && evt.run_id) {
                 const runId = evt.run_id;
                 const review = evt as TaskReviewEvent;
-                useChatStreamStore.getState().updateTaskBoard(runId, (prev) =>
-                  prev && prev.runId === runId ? { ...prev, review } : prev,
-                );
+                useChatStreamStore
+                  .getState()
+                  .updateTaskBoard(runId, (prev) =>
+                    prev && prev.runId === runId ? { ...prev, review } : prev,
+                  );
                 return;
               }
 

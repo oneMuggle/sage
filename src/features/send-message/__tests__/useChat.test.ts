@@ -1438,10 +1438,7 @@ describe('useChat taskBoard', () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-1' });
     listenMock.mockImplementationOnce(
-      async (
-        _name: string,
-        cb: (e: { payload: Record<string, unknown> }) => void,
-      ) => {
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
         Promise.resolve().then(() => {
           cb({
             payload: {

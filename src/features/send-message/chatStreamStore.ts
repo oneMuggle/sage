@@ -15,12 +15,7 @@
 
 import { create } from 'zustand';
 
-import type {
-  AgentEvent,
-  TaskPlanItem,
-  TaskReviewEvent,
-  TaskStatusEvent,
-} from '../../shared/api';
+import type { AgentEvent, TaskPlanItem, TaskReviewEvent, TaskStatusEvent } from '../../shared/api';
 import type { ToolCall } from '../../shared/lib/store';
 
 /** 流式消息的临时覆盖层（'🤔 思考中…' + LLM 累积的 content/reasoning） */
@@ -140,9 +135,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
 
   clearStream: (messageId) =>
     set((prev) =>
-      prev.streaming && prev.streaming.messageId === messageId
-        ? { streaming: null }
-        : prev,
+      prev.streaming && prev.streaming.messageId === messageId ? { streaming: null } : prev,
     ),
 
   resetToolCalls: () => set({ streamingToolCalls: [] }),
