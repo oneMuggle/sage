@@ -3,8 +3,6 @@
 使用 respx 拦截 httpx 请求，避免真实网络调用。
 """
 
-import ipaddress
-
 import httpx
 import pytest
 import respx

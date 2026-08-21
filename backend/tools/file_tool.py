@@ -172,7 +172,9 @@ class ReadFileTool(BaseTool):
 
         return _base_is_safe_path(path, allowed_base)
 
-    def execute(self, path: str, offset: int = 1, limit: int = 500, **kwargs) -> ToolResult:
+    def execute(  # noqa: PLR0911 — legacy read path keeps explicit early-return guards
+        self, path: str, offset: int = 1, limit: int = 500, **kwargs
+    ) -> ToolResult:
         """
         读取文件
 

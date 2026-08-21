@@ -36,8 +36,7 @@ async def test_endpoint_hits_registered_stream_agent(monkeypatch):
 @pytest.mark.asyncio()
 async def test_run_cancel_interrupts_primary_and_dispatcher(monkeypatch):
     """Run-level cancellation reaches both in-process execution owners."""
-    from backend.api import legacy_routes as lr
-    from backend.api import orch_routes as orch
+    from backend.api import legacy_routes as lr, orch_routes as orch
     from backend.orchestration import chat_dispatcher as cd_mod
     from backend.orchestration.chat_dispatcher import ChatDispatcher
 

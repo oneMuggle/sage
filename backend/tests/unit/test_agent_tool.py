@@ -57,7 +57,8 @@ class TestReadonlyWhitelist:
         second_root = Path(second.get("read_file")._policy.workspace_root)
 
         assert first_root != second_root
-        assert first_root.is_dir() and second_root.is_dir()
+        assert first_root.is_dir()
+        assert second_root.is_dir()
         assert first_root.stat().st_mode & 0o777 == 0o700
         assert second_root.stat().st_mode & 0o777 == 0o700
 
