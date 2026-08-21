@@ -411,6 +411,13 @@ def interrupt_run(run_id: str) -> str:
         if dispatcher is not None:
             dispatcher.cancel()
     if not matched:
+        # P2-9 兼容回退：run 级 cancel 在无 stream entry 时仍直接命中
+        # dispatcher 注册表（如 resume 流或仅注册 dispatcher 的场景）。
+        from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+        if _ACTIVE_DISPATCHERS.get(run_id) is not None:
+            _ACTIVE_DISPATCHERS[run_id].cancel()
+            return "stream"
         _PENDING_RUN_CANCELLATIONS.add(run_id)
     return "stream" if matched else "pending"
 
