@@ -69,6 +69,21 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
           </button>
         )}
       </div>
+      {/* P0-6 (2026-08-20): reviewer 复核结论横幅 —— pass/fail 双色 */}
+      {board.review && (
+        <div
+          data-testid="task-review-banner"
+          className={`px-2 py-1 rounded text-xs ${
+            board.review.verdict === 'pass'
+              ? 'bg-primary/10 text-primary'
+              : 'bg-error/10 text-error'
+          }`}
+        >
+          {board.review.verdict === 'pass'
+            ? `✓ 复核通过（${board.review.assertion_count} 项断言）`
+            : `⚠ 复核存疑（${board.review.assertion_count} 项断言）：${board.review.summary}`}
+        </div>
+      )}
       {board.plan.map((item) => {
         const st = board.statuses[item.task_id];
         const status: TaskStatusValue = st?.status ?? 'queued';

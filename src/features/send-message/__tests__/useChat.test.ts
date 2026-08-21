@@ -1431,6 +1431,57 @@ describe('useChat taskBoard', () => {
     });
   });
 
+  // P0-6 (2026-08-20): task_review 事件 → 复核结论写入任务板,
+  // 由 TaskTreeSection 渲染横幅。不进消息气泡（agentStateMapping 对
+  // task_review 返回 null 的既有行为保留）。
+  it('stores task_review event on the task board', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-1' });
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: { payload: Record<string, unknown> }) => void,
+      ) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'task_plan',
+              iteration: 0,
+              run_id: 'orch-1',
+              plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'g1' }],
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_review',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              reviewer_id: 'reviewer',
+              verdict: 'fail',
+              assertion_count: 3,
+              summary: '结论缺少数据支撑',
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('complex task');
+    });
+
+    await waitFor(() => {
+      const board = useChatStreamStore.getState().taskBoard;
+      expect(board?.review?.verdict).toBe('fail');
+      expect(board?.review?.summary).toBe('结论缺少数据支撑');
+    });
+  });
+
   it('falls back to statuses-driven progress when no task_progress arrives', async () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-4' });

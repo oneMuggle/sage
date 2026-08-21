@@ -11,6 +11,7 @@ import {
   type ChatOfficeRef,
   type TaskPlanItem,
   type TaskProgressEvent,
+  type TaskReviewEvent,
   type TaskStatusEvent,
 } from '../../shared/api';
 import { orchRunClient } from '../../shared/api/orchRunClient';
@@ -423,6 +424,18 @@ export function useChat() {
                         },
                       }
                     : prev,
+                );
+                return;
+              }
+
+              // P0-6 (2026-08-20): task_review 事件 → 复核结论写入任务板，
+              // 由 TaskTreeSection 渲染横幅。不进消息气泡 ——
+              // agentStateMapping 对 task_review 返回 null 的既有行为保留。
+              if (evt.state === 'task_review' && evt.run_id) {
+                const runId = evt.run_id;
+                const review = evt as TaskReviewEvent;
+                useChatStreamStore.getState().updateTaskBoard(runId, (prev) =>
+                  prev && prev.runId === runId ? { ...prev, review } : prev,
                 );
                 return;
               }

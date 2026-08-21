@@ -201,4 +201,41 @@ describe('TaskTreeSection', () => {
     render(<TaskTreeSection board={board} />);
     expect(screen.getByTestId('task-tree-item-t1')).toHaveTextContent('⊘');
   });
+
+  // P0-6 (2026-08-20): reviewer 复核结论横幅 —— pass/fail 双色展示
+  it('shows review pass banner with assertion count', () => {
+    const board = makeBoard({
+      review: {
+        state: 'task_review',
+        run_id: 'orch-1',
+        task_id: 't1',
+        reviewer_id: 'reviewer',
+        verdict: 'pass',
+        assertion_count: 4,
+        summary: '全部通过',
+      },
+    });
+    render(<TaskTreeSection board={board} />);
+    const banner = screen.getByTestId('task-review-banner');
+    expect(banner).toHaveTextContent('复核通过');
+    expect(banner).toHaveTextContent('4');
+  });
+
+  it('shows review fail banner with summary', () => {
+    const board = makeBoard({
+      review: {
+        state: 'task_review',
+        run_id: 'orch-1',
+        task_id: 't1',
+        reviewer_id: 'reviewer',
+        verdict: 'fail',
+        assertion_count: 3,
+        summary: '结论缺少数据支撑',
+      },
+    });
+    render(<TaskTreeSection board={board} />);
+    const banner = screen.getByTestId('task-review-banner');
+    expect(banner).toHaveTextContent('复核存疑');
+    expect(banner).toHaveTextContent('结论缺少数据支撑');
+  });
 });
