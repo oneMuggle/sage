@@ -387,6 +387,24 @@ def interrupt_stream(stream_id: Optional[str]) -> str:
     return "stream"
 
 
+def _finalize_orch_run(
+    run_id: Optional[str], status: str, final_summary: Optional[str]
+) -> None:
+    """P0-4 (2026-08-20): orch run 生命周期闭环（降级型）。
+
+    此前 OrchRunRepository.finalize 生产路径零调用者，orch_runs 永远
+    停留 "running"。single 路径 run_id=None 直接跳过。
+    """
+    if not run_id:
+        return
+    try:
+        from backend.data.orch_run_repo import OrchRunRepository
+
+        OrchRunRepository().finalize(run_id, status, final_summary)
+    except Exception as exc:  # noqa: BLE001 — 闭环失败不影响主流
+        logger.warning("orch run finalize 失败 (%s): %s", run_id, exc)
+
+
 def get_agent() -> SageAgent:
     return SageAgent()
 
@@ -2007,6 +2025,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             done_content: Optional[str] = None
 
+            # P0-4 (2026-08-20): run 终态 —— 默认 failed（LLMError/崩溃路径），
+            # DONE 事件到达时置 completed；finally 无条件 finalize。
+            run_outcome = "failed"
+
             done_reasoning: Optional[str] = None
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
@@ -2038,6 +2060,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 待 post-loop 标题生成 + session_updated 事件后再推送，
                     # 保证前端 onDone → loadSessions() 时标题已落盘。
                     done_event = evt
+                    run_outcome = "completed"
                 elif evt.state.value == "reasoning" and evt.reasoning:
                     # PR-7b: 累积 reasoning 事件,持久化时一起写入 DB
                     if done_reasoning is None:
@@ -2148,6 +2171,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 _ACTIVE_DISPATCHERS.pop(run_id, None)
             # P0-2 (2026-08-20): 注销流注册表 —— stream 结束 / interrupt 不再命中陈旧实例。
             _ACTIVE_STREAMS.pop(stream_id, None)
+            # P0-4 (2026-08-20): orch run 终态闭环 —— 让 run 离开 "running"。
+            _finalize_orch_run(run_id, run_outcome, done_content)
             # Task 9 (M1-M2): always reset the tool context so the
             # ContextVar never leaks into the next producer invocation.
             if _tool_ctx_token is not None:
