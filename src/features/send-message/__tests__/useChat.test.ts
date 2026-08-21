@@ -1428,6 +1428,7 @@ describe('useChat taskBoard', () => {
       running: 0,
       queued: 0,
       failed: 0,
+      cancelled: 0,
     });
   });
 
@@ -1569,6 +1570,7 @@ describe('useChat taskBoard', () => {
       running: 0,
       queued: 0,
       failed: 0,
+      cancelled: 0,
     });
   });
 });

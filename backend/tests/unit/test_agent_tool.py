@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import backend.tools.agent_tool as agent_tool_module
@@ -48,6 +49,48 @@ def _mock_sub_llm(*responses: LLMResponse) -> MagicMock:
 
 
 class TestReadonlyWhitelist:
+    def test_default_registries_use_distinct_restrictive_scratch_roots(self):
+        first = build_readonly_tool_registry()
+        second = build_readonly_tool_registry()
+
+        first_root = Path(first.get("read_file")._policy.workspace_root)
+        second_root = Path(second.get("read_file")._policy.workspace_root)
+
+        assert first_root != second_root
+        assert first_root.is_dir() and second_root.is_dir()
+        assert first_root.stat().st_mode & 0o777 == 0o700
+        assert second_root.stat().st_mode & 0o777 == 0o700
+
+        agent_tool_module._cleanup_subagent_workspace(first_root)
+        agent_tool_module._cleanup_subagent_workspace(second_root)
+
+    def test_default_registry_does_not_reuse_preexisting_unsafe_root(self, monkeypatch, tmp_path):
+        unsafe = tmp_path / "sage-subagent-scratch"
+        unsafe.mkdir(mode=0o755)
+        symlink = tmp_path / "sage-subagent-link"
+        symlink.symlink_to(tmp_path)
+        monkeypatch.setattr(agent_tool_module.tempfile, "gettempdir", lambda: str(tmp_path))
+
+        registry = build_readonly_tool_registry()
+        root = Path(registry.get("read_file")._policy.workspace_root)
+
+        assert root not in (unsafe, symlink)
+        assert root.stat().st_mode & 0o777 == 0o700
+        agent_tool_module._cleanup_subagent_workspace(root)
+
+    def test_explicit_workspace_is_not_owned_or_deleted(self, tmp_path):
+        workspace = tmp_path / "caller-workspace"
+        workspace.mkdir(mode=0o700)
+
+        registry = build_readonly_tool_registry(
+            policy=agent_tool_module.ToolPolicy(workspace_root=str(workspace))
+        )
+        agent_tool_module._cleanup_subagent_workspace(
+            getattr(registry, "_owned_workspace_root", None)
+        )
+
+        assert workspace.is_dir()
+
     def test_whitelist_is_read_only(self):
         """Registry exposes exactly the six read-only tools — nothing else."""
         registry = build_readonly_tool_registry()

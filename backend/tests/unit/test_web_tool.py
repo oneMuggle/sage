@@ -158,9 +158,8 @@ def test_web_fetch_http_error():
     assert "HTTP" in result.error or "失败" in result.error
 
 
-def test_web_fetch_subagent_blocks_private_destinations(monkeypatch):
+def test_web_fetch_subagent_blocks_private_destinations():
     tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
-    monkeypatch.setattr(tool, "_is_public_url", lambda url: False)
 
     result = tool.execute(url="http://127.0.0.1:8765/health")
 
@@ -168,45 +167,60 @@ def test_web_fetch_subagent_blocks_private_destinations(monkeypatch):
     assert "subagent_web_fetch_blocked" in result.error
 
 
-def test_web_fetch_subagent_blocks_dns_rebinding(monkeypatch):
+@pytest.mark.parametrize(
+    "address",
+    [
+        "100.64.0.1",
+        "192.0.2.1",
+        "198.51.100.1",
+        "203.0.113.1",
+        "::ffff:100.64.0.1",
+        "::ffff:192.0.2.1",
+    ],
+)
+def test_web_fetch_subagent_blocks_non_global_literal_addresses(address):
     tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
-    public = {ipaddress.ip_address("93.184.216.34")}
-    private = {ipaddress.ip_address("127.0.0.1")}
-    resolutions = iter([public, private])
-    monkeypatch.setattr(tool, "_resolve_addresses", lambda url: next(resolutions))
 
-    with respx.mock(base_url="https://public.example", assert_all_called=False) as mock:
-        mock.get("/page").mock(return_value=Response(200, text="public"))
-        result = tool.execute(url="https://public.example/page")
-
-    assert result.success is False
-    assert "DNS" in result.error
-
-
-def test_web_fetch_subagent_allows_public_url(monkeypatch):
-    with respx.mock(base_url="https://public.example", assert_all_called=False) as mock:
-        mock.get("/page").mock(return_value=Response(200, text="public"))
-        tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
-        monkeypatch.setattr(tool, "_resolve_addresses", lambda url: {ipaddress.ip_address("93.184.216.34")})
-        result = tool.execute(url="https://public.example/page")
-
-    assert result.success is True
-    assert result.content["content"] == "public"
-
-def test_web_fetch_subagent_blocks_unsafe_redirect(monkeypatch):
-    with respx.mock(base_url="https://public.example", assert_all_called=False) as mock:
-        mock.get("/redirect").mock(
-            return_value=Response(302, headers={"location": "http://127.0.0.1/admin"})
-        )
-        tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
-        monkeypatch.setattr(tool, "_is_public_url", lambda url: not url.startswith("http://127"))
-        result = tool.execute(url="https://public.example/redirect")
+    result = tool.execute(url=f"http://[{address}]/metadata" if ":" in address else f"http://{address}/metadata")
 
     assert result.success is False
     assert "subagent_web_fetch_blocked" in result.error
 
 
-    """底层抛异常 → 包装成失败"""
+def test_web_fetch_subagent_rejects_hostname_to_avoid_dns_to_connect_toctou():
+    tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
+
+    result = tool.execute(url="https://public.example/page")
+
+    assert result.success is False
+    assert "字面量公共 IP" in result.error
+
+
+def test_web_fetch_subagent_allows_public_literal_ip():
+    with respx.mock(base_url="https://93.184.216.34", assert_all_called=False) as mock:
+        mock.get("/page").mock(return_value=Response(200, text="public"))
+        tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
+        result = tool.execute(url="https://93.184.216.34/page")
+
+    assert result.success is True
+    assert result.content["content"] == "public"
+    assert tool.client._trust_env is False
+
+
+def test_web_fetch_subagent_blocks_unsafe_redirect():
+    with respx.mock(base_url="https://93.184.216.34", assert_all_called=False) as mock:
+        mock.get("/redirect").mock(
+            return_value=Response(302, headers={"location": "http://127.0.0.1/admin"})
+        )
+        tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
+        result = tool.execute(url="https://93.184.216.34/redirect")
+
+    assert result.success is False
+    assert "subagent_web_fetch_blocked" in result.error
+
+
+def test_web_fetch_network_exception():
+    """底层抛异常 → 包装成失败。"""
     with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
         mock.get("/oops").mock(side_effect=httpx.ConnectError("conn refused"))
         tool = WebFetchTool()
