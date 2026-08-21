@@ -361,7 +361,7 @@ PR A #316（P2-7/8/9 + run 级 cancel）+ PR B #317（P2-10 休眠层）+ PR C #
 - **Run-level cancel**：`POST /api/v1/orch/runs/{run_id}/cancel` 先将数据库状态置为 `cancelled`，再通过 `legacy_routes.interrupt_run()` 遍历该 run 的活动 stream，同时调用 primary `SageAgent.interrupt()` 与 `ChatDispatcher.cancel()`。取消入口保持异常隔离，避免内存注册表故障阻断状态落库。
 - **Stream registration race**：`/chat/stream` producer 在创建 primary agent 后、任何规划或附件等待前登记 `_ACTIVE_STREAMS`。dispatcher 后绑定到同一条 entry；若取消先到，entry 的 `cancelled` 标记会在绑定时重放到 dispatcher。producer finally 仍负责移除 entry。
 - **Cancelled is terminal**：`task_progress.cancelled` 纳入前后端五元组快照；任务树与摘要将 `cancelled` 计为终态，取消-only run 不再显示“等待结果中”或取消按钮。
-- **Subagent filesystem**：只有 `build_readonly_tool_registry()` 为子代理构造 `ReadFileTool` / `ListDirTool(enforce_workspace=True)`，路径经 resolve 后必须位于 scratch/workspace 根内，拦截绝对越界、`..` 穿越和符号链接逃逸。直接调用文件工具仍保留既有 read-vs-write 兼容语义。
-- **Subagent web fetch**：子代理 `WebFetchTool` 使用 `subagent_only` 策略拒绝 loopback、私网、link-local、multicast、未指定地址及不安全重定向；普通 WebFetch/WebSearch 不启用该限制。该检查不是完整的身份、凭证或网络层防护。
+- **Subagent filesystem**：只有 `build_readonly_tool_registry()` 为子代理构造 `ReadFileTool` / `ListDirTool(enforce_workspace=True)`，默认情况下为每个注册表分配独立的 `0700` 临时 scratch 根，并在子代理循环结束后清理；显式传入的 workspace 根由调用方管理，不会被删除。路径经 resolve 后必须位于 scratch/workspace 根内，拦截绝对越界、`..` 穿越和符号链接逃逸。直接调用文件工具仍保留既有 read-vs-write 兼容语义。
+- **Subagent web fetch**：为消除 DNS 预检与 HTTP 客户端实际解析之间的 TOCTOU，`subagent_only` 仅允许 URL 主机部分为字面量 IPv4/IPv6，且每个地址必须满足 `ip.is_global`；因此 CGNAT、保留网段、文档网段、私网及 IPv4-mapped IPv6 非公网地址都会拒绝。请求使用 `trust_env=False`，禁用自动重定向；若响应含重定向，目标必须再次满足同一字面量公网 IP 策略。普通 WebFetch/WebSearch 不启用该限制。该检查不是完整的身份、凭证或网络层防护。
 
 剩余边界：取消 API 当前仍未增加认证/资源所有权校验；桌面端真实 IPC/模型流 smoke test 仍需在目标运行环境验证。
