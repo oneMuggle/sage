@@ -182,4 +182,23 @@ describe('TaskTreeSection', () => {
     render(<TaskTreeSection board={makeBoard()} />);
     expect(screen.queryByTestId('task-tree-cancel')).toBeNull();
   });
+
+  it('renders cancelled status icon for cancelled tasks', () => {
+    const board = makeBoard({
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'cancelled',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: 'cancelled by user',
+          output_preview: null,
+        },
+      },
+    });
+    render(<TaskTreeSection board={board} />);
+    expect(screen.getByTestId('task-tree-item-t1')).toHaveTextContent('⊘');
+  });
 });

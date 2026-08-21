@@ -162,3 +162,19 @@ def test_aggregate_in_flight_excludes_cancelled():
     result2 = d._aggregate(partial)
     assert ",1 个仍在并行运行" in result2  # in_flight=1（仅 running），cancelled 不计
     assert "（1 已取消）" in result2
+
+
+@pytest.mark.asyncio()
+async def test_cancel_during_run_marks_subagent_cancelled_not_failed(tmp_path, monkeypatch):
+    """P0-3: cancel 打断 running 子任务 → status=cancelled（旧行为一律 failed）。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    d = ChatDispatcher(stream_id="s1", entry_queue=asyncio.Queue(), run_id="orch-test")
+
+    async def fake_run(state):
+        d.cancel()  # 模拟：cancel 在子任务运行中到达并触发中断异常
+        raise RuntimeError("subtask interrupted by user")
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "r", "goal": "g"}])
+    assert d._states["t1"].status == "cancelled"
+    assert d._states["t1"].error == "subtask interrupted by user"

@@ -8,6 +8,9 @@ const STATUS_ICON: Record<TaskStatusValue, string> = {
   running: '◐',
   done: '✓',
   failed: '✗',
+  // P0-8 (2026-08-20): cancelled 状态渲染 —— 之前未覆盖 cancel 子任务，图标
+  // 退化为 undefined，TaskTreeSection 视觉上与 running 难以区分。
+  cancelled: '⊘',
 };
 
 const STATUS_TITLE: Record<TaskStatusValue, string> = {
@@ -15,6 +18,7 @@ const STATUS_TITLE: Record<TaskStatusValue, string> = {
   running: 'running',
   done: 'done',
   failed: 'failed',
+  cancelled: 'cancelled',
 };
 
 interface TaskTreeSectionProps {

@@ -36,7 +36,7 @@ export interface TaskPlanEvent {
   plan: TaskPlanItem[];
 }
 
-export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed';
+export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface TaskStatusEvent {
   state: 'task_status';
