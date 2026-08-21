@@ -1,10 +1,10 @@
 """
 Web 工具 - 网络搜索和网页获取
 """
+
+import ipaddress
 from typing import Optional
 from urllib.parse import urlparse
-import ipaddress
-import socket
 
 import httpx
 
@@ -149,39 +149,41 @@ class WebFetchTool(BaseTool):
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
-        self.client = httpx.Client(timeout=30.0, follow_redirects=False)
+        self.client = httpx.Client(
+            timeout=30.0,
+            follow_redirects=False,
+            trust_env=not self._policy.subagent_only,
+        )
 
-    def _resolve_addresses(self, url: str) -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:
-        parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            return set()
+    @staticmethod
+    def _literal_ip(url: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+        hostname = urlparse(url).hostname
+        if not hostname:
+            return None
         try:
-            return {
-                ipaddress.ip_address(info[4][0])
-                for info in socket.getaddrinfo(
-                    parsed.hostname,
-                    parsed.port or 443,
-                    type=socket.SOCK_STREAM,
-                )
-            }
-        except (OSError, ValueError):
-            return set()
+            return ipaddress.ip_address(hostname)
+        except ValueError:
+            return None
 
     @staticmethod
     def _all_public(addresses: set[ipaddress.IPv4Address | ipaddress.IPv6Address]) -> bool:
-        return bool(addresses) and all(
-            not (
-                ip.is_private
-                or ip.is_loopback
-                or ip.is_link_local
-                or ip.is_multicast
-                or ip.is_unspecified
-            )
-            for ip in addresses
-        )
+        return bool(addresses) and all(ip.is_global for ip in addresses)
 
-    def _is_public_url(self, url: str) -> bool:
-        return self._all_public(self._resolve_addresses(url))
+    def _validate_subagent_url(self, url: str) -> str | None:
+        address = self._literal_ip(url)
+        if address is None:
+            return "subagent_web_fetch_blocked: 仅允许访问字面量公共 IP 地址"
+        if not self._all_public({address}):
+            return "subagent_web_fetch_blocked: 仅允许访问公共网络地址"
+        return None
+
+    def _validate_subagent_redirect(self, location: str) -> str | None:
+        address = self._literal_ip(location)
+        if address is None:
+            return "subagent_web_fetch_blocked: 重定向目标必须是字面量公共 IP 地址"
+        if not self._all_public({address}):
+            return "subagent_web_fetch_blocked: 重定向目标不是公共地址"
+        return None
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -212,19 +214,16 @@ class WebFetchTool(BaseTool):
                     success=False, error="无效的 URL，必须以 http:// 或 https:// 开头"
                 )
             if self._policy.subagent_only:
-                initial_addresses = self._resolve_addresses(url)
-                if not self._all_public(initial_addresses):
-                    return ToolResult(success=False, error="subagent_web_fetch_blocked: 仅允许访问公共网络地址")
+                validation_error = self._validate_subagent_url(url)
+                if validation_error:
+                    return ToolResult(success=False, error=validation_error)
 
             response = self.client.get(url)
-            if self._policy.subagent_only:
-                if self._resolve_addresses(url) != initial_addresses:
-                    return ToolResult(success=False, error="subagent_web_fetch_blocked: DNS 解析发生变化")
-                if response.is_redirect:
-                    location = response.headers.get("location", "")
-                    redirect_addresses = self._resolve_addresses(location)
-                    if not self._all_public(redirect_addresses):
-                        return ToolResult(success=False, error="subagent_web_fetch_blocked: 重定向目标不是公共地址")
+            if self._policy.subagent_only and response.is_redirect:
+                location = response.headers.get("location", "")
+                validation_error = self._validate_subagent_redirect(location)
+                if validation_error:
+                    return ToolResult(success=False, error=validation_error)
             response.raise_for_status()
 
             content = response.text[:max_length]

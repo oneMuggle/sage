@@ -52,9 +52,11 @@ import asyncio
 import concurrent.futures
 import logging
 import os
+import shutil
 import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Optional, Tuple
 
 from backend.domain.tool_policy import ToolPolicy
@@ -144,24 +146,43 @@ SUBAGENT_SYSTEM_PROMPT = (
 )
 
 
-def _subagent_policy(policy: Optional[ToolPolicy]) -> ToolPolicy:
+def _new_subagent_workspace() -> Path:
+    """Create an owned, private scratch directory for one sub-agent."""
+    return Path(tempfile.mkdtemp(prefix="sage-subagent-", dir=tempfile.gettempdir()))
+
+
+def _cleanup_subagent_workspace(root: Path | None) -> None:
+    if root is None:
+        return
+    try:
+        shutil.rmtree(root)
+    except FileNotFoundError:
+        return
+    except OSError:
+        logger.warning("Failed to clean sub-agent workspace %s", root, exc_info=True)
+
+
+def _subagent_policy(policy: Optional[ToolPolicy]) -> tuple[ToolPolicy, Path | None]:
     parent = policy or ToolPolicy()
-    root = parent.workspace_root or os.path.join(tempfile.gettempdir(), "sage-subagent-scratch")
-    os.makedirs(root, exist_ok=True)
-    return ToolPolicy(
-        timeout_seconds=parent.timeout_seconds,
-        max_output_bytes=parent.max_output_bytes,
-        max_result_items=parent.max_result_items,
-        max_read_bytes=parent.max_read_bytes,
-        max_tool_calls_per_run=parent.max_tool_calls_per_run,
-        workspace_root=root,
-        subagent_only=True,
+    owned_root = None if parent.workspace_root else _new_subagent_workspace()
+    root = parent.workspace_root or str(owned_root)
+    return (
+        ToolPolicy(
+            timeout_seconds=parent.timeout_seconds,
+            max_output_bytes=parent.max_output_bytes,
+            max_result_items=parent.max_result_items,
+            max_read_bytes=parent.max_read_bytes,
+            max_tool_calls_per_run=parent.max_tool_calls_per_run,
+            workspace_root=root,
+            subagent_only=True,
+        ),
+        owned_root,
     )
 
 
 def build_readonly_tool_registry(policy: Optional[ToolPolicy] = None) -> ToolRegistry:
     """Build the restricted read-only registry given to sub-agents."""
-    policy = _subagent_policy(policy)
+    policy, owned_root = _subagent_policy(policy)
     registry = ToolRegistry()
     registry.register(ReadFileTool(policy=policy, enforce_workspace=True))
     registry.register(ListDirTool(policy=policy, enforce_workspace=True))
@@ -169,6 +190,7 @@ def build_readonly_tool_registry(policy: Optional[ToolPolicy] = None) -> ToolReg
     registry.register(WebFetchTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))
     registry.register(CalculatorTool(policy=policy))
+    registry._owned_workspace_root = owned_root  # noqa: SLF001 — lifecycle metadata
     return registry
 
 
@@ -384,43 +406,49 @@ class AgentTool(BaseTool):
     ) -> Tuple[str, Optional[str]]:
         """Drive ``run_loop`` to completion; return (answer, error)."""
         subagent = self._build_subagent()
-        # Inject the LLM client post-construction so tests can pass mocks and
-        # production reuses the settings-derived client without SageAgent
-        # building its own.
-        subagent.llm_client = llm_client
+        try:
+            # Inject the LLM client post-construction so tests can pass mocks and
+            # production reuses the settings-derived client without SageAgent
+            # building its own.
+            subagent.llm_client = llm_client
 
-        messages = [
-            {"role": "system", "content": SUBAGENT_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Delegated task ({description}):\n\n{prompt}",
-            },
-        ]
+            messages = [
+                {"role": "system", "content": SUBAGENT_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Delegated task ({description}):\n\n{prompt}",
+                },
+            ]
 
-        answer = ""
-        error: Optional[str] = None
-        saw_done = False
-        async for event in subagent.run_loop(
-            messages, max_iterations=_resolve_subagent_iterations()
-        ):
-            state = getattr(event, "state", None)
-            state_value = getattr(state, "value", state)
-            if state_value == "done":
-                saw_done = True
-                answer = event.content or ""
-            elif state_value == "failed":
-                error = event.error or "subagent_loop_failed"
+            answer = ""
+            error: Optional[str] = None
+            saw_done = False
+            async for event in subagent.run_loop(
+                messages, max_iterations=_resolve_subagent_iterations()
+            ):
+                state = getattr(event, "state", None)
+                state_value = getattr(state, "value", state)
+                if state_value == "done":
+                    saw_done = True
+                    answer = event.content or ""
+                elif state_value == "failed":
+                    error = event.error or "subagent_loop_failed"
 
-        if error is not None:
-            return "", error
-        if not saw_done:
-            return "", "subagent_exhausted_iterations"
-        return answer, None
+            if error is not None:
+                return "", error
+            if not saw_done:
+                return "", "subagent_exhausted_iterations"
+            return answer, None
+        finally:
+            _cleanup_subagent_workspace(getattr(subagent, "_owned_workspace_root", None))
 
     def _build_subagent(self) -> Any:
         """Construct a SageAgent with the restricted read-only registry."""
         if self._subagent_factory is not None:
-            return self._subagent_factory(build_readonly_tool_registry(self._policy))
+            registry = build_readonly_tool_registry(self._policy)
+            subagent = self._subagent_factory(registry)
+            subagent._owned_workspace_root = getattr(registry, "_owned_workspace_root", None)
+            return subagent
 
         # Lazy import: backend.core.legacy.agent imports backend.tools — the
         # reverse direction — so importing at module load would cycle.
@@ -433,5 +461,7 @@ class AgentTool(BaseTool):
         # default tools.
         subagent = SageAgent(bare=True)
         # Structural whitelist: install the read-only registry directly.
-        subagent.tool_registry = build_readonly_tool_registry(self._policy)
+        registry = build_readonly_tool_registry(self._policy)
+        subagent.tool_registry = registry
+        subagent._owned_workspace_root = getattr(registry, "_owned_workspace_root", None)
         return subagent
