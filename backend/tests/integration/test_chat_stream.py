@@ -456,3 +456,44 @@ async def test_producer_omits_reasoning_params_when_not_provided():
     # 向后兼容: 老请求不带新字段时,llm_config 也不该有这些 key
     assert "reasoning_effort" not in llm_config
     assert "thinking_budget" not in llm_config
+
+
+@pytest.mark.asyncio()
+async def test_finally_finalizes_run_even_on_early_producer_failure():
+    """P0-4 (2026-08-20): producer 早期异常也必须走到 _finalize_orch_run。
+
+    finally 无条件调用 ``_finalize_orch_run(run_id, run_outcome, done_content)``。
+    若这两个终态变量声明在 try 块数百行之后，早期异常（这里模拟
+    resolve_attachments 抛错）会让 finally 先抛 UnboundLocalError：
+    finalize 永远不被调用，原始异常被掩盖，后面的 reset_tool_context 也被跳过。
+    用 spy 断言 finalize 确实被调用，即可锁定"终态变量必须前置"这一不变量。
+    """
+    from backend.api.chat_stream_registry import StreamRegistry
+
+    if not hasattr(app.state, "streams") or app.state.streams is None:
+        app.state.streams = StreamRegistry()
+
+    calls: List[tuple] = []
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("attachment resolution exploded")
+
+    def _spy(run_id, status, final_summary):
+        calls.append((run_id, status, final_summary))
+
+    with (
+        patch("backend.api.legacy_routes.resolve_attachments", _boom),
+        patch("backend.api.legacy_routes._finalize_orch_run", _spy),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            create_resp = await ac.post(
+                CHAT_STREAM_PATH,
+                json={"session_id": "s", "message": "hi"},
+            )
+            stream_id = create_resp.json()["streamId"]
+            await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+
+    assert calls, "finally 未能调用 _finalize_orch_run（终态变量未前置？）"
+    # 早期异常路径没有 DONE 事件 → 终态必须是 failed，summary 为 None
+    assert calls[0][1] == "failed"
+    assert calls[0][2] is None

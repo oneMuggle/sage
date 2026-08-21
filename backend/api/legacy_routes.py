@@ -1727,6 +1727,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             )
         _tool_ctx_token = set_tool_context(_tool_ctx)
         try:
+            # P0-4 (2026-08-20): 终态变量前置到 try 顶部 —— finally 无条件读取
+            # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
+            # CancelledError）会让 finally 触发 UnboundLocalError，既掩盖原始异常
+            # 又跳过后续的 reset_tool_context 清理。
+            done_content: Optional[str] = None
+            run_outcome = "failed"
+
             llm_config = None
             if data.api_key and data.api_url:
                 llm_config = {
@@ -2022,12 +2029,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
-
-            done_content: Optional[str] = None
-
-            # P0-4 (2026-08-20): run 终态 —— 默认 failed（LLMError/崩溃路径），
-            # DONE 事件到达时置 completed；finally 无条件 finalize。
-            run_outcome = "failed"
 
             done_reasoning: Optional[str] = None
 
