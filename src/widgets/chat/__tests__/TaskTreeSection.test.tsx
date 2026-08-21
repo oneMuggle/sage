@@ -238,4 +238,32 @@ describe('TaskTreeSection', () => {
     expect(banner).toHaveTextContent('复核存疑');
     expect(banner).toHaveTextContent('结论缺少数据支撑');
   });
+
+  // P0-7 (2026-08-20): retry_count 徽章 —— 后端一直携带 retry_count, 前端类型此前
+  // 未声明被静默丢弃, 现在展示"已重试 ×N"让用户感知到重试发生过。
+  it('shows retry badge when task has been retried', () => {
+    const board = makeBoard({
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'done',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: '完成',
+          retry_count: 2,
+        },
+      },
+    });
+    render(<TaskTreeSection board={board} />);
+    expect(screen.getByTestId('task-tree-retry-t1')).toHaveTextContent('已重试 ×2');
+  });
+
+  it('hides retry badge when retry_count is zero or absent', () => {
+    render(<TaskTreeSection board={makeBoard()} />);
+    expect(screen.queryByTestId('task-tree-retry-t1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('task-tree-retry-t2')).not.toBeInTheDocument();
+  });
 });

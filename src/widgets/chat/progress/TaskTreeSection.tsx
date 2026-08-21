@@ -113,6 +113,15 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
               </span>
               <span className="px-1 rounded bg-primary/10 text-primary">{item.agent_id}</span>
               <span className="text-text-secondary flex-1">{item.goal}</span>
+              {/* P0-7 (2026-08-20): 重试徽章 —— retry_count>0 才显示 */}
+              {(st?.retry_count ?? 0) > 0 && (
+                <span
+                  data-testid={`task-tree-retry-${item.task_id}`}
+                  className="text-text-tertiary text-[10px] shrink-0"
+                >
+                  已重试 ×{st?.retry_count}
+                </span>
+              )}
             </div>
             {preview && status !== 'queued' && (
               <details className="pl-6 text-muted">

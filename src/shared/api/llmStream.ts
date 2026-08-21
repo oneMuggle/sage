@@ -47,6 +47,8 @@ export interface TaskStatusEvent {
   goal: string;
   error: string | null;
   output_preview: string | null;
+  // P0-7 (2026-08-20): 重试次数 —— 后端 _emit_task_status 一直携带,此前前端未声明被静默丢弃。
+  retry_count?: number;
 }
 
 /** 进度可视化 P0-2 (2026-08-12): 整盘概览,与 types.ts TaskProgressEvent 同形。 */
@@ -104,6 +106,7 @@ export interface AgentEvent {
   status?: TaskStatusValue;
   goal?: string;
   output_preview?: string | null;
+  retry_count?: number;
   // 进度可视化 P0-2 (2026-08-12): 5 元组快照字段,与 TaskProgressEvent 对齐。
   total?: number;
   done?: number;
