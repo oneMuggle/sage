@@ -18,9 +18,14 @@
 - 仅 subagent WebFetch 启用公共地址和重定向目标校验；普通 WebFetch/WebSearch 行为未改变。
 - 技术文档 `docs/technical/42-chat-multi-agent-orchestration.md` §14.4 已记录边界和剩余风险。
 
+- run-level cancel 在 run_id 尚未绑定 stream 时写入 pending cancellation token，绑定 dispatcher 时重放并中断 primary。
+- WebFetch 子代理路径在请求前后比较 DNS 解析结果，拒绝 DNS rebinding；重定向目标单独重新解析并校验。
+- cancel bridge 异常现在写入 warning 日志，不再静默吞掉执行控制失败。
+
 ## 验证
 
-- Backend focused pytest：`48 passed, 5 warnings`
+- Backend focused pytest（初始实现）：`48 passed, 5 warnings`
+- 审查后新增竞态/SSRF测试：`21 passed, 5 warnings`
 - Frontend focused Vitest：`28 passed`
 - TypeScript：`npx tsc --noEmit` 通过
 - Ruff：未能全绿。仓库既有文件存在大量 UP045、PLC0415、SIM103 等规则告警；新增测试还触发既有测试文件中的局部 import/decorator 规则告警。未执行全文件自动修复，避免无关 churn。
