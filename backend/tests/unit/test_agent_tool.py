@@ -66,7 +66,25 @@ class TestReadonlyWhitelist:
             assert registry.get(dangerous) is None
 
 
-class TestAgentToolExecution:
+    def test_subagent_file_tools_reject_outside_traversal_and_symlink(self, tmp_path):
+        root = tmp_path / "scratch"
+        root.mkdir()
+        outside = tmp_path / "outside.txt"
+        outside.write_text("secret", encoding="utf-8")
+        link = root / "escape.txt"
+        link.symlink_to(outside)
+        registry = build_readonly_tool_registry(
+            policy=agent_tool_module.ToolPolicy(workspace_root=str(root))
+        )
+
+        absolute = registry.get("read_file").execute(path=str(outside))
+        traversal = registry.get("read_file").execute(path=str(root / ".." / "outside.txt"))
+        symlink = registry.get("read_file").execute(path=str(link))
+        listed = registry.get("list_dir").execute(path=str(tmp_path))
+
+        assert all(not result.success for result in (absolute, traversal, symlink, listed))
+        assert all("path_outside_workspace" in result.error for result in (absolute, traversal, symlink, listed))
+
     def test_success_returns_answer_and_creates_succeeded_lane(self):
         tool = AgentTool(llm_client=_mock_sub_llm(_done_response("sub answer: 42")))
 

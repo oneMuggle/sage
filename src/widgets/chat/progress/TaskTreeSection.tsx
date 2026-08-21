@@ -41,10 +41,11 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
   const running = progress?.running ?? 0;
   const queued = progress?.queued ?? 0;
   const failed = progress?.failed ?? 0;
+  const cancelled = progress?.cancelled ?? 0;
   const inFlight = running + queued;
   // 进度可视化 L2 修正 (2026-08-12): 全部完成时不再显示"等待结果中"，
   // 避免与下方 "完成 6/6" 自相矛盾。
-  const allDone = doneCount > 0 && doneCount === total && inFlight === 0;
+  const allDone = doneCount + failed + cancelled === total && inFlight === 0;
 
   return (
     <div className="space-y-1" data-testid="task-tree">
@@ -56,6 +57,7 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
           完成 {doneCount}/{total}
           {inFlight > 0 && ` · ${inFlight} 个进行中`}
           {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
+          {cancelled > 0 && <span className="text-text-secondary ml-1">({cancelled} 已取消)</span>}
         </div>
         {/* Wave 3 H2 (2026-08-15): 运行中取消按钮 —— 全部完成/无 onCancel 时隐藏 */}
         {!allDone && onCancel && (

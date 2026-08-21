@@ -2,6 +2,9 @@
 Web 工具 - 网络搜索和网页获取
 """
 from typing import Optional
+from urllib.parse import urlparse
+import ipaddress
+import socket
 
 import httpx
 
@@ -146,7 +149,23 @@ class WebFetchTool(BaseTool):
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
-        self.client = httpx.Client(timeout=30.0)
+        self.client = httpx.Client(timeout=30.0, follow_redirects=False)
+
+    def _is_public_url(self, url: str) -> bool:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return False
+        try:
+            addresses = {
+                ipaddress.ip_address(info[4][0])
+                for info in socket.getaddrinfo(parsed.hostname, parsed.port or 443, type=socket.SOCK_STREAM)
+            }
+        except (OSError, ValueError):
+            return False
+        return bool(addresses) and all(
+            not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified)
+            for ip in addresses
+        )
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -176,8 +195,14 @@ class WebFetchTool(BaseTool):
                 return ToolResult(
                     success=False, error="无效的 URL，必须以 http:// 或 https:// 开头"
                 )
+            if self._policy.subagent_only and not self._is_public_url(url):
+                return ToolResult(success=False, error="subagent_web_fetch_blocked: 仅允许访问公共网络地址")
 
             response = self.client.get(url)
+            if self._policy.subagent_only and response.is_redirect:
+                location = response.headers.get("location", "")
+                if not self._is_public_url(location):
+                    return ToolResult(success=False, error="subagent_web_fetch_blocked: 重定向目标不是公共地址")
             response.raise_for_status()
 
             content = response.text[:max_length]

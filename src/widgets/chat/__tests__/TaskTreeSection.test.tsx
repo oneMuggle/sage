@@ -110,6 +110,7 @@ describe('TaskTreeSection', () => {
         running: 1,
         queued: 1,
         failed: 0,
+        cancelled: 0,
       },
     });
     render(<TaskTreeSection board={board} />);
@@ -120,10 +121,21 @@ describe('TaskTreeSection', () => {
 
   it('shows failed count when failures present', () => {
     const board = makeBoard({
-      progress: { total: 2, done: 0, running: 0, queued: 0, failed: 1 },
+      progress: { total: 2, done: 0, running: 0, queued: 0, failed: 1, cancelled: 0 },
     });
     render(<TaskTreeSection board={board} />);
     expect(screen.getByText(/\(1 失败\)/)).toBeInTheDocument();
+  });
+
+  it('treats cancelled tasks as terminal and shows cancelled count', () => {
+    const board = makeBoard({
+      progress: { total: 2, done: 0, running: 0, queued: 0, failed: 0, cancelled: 2 },
+    });
+    render(<TaskTreeSection board={board} onCancel={vi.fn()} />);
+    expect(screen.getByText(/完成 0\/2/)).toBeInTheDocument();
+    expect(screen.getByText(/\(2 已取消\)/)).toBeInTheDocument();
+    expect(screen.queryByTestId('task-tree-cancel')).not.toBeInTheDocument();
+    expect(screen.queryByText(/等待结果中/)).not.toBeInTheDocument();
   });
 
   // Wave 3 H2 (2026-08-15): 运行中编排的取消按钮

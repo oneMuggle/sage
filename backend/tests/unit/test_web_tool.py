@@ -8,6 +8,7 @@ import pytest
 import respx
 from httpx import Response
 
+from backend.domain.tool_policy import ToolPolicy
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
 
 pytestmark = [pytest.mark.unit]
@@ -155,7 +156,40 @@ def test_web_fetch_http_error():
     assert "HTTP" in result.error or "失败" in result.error
 
 
-def test_web_fetch_network_exception():
+def test_web_fetch_subagent_blocks_private_destinations(monkeypatch):
+    tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
+    monkeypatch.setattr(tool, "_is_public_url", lambda url: False)
+
+    result = tool.execute(url="http://127.0.0.1:8765/health")
+
+    assert result.success is False
+    assert "subagent_web_fetch_blocked" in result.error
+
+
+def test_web_fetch_subagent_allows_public_url(monkeypatch):
+    with respx.mock(base_url="https://public.example", assert_all_called=False) as mock:
+        mock.get("/page").mock(return_value=Response(200, text="public"))
+        tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
+        monkeypatch.setattr(tool, "_is_public_url", lambda url: True)
+        result = tool.execute(url="https://public.example/page")
+
+    assert result.success is True
+    assert result.content["content"] == "public"
+
+
+def test_web_fetch_subagent_blocks_unsafe_redirect(monkeypatch):
+    with respx.mock(base_url="https://public.example", assert_all_called=False) as mock:
+        mock.get("/redirect").mock(
+            return_value=Response(302, headers={"location": "http://127.0.0.1/admin"})
+        )
+        tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
+        monkeypatch.setattr(tool, "_is_public_url", lambda url: not url.startswith("http://127"))
+        result = tool.execute(url="https://public.example/redirect")
+
+    assert result.success is False
+    assert "subagent_web_fetch_blocked" in result.error
+
+
     """底层抛异常 → 包装成失败"""
     with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
         mock.get("/oops").mock(side_effect=httpx.ConnectError("conn refused"))

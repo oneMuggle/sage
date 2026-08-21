@@ -41,6 +41,7 @@ export interface TaskBoardState {
     running: number;
     queued: number;
     failed: number;
+    cancelled: number;
   };
   dispatchedAt?: number | null;
   /** P0-6 (2026-08-20): reviewer 复核结论（每 run 至多一条，后到覆盖先到）。 */

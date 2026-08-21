@@ -375,16 +375,43 @@ def interrupt_stream(stream_id: Optional[str]) -> str:
     entry = _ACTIVE_STREAMS.get(stream_id)
     if entry is None:
         return "none"
+    entry["cancelled"] = True
     agent_obj: SageAgent = entry["agent"]
     agent_obj.interrupt()
     run_id = entry.get("run_id")
     if run_id:
         from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
 
-        dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
+        dispatcher = entry.get("dispatcher") or _ACTIVE_DISPATCHERS.get(run_id)
         if dispatcher is not None:
             dispatcher.cancel()
     return "stream"
+
+
+def interrupt_run(run_id: str) -> str:
+    """Cancel every active stream belonging to an orchestration run.
+
+    The run endpoint owns durable status, while this bridge owns in-process
+    cancellation of the primary agent and dispatcher.  Streams are marked
+    before dispatchers are bound so a cancellation racing plan construction is
+    replayed when the dispatcher is attached.
+    """
+    matched = False
+    for entry in list(_ACTIVE_STREAMS.values()):
+        if entry.get("run_id") != run_id:
+            continue
+        matched = True
+        entry["cancelled"] = True
+        agent_obj: SageAgent = entry["agent"]
+        agent_obj.interrupt()
+        dispatcher = entry.get("dispatcher")
+        if dispatcher is None:
+            from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+            dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
+        if dispatcher is not None:
+            dispatcher.cancel()
+    return "stream" if matched else "none"
 
 
 def _finalize_orch_run(
@@ -1756,6 +1783,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
 
             agent = SageAgent(agent_id=data.agent_id or "primary")
+            # P0 cancellation: register the primary before any blocking await.
+            _ACTIVE_STREAMS[stream_id] = {
+                "agent": agent,
+                "run_id": None,
+                "dispatcher": None,
+                "cancelled": False,
+            }
 
             # Build system prompt with optional diagram tool guidance
             from backend.agents.profiles import build_system_base
@@ -1786,6 +1820,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
                     mode = "single"
             run_id: Optional[str] = None
+            dispatcher = None
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import (
                     _ACTIVE_DISPATCHERS,
@@ -1873,6 +1908,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # P2-9 (2026-08-14): 进程内注册表登记 —— 长连接期间 run 级
                     # cancel 端点能定位到本 dispatcher 并置位取消事件。
                     _ACTIVE_DISPATCHERS[run_id] = dispatcher
+                    stream_entry = _ACTIVE_STREAMS.get(stream_id)
+                    if stream_entry is not None:
+                        stream_entry["run_id"] = run_id
+                        stream_entry["dispatcher"] = dispatcher
+                        if stream_entry.get("cancelled"):
+                            dispatcher.cancel()
                     agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
                     if (
                         agent.profile is not None
@@ -2036,9 +2077,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
 
-            # P0-2 (2026-08-20): 登记运行实例，让 /interrupt 能命中 producer 的 agent。
-            # single 模式 run_id=None → 仅中断主 agent；multi 模式连带 cancel dispatcher。
-            _ACTIVE_STREAMS[stream_id] = {"agent": agent, "run_id": run_id}
+            # P0-2 (2026-08-20): registration is created immediately after agent.
+            # Keep the same entry and only refresh late-bound fields here.
+            stream_entry = _ACTIVE_STREAMS.get(stream_id)
+            if stream_entry is not None:
+                stream_entry["run_id"] = run_id
+                stream_entry["dispatcher"] = dispatcher
+                if stream_entry.get("cancelled") and dispatcher is not None:
+                    dispatcher.cancel()
 
             async for evt in agent.run_loop(messages, llm_config=llm_config):
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。

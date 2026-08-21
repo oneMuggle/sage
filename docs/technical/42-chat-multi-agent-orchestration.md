@@ -353,3 +353,15 @@ PR A #316（P2-7/8/9 + run 级 cancel）+ PR B #317（P2-10 休眠层）+ PR C #
 ### 14.3 primary 的 agent 工具
 
 种子白名单追加 `"agent"`（AgentTool，只读子代理）。存量 DB：`ensure_default_agents()` 仅当现有白名单恰等于 `_PRIMARY_TOOLS_BEFORE_AGENT`（旧 8 工具集合）时追加，用户自定义白名单不动。
+
+### 14.4 最终复核补丁：取消闭环与子代理边界（2026-08-21）
+
+本节记录最终复核后补齐的运行时控制边界。它描述的是进程内取消与子代理最小权限，不等同于用户身份认证或 run 所有权授权。
+
+- **Run-level cancel**：`POST /api/v1/orch/runs/{run_id}/cancel` 先将数据库状态置为 `cancelled`，再通过 `legacy_routes.interrupt_run()` 遍历该 run 的活动 stream，同时调用 primary `SageAgent.interrupt()` 与 `ChatDispatcher.cancel()`。取消入口保持异常隔离，避免内存注册表故障阻断状态落库。
+- **Stream registration race**：`/chat/stream` producer 在创建 primary agent 后、任何规划或附件等待前登记 `_ACTIVE_STREAMS`。dispatcher 后绑定到同一条 entry；若取消先到，entry 的 `cancelled` 标记会在绑定时重放到 dispatcher。producer finally 仍负责移除 entry。
+- **Cancelled is terminal**：`task_progress.cancelled` 纳入前后端五元组快照；任务树与摘要将 `cancelled` 计为终态，取消-only run 不再显示“等待结果中”或取消按钮。
+- **Subagent filesystem**：只有 `build_readonly_tool_registry()` 为子代理构造 `ReadFileTool` / `ListDirTool(enforce_workspace=True)`，路径经 resolve 后必须位于 scratch/workspace 根内，拦截绝对越界、`..` 穿越和符号链接逃逸。直接调用文件工具仍保留既有 read-vs-write 兼容语义。
+- **Subagent web fetch**：子代理 `WebFetchTool` 使用 `subagent_only` 策略拒绝 loopback、私网、link-local、multicast、未指定地址及不安全重定向；普通 WebFetch/WebSearch 不启用该限制。该检查不是完整的身份、凭证或网络层防护。
+
+剩余边界：取消 API 当前仍未增加认证/资源所有权校验；桌面端真实 IPC/模型流 smoke test 仍需在目标运行环境验证。

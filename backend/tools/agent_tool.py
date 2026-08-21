@@ -52,6 +52,7 @@ import asyncio
 import concurrent.futures
 import logging
 import os
+import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional, Tuple
@@ -137,16 +138,33 @@ SUBAGENT_SYSTEM_PROMPT = (
     "You are a focused Sage sub-agent performing a delegated task. "
     "You have READ-ONLY tools: file reading, directory listing, web search/fetch, "
     "memory search, and a calculator. You cannot modify files or run commands. "
-    "Complete the task concisely and return your final answer as plain text."
+    "File tools can only read the delegated scratch/workspace content; web fetch "
+    "rejects private or local destinations. Complete the task concisely and "
+    "return your final answer as plain text."
 )
+
+
+def _subagent_policy(policy: Optional[ToolPolicy]) -> ToolPolicy:
+    parent = policy or ToolPolicy()
+    root = parent.workspace_root or os.path.join(tempfile.gettempdir(), "sage-subagent-scratch")
+    os.makedirs(root, exist_ok=True)
+    return ToolPolicy(
+        timeout_seconds=parent.timeout_seconds,
+        max_output_bytes=parent.max_output_bytes,
+        max_result_items=parent.max_result_items,
+        max_read_bytes=parent.max_read_bytes,
+        max_tool_calls_per_run=parent.max_tool_calls_per_run,
+        workspace_root=root,
+        subagent_only=True,
+    )
 
 
 def build_readonly_tool_registry(policy: Optional[ToolPolicy] = None) -> ToolRegistry:
     """Build the restricted read-only registry given to sub-agents."""
-    policy = policy or ToolPolicy()
+    policy = _subagent_policy(policy)
     registry = ToolRegistry()
-    registry.register(ReadFileTool(policy=policy))
-    registry.register(ListDirTool(policy=policy))
+    registry.register(ReadFileTool(policy=policy, enforce_workspace=True))
+    registry.register(ListDirTool(policy=policy, enforce_workspace=True))
     registry.register(WebSearchTool(policy=policy))
     registry.register(WebFetchTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))

@@ -380,12 +380,13 @@ export function useChat() {
                     ...prev.statuses,
                     [taskId]: evt as TaskStatusEvent,
                   };
-                  const counts = { done: 0, running: 0, queued: 0, failed: 0 };
+                  const counts = { done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
                   for (const st of Object.values(nextStatuses)) {
                     if (st.status === 'done') counts.done++;
                     else if (st.status === 'running') counts.running++;
                     else if (st.status === 'queued') counts.queued++;
                     else if (st.status === 'failed') counts.failed++;
+                    else if (st.status === 'cancelled') counts.cancelled++;
                   }
                   const total = Math.max(
                     prev.progress?.total ?? 0,
@@ -421,6 +422,7 @@ export function useChat() {
                           running: tp.running ?? 0,
                           queued: tp.queued ?? 0,
                           failed: tp.failed ?? 0,
+                          cancelled: tp.cancelled ?? 0,
                         },
                       }
                     : prev,

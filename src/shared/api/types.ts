@@ -253,6 +253,7 @@ export interface TaskProgressEvent {
   running: number;
   queued: number;
   failed: number;
+  cancelled: number;
 }
 
 /** Wave 2 (2026-08-14): reviewer 复核结论事件（spec §5.2）。
@@ -305,6 +306,7 @@ export interface AgentEvent {
   running?: number;
   queued?: number;
   failed?: number;
+  cancelled?: number;
   // Wave 2 (2026-08-14): task_review 事件 4 可选字段（仅 state='task_review' 时携带）。
   reviewer_id?: string;
   verdict?: ReviewVerdict;
