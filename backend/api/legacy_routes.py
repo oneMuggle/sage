@@ -356,6 +356,7 @@ def get_session_repo() -> SessionRepository:
 # Depends(get_agent) 每次新建空实例，中断信号永远到不了 producer 里
 # 正在跑的 agent。producer 在 run_loop 前登记、finally 注销。
 _ACTIVE_STREAMS: Dict[str, Dict[str, Any]] = {}
+_PENDING_RUN_CANCELLATIONS: Set[str] = set()
 
 
 class InterruptRequest(BaseModel):
@@ -391,10 +392,8 @@ def interrupt_stream(stream_id: Optional[str]) -> str:
 def interrupt_run(run_id: str) -> str:
     """Cancel every active stream belonging to an orchestration run.
 
-    The run endpoint owns durable status, while this bridge owns in-process
-    cancellation of the primary agent and dispatcher.  Streams are marked
-    before dispatchers are bound so a cancellation racing plan construction is
-    replayed when the dispatcher is attached.
+    If planning has not bound the run id to its stream yet, retain a pending
+    cancellation token.  The producer consumes it when the dispatcher binds.
     """
     matched = False
     for entry in list(_ACTIVE_STREAMS.values()):
@@ -411,7 +410,9 @@ def interrupt_run(run_id: str) -> str:
             dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
         if dispatcher is not None:
             dispatcher.cancel()
-    return "stream" if matched else "none"
+    if not matched:
+        _PENDING_RUN_CANCELLATIONS.add(run_id)
+    return "stream" if matched else "pending"
 
 
 def _finalize_orch_run(
@@ -1912,7 +1913,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     if stream_entry is not None:
                         stream_entry["run_id"] = run_id
                         stream_entry["dispatcher"] = dispatcher
-                        if stream_entry.get("cancelled"):
+                        if (
+                            stream_entry.get("cancelled")
+                            or run_id in _PENDING_RUN_CANCELLATIONS
+                        ):
+                            stream_entry["cancelled"] = True
+                            _PENDING_RUN_CANCELLATIONS.discard(run_id)
+                            agent.interrupt()
                             dispatcher.cancel()
                     agent.tool_registry.register(DispatchSubagentsTool(dispatcher))
                     if (
@@ -2083,7 +2090,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             if stream_entry is not None:
                 stream_entry["run_id"] = run_id
                 stream_entry["dispatcher"] = dispatcher
-                if stream_entry.get("cancelled") and dispatcher is not None:
+                if run_id in _PENDING_RUN_CANCELLATIONS:
+                    stream_entry["cancelled"] = True
+                    _PENDING_RUN_CANCELLATIONS.discard(run_id)
+                    agent.interrupt()
+                    if dispatcher is not None:
+                        dispatcher.cancel()
+                elif stream_entry.get("cancelled") and dispatcher is not None:
                     dispatcher.cancel()
 
             async for evt in agent.run_loop(messages, llm_config=llm_config):

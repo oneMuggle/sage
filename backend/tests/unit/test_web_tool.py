@@ -3,6 +3,8 @@
 使用 respx 拦截 httpx 请求，避免真实网络调用。
 """
 
+import ipaddress
+
 import httpx
 import pytest
 import respx
@@ -166,16 +168,30 @@ def test_web_fetch_subagent_blocks_private_destinations(monkeypatch):
     assert "subagent_web_fetch_blocked" in result.error
 
 
+def test_web_fetch_subagent_blocks_dns_rebinding(monkeypatch):
+    tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
+    public = {ipaddress.ip_address("93.184.216.34")}
+    private = {ipaddress.ip_address("127.0.0.1")}
+    resolutions = iter([public, private])
+    monkeypatch.setattr(tool, "_resolve_addresses", lambda url: next(resolutions))
+
+    with respx.mock(base_url="https://public.example", assert_all_called=False) as mock:
+        mock.get("/page").mock(return_value=Response(200, text="public"))
+        result = tool.execute(url="https://public.example/page")
+
+    assert result.success is False
+    assert "DNS" in result.error
+
+
 def test_web_fetch_subagent_allows_public_url(monkeypatch):
     with respx.mock(base_url="https://public.example", assert_all_called=False) as mock:
         mock.get("/page").mock(return_value=Response(200, text="public"))
         tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
-        monkeypatch.setattr(tool, "_is_public_url", lambda url: True)
+        monkeypatch.setattr(tool, "_resolve_addresses", lambda url: {ipaddress.ip_address("93.184.216.34")})
         result = tool.execute(url="https://public.example/page")
 
     assert result.success is True
     assert result.content["content"] == "public"
-
 
 def test_web_fetch_subagent_blocks_unsafe_redirect(monkeypatch):
     with respx.mock(base_url="https://public.example", assert_all_called=False) as mock:

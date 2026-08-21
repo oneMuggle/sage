@@ -121,7 +121,35 @@ async def test_interrupt_stream_cancels_dispatcher_in_multi_mode(monkeypatch):
     assert dispatcher._cancelled.is_set()
 
 
-def test_interrupt_stream_unknown_or_missing_returns_none():
+def test_run_cancel_before_run_binding_replays_to_dispatcher():
+    """A pending run cancel is replayed after planning binds the run id."""
+    from backend.api import legacy_routes as lr
+    from backend.orchestration.chat_dispatcher import ChatDispatcher
+
+    agent = SageAgent()
+    entry = {"agent": agent, "run_id": None, "dispatcher": None, "cancelled": False}
+    lr._ACTIVE_STREAMS["pending-race"] = entry
+    try:
+        assert lr.interrupt_run("orch-pending") == "pending"
+        dispatcher = ChatDispatcher(
+            stream_id="pending-race",
+            entry_queue=asyncio.Queue(),
+            run_id="orch-pending",
+        )
+        entry["run_id"] = "orch-pending"
+        entry["dispatcher"] = dispatcher
+        if "orch-pending" in lr._PENDING_RUN_CANCELLATIONS:
+            entry["cancelled"] = True
+            lr._PENDING_RUN_CANCELLATIONS.discard("orch-pending")
+            agent.interrupt()
+            dispatcher.cancel()
+        assert agent.is_interrupted() is True
+        assert dispatcher._cancelled.is_set()
+    finally:
+        lr._ACTIVE_STREAMS.pop("pending-race", None)
+        lr._PENDING_RUN_CANCELLATIONS.discard("orch-pending")
+
+
     from backend.api import legacy_routes as lr
 
     assert lr.interrupt_stream("ghost-stream") == "none"

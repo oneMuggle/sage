@@ -191,6 +191,12 @@ def cancel_run(run_id: str, body: Optional[CancelRunRequest] = None) -> CancelRu
         from backend.api.legacy_routes import interrupt_run
 
         interrupt_run(run_id)
-    except Exception:  # noqa: BLE001 — 注册表命中失败不阻塞状态落库
-        pass
+    except Exception as exc:  # noqa: BLE001 — 注册表命中失败不阻塞状态落库
+        # Durable cancellation remains authoritative; log control-plane failure
+        # so operators can detect a run that may still be executing.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "run cancellation bridge failed for %s: %s", run_id, exc
+        )
     return CancelRunResponse(ok=True, run_id=run_id, status="cancelled")
