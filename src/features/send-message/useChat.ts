@@ -68,6 +68,8 @@ export function useChat() {
   // HIGH-4 修复: finishStream 是 sendMessage 闭包内的函数,interrupt() 无法直接调用
   // 用 ref 把 finishStream 暴露出去,让 interrupt 也能触发清理流程
   const finishStreamRef = useRef<(() => void) | null>(null);
+  // P0-2 (2026-08-20): 当前 streamId —— interrupt 需要它让后端定位真实 agent。
+  const streamIdRef = useRef<string | null>(null);
 
   // 流式当前 assistant 消息的内容覆盖 (派生 messages 的最后一条) —— 2026-08-19
   // 搬到 chatStreamStore(独立 zustand),跨路由切换保留,避免 Chat 页卸载后
@@ -129,7 +131,8 @@ export function useChat() {
         cancelRef.current = null;
         // MEDIUM-1: 同时通知后端中断正在跑的 stream,避免 cancel 只 unlisten 前端
         // 而后端继续消耗 LLM token。fire-and-forget — interrupt 失败不影响新消息发送
-        chatApi.interrupt().catch(() => {
+        // P0-2 (2026-08-20): 把当前 streamId 传给后端,让 /interrupt 命中真实 agent。
+        chatApi.interrupt(streamIdRef.current ?? undefined).catch(() => {
           /* Interrupt failures are non-critical */
         });
       }
@@ -302,6 +305,8 @@ export function useChat() {
         useQuestionState.getState().resolve();
         // HIGH-4: 清空 ref 让 interrupt 知道当前 stream 已结束
         finishStreamRef.current = null;
+        // P0-2 (2026-08-20): 清空 streamId —— 流已结束，interrupt 不应命中陈旧实例。
+        streamIdRef.current = null;
         // 流结束后刷新侧栏会话列表（获取自动生成的标题）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
         void useStore.getState().loadSessions();
@@ -311,7 +316,8 @@ export function useChat() {
 
       try {
         // 解构 cancel 用于下次 sendMessage 时取消 (cancel-prev)
-        const { cancel } = await chatApi.chatStream(
+        // P0-2 (2026-08-20): 同时解构 streamId,存入 ref 供 interrupt 回调使用。
+        const { streamId, cancel } = await chatApi.chatStream(
           sid,
           content,
           {
@@ -511,6 +517,8 @@ export function useChat() {
         );
         // 存 cancel 用于下次 sendMessage 取消 + interrupt 用
         cancelRef.current = cancel;
+        // P0-2 (2026-08-20): 记录当前 streamId，interrupt 时让后端命中真实 agent。
+        streamIdRef.current = streamId;
       } catch (err: unknown) {
         // chatStream 启动失败 (validate / listen 失败等)
         // onDone/onError 不会触发,这里兜底
@@ -553,7 +561,8 @@ export function useChat() {
       cancelRef.current = null;
     }
     try {
-      await chatApi.interrupt();
+      // P0-2 (2026-08-20): 带上当前 streamId 让后端命中真实运行的 agent。
+      await chatApi.interrupt(streamIdRef.current ?? undefined);
     } catch {
       // Interrupt failures are non-critical
     }

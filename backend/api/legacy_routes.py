@@ -23,7 +23,7 @@ import time
 import uuid
 from typing import Any, Dict, Optional, Set, Union
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, StrictBool
 
@@ -350,6 +350,41 @@ class AgentCreate(BaseModel):
 
 def get_session_repo() -> SessionRepository:
     return SessionRepository()
+
+
+# P0-2 (2026-08-20): stream_id → 本流真实运行实例。旧 /interrupt 用
+# Depends(get_agent) 每次新建空实例，中断信号永远到不了 producer 里
+# 正在跑的 agent。producer 在 run_loop 前登记、finally 注销。
+_ACTIVE_STREAMS: Dict[str, Dict[str, Any]] = {}
+
+
+class InterruptRequest(BaseModel):
+    """/interrupt 请求体 —— stream_id 可选，兼容不带 body 的旧调用方。"""
+
+    stream_id: Optional[str] = None
+
+
+def interrupt_stream(stream_id: Optional[str]) -> str:
+    """中断目标流：主 agent interrupt（+ multi 模式 cancel dispatcher）。
+
+    返回命中标识（"stream"/"none"）供端点回传与测试断言。
+    纯内存注册表操作，不依赖 DB。
+    """
+    if not stream_id:
+        return "none"
+    entry = _ACTIVE_STREAMS.get(stream_id)
+    if entry is None:
+        return "none"
+    agent_obj: SageAgent = entry["agent"]
+    agent_obj.interrupt()
+    run_id = entry.get("run_id")
+    if run_id:
+        from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+        dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
+        if dispatcher is not None:
+            dispatcher.cancel()
+    return "stream"
 
 
 def get_agent() -> SageAgent:
@@ -1978,6 +2013,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
 
+            # P0-2 (2026-08-20): 登记运行实例，让 /interrupt 能命中 producer 的 agent。
+            # single 模式 run_id=None → 仅中断主 agent；multi 模式连带 cancel dispatcher。
+            _ACTIVE_STREAMS[stream_id] = {"agent": agent, "run_id": run_id}
+
             async for evt in agent.run_loop(messages, llm_config=llm_config):
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
                 # 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls,
@@ -2107,6 +2146,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:
                 _ACTIVE_DISPATCHERS.pop(run_id, None)
+            # P0-2 (2026-08-20): 注销流注册表 —— stream 结束 / interrupt 不再命中陈旧实例。
+            _ACTIVE_STREAMS.pop(stream_id, None)
             # Task 9 (M1-M2): always reset the tool context so the
             # ContextVar never leaks into the next producer invocation.
             if _tool_ctx_token is not None:
@@ -2183,10 +2224,11 @@ def _ndjson(d: dict) -> str:
 
 @router.post("/interrupt")
 @with_db_lock
-def interrupt(agent: SageAgent = Depends(get_agent)):
-    """中断 Agent"""
-    agent.interrupt()
-    return {"status": "ok"}
+def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
+    """中断 Agent（P0-2: 经 stream_id 定位真实运行的 agent）"""
+    stream_id = data.stream_id if data is not None else None
+    target = interrupt_stream(stream_id)
+    return {"status": "ok", "target": target}
 
 
 # ==================== 消息 API ====================
