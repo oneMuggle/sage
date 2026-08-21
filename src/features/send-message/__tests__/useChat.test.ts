@@ -614,6 +614,31 @@ describe('useChat', () => {
     ).resolves.not.toThrow();
   });
 
+  // P0-2 (2026-08-20): interrupt 必须带上当前 streamId，让后端命中真实 agent。
+  it('interrupt passes current streamId to backend', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-9' });
+    listenMock.mockResolvedValueOnce(vi.fn());
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    await act(async () => {
+      result.current.sendMessage('hello');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    invokeMock.mockClear();
+    await act(async () => {
+      await result.current.interrupt();
+    });
+
+    const interruptCalls = invokeMock.mock.calls.filter((c) => c[0] === 'interrupt_agent');
+    expect(interruptCalls).toHaveLength(1);
+    expect(interruptCalls[0][1]).toEqual({ streamId: 'stream-9' });
+  });
+
   // I5: 流式逐字渲染 — backend producer 把 done.content 拆成 content_delta chunks,
   // useChat 必须累积 chunks 成完整回答 (而不是只显示最后 chunk)。
   // 旧实现是覆盖 (ref = next) — 修成 ref += next 才能逐字增长。
@@ -1054,6 +1079,55 @@ describe('useChat taskBoard', () => {
       running: 0,
       queued: 0,
       failed: 0,
+      cancelled: 0,
+    });
+  });
+
+  // P0-6 (2026-08-20): task_review 事件 → 复核结论写入任务板,
+  // 由 TaskTreeSection 渲染横幅。不进消息气泡（agentStateMapping 对
+  // task_review 返回 null 的既有行为保留）。
+  it('stores task_review event on the task board', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-1' });
+    listenMock.mockImplementationOnce(
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'task_plan',
+              iteration: 0,
+              run_id: 'orch-1',
+              plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'g1' }],
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_review',
+              iteration: 0,
+              run_id: 'orch-1',
+              task_id: 't1',
+              reviewer_id: 'reviewer',
+              verdict: 'fail',
+              assertion_count: 3,
+              summary: '结论缺少数据支撑',
+            },
+          });
+          cb({ payload: { state: 'done', iteration: 0, content: 'done' } });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('complex task');
+    });
+
+    await waitFor(() => {
+      const board = useChatStreamStore.getState().taskBoard;
+      expect(board?.review?.verdict).toBe('fail');
+      expect(board?.review?.summary).toBe('结论缺少数据支撑');
     });
   });
 
@@ -1147,6 +1221,7 @@ describe('useChat taskBoard', () => {
       running: 0,
       queued: 0,
       failed: 0,
+      cancelled: 0,
     });
   });
 });

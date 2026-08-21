@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, Optional
 
@@ -24,8 +25,16 @@ logger = logging.getLogger(__name__)
 class SubagentRunner:
     """经 ``LaneExecutor.agent_runner`` 契约执行单个编排子任务。"""
 
-    def __init__(self, llm_config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        llm_config: Optional[Dict[str, Any]] = None,
+        interrupt_event: Optional[asyncio.Event] = None,
+    ) -> None:
         self._llm_config = llm_config
+        # P0-3 (2026-08-20): 取消事件 —— ChatDispatcher._cancelled 传入，
+        # 置位后 watcher 调 child.interrupt()，子 run_loop 在下轮迭代顶部
+        # 发 FAILED 终止（P0-1 通道）。
+        self._interrupt_event = interrupt_event
 
     async def __call__(self, task: Any, agent_id: Optional[str]) -> Dict[str, Any]:
         """Run one subtask via SageAgent.run_loop; return executor-usable dict.
@@ -61,11 +70,32 @@ class SubagentRunner:
             {"role": "user", "content": goal},
         ]
         collected: list[str] = []
-        async for evt in child.run_loop(messages, llm_config=self._llm_config):
-            if evt.state.value == "done" and evt.content:
-                collected.append(evt.content)
+        last_error: Optional[str] = None
+
+        # P0-3 (2026-08-20): interrupt watcher —— 与 child.run_loop 并发，
+        # 取消事件到达即置位子 agent 中断标志；正常结束时 finally 撤销。
+        watcher: Optional[asyncio.Task] = None
+        if self._interrupt_event is not None:
+            async def _watch() -> None:
+                await self._interrupt_event.wait()
+                child.interrupt()
+
+            watcher = asyncio.create_task(_watch())
+
+        try:
+            async for evt in child.run_loop(messages, llm_config=self._llm_config):
+                if evt.state.value == "done" and evt.content:
+                    collected.append(evt.content)
+                elif evt.state.value == "failed" and evt.error:
+                    last_error = evt.error
+        finally:
+            if watcher is not None:
+                watcher.cancel()
+
         if not collected:
-            raise RuntimeError("子 agent 未产出 DONE content")
+            if self._interrupt_event is not None and self._interrupt_event.is_set():
+                raise RuntimeError("subtask interrupted by user")
+            raise RuntimeError(last_error or "子 agent 未产出 DONE content")
         return {"status": "succeeded", "output": "\n\n".join(collected)}
 
 

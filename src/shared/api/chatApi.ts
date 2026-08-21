@@ -52,9 +52,11 @@ export const chatApi = {
     ); // chat 操作重试次数少一些
   },
 
-  async interrupt(): Promise<void> {
+  async interrupt(streamId?: string): Promise<void> {
     try {
-      await invoke('interrupt_agent');
+      // P0-2 (2026-08-20): 带上 streamId 让后端命中真实运行的 agent。
+      // Electron relay camelToSnakeKeys 会把 body 转成 { stream_id }。
+      await invoke('interrupt_agent', streamId ? { streamId } : {});
     } catch (error) {
       console.error('中断请求失败:', error);
       // 中断操作不重试，忽略错误

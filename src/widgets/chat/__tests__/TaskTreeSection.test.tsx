@@ -110,6 +110,7 @@ describe('TaskTreeSection', () => {
         running: 1,
         queued: 1,
         failed: 0,
+        cancelled: 0,
       },
     });
     render(<TaskTreeSection board={board} />);
@@ -120,10 +121,21 @@ describe('TaskTreeSection', () => {
 
   it('shows failed count when failures present', () => {
     const board = makeBoard({
-      progress: { total: 2, done: 0, running: 0, queued: 0, failed: 1 },
+      progress: { total: 2, done: 0, running: 0, queued: 0, failed: 1, cancelled: 0 },
     });
     render(<TaskTreeSection board={board} />);
     expect(screen.getByText(/\(1 失败\)/)).toBeInTheDocument();
+  });
+
+  it('treats cancelled tasks as terminal and shows cancelled count', () => {
+    const board = makeBoard({
+      progress: { total: 2, done: 0, running: 0, queued: 0, failed: 0, cancelled: 2 },
+    });
+    render(<TaskTreeSection board={board} onCancel={vi.fn()} />);
+    expect(screen.getByText(/完成 0\/2/)).toBeInTheDocument();
+    expect(screen.getByText(/\(2 已取消\)/)).toBeInTheDocument();
+    expect(screen.queryByTestId('task-tree-cancel')).not.toBeInTheDocument();
+    expect(screen.queryByText(/等待结果中/)).not.toBeInTheDocument();
   });
 
   // Wave 3 H2 (2026-08-15): 运行中编排的取消按钮
@@ -181,5 +193,89 @@ describe('TaskTreeSection', () => {
   it('hides cancel button when onCancel not provided', () => {
     render(<TaskTreeSection board={makeBoard()} />);
     expect(screen.queryByTestId('task-tree-cancel')).toBeNull();
+  });
+
+  it('renders cancelled status icon for cancelled tasks', () => {
+    const board = makeBoard({
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'cancelled',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: 'cancelled by user',
+          output_preview: null,
+        },
+      },
+    });
+    render(<TaskTreeSection board={board} />);
+    expect(screen.getByTestId('task-tree-item-t1')).toHaveTextContent('⊘');
+  });
+
+  // P0-6 (2026-08-20): reviewer 复核结论横幅 —— pass/fail 双色展示
+  it('shows review pass banner with assertion count', () => {
+    const board = makeBoard({
+      review: {
+        state: 'task_review',
+        run_id: 'orch-1',
+        task_id: 't1',
+        reviewer_id: 'reviewer',
+        verdict: 'pass',
+        assertion_count: 4,
+        summary: '全部通过',
+      },
+    });
+    render(<TaskTreeSection board={board} />);
+    const banner = screen.getByTestId('task-review-banner');
+    expect(banner).toHaveTextContent('复核通过');
+    expect(banner).toHaveTextContent('4');
+  });
+
+  it('shows review fail banner with summary', () => {
+    const board = makeBoard({
+      review: {
+        state: 'task_review',
+        run_id: 'orch-1',
+        task_id: 't1',
+        reviewer_id: 'reviewer',
+        verdict: 'fail',
+        assertion_count: 3,
+        summary: '结论缺少数据支撑',
+      },
+    });
+    render(<TaskTreeSection board={board} />);
+    const banner = screen.getByTestId('task-review-banner');
+    expect(banner).toHaveTextContent('复核存疑');
+    expect(banner).toHaveTextContent('结论缺少数据支撑');
+  });
+
+  // P0-7 (2026-08-20): retry_count 徽章 —— 后端一直携带 retry_count, 前端类型此前
+  // 未声明被静默丢弃, 现在展示"已重试 ×N"让用户感知到重试发生过。
+  it('shows retry badge when task has been retried', () => {
+    const board = makeBoard({
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'done',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: '完成',
+          retry_count: 2,
+        },
+      },
+    });
+    render(<TaskTreeSection board={board} />);
+    expect(screen.getByTestId('task-tree-retry-t1')).toHaveTextContent('已重试 ×2');
+  });
+
+  it('hides retry badge when retry_count is zero or absent', () => {
+    render(<TaskTreeSection board={makeBoard()} />);
+    expect(screen.queryByTestId('task-tree-retry-t1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('task-tree-retry-t2')).not.toBeInTheDocument();
   });
 });

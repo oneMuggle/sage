@@ -122,6 +122,9 @@ conductor 的工具入口，`execute_async` 调 `ChatDispatcher.dispatch`。工�
 - 用户加载名为 `orchestrate`/`single` 的 SKILL.md 时，动态 skill 优先，override 分支不触发（与既有"用户显式加载的 skill 优先"设计一致）
 - `task_status` 事件含必填 `agent_id`，会命中 useChat 前端 `if (evt.agent_id || evt.iteration)` 块把 UI"当前 agent"指示器改为子 agent id（大概率良性显示活跃子 agent）
 - `evt as TaskStatusEvent` 依赖后端 task_status 全字段不变式（注释已声明；后端若放宽字段可改 `Partial<TaskStatusEvent>`）
+- ~~中断链路~~（P0-1/P0-2/P0-3, 2026-08-20 已修）：run_loop 每轮迭代顶部消费一次性中断标志；`/interrupt` 经 `_ACTIVE_STREAMS` 注册表命中 producer 真实 agent（旧 `Depends(get_agent)` 新建空实例已废弃）；`SubagentRunner` 经 `interrupt_event` watcher 把取消传播到运行中的子 agent，被打断的任务状态记 `cancelled`（前端 `TaskStatusValue` 已含该值）
+- ~~orch_runs 恒 "running"~~（P0-4, 2026-08-20 已修）：producer finally 调 `_finalize_orch_run`（DONE→completed，否则 failed）；`finalize` SQL 带 `AND status='running'` 守卫，cancelled run 不被覆盖
+- ~~task_review 前端丢弃~~（P0-6, 2026-08-20 已修）：复核结论存 `TaskBoardState.review`，TaskTreeSection 渲染 pass/fail 横幅；agentStateMapping 对 task_review 返回 null 的行为保留（结论不进消息气泡）
 
 ## 8. 相关章节
 
@@ -200,7 +203,7 @@ conductor 的工具入口，`execute_async` 调 `ChatDispatcher.dispatch`。工�
 
 ### 11.2 task_status 事件增 retry_count（P0-1 透传）
 
-`ChatTaskState.retry_count` 回填自 `lane.metadata["retry_count"]`，`_emit_task_status` 把 `retry_count` 放进 `task_status` 事件。前端 `TaskStatusEvent` 接口（`src/shared/api/types.ts:225`）未声明 `retry_count`——SSE JSON 多出的运行时键被忽略，新字段天然兼容，不涉及前端改动。
+`ChatTaskState.retry_count` 回填自 `lane.metadata["retry_count"]`，`_emit_task_status` 把 `retry_count` 放进 `task_status` 事件。P0-7 (2026-08-20) 起前端 `TaskStatusEvent` 已声明 `retry_count?: number`（types.ts + llmStream.ts 双处），TaskTreeSection 任务行显示 `已重试 ×N` 徽章。
 
 ### 11.3 lane 镜像事实落地（范围修正）
 
@@ -331,3 +334,34 @@ PR A #316（P2-7/8/9 + run 级 cancel）+ PR B #317（P2-10 休眠层）+ PR C #
 - **handleStart 静默吞错** ~~落库失败（非 409）无用户反馈~~ —— ✅ 已收口（2026-08-15）：invoke 错误结构带 `status_code`，409 静默保持编辑态、非 409 toast 提示
 - **original_request NULL 兜底** ~~旧库 NULL 行的 resume 需对 undefined 兜底~~ —— ✅ 已收口（2026-08-15）：占位文案 + toast 提示
 - 进度可视化已知局限见 §9.3 / §11.7
+
+## 14. 控制面修复（P0 批次，2026-08-20）
+
+> 本节归档 P0 控制面缺陷修复（计划：`docs/superpowers/plans/2026-08-20-orchestration-control-fixes.md`）。分支 `fix/orchestration-control-p0`，2026-08-20。
+
+### 14.1 中断语义
+
+- 粒度：迭代边界（LLM 调用之间），不做请求内硬杀。
+- 标志 one-shot：`run_loop` 读到 `_interrupted` 即 `reset_interrupt()`，同实例下一轮 run 不受影响。
+- `/interrupt` body：`{"stream_id": "..."}` 可选；未带/未命中 → `{"status":"ok","target":"none"}`。
+- multi 模式中断 = 主 agent interrupt + dispatcher.cancel()（queued 任务短路、running 子任务经 watcher 打断）。
+
+### 14.2 run 生命周期
+
+`orch_runs.status` 迁移：`running → completed | failed | cancelled`。completed/failed 由 producer finally 写入；cancelled 由 cancelRun 先写，finalize 守卫不覆盖。
+
+### 14.3 primary 的 agent 工具
+
+种子白名单追加 `"agent"`（AgentTool，只读子代理）。存量 DB：`ensure_default_agents()` 仅当现有白名单恰等于 `_PRIMARY_TOOLS_BEFORE_AGENT`（旧 8 工具集合）时追加，用户自定义白名单不动。
+
+### 14.4 最终复核补丁：取消闭环与子代理边界（2026-08-21）
+
+本节记录最终复核后补齐的运行时控制边界。它描述的是进程内取消与子代理最小权限，不等同于用户身份认证或 run 所有权授权。
+
+- **Run-level cancel**：`POST /api/v1/orch/runs/{run_id}/cancel` 先将数据库状态置为 `cancelled`，再通过 `legacy_routes.interrupt_run()` 遍历该 run 的活动 stream，同时调用 primary `SageAgent.interrupt()` 与 `ChatDispatcher.cancel()`。取消入口保持异常隔离，避免内存注册表故障阻断状态落库。
+- **Stream registration race**：`/chat/stream` producer 在创建 primary agent 后、任何规划或附件等待前登记 `_ACTIVE_STREAMS`。dispatcher 后绑定到同一条 entry；若取消先到，entry 的 `cancelled` 标记会在绑定时重放到 dispatcher。producer finally 仍负责移除 entry。
+- **Cancelled is terminal**：`task_progress.cancelled` 纳入前后端五元组快照；任务树与摘要将 `cancelled` 计为终态，取消-only run 不再显示“等待结果中”或取消按钮。
+- **Subagent filesystem**：只有 `build_readonly_tool_registry()` 为子代理构造 `ReadFileTool` / `ListDirTool(enforce_workspace=True)`，默认情况下为每个注册表分配独立的 `0700` 临时 scratch 根，并在子代理循环结束后清理；显式传入的 workspace 根由调用方管理，不会被删除。路径经 resolve 后必须位于 scratch/workspace 根内，拦截绝对越界、`..` 穿越和符号链接逃逸。直接调用文件工具仍保留既有 read-vs-write 兼容语义。
+- **Subagent web fetch**：为消除 DNS 预检与 HTTP 客户端实际解析之间的 TOCTOU，`subagent_only` 仅允许 URL 主机部分为字面量 IPv4/IPv6，且每个地址必须满足 `ip.is_global`；因此 CGNAT、保留网段、文档网段、私网及 IPv4-mapped IPv6 非公网地址都会拒绝。请求使用 `trust_env=False`，禁用自动重定向；若响应含重定向，目标必须再次满足同一字面量公网 IP 策略。普通 WebFetch/WebSearch 不启用该限制。该检查不是完整的身份、凭证或网络层防护。
+
+剩余边界：取消 API 当前仍未增加认证/资源所有权校验；桌面端真实 IPC/模型流 smoke test 仍需在目标运行环境验证。
