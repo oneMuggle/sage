@@ -250,6 +250,24 @@ class TestReadonlyWhitelist:
         assert result.content["answer"] == "fake answer"
         assert "terminal" not in captured["registry"].list_names()
 
+    def test_factory_setup_failure_cleans_owned_workspace(self):
+        captured = {}
+
+        def _raising_factory(registry):
+            captured["root"] = Path(registry.get("read_file")._policy.workspace_root)
+            raise RuntimeError("factory setup failed")
+
+        tool = AgentTool(
+            llm_client=_mock_sub_llm(_done_response("unused")),
+            subagent_factory=_raising_factory,
+        )
+
+        result = tool.execute(description="Factory failure", prompt="task")
+
+        assert result.success is False
+        assert "factory setup failed" in result.error
+        assert not captured["root"].exists()
+
 
 class TestSubagentIterationBudget:
     """子代理迭代预算读 orch_settings（此前硬编码 SUBAGENT_MAX_ITERATIONS=6）。"""

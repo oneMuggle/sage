@@ -446,7 +446,13 @@ class AgentTool(BaseTool):
         """Construct a SageAgent with the restricted read-only registry."""
         if self._subagent_factory is not None:
             registry = build_readonly_tool_registry(self._policy)
-            subagent = self._subagent_factory(registry)
+            try:
+                subagent = self._subagent_factory(registry)
+            except Exception:
+                _cleanup_subagent_workspace(
+                    getattr(registry, "_owned_workspace_root", None)
+                )
+                raise
             subagent._owned_workspace_root = getattr(registry, "_owned_workspace_root", None)
             return subagent
 
