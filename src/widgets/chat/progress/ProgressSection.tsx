@@ -1,11 +1,14 @@
 // src/widgets/chat/progress/ProgressSection.tsx
 import { PlanCard } from '../../../components/PlanCard';
 import { PlanCardList } from '../../../components/PlanCardList';
+import { useChatStreamStore } from '../../../features/send-message/chatStreamStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { ToolCall } from '../../../shared/lib/store';
 
 // Multi-Agent Orchestration: 编排任务板聚合状态
 import { TaskTreeSection } from './TaskTreeSection';
+// P1 todo 接线 (2026-08-21): agent 自维护任务清单
+import { TodoListSection } from './TodoListSection';
 
 interface ProgressSectionProps {
   iteration: number;
@@ -36,6 +39,8 @@ export function ProgressSection({
   onResumeRun,
   onCancelExecution,
 }: ProgressSectionProps) {
+  // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）
+  const todos = useChatStreamStore((s) => s.todos);
   const stateLabel = streamingState ? (STATE_LABELS[streamingState] ?? streamingState) : null;
   // 进度可视化 P0-2 (2026-08-12): 编排进行中有 taskBoard 时,用 5 元组
   // 摘要替代"等待输入"占位文,避免误导用户以为主进程空闲。
@@ -90,6 +95,8 @@ export function ProgressSection({
           ))}
         </div>
       )}
+      {/* P1 todo 接线: agent 自维护任务清单（todo_snapshot 快照渲染） */}
+      <TodoListSection todos={todos} />
 
       {/* Wave 3 C3 (2026-08-15): 三态 —— 无编排→历史记录;未派发→计划卡(可编辑);已派发→任务树 */}
       {taskBoard == null ? (

@@ -18,7 +18,9 @@ export type AgentState =
   // 进度可视化 P0-2 (2026-08-12): 整盘概览,见 types.ts TaskProgressEvent。
   | 'task_progress'
   // Wave 2 (2026-08-14): reviewer 复核结论事件,见 types.ts TaskReviewEvent。
-  | 'task_review';
+  | 'task_review'
+  // P1 todo 接线 (2026-08-21): agent 任务清单全量快照。
+  | 'todo_snapshot';
 
 // 窄类型事件接口 —— useChat taskBoard 状态机的数据类型。
 // AgentState / AgentEvent（宽松字段）见 types.ts —— 双处保持一致。
@@ -76,6 +78,21 @@ export interface TaskReviewEvent {
   summary: string;
 }
 
+/** P1 todo 接线: agent 自维护清单的全量快照事件。 */
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface TodoItem {
+  content: string;
+  status: TodoStatus;
+  activeForm?: string;
+}
+
+export interface TodoSnapshotEvent {
+  state: 'todo_snapshot';
+  session_id: string;
+  todos: TodoItem[];
+}
+
 export interface ToolCallRequestFE {
   id: string;
   type: 'function';
@@ -120,6 +137,9 @@ export interface AgentEvent {
   verdict?: ReviewVerdict;
   assertion_count?: number;
   summary?: string;
+  // P1 todo 接线: todo_snapshot 全量快照字段。
+  todos?: TodoItem[];
+  session_id?: string;
 }
 
 export async function* parseNDJSONStream(

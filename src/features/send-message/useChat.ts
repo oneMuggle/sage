@@ -444,6 +444,13 @@ export function useChat() {
                 return;
               }
 
+              // P1 todo 接线 (2026-08-21): todo_write 全量快照 → store。
+              // 不进消息气泡（agentStateMapping 对编排事件同类处理）。
+              if (evt.state === 'todo_snapshot' && Array.isArray(evt.todos)) {
+                useChatStreamStore.getState().setTodos(evt.todos);
+                return;
+              }
+
               // 处理 reasoning 事件：累积 reasoning 内容（支持完整事件和增量事件）
               if ((evt.state === 'reasoning' || evt.state === 'reasoning_delta') && evt.reasoning) {
                 useChatStreamStore.getState().appendReasoning(assistantId, evt.reasoning);
