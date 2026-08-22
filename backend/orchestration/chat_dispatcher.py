@@ -369,6 +369,9 @@ class ChatDispatcher:
                 downstream.error = _CASCADE_ERROR_PREFIX + (
                     ",".join(culprits) if culprits else "upstream"
                 )
+                # 级联置 failed 的任务并入累计失败集 —— 更下游才能引用到
+                # 直接上游 id（否则多级链 t1→t2→t3 中 t3 拿不到 t2）。
+                cumulative_failed.add(tid)
                 downstream.finished_at = time.time()
                 self._emit_task_status(downstream)
         aggregated = self._aggregate(states)

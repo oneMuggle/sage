@@ -135,6 +135,43 @@ async def test_upstream_failure_cascades_without_running_downstream():
 
 
 @pytest.mark.asyncio()
+async def test_transitive_cascade_attributes_direct_upstream():
+    """三级链 t1→t2→t3：t1 失败 → t2/t3 级联，且 t3 的归因引用直接上游 t2。"""
+    queue = _make_queue()
+    fake = _FakeSageAgent(results=["正常结果"], fail_goal="崩溃")
+    dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-tc")
+    _inject_plan(
+        dispatcher,
+        [
+            ("t1", "崩溃任务", "researcher", []),
+            ("t2", "中游任务", "writer", ["t1"]),
+            ("t3", "下游任务", "coder", ["t2"]),
+        ],
+    )
+
+    with _patch_subagents(fake):
+        await dispatcher.dispatch(
+            [
+                {"task_id": "t1", "agent_id": "researcher", "goal": "崩溃任务"},
+                {"task_id": "t2", "agent_id": "writer", "goal": "中游任务"},
+                {"task_id": "t3", "agent_id": "coder", "goal": "下游任务"},
+            ]
+        )
+
+    events = _drain_events(queue)
+    errors = {
+        e["task_id"]: e["error"]
+        for e in events
+        if e["status"] == "failed"
+    }
+    assert set(errors) == {"t1", "t2", "t3"}
+    # 级联置 failed 的 t2 并入累计失败集 → t3 能引用到直接上游 t2
+    assert errors["t2"] == f"{_CASCADE_ERROR_PREFIX}t1"
+    assert errors["t3"] == f"{_CASCADE_ERROR_PREFIX}t2"
+    assert fake.calls <= 3  # 只有 t1 的重试链真正派遣过子代理
+
+
+@pytest.mark.asyncio()
 async def test_cycle_rejected_before_any_dispatch():
     """环依赖 → dispatch 抛 ValueError（含环路径），无任何子代理运行。"""
     queue = _make_queue()
