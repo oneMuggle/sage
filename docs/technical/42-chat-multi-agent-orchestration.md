@@ -365,3 +365,22 @@ PR A #316（P2-7/8/9 + run 级 cancel）+ PR B #317（P2-10 休眠层）+ PR C #
 - **Subagent web fetch**：为消除 DNS 预检与 HTTP 客户端实际解析之间的 TOCTOU，`subagent_only` 仅允许 URL 主机部分为字面量 IPv4/IPv6，且每个地址必须满足 `ip.is_global`；因此 CGNAT、保留网段、文档网段、私网及 IPv4-mapped IPv6 非公网地址都会拒绝。请求使用 `trust_env=False`，禁用自动重定向；若响应含重定向，目标必须再次满足同一字面量公网 IP 策略。普通 WebFetch/WebSearch 不启用该限制。该检查不是完整的身份、凭证或网络层防护。
 
 剩余边界：取消 API 当前仍未增加认证/资源所有权校验；桌面端真实 IPC/模型流 smoke test 仍需在目标运行环境验证。
+
+## 15. P1 拓扑调度 + agent todo 清单（2026-08-22，#355-#359）
+
+### 15.1 depends_on 真实拓扑调度
+
+`backend/orchestration/topology.py`：Kahn 分波（`build_waves`）、传递闭包（`downstream_closure`）、环检测（`find_cycle`/`DependencyCycleError`）。未知 batch 外依赖视为已满足。
+
+`ChatDispatcher.dispatch()`：
+- 派发前 `find_cycle` 环预检，拒单时未派发任何子代理，错误经工具层回传 conductor 可自纠重派；
+- 主循环由全并行 gather 改分波执行：波内并行（信号量限流不变）、波间屏障；
+- 上游 failed/cancelled → 传递闭包内未启动下游直接置 failed，`error=blocked_by_failed:<根因上游>`，级联任务并入累计失败集使多级链逐级归因直接上游；用户全局取消不做级联标注。
+
+无依赖批次退化为原全并行行为（事件序兼容）。
+
+### 15.2 agent 自维护 todo 清单（全链路）
+
+- **后端**：`todo_state.py` `_NotifyingTodoStore` + `add/remove_todo_listener`；producer 注册监听器推 SSE `{"state":"todo_snapshot","session_id",todos}`（会话过滤防跨流串扰，finally 注销防泄漏）；primary 白名单加 `todo_write`，存量 DB 二段升级链（`_PRIMARY_TOOLS_BEFORE_TODO`，用户自定义白名单不动）。
+- **前端**：AgentState 加 `todo_snapshot`；chatStreamStore `todos` slice（startStream 复位）；useChat 消费分支；`TodoListSection` 卡片（○◐☑ 字形 + 进度计数 + activeForm）。
+- **编排镜像（PR-C，纯前端派生）**：`TodoListSection` props 扩展 `taskBoard?`，镜像项从 plan+statuses 实时计算，「编排」徽章 + 依赖缩进 + `mapOrchStatus` 映射；todo_write 天然无法篡改镜像项。win7 分支额外保留实时 toolCalls 列表与 permission_request/user_question 字段（双方保留合并）。
