@@ -15,7 +15,13 @@
 
 import { create } from 'zustand';
 
-import type { AgentEvent, TaskPlanItem, TaskReviewEvent, TaskStatusEvent } from '../../shared/api';
+import type {
+  AgentEvent,
+  TaskPlanItem,
+  TaskReviewEvent,
+  TaskStatusEvent,
+  TodoItem,
+} from '../../shared/api';
 import type { ToolCall } from '../../shared/lib/store';
 
 /** 流式消息的临时覆盖层（'🤔 思考中…' + LLM 累积的 content/reasoning） */
@@ -52,6 +58,8 @@ interface ChatStreamStoreState {
   streaming: StreamingState | null;
   streamingToolCalls: ToolCall[];
   taskBoard: TaskBoardState | null;
+  // P1 todo 接线 (2026-08-21): todo_snapshot 全量快照（agent 自维护清单）。
+  todos: TodoItem[];
 
   // —— 流式生命周期 ——
   startStream: (
@@ -79,6 +87,9 @@ interface ChatStreamStoreState {
     updater: (prev: TaskBoardState | null) => TaskBoardState | null,
   ) => void;
 
+  // —— todo 清单（P1 接线） ——
+  setTodos: (todos: TodoItem[]) => void;
+
   // —— 一锅端（reset / 测试清理 / 异常恢复） ——
   resetAll: () => void;
 }
@@ -87,6 +98,7 @@ const initial = {
   streaming: null as StreamingState | null,
   streamingToolCalls: [] as ToolCall[],
   taskBoard: null as TaskBoardState | null,
+  todos: [] as TodoItem[],
 };
 
 export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
@@ -104,6 +116,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
       },
       streamingToolCalls: [],
       taskBoard: null,
+      todos: [],
     }),
 
   appendContent: (messageId, next) =>
@@ -153,6 +166,8 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
     }),
 
   setTaskBoard: (board) => set({ taskBoard: board }),
+
+  setTodos: (todos) => set({ todos }),
 
   updateTaskBoard: (_runId, updater) =>
     set((prev) => {
