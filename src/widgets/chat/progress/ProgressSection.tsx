@@ -95,8 +95,8 @@ export function ProgressSection({
           ))}
         </div>
       )}
-      {/* P1 todo 接线: agent 自维护任务清单（todo_snapshot 快照渲染） */}
-      <TodoListSection todos={todos} />
+      {/* P1 todo 接线: agent 自维护任务清单 + PR-C 编排计划镜像 */}
+      <TodoListSection todos={todos} taskBoard={taskBoard} />
 
       {/* Wave 3 C3 (2026-08-15): 三态 —— 无编排→历史记录;未派发→计划卡(可编辑);已派发→任务树 */}
       {taskBoard == null ? (
