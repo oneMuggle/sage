@@ -136,7 +136,9 @@ export type AgentState =
   // 实时从 task_status 聚合,本事件只承担初始化职责。
   | 'task_progress'
   // Wave 2 (2026-08-14): reviewer 复核结论事件,见 TaskReviewEvent。
-  | 'task_review';
+  | 'task_review'
+  // P1 todo 接线 (2026-08-21): agent 任务清单全量快照,与 llmStream.ts 双处一致。
+  | 'todo_snapshot';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -273,6 +275,21 @@ export interface TaskReviewEvent {
   summary: string;
 }
 
+/** P1 todo 接线: agent 自维护清单的全量快照事件,与 llmStream.ts 双处一致。 */
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface TodoItem {
+  content: string;
+  status: TodoStatus;
+  activeForm?: string;
+}
+
+export interface TodoSnapshotEvent {
+  state: 'todo_snapshot';
+  session_id: string;
+  todos: TodoItem[];
+}
+
 /** 流式聊天事件 (NDJSON 协议的一行) */
 export interface AgentEvent {
   state: AgentState;
@@ -312,6 +329,9 @@ export interface AgentEvent {
   permission_request?: PermissionRequest;
   /** M2 part B: state === 'ask_user_question' 时携带的提问详情 */
   user_question?: UserQuestion;
+  // P1 todo 接线: todo_snapshot 全量快照字段,与 llmStream.ts 双处一致。
+  todos?: TodoItem[];
+  session_id?: string;
 }
 
 // ==================== 错误类型定义 ====================

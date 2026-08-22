@@ -29,6 +29,12 @@ from backend.orchestration.orch_settings import OrchSettings, load_orch_settings
 from backend.orchestration.report_schema import Assertion
 from backend.orchestration.subagent_runner import SubagentRunner, run_lane_with_retry
 from backend.orchestration.task_registry import TaskRegistry
+from backend.orchestration.topology import (
+    DependencyCycleError,
+    build_waves,
+    downstream_closure,
+    find_cycle,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +54,9 @@ MAX_OUTPUT_PREVIEW_CHARS = 500
 #: Wave 2 Minor 2 fix (2026-08-14): 防御性 retry 循环上限 —— 防未来 executor
 #: 退化（一直返回 retrying）导致 _run_subagent 无限循环 hang。
 MAX_LANE_ITERATIONS = 8
+
+#: 级联失败错误前缀 —— 下游任务因上游 failed/stopped 未启动即置 failed。
+_CASCADE_ERROR_PREFIX = "blocked_by_failed:"
 
 #: 编排语义判定 prompt（轻量二分类）：LLM 只需回答 multi / single。
 _CLASSIFY_PROMPT = """判断以下用户消息是否需要多 agent 协作（拆解为多个子任务、由不同角色并行执行）才能最好地完成。
@@ -258,6 +267,23 @@ class ChatDispatcher:
             states.append(state)
             self._emit_task_status(state)  # queued
 
+        # P1 拓扑调度 (spec 2026-08-21): 派发前环预检 —— 拒单时未发任何
+        # 子代理、仅 queued 事件。错误经工具层回传 conductor 可自纠重派。
+        batch_plan_deps: Dict[str, List[str]] = {}
+        for raw_item in tasks:
+            rid = raw_item.get("task_id")
+            if rid and rid in self._plan_by_id:
+                batch_plan_deps[str(rid)] = [
+                    str(d)
+                    for d in (self._plan_by_id[rid].get("depends_on") or [])
+                ]
+        cycle = find_cycle(batch_plan_deps)
+        if cycle:
+            raise ValueError(
+                "任务依赖存在环，拒绝派发：" + " -> ".join(cycle)
+                + "。请修正 depends_on 后重新派发。"
+            )
+
         async def _run_one(state: ChatTaskState) -> None:
             async with self._semaphore:
                 # P2-9 (2026-08-14) + P0-3 (2026-08-20): 取消后 queued 任务不再启动
@@ -288,9 +314,66 @@ class ChatDispatcher:
                     state.finished_at = time.time()
                     self._emit_task_status(state)
 
-        await asyncio.gather(
-            *(_run_one(s) for s in states if s.status not in ("failed", "cancelled"))
-        )
+        # P1 拓扑调度 (spec 2026-08-21): 依 depends_on 分波执行。
+        # - 波内 asyncio.gather 全并行（信号量限流不变）
+        # - 波间屏障：上一波全部终态才进下一波
+        # - 级联取消：上游 failed/stopped → 传递闭包内未启动下游直接置 failed
+        #   （不发子代理运行），error 前缀 blocked_by_failed:<根因上游>。
+        # 用户全局取消时不做级联标注（下游由 _run_one 统一转 cancelled）。
+        deps_by_id: Dict[str, List[str]] = {}
+        for state in states:
+            plan_item = self._plan_by_id.get(state.task_id)
+            raw_deps = (
+                [str(d) for d in (plan_item.get("depends_on") or [])]
+                if plan_item
+                else []
+            )
+            deps_by_id[state.task_id] = [
+                d for d in raw_deps if d in self._states and d != state.task_id
+            ]
+
+        try:
+            waves = build_waves([s.task_id for s in states], deps_by_id)
+        except DependencyCycleError as exc:  # 预检漏网（自指等）兜底
+            raise ValueError(
+                "任务依赖存在环，拒绝派发：" + " -> ".join(exc.cycle)
+            ) from exc
+
+        by_id = {s.task_id: s for s in states}
+        cumulative_failed: Set[str] = set()
+        for wave in waves:
+            runnable = [
+                by_id[tid]
+                for tid in wave
+                if by_id[tid].status not in ("failed", "cancelled")
+            ]
+            await asyncio.gather(*(_run_one(s) for s in runnable))
+            if self._cancelled.is_set():
+                continue
+            newly_failed = {
+                s.task_id for s in runnable if s.status in ("failed", "cancelled")
+            }
+            if not newly_failed:
+                continue
+            cumulative_failed |= newly_failed
+            for tid in sorted(downstream_closure(deps_by_id, newly_failed)):
+                downstream = by_id.get(tid)
+                if downstream is None:
+                    continue
+                if downstream.status in ("failed", "cancelled", "done"):
+                    continue
+                culprits = [
+                    d for d in deps_by_id.get(tid, []) if d in cumulative_failed
+                ]
+                downstream.status = "failed"
+                downstream.error = _CASCADE_ERROR_PREFIX + (
+                    ",".join(culprits) if culprits else "upstream"
+                )
+                # 级联置 failed 的任务并入累计失败集 —— 更下游才能引用到
+                # 直接上游 id（否则多级链 t1→t2→t3 中 t3 拿不到 t2）。
+                cumulative_failed.add(tid)
+                downstream.finished_at = time.time()
+                self._emit_task_status(downstream)
         aggregated = self._aggregate(states)
         # P0-2 验证环：仅当本次调用已覆盖 plan 全部任务后跑 reviewer；
         # 失败降级跳过（绝不阻塞聊天）。

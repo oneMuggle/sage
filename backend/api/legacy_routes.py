@@ -1689,6 +1689,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 office_doc_scope=frozenset(),
             )
         _tool_ctx_token = set_tool_context(_tool_ctx)
+        # P1 todo 接线 (spec 2026-08-21): todo_write 变更 → todo_snapshot
+        # SSE 全量快照。会话过滤防跨流串扰；队列满静默降级（尽力而为）。
+        from backend.tools.todo_state import (
+            add_todo_listener,
+            remove_todo_listener,
+        )
+
+        def _push_todo_snapshot(session_id: str, todos: Any) -> None:
+            if session_id != data.session_id:
+                return
+            try:
+                entry.queue.put_nowait(
+                    {
+                        "state": "todo_snapshot",
+                        "session_id": session_id,
+                        "todos": todos,
+                    }
+                )
+            except Exception:  # noqa: BLE001 — 降级铁律
+                logger.debug("todo_snapshot 推送失败（队列满/关闭），忽略")
+
+        add_todo_listener(_push_todo_snapshot)
         try:
             # P0-4 (2026-08-20): 终态变量前置到 try 顶部 —— finally 无条件读取
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
@@ -2191,6 +2213,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # ContextVar never leaks into the next producer invocation.
             if _tool_ctx_token is not None:
                 reset_tool_context(_tool_ctx_token)
+            # P1 todo 接线: 注销监听器（闭包持有 entry/queue 引用，
+            # 不注销会随全局 _listeners 泄漏并推已关闭的流）。
+            remove_todo_listener(_push_todo_snapshot)
 
     await registry.create(stream_id, queue_maxsize=1000, producer=producer)
     return {"streamId": stream_id}

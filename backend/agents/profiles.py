@@ -81,6 +81,9 @@ def create_default_agents() -> List[AgentProfile]:
                 # P0-5 (2026-08-20): 循环内只读子代理工具 —— 让主助手能在
                 # ReAct 循环内派遣子 agent（AgentTool 只读，无写副作用）。
                 "agent",
+                # P1 todo 接线 (2026-08-21): 任务清单工具 —— 主助手可在多步
+                # 任务中记录/更新计划（todo_state 存会话，无文件副作用）。
+                "todo_write",
             ],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
@@ -164,6 +167,23 @@ _PRIMARY_TOOLS_BEFORE_AGENT = {
     "file_summary",
 }
 
+# P1 todo 接线 (2026-08-21): 加 "todo_write" 之前的 primary 种子集合 ——
+# 存量 DB 二段升级判定。仅当白名单恰好等于上一代种子时才追加。
+_PRIMARY_TOOLS_BEFORE_TODO = {
+    "calculator", "memory_search", "memory_save", "list_dir", "read_file",
+    "grep_search", "glob_search", "file_summary", "agent",
+}
+
+
+def _default_repo():
+    from backend.data.agent_repo import AgentRepository
+
+    return AgentRepository()
+
+
+#: 测试注入点（monkeypatch 目标）；生产恒走 _default_repo
+_repo_factory_for_tests = None
+
 
 def ensure_default_agents() -> int:
     """确保所有默认 agent（含 writer）都存在。
@@ -171,9 +191,7 @@ def ensure_default_agents() -> int:
     ``seed_defaults_if_empty`` 只在表为空时插，已存在的 DB 不会自动补
     writer —— 本函数逐个检查缺失的默认 id 并补插。返回补插条数。
     """
-    from backend.data.agent_repo import AgentRepository
-
-    repo = AgentRepository()
+    repo = _repo_factory_for_tests() if _repo_factory_for_tests else _default_repo()
     inserted = 0
     for agent in create_default_agents():
         if repo.get(agent.id) is None:
@@ -185,6 +203,16 @@ def ensure_default_agents() -> int:
         tools = primary.get("tools") or []
         if set(tools) == _PRIMARY_TOOLS_BEFORE_AGENT:
             primary["tools"] = tools + ["agent"]
+            repo.upsert(primary)
+    # P1 todo 接线 (2026-08-21): 存量 DB 二段升级 —— 旧种子追加 todo_write。
+    # 顺序敏感：先 agent 后 todo。两级判定互斥（旧种子集合不含 todo_write、
+    # 本段集合含 agent），一段升级后集合恰好等于二段判定集，链式生效；
+    # 任意自定义白名单都不匹配任一集合，天然不动。
+    primary = repo.get("primary")
+    if primary is not None:
+        tools = primary.get("tools") or []
+        if set(tools) == _PRIMARY_TOOLS_BEFORE_TODO:
+            primary["tools"] = tools + ["todo_write"]
             repo.upsert(primary)
     return inserted
 

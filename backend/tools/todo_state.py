@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import threading
 from collections import OrderedDict
-from typing import Any, Optional
+from contextlib import suppress
+from typing import Any, Callable, Dict, List, Optional
 
 from .context import current_tool_context
 
@@ -91,7 +92,38 @@ def _shelter(value: Any) -> Any:
     return value
 
 
-_todo_store = SessionStateStore()
+#: todo 变更监听器：(session_id, 全量 todos) —— legacy_routes 注册以推 SSE。
+TodoListener = Callable[[str, List[Dict[str, Any]]], None]
+
+_listeners: List[TodoListener] = []
+
+
+def add_todo_listener(listener: TodoListener) -> None:
+    if listener not in _listeners:
+        _listeners.append(listener)
+
+
+def remove_todo_listener(listener: TodoListener) -> None:
+    if listener in _listeners:
+        _listeners.remove(listener)
+
+
+def _notify_listeners(session_id: str, value: Any) -> None:
+    """通知所有监听者；单个异常吞掉（推送是尽力而为）。"""
+    for listener in list(_listeners):
+        with suppress(Exception):  # 降级铁律：推送失败不影响工具执行
+            listener(session_id, value)
+
+
+class _NotifyingTodoStore(SessionStateStore):
+    """replace 后同步通知监听者（SSE todo_snapshot 的数据源钩子）。"""
+
+    def replace(self, session_id: str, value: Any) -> None:
+        super().replace(session_id, value)
+        _notify_listeners(session_id, self.get(session_id))
+
+
+_todo_store = _NotifyingTodoStore()
 
 
 def get_todo_store() -> SessionStateStore:
@@ -103,6 +135,9 @@ __all__ = [
     "ANONYMOUS_SESSION_ID",
     "MAX_SESSION_BUCKETS",
     "SessionStateStore",
+    "TodoListener",
+    "add_todo_listener",
+    "remove_todo_listener",
     "resolve_session_id",
     "get_todo_store",
 ]
