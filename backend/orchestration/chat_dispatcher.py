@@ -279,6 +279,8 @@ class ChatDispatcher:
                 # 续聊必须复用父任务的 agent/profile，避免历史 system prompt
                 # 与新任务角色不一致；调用方传入的 agent_id 仅用于普通任务。
                 agent_id = self._states[parent_task_id].agent_id
+                # 续聊 goal 是新的 user 消息，不能被计划中的原始 goal 覆盖。
+                goal = str(raw.get("goal", ""))
             state = ChatTaskState(
                 task_id=task_id,
                 agent_id=agent_id,
