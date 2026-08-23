@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from contextlib import ExitStack
 from unittest.mock import patch
 
@@ -770,6 +771,50 @@ async def test_followup_self_reference_degrades_and_does_not_reject_batch(
     assert "followup_of" in caplog.text
 
 
+@pytest.mark.parametrize(
+    "bad_run_id",
+    [
+        "../victim",
+        "../../../victim",
+        "",
+        "a" * 129,
+        "has space",
+        "slash/path",
+        "-leading-dash",
+        "_leading_underscore",
+        "中文id",
+        "dot.name",
+    ],
+)
+def test_constructor_rejects_invalid_run_id(bad_run_id):
+    """安全修复波 (2026-08-23): 非法 run_id 构造即抛 ValueError。
+
+    run_id 会拼进 ``<data_dir>/orch_worktrees/<run_id>`` 与 scratch 路径并参与
+    ``shutil.rmtree`` —— 含路径分隔符 / 空串 / 超长 / 特殊字符的值可造成路径
+    穿越。白名单校验必须在任何副作用（DB、清扫）之前执行。
+    """
+    with pytest.raises(ValueError, match="非法 run_id"):
+        ChatDispatcher(
+            stream_id="s1",
+            entry_queue=_make_queue(),
+            run_id=bad_run_id,
+        )
+
+
+@pytest.mark.parametrize(
+    "good_run_id",
+    ["orch-test", "orch-self-followup", "a", "A1_b-c", "x" * 128],
+)
+def test_constructor_accepts_valid_run_id(good_run_id):
+    """合法 run_id（含现有测试风格 orch-* / 边界 128 字符）正常构造。"""
+    dispatcher = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=_make_queue(),
+        run_id=good_run_id,
+    )
+    assert dispatcher.run_id == good_run_id
+
+
 def test_constructor_sweeps_stale_worktree_root(monkeypatch, tmp_path):
     """构造时机会性清扫崩溃残留的 ``orch_worktrees/<run_id>`` 孤儿目录。"""
     from backend.orchestration import chat_dispatcher as module
@@ -823,3 +868,106 @@ def test_constructor_sweep_failure_is_swallowed(monkeypatch, tmp_path):
     )
     assert calls == [tmp_path / "orch_worktrees" / "orch-boom-sweep"]
     assert dispatcher.run_id == "orch-boom-sweep"
+
+
+def test_constructor_sweep_runs_git_worktree_prune(monkeypatch, tmp_path):
+    """清扫 rmtree 成功后 best-effort ``git worktree prune``（安全修复波）。
+
+    崩溃残留目录被 rmtree 后主仓 ``.git/worktrees/`` 管理条目仍在，同路径重建
+    worktree 会 rc=128 失败静默回落 scratch —— prune 清掉悬空元数据。
+    """
+    from backend.orchestration import chat_dispatcher as module
+
+    monkeypatch.setattr(
+        module,
+        "get_database",
+        lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})(),
+    )
+    stale = tmp_path / "orch_worktrees" / "orch-prune-run"
+    stale.mkdir(parents=True)
+
+    prune_calls = []
+
+    def fake_prune(cwd=None):
+        prune_calls.append(cwd)
+        return True
+
+    monkeypatch.setattr("backend.orchestration.worktree.prune_worktrees", fake_prune)
+
+    ChatDispatcher(
+        stream_id="s1",
+        entry_queue=_make_queue(),
+        run_id="orch-prune-run",
+        workspace_root=str(tmp_path),
+    )
+
+    assert not stale.exists()
+    assert len(prune_calls) == 1
+    assert prune_calls[0] == tmp_path
+
+
+def test_constructor_sweep_prune_skipped_without_workspace(monkeypatch, tmp_path):
+    """workspace_root 未绑定 → 不执行 prune（无 repo 可清）。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    monkeypatch.setattr(
+        module,
+        "get_database",
+        lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})(),
+    )
+    stale = tmp_path / "orch_worktrees" / "orch-prune-skip"
+    stale.mkdir(parents=True)
+
+    prune_calls = []
+
+    def fake_prune(cwd=None):
+        prune_calls.append(cwd)
+        return True
+
+    monkeypatch.setattr("backend.orchestration.worktree.prune_worktrees", fake_prune)
+
+    ChatDispatcher(
+        stream_id="s1", entry_queue=_make_queue(), run_id="orch-prune-skip"
+    )
+
+    assert not stale.exists()
+    assert prune_calls == []
+
+
+def test_constructor_sweep_prune_failure_is_swallowed(monkeypatch, tmp_path):
+    """prune 抛异常全吞降级 —— 构造与清扫结果不受影响。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    monkeypatch.setattr(
+        module,
+        "get_database",
+        lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})(),
+    )
+    stale = tmp_path / "orch_worktrees" / "orch-prune-boom"
+    stale.mkdir(parents=True)
+
+    def boom_prune(cwd=None):
+        raise RuntimeError("git gone")
+
+    monkeypatch.setattr("backend.orchestration.worktree.prune_worktrees", boom_prune)
+
+    dispatcher = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=_make_queue(),
+        run_id="orch-prune-boom",
+        workspace_root=str(tmp_path),
+    )
+
+    assert not stale.exists()
+    assert dispatcher.run_id == "orch-prune-boom"
+
+
+def test_prune_worktree_helper_real_git(tmp_path):
+    """prune_worktrees helper：真 git 仓库上调用 rc=0；非目录返回 False。"""
+    from backend.orchestration.worktree import prune_worktrees
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    assert prune_worktrees(repo) is True
+    assert prune_worktrees(tmp_path / "not-a-dir") is False

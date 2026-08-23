@@ -75,6 +75,18 @@ def remove_worktree(dest: Path) -> None:
         logger.warning("worktree 移除异常（将遗留目录）: %s: %s", dest, exc)
 
 
+def prune_worktrees(cwd: Optional[Path] = None) -> bool:
+    """在 ``cwd`` 上执行 ``git worktree prune``，清掉悬空的 worktree 管理元数据。
+
+    场景（安全修复波 2026-08-23）：崩溃残留的 worktree 目录被直接 rmtree 后，
+    主仓 ``.git/worktrees/`` 条目仍在 —— 同路径重建 ``git worktree add`` 会
+    rc=128 失败并静默回落 scratch。prune 清掉这类孤儿条目。失败返回 False。
+    """
+    if cwd is not None and not cwd.is_dir():
+        return False
+    return _run_git(["worktree", "prune"], cwd=cwd)
+
+
 async def create_worktree_async(repo: Path, dest: Path) -> bool:
     """在线程中创建 worktree，避免阻塞 asyncio event loop。"""
     loop = asyncio.get_running_loop()

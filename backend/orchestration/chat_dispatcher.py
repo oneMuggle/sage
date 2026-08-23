@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shutil
 import time
 from dataclasses import dataclass
@@ -75,6 +76,14 @@ SCRATCH_ROOT = "orch_scratch"
 #: worktree 根目录名（data_dir 下）—— 创建（_create_worktree_for）与
 #: 崩溃残留清扫（_sweep_stale_worktrees）共用，保证路径推导一致。
 WORKTREES_ROOT = "orch_worktrees"
+
+# 安全修复波 (2026-08-23): run_id 白名单 —— 客户端可控（ChatRequest.run_id /
+# plan_override 路径无格式校验），却拼进 worktree/scratch 路径并参与
+# ``shutil.rmtree``。不设白名单时 ``run_id="../../victim"`` 可路径穿越删除
+# 任意目录；同 run_id 双活还会误删并发 run 的 worktree。首字符限字母数字
+# （封死 ``-`` 开头被 git 当 flag、``.``/``_`` 开头歧义），后续允许字母数字、
+# 下划线、连字符，上限 128 字符。生产生成值 ``orch-<uuid4>`` 天然合规。
+_RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
 
 async def _classify_orchestration_mode(
@@ -153,6 +162,10 @@ class ChatDispatcher:
         settings: Optional[OrchSettings] = None,
         workspace_root: Optional[str] = None,
     ) -> None:
+        # 安全修复波 (2026-08-23): 白名单校验必须在任何副作用（DB 连接、
+        # worktree 清扫）之前 —— 非法 run_id 直接拒绝构造。
+        if not _RUN_ID_RE.fullmatch(run_id):
+            raise ValueError(f"非法 run_id: {run_id!r}")
         self.stream_id = stream_id
         self.entry_queue = entry_queue
         self.run_id = run_id
@@ -203,7 +216,10 @@ class ChatDispatcher:
         """删除本 run 的 ``<data_dir>/orch_worktrees/<run_id>`` 残留目录（若存在）。
 
         仅清本 run 自己的目录（其他并发 run 不受影响）。路径推导与
-        ``_create_worktree_for`` 一致。任何异常全吞降级 logger.debug。
+        ``_create_worktree_for`` 一致。rmtree 后 best-effort ``git worktree
+        prune``（安全修复波 2026-08-23）—— 清掉主仓 ``.git/worktrees/`` 悬空
+        条目，否则同路径重建 worktree 会 rc=128 失败静默回落 scratch。任何
+        异常全吞降级 logger.debug。
         """
         try:
             data_dir = Path(get_database().db_path).parent
@@ -211,8 +227,22 @@ class ChatDispatcher:
             if stale_root.exists():
                 shutil.rmtree(stale_root)
                 logger.debug("已清扫崩溃残留 worktree 根: %s", stale_root)
+                self._prune_after_sweep()
         except Exception as exc:  # noqa: BLE001 — 清扫失败不阻塞派发
             logger.debug("worktree 残留清扫跳过 run=%s err=%s", self.run_id, exc)
+
+    def _prune_after_sweep(self) -> None:
+        """rmtree 成功后清理 git worktree 管理元数据（best-effort，全吞降级）。"""
+        try:
+            from backend.orchestration.worktree import prune_worktrees
+
+            root = Path(self.workspace_root) if self.workspace_root else None
+            if root is None or not root.is_dir():
+                return
+            if not prune_worktrees(root):
+                logger.debug("worktree prune 未成功 workspace=%s", root)
+        except Exception as exc:  # noqa: BLE001 — prune 失败不阻塞派发
+            logger.debug("worktree prune 跳过 run=%s err=%s", self.run_id, exc)
 
     def cancel(self) -> bool:
         """置位取消事件。幂等：已 set 返回 False，否则 True。"""
