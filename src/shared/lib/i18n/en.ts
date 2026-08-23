@@ -385,6 +385,10 @@ export const en: Record<TranslationKey, string> = {
   'orchestration.heartbeat.noHeartbeat': 'no heartbeat',
   'orchestration.lane.task': 'task:',
   'orchestration.lane.agent': 'agent:',
+  'orchestration.board.summary': 'Lanes {total} · fresh {fresh} / stale {stale} / dead {dead}',
+  'orchestration.board.level.fresh': 'fresh',
+  'orchestration.board.level.stale': 'stale',
+  'orchestration.board.level.dead': 'dead',
 
   // ─── Session export (U18 HTML session export) ──────
   'session.export_failed': 'Export failed: {message}',

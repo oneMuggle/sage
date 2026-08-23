@@ -6,7 +6,8 @@ Web 工具 - 网络搜索和网页获取
 from __future__ import annotations
 
 import ipaddress
-from typing import Optional
+from ipaddress import IPv4Address, IPv6Address
+from typing import Optional, Set, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -159,7 +160,7 @@ class WebFetchTool(BaseTool):
         )
 
     @staticmethod
-    def _literal_ip(url: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    def _literal_ip(url: str) -> Optional[Union[IPv4Address, IPv6Address]]:
         hostname = urlparse(url).hostname
         if not hostname:
             return None
@@ -176,10 +177,10 @@ class WebFetchTool(BaseTool):
         return address
 
     @staticmethod
-    def _all_public(addresses: set[ipaddress.IPv4Address | ipaddress.IPv6Address]) -> bool:
+    def _all_public(addresses: Set[Union[IPv4Address, IPv6Address]]) -> bool:
         return bool(addresses) and all(ip.is_global for ip in addresses)
 
-    def _validate_subagent_url(self, url: str) -> str | None:
+    def _validate_subagent_url(self, url: str) -> Optional[str]:
         address = self._literal_ip(url)
         if address is None:
             return "subagent_web_fetch_blocked: 仅允许访问字面量公共 IP 地址"
@@ -187,7 +188,7 @@ class WebFetchTool(BaseTool):
             return "subagent_web_fetch_blocked: 仅允许访问公共网络地址"
         return None
 
-    def _validate_subagent_redirect(self, location: str) -> str | None:
+    def _validate_subagent_redirect(self, location: str) -> Optional[str]:
         address = self._literal_ip(location)
         if address is None:
             return "subagent_web_fetch_blocked: 重定向目标必须是字面量公共 IP 地址"

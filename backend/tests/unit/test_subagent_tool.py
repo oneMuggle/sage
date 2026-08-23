@@ -36,6 +36,10 @@ class TestSchema:
         # 强绑定 → 6 任务计划被迫拆多批派发（"4 轮"诱因）。
         assert tasks["maxItems"] == 8
         assert tasks["items"]["properties"]["goal"]["maxLength"] == 2000
+        assert tasks["items"]["properties"]["output_schema"] == {
+            "type": "object",
+            "description": "可选 JSON Schema；子 agent 最终回复将被约束/校验为符合它的 JSON 对象",
+        }
         # P2-7 (2026-08-14): conductor 必须回传计划编号 task_id → required 三键。
         assert tasks["items"]["required"] == ["agent_id", "goal", "task_id"]
 
@@ -133,3 +137,10 @@ def test_input_schema_requires_task_id():
     assert "task_id" in items["properties"]
     assert items["properties"]["task_id"] == {"type": "string"}
     assert items["required"] == ["agent_id", "goal", "task_id"]
+
+
+def test_input_schema_supports_followup_of():
+    items = INPUT_SCHEMA["properties"]["tasks"]["items"]
+    assert items["properties"]["followup_of"]["type"] == "string"
+    assert "已完成子任务" in items["properties"]["followup_of"]["description"]
+    assert "followup_of" in DispatchSubagentsTool(_make_dispatcher()).schema.description
