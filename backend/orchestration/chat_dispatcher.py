@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -70,6 +71,10 @@ _CLASSIFY_PROMPT = """判断以下用户消息是否需要多 agent 协作（拆
 
 #: scratch 根目录名（data_dir 下）。
 SCRATCH_ROOT = "orch_scratch"
+
+#: worktree 根目录名（data_dir 下）—— 创建（_create_worktree_for）与
+#: 崩溃残留清扫（_sweep_stale_worktrees）共用，保证路径推导一致。
+WORKTREES_ROOT = "orch_worktrees"
 
 
 async def _classify_orchestration_mode(
@@ -189,6 +194,25 @@ class ChatDispatcher:
         self._dispatched_plan_ids: Set[str] = set()
         # P2-9 (2026-08-14): 取消事件 —— cancel() 幂等 set；_run_one 开头检查。
         self._cancelled = asyncio.Event()
+        # M1 终审 (2026-08-23): 崩溃残留机会性清扫 —— 同 run_id 重派时清掉上次
+        # 进程崩溃遗留的孤儿 worktree 目录。必须在任何子任务创建 worktree 之前
+        # 执行（构造期即完成）；失败全吞降级，绝不阻塞派发。
+        self._sweep_stale_worktrees()
+
+    def _sweep_stale_worktrees(self) -> None:
+        """删除本 run 的 ``<data_dir>/orch_worktrees/<run_id>`` 残留目录（若存在）。
+
+        仅清本 run 自己的目录（其他并发 run 不受影响）。路径推导与
+        ``_create_worktree_for`` 一致。任何异常全吞降级 logger.debug。
+        """
+        try:
+            data_dir = Path(get_database().db_path).parent
+            stale_root = data_dir / WORKTREES_ROOT / self.run_id
+            if stale_root.exists():
+                shutil.rmtree(stale_root)
+                logger.debug("已清扫崩溃残留 worktree 根: %s", stale_root)
+        except Exception as exc:  # noqa: BLE001 — 清扫失败不阻塞派发
+            logger.debug("worktree 残留清扫跳过 run=%s err=%s", self.run_id, exc)
 
     def cancel(self) -> bool:
         """置位取消事件。幂等：已 set 返回 False，否则 True。"""
@@ -271,9 +295,13 @@ class ChatDispatcher:
                 agent_id = str(raw.get("agent_id", "primary"))
                 goal = str(raw.get("goal", ""))
             followup_of = raw.get("followup_of")
+            # L1 (2026-08-23): 自指 followup 守卫 —— task 引用自身不构成有效续聊。
+            # 缺守卫时隐式自环依赖会被 build_waves 判环拒掉整批；改为 warning 后
+            # 降级普通任务（与其余无效 followup_of 同一降级路径）。
             parent_task_id = (
                 followup_of
                 if isinstance(followup_of, str)
+                and followup_of != task_id
                 and followup_of in self._states
                 and self._states[followup_of].status == "done"
                 else None
@@ -560,7 +588,7 @@ class ChatDispatcher:
                 return None
             worktree_dir = (
                 Path(get_database().db_path).parent
-                / "orch_worktrees"
+                / WORKTREES_ROOT
                 / self.run_id
                 / state.task_id
             )
