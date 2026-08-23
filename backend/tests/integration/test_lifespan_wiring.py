@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Smoke test: lifespan wiring of memory lifecycle hooks + evolution scheduler.
 
 Task 4 step 15 — verify the FastAPI lifespan constructs and registers:
@@ -134,3 +135,28 @@ async def test_watchdog_fetch_runs_sql_off_event_loop(tmp_db_path: str) -> None:
             "session-watchdog SELECT ran on the event-loop thread; "
             "it must be wrapped in asyncio.to_thread"
         )
+=======
+"""Minimal packaged-runtime health/lifespan contract tests."""
+
+import os
+
+import pytest
+
+from backend.main import _build_health_metadata
+
+
+@pytest.mark.integration()
+def test_lifespan_health_metadata_uses_runtime_ownership_envelope(monkeypatch):
+    """Health metadata is derived from the process environment and is JSON-safe."""
+    monkeypatch.setenv("SAGE_BUILD_ID", "test-build")
+    monkeypatch.setenv("SAGE_BACKEND_GENERATION", "7")
+    monkeypatch.setenv("SAGE_BACKEND_OWNERSHIP_TOKEN", "token-7")
+
+    metadata = _build_health_metadata()
+
+    assert metadata["buildId"] == "test-build"
+    assert metadata["generation"] == 7
+    assert metadata["ownershipToken"] == "token-7"
+    assert metadata["pid"] == os.getpid()
+    assert metadata["pythonVersion"]
+>>>>>>> 6034f7ed (fix(win7): stabilize packaged backend lifecycle)

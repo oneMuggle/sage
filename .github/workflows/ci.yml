@@ -230,6 +230,9 @@ jobs:
       - name: Install npm dependencies
         run: npm ci --force
 
+      - name: Verify command contract tests
+        run: npm exec -- vitest run electron/__tests__/backendLauncher.test.ts electron/__tests__/backendSupervisor.test.ts electron/__tests__/commands.test.ts
+
       - name: Build frontend + Electron
         run: npm run electron:build
 

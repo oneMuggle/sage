@@ -44,6 +44,7 @@ logger.info('main: process started', {
 });
 
 import { spawn, ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import http from 'node:http';
 import fetch from 'node-fetch';
@@ -57,6 +58,8 @@ import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { resolveBackendLaunchCommand } from './backendLauncher';
+import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
+import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
 import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { runDoctorCheck } from './doctor';
 import { mainWindow, setMainWindow } from './mainWindow';
@@ -66,6 +69,17 @@ const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
+const buildManifest = loadBuildManifest(
+  join(process.resourcesPath, 'build-manifest.json'),
+  { version: app.getVersion() },
+);
+
+// A process-wide single-instance lock prevents two Electron supervisors from
+// racing over the same backend port and database.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
 
 // Window dimensions
 const DEFAULT_WINDOW_WIDTH = 1280;
@@ -109,6 +123,9 @@ app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
 app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}`);
 
 let backendProc: ChildProcess | null = null;
+let backendGeneration = 0;
+let currentBackend: BackendGeneration | null = null;
+let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 
 // PR-B: backend auto-restart state
 //
@@ -123,6 +140,7 @@ let backendProc: ChildProcess | null = null;
 // `appIsQuitting` is set true in `before-quit` so the user-initiated quit
 // path doesn't trigger a fresh restart loop.
 let restartCount = 0;
+let restartTimer: NodeJS.Timeout | null = null;
 let appIsQuitting = false;
 const MAX_RESTART_ATTEMPTS = 3;
 const RESTART_BASE_DELAY_MS = 1000;
@@ -204,6 +222,13 @@ function spawnBackend(): ChildProcess {
   }
 
   // plan.kind === 'spawn' — happy path
+  if (backendProc && backendLifecycle !== 'idle') {
+    return backendProc;
+  }
+  const generation = ++backendGeneration;
+  const ownershipToken = randomUUID();
+  currentBackend = { generation, pid: -1, ownershipToken };
+  backendLifecycle = 'starting';
 
   // ── Orphan cleanup (Windows only) ──────────────────────────────────────
   // A previous Electron main process may have crashed without running
@@ -225,11 +250,25 @@ function spawnBackend(): ChildProcess {
     });
   }
 
-  const proc = spawn(plan.cmd, plan.args, {
-    env: { ...process.env, ...plan.extraEnv },
+  const proc = spawn(plan.command, plan.args, {
+    cwd: plan.cwd,
+    env: {
+      ...process.env,
+      ...plan.env,
+      ...plan.extraEnv,
+      SAGE_BUILD_ID: buildManifest.buildId,
+      SAGE_BUILD_COMMIT: buildManifest.commit,
+      SAGE_BUILD_BRANCH: buildManifest.branch,
+      SAGE_BUILD_VERSION: buildManifest.version,
+      SAGE_ELECTRON_VERSION: buildManifest.electronVersion,
+      SAGE_PYTHON_VERSION: buildManifest.pythonVersion,
+      SAGE_BACKEND_GENERATION: String(generation),
+      SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
+  currentBackend = { generation, pid: proc.pid ?? -1, ownershipToken };
 
   logger.info('main: backend spawned', {
     reason: plan.reason,
@@ -237,12 +276,17 @@ function spawnBackend(): ChildProcess {
     args: plan.args,
   });
 
-  proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: b.toString().trim() }));
-  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: b.toString().trim() }));
+  proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: decodeChildOutput(b).trim() }));
+  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: decodeChildOutput(b).trim() }));
   proc.on('exit', (code) => {
-    logger.info('main: backend exited', { code });
+    if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
+      logger.debug('main: stale backend exit ignored', { generation, pid: proc.pid });
+      return;
+    }
+    logger.info('main: backend exited', { code, generation, pid: proc.pid });
     backendProc = null;
-    // PR-B: 用户主动 quit 时不重试;否则指数退避自动重 spawn
+    currentBackend = null;
+    backendLifecycle = 'idle';
     if (!appIsQuitting) {
       scheduleBackendRestart();
     }
@@ -252,16 +296,31 @@ function spawnBackend(): ChildProcess {
   // exceptions and crashes the Electron main process — exactly the failure
   // mode PR #130 was meant to fix. PR #130 review flagged this as issue #10.
   proc.on('error', (err) => {
+    if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
+      logger.debug('main: stale backend spawn error ignored', { generation, pid: proc.pid });
+      return;
+    }
     logger.error('main: backend spawn error', {
       reason: plan.reason,
       cmd: plan.cmd,
       err: String(err),
     });
     backendProc = null;
+    currentBackend = null;
+    backendLifecycle = 'idle';
   });
   return proc;
 }
 
+function decodeChildOutput(value: Buffer): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(value);
+  } catch {
+    return Array.from(value)
+      .map((byte) => (byte >= 0x20 && byte <= 0x7e ? String.fromCharCode(byte) : `\\x${byte.toString(16).padStart(2, '0')}`))
+      .join('');
+  }
+}
 /**
  * Stand-in subprocess used when the resolver reports a broken installer.
  *
@@ -306,6 +365,7 @@ function spawnStubProcess(reason: string): ChildProcess {
  * without spawning a real Electron process.
  */
 export function scheduleBackendRestart(): void {
+  if (appIsQuitting || restartTimer) return;
   if (restartCount >= MAX_RESTART_ATTEMPTS) {
     logger.error('main: backend restart exhausted', { attempts: restartCount });
     mainWindow?.webContents.send('backend:disconnected', { attempt: -1 });
@@ -321,15 +381,20 @@ export function scheduleBackendRestart(): void {
     delayMs: delay,
   });
   mainWindow?.webContents.send('backend:disconnected', { attempt: restartCount });
-  setTimeout(() => {
+  restartTimer = setTimeout(() => {
+    restartTimer = null;
+    if (appIsQuitting || backendProc || currentBackend || backendLifecycle !== 'idle') return;
     backendProc = spawnBackend();
+    const expectedBackend = currentBackend;
     waitForBackend().then((ready) => {
+      if (!isCurrentGeneration(expectedBackend, currentBackend)) return;
       if (ready) {
         restartCount = 0;
         mainWindow?.webContents.send('backend:reconnected', {});
       }
     });
-  }, delay).unref();
+  }, delay);
+  restartTimer.unref();
 }
 
 /**
@@ -337,25 +402,47 @@ export function scheduleBackendRestart(): void {
  * Backend startup usually <2s; cap at 30s to surface real failures fast.
  */
 async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<boolean> {
+  const expectedBackend = currentBackend;
+  if (!expectedBackend || backendLifecycle !== 'starting') return false;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) return false;
     try {
-      const ok = await new Promise<boolean>((resolve) => {
+      const health = await new Promise<unknown>((resolve) => {
         const req = http.get(BACKEND_HEALTH, (res) => {
-          resolve(res.statusCode === 200);
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk: string) => {
+            body += chunk;
+          });
+          res.on('end', () => {
+            if (res.statusCode !== 200) {
+              resolve(null);
+              return;
+            }
+            try {
+              resolve(JSON.parse(body) as unknown);
+            } catch {
+              resolve(null);
+            }
+          });
           res.resume();
         });
-        req.on('error', () => resolve(false));
+        req.on('error', () => resolve(null));
         req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
-          resolve(false);
+          resolve(null);
         });
       });
-      if (ok) return true;
+      if (ownsBackend(health as Partial<BackendHealthEnvelope>, expectedBackend, buildManifest)) {
+        if (!isCurrentGeneration(expectedBackend, currentBackend)) return false;
+        backendLifecycle = 'ready';
+        return true;
+      }
     } catch {
-      /* ignore */
+      /* transient connection or malformed health payload */
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
   return false;
 }
@@ -892,12 +979,17 @@ function startWikiIngestStream(
 }
 
 function shutdownBackend(): void {
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
   if (backendProc && backendProc.exitCode === null) {
+    backendLifecycle = 'stopping';
     logger.info('main: killing backend subprocess');
     backendProc.kill('SIGTERM');
     // Give it 3s to exit cleanly, then SIGKILL
     setTimeout(() => {
-      if (backendProc && backendProc.exitCode === null) {
+      if (backendProc && backendProc.exitCode === null && backendLifecycle === 'stopping') {
         backendProc.kill('SIGKILL');
       }
     }, BACKEND_SHUTDOWN_TIMEOUT_MS);
@@ -913,10 +1005,24 @@ app.whenReady().then(async () => {
   // experiences via Show Logs. Hard 5s timeout is enforced inside runDoctorCheck.
   if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
     try {
-      const doctorSummary = await runDoctorCheck(
-        process.env.SAGE_PYTHON ?? 'python',
-        process.cwd(),
-      );
+      const doctorPlan = resolveBackendLaunchCommand({
+        env: process.env,
+        resourcesPath: process.resourcesPath,
+        platform: process.platform,
+        isPackaged: app.isPackaged,
+        sageDbPath: process.env.SAGE_DB_PATH ?? join(process.cwd(), 'data', 'sage.db'),
+        sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
+        port: BACKEND_PORT,
+      });
+      const doctorSummary =
+        doctorPlan.kind === 'spawn'
+          ? await runDoctorCheck({
+              pythonBin: doctorPlan.command,
+              packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
+              cwd: doctorPlan.cwd,
+              env: doctorPlan.env,
+            })
+          : await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
       logger.info('main: doctor check complete', doctorSummary);
       if (doctorSummary.status === 'critical') {
         logger.warn('main: doctor reported CRITICAL — user may see degraded experience', {

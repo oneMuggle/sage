@@ -19,6 +19,7 @@ from backend.cli.doctor import (
     build_parser,
     main,
     register,
+    run_doctor,
 )
 
 # ============================================================
@@ -239,6 +240,14 @@ class TestFormatJson:
         results = [CheckResult("c", Severity.WARN, message="中文消息")]
         data = json.loads(_format_json(results))
         assert data["checks"][0]["message"] == "中文消息"
+
+
+class TestRunDoctor:
+    def test_reports_explicit_runtime_and_package_root(self, tmp_path):
+        runtime = run_doctor(tmp_path / "python.exe", tmp_path / "backend")
+        assert runtime.interpreter == str((tmp_path / "python.exe").resolve())
+        assert runtime.package_root == str((tmp_path / "backend").resolve())
+        assert runtime.import_backend is True
 
 
 # ============================================================

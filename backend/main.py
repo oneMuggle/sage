@@ -5,6 +5,7 @@ FastAPI 后端入口
 import asyncio
 import logging
 import os
+import sys
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -80,6 +81,21 @@ from backend.services.scheduler import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _build_health_metadata() -> dict:
+    """Return the immutable build/ownership envelope for health probes."""
+    return {
+        "buildId": os.environ.get("SAGE_BUILD_ID", "dev-build"),
+        "commit": os.environ.get("SAGE_BUILD_COMMIT", "unknown"),
+        "branch": os.environ.get("SAGE_BUILD_BRANCH", "unknown"),
+        "version": os.environ.get("SAGE_BUILD_VERSION", "0.1.1"),
+        "electronVersion": os.environ.get("SAGE_ELECTRON_VERSION", "unknown"),
+        "pythonVersion": ".".join(str(part) for part in sys.version_info[:3]),
+        "pid": os.getpid(),
+        "generation": int(os.environ.get("SAGE_BACKEND_GENERATION", "0")),
+        "ownershipToken": os.environ.get("SAGE_BACKEND_OWNERSHIP_TOKEN", ""),
+    }
 
 
 def _build_compute_adapter():
@@ -637,8 +653,8 @@ app.include_router(mcp_router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():
-    """健康检查"""
-    return {"status": "ok", "version": "0.1.1"}
+    """Return a machine-readable build and process ownership envelope."""
+    return {"status": "ok", **_build_health_metadata()}
 
 
 if __name__ == "__main__":
