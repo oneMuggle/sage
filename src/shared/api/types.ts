@@ -751,6 +751,23 @@ export interface LaneBoardSnapshot {
   redaction_provenance?: Record<string, string>;
 }
 
+/**
+ * ui_minimal 投影响应信封（GET /orchestration/board?view=ui_minimal）。
+ *
+ * 形态对齐 backend/orchestration/lane_board.py `BoardProjection.to_dict()`：
+ * 与 ops_full 快照（LaneBoardSnapshot）是两种不同信封 —— ui_minimal 不含
+ * active/blocked/finished 分组，只有投影后的扁平 entries（lifecycle 字段族）
+ * + 协商元数据（父快照 hash / schema 版本 / 降级 / 删减溯源）。
+ */
+export interface BoardProjectionEnvelope {
+  parent_content_hash: string;
+  parent_schema_version: string;
+  view: string;
+  entries: Array<Record<string, unknown>>;
+  downgrade_for_compatibility: string[];
+  redaction_provenance: Record<string, string>;
+}
+
 /** Task summary returned by POST /orchestration/lanes (M5). */
 export interface PlannerTaskOut {
   task_id: string;
