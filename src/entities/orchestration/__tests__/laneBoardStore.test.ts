@@ -107,3 +107,4 @@ describe('laneBoardStore.load()', () => {
     expect(error).toBeNull();
   });
 });
+
