@@ -40,4 +40,35 @@ describe('orchestrationClient', () => {
     await orchestrationClient.listLanes({});
     expect(invokeMock).toHaveBeenCalledWith('orchestration_list_lanes', { params: {} });
   });
+
+  describe('getBoard (P2-5)', () => {
+    const fixture = {
+      schema_version: '1.0',
+      generated_at: 1758500000000,
+      generated_by: 'http-api',
+      active: [],
+      blocked: [],
+      finished: [],
+      freshness_summary: { total: 0, fresh: 0, stale: 0, dead: 0, overall_level: 'fresh' },
+    };
+
+    it('defaults to view=ops_full', async () => {
+      invokeMock.mockResolvedValueOnce(fixture);
+      const result = await orchestrationClient.getBoard();
+      expect(invokeMock).toHaveBeenCalledWith('orchestration_board', { view: 'ops_full' });
+      expect(result).toEqual(fixture);
+    });
+
+    it('forwards ui_minimal projection view', async () => {
+      invokeMock.mockResolvedValueOnce({ ...fixture, view: 'ui_minimal' });
+      const result = await orchestrationClient.getBoard('ui_minimal');
+      expect(invokeMock).toHaveBeenCalledWith('orchestration_board', { view: 'ui_minimal' });
+      expect(result.view).toBe('ui_minimal');
+    });
+
+    it('propagates IPC failure (caller decides degradation)', async () => {
+      invokeMock.mockRejectedValueOnce(new Error('ipc down'));
+      await expect(orchestrationClient.getBoard()).rejects.toThrow('ipc down');
+    });
+  });
 });

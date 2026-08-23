@@ -8,8 +8,13 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
-import type { Lane, LaneBoardGroup, LaneStatus } from '../../shared/api/types';
-import { useI18n } from '../../shared/lib/i18n';
+import type {
+  FreshnessSummaryInfo,
+  Lane,
+  LaneBoardGroup,
+  LaneStatus,
+} from '../../shared/api/types';
+import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
 const STATUS_COLORS: Record<LaneStatus, string> = {
   created: 'bg-bg-subtle text-text-secondary',
@@ -118,6 +123,47 @@ interface ColumnProps {
   onCancel: (laneId: string) => void;
 }
 
+/** P2-5: overall_level → 色徽章映射（fresh=green / stale=yellow / dead=red）。 */
+const FRESHNESS_LEVEL_COLORS: Record<FreshnessSummaryInfo['overall_level'], string> = {
+  fresh: 'bg-green-100 text-green-800',
+  stale: 'bg-yellow-100 text-yellow-800',
+  dead: 'bg-red-100 text-red-800',
+};
+
+const FRESHNESS_LEVEL_I18N: Record<
+  FreshnessSummaryInfo['overall_level'],
+  TranslationKey
+> = {
+  fresh: 'orchestration.board.level.fresh',
+  stale: 'orchestration.board.level.stale',
+  dead: 'orchestration.board.level.dead',
+};
+
+function FreshnessBadge({ summary }: { summary: FreshnessSummaryInfo }) {
+  const { t } = useI18n();
+  // 项目 t() 不支持占位符插值 —— 沿用 Orchestration.tsx 的调用点
+  // .replace() 先例（与 toast.create_success 的 {count} 同模式）。
+  const summaryText = t('orchestration.board.summary')
+    .replace('{total}', String(summary.total))
+    .replace('{fresh}', String(summary.fresh))
+    .replace('{stale}', String(summary.stale))
+    .replace('{dead}', String(summary.dead));
+  const levelLabel = t(FRESHNESS_LEVEL_I18N[summary.overall_level]);
+  return (
+    <div
+      data-testid="board-freshness-summary"
+      className="flex items-center gap-2 mb-3 text-xs text-text-secondary"
+    >
+      <span>{summaryText}</span>
+      <span
+        data-testid="board-freshness-badge"
+        className={`px-2 py-0.5 rounded-full whitespace-nowrap ${FRESHNESS_LEVEL_COLORS[summary.overall_level]}`}
+      >
+        {levelLabel}
+      </span>
+    </div>
+  );
+}
 function Column({ title, lanes, onCancel }: ColumnProps) {
   const { t } = useI18n();
   return (
@@ -142,6 +188,7 @@ function Column({ title, lanes, onCancel }: ColumnProps) {
 export function LaneBoard() {
   const { t } = useI18n();
   const lanes = useLaneBoardStore((s) => s.lanes);
+  const boardSummary = useLaneBoardStore((s) => s.boardSummary);
   const loading = useLaneBoardStore((s) => s.loading);
   const error = useLaneBoardStore((s) => s.error);
   const load = useLaneBoardStore((s) => s.load);
@@ -187,22 +234,25 @@ export function LaneBoard() {
   }
 
   return (
-    <div className="flex gap-4 p-4">
-      <Column
-        title={t('orchestration.column.active')}
-        lanes={board.active}
-        onCancel={handleCancel}
-      />
-      <Column
-        title={t('orchestration.column.blocked')}
-        lanes={board.blocked}
-        onCancel={handleCancel}
-      />
-      <Column
-        title={t('orchestration.column.finished')}
-        lanes={board.finished}
-        onCancel={handleCancel}
-      />
+    <div className="p-4">
+      {boardSummary && <FreshnessBadge summary={boardSummary} />}
+      <div className="flex gap-4">
+        <Column
+          title={t('orchestration.column.active')}
+          lanes={board.active}
+          onCancel={handleCancel}
+        />
+        <Column
+          title={t('orchestration.column.blocked')}
+          lanes={board.blocked}
+          onCancel={handleCancel}
+        />
+        <Column
+          title={t('orchestration.column.finished')}
+          lanes={board.finished}
+          onCancel={handleCancel}
+        />
+      </div>
     </div>
   );
 }

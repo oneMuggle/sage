@@ -384,3 +384,45 @@ PR A #316（P2-7/8/9 + run 级 cancel）+ PR B #317（P2-10 休眠层）+ PR C #
 - **后端**：`todo_state.py` `_NotifyingTodoStore` + `add/remove_todo_listener`；producer 注册监听器推 SSE `{"state":"todo_snapshot","session_id",todos}`（会话过滤防跨流串扰，finally 注销防泄漏）；primary 白名单加 `todo_write`，存量 DB 二段升级链（`_PRIMARY_TOOLS_BEFORE_TODO`，用户自定义白名单不动）。
 - **前端**：AgentState 加 `todo_snapshot`；chatStreamStore `todos` slice（startStream 复位）；useChat 消费分支；`TodoListSection` 卡片（○◐☑ 字形 + 进度计数 + activeForm）。
 - **编排镜像（PR-C，纯前端派生）**：`TodoListSection` props 扩展 `taskBoard?`，镜像项从 plan+statuses 实时计算，「编排」徽章 + 依赖缩进 + `mapOrchStatus` 映射；todo_write 天然无法篡改镜像项。win7 分支额外保留实时 toolCalls 列表与 permission_request/user_question 字段（双方保留合并）。
+
+## 16. P2 批次：结构化返回 + 子代理续聊 + worktree 隔离 + legacy 清理 + LaneBoard 激活（2026-08-23）
+
+> 本节归档编排 P2 五项（计划：`docs/plans/2026-08-23_orchestration-p2-batch.md`，合并后删除）。分支 `feat/orchestration-p2-batch`。
+
+### 16.1 output_schema 结构化返回
+
+- `dispatch_subagents` 工具 items 增可选 `output_schema`（JSON Schema object）；`ChatTaskState.output_schema` 透传至 `SubagentRunner.task.parameters`。
+- runner 侧：schema 存在时向 user prompt 注入硬性 JSON 输出要求；结果经 `extract_json_payload()`（纯 JSON → 围栏 → 首尾大括号三形态）提取后用既有 `structured_output_tool.validate_against_schema` 校验，通过则以紧凑 JSON 进聚合；**提取/校验失败/validator 异常一律降级原文**（warning 日志）。
+- runner 成功返回值新增 `"messages"` 键（Task 2 消费者）。py38 兼容连带：`web_tool.py` 存量 PEP 604 注解改 Optional/Union 写法。
+
+### 16.2 followup_of 子代理续聊
+
+- dispatch items 可选 `followup_of`：仅接受本 run 内 status=done 的 task_id；有效时强制继承父任务 agent_id/profile、goal 用本次新值（不被计划权威覆盖）、父任务 messages 历史（保留首条 system + 最近 `MAX_REPLAY_MESSAGES=20` 条）经 `task.parameters["history"]` 重放，新 goal 追加为末条 user 消息。
+- 隐式拓扑依赖：parent 进 deps_by_id，跨批已 done 的 parent 被 build_waves 视为已满足不卡波次。
+- 自指守卫：`followup_of != task_id`（resume 重放场景自指会产生自环拒整批）；无效 followup 一律 warning 后降级普通新任务。
+- dispatcher `_histories` 从 LaneExecutor 成功结果的 `result.messages` 回写。
+
+### 16.3 worktree 级隔离（默认关）
+
+- 新模块 `backend/orchestration/worktree.py`：`is_git_repo` / `create_worktree` / `remove_worktree` / `prune_worktrees` + 三个 async 包装（run_in_executor，git subprocess 30s 超时，argv 列表无 shell）。
+- `orch.worktreeIsolation`（bool 白名单校验，拒绝整数伪 bool）开启且会话绑定 git 工作区时，子任务在 `<data_dir>/orch_worktrees/<run_id>/<task_id>` detached 副本工作，`Lane.worktree` 落库，ToolPolicy 根优先 workspace_dir、回落 scratch。产物不自动 merge（YAGNI 边界）。
+- 创建异常整体降级 scratch；清理 best-effort 不覆盖任务结果；构造期机会性清扫本 run 崩溃残留目录 + prune git 元数据。
+- **安全约束**：`run_id` 白名单 `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$` 在 ChatDispatcher 构造入口 fullmatch 校验（非法抛 ValueError → StreamRegistry 转 failed 事件），封死 rmtree/worktree/scratch 三处路径拼接面（客户端可控 run_id 曾可路径穿越删除任意目录）。
+
+### 16.4 legacy 启发式编排器下线
+
+- 删除 `core/legacy/orchestrator.py`（AgentOrchestrator + Intent）及其 3 个测试文件；`core/__init__` 摘除导出；非流式 `/chat` 恒走单 SageAgent（该端点无前端/Electron 调用方，聊天编排由 ChatDispatcher 承担）。
+- 已知遗留：`data/blackboard_repo.py` 成为零调用方孤儿模块（自带测试无运行时风险），待 hygiene PR 评估下线。
+
+### 16.5 LaneBoard API 激活
+
+- `GET /orchestration/board?view=ops_full|ui_minimal`：默认 ops_full 保持原形态；ui_minimal 走既有 `LaneBoardSnapshot.project()` 投影（含 redaction_provenance）；非法 view 400。
+- Electron IPC `orchestration_board` + `orchestrationClient.getBoard(view)` + TS 类型四件（LaneBoardSnapshot/FreshnessSummaryInfo 等，桶导出已补）。
+- laneBoardStore `boardSummary`：load 时顺带拉快照，失败置 null 不阻塞 lanes 渲染；LaneBoard 头部 freshness 摘要行 + overall_level 色徽章（i18n zh/en 各 4 键）。
+- 已知遗留：TS 类型未拆 ops_full/ui_minimal 两种信封（当前唯一调用方硬编码 ops_full 无实际故障）；store 降级分支缺直接单测。
+
+### 16.6 已知限制与延后项
+
+- 同批 followup 静默降级对 conductor 不可见（warning 仅进日志，聚合 markdown 无提示）——可选改进。
+- `dispatch()` 类型注解漂移（实际 items 含 dict 值）。
+- 非法 run_id 错误文案是原始异常串非友好 4xx（UX 打磨点）。

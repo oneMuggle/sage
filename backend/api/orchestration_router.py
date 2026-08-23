@@ -390,12 +390,32 @@ def build_router() -> APIRouter:
         return _to_lane_out(refreshed)
 
     @router.get("/board")
-    async def board() -> Dict[str, Any]:
-        """LaneBoard 监控快照（M4 交付但未暴露 HTTP — P2-10 补暴露）。"""
+    async def board(view: str = Query(default="ops_full")) -> Dict[str, Any]:
+        """LaneBoard 监控快照（M4 交付但未暴露 HTTP — P2-10 补暴露）。
+
+        P2-5: ``?view=ops_full|ui_minimal`` 投影协商 —— 默认 ops_full
+        保持既有形态（snapshot.to_dict()）；ui_minimal 走
+        ``LaneBoardSnapshot.project`` 只保留 lifecycle 字段族并附
+        redaction_provenance；非法 view → 400。
+        """
         from backend.orchestration.lane_board import LaneBoardBuilder
 
         builder = LaneBoardBuilder(lane_registry=LaneRegistry())
-        return builder.build_snapshot(actor="http-api").to_dict()
+        snapshot = builder.build_snapshot(actor="http-api")
+        if view == "ops_full":
+            return snapshot.to_dict()
+
+        from backend.orchestration.lane_board import ProjectionRequest, UnsupportedViewError
+
+        try:
+            return snapshot.project(
+                ProjectionRequest(consumer="http-api", requested_view=view)
+            ).to_dict()
+        except UnsupportedViewError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"unsupported board view: {view}",
+            ) from None
 
     return router
 

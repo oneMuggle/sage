@@ -50,6 +50,23 @@ def test_bad_typed_keys_fall_back_per_key():
     assert s.max_subagent_result_chars == 30_000
 
 
+def test_worktree_isolation_bool_override_and_bad_value_falls_back():
+    """worktreeIsolation 只接受 bool，默认关闭。"""
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {"worktreeIsolation": True}
+        }
+        s = load_orch_settings()
+    assert s.worktree_isolation is True
+
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {"worktreeIsolation": 1}
+        }
+        s = load_orch_settings()
+    assert s.worktree_isolation is False
+
+
 # --------------------------------------------------------------------------- #
 # max_subagent_iterations —— 子代理迭代预算配置化
 #

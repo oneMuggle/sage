@@ -356,6 +356,15 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: () => '/api/v1/orchestration/lanes',
   },
+  // P2-5: LaneBoard 快照（freshness_summary + view 投影协商）。
+  // GET /api/v1/orchestration/board?view=ops_full|ui_minimal
+  orchestration_board: {
+    method: 'GET',
+    path: (a) => {
+      const view = a?.view ? `?view=${encodeURIComponent(String(a.view))}` : '';
+      return `/api/v1/orchestration/board${view}`;
+    },
+  },
 
   // Wave 2 P1-4/P1-5 (2026-08-14): run 生命周期 —— 历史列表 / 详情 / 恢复
   // / plan 更新,对应 backend/api/orch_routes.py 的 /api/v1/orch/runs 4 端点。

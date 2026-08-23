@@ -12,7 +12,13 @@
  * surface a toast on failure.
  */
 import { invoke } from './desktopInvoke';
-import type { CreateLanesResponse, Lane, LaneEvent, LaneStatus } from './types';
+import type {
+  CreateLanesResponse,
+  Lane,
+  LaneBoardSnapshot,
+  LaneEvent,
+  LaneStatus,
+} from './types';
 
 export interface ListLanesParams {
   status?: LaneStatus;
@@ -48,5 +54,10 @@ export const orchestrationClient = {
       lane_id: laneId,
       reason,
     });
+  },
+
+  /** P2-5: LaneBoard 快照（freshness_summary；view 走投影协商）。 */
+  async getBoard(view: 'ops_full' | 'ui_minimal' = 'ops_full'): Promise<LaneBoardSnapshot> {
+    return invoke<LaneBoardSnapshot>('orchestration_board', { view });
   },
 };

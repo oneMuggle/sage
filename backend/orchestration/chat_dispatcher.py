@@ -15,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -71,6 +73,18 @@ _CLASSIFY_PROMPT = """判断以下用户消息是否需要多 agent 协作（拆
 #: scratch 根目录名（data_dir 下）。
 SCRATCH_ROOT = "orch_scratch"
 
+#: worktree 根目录名（data_dir 下）—— 创建（_create_worktree_for）与
+#: 崩溃残留清扫（_sweep_stale_worktrees）共用，保证路径推导一致。
+WORKTREES_ROOT = "orch_worktrees"
+
+# 安全修复波 (2026-08-23): run_id 白名单 —— 客户端可控（ChatRequest.run_id /
+# plan_override 路径无格式校验），却拼进 worktree/scratch 路径并参与
+# ``shutil.rmtree``。不设白名单时 ``run_id="../../victim"`` 可路径穿越删除
+# 任意目录；同 run_id 双活还会误删并发 run 的 worktree。首字符限字母数字
+# （封死 ``-`` 开头被 git 当 flag、``.``/``_`` 开头歧义），后续允许字母数字、
+# 下划线、连字符，上限 128 字符。生产生成值 ``orch-<uuid4>`` 天然合规。
+_RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+
 
 async def _classify_orchestration_mode(
     message: str,
@@ -117,6 +131,8 @@ class ChatTaskState:
     task_id: str
     agent_id: str
     goal: str
+    output_schema: Optional[Dict[str, Any]] = None
+    parent_task_id: Optional[str] = None
     status: str = "queued"  # queued|running|done|failed
     output: Optional[str] = None
     error: Optional[str] = None
@@ -144,7 +160,12 @@ class ChatDispatcher:
         event_recorder: Optional[EventRecorder] = None,
         total_tasks: Optional[int] = None,
         settings: Optional[OrchSettings] = None,
+        workspace_root: Optional[str] = None,
     ) -> None:
+        # 安全修复波 (2026-08-23): 白名单校验必须在任何副作用（DB 连接、
+        # worktree 清扫）之前 —— 非法 run_id 直接拒绝构造。
+        if not _RUN_ID_RE.fullmatch(run_id):
+            raise ValueError(f"非法 run_id: {run_id!r}")
         self.stream_id = stream_id
         self.entry_queue = entry_queue
         self.run_id = run_id
@@ -158,7 +179,10 @@ class ChatDispatcher:
         self.event_recorder = event_recorder or EventRecorder()
         # P0-2：总任务数门控 —— 达到 plan 总量后跑 reviewer 验证环（Task 5）。
         self.total_tasks = total_tasks
+        self.workspace_root = workspace_root
+        self._worktree_dirs: List[Path] = []
         self._states: Dict[str, ChatTaskState] = {}
+        self._histories: Dict[str, List[Dict[str, Any]]] = {}
         self._semaphore = asyncio.Semaphore(self.settings.max_concurrent_subagents)
         # F1 (2026-08-12): run 内全局递增的 task 计数器。修复前每次 dispatch
         # 调用都从 t1 重编号，与 producer 计划的全局编号 t1..tN 错位 —— 前端
@@ -183,6 +207,42 @@ class ChatDispatcher:
         self._dispatched_plan_ids: Set[str] = set()
         # P2-9 (2026-08-14): 取消事件 —— cancel() 幂等 set；_run_one 开头检查。
         self._cancelled = asyncio.Event()
+        # M1 终审 (2026-08-23): 崩溃残留机会性清扫 —— 同 run_id 重派时清掉上次
+        # 进程崩溃遗留的孤儿 worktree 目录。必须在任何子任务创建 worktree 之前
+        # 执行（构造期即完成）；失败全吞降级，绝不阻塞派发。
+        self._sweep_stale_worktrees()
+
+    def _sweep_stale_worktrees(self) -> None:
+        """删除本 run 的 ``<data_dir>/orch_worktrees/<run_id>`` 残留目录（若存在）。
+
+        仅清本 run 自己的目录（其他并发 run 不受影响）。路径推导与
+        ``_create_worktree_for`` 一致。rmtree 后 best-effort ``git worktree
+        prune``（安全修复波 2026-08-23）—— 清掉主仓 ``.git/worktrees/`` 悬空
+        条目，否则同路径重建 worktree 会 rc=128 失败静默回落 scratch。任何
+        异常全吞降级 logger.debug。
+        """
+        try:
+            data_dir = Path(get_database().db_path).parent
+            stale_root = data_dir / WORKTREES_ROOT / self.run_id
+            if stale_root.exists():
+                shutil.rmtree(stale_root)
+                logger.debug("已清扫崩溃残留 worktree 根: %s", stale_root)
+                self._prune_after_sweep()
+        except Exception as exc:  # noqa: BLE001 — 清扫失败不阻塞派发
+            logger.debug("worktree 残留清扫跳过 run=%s err=%s", self.run_id, exc)
+
+    def _prune_after_sweep(self) -> None:
+        """rmtree 成功后清理 git worktree 管理元数据（best-effort，全吞降级）。"""
+        try:
+            from backend.orchestration.worktree import prune_worktrees
+
+            root = Path(self.workspace_root) if self.workspace_root else None
+            if root is None or not root.is_dir():
+                return
+            if not prune_worktrees(root):
+                logger.debug("worktree prune 未成功 workspace=%s", root)
+        except Exception as exc:  # noqa: BLE001 — prune 失败不阻塞派发
+            logger.debug("worktree prune 跳过 run=%s err=%s", self.run_id, exc)
 
     def cancel(self) -> bool:
         """置位取消事件。幂等：已 set 返回 False，否则 True。"""
@@ -239,9 +299,11 @@ class ChatDispatcher:
         states: List[ChatTaskState] = []
         for raw in tasks:
             raw_task_id = raw.get("task_id")
+            raw_schema = raw.get("output_schema")
+            output_schema = raw_schema if isinstance(raw_schema, dict) else None
             if raw_task_id and raw_task_id in self._plan_by_id:
-                # P2-7 计划权威：goal/agent 以计划为准（覆盖 tool-passed；计划卡
-                # 编辑在派发前生效的杠杆点）。depends_on 直接随 plan_json 透传（A4 不用）。
+                # P2-7 计划权威：goal/agent 以计划为准（计划卡
+                # 编辑在派发前生效的杠杆点）。depends_on 直接随 plan_json 透传。
                 plan_item = self._plan_by_id[raw_task_id]
                 task_id = raw_task_id
                 agent_id = str(plan_item.get("agent_id", raw.get("agent_id", "primary")))
@@ -262,7 +324,37 @@ class ChatDispatcher:
                 self._next_task_index += 1
                 agent_id = str(raw.get("agent_id", "primary"))
                 goal = str(raw.get("goal", ""))
-            state = ChatTaskState(task_id=task_id, agent_id=agent_id, goal=goal)
+            followup_of = raw.get("followup_of")
+            # L1 (2026-08-23): 自指 followup 守卫 —— task 引用自身不构成有效续聊。
+            # 缺守卫时隐式自环依赖会被 build_waves 判环拒掉整批；改为 warning 后
+            # 降级普通任务（与其余无效 followup_of 同一降级路径）。
+            parent_task_id = (
+                followup_of
+                if isinstance(followup_of, str)
+                and followup_of != task_id
+                and followup_of in self._states
+                and self._states[followup_of].status == "done"
+                else None
+            )
+            if parent_task_id is not None:
+                # 续聊必须复用父任务的 agent/profile，避免历史 system prompt
+                # 与新任务角色不一致；调用方传入的 agent_id 仅用于普通任务。
+                agent_id = self._states[parent_task_id].agent_id
+                # 续聊 goal 是新的 user 消息，不能被计划中的原始 goal 覆盖。
+                goal = str(raw.get("goal", ""))
+            state = ChatTaskState(
+                task_id=task_id,
+                agent_id=agent_id,
+                goal=goal,
+                output_schema=output_schema,
+                parent_task_id=parent_task_id,
+            )
+            if followup_of is not None and state.parent_task_id is None:
+                logger.warning(
+                    "无效 followup_of=%r，任务 %s 降级为普通新任务",
+                    followup_of,
+                    task_id,
+                )
             self._states[state.task_id] = state
             states.append(state)
             self._emit_task_status(state)  # queued
@@ -331,6 +423,11 @@ class ChatDispatcher:
             deps_by_id[state.task_id] = [
                 d for d in raw_deps if d in self._states and d != state.task_id
             ]
+            if (
+                state.parent_task_id
+                and state.parent_task_id not in deps_by_id[state.task_id]
+            ):
+                deps_by_id[state.task_id].append(state.parent_task_id)
 
         try:
             waves = build_waves([s.task_id for s in states], deps_by_id)
@@ -401,25 +498,53 @@ class ChatDispatcher:
         return aggregated
 
     async def _run_subagent(self, state: ChatTaskState) -> str:
+        """执行单个子任务，并在结束后清理该任务的临时 worktree。"""
+        workspace_dir = await self._create_worktree_for(state)
+        try:
+            return await self._run_subagent_impl(state, workspace_dir)
+        finally:
+            if workspace_dir is not None:
+                from backend.orchestration.worktree import remove_worktree_async
+
+                try:
+                    await remove_worktree_async(workspace_dir)
+                except Exception as exc:  # noqa: BLE001 — 清理不得覆盖任务结果
+                    logger.warning(
+                        "子任务 %s worktree 清理异常（忽略）: %s",
+                        state.task_id,
+                        exc,
+                    )
+                if workspace_dir in self._worktree_dirs:
+                    self._worktree_dirs.remove(workspace_dir)
+
+    async def _run_subagent_impl(
+        self, state: ChatTaskState, workspace_dir: Optional[Path]
+    ) -> str:
         """经 LaneExecutor 执行子任务（P0-1）：创建 lane+task，复用重试策略。
 
-        子 agent 以 ToolPolicy(workspace_root=<scratch_dir>) 构建（P0-3）——
-        write_file 等文件工具被锁进隔离目录，越界写返回 path_outside_workspace。
+        子 agent 优先使用 worktree 的 ToolPolicy 根目录；不可用时回落 scratch。
         """
         task_id = f"task-{state.task_id}"
         lane_id = f"lane-{state.task_id}"
         scratch_dir = self._scratch_dir_for(state)
         scratch_dir.mkdir(parents=True, exist_ok=True)
 
+        parameters = {
+            "goal": state.goal,
+            "agent_id": state.agent_id,
+            "scratch_dir": str(scratch_dir),
+            "workspace_dir": str(workspace_dir) if workspace_dir else None,
+        }
+        if state.parent_task_id is not None:
+            parameters["history"] = self._histories.get(state.parent_task_id, [])
+        if state.output_schema is not None:
+            parameters["output_schema"] = state.output_schema
+
         task = Task(
             task_id=task_id,
             name=f"Subtask {state.task_id}",
             description=state.goal,
-            parameters={
-                "goal": state.goal,
-                "agent_id": state.agent_id,
-                "scratch_dir": str(scratch_dir),
-            },
+            parameters=parameters,
             packet=TaskPacket(
                 objective=state.goal,
                 recovery_policy=RecoveryPolicy(
@@ -434,6 +559,7 @@ class ChatDispatcher:
             lane_id=lane_id,
             task_id=task_id,
             agent_id=state.agent_id,
+            worktree=str(workspace_dir) if workspace_dir else None,
             metadata={"task_id": state.task_id},
         )
         self.lane_registry.create_lane(lane)
@@ -464,7 +590,50 @@ class ChatDispatcher:
             raise RuntimeError(result.get("error", "subtask failed"))
         if result.get("status") != "succeeded":
             raise RuntimeError(f"subtask unexpected status: {result.get('status')}")
-        return result["result"]["output"]
+        result_payload = result.get("result")
+        if isinstance(result_payload, dict):
+            messages = result_payload.get("messages")
+            if isinstance(messages, list):
+                self._histories[state.task_id] = list(messages)
+        return result_payload["output"]
+
+    async def _create_worktree_for(self, state: ChatTaskState) -> Optional[Path]:
+        """按配置为任务创建 worktree；任何不可用情况都回落 scratch。
+
+        所有 git/路径操作在线程中执行，异常一律降级为 None —— 绝不阻塞聊天。
+        """
+        if not self.settings.worktree_isolation or not self.workspace_root:
+            return None
+        try:
+            from backend.orchestration.worktree import (
+                create_worktree_async,
+                is_git_repo_async,
+            )
+
+            repo = Path(self.workspace_root)
+            if not await is_git_repo_async(repo):
+                logger.warning(
+                    "worktree 隔离不可用，子任务 %s 回落 scratch", state.task_id
+                )
+                return None
+            worktree_dir = (
+                Path(get_database().db_path).parent
+                / WORKTREES_ROOT
+                / self.run_id
+                / state.task_id
+            )
+            if await create_worktree_async(repo, worktree_dir):
+                self._worktree_dirs.append(worktree_dir)
+                return worktree_dir
+            logger.warning("worktree 隔离不可用，子任务 %s 回落 scratch", state.task_id)
+            return None
+        except Exception as exc:  # noqa: BLE001 — 创建异常降级 scratch
+            logger.warning(
+                "worktree 隔离创建异常，子任务 %s 回落 scratch: %s",
+                state.task_id,
+                exc,
+            )
+            return None
 
     def _scratch_dir_for(self, state: ChatTaskState) -> Path:
         """子任务隔离目录：``<data_dir>/orch_scratch/<run_id>/<task_id>``。"""
