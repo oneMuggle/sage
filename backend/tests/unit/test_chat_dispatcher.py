@@ -434,7 +434,54 @@ async def test_followup_task_inherits_done_parent_history(monkeypatch):
     assert dispatcher._states["t2"].parent_task_id == "t1"
     assert dispatcher._states["t2"].agent_id == "primary"
     assert dispatcher.task_registry.get_task("task-t2").parameters["history"] == history
+    assert dispatcher._histories["t2"] == history
     assert built["deps"]["t2"] == ["t1"]
+
+
+@pytest.mark.asyncio()
+async def test_planned_followup_uses_new_goal_and_replays_it(monkeypatch):
+    """计划权威任务续聊时，raw goal 覆盖计划 goal，并传给 runner。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    dispatcher = ChatDispatcher(
+        stream_id="s1", entry_queue=_make_queue(), run_id="orch-planned-followup"
+    )
+    dispatcher._states["t1"] = module.ChatTaskState(
+        task_id="t1", agent_id="researcher", goal="原任务", status="done"
+    )
+    history = [{"role": "system", "content": "system"}]
+    dispatcher._histories["t1"] = history
+    dispatcher._plan_loaded = True
+    dispatcher._plan_by_id = {
+        "t2": {"task_id": "t2", "agent_id": "writer", "goal": "计划原目标"}
+    }
+    captured = {}
+
+    async def fake_lane_result(executor, lane, agent_id):
+        task = dispatcher.task_registry.get_task(lane.task_id)
+        captured["task_goal"] = task.parameters["goal"]
+        captured["agent_id"] = agent_id
+        return {
+            "status": "succeeded",
+            "result": {"output": "ok", "messages": history},
+        }
+
+    monkeypatch.setattr(module, "run_lane_with_retry", fake_lane_result)
+    await dispatcher.dispatch(
+        [
+            {
+                "task_id": "t2",
+                "agent_id": "writer",
+                "goal": "新的追问目标",
+                "followup_of": "t1",
+            }
+        ]
+    )
+
+    assert dispatcher._states["t2"].goal == "新的追问目标"
+    assert captured["task_goal"] == "新的追问目标"
+    assert captured["agent_id"] == "researcher"
+    assert dispatcher._histories["t2"] == history
 
 
 @pytest.mark.asyncio()
