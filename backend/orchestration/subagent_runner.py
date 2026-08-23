@@ -174,13 +174,30 @@ class SubagentRunner:
         if schema is None:
             return None
         payload = extract_json_payload(raw_output)
-        if payload is not None and not validate_against_schema(payload, schema):
+        if payload is None:
+            SubagentRunner._warn_structured_failure(task)
+            return None
+        try:
+            errors = validate_against_schema(payload, schema)
+        except Exception as exc:  # noqa: BLE001 — validator 失败必须降级原文
+            logger.warning(
+                "子任务 %s 结构化输出校验异常，降级原文: %s",
+                getattr(task, "task_id", "?"),
+                exc,
+            )
+            return None
+        if not errors:
             return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        SubagentRunner._warn_structured_failure(task)
+        return None
+
+    @staticmethod
+    def _warn_structured_failure(task: Any) -> None:
+        """记录结构化输出提取/校验失败，调用方随后保留原文。"""
         logger.warning(
             "子任务 %s 结构化输出校验失败，降级原文",
             getattr(task, "task_id", "?"),
         )
-        return None
 
 
 async def run_lane_with_retry(
