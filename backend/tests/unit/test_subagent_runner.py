@@ -378,3 +378,30 @@ async def test_no_schema_keeps_raw_behavior():
     assert fake.captured_user_content == "调研 X"
     # messages 键仍然铺设（Task 2 消费者）
     assert isinstance(result["messages"], list)
+
+
+@pytest.mark.asyncio()
+async def test_runner_replays_history_with_system_and_recent_messages():
+    """续聊只保留首条 system、最近消息，并追加新的 user goal。"""
+    from backend.orchestration.subagent_runner import MAX_REPLAY_MESSAGES, SubagentRunner
+
+    history = [{"role": "system", "content": "old system"}]
+    history.extend(
+        {"role": "assistant", "content": "message %d" % index}
+        for index in range(MAX_REPLAY_MESSAGES + 3)
+    )
+    fake = _CapturingSageAgent(content="追问结果")
+    task = _make_task(goal="新的追问")
+    task.parameters["history"] = history
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch("backend.orchestration.subagent_runner.SageAgent", return_value=fake):
+        result = await SubagentRunner()(task, "researcher")
+
+    messages = result["messages"]
+    assert messages[0] == history[0]
+    assert messages[-1] == {"role": "user", "content": "新的追问"}
+    assert len(messages) == MAX_REPLAY_MESSAGES + 2
+    assert messages[1] == history[-MAX_REPLAY_MESSAGES]
+    assert fake.captured_user_content == "新的追问"

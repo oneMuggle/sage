@@ -118,6 +118,7 @@ class ChatTaskState:
     agent_id: str
     goal: str
     output_schema: Optional[Dict[str, Any]] = None
+    parent_task_id: Optional[str] = None
     status: str = "queued"  # queued|running|done|failed
     output: Optional[str] = None
     error: Optional[str] = None
@@ -160,6 +161,7 @@ class ChatDispatcher:
         # P0-2：总任务数门控 —— 达到 plan 总量后跑 reviewer 验证环（Task 5）。
         self.total_tasks = total_tasks
         self._states: Dict[str, ChatTaskState] = {}
+        self._histories: Dict[str, List[Dict[str, Any]]] = {}
         self._semaphore = asyncio.Semaphore(self.settings.max_concurrent_subagents)
         # F1 (2026-08-12): run 内全局递增的 task 计数器。修复前每次 dispatch
         # 调用都从 t1 重编号，与 producer 计划的全局编号 t1..tN 错位 —— 前端
@@ -270,7 +272,21 @@ class ChatDispatcher:
                 agent_id=agent_id,
                 goal=goal,
                 output_schema=output_schema,
+                parent_task_id=(
+                    raw.get("followup_of")
+                    if isinstance(raw.get("followup_of"), str)
+                    and raw.get("followup_of") in self._states
+                    and self._states[raw.get("followup_of")].status == "done"
+                    else None
+                ),
             )
+            followup_of = raw.get("followup_of")
+            if followup_of is not None and state.parent_task_id is None:
+                logger.warning(
+                    "无效 followup_of=%r，任务 %s 降级为普通新任务",
+                    followup_of,
+                    task_id,
+                )
             self._states[state.task_id] = state
             states.append(state)
             self._emit_task_status(state)  # queued
@@ -339,6 +355,11 @@ class ChatDispatcher:
             deps_by_id[state.task_id] = [
                 d for d in raw_deps if d in self._states and d != state.task_id
             ]
+            if (
+                state.parent_task_id
+                and state.parent_task_id not in deps_by_id[state.task_id]
+            ):
+                deps_by_id[state.task_id].append(state.parent_task_id)
 
         try:
             waves = build_waves([s.task_id for s in states], deps_by_id)
@@ -424,6 +445,8 @@ class ChatDispatcher:
             "agent_id": state.agent_id,
             "scratch_dir": str(scratch_dir),
         }
+        if state.parent_task_id is not None:
+            parameters["history"] = self._histories.get(state.parent_task_id, [])
         if state.output_schema is not None:
             parameters["output_schema"] = state.output_schema
 
@@ -476,7 +499,12 @@ class ChatDispatcher:
             raise RuntimeError(result.get("error", "subtask failed"))
         if result.get("status") != "succeeded":
             raise RuntimeError(f"subtask unexpected status: {result.get('status')}")
-        return result["result"]["output"]
+        result_payload = result.get("result")
+        if isinstance(result_payload, dict):
+            messages = result_payload.get("messages")
+            if isinstance(messages, list):
+                self._histories[state.task_id] = list(messages)
+        return result_payload["output"]
 
     def _scratch_dir_for(self, state: ChatTaskState) -> Path:
         """子任务隔离目录：``<data_dir>/orch_scratch/<run_id>/<task_id>``。"""

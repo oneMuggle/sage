@@ -377,3 +377,87 @@ async def test_dispatch_passes_output_schema_to_subagent(monkeypatch):
 
     assert captured["schema"] == schema
     assert dispatcher._states["dynamic-1"].output_schema == schema
+
+
+@pytest.mark.asyncio()
+async def test_followup_task_inherits_done_parent_history(monkeypatch):
+    """有效 followup_of 复用已完成父任务历史，并建立隐式依赖。"""
+    queue = _make_queue()
+    dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-followup")
+    history = [
+        {"role": "system", "content": "system"},
+        {"role": "assistant", "content": "previous"},
+    ]
+
+    async def fake_run_subagent(state):
+        return "done"
+
+    original_run_subagent = dispatcher._run_subagent
+    monkeypatch.setattr(dispatcher, "_run_subagent", fake_run_subagent)
+    await dispatcher.dispatch(
+        [{"task_id": "t1", "agent_id": "primary", "goal": "原任务"}]
+    )
+    dispatcher._histories["t1"] = history
+
+    async def fake_lane_result(executor, lane, agent_id):
+        task = dispatcher.task_registry.get_task(lane.task_id)
+        assert task.parameters["history"] == history
+        return {
+            "status": "succeeded",
+            "result": {"output": "done", "messages": history},
+        }
+
+    from backend.orchestration import chat_dispatcher as module
+
+    monkeypatch.setattr(module, "run_lane_with_retry", fake_lane_result)
+    monkeypatch.setattr(dispatcher, "_run_subagent", original_run_subagent)
+
+    built = {}
+    original_build_waves = module.build_waves
+
+    def capture_build_waves(task_ids, deps_by_id):
+        built["deps"] = deps_by_id
+        return original_build_waves(task_ids, deps_by_id)
+
+    monkeypatch.setattr(module, "build_waves", capture_build_waves)
+    await dispatcher.dispatch(
+        [
+            {
+                "task_id": "t2",
+                "agent_id": "primary",
+                "goal": "追问",
+                "followup_of": "t1",
+            }
+        ]
+    )
+
+    assert dispatcher._states["t2"].parent_task_id == "t1"
+    assert dispatcher.task_registry.get_task("task-t2").parameters["history"] == history
+    assert built["deps"]["t2"] == ["t1"]
+
+
+@pytest.mark.asyncio()
+async def test_followup_invalid_parent_degrades_to_new_task(caplog):
+    """不存在或未完成的 followup_of 降级为普通任务，不建立父依赖。"""
+    dispatcher = ChatDispatcher(
+        stream_id="s1", entry_queue=_make_queue(), run_id="orch-invalid-followup"
+    )
+
+    async def fake_run_subagent(state):
+        return "done"
+
+    dispatcher._run_subagent = fake_run_subagent
+    with caplog.at_level("WARNING"):
+        await dispatcher.dispatch(
+            [
+                {
+                    "task_id": "t1",
+                    "agent_id": "primary",
+                    "goal": "未完成父任务",
+                    "followup_of": "missing",
+                }
+            ]
+        )
+
+    assert dispatcher._states["t1"].parent_task_id is None
+    assert "followup_of" in caplog.text

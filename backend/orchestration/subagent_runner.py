@@ -23,6 +23,9 @@ from backend.tools.structured_output_tool import validate_against_schema
 
 logger = logging.getLogger(__name__)
 
+#: 历史重放最多保留的非 system 消息数。
+MAX_REPLAY_MESSAGES = 20
+
 #: schema 声明时注入 user message 的硬性格式要求前缀。
 _SCHEMA_DIRECTIVE = (
     "\n\n输出格式硬性要求：你的最终回复必须只包含一个符合以下 JSON Schema "
@@ -120,10 +123,19 @@ class SubagentRunner:
             )
 
         child = SageAgent(agent_id=agent_id, policy=policy)
-        messages = [
-            {"role": "system", "content": child_system},
-            {"role": "user", "content": user_content},
-        ]
+        history = task.parameters.get("history")
+        if (
+            isinstance(history, list)
+            and history
+            and all(isinstance(message, dict) for message in history)
+        ):
+            trimmed = history[1:][-MAX_REPLAY_MESSAGES:]
+            messages = [history[0], *trimmed, {"role": "user", "content": user_content}]
+        else:
+            messages = [
+                {"role": "system", "content": child_system},
+                {"role": "user", "content": user_content},
+            ]
         collected: list[str] = []
         last_error: Optional[str] = None
 

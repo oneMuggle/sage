@@ -41,6 +41,10 @@ INPUT_SCHEMA: Dict[str, Any] = {
                         "type": "object",
                         "description": "可选 JSON Schema；子 agent 最终回复将被约束/校验为符合它的 JSON 对象",
                     },
+                    "followup_of": {
+                        "type": "string",
+                        "description": "可选：要追问的已完成子任务 task_id（本 run 内）。设置后 goal 作为追问消息发给同一子代理上下文，而非开新任务",
+                    },
                 },
                 "required": ["agent_id", "goal", "task_id"],
             },
@@ -54,6 +58,7 @@ _TOOL_DESCRIPTION = (
     "传入 [{task_id, agent_id, goal, output_schema?}] 列表（最多 8 个），每个子 agent 独立运行并把"
     "结果聚合返回。agent_id 必须是已启用的角色（如 researcher / writer）。"
     "task_id 必须回传 task_plan 中的计划编号（t1..tN）。"
+    "对已完成的子任务需要补充要求/追问时，传 followup_of=<已完成 task_id> 继续同一上下文。"
 )
 
 
