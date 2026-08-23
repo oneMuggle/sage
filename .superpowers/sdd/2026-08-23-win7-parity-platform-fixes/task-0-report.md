@@ -35,7 +35,7 @@ All commands were run from the isolated Task 0 worktree.
 
 Commit message: `fix(win7): stabilize packaged backend lifecycle`
 
-Commit hash: recorded after final commit.
+Commit hash: `6034f7ed`.
 
 ## Unresolved Concerns
 
