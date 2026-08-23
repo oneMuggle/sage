@@ -137,3 +137,10 @@ def test_input_schema_requires_task_id():
     assert "task_id" in items["properties"]
     assert items["properties"]["task_id"] == {"type": "string"}
     assert items["required"] == ["agent_id", "goal", "task_id"]
+
+
+def test_input_schema_supports_followup_of():
+    items = INPUT_SCHEMA["properties"]["tasks"]["items"]
+    assert items["properties"]["followup_of"]["type"] == "string"
+    assert "已完成子任务" in items["properties"]["followup_of"]["description"]
+    assert "followup_of" in DispatchSubagentsTool(_make_dispatcher()).schema.description
