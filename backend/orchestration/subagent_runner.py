@@ -104,7 +104,9 @@ class SubagentRunner:
 
         goal = task.parameters.get("goal", "")
         scratch_dir = task.parameters.get("scratch_dir")
-        policy = ToolPolicy(workspace_root=scratch_dir) if scratch_dir else None
+        workspace_dir = task.parameters.get("workspace_dir")
+        policy_root = workspace_dir or scratch_dir
+        policy = ToolPolicy(workspace_root=policy_root) if policy_root else None
 
         # P2 Task 1 (2026-08-23): 可选 output_schema —— 非 dict 视为未声明。
         schema = task.parameters.get("output_schema")

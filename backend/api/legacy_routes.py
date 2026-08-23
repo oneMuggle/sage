@@ -1855,6 +1855,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             }
                             for i, t in enumerate(plan_tasks, 1)
                         ]
+                    dispatcher_workspace_root = None
+                    try:
+                        from backend.office.session_workspace import get_workspace_binding
+
+                        binding = get_workspace_binding(
+                            get_database().get_connection(), data.session_id
+                        )
+                        if binding is not None and binding.workspace_path:
+                            dispatcher_workspace_root = binding.workspace_path
+                    except Exception as workspace_err:  # noqa: BLE001 — 降级旧 scratch
+                        logger.debug(
+                            "编排 workspace 绑定读取失败，回落 scratch: %s",
+                            workspace_err,
+                        )
                     dispatcher = ChatDispatcher(
                         stream_id=stream_id,
                         entry_queue=entry.queue,
@@ -1862,6 +1876,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         llm_config=llm_config,
                         total_tasks=len(plan_items),
                         settings=load_orch_settings(),
+                        workspace_root=dispatcher_workspace_root,
                     )
                     # P2-9 (2026-08-14): 进程内注册表登记 —— 长连接期间 run 级
                     # cancel 端点能定位到本 dispatcher 并置位取消事件。

@@ -331,7 +331,85 @@ async def test_dispatch_no_review_when_total_tasks_unset():
     assert "## 复核结果" not in aggregated
 
 
-# P2-9 (2026-08-14) — dispatcher 注入 OrchSettings：构造注入覆盖默认；缺省回落。
+@pytest.mark.asyncio()
+async def test_worktree_isolation_wires_policy_and_cleans(monkeypatch, tmp_path):
+    """开启隔离时 task parameters 使用 worktree，任务结束后清理副本。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    created = []
+    removed = []
+
+    def fake_is_git_repo(path):
+        return path == tmp_path
+
+    def fake_create(repo, dest):
+        created.append((repo, dest))
+        dest.mkdir(parents=True)
+        return True
+
+    def fake_remove(dest):
+        removed.append(dest)
+
+    captured = {}
+
+    async def fake_run_lane(executor, lane, agent_id):
+        task = executor.task_registry.get_task(lane.task_id)
+        captured["parameters"] = dict(task.parameters)
+        return {"status": "succeeded", "result": {"output": "ok"}}
+
+    monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
+    monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
+    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo", fake_is_git_repo)
+    monkeypatch.setattr("backend.orchestration.worktree.create_worktree", fake_create)
+    monkeypatch.setattr("backend.orchestration.worktree.remove_worktree", fake_remove)
+
+    dispatcher = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=_make_queue(),
+        run_id="orch-wt",
+        settings=OrchSettings(worktree_isolation=True),
+        workspace_root=str(tmp_path),
+    )
+    await dispatcher.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g"}])
+
+    assert created
+    assert captured["parameters"]["workspace_dir"] == str(tmp_path / "orch_worktrees" / "orch-wt" / "t1")
+    assert removed == [tmp_path / "orch_worktrees" / "orch-wt" / "t1"]
+    assert dispatcher._worktree_dirs == []
+
+
+@pytest.mark.asyncio()
+async def test_worktree_isolation_disabled_or_non_repo_falls_back(monkeypatch, tmp_path):
+    """开关关闭或 workspace 非 git repo 时保持 scratch 行为。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    captured = []
+
+    async def fake_run_lane(executor, lane, agent_id):
+        task = executor.task_registry.get_task(lane.task_id)
+        captured.append(task.parameters)
+        return {"status": "succeeded", "result": {"output": "ok"}}
+
+    monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
+    monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
+    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo", lambda path: False)
+
+    disabled = ChatDispatcher(
+        stream_id="s1", entry_queue=_make_queue(), run_id="orch-off",
+        settings=OrchSettings(worktree_isolation=False), workspace_root=str(tmp_path),
+    )
+    await disabled.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g"}])
+
+    non_repo = ChatDispatcher(
+        stream_id="s1", entry_queue=_make_queue(), run_id="orch-plain",
+        settings=OrchSettings(worktree_isolation=True), workspace_root=str(tmp_path),
+    )
+    await non_repo.dispatch([{"task_id": "t2", "agent_id": "primary", "goal": "g"}])
+
+    assert captured[0]["workspace_dir"] is None
+    assert captured[1]["workspace_dir"] is None
+
+
 def test_dispatcher_injects_settings():
     """构造传入 settings → 实例用它（semaphore/retry/scratch）。"""
     d = ChatDispatcher(

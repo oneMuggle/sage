@@ -19,6 +19,7 @@ _RAW_KEYS = {
     "maxLaneIterations": "max_lane_iterations",
     "maxSubagentIterations": "max_subagent_iterations",
     "scratchRoot": "scratch_root",
+    "worktreeIsolation": "worktree_isolation",
 }
 
 
@@ -33,6 +34,7 @@ class OrchSettings:
     #: ``agent_tool.SUBAGENT_MAX_ITERATIONS`` 常量一致，仅开放可配。
     max_subagent_iterations: int = 6
     scratch_root: str = "orch_scratch"
+    worktree_isolation: bool = False
 
 
 def load_orch_settings() -> OrchSettings:
@@ -52,7 +54,11 @@ def load_orch_settings() -> OrchSettings:
         current = getattr(settings, field_name)
         if value is None:
             continue
-        if isinstance(current, int):
+        if isinstance(current, bool):
+            if not isinstance(value, bool):
+                continue
+            settings = replace(settings, **{field_name: value})
+        elif isinstance(current, int):
             if not isinstance(value, int) or isinstance(value, bool):
                 continue
             settings = replace(settings, **{field_name: value})
