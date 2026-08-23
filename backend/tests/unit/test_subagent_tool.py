@@ -36,6 +36,10 @@ class TestSchema:
         # 强绑定 → 6 任务计划被迫拆多批派发（"4 轮"诱因）。
         assert tasks["maxItems"] == 8
         assert tasks["items"]["properties"]["goal"]["maxLength"] == 2000
+        assert tasks["items"]["properties"]["output_schema"] == {
+            "type": "object",
+            "description": "可选 JSON Schema；子 agent 最终回复将被约束/校验为符合它的 JSON 对象",
+        }
         # P2-7 (2026-08-14): conductor 必须回传计划编号 task_id → required 三键。
         assert tasks["items"]["required"] == ["agent_id", "goal", "task_id"]
 

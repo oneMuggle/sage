@@ -117,6 +117,7 @@ class ChatTaskState:
     task_id: str
     agent_id: str
     goal: str
+    output_schema: Optional[Dict[str, Any]] = None
     status: str = "queued"  # queued|running|done|failed
     output: Optional[str] = None
     error: Optional[str] = None
@@ -239,9 +240,11 @@ class ChatDispatcher:
         states: List[ChatTaskState] = []
         for raw in tasks:
             raw_task_id = raw.get("task_id")
+            raw_schema = raw.get("output_schema")
+            output_schema = raw_schema if isinstance(raw_schema, dict) else None
             if raw_task_id and raw_task_id in self._plan_by_id:
-                # P2-7 计划权威：goal/agent 以计划为准（覆盖 tool-passed；计划卡
-                # 编辑在派发前生效的杠杆点）。depends_on 直接随 plan_json 透传（A4 不用）。
+                # P2-7 计划权威：goal/agent 以计划为准（计划卡
+                # 编辑在派发前生效的杠杆点）。depends_on 直接随 plan_json 透传。
                 plan_item = self._plan_by_id[raw_task_id]
                 task_id = raw_task_id
                 agent_id = str(plan_item.get("agent_id", raw.get("agent_id", "primary")))
@@ -262,7 +265,12 @@ class ChatDispatcher:
                 self._next_task_index += 1
                 agent_id = str(raw.get("agent_id", "primary"))
                 goal = str(raw.get("goal", ""))
-            state = ChatTaskState(task_id=task_id, agent_id=agent_id, goal=goal)
+            state = ChatTaskState(
+                task_id=task_id,
+                agent_id=agent_id,
+                goal=goal,
+                output_schema=output_schema,
+            )
             self._states[state.task_id] = state
             states.append(state)
             self._emit_task_status(state)  # queued
@@ -411,15 +419,19 @@ class ChatDispatcher:
         scratch_dir = self._scratch_dir_for(state)
         scratch_dir.mkdir(parents=True, exist_ok=True)
 
+        parameters = {
+            "goal": state.goal,
+            "agent_id": state.agent_id,
+            "scratch_dir": str(scratch_dir),
+        }
+        if state.output_schema is not None:
+            parameters["output_schema"] = state.output_schema
+
         task = Task(
             task_id=task_id,
             name=f"Subtask {state.task_id}",
             description=state.goal,
-            parameters={
-                "goal": state.goal,
-                "agent_id": state.agent_id,
-                "scratch_dir": str(scratch_dir),
-            },
+            parameters=parameters,
             packet=TaskPacket(
                 objective=state.goal,
                 recovery_policy=RecoveryPolicy(

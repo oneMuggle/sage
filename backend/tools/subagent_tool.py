@@ -37,6 +37,10 @@ INPUT_SCHEMA: Dict[str, Any] = {
                     "task_id": {"type": "string"},
                     "agent_id": {"type": "string"},
                     "goal": {"type": "string", "maxLength": 2000},
+                    "output_schema": {
+                        "type": "object",
+                        "description": "可选 JSON Schema；子 agent 最终回复将被约束/校验为符合它的 JSON 对象",
+                    },
                 },
                 "required": ["agent_id", "goal", "task_id"],
             },
@@ -47,7 +51,7 @@ INPUT_SCHEMA: Dict[str, Any] = {
 
 _TOOL_DESCRIPTION = (
     "并行派发子 agent 执行任务。适用于已拆解为多个子任务的复杂目标："
-    "传入 [{task_id, agent_id, goal}] 列表（最多 8 个），每个子 agent 独立运行并把"
+    "传入 [{task_id, agent_id, goal, output_schema?}] 列表（最多 8 个），每个子 agent 独立运行并把"
     "结果聚合返回。agent_id 必须是已启用的角色（如 researcher / writer）。"
     "task_id 必须回传 task_plan 中的计划编号（t1..tN）。"
 )
