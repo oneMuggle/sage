@@ -339,15 +339,16 @@ async def test_worktree_isolation_wires_policy_and_cleans(monkeypatch, tmp_path)
     created = []
     removed = []
 
-    def fake_is_git_repo(path):
+    async def fake_is_git_repo(path):
         return path == tmp_path
 
-    def fake_create(repo, dest):
+    async def fake_create(repo, dest):
         created.append((repo, dest))
-        dest.mkdir(parents=True)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.mkdir(exist_ok=True)
         return True
 
-    def fake_remove(dest):
+    async def fake_remove(dest):
         removed.append(dest)
 
     captured = {}
@@ -359,9 +360,9 @@ async def test_worktree_isolation_wires_policy_and_cleans(monkeypatch, tmp_path)
 
     monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
     monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
-    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo", fake_is_git_repo)
-    monkeypatch.setattr("backend.orchestration.worktree.create_worktree", fake_create)
-    monkeypatch.setattr("backend.orchestration.worktree.remove_worktree", fake_remove)
+    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo_async", fake_is_git_repo)
+    monkeypatch.setattr("backend.orchestration.worktree.create_worktree_async", fake_create)
+    monkeypatch.setattr("backend.orchestration.worktree.remove_worktree_async", fake_remove)
 
     dispatcher = ChatDispatcher(
         stream_id="s1",
@@ -392,7 +393,7 @@ async def test_worktree_isolation_disabled_or_non_repo_falls_back(monkeypatch, t
 
     monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
     monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
-    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo", lambda path: False)
+    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo_async", lambda path: _SafeFalse())
 
     disabled = ChatDispatcher(
         stream_id="s1", entry_queue=_make_queue(), run_id="orch-off",
@@ -408,6 +409,142 @@ async def test_worktree_isolation_disabled_or_non_repo_falls_back(monkeypatch, t
 
     assert captured[0]["workspace_dir"] is None
     assert captured[1]["workspace_dir"] is None
+
+
+class _SafeFalse:
+    """await 安全的 falsy 桩：async 假函数返回后 await 不再触发 coroutine 警告。"""
+
+    def __bool__(self) -> bool:
+        return False
+
+
+@pytest.mark.asyncio()
+async def test_worktree_create_async_exception_falls_back(monkeypatch, tmp_path):
+    """创建路径抛异常 → 回落 scratch，任务照常成功，无残留副本。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    captured = {}
+
+    async def boom_create(repo, dest):
+        raise RuntimeError("disk full")
+
+    async def fake_run_lane(executor, lane, agent_id):
+        task = executor.task_registry.get_task(lane.task_id)
+        captured["parameters"] = dict(task.parameters)
+        return {"status": "succeeded", "result": {"output": "ok"}}
+
+    monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
+    monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
+    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo_async", lambda path: True)
+    monkeypatch.setattr("backend.orchestration.worktree.create_worktree_async", boom_create)
+
+    dispatcher = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=_make_queue(),
+        run_id="orch-boom",
+        settings=OrchSettings(worktree_isolation=True),
+        workspace_root=str(tmp_path),
+    )
+    await dispatcher.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g"}])
+
+    assert captured["parameters"]["workspace_dir"] is None
+    assert dispatcher._worktree_dirs == []
+
+
+@pytest.mark.asyncio()
+async def test_worktree_cleanup_async_exception_keeps_result(monkeypatch, tmp_path):
+    """清理抛异常被吞 → 成功任务的文本结果不被覆盖。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    created = []
+
+    async def fake_is_git_repo(path):
+        return path == tmp_path
+
+    async def fake_create(repo, dest):
+        created.append(dest)
+        dest.mkdir(parents=True, exist_ok=True)
+        return True
+
+    async def boom_remove(dest):
+        raise RuntimeError("cleanup failed")
+
+    async def fake_run_lane(executor, lane, agent_id):
+        return {"status": "succeeded", "result": {"output": "完成结果"}}
+
+    monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
+    monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
+    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo_async", fake_is_git_repo)
+    monkeypatch.setattr("backend.orchestration.worktree.create_worktree_async", fake_create)
+    monkeypatch.setattr("backend.orchestration.worktree.remove_worktree_async", boom_remove)
+
+    dispatcher = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=_make_queue(),
+        run_id="orch-cleanup",
+        settings=OrchSettings(worktree_isolation=True),
+        workspace_root=str(tmp_path),
+    )
+    aggregated = await dispatcher.dispatch(
+        [{"task_id": "t1", "agent_id": "primary", "goal": "g"}]
+    )
+
+    assert "完成结果" in aggregated
+    assert dispatcher._worktree_dirs == []
+
+
+@pytest.mark.asyncio()
+async def test_worktree_async_path_does_not_block_event_loop(monkeypatch, tmp_path):
+    """git 慢操作期间事件循环仍能响应并发任务 —— 异步路径不阻塞。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    ticker_done = asyncio.Event()
+    ticks = 0
+
+    async def slow_create(repo, dest):
+        entered.set()
+        await release.wait()
+        dest.mkdir(parents=True, exist_ok=True)
+        return True
+
+    async def ticker():
+        nonlocal ticks
+        release.set()
+        while not ticker_done.is_set():
+            ticks += 1
+            await asyncio.sleep(0)
+
+    async def fake_is_git_repo(path):
+        return True
+
+    async def fake_remove(dest):
+        return None
+
+    async def fake_run_lane(executor, lane, agent_id):
+        return {"status": "succeeded", "result": {"output": "ok"}}
+
+    monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
+    monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
+    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo_async", fake_is_git_repo)
+    monkeypatch.setattr("backend.orchestration.worktree.create_worktree_async", slow_create)
+    monkeypatch.setattr("backend.orchestration.worktree.remove_worktree_async", fake_remove)
+
+    dispatcher = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=_make_queue(),
+        run_id="orch-nb",
+        settings=OrchSettings(worktree_isolation=True),
+        workspace_root=str(tmp_path),
+    )
+    t = asyncio.create_task(ticker())
+    await dispatcher.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g"}])
+    ticker_done.set()
+    await t
+
+    assert entered.is_set()
+    assert ticks > 0
 
 
 def test_dispatcher_injects_settings():

@@ -441,14 +441,21 @@ class ChatDispatcher:
 
     async def _run_subagent(self, state: ChatTaskState) -> str:
         """执行单个子任务，并在结束后清理该任务的临时 worktree。"""
-        workspace_dir = self._create_worktree_for(state)
+        workspace_dir = await self._create_worktree_for(state)
         try:
             return await self._run_subagent_impl(state, workspace_dir)
         finally:
             if workspace_dir is not None:
-                from backend.orchestration.worktree import remove_worktree
+                from backend.orchestration.worktree import remove_worktree_async
 
-                remove_worktree(workspace_dir)
+                try:
+                    await remove_worktree_async(workspace_dir)
+                except Exception as exc:  # noqa: BLE001 — 清理不得覆盖任务结果
+                    logger.warning(
+                        "子任务 %s worktree 清理异常（忽略）: %s",
+                        state.task_id,
+                        exc,
+                    )
                 if workspace_dir in self._worktree_dirs:
                     self._worktree_dirs.remove(workspace_dir)
 
@@ -532,27 +539,43 @@ class ChatDispatcher:
                 self._histories[state.task_id] = list(messages)
         return result_payload["output"]
 
-    def _create_worktree_for(self, state: ChatTaskState) -> Optional[Path]:
-        """按配置为任务创建 worktree；任何不可用情况都回落 scratch。"""
+    async def _create_worktree_for(self, state: ChatTaskState) -> Optional[Path]:
+        """按配置为任务创建 worktree；任何不可用情况都回落 scratch。
+
+        所有 git/路径操作在线程中执行，异常一律降级为 None —— 绝不阻塞聊天。
+        """
         if not self.settings.worktree_isolation or not self.workspace_root:
             return None
-        from backend.orchestration.worktree import create_worktree, is_git_repo
+        try:
+            from backend.orchestration.worktree import (
+                create_worktree_async,
+                is_git_repo_async,
+            )
 
-        repo = Path(self.workspace_root)
-        if not is_git_repo(repo):
+            repo = Path(self.workspace_root)
+            if not await is_git_repo_async(repo):
+                logger.warning(
+                    "worktree 隔离不可用，子任务 %s 回落 scratch", state.task_id
+                )
+                return None
+            worktree_dir = (
+                Path(get_database().db_path).parent
+                / "orch_worktrees"
+                / self.run_id
+                / state.task_id
+            )
+            if await create_worktree_async(repo, worktree_dir):
+                self._worktree_dirs.append(worktree_dir)
+                return worktree_dir
             logger.warning("worktree 隔离不可用，子任务 %s 回落 scratch", state.task_id)
             return None
-        worktree_dir = (
-            Path(get_database().db_path).parent
-            / "orch_worktrees"
-            / self.run_id
-            / state.task_id
-        )
-        if create_worktree(repo, worktree_dir):
-            self._worktree_dirs.append(worktree_dir)
-            return worktree_dir
-        logger.warning("worktree 隔离不可用，子任务 %s 回落 scratch", state.task_id)
-        return None
+        except Exception as exc:  # noqa: BLE001 — 创建异常降级 scratch
+            logger.warning(
+                "worktree 隔离创建异常，子任务 %s 回落 scratch: %s",
+                state.task_id,
+                exc,
+            )
+            return None
 
     def _scratch_dir_for(self, state: ChatTaskState) -> Path:
         """子任务隔离目录：``<data_dir>/orch_scratch/<run_id>/<task_id>``。"""
