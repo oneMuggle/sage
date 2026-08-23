@@ -15,9 +15,9 @@ vi.mock('../../../shared/api/desktopInvoke', () => ({
   invoke: vi.fn(),
 }));
 
-import { useLaneBoardStore } from '../laneBoardStore';
 import { invoke } from '../../../shared/api/desktopInvoke';
 import type { FreshnessSummaryInfo, Lane } from '../../../shared/api/types';
+import { useLaneBoardStore } from '../laneBoardStore';
 
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
 
