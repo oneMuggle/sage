@@ -54,7 +54,10 @@ from backend.office.workspace_errors import (
     WorkspacePathMismatchError,
     WorkspaceSessionNotFoundError,
 )
-from backend.orchestration.chat_dispatcher import _classify_orchestration_mode
+from backend.orchestration.chat_dispatcher import (
+    ChatDispatcher,
+    _classify_orchestration_mode,
+)
 from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
@@ -416,6 +419,40 @@ def _finalize_orch_run(
         OrchRunRepository().finalize(run_id, status, final_summary)
     except Exception as exc:  # noqa: BLE001 — 闭环失败不影响主流
         logger.warning("orch run finalize 失败 (%s): %s", run_id, exc)
+
+
+def _build_orchestration_dispatcher(
+    *,
+    stream_id: str,
+    entry_queue: Any,
+    run_id: str,
+    llm_config: Optional[Dict[str, Any]],
+    total_tasks: Optional[int],
+    workspace_root: Optional[str],
+) -> ChatDispatcher:
+    """构造 ChatDispatcher；非法 run_id 的 ValueError 重抛为前端可读文案。
+
+    ChatDispatcher.__init__ 对 run_id 做白名单 fullmatch（防路径穿越/非法
+    字符），非法值抛 ``ValueError(f"非法 run_id: {run_id!r}")`` —— 原始串含
+    repr 与英文，直接透传给前端不可读。这里只改写文案：**拒绝语义保留**，
+    不吞错、不降级 single（非法 run_id 是客户端 bug，应显式失败提示刷新，
+    而非用"单机模式"掩盖）。
+    """
+    try:
+        return ChatDispatcher(
+            stream_id=stream_id,
+            entry_queue=entry_queue,
+            run_id=run_id,
+            llm_config=llm_config,
+            total_tasks=total_tasks,
+            settings=load_orch_settings(),
+            workspace_root=workspace_root,
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "编排启动失败：run_id 格式非法（应为 orch-* 标识符），"
+            f"请刷新后重试。原始信息: {exc}"
+        ) from exc
 
 
 def get_agent() -> SageAgent:
@@ -1716,10 +1753,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             run_id: Optional[str] = None
             dispatcher = None
             if mode == "multi":
-                from backend.orchestration.chat_dispatcher import (
-                    _ACTIVE_DISPATCHERS,
-                    ChatDispatcher,
-                )
+                from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
                 from backend.orchestration.planner import Planner
                 from backend.orchestration.task_registry import TaskRegistry
                 from backend.orchestration.team_registry import TeamRegistry
@@ -1805,13 +1839,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             "编排 workspace 绑定读取失败，回落 scratch: %s",
                             workspace_err,
                         )
-                    dispatcher = ChatDispatcher(
+                    dispatcher = _build_orchestration_dispatcher(
                         stream_id=stream_id,
                         entry_queue=entry.queue,
                         run_id=run_id,
                         llm_config=llm_config,
                         total_tasks=len(plan_items),
-                        settings=load_orch_settings(),
                         workspace_root=dispatcher_workspace_root,
                     )
                     # P2-9 (2026-08-14): 进程内注册表登记 —— 长连接期间 run 级

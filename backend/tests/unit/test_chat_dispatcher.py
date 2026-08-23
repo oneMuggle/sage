@@ -771,6 +771,67 @@ async def test_followup_self_reference_degrades_and_does_not_reject_batch(
     assert "followup_of" in caplog.text
 
 
+@pytest.mark.asyncio()
+async def test_followup_invalid_parent_degradation_visible_in_aggregate():
+    """L2: 无效 followup_of（父不存在）→ 聚合该子任务块含降级提示。"""
+    dispatcher = ChatDispatcher(
+        stream_id="s1", entry_queue=_make_queue(), run_id="orch-invalid-followup-vis"
+    )
+
+    async def fake_run_subagent(state):
+        return "done"
+
+    dispatcher._run_subagent = fake_run_subagent
+    aggregated = await dispatcher.dispatch(
+        [
+            {
+                "task_id": "t1",
+                "agent_id": "primary",
+                "goal": "无父任务续聊",
+                "followup_of": "missing",
+            }
+        ]
+    )
+
+    assert dispatcher._states["t1"].parent_task_id is None
+    assert dispatcher._states["t1"].followup_degraded is True
+    assert "followup 已降级为新任务" in aggregated
+    assert "本次结果不含续聊上下文" in aggregated
+
+
+@pytest.mark.asyncio()
+async def test_followup_self_reference_degradation_visible_in_aggregate(monkeypatch):
+    """L2: 自指 followup_of → 聚合该子任务块含降级提示，整批不拒。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    queue = _make_queue()
+    dispatcher = ChatDispatcher(
+        stream_id="s1", entry_queue=queue, run_id="orch-self-followup-vis"
+    )
+    dispatcher._states["t1"] = module.ChatTaskState(
+        task_id="t1", agent_id="primary", goal="旧任务", status="done"
+    )
+    ran = []
+
+    async def fake_run_lane(executor, lane, agent_id):
+        ran.append(lane.task_id)
+        return {"status": "succeeded", "result": {"output": "ok"}}
+
+    monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
+
+    aggregated = await dispatcher.dispatch(
+        [
+            {"task_id": "t1", "agent_id": "primary", "goal": "g", "followup_of": "t1"},
+            {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+        ]
+    )
+
+    assert dispatcher._states["t1"].parent_task_id is None
+    assert dispatcher._states["t1"].followup_degraded is True
+    assert "followup 已降级为新任务" in aggregated
+    assert ran == ["task-t1", "task-t2"]
+
+
 @pytest.mark.parametrize(
     "bad_run_id",
     [

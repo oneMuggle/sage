@@ -13,6 +13,7 @@
  */
 import { invoke } from './desktopInvoke';
 import type {
+  BoardProjectionEnvelope,
   CreateLanesResponse,
   Lane,
   LaneBoardSnapshot,
@@ -56,8 +57,19 @@ export const orchestrationClient = {
     });
   },
 
-  /** P2-5: LaneBoard 快照（freshness_summary；view 走投影协商）。 */
-  async getBoard(view: 'ops_full' | 'ui_minimal' = 'ops_full'): Promise<LaneBoardSnapshot> {
-    return invoke<LaneBoardSnapshot>('orchestration_board', { view });
+  /**
+   * P2-5: LaneBoard 快照/投影 —— 两种信封按 view 区分：
+   * - ops_full（缺省）：LaneBoardSnapshot（active/blocked/finished 分组）。
+   * - ui_minimal：BoardProjectionEnvelope（扁平 entries + 协商元数据）。
+   *
+   * 泛型条件返回等价于重载签名：``getBoard('ui_minimal')`` 拿到投影信封，
+   * ``getBoard()`` / ``getBoard('ops_full')`` 拿到快照。实现体单方法内部 cast。
+   */
+  async getBoard<V extends 'ops_full' | 'ui_minimal' = 'ops_full'>(
+    view: V = 'ops_full' as V,
+  ): Promise<V extends 'ui_minimal' ? BoardProjectionEnvelope : LaneBoardSnapshot> {
+    return invoke<LaneBoardSnapshot | BoardProjectionEnvelope>('orchestration_board', {
+      view,
+    }) as Promise<V extends 'ui_minimal' ? BoardProjectionEnvelope : LaneBoardSnapshot>;
   },
 };
