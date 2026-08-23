@@ -74,13 +74,18 @@ def test_create_worktree_on_non_repo_returns_false(tmp_path):
 
 
 def test_create_worktree_fail_return_false_and_leave_no_dir(tmp_path):
-    """git 命令失败（非空 repo → 冲突）→ False，不产生残留目录。"""
+    """git worktree add 真实失败（悬空 HEAD symref → 无效引用）→ False，无残留。
+
+    悬空 symref 使 is_git_repo 守卫放行（rev-parse 仍 true），但
+    ``git worktree add --detach dest HEAD`` 以 rc=128 失败 —— 走真实
+    git 命令失败路径而非守卫短路。
+    """
     repo = tmp_path / "repo"
     _init_repo(repo)
+    (repo / ".git" / "HEAD").write_text("ref: refs/heads/nope\n")
     dest = tmp_path / "wt"
-    (tmp_path / "mark").write_text("occupied")
-    (dest).mkdir(parents=True)
     assert create_worktree(repo, dest) is False
+    assert not dest.exists()
 
 
 def test_timeout_returns_false(monkeypatch, tmp_path):

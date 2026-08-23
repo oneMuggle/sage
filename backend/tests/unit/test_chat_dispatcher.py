@@ -393,7 +393,13 @@ async def test_worktree_isolation_disabled_or_non_repo_falls_back(monkeypatch, t
 
     monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
     monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
-    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo_async", lambda path: _SafeFalse())
+
+    async def fake_is_git_repo_false(path):
+        return False
+
+    monkeypatch.setattr(
+        "backend.orchestration.worktree.is_git_repo_async", fake_is_git_repo_false
+    )
 
     disabled = ChatDispatcher(
         stream_id="s1", entry_queue=_make_queue(), run_id="orch-off",
@@ -411,13 +417,6 @@ async def test_worktree_isolation_disabled_or_non_repo_falls_back(monkeypatch, t
     assert captured[1]["workspace_dir"] is None
 
 
-class _SafeFalse:
-    """await 安全的 falsy 桩：async 假函数返回后 await 不再触发 coroutine 警告。"""
-
-    def __bool__(self) -> bool:
-        return False
-
-
 @pytest.mark.asyncio()
 async def test_worktree_create_async_exception_falls_back(monkeypatch, tmp_path):
     """创建路径抛异常 → 回落 scratch，任务照常成功，无残留副本。"""
@@ -433,9 +432,14 @@ async def test_worktree_create_async_exception_falls_back(monkeypatch, tmp_path)
         captured["parameters"] = dict(task.parameters)
         return {"status": "succeeded", "result": {"output": "ok"}}
 
+    async def fake_is_git_repo_true(path):
+        return True
+
     monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
     monkeypatch.setattr(module, "get_database", lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})())
-    monkeypatch.setattr("backend.orchestration.worktree.is_git_repo_async", lambda path: True)
+    monkeypatch.setattr(
+        "backend.orchestration.worktree.is_git_repo_async", fake_is_git_repo_true
+    )
     monkeypatch.setattr("backend.orchestration.worktree.create_worktree_async", boom_create)
 
     dispatcher = ChatDispatcher(
@@ -724,3 +728,98 @@ async def test_followup_invalid_parent_degrades_to_new_task(caplog):
 
     assert dispatcher._states["t1"].parent_task_id is None
     assert "followup_of" in caplog.text
+
+
+@pytest.mark.asyncio()
+async def test_followup_self_reference_degrades_and_does_not_reject_batch(
+    monkeypatch, caplog
+):
+    """自指 followup_of（task 引用自身）→ warning 后降级普通任务，不因自环拒整批。
+
+    回归场景：父任务 t1 前一批已 done（或 resume 重放），同 run 再次派发
+    task_id=t1 且 followup_of=t1 —— 守卫缺失时隐式自环依赖会让 build_waves
+    抛环错误拒掉整批（含无辜的 t2）。
+    """
+    from backend.orchestration import chat_dispatcher as module
+
+    queue = _make_queue()
+    dispatcher = ChatDispatcher(
+        stream_id="s1", entry_queue=queue, run_id="orch-self-followup"
+    )
+    dispatcher._states["t1"] = module.ChatTaskState(
+        task_id="t1", agent_id="primary", goal="旧任务", status="done"
+    )
+    ran = []
+
+    async def fake_run_lane(executor, lane, agent_id):
+        ran.append(lane.task_id)
+        return {"status": "succeeded", "result": {"output": "ok"}}
+
+    monkeypatch.setattr(module, "run_lane_with_retry", fake_run_lane)
+
+    with caplog.at_level("WARNING"):
+        await dispatcher.dispatch(
+            [
+                {"task_id": "t1", "agent_id": "primary", "goal": "g", "followup_of": "t1"},
+                {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+            ]
+        )
+
+    assert dispatcher._states["t1"].parent_task_id is None
+    assert ran == ["task-t1", "task-t2"]
+    assert "followup_of" in caplog.text
+
+
+def test_constructor_sweeps_stale_worktree_root(monkeypatch, tmp_path):
+    """构造时机会性清扫崩溃残留的 ``orch_worktrees/<run_id>`` 孤儿目录。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    monkeypatch.setattr(
+        module,
+        "get_database",
+        lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})(),
+    )
+    stale = tmp_path / "orch_worktrees" / "orch-stale-run" / "t9"
+    stale.mkdir(parents=True)
+    (stale / "marker.txt").write_text("orphan")
+
+    other_run = tmp_path / "orch_worktrees" / "other-run"
+    other_run.mkdir(parents=True)
+
+    ChatDispatcher(
+        stream_id="s1",
+        entry_queue=_make_queue(),
+        run_id="orch-stale-run",
+        workspace_root=str(tmp_path),
+    )
+
+    assert not (tmp_path / "orch_worktrees" / "orch-stale-run").exists()
+    # 其他 run 的目录不受影响。
+    assert other_run.exists()
+
+
+def test_constructor_sweep_failure_is_swallowed(monkeypatch, tmp_path):
+    """清扫失败（目录只读等）全吞降级 —— 构造绝不抛异常。"""
+    from backend.orchestration import chat_dispatcher as module
+
+    monkeypatch.setattr(
+        module,
+        "get_database",
+        lambda: type("DB", (), {"db_path": str(tmp_path / "sage.db")})(),
+    )
+    stale = tmp_path / "orch_worktrees" / "orch-boom-sweep"
+    stale.mkdir(parents=True)
+
+    calls = []
+
+    def flaky_rmtree(path, *args, **kwargs):
+        calls.append(path)
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(module.shutil, "rmtree", flaky_rmtree)
+
+    dispatcher = ChatDispatcher(
+        stream_id="s1", entry_queue=_make_queue(), run_id="orch-boom-sweep"
+    )
+    assert calls == [tmp_path / "orch_worktrees" / "orch-boom-sweep"]
+    assert dispatcher.run_id == "orch-boom-sweep"
