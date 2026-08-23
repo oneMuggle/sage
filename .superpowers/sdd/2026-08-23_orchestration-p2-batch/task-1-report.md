@@ -57,3 +57,38 @@
 - 测试环境使用 Python 3.10 的 `sage-backend` 环境；本次新增生产代码未引入 PEP 604 union、`zip(strict=)` 或 `match`。
 - Pydantic 既有 deprecation warning 仍存在，但不属于本 Task 变更。
 - `output_schema` 不落库，符合本任务接口范围；任务状态持久化字段保持兼容。
+
+## Review 修复轮次 1
+
+- `backend/tools/web_tool.py`
+  - 将 `_literal_ip`、`_all_public`、`_validate_subagent_url`、`_validate_subagent_redirect` 的 Python 3.10 union/set 注解改为 Python 3.8 可运行的 `Optional`、`Union`、`Set` 注解；运行逻辑不变。
+- `backend/orchestration/subagent_runner.py`
+  - 捕获 `validate_against_schema()` 异常，记录 warning 并降级返回原文；抽出 `_warn_structured_failure()` 保持函数职责和长度约束。
+- `backend/tests/unit/test_subagent_runner.py`
+  - 新增 `test_output_schema_validator_exception_falls_back_to_raw`，覆盖 validator 抛异常时任务仍 succeeded、output 保留原文和 warning 记录。
+
+### 修复 TDD 与验证
+
+1. **validator 异常 RED**
+   - 命令：`cd backend && /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest tests/unit/test_subagent_runner.py::test_output_schema_validator_exception_falls_back_to_raw -q`
+   - 结果：1 failed，`RuntimeError: validator boom` 按预期穿出。
+2. **validator 异常 GREEN**
+   - 同一命令。
+   - 结果：`1 passed, 5 warnings`。
+3. **Python 3.8 定向 pytest**
+   - 命令：`cd backend && /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest tests/unit/test_subagent_runner.py tests/unit/test_subagent_tool.py tests/unit/test_chat_dispatcher.py -q`
+   - 结果：Python `3.8.20` 收集阶段被分支既有 `office_create_tool` 的 Pydantic v1 字段约束错误阻塞：`ValueError: On field "slides" ... max_length, min_length`；未进入本 Task 测试执行。
+4. **Python 3.8 语法验证**
+   - 命令：`/home/fz/anaconda3/envs/sage-backend-py38/bin/python -m py_compile backend/tools/web_tool.py backend/orchestration/subagent_runner.py`，并用同一解释器执行 `ast.parse`。
+   - 结果：编译和 AST parse 均通过，确认修复文件可被 Python 3.8 解析。
+5. **Python 3.10 最终定向验证**
+   - 命令：`cd backend && /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest tests/unit/test_subagent_runner.py tests/unit/test_subagent_tool.py tests/unit/test_chat_dispatcher.py -q`
+   - 结果：`34 passed, 5 warnings`。
+6. **Ruff**
+   - 命令：`cd backend && /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check .`
+   - 结果：`All checks passed!`
+
+### 修复遗留疑虑
+
+- `sage-backend-py38` 的完整定向 pytest 仍受既有 Pydantic v1/OfficeCreate collection 错误阻塞；本轮已用 Python 3.8 编译和 AST parse 验证本轮涉及模块。
+- Pydantic deprecation warnings（Python 3.10）仍为既有 warning。

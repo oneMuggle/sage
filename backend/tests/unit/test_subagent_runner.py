@@ -336,6 +336,29 @@ async def test_output_schema_violation_falls_back_to_raw():
 
 
 @pytest.mark.asyncio()
+async def test_output_schema_validator_exception_falls_back_to_raw():
+    """schema validator 异常 → warning 后降级返回原文，不失败任务。"""
+    from backend.orchestration.subagent_runner import SubagentRunner
+
+    raw_text = '{"summary":"调研完成"}'
+    fake = _CapturingSageAgent(content=raw_text)
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch("backend.orchestration.subagent_runner.SageAgent", return_value=fake), patch(
+        "backend.orchestration.subagent_runner.validate_against_schema",
+        side_effect=RuntimeError("validator boom"),
+    ), patch("backend.orchestration.subagent_runner.logger.warning") as warning:
+        result = await SubagentRunner()(
+            _make_schema_task(schema=_SCHEMA), "researcher"
+        )
+
+    assert result["status"] == "succeeded"
+    assert result["output"] == raw_text
+    warning.assert_called_once()
+
+
+@pytest.mark.asyncio()
 async def test_no_schema_keeps_raw_behavior():
     """未声明 schema → 与旧版行为一致（回归守卫）。"""
     from backend.orchestration.subagent_runner import SubagentRunner
