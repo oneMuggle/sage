@@ -45,6 +45,7 @@
 | 2026-08-10 | [Storage Adapter asyncio.to_thread Design](./2026-08-10-storage-adapter-to-thread-design.md) | 存储适配器同步 SQLite 写 offload 到线程池，共享 SQLite 锁 |
 | 2026-08-11 | [Chat-Native Multi-Agent Orchestration Design](./2026-08-11-multi-agent-orchestration-design.md) | 聊天链路多 agent 编排：计划先行 + conductor 驱动 + 双失败模式门 |
 | 2026-08-20 | [Win7 Memory Manager Initialization and SSL Fix](./2026-08-20-win7-memory-manager-init-design.md) | memory tool 注入、Win7 certifi 打包与 SSL CA bootstrap |
+| 2026-08-23 | [Win7 与主分支平台能力修复](./2026-08-23-win7-parity-platform-fixes-design.md) | 修复记忆、流式 UI、LM Studio、工具、Office、知识库、摘要、时区与工作区设置 |
 
 ## 与其他目录关系
 
