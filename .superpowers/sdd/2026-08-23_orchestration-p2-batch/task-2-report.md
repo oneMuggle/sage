@@ -4,7 +4,7 @@
 
 - `ChatTaskState` 新增 `parent_task_id`，`ChatDispatcher` 新增 run 内 `_histories`。
 - `dispatch()` 支持可选 `followup_of`：仅接受当前 run 中已存在且 `status == "done"` 的 task；非法值记录 warning 并降级为普通任务。
-- 有效 followup 自动把父任务加入依赖图，并把父任务历史注入新 Task 的 `parameters["history"]`。
+- 有效 followup 自动把父任务加入依赖图，并把父任务历史注入新 Task 的 `parameters["history"]`；同时继承父任务 `agent_id`，避免续聊历史与角色 profile 不一致。
 - `_run_subagent()` 从 `LaneExecutor` 成功结果的 `result.messages` 保存历史，同时保留既有字符串 output 和 monkeypatch 兼容行为。
 - `SubagentRunner` 增加 `MAX_REPLAY_MESSAGES = 20`，重放时保留首条 system 与最近 20 条历史消息，再追加新的 user goal；history 缺失或非法时走旧路径。
 - `dispatch_subagents` schema 与描述增加 `followup_of`。
