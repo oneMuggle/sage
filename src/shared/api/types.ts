@@ -301,6 +301,10 @@ export interface AgentEvent {
   error?: string;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
+  /** M1: state === 'permission_request' 时携带的审批请求详情 */
+  permission_request?: PermissionRequest;
+  /** M2 part B: state === 'ask_user_question' 时携带的提问详情 */
+  user_question?: UserQuestion;
   /** 会话元数据更新事件 (非 agent 事件, 由 producer 在流末尾推送) */
   type?: string;
   subtype?: string;
@@ -325,10 +329,6 @@ export interface AgentEvent {
   verdict?: ReviewVerdict;
   assertion_count?: number;
   summary?: string;
-  /** M1: state === 'permission_request' 时携带的审批请求详情 */
-  permission_request?: PermissionRequest;
-  /** M2 part B: state === 'ask_user_question' 时携带的提问详情 */
-  user_question?: UserQuestion;
   // P1 todo 接线: todo_snapshot 全量快照字段,与 llmStream.ts 双处一致。
   todos?: TodoItem[];
   session_id?: string;
@@ -696,6 +696,79 @@ export interface LaneBoardGroup {
   active: Lane[];
   blocked: Lane[];
   finished: Lane[];
+}
+
+// ============================================================================
+// LaneBoard snapshot (P2-5: GET /orchestration/board)
+// 形态对齐 backend/orchestration/lane_board.py 的 to_dict()
+// ============================================================================
+
+/** Per-lane freshness derived from heartbeat age (lane_board.LaneFreshness). */
+export interface LaneFreshnessInfo {
+  lane_id: string;
+  last_heartbeat_at: number | null;
+  age_ms: number | null;
+  level: 'fresh' | 'stale' | 'dead';
+  reasons: string[];
+}
+
+/** Aggregate freshness counts + worst-of-three overall level. */
+export interface FreshnessSummaryInfo {
+  total: number;
+  fresh: number;
+  stale: number;
+  dead: number;
+  overall_level: 'fresh' | 'stale' | 'dead';
+}
+
+/** One lane rendered on the board (lane_board.BoardEntry). */
+export interface LaneBoardEntry {
+  lane_id: string;
+  task_id: string;
+  agent_id?: string | null;
+  status: string;
+  freshness?: LaneFreshnessInfo;
+  heartbeat_status?: string | null;
+  last_event_at?: number;
+  last_event_type?: string;
+}
+
+/**
+ * Snapshot of all lanes grouped by status with freshness.
+ * `view` / `redaction_provenance` only appear on projection responses
+ * (`?view=ui_minimal`); plain ops_full omits them.
+ */
+export interface LaneBoardSnapshot {
+  schema_version: string;
+  generated_at: number;
+  generated_by: string;
+  active: LaneBoardEntry[];
+  blocked: LaneBoardEntry[];
+  finished: LaneBoardEntry[];
+  freshness_summary: FreshnessSummaryInfo;
+  /** projection 响应独有（ops_full 无此字段） */
+  view?: string;
+  redaction_provenance?: Record<string, string>;
+}
+
+/** Task summary returned by POST /orchestration/lanes (M5). */
+export interface PlannerTaskOut {
+  task_id: string;
+  name: string;
+  description: string;
+  task_type: string;
+  status: TaskStatus;
+  blocked_by: string[];
+  team_id: string | null;
+  agent_hint: string | null;
+}
+
+/** Response of POST /orchestration/lanes (M5 planner decomposition). */
+export interface CreateLanesResponse {
+  ok: boolean;
+  team_id: string;
+  lanes: Lane[];
+  tasks: PlannerTaskOut[];
 }
 
 // ──────────────────────────────────────────────────────────────────────
