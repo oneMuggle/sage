@@ -267,20 +267,25 @@ class ChatDispatcher:
                 self._next_task_index += 1
                 agent_id = str(raw.get("agent_id", "primary"))
                 goal = str(raw.get("goal", ""))
+            followup_of = raw.get("followup_of")
+            parent_task_id = (
+                followup_of
+                if isinstance(followup_of, str)
+                and followup_of in self._states
+                and self._states[followup_of].status == "done"
+                else None
+            )
+            if parent_task_id is not None:
+                # 续聊必须复用父任务的 agent/profile，避免历史 system prompt
+                # 与新任务角色不一致；调用方传入的 agent_id 仅用于普通任务。
+                agent_id = self._states[parent_task_id].agent_id
             state = ChatTaskState(
                 task_id=task_id,
                 agent_id=agent_id,
                 goal=goal,
                 output_schema=output_schema,
-                parent_task_id=(
-                    raw.get("followup_of")
-                    if isinstance(raw.get("followup_of"), str)
-                    and raw.get("followup_of") in self._states
-                    and self._states[raw.get("followup_of")].status == "done"
-                    else None
-                ),
+                parent_task_id=parent_task_id,
             )
-            followup_of = raw.get("followup_of")
             if followup_of is not None and state.parent_task_id is None:
                 logger.warning(
                     "无效 followup_of=%r，任务 %s 降级为普通新任务",

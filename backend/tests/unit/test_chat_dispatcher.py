@@ -424,7 +424,7 @@ async def test_followup_task_inherits_done_parent_history(monkeypatch):
         [
             {
                 "task_id": "t2",
-                "agent_id": "primary",
+                "agent_id": "writer",
                 "goal": "追问",
                 "followup_of": "t1",
             }
@@ -432,6 +432,7 @@ async def test_followup_task_inherits_done_parent_history(monkeypatch):
     )
 
     assert dispatcher._states["t2"].parent_task_id == "t1"
+    assert dispatcher._states["t2"].agent_id == "primary"
     assert dispatcher.task_registry.get_task("task-t2").parameters["history"] == history
     assert built["deps"]["t2"] == ["t1"]
 
