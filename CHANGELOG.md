@@ -46,6 +46,17 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Documentation
 - docs(wiki): 25-llm-wiki-integration.md 新增 "流式架构" section (10 章节) 描述 PR-114+115+116 架构 (PR-125)
 
+## [v0.4.9-alpha.3-win7] - 2026-08-23
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 分支同步编排控制面、拓扑调度、agent todo、结构化返回、follow-up 续聊、worktree 隔离、legacy 清理和 LaneBoard 激活。
+
+### Fixed
+
+- fix(win7): 同步 orchestration control plane P0
+- fix(win7): 同步 P1 `depends_on` 拓扑调度与 agent todo 全链路
+- fix(win7): 同步 P2 schema 结构化返回、follow-up 续聊、worktree 隔离、legacy 清理和 LaneBoard
+- fix(win7): 完成 P2 fast-follow 五项遗留
+
 ## [Unreleased]
 
 ### Added
