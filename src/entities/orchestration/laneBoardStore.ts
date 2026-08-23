@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { orchestrationClient } from '../../shared/api/orchestrationClient';
 import type {
   CreateLanesResponse,
+  FreshnessSummaryInfo,
   Lane,
   LaneBoardGroup,
   LaneEvent,
@@ -17,6 +18,8 @@ import type {
 
 interface LaneBoardState {
   lanes: Lane[];
+  /** P2-5: board 快照的整体新鲜度摘要；board 拉取失败时置 null（不阻塞 lanes 渲染）。 */
+  boardSummary: FreshnessSummaryInfo | null;
   loading: boolean;
   error: string | null;
   teamIdFilter: string | null;
@@ -65,6 +68,7 @@ function groupLanes(lanes: readonly Lane[]): LaneBoardGroup {
 
 export const useLaneBoardStore = create<LaneBoardState>((set, get) => ({
   lanes: [],
+  boardSummary: null,
   loading: false,
   error: null,
   teamIdFilter: null,
@@ -76,6 +80,14 @@ export const useLaneBoardStore = create<LaneBoardState>((set, get) => ({
       if (teamId) params.team_id = teamId;
       const lanes = await orchestrationClient.listLanes(params);
       set({ lanes, loading: false });
+      // P2-5: board 快照独立拉取 —— 失败只降级摘要（置 null），
+      // 不影响 lanes 渲染（降级铁律的前端对应物）。
+      try {
+        const snapshot = await orchestrationClient.getBoard('ops_full');
+        set({ boardSummary: snapshot.freshness_summary });
+      } catch {
+        set({ boardSummary: null });
+      }
     } catch (error: unknown) {
       set({ lanes: [], loading: false, error: getErrorMessage(error) });
     }
@@ -88,6 +100,13 @@ export const useLaneBoardStore = create<LaneBoardState>((set, get) => ({
     try {
       const lanes = await orchestrationClient.listLanes(params);
       set({ lanes, error: null });
+      // 与 load() 同构：board 摘要失败静默降级，不阻塞 lanes。
+      try {
+        const snapshot = await orchestrationClient.getBoard('ops_full');
+        set({ boardSummary: snapshot.freshness_summary });
+      } catch {
+        set({ boardSummary: null });
+      }
     } catch (error: unknown) {
       set({ error: getErrorMessage(error) });
     }

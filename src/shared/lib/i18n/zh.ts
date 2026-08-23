@@ -391,6 +391,10 @@ export const zh = {
   'orchestration.heartbeat.noHeartbeat': 'no heartbeat',
   'orchestration.lane.task': 'task:',
   'orchestration.lane.agent': 'agent:',
+  'orchestration.board.summary': '通道 {total} · 新鲜 {fresh} / 陈旧 {stale} / 失联 {dead}',
+  'orchestration.board.level.fresh': '新鲜',
+  'orchestration.board.level.stale': '陈旧',
+  'orchestration.board.level.dead': '失联',
 
   // ─── 会话导出 (U18 HTML 会话导出) ──────
   'session.export_failed': '导出失败：{message}',

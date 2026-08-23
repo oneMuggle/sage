@@ -698,6 +698,59 @@ export interface LaneBoardGroup {
   finished: Lane[];
 }
 
+// ============================================================================
+// LaneBoard snapshot (P2-5: GET /orchestration/board)
+// 形态对齐 backend/orchestration/lane_board.py 的 to_dict()
+// ============================================================================
+
+/** Per-lane freshness derived from heartbeat age (lane_board.LaneFreshness). */
+export interface LaneFreshnessInfo {
+  lane_id: string;
+  last_heartbeat_at: number | null;
+  age_ms: number | null;
+  level: 'fresh' | 'stale' | 'dead';
+  reasons: string[];
+}
+
+/** Aggregate freshness counts + worst-of-three overall level. */
+export interface FreshnessSummaryInfo {
+  total: number;
+  fresh: number;
+  stale: number;
+  dead: number;
+  overall_level: 'fresh' | 'stale' | 'dead';
+}
+
+/** One lane rendered on the board (lane_board.BoardEntry). */
+export interface LaneBoardEntry {
+  lane_id: string;
+  task_id: string;
+  agent_id?: string | null;
+  status: string;
+  freshness?: LaneFreshnessInfo;
+  heartbeat_status?: string | null;
+  last_event_at?: number;
+  last_event_type?: string;
+}
+
+/**
+ * Snapshot of all lanes grouped by status with freshness.
+ * `view` / `redaction_provenance` only appear on projection responses
+ * (`?view=ui_minimal`); plain ops_full omits them.
+ */
+export interface LaneBoardSnapshot {
+  schema_version: string;
+  generated_at: number;
+  generated_by: string;
+  active: LaneBoardEntry[];
+  blocked: LaneBoardEntry[];
+  finished: LaneBoardEntry[];
+  freshness_summary: FreshnessSummaryInfo;
+  /** projection 响应独有（ops_full 无此字段） */
+  view?: string;
+  redaction_provenance?: Record<string, string>;
+}
+
 /** Task summary returned by POST /orchestration/lanes (M5). */
 export interface PlannerTaskOut {
   task_id: string;
