@@ -27,7 +27,8 @@ import enum
 import json
 import platform
 import sys
-from typing import Optional, Protocol, runtime_checkable
+from pathlib import Path
+from typing import Optional, Protocol, Union, runtime_checkable
 
 
 class Severity(str, enum.Enum):
@@ -140,7 +141,10 @@ def _format_text(results: list) -> str:
     return "\n".join(lines)
 
 
-def _format_json(results: list) -> str:
+def _format_json(
+    results: list,
+    runtime: Optional[Union[dict, DoctorRuntime]] = None,
+) -> str:
     """JSON 报告(机器可读)。"""
     payload: dict = {
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),  # noqa: UP017 — datetime.timezone.utc for Py3.8/3.10 compat
@@ -149,6 +153,8 @@ def _format_json(results: list) -> str:
         "checks": [r.to_dict() for r in results],
         "summary": _summarize(results),
     }
+    if runtime:
+        payload.update(runtime.to_dict() if isinstance(runtime, DoctorRuntime) else runtime)
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
@@ -163,9 +169,33 @@ def _exit_code(results: list) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# CLI 入口
-# ---------------------------------------------------------------------------
+@dataclasses.dataclass(frozen=True)
+class DoctorRuntime:
+    """Resolved runtime metadata emitted by packaged doctor checks."""
+
+    interpreter: str
+    package_root: str
+    import_backend: bool
+
+    def to_dict(self) -> dict:
+        return dataclasses.asdict(self)
+
+
+def run_doctor(
+    interpreter: Union[Path, str, None] = None,
+    package_root: Union[Path, str, None] = None,
+) -> DoctorRuntime:
+    """Resolve and report the interpreter/package-root contract."""
+    interpreter_path = Path(interpreter or sys.executable).resolve()
+    package_root_path = Path(package_root or Path.cwd()).resolve()
+    importable = (package_root_path / "backend").is_dir() or package_root_path.name == "backend"
+    return DoctorRuntime(
+        interpreter=str(interpreter_path),
+        package_root=str(package_root_path),
+        import_backend=importable,
+    )
+
+
 
 
 def _import_all_checks() -> None:
@@ -223,7 +253,7 @@ def main(argv: Optional[list] = None) -> int:
     results: list = [_run_one(cls) for cls in all_checks]
 
     if args.as_json:
-        print(_format_json(results))  # noqa: T201 — CLI output
+        print(_format_json(results, run_doctor()))  # noqa: T201 — CLI output
     else:
         print(_format_text(results))  # noqa: T201 — CLI output
 

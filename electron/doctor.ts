@@ -17,6 +17,13 @@
 
 import { spawn } from 'node:child_process';
 
+export interface DoctorLaunchOptions {
+  pythonBin: string;
+  packageRoot: string;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+}
+
 export type DoctorStatus = 'ok' | 'warn' | 'critical' | 'timeout' | 'error';
 
 export interface DoctorCheck {
@@ -38,6 +45,8 @@ export interface DoctorSummary {
   exitCode?: number | null;
   /** Wall-clock duration of the run, in milliseconds. */
   elapsed_ms: number;
+  interpreter?: string;
+  package_root?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -76,13 +85,24 @@ function parseJsonOutput(stdout: string): ParsedDoctorOutput | undefined {
  * returned summary.
  */
 export async function runDoctorCheck(
-  pythonBin: string,
-  projectRoot: string,
+  pythonBinOrOptions: string | DoctorLaunchOptions,
+  projectRoot?: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  extraEnv: Record<string, string> = {},
 ): Promise<DoctorSummary> {
+  const options: DoctorLaunchOptions =
+    typeof pythonBinOrOptions === 'string'
+      ? {
+          pythonBin: pythonBinOrOptions,
+          packageRoot: projectRoot ?? process.cwd(),
+          cwd: projectRoot ?? process.cwd(),
+          env: extraEnv,
+        }
+      : pythonBinOrOptions;
   const startedAt = Date.now();
-  const proc = spawn(pythonBin, ['-m', 'backend.cli.doctor', '--json'], {
-    cwd: projectRoot,
+  const proc = spawn(options.pythonBin, ['-m', 'backend.cli.doctor', '--json'], {
+    cwd: options.cwd ?? options.packageRoot,
+    env: { ...process.env, ...options.env, PYTHONPATH: options.packageRoot },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
