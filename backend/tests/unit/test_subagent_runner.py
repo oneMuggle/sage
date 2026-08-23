@@ -66,6 +66,31 @@ def _make_task(goal: str = "调研 X", scratch: str | None = None):
 
 
 @pytest.mark.asyncio()
+async def test_runner_prefers_workspace_dir_for_tool_policy():
+    """worktree workspace_dir 存在时优先于 scratch_dir 注入 ToolPolicy。"""
+    from backend.orchestration.subagent_runner import SubagentRunner
+
+    captured = {}
+
+    class _PolicyAgent(_FakeSageAgent):
+        def __init__(self, agent_id=None, policy=None):
+            super().__init__()
+            captured["workspace_root"] = policy.workspace_root if policy else None
+
+    task = _make_task(goal="写入隔离副本", scratch="/tmp/scratch")
+    task.parameters["workspace_dir"] = "/tmp/worktree"
+    with patch(
+        "backend.orchestration.subagent_runner.get_enabled_agent",
+        return_value=_DUMMY_PROFILE,
+    ), patch(
+        "backend.orchestration.subagent_runner.SageAgent", _PolicyAgent
+    ):
+        await SubagentRunner()(task, "researcher")
+
+    assert captured["workspace_root"] == "/tmp/worktree"
+
+
+@pytest.mark.asyncio()
 async def test_runner_returns_succeeded_dict():
     from backend.orchestration.subagent_runner import SubagentRunner
 

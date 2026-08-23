@@ -146,6 +146,7 @@ class ChatDispatcher:
         event_recorder: Optional[EventRecorder] = None,
         total_tasks: Optional[int] = None,
         settings: Optional[OrchSettings] = None,
+        workspace_root: Optional[str] = None,
     ) -> None:
         self.stream_id = stream_id
         self.entry_queue = entry_queue
@@ -160,6 +161,8 @@ class ChatDispatcher:
         self.event_recorder = event_recorder or EventRecorder()
         # P0-2：总任务数门控 —— 达到 plan 总量后跑 reviewer 验证环（Task 5）。
         self.total_tasks = total_tasks
+        self.workspace_root = workspace_root
+        self._worktree_dirs: List[Path] = []
         self._states: Dict[str, ChatTaskState] = {}
         self._histories: Dict[str, List[Dict[str, Any]]] = {}
         self._semaphore = asyncio.Semaphore(self.settings.max_concurrent_subagents)
@@ -437,10 +440,24 @@ class ChatDispatcher:
         return aggregated
 
     async def _run_subagent(self, state: ChatTaskState) -> str:
+        """执行单个子任务，并在结束后清理该任务的临时 worktree。"""
+        workspace_dir = self._create_worktree_for(state)
+        try:
+            return await self._run_subagent_impl(state, workspace_dir)
+        finally:
+            if workspace_dir is not None:
+                from backend.orchestration.worktree import remove_worktree
+
+                remove_worktree(workspace_dir)
+                if workspace_dir in self._worktree_dirs:
+                    self._worktree_dirs.remove(workspace_dir)
+
+    async def _run_subagent_impl(
+        self, state: ChatTaskState, workspace_dir: Optional[Path]
+    ) -> str:
         """经 LaneExecutor 执行子任务（P0-1）：创建 lane+task，复用重试策略。
 
-        子 agent 以 ToolPolicy(workspace_root=<scratch_dir>) 构建（P0-3）——
-        write_file 等文件工具被锁进隔离目录，越界写返回 path_outside_workspace。
+        子 agent 优先使用 worktree 的 ToolPolicy 根目录；不可用时回落 scratch。
         """
         task_id = f"task-{state.task_id}"
         lane_id = f"lane-{state.task_id}"
@@ -451,6 +468,7 @@ class ChatDispatcher:
             "goal": state.goal,
             "agent_id": state.agent_id,
             "scratch_dir": str(scratch_dir),
+            "workspace_dir": str(workspace_dir) if workspace_dir else None,
         }
         if state.parent_task_id is not None:
             parameters["history"] = self._histories.get(state.parent_task_id, [])
@@ -476,6 +494,7 @@ class ChatDispatcher:
             lane_id=lane_id,
             task_id=task_id,
             agent_id=state.agent_id,
+            worktree=str(workspace_dir) if workspace_dir else None,
             metadata={"task_id": state.task_id},
         )
         self.lane_registry.create_lane(lane)
@@ -512,6 +531,28 @@ class ChatDispatcher:
             if isinstance(messages, list):
                 self._histories[state.task_id] = list(messages)
         return result_payload["output"]
+
+    def _create_worktree_for(self, state: ChatTaskState) -> Optional[Path]:
+        """按配置为任务创建 worktree；任何不可用情况都回落 scratch。"""
+        if not self.settings.worktree_isolation or not self.workspace_root:
+            return None
+        from backend.orchestration.worktree import create_worktree, is_git_repo
+
+        repo = Path(self.workspace_root)
+        if not is_git_repo(repo):
+            logger.warning("worktree 隔离不可用，子任务 %s 回落 scratch", state.task_id)
+            return None
+        worktree_dir = (
+            Path(get_database().db_path).parent
+            / "orch_worktrees"
+            / self.run_id
+            / state.task_id
+        )
+        if create_worktree(repo, worktree_dir):
+            self._worktree_dirs.append(worktree_dir)
+            return worktree_dir
+        logger.warning("worktree 隔离不可用，子任务 %s 回落 scratch", state.task_id)
+        return None
 
     def _scratch_dir_for(self, state: ChatTaskState) -> Path:
         """子任务隔离目录：``<data_dir>/orch_scratch/<run_id>/<task_id>``。"""
