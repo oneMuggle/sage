@@ -412,17 +412,18 @@ PR A #316（P2-7/8/9 + run 级 cancel）+ PR B #317（P2-10 休眠层）+ PR C #
 ### 16.4 legacy 启发式编排器下线
 
 - 删除 `core/legacy/orchestrator.py`（AgentOrchestrator + Intent）及其 3 个测试文件；`core/__init__` 摘除导出；非流式 `/chat` 恒走单 SageAgent（该端点无前端/Electron 调用方，聊天编排由 ChatDispatcher 承担）。
-- 已知遗留：`data/blackboard_repo.py` 成为零调用方孤儿模块（自带测试无运行时风险），待 hygiene PR 评估下线。
+- ~~已知遗留：`data/blackboard_repo.py` 成为零调用方孤儿模块（自带测试无运行时风险），待 hygiene PR 评估下线。~~ —— ✅ 已收口（2026-08-23 fast-follow）：删除 `backend/data/blackboard_repo.py` + `backend/tests/unit/test_data_blackboard_repo.py`（grep 确认生产路径零调用；`data/__init__.py` 为空桶，免改导出）。
 
 ### 16.5 LaneBoard API 激活
 
 - `GET /orchestration/board?view=ops_full|ui_minimal`：默认 ops_full 保持原形态；ui_minimal 走既有 `LaneBoardSnapshot.project()` 投影（含 redaction_provenance）；非法 view 400。
-- Electron IPC `orchestration_board` + `orchestrationClient.getBoard(view)` + TS 类型四件（LaneBoardSnapshot/FreshnessSummaryInfo 等，桶导出已补）。
+- Electron IPC `orchestration_board` + `orchestrationClient.getBoard(view)`（泛型条件返回：ops_full→LaneBoardSnapshot、ui_minimal→BoardProjectionEnvelope）+ TS 类型（LaneBoardSnapshot/BoardProjectionEnvelope/FreshnessSummaryInfo 等，桶导出已补）。
 - laneBoardStore `boardSummary`：load 时顺带拉快照，失败置 null 不阻塞 lanes 渲染；LaneBoard 头部 freshness 摘要行 + overall_level 色徽章（i18n zh/en 各 4 键）。
-- 已知遗留：TS 类型未拆 ops_full/ui_minimal 两种信封（当前唯一调用方硬编码 ops_full 无实际故障）；store 降级分支缺直接单测。
+- ~~已知遗留：TS 类型未拆 ops_full/ui_minimal 两种信封（当前唯一调用方硬编码 ops_full 无实际故障）；store 降级分支缺直接单测。~~ —— ✅ 已收口（2026-08-23 fast-follow）：新增 `BoardProjectionEnvelope` + `orchestrationClient.getBoard(view)` 泛型条件返回（object literal 不允许重载签名，TS1005 规避）；新建 `laneBoardStore.test.ts` 覆盖 board 失败降级（boardSummary null 不阻塞 lanes）/ lanes 失败置 error / 成功 freshness 三路径。
 
 ### 16.6 已知限制与延后项
 
-- 同批 followup 静默降级对 conductor 不可见（warning 仅进日志，聚合 markdown 无提示）——可选改进。
-- `dispatch()` 类型注解漂移（实际 items 含 dict 值）。
-- 非法 run_id 错误文案是原始异常串非友好 4xx（UX 打磨点）。
+- ~~同批 followup 静默降级对 conductor 不可见（warning 仅进日志，聚合 markdown 无提示）——可选改进。~~ —— ✅ 已收口（2026-08-23 fast-follow）：`ChatTaskState.followup_degraded` 置位（无效父 / 自指 followup 两条路径），聚合时追加「followup 已降级为新任务（父任务不存在/未完成/自指），本次结果不含续聊上下文」提示，conductor 显式可见。
+- `dispatch()` 类型注解漂移（实际 items 含 dict 值）——仍开放。
+- ~~非法 run_id 错误文案是原始异常串非友好 4xx（UX 打磨点）。~~ —— ✅ 已收口（2026-08-23 fast-follow）：legacy_routes 多分支构造段抽出 `_build_orchestration_dispatcher`，把 ChatDispatcher 的 `ValueError` 重抛为「编排启动失败：run_id 格式非法（应为 orch-* 标识符），请刷新后重试。原始信息: …」中文文案；**拒绝语义保留**（不降级 single、不吞错），经 StreamRegistry 转 failed 事件送达前端。
+- **2026-08-23 fast-follow 波已收口**：T1/T2（§16.5 信封拆分 + store 单测）、黑名单孤儿下线（§16.4）、T3/T4（本篇前两项）已全部划掉；仅剩 `dispatch()` 类型注解漂移一项开放。
