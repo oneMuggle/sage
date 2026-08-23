@@ -348,3 +348,32 @@ def test_dispatcher_defaults_settings_when_omitted():
     """不传 settings → load_orch_settings() 回落默认。"""
     d = ChatDispatcher(stream_id="s1", entry_queue=asyncio.Queue(), run_id="orch-test")
     assert d.settings.max_concurrent_subagents == 4
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_passes_output_schema_to_subagent(monkeypatch):
+    """tool-passed output_schema 进入 ChatTaskState 并写进 Task.parameters。"""
+    captured = {}
+    queue = _make_queue()
+    dispatcher = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-schema")
+
+    async def fake_run_subagent(state):
+        captured["schema"] = state.output_schema
+        return "ok"
+
+    monkeypatch.setattr(dispatcher, "_run_subagent", fake_run_subagent)
+    schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+
+    await dispatcher.dispatch(
+        [
+            {
+                "task_id": "dynamic-1",
+                "agent_id": "primary",
+                "goal": "g",
+                "output_schema": schema,
+            }
+        ]
+    )
+
+    assert captured["schema"] == schema
+    assert dispatcher._states["dynamic-1"].output_schema == schema

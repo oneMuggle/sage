@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any, Dict, Optional
 
@@ -18,8 +19,51 @@ from backend.core.legacy.agent import SageAgent
 from backend.domain.tool_policy import ToolPolicy
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.models import Lane
+from backend.tools.structured_output_tool import validate_against_schema
 
 logger = logging.getLogger(__name__)
+
+#: schema 声明时注入 user message 的硬性格式要求前缀。
+_SCHEMA_DIRECTIVE = (
+    "\n\n输出格式硬性要求：你的最终回复必须只包含一个符合以下 JSON Schema "
+    "的 JSON 对象（可放在代码围栏中），不要输出其他文字。\n"
+)
+
+
+def extract_json_payload(text: str) -> Optional[Dict[str, Any]]:
+    """从 LLM 输出文本提取 JSON object；三种形态依次尝试，失败返回 None。
+
+    优先级：整段即 JSON > ``` 围栏 > 首个 ``{`` 到末个 ``}`` 子串。
+    """
+    candidate = (text or "").strip()
+    if not candidate:
+        return None
+    try:
+        parsed = json.loads(candidate)
+        return parsed if isinstance(parsed, dict) else None
+    except ValueError:
+        pass
+    fence_start = candidate.find("```json")
+    if fence_start == -1:
+        fence_start = candidate.find("```")
+    if fence_start != -1:
+        body_start = candidate.find("\n", fence_start)
+        fence_end = candidate.find("```", fence_start + 3)
+        if body_start != -1 and fence_end > body_start:
+            try:
+                parsed = json.loads(candidate[body_start + 1 : fence_end].strip())
+                return parsed if isinstance(parsed, dict) else None
+            except ValueError:
+                pass
+    brace_start = candidate.find("{")
+    brace_end = candidate.rfind("}")
+    if brace_start != -1 and brace_end > brace_start:
+        try:
+            parsed = json.loads(candidate[brace_start : brace_end + 1])
+            return parsed if isinstance(parsed, dict) else None
+        except ValueError:
+            return None
+    return None
 
 
 class SubagentRunner:
@@ -59,15 +103,26 @@ class SubagentRunner:
         scratch_dir = task.parameters.get("scratch_dir")
         policy = ToolPolicy(workspace_root=scratch_dir) if scratch_dir else None
 
+        # P2 Task 1 (2026-08-23): 可选 output_schema —— 非 dict 视为未声明。
+        schema = task.parameters.get("output_schema")
+        if not isinstance(schema, dict):
+            schema = None
+
         child_system = build_system_base()
         profile = get_enabled_agent(agent_id)
         if profile and profile.get("system_prompt"):
             child_system += "\n\n" + profile["system_prompt"]
 
+        user_content = goal
+        if schema is not None:
+            user_content += _SCHEMA_DIRECTIVE + json.dumps(
+                schema, ensure_ascii=False
+            )
+
         child = SageAgent(agent_id=agent_id, policy=policy)
         messages = [
             {"role": "system", "content": child_system},
-            {"role": "user", "content": goal},
+            {"role": "user", "content": user_content},
         ]
         collected: list[str] = []
         last_error: Optional[str] = None
@@ -96,7 +151,36 @@ class SubagentRunner:
             if self._interrupt_event is not None and self._interrupt_event.is_set():
                 raise RuntimeError("subtask interrupted by user")
             raise RuntimeError(last_error or "子 agent 未产出 DONE content")
-        return {"status": "succeeded", "output": "\n\n".join(collected)}
+
+        raw_output = "\n\n".join(collected)
+        structured = self._structured_output(raw_output, schema, task)
+        return {
+            "status": "succeeded",
+            "output": structured if structured is not None else raw_output,
+            "messages": messages,
+        }
+
+    @staticmethod
+    def _structured_output(
+        raw_output: str,
+        schema: Optional[Dict[str, Any]],
+        task: Any,
+    ) -> Optional[str]:
+        """schema 声明时提取+校验 JSON；通过返回紧凑 JSON，否则降级原文（None）。
+
+        校验失败只 warning 不 fail —— 结构化是增强而非硬约束，降级保证子任务
+        仍产出可用结果（brief Task 1 语义：失败降级原文）。
+        """
+        if schema is None:
+            return None
+        payload = extract_json_payload(raw_output)
+        if payload is not None and not validate_against_schema(payload, schema):
+            return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        logger.warning(
+            "子任务 %s 结构化输出校验失败，降级原文",
+            getattr(task, "task_id", "?"),
+        )
+        return None
 
 
 async def run_lane_with_retry(
