@@ -49,6 +49,24 @@ LM Studio 可通过现有 OpenAI-compatible proxy 间接使用，但 endpoint �
 
 当前 workspace 是 session 到目录的绑定，不是独立 workspace settings。没有稳定 workspace identity、settings blob、继承优先级或 GET/PATCH settings API。
 
+### 2.5 Win7 打包运行时日志新增发现
+
+真实 Win7 packaged 运行日志补充确认以下问题，这些问题属于本设计范围，优先级高于业务能力接线：
+
+- `doctor` 使用 `E:\ProgramData\anaconda2\python.exe` 或 PATH 中的 `python`，而不是 bundled interpreter；以 `-m backend.cli.doctor` 启动时没有正确的 package root/PYTHONPATH，产生 `ModuleNotFoundError: No module named 'backend'`。日志中的 doctor 失败不能代表 bundled backend 本身失败。
+- backend supervisor 在旧进程、健康检查、退出回调和重启定时器之间存在竞态：多个 `backend spawned` 重叠、重复 kill orphan、`[Errno 10048]` 端口占用、backend 刚返回 `/health` 便退出，随后 renderer 大量 `ECONNREFUSED`。当前 `backend ready` 事件可能只是端口探测成功，不是被当前 child process 身份绑定的稳定就绪状态。
+- 同一日志窗口出现两个 Electron `main: process started`（不同 PID），需要核对 Electron single-instance lock；若未加锁，两个主进程各自启动 supervisor 会直接造成 backend ownership、端口和 IPC 竞态。
+- renderer 在 backend 真正 ready 前已执行 settings/session/theme/scheduler IPC，导致启动阶段错误风暴；`backend:disconnected`/`backend:reconnected` 事件在 renderer 侧又被报告为 unknown event，说明 IPC 事件契约未统一。
+- packaged frontend 调用了 `get_evolution_status` 和 `get_evolution_logs`，但 `electron/commands.ts` 不支持，说明前端 bundle、命令路由和后端能力存在版本漂移。
+- settings payload 仍向后端提交 `memory_server_sync` 和 `orch.max_concurrent_subagents` 这类未规范化字段，而后端只接受 camelCase 白名单；这是设置 schema/canonicalization 漂移，不只是单个字段缺失。
+- bundled backend 输出中文出现乱码，说明 Windows console/child-process stdout 的编码协议未统一；日志可读性和错误诊断因此受损。
+- 外部 HTTPS 请求因 `CERTIFICATE_VERIFY_FAILED` 返回 502，说明 bundled Python 的 CA 证书路径/环境变量在真实 Win7 包中仍未可靠生效；不能只依赖开发环境或 conda 的 certifi。
+- backend 启动时 `Wiki MCP Server` 因缺少 `mcp` 包降级，且后续显示 `No MCP tools available`。若 MCP 是可选功能，UI/doctor 必须明确报告 disabled；若知识库/MCP 是本次目标，则 bundled/Win7 依赖和启动验证必须覆盖它。
+- chat 请求中的 `model=/mnt/workspace/model` 是 Windows packaged 环境下的 Linux 风格路径，且 provider 被记录为 `custom`。模型配置需要区分 provider、model id 和本地文件路径，并在跨平台加载时拒绝或迁移无效路径；不能把路径当作 LM Studio 模型 ID。
+- Proactor 事件循环出现 `WinError 10038`，通常与连接被强制关闭后 transport callback 仍被调度有关；重启/取消/stream attach 的 teardown 必须具备幂等关闭和 Windows Proactor 回归测试。
+- `backend` 启动日志使用本地时间（例如 `15:49`），Electron 外层 JSON 日志使用 UTC `Z`（例如 `07:49Z`）；两种时间本身相差 UTC+8，但当前没有统一字段标注，排查时容易误判启动顺序、scheduler 触发时间和超时。日志协议必须明确全部机器可读时间使用 UTC，展示层再按用户时区转换。
+- 安装包可能不是当前源码对应产物：frontend bundle 调用 source `COMMAND_ROUTES` 中不存在的命令、doctor 使用旧路径、settings 发送旧字段，说明缺少 build commit/version/branch/manifest 可追踪性。必须在 packaged app、Electron main、frontend bundle 和 backend 启动日志中输出同一 build ID，并在 CI 做命令/schema/asset provenance 校验。
+
 ## 3. 范围与非目标
 
 ### 3.1 本次范围
@@ -77,6 +95,20 @@ LM Studio 可通过现有 OpenAI-compatible proxy 间接使用，但 endpoint �
 ## 4. 设计方案
 
 ### 4.1 分批交付
+
+#### 批次零：打包启动与运行时稳定性
+
+1. doctor 必须使用与 backend spawn 相同的 bundled interpreter、工作目录和 package root；doctor 失败时记录真实解释器路径、`sys.path` 摘要和可诊断错误，不再使用 PATH 中的 `python`。
+2. Electron packaged app 必须先取得 single-instance lock；重复启动只把参数/激活请求转发给已有 main，不创建第二个 supervisor 或 backend。
+3. backend supervisor 对每次启动分配唯一 generation/child PID/ownership token，启动、健康检查、退出和 restart timer 只允许当前 generation 改变状态；同一时刻最多一个 Sage backend child，重启前等待旧进程退出并确认端口释放。
+4. `backend ready` 只能在当前 child PID 返回带匹配 ownership token 的 `/health` 后发出；renderer 的初始 IPC 请求在 ready 前排队或返回可识别的 `backend_not_ready`，不得产生无界错误风暴。`backend:disconnected`/`backend:reconnected` 统一纳入 IPC event contract 并由 renderer 消费。
+5. 对 Electron `COMMAND_ROUTES` 做启动时/CI 契约校验，确保 packaged frontend 调用的 `get_evolution_status`、`get_evolution_logs` 等命令均有 route，或前端 bundle 不再调用已移除命令。
+5. settings canonicalizer 同时处理历史 snake_case 输入和当前 camelCase 输出；清理 `memory_server_sync`、`orch.max_concurrent_subagents` 等过期字段，增加 packaged bundle 的 GET/PUT round-trip 测试。
+6. bundled child stdout/stderr 统一使用 UTF-8 解码并保留原始 bytes 的错误回退；日志中不得出现不可读的中文替换字符。
+7. packaged HTTPS 请求显式验证并加载 bundled CA bundle（如 certifi），覆盖 Windows 环境变量、安装路径和代理场景；证书失败须报告可操作的诊断信息，不允许关闭 TLS 验证。
+8. MCP 按产品策略二选一并写入打包契约：若 Wiki MCP 是可选项，doctor/UI 明确显示 disabled 和缺失依赖；若是本次必需能力，则把 `mcp` 及其依赖加入 Win7/bundled requirements 并做启动 smoke。
+9. 模型配置拆分 `provider`、`model_id` 和可选 `local_model_path`；Windows packaged 环境拒绝 `/mnt/...` 等不属于当前平台的路径，并把 LM Studio 模型名作为模型 ID 而不是文件路径。
+10. stream attach、interrupt、child kill 和 uvicorn shutdown 使用幂等 teardown，增加 Windows Proactor 下 `WinError 10038`、客户端提前断开和重复重启回归测试。
 
 #### 批次一：契约和用户体验修复
 
@@ -163,6 +195,16 @@ session override > workspace settings > app settings > product default
 
 设置写入走现有 canonicalizer 和 app settings blob；新增字段必须同时加入前端类型、默认值、snake/camel canonicalization、legacy/hex route contract 和 reset 逻辑。时间展示失败时回退 UTC，而不是回退操作系统本地时区。
 
+### 5.5 打包启动与运行时
+
+supervisor 的状态机必须以 `child_generation` 为 authority，状态至少区分 `starting`、`ready`、`stopping`、`exited` 和 `restarting`。健康检查只接受当前 generation，旧 child 的迟到退出事件不得杀掉新 child。每个启动周期记录合成诊断字段：`generation`、`pid`、`interpreter`、`working_directory`、`port`、`health_status` 和 `exit_code`。
+
+doctor、backend、Electron IPC 和 frontend bundle 共用一个版本化 capability/command manifest。缺失能力必须在启动诊断中标为 `disabled` 或 `incompatible`，不能表现为反复重试的网络错误。
+
+### 5.6 TLS、编码与 Windows teardown
+
+网络 TLS 始终启用证书验证，CA 路径通过 bundled interpreter 自身可解析的资源确定。子进程输出按 UTF-8 解码，无法解码时保留转义字节摘要。关闭路径采用幂等 guard，先停止新请求和 stream attach，再取消后台任务、关闭连接、等待 child 退出，最后释放端口。
+
 ## 6. 文件与模块边界
 
 ### 后端
@@ -174,9 +216,12 @@ session override > workspace settings > app settings > product default
 - `backend/wiki/*`、新增知识库工具模块
 - `backend/api/legacy_routes.py`、`wiki_routes.py`、workspace/settings routes
 - `backend/data/database.py`、settings repository/canonicalizer
-- `backend/requirements-py38.txt`
-
-### 前端与 Electron
+- `backend/requirements-py38.txt`、bundled requirements 和依赖 manifest
+- `backend/cli/doctor.py`、backend CLI checks 与 bundled launcher
+- `backend/main.py`、`backend/api/llm_proxy_routes.py`、stream/uvicorn teardown
+- `backend/config.yaml`、CA/bootstrap 和 MCP optional dependency manifest
+- `electron/backendLauncher.ts`、`electron/main.ts`、`electron/commands.ts`、IPC event types
+- `src/shared/api/desktopInvoke.ts`、启动 readiness/error queue 和 settings canonicalization
 
 - `src/features/send-message/useChat.ts`
 - `src/pages/Chat.tsx`、滚动容器/消息列表相关组件
@@ -188,7 +233,12 @@ session override > workspace settings > app settings > product default
 
 ### 测试与文档
 
-- memory tool/manager/API/前端 contract tests
+- Electron packaged build manifest/provenance tests
+- Electron single-instance lock and duplicate-launch tests
+- backend launcher/doctor/supervisor readiness and single-child tests
+- ownership-token/child-generation stale-event tests
+- IPC command/event manifest parity tests
+- Windows UTF-8 log, bundled CA/TLS and Proactor teardown tests
 - Chat auto-scroll/stream tests
 - provider proxy/LM Studio fixture tests
 - tool registry/profile/list-dir tests
@@ -208,7 +258,18 @@ session override > workspace settings > app settings > product default
 
 ## 8. 验收标准
 
-### 功能
+### 8.1 打包运行时
+
+- doctor 使用 bundled interpreter 且 package root 正确；
+- 任意时刻最多一个当前 generation backend child，连续重启不产生端口占用或 renderer 错误风暴；
+- Electron 重复启动不会创建第二个 main/supervisor/backend；
+- `backend ready` 与当前 PID、generation 和 ownership token 绑定，IPC event/command manifest 与 packaged bundle 一致；
+- settings GET/PUT 在旧 snake_case 输入和当前 camelCase 输出间稳定 round-trip；
+- bundled 日志统一 UTC、中文可读，并包含 build ID；
+- Win7 HTTPS 请求通过 bundled CA 验证，缺失 CA、MCP disabled 和模型路径错误均有明确诊断；
+- stream 取消、backend kill/restart 和 shutdown 不产生 `WinError 10038`。
+
+### 8.2 功能
 
 - LM Studio 可完成模型发现、空 key 普通回复和 SSE 流式回复；
 - 用户向上滚动历史时，流式回复不会抢回底部；
