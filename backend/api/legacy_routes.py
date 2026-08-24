@@ -2508,6 +2508,9 @@ def _draft_to_dict(draft) -> dict:
 # ==================== 记忆 API ====================
 
 # get_memory_manager 从 backend.memory 导入（全局单例）
+_MEMORY_LIST_MAX_PAGE_SIZE = 100
+_MEMORY_LIST_MAX_FETCH = 1000
+_MEMORY_LIST_MAX_PAGE = _MEMORY_LIST_MAX_FETCH // _MEMORY_LIST_MAX_PAGE_SIZE
 
 
 class MemorySearchRequest(BaseModel):
@@ -2602,21 +2605,37 @@ def list_memories(page: int = 1, page_size: int = 20, type: str | None = None):
     """
     try:
         # 1. 输入 clamp
-        safe_page = max(1, int(page) if page is not None else 1)
-        safe_page_size = max(1, min(100, int(page_size) if page_size is not None else 20))
+        safe_page = max(
+            1,
+            min(
+                _MEMORY_LIST_MAX_PAGE,
+                int(page) if page is not None else 1,
+            ),
+        )
+        safe_page_size = max(
+            1,
+            min(
+                _MEMORY_LIST_MAX_PAGE_SIZE,
+                int(page_size) if page_size is not None else 20,
+            ),
+        )
+        fetch_limit = min(
+            _MEMORY_LIST_MAX_FETCH,
+            safe_page * safe_page_size,
+        )
         normalized_type = type if type and type not in ("", "all") else None
 
         mm = get_memory_manager()
         # 2. 取数 (按 type 路由)
         if normalized_type == "episodic":
-            episodic_items = mm.episodic.get_recent(limit=safe_page_size * safe_page)
+            episodic_items = mm.episodic.get_recent(limit=fetch_limit)
             items = _enrich_memory_records(
                 episodic_items, layer="episodic", source="episodic"
             )
             total = mm.episodic.count()
             source_breakdown = {"episodic": len(items), "semantic": 0}
         elif normalized_type == "semantic":
-            semantic_items = mm.semantic.get_recent(limit=safe_page_size * safe_page)
+            semantic_items = mm.semantic.get_recent(limit=fetch_limit)
             items = _enrich_memory_records(
                 semantic_items, layer="semantic", source="semantic"
             )
@@ -2624,8 +2643,8 @@ def list_memories(page: int = 1, page_size: int = 20, type: str | None = None):
             source_breakdown = {"episodic": 0, "semantic": len(items)}
         else:
             # 'all' / '' / None → 合并两层,按 created_at DESC 排序
-            episodic_items = mm.episodic.get_recent(limit=safe_page_size * safe_page)
-            semantic_items = mm.semantic.get_recent(limit=safe_page_size * safe_page)
+            episodic_items = mm.episodic.get_recent(limit=fetch_limit)
+            semantic_items = mm.semantic.get_recent(limit=fetch_limit)
             merged = []
             merged.extend(
                 _enrich_memory_records(episodic_items, layer="episodic", source="episodic")

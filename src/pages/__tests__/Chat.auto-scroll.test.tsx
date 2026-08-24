@@ -432,6 +432,76 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
     expect(jumpBtn).toBeTruthy();
   });
 
+  it('jumps to the latest message and hides the button when clicked', async () => {
+    const messages = [baseMsg('1', 'assistant', 'hello')];
+    useChatMock.mockReturnValue({
+      messages,
+      isLoading: true,
+      streamingMessageId: '1',
+      error: null,
+      clearError: vi.fn(),
+      sendMessage: vi.fn(),
+      interrupt: vi.fn(),
+      loadMessages: vi.fn(),
+      streamingToolCalls: [],
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    const scrollEl = setupScrollEl(container, 1000, 400, 200);
+    fireEvent.scroll(scrollEl);
+
+    const jumpBtn = await waitFor(() =>
+      screen.getByRole('button', { name: '跳到最新' }),
+    );
+    fireEvent.click(jumpBtn);
+
+    expect(scrollEl.scrollTop).toBe(1000);
+    expect(screen.queryByRole('button', { name: '跳到最新' })).toBeNull();
+  });
+
+  it('resets sticky-bottom state when switching sessions', async () => {
+    const messages = [baseMsg('1', 'assistant', 'hello')];
+    useChatMock.mockReturnValue({
+      messages,
+      isLoading: true,
+      streamingMessageId: '1',
+      error: null,
+      clearError: vi.fn(),
+      sendMessage: vi.fn(),
+      interrupt: vi.fn(),
+      loadMessages: vi.fn(),
+      streamingToolCalls: [],
+    });
+
+    const { container, rerender } = render(
+      <MemoryRouter>
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    const scrollEl = setupScrollEl(container, 1000, 400, 200);
+    fireEvent.scroll(scrollEl);
+    await waitFor(() => screen.getByRole('button', { name: '跳到最新' }));
+
+    useStore.setState({ currentSessionId: 'session-2' });
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('button', { name: '跳到最新' })).toBeNull();
+  });
+
   it('sending a new message forces scroll to bottom regardless of prior state', async () => {
     // 初始有 1 条, 用户向上滚(不在底部)
     const messagesV1 = [baseMsg('1', 'assistant', 'hi')];

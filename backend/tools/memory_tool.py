@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools.context import current_tool_context
 
 from .base import BaseTool, ToolResult, ToolSchema
 
@@ -70,6 +71,8 @@ DEFAULT_SEARCH_LIMIT = 20
 #: "全部"的统一哨兵;映射到 ``MemoryManager.search_memories(memory_type=None)``
 #: 的契约。空串 / None 视作等价。
 SEARCH_TYPE_ALL = "all"
+SEARCH_MEMORY_TYPES = ("all", "working", "episodic", "semantic")
+SAVE_MEMORY_TYPES = ("auto", "working", "episodic", "semantic")
 
 
 class MemorySearchTool(BaseTool):
@@ -108,7 +111,7 @@ class MemorySearchTool(BaseTool):
                     "query": {"type": "string", "description": "搜索查询"},
                     "memory_type": {
                         "type": "string",
-                        "enum": ["all", "episodic", "semantic"],
+                        "enum": ["all", "working", "episodic", "semantic"],
                         "description": "记忆类型 (默认 all)",
                     },
                     "limit": {
@@ -122,14 +125,12 @@ class MemorySearchTool(BaseTool):
 
     @staticmethod
     def _normalize_memory_type(memory_type: Optional[str]) -> Optional[str]:
-        """``all`` / ``''`` / ``None`` → ``None``, 其余原样返回。
-
-        等价语义输入全部走同一条管道,与 IPC 层 / URL 参数 / tool args
-        保持一致。
-        """
-        if memory_type is None:
+        """Validate and normalize the supported search memory types."""
+        if memory_type is None or memory_type == "":
             return None
-        if memory_type in ("", SEARCH_TYPE_ALL):
+        if memory_type not in SEARCH_MEMORY_TYPES:
+            raise ValueError("不支持的搜索记忆类型")
+        if memory_type == SEARCH_TYPE_ALL:
             return None
         return memory_type
 
@@ -171,13 +172,20 @@ class MemorySearchTool(BaseTool):
         try:
             normalized_type = self._normalize_memory_type(memory_type)
             clamped_limit = self._clamp_limit(limit)
+            context = current_tool_context()
+            if context is None:
+                return ToolResult(success=False, error="记忆搜索需要可信会话上下文")
 
             results = self.memory.search_memories(
-                query, normalized_type, clamped_limit
+                query, normalized_type, clamped_limit, session_id=context.session_id
             )
-            # ``search_memories`` 内部已经按 limit 截断;这里再保险一次
-            # (manager 历史版本曾返回 ``<= limit`` 而不是 ``== limit``)。
-            truncated = list(results[:clamped_limit]) if results else []
+            # 持久层旧实现可能忽略 session_id；过滤所有会话标识明确不匹配的记录。
+            scoped_results = [
+                item
+                for item in (results or [])
+                if not item.get("session_id") or item.get("session_id") == context.session_id
+            ]
+            truncated = scoped_results[:clamped_limit]
 
             return ToolResult(
                 success=True,
@@ -272,6 +280,16 @@ class MemorySaveTool(BaseTool):
         if self.memory is None:
             return ToolResult(success=False, error="记忆管理器未初始化")
 
+        context = current_tool_context()
+        if session_id is not None:
+            if context is None:
+                return ToolResult(success=False, error="显式 session_id 需要可信会话上下文")
+            if session_id != context.session_id:
+                return ToolResult(success=False, error="session_id 与当前会话不一致")
+        effective_session_id = context.session_id if context is not None else None
+        if memory_type not in SAVE_MEMORY_TYPES:
+            return ToolResult(success=False, error="不支持的保存记忆类型")
+
         # tags 直接透传（``[]`` 走空列表路径, ``None`` 走 manager 默认）。
         # 不在这里做 normalize —— 测试用 ``MagicMock.assert_called_once_with``
         # 会严格比较 args。``memorize`` 自身对 ``None`` tags 安全处理。
@@ -283,7 +301,7 @@ class MemorySaveTool(BaseTool):
                 memory_type,
                 importance,
                 forwarded_tags,
-                session_id=session_id,
+                session_id=effective_session_id,
             )
         except TypeError as exc:
             # 兼容旧 MemoryManager 缺 ``session_id`` kwarg 的退化实现
@@ -301,7 +319,8 @@ class MemorySaveTool(BaseTool):
             return ToolResult(success=False, error=f"保存记忆失败: {str(e)}")
 
         return ToolResult(
-            success=True,
+            success=memory_id is not None,
+            error=None if memory_id is not None else "保存记忆失败: 未返回记忆 ID",
             content={
                 "memory_id": memory_id,
                 "content_length": len(content),

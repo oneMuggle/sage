@@ -50,6 +50,7 @@ from backend.services.question_gate import (
 )
 from backend.tools import ToolRegistry, register_all_tools
 from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_ask_user_args
+from backend.tools.base import ToolResult
 
 #: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
 #: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
@@ -882,8 +883,15 @@ class SageAgent:
                                     if hasattr(result, "success") and hasattr(result, "content"):
                                         is_error = not result.success
                                         if result.success:
+                                            # ToolResult.output is the machine-readable
+                                            # value (e.g. memory ID); retain content
+                                            # fallback for legacy result objects.
+                                            if isinstance(result, ToolResult):
+                                                output_value = result.output
+                                            else:
+                                                output_value = result.content
                                             result_content = json.dumps(
-                                                result.content, ensure_ascii=False
+                                                output_value, ensure_ascii=False
                                             )
                                         else:
                                             result_content = result.error or "工具执行失败"
