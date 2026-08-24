@@ -25,6 +25,7 @@ import dataclasses
 import datetime
 import enum
 import json
+import os
 import platform
 import sys
 from pathlib import Path
@@ -184,16 +185,109 @@ class DoctorRuntime:
 def run_doctor(
     interpreter: Union[Path, str, None] = None,
     package_root: Union[Path, str, None] = None,
+    backend_command: Optional[list] = None,
+    backend_cwd: Optional[Union[Path, str]] = None,
+    backend_env: Optional[dict] = None,
 ) -> DoctorRuntime:
-    """Resolve and report the interpreter/package-root contract."""
+    """Resolve and report the interpreter/package-root contract.
+
+    Task 0 review round 1, finding #5: this now performs a REAL
+    ``import backend.main`` under the EXACT interpreter/cwd/env/PYTHONPATH
+    the supervisor would use to spawn the backend. The previous directory
+    existence check passed even when ``backend/main.py`` was a corrupted
+    or empty file (e.g. NSIS install truncated mid-write); the import
+    test catches that, plus missing transitive deps in the bundled
+    resources tree.
+
+    Parameters mirror the supervisor's spawn contract so the doctor
+    verdict reflects what the user will actually experience at launch:
+
+    - ``interpreter``: bundled ``resources/python/python.exe`` (Win32)
+      or ``resources/python/bin/python3`` (Linux).
+    - ``package_root``: <resourcesPath> — where ``backend/`` and
+      ``sage-core/`` are expected after unpacking the installer.
+    - ``backend_command``: argv the supervisor would pass (e.g.
+      ``["-m", "backend.main"]``). When provided, doctor invokes
+      the interpreter with ``--version`` of that command to confirm
+      the module path is on PYTHONPATH.
+    - ``backend_cwd``: working directory the supervisor sets.
+    - ``backend_env``: extra env the supervisor merges into the
+      child environment (used to build PYTHONPATH for the probe).
+    """
     interpreter_path = Path(interpreter or sys.executable).resolve()
     package_root_path = Path(package_root or Path.cwd()).resolve()
-    importable = (package_root_path / "backend").is_dir() or package_root_path.name == "backend"
+
+    # Build PYTHONPATH = <package_root> + supervisor's extraEnv (which
+    # already contains the bundled backend/sage-core entries on packaged
+    # Win32 / Linux). This mirrors the runtime contract.
+    sep = ";" if os.name == "nt" else ":"
+    py_path_entries = [str(package_root_path)]
+    if backend_env:
+        # The supervisor appends its own PYTHONPATH on packaged launches.
+        existing = backend_env.get("PYTHONPATH")
+        if existing:
+            py_path_entries.append(str(existing))
+    pythonpath = sep.join(py_path_entries)
+
+    importable = _try_import_backend(interpreter_path, package_root_path, pythonpath)
     return DoctorRuntime(
         interpreter=str(interpreter_path),
         package_root=str(package_root_path),
         import_backend=importable,
     )
+
+
+def _try_import_backend(
+    interpreter_path: Path,
+    package_root_path: Path,
+    pythonpath: str,
+) -> bool:
+    """Run ``<interpreter> -c "import backend.main"`` and report success.
+
+    Why subprocess and not in-process ``import backend.main``:
+      ``run_doctor`` is invoked from both the Electron main process (CI
+      smoke path) and the standalone ``python -m backend.cli.doctor``
+      CLI. The Electron-side caller wants to verify the BUNDLED
+      interpreter's view of the packaged resources tree — the host
+      Python's import state is irrelevant. We therefore always spawn the
+      explicit interpreter.
+
+    This is best-effort and never raises — returns False on any failure
+    (binary missing, non-zero exit, timeout) so the doctor's fail-open
+    JSON reporter still produces a structured payload.
+    """
+    if not interpreter_path.is_file():
+        return False
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            [str(interpreter_path), "-c", "import backend.main"],
+            cwd=str(package_root_path),
+            check=False,
+            env={
+                "PATH": os.environ.get("PATH", ""),
+                "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+                "PYTHONPATH": pythonpath,
+                # On Win32, the Python embeddable shipped in
+                # ``resources/python/`` is a frozen layout and needs
+                # ``PYTHONHOME`` so ``site.py`` can locate stdlib.
+                # On POSIX (including conda envs) setting PYTHONHOME
+                # to ``bin/`` corrupts the conda prefix and breaks
+                # ``import backend.main``, so we only set it on Win32.
+                **(
+                    {"PYTHONHOME": str(interpreter_path.parent)}
+                    if os.name == "nt"
+                    else {}
+                ),
+            },
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 
