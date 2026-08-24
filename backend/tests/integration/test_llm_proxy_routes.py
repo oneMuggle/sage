@@ -609,7 +609,8 @@ async def test_streaming_upstream_disconnect_after_first_chunk_closes_context(cl
     assert isinstance(exc, RuntimeError)
 
 
-
+@pytest.mark.asyncio()
+async def test_proxy_uses_certifi_ca_bundle_for_https(client):
     """Task 1 §4: 代理始终启用证书校验 — ``httpx.AsyncClient`` 走 ``SSL_CERT_FILE``
     / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE`` 任一环境变量, 由 ``main.py``
     ``configure_ssl_ca_bundle(certifi.where)`` 在 import-time 注入.
