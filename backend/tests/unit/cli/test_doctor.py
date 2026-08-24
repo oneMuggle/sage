@@ -244,9 +244,27 @@ class TestFormatJson:
 
 class TestRunDoctor:
     def test_reports_explicit_runtime_and_package_root(self, tmp_path):
-        runtime = run_doctor(tmp_path / "python.exe", tmp_path / "backend")
-        assert runtime.interpreter == str((tmp_path / "python.exe").resolve())
-        assert runtime.package_root == str((tmp_path / "backend").resolve())
+        # Finding #5 (Task 0 review round 1): doctor now performs a real
+        # `import backend.main` via the supplied interpreter. Passing a
+        # non-existent interpreter path therefore legitimately reports
+        # `import_backend=False`. Use sys.executable + the real repo
+        # root so the probe actually succeeds and we also exercise the
+        # exact backend_command/cwd/env contract that the supervisor uses.
+        import sys
+        from pathlib import Path
+
+        # `package_root` is the directory that CONTAINS the ``backend/``
+        # package directory on disk (the supervisor's `<resourcesPath>`);
+        # it is used both as cwd and PYTHONPATH for the probe so
+        # ``import backend.main`` resolves to ``package_root/backend/main.py``.
+        backend_dir = Path(__file__).resolve().parents[3]   # .../backend
+        package_root = backend_dir.parent                  # .../<repo>
+        runtime = run_doctor(
+            interpreter=sys.executable,
+            package_root=package_root,
+        )
+        assert runtime.interpreter == str(Path(sys.executable).resolve())
+        assert runtime.package_root == str(package_root)
         assert runtime.import_backend is True
 
 
