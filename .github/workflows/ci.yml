@@ -263,19 +263,37 @@ jobs:
 
       # Task 0 (win7 parity): validate that the packaged Linux artifact actually
       # contains resources/build-manifest.json. electron-builder writes the
-      # intermediate unpacked staging directory at release/linux-unpacked/;
-      # the .AppImage is built from that directory, so its presence is a
-      # proof that the AppImage/deb contain the manifest too. If extraResources
-      # is missing the entry, the build manifest would not be packaged and the
-      # Electron main process would fall back to `createBuildManifest()` defaults,
-      # which silently disables buildId-based health-ownership validation.
+      # intermediate unpacked staging directory at release/{version}/linux-unpacked/
+      # (see directories.output in electron-builder.yml line 8 — package.json's
+      # version field determines the leaf). The .AppImage and .deb are built
+      # from that directory, so its presence is a proof the artifacts contain
+      # the manifest too. If extraResources is missing the entry, the build
+      # manifest would not be packaged and the Electron main process would
+      # fall back to `createBuildManifest()` defaults, which silently disables
+      # buildId-based health-ownership validation. We locate the versioned
+      # dir via glob (Get-ChildItem -Recurse) rather than hardcoding the
+      # version so this works regardless of the next package.json bump.
       - name: Verify packaged build-manifest.json (Linux)
         if: matrix.os == 'ubuntu-latest'
+        shell: pwsh
         run: |
-          set -euo pipefail
-          test -f release/linux-unpacked/resources/build-manifest.json \
-            || (echo "::error::Missing resources/build-manifest.json in packaged Linux artifact (check electron-builder.yml extraResources)" && exit 1)
-          echo "Linux packaged build-manifest.json OK"
+          # electron-builder nests the unpacked dir under release/${version}/
+          # (see directories.output in electron-builder.yml line 8). Grep for
+          # the linux-unpacked dir under release/* rather than hardcoding the
+          # version, since CI uses package.json's version field directly.
+          $found = Get-ChildItem -Path release -Directory -Recurse -Filter linux-unpacked -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' } |
+            Select-Object -First 1
+          if (-not $found) {
+            Write-Error "::error::Could not find release/**/linux-unpacked directory. electron-builder output structure may have changed."
+            exit 1
+          }
+          $manifest = Join-Path $found.FullName 'resources/build-manifest.json'
+          if (-not (Test-Path $manifest)) {
+            Write-Error "::error::Missing $manifest in packaged Linux artifact (check electron-builder.yml extraResources)"
+            exit 1
+          }
+          Write-Host "Linux packaged build-manifest.json OK at $manifest"
 
       - name: Verify Linux artifacts (vitest)
         if: matrix.os == 'ubuntu-latest'
@@ -321,22 +339,30 @@ jobs:
 
       # Task 0 (win7 parity): validate that the packaged Windows NSIS artifact
       # contains resources/build-manifest.json. electron-builder writes the
-      # intermediate unpacked staging directory at release/win-unpacked/; the
-      # .exe is built from that directory, so its presence is a proof that the
-      # installer contains the manifest too. If extraResources is missing the
-      # entry, the build manifest would not be packaged and the Electron main
-      # process would fall back to `createBuildManifest()` defaults, which
-      # silently disables buildId-based health-ownership validation.
+      # intermediate unpacked staging directory at release/{version}/win-unpacked/
+      # (see directories.output in electron-builder.yml line 8 — package.json's
+      # version field determines the leaf). The .exe is built from that dir, so
+      # the manifest's presence is a proof the installer contains it too. If
+      # extraResources is missing the entry, the Electron main process would
+      # fall back to `createBuildManifest()` defaults, which silently disables
+      # buildId-based health-ownership validation.
       - name: Verify packaged build-manifest.json (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          $manifest = "release/win-unpacked/resources/build-manifest.json"
+          $found = Get-ChildItem -Path release -Directory -Recurse -Filter win-unpacked -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' } |
+            Select-Object -First 1
+          if (-not $found) {
+            Write-Error "::error::Could not find release/**/win-unpacked directory. electron-builder output structure may have changed."
+            exit 1
+          }
+          $manifest = Join-Path $found.FullName 'resources/build-manifest.json'
           if (-not (Test-Path $manifest)) {
             Write-Error "::error::Missing $manifest in packaged Windows artifact (check electron-builder.yml extraResources)"
             exit 1
           }
-          Write-Host "Windows packaged build-manifest.json OK"
+          Write-Host "Windows packaged build-manifest.json OK at $manifest"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
