@@ -456,3 +456,161 @@ def test_read_all_exceeding_output_bytes_returns_truncated_head(
     result = service.read(conn, "sess-1", binding.generation, "doc-a", section="all")
     assert result["success"] is True
     assert result["content"].get("truncated") is True
+
+
+# ──────────────────────────────────────────────────────────────────────
+# create: round-trip — file lands under workspace/office/<doc_type>/<id>/<name>
+#         AND the row is registered so list/read see it.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _word_create_args(**overrides) -> dict:
+    """Default args for ``service.create(..., doc_type='word', ...)``."""
+    args = {
+        "doc_type": "word",
+        "filename": "天气.docx",
+        "content": {"title": "天气", "paragraphs": [{"text": "今天天气很好"}]},
+    }
+    args.update(overrides)
+    return args
+
+
+def test_create_writes_file_and_registers_row(tmp_path: Path):
+    """``create`` must (1) write the file inside the workspace's managed
+    directory and (2) register an ``office_documents`` row so the next
+    ``list`` / ``read`` call sees it. Otherwise tool-generated docs are
+    invisible to the Office scope — the round-trip bug T7.5 plans to fix.
+    """
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-create")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-create", str(work), now_ms=1)
+
+    service = OfficeToolService()
+    result = service.create(
+        conn,
+        "sess-create",
+        binding.generation,
+        **_word_create_args(),
+    )
+
+    # Return shape: {document_id, doc_type, filename}; NEVER an absolute path.
+    assert result["success"] is True
+    assert result["content"]["doc_type"] == "word"
+    assert result["content"]["filename"] == "天气.docx"
+    document_id = result["content"]["document_id"]
+    assert isinstance(document_id, str) and len(document_id) >= 16
+
+    # File landed under <workspace>/office/word/<document_id>/<filename>.
+    on_disk = work / "office" / "word" / document_id / "天气.docx"
+    assert on_disk.is_file(), f"file missing: {on_disk}"
+
+    # The list path sees the registered row.
+    listed = service.list(conn, "sess-create", binding.generation)
+    assert len(listed) == 1
+    assert listed[0]["id"] == document_id
+
+    # And the read path can parse the file end-to-end.
+    read = service.read(conn, "sess-create", binding.generation, document_id)
+    assert read["success"] is True
+
+
+def test_create_returns_only_document_id_doc_type_filename(tmp_path: Path):
+    """Result payload must omit ``path`` / ``workspace_path`` / ``bytes``.
+
+    Tool-generated Office docs are now first-class Office scope items, not
+    raw file paths. Echoing the absolute path would defeat the "no path
+    leak to the LLM" invariant already enforced by ``list`` / ``read``.
+    """
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-create")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-create", str(work), now_ms=1)
+
+    service = OfficeToolService()
+    result = service.create(
+        conn,
+        "sess-create",
+        binding.generation,
+        **_word_create_args(),
+    )
+    payload = result["content"]
+    assert set(payload.keys()) == {"document_id", "doc_type", "filename"}
+    full_text = json.dumps(result, ensure_ascii=False)
+    assert str(work.resolve()) not in full_text
+
+
+def test_create_fails_closed_on_generation_mismatch(tmp_path: Path):
+    """Stale ``binding_generation`` → no file, no row.
+
+    Symmetric with the ``list`` / ``read`` generation-mismatch contract:
+    a revoked / rebound binding must not silently allow the create to
+    land in some orphan directory or leak the absence of a binding via
+    a confusing error.
+    """
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-create")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-create", str(work), now_ms=1)
+
+    service = OfficeToolService()
+    result = service.create(
+        conn,
+        "sess-create",
+        binding.generation + 99,
+        **_word_create_args(),
+    )
+
+    assert result["success"] is False
+    # No files should have landed under any office/ directory.
+    office_dirs = list(work.rglob("office"))
+    assert office_dirs == [], f"unexpected files written: {office_dirs}"
+    # No row was registered either.
+    assert service.list(conn, "sess-create", binding.generation) == []
+
+
+def test_create_rolls_back_file_on_registration_failure(tmp_path: Path, monkeypatch):
+    """If ``save_document`` raises after the file was written, the file
+    must be removed so the on-disk state matches the SQLite state.
+
+    Otherwise the next list call wouldn't surface the doc but the file
+    would persist as an orphan — silent failure mode T7.5 explicitly
+    calls out as the round-trip bug.
+    """
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-create")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-create", str(work), now_ms=1)
+
+    # Force save_document to blow up after the file write.
+    from backend.office import tool_service as svc_mod
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("simulated DB outage")
+
+    monkeypatch.setattr(svc_mod, "save_document", _boom)
+
+    service = OfficeToolService()
+    result = service.create(
+        conn,
+        "sess-create",
+        binding.generation,
+        **_word_create_args(),
+    )
+
+    assert result["success"] is False
+    # The orphan file must have been cleaned up.
+    office_files = list(work.rglob("*.docx"))
+    assert office_files == [], f"orphan files remain: {office_files}"
