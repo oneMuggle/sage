@@ -31,7 +31,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sage_core import LLMError, Message, Role
 from sage_core.exceptions import SessionNotFoundError
 
@@ -96,6 +96,10 @@ class SettingsRequest(BaseModel):
     modelSelections: Optional[dict] = None  # noqa: N815
     maxContext: Optional[int] = None  # noqa: N815
     temperature: Optional[float] = None
+    # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai (后端 canonicalizer
+    # 兜底, Pydantic 层校验非法值 → 422). 缺省时 None → handler 不写入;
+    # 由前端 DEFAULT_SETTINGS 兜底补 Asia/Shanghai.
+    timezone: Optional[str] = None
     wiki: Optional[dict] = None
     version: Optional[str] = None
 
@@ -103,6 +107,16 @@ class SettingsRequest(BaseModel):
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None  # noqa: S105 — 字段名占位；不存储
     model: Optional[str] = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, value: Optional[str]) -> Optional[str]:
+        """IANA timezone 校验 — 非法值抛 ValueError → Pydantic 422."""
+        # 避免循环 import — handler 也需要此函数, 但 ``hex_routes`` 是顶层路由
+        # 模块, 不会从 settings_canonicalizer 反向 import 引发循环。
+        from backend.data.settings_canonicalizer import validate_timezone
+
+        return validate_timezone(value)
 
 
 class SettingsResponse(BaseModel):
@@ -275,6 +289,8 @@ async def update_settings(
     # payload 侧的未知字段仍原样保留并触发 400 —— 静默净化历史残留，严格拒绝新提交。
     camel_existing = strip_unknown_fields(to_camel(existing))
     camel_merged = {**camel_existing, **to_camel(canonical_payload)}
+    # Task 1 (2026-08-23): 旧 endpoints 写入前补 protocol 默认值, 与 GET 路径对齐.
+    _migrate_default_protocol(camel_merged)
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
@@ -321,7 +337,23 @@ async def get_settings() -> Optional[dict]:
     if not isinstance(raw, dict):
         return None
     detect_legacy_snake_pollution(raw)
-    return to_camel(raw)
+    translated = to_camel(raw)
+    # Task 1 (2026-08-23): 历史 endpoints[*] 无 protocol 字段 → 默认 ``openai-compatible``.
+    _migrate_default_protocol(translated)
+    return translated
+
+
+def _migrate_default_protocol(settings: dict) -> None:
+    """历史 endpoints 补 protocol 默认值 ``openai-compatible``.
+
+    与 legacy_routes 同名函数保持一致 — 共享语义, 不抽公共模块避免循环依赖.
+    """
+    endpoints = settings.get("endpoints")
+    if not isinstance(endpoints, list):
+        return
+    for ep in endpoints:
+        if isinstance(ep, dict) and "protocol" not in ep:
+            ep["protocol"] = "openai-compatible"
 
 
 # ==================== 通用 KV /preferences/{key} 端点（白名单） ====================

@@ -25,7 +25,7 @@ from typing import Any, Dict, Optional, Set, Union
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, StrictBool
+from pydantic import BaseModel, Field, StrictBool, field_validator
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
 from backend.api.orch_routes import router as orch_routes_router
@@ -1324,6 +1324,18 @@ class LegacySettingsRequest(BaseModel):
 
     model: Optional[str] = None
 
+    # Task 1 (2026-08-23): IANA timezone (e.g. ``Asia/Shanghai``), 默认由前端
+    # DEFAULT_SETTINGS 兜底, 此字段可选. 非法值经 Pydantic validator 抛
+    # ValueError → FastAPI 422, 与 hex 路径保持一致.
+    timezone: Optional[str] = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, value: Optional[str]) -> Optional[str]:
+        from backend.data.settings_canonicalizer import validate_timezone
+
+        return validate_timezone(value)
+
 
 class LegacySettingsResponse(BaseModel):
     """PUT /settings 响应体。"""
@@ -1368,7 +1380,26 @@ def legacy_get_settings() -> Optional[dict]:
         logger.warning("[LEGACY] /settings: top-level non-dict JSON, returning null")
         return None
     detect_legacy_snake_pollution(raw)
-    return to_camel(raw)
+    translated = to_camel(raw)
+    # Task 1 (2026-08-23): 历史 endpoints[*] 无 protocol 字段 (旧 schema 没这层)
+    # → 迁移默认值 ``openai-compatible`` (OpenAI 兼容端点是最常见的 LM Studio /
+    # Ollama / OpenAI 替代品). 这样旧客户端无需再写一次 PUT 就能看到正确 protocol.
+    _migrate_default_protocol(translated)
+    return translated
+
+
+def _migrate_default_protocol(settings: dict) -> None:
+    """把 DB 中无 ``protocol`` 字段的 endpoint 默认填 ``openai-compatible``.
+
+    仅在 GET 路径走 — 不写回 DB (避免无谓 IO); 用户下次 PUT 时如果设置里仍无
+    protocol 字段, 由 handler 在写库前再补一遍默认值.
+    """
+    endpoints = settings.get("endpoints")
+    if not isinstance(endpoints, list):
+        return
+    for ep in endpoints:
+        if isinstance(ep, dict) and "protocol" not in ep:
+            ep["protocol"] = "openai-compatible"
 
 
 @router.put("/settings", response_model=LegacySettingsResponse)
@@ -1421,6 +1452,8 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     # payload 侧的未知字段仍原样保留并触发 400（与 hex PUT 对齐）。
     camel_existing = strip_unknown_fields(to_camel(existing))
     camel_merged = {**camel_existing, **to_camel(payload)}
+    # Task 1 (2026-08-23): 写入前给旧 endpoints (无 protocol) 补默认值, 与 GET 路径对齐.
+    _migrate_default_protocol(camel_merged)
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
