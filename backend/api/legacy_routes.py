@@ -2589,16 +2589,80 @@ def delete_memory(data: MemoryDeleteRequest):
 @router.get("/memory/list")
 @with_db_lock
 def list_memories(page: int = 1, page_size: int = 20, type: str | None = None):
-    """获取记忆列表"""
+    """获取记忆列表（带 layer / source / 分页 envelope）。
+
+    Task 2 起:
+    - 分页参数 clamp 到合法范围 (``page >= 1``, ``page_size`` in ``[1, 100]``)。
+    - 返回 envelope ``{items, total, page, page_size, layer, source_breakdown}``,
+      替代旧实现返回裸 list 的契约。
+    - ``type`` 可为 ``None`` / ``''`` / ``'all'`` → 合并 episodic + semantic
+      (其他 type 仍走对应层)。
+    - 每条记录带 ``source`` (``'episodic'`` / ``'semantic'``) 与 ``layer``
+      字段,与 ``MemoryManager.search_memories`` 对齐。
+    """
     try:
+        # 1. 输入 clamp
+        safe_page = max(1, int(page) if page is not None else 1)
+        safe_page_size = max(1, min(100, int(page_size) if page_size is not None else 20))
+        normalized_type = type if type and type not in ("", "all") else None
+
         mm = get_memory_manager()
-        if type == "episodic":
-            results = mm.episodic.get_recent(limit=page_size)
-        elif type == "semantic":
-            results = mm.semantic.get_recent(limit=page_size)
+        # 2. 取数 (按 type 路由)
+        if normalized_type == "episodic":
+            episodic_items = mm.episodic.get_recent(limit=safe_page_size * safe_page)
+            items = _enrich_memory_records(
+                episodic_items, layer="episodic", source="episodic"
+            )
+            total = mm.episodic.count()
+            source_breakdown = {"episodic": len(items), "semantic": 0}
+        elif normalized_type == "semantic":
+            semantic_items = mm.semantic.get_recent(limit=safe_page_size * safe_page)
+            items = _enrich_memory_records(
+                semantic_items, layer="semantic", source="semantic"
+            )
+            total = mm.semantic.count()
+            source_breakdown = {"episodic": 0, "semantic": len(items)}
         else:
-            results = mm.episodic.get_recent(limit=page_size)
-        return results
+            # 'all' / '' / None → 合并两层,按 created_at DESC 排序
+            episodic_items = mm.episodic.get_recent(limit=safe_page_size * safe_page)
+            semantic_items = mm.semantic.get_recent(limit=safe_page_size * safe_page)
+            merged = []
+            merged.extend(
+                _enrich_memory_records(episodic_items, layer="episodic", source="episodic")
+            )
+            merged.extend(
+                _enrich_memory_records(semantic_items, layer="semantic", source="semantic")
+            )
+            # 按 created_at 倒序
+            merged.sort(
+                key=lambda x: x.get("created_at_ms", x.get("created_at", 0)),
+                reverse=True,
+            )
+            items = merged
+            try:
+                total = mm.episodic.count() + mm.semantic.count()
+            except Exception:
+                total = len(items)
+            source_breakdown = {
+                "episodic": len(episodic_items),
+                "semantic": len(semantic_items),
+            }
+
+        # 3. 分页 slice
+        offset = (safe_page - 1) * safe_page_size
+        page_items = items[offset : offset + safe_page_size]
+
+        # 4. Envelope
+        return {
+            "items": page_items,
+            "total": total,
+            "page": safe_page,
+            "page_size": safe_page_size,
+            "layer": normalized_type or "all",
+            "source_breakdown": source_breakdown,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2719,6 +2783,39 @@ async def memory_events(request: Request):
             hooks.off("memory_written", on_memory_written)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def _enrich_memory_records(
+    records: List[Dict[str, Any]], layer: str, source: str
+) -> List[Dict[str, Any]]:
+    """给每条记忆记录补 ``source`` / ``layer`` / ``created_at_ms``。
+
+    字段约定:
+    - ``id`` / ``content`` / ``memory_type`` / ``source`` / ``session_id``
+      / ``importance`` / ``created_at_ms`` / ``summary``
+    - ``created_at`` 字段若存在,映射成 ``created_at_ms``(毫秒)。
+
+    ``source`` 强制覆盖(不用 setdefault):DB 里 ``source`` 列存的是
+    'auto'/'manual'/'review' 之类的"写入来源",而这里我们要的是"层来源"
+    (episodic/semantic)。两者语义不同,务必区分,UI 按这个字段决定走
+    哪个标签样式。
+    """
+    enriched: List[Dict[str, Any]] = []
+    for raw in records or []:
+        item = dict(raw)
+        item["source"] = source  # 强制覆盖,与 DB 列 source 解耦
+        item["layer"] = layer
+        # created_at (秒) → created_at_ms (毫秒)
+        if "created_at_ms" not in item and "created_at" in item:
+            ts = item["created_at"]
+            try:
+                # 数据库列存的就是毫秒（int(time.time() * 1000)），原样复制
+                item["created_at_ms"] = int(ts)
+            except (TypeError, ValueError):
+                pass
+        enriched.append(item)
+    return enriched
+
 
 # Wave 2 P1-4 (2026-08-14): 编排 run 读取/resume/计划更新端点挂载。
 # orch_routes 用独立 APIRouter(prefix="/orch")，经 include_router 并入

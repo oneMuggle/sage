@@ -368,17 +368,46 @@ export interface ChatConfig {
 
 // ==================== Memory 类型定义 ====================
 
+/**
+ * 单条记忆记录。Task 2 起 ``layer`` / ``source`` 由后端 ``/memory/list`` 直接
+ * 注入:
+ * - ``layer`` 表示该条记录归属的层 (``'episodic'`` / ``'semantic'`` / ``'working'``)
+ * - ``source`` 表示层来源(同 ``layer``);与 DB 列 ``source``('auto'/'manual')语义不同
+ */
 export interface Memory {
   id: string;
   content: string;
   summary?: string;
   memory_type?: 'episodic' | 'semantic' | 'working';
+  /** 该条记录归属的记忆层。Task 2 新增。 */
+  layer?: 'episodic' | 'semantic' | 'working';
+  /** 该条记录的层来源(episodic/semantic)。Task 2 新增。 */
+  source?: 'episodic' | 'semantic';
   session_id?: string;
   importance: number;
   tags: string[];
   created_at: number;
+  /** 毫秒时间戳副本,UI 可优先用此避免二次乘法。Task 2 新增。 */
+  created_at_ms?: number;
   accessed_at?: number;
   access_count: number;
+}
+
+/**
+ * ``/memory/list`` 返回的 envelope,Task 2 起替换裸 list 契约。
+ * 旧 caller 拿 ``resp.json()`` 直接当数组用 — 现在必须读 ``.items``。
+ */
+export interface MemoryListResponse {
+  items: Memory[];
+  total: number;
+  page: number;
+  page_size: number;
+  /** 请求归一化后的查询层;``'all'`` 表示合并 episodic + semantic。 */
+  layer: 'episodic' | 'semantic' | 'all';
+  source_breakdown: {
+    episodic: number;
+    semantic: number;
+  };
 }
 
 // ==================== Knowledge 类型定义 ====================

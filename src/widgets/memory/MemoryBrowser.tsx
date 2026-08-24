@@ -47,8 +47,10 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
     setError(null);
     try {
       const type = filterType === 'all' ? undefined : filterType;
-      const results = await memoryApi.getMemories(type, 1, MEMORY_PAGE_SIZE);
-      setMemories(results);
+      // Task 2: ``getMemories`` 现在返回 envelope ``MemoryListResponse``
+      // (items / total / page / page_size / layer / source_breakdown)。
+      const response = await memoryApi.getMemories(type, 1, MEMORY_PAGE_SIZE);
+      setMemories(response.items);
     } catch (err) {
       const message = err instanceof Error ? err.message : '加载失败';
       setError(message);
@@ -60,7 +62,7 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
 
   const loadStats = useCallback(async () => {
     try {
-      const [episodic, semantic] = await Promise.all([
+      const [episodicResp, semanticResp] = await Promise.all([
         memoryApi.getMemories('episodic', 1, 1),
         memoryApi.getMemories('semantic', 1, 1),
       ]);
@@ -71,8 +73,9 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
         setStats({
           total: currentMemories.length,
           thisWeek: currentMemories.filter((m) => Date.now() - m.created_at < ONE_WEEK_MS).length,
-          episodic: episodic.length,
-          semantic: semantic.length,
+          // envelope 提供 ``source_breakdown``,更精确;留 fallback 兼容旧 flat
+          episodic: episodicResp.total ?? episodicResp.items.length,
+          semantic: semanticResp.total ?? semanticResp.items.length,
         });
         return currentMemories;
       });

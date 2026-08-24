@@ -1,3 +1,4 @@
+# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
 """
 工具系统基类
 定义工具的基础接口和数据结构
@@ -30,6 +31,10 @@ class ToolResult:
     success: bool  # 是否成功
     content: Any = None  # 返回内容
     error: Optional[str] = None  # 错误信息
+    # ``output``: Task 2 起新增的字段,承载"业务层主返回"(如记忆 ID、
+    # 文件路径等),与 ``content``(结构化 dict)解耦。``InprocToolAdapter``
+    # 转发到 ``domain.tool.ToolResult.output``。新字段可选,旧工具不受影响。
+    output: Any = None
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -38,6 +43,8 @@ class ToolResult:
             result["content"] = self.content
         if self.error is not None:
             result["error"] = self.error
+        if self.output is not None:
+            result["output"] = self.output
         return result
 
 
