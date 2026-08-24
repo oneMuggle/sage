@@ -2,8 +2,12 @@ import { Plus, Download } from 'lucide-react';
 import { useState } from 'react';
 
 import { memoryApi } from '../shared/api';
+import type { Memory } from '../shared/api/types';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { MemoryBrowser, NewMemoryModal } from '../widgets/memory';
+
+const MEMORY_EXPORT_PAGE_SIZE = 100;
+const MEMORY_EXPORT_MAX_ITEMS = 1000;
 
 export function Memory() {
   const [showNewMemory, setShowNewMemory] = useState(false);
@@ -17,8 +21,41 @@ export function Memory() {
     setExporting(true);
     setExportError(null);
     try {
-      const memories = await memoryApi.getMemories(undefined, 1, 1000);
-      const blob = new Blob([JSON.stringify(memories, null, 2)], { type: 'application/json' });
+      // Fetch every page because the API caps each request at 100 items.
+      const exportedItems: Memory[] = [];
+      let page = 1;
+      let total = 0;
+      do {
+        const response = await memoryApi.getMemories(
+          undefined,
+          page,
+          MEMORY_EXPORT_PAGE_SIZE,
+        );
+        // Early check: backend clamps page>10 → 10, declaring total from the
+        // first response lets us bail out before issuing 10 doomed round-trips.
+        if (response.total > MEMORY_EXPORT_MAX_ITEMS) {
+          throw new Error('记忆数量超过当前导出上限，请缩小范围后重试');
+        }
+        if (response.page !== page) {
+          throw new Error('记忆数量超过当前导出上限，请缩小范围后重试');
+        }
+        exportedItems.push(...response.items);
+        if (
+          response.items.length > MEMORY_EXPORT_PAGE_SIZE ||
+          exportedItems.length > MEMORY_EXPORT_MAX_ITEMS
+        ) {
+          throw new Error('记忆数量超过当前导出上限，请缩小范围后重试');
+        }
+        total = response.total;
+        page += 1;
+        if (response.items.length === 0 && exportedItems.length < total) {
+          throw new Error('记忆列表分页不完整，请重试');
+        }
+      } while (exportedItems.length < total);
+
+      const blob = new Blob([JSON.stringify(exportedItems, null, 2)], {
+        type: 'application/json',
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

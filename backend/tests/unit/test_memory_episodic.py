@@ -66,6 +66,19 @@ def test_search_filters_by_type(episodic: EpisodicMemory) -> None:
     assert len(events) >= 1
 
 
+def test_search_filters_by_session_before_limit(episodic: EpisodicMemory) -> None:
+    ensure_session(episodic.db, "s1")
+    ensure_session(episodic.db, "s2")
+    episodic.save("same query other", importance=9, session_id="s2")
+    episodic.save("same query current", importance=5, session_id="s1")
+
+    results = episodic.search("same query", limit=1, session_id="s1")
+
+    assert len(results) == 1
+    assert results[0]["session_id"] == "s1"
+    assert "current" in results[0]["content"]
+
+
 def test_get_recent_global_and_by_session(episodic: EpisodicMemory) -> None:
     # §1.3a: FK enforcement — create both parent sessions first.
     ensure_session(episodic.db, "s1")

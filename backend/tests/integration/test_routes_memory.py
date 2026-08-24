@@ -103,15 +103,20 @@ async def test_memory_delete_not_found_returns_404(client):
 
 @pytest.mark.asyncio()
 async def test_memory_list_empty(client):
-    """空库上 /memory/list 返回空数组。"""
+    """空库上 /memory/list 返回 envelope(无 items)。"""
     resp = await client.get(f"{PREFIX}/memory/list")
     assert resp.status_code == 200
-    assert resp.json() == []
+    body = resp.json()
+    assert body["items"] == []
+    assert body["total"] == 0
+    assert body["page"] == 1
+    assert body["page_size"] == 20
+    assert body["layer"] == "all"
 
 
 @pytest.mark.asyncio()
 async def test_memory_list_returns_saved(client):
-    """保存后 /memory/list 能查到。"""
+    """保存后 /memory/list 能查到, envelope 含 layer/source_breakdown。"""
     await client.post(
         f"{PREFIX}/memory/save",
         json={"content": "列表查询测试", "memory_type": "episodic"},
@@ -119,14 +124,19 @@ async def test_memory_list_returns_saved(client):
 
     resp = await client.get(f"{PREFIX}/memory/list", params={"type": "episodic"})
     assert resp.status_code == 200
-    results = resp.json()
-    assert len(results) >= 1
-    assert any(r.get("content") == "列表查询测试" for r in results)
+    body = resp.json()
+    assert body["layer"] == "episodic"
+    items = body["items"]
+    assert len(items) >= 1
+    assert any(r.get("content") == "列表查询测试" for r in items)
+    # 每条记录都带 source/layer 字段
+    assert all(r.get("source") == "episodic" for r in items)
+    assert all(r.get("layer") == "episodic" for r in items)
 
 
 @pytest.mark.asyncio()
 async def test_memory_list_default_type_is_episodic(client):
-    """不指定 type 时默认查询 episodic。"""
+    """不指定 type 时默认查询所有层(layer=='all')。"""
     await client.post(
         f"{PREFIX}/memory/save",
         json={"content": "默认类型列表", "memory_type": "episodic"},
@@ -134,8 +144,10 @@ async def test_memory_list_default_type_is_episodic(client):
 
     resp = await client.get(f"{PREFIX}/memory/list")
     assert resp.status_code == 200
-    results = resp.json()
-    assert any(r.get("content") == "默认类型列表" for r in results)
+    body = resp.json()
+    assert body["layer"] == "all"
+    items = body["items"]
+    assert any(r.get("content") == "默认类型列表" for r in items)
 
 
 @pytest.mark.asyncio()
@@ -148,5 +160,57 @@ async def test_memory_list_type_semantic(client):
 
     resp = await client.get(f"{PREFIX}/memory/list", params={"type": "semantic"})
     assert resp.status_code == 200
-    results = resp.json()
-    assert any(r.get("content") == "语义记忆测试" for r in results)
+    body = resp.json()
+    assert body["layer"] == "semantic"
+    items = body["items"]
+    assert any(r.get("content") == "语义记忆测试" for r in items)
+    assert all(r.get("source") == "semantic" for r in items)
+
+
+@pytest.mark.asyncio()
+async def test_memory_list_pagination_envelope(client):
+    """``page`` / ``page_size`` clamp + envelope 字段。"""
+    await client.post(
+        f"{PREFIX}/memory/save",
+        json={"content": "P 测试1", "memory_type": "episodic"},
+    )
+    await client.post(
+        f"{PREFIX}/memory/save",
+        json={"content": "P 测试2", "memory_type": "episodic"},
+    )
+
+    resp = await client.get(
+        f"{PREFIX}/memory/list",
+        params={"type": "episodic", "page": 1, "page_size": 1},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["page"] == 1
+    assert body["page_size"] == 1
+    assert len(body["items"]) == 1
+    assert body["total"] >= 2
+    # source_breakdown 在 envelope 里
+    assert "source_breakdown" in body
+
+
+@pytest.mark.asyncio()
+async def test_memory_list_clamps_invalid_page_size(client):
+    """``page_size > 100`` 必须 clamp 到 100。"""
+    resp = await client.get(
+        f"{PREFIX}/memory/list",
+        params={"type": "episodic", "page_size": 9999},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["page_size"] == 100
+
+
+@pytest.mark.asyncio()
+async def test_memory_list_clamps_invalid_page(client):
+    """``page > 10`` 必须 clamp 到 10,避免无界取数。"""
+    resp = await client.get(
+        f"{PREFIX}/memory/list",
+        params={"type": "episodic", "page": 9999},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["page"] == 10

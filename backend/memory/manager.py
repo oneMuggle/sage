@@ -143,7 +143,12 @@ class MemoryManager:
             )
 
         elif resolved == "semantic":
-            return self.semantic.save(content=content, summary=None, tags=tags)
+            return self.semantic.save(
+                content=content,
+                summary=None,
+                tags=tags,
+                session_id=session_id,
+            )
 
         else:
             logger.warning(f"未知的记忆类型: {resolved}")
@@ -202,11 +207,19 @@ class MemoryManager:
 
         # 情景记忆 - SQLite LIKE 搜索
         if "episodic" in memory_types:
-            results["episodic"] = self.episodic.search(query=query, limit=limit)
+            results["episodic"] = self.episodic.search(
+                query=query,
+                limit=limit,
+                session_id=session_id,
+            )
 
         # 语义记忆 - FTS5 全文搜索
         if "semantic" in memory_types:
-            results["semantic"] = self.semantic.search(query=query, limit=limit)
+            results["semantic"] = self.semantic.search(
+                query=query,
+                limit=limit,
+                session_id=session_id,
+            )
 
         return results
 
@@ -247,7 +260,10 @@ class MemoryManager:
 
         # 获取最近的 episodic 记忆
         try:
-            recent_episodic = self.episodic.get_recent(limit=3)
+            recent_episodic = self.episodic.get_recent(
+                limit=3,
+                session_id=session_id,
+            )
             if recent_episodic:
                 parts.append("\n【相关经历】")
                 for mem in recent_episodic:
@@ -258,7 +274,7 @@ class MemoryManager:
 
         # 获取最近的 semantic 记忆
         try:
-            recent_semantic = self.semantic.get_recent(limit=3)
+            recent_semantic = self.semantic.get_recent(limit=3, session_id=session_id)
             if recent_semantic:
                 parts.append("\n【相关知识】")
                 for mem in recent_semantic:
@@ -339,9 +355,13 @@ class MemoryManager:
             记忆列表
         """
         if memory_type == "episodic":
-            return self.episodic.search(query, limit=limit)
+            return self.episodic.search(query, limit=limit, session_id=session_id)
         elif memory_type == "semantic":
-            return self.semantic.search(query, limit=limit)
+            return self.semantic.search(
+                query,
+                limit=limit,
+                session_id=session_id,
+            )
 
         results: List[Dict[str, Any]] = []
 
@@ -361,8 +381,10 @@ class MemoryManager:
             return results[:limit]
 
         # memory_type 为 None：搜索所有持久层并与工作记忆合并
-        results.extend(self.episodic.search(query, limit=limit))
-        results.extend(self.semantic.search(query, limit=limit))
+        results.extend(self.episodic.search(query, limit=limit, session_id=session_id))
+        results.extend(
+            self.semantic.search(query, limit=limit, session_id=session_id)
+        )
         return results[:limit]
 
     def delete_memory(self, memory_id: str, memory_type: str) -> bool:
