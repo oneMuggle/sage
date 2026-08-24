@@ -12,9 +12,14 @@
  * Mirror of the manifest block in scripts/bundle-python.ps1 (Win7 LTS)
  * and scripts/bundle-python-main.ps1. Field set is the BuildManifest
  * contract from electron/buildManifest.ts.
+ *
+ * Written as ESM (.mjs) because package.json has `"type": "module"` and
+ * plain .js under scripts/ would also be ESM, but the @typescript-eslint
+ * config rejects `require()` calls. Using `import` keeps both Node and
+ * ESLint happy.
  */
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 const sha = process.env.GITHUB_SHA || 'unknown';
 const sha7 = sha.slice(0, 7);
