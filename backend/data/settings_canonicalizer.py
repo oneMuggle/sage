@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
 from typing import Any, Dict, FrozenSet, List
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,8 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "modelSelections",
         "maxContext",
         "temperature",
+        # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai, 后端 zoneinfo 校验
+        "timezone",
         "wiki",
         "version",
         # Wave 3 P2-9 (2026-08-14): 编排执行参数段。
@@ -64,6 +67,15 @@ LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
         "name",
         "baseUrl",
         "apiKey",
+        # Task 1 (2026-08-23): 新增端点协议/模型身份字段。
+        # - protocol: 'openai-compatible' | 'anthropic' | 'gemini' | 'ollama',
+        #   历史无 protocol 的端点经 strip_unknown_fields+迁移 fallback 默认为 'openai-compatible'.
+        # - modelId: 上游模型 ID (LM Studio 用户常填的 ``qwen2.5-7b-instruct``).
+        # - localModelPath: 本地模型文件路径, 与 modelId 互斥但并存以支持 hybrid (e.g.
+        #   Ollama 边远端边本地).
+        "protocol",
+        "modelId",
+        "localModelPath",
         "discoveredModels",
         "lastDiscoveredAt",
     }
@@ -294,3 +306,167 @@ def detect_legacy_snake_pollution(
             polluted,
         )
     return polluted
+
+
+# === Task 1 (2026-08-23): IANA timezone 校验 ===
+#
+# AppSettings.timezone 用 ``zoneinfo`` 验证 (Python 3.9+ 内置, Win7 走 backports.zoneinfo).
+# ``None`` / 空字符串视为 "未设置", 由调用方决定是否补默认值; 非法字符串抛 ValueError.
+#
+# 注意: canonicalizer 自身只锁白名单 key, 不锁 value 语义. timezone 校验由调用方
+# (hex_routes.SettingsRequest / legacy_routes.LegacySettingsRequest) 在 Pydantic
+# 层 + 本 helper 在 strip_unknown_fields 之后做, 保证 422 响应一致性.
+
+DEFAULT_TIMEZONE = "Asia/Shanghai"
+
+
+def validate_timezone(value: Any) -> Any:
+    """IANA timezone 校验.
+
+    Returns:
+        原样返回 ``value`` (便于 Pydantic ``validator`` 链式调用).
+
+    Raises:
+        ValueError: 非 None / 非 str / ``zoneinfo`` 不识别的字符串。
+    """
+    if value is None or value == "":
+        return value
+    if not isinstance(value, str):
+        raise ValueError(f"timezone must be a string, got {type(value).__name__}")
+    try:
+        # 延迟导入 zoneinfo — Python 3.9+ 标准库; Win7 走 backports.zoneinfo.
+        from zoneinfo import ZoneInfo
+    except ImportError:  # pragma: no cover — py3.9+ always has zoneinfo
+        try:
+            from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+        except ImportError as exc:  # pragma: no cover — backports is dep
+            raise ValueError(
+                "timezone validation requires zoneinfo or backports.zoneinfo"
+            ) from exc
+
+    try:
+        ZoneInfo(value)
+    except Exception as exc:  # ZoneInfoNotFoundError + 其它解析异常
+        raise ValueError(f"invalid IANA timezone {value!r}: {exc}") from exc
+    return value
+
+
+# === Task 1 round 1 (2026-08-24): 协议枚举 + 本地路径平台校验 ===
+#
+# 这些校验原本散在 Pydantic ``field_validator`` 装饰器里 (hex_routes / legacy_routes
+# 各自重复). Pydantic 2 的 ``field_validator`` 在 Pydantic 1 / Win7 不可用, 直接走
+# 装饰器会 syntax/runtime 双重炸. 现在把它们沉到 canonicalizer 层, 路由 handler
+# 在 ``validate_settings_shape`` 之前显式调用, Pydantic 1/2 都跑同一套函数.
+#
+# 设计原则:
+# - validate_* 函数都接受 ``Any`` 输入 (None / 空串 / dict 都能容忍), 不抛 TypeError.
+# - 非法值抛 ``ValueError`` — FastAPI 会通过 handler 翻译成 422.
+# - 平台相关分支接受 ``platform`` 参数 (默认 ``sys.platform``), 便于测试注入.
+
+# Endpoint.protocol 合法值 (与前端 src/entities/setting/types.ts:EndpointProtocol 同步)
+LEGAL_PROTOCOLS: FrozenSet[str] = frozenset(
+    {"openai-compatible", "anthropic", "gemini", "ollama"}
+)
+DEFAULT_PROTOCOL = "openai-compatible"
+
+
+def validate_protocol(value: Any) -> Any:
+    """Endpoint.protocol 枚举校验.
+
+    - ``None`` / 空字符串视为"未设置", 由 ``_migrate_default_protocol`` 兜底补默认值.
+    - 非字符串 / 不在白名单 → ValueError (handler 翻译 422).
+    """
+    if value is None or value == "":
+        return value
+    if not isinstance(value, str):
+        raise ValueError(
+            f"protocol must be a string, got {type(value).__name__}: {value!r}"
+        )
+    if value not in LEGAL_PROTOCOLS:
+        raise ValueError(
+            f"invalid protocol {value!r}; allowed: {sorted(LEGAL_PROTOCOLS)}"
+        )
+    return value
+
+
+def validate_local_model_path(value: Any, platform: str | None = None) -> Any:
+    """Endpoint.localModelPath 平台路径分隔符校验.
+
+    - ``None`` / 空字符串视为"未设置", 直接返回.
+    - Win32 (平台名以 ``win`` 开头) 拒绝 POSIX 分隔符 ``/`` (除 drive letter 的 ``C:`` 后).
+    - POSIX (linux / darwin) 拒绝 Windows 分隔符 ``\\``.
+    - 其它平台 (如 cygwin) 跳过校验, 仅作字符串处理.
+
+    Args:
+        value: 待校验的路径字符串.
+        platform: 显式平台覆盖, 默认 ``sys.platform``. 用于测试跨平台行为.
+    """
+    if value is None or value == "":
+        return value
+    if not isinstance(value, str):
+        raise ValueError(
+            f"localModelPath must be a string, got {type(value).__name__}: {value!r}"
+        )
+
+    effective_platform = platform if platform is not None else sys.platform
+
+    if effective_platform.startswith("win"):
+        # Win32 路径用 ``\\`` 作分隔符; 拒绝裸 POSIX ``/`` (drive letter 形如 ``C:\\`` 或
+        #  UNC 路径 ``\\\\server\\share``, 不含裸 ``/``).
+        if "/" in value:
+            raise ValueError(
+                f"localModelPath must use Windows path separators on win32, "
+                f"got POSIX slash in {value!r}"
+            )
+    elif effective_platform.startswith(("linux", "darwin")) and "\\" in value:
+        # POSIX 用 ``/``; 拒绝反斜杠 (历史数据从 Windows 迁过来时常见).
+            raise ValueError(
+                f"localModelPath must use POSIX path separators on {effective_platform}, "
+                f"got backslash in {value!r}"
+            )
+    # 其它平台 (cygwin / freebsd 等) 跳过, 不强校验.
+
+    return value
+
+
+def validate_endpoint_payload(ep: Any, platform: str | None = None) -> Any:
+    """单条 endpoint dict 的全部字段语义校验 (protocol / localModelPath).
+
+    在 ``validate_settings_shape`` 之前调用 — 后者只锁白名单 key, 不锁 value.
+    返回原 dict (校验通过), 失败抛 ValueError.
+
+    Args:
+        ep: 单条 endpoint 字典 (camelCase).
+        platform: 透传给 ``validate_local_model_path``.
+    """
+    if not isinstance(ep, dict):
+        raise ValueError(f"endpoint payload must be a dict, got {type(ep).__name__}")
+    validate_protocol(ep.get("protocol"))
+    validate_local_model_path(ep.get("localModelPath"), platform=platform)
+    return ep
+
+
+def validate_settings_payload(
+    settings: Any,
+    platform: str | None = None,
+) -> None:
+    """顶层 settings payload 全校验 (timezone + 全部 endpoint 子项).
+
+    在 ``validate_settings_shape`` 之前调用:
+    1. ``validate_timezone`` — 顶层 IANA timezone.
+    2. ``validate_endpoint_payload`` — 每个 endpoint 跑 protocol + localModelPath.
+
+    Raises:
+        ValueError: 任一字段非法.
+    """
+    if not isinstance(settings, dict):
+        return  # 非 dict 已经在 validate_settings_shape 里挡掉
+    validate_timezone(settings.get("timezone"))
+    endpoints = settings.get("endpoints")
+    if isinstance(endpoints, list):
+        for i, ep in enumerate(endpoints):
+            try:
+                validate_endpoint_payload(ep, platform=platform)
+            except ValueError as exc:
+                # 重新包装, 带上 endpoints 索引, 便于用户定位
+                raise ValueError(f"endpoints[{i}]: {exc}") from exc

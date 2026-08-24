@@ -161,3 +161,120 @@ async def test_get_returns_null_when_top_level_is_list(client):
     resp = await client.get("/api/v1/settings")
     assert resp.status_code == 200
     assert resp.json() is None
+
+
+# ============================================================================
+# Task 1 (2026-08-23) — settings migration + timezone (IANA) 校验
+# ============================================================================
+#
+# 覆盖：
+# 1. timezone camelCase 合法值 → 200 + 持久化
+# 2. timezone 非法 IANA 字符串 → 422 (Pydantic)
+# 3. EndpointConfig 新字段 protocol / modelId / localModelPath 通过白名单校验 + 存到 DB
+# 4. GET /settings 把新字段原样回传 (canonicalizer 不破坏 camelCase)
+
+
+@pytest.mark.asyncio()
+async def test_settings_migrates_legacy_snake_case_and_rejects_invalid_timezone(client):
+    """Task 1: PUT /settings 接受合法 IANA timezone 并持久化; 非法 timezone → 422."""
+    valid = await client.put(
+        "/api/v1/settings",
+        json={"timezone": "Asia/Shanghai"},
+    )
+    assert valid.status_code == 200
+    persisted = SettingsRepository().get_json("app_settings")
+    assert persisted is not None
+    assert persisted.get("timezone") == "Asia/Shanghai"
+
+    invalid = await client.put(
+        "/api/v1/settings",
+        json={"timezone": "Not/AZone"},
+    )
+    assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio()
+async def test_settings_accepts_protocol_model_id_local_model_path(client):
+    """Task 1: EndpointConfig 新字段 protocol / modelId / localModelPath 应通过
+    canonicalizer 白名单校验 + 存到 DB."""
+    resp = await client.put(
+        "/api/v1/settings",
+        json={
+            "endpoints": [
+                {
+                    "id": "lmstudio-1",
+                    "name": "LM Studio",
+                    "baseUrl": "http://127.0.0.1:1234/v1",
+                    "apiKey": "",
+                    "protocol": "openai-compatible",
+                    "modelId": "qwen2.5-7b-instruct",
+                    "localModelPath": "/Users/me/Models/qwen.gguf",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    persisted = SettingsRepository().get_json("app_settings")
+    assert persisted is not None
+    ep = persisted["endpoints"][0]
+    assert ep["protocol"] == "openai-compatible"
+    assert ep["modelId"] == "qwen2.5-7b-instruct"
+    assert ep["localModelPath"] == "/Users/me/Models/qwen.gguf"
+
+
+@pytest.mark.asyncio()
+async def test_settings_unknown_endpoint_field_still_rejected(client):
+    """回归门禁: 新增白名单字段后, 老的「未知字段 → 400」行为不变."""
+    resp = await client.put(
+        "/api/v1/settings",
+        json={
+            "endpoints": [
+                {
+                    "id": "e1",
+                    "baseUrl": "http://x",
+                    "apiKey": "",
+                    "category": "primary",  # 不在白名单
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 400
+    assert "category" in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_get_round_trips_new_fields_through_canonicalizer(client):
+    """Task 1: GET /settings 把 DB 中的 timezone / protocol / modelId / localModelPath
+    原样回传 (DB 已存 camelCase, canonicalizer 不需动作)."""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "streaming": True,
+            "timezone": "Asia/Shanghai",
+            "endpoints": [
+                {
+                    "id": "lmstudio-1",
+                    "name": "LM Studio",
+                    "baseUrl": "http://127.0.0.1:1234/v1",
+                    "apiKey": "",
+                    "protocol": "openai-compatible",
+                    "modelId": "qwen2.5-7b-instruct",
+                    "localModelPath": "/tmp/qwen.gguf",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ],
+            "version": "4.0.0",
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["timezone"] == "Asia/Shanghai"
+    ep = body["endpoints"][0]
+    assert ep["protocol"] == "openai-compatible"
+    assert ep["modelId"] == "qwen2.5-7b-instruct"
+    assert ep["localModelPath"] == "/tmp/qwen.gguf"

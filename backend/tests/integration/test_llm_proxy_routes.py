@@ -414,3 +414,252 @@ async def test_non_streaming_path_unchanged(client):
     assert resp.status_code == 200
     assert resp.json()["choices"][0]["message"]["content"] == "Hi"
     assert route.called
+
+
+# ============================================================================
+# Task 1 (2026-08-23) — LM Studio + structured TLS diagnostics
+# ============================================================================
+#
+# 覆盖：
+# 1. LM Studio 本地端点 ``http://127.0.0.1:1234/v1`` + 空 Authorization 透传
+# 2. baseURL 已含 ``/v1`` + path 以 ``/v1`` 开头 → 不重复 ``/v1/v1``
+# 3. SSE ``data:`` chunks 完整透传 (OpenAI 流式协议)
+# 4. 非流式 ``/v1/chat/completions`` 接受空 Authorization
+# 5. TLS 错误结构化分类 (verify=True 不变 — httpx 永不关闭校验)
+
+
+LM_STUDIO = "http://127.0.0.1:1234/v1"
+# respx ``base_url`` 不含 ``/v1`` 后缀, 否则 base_url + path 会拼出 ``/v1/v1/...``;
+# ``build_upstream_url`` 已经把 ``/v1`` 去重, 所以上游 URL 是单 v1。
+LM_STUDIO_BASE = "http://127.0.0.1:1234"
+
+
+@pytest.mark.asyncio()
+async def test_lm_studio_get_models_empty_authorization(client):
+    """LM Studio 本地端点 GET /v1/models: 无 Authorization header 时仍 200,
+    且 respx mock 收到上游空 Authorization(浏览器不发 ``Bearer ``)而非 ``null``.
+    """
+    with respx.mock(base_url=LM_STUDIO_BASE, assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(
+            return_value=Response(
+                200,
+                json={
+                    "object": "list",
+                    "data": [{"id": "qwen2.5-7b-instruct", "object": "model"}],
+                },
+            )
+        )
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": LM_STUDIO},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["data"][0]["id"] == "qwen2.5-7b-instruct"
+    assert route.called
+    # 上游收到的 Authorization 应为空(None) — 浏览器没发 ``Bearer `` 噪音
+    auth = route.calls[0].request.headers.get("authorization")
+    assert auth is None or auth == ""
+
+
+@pytest.mark.asyncio()
+async def test_baseurl_with_v1_suffix_does_not_double_v1_in_path(client):
+    """LM Studio baseURL 已含 ``/v1``, 浏览器拉 ``/v1/models`` → 上游不应收到 ``/v1/v1/models``.
+
+    ``build_upstream_url`` 已在 ``test_llm_proxy_url.py`` 单元测试覆盖;
+    这里验证整条链路: 浏览器请求 → proxy → 上游.
+    """
+    with respx.mock(base_url=LM_STUDIO_BASE, assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(
+            return_value=Response(200, json={"object": "list", "data": []})
+        )
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": LM_STUDIO},
+        )
+
+    assert resp.status_code == 200
+    assert route.called
+    # 上游 path 应是 ``/v1/models`` (单 v1), 不是 ``/v1/v1/models``
+    assert route.calls[0].request.url.path == "/v1/models"
+
+
+@pytest.mark.asyncio()
+async def test_lm_studio_non_streaming_chat_with_empty_authorization(client):
+    """LM Studio 非流式 POST /v1/chat/completions: 空 Authorization → 上游收到空."""
+    with respx.mock(base_url=LM_STUDIO_BASE, assert_all_called=False) as mock:
+        route = mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                200,
+                json={
+                    "id": "cmpl-1",
+                    "choices": [{"message": {"role": "assistant", "content": "Hi"}}],
+                },
+            )
+        )
+        resp = await client.post(
+            f"{PROXY_BASE}/v1/chat/completions",
+            headers={
+                "X-LLM-Provider-Url": LM_STUDIO,
+                "Content-Type": "application/json",
+            },
+            content=b'{"model":"qwen2.5-7b-instruct","messages":[{"role":"user","content":"hi"}]}',
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["choices"][0]["message"]["content"] == "Hi"
+    assert route.called
+    auth = route.calls[0].request.headers.get("authorization")
+    assert auth is None or auth == ""
+
+
+@pytest.mark.asyncio()
+async def test_lm_studio_streaming_sse_chunks_preserved(client):
+    """LM Studio 流式 SSE: 完整 ``data: {...}\\n\\n`` chunk 序列应字节级透传."""
+    chunks = (
+        b'data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}\n\n'
+        b'data: {"choices":[{"delta":{"content":" LM"},"index":0}]}\n\n'
+        b'data: {"choices":[{"delta":{"content":" Studio"},"index":0}]}\n\n'
+        b'data: [DONE]\n\n'
+    )
+    with respx.mock(base_url=LM_STUDIO_BASE, assert_all_called=False) as mock:
+        route = mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                200,
+                content=chunks,
+                headers={"content-type": "text/event-stream"},
+            )
+        )
+        resp = await client.post(
+            f"{PROXY_BASE}/v1/chat/completions?stream=true",
+            headers={
+                "X-LLM-Provider-Url": LM_STUDIO,
+                "Content-Type": "application/json",
+            },
+            content=b'{"model":"qwen2.5-7b-instruct","messages":[{"role":"user","content":"hi"}],"stream":true}',
+        )
+
+    assert resp.status_code == 200
+    assert route.called
+    # 字节级透传: 完整 SSE 序列(包括末尾 [DONE])应出现在响应体
+    assert resp.content == chunks
+    assert b"data: [DONE]\n\n" in resp.content
+
+
+@pytest.mark.asyncio()
+async def test_streaming_upstream_disconnect_after_first_chunk_closes_context(client, monkeypatch):
+    """首个 chunk 已发出后上游传输异常只能截断流, 但必须 close 且不二次写 status."""
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "text/event-stream"}
+        is_success = True
+
+        async def aiter_raw(self):
+            yield b"data: first\\n\\n"
+            raise RuntimeError("upstream disconnected after first chunk")
+
+    class FakeRequestContext:
+        def __init__(self):
+            self.exit_calls = []
+
+        async def __aenter__(self):
+            return FakeResponse()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self.exit_calls.append((exc_type, exc))
+            return False
+
+    fake_ctx = FakeRequestContext()
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return fake_ctx
+
+    monkeypatch.setattr(proxy_routes.httpx, "AsyncClient", FakeClient)
+    response = await proxy_routes._proxy_streaming(
+        "http://upstream.example.com/v1/chat/completions",
+        "POST",
+        {},
+        b"{}",
+    )
+
+    chunks = []
+    async def collect_chunks():
+        async for chunk in response.body_iterator:
+            chunks.append(chunk)
+
+    with pytest.raises(RuntimeError, match="upstream disconnected"):
+        await collect_chunks()
+
+    assert chunks == [b"data: first\\n\\n"]
+    assert len(fake_ctx.exit_calls) == 1
+    exc_type, exc = fake_ctx.exit_calls[0]
+    assert exc_type is RuntimeError
+    assert isinstance(exc, RuntimeError)
+
+
+@pytest.mark.asyncio()
+async def test_proxy_uses_certifi_ca_bundle_for_https(client):
+    """Task 1 §4: 代理始终启用证书校验 — ``httpx.AsyncClient`` 走 ``SSL_CERT_FILE``
+    / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE`` 任一环境变量, 由 ``main.py``
+    ``configure_ssl_ca_bundle(certifi.where)`` 在 import-time 注入.
+
+    此测试只验证 import-time 注入在测试进程里发生过 (即环境变量被设置),
+    不实际建立 TLS 连接(避免本地无 certifi 时 CI flake).
+    """
+    import os
+
+    # 任一变量非空即可 — 不同平台 certifi 路径不同, 三选一有值就算成功
+    bundle_vars = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE")
+    set_vars = [v for v in bundle_vars if os.environ.get(v)]
+    # conftest 已 import backend.main → ``configure_ssl_ca_bundle`` 应跑过
+    # 如果 certifi 可用 (sage-backend 依赖里包含 certifi), 至少一个变量被设置
+    assert set_vars, (
+        "expected at least one of SSL_CERT_FILE/REQUESTS_CA_BUNDLE/CURL_CA_BUNDLE "
+        "to be set by configure_ssl_ca_bundle(); backend.main must be imported "
+        "before this assertion runs"
+    )
+
+
+@pytest.mark.asyncio()
+async def test_tls_certificate_error_returns_structured_detail(client):
+    """Task 1 §4: 上游 TLS 证书校验失败应映射为 ``tls_certificate_failed``
+    结构化 detail (状态码 502) — 不应被映射成 ``upstream_unreachable`` 把 TLS 错误淹没."""
+    import httpx as _httpx
+
+    # ``httpx`` 在证书校验失败时抛 ``httpcore.ConnectError`` 包装的 SSLError.
+    # respx 的 side_effect 直接注入 ``httpx.ConnectError`` 即可,
+    # 后续 proxy 的 except 分支应识别消息含 ``certificate`` 关键字升级为 tls_certificate_failed.
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        mock.get("/v1/models").mock(side_effect=_httpx.ConnectError("certificate verify failed"))
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": UPSTREAM},
+        )
+
+    assert resp.status_code == 502
+    detail = resp.json()["detail"]
+    # Task 1 round 1 (2026-08-24): 收紧断言 — 之前 ``in {tls_certificate_failed, upstream_unreachable}``
+    # 太宽松, 让字符串含 "certificate" 的 ConnectError 可能误判走 upstream_unreachable 也能通过.
+    # 现在强制要求 ``tls_certificate_failed``, 因为 ``_is_tls_certificate_error`` 的
+    # 字符串匹配兜底会把 "certificate verify failed" 升级. 如果这条挂了说明上游 TLS
+    # 检测被静默降级为通用连接错误 — 修 proxy, 不要回退断言.
+    assert detail["type"] == "tls_certificate_failed", (
+        f"expected tls_certificate_failed, got {detail['type']!r}; "
+        f"_is_tls_certificate_error must match the 'certificate verify failed' substring"
+    )
+    # 不论哪种 type, 都不应包含 API key / 凭据
+    body_text = resp.text
+    assert "sk-" not in body_text
+    assert "Bearer " not in body_text
