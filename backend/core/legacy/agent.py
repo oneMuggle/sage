@@ -34,6 +34,7 @@ from backend.memory import (
     EpisodicMemory,
     MemoryManager,
     SemanticMemory,
+    SessionSummaryStore,
     WorkingMemory,
 )
 from backend.services.permission_gate import (
@@ -264,7 +265,12 @@ class SageAgent:
             working = WorkingMemory(max_size=20, max_tokens=4000)
             episodic = EpisodicMemory(db)
             semantic = SemanticMemory(db)
-            self.memory_manager = MemoryManager(working, episodic, semantic)
+            self.memory_manager = MemoryManager(
+                working,
+                episodic,
+                semantic,
+                summary_store=SessionSummaryStore(db),
+            )
 
             # 初始化工具注册表
             self.tool_registry = ToolRegistry()
@@ -308,7 +314,14 @@ class SageAgent:
         if bare:
             self.consolidation = None
         else:
-            self.consolidation = ConsolidationPipeline(llm_client=self.llm_client)
+            # 批次三 step 4 接线修复:summary_store 必须注入压缩管道,
+            # 否则 consolidation 走 save_compressed() 把"对话摘要"
+            # 伪装成普通事实写入 episodic,违反 spec §4.3 step 4
+            # "不伪装为普通事实"的硬约束。
+            self.consolidation = ConsolidationPipeline(
+                llm_client=self.llm_client,
+                summary_store=self.memory_manager.summary_store,
+            )
 
     async def chat(
         self, session_id: str, message: str, llm_config: Optional[Dict[str, Any]] = None

@@ -11,6 +11,11 @@ from backend.memory.consolidation import ConsolidationPipeline
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.manager import MemoryManager
 from backend.memory.semantic import SemanticMemory
+from backend.memory.summary import (
+    FAILED,
+    SessionSummaryStore,
+    list_summaries_for_session,
+)
 from backend.memory.working import WorkingMemory
 from backend.tests.conftest import ensure_session
 
@@ -65,23 +70,28 @@ def test_compress_with_llm_uses_llm_response() -> None:
     assert len(llm.calls) == 1
 
 
-def test_compress_llm_returns_empty_falls_back() -> None:
+def test_compress_llm_returns_empty_returns_none() -> None:
+    """LLM 已配置但返回空内容 → 走 FAILED 分支,绝不 fallback 伪装成 READY。
+
+    spec §4.3 step 4:LLM 摘要失败/空响应向 consolidate() 传播,
+    由调用方写 status=FAILED 行,不掩盖失败。
+    """
     llm = _FakeLLM(response="   ")
     pipe = ConsolidationPipeline(llm_client=llm)
     msgs: List[Dict[str, Any]] = [{"role": "user", "content": "hi"}]
     summary = pipe.compress_working_memory(msgs)
-    assert summary is not None
-    assert "条消息" in summary or "对话围绕" in summary
+    assert summary is None
 
 
-def test_compress_llm_exception_falls_back() -> None:
+def test_compress_llm_exception_returns_none() -> None:
+    """LLM 异常 → 走 FAILED 分支,绝不 fallback。"""
     pipe = ConsolidationPipeline(llm_client=_ErrorLLM())
     msgs: List[Dict[str, Any]] = [
         {"role": "user", "content": "talk about cats"},
         {"role": "assistant", "content": "ok"},
     ]
     summary = pipe.compress_working_memory(msgs)
-    assert summary is not None
+    assert summary is None
 
 
 def test_compress_no_llm_uses_fallback() -> None:
@@ -151,6 +161,66 @@ def test_consolidate_summary_failure_returns_none(manager: MemoryManager) -> Non
     manager.add_to_working("user", "msg")
     pipe.compress_working_memory = lambda messages: None
     assert pipe.consolidate(manager) is None
+
+
+def test_consolidate_with_llm_failure_writes_failed_summary_not_ready(
+    manager: MemoryManager,
+) -> None:
+    """LLM 配置但摘要失败时 consolidate 写 status=FAILED,不伪装为 READY。
+
+    spec §4.3 step 4:不伪装为普通事实。FAILED 行必须带
+    error_message,前端可据此区分"等待 LLM"与"已失败重试"。
+    """
+    # §1.3a: FK enforcement — parent session row must exist
+    ensure_session(manager.episodic.db, "abc")
+    store = SessionSummaryStore(manager.episodic.db)
+    pipe = ConsolidationPipeline(llm_client=_ErrorLLM(), summary_store=store)
+    manager.add_to_working("user", "hi", session_id="abc")
+    manager.add_to_working("assistant", "hello", session_id="abc")
+
+    memory_id = pipe.consolidate(manager, session_id="abc")
+
+    assert memory_id is None
+    rows = list_summaries_for_session(manager.episodic.db, "abc")
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.status == FAILED
+    assert row.content == ""
+    assert row.error_message  # 必须有诊断信息
+    # 同时,工作记忆应保留（失败时不消费原文）
+    assert len(manager.working.get_context("abc")) == 2
+
+
+def test_sage_agent_wires_summary_store_to_consolidation(
+    tmp_db_path: str,
+    monkeypatch,
+) -> None:
+    """SageAgent 注入 summary_store 到 ConsolidationPipeline（防回归）。
+
+    spec §4.3 step 4 + reviewer HIGH-2:legacy SageAgent 之前
+    创建 ConsolidationPipeline 时不传 summary_store,导致 consolidate
+    失败时不会写 FAILED 行。本测试保护接线关系。
+    """
+    import sys
+
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[3]))
+    # SageAgent 内部通过 get_database() 拿 db,把它 patch 成我们的 tmp db
+    from backend.core.legacy import agent as agent_module
+
+    db = Database(db_path=tmp_db_path)
+    db.init_db()
+    monkeypatch.setattr(agent_module, "get_database", lambda: db)
+
+    agent = agent_module.SageAgent()
+    assert agent.memory_manager is not None
+    assert agent.memory_manager.summary_store is not None, (
+        "SageAgent.memory_manager 必须暴露 summary_store(spec §4.3 step 3)"
+    )
+    assert agent.consolidation is not None
+    assert agent.consolidation.summary_store is agent.memory_manager.summary_store, (
+        "SageAgent.consolidation 必须共享 memory_manager.summary_store,"
+        "否则 consolidate() 失败时不会写 FAILED 行"
+    )
 
 
 def test_extract_key_facts_preferences() -> None:

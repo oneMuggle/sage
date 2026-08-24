@@ -63,7 +63,8 @@ class VectorStore:
                 CREATE VIRTUAL TABLE IF NOT EXISTS memories_vec USING vec0(
                     embedding FLOAT[{self.dimensions}],
                     memory_id TEXT,
-                    memory_type TEXT
+                    memory_type TEXT,
+                    session_id TEXT
                 )
             """)
             conn.commit()
@@ -74,7 +75,13 @@ class VectorStore:
         except Exception as e:
             logger.warning(f"向量存储表创建失败: {e}")
 
-    def add(self, memory_id: str, text: str, memory_type: str = "episodic") -> None:
+    def add(
+        self,
+        memory_id: str,
+        text: str,
+        memory_type: str = "episodic",
+        session_id: Optional[str] = None,
+    ) -> None:
         """添加记忆向量
 
         Args:
@@ -97,9 +104,9 @@ class VectorStore:
             # 插入新条目（使用 memory_id 的哈希作为 rowid）
             rowid = abs(hash(memory_id)) % (2**31)
             conn.execute(
-                """INSERT INTO memories_vec (rowid, embedding, memory_id, memory_type)
-                   VALUES (?, ?, ?, ?)""",
-                (rowid, vec_bytes, memory_id, memory_type),
+                """INSERT INTO memories_vec (rowid, embedding, memory_id, memory_type, session_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (rowid, vec_bytes, memory_id, memory_type, session_id),
             )
             conn.commit()
         except Exception as e:
@@ -110,6 +117,7 @@ class VectorStore:
         query: str,
         top_k: int = 10,
         memory_type: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """向量相似度搜索
 
@@ -117,38 +125,49 @@ class VectorStore:
             query: 查询文本
             top_k: 返回结果数量
             memory_type: 可选，按记忆类型筛选
+            session_id: 可选,按会话 ID 严格过滤（spec §4.3 step 5 严禁跨 session 串味）
 
         Returns:
-            搜索结果列表，每项包含 memory_id, distance
+            搜索结果列表，每项包含 memory_id, memory_type, session_id, distance
         """
         conn = self._db.get_connection()
 
         try:
             query_vec = self._embedder.encode_to_bytes(query)
 
-            if memory_type:
-                rows = conn.execute(
-                    """SELECT memory_id, memory_type, distance
-                       FROM memories_vec
-                       WHERE embedding MATCH ?
-                         AND memory_type = ?
-                       ORDER BY distance
-                       LIMIT ?""",
-                    (query_vec, memory_type, top_k),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """SELECT memory_id, memory_type, distance
-                       FROM memories_vec
-                       WHERE embedding MATCH ?
-                       ORDER BY distance
-                       LIMIT ?""",
-                    (query_vec, top_k),
-                ).fetchall()
+            # spec §4.3 step 5:session_id 过滤可能让 KNN 候选被裁掉,
+            # 这里过取 4x 以确保最终返回至少 top_k 个 (允许 0/不足时退化)。
+            fetch_k = top_k * 4 if session_id is not None else top_k
 
-            return [
-                {"memory_id": row[0], "memory_type": row[1], "distance": row[2]} for row in rows
+            sql_parts = [
+                "SELECT memory_id, memory_type, session_id, distance",
+                "FROM memories_vec",
+                "WHERE embedding MATCH ?",
             ]
+            params: List[Any] = [query_vec]
+
+            if memory_type:
+                sql_parts.append("AND memory_type = ?")
+                params.append(memory_type)
+
+            if session_id is not None:
+                sql_parts.append("AND session_id = ?")
+                params.append(session_id)
+
+            sql_parts.append("ORDER BY distance LIMIT ?")
+            params.append(fetch_k)
+
+            rows = conn.execute(" ".join(sql_parts), params).fetchall()
+            results: List[Dict[str, Any]] = [
+                {
+                    "memory_id": row[0],
+                    "memory_type": row[1],
+                    "session_id": row[2],
+                    "distance": row[3],
+                }
+                for row in rows[:top_k]
+            ]
+            return results
         except Exception as e:
             logger.warning(f"向量搜索失败: {e}")
             return []

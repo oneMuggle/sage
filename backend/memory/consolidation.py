@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from backend.memory.summary import FAILED, READY, SessionSummaryStore, _redact_error_message
+
 if TYPE_CHECKING:
     from backend.core.legacy.llm_client import LLMClient
 
@@ -24,10 +26,15 @@ class ConsolidationPipeline:
     3. 可选：使用 LLM 辅助摘要生成
     """
 
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(
+        self,
+        llm_client: Optional[LLMClient] = None,
+        summary_store: Optional[SessionSummaryStore] = None,
+    ):
         self.llm_client = llm_client
+        self.summary_store = summary_store
 
-    def compress_working_memory(self, messages: List[Dict[str, Any]]) -> str | None:
+    def compress_working_memory(self, messages: List[Dict[str, Any]]) -> Optional[str]:
         """
         压缩工作记忆为摘要
 
@@ -35,7 +42,11 @@ class ConsolidationPipeline:
             messages: 工作记忆中的消息列表
 
         Returns:
-            生成的摘要内容，如果输入为空则返回 None
+            生成的摘要内容；批次三 step 4 起：LLM 失败/空响应**绝不**回退
+            到 fallback 文本,而是返回 ``None``,由 :meth:`consolidate`
+            写 ``status=FAILED`` 行（spec §4.3 step 4 "不伪装为普通事实"）。
+            只有未配置 LLM 时才使用 fallback,这是产品明确定义的"无 LLM
+            模式",与失败语义分开。
         """
         if not messages:
             return None
@@ -54,9 +65,21 @@ class ConsolidationPipeline:
                 result = self.llm_client.complete(prompt)
                 if result and result.strip():
                     return result.strip()
+                # LLM 已配置但返回空 → 不回退,直接当失败
+                logger.warning(
+                    "LLM 摘要生成返回空内容 (session=%s),走 FAILED 分支",
+                    getattr(self, "_current_session_id", "<unknown>"),
+                )
+                return None
             except Exception as e:
-                logger.warning(f"LLM 摘要生成失败，回退到简单策略: {e}")
+                logger.warning(
+                    "LLM 摘要生成异常 (session=%s): %s",
+                    getattr(self, "_current_session_id", "<unknown>"),
+                    e,
+                )
+                return None
 
+        # 未配置 LLM:产品允许的降级路径,使用 fallback
         return self._fallback_summary(messages)
 
     def _fallback_summary(self, messages: List[Dict[str, Any]]) -> str:
@@ -103,7 +126,7 @@ class ConsolidationPipeline:
 
     def consolidate(
         self, memory_manager, session_id: Optional[str] = None, importance_threshold: int = 5
-    ) -> str | None:
+    ) -> Optional[str]:
         """
         完整的记忆压缩流程
 
@@ -121,14 +144,31 @@ class ConsolidationPipeline:
 
         summary = self.compress_working_memory(working_messages)
         if not summary:
+            if self.summary_store is not None and session_id:
+                self.summary_store.create(
+                    session_id=session_id,
+                    content="",
+                    status=FAILED,
+                    error_message=_redact_error_message(
+                        "Summary generation returned no content"
+                    ),
+                )
             return None
 
-        memory_id = self.save_compressed(
-            episodic_memory=memory_manager.episodic,
-            summary=summary,
-            session_id=session_id,
-            message_count=len(working_messages),
-        )
+        if self.summary_store is not None and session_id:
+            summary_row = self.summary_store.create(
+                session_id=session_id,
+                content=summary,
+                status=READY,
+            )
+            memory_id = summary_row.id
+        else:
+            memory_id = self.save_compressed(
+                episodic_memory=memory_manager.episodic,
+                summary=summary,
+                session_id=session_id,
+                message_count=len(working_messages),
+            )
 
         memory_manager.working.clear()
 

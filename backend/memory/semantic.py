@@ -483,9 +483,13 @@ class SemanticMemory:
         conn.commit()
         return cursor.rowcount > 0
 
-    def count(self) -> int:
+    def count(self, session_id: Optional[str] = None) -> int:
         """
-        获取记忆总数
+        获取记忆总数（批次三 step 5：可按 session 过滤）
+
+        Args:
+            session_id: 可选，按会话 ID 严格过滤
+                （spec §4.3 step 5 严禁跨 session 串味）
 
         Returns:
             记忆数量
@@ -493,7 +497,13 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT COUNT(*) FROM memories_semantic")
+        if session_id is None:
+            cursor.execute("SELECT COUNT(*) FROM memories_semantic")
+        else:
+            cursor.execute(
+                "SELECT COUNT(*) FROM memories_semantic WHERE session_id = ?",
+                (session_id,),
+            )
         return cursor.fetchone()[0]
 
     def update_tags(self, memory_id: str, tags: List[str]) -> bool:

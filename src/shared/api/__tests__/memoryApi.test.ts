@@ -28,8 +28,14 @@ describe('memoryApi.getMemories response normalization', () => {
       total: 0,
       page: 1,
       page_size: 0,
+      offset: 0,
       layer: 'all',
-      source_breakdown: { episodic: 2, semantic: 0 },
+      source_breakdown: {
+        episodic: 2,
+        semantic: 0,
+        working: 0,
+        session_summary: 0,
+      },
     });
   });
 
@@ -48,8 +54,14 @@ describe('memoryApi.getMemories response normalization', () => {
       total: 0,
       page: 1,
       page_size: 0,
+      offset: 0,
       layer: 'all',
-      source_breakdown: { episodic: 0, semantic: 0 },
+      source_breakdown: {
+        episodic: 0,
+        semantic: 0,
+        working: 0,
+        session_summary: 0,
+      },
     });
   });
 
@@ -62,6 +74,25 @@ describe('memoryApi.getMemories response normalization', () => {
       memoryType: 'semantic',
       page: 1,
       pageSize: 100,
+      offset: null,
+      sessionId: null,
+    });
+  });
+
+  it('forwards offset + sessionId to IPC when provided', async () => {
+    mockInvoke.mockResolvedValue({ items: [] });
+
+    await memoryApi.getMemories('episodic', 2, 20, {
+      offset: 40,
+      sessionId: 'sess-1',
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('get_memories', {
+      memoryType: 'episodic',
+      page: 2,
+      pageSize: 20,
+      offset: 40,
+      sessionId: 'sess-1',
     });
   });
 });
