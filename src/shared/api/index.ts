@@ -34,6 +34,7 @@ export type {
   AgentToolResult,
   AgentUpdate,
   ApiError,
+  BoardProjectionEnvelope,
   ChatConfig,
   ChatRequest,
   ChatResponse,

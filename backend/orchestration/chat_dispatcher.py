@@ -60,6 +60,13 @@ MAX_LANE_ITERATIONS = 8
 #: 级联失败错误前缀 —— 下游任务因上游 failed/stopped 未启动即置 failed。
 _CASCADE_ERROR_PREFIX = "blocked_by_failed:"
 
+#: L2 (2026-08-23): followup 降级提示 —— 追加到聚合 markdown 对应子任务块尾部，
+#: 让 conductor 明确"拿到的是新任务结果而非续聊上下文"，避免误以为续聊已生效。
+_FOLLOWUP_DEGRADED_NOTE = (
+    "\n[注意] followup 已降级为新任务（父任务不存在/未完成/自指），"
+    "本次结果不含续聊上下文。"
+)
+
 #: 编排语义判定 prompt（轻量二分类）：LLM 只需回答 multi / single。
 _CLASSIFY_PROMPT = """判断以下用户消息是否需要多 agent 协作（拆解为多个子任务、由不同角色并行执行）才能最好地完成。
 只需返回一个词：multi 或 single。
@@ -139,6 +146,9 @@ class ChatTaskState:
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
     retry_count: int = 0
+    # L2 (2026-08-23): followup_of 已携带但无法建立父依赖（不存在/未完成/自指）
+    # → 降级为普通新任务并置位，聚合时对 conductor 显式提示不含续聊上下文。
+    followup_degraded: bool = False
 
 
 # P2-9 (2026-08-14): 进程内活动 dispatcher 注册表 —— 供 run 级 cancel 端点
@@ -336,6 +346,9 @@ class ChatDispatcher:
                 and self._states[followup_of].status == "done"
                 else None
             )
+            # L2 (2026-08-23): 降级可见性 —— followup_of 已携带但无法建立父依赖
+            # （不存在/未完成/自指）→ 置位，_aggregate 对 conductor 显式提示。
+            followup_degraded = followup_of is not None and parent_task_id is None
             if parent_task_id is not None:
                 # 续聊必须复用父任务的 agent/profile，避免历史 system prompt
                 # 与新任务角色不一致；调用方传入的 agent_id 仅用于普通任务。
@@ -348,6 +361,7 @@ class ChatDispatcher:
                 goal=goal,
                 output_schema=output_schema,
                 parent_task_id=parent_task_id,
+                followup_degraded=followup_degraded,
             )
             if followup_of is not None and state.parent_task_id is None:
                 logger.warning(
@@ -756,12 +770,16 @@ class ChatDispatcher:
             header_item = f"## 子任务 {state.task_id}（{state.agent_id}）"
             if state.status == "done" and state.output:
                 body = state.output[: self.settings.max_subagent_result_chars]
-                blocks.append(f"{header_item}\n\n{body}")
+                block = f"{header_item}\n\n{body}"
             elif state.status == "failed":
                 err = (state.error or "未知错误")[: self.settings.max_subagent_result_chars]
-                blocks.append(f"{header_item}\n\n[失败] {err}")
+                block = f"{header_item}\n\n[失败] {err}"
             else:
-                blocks.append(f"{header_item}\n\n[状态: {state.status}]")
+                block = f"{header_item}\n\n[状态: {state.status}]"
+            # L2 (2026-08-23): followup 降级对 conductor 可见 —— 提示本块不含续聊上下文。
+            if state.followup_degraded:
+                block += _FOLLOWUP_DEGRADED_NOTE
+            blocks.append(block)
         result = header + "\n\n".join(blocks)
         # F3 (2026-08-12): maxItems 放宽到 8 后单批聚合体积翻倍，整体截断兜底
         # （保留头部进度摘要 + 前部子任务），防一次性灌爆 conductor 上下文。

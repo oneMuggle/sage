@@ -19,6 +19,7 @@ from backend.cli.doctor import (
     build_parser,
     main,
     register,
+    run_doctor,
 )
 
 # ============================================================
@@ -239,6 +240,90 @@ class TestFormatJson:
         results = [CheckResult("c", Severity.WARN, message="中文消息")]
         data = json.loads(_format_json(results))
         assert data["checks"][0]["message"] == "中文消息"
+
+
+class TestRunDoctor:
+    def test_reports_explicit_runtime_and_package_root(self, tmp_path):
+        # Finding #5 (Task 0 review round 1): doctor now performs a real
+        # `import backend.main` via the supplied interpreter. Passing a
+        # non-existent interpreter path therefore legitimately reports
+        # `import_backend=False`. Use sys.executable + the real repo
+        # root so the probe actually succeeds and we also exercise the
+        # exact backend_command/cwd/env contract that the supervisor uses.
+        import sys
+        from pathlib import Path
+
+        # `package_root` is the directory that CONTAINS the ``backend/``
+        # package directory on disk (the supervisor's `<resourcesPath>`);
+        # it is used both as cwd and PYTHONPATH for the probe so
+        # ``import backend.main`` resolves to ``package_root/backend/main.py``.
+        backend_dir = Path(__file__).resolve().parents[3]   # .../backend
+        package_root = backend_dir.parent                  # .../<repo>
+        runtime = run_doctor(
+            interpreter=sys.executable,
+            package_root=package_root,
+        )
+        assert runtime.interpreter == str(Path(sys.executable).resolve())
+        assert runtime.package_root == str(package_root)
+        assert runtime.import_backend is True
+
+    def test_propagates_backend_env_to_import_subprocess(self, monkeypatch, tmp_path):
+        # Round 2 (fast-follow E): when the supervisor passes its launcher
+        # context (SAGE_BACKEND_GENERATION / SAGE_BACKEND_OWNERSHIP_TOKEN /
+        # PYTHONPATH) via ``backend_env``, the ``import backend.main`` probe
+        # subprocess MUST see those exact keys. Otherwise the probe runs in
+        # a stripped env and the doctor verdict diverges from what the
+        # supervisor's child backend would actually experience.
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        backend_dir = Path(__file__).resolve().parents[3]
+        package_root = backend_dir.parent
+        supervisor_env = {
+            "SAGE_BACKEND_GENERATION": "7",
+            "SAGE_BACKEND_OWNERSHIP_TOKEN": "tok-abc",
+            "PYTHONPATH": str(package_root) + ":_sage_core_marker",
+            "SAGE_DB_PATH": str(tmp_path / "sage.db"),
+        }
+
+        captured: dict = {}
+
+        class _FakeCompletedProcess:
+            returncode = 0
+
+        def _fake_run(argv, **kwargs):
+            captured["argv"] = argv
+            captured["cwd"] = kwargs.get("cwd")
+            captured["env"] = kwargs.get("env")
+            captured["timeout"] = kwargs.get("timeout")
+            return _FakeCompletedProcess()
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+
+        runtime = run_doctor(
+            interpreter=sys.executable,
+            package_root=package_root,
+            backend_env=supervisor_env,
+        )
+        assert runtime.import_backend is True
+        # The probe argv always probes ``import backend.main``; what we
+        # care about here is the env contract.
+        assert captured["argv"][-2:] == ["-c", "import backend.main"]
+        env = captured["env"]
+        assert env is not None
+        # Supervisor markers must reach the probe verbatim.
+        assert env["SAGE_BACKEND_GENERATION"] == "7"
+        assert env["SAGE_BACKEND_OWNERSHIP_TOKEN"] == "tok-abc"
+        assert env["SAGE_DB_PATH"] == str(tmp_path / "sage.db")
+        # Supervisor-provided PYTHONPATH must WIN over the package-root
+        # default that ``run_doctor`` builds from ``package_root`` alone.
+        assert env["PYTHONPATH"] == supervisor_env["PYTHONPATH"]
+        # Probe still inherits PATH/SYSTEMROOT so the bundled interpreter
+        # is discoverable.
+        assert "PATH" in env
+        # Hard 5s cap must be honoured so a broken installer never hangs.
+        assert captured["timeout"] == 5
 
 
 # ============================================================

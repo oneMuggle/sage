@@ -19,6 +19,7 @@ $GetPipUrl = "https://bootstrap.pypa.io/pip/3.8/get-pip.py"
 $ResourcesDir = Join-Path $PSScriptRoot "..\resources"
 $PythonDir = Join-Path $ResourcesDir "python"
 $BackendDir = Join-Path $ResourcesDir "backend"
+$ManifestPath = Join-Path $ResourcesDir "build-manifest.json"
 $BackendSourceDir = Join-Path $PSScriptRoot "..\backend"
 $RequirementsFile = Join-Path $PSScriptRoot "..\backend\requirements-py38.txt"
 
@@ -104,6 +105,19 @@ set PYTHONPATH=%~dp0backend;%~dp0sage-core
 "%~dp0python\python.exe" -m uvicorn backend.main:app --host 127.0.0.1 --port 8765
 "@
 Set-Content -Path $StartBackendBat -Value $BatContent -Encoding ASCII
+
+# Write the same provenance contract consumed by packaged Electron.
+$Manifest = [ordered]@{
+    manifestVersion = 1
+    buildId = if ($env:SAGE_BUILD_ID) { $env:SAGE_BUILD_ID } else { "local-$((Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))" }
+    commit = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { "unknown" }
+    branch = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "unknown" }
+    version = if ($env:SAGE_BUILD_VERSION) { $env:SAGE_BUILD_VERSION } else { "unknown" }
+    electronVersion = if ($env:SAGE_ELECTRON_VERSION) { $env:SAGE_ELECTRON_VERSION } else { "21.4.4" }
+    pythonVersion = $PythonVersion
+}
+$Manifest | ConvertTo-Json -Depth 3 | Set-Content -Path $ManifestPath -Encoding UTF8
+Write-Host "Build manifest: $ManifestPath" -ForegroundColor Green
 
 # Verify installation
 Write-Host ""

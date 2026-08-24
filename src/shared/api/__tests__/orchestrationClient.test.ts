@@ -59,11 +59,23 @@ describe('orchestrationClient', () => {
       expect(result).toEqual(fixture);
     });
 
-    it('forwards ui_minimal projection view', async () => {
-      invokeMock.mockResolvedValueOnce({ ...fixture, view: 'ui_minimal' });
+    it('forwards ui_minimal projection envelope', async () => {
+      const envelope = {
+        parent_content_hash: 'abc123',
+        parent_schema_version: 'board@1.0',
+        view: 'ui_minimal',
+        entries: [{ lane_id: 'lane-1', task_id: 'task-1', status: 'running' }],
+        downgrade_for_compatibility: [],
+        redaction_provenance: { agent_id: 'field not in accepted_field_families' },
+      };
+      invokeMock.mockResolvedValueOnce(envelope);
       const result = await orchestrationClient.getBoard('ui_minimal');
       expect(invokeMock).toHaveBeenCalledWith('orchestration_board', { view: 'ui_minimal' });
-      expect(result.view).toBe('ui_minimal');
+      // 返回形态透传 —— ui_minimal 是投影信封，不含快照分组字段。
+      expect(result).toEqual(envelope);
+      expect(result.parent_content_hash).toBe('abc123');
+      expect(Array.isArray(result.entries)).toBe(true);
+      expect(result.redaction_provenance).toHaveProperty('agent_id');
     });
 
     it('propagates IPC failure (caller decides degradation)', async () => {

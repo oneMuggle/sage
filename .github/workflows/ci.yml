@@ -230,12 +230,31 @@ jobs:
       - name: Install npm dependencies
         run: npm ci --force
 
+      - name: Verify command contract tests
+        run: npm exec -- vitest run electron/__tests__/backendLauncher.test.ts electron/__tests__/backendSupervisor.test.ts electron/__tests__/commands.test.ts
+
       - name: Build frontend + Electron
         run: npm run electron:build
 
       - name: Package (Linux AppImage + deb)
         if: matrix.os == 'ubuntu-latest'
         run: npx electron-builder --linux AppImage deb --publish never
+
+      # Task 0 (win7 parity): validate that the packaged Linux artifact actually
+      # contains resources/build-manifest.json. electron-builder writes the
+      # intermediate unpacked staging directory at release/linux-unpacked/;
+      # the .AppImage is built from that directory, so its presence is a
+      # proof that the AppImage/deb contain the manifest too. If extraResources
+      # is missing the entry, the build manifest would not be packaged and the
+      # Electron main process would fall back to `createBuildManifest()` defaults,
+      # which silently disables buildId-based health-ownership validation.
+      - name: Verify packaged build-manifest.json (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -euo pipefail
+          test -f release/linux-unpacked/resources/build-manifest.json \
+            || (echo "::error::Missing resources/build-manifest.json in packaged Linux artifact (check electron-builder.yml extraResources)" && exit 1)
+          echo "Linux packaged build-manifest.json OK"
 
       - name: Verify Linux artifacts (vitest)
         if: matrix.os == 'ubuntu-latest'
@@ -278,6 +297,25 @@ jobs:
           # Release workflows (release.yml / release-win7.yml) use -win10 / -win7.
           ARTIFACT_SUFFIX: ci
         run: npx electron-builder --win --publish never
+
+      # Task 0 (win7 parity): validate that the packaged Windows NSIS artifact
+      # contains resources/build-manifest.json. electron-builder writes the
+      # intermediate unpacked staging directory at release/win-unpacked/; the
+      # .exe is built from that directory, so its presence is a proof that the
+      # installer contains the manifest too. If extraResources is missing the
+      # entry, the build manifest would not be packaged and the Electron main
+      # process would fall back to `createBuildManifest()` defaults, which
+      # silently disables buildId-based health-ownership validation.
+      - name: Verify packaged build-manifest.json (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $manifest = "release/win-unpacked/resources/build-manifest.json"
+          if (-not (Test-Path $manifest)) {
+            Write-Error "::error::Missing $manifest in packaged Windows artifact (check electron-builder.yml extraResources)"
+            exit 1
+          }
+          Write-Host "Windows packaged build-manifest.json OK"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
