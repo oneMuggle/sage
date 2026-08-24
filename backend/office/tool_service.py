@@ -21,6 +21,8 @@ Public surface:
           doc_type=None, limit=50) -> List[dict]
     .read(conn, session_id, binding_generation, doc_id,
           section="summary") -> dict
+    .create(conn, session_id, binding_generation, *,
+            doc_type, filename, content) -> dict
 """
 
 from __future__ import annotations
@@ -28,15 +30,26 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import time
+import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from backend.domain.tool_policy import ToolPolicy
-from backend.office.models import OfficeDocType, OfficeDocumentSummary
+from backend.office.models import (
+    OfficeDocStatus,
+    OfficeDocType,
+    OfficeDocumentMetadata,
+    OfficeDocumentSummary,
+    OfficeExcelGenerateRequest,
+    OfficePptGenerateRequest,
+    OfficeWordGenerateRequest,
+)
 from backend.office.session_workspace import (
     get_active_workspace,
     get_document_in_workspace,
 )
-from backend.office.storage import document_path, list_documents
+from backend.office.storage import document_path, list_documents, save_document
 
 logger = logging.getLogger(__name__)
 
@@ -313,6 +326,221 @@ class OfficeToolService:
         # Degrade to bounded head so the tool output stays within budget.
         bounded = _truncate_to_byte_cap(full, self._policy.max_output_bytes)
         return {"success": True, "content": bounded}
+
+    # ──────────────────────────────────────────────────────────────
+    # create (T7.5 round-trip)
+    # ──────────────────────────────────────────────────────────────
+
+    def create(
+        self,
+        conn: sqlite3.Connection,
+        session_id: str,
+        binding_generation: int,
+        *,
+        doc_type: str,
+        filename: str,
+        content: Any,
+    ) -> Dict[str, Any]:
+        """Generate + register a new Office document under the bound workspace.
+
+        Steps:
+            1. Re-verify the session-workspace binding.
+            2. Mint a ``doc_id`` and dispatch to the doc-type generator.
+               The generator is told the binding's workspace_path so it
+               lands at ``<workspace>/office/<doc_type>/<doc_id>/``
+               (managed-document path, scoped to the binding).
+            3. Persist a row in ``office_documents`` via :func:`save_document`
+               so the new doc is visible to ``list`` / ``read``.
+            4. Roll back the generated file if registration fails -- the
+               filesystem must not carry orphan files the DB doesn't know
+               about.
+
+        Returns ``{success: True, content: {document_id, doc_type, filename}}``
+        on success. The result payload deliberately drops the absolute
+        ``workspace_path`` -- tool callers only need the handle trio.
+        """
+        binding = get_active_workspace(
+            conn, session_id, expected_generation=binding_generation
+        )
+        if binding is None:
+            return {
+                "success": False,
+                "error": {"code": "no_workspace_binding", "message": "no binding"},
+            }
+
+        # Normalize + validate doc_type. Generators accept OfficeDocType values;
+        # the tool wrapper may pass user-supplied case ("Word") which we fold.
+        try:
+            normalized_doc_type = OfficeDocType(doc_type.lower())
+        except ValueError:
+            return {
+                "success": False,
+                "error": {"code": "unsupported_doc_type", "message": str(doc_type)},
+            }
+
+        try:
+            generated_path = _generate_managed_document(
+                doc_type=normalized_doc_type,
+                doc_id="unused",  # generator mints its own; we read from path
+                filename=filename,
+                content=content,
+                workspace_path=binding.workspace_path,
+            )
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return {
+                "success": False,
+                "error": {"code": "generation_failed", "message": str(exc)},
+            }
+
+        # Recover the doc_id the generator minted. Managed layout is
+        # ``<workspace>/office/<doc_type>/<doc_id>/`` so the
+        # parent directory's basename IS the doc_id.
+        doc_id = generated_path.parent.name
+
+        # Register the document. Status is GENERATED (created from scratch,
+        # not parsed from an upload). Original filename is None -- the
+        # "original" slot is reserved for uploaded files.
+        try:
+            now_ms = int(time.time() * 1000)
+            canonical_workspace = str(Path(binding.workspace_path).resolve())
+            summary = OfficeDocumentSummary(
+                id=doc_id,
+                workspace_path=canonical_workspace,
+                doc_type=normalized_doc_type,
+                original_filename=None,
+                generated_filename=generated_path.name,
+                status=OfficeDocStatus.GENERATED,
+                created_at=now_ms,
+                updated_at=now_ms,
+                metadata=OfficeDocumentMetadata(
+                    file_size_bytes=generated_path.stat().st_size,
+                ),
+            )
+            save_document(conn, summary)
+        except Exception as exc:  # noqa: BLE001 -- rollback must catch all
+            # Best-effort rollback: drop the file the generator wrote so the
+            # workspace doesn't accumulate orphan files the DB doesn't track.
+            try:
+                generated_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return {
+                "success": False,
+                "error": {
+                    "code": "registration_failed",
+                    "message": str(exc),
+                },
+            }
+
+        return {
+            "success": True,
+            "content": {
+                "document_id": doc_id,
+                "doc_type": normalized_doc_type.value,
+                "filename": filename,
+            },
+        }
+
+
+def _generate_managed_document(
+    *,
+    doc_type: OfficeDocType,
+    doc_id: str,
+    filename: str,
+    content: Any,
+    workspace_path: str,
+) -> Any:  # Path on success
+    """Dispatch to the right generator and return the on-disk path.
+
+    Each generator accepts ``output_dir=None`` to mean "use the managed
+    per-doc layout under ``workspace_path/office/<doc_type>/<doc_id>/``".
+    The workspace path travels on the request object itself so request
+    models stay self-contained.
+    """
+    if doc_type is OfficeDocType.WORD:
+        from backend.office.word import generate_docx
+
+        req = _coerce_word_request(doc_id, filename, content, workspace_path)
+        return generate_docx(req, output_dir=None)
+    if doc_type is OfficeDocType.EXCEL:
+        from backend.office.excel import generate_xlsx
+
+        req = _coerce_excel_request(doc_id, filename, content, workspace_path)
+        return generate_xlsx(req, output_dir=None)
+    if doc_type is OfficeDocType.PPT:
+        from backend.office.ppt import generate_ppt
+
+        req = _coerce_ppt_request(doc_id, filename, content, workspace_path)
+        return generate_ppt(req, output_dir=None)
+    raise ValueError(f"unsupported doc_type: {doc_type}")
+
+
+def _coerce_word_request(
+    doc_id: str, filename: str, content: Any, workspace_path: str
+) -> OfficeWordGenerateRequest:
+    """Build an OfficeWordGenerateRequest from the LLM-facing ``content``.
+
+    Accepts either:
+        * ``str`` — wrap as a single Title-less paragraph (mirrors the
+          OfficeCreateTool "writing a sentence" case).
+        * ``dict`` — must contain ``title`` (optional) + ``paragraphs`` /
+          ``tables`` (optional). Empty dict → single empty paragraph.
+
+    NB: the request model has no ``document_id`` field — the generator
+    mints a fresh UUID internally when ``output_dir=None``. The ``doc_id``
+    we want to bind to the DB row is recovered from the resulting
+    on-disk path (``file_path.parent.name``).
+    """
+    if isinstance(content, str):
+        return OfficeWordGenerateRequest(
+            workspace_path=workspace_path,
+            filename=filename,
+            title=filename,
+            paragraphs=[{"text": content}],
+        )
+    if not isinstance(content, dict):
+        raise TypeError("word content must be str or dict")
+    title = content.get("title") or filename
+    paragraphs = content.get("paragraphs") or [{"text": ""}]
+    tables = content.get("tables") or []
+    return OfficeWordGenerateRequest(
+        workspace_path=workspace_path,
+        filename=filename,
+        title=title,
+        paragraphs=paragraphs,
+        tables=tables,
+    )
+
+
+def _coerce_excel_request(
+    doc_id: str, filename: str, content: Any, workspace_path: str
+) -> OfficeExcelGenerateRequest:
+    if not isinstance(content, dict):
+        raise TypeError("excel content must be dict")
+    sheets = content.get("sheets")
+    if not sheets:
+        raise ValueError("excel content requires non-empty 'sheets'")
+    return OfficeExcelGenerateRequest(
+        workspace_path=workspace_path,
+        filename=filename,
+        sheets=sheets,
+    )
+
+
+def _coerce_ppt_request(
+    doc_id: str, filename: str, content: Any, workspace_path: str
+) -> OfficePptGenerateRequest:
+    if not isinstance(content, dict):
+        raise TypeError("ppt content must be dict")
+    slides = content.get("slides")
+    if not slides:
+        raise ValueError("ppt content requires non-empty 'slides'")
+    return OfficePptGenerateRequest(
+        workspace_path=workspace_path,
+        filename=filename,
+        title=filename,
+        slides=slides,
+    )
 
 
 def _not_found() -> Dict[str, Any]:

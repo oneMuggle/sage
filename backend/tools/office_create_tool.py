@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from backend.data.database import get_database
 from backend.domain.risk import RiskClass
 from backend.office.excel import generate_xlsx
 from backend.office.models import (
@@ -29,8 +30,11 @@ from backend.office.models import (
 )
 from backend.office.path_safety import OfficePathError, validate_supported_filename
 from backend.office.ppt import generate_ppt
+from backend.office.session_workspace import get_active_workspace
+from backend.office.tool_service import OfficeToolService
 from backend.office.word import generate_docx
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.context import current_tool_context
 from backend.tools.file_tool import _record_artifact_safely
 
 #: doc_type 参数合法取值（与 models.OfficeDocType 对齐）
@@ -203,6 +207,19 @@ class OfficeCreateTool(BaseTool):
         error = self._check_params(doc_type, output_dir, filename, content)
         if error is not None:
             return error
+
+        # ---- T7.5: binding-aware delegation -----------------------------
+        # When the agent loop is running under a session-workspace binding
+        # (``@workspace foo`` in the chat) we MUST route through
+        # ``OfficeToolService.create`` so the doc is registered in
+        # ``office_documents`` -- otherwise list/read can't see it (the
+        # round-trip bug T7.5 fixes).
+        delegated = self._try_delegate_to_bound_service(
+            doc_type=doc_type, filename=filename, content=content
+        )
+        if delegated is not None:
+            return delegated
+
         doc_type_enum = OfficeDocType(doc_type)
         target_dir = Path(output_dir).expanduser().resolve()
         error = self._check_path(output_dir, filename, doc_type_enum, target_dir)
@@ -212,6 +229,57 @@ class OfficeCreateTool(BaseTool):
         if content is None:
             return ToolResult(success=False, error="content_required")
         return self._generate_document(doc_type_enum, filename, content, target_dir)
+
+    @staticmethod
+    def _try_delegate_to_bound_service(
+        *,
+        doc_type: str,
+        filename: str,
+        content: Any,
+    ) -> Optional[ToolResult]:
+        """Route to OfficeToolService.create when an active binding exists.
+
+        Returns:
+            * ``None`` when there is no live binding (caller falls through
+              to the legacy ``output_dir`` flow).
+            * A :class:`ToolResult` carrying the service's ``{document_id,
+              doc_type, filename}`` payload when delegation succeeds.
+            * A failure :class:`ToolResult` if the service returns an
+              error (e.g. stale generation, generation failure).
+        """
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return None
+        try:
+            db = get_database()
+            conn = db.get_connection()
+        except Exception:
+            # No DB configured (e.g. legacy caller) -> fall through to
+            # legacy ``output_dir`` path so plain "create on Desktop"
+            # requests still work.
+            return None
+        binding = get_active_workspace(
+            conn, ctx.session_id, expected_generation=ctx.binding_generation
+        )
+        if binding is None:
+            return None
+
+        service = OfficeToolService()
+        result = service.create(
+            conn,
+            ctx.session_id,
+            ctx.binding_generation,
+            doc_type=doc_type,
+            filename=filename,
+            content=content,
+        )
+        if not result.get("success"):
+            err = result.get("error") or {}
+            return ToolResult(
+                success=False,
+                error=str(err.get("code") or "create_failed"),
+            )
+        return ToolResult(success=True, content=result["content"])
 
     @staticmethod
     def _normalize_content(
