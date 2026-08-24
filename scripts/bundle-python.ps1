@@ -248,7 +248,7 @@ set PYTHONPATH=%~dp0backend;%~dp0sage-core
 "@
 Set-Content -Path $StartBackendBat -Value $BatContent -Encoding ASCII
 
-# Write the same provenance contract consumed by packaged Electron (from main 6034f7ed).
+# Write the same provenance contract consumed by packaged Electron.
 $Manifest = [ordered]@{
     manifestVersion = 1
     buildId = if ($env:SAGE_BUILD_ID) { $env:SAGE_BUILD_ID } else { "local-$((Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))" }
