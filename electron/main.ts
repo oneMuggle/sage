@@ -73,12 +73,30 @@ const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
 const buildManifest = loadBuildManifest(
   process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
-  { version: app.getVersion() },
+  // CRITICAL: guard app.getVersion() for vitest environments where the
+  // `electron` module mock (`vi.mock('electron', () => ({ app: { ... } }))`)
+  // does not include `getVersion`. Production Electron always provides it,
+  // but the test_backend_auto_restart.test.ts suite loads main.ts for
+  // module-level side effects (loading buildManifest triggers parseLogPaths,
+  // which spawns fs calls that error out in jsdom), so we cannot mock
+  // `loadBuildManifest` away cleanly. Optional-chaining + a stable fallback
+  // lets tests pass without forking the load path.
+  { version: (typeof app.getVersion === 'function' ? app.getVersion() : 'unknown') },
 );
 
 // A process-wide single-instance lock prevents two Electron supervisors from
 // racing over the same backend port and database.
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
+//
+// CRITICAL: guard app.requestSingleInstanceLock() for vitest environments
+// where the `electron` module mock in test_backend_auto_restart.test.ts
+// doesn't provide requestSingleInstanceLock. Production Electron always
+// provides it; the vitest mock intentionally exposes only the surface the
+// suite actually exercises. Same rationale as the app.getVersion() guard at
+// line 84 above.
+const gotSingleInstanceLock =
+  typeof app.requestSingleInstanceLock === 'function'
+    ? app.requestSingleInstanceLock()
+    : true;
 if (!gotSingleInstanceLock) {
   // CRITICAL: short-circuit ALL subsequent initialization, not just app.quit().
   //
