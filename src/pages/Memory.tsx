@@ -17,8 +17,11 @@ export function Memory() {
     setExporting(true);
     setExportError(null);
     try {
-      const memories = await memoryApi.getMemories(undefined, 1, 1000);
-      const blob = new Blob([JSON.stringify(memories, null, 2)], { type: 'application/json' });
+      // Task 2: ``getMemories`` 现在返回 envelope,从 ``items`` 取数据。
+      const response = await memoryApi.getMemories(undefined, 1, 1000);
+      const blob = new Blob([JSON.stringify(response.items, null, 2)], {
+        type: 'application/json',
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

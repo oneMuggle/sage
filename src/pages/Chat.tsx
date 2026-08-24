@@ -24,6 +24,15 @@ function fill(template: string, vars: Record<string, string | number>): string {
   );
 }
 
+/**
+ * Sticky-bottom 阈值(scrollTop 距底部 ≤ 此值视作"在底部")。
+ *
+ * - 太大会让用户微调 scrollbar 也算"在底部"→ 流式 token 抢焦点
+ * - 太小会让 1px 误差就让"跳到最新"按钮闪出/消失
+ * 经验值 48px 对应 ~5 行文字,大多数用户用滚轮 1-2 击内仍能停在阈值内。
+ */
+const BOTTOM_THRESHOLD_PX = 48;
+
 export function Chat() {
   const {
     messages,
@@ -66,12 +75,35 @@ export function Chat() {
   // 必须用 derivedMessages 而非 messages —— 流式 override 只在 derivedMessages 里,
   // 原 messages 中最后一条仍是占位符 '🤔 思考中…'。
   // 依赖:消息条数 + 最后一条 content + reasoning + tool_call 数 — 任一变化都触发滚动。
+  //
+  // Task 2 (Win7 parity) sticky-bottom UX:
+  // - 之前未实现时,流式 token 每来一次都强制 scrollTop=scrollHeight,
+  //   用户上滚读历史时焦点被频繁拉回底部,无法阅读 — Win7 packaged 后端
+  //   日志记录到该 UX 退化。
+  // - 修法:加 ``wasAtBottomRef`` + ``BOTTOM_THRESHOLD_PX`` 跟踪,只在
+  //   上次 scroll 事件时位于阈值内才 auto-scroll。
+  // - ``lastMsgLengthRef`` 检测"用户刚发了新消息"(消息条数增加)→ 强制一次
+  //   scroll,不依赖 wasAtBottomRef。
+  // - "跳到最新"按钮在 ``wasAtBottomRef.current === false && streamingMessageId`` 时渲染,
+  //   固定右下角,a11y ``aria-label="跳到最新"``。
   const scrollRef = useRef<HTMLDivElement>(null);
+  const wasAtBottomRef = useRef(true);
+  const lastMsgLengthRef = useRef(0);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const lastMsg = messages[messages.length - 1];
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+
+    const prevLength = lastMsgLengthRef.current;
+    const currentLength = messages.length;
+    // 新消息触发(消息数增加):用户主动发了一条,无论之前在不在底部都强制滚到底。
+    const userJustSent = currentLength > prevLength;
+    lastMsgLengthRef.current = currentLength;
+
+    if (userJustSent || wasAtBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [
     messages.length,
     lastMsg?.content,
@@ -80,6 +112,36 @@ export function Chat() {
     // streamingMessageId 变化时也需要滚 (新 stream 开始)
     streamingMessageId,
   ]);
+
+  // Scroll listener: 维护 wasAtBottomRef + showJumpToLatest UI state。
+  // 用 ``wasAtBottomRef`` 同步标记 + ``useState`` 异步刷新,避免 setState 触发的
+  // re-render 打断滚动节奏(scrollTop 频繁跳变会让 wasAtBottom 状态本身抖动)。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
+      const atBottom = distance <= BOTTOM_THRESHOLD_PX;
+      wasAtBottomRef.current = atBottom;
+      // ``showJumpToLatest`` 仅在流式进行 + 离开底部时显示
+      setShowJumpToLatest(!atBottom && Boolean(streamingMessageId));
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    // 初始挂载时跑一次,让 wasAtBottom 反映真实初始状态
+    onScroll();
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [streamingMessageId]);
+
+  const scrollToLatest = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    wasAtBottomRef.current = true;
+    setShowJumpToLatest(false);
+  };
 
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const hasConfig =
@@ -252,7 +314,7 @@ export function Chat() {
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto relative">
         {isLoading && messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <LoadingState label="正在加载对话..." />
@@ -263,6 +325,19 @@ export function Chat() {
             streamingMessageId={streamingMessageId}
             onFork={handleFork}
           />
+        )}
+        {/* Task 2: sticky-bottom "跳到最新" 按钮 — 用户离开底部 + 流式进行中显示,
+            固定右下角,a11y ``aria-label="跳到最新"``。点击后 scrollTop=scrollHeight
+            并把 wasAtBottomRef 重置。 */}
+        {showJumpToLatest && (
+          <button
+            type="button"
+            onClick={scrollToLatest}
+            aria-label="跳到最新"
+            className="absolute bottom-4 right-4 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm shadow-md hover:bg-primary-hover transition-colors z-10"
+          >
+            跳到最新
+          </button>
         )}
       </div>
 

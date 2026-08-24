@@ -1,6 +1,13 @@
 """memory_tool 单元测试：MemorySearchTool / MemorySaveTool
 
-使用一个 fake memory manager (含 async remember) 替代真实记忆系统。
+Win7 parity 修复（Task 2）后：
+- MemorySaveTool 直接调 ``MemoryManager.memorize``，不包 event loop。
+- MemorySearchTool 调 ``MemoryManager.search_memories``，把 ``'all'`` 映射成
+  ``None``，并 clamp ``limit`` 到 ``[1, 100]``。
+
+旧的 ``_FakeMemoryManager.remember`` 已废弃，本测试改用 ``_FakeMemoryManager``
+exposing ``memorize`` / ``search_memories`` 两个 sync 方法。``remember`` 仍
+存在（向后兼容 back-compat）但工具不应再调用它。
 """
 
 from __future__ import annotations
@@ -15,18 +22,35 @@ pytestmark = pytest.mark.unit
 
 
 class _FakeMemoryManager:
-    """简化的 async 记忆管理器：记录每次 remember 调用并按需返回结果。"""
+    """同步 fake 记忆管理器：记录 memorize / search_memories 调用。
 
-    def __init__(self, remember_return=None, raise_exc: Optional[Exception] = None):
-        self._return = remember_return if remember_return is not None else []
+    提供 ``raise_exc`` 让测试触发 manager 异常路径（替代旧的 async remember
+    注入）。``remember`` 保留只是为防止未来 regression 把工具切回去。
+    """
+
+    def __init__(
+        self,
+        memorize_return: Optional[str] = "mem-1",
+        search_return: Optional[List[dict]] = None,
+        raise_exc: Optional[Exception] = None,
+    ) -> None:
+        self.memorize_calls: List[tuple] = []
+        self.search_memories_calls: List[tuple] = []
+        self._memorize_return = memorize_return
+        self._search_return = search_return if search_return is not None else []
         self._raise = raise_exc
-        self.calls: List[tuple] = []
 
-    async def remember(self, *args, **kwargs):
-        self.calls.append((args, kwargs))
+    def memorize(self, *args, **kwargs):
         if self._raise:
             raise self._raise
-        return self._return
+        self.memorize_calls.append((args, kwargs))
+        return self._memorize_return
+
+    def search_memories(self, *args, **kwargs):
+        if self._raise:
+            raise self._raise
+        self.search_memories_calls.append((args, kwargs))
+        return list(self._search_return)
 
 
 # ---------- MemorySearchTool ----------
@@ -49,8 +73,8 @@ def test_memory_search_without_manager_fails():
 
 
 def test_memory_search_success_with_results():
-    """正常调用 memory_manager.remember 并返回限制后的结果"""
-    fake = _FakeMemoryManager(remember_return=[{"id": 1}, {"id": 2}, {"id": 3}])
+    """正常调用 ``search_memories`` 并返回结果。"""
+    fake = _FakeMemoryManager(search_return=[{"id": 1}, {"id": 2}, {"id": 3}])
     tool = MemorySearchTool(memory_manager=fake)
 
     result = tool.execute(query="hello", memory_type="semantic", limit=2)
@@ -59,17 +83,18 @@ def test_memory_search_success_with_results():
     assert result.content["query"] == "hello"
     assert result.content["memory_type"] == "semantic"
     assert result.content["results"] == [{"id": 1}, {"id": 2}]
-
-    # 验证 manager.remember 被调用且参数被正确转发
-    assert len(fake.calls) == 1
-    _, kwargs = fake.calls[0]
-    assert kwargs["query"] == "hello"
-    assert kwargs["context"]["memory_type_filter"] == "semantic"
+    # 默认 limit=20 时 tools 内部把 limit=2 直接转发
+    assert len(fake.search_memories_calls) == 1
+    args, _ = fake.search_memories_calls[0]
+    assert args[0] == "hello"
+    # 'semantic' 不是 'all', 原样转发
+    assert args[1] == "semantic"
+    assert args[2] == 2
 
 
 def test_memory_search_empty_results_returns_empty_list():
-    """remember 返回 None 时 results 为 []"""
-    fake = _FakeMemoryManager(remember_return=None)
+    """``search_memories`` 返回空列表时 ``results`` 为 ``[]``。"""
+    fake = _FakeMemoryManager(search_return=[])
     tool = MemorySearchTool(memory_manager=fake)
     result = tool.execute(query="empty")
     assert result.success is True
@@ -77,7 +102,7 @@ def test_memory_search_empty_results_returns_empty_list():
 
 
 def test_memory_search_manager_exception_returns_failure():
-    """remember 抛异常时工具捕获并返回失败"""
+    """manager 抛异常时工具捕获并返回失败"""
     fake = _FakeMemoryManager(raise_exc=RuntimeError("boom"))
     tool = MemorySearchTool(memory_manager=fake)
     result = tool.execute(query="oops")
@@ -89,7 +114,7 @@ def test_memory_search_manager_exception_returns_failure():
 def test_memory_search_set_manager_late():
     """可以延迟设置 manager"""
     tool = MemorySearchTool()
-    fake = _FakeMemoryManager(remember_return=[{"x": 1}])
+    fake = _FakeMemoryManager(search_return=[{"x": 1}])
     tool.set_memory_manager(fake)
     result = tool.execute(query="late")
     assert result.success is True
@@ -115,22 +140,25 @@ def test_memory_save_without_manager_fails():
 
 
 def test_memory_save_success_calls_manager_with_meta():
-    """正常保存：转发 content 与 importance/memory_type"""
-    fake = _FakeMemoryManager(remember_return=None)
+    """正常保存：``memorize`` 被调用且参数正确转发。"""
+    fake = _FakeMemoryManager(memorize_return="mem-x")
     tool = MemorySaveTool(memory_manager=fake)
 
     result = tool.execute(content="重要信息", importance=8, memory_type="semantic")
 
     assert result.success is True
+    assert result.output == "mem-x"
     assert result.content["content_length"] == len("重要信息")
     assert result.content["importance"] == 8
     assert result.content["memory_type"] == "semantic"
 
-    assert len(fake.calls) == 1
-    args, _ = fake.calls[0]
+    assert len(fake.memorize_calls) == 1
+    args, kwargs = fake.memorize_calls[0]
     assert args[0] == "重要信息"
-    assert args[1]["importance"] == 8
-    assert args[1]["memory_type"] == "semantic"
+    assert args[1] == "semantic"
+    assert args[2] == 8
+    assert args[3] is None  # 默认 tags=None
+    assert kwargs["session_id"] is None
 
 
 def test_memory_save_default_importance_and_type():
@@ -139,12 +167,13 @@ def test_memory_save_default_importance_and_type():
     tool = MemorySaveTool(memory_manager=fake)
     result = tool.execute(content="hi")
     assert result.success is True
+    assert result.output == "mem-1"
     assert result.content["importance"] == 5
     assert result.content["memory_type"] == "episodic"
 
 
 def test_memory_save_manager_exception_returns_failure():
-    """remember 抛异常时返回失败"""
+    """manager 抛异常时返回失败"""
     fake = _FakeMemoryManager(raise_exc=ValueError("db down"))
     tool = MemorySaveTool(memory_manager=fake)
     result = tool.execute(content="payload")
@@ -155,7 +184,127 @@ def test_memory_save_manager_exception_returns_failure():
 
 def test_memory_save_set_manager_late():
     tool = MemorySaveTool()
-    fake = _FakeMemoryManager()
+    fake = _FakeMemoryManager(memorize_return="mem-late")
     tool.set_memory_manager(fake)
     result = tool.execute(content="after set")
     assert result.success is True
+    assert result.output == "mem-late"
+
+
+# ---------- Task 2: New contract — memorize / search_memories ----------
+#
+# The Win7 packaged backend logs proved the old implementation is broken:
+#  - ``MemorySaveTool.execute`` ran ``new_event_loop().run_until_complete()``
+#    against a non-coroutine return value → "cannot run the event loop while
+#    another loop is running".
+#  - ``MemorySearchTool.execute`` called ``self.memory.remember(query=...)``
+#    → TypeError (no such kwarg on ``remember``).
+#
+# New contract: tools speak the synchronous ``memorize()`` /
+# ``search_memories()`` API exposed by ``MemoryManager``.
+
+
+def test_memory_save_tool_uses_memorize_without_event_loop(real_memory_manager):
+    """MemorySaveTool must call ``memorize(...)`` synchronously.
+
+    The brief pins: ``self.memory.memorize(content, memory_type, importance,
+    tags, session_id=session_id)``. The tool must NOT spin a private event
+    loop (which was the source of the Win7 RuntimeError).
+    """
+    result = MemorySaveTool(memory=real_memory_manager).execute(
+        content="user prefers UTC+8",
+        memory_type="episodic",
+        importance=5,
+        tags=[],
+        session_id="sess-A",
+    )
+    assert result.success is True
+    # output is the actual memory ID — surfaced for the LLM tool loop.
+    assert result.output
+    real_memory_manager.memorize.assert_called_once_with(
+        "user prefers UTC+8",
+        "episodic",
+        5,
+        [],
+        session_id="sess-A",
+    )
+
+
+def test_memory_search_tool_calls_search_memories_not_remember(memory_manager_spy):
+    """MemorySearchTool must call ``search_memories`` (not ``remember``).
+
+    The brief pins: ``MemoryManager.search_memories(query, memory_type=None,
+    limit=20)``. ``memory_type='all'`` must be normalised to ``None``.
+    """
+    MemorySearchTool(memory=memory_manager_spy).execute(
+        query="UTC", memory_type="all", limit=5
+    )
+    memory_manager_spy.search_memories.assert_called_once_with("UTC", None, 5)
+
+
+def test_memory_search_tool_maps_all_to_none_and_clamps_limit(memory_manager_spy):
+    """Out-of-range ``limit`` must be clamped to ``[1, 100]``.
+
+    ``memory_type='all'`` and empty strings must also normalise to ``None``.
+    """
+    MemorySearchTool(memory=memory_manager_spy).execute(
+        query="x", memory_type="all", limit=999
+    )
+    memory_manager_spy.search_memories.assert_called_once_with("x", None, 100)
+
+
+def test_memory_search_tool_normalises_empty_string_type(memory_manager_spy):
+    """Empty-string ``memory_type`` (e.g. from optional IPC field) → ``None``."""
+    MemorySearchTool(memory=memory_manager_spy).execute(
+        query="x", memory_type="", limit=3
+    )
+    memory_manager_spy.search_memories.assert_called_once_with("x", None, 3)
+
+
+def test_memory_search_tool_clamps_limit_to_min_one(memory_manager_spy):
+    """``limit < 1`` must be clamped up to 1 (avoid ``LIMIT 0`` silent)."""
+    MemorySearchTool(memory=memory_manager_spy).execute(
+        query="x", memory_type="all", limit=0
+    )
+    memory_manager_spy.search_memories.assert_called_once_with("x", None, 1)
+
+
+def test_memory_search_tool_passes_through_specific_type(memory_manager_spy):
+    """Non-``all`` ``memory_type`` (e.g. ``episodic``) is forwarded unchanged."""
+    MemorySearchTool(memory=memory_manager_spy).execute(
+        query="x", memory_type="episodic", limit=2
+    )
+    memory_manager_spy.search_memories.assert_called_once_with("x", "episodic", 2)
+
+
+# ---------- pytest fixtures used by the contract tests ----------
+
+
+@pytest.fixture()
+def real_memory_manager(monkeypatch):
+    """Spy whose ``memorize`` returns a stable memory ID and records calls.
+
+    The brief's test pins ``real_memory_manager.memorize.assert_called_once_with(...)``,
+    so this fixture exposes a real ``MagicMock``-style spy rather than a hand-
+    written recorder.
+    """
+    from unittest.mock import MagicMock
+
+    spy = MagicMock()
+    spy.memorize.return_value = "mem-real"
+    return spy
+
+
+@pytest.fixture()
+def memory_manager_spy():
+    """``MagicMock`` whose ``search_memories`` returns ``[]`` by default.
+
+    Using ``MagicMock`` (not hand-rolled recorder) so tests can call
+    ``assert_called_once_with`` / ``assert_not_called`` directly.
+    """
+    from unittest.mock import MagicMock
+
+    spy = MagicMock()
+    spy.search_memories.return_value = []
+    spy.memorize.return_value = "mem-1"
+    return spy
