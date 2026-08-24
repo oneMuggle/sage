@@ -38,8 +38,9 @@ from __future__ import annotations
 import logging
 import os
 import posixpath
+import ssl
 from collections.abc import AsyncIterator
-from typing import Dict, FrozenSet, Optional
+from typing import Dict, FrozenSet
 from urllib.parse import urlparse
 
 import httpx
@@ -82,18 +83,50 @@ _CA_BUNDLE_ENV_VARS: FrozenSet[str] = frozenset(
 
 
 def _is_ca_bundle_available() -> bool:
-    """检测 ``SSL_CERT_FILE`` / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE``
-    是否被 ``configure_ssl_ca_bundle`` 注入并且指向现有非空文件。
+    """检测 CA bundle 是否可用.
 
-    任一变量存在且路径可读 → True; 全部未设 / 路径缺失 → False.
+    优先检查 ``SSL_CERT_FILE`` / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE``
+    三个环境变量 (由 ``main.configure_ssl_ca_bundle`` 注入 certifi.where 路径).
+    兜底探测 ``ssl.get_default_verify_paths().cafile / capath``: 系统级 bundle
+    (OpenSSL ``/etc/ssl/certs`` / Windows cert store 派生文件) 也是合法 CA 源,
+    在公司代理只配系统 bundle 不设 env vars 的环境里必须认.
+
+    任一来源存在且路径可读 → True; 全部未设 / 路径缺失 / 不可读 → False.
     """
+    from pathlib import Path
+
     for variable in _CA_BUNDLE_ENV_VARS:
         path_str = os.environ.get(variable)
         if not path_str:
             continue
-        path = __import__("pathlib").Path(path_str)
+        path = Path(path_str)
         try:
             if path.is_file() and path.stat().st_size > 0:
+                return True
+            if path.is_dir() and any(path.iterdir()):
+                # capath 是目录, 含已哈希链接的 cert 文件; 任意文件存在即视为可用.
+                return True
+        except OSError:
+            continue
+
+    # 兜底: 探测 Python 进程默认的 CA bundle 路径 (OpenSSL ``DEFAULT@`` 区段).
+    # get_default_verify_paths() 在所有 CPython 版本 (>= 3.7) 都返回 cafile/capath
+    # 字符串; cafile 通常指向 certifi 注入后的 PEM, capath 指向系统 certs 目录.
+    try:
+        defaults = ssl.get_default_verify_paths()
+    except Exception:  # pragma: no cover — ssl 模块不应抛, 兜底保护
+        return False
+    for candidate in (defaults.cafile, defaults.capath):
+        if not candidate:
+            continue
+        try:
+            path = Path(candidate)
+        except (TypeError, ValueError):
+            continue
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return True
+            if path.is_dir() and any(path.iterdir()):
                 return True
         except OSError:
             continue
@@ -101,12 +134,45 @@ def _is_ca_bundle_available() -> bool:
 
 
 def _is_tls_certificate_error(exc: BaseException) -> bool:
-    """判断 httpx 异常是否来自证书校验失败(包含 SSLCertVerificationError 等).
+    """判断 httpx 异常是否来自证书校验失败.
 
-    httpx 在证书校验失败时抛 ``httpcore.ConnectError`` 包装的 ``ssl.SSLCertVerificationError``
-    / ``ssl.SSLError``, 错误消息含 "certificate verify failed". 我们做关键字匹配兜底,
-    避免依赖特定异常类层级.
+    主路径: 沿异常链 (``__cause__`` / ``__context__`` / ``exceptions``) 递归找
+    ``ssl.SSLCertVerificationError`` 实例. Python 3.7+ 起
+    ``ssl.SSLCertVerificationError`` 是 ``ssl.SSLError`` 子类, 与 ``str(exc)``
+    的字符串匹配无关 — 比关键字匹配更可靠, 不会被 i18n / message 格式变化
+    误伤.
+
+    兜底: 字符串匹配 "certificate verify failed" 等关键词. 兜底覆盖罕见情况
+    (例: httpcore 在某些版本里把 ``SSLCertVerificationError`` 包装成
+    ``RemoteProtocolError`` 丢失 ``__cause__`` 链, 但 str() 里仍带关键词).
+
+    httpx.ConnectError / httpcore.ConnectError 通常 ``__cause__`` 链挂
+    ``ssl.SSLCertVerificationError`` (Py3.7+); 也有可能挂在 ``ssl.SSLError``
+    但 message 含 "CERTIFICATE_VERIFY_FAILED".
     """
+    # 主路径: 异常链递归
+    current: Optional[BaseException] = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return True
+        # 同级: __cause__ (raise X from Y) → __context__ (implicit) → exceptions
+        next_exc: BaseException | None = None
+        if current.__cause__ is not None and current.__cause__ is not current:
+            next_exc = current.__cause__
+        elif current.__context__ is not None and current.__context__ is not current:
+            next_exc = current.__context__
+        # Python 3.11+ ExceptionGroup 兼容: 沿 .exceptions 拆开递归.
+        if hasattr(current, "exceptions") and isinstance(
+            current.exceptions, tuple
+        ):
+            for sub in current.exceptions:
+                if _is_tls_certificate_error(sub):
+                    return True
+        current = next_exc
+
+    # 兜底: 字符串匹配 (httpcore 在某些版本里把 SSL 异常包装, 丢 __cause__ 链).
     msg = str(exc).lower()
     return (
         "certificate verify failed" in msg
@@ -260,7 +326,7 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
 
     # 4. 透传头部与 body
     fwd_headers = _filter_request_headers(request)
-    body: Optional[bytes] = (
+    body: bytes | None = (
         await request.body() if request.method in {"POST", "PUT", "PATCH"} else None
     )
 
@@ -391,7 +457,7 @@ async def _proxy_streaming(
     upstream_url: str,
     method: str,
     fwd_headers: Dict[str, str],
-    body: Optional[bytes],
+    body: bytes | None,
 ) -> StreamingResponse:
     """v2: SSE/chunked 流式透传。
 

@@ -12,6 +12,8 @@ import {
   AppSettings,
   DEFAULT_ORCH_SETTINGS,
   DEFAULT_SETTINGS,
+  EndpointConfig,
+  ModelSelections,
   SETTINGS_STORAGE_KEY,
   SETTINGS_VERSION,
 } from './types';
@@ -88,11 +90,37 @@ async function maybeAutoMigrate(remote: AppSettings | null): Promise<void> {
 
 // 导出为测试钩子（vitest 直接断言嵌套 merge 行为）。
 export function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
+  // Task 1 round 1 (2026-08-24): endpoints / modelSelections 走 deepMerge 而非
+  // 整体替换. 之前 ``partial.endpoints ?? DEFAULT_SETTINGS.endpoints`` 是 hard
+  // replace — 用户的 partial 里只更新了一条 endpoint, 会把 DEFAULT 的其它默认
+  // endpoint 全部丢掉, 新加默认 endpoint 时用户永远看不到.
+  //
+  // deepMerge 行为:
+  // - 同 id endpoint → 字段级 merge (DEFAULT 字段 + 用户覆盖字段)
+  // - 新 id (用户加的) → 追加
+  // - DEFAULT 独有 id (用户在老 partial 没的) → 保留
+  // 这与 loadSettings 的 remote + local 合并策略一致 (deepMerge remote-wins).
+  const partialEndpoints = partial.endpoints;
+  const mergedEndpoints =
+    partialEndpoints === undefined
+      ? DEFAULT_SETTINGS.endpoints
+      : deepMerge<EndpointConfig[]>(DEFAULT_SETTINGS.endpoints, partialEndpoints, {
+          policy: 'remote-wins',
+        });
+
+  const partialModelSelections = partial.modelSelections;
+  const mergedModelSelections =
+    partialModelSelections === undefined
+      ? DEFAULT_SETTINGS.modelSelections
+      : deepMerge<ModelSelections>(DEFAULT_SETTINGS.modelSelections, partialModelSelections, {
+          policy: 'remote-wins',
+        });
+
   return {
     ...DEFAULT_SETTINGS,
     ...partial,
-    endpoints: partial.endpoints ?? DEFAULT_SETTINGS.endpoints,
-    modelSelections: partial.modelSelections ?? DEFAULT_SETTINGS.modelSelections,
+    endpoints: mergedEndpoints,
+    modelSelections: mergedModelSelections,
     // Task 1 (2026-08-23): 缺省时区补 'Asia/Shanghai' — 与 DEFAULT_SETTINGS.timezone 对齐.
     timezone: partial.timezone ?? DEFAULT_SETTINGS.timezone,
     // 嵌套 merge：部分 orch 更新不丢其余键（同 endpoints 的既有 bug 防护）。

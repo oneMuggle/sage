@@ -20,6 +20,10 @@ from backend.data.settings_canonicalizer import (
     from_camel,
     strip_unknown_fields,
     to_camel,
+    validate_endpoint_payload,
+    validate_local_model_path,
+    validate_protocol,
+    validate_settings_payload,
     validate_settings_shape,
 )
 
@@ -433,3 +437,135 @@ def test_strip_unknown_fields_keeps_new_fields() -> None:
         ],
     }
     assert strip_unknown_fields(clean) == clean
+
+
+# === Task 1 round 1 (2026-08-24): protocol / localModelPath value validators ===
+# 之前散在 hex_routes / legacy_routes 的 Pydantic ``field_validator`` 装饰器里.
+# Pydantic 2 装饰器在 Pydantic 1 / Win7 不可用, 故下沉到 canonicalizer.
+# 这些测试覆盖 value 校验 (Pydantic 装饰器已替换, 跑 Pydantic 1/2 同一套函数).
+
+
+def test_validate_protocol_accepts_legal_values() -> None:
+    """4 个合法协议枚举值全部接受."""
+    for p in ("openai-compatible", "anthropic", "gemini", "ollama"):
+        assert validate_protocol(p) == p  # 原样返回
+
+
+def test_validate_protocol_passes_through_none_and_empty() -> None:
+    """None / 空串视为"未设置", 由 _migrate_default_protocol 兜底补默认值."""
+    assert validate_protocol(None) is None
+    assert validate_protocol("") == ""
+
+
+def test_validate_protocol_rejects_non_string() -> None:
+    """非 str 类型 (int / dict) → ValueError."""
+    with pytest.raises(ValueError, match="protocol must be a string"):
+        validate_protocol(123)
+    with pytest.raises(ValueError, match="protocol must be a string"):
+        validate_protocol({"nested": True})
+
+
+def test_validate_protocol_rejects_unknown_value() -> None:
+    """不在白名单的协议 → ValueError, 提示合法值."""
+    with pytest.raises(ValueError, match="invalid protocol"):
+        validate_protocol("future-protocol")
+
+
+def test_validate_local_model_path_accepts_none_and_empty() -> None:
+    """None / 空串直接通过."""
+    assert validate_local_model_path(None) is None
+    assert validate_local_model_path("") == ""
+
+
+def test_validate_local_model_path_rejects_non_string() -> None:
+    """非 str 类型 → ValueError."""
+    with pytest.raises(ValueError, match="localModelPath must be a string"):
+        validate_local_model_path(123)
+    with pytest.raises(ValueError, match="localModelPath must be a string"):
+        validate_local_model_path(["array", "is", "not", "allowed"])
+
+
+def test_validate_local_model_path_win32_rejects_posix_slash() -> None:
+    """Task 1 round 1 (2026-08-24): Win32 平台拒绝 POSIX 分隔符 ``/``.
+
+    Win32 路径必须用 ``\\``; 用户的 localModelPath 含 ``/`` 多半是
+    LM Studio / Ollama 等跨平台用户把 POSIX 路径直接复制过来, 在 Windows
+    上找不到文件. 提早报错比"运行时静默找不到"好.
+    """
+    # 注入 platform="win32", 避免依赖真实平台.
+    with pytest.raises(ValueError, match="Windows path separators"):
+        validate_local_model_path("/tmp/qwen.gguf", platform="win32")
+    with pytest.raises(ValueError, match="Windows path separators"):
+        validate_local_model_path("C:/Users/foo/qwen.gguf", platform="win32")
+
+
+def test_validate_local_model_path_win32_accepts_backslash() -> None:
+    """Win32 平台反斜杠路径正常通过 (UNC / drive letter 等都允许)."""
+    assert validate_local_model_path(r"C:\models\qwen.gguf", platform="win32") == r"C:\models\qwen.gguf"
+    assert validate_local_model_path(r"\\server\share\model.gguf", platform="win32") == r"\\server\share\model.gguf"
+
+
+def test_validate_local_model_path_linux_rejects_backslash() -> None:
+    """POSIX 平台 (linux / darwin) 拒绝反斜杠 — 历史数据从 Windows 迁过来时常见.
+
+    反斜杠在 POSIX 上不是合法分隔符, 必须用 ``/``. ``bash`` 把 ``\\``
+    当字面字符, 路径含 ``\\`` 通常是数据迁移残留.
+    """
+    with pytest.raises(ValueError, match="POSIX path separators"):
+        validate_local_model_path(r"C:\models\qwen.gguf", platform="linux")
+    with pytest.raises(ValueError, match="POSIX path separators"):
+        validate_local_model_path(r"models\qwen.gguf", platform="darwin")
+
+
+def test_validate_local_model_path_linux_accepts_forward_slash() -> None:
+    """POSIX 平台正斜杠路径正常通过."""
+    assert validate_local_model_path("/home/user/qwen.gguf", platform="linux") == "/home/user/qwen.gguf"
+    assert validate_local_model_path("./relative/path/model.gguf", platform="linux") == "./relative/path/model.gguf"
+
+
+def test_validate_endpoint_payload_combined() -> None:
+    """单条 endpoint dict: protocol + localModelPath 组合校验.
+
+    传合法 protocol + 合法 path → 通过.
+    传合法 protocol + 非法 path → ValueError, message 含 path.
+    """
+    ep_ok = {"id": "e1", "protocol": "openai-compatible", "localModelPath": "/tmp/q.gguf"}
+    assert validate_endpoint_payload(ep_ok, platform="linux") == ep_ok
+
+    ep_bad_path = {"id": "e1", "protocol": "openai-compatible", "localModelPath": r"C:\bad"}
+    with pytest.raises(ValueError, match="POSIX path separators"):
+        validate_endpoint_payload(ep_bad_path, platform="linux")
+
+
+def test_validate_endpoint_payload_rejects_non_dict() -> None:
+    """endpoint payload 必须是 dict, list/str/number 全部拒绝."""
+    with pytest.raises(ValueError, match="endpoint payload must be a dict"):
+        validate_endpoint_payload("not-a-dict")
+    with pytest.raises(ValueError, match="endpoint payload must be a dict"):
+        validate_endpoint_payload([1, 2, 3])
+
+
+def test_validate_settings_payload_rejects_bad_timezone() -> None:
+    """顶层 timezone 非法 → ValueError (handler 翻译 422)."""
+    settings = {"timezone": "Not/A/Real/Zone"}
+    with pytest.raises(ValueError, match="invalid IANA timezone"):
+        validate_settings_payload(settings)
+
+
+def test_validate_settings_payload_wraps_endpoint_index() -> None:
+    """endpoints[i].protocol 非法 → ValueError, message 含 endpoints[i] 索引."""
+    settings = {
+        "endpoints": [
+            {"id": "ok", "protocol": "openai-compatible"},
+            {"id": "bad", "protocol": "future-protocol"},  # 第 2 个
+        ]
+    }
+    with pytest.raises(ValueError, match=r"endpoints\[1\]"):
+        validate_settings_payload(settings)
+
+
+def test_validate_settings_payload_non_dict_passes_silently() -> None:
+    """非 dict 输入 (None / list / str) 不抛错, 由 validate_settings_shape 兜底."""
+    validate_settings_payload(None)
+    validate_settings_payload([1, 2, 3])
+    validate_settings_payload("not-a-dict")
