@@ -246,16 +246,16 @@ jobs:
       # createBuildManifest() defaults and silently disables buildId-based
       # health-ownership validation. The two "Verify packaged build-manifest.json"
       # steps below would fail. We use the dedicated cross-platform Node
-      # helper scripts/ci-write-manifest.cjs invoked via PowerShell (which
+      # helper scripts/ci-write-manifest.mjs invoked via PowerShell (which
       # is preinstalled on every GitHub-hosted runner and avoids shell-
       # escape hell on Windows). GitHub Actions does NOT accept `shell:
-      # node`. The .cjs extension is mandatory because package.json has
+      # node`. The .mjs extension is mandatory because package.json has
       # `"type": "module"` (since the main TS toolchain migrated to ESM)
-      # and Node would otherwise treat a plain .js file as ESM, rejecting
-      # the CommonJS `require()` calls inside.
+      # AND the @typescript-eslint config rejects `require()` calls; ESM
+      # `import` satisfies both.
       - name: Generate build-manifest.json (cross-platform)
         shell: pwsh
-        run: node scripts/ci-write-manifest.cjs
+        run: node scripts/ci-write-manifest.mjs
 
       - name: Package (Linux AppImage + deb)
         if: matrix.os == 'ubuntu-latest'
