@@ -71,7 +71,7 @@ const BACKEND_HEALTH = `${BACKEND_URL}/health`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
 const buildManifest = loadBuildManifest(
-  join(process.resourcesPath, 'build-manifest.json'),
+  process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
   { version: app.getVersion() },
 );
 
@@ -1308,6 +1308,11 @@ app.whenReady().then(async () => {
   // and exposes window.electronAPI for IPC contract verification).
   if (process.env.SAGE_SKIP_BACKEND === '1') {
     logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
+    // The IPC readiness gate (BackendNotReadyError) is meaningless when the
+    // user (or CI) has explicitly opted out of the backend — without this,
+    // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before
+    // reaching the dispatcher and fails the bridge round-trip assertion.
+    backendLifecycle = 'ready';
     createMainWindow();
     buildApplicationMenu();
     return;
