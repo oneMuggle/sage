@@ -21,14 +21,15 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Dict, Optional, Set, Union
+from typing import Any, Dict, Set, Union
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, StrictBool, field_validator
+from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
 from backend.api.orch_routes import router as orch_routes_router
+from backend.api.settings_models import LegacySettingsPayload
 from backend.chat.compaction import (
     MIN_COMPACT_MESSAGE_COUNT,
     CompactionError,
@@ -132,44 +133,44 @@ def _safe_log_field(value: object, max_length: int = 64) -> str:
 
 class SessionCreate(BaseModel):
     title: str = "新对话"
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
 
 
 class SessionUpdate(BaseModel):
-    title: Optional[str] = None
+    title: str | None = None
 
-    is_pinned: Optional[bool] = None
+    is_pinned: bool | None = None
 
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    workspace_path: Optional[str] = None
+    workspace_path: str | None = None
     # 2026-07-30: 选 agent 的入口。None / 空字符串 → 端点 fallback 到 "primary"。
     # 真正的路由由 SageAgent(agent_id=...) 内部完成:从 SQLite 读 profile,
     # 透传到 get_available_tools → ToolRegistry.get_schemas_for_llm(allowed_tools=...)
     # 这样 memory_manager 之类的窄权限 agent 不会拿到 list_dir/read_file。
-    agent_id: Optional[str] = None
-    api_key: Optional[str] = None
+    agent_id: str | None = None
+    api_key: str | None = None
 
-    api_url: Optional[str] = None
+    api_url: str | None = None
 
-    model: Optional[str] = None
+    model: str | None = None
 
-    max_context: Optional[int] = None
+    max_context: int | None = None
 
-    temperature: Optional[float] = None
+    temperature: float | None = None
 
     # 透传字段:provider 让后端不再硬写,reasoning_effort/thinking_budget
     # 让上游 LLM 启用 thinking 输出(provider 决定哪种 key 会被接受)
     # - provider: openai / claude / gemini / deepseek / ollama / custom
     # - reasoning_effort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
     # - thinking_budget: Gemini 2.5 OpenAI 兼容模式
-    provider: Optional[str] = None
+    provider: str | None = None
 
-    reasoning_effort: Optional[str] = None
+    reasoning_effort: str | None = None
 
-    thinking_budget: Optional[int] = None
+    thinking_budget: int | None = None
 
     # Task 6 (M1-M2 chat-read): frontend 把 @mention 解析成
     # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
@@ -184,12 +185,12 @@ class ChatRequest(BaseModel):
     # Optional: 兼容渲染进程 IPC payload 里显式 null(undefined ?? null 序列化的产物)。
     # Pydantic 默认值只在字段缺失时生效，显式 null 仍按类型校验 →
     # 不加 Optional 会被 422 拒绝。业务层 `data.orchestration_mode or "auto"` 已兜底。
-    orchestration_mode: Optional[str] = "auto"
+    orchestration_mode: str | None = "auto"
 
     # Wave 3 A10 (2026-08-14): resume 恢复流 —— plan_override 非空时跳过 LLM
     # 拆解，直接用存储计划建 dispatcher；run_id 复用 resume 返回的 new_run_id。
-    plan_override: Optional[List[Dict[str, Any]]] = None
-    run_id: Optional[str] = None
+    plan_override: List[Dict[str, Any]] | None = None
+    run_id: str | None = None
 
 
 class MessageResponse(BaseModel):
@@ -198,9 +199,9 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: int
-    model: Optional[str] = None
+    model: str | None = None
 
-    tool_calls: Optional[str] = None
+    tool_calls: str | None = None
 
 
 class ChatErrorInfo(BaseModel):
@@ -211,19 +212,19 @@ class ChatErrorInfo(BaseModel):
 
     type: str
     message: str
-    status_code: Optional[int] = None
+    status_code: int | None = None
 
-    retry_after: Optional[int] = None
+    retry_after: int | None = None
 
 
 class ChatResponse(BaseModel):
     """聊天响应：成功时含 message+session，失败时含 error+null message。"""
 
-    message: Optional[MessageResponse] = None
+    message: MessageResponse | None = None
 
-    session: Optional[dict] = None
+    session: dict | None = None
 
-    error: Optional[ChatErrorInfo] = None
+    error: ChatErrorInfo | None = None
 
 
 class EvolutionLogResponse(BaseModel):
@@ -232,20 +233,20 @@ class EvolutionLogResponse(BaseModel):
     id: str
     evolution_type: str
     description: str
-    before_state: Optional[str] = None
+    before_state: str | None = None
 
-    after_state: Optional[str] = None
+    after_state: str | None = None
 
     trigger_type: str
-    trigger_condition: Optional[str] = None
+    trigger_condition: str | None = None
 
     status: str
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
-    tokens_used: Optional[int] = None
+    tokens_used: int | None = None
 
     created_at: int
-    completed_at: Optional[int] = None
+    completed_at: int | None = None
 
 
 #: agent role 白名单（PATCH/POST 共用）。
@@ -285,25 +286,25 @@ class AgentUpdate(BaseModel):
     # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
     model_config = {"protected_namespaces": ()}
 
-    name: Optional[str] = None
+    name: str | None = None
 
     role: Union[str, None] = None  # 校验放在路由层 (依赖 Pydantic Literal 不直观)
 
-    system_prompt: Optional[str] = None
+    system_prompt: str | None = None
 
-    tools: Optional[List[str]] = None
+    tools: List[str] | None = None
 
-    memory_access: Optional[List[str]] = None
+    memory_access: List[str] | None = None
 
     model_config_data: Union[dict, None] = (
         None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
     )
 
-    max_iterations: Optional[int] = None  # 路由层校验 1..50
+    max_iterations: int | None = None  # 路由层校验 1..50
 
-    enabled: Optional[bool] = None
+    enabled: bool | None = None
 
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class AgentCreate(BaseModel):
@@ -319,12 +320,12 @@ class AgentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     role: str = "general"
     system_prompt: str = ""
-    tools: Optional[List[str]] = None
-    memory_access: Optional[List[str]] = None
-    model_config_data: Optional[dict] = None
-    max_iterations: Optional[int] = None
-    enabled: Optional[bool] = None
-    description: Optional[str] = None
+    tools: List[str] | None = None
+    memory_access: List[str] | None = None
+    model_config_data: dict | None = None
+    max_iterations: int | None = None
+    enabled: bool | None = None
+    description: str | None = None
 
 
 # ==================== 依赖注入 ====================
@@ -344,10 +345,10 @@ _PENDING_RUN_CANCELLATIONS: Set[str] = set()
 class InterruptRequest(BaseModel):
     """/interrupt 请求体 —— stream_id 可选，兼容不带 body 的旧调用方。"""
 
-    stream_id: Optional[str] = None
+    stream_id: str | None = None
 
 
-def interrupt_stream(stream_id: Optional[str]) -> str:
+def interrupt_stream(stream_id: str | None) -> str:
     """中断目标流：主 agent interrupt（+ multi 模式 cancel dispatcher）。
 
     返回命中标识（"stream"/"none"）供端点回传与测试断言。
@@ -405,7 +406,7 @@ def interrupt_run(run_id: str) -> str:
 
 
 def _finalize_orch_run(
-    run_id: Optional[str], status: str, final_summary: Optional[str]
+    run_id: str | None, status: str, final_summary: str | None
 ) -> None:
     """P0-4 (2026-08-20): orch run 生命周期闭环（降级型）。
 
@@ -427,9 +428,9 @@ def _build_orchestration_dispatcher(
     stream_id: str,
     entry_queue: Any,
     run_id: str,
-    llm_config: Optional[Dict[str, Any]],
-    total_tasks: Optional[int],
-    workspace_root: Optional[str],
+    llm_config: Dict[str, Any] | None,
+    total_tasks: int | None,
+    workspace_root: str | None,
 ) -> ChatDispatcher:
     """构造 ChatDispatcher；非法 run_id 的 ValueError 重抛为前端可读文案。
 
@@ -644,7 +645,7 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[dict]) -> None:
+async def _maybe_auto_compact_session(session_id: str, llm_config: dict | None) -> None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -858,8 +859,8 @@ async def compact_session(session_id: str):
 class ForkSessionRequest(BaseModel):
     """POST /sessions/{session_id}/fork 请求体。"""
 
-    at_message_id: Optional[str] = None
-    title: Optional[str] = None
+    at_message_id: str | None = None
+    title: str | None = None
 
 
 @router.post("/sessions/{session_id}/fork", response_model=dict)
@@ -1385,31 +1386,15 @@ async def import_skills(files: List[UploadFile] = File(default=[])):
 # 因此在 legacy_routes 中也提供，确保两种 API_MODE 下都能工作。
 
 
-from pydantic import ConfigDict as _ConfigDict
-
-
-class LegacySettingsRequest(BaseModel):
-    """PUT /settings 请求体（legacy 路径）。所有字段可选。"""
-
-    model_config = _ConfigDict(extra="allow")
-
-    api_base_url: Optional[str] = None
-
-    api_key: Optional[str] = None  # noqa: S105
-
-    model: Optional[str] = None
-
-    # Task 1 (2026-08-23): IANA timezone (e.g. ``Asia/Shanghai``), 默认由前端
-    # DEFAULT_SETTINGS 兜底, 此字段可选. 非法值经 Pydantic validator 抛
-    # ValueError → FastAPI 422, 与 hex 路径保持一致.
-    timezone: Optional[str] = None
-
-    @field_validator("timezone")
-    @classmethod
-    def _validate_timezone(cls, value: Optional[str]) -> Optional[str]:
-        from backend.data.settings_canonicalizer import validate_timezone
-
-        return validate_timezone(value)
+# Task 1 round 1 (2026-08-24): LegacySettingsRequest → ``backend.api.settings_models.LegacySettingsPayload``.
+# 原因:
+# - Pydantic 1/2 双兼容 (``class Config`` 在两边都生效)
+# - 强类型 ``endpoints: List[EndpointPayload]`` 而非 ``List[dict]`` (canonicalizer
+#   兜底嵌套; 旧客户端不传 endpoints 不受影响, 因为 Optional)
+# - 时区 / 协议 / 本地路径校验**下沉**到 canonicalizer.validate_settings_payload,
+#   不再用 ``field_validator`` 装饰器 (Pydantic 2 语法在 Pydantic 1 / Win7 不可用).
+# 取别名 ``LegacySettingsRequest`` 保持 legacy_routes 下游不动, 避免改动面爆炸.
+LegacySettingsRequest = LegacySettingsPayload
 
 
 class LegacySettingsResponse(BaseModel):
@@ -1422,7 +1407,7 @@ class LegacySettingsResponse(BaseModel):
 class LegacyPreferenceItem(BaseModel):
     """GET/PUT /preferences/{key} 请求/响应体。"""
 
-    value: Optional[str] = None
+    value: str | None = None
 
     value_type: str = "string"
     category: str = "general"
@@ -1430,7 +1415,7 @@ class LegacyPreferenceItem(BaseModel):
 
 @router.get("/settings")
 @with_db_lock
-def legacy_get_settings() -> Optional[dict]:
+def legacy_get_settings() -> dict | None:
     """读取持久化的 settings；不存在返回 null。
 
     翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
@@ -1494,6 +1479,7 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     from backend.data.settings_canonicalizer import (
         strip_unknown_fields,
         to_camel,
+        validate_settings_payload,
         validate_settings_shape,
     )
     from backend.data.settings_repo import SettingsRepository
@@ -1526,6 +1512,13 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     camel_merged = {**camel_existing, **to_camel(payload)}
     # Task 1 (2026-08-23): 写入前给旧 endpoints (无 protocol) 补默认值, 与 GET 路径对齐.
     _migrate_default_protocol(camel_merged)
+    # Task 1 round 1 (2026-08-24): 显式跑 timezone / protocol / localModelPath
+    # value 校验 (Pydantic 装饰器不可用, 这里下沉到 canonicalizer 层).
+    try:
+        validate_settings_payload(camel_merged)
+    except ValueError as exc:
+        logger.warning(f"[LEGACY] /settings rejected invalid value: {exc}")
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
@@ -1794,7 +1787,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
             # CancelledError）会让 finally 触发 UnboundLocalError，既掩盖原始异常
             # 又跳过后续的 reset_tool_context 清理。
-            done_content: Optional[str] = None
+            done_content: str | None = None
             run_outcome = "failed"
 
             llm_config = None
@@ -1855,7 +1848,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
                     mode = "single"
-            run_id: Optional[str] = None
+            run_id: str | None = None
             dispatcher = None
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
@@ -2124,7 +2117,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
-            done_reasoning: Optional[str] = None
+            done_reasoning: str | None = None
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
@@ -2358,7 +2351,7 @@ def _ndjson(d: dict) -> str:
 
 @router.post("/interrupt")
 @with_db_lock
-def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
+def interrupt(data: InterruptRequest | None = Body(default=None)):
     """中断 Agent（P0-2: 经 stream_id 定位真实运行的 agent）"""
     stream_id = data.stream_id if data is not None else None
     target = interrupt_stream(stream_id)
@@ -2575,7 +2568,7 @@ def _draft_to_dict(draft) -> dict:
 
 class MemorySearchRequest(BaseModel):
     query: str
-    memory_type: Optional[str] = None
+    memory_type: str | None = None
 
     limit: int = 20
 
@@ -2593,7 +2586,7 @@ class MemoryDeleteRequest(BaseModel):
 
 @router.get("/memory/search")
 @with_db_lock
-def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
+def search_memory(query: str, limit: int = 20, type: str | None = None):
     """搜索记忆"""
     try:
         mm = get_memory_manager()
@@ -2638,7 +2631,7 @@ def delete_memory(data: MemoryDeleteRequest):
 
 @router.get("/memory/list")
 @with_db_lock
-def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] = None):
+def list_memories(page: int = 1, page_size: int = 20, type: str | None = None):
     """获取记忆列表"""
     try:
         mm = get_memory_manager()

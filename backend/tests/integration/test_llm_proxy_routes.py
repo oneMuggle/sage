@@ -587,8 +587,15 @@ async def test_tls_certificate_error_returns_structured_detail(client):
 
     assert resp.status_code == 502
     detail = resp.json()["detail"]
-    # Task 1 §4: ConnectError 消息含 ``certificate`` 应升级为 tls_certificate_failed.
-    assert detail["type"] in {"tls_certificate_failed", "upstream_unreachable"}
+    # Task 1 round 1 (2026-08-24): 收紧断言 — 之前 ``in {tls_certificate_failed, upstream_unreachable}``
+    # 太宽松, 让字符串含 "certificate" 的 ConnectError 可能误判走 upstream_unreachable 也能通过.
+    # 现在强制要求 ``tls_certificate_failed``, 因为 ``_is_tls_certificate_error`` 的
+    # 字符串匹配兜底会把 "certificate verify failed" 升级. 如果这条挂了说明上游 TLS
+    # 检测被静默降级为通用连接错误 — 修 proxy, 不要回退断言.
+    assert detail["type"] == "tls_certificate_failed", (
+        f"expected tls_certificate_failed, got {detail['type']!r}; "
+        f"_is_tls_certificate_error must match the 'certificate verify failed' substring"
+    )
     # 不论哪种 type, 都不应包含 API key / 凭据
     body_text = resp.text
     assert "sk-" not in body_text
