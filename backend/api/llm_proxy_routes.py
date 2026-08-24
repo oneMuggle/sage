@@ -18,11 +18,25 @@
   强行限制会打断用户主用例(局域网内的 Ollama)
 - 但拒绝带 userinfo 的 URL(``http://user:pass@host``),防止凭据在 log 中泄露
 - ``..`` 路径段会被 ``posixpath.normpath`` 规范化,若试图逃出上游根则 400
+
+TLS 行为(Task 1 2026-08-23):
+
+- 始终启用证书校验(``verify`` 默认 True); 绝不设置 ``verify=False``.
+- import-time ``main.configure_ssl_ca_bundle(certifi.where)`` 把 certifi CA
+  bundle 注入 ``SSL_CERT_FILE`` / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE``,
+  httpx 默认会读取这些变量.
+- 上游 TLS 证书校验失败 → 结构化 detail ``tls_certificate_failed`` (502),
+  不是被吞成 ``upstream_unreachable`` 淹没错误信号.
+- CA bundle 不可用 (certifi 缺失 / 文件为空 / 读不到) → 结构化 detail
+  ``ca_bundle_unavailable`` (502); 仍然 *不* 关闭校验, 让用户立即看到
+  TLS 故障而不是沉默降级.
+- 所有 detail ``message`` 字段只放已脱敏的错误描述(不含 API key / 凭据).
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import posixpath
 from collections.abc import AsyncIterator
 from typing import Dict, FrozenSet, Optional
@@ -60,6 +74,46 @@ HOP_BY_HOP_HEADERS: FrozenSet[str] = frozenset(
 PROXY_INTERNAL_HEADERS: FrozenSet[str] = frozenset({"x-llm-provider-url"})
 
 PROXY_TIMEOUT_SECONDS: float = 60.0
+
+# CA bundle 不可用时上报 — 用于结构化 detail.type; 不泄露具体路径
+_CA_BUNDLE_ENV_VARS: FrozenSet[str] = frozenset(
+    {"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"}
+)
+
+
+def _is_ca_bundle_available() -> bool:
+    """检测 ``SSL_CERT_FILE`` / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE``
+    是否被 ``configure_ssl_ca_bundle`` 注入并且指向现有非空文件。
+
+    任一变量存在且路径可读 → True; 全部未设 / 路径缺失 → False.
+    """
+    for variable in _CA_BUNDLE_ENV_VARS:
+        path_str = os.environ.get(variable)
+        if not path_str:
+            continue
+        path = __import__("pathlib").Path(path_str)
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _is_tls_certificate_error(exc: BaseException) -> bool:
+    """判断 httpx 异常是否来自证书校验失败(包含 SSLCertVerificationError 等).
+
+    httpx 在证书校验失败时抛 ``httpcore.ConnectError`` 包装的 ``ssl.SSLCertVerificationError``
+    / ``ssl.SSLError``, 错误消息含 "certificate verify failed". 我们做关键字匹配兜底,
+    避免依赖特定异常类层级.
+    """
+    msg = str(exc).lower()
+    return (
+        "certificate verify failed" in msg
+        or "ssl: certificate_verify_failed" in msg
+        or "certverifyfailed" in msg.replace(" ", "")
+        or "ssl_cert_verify" in msg
+    )
 
 
 def build_upstream_url(provider_url: str, path: str, query: str = "") -> str:
@@ -258,9 +312,48 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
                 },
             ) from exc
         except httpx.ConnectError as exc:
+            # Task 1 (2026-08-23): 区分证书校验失败与一般连接错误 — TLS 错误
+            # 不应被映射成 ``upstream_unreachable`` 淹没信号. 同样, 当 CA bundle
+            # 完全不可用时, 报告 ``ca_bundle_unavailable`` 而非沉默降级.
+            safe_url = _safe_url_for_log(upstream_url)
+            if _is_tls_certificate_error(exc):
+                logger.warning(
+                    "llm_proxy TLS certificate failed: %s — %s",
+                    safe_url,
+                    exc,
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "type": "tls_certificate_failed",
+                        "message": (
+                            f"Upstream TLS certificate verification failed: {exc!s}. "
+                            "TLS verification is enforced — proxy never disables "
+                            "verify. Check the upstream certificate or the CA bundle."
+                        ),
+                    },
+                ) from exc
+            if not _is_ca_bundle_available():
+                logger.warning(
+                    "llm_proxy CA bundle unavailable: %s — %s",
+                    safe_url,
+                    exc,
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "type": "ca_bundle_unavailable",
+                        "message": (
+                            "No usable CA bundle found in SSL_CERT_FILE / "
+                            "REQUESTS_CA_BUNDLE / CURL_CA_BUNDLE. certifi "
+                            "bootstrap did not configure a CA file. TLS verification "
+                            "is enforced; please install certifi or set SSL_CERT_FILE."
+                        ),
+                    },
+                ) from exc
             logger.warning(
                 "llm_proxy connect error: %s — %s",
-                _safe_url_for_log(upstream_url),
+                safe_url,
                 exc,
             )
             raise HTTPException(
@@ -350,6 +443,50 @@ async def _proxy_streaming(
                 },
             ) from exc
         except httpx.ConnectError as exc:
+            # Task 1 (2026-08-23): 与非流式分支对齐 — TLS 错误必须映射到
+            # ``tls_certificate_failed`` / ``ca_bundle_unavailable``, 不能被
+            # 通用 ``upstream_unreachable`` 淹没.
+            safe_url = _safe_url_for_log(upstream_url)
+            if _is_tls_certificate_error(exc):
+                logger.warning(
+                    "llm_proxy (streaming) TLS certificate failed: %s — %s",
+                    safe_url,
+                    exc,
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "type": "tls_certificate_failed",
+                        "message": (
+                            f"Upstream TLS certificate verification failed: {exc!s}. "
+                            "TLS verification is enforced — proxy never disables "
+                            "verify. Check the upstream certificate or the CA bundle."
+                        ),
+                    },
+                ) from exc
+            if not _is_ca_bundle_available():
+                logger.warning(
+                    "llm_proxy (streaming) CA bundle unavailable: %s — %s",
+                    safe_url,
+                    exc,
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "type": "ca_bundle_unavailable",
+                        "message": (
+                            "No usable CA bundle found in SSL_CERT_FILE / "
+                            "REQUESTS_CA_BUNDLE / CURL_CA_BUNDLE. certifi "
+                            "bootstrap did not configure a CA file. TLS verification "
+                            "is enforced; please install certifi or set SSL_CERT_FILE."
+                        ),
+                    },
+                ) from exc
+            logger.warning(
+                "llm_proxy (streaming) connect error: %s — %s",
+                safe_url,
+                exc,
+            )
             raise HTTPException(
                 status_code=502,
                 detail={

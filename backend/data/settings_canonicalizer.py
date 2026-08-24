@@ -52,6 +52,8 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "modelSelections",
         "maxContext",
         "temperature",
+        # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai, 后端 zoneinfo 校验
+        "timezone",
         "wiki",
         "version",
         # Wave 3 P2-9 (2026-08-14): 编排执行参数段。
@@ -64,6 +66,15 @@ LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
         "name",
         "baseUrl",
         "apiKey",
+        # Task 1 (2026-08-23): 新增端点协议/模型身份字段。
+        # - protocol: 'openai-compatible' | 'anthropic' | 'gemini' | 'ollama',
+        #   历史无 protocol 的端点经 strip_unknown_fields+迁移 fallback 默认为 'openai-compatible'.
+        # - modelId: 上游模型 ID (LM Studio 用户常填的 ``qwen2.5-7b-instruct``).
+        # - localModelPath: 本地模型文件路径, 与 modelId 互斥但并存以支持 hybrid (e.g.
+        #   Ollama 边远端边本地).
+        "protocol",
+        "modelId",
+        "localModelPath",
         "discoveredModels",
         "lastDiscoveredAt",
     }
@@ -294,3 +305,46 @@ def detect_legacy_snake_pollution(
             polluted,
         )
     return polluted
+
+
+# === Task 1 (2026-08-23): IANA timezone 校验 ===
+#
+# AppSettings.timezone 用 ``zoneinfo`` 验证 (Python 3.9+ 内置, Win7 走 backports.zoneinfo).
+# ``None`` / 空字符串视为 "未设置", 由调用方决定是否补默认值; 非法字符串抛 ValueError.
+#
+# 注意: canonicalizer 自身只锁白名单 key, 不锁 value 语义. timezone 校验由调用方
+# (hex_routes.SettingsRequest / legacy_routes.LegacySettingsRequest) 在 Pydantic
+# 层 + 本 helper 在 strip_unknown_fields 之后做, 保证 422 响应一致性.
+
+DEFAULT_TIMEZONE = "Asia/Shanghai"
+
+
+def validate_timezone(value: Any) -> Any:
+    """IANA timezone 校验.
+
+    Returns:
+        原样返回 ``value`` (便于 Pydantic ``validator`` 链式调用).
+
+    Raises:
+        ValueError: 非 None / 非 str / ``zoneinfo`` 不识别的字符串。
+    """
+    if value is None or value == "":
+        return value
+    if not isinstance(value, str):
+        raise ValueError(f"timezone must be a string, got {type(value).__name__}")
+    try:
+        # 延迟导入 zoneinfo — Python 3.9+ 标准库; Win7 走 backports.zoneinfo.
+        from zoneinfo import ZoneInfo
+    except ImportError:  # pragma: no cover — py3.9+ always has zoneinfo
+        try:
+            from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+        except ImportError as exc:  # pragma: no cover — backports is dep
+            raise ValueError(
+                "timezone validation requires zoneinfo or backports.zoneinfo"
+            ) from exc
+
+    try:
+        ZoneInfo(value)
+    except Exception as exc:  # ZoneInfoNotFoundError + 其它解析异常
+        raise ValueError(f"invalid IANA timezone {value!r}: {exc}") from exc
+    return value

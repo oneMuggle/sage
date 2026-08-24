@@ -108,6 +108,50 @@ describe('fetchModels', () => {
 
     await expect(fetchModels(USER_BASE_URL, USER_API_KEY)).rejects.toThrow(/500/);
   });
+
+  // ============================================================
+  // LM Studio 本地端点：用户常填 ``http://127.0.0.1:1234/v1``,空 API key
+  // 不发 Authorization,且即便 baseURL 已含 ``/v1`` 也不能拼出 ``/v1/v1/models``。
+  // ============================================================
+  describe('LM Studio', () => {
+    it('discovers an OpenAI-compatible LM Studio endpoint without an API key', async () => {
+      mockFetch(async () =>
+        makeJsonResponse(200, {
+          object: 'list',
+          data: [{ id: 'qwen2.5-7b-instruct', object: 'model', owned_by: 'user' }],
+        }),
+      );
+
+      await expect(fetchModels('http://127.0.0.1:1234/v1', '')).resolves.toEqual([
+        { id: 'qwen2.5-7b-instruct', capabilities: ['chat'], endpointId: '' },
+      ]);
+      const last = fetchCalls[fetchCalls.length - 1];
+      expect(last.url).toBe(`${PROXY_BASE}/v1/models`);
+      const headers = new Headers(last.init?.headers);
+      expect(headers.get('Authorization')).toBeNull();
+      // provider URL 仍按用户原样透传 — 拼 ``/v1/v1/models`` 由后端
+      // ``build_upstream_url`` 去重,不在前端做 (避免职责泄漏)。
+      expect(headers.get('X-LLM-Provider-Url')).toBe('http://127.0.0.1:1234/v1');
+    });
+
+    it('testEndpointConnection 在 baseURL 已含 /v1 + 空 apiKey 时也能跑通 models 阶段', async () => {
+      mockFetch(async () =>
+        makeJsonResponse(200, {
+          object: 'list',
+          data: [{ id: 'qwen2.5-7b-instruct', object: 'model', owned_by: 'user' }],
+        }),
+      );
+
+      // 不带 chatModel → testChatCompletion 不会跑 (被测端点无 chat 候选)
+      // 用的是 default first non-embedding, qwen2.5-7b-instruct 是 chat 模型 → 会跑 chat 端点
+      const result = await testEndpointConnection('http://127.0.0.1:1234/v1', '');
+      expect(result.success).toBe(true);
+      const modelsCall = fetchCalls.find((c) => c.url.endsWith('/v1/models'));
+      expect(modelsCall).toBeDefined();
+      const headers = new Headers(modelsCall?.init?.headers);
+      expect(headers.get('Authorization')).toBeNull();
+    });
+  });
 });
 
 describe('testEndpointConnection', () => {

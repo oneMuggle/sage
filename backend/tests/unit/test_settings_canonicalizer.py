@@ -322,3 +322,114 @@ def test_strip_unknown_fields_preserves_non_dict_endpoint_item() -> None:
     dirty = {"endpoints": ["corrupted", {"id": "e1", "baseUrl": "u", "junk": 1}]}
     cleaned = strip_unknown_fields(dirty)
     assert cleaned["endpoints"] == ["corrupted", {"id": "e1", "baseUrl": "u"}]
+
+
+# --- Task 1 新增字段 (timezone / protocol / modelId / localModelPath) ---
+
+
+def test_to_camel_handles_timezone_alias() -> None:
+    """timezone 顶层字段无历史 snake 别名 (默认 Asia/Shanghai 由前端默认值补齐,
+    canonicalizer 不翻译 — 顶层 snake 不在 ALIASES → 直接拒收)。"""
+    raw = {"timezone": "Asia/Shanghai"}
+    # timezone 不在 ALIASES, 直接原样保留 (snake_case 守门交给 validate_settings_shape)
+    assert to_camel(raw) == {"timezone": "Asia/Shanghai"}
+
+
+def test_to_camel_handles_endpoint_protocol_alias() -> None:
+    """endpoints[*].protocol 顶层 snake → ALIASES 翻译,无别名则原样保留。"""
+    # protocol 不在 ALIASES 里 (camelCase 已是合法形态), 应原样保留
+    raw = {"endpoints": [{"id": "e1", "protocol": "openai-compatible"}]}
+    assert to_camel(raw) == {"endpoints": [{"id": "e1", "protocol": "openai-compatible"}]}
+
+
+def test_to_camel_handles_endpoint_model_id_and_local_model_path() -> None:
+    """endpoints[*].modelId / localModelPath camelCase 原样保留。"""
+    raw = {
+        "endpoints": [
+            {
+                "id": "e1",
+                "modelId": "qwen2.5-7b-instruct",
+                "localModelPath": "/Users/me/Models/qwen2.5-7b-instruct.gguf",
+            }
+        ]
+    }
+    assert to_camel(raw) == {
+        "endpoints": [
+            {
+                "id": "e1",
+                "modelId": "qwen2.5-7b-instruct",
+                "localModelPath": "/Users/me/Models/qwen2.5-7b-instruct.gguf",
+            }
+        ]
+    }
+
+
+def test_validate_settings_shape_accepts_new_fields() -> None:
+    """含 timezone + endpoints[*].protocol/modelId/localModelPath 的完整 AppSettings 应通过校验。"""
+    settings = {
+        "streaming": True,
+        "autoMemory": True,
+        "confirmDelete": True,
+        "endpoints": [
+            {
+                "id": "e1",
+                "name": "LM Studio",
+                "baseUrl": "http://127.0.0.1:1234/v1",
+                "apiKey": "",
+                "protocol": "openai-compatible",
+                "modelId": "qwen2.5-7b-instruct",
+                "localModelPath": None,
+                "discoveredModels": [],
+                "lastDiscoveredAt": 0,
+            }
+        ],
+        "modelSelections": {
+            "chatModel": {"endpointId": "e1", "modelId": "qwen2.5-7b-instruct"},
+            "visionModel": {"endpointId": None, "modelId": None},
+            "embeddingModel": {"endpointId": None, "modelId": None},
+        },
+        "maxContext": 4096,
+        "temperature": 0.7,
+        "timezone": "Asia/Shanghai",
+        "wiki": {"useFolderPicker": True},
+        "version": "4.0.0",
+    }
+    validate_settings_shape(settings)
+
+
+def test_validate_settings_shape_rejects_unknown_protocol_value_silently_via_whitelist() -> None:
+    """白名单只锁 key 名, 不锁 value 枚举 (protocol 枚举校验交给 Pydantic 层 hex_routes)。
+    canonicalizer 只确保 protocol 字段在 LEGAL_ENDPOINT_KEYS 中, value 任意 str 接受。"""
+    settings = {
+        "endpoints": [
+            {
+                "id": "e1",
+                "protocol": "future-protocol",  # 白名单不看 value
+                "baseUrl": "http://x",
+                "apiKey": "",
+            }
+        ]
+    }
+    # 不抛错 — protocol 是新白名单 key, value 不在 canonicalizer 校验范围
+    validate_settings_shape(settings)
+
+
+def test_strip_unknown_fields_keeps_new_fields() -> None:
+    """新字段 (timezone / modelId / localModelPath) 应原样保留, 不被 strip 误删。"""
+    clean = {
+        "streaming": True,
+        "timezone": "Asia/Shanghai",
+        "endpoints": [
+            {
+                "id": "e1",
+                "baseUrl": "http://x",
+                "apiKey": "",
+                "protocol": "openai-compatible",
+                "modelId": "qwen2.5-7b-instruct",
+                "localModelPath": "/tmp/qwen.gguf",
+                "discoveredModels": [],
+                "lastDiscoveredAt": 0,
+            }
+        ],
+    }
+    assert strip_unknown_fields(clean) == clean

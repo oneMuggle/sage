@@ -127,6 +127,22 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         </SettingRow>
       </section>
       <section>
+        <h3 className="text-sm font-semibold text-text mb-3">时区 (Task 1 2026-08-23)</h3>
+        <SettingRow
+          label="IANA 时区"
+          desc="后端 zoneinfo 校验；非法值会被拒绝 (422)。默认 Asia/Shanghai"
+        >
+          <input
+            type="text"
+            data-testid="settings-timezone-input"
+            value={settings.timezone}
+            onChange={(e) => updateSettings({ timezone: e.target.value })}
+            placeholder="Asia/Shanghai"
+            className="w-48 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary font-mono"
+          />
+        </SettingRow>
+      </section>
+      <section>
         <h3 className="text-sm font-semibold text-text mb-3">对话</h3>
         <SettingRow label="自动记忆提取" desc="对话中自动识别并保存关键信息到记忆库">
           <Toggle value={settings.autoMemory} onChange={(v) => updateSettings({ autoMemory: v })} />

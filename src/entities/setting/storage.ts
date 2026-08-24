@@ -93,6 +93,8 @@ export function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
     ...partial,
     endpoints: partial.endpoints ?? DEFAULT_SETTINGS.endpoints,
     modelSelections: partial.modelSelections ?? DEFAULT_SETTINGS.modelSelections,
+    // Task 1 (2026-08-23): 缺省时区补 'Asia/Shanghai' — 与 DEFAULT_SETTINGS.timezone 对齐.
+    timezone: partial.timezone ?? DEFAULT_SETTINGS.timezone,
     // 嵌套 merge：部分 orch 更新不丢其余键（同 endpoints 的既有 bug 防护）。
     orch: { ...DEFAULT_ORCH_SETTINGS, ...(partial.orch ?? {}) },
     version: partial.version ?? SETTINGS_VERSION,
