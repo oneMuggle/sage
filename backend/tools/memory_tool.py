@@ -281,12 +281,11 @@ class MemorySaveTool(BaseTool):
             return ToolResult(success=False, error="记忆管理器未初始化")
 
         context = current_tool_context()
-        if session_id is not None:
-            if context is None:
-                return ToolResult(success=False, error="显式 session_id 需要可信会话上下文")
-            if session_id != context.session_id:
-                return ToolResult(success=False, error="session_id 与当前会话不一致")
-        effective_session_id = context.session_id if context is not None else None
+        if context is None:
+            return ToolResult(success=False, error="记忆保存需要可信会话上下文")
+        if session_id is not None and session_id != context.session_id:
+            return ToolResult(success=False, error="session_id 与当前会话不一致")
+        effective_session_id = context.session_id
         if memory_type not in SAVE_MEMORY_TYPES:
             return ToolResult(success=False, error="不支持的保存记忆类型")
 
@@ -304,17 +303,13 @@ class MemorySaveTool(BaseTool):
                 session_id=effective_session_id,
             )
         except TypeError as exc:
-            # 兼容旧 MemoryManager 缺 ``session_id`` kwarg 的退化实现
-            # (理论上不存在, 但保留 fallback 不让 IPC 全挂)
+            # 旧 manager 不支持 session_id 时无法保证会话隔离，拒绝写入。
             if "session_id" in str(exc):
-                memory_id = self.memory.memorize(
-                    content,
-                    memory_type,
-                    importance,
-                    forwarded_tags,
+                return ToolResult(
+                    success=False,
+                    error="记忆管理器不支持会话隔离，拒绝保存记忆",
                 )
-            else:
-                return ToolResult(success=False, error=f"保存记忆失败: {exc}")
+            return ToolResult(success=False, error=f"保存记忆失败: {exc}")
         except Exception as e:
             return ToolResult(success=False, error=f"保存记忆失败: {str(e)}")
 

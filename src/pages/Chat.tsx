@@ -91,12 +91,14 @@ export function Chat() {
   const lastMsgLengthRef = useRef(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const lastMsg = messages[messages.length - 1];
+  const previousMessagesRef = useRef<typeof messages>([]);
 
   // A session switch replaces the scrollable content; discard the previous
   // session's sticky-bottom state before the new message list is measured.
   useEffect(() => {
     wasAtBottomRef.current = true;
     lastMsgLengthRef.current = 0;
+    previousMessagesRef.current = [];
     setShowJumpToLatest(false);
   }, [currentSessionId]);
 
@@ -106,11 +108,14 @@ export function Chat() {
 
     const prevLength = lastMsgLengthRef.current;
     const currentLength = messages.length;
-    // 新消息触发(消息数增加):用户主动发了一条,无论之前在不在底部都强制滚到底。
-    const userJustSent = currentLength > prevLength;
+    const previousMessages = previousMessagesRef.current;
+    const addedUserMessage =
+      currentLength > prevLength &&
+      messages.slice(previousMessages.length).some((message) => message.role === 'user');
     lastMsgLengthRef.current = currentLength;
+    previousMessagesRef.current = messages;
 
-    if (userJustSent || wasAtBottomRef.current) {
+    if (addedUserMessage || wasAtBottomRef.current) {
       el.scrollTop = el.scrollHeight;
     }
   }, [

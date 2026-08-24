@@ -319,14 +319,10 @@ def test_memory_search_rejects_without_trusted_context(memory_manager_spy, monke
     memory_manager_spy.search_memories.assert_not_called()
 
 
-def test_memory_save_rejects_explicit_session_without_trusted_context(
-    real_memory_manager, monkeypatch
-):
+def test_memory_save_rejects_without_trusted_context(real_memory_manager, monkeypatch):
     monkeypatch.setattr(memory_tool_module, "current_tool_context", lambda: None)
 
-    result = MemorySaveTool(memory=real_memory_manager).execute(
-        content="x", session_id="sess-explicit"
-    )
+    result = MemorySaveTool(memory=real_memory_manager).execute(content="x")
 
     assert result.success is False
     assert "可信会话上下文" in result.error
@@ -341,6 +337,18 @@ def test_memory_save_rejects_session_mismatch(real_memory_manager):
     assert result.success is False
     assert "不一致" in result.error
     real_memory_manager.memorize.assert_not_called()
+
+
+def test_memory_save_rejects_manager_without_session_isolation(real_memory_manager):
+    real_memory_manager.memorize.side_effect = TypeError(
+        "memorize() got an unexpected keyword argument 'session_id'"
+    )
+
+    result = MemorySaveTool(memory=real_memory_manager).execute(content="x")
+
+    assert result.success is False
+    assert "不支持会话隔离" in result.error
+    assert real_memory_manager.memorize.call_count == 1
 
 
 def test_memory_tools_reject_unsupported_types(memory_manager_spy, real_memory_manager):
@@ -367,6 +375,18 @@ def test_memory_save_returns_failure_when_manager_returns_no_id(real_memory_mana
     assert result.success is False
     assert "未返回记忆 ID" in result.error
     assert result.output is None
+
+
+def test_memory_search_refills_after_other_session_candidates(memory_manager_spy):
+    memory_manager_spy.search_memories.return_value = [
+        {"id": "other", "session_id": "sess-other"},
+        {"id": "same", "session_id": "sess-test"},
+    ]
+
+    result = MemorySearchTool(memory=memory_manager_spy).execute(query="x", limit=1)
+
+    assert result.success is True
+    assert result.output == [{"id": "same", "session_id": "sess-test"}]
 
 
 def test_memory_search_filters_results_from_other_sessions(memory_manager_spy):
