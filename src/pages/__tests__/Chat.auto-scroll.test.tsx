@@ -98,6 +98,25 @@ const baseMsg = (id: string, role: 'user' | 'assistant', content: string) => ({
   created_at: 0,
 });
 
+function setupScrollEl(
+  container: HTMLElement,
+  scrollHeight: number,
+  clientHeight: number,
+  scrollTop: number,
+): HTMLDivElement {
+  const scrollEl = container.querySelector('.overflow-y-auto') as HTMLDivElement;
+  Object.defineProperty(scrollEl, 'scrollHeight', {
+    configurable: true,
+    get: () => scrollHeight,
+  });
+  Object.defineProperty(scrollEl, 'clientHeight', {
+    configurable: true,
+    get: () => clientHeight,
+  });
+  scrollEl.scrollTop = scrollTop;
+  return scrollEl;
+}
+
 describe('Chat — auto-scroll to bottom on new message', () => {
   beforeEach(() => {
     useSettingsMock.mockReturnValue({
@@ -260,18 +279,6 @@ describe('Chat — auto-scroll to bottom on new message', () => {
 //     regardless of prior state
 
 describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
-  // 滚动容器定位 hook:``container.querySelector('.overflow-y-auto')`` 拿到
-  // 真实 DOM。每个测试都给 scrollEl 设 scrollHeight/clientHeight/scrollTop,
-  // 让 ``el.scrollHeight - el.clientHeight - el.scrollTop <= 48`` 决定
-  // wasAtBottom 状态。
-  function setupScrollEl(container: HTMLElement, scrollHeight: number, clientHeight: number, scrollTop: number) {
-    const scrollEl = container.querySelector('.overflow-y-auto') as HTMLDivElement;
-    Object.defineProperty(scrollEl, 'scrollHeight', { configurable: true, get: () => scrollHeight });
-    Object.defineProperty(scrollEl, 'clientHeight', { configurable: true, get: () => clientHeight });
-    scrollEl.scrollTop = scrollTop;
-    return scrollEl;
-  }
-
   it('does not take focus from history while a token arrives (user scrolled up)', async () => {
     // 模拟用户上滚读历史(scrollTop 120, 内容延伸到 1000)
     const messagesV1 = [baseMsg('1', 'assistant', 'hello')];
@@ -295,7 +302,12 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       </MemoryRouter>,
     );
 
-    const scrollEl = setupScrollEl(container, /* scrollHeight */ 1000, /* clientHeight */ 400, /* scrollTop */ 120);
+    const scrollEl = setupScrollEl(
+      container,
+      /* scrollHeight */ 1000,
+      /* clientHeight */ 400,
+      /* scrollTop */ 120,
+    );
     // 触发 scroll 事件让 wasAtBottomRef 算一次:
     // 1000 - 400 - 120 = 480 > 48 → 不在底部
     fireEvent.scroll(scrollEl);
@@ -327,6 +339,52 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
     });
   });
 
+  it('does not jump when a new assistant message is appended while scrolled up', async () => {
+    const messagesV1 = [baseMsg('1', 'assistant', 'hello')];
+    useChatMock.mockReturnValue({
+      messages: messagesV1,
+      isLoading: true,
+      streamingMessageId: '1',
+      error: null,
+      clearError: vi.fn(),
+      sendMessage: vi.fn(),
+      interrupt: vi.fn(),
+      loadMessages: vi.fn(),
+      streamingToolCalls: [],
+    });
+
+    const { container, rerender } = render(
+      <MemoryRouter>
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    const scrollEl = setupScrollEl(container, 1000, 400, 120);
+    fireEvent.scroll(scrollEl);
+
+    useChatMock.mockReturnValue({
+      messages: [...messagesV1, baseMsg('2', 'assistant', 'tool result')],
+      isLoading: true,
+      streamingMessageId: '2',
+      error: null,
+      clearError: vi.fn(),
+      sendMessage: vi.fn(),
+      interrupt: vi.fn(),
+      loadMessages: vi.fn(),
+      streamingToolCalls: [],
+    });
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(scrollEl.scrollTop).toBe(120));
+  });
+
   it('follows bottom when user was at bottom before update', async () => {
     // scrollHeight=952, clientHeight=400, scrollTop=552 → 0 距离底部(在阈值内)
     const messagesV1 = [baseMsg('1', 'assistant', 'hel')];
@@ -350,7 +408,12 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       </MemoryRouter>,
     );
 
-    const scrollEl = setupScrollEl(container, /* scrollHeight */ 952, /* clientHeight */ 400, /* scrollTop */ 552);
+    const scrollEl = setupScrollEl(
+      container,
+      /* scrollHeight */ 952,
+      /* clientHeight */ 400,
+      /* scrollTop */ 552,
+    );
     fireEvent.scroll(scrollEl); // wasAtBottom=true
 
     // 流式 token 流入
@@ -402,7 +465,12 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       </MemoryRouter>,
     );
 
-    const scrollEl = setupScrollEl(container, /* scrollHeight */ 1000, /* clientHeight */ 400, /* scrollTop */ 200);
+    const scrollEl = setupScrollEl(
+      container,
+      /* scrollHeight */ 1000,
+      /* clientHeight */ 400,
+      /* scrollTop */ 200,
+    );
     fireEvent.scroll(scrollEl); // 不在底部
 
     const messagesV2 = [{ ...messagesV1[0], content: 'hello world' }];
@@ -426,9 +494,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
     );
 
     // "跳到最新" 按钮存在且 a11y 标签正确
-    const jumpBtn = await waitFor(() =>
-      screen.getByRole('button', { name: '跳到最新' }),
-    );
+    const jumpBtn = await waitFor(() => screen.getByRole('button', { name: '跳到最新' }));
     expect(jumpBtn).toBeTruthy();
   });
 
@@ -456,9 +522,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
     const scrollEl = setupScrollEl(container, 1000, 400, 200);
     fireEvent.scroll(scrollEl);
 
-    const jumpBtn = await waitFor(() =>
-      screen.getByRole('button', { name: '跳到最新' }),
-    );
+    const jumpBtn = await waitFor(() => screen.getByRole('button', { name: '跳到最新' }));
     fireEvent.click(jumpBtn);
 
     expect(scrollEl.scrollTop).toBe(1000);
@@ -525,7 +589,12 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       </MemoryRouter>,
     );
 
-    const scrollEl = setupScrollEl(container, /* scrollHeight */ 800, /* clientHeight */ 400, /* scrollTop */ 0);
+    const scrollEl = setupScrollEl(
+      container,
+      /* scrollHeight */ 800,
+      /* clientHeight */ 400,
+      /* scrollTop */ 0,
+    );
     fireEvent.scroll(scrollEl); // 不在底部 (800 - 400 - 0 = 400 > 48)
 
     // 模拟用户发了新消息(消息列表多 1 条)

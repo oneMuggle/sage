@@ -887,7 +887,11 @@ class SageAgent:
                                             # value (e.g. memory ID); retain content
                                             # fallback for legacy result objects.
                                             if isinstance(result, ToolResult):
-                                                output_value = result.output
+                                                output_value = (
+                                                    result.output
+                                                    if result.output is not None
+                                                    else result.content
+                                                )
                                             else:
                                                 output_value = result.content
                                             result_content = json.dumps(

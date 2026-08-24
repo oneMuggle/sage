@@ -488,6 +488,36 @@ async def test_run_loop_prefers_tool_result_output_over_content():
 
 
 @pytest.mark.asyncio()
+async def test_run_loop_falls_back_to_tool_result_content_when_output_is_none():
+    """旧 ToolResult 未设置 output 时仍把 content 传给下一轮 LLM。"""
+    tool_call = LLMToolCall(id="c-content-none", name="legacy", arguments="{}")
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(content="", tool_calls=[tool_call]),
+            _make_response(content="done"),
+        ]
+    )
+    mock_tool = MagicMock()
+    mock_tool.execute = MagicMock(
+        return_value=ToolResult(
+            success=True,
+            content={"legacy": "ok"},
+            output=None,
+        )
+    )
+    agent.tool_registry.get = MagicMock(return_value=mock_tool)
+    messages = [{"role": "user", "content": "legacy"}]
+
+    async for _ in agent.run_loop(messages):
+        pass
+
+    tool_message = next(message for message in messages if message["role"] == "tool")
+    assert json.loads(tool_message["content"]) == {"legacy": "ok"}
+
+
+@pytest.mark.asyncio()
 async def test_run_loop_falls_back_to_legacy_tool_result_content():
     """Legacy result objects without output remain compatible."""
     tool_call = LLMToolCall(id="c-content", name="legacy", arguments="{}")
