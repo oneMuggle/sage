@@ -40,7 +40,7 @@ import os
 import posixpath
 import ssl
 from collections.abc import AsyncIterator
-from typing import Dict, FrozenSet
+from typing import Dict, FrozenSet, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -150,7 +150,6 @@ def _is_tls_certificate_error(exc: BaseException) -> bool:
     ``ssl.SSLCertVerificationError`` (Py3.7+); 也有可能挂在 ``ssl.SSLError``
     但 message 含 "CERTIFICATE_VERIFY_FAILED".
     """
-    # 主路径: 异常链递归
     current: Optional[BaseException] = exc
     seen: set[int] = set()
     while current is not None and id(current) not in seen:
@@ -594,9 +593,24 @@ async def _proxy_streaming(
                 # aiter_raw 透传原始字节,把解压责任交给调用方(httpx 客户端)。
                 async for chunk in upstream_resp.aiter_raw():
                     yield chunk
-            finally:
-                # generator 退出(客户端断开 / 自然结束 / 异常)都关掉上游流,
-                # 释放 httpx 连接 — 避免 leak。
+            except BaseException as exc:
+                # Headers/status have already been emitted by StreamingResponse; a
+                # mid-stream failure cannot be rewritten as a second HTTP response.
+                # Record a structured teardown event and pass the exception through
+                # the context manager so the connection is released deterministically.
+                logger.warning(
+                    "llm_proxy streaming upstream interrupted: %s",
+                    _safe_url_for_log(upstream_url),
+                    extra={
+                        "event": "llm_proxy_stream_error",
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                )
+                await req_ctx.__aexit__(type(exc), exc, exc.__traceback__)
+                raise
+            else:
+                # Natural EOF also closes exactly once and releases the connection.
                 await req_ctx.__aexit__(None, None, None)
 
         return StreamingResponse(

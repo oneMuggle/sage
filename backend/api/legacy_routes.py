@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
 from backend.api.orch_routes import router as orch_routes_router
-from backend.api.settings_models import LegacySettingsPayload
+from backend.api.settings_models import LegacySettingsPayload, model_dump_compat
 from backend.chat.compaction import (
     MIN_COMPACT_MESSAGE_COUNT,
     CompactionError,
@@ -932,7 +932,7 @@ def update_agent(agent_id: str, data: AgentUpdate):
         )
 
     # 转 dict 给 repo.update; 字段名 model_config_data → model_config (避开 Pydantic 保留名)
-    update_payload = data.dict(exclude_none=True)
+    update_payload = model_dump_compat(data, exclude_none=True)
     if "model_config_data" in update_payload:
         update_payload["model_config"] = update_payload.pop("model_config_data")
 
@@ -1013,7 +1013,7 @@ def create_agent(data: AgentCreate):
             },
         )
 
-    payload = data.dict(exclude_none=True)
+payload = model_dump_compat(data, exclude_none=True)
     if "model_config_data" in payload:
         payload["model_config"] = payload.pop("model_config_data")
     payload.setdefault("tools", [])
@@ -1423,10 +1423,7 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
 
     # LegacySettingsRequest 是 extra="allow", dict(exclude_none=True) 会包含所有 set 字段
     # (含 extras, 如 streaming/foo/endpoints) — 这是设计: 旧客户端 PUT schema 之外字段不丢。
-    #
-    # win7 Note: Pydantic v1 不识 ``model_dump()``, 用 ``dict()`` 拿已 set 的字段;
-    # 等价语义 (与 v2 model_dump(exclude_none=True) 行为一致)。
-    payload = req.dict(exclude_none=True)
+payload = model_dump_compat(req, exclude_none=True)
 
     # 剥离 legacy compatibility 3 字段: api_base_url / api_key / model.
     # 这 3 字段不进 DB (与 hex PUT 对齐, 见 eebbedd), 仅用于审计和 changed_fields.
