@@ -245,31 +245,13 @@ jobs:
       # resources/build-manifest.json → main.ts falls back to
       # createBuildManifest() defaults and silently disables buildId-based
       # health-ownership validation. The two "Verify packaged build-manifest.json"
-      # steps below would fail. We use Node.js (preinstalled on every runner)
-      # rather than pwsh to stay cross-platform without an extra setup step.
+      # steps below would fail. We use the dedicated cross-platform Node
+      # helper scripts/ci-write-manifest.js invoked via PowerShell (which is
+      # preinstalled on every GitHub-hosted runner and avoids shell-escape
+      # hell on Windows). GitHub Actions does NOT accept `shell: node`.
       - name: Generate build-manifest.json (cross-platform)
-        shell: node
-        run: |
-          const fs = require('fs');
-          const path = require('path');
-          const sha = process.env.GITHUB_SHA || 'unknown';
-          const sha7 = sha.slice(0, 7);
-          const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, 'Z').replace('T', 'T');
-          const manifest = {
-            manifestVersion: 1,
-            buildId: process.env.SAGE_BUILD_ID || `ci-${sha7}-${stamp}`,
-            commit: sha,
-            branch: process.env.GITHUB_REF_NAME || 'unknown',
-            version: process.env.SAGE_BUILD_VERSION || '0.0.0-ci',
-            electronVersion: process.env.SAGE_ELECTRON_VERSION || '21.4.4',
-            pythonVersion: process.env.SAGE_PYTHON_VERSION || '3.11.9',
-          };
-          const dir = path.join(process.env.GITHUB_WORKSPACE || process.cwd(), 'resources');
-          fs.mkdirSync(dir, { recursive: true });
-          const file = path.join(dir, 'build-manifest.json');
-          fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
-          console.log(`Wrote ${file}`);
-          console.log(fs.readFileSync(file, 'utf8'));
+        shell: pwsh
+        run: node scripts/ci-write-manifest.js
 
       - name: Package (Linux AppImage + deb)
         if: matrix.os == 'ubuntu-latest'
