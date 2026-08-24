@@ -1218,13 +1218,40 @@ app.whenReady().then(async () => {
         sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
         port: BACKEND_PORT,
       });
+      // Round 2 (fast-follow E): thread the supervisor's launcher context
+      // (command / cwd / env) into the doctor subprocess so the
+      // ``import backend.main`` probe runs under the EXACT env the
+      // backend will see. ``runDoctorCheck`` already merges ``options.env``
+      // into the child env, so these three SAGE_BACKEND_* keys reach
+      // ``backend.cli.doctor.main`` which reads them via the new
+      // ``_resolve_backend_context`` helper.
+      let doctorEnv: NodeJS.ProcessEnv | undefined;
+      if (doctorPlan.kind === 'spawn') {
+        const launcherArgv = [doctorPlan.command, ...(doctorPlan.args ?? [])];
+        // Surface only the env keys the supervisor would actually set on
+        // the backend (plan.env + plan.extraEnv); the host env is already
+        // inherited via ``process.env`` in runDoctorCheck.
+        const supervisorEnv: Record<string, string> = {};
+        for (const [k, v] of Object.entries({
+          ...doctorPlan.env,
+          ...doctorPlan.extraEnv,
+        })) {
+          if (typeof v === 'string') supervisorEnv[k] = v;
+        }
+        doctorEnv = {
+          ...supervisorEnv,
+          SAGE_BACKEND_CMD: JSON.stringify(launcherArgv),
+          SAGE_BACKEND_CWD: doctorPlan.cwd,
+          SAGE_BACKEND_ENV: JSON.stringify(supervisorEnv),
+        };
+      }
       const doctorSummary =
         doctorPlan.kind === 'spawn'
           ? await runDoctorCheck({
               pythonBin: doctorPlan.command,
               packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
               cwd: doctorPlan.cwd,
-              env: doctorPlan.env,
+              env: doctorEnv,
             })
           : await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
       logger.info('main: doctor check complete', doctorSummary);
