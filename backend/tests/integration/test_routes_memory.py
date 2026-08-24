@@ -203,3 +203,14 @@ async def test_memory_list_clamps_invalid_page_size(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["page_size"] == 100
+
+
+@pytest.mark.asyncio()
+async def test_memory_list_clamps_invalid_page(client):
+    """``page > 10`` 必须 clamp 到 10,避免无界取数。"""
+    resp = await client.get(
+        f"{PREFIX}/memory/list",
+        params={"type": "episodic", "page": 9999},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["page"] == 10

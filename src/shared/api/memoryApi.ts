@@ -14,17 +14,29 @@ import { invoke } from './desktopInvoke';
 import type { Memory, MemoryListResponse } from './types';
 import { ApiException, handleApiError, sanitizeInput, withRetry } from './utils';
 
-/**
- * 类型守卫:把后端响应规整成 ``MemoryListResponse``。
- *
- * Task 2 起 ``/memory/list`` 返回 envelope ``{items, total, page, ...}``,
- * 但旧 caller 可能直接拿返回当数组用。防御性地兼容旧 flat list 形态:
- * 把传入数组就地包成 envelope,避免下游解构 ``.items`` 时崩溃。
- */
+const MEMORY_LAYERS = ['episodic', 'semantic', 'all'] as const;
+
+type MemoryLayer = (typeof MEMORY_LAYERS)[number];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asNonNegativeInteger(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
+}
+
+function asPositiveInteger(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : fallback;
+}
+
+function asLayer(value: unknown, fallback: MemoryLayer): MemoryLayer {
+  return typeof value === 'string' && (MEMORY_LAYERS as readonly string[]).includes(value)
+    ? (value as MemoryLayer)
+    : fallback;
+}
+
 function coerceMemoryListResponse(raw: unknown): MemoryListResponse {
-  if (raw && typeof raw === 'object' && !Array.isArray(raw) && 'items' in raw) {
-    return raw as MemoryListResponse;
-  }
   if (Array.isArray(raw)) {
     return {
       items: raw as Memory[],
@@ -35,13 +47,29 @@ function coerceMemoryListResponse(raw: unknown): MemoryListResponse {
       source_breakdown: { episodic: 0, semantic: 0 },
     };
   }
+  if (!isRecord(raw)) {
+    return {
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 0,
+      layer: 'all',
+      source_breakdown: { episodic: 0, semantic: 0 },
+    };
+  }
+
+  const items = Array.isArray(raw.items) ? (raw.items as Memory[]) : [];
+  const breakdown = isRecord(raw.source_breakdown) ? raw.source_breakdown : {};
   return {
-    items: [],
-    total: 0,
-    page: 1,
-    page_size: 0,
-    layer: 'all',
-    source_breakdown: { episodic: 0, semantic: 0 },
+    items,
+    total: asNonNegativeInteger(raw.total, items.length),
+    page: asPositiveInteger(raw.page, 1),
+    page_size: asNonNegativeInteger(raw.page_size, items.length),
+    layer: asLayer(raw.layer, 'all'),
+    source_breakdown: {
+      episodic: asNonNegativeInteger(breakdown.episodic, 0),
+      semantic: asNonNegativeInteger(breakdown.semantic, 0),
+    },
   };
 }
 

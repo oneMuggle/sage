@@ -91,6 +91,15 @@ export function Chat() {
   const lastMsgLengthRef = useRef(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const lastMsg = messages[messages.length - 1];
+
+  // A session switch replaces the scrollable content; discard the previous
+  // session's sticky-bottom state before the new message list is measured.
+  useEffect(() => {
+    wasAtBottomRef.current = true;
+    lastMsgLengthRef.current = 0;
+    setShowJumpToLatest(false);
+  }, [currentSessionId]);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;

@@ -16,9 +16,31 @@ from typing import List, Optional
 
 import pytest
 
+import backend.tools.memory_tool as memory_tool_module
+from backend.tools.context import (
+    ToolExecutionContext,
+    reset_tool_context,
+    set_tool_context,
+)
 from backend.tools.memory_tool import MemorySaveTool, MemorySearchTool
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def _trusted_context():
+    token = set_tool_context(
+        ToolExecutionContext(
+            session_id="sess-test",
+            stream_id="stream-test",
+            binding_generation=0,
+            office_doc_scope=frozenset(),
+        )
+    )
+    try:
+        yield
+    finally:
+        reset_tool_context(token)
 
 
 class _FakeMemoryManager:
@@ -158,7 +180,7 @@ def test_memory_save_success_calls_manager_with_meta():
     assert args[1] == "semantic"
     assert args[2] == 8
     assert args[3] is None  # 默认 tags=None
-    assert kwargs["session_id"] is None
+    assert kwargs["session_id"] == "sess-test"
 
 
 def test_memory_save_default_importance_and_type():
@@ -216,7 +238,7 @@ def test_memory_save_tool_uses_memorize_without_event_loop(real_memory_manager):
         memory_type="episodic",
         importance=5,
         tags=[],
-        session_id="sess-A",
+        session_id="sess-test",
     )
     assert result.success is True
     # output is the actual memory ID — surfaced for the LLM tool loop.
@@ -226,7 +248,7 @@ def test_memory_save_tool_uses_memorize_without_event_loop(real_memory_manager):
         "episodic",
         5,
         [],
-        session_id="sess-A",
+        session_id="sess-test",
     )
 
 
@@ -239,7 +261,9 @@ def test_memory_search_tool_calls_search_memories_not_remember(memory_manager_sp
     MemorySearchTool(memory=memory_manager_spy).execute(
         query="UTC", memory_type="all", limit=5
     )
-    memory_manager_spy.search_memories.assert_called_once_with("UTC", None, 5)
+    memory_manager_spy.search_memories.assert_called_once_with(
+        "UTC", None, 5, session_id="sess-test"
+    )
 
 
 def test_memory_search_tool_maps_all_to_none_and_clamps_limit(memory_manager_spy):
@@ -250,7 +274,9 @@ def test_memory_search_tool_maps_all_to_none_and_clamps_limit(memory_manager_spy
     MemorySearchTool(memory=memory_manager_spy).execute(
         query="x", memory_type="all", limit=999
     )
-    memory_manager_spy.search_memories.assert_called_once_with("x", None, 100)
+    memory_manager_spy.search_memories.assert_called_once_with(
+        "x", None, 100, session_id="sess-test"
+    )
 
 
 def test_memory_search_tool_normalises_empty_string_type(memory_manager_spy):
@@ -258,7 +284,9 @@ def test_memory_search_tool_normalises_empty_string_type(memory_manager_spy):
     MemorySearchTool(memory=memory_manager_spy).execute(
         query="x", memory_type="", limit=3
     )
-    memory_manager_spy.search_memories.assert_called_once_with("x", None, 3)
+    memory_manager_spy.search_memories.assert_called_once_with(
+        "x", None, 3, session_id="sess-test"
+    )
 
 
 def test_memory_search_tool_clamps_limit_to_min_one(memory_manager_spy):
@@ -266,7 +294,9 @@ def test_memory_search_tool_clamps_limit_to_min_one(memory_manager_spy):
     MemorySearchTool(memory=memory_manager_spy).execute(
         query="x", memory_type="all", limit=0
     )
-    memory_manager_spy.search_memories.assert_called_once_with("x", None, 1)
+    memory_manager_spy.search_memories.assert_called_once_with(
+        "x", None, 1, session_id="sess-test"
+    )
 
 
 def test_memory_search_tool_passes_through_specific_type(memory_manager_spy):
@@ -274,7 +304,85 @@ def test_memory_search_tool_passes_through_specific_type(memory_manager_spy):
     MemorySearchTool(memory=memory_manager_spy).execute(
         query="x", memory_type="episodic", limit=2
     )
-    memory_manager_spy.search_memories.assert_called_once_with("x", "episodic", 2)
+    memory_manager_spy.search_memories.assert_called_once_with(
+        "x", "episodic", 2, session_id="sess-test"
+    )
+
+
+def test_memory_search_rejects_without_trusted_context(memory_manager_spy, monkeypatch):
+    monkeypatch.setattr(memory_tool_module, "current_tool_context", lambda: None)
+
+    result = MemorySearchTool(memory=memory_manager_spy).execute(query="x")
+
+    assert result.success is False
+    assert "可信会话上下文" in result.error
+    memory_manager_spy.search_memories.assert_not_called()
+
+
+def test_memory_save_rejects_explicit_session_without_trusted_context(
+    real_memory_manager, monkeypatch
+):
+    monkeypatch.setattr(memory_tool_module, "current_tool_context", lambda: None)
+
+    result = MemorySaveTool(memory=real_memory_manager).execute(
+        content="x", session_id="sess-explicit"
+    )
+
+    assert result.success is False
+    assert "可信会话上下文" in result.error
+    real_memory_manager.memorize.assert_not_called()
+
+
+def test_memory_save_rejects_session_mismatch(real_memory_manager):
+    result = MemorySaveTool(memory=real_memory_manager).execute(
+        content="x", session_id="sess-other"
+    )
+
+    assert result.success is False
+    assert "不一致" in result.error
+    real_memory_manager.memorize.assert_not_called()
+
+
+def test_memory_tools_reject_unsupported_types(memory_manager_spy, real_memory_manager):
+    search_result = MemorySearchTool(memory=memory_manager_spy).execute(
+        query="x", memory_type="unknown"
+    )
+    save_result = MemorySaveTool(memory=real_memory_manager).execute(
+        content="x", memory_type="unknown"
+    )
+
+    assert search_result.success is False
+    assert "不支持" in search_result.error
+    assert save_result.success is False
+    assert "不支持" in save_result.error
+    memory_manager_spy.search_memories.assert_not_called()
+    real_memory_manager.memorize.assert_not_called()
+
+
+def test_memory_save_returns_failure_when_manager_returns_no_id(real_memory_manager):
+    real_memory_manager.memorize.return_value = None
+
+    result = MemorySaveTool(memory=real_memory_manager).execute(content="x")
+
+    assert result.success is False
+    assert "未返回记忆 ID" in result.error
+    assert result.output is None
+
+
+def test_memory_search_filters_results_from_other_sessions(memory_manager_spy):
+    memory_manager_spy.search_memories.return_value = [
+        {"id": "same", "session_id": "sess-test"},
+        {"id": "legacy-no-session"},
+        {"id": "other", "session_id": "sess-other"},
+    ]
+
+    result = MemorySearchTool(memory=memory_manager_spy).execute(query="x")
+
+    assert result.success is True
+    assert result.output == [
+        {"id": "same", "session_id": "sess-test"},
+        {"id": "legacy-no-session"},
+    ]
 
 
 # ---------- pytest fixtures used by the contract tests ----------
