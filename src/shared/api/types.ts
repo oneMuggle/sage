@@ -371,19 +371,33 @@ export interface ChatConfig {
 /**
  * 单条记忆记录。Task 2 起 ``layer`` / ``source`` 由后端 ``/memory/list`` 直接
  * 注入:
- * - ``layer`` 表示该条记录归属的层 (``'episodic'`` / ``'semantic'`` / ``'working'``)
- * - ``source`` 表示层来源(同 ``layer``);与 DB 列 ``source``('auto'/'manual')语义不同
+ * - ``layer`` 表示该条记录归属的层 (``'episodic'`` / ``'semantic'`` /
+ *   ``'working'`` / ``'session_summary'``)
+ * - ``source`` 表示层来源(同 ``layer``);与 DB 列 ``source``('auto'/'manual')
+ *   语义不同
+ *
+ * 批次三 step 6 (spec §4.3 line 150) 起:
+ * - ``source`` 新增 ``'working'`` 和 ``'session_summary'``,对应工作记忆与会话
+ *   摘要的展示徽章。
+ * - ``status`` 仅 ``session_summary`` 行有值,取 ``'pending'`` / ``'ready'`` /
+ *   ``'failed'``;失败行带 ``error_message`` 供诊断展示。
  */
 export interface Memory {
   id: string;
   content: string;
   summary?: string;
-  memory_type?: 'episodic' | 'semantic' | 'working';
-  /** 该条记录归属的记忆层。Task 2 新增。 */
-  layer?: 'episodic' | 'semantic' | 'working';
-  /** 该条记录的层来源(episodic/semantic)。Task 2 新增。 */
-  source?: 'episodic' | 'semantic';
+  memory_type?: 'episodic' | 'semantic' | 'working' | 'session_summary';
+  /** 该条记录归属的记忆层。Task 2 新增;step 6 扩展到 session_summary。 */
+  layer?: 'episodic' | 'semantic' | 'working' | 'session_summary';
+  /** 该条记录的层来源(episodic/semantic/working/session_summary)。 */
+  source?: 'episodic' | 'semantic' | 'working' | 'session_summary';
   session_id?: string;
+  /** session_summary 专用:对应的源 turn id(可选)。 */
+  source_turn_id?: string;
+  /** session_summary 专用:行状态。 */
+  status?: 'pending' | 'ready' | 'failed';
+  /** session_summary 专用:失败时携带的诊断。 */
+  error_message?: string;
   importance: number;
   tags: string[];
   created_at: number;
@@ -396,18 +410,41 @@ export interface Memory {
 /**
  * ``/memory/list`` 返回的 envelope,Task 2 起替换裸 list 契约。
  * 旧 caller 拿 ``resp.json()`` 直接当数组用 — 现在必须读 ``.items``。
+ *
+ * 批次三 step 6 起:
+ * - ``layer`` 扩展为 ``'working'`` / ``'session_summary'`` / ``'all'``(四层)
+ * - ``source_breakdown`` 新增 ``working`` / ``session_summary`` 计数
+ * - ``offset`` 字段回显后端的 offset cursor
  */
 export interface MemoryListResponse {
   items: Memory[];
   total: number;
   page: number;
   page_size: number;
-  /** 请求归一化后的查询层;``'all'`` 表示合并 episodic + semantic。 */
-  layer: 'episodic' | 'semantic' | 'all';
+  /** 后端 offset cursor 回显(step 6 新增)。 */
+  offset?: number;
+  /** 请求归一化后的查询层;step 6 扩展到 working/session_summary。 */
+  layer: 'episodic' | 'semantic' | 'working' | 'session_summary' | 'all';
   source_breakdown: {
+    working: number;
+    session_summary: number;
     episodic: number;
     semantic: number;
   };
+}
+
+/**
+ * ``/memory/summaries`` 返回的 envelope(批次三 step 6 新增)。
+ * ``session_id`` 必填,不允许"全部 session 的摘要"视图(spec step 5 严禁
+ * 跨 session 串味)。
+ */
+export interface MemorySummariesListResponse {
+  session_id: string;
+  items: Memory[];
+  total: number;
+  page: number;
+  page_size: number;
+  offset?: number;
 }
 
 // ==================== Knowledge 类型定义 ====================

@@ -282,6 +282,34 @@ class Database:
             cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_content TEXT")
             conn.commit()
 
+        # 会话摘要表（批次三 step 3，spec §4.3）
+        # Dedicated table for compressed session summaries; deliberately
+        # separate from memories_episodic so a derived summary never gets
+        # mistaken for an ordinary fact. status CHECK-constrained at the SQL
+        # layer to {pending, ready, failed}; error_message is required when
+        # status='failed' so a broken LLM call never masquerades as a fact.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_summaries (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                source_turn_id TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('pending', 'ready', 'failed')),
+                content TEXT NOT NULL DEFAULT '',
+                error_message TEXT,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_session_summaries_session_created
+            ON session_summaries(session_id, created_at_ms DESC)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_session_summaries_status
+            ON session_summaries(session_id, status)
+        """)
+
         # 数据库迁移 (M4 会话分叉)：为已有数据库的 sessions 表添加
         # fork_root / forked_at_message_id 列（如果不存在）。两列均可空，
         # 存量行保持合法；新库走同一 ALTER 分支补齐。
@@ -705,9 +733,8 @@ class Database:
         # review_events 与 skill_drafts 表放在主初始化路径, 确保任何进程启动
         # 时都可用, 无需依赖 ReviewQueue 自己的 _initialize_db。
 
-        # review_events: 审查事件队列表
-        # ReviewQueue 入队/出队的持久化载体。与 ReviewQueue._initialize_db
-        # 中的 schema 保持一致 (CREATE TABLE IF NOT EXISTS 幂等)。
+        # review_events 表：审查事件队列表。
+        # ReviewQueue 入队/出队的持久化载体，与其初始化 schema 保持一致。
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS review_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -721,9 +748,8 @@ class Database:
             )
         """)
 
-        # skill_drafts: 技能草稿表
-        # Background Review 在会话结束提炼出的候选技能, 等待用户审阅后
-        # 决定是否晋升为正式技能 (写入 skills 表)。
+        # skill_drafts 表：Background Review 生成的候选技能记录。
+        # 草稿经用户审阅后，再决定是否写入 skills 表。
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS skill_drafts (
                 id TEXT PRIMARY KEY,

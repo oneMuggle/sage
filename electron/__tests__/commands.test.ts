@@ -369,6 +369,36 @@ describe('memory IPC routes (PR-C §5.4)', () => {
       tags: ['pref', 'ui'],
     });
   });
+
+  // 批次三 step 6 (spec §4.3 line 150): 4-way /memory/list envelope + /memory/summaries endpoint
+  it('get_memories forwards offset query param when provided', () => {
+    const r = COMMAND_ROUTES.get_memories;
+    const url = new URL(
+      `http://x${r.path({ page: 1, pageSize: 20, offset: 40, sessionId: null, memoryType: 'episodic' })}`,
+    );
+    expect(url.searchParams.get('offset')).toBe('40');
+    expect(url.searchParams.get('session_id')).toBeNull();
+  });
+
+  it('get_memories forwards session_id query param when provided', () => {
+    const r = COMMAND_ROUTES.get_memories;
+    const url = new URL(
+      `http://x${r.path({ page: 1, pageSize: 20, offset: null, sessionId: 'sess-1', memoryType: null })}`,
+    );
+    expect(url.searchParams.get('session_id')).toBe('sess-1');
+    expect(url.searchParams.get('offset')).toBeNull();
+  });
+
+  it('has get_session_summaries route posting to /api/v1/memory/summaries', () => {
+    const r = COMMAND_ROUTES.get_session_summaries;
+    expect(r).toBeDefined();
+    expect(r.method).toBe('GET');
+    const url = new URL(`http://x${r.path({ sessionId: 'sess-7', page: 2, pageSize: 5 })}`);
+    expect(url.pathname).toBe('/api/v1/memory/summaries');
+    expect(url.searchParams.get('session_id')).toBe('sess-7');
+    expect(url.searchParams.get('page')).toBe('2');
+    expect(url.searchParams.get('page_size')).toBe('5');
+  });
 });
 
 describe('settings & preferences IPC routes', () => {
