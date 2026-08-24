@@ -36,7 +36,7 @@ from sage_core import LLMError, Message, Role
 from sage_core.exceptions import SessionNotFoundError
 
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
-from backend.api.settings_models import SettingsPayload
+from backend.api.settings_models import SettingsPayload, model_dump_compat
 from backend.application.services.chat_service import ChatService
 from backend.application.services.session_service import SessionService
 from backend.chat.executors import resolve_attachments
@@ -220,7 +220,7 @@ async def update_settings(
     不写入存储。
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
-    payload = req.model_dump(exclude_none=True)
+    payload = model_dump_compat(req, exclude_none=True)
 
     # 分离 legacy 字段 vs canonical 字段
     legacy_keys = {"api_base_url", "api_key", "model"}

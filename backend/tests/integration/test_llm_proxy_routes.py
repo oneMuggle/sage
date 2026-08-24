@@ -547,7 +547,69 @@ async def test_lm_studio_streaming_sse_chunks_preserved(client):
 
 
 @pytest.mark.asyncio()
-async def test_proxy_uses_certifi_ca_bundle_for_https(client):
+async def test_streaming_upstream_disconnect_after_first_chunk_closes_context(client, monkeypatch):
+    """首个 chunk 已发出后上游传输异常只能截断流, 但必须 close 且不二次写 status."""
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "text/event-stream"}
+        is_success = True
+
+        async def aiter_raw(self):
+            yield b"data: first\\n\\n"
+            raise RuntimeError("upstream disconnected after first chunk")
+
+    class FakeRequestContext:
+        def __init__(self):
+            self.exit_calls = []
+
+        async def __aenter__(self):
+            return FakeResponse()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self.exit_calls.append((exc_type, exc))
+            return False
+
+    fake_ctx = FakeRequestContext()
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return fake_ctx
+
+    monkeypatch.setattr(proxy_routes.httpx, "AsyncClient", FakeClient)
+    response = await proxy_routes._proxy_streaming(
+        "http://upstream.example.com/v1/chat/completions",
+        "POST",
+        {},
+        b"{}",
+    )
+
+    chunks = []
+    async def collect_chunks():
+        async for chunk in response.body_iterator:
+            chunks.append(chunk)
+
+    with pytest.raises(RuntimeError, match="upstream disconnected"):
+        await collect_chunks()
+
+    assert chunks == [b"data: first\\n\\n"]
+    assert len(fake_ctx.exit_calls) == 1
+    exc_type, exc = fake_ctx.exit_calls[0]
+    assert exc_type is RuntimeError
+    assert isinstance(exc, RuntimeError)
+
+
+
     """Task 1 §4: 代理始终启用证书校验 — ``httpx.AsyncClient`` 走 ``SSL_CERT_FILE``
     / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE`` 任一环境变量, 由 ``main.py``
     ``configure_ssl_ca_bundle(certifi.where)`` 在 import-time 注入.

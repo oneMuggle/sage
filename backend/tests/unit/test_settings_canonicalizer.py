@@ -569,3 +569,26 @@ def test_validate_settings_payload_non_dict_passes_silently() -> None:
     validate_settings_payload(None)
     validate_settings_payload([1, 2, 3])
     validate_settings_payload("not-a-dict")
+
+
+def test_model_dump_compat_uses_v2_model_dump() -> None:
+    """Pydantic 2 path remains preferred when available."""
+    from backend.api.settings_models import EndpointPayload, model_dump_compat
+
+    model = EndpointPayload(id="ep-1", protocol="ollama")
+    assert model_dump_compat(model, exclude_none=True) == {
+        "id": "ep-1",
+        "protocol": "ollama",
+    }
+
+
+def test_model_dump_compat_falls_back_to_pydantic_v1_dict() -> None:
+    """A v1-shaped model exposing only ``dict`` serializes identically."""
+    from backend.api.settings_models import model_dump_compat
+
+    class PydanticV1ShapedModel:
+        def dict(self, **kwargs):
+            assert kwargs == {"exclude_none": True}
+            return {"id": "ep-1"}
+
+    assert model_dump_compat(PydanticV1ShapedModel(), exclude_none=True) == {"id": "ep-1"}

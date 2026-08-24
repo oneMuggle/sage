@@ -21,7 +21,7 @@ Task 1 round 1 (2026-08-24): ``EndpointPayload`` + ``SettingsPayload`` 必须
 
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -33,6 +33,19 @@ from pydantic import BaseModel
 EndpointProtocolLiteral = Literal[
     "openai-compatible", "anthropic", "gemini", "ollama"
 ]
+
+
+def model_dump_compat(model: BaseModel, **kwargs: Any) -> Dict[str, Any]:
+    """Serialize a Pydantic model on both v1 and v2.
+
+    Pydantic 2 exposes ``model_dump`` while Pydantic 1 only provides ``dict``.
+    Keeping this boundary helper beside the shared request models prevents route
+    handlers from accidentally reintroducing a v2-only call on the Win7 path.
+    """
+    dump = getattr(model, "model_dump", None)
+    if callable(dump):
+        return dump(**kwargs)
+    return model.dict(**kwargs)
 
 
 # --------------------------------------------------------------------------
@@ -60,17 +73,17 @@ class EndpointPayload(BaseModel):
         extra = "allow"
 
     # ----- EndpointConfig 字段 (与 types.ts:EndpointConfig 同步) -----
-    id: str | None = None
-    name: str | None = None
-    baseUrl: str | None = None  # noqa: N815 — camelCase 对齐前端
-    apiKey: str | None = None  # noqa: N815
+    id: Optional[str] = None
+    name: Optional[str] = None
+    baseUrl: Optional[str] = None  # noqa: N815 — camelCase 对齐前端
+    apiKey: Optional[str] = None  # noqa: N815
     # Task 1 (2026-08-23): 协议枚举 + 模型身份.
     # Literal 在 Pydantic 1.10+ 与 2 都生效; 非法值 → Pydantic 422.
-    protocol: EndpointProtocolLiteral | None = None  # noqa: N815
-    modelId: str | None = None  # noqa: N815
-    localModelPath: str | None = None  # noqa: N815
-    discoveredModels: List[dict] | None = None  # noqa: N815
-    lastDiscoveredAt: int | None = None  # noqa: N815
+    protocol: Optional[EndpointProtocolLiteral] = None  # noqa: N815
+    modelId: Optional[str] = None  # noqa: N815
+    localModelPath: Optional[str] = None  # noqa: N815
+    discoveredModels: Optional[List[dict]] = None  # noqa: N815
+    lastDiscoveredAt: Optional[int] = None  # noqa: N815
 
 
 # --------------------------------------------------------------------------
@@ -88,24 +101,24 @@ class SettingsPayload(BaseModel):
         extra = "forbid"
 
     # ----- AppSettings 顶层字段 (与 types.ts:AppSettings 同步) -----
-    streaming: bool | None = None
-    autoMemory: bool | None = None  # noqa: N815
-    confirmDelete: bool | None = None  # noqa: N815
+    streaming: Optional[bool] = None
+    autoMemory: Optional[bool] = None  # noqa: N815
+    confirmDelete: Optional[bool] = None  # noqa: N815
     # Task 1 round 1: 强类型而非 List[dict]
-    endpoints: List[EndpointPayload] | None = None
-    modelSelections: dict | None = None  # noqa: N815
-    maxContext: int | None = None  # noqa: N815
-    temperature: float | None = None
+    endpoints: Optional[List[EndpointPayload]] = None
+    modelSelections: Optional[dict] = None  # noqa: N815
+    maxContext: Optional[int] = None  # noqa: N815
+    temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
-    timezone: str | None = None
-    wiki: dict | None = None
-    version: str | None = None
-    orch: dict | None = None
+    timezone: Optional[str] = None
+    wiki: Optional[dict] = None
+    version: Optional[str] = None
+    orch: Optional[dict] = None
 
     # ----- Legacy fields (兼容旧客户端, 不写入存储) -----
-    api_base_url: str | None = None
-    api_key: str | None = None  # noqa: S105 — 字段名占位; 不存储
-    model: str | None = None
+    api_base_url: Optional[str] = None
+    api_key: Optional[str] = None  # noqa: S105 — 字段名占位; 不存储
+    model: Optional[str] = None
 
 
 # --------------------------------------------------------------------------
@@ -128,22 +141,22 @@ class LegacySettingsPayload(BaseModel):
         extra = "allow"
 
     # ----- AppSettings 顶层字段 (与 types.ts:AppSettings 同步) -----
-    streaming: bool | None = None
-    autoMemory: bool | None = None  # noqa: N815
-    confirmDelete: bool | None = None  # noqa: N815
+    streaming: Optional[bool] = None
+    autoMemory: Optional[bool] = None  # noqa: N815
+    confirmDelete: Optional[bool] = None  # noqa: N815
     # Task 1 round 1: 强类型而非 List[dict]
-    endpoints: List[EndpointPayload] | None = None
-    modelSelections: dict | None = None  # noqa: N815
-    maxContext: int | None = None  # noqa: N815
-    temperature: float | None = None
+    endpoints: Optional[List[EndpointPayload]] = None
+    modelSelections: Optional[dict] = None  # noqa: N815
+    maxContext: Optional[int] = None  # noqa: N815
+    temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
-    timezone: str | None = None
-    wiki: dict | None = None
-    version: str | None = None
-    orch: dict | None = None
+    timezone: Optional[str] = None
+    wiki: Optional[dict] = None
+    version: Optional[str] = None
+    orch: Optional[dict] = None
 
     # ----- Legacy fields (deprecated, 兼容旧客户端, 不写入存储) -----
-    api_base_url: str | None = None
-    api_key: str | None = None  # noqa: S105 — 字段名占位; 不存储
-    model: str | None = None
+    api_base_url: Optional[str] = None
+    api_key: Optional[str] = None  # noqa: S105 — 字段名占位; 不存储
+    model: Optional[str] = None
 

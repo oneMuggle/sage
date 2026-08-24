@@ -65,3 +65,50 @@ git diff --check                                      通过
 ## 剩余问题
 
 无本轮阻塞问题。lint 的 5 个 warning 位于未改动的 ChatInput、TodoListSection、CommandPalette 文件；Pydantic 2 对双版本 `class Config` 会产生兼容层 deprecation warning，这是为 Python 3.8/Pydantic 1 保持同一模型定义的有意取舍。
+
+## Task 1 Fix Round 2（2026-08-24）
+
+状态：DONE
+
+### 本轮修复
+
+- `backend/api/settings_models.py` 全部字段改为 Python 3.8 可解析的 `Optional`/`List`/`Literal` 注解，移除所有 PEP 604 `|`。
+- 新增 `model_dump_compat()`：Pydantic 2 优先 `model_dump()`，Pydantic 1 fallback `dict()`；hex/legacy settings routes 的序列化均改用该 helper。
+- 保留 `EndpointPayload.protocol` 的 `Literal` 约束、timezone/protocol/localModelPath canonicalizer 校验和 Pydantic 1/2 双版本 `class Config`。
+- `_proxy_streaming` 在首 chunk 后上游异常时记录结构化 `llm_proxy_stream_error` teardown 日志，把异常传给 context manager，并确保连接只关闭一次；不尝试二次写 HTTP status。
+- 新增首 chunk 后断流回归测试，锁定已发送 chunk、异常透传和 deterministic close。
+- 新增 `model_dump_compat` 的 v2 优先与 v1-shaped fallback 测试。
+
+### 验证
+
+```text
+pytest backend/tests/unit/test_settings_canonicalizer.py backend/tests/integration/test_llm_proxy_routes.py
+73 passed
+
+pytest backend/tests/integration/test_llm_proxy_routes.py
+25 passed
+
+API_MODE=hex pytest backend/tests/integration/test_settings_endpoint.py backend/tests/integration/test_settings_route_hex.py
+4 passed
+
+pytest backend/tests/integration/test_settings_route_legacy.py
+10 passed
+
+npm run typecheck
+通过
+
+npm run lint
+0 errors, 5 个既有 warnings
+
+ruff check（本轮 Python 改动文件）
+All checks passed
+
+compileall + git diff --check
+通过
+```
+
+当前 conda 环境为 `sage-backend`（Python 3.10），本机未提供 `sage-backend-py38`，因此未直接启动 Python 3.8；共享模型已通过静态扫描确认无 PEP 604 注解，并使用 Python 3.8 兼容 typing 写法。Pydantic 1 的运行时 fallback 由 helper 单测覆盖，未修改 `release/win7`。
+
+### 剩余问题
+
+无阻塞问题。lint 的 5 个 warning 均位于本轮未修改的 ChatInput、TodoListSection、CommandPalette 文件；Pydantic 2 的 `class Config` deprecation warning 是为 Pydantic 1/2 共用模型而保留的兼容写法。
