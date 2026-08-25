@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
+## [Unreleased]
+
+## [v0.4.9-alpha.6-win7] - 2026-08-25
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 平台一致性 + Chat UI 补全回归测试落地:cherry-pick main 的 PR #305 (Chat 顶部 "+ 新对话" / Sidebar 跳转 / InputCard autosize 三处 UI 缺陷修复)。本批原本挑选了 4 个低风险 PR (#286 / #298 / #305 / #308),核对发现仅 #305 还有未 cherry-pick 内容(R1 autosize 回归测试),其余三个已被 PR #287 / #312+#313 / #324 等前置到位。
+
+### Fixed
+- **fix(win7-chat): cherry-pick main PR #305 三处 Chat UI 缺陷 (R1/R2/R3) 回归测试补全 (#372)** — main PR #305 R1 (InputCard autosize)、R2 (Sidebar 用 navigate 替代 window.location.href)、R3 (Chat 顶部 "+ 新对话" 跳 /welcome) 三处主代码已在 win7 通过 PR #324 等途径前置到位。本批 cherry-pick 仅追加 R1 autosize 回归测试 (`src/widgets/chat/__tests__/InputCard.test.tsx` +20 行),守护 `textarea.style.height` 在 value 变化时被 useEffect 更新、封顶 200px 的契约。冲突解析:`InputCard.tsx` 第 149-152 行 cherry-pick 想移除的注释实际是 win7 适配注解 (`emacsRef 同时服务 autosize, 与 main #252 最终形态一致`),保留并删冲突标记
+
 ## [v0.4.3-alpha.2] - 2026-07-07
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。PEP 604/585 → typing.* 跨平台兼容同步(原 Win7 LTS fix PR #112 现在 main 也对齐)。Win10+Linux+Mac 验证用版本。
