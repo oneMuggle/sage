@@ -380,8 +380,12 @@ class MemoryManager:
         except Exception as exc:
             logger.debug(f"用户画像快照注入失败: {exc}")
 
-        # 获取工作记忆上下文（按 session 隔离; win7 working.py 当前仅支持单会话, 传 limit）
-        working_context = self.working.get_context(limit=limit)
+        # 获取工作记忆上下文（按 session 隔离 — 批次三 step 6：win7 working.py
+        # 升级后 ``get_context`` 支持 ``session_id`` 过滤，未指定时仍返回全部，
+        # 保留对旧调用方的向后兼容）
+        working_context = self.working.get_context(
+            session_id=session_id, limit=limit
+        )
         if working_context:
             parts.append("【当前对话】")
             for msg in working_context:
@@ -459,15 +463,21 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"压缩工作记忆失败: {e}")
 
-    def add_to_working(self, role: str, content: str) -> None:
+    def add_to_working(
+        self, role: str, content: str, session_id: Optional[str] = None
+    ) -> None:
         """
         添加消息到工作记忆
 
         Args:
             role: 角色 (user/assistant/system)
             content: 消息内容
+            session_id: 可选会话 ID（批次三 step 6 — 透传到 ``WorkingMemory.add`` 的
+                ``session_id`` tag，供 ``get_context(session_id=...)`` 隔离读取）
         """
-        self.working.add({"role": role, "content": content})
+        self.working.add(
+            {"role": role, "content": content}, session_id=session_id
+        )
 
     def search_memories(
         self,
