@@ -9,6 +9,7 @@ API 路由定义
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import List
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
@@ -29,6 +30,7 @@ from pydantic import BaseModel, Field, StrictBool
 
 from backend.api.chat_stream_registry import SENTINEL, StreamEntry, StreamRegistry
 from backend.api.orch_routes import router as orch_routes_router
+from backend.api.settings_models import LegacySettingsPayload, model_dump_compat
 from backend.chat.compaction import (
     MIN_COMPACT_MESSAGE_COUNT,
     CompactionError,
@@ -47,6 +49,9 @@ from backend.data.session_repo import (
     fork_session as fork_session_core,
 )
 from backend.memory import get_memory_manager
+from backend.memory.summary import (
+    list_summaries_for_session as _list_summaries_for_session,
+)
 from backend.office.chat_refs import ChatOfficeRef, authorize_chat_office_request
 from backend.office.workspace_errors import (
     WorkspaceDocumentNotFoundError,
@@ -132,44 +137,44 @@ def _safe_log_field(value: object, max_length: int = 64) -> str:
 
 class SessionCreate(BaseModel):
     title: str = "新对话"
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
 
 
 class SessionUpdate(BaseModel):
-    title: Optional[str] = None
+    title: str | None = None
 
-    is_pinned: Optional[bool] = None
+    is_pinned: bool | None = None
 
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    workspace_path: Optional[str] = None
+    workspace_path: str | None = None
     # 2026-07-30: 选 agent 的入口。None / 空字符串 → 端点 fallback 到 "primary"。
     # 真正的路由由 SageAgent(agent_id=...) 内部完成:从 SQLite 读 profile,
     # 透传到 get_available_tools → ToolRegistry.get_schemas_for_llm(allowed_tools=...)
     # 这样 memory_manager 之类的窄权限 agent 不会拿到 list_dir/read_file。
-    agent_id: Optional[str] = None
-    api_key: Optional[str] = None
+    agent_id: str | None = None
+    api_key: str | None = None
 
-    api_url: Optional[str] = None
+    api_url: str | None = None
 
-    model: Optional[str] = None
+    model: str | None = None
 
-    max_context: Optional[int] = None
+    max_context: int | None = None
 
-    temperature: Optional[float] = None
+    temperature: float | None = None
 
     # 透传字段:provider 让后端不再硬写,reasoning_effort/thinking_budget
     # 让上游 LLM 启用 thinking 输出(provider 决定哪种 key 会被接受)
     # - provider: openai / claude / gemini / deepseek / ollama / custom
     # - reasoning_effort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
     # - thinking_budget: Gemini 2.5 OpenAI 兼容模式
-    provider: Optional[str] = None
+    provider: str | None = None
 
-    reasoning_effort: Optional[str] = None
+    reasoning_effort: str | None = None
 
-    thinking_budget: Optional[int] = None
+    thinking_budget: int | None = None
 
     # Task 6 (M1-M2 chat-read): frontend 把 @mention 解析成
     # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
@@ -184,12 +189,12 @@ class ChatRequest(BaseModel):
     # Optional: 兼容渲染进程 IPC payload 里显式 null(undefined ?? null 序列化的产物)。
     # Pydantic 默认值只在字段缺失时生效，显式 null 仍按类型校验 →
     # 不加 Optional 会被 422 拒绝。业务层 `data.orchestration_mode or "auto"` 已兜底。
-    orchestration_mode: Optional[str] = "auto"
+    orchestration_mode: str | None = "auto"
 
     # Wave 3 A10 (2026-08-14): resume 恢复流 —— plan_override 非空时跳过 LLM
     # 拆解，直接用存储计划建 dispatcher；run_id 复用 resume 返回的 new_run_id。
-    plan_override: Optional[List[Dict[str, Any]]] = None
-    run_id: Optional[str] = None
+    plan_override: List[Dict[str, Any]] | None = None
+    run_id: str | None = None
 
 
 class MessageResponse(BaseModel):
@@ -198,9 +203,9 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: int
-    model: Optional[str] = None
+    model: str | None = None
 
-    tool_calls: Optional[str] = None
+    tool_calls: str | None = None
 
 
 class ChatErrorInfo(BaseModel):
@@ -211,19 +216,19 @@ class ChatErrorInfo(BaseModel):
 
     type: str
     message: str
-    status_code: Optional[int] = None
+    status_code: int | None = None
 
-    retry_after: Optional[int] = None
+    retry_after: int | None = None
 
 
 class ChatResponse(BaseModel):
     """聊天响应：成功时含 message+session，失败时含 error+null message。"""
 
-    message: Optional[MessageResponse] = None
+    message: MessageResponse | None = None
 
-    session: Optional[dict] = None
+    session: dict | None = None
 
-    error: Optional[ChatErrorInfo] = None
+    error: ChatErrorInfo | None = None
 
 
 class EvolutionLogResponse(BaseModel):
@@ -232,20 +237,20 @@ class EvolutionLogResponse(BaseModel):
     id: str
     evolution_type: str
     description: str
-    before_state: Optional[str] = None
+    before_state: str | None = None
 
-    after_state: Optional[str] = None
+    after_state: str | None = None
 
     trigger_type: str
-    trigger_condition: Optional[str] = None
+    trigger_condition: str | None = None
 
     status: str
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
-    tokens_used: Optional[int] = None
+    tokens_used: int | None = None
 
     created_at: int
-    completed_at: Optional[int] = None
+    completed_at: int | None = None
 
 
 #: agent role 白名单（PATCH/POST 共用）。
@@ -285,25 +290,25 @@ class AgentUpdate(BaseModel):
     # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
     model_config = {"protected_namespaces": ()}
 
-    name: Optional[str] = None
+    name: str | None = None
 
     role: Union[str, None] = None  # 校验放在路由层 (依赖 Pydantic Literal 不直观)
 
-    system_prompt: Optional[str] = None
+    system_prompt: str | None = None
 
-    tools: Optional[List[str]] = None
+    tools: List[str] | None = None
 
-    memory_access: Optional[List[str]] = None
+    memory_access: List[str] | None = None
 
     model_config_data: Union[dict, None] = (
         None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
     )
 
-    max_iterations: Optional[int] = None  # 路由层校验 1..50
+    max_iterations: int | None = None  # 路由层校验 1..50
 
-    enabled: Optional[bool] = None
+    enabled: bool | None = None
 
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class AgentCreate(BaseModel):
@@ -319,12 +324,12 @@ class AgentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     role: str = "general"
     system_prompt: str = ""
-    tools: Optional[List[str]] = None
-    memory_access: Optional[List[str]] = None
-    model_config_data: Optional[dict] = None
-    max_iterations: Optional[int] = None
-    enabled: Optional[bool] = None
-    description: Optional[str] = None
+    tools: List[str] | None = None
+    memory_access: List[str] | None = None
+    model_config_data: dict | None = None
+    max_iterations: int | None = None
+    enabled: bool | None = None
+    description: str | None = None
 
 
 # ==================== 依赖注入 ====================
@@ -344,10 +349,10 @@ _PENDING_RUN_CANCELLATIONS: Set[str] = set()
 class InterruptRequest(BaseModel):
     """/interrupt 请求体 —— stream_id 可选，兼容不带 body 的旧调用方。"""
 
-    stream_id: Optional[str] = None
+    stream_id: str | None = None
 
 
-def interrupt_stream(stream_id: Optional[str]) -> str:
+def interrupt_stream(stream_id: str | None) -> str:
     """中断目标流：主 agent interrupt（+ multi 模式 cancel dispatcher）。
 
     返回命中标识（"stream"/"none"）供端点回传与测试断言。
@@ -405,7 +410,7 @@ def interrupt_run(run_id: str) -> str:
 
 
 def _finalize_orch_run(
-    run_id: Optional[str], status: str, final_summary: Optional[str]
+    run_id: str | None, status: str, final_summary: str | None
 ) -> None:
     """P0-4 (2026-08-20): orch run 生命周期闭环（降级型）。
 
@@ -427,9 +432,9 @@ def _build_orchestration_dispatcher(
     stream_id: str,
     entry_queue: Any,
     run_id: str,
-    llm_config: Optional[Dict[str, Any]],
-    total_tasks: Optional[int],
-    workspace_root: Optional[str],
+    llm_config: Dict[str, Any] | None,
+    total_tasks: int | None,
+    workspace_root: str | None,
 ) -> ChatDispatcher:
     """构造 ChatDispatcher；非法 run_id 的 ValueError 重抛为前端可读文案。
 
@@ -644,7 +649,7 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[dict]) -> None:
+async def _maybe_auto_compact_session(session_id: str, llm_config: dict | None) -> None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -858,8 +863,8 @@ async def compact_session(session_id: str):
 class ForkSessionRequest(BaseModel):
     """POST /sessions/{session_id}/fork 请求体。"""
 
-    at_message_id: Optional[str] = None
-    title: Optional[str] = None
+    at_message_id: str | None = None
+    title: str | None = None
 
 
 @router.post("/sessions/{session_id}/fork", response_model=dict)
@@ -1007,7 +1012,7 @@ def update_agent(agent_id: str, data: AgentUpdate):
         )
 
     # 转 dict 给 repo.update; 字段名 model_config_data → model_config (避开 Pydantic 保留名)
-    update_payload = data.model_dump(exclude_none=True)
+    update_payload = model_dump_compat(data, exclude_none=True)
     if "model_config_data" in update_payload:
         update_payload["model_config"] = update_payload.pop("model_config_data")
 
@@ -1088,7 +1093,7 @@ def create_agent(data: AgentCreate):
             },
         )
 
-    payload = data.model_dump(exclude_none=True)
+    payload = model_dump_compat(data, exclude_none=True)
     if "model_config_data" in payload:
         payload["model_config"] = payload.pop("model_config_data")
     payload.setdefault("tools", [])
@@ -1385,19 +1390,15 @@ async def import_skills(files: List[UploadFile] = File(default=[])):
 # 因此在 legacy_routes 中也提供，确保两种 API_MODE 下都能工作。
 
 
-from pydantic import ConfigDict as _ConfigDict
-
-
-class LegacySettingsRequest(BaseModel):
-    """PUT /settings 请求体（legacy 路径）。所有字段可选。"""
-
-    model_config = _ConfigDict(extra="allow")
-
-    api_base_url: Optional[str] = None
-
-    api_key: Optional[str] = None  # noqa: S105
-
-    model: Optional[str] = None
+# Task 1 round 1 (2026-08-24): LegacySettingsRequest → ``backend.api.settings_models.LegacySettingsPayload``.
+# 原因:
+# - Pydantic 1/2 双兼容 (``class Config`` 在两边都生效)
+# - 强类型 ``endpoints: List[EndpointPayload]`` 而非 ``List[dict]`` (canonicalizer
+#   兜底嵌套; 旧客户端不传 endpoints 不受影响, 因为 Optional)
+# - 时区 / 协议 / 本地路径校验**下沉**到 canonicalizer.validate_settings_payload,
+#   不再用 ``field_validator`` 装饰器 (Pydantic 2 语法在 Pydantic 1 / Win7 不可用).
+# 取别名 ``LegacySettingsRequest`` 保持 legacy_routes 下游不动, 避免改动面爆炸.
+LegacySettingsRequest = LegacySettingsPayload
 
 
 class LegacySettingsResponse(BaseModel):
@@ -1410,7 +1411,7 @@ class LegacySettingsResponse(BaseModel):
 class LegacyPreferenceItem(BaseModel):
     """GET/PUT /preferences/{key} 请求/响应体。"""
 
-    value: Optional[str] = None
+    value: str | None = None
 
     value_type: str = "string"
     category: str = "general"
@@ -1418,7 +1419,7 @@ class LegacyPreferenceItem(BaseModel):
 
 @router.get("/settings")
 @with_db_lock
-def legacy_get_settings() -> Optional[dict]:
+def legacy_get_settings() -> dict | None:
     """读取持久化的 settings；不存在返回 null。
 
     翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
@@ -1443,7 +1444,26 @@ def legacy_get_settings() -> Optional[dict]:
         logger.warning("[LEGACY] /settings: top-level non-dict JSON, returning null")
         return None
     detect_legacy_snake_pollution(raw)
-    return to_camel(raw)
+    translated = to_camel(raw)
+    # Task 1 (2026-08-23): 历史 endpoints[*] 无 protocol 字段 (旧 schema 没这层)
+    # → 迁移默认值 ``openai-compatible`` (OpenAI 兼容端点是最常见的 LM Studio /
+    # Ollama / OpenAI 替代品). 这样旧客户端无需再写一次 PUT 就能看到正确 protocol.
+    _migrate_default_protocol(translated)
+    return translated
+
+
+def _migrate_default_protocol(settings: dict) -> None:
+    """把 DB 中无 ``protocol`` 字段的 endpoint 默认填 ``openai-compatible``.
+
+    仅在 GET 路径走 — 不写回 DB (避免无谓 IO); 用户下次 PUT 时如果设置里仍无
+    protocol 字段, 由 handler 在写库前再补一遍默认值.
+    """
+    endpoints = settings.get("endpoints")
+    if not isinstance(endpoints, list):
+        return
+    for ep in endpoints:
+        if isinstance(ep, dict) and "protocol" not in ep:
+            ep["protocol"] = "openai-compatible"
 
 
 @router.put("/settings", response_model=LegacySettingsResponse)
@@ -1463,6 +1483,7 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     from backend.data.settings_canonicalizer import (
         strip_unknown_fields,
         to_camel,
+        validate_settings_payload,
         validate_settings_shape,
     )
     from backend.data.settings_repo import SettingsRepository
@@ -1479,7 +1500,7 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
 
     # LegacySettingsRequest 是 extra="allow", model_dump(exclude_none=True) 会包含所有 set 字段
     # (含 extras, 如 streaming/foo/endpoints) — 这是设计: 旧客户端 PUT schema 之外字段不丢。
-    payload = req.model_dump(exclude_none=True)
+    payload = model_dump_compat(req, exclude_none=True)
 
     # 剥离 legacy compatibility 3 字段: api_base_url / api_key / model.
     # 这 3 字段不进 DB (与 hex PUT 对齐, 见 eebbedd), 仅用于审计和 changed_fields.
@@ -1493,6 +1514,15 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     # payload 侧的未知字段仍原样保留并触发 400（与 hex PUT 对齐）。
     camel_existing = strip_unknown_fields(to_camel(existing))
     camel_merged = {**camel_existing, **to_camel(payload)}
+    # Task 1 (2026-08-23): 写入前给旧 endpoints (无 protocol) 补默认值, 与 GET 路径对齐.
+    _migrate_default_protocol(camel_merged)
+    # Task 1 round 1 (2026-08-24): 显式跑 timezone / protocol / localModelPath
+    # value 校验 (Pydantic 装饰器不可用, 这里下沉到 canonicalizer 层).
+    try:
+        validate_settings_payload(camel_merged)
+    except ValueError as exc:
+        logger.warning(f"[LEGACY] /settings rejected invalid value: {exc}")
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
@@ -1761,7 +1791,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
             # CancelledError）会让 finally 触发 UnboundLocalError，既掩盖原始异常
             # 又跳过后续的 reset_tool_context 清理。
-            done_content: Optional[str] = None
+            done_content: str | None = None
             run_outcome = "failed"
 
             llm_config = None
@@ -1822,7 +1852,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
                     mode = "single"
-            run_id: Optional[str] = None
+            run_id: str | None = None
             dispatcher = None
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
@@ -2091,7 +2121,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
-            done_reasoning: Optional[str] = None
+            done_reasoning: str | None = None
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
@@ -2325,7 +2355,7 @@ def _ndjson(d: dict) -> str:
 
 @router.post("/interrupt")
 @with_db_lock
-def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
+def interrupt(data: InterruptRequest | None = Body(default=None)):
     """中断 Agent（P0-2: 经 stream_id 定位真实运行的 agent）"""
     stream_id = data.stream_id if data is not None else None
     target = interrupt_stream(stream_id)
@@ -2538,11 +2568,14 @@ def _draft_to_dict(draft) -> dict:
 # ==================== 记忆 API ====================
 
 # get_memory_manager 从 backend.memory 导入（全局单例）
+_MEMORY_LIST_MAX_PAGE_SIZE = 100
+_MEMORY_LIST_MAX_FETCH = 1000
+_MEMORY_LIST_MAX_PAGE = _MEMORY_LIST_MAX_FETCH // _MEMORY_LIST_MAX_PAGE_SIZE
 
 
 class MemorySearchRequest(BaseModel):
     query: str
-    memory_type: Optional[str] = None
+    memory_type: str | None = None
 
     limit: int = 20
 
@@ -2560,7 +2593,7 @@ class MemoryDeleteRequest(BaseModel):
 
 @router.get("/memory/search")
 @with_db_lock
-def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
+def search_memory(query: str, limit: int = 20, type: str | None = None):
     """搜索记忆"""
     try:
         mm = get_memory_manager()
@@ -2605,17 +2638,356 @@ def delete_memory(data: MemoryDeleteRequest):
 
 @router.get("/memory/list")
 @with_db_lock
-def list_memories(page: int = 1, page_size: int = 20, type: Optional[str] = None):
-    """获取记忆列表"""
+def list_memories(
+    page: int = 1,
+    page_size: int = 20,
+    offset: Optional[int] = None,
+    type: Optional[str] = None,
+    session_id: Optional[str] = None,
+):
+    """获取记忆列表（带 layer / source / 分页 envelope）。
+
+    Task 2 起:
+    - 分页参数 clamp 到合法范围 (``page >= 1``, ``page_size`` in ``[1, 100]``)。
+    - 返回 envelope ``{items, total, page, page_size, layer, source_breakdown}``,
+      替代旧实现返回裸 list 的契约。
+    - ``type`` 可为 ``None`` / ``''`` / ``'all'`` → 合并 episodic + semantic
+      (其他 type 仍走对应层)。
+    - 每条记录带 ``source`` (``'episodic'`` / ``'semantic'``) 与 ``layer``
+      字段,与 ``MemoryManager.search_memories`` 对齐。
+
+    批次三 step 6 起 (spec §4.3 line 150):
+    - ``type=None`` / ``'all'`` / ``''`` 现在合并**四层**: working +
+      session_summary + episodic + semantic（不再只返回 episodic + semantic）。
+    - 新增 ``offset`` query 参数：调用方可直接传 offset 游标,不必先算 page。
+    - 新增 ``session_id`` query 参数: 按 session 隔离列表,呼应 step 5 的
+      session 隔离不变量。
+    - ``source_breakdown`` 输出新增 ``working`` 和 ``session_summary`` 计数。
+    """
     try:
+        # 1. 输入 clamp
+        safe_page = max(
+            1,
+            min(
+                _MEMORY_LIST_MAX_PAGE,
+                int(page) if page is not None else 1,
+            ),
+        )
+        safe_page_size = max(
+            1,
+            min(
+                _MEMORY_LIST_MAX_PAGE_SIZE,
+                int(page_size) if page_size is not None else 20,
+            ),
+        )
+        # offset 默认从 page 派生;调用方显式传 offset 时优先使用。
+        safe_offset = (
+            max(0, int(offset))
+            if offset is not None
+            else (safe_page - 1) * safe_page_size
+        )
+        fetch_limit = min(
+            _MEMORY_LIST_MAX_FETCH,
+            safe_offset + safe_page + safe_page_size,
+        )
+        normalized_type = type if type and type not in ("", "all") else None
+
         mm = get_memory_manager()
-        if type == "episodic":
-            results = mm.episodic.get_recent(limit=page_size)
-        elif type == "semantic":
-            results = mm.semantic.get_recent(limit=page_size)
+        # 2. 取数 (按 type 路由)
+        if normalized_type == "episodic":
+            episodic_items = mm.episodic.get_recent(
+                limit=fetch_limit, session_id=session_id
+            )
+            items = _enrich_memory_records(
+                episodic_items, layer="episodic", source="episodic"
+            )
+            # step 5: session_id 给定时,total 必须按会话统计,否则分页 envelope
+            # 会把其它会话的内存以 total 形式泄漏给 UI
+            total = mm.episodic.count(session_id=session_id)
+            source_breakdown = {
+                "working": 0,
+                "session_summary": 0,
+                "episodic": len(items),
+                "semantic": 0,
+            }
+        elif normalized_type == "semantic":
+            semantic_items = mm.semantic.get_recent(
+                limit=fetch_limit, session_id=session_id
+            )
+            items = _enrich_memory_records(
+                semantic_items, layer="semantic", source="semantic"
+            )
+            total = mm.semantic.count(session_id=session_id)
+            source_breakdown = {
+                "working": 0,
+                "session_summary": 0,
+                "episodic": 0,
+                "semantic": len(items),
+            }
+        elif normalized_type == "working":
+            working_items = mm.working.get_context(
+                session_id=session_id, limit=fetch_limit
+            ) if session_id else list(mm.working.messages)[-fetch_limit:]
+            items = _enrich_working_records(working_items, session_id=session_id)
+            total = len(items)
+            source_breakdown = {
+                "working": len(items),
+                "session_summary": 0,
+                "episodic": 0,
+                "semantic": 0,
+            }
+        elif normalized_type == "session_summary":
+            # step 6 兼容:旧 MemoryManager 没有 summary_store → 返空 envelope,不 500
+            if mm.summary_store is None or not session_id:
+                items = []
+                total = 0
+            else:
+                summaries = _list_summaries_for_session(
+                    db=mm.summary_store.db,
+                    session_id=session_id,
+                    limit=fetch_limit,
+                )
+                items = _enrich_summary_records(summaries)
+                total = len(summaries)
+            source_breakdown = {
+                "working": 0,
+                "session_summary": total,
+                "episodic": 0,
+                "semantic": 0,
+            }
         else:
-            results = mm.episodic.get_recent(limit=page_size)
-        return results
+            # 'all' / '' / None → 合并四层: working + session_summary +
+            # episodic + semantic,按 created_at 倒序
+            episodic_items = mm.episodic.get_recent(
+                limit=fetch_limit, session_id=session_id
+            )
+            semantic_items = mm.semantic.get_recent(
+                limit=fetch_limit, session_id=session_id
+            )
+
+            # Working memory: 当 session_id 给定时取该会话;否则取全局最后 N 条
+            if session_id:
+                working_items = mm.working.get_context(
+                    session_id=session_id, limit=fetch_limit
+                )
+            else:
+                # 全局视图: 跨会话聚合(粗粒度,按 timestamp 排序)
+                working_items = list(mm.working.messages)[-fetch_limit:]
+
+            # Session summaries: 只在 session_id 给定时注入
+            # (不输出"全 session 摘要",以防跨 session 串味)
+            summaries = []
+            if session_id and mm.summary_store is not None:
+                summaries = _list_summaries_for_session(
+                    db=mm.summary_store.db,
+                    session_id=session_id,
+                    limit=fetch_limit,
+                )
+
+            merged: list[dict] = []
+            merged.extend(
+                _enrich_memory_records(episodic_items, layer="episodic", source="episodic")
+            )
+            merged.extend(
+                _enrich_memory_records(semantic_items, layer="semantic", source="semantic")
+            )
+            merged.extend(_enrich_working_records(working_items, session_id=session_id))
+            merged.extend(_enrich_summary_records(summaries))
+            # 按 created_at_ms / timestamp 倒序
+            merged.sort(
+                key=lambda x: x.get("created_at_ms", x.get("timestamp_ms", 0)),
+                reverse=True,
+            )
+            items = merged
+            try:
+                # step 5: total 必须按 session 隔离,否则 envelope 会把其它
+                # 会话的条目数泄漏给当前会话的 UI
+                total = (
+                    mm.episodic.count(session_id=session_id)
+                    + mm.semantic.count(session_id=session_id)
+                    + len(working_items)
+                    + len(summaries)
+                )
+            except Exception:
+                total = len(items)
+            source_breakdown = {
+                "working": len(working_items),
+                "session_summary": len(summaries),
+                "episodic": len(episodic_items),
+                "semantic": len(semantic_items),
+            }
+
+        # 3. 分页 slice
+        page_items = items[safe_offset : safe_offset + safe_page_size]
+
+        # 4. Envelope
+        return {
+            "items": page_items,
+            "total": total,
+            "page": safe_page,
+            "page_size": safe_page_size,
+            "offset": safe_offset,
+            "layer": normalized_type or "all",
+            "source_breakdown": source_breakdown,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _enrich_memory_records(
+    records: List[Dict[str, Any]], layer: str, source: str
+) -> List[Dict[str, Any]]:
+    """给每条记忆记录补 ``source`` / ``layer`` / ``created_at_ms``。
+
+    字段约定:
+    - ``id`` / ``content`` / ``memory_type`` / ``source`` / ``session_id``
+      / ``importance`` / ``created_at_ms`` / ``summary``
+    - ``created_at`` 字段若存在,映射成 ``created_at_ms``(毫秒)。
+
+    ``source`` 强制覆盖(不用 setdefault):DB 里 ``source`` 列存的是
+    'auto'/'manual'/'review' 之类的"写入来源",而这里我们要的是"层来源"
+    (episodic/semantic)。两者语义不同,务必区分,UI 按这个字段决定走
+    哪个标签样式。
+    """
+    enriched: List[Dict[str, Any]] = []
+    for raw in records or []:
+        item = dict(raw)
+        item["source"] = source  # 强制覆盖,与 DB 列 source 解耦
+        item["layer"] = layer
+        # created_at (秒) → created_at_ms (毫秒)
+        if "created_at_ms" not in item and "created_at" in item:
+            ts = item["created_at"]
+            # 数据库列存的就是毫秒（int(time.time() * 1000)），原样复制
+            with contextlib.suppress(TypeError, ValueError):
+                item["created_at_ms"] = int(ts)
+        enriched.append(item)
+    return enriched
+
+
+def _enrich_working_records(
+    messages: List[Dict[str, Any]], session_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """把工作记忆消息序列化成 ``/memory/list`` 的统一记录格式。
+
+    工作记忆是 in-memory deque,不是 DB 行,所以这里手填
+    ``source='working'`` / ``layer='working'`` 让 UI 走对应的徽章样式。
+    ``created_at_ms`` 用 ``timestamp * 1000``(秒→毫秒,spec §4.4 step 1)。
+    """
+    enriched: List[Dict[str, Any]] = []
+    for msg in messages or []:
+        item = dict(msg)
+        sid = item.get("session_id", session_id or "")
+        seq = item.get("seq", 0)
+        item["id"] = item.get("id") or f"wm:{sid}:{seq}"
+        item["source"] = "working"
+        item["layer"] = "working"
+        item["memory_type"] = "working"
+        ts = item.get("timestamp", 0)
+        try:
+            item["created_at_ms"] = int(float(ts) * 1000)
+        except (TypeError, ValueError):
+            item["created_at_ms"] = 0
+        item["timestamp_ms"] = item["created_at_ms"]
+        item["content"] = item.get("content", "")
+        item["importance"] = item.get("importance", 0)
+        enriched.append(item)
+    return enriched
+
+
+def _enrich_summary_records(
+    summaries: List[Any],
+) -> List[Dict[str, Any]]:
+    """把 :class:`SessionSummary` 行转成 ``/memory/list`` 的统一格式。
+
+    ``source='session_summary'`` / ``layer='session_summary'`` 区分于持久层
+    (episodic/semantic)。``created_at_ms`` 已经是 spec §4.4 规范的毫秒,
+    直接透传。
+    """
+    enriched: List[Dict[str, Any]] = []
+    for s in summaries or []:
+        enriched.append(
+            {
+                "id": s.id,
+                "source": "session_summary",
+                "layer": "session_summary",
+                "memory_type": "session_summary",
+                "session_id": s.session_id,
+                "source_turn_id": s.source_turn_id,
+                "content": s.content,
+                "status": s.status,
+                "error_message": s.error_message,
+                "created_at_ms": s.created_at_ms,
+                "updated_at_ms": s.updated_at_ms,
+                "importance": 0,
+                "summary": (s.content or "")[:100],
+            }
+        )
+    return enriched
+
+
+@router.get("/memory/summaries")
+@with_db_lock
+def list_session_summaries(
+    session_id: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    """按 session 列出 session_summaries 行(批次三 step 6,spec §4.3)。
+
+    跨 session 串味是 step 5 严令禁止的,所以 ``session_id`` **必填**:
+    不存在"全部 session 的摘要列表"这种视图。漏传 session_id 直接
+    400,而不是默认某 session。
+
+    包含 READY/FAILED/PENDING 三种 status 行,这样 UI 能正确显示
+    "上一次生成失败"等诊断,而不会把失败伪装成 READY。
+    """
+    if not session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="session_id is required for /memory/summaries "
+            "(spec §4.3 step 5 forbids cross-session reads)",
+        )
+
+    try:
+        safe_page = max(1, int(page))
+        safe_page_size = max(
+            1, min(_MEMORY_LIST_MAX_PAGE_SIZE, int(page_size))
+        )
+        safe_offset = (safe_page - 1) * safe_page_size
+
+        mm = get_memory_manager()
+        if mm.summary_store is None:
+            # 没有 store (旧版 MemoryManager) 就直接返空,避免 500。
+            return {
+                "session_id": session_id,
+                "items": [],
+                "total": 0,
+                "page": safe_page,
+                "page_size": safe_page_size,
+                "offset": safe_offset,
+            }
+
+        # 用 session_id 强过滤(防 step 5 跨 session 串味)
+        all_rows = _list_summaries_for_session(
+            db=mm.summary_store.db,
+            session_id=session_id,
+            limit=_MEMORY_LIST_MAX_FETCH,
+        )
+        total = len(all_rows)
+        page_items = all_rows[safe_offset : safe_offset + safe_page_size]
+
+        return {
+            "session_id": session_id,
+            "items": _enrich_summary_records(page_items),
+            "total": total,
+            "page": safe_page,
+            "page_size": safe_page_size,
+            "offset": safe_offset,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

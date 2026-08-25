@@ -41,6 +41,7 @@ EXPECTED_TOP_KEYS = frozenset(
         "modelSelections",
         "maxContext",
         "temperature",
+        "timezone",  # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai
         "wiki",
         "version",
         "orch",
@@ -54,7 +55,7 @@ def test_legal_top_keys_matches_appsettings_interface() -> None:
 
 
 def test_legal_endpoint_keys_is_stable() -> None:
-    """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 6 字段."""
+    """LEGAL_ENDPOINT_KEYS 是 EndpointConfig 9 字段 (含 Task 1 新增 protocol / modelId / localModelPath)."""
     assert (
         frozenset(
             {
@@ -62,6 +63,9 @@ def test_legal_endpoint_keys_is_stable() -> None:
                 "name",
                 "baseUrl",
                 "apiKey",
+                "protocol",
+                "modelId",
+                "localModelPath",
                 "discoveredModels",
                 "lastDiscoveredAt",
             }

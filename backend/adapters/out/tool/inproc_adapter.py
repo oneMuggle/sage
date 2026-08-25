@@ -147,7 +147,10 @@ class InprocToolAdapter:
                 metadata=None,
             )
 
-        output_str = "" if raw.content is None else str(raw.content)
+        output_value = getattr(raw, "output", None)
+        if output_value is None:
+            output_value = raw.content
+        output_str = "" if output_value is None else str(output_value)
         truncated_output, truncation_meta = _truncate_output(output_str, self._policy)
 
         metadata: Optional[Dict[str, Any]] = None

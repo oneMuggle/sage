@@ -130,3 +130,54 @@ class TestVectorStore:
         assert "distance" in results[0]
         assert "memory_type" in results[0]
         assert results[0]["memory_id"] == "m1"
+
+    def test_search_session_isolation(self, store):
+        """spec §4.3 step 5:session_id 过滤必须阻止跨 session 召回。"""
+        store.add("a1", "用户喜欢火锅", session_id="sess-A")
+        store.add("b1", "用户爱吃火锅", session_id="sess-B")
+        store.add("b2", "完全无关的天气", session_id="sess-B")
+
+        # 不传 session_id:跨 session 召回三条（top_k=5 都装得下）
+        all_results = store.search("火锅", top_k=5)
+        ids_all = sorted(r["memory_id"] for r in all_results)
+        assert ids_all == ["a1", "b1", "b2"]
+
+        # 仅 sess-A:只能命中 a1
+        a_only = store.search("火锅", top_k=5, session_id="sess-A")
+        ids_a = [r["memory_id"] for r in a_only]
+        assert ids_a == ["a1"]
+        assert all(r["session_id"] == "sess-A" for r in a_only)
+
+        # 仅 sess-B:只剩 b1/b2 属 sess-B
+        b_only = store.search("火锅", top_k=5, session_id="sess-B")
+        ids_b = sorted(r["memory_id"] for r in b_only)
+        assert ids_b == ["b1", "b2"]
+        assert all(r["session_id"] == "sess-B" for r in b_only)
+
+        # 不存在的 session_id:无命中
+        none_results = store.search("火锅", top_k=5, session_id="sess-X")
+        assert none_results == []
+
+    def test_search_session_filter_excludes_all_other_sessions(self, store):
+        """session_id 过滤严格隔离:任何非目标 session 行都不能漏出。"""
+        store.add("a1", "今天天气好", session_id="sess-A")
+        store.add("b1", "明天天气好", session_id="sess-B")
+        store.add("c1", "后天天气好", session_id="sess-C")
+
+        only_a = store.search("天气", top_k=10, session_id="sess-A")
+        assert {r["memory_id"] for r in only_a} == {"a1"}
+        assert all(r["session_id"] == "sess-A" for r in only_a)
+
+    def test_add_persists_session_id_in_result(self, store):
+        """add() 写入的 session_id 必须在 search() 结果中可读。"""
+        store.add("x", "hello", session_id="sess-X")
+        results = store.search("hello", session_id="sess-X")
+        assert results[0]["session_id"] == "sess-X"
+
+    def test_search_session_id_none_is_backward_compatible(self, store):
+        """未带 session_id 时返回结果不带 session_id 字段错误,
+        应仍按 KNN 排序返回全部 (NULL session_id 视为通用向量)。"""
+        store.add("n1", "通用向量 1")  # 无 session_id
+        results = store.search("通用", top_k=5)
+        assert len(results) >= 1
+        assert any(r["memory_id"] == "n1" for r in results)

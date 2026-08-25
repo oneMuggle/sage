@@ -3,6 +3,8 @@
 使用 pytest 内置的 tmp_path fixture 隔离文件系统副作用。
 """
 
+from pathlib import Path
+
 import pytest
 
 from backend.tools.file_tool import ListDirTool, ReadFileTool, WriteFileTool
@@ -134,6 +136,78 @@ def test_list_dir_schema():
     schema = tool.schema
     assert schema.name == "list_dir"
     assert schema.parameters["required"] == ["path"]
+
+
+def test_list_dir_canonical_name_across_registries():
+    """``list_dir`` (underscore) is the single canonical name. Any drift to
+    ``list-dir`` (hyphen) or ``list_directory`` in the LLM-facing registries
+    silently breaks prompts that the model has memorized — T7.5 ships this
+    regression guard so the next refactor can't rename by accident.
+
+    Scope:
+      * Tool class schema name.
+      * Backend ``register_all_tools`` registry.
+      * Frontend ``humanize.ts`` lookup key (already underscore).
+    """
+    # 1. Tool class schema name.
+    assert ListDirTool().schema.name == "list_dir"
+
+    # 2. Backend registry exposes the canonical name (and only it).
+    from backend.tools import register_all_tools
+    from backend.tools.registry import ToolRegistry
+
+    registry = ToolRegistry()
+    register_all_tools(registry)
+    names = set(registry.list_names())
+    assert "list_dir" in names
+    assert "list-dir" not in names  # never hyphenated.
+    # ``list_directory`` is a separate API endpoint in backend/api/wiki_routes.py
+    # (wiki tree browser) — not an LLM tool — so it must NOT appear here.
+    assert "list_directory" not in names
+
+
+def test_no_list_dir_hyphen_anywhere_in_source():
+    """Repo-wide guard against the hyphenated form ``list-dir``.
+
+    Confirms zero matches across production source (tests/ excluded — the
+    regression guard itself mentions the bad form to assert against it).
+    Anything > 0 means a refactor slipped the wrong form back in.
+
+    The cwd was previously hardcoded to a developer's worktree path
+    (``worktree-task3-workspace-office-wiki``) that was deleted once #366
+    merged — causing the guard to FileNotFoundError on every greenfield
+    checkout. Resolve cwd from ``__file__`` so the guard is portable.
+    """
+    import subprocess
+
+    # backend/tests/unit/test_file_tool.py -> parents[3] == repo root
+    repo_root = Path(__file__).resolve().parents[3]
+
+    result = subprocess.run(
+        [
+            "grep",
+            "-rln",
+            "--include=*.py",
+            "--include=*.ts",
+            "--include=*.tsx",
+            "--exclude-dir=tests",
+            "--exclude-dir=__pycache__",
+            "--exclude-dir=node_modules",
+            "--exclude-dir=.git",
+            "--exclude-dir=worktrees",
+            "list-dir",
+            "backend",
+            "src",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(repo_root),
+        check=False,
+    )
+    assert result.returncode != 0 or result.stdout == "", (
+        f"Found hyphenated 'list-dir' references in production source: "
+        f"{result.stdout}"
+    )
 
 
 def test_list_dir_sorts_dirs_first(tmp_path):

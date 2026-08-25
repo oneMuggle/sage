@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.semantic import SemanticMemory
+from backend.memory.summary import SessionSummaryStore
 from backend.memory.working import WorkingMemory, normalize_session_id
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,13 @@ class MemoryManager:
     4. 记忆重要性评估
     """
 
-    def __init__(self, working: WorkingMemory, episodic: EpisodicMemory, semantic: SemanticMemory):
+    def __init__(
+        self,
+        working: WorkingMemory,
+        episodic: EpisodicMemory,
+        semantic: SemanticMemory,
+        summary_store: Optional[SessionSummaryStore] = None,
+    ):
         """
         初始化记忆管理器
 
@@ -67,10 +74,14 @@ class MemoryManager:
             working: 工作记忆实例
             episodic: 情景记忆实例
             semantic: 语义记忆实例
+            summary_store: 会话摘要 store（批次三 step 5）；可选，向后兼容
+                未注入 store 的旧调用方；没有 store 时 ``get_context`` 不
+                注入 ``【会话摘要】`` 段。
         """
         self.working = working
         self.episodic = episodic
         self.semantic = semantic
+        self.summary_store = summary_store
 
     def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -108,7 +119,7 @@ class MemoryManager:
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
-    ) -> str | None:
+    ) -> Optional[str]:
         """
         通用记忆存储接口
 
@@ -143,7 +154,12 @@ class MemoryManager:
             )
 
         elif resolved == "semantic":
-            return self.semantic.save(content=content, summary=None, tags=tags)
+            return self.semantic.save(
+                content=content,
+                summary=None,
+                tags=tags,
+                session_id=session_id,
+            )
 
         else:
             logger.warning(f"未知的记忆类型: {resolved}")
@@ -202,11 +218,19 @@ class MemoryManager:
 
         # 情景记忆 - SQLite LIKE 搜索
         if "episodic" in memory_types:
-            results["episodic"] = self.episodic.search(query=query, limit=limit)
+            results["episodic"] = self.episodic.search(
+                query=query,
+                limit=limit,
+                session_id=session_id,
+            )
 
         # 语义记忆 - FTS5 全文搜索
         if "semantic" in memory_types:
-            results["semantic"] = self.semantic.search(query=query, limit=limit)
+            results["semantic"] = self.semantic.search(
+                query=query,
+                limit=limit,
+                session_id=session_id,
+            )
 
         return results
 
@@ -245,9 +269,27 @@ class MemoryManager:
                 content = msg.get("content", "")
                 parts.append(f"- [{role}]: {content[:100]}...")
 
+        # 批次三 step 5：会话摘要，介于 working 与 episodic/semantic 之间。
+        # 只注入当前 session 的 READY 摘要，FAILED / PENDING 不注入
+        # （失败摘要只用于诊断，不假装为普通事实）。
+        # 未注入 summary_store 或 session_id 为空时整段跳过 ——
+        # 永不注入"全部 session 的最新摘要"以避免跨 session 串味。
+        if self.summary_store is not None and session_id:
+            try:
+                latest_ready = self.summary_store.get_latest_ready(session_id)
+            except Exception as exc:
+                logger.warning(f"读取会话摘要失败: {exc}")
+                latest_ready = None
+            if latest_ready is not None and latest_ready.content:
+                parts.append("\n【会话摘要】")
+                parts.append(f"- {latest_ready.content}")
+
         # 获取最近的 episodic 记忆
         try:
-            recent_episodic = self.episodic.get_recent(limit=3)
+            recent_episodic = self.episodic.get_recent(
+                limit=3,
+                session_id=session_id,
+            )
             if recent_episodic:
                 parts.append("\n【相关经历】")
                 for mem in recent_episodic:
@@ -258,7 +300,7 @@ class MemoryManager:
 
         # 获取最近的 semantic 记忆
         try:
-            recent_semantic = self.semantic.get_recent(limit=3)
+            recent_semantic = self.semantic.get_recent(limit=3, session_id=session_id)
             if recent_semantic:
                 parts.append("\n【相关知识】")
                 for mem in recent_semantic:
@@ -339,9 +381,13 @@ class MemoryManager:
             记忆列表
         """
         if memory_type == "episodic":
-            return self.episodic.search(query, limit=limit)
+            return self.episodic.search(query, limit=limit, session_id=session_id)
         elif memory_type == "semantic":
-            return self.semantic.search(query, limit=limit)
+            return self.semantic.search(
+                query,
+                limit=limit,
+                session_id=session_id,
+            )
 
         results: List[Dict[str, Any]] = []
 
@@ -361,8 +407,10 @@ class MemoryManager:
             return results[:limit]
 
         # memory_type 为 None：搜索所有持久层并与工作记忆合并
-        results.extend(self.episodic.search(query, limit=limit))
-        results.extend(self.semantic.search(query, limit=limit))
+        results.extend(self.episodic.search(query, limit=limit, session_id=session_id))
+        results.extend(
+            self.semantic.search(query, limit=limit, session_id=session_id)
+        )
         return results[:limit]
 
     def delete_memory(self, memory_id: str, memory_type: str) -> bool:

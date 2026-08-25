@@ -63,9 +63,29 @@ class SemanticMemory:
                 content TEXT NOT NULL,
                 summary TEXT,
                 tags TEXT DEFAULT '[]',
+                session_id TEXT,
                 created_at INTEGER NOT NULL
             )
         """)
+        columns = {
+            row["name"]
+            for row in cursor.execute("PRAGMA table_info(memories_semantic)")
+        }
+        if "session_id" not in columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN session_id TEXT"
+            )
+            # 升级前已落库但 session_id 为 NULL 的旧语义记忆,统一回填为 'default'。
+            # 必须仅在列刚被添加时执行,避免覆盖升级后新写入的合法 NULL 边界
+            # (语义层非空约束由 save() 强制,这里只在迁移窗口内兜底)。
+            cursor.execute(
+                "UPDATE memories_semantic SET session_id = 'default' "
+                "WHERE session_id IS NULL"
+            )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_semantic_session_created "
+            "ON memories_semantic(session_id, created_at DESC)"
+        )
         conn.commit()
 
         # FTS5 独立虚拟表：结构检测/损坏自愈（database.ensure_semantic_fts_schema）
@@ -75,7 +95,13 @@ class SemanticMemory:
         else:
             backfill_semantic_fts(conn)
 
-    def save(self, content: str, summary: Optional[str] = None, tags: Optional[List[str]] = None) -> str:
+    def save(
+        self,
+        content: str,
+        summary: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+    ) -> str:
         """
         保存语义记忆
 
@@ -83,6 +109,7 @@ class SemanticMemory:
             content: 记忆内容
             summary: 可选的摘要
             tags: 可选的标签列表
+            session_id: 可选的关联会话 ID
 
         Returns:
             生成的记忆 ID
@@ -103,10 +130,11 @@ class SemanticMemory:
         # 插入主表
         cursor.execute(
             """
-            INSERT INTO memories_semantic (id, content, summary, tags, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO memories_semantic
+            (id, content, summary, tags, session_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
         """,
-            (memory_id, content, summary, tags_json, now),
+            (memory_id, content, summary, tags_json, session_id, now),
         )
 
         # 显式同步 FTS 索引（单一事实来源：Python 侧维护，不使用触发器，
@@ -156,7 +184,11 @@ class SemanticMemory:
         return content[:max_length] + "..."
 
     def search(
-        self, query: str, limit: int = 10, tags: Optional[List[str]] = None
+        self,
+        query: str,
+        limit: int = 10,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索语义记忆
@@ -174,17 +206,21 @@ class SemanticMemory:
             匹配的记忆列表
         """
         if not query or query.strip() == "":
-            return self.get_recent(limit)
+            return self.get_recent(limit, session_id=session_id)
 
-        fts_results = self._search_fts(query, limit, tags)
+        fts_results = self._search_fts(query, limit, tags, session_id=session_id)
         if fts_results:
             return fts_results
 
         # FTS 无命中（如索引尚未回填）或异常 → 回退 LIKE+jieba
-        return self._search_like(query, limit, tags)
+        return self._search_like(query, limit, tags, session_id=session_id)
 
     def _search_fts(
-        self, query: str, limit: int = 10, tags: Optional[List[str]] = None
+        self,
+        query: str,
+        limit: int = 10,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         走 FTS5 全文索引搜索（jieba 分词 + OR MATCH）。
@@ -210,6 +246,10 @@ class SemanticMemory:
             "WHERE memories_semantic_fts MATCH ?",
         ]
         params: List[Any] = [match_expr]
+
+        if session_id is not None:
+            sql_parts.append("AND ms.session_id = ?")
+            params.append(session_id)
 
         # 标签过滤
         if tags:
@@ -244,7 +284,11 @@ class SemanticMemory:
         return tokenize_for_search(query)
 
     def _search_like(
-        self, query: str, limit: int = 10, tags: Optional[List[str]] = None
+        self,
+        query: str,
+        limit: int = 10,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         LIKE + jieba 回退搜索（FTS 索引不可用或无命中时使用）
@@ -263,7 +307,7 @@ class SemanticMemory:
         # jieba 分词，将查询拆分为多个搜索词
         tokens = [t.strip() for t in tokenize(query).split() if t.strip()]
         if not tokens:
-            return self.get_recent(limit)
+            return self.get_recent(limit, session_id=session_id)
 
         # 构建 LIKE OR 条件
         like_conditions = []
@@ -272,7 +316,14 @@ class SemanticMemory:
             like_conditions.append("(content LIKE ? OR summary LIKE ?)")
             params.extend([f"%{token}%", f"%{token}%"])
 
-        sql_parts = ["SELECT * FROM memories_semantic", f"WHERE {' OR '.join(like_conditions)}"]
+        sql_parts = [
+            "SELECT * FROM memories_semantic",
+            f"WHERE ({' OR '.join(like_conditions)})",
+        ]
+
+        if session_id is not None:
+            sql_parts.append("AND session_id = ?")
+            params.append(session_id)
 
         # 标签过滤
         if tags:
@@ -302,7 +353,9 @@ class SemanticMemory:
             results.append(memory)
         return results
 
-    def get_recent(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_recent(
+        self, limit: int = 20, session_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         获取最近的语义记忆
 
@@ -315,14 +368,25 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            """
-            SELECT * FROM memories_semantic
-            ORDER BY created_at DESC
-            LIMIT ?
-        """,
-            (limit,),
-        )
+        if session_id is None:
+            cursor.execute(
+                """
+                SELECT * FROM memories_semantic
+                ORDER BY created_at DESC
+                LIMIT ?
+            """,
+                (limit,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT * FROM memories_semantic
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            """,
+                (session_id, limit),
+            )
 
         results = []
         for row in cursor.fetchall():
@@ -408,9 +472,13 @@ class SemanticMemory:
         conn.commit()
         return deleted
 
-    def count(self) -> int:
+    def count(self, session_id: Optional[str] = None) -> int:
         """
-        获取记忆总数
+        获取记忆总数（批次三 step 5：可按 session 过滤）
+
+        Args:
+            session_id: 可选，按会话 ID 严格过滤
+                （spec §4.3 step 5 严禁跨 session 串味）
 
         Returns:
             记忆数量
@@ -418,7 +486,13 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT COUNT(*) FROM memories_semantic")
+        if session_id is None:
+            cursor.execute("SELECT COUNT(*) FROM memories_semantic")
+        else:
+            cursor.execute(
+                "SELECT COUNT(*) FROM memories_semantic WHERE session_id = ?",
+                (session_id,),
+            )
         return cursor.fetchone()[0]
 
     def update_tags(self, memory_id: str, tags: List[str]) -> bool:

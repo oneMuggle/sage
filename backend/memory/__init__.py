@@ -8,6 +8,7 @@ from backend.memory.episodic import EpisodicMemory
 from backend.memory.manager import MemoryManager
 from backend.memory.registry import get_memory_manager, reset_memory_manager
 from backend.memory.semantic import SemanticMemory
+from backend.memory.summary import SessionSummaryStore
 from backend.memory.working import WorkingMemory
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "SemanticMemory",
     "MemoryManager",
     "ConsolidationPipeline",
+    "SessionSummaryStore",
     "get_memory_manager",
     "reset_memory_manager",
 ]

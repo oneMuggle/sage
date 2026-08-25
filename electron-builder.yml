@@ -20,6 +20,16 @@ files:
   - "!**/*.map"
   - "!**/.DS_Store"
 extraResources:
+  # Build provenance manifest — single source of truth for packaged Electron
+  # to know its buildId/commit/branch/version/electronVersion/pythonVersion.
+  # Bundle scripts (scripts/bundle-python.ps1 on win7,
+  # scripts/bundle-python-main.ps1 on main) emit this file at
+  # resources/build-manifest.json during the packaging step; main.ts loads
+  # it from <resourcesPath>/build-manifest.json at startup. CI verifies the
+  # final installer/AppImage actually contains it (see .github/workflows/
+  # ci.yml "Verify packaged build-manifest.json" step).
+  - from: "resources/build-manifest.json"
+    to: "build-manifest.json"
   # Python embedded runtime + backend code.
   # - main: bundled by scripts/bundle-python-main.ps1 (Python 3.11 + requirements.txt)
   # - release/win7: bundled by scripts/bundle-python.ps1 (Python 3.8 + requirements-py38.txt)

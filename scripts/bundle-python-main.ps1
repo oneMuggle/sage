@@ -83,6 +83,7 @@ $ResourcesDir = Join-Path $PSScriptRoot "..\resources"
 $PythonDir = Join-Path $ResourcesDir "python"
 $BackendDir = Join-Path $ResourcesDir "backend"
 $SageCoreDir = Join-Path $ResourcesDir "sage-core"
+$ManifestPath = Join-Path $ResourcesDir "build-manifest.json"
 $BackendSourceDir = Join-Path $PSScriptRoot "..\backend"
 # Use requirements-bundled.txt (subset of requirements.txt that omits
 # source-only / no-Windows-wheel packages like hnswlib). Without splitting,
@@ -298,6 +299,27 @@ Write-Host $verifyOutput
 if ($verifyExit -ne 0) {
   throw "Post-install verification failed: critical Python imports missing (exit code $verifyExit). Output: $verifyOutput"
 }
+
+# Write the same provenance contract consumed by packaged Electron. Mirrors
+# scripts/bundle-python.ps1 (Win7 LTS) lines 109-119: same JSON shape, same
+# env-var precedence. electron-builder.yml extraResources line 31 picks this
+# up at packaging time and main.ts loads it from
+# <resourcesPath>/build-manifest.json at startup. Without this file the
+# packaged Electron falls back to createBuildManifest() defaults, silently
+# disabling buildId-based health-ownership validation. The CI path writes
+# its own minimal manifest in .github/workflows/ci.yml "Generate
+# build-manifest.json" — this block only runs on tag-driven release flows.
+$Manifest = [ordered]@{
+    manifestVersion = 1
+    buildId = if ($env:SAGE_BUILD_ID) { $env:SAGE_BUILD_ID } else { "local-$((Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))" }
+    commit = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { "unknown" }
+    branch = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "unknown" }
+    version = if ($env:SAGE_BUILD_VERSION) { $env:SAGE_BUILD_VERSION } else { "unknown" }
+    electronVersion = if ($env:SAGE_ELECTRON_VERSION) { $env:SAGE_ELECTRON_VERSION } else { "21.4.4" }
+    pythonVersion = $PythonVersion
+}
+$Manifest | ConvertTo-Json -Depth 3 | Set-Content -Path $ManifestPath -Encoding UTF8
+Write-Host "Build manifest: $ManifestPath" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== Python backend bundled successfully! ===" -ForegroundColor Green

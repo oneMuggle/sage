@@ -45,7 +45,9 @@ class MemoryAdapter:
                 ``get_user_profile()``（与 get_memory_manager 同模式）。
         """
         self.memory_manager = memory_manager
-        self.consolidation = ConsolidationPipeline()
+        self.consolidation = ConsolidationPipeline(
+            summary_store=getattr(memory_manager, "summary_store", None)
+        )
         self.embedder = HashEmbedder(dimensions=256)
         # 用户画像（USER.md 概念）: 缺省惰性取全局单例,失败时降级为 None
         self.user_profile = user_profile
@@ -97,10 +99,12 @@ class MemoryAdapter:
         keyword_results = self.memory_manager.recall(query, limit=limit, session_id=session_id)
         keyword_items = keyword_results.get("episodic", []) + keyword_results.get("semantic", [])
 
-        # 2. 向量检索（VectorStore）
+        # 2. 向量检索（VectorStore,批次三 step 5 起按 session 隔离）
         vector_items: List[dict] = []
         if self.vector_store is not None:
-            vec_results = self.vector_store.search(query, top_k=limit)
+            vec_results = self.vector_store.search(
+                query, top_k=limit, session_id=session_id
+            )
             for vr in vec_results:
                 mem_id = vr["memory_id"]
                 mem = self.memory_manager.episodic.get_by_id(mem_id)
@@ -198,7 +202,9 @@ class MemoryAdapter:
 
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）
         if self.vector_store is not None and memory_id and memory_type in ("episodic", "semantic"):
-            self.vector_store.add(memory_id, content, memory_type=memory_type)
+            self.vector_store.add(
+                memory_id, content, memory_type=memory_type, session_id=session_id
+            )
 
         return memory_id or ""
 

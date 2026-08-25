@@ -8,6 +8,7 @@ from backend.domain.tool_policy import ToolPolicy
 from backend.office.excel import read_xlsx
 from backend.office.models import OfficeDocType
 from backend.office.word import read_docx
+from backend.tools.context import ToolExecutionContext
 from backend.tools.office_create_tool import OfficeCreateTool
 
 pytestmark = pytest.mark.unit
@@ -208,4 +209,160 @@ def test_allows_output_dir_inside_workspace_when_bound(tmp_path):
     )
     assert result.success is True
     assert (workspace / "b.docx").exists()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Binding-aware create (T7.5 round-trip fix)
+#
+# When ``ToolExecutionContext`` carries a live ``session_id`` AND that
+# session has an active workspace binding, the tool must:
+#   1. Delegate to ``OfficeToolService.create`` so the document is
+#      registered in ``office_documents`` (otherwise list/read can't see it).
+#   2. Drop the absolute ``workspace_path`` from the result payload.
+#   3. Keep the existing ``output_dir`` flow for the unbound (legacy)
+#      case — i.e. plain "create on my Desktop" still works without a
+#      binding.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _seed_session(conn, session_id: str) -> None:
+    conn.execute(
+        "INSERT INTO sessions (id, title, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?)",
+        (session_id, "t", 1, 1),
+    )
+    conn.commit()
+
+
+def _ctx(session_id: str, binding_generation: int) -> ToolExecutionContext:
+    return ToolExecutionContext(
+        session_id=session_id,
+        stream_id="stream-x",
+        binding_generation=binding_generation,
+        office_doc_scope=frozenset(),
+    )
+
+
+def test_create_with_session_binding_registers_document(tmp_path, monkeypatch):
+    """When a session binding is active, ``office_create`` must delegate to
+    ``OfficeToolService.create`` so the doc is registered for list/read.
+
+    Without this delegation the file lands on disk but is invisible to the
+    rest of the Office scope — the round-trip bug T7.5 fixes.
+    """
+    from backend.data.database import Database
+    from backend.office.session_workspace import bind_session_workspace
+    from backend.tools.context import reset_tool_context, set_tool_context
+
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-bound")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-bound", str(work), now_ms=1)
+
+    # Capture the call site — proves we delegated instead of writing raw.
+    delegated: list = []
+    real_svc_create = "backend.office.tool_service.OfficeToolService.create"
+
+    def _spy_create(self, _conn, session_id_arg, generation_arg, **_kwargs):
+        delegated.append((session_id_arg, generation_arg))
+        return {
+            "success": True,
+            "content": {
+                "document_id": "stub-id",
+                "doc_type": "word",
+                "filename": "天气.docx",
+            },
+        }
+
+    monkeypatch.setattr(real_svc_create, _spy_create, raising=False)
+    monkeypatch.setattr("backend.tools.office_create_tool.get_database", lambda: db)
+
+    ctx = _ctx("sess-bound", binding.generation)
+    token = set_tool_context(ctx)
+    try:
+        result = _tool().execute(**_word_args(str(work)))
+    finally:
+        reset_tool_context(token)
+
+    assert result.success is True
+    assert result.content == {
+        "document_id": "stub-id",
+        "doc_type": "word",
+        "filename": "天气.docx",
+    }
+    assert delegated == [("sess-bound", binding.generation)]
+
+
+def test_create_with_binding_does_not_leak_workspace_path(tmp_path, monkeypatch):
+    """The tool result must NOT echo the binding's absolute workspace path.
+
+    Symmetric with the office_list / office_read "no path leak" invariant.
+    Tool-generated docs are first-class Office scope items; their handle is
+    ``{document_id, doc_type, filename}``.
+    """
+    from backend.data.database import Database
+    from backend.office.session_workspace import bind_session_workspace
+    from backend.tools.context import reset_tool_context, set_tool_context
+
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-bound")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-bound", str(work), now_ms=1)
+
+    def _fake_create(self, _conn, session_id_arg, generation_arg, **_kwargs):
+        return {
+            "success": True,
+            "content": {
+                "document_id": "stub-id",
+                "doc_type": "word",
+                "filename": "天气.docx",
+            },
+        }
+
+    real_svc_create = "backend.office.tool_service.OfficeToolService.create"
+    monkeypatch.setattr(real_svc_create, _fake_create, raising=False)
+    monkeypatch.setattr("backend.tools.office_create_tool.get_database", lambda: db)
+
+    ctx = _ctx("sess-bound", binding.generation)
+    token = set_tool_context(ctx)
+    try:
+        result = _tool().execute(**_word_args(str(work)))
+    finally:
+        reset_tool_context(token)
+
+    import json
+
+    full_text = json.dumps(result.content, ensure_ascii=False)
+    assert str(work.resolve()) not in full_text
+
+
+def test_create_without_binding_keeps_legacy_output_dir_behavior(tmp_path):
+    """Without a session binding the tool must keep writing to ``output_dir``
+    and return the legacy ``{path, filename, bytes}`` shape.
+
+    Plain "create a doc on my Desktop" requests still hit this path — it's
+    the most common case for users who never opened a workspace. Breaking
+    it would silently regress the existing happy path.
+    """
+    from backend.tools.context import reset_tool_context, set_tool_context
+
+    out_dir = tmp_path / "desktop"
+    out_dir.mkdir()
+
+    ctx = _ctx("sess-no-binding", binding_generation=0)
+    token = set_tool_context(ctx)
+    try:
+        result = _tool().execute(**_word_args(str(out_dir)))
+    finally:
+        reset_tool_context(token)
+
+    assert result.success is True
+    assert set(result.content.keys()) == {"path", "filename", "bytes"}
+    assert (out_dir / "天气.docx").exists()
 

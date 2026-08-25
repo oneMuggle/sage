@@ -12,6 +12,10 @@
  * 重包装，Error 自定义属性过不了 Electron 21 IPC，但 message（含 `→ <status>:`）
  * 可靠。renderer 唯一漏斗在此解析附加 status_code，全局所有调用点可读。
  *
+ * Task 0 review round 1, finding #6: when the main process throws
+ * BackendNotReadyError (cold-start gate), the renderer surfaces its message
+ * verbatim instead of falling into the generic ECONNREFUSED branch.
+ *
  * 测试通过 `vi.mock('@/shared/api/desktopInvoke')` 桩化，与底层 transport 解耦
  */
 import type { ElectronAPI } from '../types/electron-api';
@@ -22,6 +26,9 @@ export interface InvokeError extends Error {
 }
 
 const STATUS_RE = /→ (\d+):/;
+
+/** Marker that main process throws when backend isn't ready yet. */
+const BACKEND_NOT_READY_MARKER = '后端服务尚未就绪';
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const api: ElectronAPI | undefined =
@@ -39,11 +46,18 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
       const m = err.message.match(STATUS_RE);
       if (m) (err as InvokeError).status_code = Number(m[1]);
     }
+    const raw = err instanceof Error ? err.message : String(err);
+    // Task 0 review round 1: BackendNotReadyError takes precedence over the
+    // generic ECONNREFUSED check — otherwise the latter would re-wrap the
+    // readiness-gate message with a different Chinese text and the
+    // BackendStatusBanner couldn't tell them apart.
+    if (raw.includes(BACKEND_NOT_READY_MARKER)) {
+      throw new Error(raw);
+    }
     // PR-B (2026-08-18): 把后端断开的 ECONNREFUSED / fetch failed / network error
     // 翻译成中文友好提示，让上层（React Query / UI）拿到稳定的 Error 而非
     // 裸英文 system error。其他错误（验证失败、HTTP 4xx 等）原样抛出，保持
     // status_code 属性与原始 message（含 /validation/ 等可读标记）。
-    const raw = err instanceof Error ? err.message : String(err);
     const isBackendDown =
       raw.includes('ECONNREFUSED') || raw.includes('fetch failed') || raw.includes('network error');
     if (isBackendDown) {

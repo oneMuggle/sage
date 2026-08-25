@@ -34,6 +34,7 @@ from backend.memory import (
     EpisodicMemory,
     MemoryManager,
     SemanticMemory,
+    SessionSummaryStore,
     WorkingMemory,
 )
 from backend.services.permission_gate import (
@@ -50,6 +51,7 @@ from backend.services.question_gate import (
 )
 from backend.tools import ToolRegistry, register_all_tools
 from backend.tools.ask_user_tool import ASK_USER_QUESTION_TOOL_NAME, validate_ask_user_args
+from backend.tools.base import ToolResult
 
 #: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
 #: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
@@ -263,7 +265,12 @@ class SageAgent:
             working = WorkingMemory(max_size=20, max_tokens=4000)
             episodic = EpisodicMemory(db)
             semantic = SemanticMemory(db)
-            self.memory_manager = MemoryManager(working, episodic, semantic)
+            self.memory_manager = MemoryManager(
+                working,
+                episodic,
+                semantic,
+                summary_store=SessionSummaryStore(db),
+            )
 
             # 初始化工具注册表
             self.tool_registry = ToolRegistry()
@@ -307,7 +314,14 @@ class SageAgent:
         if bare:
             self.consolidation = None
         else:
-            self.consolidation = ConsolidationPipeline(llm_client=self.llm_client)
+            # 批次三 step 4 接线修复:summary_store 必须注入压缩管道,
+            # 否则 consolidation 走 save_compressed() 把"对话摘要"
+            # 伪装成普通事实写入 episodic,违反 spec §4.3 step 4
+            # "不伪装为普通事实"的硬约束。
+            self.consolidation = ConsolidationPipeline(
+                llm_client=self.llm_client,
+                summary_store=self.memory_manager.summary_store,
+            )
 
     async def chat(
         self, session_id: str, message: str, llm_config: Optional[Dict[str, Any]] = None
@@ -888,8 +902,19 @@ class SageAgent:
                                     if hasattr(result, "success") and hasattr(result, "content"):
                                         is_error = not result.success
                                         if result.success:
+                                            # ToolResult.output is the machine-readable
+                                            # value (e.g. memory ID); retain content
+                                            # fallback for legacy result objects.
+                                            if isinstance(result, ToolResult):
+                                                output_value = (
+                                                    result.output
+                                                    if result.output is not None
+                                                    else result.content
+                                                )
+                                            else:
+                                                output_value = result.content
                                             result_content = json.dumps(
-                                                result.content, ensure_ascii=False
+                                                output_value, ensure_ascii=False
                                             )
                                         else:
                                             result_content = result.error or "工具执行失败"
