@@ -49,3 +49,40 @@ def stub_backend():
             os.environ["PYTHON_BACKEND_PORT"] = old_port
         else:
             os.environ.pop("PYTHON_BACKEND_PORT", None)
+
+
+import subprocess
+import time
+
+from _real_backend import RealBackend
+
+
+def _conda_env_available(env_name: str) -> bool:
+    try:
+        subprocess.run(
+            ["conda", "run", "-n", env_name, "python", "-c", "pass"],
+            check=True, capture_output=True, timeout=10,
+        )
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+@pytest.fixture()
+def real_backend():
+    """启动真实 conda sage-backend。环境不可用时 skip。"""
+    if not _conda_env_available("sage-backend"):
+        pytest.skip("sage-backend conda env not available")
+
+    backend = RealBackend()
+    backend.start()
+    old_port = os.environ.get("PYTHON_BACKEND_PORT")
+    os.environ["PYTHON_BACKEND_PORT"] = str(backend.port)
+    try:
+        yield backend
+    finally:
+        backend.stop()
+        if old_port is not None:
+            os.environ["PYTHON_BACKEND_PORT"] = old_port
+        else:
+            os.environ.pop("PYTHON_BACKEND_PORT", None)
