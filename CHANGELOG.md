@@ -57,6 +57,10 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - fix(win7): 同步 P2 schema 结构化返回、follow-up 续聊、worktree 隔离、legacy 清理和 LaneBoard
 - fix(win7): 完成 P2 fast-follow 五项遗留
 
+## [v0.4.9-alpha.4-win7] - 2026-08-25
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS alpha 推进,代码基线与 v0.4.9-alpha.3-win7 一致;**无功能变更**(本轮仅为发布版本号 bump + NSIS 重打)。下一轮 `cherry-pick` main 的 PR #368 (Task 0-3 平台一致性) 后再发 v0.4.9-alpha.5-win7。
+
 ## [Unreleased]
 
 ### Added
