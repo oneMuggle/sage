@@ -830,3 +830,66 @@ def test_memory_consolidate_returns_pending():
         assert r["status"] == "pending"
     finally:
         server.stop()
+
+
+# ---- Task 6: evolution endpoint tests ----
+#
+# Note: the Task 6 brief wrote these against the ``requests`` library, but the
+# sage-backend env intentionally has no ``requests`` installed (this file's
+# _HTTPHelper exists precisely for "stdlib only, no requests dependency"), so
+# they are transcribed with identical names/assertions on top of _HTTPHelper
+# (same adaptation as the Task 3/4/5 tests above; the brief's explicit
+# ``status_code == 200`` asserts are folded into _HTTPHelper's default
+# expected_status=200 check).
+
+
+def test_evolution_signals_returns_seed_list():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        r = http.get("/api/v1/evolution/signals")
+        signals = r["signals"]
+        assert len(signals) >= 1
+        assert "id" in signals[0]
+        assert "type" in signals[0]
+        assert "strength" in signals[0]
+    finally:
+        server.stop()
+
+
+def test_evolution_draft_to_queue_to_approve():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        signals = http.get("/api/v1/evolution/signals")["signals"]
+        sid = signals[0]["id"]
+        r1 = http.post("/api/v1/evolution/draft", {"signal_ids": [sid]})
+        draft_id = r1["id"]
+        assert r1["status"] == "pending"
+
+        r2 = http.get("/api/v1/evolution/queue")
+        drafts = r2["drafts"]
+        assert any(d["id"] == draft_id for d in drafts)
+
+        http.post("/api/v1/evolution/approve/{}".format(draft_id))
+
+        r4 = http.get("/api/v1/evolution/queue")
+        approved = [d for d in r4["drafts"] if d["id"] == draft_id][0]
+        assert approved["status"] == "approved"
+    finally:
+        server.stop()
+
+
+def test_evolution_scheduler_status():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        data = http.get("/api/v1/evolution/scheduler/status")
+        assert data["state"] in ("idle", "running", "stopped")
+        assert "last_run_at_ms" in data
+        assert "next_run_at_ms" in data
+    finally:
+        server.stop()
