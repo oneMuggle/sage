@@ -26,8 +26,13 @@ import { test, expect, _electron as electron, ElectronApplication, Page } from '
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
+import { fileURLToPath } from 'url';
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..');
+// ESM/CJS compat: Playwright's ESM loader does not expose __dirname at module scope.
+const _filename = typeof __filename !== 'undefined' ? __filename : fileURLToPath(import.meta.url);
+const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(_filename);
+
+const REPO_ROOT = path.resolve(_dirname, '..', '..');
 const BACKEND_URL = 'http://127.0.0.1:8765';
 
 test.describe('SKILL.md spec compliance (agentskills.io)', () => {
