@@ -135,4 +135,24 @@ describe('InputCard', () => {
     expect(handled).toBe(true); // default NOT prevented
     expect(defaultProps.onChange).not.toHaveBeenCalled();
   });
+
+  // Autosize: textarea must auto-grow when value spans multiple lines.
+  // jsdom does not compute layout, so scrollHeight is not meaningful here.
+  // We assert the inline style is updated on value change — the shape that
+  // ensures the textarea's height tracks the content visually in a real DOM.
+  it('updates textarea height inline style when value changes (autosize)', () => {
+    const { rerender } = render(<InputCard {...defaultProps} value="" />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    // Baseline: empty value still triggers an autosize pass to reset
+    // the height to 'auto' before measuring.
+    expect(textarea.style.height).not.toBe('');
+
+    rerender(<InputCard {...defaultProps} value={'line1\nline2\nline3\nline4'} />);
+
+    // After multi-line content, autosize must apply an explicit pixel height
+    // (capped at 200px). jsdom reports a 0 scrollHeight, so the cap branch
+    // is exercised — what we care about is that style.height is set.
+    expect(textarea.style.height).toMatch(/^\d+px$/);
+  });
 });
