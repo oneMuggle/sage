@@ -3,6 +3,8 @@
 使用 pytest 内置的 tmp_path fixture 隔离文件系统副作用。
 """
 
+from pathlib import Path
+
 import pytest
 
 from backend.tools.file_tool import ListDirTool, ReadFileTool, WriteFileTool
@@ -170,8 +172,16 @@ def test_no_list_dir_hyphen_anywhere_in_source():
     Confirms zero matches across production source (tests/ excluded — the
     regression guard itself mentions the bad form to assert against it).
     Anything > 0 means a refactor slipped the wrong form back in.
+
+    The cwd was previously hardcoded to a developer's worktree path
+    (``worktree-task3-workspace-office-wiki``) that was deleted once #366
+    merged — causing the guard to FileNotFoundError on every greenfield
+    checkout. Resolve cwd from ``__file__`` so the guard is portable.
     """
     import subprocess
+
+    # backend/tests/unit/test_file_tool.py -> parents[3] == repo root
+    repo_root = Path(__file__).resolve().parents[3]
 
     result = subprocess.run(
         [
@@ -191,7 +201,7 @@ def test_no_list_dir_hyphen_anywhere_in_source():
         ],
         capture_output=True,
         text=True,
-        cwd="/home/fz/project/sage-worktrees/worktree-task3-workspace-office-wiki",
+        cwd=str(repo_root),
         check=False,
     )
     assert result.returncode != 0 or result.stdout == "", (

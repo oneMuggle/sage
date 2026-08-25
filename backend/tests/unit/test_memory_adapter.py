@@ -138,8 +138,9 @@ class TestMemoryAdapterStore:
         # Assert
         call_kwargs = mock_memory_manager.memorize.call_args[1]
         assert call_kwargs["memory_type"] == "semantic"
+        # PR #366 把 session_id 透传到 vector_store.add,用于按 session 隔离语义/情景向量.
         adapter.vector_store.add.assert_called_once_with(
-            "memory-id-sem", "重要事实", memory_type="semantic"
+            "memory-id-sem", "重要事实", memory_type="semantic", session_id="session-1"
         )
         assert memory_id == "memory-id-sem"
 

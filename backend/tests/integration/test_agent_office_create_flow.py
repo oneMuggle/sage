@@ -119,7 +119,18 @@ async def test_office_create_outside_workspace_asks_then_creates(tmp_path):
     states = [e.state for e in events]
     assert AgentState.PERMISSION_REQUEST in states
     assert events[-1].state == AgentState.DONE
-    assert (workspace_out / "天气.docx").exists()
+    # T7.5 起,binding-aware 委托把 office_create 路由到 OfficeToolService.create,
+    # 文件落地 ``<binding.workspace>/office/<doc_type>/<doc_id>/`` 而非
+    # LLM 提供的 output_dir;权限请求触发点在 M1 path_boundary_validator,因为
+    # LLM 声称要写的是 workspace_in(已绑定)之外的目录。这里通过数据库注册断言
+    # 证明审批通过后 doc 真的被登记(从而保证 office_list/read 能看到)。
+    from backend.office.storage import list_documents
+
+    conn = get_database().get_connection()
+    registered = list_documents(conn, str(workspace_in))
+    assert any(doc.generated_filename == "天气.docx" for doc in registered), (
+        f"OfficeToolService.create 未注册文档到 workspace_in: {registered}"
+    )
 
 
 async def test_office_create_denial_does_not_create(tmp_path):
