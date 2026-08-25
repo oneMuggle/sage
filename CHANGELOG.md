@@ -57,11 +57,9 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - fix(win7): 同步 P2 schema 结构化返回、follow-up 续聊、worktree 隔离、legacy 清理和 LaneBoard
 - fix(win7): 完成 P2 fast-follow 五项遗留
 
-## [v0.4.9-alpha.4-win7] - 2026-08-25
+## [v0.4.9-alpha.5-win7] - 2026-08-25
 
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS alpha 推进,代码基线与 v0.4.9-alpha.3-win7 一致;**无功能变更**(本轮仅为发布版本号 bump + NSIS 重打)。下一轮 `cherry-pick` main 的 PR #368 (Task 0-3 平台一致性) 后再发 v0.4.9-alpha.5-win7。
-
-## [Unreleased]
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 平台一致性 + base CI 修复落地:cherry-pick main 的 PR #368 (Task 0-3 platform parity) + PR #367 (base CI 修复) 合并成 PR #370。Win7 适配重点:`requirements-py38.txt` (Python 3.8 + pydantic 1.x) + `certifi` CA bundle 路径注入 + Pydantic v1/v2 `model_dump_compat` 兼容层 + LM Studio OpenAI-compatible protocol + memory session_id 跨层透传 + `office_create` binding-aware delegation 越界守卫。
 
 ### Added
 - feat(cli): add sage doctor for installation/env self-check (port of main PR #283; win7 适配: conda_env 跨平台路径匹配 + py_version_match 优先 requirements-py38.txt)
@@ -75,6 +73,10 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
   - Emit warning when description lacks trigger keywords
   - All changes forward-compatible; existing SKILL.md files unaffected
   - Refs: docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md
+- feat(backend): packaged backend supervision + bundled supervisor for NSIS (#130 + #132 win7 port)
+- feat(llm): LM Studio OpenAI-compatible protocol support (modelId / localModelPath)
+- feat(llm): `Asia/Shanghai` 时区规范化作为 LLM 调用默认
+- feat(memory): `MemoryManager.add_to_working(role, content, session_id=)` → `WorkingMemory.add(message, session_id=)` → `get_context(session_id=)` 三层 session_id 透传,跨 session 严格隔离
 
 ### Fixed
 - **fix(win7-bundling): sage_core inner-copy + backendLauncher error handling** (port of main PR #130 + #132)
@@ -83,6 +85,17 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
   - `electron/main.ts`: replace inline `existsSync` + conda fallback with `resolveBackendLaunchCommand()` from a new `electron/backendLauncher.ts` (ported from main). Adds broken-installer detection, `proc.on('error')` listener, `spawnStubProcess` placeholder, `reportedBrokenInstaller` flag (skips misleading 30s dialog), `SAGE_USER_DATA_DIR` env var (was missing).
   - Adds 13 vitest cases in `electron/__tests__/backendLauncher.test.ts` and 3 Pester AST assertions in `scripts/bundle-python.Tests.ps1`.
   - Bumps to v0.4.5-alpha.3-win7.
+- **fix(win7-py38): 跨 Pydantic v1 / v2 兼容** — `model_dump_compat()` helper 抹平 `.dict()` / `.model_dump()` 差异; 全部 e2e 测试在 py3.8 + pydantic 1.10 + py3.11 + pydantic 2.5 双轨绿
+- **fix(win7-tls): certifi CA bundle 路径注入 + 系统 bundle 兜底** — `_is_ca_bundle_available()` 优先探测 `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` / `CURL_CA_BUNDLE` 三个 env var(由 `main.configure_ssl_ca_bundle` 注入 certifi.where 路径),然后兜底探测 `ssl.get_default_verify_paths().cafile / capath`(OpenSSL 系统 certs 目录)。env var 显式设了但路径存在却不可用(0 字节空文件)→ 直接 False 不静默回落系统,避免掩盖 misconfig
+- **fix(win7-office): `office_create` binding-aware delegation 越界守卫** (T7.5) — 当用户显式把 `output_dir` 指到 binding workspace 之外(如桌面)时不再 delegation,留给 legacy `output_dir` 路径走 `_enforce_workspace` + ApprovalGate 触发"越界写"权限提示。否则文件会被静默改写到 managed workspace, 用户找不到且 doc 也只在 binding 内可见,双重反直觉
+- **fix(win7-test): `test_no_list_dir_hyphen_anywhere_in_source` cwd 来源去硬编码** — 改用 `git rev-parse --show-toplevel` 子进程动态定位仓库根,任意 worktree / 干净 CI runner 都能跑
+- **fix(ci): base CI 修复 cherry-pick (PR #367)** — `ci-write-manifest` 转 .mjs, `build-manifest` 路径校正, vitest 排除 .claude/worktrees
+
+## [Unreleased]
+
+## [v0.4.9-alpha.4-win7] - 2026-08-25
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS alpha 推进,代码基线与 v0.4.9-alpha.3-win7 一致;**无功能变更**(本轮仅为发布版本号 bump + NSIS 重打)。下一轮 `cherry-pick` main 的 PR #368 (Task 0-3 平台一致性) 后再发 v0.4.9-alpha.5-win7。
 
 ## [v0.3.0] - 2026-06-23
 
