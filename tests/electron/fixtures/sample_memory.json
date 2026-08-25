@@ -1,0 +1,11 @@
+{
+  "episodic": [
+    {"id": "mem_epi_1", "content": "User asked about Sage memory system", "session_id": "sess_sample_001", "created_at_ms": 1700000000000}
+  ],
+  "semantic": [
+    {"id": "mem_sem_1", "content": "Sage memory uses 3 tiers: episodic, semantic, working", "session_id": "sess_sample_001", "created_at_ms": 1700000000000}
+  ],
+  "working": [
+    {"id": "mem_wrk_1", "content": "Current context: discussing E2E testing", "session_id": "sess_sample_001", "created_at_ms": 1700000000000}
+  ]
+}
