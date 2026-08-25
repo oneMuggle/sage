@@ -502,7 +502,8 @@ def test_create_writes_file_and_registers_row(tmp_path: Path):
     assert result["content"]["doc_type"] == "word"
     assert result["content"]["filename"] == "天气.docx"
     document_id = result["content"]["document_id"]
-    assert isinstance(document_id, str) and len(document_id) >= 16
+    assert isinstance(document_id, str)
+    assert len(document_id) >= 16
 
     # File landed under <workspace>/office/word/<document_id>/<filename>.
     on_disk = work / "office" / "word" / document_id / "天气.docx"

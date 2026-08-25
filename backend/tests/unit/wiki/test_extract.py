@@ -32,6 +32,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.office.errors import OfficeParseError
 from backend.office.excel import generate_xlsx
 from backend.office.models import (
     OfficeExcelGenerateRequest,
@@ -49,7 +50,7 @@ pytestmark = pytest.mark.unit
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest.fixture()
 def docx_path(tmp_path: Path) -> Path:
     """Generate a real DOCX with paragraphs + a small table."""
     req = OfficeWordGenerateRequest(
@@ -70,7 +71,7 @@ def docx_path(tmp_path: Path) -> Path:
     return generate_docx(req, output_dir=str(tmp_path))
 
 
-@pytest.fixture
+@pytest.fixture()
 def pptx_path(tmp_path: Path) -> Path:
     req = OfficePptGenerateRequest(
         slides=[
@@ -91,7 +92,7 @@ def pptx_path(tmp_path: Path) -> Path:
     return generate_ppt(req, output_dir=str(tmp_path))
 
 
-@pytest.fixture
+@pytest.fixture()
 def xlsx_path(tmp_path: Path) -> Path:
     req = OfficeExcelGenerateRequest(
         sheets=[
@@ -192,12 +193,11 @@ def test_oversized_file_rejected_before_open(tmp_path: Path):
     big = tmp_path / "huge.docx"
     big.write_bytes(b"PK\x03\x04" + b"\x00" * 1024)  # 1KB ZIP-like header
 
-    # 1KB file < 1MB cap → succeeds (no real DOCX; parser raises its own
-    # error, which is fine — this test focuses on the size gate).
-    with pytest.raises(Exception):
-        # We don't care WHICH exception the parser raises here; we only
-        # care that the size gate is not the cause.
-        extract_text_for_ingest(big, max_file_bytes=512)
+    # 1KB file < 1MB cap → size gate passes, parser raises because the
+    # fake DOCX body is not a real ZIP (regression guard: parser is
+    # actually invoked when the gate lets the file through).
+    with pytest.raises(OfficeParseError, match=r"Failed to parse DOCX"):
+        extract_text_for_ingest(big, max_file_bytes=1024 * 1024)
 
     # 1KB file > 512B cap → FileTooLargeError BEFORE any open.
     with pytest.raises(FileTooLargeError):
@@ -265,7 +265,7 @@ def test_unsupported_suffix_raises_value_error(tmp_path: Path):
     weird = tmp_path / "thing.exe"
     weird.write_bytes(b"MZ\x00\x00")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"unsupported_suffix"):
         extract_text_for_ingest(weird)
 
 

@@ -1,4 +1,4 @@
-# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
+# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
 """
 Memory 工具 - 记忆系统操作
 
@@ -277,17 +277,23 @@ class MemorySaveTool(BaseTool):
             ``MemoryManager.memorize`` 返回的记忆 ID(供后续 read/recall
             使用,不能丢)。
         """
-        if self.memory is None:
-            return ToolResult(success=False, error="记忆管理器未初始化")
-
+        # 把 N 个前置 guard 合并到 if/elif 链 + 单一 return, 避免 PLR0911
+        # (Too many returns). elif 顺序保证 ``context is None`` 先匹配,
+        # 后续 ``context.session_id`` 访问安全。
         context = current_tool_context()
-        if context is None:
-            return ToolResult(success=False, error="记忆保存需要可信会话上下文")
-        if session_id is not None and session_id != context.session_id:
-            return ToolResult(success=False, error="session_id 与当前会话不一致")
+        guard_failed: Optional[str] = None
+        if self.memory is None:
+            guard_failed = "记忆管理器未初始化"
+        elif context is None:
+            guard_failed = "记忆保存需要可信会话上下文"
+        elif session_id is not None and context.session_id != session_id:
+            guard_failed = "session_id 与当前会话不一致"
+        elif memory_type not in SAVE_MEMORY_TYPES:
+            guard_failed = "不支持的保存记忆类型"
+        if guard_failed is not None:
+            return ToolResult(success=False, error=guard_failed)
+        # 此时 ``context`` 必非 None (elif ``context is None`` 已返回)
         effective_session_id = context.session_id
-        if memory_type not in SAVE_MEMORY_TYPES:
-            return ToolResult(success=False, error="不支持的保存记忆类型")
 
         # tags 直接透传（``[]`` 走空列表路径, ``None`` 走 manager 默认）。
         # 不在这里做 normalize —— 测试用 ``MagicMock.assert_called_once_with``

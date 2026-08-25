@@ -8,6 +8,7 @@ from backend.domain.tool_policy import ToolPolicy
 from backend.office.excel import read_xlsx
 from backend.office.models import OfficeDocType
 from backend.office.word import read_docx
+from backend.tools.context import ToolExecutionContext
 from backend.tools.office_create_tool import OfficeCreateTool
 
 pytestmark = pytest.mark.unit
@@ -233,9 +234,7 @@ def _seed_session(conn, session_id: str) -> None:
     conn.commit()
 
 
-def _ctx(session_id: str, binding_generation: int) -> "ToolExecutionContext":
-    from backend.tools.context import ToolExecutionContext
-
+def _ctx(session_id: str, binding_generation: int) -> ToolExecutionContext:
     return ToolExecutionContext(
         session_id=session_id,
         stream_id="stream-x",

@@ -23,6 +23,20 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(var, raising=False)
 
 
+def _raise_with_implicit_context(cause: BaseException) -> None:
+    """Re-raise ``cause`` inside a try/except so the wrapper attaches it as
+    implicit ``__context__`` (no explicit ``from``).
+
+    Extracted to satisfy PT012 (pytest.raises block must contain a single
+    simple statement); the body of the helper owns the nested try/except
+    needed to construct the implicit chain.
+    """
+    try:
+        raise cause
+    except Exception:
+        raise RuntimeError("wrapper")
+
+
 def test_ca_bundle_via_env_var(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """设置 ``SSL_CERT_FILE`` 指向非空文件 → True."""
     ca_file = tmp_path / "ca.pem"
@@ -116,10 +130,10 @@ def test_tls_certificate_error_walks_cause_chain() -> None:
     except ImportError:
         outer = RuntimeError("wrapped connect error")
 
-    try:
+    with pytest.raises(Exception, match=r"wrapped connect error") as exc_info:
         raise outer from real_ssl_err
-    except BaseException as exc:  # noqa: BLE001 — 故意捕获, 仅测链
-        assert _is_tls_certificate_error(exc) is True
+    # PT011: 用 match 限定, 测试关心 outer 异常的链, 不关心具体类型
+    assert _is_tls_certificate_error(exc_info.value) is True
 
 
 def test_tls_certificate_error_walks_context_chain() -> None:
@@ -136,14 +150,10 @@ def test_tls_certificate_error_walks_context_chain() -> None:
         )
     except TypeError:
         real_ssl_err = ssl.SSLCertVerificationError("certificate verify failed")
-    try:
-        # 不写 ``from`` → 触发 implicit ``__context__`` 链
-        try:
-            raise real_ssl_err
-        except Exception:
-            raise RuntimeError("wrapper")
-    except BaseException as exc:  # noqa: BLE001
-        assert _is_tls_certificate_error(exc) is True
+    with pytest.raises(RuntimeError, match=r"wrapper") as exc_info:
+        # 抽出 helper 避免 PT012: pytest.raises 体只放单条语句
+        _raise_with_implicit_context(real_ssl_err)
+    assert _is_tls_certificate_error(exc_info.value) is True
 
 
 def test_tls_certificate_error_returns_false_for_unrelated() -> None:
