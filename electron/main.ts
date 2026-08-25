@@ -72,13 +72,29 @@ const BACKEND_HEALTH = `${BACKEND_URL}/health`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
 const buildManifest = loadBuildManifest(
-  join(process.resourcesPath, 'build-manifest.json'),
-  { version: app.getVersion() },
+  process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
+  // CRITICAL: guard app.getVersion() for vitest environments where the
+  // `electron` module mock (`vi.mock('electron', () => ({ app: { ... } }))`)
+  // does not include `getVersion`. Production Electron always provides it,
+  // but the test_backend_auto_restart.test.ts suite loads main.ts for
+  // module-level side effects (loading buildManifest triggers parseLogPaths,
+  // which spawns fs calls that error out in jsdom), so we cannot mock
+  // `loadBuildManifest` away cleanly. Optional-chaining + a stable fallback
+  // lets tests pass without forking the load path.
+  { version: typeof app.getVersion === 'function' ? app.getVersion() : 'unknown' },
 );
 
 // A process-wide single-instance lock prevents two Electron supervisors from
 // racing over the same backend port and database.
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
+//
+// CRITICAL: guard app.requestSingleInstanceLock() for vitest environments
+// where the `electron` module mock in test_backend_auto_restart.test.ts
+// doesn't provide requestSingleInstanceLock. Production Electron always
+// provides it; the vitest mock intentionally exposes only the surface the
+// suite actually exercises. Same rationale as the app.getVersion() guard at
+// line 84 above.
+const gotSingleInstanceLock =
+  typeof app.requestSingleInstanceLock === 'function' ? app.requestSingleInstanceLock() : true;
 if (!gotSingleInstanceLock) {
   // CRITICAL: short-circuit ALL subsequent initialization, not just app.quit().
   //
@@ -296,8 +312,12 @@ function spawnBackend(): ChildProcess {
     args: plan.args,
   });
 
-  proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }));
-  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: stderrDecoder.push(b).trim() }));
+  proc.stdout?.on('data', (b) =>
+    logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }),
+  );
+  proc.stderr?.on('data', (b) =>
+    logger.error('backend: stderr', { line: stderrDecoder.push(b).trim() }),
+  );
   proc.on('exit', (code) => {
     if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
       logger.debug('main: stale backend exit ignored', { generation, pid: proc.pid });
@@ -404,10 +424,7 @@ export function scheduleBackendRestart(): void {
     return;
   }
   restartCount++;
-  const delay = Math.min(
-    RESTART_BASE_DELAY_MS * 2 ** (restartCount - 1),
-    RESTART_MAX_DELAY_MS,
-  );
+  const delay = Math.min(RESTART_BASE_DELAY_MS * 2 ** (restartCount - 1), RESTART_MAX_DELAY_MS);
   logger.warn('main: scheduling backend restart', {
     attempt: restartCount,
     delayMs: delay,
@@ -1270,6 +1287,11 @@ app.whenReady().then(async () => {
   // and exposes window.electronAPI for IPC contract verification).
   if (process.env.SAGE_SKIP_BACKEND === '1') {
     logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
+    // The IPC readiness gate (BackendNotReadyError) is meaningless when the
+    // user (or CI) has explicitly opted out of the backend — without this,
+    // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before
+    // reaching the dispatcher and fails the bridge round-trip assertion.
+    backendLifecycle = 'ready';
     createMainWindow();
     buildApplicationMenu();
     return;

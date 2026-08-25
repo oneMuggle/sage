@@ -1,13 +1,12 @@
 // electron/test_backend_auto_restart.test.ts
 // PR-B: backend auto-restart logic.
 //
-// This test is intentionally RED at the time of writing — it assumes
-// - `scheduleBackendRestart` is exported from `./main` (added by Task 10)
-// - `electron/mainWindow.ts` exists and exports a `mainWindow` singleton
-//   with `webContents.send` (added by Task 10).
-//
-// Per TDD, the RED-on-import failure is the *correct* state at this stage.
-// Task 10 will turn these tests GREEN by introducing the exports.
+// Module-state isolation: scheduleBackendRestart relies on module-scoped
+// state (`restartCount`, `restartTimer`, `appIsQuitting`) declared in
+// electron/main.ts. Vitest's per-file module cache means a second `it()`
+// in the same file would see the timer still armed from the first test
+// (vi.useFakeTimers prevents it from firing → early-return forever). To
+// get a clean slate per test, reset modules and re-import the function.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('child_process', () => {
@@ -66,22 +65,22 @@ vi.mock('./backendLauncher', () => ({
     reason: 'test',
   }),
 }));
-vi.mock('./mainWindow', () => ({
-  mainWindow: {
-    webContents: { send: vi.fn() },
-  },
-}));
-
-import { scheduleBackendRestart } from './main';
-import { mainWindow } from './mainWindow';
-
-// Test mock injects a non-null BrowserWindow; the production type allows null.
-// `!` here is the standard vitest pattern for "test fixture is guaranteed".
-const win = mainWindow!;
 
 describe('backend exit auto-restart logic (PR-B)', () => {
-  beforeEach(() => {
-    vi.mocked(win.webContents.send).mockClear();
+  // Per-test fresh module: vi.resetModules() drops the cached
+  // electron/main.ts module so a re-import gives a new
+  // restartCount=0, restartTimer=null, appIsQuitting=false slate.
+  let mainWindow: { webContents: { send: ReturnType<typeof vi.fn> } };
+  let scheduleBackendRestart: () => void;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    const mockMainWindow = { webContents: { send: vi.fn() } };
+    // mainWindow is re-created with the freshly-reset module each test.
+    vi.doMock('./mainWindow', () => ({ mainWindow: mockMainWindow }));
+    const mainMod = await import('./main');
+    scheduleBackendRestart = mainMod.scheduleBackendRestart;
+    mainWindow = mockMainWindow;
     vi.useFakeTimers();
   });
 
@@ -91,17 +90,54 @@ describe('backend exit auto-restart logic (PR-B)', () => {
 
   it('emits backend:disconnected with attempt=1 on first call', () => {
     scheduleBackendRestart();
-    expect(win.webContents.send).toHaveBeenCalledWith('backend:disconnected', { attempt: 1 });
+
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith('backend:disconnected', {
+      attempt: 1,
+    });
+    expect(vi.getTimerCount()).toBe(1);
   });
 
-  it('emits backend:disconnected with attempt=-1 after 3 attempts', () => {
+  it('does not schedule duplicate retries for repeated exit events', () => {
     scheduleBackendRestart();
     scheduleBackendRestart();
     scheduleBackendRestart();
-    scheduleBackendRestart();
-    expect(win.webContents.send).toHaveBeenLastCalledWith(
-      'backend:disconnected',
-      { attempt: -1 },
+
+    const disconnectedCalls = mainWindow.webContents.send.mock.calls.filter(
+      ([channel]) => channel === 'backend:disconnected',
     );
+    expect(disconnectedCalls).toEqual([
+      ['backend:disconnected', { attempt: 1 }],
+    ]);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('emits attempt=-1 after three elapsed retry attempts', async () => {
+    scheduleBackendRestart();
+    vi.advanceTimersByTime(1000);
+    await Promise.resolve();
+
+    scheduleBackendRestart();
+    vi.advanceTimersByTime(2000);
+    await Promise.resolve();
+
+    scheduleBackendRestart();
+    vi.advanceTimersByTime(4000);
+    await Promise.resolve();
+
+    scheduleBackendRestart();
+
+    const disconnectedCalls = mainWindow.webContents.send.mock.calls.filter(
+      ([channel]) => channel === 'backend:disconnected',
+    );
+    expect(disconnectedCalls).toEqual([
+      ['backend:disconnected', { attempt: 1 }],
+      ['backend:disconnected', { attempt: 2 }],
+      ['backend:disconnected', { attempt: 3 }],
+      ['backend:disconnected', { attempt: -1 }],
+    ]);
+    // Exhausted state: no further timer armed. Locks the contract that
+    // `restartCount >= MAX_RESTART_ATTEMPTS` early-returns before
+    // `setTimeout` so a future refactor can't silently keep retrying.
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
