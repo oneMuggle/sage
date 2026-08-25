@@ -173,6 +173,16 @@ def test_no_list_dir_hyphen_anywhere_in_source():
     """
     import subprocess
 
+    # 用 git 仓库根（任何 worktree 都行）, 不要写死特定 worktree 路径
+    # —— 之前 hardcode ``worktree-task3-workspace-office-wiki`` 导致在
+    # 其他 worktree / CI runner 上 FileNotFoundError 跑不起来。
+    repo_root = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
     result = subprocess.run(
         [
             "grep",
@@ -191,7 +201,7 @@ def test_no_list_dir_hyphen_anywhere_in_source():
         ],
         capture_output=True,
         text=True,
-        cwd="/home/fz/project/sage-worktrees/worktree-task3-workspace-office-wiki",
+        cwd=repo_root,
         check=False,
     )
     assert result.returncode != 0 or result.stdout == "", (

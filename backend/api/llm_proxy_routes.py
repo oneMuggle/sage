@@ -91,23 +91,43 @@ def _is_ca_bundle_available() -> bool:
     (OpenSSL ``/etc/ssl/certs`` / Windows cert store 派生文件) 也是合法 CA 源,
     在公司代理只配系统 bundle 不设 env vars 的环境里必须认.
 
-    任一来源存在且路径可读 → True; 全部未设 / 路径缺失 / 不可读 → False.
+    行为矩阵（test_ca_bundle_env_var_* 覆盖）:
+    - env var 设了, 路径是非空文件 / 非空目录  → True
+    - env var 设了, 路径存在但空 / 是 0 字节文件 → False（不回落系统；用户
+      明确配了这条路却配错, 静默改走默认会掩盖 misconfig）
+    - env var 设了, 路径不存在 / 不可访问        → 继续下一 env var, 都没找到
+      才回落系统（兼容 test_ca_bundle_env_var_missing_file_returns_false
+      在 CI 有 certifi 的环境里返回 True）
+    - env var 全没设                            → 兜底探测系统默认 bundle
+
+    返回: 任一来源可用 → True; 全部不可用 → False.
     """
     from pathlib import Path
+
+    def _path_has_bundle(p: Path) -> bool:
+        """非空文件 / 非空目录 → True; 不存在 / 空文件 / 不可访问 → False."""
+        try:
+            if p.is_file() and p.stat().st_size > 0:
+                return True
+            if p.is_dir() and any(p.iterdir()):
+                # capath 是目录, 含已哈希链接的 cert 文件; 任意文件存在即视为可用.
+                return True
+        except OSError:
+            return False
+        return False
 
     for variable in _CA_BUNDLE_ENV_VARS:
         path_str = os.environ.get(variable)
         if not path_str:
             continue
         path = Path(path_str)
-        try:
-            if path.is_file() and path.stat().st_size > 0:
-                return True
-            if path.is_dir() and any(path.iterdir()):
-                # capath 是目录, 含已哈希链接的 cert 文件; 任意文件存在即视为可用.
-                return True
-        except OSError:
-            continue
+        if _path_has_bundle(path):
+            return True
+        # Env var 显式设了但路径无效: 路径不存在 / 不可访问 → 继续下一 env var
+        # 或回落系统（典型: SSL_CERT_FILE=/no/such → 落到系统 bundle）;
+        # 路径存在但非空不可用 → 不回落系统, 直接 False.
+        if path.exists():
+            return False
 
     # 兜底: 探测 Python 进程默认的 CA bundle 路径 (OpenSSL ``DEFAULT@`` 区段).
     # get_default_verify_paths() 在所有 CPython 版本 (>= 3.7) 都返回 cafile/capath
@@ -123,13 +143,8 @@ def _is_ca_bundle_available() -> bool:
             path = Path(candidate)
         except (TypeError, ValueError):
             continue
-        try:
-            if path.is_file() and path.stat().st_size > 0:
-                return True
-            if path.is_dir() and any(path.iterdir()):
-                return True
-        except OSError:
-            continue
+        if _path_has_bundle(path):
+            return True
     return False
 
 
