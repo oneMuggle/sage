@@ -82,7 +82,7 @@ _CA_BUNDLE_ENV_VARS: FrozenSet[str] = frozenset(
 )
 
 
-def _is_ca_bundle_available() -> bool:
+def _is_ca_bundle_available() -> bool:  # noqa: PLR0911 — 多分支表驱动早返,提取会破坏可读性
     """检测 CA bundle 是否可用.
 
     优先检查 ``SSL_CERT_FILE`` / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE``
@@ -92,13 +92,21 @@ def _is_ca_bundle_available() -> bool:
     在公司代理只配系统 bundle 不设 env vars 的环境里必须认.
 
     任一来源存在且路径可读 → True; 全部未设 / 路径缺失 / 不可读 → False.
+
+    Semantics: 一旦用户**显式**设置了任一 env var(非空字符串),就视为用户选择,
+    不再 fallback 到 ``ssl.get_default_verify_paths()``. 这避免 certifi 注入后
+    系统默认 cafile 覆盖用户故意设置的"空文件 / 损坏 bundle"(典型场景:测试
+    隔离环境故意 mock 一个空 cert 来强制走非 TLS 路径;以及用户手动
+    ``SSL_CERT_FILE=/tmp/empty.pem`` 表示"我已知风险,继续").
     """
     from pathlib import Path
 
+    any_env_set = False
     for variable in _CA_BUNDLE_ENV_VARS:
         path_str = os.environ.get(variable)
         if not path_str:
             continue
+        any_env_set = True
         path = Path(path_str)
         try:
             if path.is_file() and path.stat().st_size > 0:
@@ -108,6 +116,10 @@ def _is_ca_bundle_available() -> bool:
                 return True
         except OSError:
             continue
+
+    if any_env_set:
+        # 用户显式设置了 env var 但都不可用 → 不再 fallback,直接 False.
+        return False
 
     # 兜底: 探测 Python 进程默认的 CA bundle 路径 (OpenSSL ``DEFAULT@`` 区段).
     # get_default_verify_paths() 在所有 CPython 版本 (>= 3.7) 都返回 cafile/capath
