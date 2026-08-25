@@ -154,12 +154,42 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const page = (a?.page as number) ?? 1;
       const pageSize = (a?.pageSize as number) ?? 20;
       const memoryType = a?.memoryType as string | null;
+      const offset = a?.offset as number | null;
+      const sessionId = a?.sessionId as string | null;
       const params = new URLSearchParams({
         page: String(page),
         page_size: String(pageSize),
       });
       if (memoryType) params.set('type', memoryType);
+      // 批次三 step 6 (spec §4.3 line 150):
+      // 前端 memoryApi.getMemories() 增加 offset / sessionId 透传,
+      // 否则后端 4-way /memory/list 收不到 session 隔离和 offset cursor。
+      if (offset !== null && offset !== undefined) {
+        params.set('offset', String(offset));
+      }
+      if (sessionId) {
+        params.set('session_id', sessionId);
+      }
       return `/api/v1/memory/list?${params.toString()}`;
+    },
+  },
+  // 批次三 step 6 (spec §4.3 line 150):
+  // 新增 GET /memory/summaries 端点 — 之前前端 memoryApi.getSessionSummaries()
+  // 调用 invoke('get_session_summaries', ...) 找不到映射,直接 404。
+  // sessionId 必填(spec step 5 严令禁止"全部 session"视图)。
+  get_session_summaries: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = a?.sessionId as string | null | undefined;
+      const page = (a?.page as number) ?? 1;
+      const pageSize = (a?.pageSize as number) ?? 20;
+      const sid = sessionId ? String(sessionId) : '';
+      const params = new URLSearchParams({
+        session_id: sid,
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      return `/api/v1/memory/summaries?${params.toString()}`;
     },
   },
   delete_memory: { method: 'POST', path: () => '/api/v1/memory/delete' },

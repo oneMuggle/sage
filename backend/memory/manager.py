@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.semantic import SemanticMemory
+from backend.memory.summary import SessionSummaryStore
 from backend.memory.working import WorkingMemory, normalize_session_id
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,13 @@ class MemoryManager:
     4. 记忆重要性评估
     """
 
-    def __init__(self, working: WorkingMemory, episodic: EpisodicMemory, semantic: SemanticMemory):
+    def __init__(
+        self,
+        working: WorkingMemory,
+        episodic: EpisodicMemory,
+        semantic: SemanticMemory,
+        summary_store: Optional[SessionSummaryStore] = None,
+    ):
         """
         初始化记忆管理器
 
@@ -67,10 +74,14 @@ class MemoryManager:
             working: 工作记忆实例
             episodic: 情景记忆实例
             semantic: 语义记忆实例
+            summary_store: 会话摘要 store（批次三 step 5）；可选，向后兼容
+                未注入 store 的旧调用方；没有 store 时 ``get_context`` 不
+                注入 ``【会话摘要】`` 段。
         """
         self.working = working
         self.episodic = episodic
         self.semantic = semantic
+        self.summary_store = summary_store
 
     def remember(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -108,7 +119,7 @@ class MemoryManager:
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
-    ) -> str | None:
+    ) -> Optional[str]:
         """
         通用记忆存储接口
 
@@ -257,6 +268,21 @@ class MemoryManager:
                 role = msg.get("role", "unknown")
                 content = msg.get("content", "")
                 parts.append(f"- [{role}]: {content[:100]}...")
+
+        # 批次三 step 5：会话摘要，介于 working 与 episodic/semantic 之间。
+        # 只注入当前 session 的 READY 摘要，FAILED / PENDING 不注入
+        # （失败摘要只用于诊断，不假装为普通事实）。
+        # 未注入 summary_store 或 session_id 为空时整段跳过 ——
+        # 永不注入"全部 session 的最新摘要"以避免跨 session 串味。
+        if self.summary_store is not None and session_id:
+            try:
+                latest_ready = self.summary_store.get_latest_ready(session_id)
+            except Exception as exc:
+                logger.warning(f"读取会话摘要失败: {exc}")
+                latest_ready = None
+            if latest_ready is not None and latest_ready.content:
+                parts.append("\n【会话摘要】")
+                parts.append(f"- {latest_ready.content}")
 
         # 获取最近的 episodic 记忆
         try:

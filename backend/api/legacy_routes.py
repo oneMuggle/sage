@@ -9,6 +9,7 @@ API 路由定义
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import List
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
@@ -21,7 +22,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Dict, Set, Union
+from typing import Any, Dict, Optional, Set, Union
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -48,6 +49,9 @@ from backend.data.session_repo import (
     fork_session as fork_session_core,
 )
 from backend.memory import get_memory_manager
+from backend.memory.summary import (
+    list_summaries_for_session as _list_summaries_for_session,
+)
 from backend.office.chat_refs import ChatOfficeRef, authorize_chat_office_request
 from backend.office.workspace_errors import (
     WorkspaceDocumentNotFoundError,
@@ -2634,7 +2638,13 @@ def delete_memory(data: MemoryDeleteRequest):
 
 @router.get("/memory/list")
 @with_db_lock
-def list_memories(page: int = 1, page_size: int = 20, type: str | None = None):
+def list_memories(
+    page: int = 1,
+    page_size: int = 20,
+    offset: Optional[int] = None,
+    type: Optional[str] = None,
+    session_id: Optional[str] = None,
+):
     """获取记忆列表（带 layer / source / 分页 envelope）。
 
     Task 2 起:
@@ -2645,6 +2655,14 @@ def list_memories(page: int = 1, page_size: int = 20, type: str | None = None):
       (其他 type 仍走对应层)。
     - 每条记录带 ``source`` (``'episodic'`` / ``'semantic'``) 与 ``layer``
       字段,与 ``MemoryManager.search_memories`` 对齐。
+
+    批次三 step 6 起 (spec §4.3 line 150):
+    - ``type=None`` / ``'all'`` / ``''`` 现在合并**四层**: working +
+      session_summary + episodic + semantic（不再只返回 episodic + semantic）。
+    - 新增 ``offset`` query 参数：调用方可直接传 offset 游标,不必先算 page。
+    - 新增 ``session_id`` query 参数: 按 session 隔离列表,呼应 step 5 的
+      session 隔离不变量。
+    - ``source_breakdown`` 输出新增 ``working`` 和 ``session_summary`` 计数。
     """
     try:
         # 1. 输入 clamp
@@ -2662,57 +2680,145 @@ def list_memories(page: int = 1, page_size: int = 20, type: str | None = None):
                 int(page_size) if page_size is not None else 20,
             ),
         )
+        # offset 默认从 page 派生;调用方显式传 offset 时优先使用。
+        safe_offset = (
+            max(0, int(offset))
+            if offset is not None
+            else (safe_page - 1) * safe_page_size
+        )
         fetch_limit = min(
             _MEMORY_LIST_MAX_FETCH,
-            safe_page * safe_page_size,
+            safe_offset + safe_page + safe_page_size,
         )
         normalized_type = type if type and type not in ("", "all") else None
 
         mm = get_memory_manager()
         # 2. 取数 (按 type 路由)
         if normalized_type == "episodic":
-            episodic_items = mm.episodic.get_recent(limit=fetch_limit)
+            episodic_items = mm.episodic.get_recent(
+                limit=fetch_limit, session_id=session_id
+            )
             items = _enrich_memory_records(
                 episodic_items, layer="episodic", source="episodic"
             )
-            total = mm.episodic.count()
-            source_breakdown = {"episodic": len(items), "semantic": 0}
+            # step 5: session_id 给定时,total 必须按会话统计,否则分页 envelope
+            # 会把其它会话的内存以 total 形式泄漏给 UI
+            total = mm.episodic.count(session_id=session_id)
+            source_breakdown = {
+                "working": 0,
+                "session_summary": 0,
+                "episodic": len(items),
+                "semantic": 0,
+            }
         elif normalized_type == "semantic":
-            semantic_items = mm.semantic.get_recent(limit=fetch_limit)
+            semantic_items = mm.semantic.get_recent(
+                limit=fetch_limit, session_id=session_id
+            )
             items = _enrich_memory_records(
                 semantic_items, layer="semantic", source="semantic"
             )
-            total = mm.semantic.count()
-            source_breakdown = {"episodic": 0, "semantic": len(items)}
+            total = mm.semantic.count(session_id=session_id)
+            source_breakdown = {
+                "working": 0,
+                "session_summary": 0,
+                "episodic": 0,
+                "semantic": len(items),
+            }
+        elif normalized_type == "working":
+            working_items = mm.working.get_context(
+                session_id=session_id, limit=fetch_limit
+            ) if session_id else list(mm.working.messages)[-fetch_limit:]
+            items = _enrich_working_records(working_items, session_id=session_id)
+            total = len(items)
+            source_breakdown = {
+                "working": len(items),
+                "session_summary": 0,
+                "episodic": 0,
+                "semantic": 0,
+            }
+        elif normalized_type == "session_summary":
+            # step 6 兼容:旧 MemoryManager 没有 summary_store → 返空 envelope,不 500
+            if mm.summary_store is None or not session_id:
+                items = []
+                total = 0
+            else:
+                summaries = _list_summaries_for_session(
+                    db=mm.summary_store.db,
+                    session_id=session_id,
+                    limit=fetch_limit,
+                )
+                items = _enrich_summary_records(summaries)
+                total = len(summaries)
+            source_breakdown = {
+                "working": 0,
+                "session_summary": total,
+                "episodic": 0,
+                "semantic": 0,
+            }
         else:
-            # 'all' / '' / None → 合并两层,按 created_at DESC 排序
-            episodic_items = mm.episodic.get_recent(limit=fetch_limit)
-            semantic_items = mm.semantic.get_recent(limit=fetch_limit)
-            merged = []
+            # 'all' / '' / None → 合并四层: working + session_summary +
+            # episodic + semantic,按 created_at 倒序
+            episodic_items = mm.episodic.get_recent(
+                limit=fetch_limit, session_id=session_id
+            )
+            semantic_items = mm.semantic.get_recent(
+                limit=fetch_limit, session_id=session_id
+            )
+
+            # Working memory: 当 session_id 给定时取该会话;否则取全局最后 N 条
+            if session_id:
+                working_items = mm.working.get_context(
+                    session_id=session_id, limit=fetch_limit
+                )
+            else:
+                # 全局视图: 跨会话聚合(粗粒度,按 timestamp 排序)
+                working_items = list(mm.working.messages)[-fetch_limit:]
+
+            # Session summaries: 只在 session_id 给定时注入
+            # (不输出"全 session 摘要",以防跨 session 串味)
+            summaries = []
+            if session_id and mm.summary_store is not None:
+                summaries = _list_summaries_for_session(
+                    db=mm.summary_store.db,
+                    session_id=session_id,
+                    limit=fetch_limit,
+                )
+
+            merged: list[dict] = []
             merged.extend(
                 _enrich_memory_records(episodic_items, layer="episodic", source="episodic")
             )
             merged.extend(
                 _enrich_memory_records(semantic_items, layer="semantic", source="semantic")
             )
-            # 按 created_at 倒序
+            merged.extend(_enrich_working_records(working_items, session_id=session_id))
+            merged.extend(_enrich_summary_records(summaries))
+            # 按 created_at_ms / timestamp 倒序
             merged.sort(
-                key=lambda x: x.get("created_at_ms", x.get("created_at", 0)),
+                key=lambda x: x.get("created_at_ms", x.get("timestamp_ms", 0)),
                 reverse=True,
             )
             items = merged
             try:
-                total = mm.episodic.count() + mm.semantic.count()
+                # step 5: total 必须按 session 隔离,否则 envelope 会把其它
+                # 会话的条目数泄漏给当前会话的 UI
+                total = (
+                    mm.episodic.count(session_id=session_id)
+                    + mm.semantic.count(session_id=session_id)
+                    + len(working_items)
+                    + len(summaries)
+                )
             except Exception:
                 total = len(items)
             source_breakdown = {
+                "working": len(working_items),
+                "session_summary": len(summaries),
                 "episodic": len(episodic_items),
                 "semantic": len(semantic_items),
             }
 
         # 3. 分页 slice
-        offset = (safe_page - 1) * safe_page_size
-        page_items = items[offset : offset + safe_page_size]
+        page_items = items[safe_offset : safe_offset + safe_page_size]
 
         # 4. Envelope
         return {
@@ -2720,6 +2826,7 @@ def list_memories(page: int = 1, page_size: int = 20, type: str | None = None):
             "total": total,
             "page": safe_page,
             "page_size": safe_page_size,
+            "offset": safe_offset,
             "layer": normalized_type or "all",
             "source_breakdown": source_breakdown,
         }
@@ -2752,13 +2859,137 @@ def _enrich_memory_records(
         # created_at (秒) → created_at_ms (毫秒)
         if "created_at_ms" not in item and "created_at" in item:
             ts = item["created_at"]
-            try:
-                # 数据库列存的就是毫秒（int(time.time() * 1000)），原样复制
+            # 数据库列存的就是毫秒（int(time.time() * 1000)），原样复制
+            with contextlib.suppress(TypeError, ValueError):
                 item["created_at_ms"] = int(ts)
-            except (TypeError, ValueError):
-                pass
         enriched.append(item)
     return enriched
+
+
+def _enrich_working_records(
+    messages: List[Dict[str, Any]], session_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """把工作记忆消息序列化成 ``/memory/list`` 的统一记录格式。
+
+    工作记忆是 in-memory deque,不是 DB 行,所以这里手填
+    ``source='working'`` / ``layer='working'`` 让 UI 走对应的徽章样式。
+    ``created_at_ms`` 用 ``timestamp * 1000``(秒→毫秒,spec §4.4 step 1)。
+    """
+    enriched: List[Dict[str, Any]] = []
+    for msg in messages or []:
+        item = dict(msg)
+        sid = item.get("session_id", session_id or "")
+        seq = item.get("seq", 0)
+        item["id"] = item.get("id") or f"wm:{sid}:{seq}"
+        item["source"] = "working"
+        item["layer"] = "working"
+        item["memory_type"] = "working"
+        ts = item.get("timestamp", 0)
+        try:
+            item["created_at_ms"] = int(float(ts) * 1000)
+        except (TypeError, ValueError):
+            item["created_at_ms"] = 0
+        item["timestamp_ms"] = item["created_at_ms"]
+        item["content"] = item.get("content", "")
+        item["importance"] = item.get("importance", 0)
+        enriched.append(item)
+    return enriched
+
+
+def _enrich_summary_records(
+    summaries: List[Any],
+) -> List[Dict[str, Any]]:
+    """把 :class:`SessionSummary` 行转成 ``/memory/list`` 的统一格式。
+
+    ``source='session_summary'`` / ``layer='session_summary'`` 区分于持久层
+    (episodic/semantic)。``created_at_ms`` 已经是 spec §4.4 规范的毫秒,
+    直接透传。
+    """
+    enriched: List[Dict[str, Any]] = []
+    for s in summaries or []:
+        enriched.append(
+            {
+                "id": s.id,
+                "source": "session_summary",
+                "layer": "session_summary",
+                "memory_type": "session_summary",
+                "session_id": s.session_id,
+                "source_turn_id": s.source_turn_id,
+                "content": s.content,
+                "status": s.status,
+                "error_message": s.error_message,
+                "created_at_ms": s.created_at_ms,
+                "updated_at_ms": s.updated_at_ms,
+                "importance": 0,
+                "summary": (s.content or "")[:100],
+            }
+        )
+    return enriched
+
+
+@router.get("/memory/summaries")
+@with_db_lock
+def list_session_summaries(
+    session_id: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    """按 session 列出 session_summaries 行(批次三 step 6,spec §4.3)。
+
+    跨 session 串味是 step 5 严令禁止的,所以 ``session_id`` **必填**:
+    不存在"全部 session 的摘要列表"这种视图。漏传 session_id 直接
+    400,而不是默认某 session。
+
+    包含 READY/FAILED/PENDING 三种 status 行,这样 UI 能正确显示
+    "上一次生成失败"等诊断,而不会把失败伪装成 READY。
+    """
+    if not session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="session_id is required for /memory/summaries "
+            "(spec §4.3 step 5 forbids cross-session reads)",
+        )
+
+    try:
+        safe_page = max(1, int(page))
+        safe_page_size = max(
+            1, min(_MEMORY_LIST_MAX_PAGE_SIZE, int(page_size))
+        )
+        safe_offset = (safe_page - 1) * safe_page_size
+
+        mm = get_memory_manager()
+        if mm.summary_store is None:
+            # 没有 store (旧版 MemoryManager) 就直接返空,避免 500。
+            return {
+                "session_id": session_id,
+                "items": [],
+                "total": 0,
+                "page": safe_page,
+                "page_size": safe_page_size,
+                "offset": safe_offset,
+            }
+
+        # 用 session_id 强过滤(防 step 5 跨 session 串味)
+        all_rows = _list_summaries_for_session(
+            db=mm.summary_store.db,
+            session_id=session_id,
+            limit=_MEMORY_LIST_MAX_FETCH,
+        )
+        total = len(all_rows)
+        page_items = all_rows[safe_offset : safe_offset + safe_page_size]
+
+        return {
+            "session_id": session_id,
+            "items": _enrich_summary_records(page_items),
+            "total": total,
+            "page": safe_page,
+            "page_size": safe_page_size,
+            "offset": safe_offset,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Wave 2 P1-4 (2026-08-14): 编排 run 读取/resume/计划更新端点挂载。
