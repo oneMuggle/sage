@@ -139,3 +139,64 @@ describe('mergeWithDefaults (orch 嵌套 merge)', () => {
     expect(merged.orch.maxConcurrentSubagents).toBe(4); // 其余键保持默认
   });
 });
+
+describe('mergeWithDefaults (endpoints / modelSelections deepMerge)', () => {
+  it('endpoints 缺省时返回 DEFAULT_SETTINGS.endpoints', () => {
+    const merged = mergeWithDefaults({} as Partial<AppSettings>);
+    expect(merged.endpoints).toEqual(DEFAULT_SETTINGS.endpoints);
+  });
+
+  it('endpoints 提供新 id 时保留用户 endpoint (DEFAULT 为空时也不丢)', () => {
+    // Task 1 round 1 (2026-08-24): DEFAULT_SETTINGS 当前 endpoints 为空;
+    // deepMerge 仍必须保留用户新 id, 而不是因默认数组兜底逻辑被吞掉.
+    const userExtra = {
+      id: 'user-added-endpoint',
+      name: 'User Added',
+      baseUrl: 'http://example.com',
+      protocol: 'openai-compatible' as const,
+      modelId: null,
+      localModelPath: null,
+      apiKey: null,
+      discoveredModels: [],
+      lastDiscoveredAt: null,
+    };
+    const merged = mergeWithDefaults({
+      endpoints: [userExtra],
+    } as unknown as Partial<AppSettings>);
+    expect(merged.endpoints).toContainEqual(userExtra);
+  });
+
+  it('endpoints 采用 deepMerge 返回新数组, 不直接复用 partial 引用', () => {
+    const userEndpoint = {
+      id: 'user-endpoint',
+      name: 'User Endpoint',
+      baseUrl: 'http://example.com',
+      protocol: 'openai-compatible' as const,
+      modelId: 'custom-model',
+      localModelPath: null,
+      apiKey: 'redacted',
+      discoveredModels: [],
+      lastDiscoveredAt: null,
+    };
+    const partial = { endpoints: [userEndpoint] } as unknown as Partial<AppSettings>;
+    const merged = mergeWithDefaults(partial);
+    expect(merged.endpoints).toEqual([userEndpoint]);
+    expect(merged.endpoints).not.toBe(partial.endpoints);
+  });
+
+  it('modelSelections 提供部分键时与 DEFAULT 字段级 merge', () => {
+    const merged = mergeWithDefaults({
+      modelSelections: { chatModel: { endpointId: 'ep-1', modelId: 'm-1' } } as {
+        chatModel: { endpointId: string; modelId: string };
+      },
+    } as Partial<AppSettings>);
+    expect(merged.modelSelections.chatModel.endpointId).toBe('ep-1');
+    // visionModel / embeddingModel 应保持 DEFAULT (不被丢)
+    expect(merged.modelSelections.visionModel).toEqual(
+      DEFAULT_SETTINGS.modelSelections.visionModel,
+    );
+    expect(merged.modelSelections.embeddingModel).toEqual(
+      DEFAULT_SETTINGS.modelSelections.embeddingModel,
+    );
+  });
+});

@@ -23,6 +23,31 @@ import fetch from 'node-fetch';
 import { COMMAND_ROUTES, UnknownIpcCommandError } from './commands';
 
 /**
+ * Thrown by the IPC handler when an `invoke()` arrives before the backend
+ * has passed its health-ownership probe (i.e. lifecycle === 'ready').
+ *
+ * Renderer contract (Task 0 review round 1, finding #6):
+ *   - `code === 'BACKEND_NOT_READY'` is the stable signal.
+ *   - `message` is human-readable Chinese — desktopInvoke.ts forwards it
+ *     verbatim, BackendStatusBanner doesn't need to render it (it listens
+ *     to the 'backend:disconnected' event for the auto-reconnecting banner).
+ *
+ * Why a typed error (not a generic Error):
+ *   Renderer distinguishes "backend offline → show reconnect banner" from
+ *   "endpoint said 4xx/5xx → show the server's message verbatim". A
+ *   generic Error with the same message conflated the two and previously
+ *   caused a "后端服务未启动或已断开" toast to appear over a real 422
+ *   (Pydantic validation) error.
+ */
+export class BackendNotReadyError extends Error {
+  readonly code = 'BACKEND_NOT_READY';
+  constructor(message = '后端服务尚未就绪,请稍候或重启 Sage') {
+    super(message);
+    this.name = 'BackendNotReadyError';
+  }
+}
+
+/**
  * 把对象里所有 camelCase key 转成 snake_case,递归处理嵌套对象和数组里的对象元素。
  * - 单段 key ("title", "id") 不动
  * - 已含下划线 ("max_iterations") 不动

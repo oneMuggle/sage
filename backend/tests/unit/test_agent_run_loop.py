@@ -11,6 +11,7 @@ agent.run_loop() 状态机测试
 
 from __future__ import annotations
 
+import json
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,6 +22,7 @@ from backend.core.exceptions import AgentError
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
+from backend.tools.base import ToolResult
 
 pytestmark = pytest.mark.unit
 
@@ -453,6 +455,92 @@ async def test_run_loop_appends_tool_message_to_messages_in_place():
     assert "tool" in roles
     tool_msg = next(m for m in messages if m["role"] == "tool")
     assert tool_msg["tool_call_id"] == "c1"
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_prefers_tool_result_output_over_content():
+    """Machine-readable ToolResult.output must reach the next tool message."""
+    tool_call = LLMToolCall(id="c-output", name="memory_save", arguments="{}")
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(content="", tool_calls=[tool_call]),
+            _make_response(content="done"),
+        ]
+    )
+    mock_tool = MagicMock()
+    mock_tool.execute = MagicMock(
+        return_value=ToolResult(
+            success=True,
+            content={"memory_id": "mem-content"},
+            output="mem-output",
+        )
+    )
+    agent.tool_registry.get = MagicMock(return_value=mock_tool)
+    messages = [{"role": "user", "content": "save"}]
+
+    async for _ in agent.run_loop(messages):
+        pass
+
+    tool_message = next(message for message in messages if message["role"] == "tool")
+    assert tool_message["content"] == '"mem-output"'
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_falls_back_to_tool_result_content_when_output_is_none():
+    """旧 ToolResult 未设置 output 时仍把 content 传给下一轮 LLM。"""
+    tool_call = LLMToolCall(id="c-content-none", name="legacy", arguments="{}")
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(content="", tool_calls=[tool_call]),
+            _make_response(content="done"),
+        ]
+    )
+    mock_tool = MagicMock()
+    mock_tool.execute = MagicMock(
+        return_value=ToolResult(
+            success=True,
+            content={"legacy": "ok"},
+            output=None,
+        )
+    )
+    agent.tool_registry.get = MagicMock(return_value=mock_tool)
+    messages = [{"role": "user", "content": "legacy"}]
+
+    async for _ in agent.run_loop(messages):
+        pass
+
+    tool_message = next(message for message in messages if message["role"] == "tool")
+    assert json.loads(tool_message["content"]) == {"legacy": "ok"}
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_falls_back_to_legacy_tool_result_content():
+    """Legacy result objects without output remain compatible."""
+    tool_call = LLMToolCall(id="c-content", name="legacy", arguments="{}")
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(content="", tool_calls=[tool_call]),
+            _make_response(content="done"),
+        ]
+    )
+    mock_tool = MagicMock()
+    mock_tool.execute = MagicMock(
+        return_value=MagicMock(success=True, content={"legacy": "ok"}, error=None)
+    )
+    agent.tool_registry.get = MagicMock(return_value=mock_tool)
+    messages = [{"role": "user", "content": "legacy"}]
+
+    async for _ in agent.run_loop(messages):
+        pass
+
+    tool_message = next(message for message in messages if message["role"] == "tool")
+    assert json.loads(tool_message["content"]) == {"legacy": "ok"}
 
 
 @pytest.mark.asyncio()

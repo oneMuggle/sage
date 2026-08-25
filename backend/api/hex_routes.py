@@ -36,6 +36,7 @@ from sage_core import LLMError, Message, Role
 from sage_core.exceptions import SessionNotFoundError
 
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
+from backend.api.settings_models import SettingsPayload, model_dump_compat
 from backend.application.services.chat_service import ChatService
 from backend.application.services.session_service import SessionService
 from backend.chat.executors import resolve_attachments
@@ -65,44 +66,15 @@ class ChatResponse(BaseModel):
     reply: str
 
 
-class SettingsRequest(BaseModel):
-    """Hex 路径的 PUT /settings 请求体。
-
-    字段契约（双层校验设计，Pydantic v1 win7 兼容）：
-
-    - **Pydantic 层**（本类）：声明类型边界 + ``extra="forbid"`` 拒白名单外字段。
-      顶层 13 个 AppSettings 字段 + 3 个 legacy 字段。
-    - **canonical shape 层**（``validate_settings_shape``）：校验嵌套白名单
-      + 拒绝残留 snake_case。两条不互冗余：Pydantic 给 OpenAPI docs + 顶层
-      类型校验，canonical 给嵌套结构 + snake_case 翻译。
-    - **legacy 字段**（``api_base_url`` / ``api_key`` / ``model``）：保留以兼容
-      旧客户端调用（如 ``test_audit_log.py``）。handler 收到后只用作审计
-      ``changed_fields`` 占位 + 日志标记，**不**写入 settings 存储。
-
-    win7 Note: Pydantic v1 不支持 ``model_config = {"extra": ...}`` 字典写法,
-    必须用 ``class Config: extra = ...``。
-    """
-
-    class Config:
-        extra = "forbid"
-
-    # ----- AppSettings fields (canonical, src/entities/setting/types.ts) -----
-    # noqa: N815 — camelCase 是为了与 AppSettings TypeScript interface 字段一一对齐；
-    # 字段名经过 to_camel/validate_settings_shape 链路进入存储。
-    streaming: Optional[bool] = None
-    autoMemory: Optional[bool] = None  # noqa: N815
-    confirmDelete: Optional[bool] = None  # noqa: N815
-    endpoints: Optional[List[dict]] = None
-    modelSelections: Optional[dict] = None  # noqa: N815
-    maxContext: Optional[int] = None  # noqa: N815
-    temperature: Optional[float] = None
-    wiki: Optional[dict] = None
-    version: Optional[str] = None
-
-    # ----- Legacy fields (deprecated, 兼容旧客户端, 不写入存储) -----
-    api_base_url: Optional[str] = None
-    api_key: Optional[str] = None  # noqa: S105 — 字段名占位；不存储
-    model: Optional[str] = None
+# Task 1 round 1 (2026-08-24): SettingsRequest → ``backend.api.settings_models.SettingsPayload``.
+# 原因:
+# - Pydantic 1/2 双兼容 (``class Config`` 在两边都生效)
+# - 强类型 ``endpoints: List[EndpointPayload]`` 而非 ``List[dict]`` (Pydantic 顶层拒
+#   未知字段; canonicalizer 兜底嵌套)
+# - 时区 / 协议 / 本地路径校验**下沉**到 canonicalizer.validate_settings_payload,
+#   不再用 ``field_validator`` 装饰器 (Pydantic 2 语法在 Pydantic 1 / Win7 不可用).
+# 取别名 ``SettingsRequest`` 保持 hex_routes 里下游 handler 不动, 避免改动面爆炸.
+SettingsRequest = SettingsPayload
 
 
 class SettingsResponse(BaseModel):
@@ -248,7 +220,7 @@ async def update_settings(
     不写入存储。
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
-    payload = req.dict(exclude_none=True)
+    payload = model_dump_compat(req, exclude_none=True)
 
     # 分离 legacy 字段 vs canonical 字段
     legacy_keys = {"api_base_url", "api_key", "model"}
@@ -258,6 +230,7 @@ async def update_settings(
     from backend.data.settings_canonicalizer import (
         strip_unknown_fields,
         to_camel,
+        validate_settings_payload,
         validate_settings_shape,
     )
     from backend.data.settings_repo import SettingsRepository
@@ -275,6 +248,15 @@ async def update_settings(
     # payload 侧的未知字段仍原样保留并触发 400 —— 静默净化历史残留，严格拒绝新提交。
     camel_existing = strip_unknown_fields(to_camel(existing))
     camel_merged = {**camel_existing, **to_camel(canonical_payload)}
+    # Task 1 (2026-08-23): 旧 endpoints 写入前补 protocol 默认值, 与 GET 路径对齐.
+    _migrate_default_protocol(camel_merged)
+    # Task 1 round 1 (2026-08-24): 显式跑 timezone / protocol / localModelPath
+    # value 校验 (Pydantic 装饰器不可用, 这里下沉到 canonicalizer 层).
+    try:
+        validate_settings_payload(camel_merged)
+    except ValueError as exc:
+        logger.warning(f"[HEX REQ {request_id}] /settings rejected invalid value: {exc}")
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
@@ -321,7 +303,23 @@ async def get_settings() -> Optional[dict]:
     if not isinstance(raw, dict):
         return None
     detect_legacy_snake_pollution(raw)
-    return to_camel(raw)
+    translated = to_camel(raw)
+    # Task 1 (2026-08-23): 历史 endpoints[*] 无 protocol 字段 → 默认 ``openai-compatible``.
+    _migrate_default_protocol(translated)
+    return translated
+
+
+def _migrate_default_protocol(settings: dict) -> None:
+    """历史 endpoints 补 protocol 默认值 ``openai-compatible``.
+
+    与 legacy_routes 同名函数保持一致 — 共享语义, 不抽公共模块避免循环依赖.
+    """
+    endpoints = settings.get("endpoints")
+    if not isinstance(endpoints, list):
+        return
+    for ep in endpoints:
+        if isinstance(ep, dict) and "protocol" not in ep:
+            ep["protocol"] = "openai-compatible"
 
 
 # ==================== 通用 KV /preferences/{key} 端点（白名单） ====================

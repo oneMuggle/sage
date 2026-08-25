@@ -88,3 +88,37 @@ def test_query_string_is_appended():
     )
 
     assert url == "https://api.openai.com/v1/models?limit=10&after=foo"
+
+
+# === Task 1 (2026-08-23): LM Studio / edge cases ===
+
+
+def test_lm_studio_baseurl_with_v1_suffix_and_v1_models():
+    """LM Studio 本地 ``http://127.0.0.1:1234/v1`` + 拉 ``/v1/models`` → 不能拼成 ``/v1/v1/models``."""
+    url = build_upstream_url(
+        provider_url="http://127.0.0.1:1234/v1",
+        path="v1/models",
+    )
+
+    assert url == "http://127.0.0.1:1234/v1/models"
+
+
+def test_provider_url_with_v1_suffix_and_path_just_v1_collapse_to_root():
+    """baseURL 含 ``/v1`` + path 仅为 ``/v1`` → 折叠到根 ``/`` (允许尾部 ``/``)."""
+    url = build_upstream_url(
+        provider_url="https://api.example.com/v1",
+        path="v1",
+    )
+
+    assert url.rstrip("/") == "https://api.example.com/v1"
+
+
+def test_provider_url_with_v1_suffix_and_chat_completions_stream_query():
+    """baseURL 含 ``/v1`` + 流式 ``/v1/chat/completions?stream=true`` → 单 v1 + query 保留."""
+    url = build_upstream_url(
+        provider_url="http://127.0.0.1:1234/v1",
+        path="v1/chat/completions",
+        query="stream=true",
+    )
+
+    assert url == "http://127.0.0.1:1234/v1/chat/completions?stream=true"

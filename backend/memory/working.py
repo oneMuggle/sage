@@ -77,24 +77,31 @@ class WorkingMemory:
         if self._db is not None:
             self._load_snapshot()
 
-    def add(self, message: Dict[str, Any]) -> None:
+    def add(
+        self,
+        message: Dict[str, Any],
+        session_id: Optional[str] = None,
+    ) -> None:
         """
         添加消息到工作记忆
 
         Args:
             message: 消息字典，包含 role, content 等字段
+            session_id: 可选会话 ID（批次三 step 6 — ``MemoryManager.add_to_working``
+                透传，多会话场景下同一进程内不同 session 的工作记忆共存）
         """
         # 计算消息的估算 Token 数量（中文约 2 字符 = 1 Token）
         content = message.get("content", "")
         tokens = self._estimate_tokens(content)
 
-        # 存储消息
+        # 存储消息（session_id 仅作为查询 tag，不影响 FIFO 淘汰顺序）
         self.messages.append(
             {
                 "role": message.get("role", "unknown"),
                 "content": content,
                 "tokens": tokens,
                 "timestamp": time.time(),
+                "session_id": session_id,
             }
         )
 
@@ -129,19 +136,37 @@ class WorkingMemory:
             old_message = self.messages.popleft()
             self.total_tokens -= old_message.get("tokens", 0)
 
-    def get_context(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_context(
+        self,
+        session_id: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """
         获取当前上下文
 
         Args:
+            session_id: 可选会话 ID — 仅返回带此 session_id tag 的消息（批次三
+                step 6 多会话隔离）。``None`` / 未指定 → 返回全部（向后兼容）。
+                兼容旧形态: 传 int 视为 ``limit``。
             limit: 可选，限制返回的消息数量
 
         Returns:
             消息列表
         """
+        # 兼容旧形态 ``get_context(limit)`` —— 单个 int 参数视为 limit
+        if isinstance(session_id, int) and limit is None:
+            session_id, limit = None, session_id
+        # session 过滤: 严格匹配相同 tag 以保持隔离语义。无 tag 的旧消息
+        # (单会话场景写入) 仅在 session_id=None 时返回。
+        if session_id is None:
+            filtered = list(self.messages)
+        else:
+            filtered = [
+                m for m in self.messages if m.get("session_id") == session_id
+            ]
         if limit is None:
-            return list(self.messages)
-        return list(self.messages)[-limit:]
+            return filtered
+        return filtered[-limit:]
 
     def get_recent(self, limit: int = 5) -> List[Dict[str, Any]]:
         """

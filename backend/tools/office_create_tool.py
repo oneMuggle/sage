@@ -16,9 +16,11 @@ write outright when ``policy.workspace_root`` is bound (the hex chain).
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from backend.data.database import get_database
 from backend.domain.risk import RiskClass
 from backend.office.excel import generate_xlsx
 from backend.office.models import (
@@ -29,8 +31,11 @@ from backend.office.models import (
 )
 from backend.office.path_safety import OfficePathError, validate_supported_filename
 from backend.office.ppt import generate_ppt
+from backend.office.session_workspace import get_active_workspace
+from backend.office.tool_service import OfficeToolService
 from backend.office.word import generate_docx
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.context import current_tool_context
 from backend.tools.file_tool import _record_artifact_safely
 
 #: doc_type 参数合法取值（与 models.OfficeDocType 对齐）
@@ -203,6 +208,28 @@ class OfficeCreateTool(BaseTool):
         error = self._check_params(doc_type, output_dir, filename, content)
         if error is not None:
             return error
+
+        # ---- T7.5: binding-aware delegation -----------------------------
+        # When the agent loop is running under a session-workspace binding
+        # (``@workspace foo`` in the chat) we route through
+        # ``OfficeToolService.create`` so the doc is registered in
+        # ``office_documents`` -- otherwise list/read can't see it (the
+        # round-trip bug T7.5 fixes).
+        #
+        # 但当用户明确把 ``output_dir`` 指到 binding 外部时（"写到我桌面"），
+        # 必须走 legacy ``output_dir`` path —— 它会经由 ``_enforce_workspace``
+        # + ApprovalGate 触发"越界写"权限提示，让用户在 workspace 边界外落地
+        # 文件。如果仍 delegation，文件会被静默改写到 managed workspace，
+        # 用户在桌面上看不到，且 doc 也只在 binding 内可见 —— 双重反直觉。
+        delegated = self._try_delegate_to_bound_service(
+            doc_type=doc_type,
+            output_dir=output_dir,
+            filename=filename,
+            content=content,
+        )
+        if delegated is not None:
+            return delegated
+
         doc_type_enum = OfficeDocType(doc_type)
         target_dir = Path(output_dir).expanduser().resolve()
         error = self._check_path(output_dir, filename, doc_type_enum, target_dir)
@@ -212,6 +239,70 @@ class OfficeCreateTool(BaseTool):
         if content is None:
             return ToolResult(success=False, error="content_required")
         return self._generate_document(doc_type_enum, filename, content, target_dir)
+
+    @staticmethod
+    def _try_delegate_to_bound_service(
+        *,
+        doc_type: str,
+        output_dir: Optional[str],
+        filename: str,
+        content: Any,
+    ) -> Optional[ToolResult]:
+        """Route to OfficeToolService.create when an active binding exists
+        AND ``output_dir`` is inside (or equal to) the binding's workspace.
+
+        Returns:
+            * ``None`` when there is no live binding OR when ``output_dir``
+              falls outside the bound workspace (caller falls through to
+              the legacy ``output_dir`` flow, which has its own
+              ``_enforce_workspace`` + ApprovalGate path).
+            * A :class:`ToolResult` carrying the service's ``{document_id,
+              doc_type, filename}`` payload when delegation succeeds.
+            * A failure :class:`ToolResult` if the service returns an
+              error (e.g. stale generation, generation failure).
+        """
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return None
+        try:
+            db = get_database()
+            conn = db.get_connection()
+        except Exception:
+            # No DB configured (e.g. legacy caller) -> fall through to
+            # legacy ``output_dir`` path so plain "create on Desktop"
+            # requests still work.
+            return None
+        binding = get_active_workspace(
+            conn, ctx.session_id, expected_generation=ctx.binding_generation
+        )
+        if binding is None:
+            return None
+
+        # T7.5 越界守卫: 用户显式把 output_dir 指到 binding 之外（如桌面）
+        # → 不 delegation, 让 legacy path 触发"越界写"权限提示并落地到用户
+        # 指定的位置。managed workspace 注册反而会让用户在桌面找不到文件,
+        # 而且 doc 也只在 binding 内 list 可见, 双重反直觉。
+        if output_dir and not _output_dir_inside_workspace(
+            output_dir, binding.workspace_path
+        ):
+            return None
+
+        service = OfficeToolService()
+        result = service.create(
+            conn,
+            ctx.session_id,
+            ctx.binding_generation,
+            doc_type=doc_type,
+            filename=filename,
+            content=content,
+        )
+        if not result.get("success"):
+            err = result.get("error") or {}
+            return ToolResult(
+                success=False,
+                error=str(err.get("code") or "create_failed"),
+            )
+        return ToolResult(success=True, content=result["content"])
 
     @staticmethod
     def _normalize_content(
@@ -328,6 +419,24 @@ class OfficeCreateTool(BaseTool):
                 "bytes": stat.st_size,
             },
         )
+
+
+def _output_dir_inside_workspace(output_dir: str, workspace_path: str) -> bool:
+    """``output_dir`` 是否在 ``workspace_path`` 内（含等于）。
+
+    T7.5 delegation 路由判定: 用户显式指到 binding 外部时不 delegation,
+    留给 legacy path + ApprovalGate 处理。用 ``os.path.realpath`` 解析符号
+    链接并以 ``sep`` 收尾防 ``/foo/bar2`` 误匹配 ``/foo/bar`` —— 与
+    :func:`backend.tools.file_tool._path_within_workspace` 同口径。
+    """
+    try:
+        resolved_target = os.path.realpath(str(Path(output_dir).expanduser()))
+        resolved_root = os.path.realpath(str(Path(workspace_path).expanduser()))
+    except (OSError, ValueError):
+        return False
+    return resolved_target == resolved_root or resolved_target.startswith(
+        resolved_root + os.sep
+    )
 
 
 __all__ = ["OfficeCreateTool"]

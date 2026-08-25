@@ -53,13 +53,19 @@ export interface ResolveOpts {
   existsSyncFn?: (path: string) => boolean;
   /** Backend port — main.ts owns this constant so this module stays framework-free */
   port: number;
+  /** Optional packaged paths used by callers building provenance diagnostics. */
+  appPath?: string;
+  userDataPath?: string;
 }
 
 export type BackendLaunchPlan =
   | {
       kind: 'spawn';
+      command: string;
       cmd: string;
       args: string[];
+      cwd: string;
+      env: Record<string, string>;
       extraEnv: Record<string, string>;
       reason:
         | 'dev-conda'
@@ -113,8 +119,15 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
     if (sagePythonOverride !== undefined) {
       return {
         kind: 'spawn',
+        command: sagePythonOverride,
         cmd: sagePythonOverride,
         args: ['-m', 'backend.main'],
+        cwd: process.cwd(),
+        env: {
+          SAGE_DB_PATH: opts.sageDbPath,
+          SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+          PYTHON_BACKEND_PORT: String(opts.port),
+        },
         extraEnv: {
           SAGE_DB_PATH: opts.sageDbPath,
           SAGE_USER_DATA_DIR: opts.sageUserDataDir,
@@ -125,8 +138,11 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
     }
     return {
       kind: 'spawn',
+      command: 'conda',
       cmd: 'conda',
       args: ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'],
+      cwd: process.cwd(),
+      env: { SAGE_DB_PATH: opts.sageDbPath, SAGE_USER_DATA_DIR: opts.sageUserDataDir },
       extraEnv: { SAGE_DB_PATH: opts.sageDbPath, SAGE_USER_DATA_DIR: opts.sageUserDataDir },
       reason: 'dev-conda',
     };
@@ -151,8 +167,14 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
     if (existsSyncFn(pyExe)) {
       return {
         kind: 'spawn',
+        command: pyExe,
         cmd: pyExe,
         args: ['-m', 'backend.main'],
+        cwd: opts.resourcesPath,
+        env: {
+          ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+          PYTHON_BACKEND_PORT: String(opts.port),
+        },
         extraEnv: {
           ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
           PYTHON_BACKEND_PORT: String(opts.port),
@@ -178,8 +200,14 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
     if (existsSyncFn(pyBin)) {
       return {
         kind: 'spawn',
+        command: pyBin,
         cmd: pyBin,
         args: ['-m', 'backend.main'],
+        cwd: opts.resourcesPath,
+        env: {
+          ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
+          PYTHON_BACKEND_PORT: String(opts.port),
+        },
         extraEnv: {
           ...packagedEnv(opts.resourcesPath, opts.sageDbPath, opts.sageUserDataDir, sep),
           PYTHON_BACKEND_PORT: String(opts.port),

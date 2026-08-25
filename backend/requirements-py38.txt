@@ -72,6 +72,39 @@ lxml==5.4.0
 python-docx==1.1.2
 openpyxl==3.1.5
 
+# --- Task 1 round 1 (2026-08-24): Win7 LTS 平台补包 ---
+# backports.zoneinfo 提供 py3.8 的 IANA timezone 校验 (Python 3.9+ 用内置 zoneinfo);
+# settings_canonicalizer.validate_timezone 通过条件 import 自动选版本.
+backports.zoneinfo>=0.2.1; python_version<"3.9"
+# tzdata 在 Windows 上提供 IANA tz 数据库 (py3.9+ 内置 zoneinfo 也会用);
+# POSIX 上系统自带 /usr/share/zoneinfo, 无需此包, 用 sys_platform gate.
+tzdata>=2024.1; sys_platform=="win32"
+# certifi 是 httpx/requests 默认 CA bundle 源; llm_proxy 必须 verify 证书,
+# 没有 certifi 时 configure_ssl_ca_bundle() 会把 REQUESTS_CA_BUNDLE 指向空,
+# 触发 _is_ca_bundle_available() 报 ca_bundle_unavailable → 502 而非静默关闭 verify.
+certifi>=2024.7.4
+
+# --- Task 1 round 1 (2026-08-24): Win7 LTS 平台补包 ---
+# backports.zoneinfo 提供 py3.8 的 IANA timezone 校验 (Python 3.9+ 用内置 zoneinfo);
+# settings_canonicalizer.validate_timezone 通过条件 import 自动选版本.
+backports.zoneinfo>=0.2.1; python_version<"3.9"
+# tzdata 在 Windows 上提供 IANA tz 数据库 (py3.9+ 内置 zoneinfo 也会用);
+# POSIX 上系统自带 /usr/share/zoneinfo, 无需此包, 用 sys_platform gate.
+tzdata>=2024.1; sys_platform=="win32"
+# certifi 是 httpx/requests 默认 CA bundle 源; llm_proxy 必须 verify 证书,
+# 没有 certifi 时 configure_ssl_ca_bundle() 会把 REQUESTS_CA_BUNDLE 指向空,
+# 触发 _is_ca_bundle_available() 报 ca_bundle_unavailable → 502 而非静默关闭 verify.
+certifi>=2024.7.4
+
+# --- Task 3 step 5+6 (2026-08-24): Office 二进制文件 → Wiki ingest ---
+# python-docx / python-pptx / openpyxl 提供 Office reader,经
+# backend.wiki.extract.extract_text_for_ingest 走 Wiki ingest.
+# 版本与 main 一致,但都验证过 Python 3.8 兼容性
+# (python-pptx 0.7.0+ 弃 3.8; 钉 0.6.23).
+python-pptx==0.6.23   # PPTX read/write, ~5MB wheel; py38 兼容 (0.7.0+ 弃 3.8)
+python-docx==1.1.2    # DOCX read/write, ~2MB wheel; py38 兼容
+openpyxl==3.1.5       # XLSX read/write (low-level), ~1MB wheel; py38 兼容
+
 # Testing
 pytest==7.4.4
 pytest-asyncio==0.23.3

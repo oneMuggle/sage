@@ -10,11 +10,15 @@ FTS5 索引 tokenized_content 而非原始 content，使中文搜索生效。
 from __future__ import annotations
 
 import json
+import logging
+import sqlite3
 import time
 import uuid
 from typing import Any, Dict, List, Optional
 
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
+
+logger = logging.getLogger(__name__)
 
 
 class SemanticMemory:
@@ -50,9 +54,30 @@ class SemanticMemory:
                 content TEXT NOT NULL,
                 summary TEXT,
                 tags TEXT DEFAULT '[]',
+                session_id TEXT,
                 created_at INTEGER NOT NULL
             )
         """)
+        columns = {
+            row["name"]
+            for row in cursor.execute("PRAGMA table_info(memories_semantic)")
+        }
+        if "session_id" not in columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN session_id TEXT"
+            )
+            # 升级前已落库但 session_id 为 NULL 的旧语义记忆,统一回填为 'default'。
+            # 必须仅在列刚被添加时执行,避免覆盖升级后新写入的合法 NULL 边界
+            # (语义层非空约束由 save() 强制,这里只在迁移窗口内兜底)。
+            cursor.execute(
+                "UPDATE memories_semantic SET session_id = 'default' "
+                "WHERE session_id IS NULL"
+            )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_semantic_session_created "
+            "ON memories_semantic(session_id, created_at DESC)"
+        )
+        conn.commit()
 
         # 创建 FTS5 虚拟表（如果不存在）
         cursor.execute("""
@@ -65,7 +90,13 @@ class SemanticMemory:
 
         conn.commit()
 
-    def save(self, content: str, summary: Optional[str] = None, tags: Optional[List[str]] = None) -> str:
+    def save(
+        self,
+        content: str,
+        summary: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+    ) -> str:
         """
         保存语义记忆
 
@@ -73,6 +104,7 @@ class SemanticMemory:
             content: 记忆内容
             summary: 可选的摘要
             tags: 可选的标签列表
+            session_id: 可选的关联会话 ID
 
         Returns:
             生成的记忆 ID
@@ -93,10 +125,11 @@ class SemanticMemory:
         # 插入主表
         cursor.execute(
             """
-            INSERT INTO memories_semantic (id, content, summary, tags, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO memories_semantic
+            (id, content, summary, tags, session_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
         """,
-            (memory_id, content, summary, tags_json, now),
+            (memory_id, content, summary, tags_json, session_id, now),
         )
 
         conn.commit()
@@ -118,12 +151,132 @@ class SemanticMemory:
         return content[:max_length] + "..."
 
     def search(
-        self, query: str, limit: int = 10, tags: Optional[List[str]] = None
+        self,
+        query: str,
+        limit: int = 10,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索语义记忆
 
-        使用 jieba 分词 + LIKE 搜索（FTS5 对中文支持差，改用 LIKE）。
+        优先走 FTS5 全文索引（jieba 分词后 MATCH）；命中为空或 FTS 查询异常时
+        回退 LIKE+jieba 路径（_search_like），保证任何情况下搜索可用。
+        importance/标签过滤、排序（created_at DESC）、limit 语义与原实现一致。
+
+        Args:
+            query: 搜索关键词
+            limit: 返回数量限制
+            tags: 可选，按标签筛选
+
+        Returns:
+            匹配的记忆列表
+        """
+        if not query or query.strip() == "":
+            return self.get_recent(limit, session_id=session_id)
+
+        fts_results = self._search_fts(query, limit, tags, session_id=session_id)
+        if fts_results:
+            return fts_results
+
+        # FTS 无命中（如索引尚未回填）或异常 → 回退 LIKE+jieba
+        return self._search_like(query, limit, tags, session_id=session_id)
+
+    def _rows_to_memories(self, rows: List[Any]) -> List[Dict[str, Any]]:
+        """Convert raw sqlite rows into the public memory dict shape.
+
+        ``tags`` is stored as JSON text in the column; if decoding fails we
+        fall back to an empty list so callers don't crash on corrupt rows
+        (matches the inline behavior in :meth:`_search_like`).
+        """
+        results: List[Dict[str, Any]] = []
+        for row in rows:
+            memory = dict(row)
+            if memory.get("tags"):
+                try:
+                    memory["tags"] = json.loads(memory["tags"])
+                except json.JSONDecodeError:
+                    memory["tags"] = []
+            results.append(memory)
+        return results
+
+    def _search_fts(
+        self,
+        query: str,
+        limit: int = 10,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        走 FTS5 全文索引搜索（jieba 分词 + OR MATCH）。
+
+        查询串由 _prepare_fts_query 生成：每个词双引号包裹（内部引号翻倍转义，
+        防 FTS 语法注入）后 OR 连接。FTS 索引行通过 rowid 与主表对齐。
+
+        Args:
+            query: 原始查询
+            limit: 返回数量限制
+            tags: 可选，按标签筛选（主表 tags JSON 上做 LIKE 过滤，与 LIKE 路径一致）
+
+        Returns:
+            匹配的记忆列表；查询异常或无命中时返回 []，由调用方回退 LIKE 路径
+        """
+        match_expr = self._prepare_fts_query(query)
+        if not match_expr or match_expr == '""':
+            return []
+
+        sql_parts = [
+            "SELECT ms.* FROM memories_semantic ms",
+            "JOIN memories_semantic_fts ON memories_semantic_fts.rowid = ms.rowid",
+            "WHERE memories_semantic_fts MATCH ?",
+        ]
+        params: List[Any] = [match_expr]
+
+        if session_id is not None:
+            sql_parts.append("AND ms.session_id = ?")
+            params.append(session_id)
+
+        # 标签过滤
+        if tags:
+            tag_conditions = []
+            for tag in tags:
+                tag_conditions.append("ms.tags LIKE ?")
+                params.append(f'%"{tag}"%')
+            sql_parts.append(f"AND ({' OR '.join(tag_conditions)})")
+
+        sql_parts.append("ORDER BY ms.created_at DESC LIMIT ?")
+        params.append(limit)
+
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(" ".join(sql_parts), params)
+            return self._rows_to_memories(cursor.fetchall())
+        except sqlite3.DatabaseError as exc:
+            logger.warning("FTS5 搜索失败，回退 LIKE 路径: %s", exc)
+            return []
+
+    def _prepare_fts_query(self, query: str) -> str:
+        """
+        准备 FTS5 查询字符串（使用 jieba 分词）
+
+        Args:
+            query: 原始查询
+
+        Returns:
+            处理后的 FTS5 查询（jieba 分词 + 双引号包裹 + OR 连接）
+        """
+        return tokenize_for_search(query)
+
+    def _search_like(
+        self,
+        query: str,
+        limit: int = 10,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        LIKE + jieba 回退搜索（FTS 索引不可用或无命中时使用）
 
         Args:
             query: 搜索关键词
@@ -142,7 +295,7 @@ class SemanticMemory:
         # jieba 分词，将查询拆分为多个搜索词
         tokens = [t.strip() for t in tokenize(query).split() if t.strip()]
         if not tokens:
-            return self.get_recent(limit)
+            return self.get_recent(limit, session_id=session_id)
 
         # 构建 LIKE OR 条件
         like_conditions = []
@@ -151,7 +304,14 @@ class SemanticMemory:
             like_conditions.append("(content LIKE ? OR summary LIKE ?)")
             params.extend([f"%{token}%", f"%{token}%"])
 
-        sql_parts = ["SELECT * FROM memories_semantic", f"WHERE {' OR '.join(like_conditions)}"]
+        sql_parts = [
+            "SELECT * FROM memories_semantic",
+            f"WHERE ({' OR '.join(like_conditions)})",
+        ]
+
+        if session_id is not None:
+            sql_parts.append("AND session_id = ?")
+            params.append(session_id)
 
         # 标签过滤
         if tags:
@@ -178,67 +338,9 @@ class SemanticMemory:
             results.append(memory)
 
         return results
-
-    def _prepare_fts_query(self, query: str) -> str:
-        """
-        准备 FTS5 查询字符串（使用 jieba 分词）
-        注意：当前 search() 不使用 FTS5，保留此方法供未来升级。
-
-        Args:
-            query: 原始查询
-
-        Returns:
-            处理后的 FTS5 查询（jieba 分词 + OR 连接）
-        """
-        return tokenize_for_search(query)
-
-    def _search_like(
-        self, query: str, limit: int = 10, tags: Optional[List[str]] = None
+    def get_recent(
+        self, limit: int = 20, session_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """
-        使用 LIKE 进行回退搜索
-
-        Args:
-            query: 搜索关键词
-            limit: 返回数量限制
-            tags: 可选，按标签筛选
-
-        Returns:
-            匹配的记忆列表
-        """
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT * FROM memories_semantic
-            WHERE content LIKE ? OR summary LIKE ?
-            ORDER BY created_at DESC
-            LIMIT ?
-        """,
-            (f"%{query}%", f"%{query}%", limit),
-        )
-
-        results = []
-        for row in cursor.fetchall():
-            memory = dict(row)
-            if memory.get("tags"):
-                try:
-                    memory["tags"] = json.loads(memory["tags"])
-                except json.JSONDecodeError:
-                    memory["tags"] = []
-
-            # 标签过滤
-            if tags:
-                memory_tags = set(memory.get("tags", []))
-                if not any(t in memory_tags for t in tags):
-                    continue
-
-            results.append(memory)
-
-        return results
-
-    def get_recent(self, limit: int = 20) -> List[Dict[str, Any]]:
         """
         获取最近的语义记忆
 
@@ -251,14 +353,25 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            """
-            SELECT * FROM memories_semantic
-            ORDER BY created_at DESC
-            LIMIT ?
-        """,
-            (limit,),
-        )
+        if session_id is None:
+            cursor.execute(
+                """
+                SELECT * FROM memories_semantic
+                ORDER BY created_at DESC
+                LIMIT ?
+            """,
+                (limit,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT * FROM memories_semantic
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            """,
+                (session_id, limit),
+            )
 
         results = []
         for row in cursor.fetchall():
@@ -332,9 +445,13 @@ class SemanticMemory:
         conn.commit()
         return cursor.rowcount > 0
 
-    def count(self) -> int:
+    def count(self, session_id: Optional[str] = None) -> int:
         """
-        获取记忆总数
+        获取记忆总数（批次三 step 5：可按 session 过滤）
+
+        Args:
+            session_id: 可选，按会话 ID 严格过滤
+                （spec §4.3 step 5 严禁跨 session 串味）
 
         Returns:
             记忆数量
@@ -342,7 +459,13 @@ class SemanticMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT COUNT(*) FROM memories_semantic")
+        if session_id is None:
+            cursor.execute("SELECT COUNT(*) FROM memories_semantic")
+        else:
+            cursor.execute(
+                "SELECT COUNT(*) FROM memories_semantic WHERE session_id = ?",
+                (session_id,),
+            )
         return cursor.fetchone()[0]
 
     def update_tags(self, memory_id: str, tags: List[str]) -> bool:

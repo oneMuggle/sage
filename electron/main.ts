@@ -44,11 +44,11 @@ logger.info('main: process started', {
 });
 
 import { spawn, ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import http from 'node:http';
 import fetch from 'node-fetch';
-import EventSource from 'eventsource';
-import { invokeBackend } from './invoke';
+
 import { relayChatStream, relayNdjsonToEvent } from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
@@ -57,7 +57,11 @@ import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { resolveBackendLaunchCommand } from './backendLauncher';
+import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
+import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
 import { killOrphanedBackendOnPort } from './orphanBackendKiller';
+import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
+import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
 import { mainWindow, setMainWindow } from './mainWindow';
 
@@ -66,6 +70,44 @@ const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
+const buildManifest = loadBuildManifest(
+  process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
+  // CRITICAL: guard app.getVersion() for vitest environments where the
+  // `electron` module mock (`vi.mock('electron', () => ({ app: { ... } }))`)
+  // does not include `getVersion`. Production Electron always provides it,
+  // but the test_backend_auto_restart.test.ts suite loads main.ts for
+  // module-level side effects (loading buildManifest triggers parseLogPaths,
+  // which spawns fs calls that error out in jsdom), so we cannot mock
+  // `loadBuildManifest` away cleanly. Optional-chaining + a stable fallback
+  // lets tests pass without forking the load path.
+  { version: (typeof app.getVersion === 'function' ? app.getVersion() : 'unknown') },
+);
+
+// A process-wide single-instance lock prevents two Electron supervisors from
+// racing over the same backend port and database.
+//
+// CRITICAL: guard app.requestSingleInstanceLock() for vitest environments
+// where the `electron` module mock in test_backend_auto_restart.test.ts
+// doesn't provide requestSingleInstanceLock. Production Electron always
+// provides it; the vitest mock intentionally exposes only the surface the
+// suite actually exercises. Same rationale as the app.getVersion() guard at
+// line 84 above.
+const gotSingleInstanceLock =
+  typeof app.requestSingleInstanceLock === 'function'
+    ? app.requestSingleInstanceLock()
+    : true;
+if (!gotSingleInstanceLock) {
+  // CRITICAL: short-circuit ALL subsequent initialization, not just app.quit().
+  //
+  // app.quit() schedules an async shutdown (next-tick); without a hard cutover
+  // the rest of this module would still execute on the next tick — building a
+  // second BrowserWindow, registering IPC handlers, spawning a second backend
+  // on the same port, clashing with the running supervisor. process.exit(0)
+  // is the synchronous terminator that prevents the duplicate-state race the
+  // previous "app.quit(); (continue)" pattern caused.
+  app.quit();
+  process.exit(0);
+}
 
 // Window dimensions
 const DEFAULT_WINDOW_WIDTH = 1280;
@@ -109,6 +151,9 @@ app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
 app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}`);
 
 let backendProc: ChildProcess | null = null;
+let backendGeneration = 0;
+let currentBackend: BackendGeneration | null = null;
+let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 
 // PR-B: backend auto-restart state
 //
@@ -123,6 +168,7 @@ let backendProc: ChildProcess | null = null;
 // `appIsQuitting` is set true in `before-quit` so the user-initiated quit
 // path doesn't trigger a fresh restart loop.
 let restartCount = 0;
+let restartTimer: NodeJS.Timeout | null = null;
 let appIsQuitting = false;
 const MAX_RESTART_ATTEMPTS = 3;
 const RESTART_BASE_DELAY_MS = 1000;
@@ -204,6 +250,17 @@ function spawnBackend(): ChildProcess {
   }
 
   // plan.kind === 'spawn' — happy path
+  if (backendProc && backendLifecycle !== 'idle') {
+    return backendProc;
+  }
+  const generation = ++backendGeneration;
+  const ownershipToken = randomUUID();
+  currentBackend = { generation, pid: -1, ownershipToken };
+  backendLifecycle = 'starting';
+  // Task 0 review round 1, finding #6: tell the renderer the new lifecycle
+  // state so BackendStatusBanner can show "starting…" before the first
+  // health probe lands.
+  mainWindow?.webContents.send('backend:starting', { generation });
 
   // ── Orphan cleanup (Windows only) ──────────────────────────────────────
   // A previous Electron main process may have crashed without running
@@ -225,11 +282,31 @@ function spawnBackend(): ChildProcess {
     });
   }
 
-  const proc = spawn(plan.cmd, plan.args, {
-    env: { ...process.env, ...plan.extraEnv },
+  const proc = spawn(plan.command, plan.args, {
+    cwd: plan.cwd,
+    env: {
+      ...process.env,
+      ...plan.env,
+      ...plan.extraEnv,
+      SAGE_BUILD_ID: buildManifest.buildId,
+      SAGE_BUILD_COMMIT: buildManifest.commit,
+      SAGE_BUILD_BRANCH: buildManifest.branch,
+      SAGE_BUILD_VERSION: buildManifest.version,
+      SAGE_ELECTRON_VERSION: buildManifest.electronVersion,
+      SAGE_PYTHON_VERSION: buildManifest.pythonVersion,
+      SAGE_BACKEND_GENERATION: String(generation),
+      SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
+  currentBackend = { generation, pid: proc.pid ?? -1, ownershipToken };
+
+  // One incremental UTF-8 decoder per stream, scoped to this child process so
+  // any incomplete multi-byte sequence that arrived in the final write before
+  // 'exit' is preserved (not silently dropped as U+FFFD).
+  const stdoutDecoder = createIncrementalUtf8Decoder();
+  const stderrDecoder = createIncrementalUtf8Decoder();
 
   logger.info('main: backend spawned', {
     reason: plan.reason,
@@ -237,12 +314,22 @@ function spawnBackend(): ChildProcess {
     args: plan.args,
   });
 
-  proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: b.toString().trim() }));
-  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: b.toString().trim() }));
+  proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }));
+  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: stderrDecoder.push(b).trim() }));
   proc.on('exit', (code) => {
-    logger.info('main: backend exited', { code });
+    if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
+      logger.debug('main: stale backend exit ignored', { generation, pid: proc.pid });
+      return;
+    }
+    logger.info('main: backend exited', { code, generation, pid: proc.pid });
     backendProc = null;
-    // PR-B: 用户主动 quit 时不重试;否则指数退避自动重 spawn
+    currentBackend = null;
+    backendLifecycle = 'idle';
+    // Flush the incremental UTF-8 decoders so any buffered bytes from the
+    // child's final write are surfaced to the log; with stream:true TextDecoder
+    // would otherwise drop them silently.
+    stdoutDecoder.close();
+    stderrDecoder.close();
     if (!appIsQuitting) {
       scheduleBackendRestart();
     }
@@ -252,12 +339,18 @@ function spawnBackend(): ChildProcess {
   // exceptions and crashes the Electron main process — exactly the failure
   // mode PR #130 was meant to fix. PR #130 review flagged this as issue #10.
   proc.on('error', (err) => {
+    if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
+      logger.debug('main: stale backend spawn error ignored', { generation, pid: proc.pid });
+      return;
+    }
     logger.error('main: backend spawn error', {
       reason: plan.reason,
       cmd: plan.cmd,
       err: String(err),
     });
     backendProc = null;
+    currentBackend = null;
+    backendLifecycle = 'idle';
   });
   return proc;
 }
@@ -276,14 +369,25 @@ function spawnStubProcess(reason: string): ChildProcess {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
+  // Use the same incremental UTF-8 decoder as spawnBackend for consistency.
+  const stdoutDecoder = createIncrementalUtf8Decoder();
+  const stderrDecoder = createIncrementalUtf8Decoder();
   stub.stdout?.on('data', (b) =>
-    logger.debug('main: stub proc stdout', { reason, line: b.toString().trim() }),
+    logger.debug('main: stub proc stdout', {
+      reason,
+      line: stdoutDecoder.push(b).trim(),
+    }),
   );
   stub.stderr?.on('data', (b) =>
-    logger.error('main: stub proc stderr', { reason, line: b.toString().trim() }),
+    logger.error('main: stub proc stderr', {
+      reason,
+      line: stderrDecoder.push(b).trim(),
+    }),
   );
   stub.on('exit', (code) => {
     logger.info('main: stub proc exited', { reason, code });
+    stdoutDecoder.close();
+    stderrDecoder.close();
     backendProc = null;
   });
   // Same rationale as spawnBackend's `'error'` handler above — stub may fail
@@ -302,10 +406,16 @@ function spawnStubProcess(reason: string): ChildProcess {
  * 退避序列 1s/2s/4s。第 3 次后永久失败,通过 IPC 通知 renderer 显示
  * 「请重启 Sage」横幅。用户在 app quit 触发的 exit 不重试。
  *
+ * Race-fix (Task 0 review round 1, finding #4): the respawn timer now AWAITS
+ * `shutdownBackend()` (which awaits child exit + port release) before
+ * calling `spawnBackend()`. Without this, the new spawn could race the OS
+ * releasing the listening socket and hit EADDRINUSE → white screen.
+ *
  * Exported so unit tests can drive restart counter + IPC notifications
  * without spawning a real Electron process.
  */
 export function scheduleBackendRestart(): void {
+  if (appIsQuitting || restartTimer) return;
   if (restartCount >= MAX_RESTART_ATTEMPTS) {
     logger.error('main: backend restart exhausted', { attempts: restartCount });
     mainWindow?.webContents.send('backend:disconnected', { attempt: -1 });
@@ -321,41 +431,163 @@ export function scheduleBackendRestart(): void {
     delayMs: delay,
   });
   mainWindow?.webContents.send('backend:disconnected', { attempt: restartCount });
-  setTimeout(() => {
-    backendProc = spawnBackend();
-    waitForBackend().then((ready) => {
-      if (ready) {
-        restartCount = 0;
-        mainWindow?.webContents.send('backend:reconnected', {});
-      }
+  restartTimer = setTimeout(() => {
+    restartTimer = null;
+    if (appIsQuitting || backendProc || currentBackend || backendLifecycle !== 'idle') return;
+    // AWAIT prior shutdown (no-op if backendProc is null) so the new spawn
+    // doesn't collide with a still-releasing listening socket.
+    void shutdownBackend().then(() => {
+      if (appIsQuitting || backendProc || currentBackend || backendLifecycle !== 'idle') return;
+      backendProc = spawnBackend();
+      const expectedBackend = currentBackend;
+      waitForBackend().then((ready) => {
+        if (!isCurrentGeneration(expectedBackend, currentBackend)) return;
+        if (ready) {
+          restartCount = 0;
+          mainWindow?.webContents.send('backend:reconnected', {});
+        }
+      });
     });
-  }, delay).unref();
+  }, delay);
+  restartTimer.unref();
 }
 
 /**
  * Poll /health until backend responds 200, with timeout.
  * Backend startup usually <2s; cap at 30s to surface real failures fast.
+ *
+ * Race-fix (Task 0 review round 1, finding #3): after `ownsBackend` matches
+ * we MUST recheck the live child/generation/PID/token and verify the port is
+ * still bound by the same PID before publishing `ready`. Otherwise, if the
+ * backend we just spawned exits between the health-poll and the lifecycle
+ * transition, we'd hand a stale `ready` flag to the renderer that points at
+ * a dead process.
  */
 async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<boolean> {
+  const expectedBackend = currentBackend;
+  if (!expectedBackend || backendLifecycle !== 'starting') return false;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) return false;
     try {
-      const ok = await new Promise<boolean>((resolve) => {
+      const health = await new Promise<unknown>((resolve) => {
         const req = http.get(BACKEND_HEALTH, (res) => {
-          resolve(res.statusCode === 200);
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk: string) => {
+            body += chunk;
+          });
+          res.on('end', () => {
+            if (res.statusCode !== 200) {
+              resolve(null);
+              return;
+            }
+            try {
+              resolve(JSON.parse(body) as unknown);
+            } catch {
+              resolve(null);
+            }
+          });
           res.resume();
         });
-        req.on('error', () => resolve(false));
+        req.on('error', () => resolve(null));
         req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
-          resolve(false);
+          resolve(null);
         });
       });
-      if (ok) return true;
+      if (ownsBackend(health as Partial<BackendHealthEnvelope>, expectedBackend, buildManifest)) {
+        // ── Race-fix recheck ─────────────────────────────────────────────
+        // 1. Generation/PID/token still match the live supervisor state.
+        // 2. The ChildProcess is still alive and not exited.
+        // 3. The port is still bound by the same PID (a sibling fresh
+        //    backend could have grabbed the port between the HTTP probe
+        //    returning 200 and this recheck; the ownershipToken check above
+        //    rules that out, but we still want a structural assertion that
+        //    the socket we hit belongs to the expected PID).
+        if (!isCurrentGeneration(expectedBackend, currentBackend)) return false;
+        if (!backendProc || backendProc.exitCode !== null || backendProc.signalCode !== null) {
+          return false;
+        }
+        if (!(await isPortStillBoundByPid(BACKEND_PORT, expectedBackend.pid, 200))) {
+          return false;
+        }
+        backendLifecycle = 'ready';
+        // Task 0 review round 1, finding #6: tell the renderer the backend
+        // is ready so BackendStatusBanner can clear the "starting…" state
+        // (or never show it, if the spawn-to-ready window was sub-frame).
+        mainWindow?.webContents.send('backend:ready', { generation: expectedBackend.generation });
+        return true;
+      }
     } catch {
-      /* ignore */
+      /* transient connection or malformed health payload */
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return false;
+}
+
+/**
+ * Verify that `port` on loopback is still bound by `expectedPid` within
+ * `timeoutMs`. Returns true if we can confirm the binding still belongs to
+ * the expected PID, false if the socket is missing, owned by a different PID,
+ * or we couldn't determine within the timeout. Defensive — used by the
+ * race-fix recheck in `waitForBackend` to catch the case where the backend
+ * we just probed has been swapped out under us.
+ *
+ * Linux/macOS: parse `lsof -iTCP:<port> -sTCP:LISTEN -F p`.
+ * Windows: parse `netstat -ano` filtered to LISTENING rows whose local
+ * address ends with `:<port>`.
+ */
+async function isPortStillBoundByPid(
+  port: number,
+  expectedPid: number,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (expectedPid <= 0) return false;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const pids: number[] = [];
+    try {
+      if (process.platform === 'win32') {
+        const { execFileSync } = await import('node:child_process');
+        const out = execFileSync('netstat', ['-ano', '-p', 'TCP'], {
+          encoding: 'utf8',
+          timeout: 500,
+        });
+        const portSuffix = `:${port}`;
+        for (const raw of out.split(/\r?\n/)) {
+          const line = raw.trim();
+          if (!line.startsWith('TCP')) continue;
+          const cols = line.split(/\s+/);
+          if (cols.length < 5) continue;
+          const localAddr = cols[1] ?? '';
+          const state = cols[3] ?? '';
+          const pidStr = cols[4] ?? '';
+          if (state !== 'LISTENING') continue;
+          if (!localAddr.endsWith(portSuffix)) continue;
+          const pid = Number.parseInt(pidStr, 10);
+          if (Number.isFinite(pid) && pid > 0) pids.push(pid);
+        }
+      } else {
+        const { execFileSync } = await import('node:child_process');
+        // `-sTCP:LISTEN` keeps noise low; `-F p` prints machine-parseable PIDs.
+        const out = execFileSync('lsof', ['-iTCP:' + String(port), '-sTCP:LISTEN', '-F', 'p'], {
+          encoding: 'utf8',
+          timeout: 500,
+        });
+        for (const raw of out.split('\n')) {
+          const line = raw.trim();
+          if (!line.startsWith('p')) continue;
+          const pid = Number.parseInt(line.slice(1), 10);
+          if (Number.isFinite(pid) && pid > 0) pids.push(pid);
+        }
+      }
+    } catch {
+      /* tool missing, permission denied, or transient — fall through to retry */
+    }
+    if (pids.length > 0 && pids.includes(expectedPid)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
   return false;
 }
@@ -497,6 +729,23 @@ function registerIpcHandlers(): void {
       // fire-and-forget the relay and return { streamId } immediately so
       // the renderer can subscribe + unlisten via the existing IPC
       // channels without waiting for the backend to complete.
+      // Streaming commands also get the readiness gate — the relay opens
+      // an HTTP fetch to the backend, so it's pointless to start one
+      // before lifecycle === 'ready'.
+      // Task 0 review round 1, finding #6: gate ALL initial invokes on
+      // backend readiness. Without this, the renderer hits ECONNREFUSED
+      // on cold start (backend takes ~2s to come up after Electron whenReady)
+      // and the BackendStatusBanner shows "reconnecting" while the user is
+      // staring at a half-loaded UI. We throw BackendNotReadyError which
+      // desktopInvoke.ts surfaces verbatim; the banner listens to the
+      // 'backend:disconnected' event for the auto-reconnecting banner.
+      if (backendLifecycle !== 'ready') {
+        logger.warn('ipc: invoke blocked — backend not ready', {
+          cmd: payload.cmd,
+          lifecycle: backendLifecycle,
+        });
+        throw new BackendNotReadyError();
+      }
       if (payload.cmd === 'wiki_chat_stream') {
         return startWikiChatStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
       }
@@ -891,16 +1140,119 @@ function startWikiIngestStream(
   return { streamId };
 }
 
-function shutdownBackend(): void {
-  if (backendProc && backendProc.exitCode === null) {
-    logger.info('main: killing backend subprocess');
-    backendProc.kill('SIGTERM');
-    // Give it 3s to exit cleanly, then SIGKILL
+/**
+ * Tear down the current backend subprocess and AWAIT its actual exit plus
+ * release of the listening port before returning.
+ *
+ * Why async (Task 0 review round 1, finding #4):
+ *   The previous sync version only fired SIGTERM and returned immediately.
+ *   The auto-restart path then spawned a new backend 1-4s later, but the old
+ *   child was still tearing down — under load (or on Windows where SIGTERM
+ *   is unreliable) the new process would either fail to bind the port
+ *   (EADDRINUSE → white screen) or get a half-released socket. We now:
+ *     1. Send SIGTERM
+ *     2. Wait up to BACKEND_SHUTDOWN_TIMEOUT_MS for `exit` event
+ *     3. Escalate to SIGKILL if still alive
+ *     4. Wait again briefly for the port to be released
+ *     5. Resolve so the caller can safely respawn
+ *
+ * Safe to call when no backend is running (no-op).
+ */
+async function shutdownBackend(): Promise<void> {
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
+  const proc = backendProc;
+  if (!proc) return;
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    backendProc = null;
+    return;
+  }
+  backendLifecycle = 'stopping';
+  logger.info('main: killing backend subprocess', { pid: proc.pid });
+  const exited = new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    proc.once('exit', finish);
+    // Send SIGTERM; on Win32 this maps to TerminateProcess.
+    try {
+      proc.kill('SIGTERM');
+    } catch {
+      // Already gone — `exit` will fire (or has fired) soon.
+    }
+    // Escalate to SIGKILL after the grace window if the child ignored
+    // SIGTERM (Windows services / conda/python occasionally do).
     setTimeout(() => {
-      if (backendProc && backendProc.exitCode === null) {
-        backendProc.kill('SIGKILL');
+      if (proc.exitCode !== null || proc.signalCode !== null) return;
+      logger.warn('main: backend did not exit on SIGTERM, escalating to SIGKILL', {
+        pid: proc.pid,
+      });
+      try {
+        proc.kill('SIGKILL');
+      } catch {
+        /* process already gone */
       }
-    }, BACKEND_SHUTDOWN_TIMEOUT_MS);
+      // Give SIGKILL a brief window; if it never resolves, finish() is
+      // still safe to call from the caller's timeout below.
+      setTimeout(finish, 500).unref();
+    }, BACKEND_SHUTDOWN_TIMEOUT_MS).unref();
+  });
+  await exited;
+  // Wait briefly for the OS to release the listening port so the next
+  // spawn doesn't hit EADDRINUSE. 500ms is empirical — typical Linux /
+  // Windows TIME_WAIT cleanup is <100ms.
+  if (proc.pid !== undefined && proc.pid > 0) {
+    await isPortReleased(BACKEND_PORT, 500);
+  }
+  backendProc = null;
+}
+
+/**
+ * Poll until `port` on loopback has no LISTENING owner (or timeout).
+ * Used by shutdownBackend to avoid respawning into EADDRINUSE.
+ */
+async function isPortReleased(port: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let occupied = false;
+    try {
+      const { execFileSync } = await import('node:child_process');
+      if (process.platform === 'win32') {
+        const out = execFileSync('netstat', ['-ano', '-p', 'TCP'], {
+          encoding: 'utf8',
+          timeout: 250,
+        });
+        const portSuffix = `:${port}`;
+        for (const raw of out.split(/\r?\n/)) {
+          const line = raw.trim();
+          if (!line.startsWith('TCP')) continue;
+          const cols = line.split(/\s+/);
+          if (cols.length < 5) continue;
+          if ((cols[3] ?? '') !== 'LISTENING') continue;
+          if ((cols[1] ?? '').endsWith(portSuffix)) {
+            occupied = true;
+            break;
+          }
+        }
+      } else {
+        // `-sTCP:LISTEN` keeps noise low.
+        execFileSync('lsof', ['-iTCP:' + String(port), '-sTCP:LISTEN'], {
+          encoding: 'utf8',
+          timeout: 250,
+        });
+        occupied = true;
+      }
+    } catch {
+      // lsof exits 1 when no listeners → treat as released.
+      occupied = false;
+    }
+    if (!occupied) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
 
@@ -913,10 +1265,51 @@ app.whenReady().then(async () => {
   // experiences via Show Logs. Hard 5s timeout is enforced inside runDoctorCheck.
   if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
     try {
-      const doctorSummary = await runDoctorCheck(
-        process.env.SAGE_PYTHON ?? 'python',
-        process.cwd(),
-      );
+      const doctorPlan = resolveBackendLaunchCommand({
+        env: process.env,
+        resourcesPath: process.resourcesPath,
+        platform: process.platform,
+        isPackaged: app.isPackaged,
+        sageDbPath: process.env.SAGE_DB_PATH ?? join(process.cwd(), 'data', 'sage.db'),
+        sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
+        port: BACKEND_PORT,
+      });
+      // Round 2 (fast-follow E): thread the supervisor's launcher context
+      // (command / cwd / env) into the doctor subprocess so the
+      // ``import backend.main`` probe runs under the EXACT env the
+      // backend will see. ``runDoctorCheck`` already merges ``options.env``
+      // into the child env, so these three SAGE_BACKEND_* keys reach
+      // ``backend.cli.doctor.main`` which reads them via the new
+      // ``_resolve_backend_context`` helper.
+      let doctorEnv: NodeJS.ProcessEnv | undefined;
+      if (doctorPlan.kind === 'spawn') {
+        const launcherArgv = [doctorPlan.command, ...(doctorPlan.args ?? [])];
+        // Surface only the env keys the supervisor would actually set on
+        // the backend (plan.env + plan.extraEnv); the host env is already
+        // inherited via ``process.env`` in runDoctorCheck.
+        const supervisorEnv: Record<string, string> = {};
+        for (const [k, v] of Object.entries({
+          ...doctorPlan.env,
+          ...doctorPlan.extraEnv,
+        })) {
+          if (typeof v === 'string') supervisorEnv[k] = v;
+        }
+        doctorEnv = {
+          ...supervisorEnv,
+          SAGE_BACKEND_CMD: JSON.stringify(launcherArgv),
+          SAGE_BACKEND_CWD: doctorPlan.cwd,
+          SAGE_BACKEND_ENV: JSON.stringify(supervisorEnv),
+        };
+      }
+      const doctorSummary =
+        doctorPlan.kind === 'spawn'
+          ? await runDoctorCheck({
+              pythonBin: doctorPlan.command,
+              packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
+              cwd: doctorPlan.cwd,
+              env: doctorEnv,
+            })
+          : await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
       logger.info('main: doctor check complete', doctorSummary);
       if (doctorSummary.status === 'critical') {
         logger.warn('main: doctor reported CRITICAL — user may see degraded experience', {
@@ -933,6 +1326,11 @@ app.whenReady().then(async () => {
   // and exposes window.electronAPI for IPC contract verification).
   if (process.env.SAGE_SKIP_BACKEND === '1') {
     logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
+    // The IPC readiness gate (BackendNotReadyError) is meaningless when the
+    // user (or CI) has explicitly opted out of the backend — without this,
+    // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before
+    // reaching the dispatcher and fails the bridge round-trip assertion.
+    backendLifecycle = 'ready';
     createMainWindow();
     buildApplicationMenu();
     return;
@@ -982,14 +1380,18 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  // On all platforms (incl. macOS), quit when last window closes
-  shutdownBackend();
-  app.quit();
+  // On all platforms (incl. macOS), quit when last window closes.
+  // AWAIT the shutdown so the OS releases the listening port before app.quit
+  // tears down the renderer. Without this, a subsequent launch on the same
+  // machine can hit EADDRINUSE for up to ~3s (TIME_WAIT).
+  void shutdownBackend().finally(() => {
+    app.quit();
+  });
 });
 
 app.on('before-quit', () => {
   appIsQuitting = true;
-  shutdownBackend();
+  void shutdownBackend();
 });
 
 app.on('activate', () => {

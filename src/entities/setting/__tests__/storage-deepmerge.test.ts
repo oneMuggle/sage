@@ -12,6 +12,10 @@ const remoteClean: AppSettings = {
       name: '新端点',
       baseUrl: 'https://example.com/v1',
       apiKey: 'sk-remote',
+      // Task 1 (2026-08-23): protocol / modelId / localModelPath 已纳入 EndpointConfig 必填.
+      protocol: 'openai-compatible',
+      modelId: '',
+      localModelPath: '',
       discoveredModels: [
         {
           id: 'm1',
@@ -57,6 +61,10 @@ describe('deepMerge', () => {
           name: '老端点',
           baseUrl: 'https://old.com',
           apiKey: 'sk-old',
+          // Task 1 (2026-08-23): EndpointConfig 必填三字段.
+          protocol: 'openai-compatible',
+          modelId: '',
+          localModelPath: '',
           discoveredModels: [],
           lastDiscoveredAt: 0,
         },
@@ -76,6 +84,10 @@ describe('deepMerge', () => {
           name: '老端点',
           baseUrl: 'https://old.com',
           apiKey: 'sk-old',
+          // Task 1 (2026-08-23): EndpointConfig 必填三字段.
+          protocol: 'openai-compatible',
+          modelId: '',
+          localModelPath: '',
           discoveredModels: [],
           lastDiscoveredAt: 0,
         },
@@ -120,6 +132,10 @@ describe('deepMerge', () => {
           name: 'n',
           baseUrl: 'u',
           apiKey: 'k',
+          // Task 1 (2026-08-23): EndpointConfig 必填三字段.
+          protocol: 'openai-compatible',
+          modelId: '',
+          localModelPath: '',
           discoveredModels: [],
           lastDiscoveredAt: null,
         },

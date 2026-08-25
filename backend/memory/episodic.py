@@ -125,7 +125,12 @@ class EpisodicMemory:
         return content[:max_length] + "..."
 
     def search(
-        self, query: str, limit: int = 10, min_importance: int = 1, memory_type: Optional[str] = None
+        self,
+        query: str,
+        limit: int = 10,
+        min_importance: int = 1,
+        memory_type: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索情景记忆
@@ -173,6 +178,11 @@ class EpisodicMemory:
         if memory_type:
             where_parts.append("AND memory_type = ?")
             params.append(memory_type)
+
+        # 会话筛选必须在 LIMIT 之前完成，避免其他会话占满候选结果。
+        if session_id is not None:
+            where_parts.append("AND session_id = ?")
+            params.append(session_id)
 
         # 排序 + 限制
         where_parts.append("ORDER BY importance DESC, access_count DESC, created_at DESC LIMIT ?")
@@ -421,9 +431,13 @@ class EpisodicMemory:
         )
         return [self._row_to_dict(row) for row in cursor.fetchall()]
 
-    def count(self) -> int:
+    def count(self, session_id: Optional[str] = None) -> int:
         """
-        获取记忆总数
+        获取记忆总数（批次三 step 5：可按 session 过滤）
+
+        Args:
+            session_id: 可选，按会话 ID 严格过滤
+                （spec §4.3 step 5 严禁跨 session 串味）
 
         Returns:
             有效记忆数量
@@ -431,9 +445,18 @@ class EpisodicMemory:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT COUNT(*) FROM memories_episodic
-            WHERE is_valid = 1
-        """)
+        if session_id is None:
+            cursor.execute("""
+                SELECT COUNT(*) FROM memories_episodic
+                WHERE is_valid = 1
+            """)
+        else:
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM memories_episodic
+                WHERE is_valid = 1 AND session_id = ?
+                """,
+                (session_id,),
+            )
 
         return cursor.fetchone()[0]

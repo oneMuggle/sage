@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.semantic import SemanticMemory
+from backend.memory.summary import SessionSummaryStore
 from backend.memory.working import WorkingMemory
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,13 @@ class MemoryManager:
     4. 记忆重要性评估
     """
 
-    def __init__(self, working: WorkingMemory, episodic: EpisodicMemory, semantic: SemanticMemory):
+    def __init__(
+        self,
+        working: WorkingMemory,
+        episodic: EpisodicMemory,
+        semantic: SemanticMemory,
+        summary_store: Optional[SessionSummaryStore] = None,
+    ):
         """
         初始化记忆管理器
 
@@ -63,10 +70,16 @@ class MemoryManager:
             working: 工作记忆实例
             episodic: 情景记忆实例
             semantic: 语义记忆实例
+            summary_store: 会话摘要 store（批次三 step 5）；可选，向后兼容
+                未注入 store 的旧调用方；没有 store 时 ``get_context`` 不
+                注入 ``【会话摘要】`` 段。
         """
         self.working = working
         self.episodic = episodic
         self.semantic = semantic
+        # 批次三 step 5：会话摘要 store，未注入时为 None — get_context() 会跳过
+        # 【会话摘要】段注入（避免在旧调用方或缺 store 的场景假装有摘要）。
+        self.summary_store = summary_store
         # Lazily-created ConsolidationPipeline (F2) — built on first use so
         # the constructor stays lightweight and test-friendly.
         self._consolidation_pipeline = None
@@ -247,7 +260,15 @@ class MemoryManager:
             )
 
         elif memory_type == "semantic":
-            return self.semantic.save(content=content, summary=None, tags=tags)
+            meta = metadata or {}
+            if tags:
+                meta["tags"] = tags
+            return self.semantic.save(
+                content=content,
+                summary=None,
+                tags=meta.get("tags") if meta.get("tags") is not None else tags,
+                session_id=meta.get("session_id"),
+            )
 
         else:
             logger.warning(f"未知的记忆类型: {memory_type}")
@@ -276,7 +297,11 @@ class MemoryManager:
         return "episodic"
 
     def recall(
-        self, query: str, limit: int = 5, memory_types: Optional[List[str]] = None
+        self,
+        query: str,
+        limit: int = 5,
+        memory_types: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         检索记忆
@@ -310,15 +335,27 @@ class MemoryManager:
 
         # 情景记忆 - SQLite LIKE 搜索
         if "episodic" in memory_types:
-            results["episodic"] = self.episodic.search(query=query, limit=limit)
+            results["episodic"] = self.episodic.search(
+                query=query,
+                limit=limit,
+                session_id=session_id,
+            )
 
         # 语义记忆 - FTS5 全文搜索
         if "semantic" in memory_types:
-            results["semantic"] = self.semantic.search(query=query, limit=limit)
+            results["semantic"] = self.semantic.search(
+                query=query,
+                limit=limit,
+                session_id=session_id,
+            )
 
         return results
 
-    def get_context(self, limit: int = 10) -> str:
+    def get_context(
+        self,
+        limit: int = 10,
+        session_id: Optional[str] = None,
+    ) -> str:
         """
         获取上下文用于 Agent
 
@@ -343,8 +380,12 @@ class MemoryManager:
         except Exception as exc:
             logger.debug(f"用户画像快照注入失败: {exc}")
 
-        # 获取工作记忆上下文（按 session 隔离; win7 working.py 当前仅支持单会话, 传 limit）
-        working_context = self.working.get_context(limit=limit)
+        # 获取工作记忆上下文（按 session 隔离 — 批次三 step 6：win7 working.py
+        # 升级后 ``get_context`` 支持 ``session_id`` 过滤，未指定时仍返回全部，
+        # 保留对旧调用方的向后兼容）
+        working_context = self.working.get_context(
+            session_id=session_id, limit=limit
+        )
         if working_context:
             parts.append("【当前对话】")
             for msg in working_context:
@@ -352,9 +393,27 @@ class MemoryManager:
                 content = msg.get("content", "")
                 parts.append(f"- [{role}]: {content[:100]}...")
 
+        # 批次三 step 5：会话摘要，介于 working 与 episodic/semantic 之间。
+        # 只注入当前 session 的 READY 摘要，FAILED / PENDING 不注入
+        # （失败摘要只用于诊断，不假装为普通事实）。
+        # 未注入 summary_store 或 session_id 为空时整段跳过 ——
+        # 永不注入"全部 session 的最新摘要"以避免跨 session 串味。
+        if self.summary_store is not None and session_id:
+            try:
+                latest_ready = self.summary_store.get_latest_ready(session_id)
+            except Exception as exc:
+                logger.warning(f"读取会话摘要失败: {exc}")
+                latest_ready = None
+            if latest_ready is not None and latest_ready.content:
+                parts.append("\n【会话摘要】")
+                parts.append(f"- {latest_ready.content}")
+
         # 获取最近的 episodic 记忆
         try:
-            recent_episodic = self.episodic.get_recent(limit=3)
+            recent_episodic = self.episodic.get_recent(
+                limit=3,
+                session_id=session_id,
+            )
             if recent_episodic:
                 parts.append("\n【相关经历】")
                 for mem in recent_episodic:
@@ -365,7 +424,7 @@ class MemoryManager:
 
         # 获取最近的 semantic 记忆
         try:
-            recent_semantic = self.semantic.get_recent(limit=3)
+            recent_semantic = self.semantic.get_recent(limit=3, session_id=session_id)
             if recent_semantic:
                 parts.append("\n【相关知识】")
                 for mem in recent_semantic:
@@ -404,18 +463,28 @@ class MemoryManager:
         except Exception as e:
             logger.error(f"压缩工作记忆失败: {e}")
 
-    def add_to_working(self, role: str, content: str) -> None:
+    def add_to_working(
+        self, role: str, content: str, session_id: Optional[str] = None
+    ) -> None:
         """
         添加消息到工作记忆
 
         Args:
             role: 角色 (user/assistant/system)
             content: 消息内容
+            session_id: 可选会话 ID（批次三 step 6 — 透传到 ``WorkingMemory.add`` 的
+                ``session_id`` tag，供 ``get_context(session_id=...)`` 隔离读取）
         """
-        self.working.add({"role": role, "content": content})
+        self.working.add(
+            {"role": role, "content": content}, session_id=session_id
+        )
 
     def search_memories(
-        self, query: str, memory_type: Optional[str] = None, limit: int = 10
+        self,
+        query: str,
+        memory_type: Optional[str] = None,
+        limit: int = 10,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索记忆的统一接口
@@ -429,23 +498,38 @@ class MemoryManager:
             记忆列表
         """
         if memory_type == "episodic":
-            return self.episodic.search(query, limit=limit)
+            return self.episodic.search(query, limit=limit, session_id=session_id)
         elif memory_type == "semantic":
-            return self.semantic.search(query, limit=limit)
-        elif memory_type == "working":
-            # 工作记忆搜索
-            context = self.working.get_context()
-            results = []
-            for msg in context:
-                if query.lower() in msg.get("content", "").lower():
-                    results.append(msg)
+            return self.semantic.search(
+                query,
+                limit=limit,
+                session_id=session_id,
+            )
+
+        results: List[Dict[str, Any]] = []
+
+        # 工作记忆（memory_type 为 None 或 'working'），按 session 隔离
+        # WorkingMemory.get_context 不接受 session_id — win7 working.py 当前仅支持
+        # 单会话, 直接调用即可. 用 entry id 加 prefix 避免与持久层 id 冲突.
+        if memory_type in (None, "working"):
+            for msg in self.working.get_context():
+                if query and query.lower() not in msg.get("content", "").lower():
+                    continue
+                entry = dict(msg)
+                entry.setdefault("id", f"wm:{entry.get('seq', 0)}")
+                entry["memory_type"] = "working"
+                entry["source"] = "working_memory"
+                results.append(entry)
+
+        if memory_type == "working":
             return results[:limit]
-        else:
-            # 搜索所有类型
-            results = []
-            results.extend(self.episodic.search(query, limit=limit))
-            results.extend(self.semantic.search(query, limit=limit))
-            return results[:limit]
+
+        # memory_type 为 None：搜索所有持久层并与工作记忆合并
+        results.extend(self.episodic.search(query, limit=limit, session_id=session_id))
+        results.extend(
+            self.semantic.search(query, limit=limit, session_id=session_id)
+        )
+        return results[:limit]
 
     def delete_memory(self, memory_id: str, memory_type: str) -> bool:
         """

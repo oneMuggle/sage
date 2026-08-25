@@ -19,6 +19,7 @@ from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Tuple
 
 from . import frontmatter, llm_prompts
 from .embeddings import EmbeddingConfig, build_embed_request, chunk_markdown, parse_embed_response
+from .extract import extract_text_for_ingest
 from .llm_context import LLMContext
 from .models import Analysis, AnalysisConcept, AnalysisEntity, IngestProgress, IngestResult
 from .vectorstore import VectorStore
@@ -139,6 +140,22 @@ async def copy_to_raw(project_root: Path, source_file: Path) -> Path:
     return dest_path
 
 
+def _read_source_content(target: Path) -> str:
+    """Read the source content as plain text — dispatches on suffix.
+
+    Office binaries (DOCX/PPTX/XLSX) flow through
+    :func:`backend.wiki.extract.extract_text_for_ingest` so they hit
+    the Wiki ingest path without crashing on ``UnicodeDecodeError``.
+    Plain-text files use the same code path with no overhead.
+
+    Raises:
+        FileTooLargeError / ParseTimeoutError / ValueError from the
+        adapter; ``ingest_source`` surfaces these as structured ingest
+        failures (see plan §1.5 error envelope).
+    """
+    return extract_text_for_ingest(target)
+
+
 def cache_get(project_root: Path, target: Path) -> Optional[IngestResult]:
     """SHA256 缓存命中检查。
 
@@ -146,7 +163,7 @@ def cache_get(project_root: Path, target: Path) -> Optional[IngestResult]:
     miss 返回 ``None``。
     """
     source_path = f"raw/sources/{target.name}"
-    content = target.read_text(encoding="utf-8", errors="ignore")[:MAX_CONTENT_CHARS]
+    content = _read_source_content(target)[:MAX_CONTENT_CHARS]
     sha256 = _compute_sha256(content)
 
     cache = _load_cache(project_root)
@@ -169,7 +186,7 @@ async def analyze_source(
     读取源内容、构造 Step1 prompt、调用 LLM、解析 JSON;
     解析失败时退化为空 ``Analysis``(与原 ``_parse_analysis_json`` 行为一致)。
     """
-    content = target.read_text(encoding="utf-8", errors="ignore")[:MAX_CONTENT_CHARS]
+    content = _read_source_content(target)[:MAX_CONTENT_CHARS]
     step1_prompt = llm_prompts.format_step1_prompt(content)
     messages = [
         {"role": "system", "content": "You are a JSON-only assistant. Output strict JSON."},
@@ -190,7 +207,7 @@ async def generate_pages(
     Returns:
         (wiki_file_path, page_type, wiki_content) — ``wiki_content`` 供 embed 阶段复用。
     """
-    content = target.read_text(encoding="utf-8", errors="ignore")[:MAX_CONTENT_CHARS]
+    content = _read_source_content(target)[:MAX_CONTENT_CHARS]
     filename = target.name
     slug = _slugify(filename)
     today = datetime.now(tz=timezone.utc).date().isoformat()  # noqa: DTZ011, UP017
@@ -284,7 +301,7 @@ def cache_put(
     同一 source_path 的旧条目会被覆盖(支持重新 ingest)。
     """
     source_path = f"raw/sources/{target.name}"
-    content = target.read_text(encoding="utf-8", errors="ignore")[:MAX_CONTENT_CHARS]
+    content = _read_source_content(target)[:MAX_CONTENT_CHARS]
     sha256 = _compute_sha256(content)
 
     cache = _load_cache(project_root)

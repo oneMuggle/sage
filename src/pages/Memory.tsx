@@ -10,11 +10,14 @@
  *
  * 渲染层复用 MemoryCard（含点击跳回产生该记忆的会话/轮次）。
  */
-import { Search } from 'lucide-react';
+import { Download, Search } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { memoryApi } from '../shared/api';
+import type { Memory } from '../shared/api/types';
 import { useStore } from '../shared/lib/store';
+import { ErrorState } from '../shared/ui/ErrorState';
 import { MemoryCard, type MemoryItem } from '../widgets/memory/MemoryCard';
 import { MemoryTabs, type MemoryTab } from '../widgets/memory/MemoryTabs';
 
@@ -22,6 +25,11 @@ interface SessionInfo {
   id: string;
   title: string;
 }
+
+// 导出分页：每页 100 条（与 main 分支 Memory export 行为对齐）
+// 上限 1000 条避免把整个记忆库一次性 dump 到客户端。
+const MEMORY_EXPORT_PAGE_SIZE = 100;
+const MEMORY_EXPORT_MAX_ITEMS = 1000;
 
 /** 归一化后端响应（数组 / { items } / { memories } / { summaries }）。 */
 function toItems(data: unknown): MemoryItem[] {
@@ -52,7 +60,66 @@ export function Memory() {
   const [selectedSession, setSelectedSession] = useState('');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const currentSessionId = useStore((s) => s.currentSessionId);
+
+  /**
+   * 导出全部记忆为 JSON 文件（PR #368 cherry-pick）：
+   * - 翻页拉取所有记忆，每页 100 条，最多 1000 条
+   * - 后端声明 total 超过上限时立即失败（避免打 10 轮 doomed round-trips）
+   * - 构建 Blob → URL.createObjectURL → 触发 anchor click → revoke URL
+   * - 错误经 ErrorState 重试（沿用 main 分支的导出 UI 形态）
+   */
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const exportedItems: Memory[] = [];
+      let page = 1;
+      let total = 0;
+      do {
+        const response = await memoryApi.getMemories(
+          undefined,
+          page,
+          MEMORY_EXPORT_PAGE_SIZE,
+        );
+        // 后端会 clamp page>10 → 10 — 提前 bail out 比循环 10 次更友好。
+        if (response.total > MEMORY_EXPORT_MAX_ITEMS) {
+          throw new Error('记忆数量超过当前导出上限，请缩小范围后重试');
+        }
+        if (response.page !== page) {
+          throw new Error('记忆数量超过当前导出上限，请缩小范围后重试');
+        }
+        exportedItems.push(...response.items);
+        if (
+          response.items.length > MEMORY_EXPORT_PAGE_SIZE ||
+          exportedItems.length > MEMORY_EXPORT_MAX_ITEMS
+        ) {
+          throw new Error('记忆数量超过当前导出上限，请缩小范围后重试');
+        }
+        total = response.total;
+        page += 1;
+        if (response.items.length === 0 && exportedItems.length < total) {
+          throw new Error('记忆列表分页不完整，请重试');
+        }
+      } while (exportedItems.length < total);
+
+      const blob = new Blob([JSON.stringify(exportedItems, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sage-memories-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(`导出失败: ${err instanceof Error ? err.message : '未知错误'}`);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
 
   // 卸载守卫：异步响应回来时组件已卸载则跳过 setState。
   const mountedRef = useRef(true);
@@ -267,7 +334,33 @@ export function Memory() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
-      <h1 className="text-2xl font-bold mb-4">🧠 记忆管理</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">🧠 记忆管理</h1>
+        <button
+          onClick={() => {
+            void handleExport();
+          }}
+          disabled={exporting}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-xs rounded-radius-sm bg-surface text-text-secondary hover:text-text transition-colors disabled:opacity-50"
+        >
+          <Download className="w-3.5 h-3.5" />
+          {exporting ? '导出中...' : '导出'}
+        </button>
+      </div>
+
+      {exportError && (
+        <div className="mb-4">
+          <ErrorState
+            title="导出失败"
+            message={exportError}
+            onRetry={() => {
+              setExportError(null);
+              void handleExport();
+            }}
+            retryLabel="重新导出"
+          />
+        </div>
+      )}
 
       <MemoryTabs active={tab} onChange={setTab} />
 

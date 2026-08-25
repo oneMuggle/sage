@@ -136,6 +136,80 @@ def test_list_dir_schema():
     assert schema.parameters["required"] == ["path"]
 
 
+def test_list_dir_canonical_name_across_registries():
+    """``list_dir`` (underscore) is the single canonical name. Any drift to
+    ``list-dir`` (hyphen) or ``list_directory`` in the LLM-facing registries
+    silently breaks prompts that the model has memorized — T7.5 ships this
+    regression guard so the next refactor can't rename by accident.
+
+    Scope:
+      * Tool class schema name.
+      * Backend ``register_all_tools`` registry.
+      * Frontend ``humanize.ts`` lookup key (already underscore).
+    """
+    # 1. Tool class schema name.
+    assert ListDirTool().schema.name == "list_dir"
+
+    # 2. Backend registry exposes the canonical name (and only it).
+    from backend.tools import register_all_tools
+    from backend.tools.registry import ToolRegistry
+
+    registry = ToolRegistry()
+    register_all_tools(registry)
+    names = set(registry.list_names())
+    assert "list_dir" in names
+    assert "list-dir" not in names  # never hyphenated.
+    # ``list_directory`` is a separate API endpoint in backend/api/wiki_routes.py
+    # (wiki tree browser) — not an LLM tool — so it must NOT appear here.
+    assert "list_directory" not in names
+
+
+def test_no_list_dir_hyphen_anywhere_in_source():
+    """Repo-wide guard against the hyphenated form ``list-dir``.
+
+    Confirms zero matches across production source (tests/ excluded — the
+    regression guard itself mentions the bad form to assert against it).
+    Anything > 0 means a refactor slipped the wrong form back in.
+    """
+    import subprocess
+
+    # 用 git 仓库根（任何 worktree 都行）, 不要写死特定 worktree 路径
+    # —— 之前 hardcode ``worktree-task3-workspace-office-wiki`` 导致在
+    # 其他 worktree / CI runner 上 FileNotFoundError 跑不起来。
+    repo_root = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    result = subprocess.run(
+        [
+            "grep",
+            "-rln",
+            "--include=*.py",
+            "--include=*.ts",
+            "--include=*.tsx",
+            "--exclude-dir=tests",
+            "--exclude-dir=__pycache__",
+            "--exclude-dir=node_modules",
+            "--exclude-dir=.git",
+            "--exclude-dir=worktrees",
+            "list-dir",
+            "backend",
+            "src",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+        check=False,
+    )
+    assert result.returncode != 0 or result.stdout == "", (
+        f"Found hyphenated 'list-dir' references in production source: "
+        f"{result.stdout}"
+    )
+
+
 def test_list_dir_sorts_dirs_first(tmp_path):
     """子目录排在文件之前，且按名称排序"""
     (tmp_path / "z_file.txt").write_text("a")

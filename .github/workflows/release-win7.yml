@@ -73,6 +73,16 @@ jobs:
         shell: pwsh
         run: pwsh scripts/bundle-python.ps1
 
+      - name: Verify build manifest
+        shell: pwsh
+        run: |
+          $manifest = Get-Content resources/build-manifest.json | ConvertFrom-Json
+          if ($manifest.manifestVersion -ne 1) { throw "Unsupported manifest version" }
+          foreach ($field in @('buildId','commit','branch','version','electronVersion','pythonVersion')) {
+            if ([string]::IsNullOrWhiteSpace($manifest.$field)) { throw "Missing manifest field: $field" }
+          }
+          Write-Host ($manifest | ConvertTo-Json -Compress)
+
       - name: Build frontend + Electron
         run: npm run electron:build
 

@@ -13,6 +13,7 @@ from backend.data.database import get_database
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.manager import MemoryManager
 from backend.memory.semantic import SemanticMemory
+from backend.memory.summary import SessionSummaryStore
 from backend.memory.working import WorkingMemory
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ def get_memory_manager() -> MemoryManager:
             working=WorkingMemory(max_size=20, max_tokens=4000, db=db),
             episodic=EpisodicMemory(db),
             semantic=SemanticMemory(db),
+            summary_store=SessionSummaryStore(db),
         )
         logger.info("全局 MemoryManager 单例已创建（WorkingMemory 持久化已启用）")
     return _memory_manager
