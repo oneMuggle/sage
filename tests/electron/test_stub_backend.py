@@ -672,3 +672,83 @@ def test_orchestration_events_sse_stream():
             assert event["run_id"] == rid
     finally:
         server.stop()
+
+
+# ---- Task 4: wiki endpoint tests ----
+#
+# Note: the Task 4 brief wrote these against the ``requests`` library, but the
+# sage-backend env intentionally has no ``requests`` installed (this file's
+# _HTTPHelper exists precisely for "stdlib only, no requests dependency"), so
+# they are transcribed with identical names/assertions on top of _HTTPHelper
+# (same adaptation as the Task 3 orchestration tests above).
+
+
+def test_wiki_ingest_then_search_returns_ranked_results():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        r1 = http.post(
+            "/api/v1/wiki/ingest",
+            {"title": "Sage Memory", "content": "Sage has 3-tier memory"},
+        )
+        doc_id = r1["doc_id"]
+        assert r1["chunks"] >= 1
+
+        r2 = http.post(
+            "/api/v1/wiki/search",
+            {"query": "memory", "limit": 5},
+        )
+        assert r2["total"] >= 1
+        assert r2["items"][0]["doc_id"] == doc_id
+        assert 0.0 <= r2["items"][0]["score"] <= 1.0
+    finally:
+        server.stop()
+
+
+def test_wiki_extract_returns_title_and_body():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        data = http.post(
+            "/api/v1/wiki/extract",
+            {"content": "Sage is great. It supports E2E."},
+        )
+        assert "title" in data
+        assert "body" in data
+        assert isinstance(data.get("links", []), list)
+    finally:
+        server.stop()
+
+
+def test_wiki_insights_returns_summary_and_tags():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        r1 = http.post(
+            "/api/v1/wiki/ingest",
+            {"title": "Foo", "content": "Sage memory works."},
+        )
+        doc_id = r1["doc_id"]
+        r2 = http.get("/api/v1/wiki/insights/{}".format(doc_id))
+        assert "summary" in r2
+        assert isinstance(r2.get("tags", []), list)
+    finally:
+        server.stop()
+
+
+def test_wiki_deep_research_returns_plan():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        data = http.post(
+            "/api/v1/wiki/deep-research",
+            {"topic": "Sage memory tiers"},
+        )
+        assert "steps" in data
+        assert data["status"] in ("pending", "running", "done")
+    finally:
+        server.stop()
