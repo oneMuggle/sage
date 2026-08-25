@@ -125,7 +125,10 @@ describe('resolveBackendLaunchCommand', () => {
           // test env has no SAGE_LOG_LEVEL set → `?? 'info'` fallback applies
           SAGE_LOG_LEVEL: 'info',
           // Win uses ';' as PYTHONPATH separator
-          PYTHONPATH: [join('/mock', 'resources', 'backend'), join('/mock', 'resources', 'sage-core')].join(';'),
+          PYTHONPATH: [
+            join('/mock', 'resources', 'backend'),
+            join('/mock', 'resources', 'sage-core'),
+          ].join(';'),
           PYTHON_BACKEND_PORT: '8765',
         });
       }
@@ -194,7 +197,11 @@ describe('resolveBackendLaunchCommand', () => {
       });
       if (plan.kind === 'spawn') {
         // Linux uses ':' as PYTHONPATH separator (not ';')
-        expect(plan.extraEnv.PYTHONPATH).toBe([join('/mock', 'resources', 'backend'), join('/mock', 'resources', 'sage-core')].join(':'));
+        expect(plan.extraEnv.PYTHONPATH).toBe(
+          [join('/mock', 'resources', 'backend'), join('/mock', 'resources', 'sage-core')].join(
+            ':',
+          ),
+        );
         // Port travels via PYTHON_BACKEND_PORT env on packaged linux too
         expect(plan.extraEnv.PYTHON_BACKEND_PORT).toBe('8765');
         expect(plan.args).toEqual(['-m', 'backend.main']);
