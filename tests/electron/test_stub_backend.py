@@ -574,3 +574,101 @@ class TestPermissionGate:
         assert "跳过" in done_evt["content"]
         observing = events_box["events"][2]
         assert "权限拒绝" in observing["tool_result"]["content"]
+
+
+# ---- Task 3: orchestration endpoint tests ----
+#
+# Note: the Task 3 brief wrote these against the ``requests`` library, but the
+# sage-backend env intentionally has no ``requests`` installed (this file's
+# _HTTPHelper exists precisely for "stdlib only, no requests dependency"), so
+# they are transcribed with identical names/assertions on top of _HTTPHelper
+# (and raw urllib for the NDJSON header check).
+
+
+def test_orchestration_create_run_returns_3_lanes():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        data = http.post(
+            "/api/v1/orchestration/runs",
+            {"session_id": "sess1", "plan": "test plan"},
+        )
+        assert data["run_id"].startswith("run_")
+        assert data["status"] == "running"
+        assert len(data["lanes"]) == 3
+        assert {lane["name"] for lane in data["lanes"]} == {"planner", "executor", "reviewer"}
+    finally:
+        server.stop()
+
+
+def test_orchestration_get_run_after_create():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        created = http.post(
+            "/api/v1/orchestration/runs", {"session_id": "s1", "plan": "p"}
+        )
+        rid = created["run_id"]
+        fetched = http.get("/api/v1/orchestration/runs/{}".format(rid))
+        assert fetched["run_id"] == rid
+    finally:
+        server.stop()
+
+
+def test_orchestration_cancel_sets_flag():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        created = http.post(
+            "/api/v1/orchestration/runs", {"session_id": "s1", "plan": "p"}
+        )
+        rid = created["run_id"]
+        http.post("/api/v1/orchestration/runs/{}/cancel".format(rid))
+        fetched = http.get("/api/v1/orchestration/runs/{}".format(rid))
+        assert fetched["cancelled"] is True
+    finally:
+        server.stop()
+
+
+def test_orchestration_approve_records_token():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        created = http.post(
+            "/api/v1/orchestration/runs", {"session_id": "s1", "plan": "p"}
+        )
+        rid = created["run_id"]
+        resp = http.post(
+            "/api/v1/orchestration/runs/{}/approve".format(rid),
+            {"token": "user_token_1"},
+        )
+        assert resp["approval_token"] == "user_token_1"
+    finally:
+        server.stop()
+
+
+def test_orchestration_events_sse_stream():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        created = http.post(
+            "/api/v1/orchestration/runs", {"session_id": "s1", "plan": "p"}
+        )
+        rid = created["run_id"]
+        req = urllib.request.Request(
+            server.url + "/api/v1/orchestration/runs/{}/events".format(rid),
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            assert resp.status == 200
+            assert "application/x-ndjson" in resp.headers["Content-Type"]
+            first_line = resp.readline().decode("utf-8")
+            event = json.loads(first_line)
+            assert event["run_id"] == rid
+    finally:
+        server.stop()
