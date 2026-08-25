@@ -18,6 +18,13 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.7-win7] - 2026-08-25
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 rightpanel 面板 × 关闭按钮 UI 改进:cherry-pick main 的 `5e43f8e6 feat(rightpanel): 面板内添加 × 关闭按钮 (closes #298)`。本批扫描 10 个 main 候选,核对发现仅 rightpanel × 按钮还未在 win7 适配 (其余 #345 / #350 / #363 / #339 / #349 / #310 / #352 / 331bd737 PR-B 等 9 个均已通过 #346 / #351 / #364 / #341 / #348 / #311 / alpha.5 / 756e165a 等 win7 适配版提前到位)。
+
+### Added
+- **fix(win7-rightpanel): cherry-pick main rightpanel × 关闭按钮 (#374)** — main `5e43f8e6` 5 文件 / +714/-18:`PanelHeader` 新组件封装 × 关闭按钮 + tab 切换两态,`RightPanel` 用 `PanelHeader` 替换原 inline tab/关闭 UI,新增 `PanelHeader.test.tsx` 7 用例覆盖 × 按钮调用。冲突解析:`RightPanel.tsx` 解构区 cherry-pick 含 `taskBoard?: TaskBoard | null` 字段,win7 未移植 main #318 编排计划卡前端接线,`RightPanelProps` 接口无该字段 → **直接移除 `taskBoard` 解构**,与 win7 当前接口对齐,避免 TS 报错 + 不引入 orchestrator 依赖。Plan / spec 文档一并 cherry-pick,便于未来 cherry-pick #318 时无缝衔接。
+
 ## [v0.4.9-alpha.6-win7] - 2026-08-25
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 平台一致性 + Chat UI 补全回归测试落地:cherry-pick main 的 PR #305 (Chat 顶部 "+ 新对话" / Sidebar 跳转 / InputCard autosize 三处 UI 缺陷修复)。本批原本挑选了 4 个低风险 PR (#286 / #298 / #305 / #308),核对发现仅 #305 还有未 cherry-pick 内容(R1 autosize 回归测试),其余三个已被 PR #287 / #312+#313 / #324 等前置到位。
