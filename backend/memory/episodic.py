@@ -431,7 +431,7 @@ class EpisodicMemory:
         )
         return [self._row_to_dict(row) for row in cursor.fetchall()]
 
-    def count(self) -> int:
+    def count(self, session_id: Optional[str] = None) -> int:
         """
         获取记忆总数（批次三 step 5：可按 session 过滤）
 

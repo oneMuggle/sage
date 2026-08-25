@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { HashRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
@@ -18,10 +18,6 @@ import { Layout } from './widgets/layout';
 import { ApprovalDialog } from './widgets/permission';
 import { QuestionDialog } from './widgets/question';
 import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
-
-// ChatRoute 内直接调用 hook 形式的 useStore setter 会引入条件调用问题,
-// 用 getState() 命令式写入更直白(与 App useEffect 里的用法一致)。
-const setCurrentSessionIdFromStore = (id: string) => useStore.getState().setCurrentSessionId(id);
 
 // 批次三 step 6 (spec §4.3 line 150):
 // Memory 页"按会话查看摘要"或"来源会话跳转"以 /chat?session=<id> 深链形式进入。

@@ -49,7 +49,7 @@ pytestmark = pytest.mark.unit
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest.fixture()
 def docx_path(tmp_path: Path) -> Path:
     """Generate a real DOCX with paragraphs + a small table."""
     req = OfficeWordGenerateRequest(
@@ -70,7 +70,7 @@ def docx_path(tmp_path: Path) -> Path:
     return generate_docx(req, output_dir=str(tmp_path))
 
 
-@pytest.fixture
+@pytest.fixture()
 def pptx_path(tmp_path: Path) -> Path:
     req = OfficePptGenerateRequest(
         slides=[
@@ -91,7 +91,7 @@ def pptx_path(tmp_path: Path) -> Path:
     return generate_ppt(req, output_dir=str(tmp_path))
 
 
-@pytest.fixture
+@pytest.fixture()
 def xlsx_path(tmp_path: Path) -> Path:
     req = OfficeExcelGenerateRequest(
         sheets=[
@@ -194,7 +194,7 @@ def test_oversized_file_rejected_before_open(tmp_path: Path):
 
     # 1KB file < 1MB cap → succeeds (no real DOCX; parser raises its own
     # error, which is fine — this test focuses on the size gate).
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017, PT011 — parser-agnostic, only checks size gate passes
         # We don't care WHICH exception the parser raises here; we only
         # care that the size gate is not the cause.
         extract_text_for_ingest(big, max_file_bytes=512)
@@ -265,7 +265,7 @@ def test_unsupported_suffix_raises_value_error(tmp_path: Path):
     weird = tmp_path / "thing.exe"
     weird.write_bytes(b"MZ\x00\x00")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"unsupported_suffix.*\.exe"):
         extract_text_for_ingest(weird)
 
 

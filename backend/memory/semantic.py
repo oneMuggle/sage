@@ -10,11 +10,15 @@ FTS5 索引 tokenized_content 而非原始 content，使中文搜索生效。
 from __future__ import annotations
 
 import json
+import logging
+import sqlite3
 import time
 import uuid
 from typing import Any, Dict, List, Optional
 
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
+
+logger = logging.getLogger(__name__)
 
 
 class SemanticMemory:
@@ -178,6 +182,24 @@ class SemanticMemory:
         # FTS 无命中（如索引尚未回填）或异常 → 回退 LIKE+jieba
         return self._search_like(query, limit, tags, session_id=session_id)
 
+    def _rows_to_memories(self, rows: List[Any]) -> List[Dict[str, Any]]:
+        """Convert raw sqlite rows into the public memory dict shape.
+
+        ``tags`` is stored as JSON text in the column; if decoding fails we
+        fall back to an empty list so callers don't crash on corrupt rows
+        (matches the inline behavior in :meth:`_search_like`).
+        """
+        results: List[Dict[str, Any]] = []
+        for row in rows:
+            memory = dict(row)
+            if memory.get("tags"):
+                try:
+                    memory["tags"] = json.loads(memory["tags"])
+                except json.JSONDecodeError:
+                    memory["tags"] = []
+            results.append(memory)
+        return results
+
     def _search_fts(
         self,
         query: str,
@@ -316,66 +338,6 @@ class SemanticMemory:
             results.append(memory)
 
         return results
-
-    def _prepare_fts_query(self, query: str) -> str:
-        """
-        准备 FTS5 查询字符串（使用 jieba 分词）
-        注意：当前 search() 不使用 FTS5，保留此方法供未来升级。
-
-        Args:
-            query: 原始查询
-
-        Returns:
-            处理后的 FTS5 查询（jieba 分词 + OR 连接）
-        """
-        return tokenize_for_search(query)
-
-    def _search_like(
-        self, query: str, limit: int = 10, tags: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        使用 LIKE 进行回退搜索
-
-        Args:
-            query: 搜索关键词
-            limit: 返回数量限制
-            tags: 可选，按标签筛选
-
-        Returns:
-            匹配的记忆列表
-        """
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT * FROM memories_semantic
-            WHERE content LIKE ? OR summary LIKE ?
-            ORDER BY created_at DESC
-            LIMIT ?
-        """,
-            (f"%{query}%", f"%{query}%", limit),
-        )
-
-        results = []
-        for row in cursor.fetchall():
-            memory = dict(row)
-            if memory.get("tags"):
-                try:
-                    memory["tags"] = json.loads(memory["tags"])
-                except json.JSONDecodeError:
-                    memory["tags"] = []
-
-            # 标签过滤
-            if tags:
-                memory_tags = set(memory.get("tags", []))
-                if not any(t in memory_tags for t in tags):
-                    continue
-
-            results.append(memory)
-
-        return results
-
     def get_recent(
         self, limit: int = 20, session_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:

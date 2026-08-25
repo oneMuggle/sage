@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from backend.memory.episodic import EpisodicMemory
 from backend.memory.semantic import SemanticMemory
+from backend.memory.summary import SessionSummaryStore
 from backend.memory.working import WorkingMemory
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,9 @@ class MemoryManager:
         self.working = working
         self.episodic = episodic
         self.semantic = semantic
+        # 批次三 step 5：会话摘要 store，未注入时为 None — get_context() 会跳过
+        # 【会话摘要】段注入（避免在旧调用方或缺 store 的场景假装有摘要）。
+        self.summary_store = summary_store
         # Lazily-created ConsolidationPipeline (F2) — built on first use so
         # the constructor stays lightweight and test-friendly.
         self._consolidation_pipeline = None
@@ -255,12 +259,15 @@ class MemoryManager:
                 memory_category=meta.get("memory_category"),
             )
 
-        elif resolved == "semantic":
+        elif memory_type == "semantic":
+            meta = metadata or {}
+            if tags:
+                meta["tags"] = tags
             return self.semantic.save(
                 content=content,
                 summary=None,
-                tags=tags,
-                session_id=session_id,
+                tags=meta.get("tags") if meta.get("tags") is not None else tags,
+                session_id=meta.get("session_id"),
             )
 
         else:
@@ -290,7 +297,11 @@ class MemoryManager:
         return "episodic"
 
     def recall(
-        self, query: str, limit: int = 5, memory_types: Optional[List[str]] = None
+        self,
+        query: str,
+        limit: int = 5,
+        memory_types: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         检索记忆
@@ -340,7 +351,11 @@ class MemoryManager:
 
         return results
 
-    def get_context(self, limit: int = 10) -> str:
+    def get_context(
+        self,
+        limit: int = 10,
+        session_id: Optional[str] = None,
+    ) -> str:
         """
         获取上下文用于 Agent
 
@@ -455,7 +470,11 @@ class MemoryManager:
         self.working.add({"role": role, "content": content})
 
     def search_memories(
-        self, query: str, memory_type: Optional[str] = None, limit: int = 10
+        self,
+        query: str,
+        memory_type: Optional[str] = None,
+        limit: int = 10,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索记忆的统一接口
@@ -480,13 +499,14 @@ class MemoryManager:
         results: List[Dict[str, Any]] = []
 
         # 工作记忆（memory_type 为 None 或 'working'），按 session 隔离
+        # WorkingMemory.get_context 不接受 session_id — win7 working.py 当前仅支持
+        # 单会话, 直接调用即可. 用 entry id 加 prefix 避免与持久层 id 冲突.
         if memory_type in (None, "working"):
-            sid = self.working.resolve_session_id(session_id)
-            for msg in self.working.get_context(session_id):
+            for msg in self.working.get_context():
                 if query and query.lower() not in msg.get("content", "").lower():
                     continue
                 entry = dict(msg)
-                entry.setdefault("id", f"wm:{sid}:{entry.get('seq', 0)}")
+                entry.setdefault("id", f"wm:{entry.get('seq', 0)}")
                 entry["memory_type"] = "working"
                 entry["source"] = "working_memory"
                 results.append(entry)

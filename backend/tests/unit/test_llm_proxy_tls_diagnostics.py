@@ -119,7 +119,7 @@ def test_tls_certificate_error_walks_cause_chain() -> None:
     try:
         raise outer from real_ssl_err
     except BaseException as exc:  # noqa: BLE001 — 故意捕获, 仅测链
-        assert _is_tls_certificate_error(exc) is True
+        assert _is_tls_certificate_error(exc) is True  # noqa: PT017 — chain classification
 
 
 def test_tls_certificate_error_walks_context_chain() -> None:
@@ -143,7 +143,7 @@ def test_tls_certificate_error_walks_context_chain() -> None:
         except Exception:
             raise RuntimeError("wrapper")
     except BaseException as exc:  # noqa: BLE001
-        assert _is_tls_certificate_error(exc) is True
+        assert _is_tls_certificate_error(exc) is True  # noqa: PT017 — chain classification
 
 
 def test_tls_certificate_error_returns_false_for_unrelated() -> None:

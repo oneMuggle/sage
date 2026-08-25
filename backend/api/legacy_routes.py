@@ -1017,7 +1017,7 @@ def create_agent(data: AgentCreate):
             },
         )
 
-payload = model_dump_compat(data, exclude_none=True)
+    payload = model_dump_compat(data, exclude_none=True)
     if "model_config_data" in payload:
         payload["model_config"] = payload.pop("model_config_data")
     payload.setdefault("tools", [])
@@ -1427,7 +1427,7 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
 
     # LegacySettingsRequest 是 extra="allow", dict(exclude_none=True) 会包含所有 set 字段
     # (含 extras, 如 streaming/foo/endpoints) — 这是设计: 旧客户端 PUT schema 之外字段不丢。
-payload = model_dump_compat(req, exclude_none=True)
+    payload = model_dump_compat(req, exclude_none=True)
 
     # 剥离 legacy compatibility 3 字段: api_base_url / api_key / model.
     # 这 3 字段不进 DB (与 hex PUT 对齐, 见 eebbedd), 仅用于审计和 changed_fields.

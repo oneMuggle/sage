@@ -27,11 +27,11 @@ Public surface:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import sqlite3
 import time
-import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -420,10 +420,8 @@ class OfficeToolService:
         except Exception as exc:  # noqa: BLE001 -- rollback must catch all
             # Best-effort rollback: drop the file the generator wrote so the
             # workspace doesn't accumulate orphan files the DB doesn't track.
-            try:
+            with contextlib.suppress(OSError):
                 generated_path.unlink(missing_ok=True)
-            except OSError:
-                pass
             return {
                 "success": False,
                 "error": {

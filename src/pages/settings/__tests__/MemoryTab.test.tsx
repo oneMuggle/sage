@@ -55,6 +55,10 @@ const baseSettings = {
   proxyMode: 'system' as const,
   proxyUrl: '',
   tlsVersion: '1.2' as const,
+  // Task 1 (2026-08-24): IANA timezone, validated server-side by
+  // settings_canonicalizer.validate_timezone (zoneinfo, py3.8 via
+  // backports.zoneinfo). Default 'Asia/Shanghai' matches the backend.
+  timezone: 'Asia/Shanghai',
   wiki: { useFolderPicker: true },
   orch: DEFAULT_ORCH_SETTINGS,
   version: '3.0.0',

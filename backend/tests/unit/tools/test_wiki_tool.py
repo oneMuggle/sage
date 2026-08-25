@@ -198,7 +198,8 @@ def test_wiki_search_returns_results_from_search_wiki(tmp_path: Path):
 
     assert result.success is True
     items = result.content["results"]
-    assert isinstance(items, list) and items
+    assert isinstance(items, list)
+    assert items
     titles = {item["title"] for item in items}
     assert "Alpha" in titles
     # Beta should not match a search for "alpha".

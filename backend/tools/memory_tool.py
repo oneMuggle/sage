@@ -252,7 +252,7 @@ class MemorySaveTool(BaseTool):
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — validation guards kept as early returns for readability
         self,
         content: str,
         importance: int = 5,
