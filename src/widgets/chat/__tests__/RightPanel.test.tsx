@@ -37,3 +37,25 @@ describe('RightPanel', () => {
     expect(screen.getByText(/暂无产物/)).toBeInTheDocument();
   });
 });
+
+describe('RightPanel - close button', () => {
+  it('list view (Progress tab) renders close button with correct aria-label', () => {
+    render(<RightPanel {...props} />);
+    expect(screen.getByRole('button', { name: '关闭右侧面板' })).toBeInTheDocument();
+  });
+
+  it('clicking close button in Progress tab invokes onToggle', () => {
+    const onToggle = vi.fn();
+    render(<RightPanel {...props} onToggle={onToggle} />);
+    fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('clicking close button in Artifacts tab invokes onToggle', () => {
+    const onToggle = vi.fn();
+    render(<RightPanel {...props} onToggle={onToggle} />);
+    fireEvent.click(screen.getByText('Artifacts'));
+    fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+});
