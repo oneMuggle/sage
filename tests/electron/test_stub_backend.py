@@ -752,3 +752,81 @@ def test_wiki_deep_research_returns_plan():
         assert data["status"] in ("pending", "running", "done")
     finally:
         server.stop()
+
+
+# ---- Task 5: memory endpoint tests ----
+#
+# Note: the Task 5 brief wrote these against the ``requests`` library, but the
+# sage-backend env intentionally has no ``requests`` installed (this file's
+# _HTTPHelper exists precisely for "stdlib only, no requests dependency"), so
+# they are transcribed with identical names/assertions on top of _HTTPHelper
+# (same adaptation as the Task 3/4 tests above; the brief's GET ``params={...}``
+# are folded into the URL query string since _HTTPHelper has no params arg).
+
+
+def test_memory_three_tier_write_and_search():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        for layer in ["episodic", "semantic", "working"]:
+            r = http.post(
+                "/api/v1/memory/{}".format(layer),
+                {"session_id": "s1", "content": "hello {}".format(layer)},
+            )
+            assert r["layer"] == layer
+            assert r["id"].startswith("mem_")
+
+        r = http.get("/api/v1/memory/search?q=hello")
+        assert len(r["episodic"]) >= 1
+        assert len(r["semantic"]) >= 1
+        assert len(r["working"]) >= 1
+    finally:
+        server.stop()
+
+
+def test_memory_search_filters_by_layer():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        http.post(
+            "/api/v1/memory/episodic",
+            {"session_id": "s1", "content": "episodic event"},
+        )
+        http.post(
+            "/api/v1/memory/semantic",
+            {"session_id": "s1", "content": "semantic fact"},
+        )
+        r = http.get("/api/v1/memory/search?q=event&layer=episodic")
+        assert len(r["episodic"]) >= 1
+        assert all(item["layer"] == "episodic" for item in r["episodic"])
+    finally:
+        server.stop()
+
+
+def test_memory_profile_returns_user_summary():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        http.post(
+            "/api/v1/memory/semantic",
+            {"session_id": "s1", "content": "user likes tests"},
+        )
+        r = http.get("/api/v1/memory/profile/user_123")
+        assert r["user_id"] == "user_123"
+        assert "facts" in r
+    finally:
+        server.stop()
+
+
+def test_memory_consolidate_returns_pending():
+    server = StubBackend(host="127.0.0.1", port=0)
+    server.start()
+    try:
+        http = _HTTPHelper(server.url)
+        r = http.post("/api/v1/memory/consolidate", {"session_id": "s1"})
+        assert r["status"] == "pending"
+    finally:
+        server.stop()
