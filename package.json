@@ -25,7 +25,12 @@
     "electron:dev": "npm run build:electron && electron .",
     "electron:build": "npm run build && npm run build:electron",
     "electron:dist": "npm run electron:build && electron-builder --publish never",
-    "postinstall": "bash scripts/fix-chrome-sandbox.sh"
+    "postinstall": "bash scripts/fix-chrome-sandbox.sh",
+    "test:smoke": "playwright test --project=electron-stub-smoke",
+    "test:pr": "playwright test --project=electron-stub-smoke --project=electron-stub-deep --project=electron-live-boot",
+    "test:nightly": "playwright test --project=electron-stub-smoke --project=electron-stub-deep --project=electron-live-boot --project=electron-live-deep --grep=@nightly",
+    "test:release": "playwright test --project=electron-stub-smoke --project=electron-stub-deep --project=electron-live-boot --project=electron-live-deep",
+    "test:dev": "playwright test --project=electron-stub-smoke --ui"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",

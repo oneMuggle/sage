@@ -58,5 +58,53 @@ export default defineConfig({
         baseURL: 'http://localhost:1420',
       },
     },
+    // Tier-based Electron E2E projects (Tier 1: stub; Tier 2: live)
+    // Stub projects spawn their own Python stub server (stub_world fixture);
+    // they MUST NOT inherit the top-level vite webServer (overridden below).
+    // Live projects spawn the real sage-backend via per-project webServer.
+    {
+      name: 'electron-stub-smoke',
+      testDir: './tests/electron/tiers/stub/smoke',
+      timeout: 60_000,
+      retries: process.env.CI ? 1 : 0,
+      outputDir: './tests/electron/tiers/stub/smoke/test-results',
+      webServer: undefined, // stub_world spawns its own server (R18/R20)
+    },
+    {
+      name: 'electron-stub-deep',
+      testDir: './tests/electron/tiers/stub/deep',
+      timeout: 120_000,
+      retries: process.env.CI ? 1 : 0,
+      outputDir: './tests/electron/tiers/stub/deep/test-results',
+      webServer: undefined, // stub_world spawns its own server (R18/R20)
+    },
+    {
+      name: 'electron-live-boot',
+      testDir: './tests/electron/tiers/live/boot-smoke',
+      timeout: 60_000,
+      retries: 0,
+      outputDir: './tests/electron/tiers/live/boot-smoke/test-results',
+      webServer: {
+        command: '/home/fz/anaconda3/envs/sage-backend/bin/python -m backend.main',
+        url: 'http://127.0.0.1:8765/health',
+        reuseExistingServer: !process.env.CI,
+        timeout: 60_000,
+        cwd: '/home/fz/project/sage', // main repo (worktree has no node_modules + backend deps may be rooted there)
+      },
+    },
+    {
+      name: 'electron-live-deep',
+      testDir: './tests/electron/tiers/live/deep',
+      timeout: 180_000, // 3 min for LLM API calls (R24)
+      retries: 0,
+      outputDir: './tests/electron/tiers/live/deep/test-results',
+      webServer: {
+        command: '/home/fz/anaconda3/envs/sage-backend/bin/python -m backend.main',
+        url: 'http://127.0.0.1:8765/health',
+        reuseExistingServer: !process.env.CI,
+        timeout: 60_000,
+        cwd: '/home/fz/project/sage',
+      },
+    },
   ],
 });
