@@ -10,9 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePermissionState } from '../../../entities/permission/permissionState';
 import { useQuestionState } from '../../../entities/question/questionState';
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
+import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { useStore } from '../../../shared/lib/store';
 import { useChatStreamStore } from '../chatStreamStore';
 import { useChat } from '../useChat';
+import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
 // 默认 mockResolvedValue(undefined) 让未 mock 的 IPC 调用（如 useSettings
@@ -34,15 +36,14 @@ const VALID_SESSION_ID = '11111111-2222-3333-4444-555555555555';
  * 在测试里调 sendMessage 前等 get_settings invoke 完成 + React state setter flush，
  * 否则 useSettings 还是 DEFAULT_SETTINGS，useChat 会误判无 endpoint。
  *
- * 仅等到 get_settings 被调用还不够 — settingsClient.getSettings() 的 mockResolvedValue
- * resolve 后, useSettings 的 .then 才会 setSettings, 这个 setter 又触发 React re-render。
- * 三步之间有 microtask gap, 用 act flush 确保 React commit 完成。
+ * 2026-08-26: useSettings 改为订阅全局 zustand store 后, loadSettings 不再
+ * 在 mount 时自动触发. 显式调 store.loadSettings() 启动加载.
  */
 async function waitForSettingsLoaded(): Promise<void> {
-  await waitFor(() => {
-    expect(invokeMock).toHaveBeenCalledWith('get_settings', {});
+  await act(async () => {
+    await useSettingsStore.getState().loadSettings();
   });
-  // flush useSettings 的 .then(setSettings) + React re-render
+  // flush React re-render
   await act(async () => {
     await Promise.resolve();
     await Promise.resolve();
@@ -117,6 +118,8 @@ beforeEach(() => {
   // mockResolvedValueOnce（后者针对 agent_chat_stream 等具体 cmd）
   invokeMock.mockResolvedValueOnce({ data: null });
   localStorage.clear();
+  // 2026-08-26: 重置 settings store,避免用例间串扰
+  useSettingsStore.setState({ settings: { ...DEFAULT_SETTINGS }, isLoading: true });
   useStore.setState({
     sessions: [],
     currentSessionId: VALID_SESSION_ID,
