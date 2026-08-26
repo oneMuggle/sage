@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from backend.data.settings_repo import SettingsRepository
@@ -28,7 +30,11 @@ def _clean_settings():
 
 @pytest.mark.asyncio()
 async def test_get_translates_legacy_snake_to_camel(client):
-    """DB 里手插一条 snake_case 行, GET 应翻译为 camelCase 返回。"""
+    """DB 里手插一条 snake_case 行, GET 应翻译为 camelCase 返回。
+
+    2026-08-26: 翻译 + 边界净化 + 脱敏契约 —— apiKey 字段翻译成 camelCase
+    后, GET 响应里必须用 hasApiKey=True 标记, apiKey 置空 (OWASP A02:2021).
+    """
     SettingsRepository().set_json(
         "app_settings",
         {
@@ -48,8 +54,11 @@ async def test_get_translates_legacy_snake_to_camel(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["endpoints"][0]["baseUrl"] == "u"
-    assert body["endpoints"][0]["apiKey"] == "k"
+    # 2026-08-26: redaction 契约 —— 明文 apiKey 不出现在 GET 响应里.
+    assert body["endpoints"][0]["apiKey"] == ""
+    assert body["endpoints"][0]["hasApiKey"] is True
     assert "base_url" not in body["endpoints"][0]
+    assert "k" not in resp.text
 
 
 @pytest.mark.asyncio()
@@ -278,3 +287,166 @@ async def test_get_round_trips_new_fields_through_canonicalizer(client):
     assert ep["protocol"] == "openai-compatible"
     assert ep["modelId"] == "qwen2.5-7b-instruct"
     assert ep["localModelPath"] == "/tmp/qwen.gguf"
+
+
+# ============================================================================
+# 2026-08-26: settings 响应脱敏 + legacy payload 字段净化
+# ============================================================================
+#
+# 背景:
+# - 真实 Electron 验证中发现 GET /api/v1/settings 会明文回传端点 apiKey,
+#   导致 settingsClient.getSettings() 把真实凭据写入 React state / localStorage
+#   / 日志. 需要把 apiKey 替换为非敏感的 hasApiKey 标记, 真实 key 仅在 PUT
+#   接收并持久化, 不再出现在 GET 响应里.
+# - 已知历史前端会发送 snake_case 残留 (memory_server_sync / local_model_path
+#   等), 这些不是白名单字段. canonicalizer 应该把合法 legacy residue 在 GET
+#   返回前清理, 同时保证响应仍然合法.
+#
+# 注意: 该测试集是 RED — 当前实现仍返回明文 apiKey, 测试会失败, 确认错误信息
+# 再走 GREEN.
+
+_REDACTED_APIKEY = "sk-test-SECRET-do-not-leak-1f2e3d4c5b6a"
+
+
+@pytest.mark.asyncio()
+async def test_get_settings_redacts_endpoint_api_key(client):
+    """GET /settings 返回的 endpoint 必须把 apiKey 替换为非敏感标记, DB 原 key 不外泄."""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "ep-real",
+                    "name": "Real",
+                    "baseUrl": "https://api.example.com/v1",
+                    "apiKey": _REDACTED_APIKEY,
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    ep = body["endpoints"][0]
+    assert ep.get("apiKey") in (None, ""), (
+        "apiKey leaked in GET /settings response: "
+        f"got {ep.get('apiKey')!r}, expected None or empty"
+    )
+    assert _REDACTED_APIKEY not in resp.text
+    assert ep.get("hasApiKey") is True
+    assert ep["baseUrl"] == "https://api.example.com/v1"
+
+
+@pytest.mark.asyncio()
+async def test_get_settings_reports_has_api_key_false_when_missing(client):
+    """GET /settings 当 endpoint 没有 apiKey 时, hasApiKey 应为 False."""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "ep-empty",
+                    "name": "LM Studio",
+                    "baseUrl": "http://127.0.0.1:1234/v1",
+                    "apiKey": "",
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    ep = body["endpoints"][0]
+    assert ep.get("apiKey") in (None, "")
+    assert ep.get("hasApiKey") is False
+
+
+@pytest.mark.asyncio()
+async def test_get_settings_cleans_legacy_snake_case_residue(client):
+    """GET /settings 收到 legacy DB 行残留 snake_case 字段时, 应清洗后回传."""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "streaming": True,
+            "memory_server_sync": True,
+            "endpoints": [
+                {
+                    "id": "ep1",
+                    "baseUrl": "http://x",
+                    "apiKey": "k",
+                    "local_model_path": "/old/path",
+                }
+            ],
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "memory_server_sync" not in body
+    ep = body["endpoints"][0]
+    assert "local_model_path" not in ep
+
+
+@pytest.mark.asyncio()
+async def test_get_preference_redacts_app_settings_payload(client):
+    """GET /preferences/app_settings 应返回脱敏 payload, 不含明文 apiKey."""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "ep-real",
+                    "name": "Real",
+                    "baseUrl": "https://api.example.com/v1",
+                    "apiKey": _REDACTED_APIKEY,
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/preferences/app_settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["value"] is not None
+    assert _REDACTED_APIKEY not in body["value"]
+    parsed = json.loads(body["value"])
+    ep = parsed["endpoints"][0]
+    assert ep.get("apiKey") in (None, "")
+    assert ep.get("hasApiKey") is True
+
+
+@pytest.mark.asyncio()
+async def test_put_app_settings_does_not_echo_plaintext_api_key(client):
+    """PUT /settings 响应 (LegacySettingsResponse) 不应包含明文 apiKey."""
+    resp = await client.put(
+        "/api/v1/settings",
+        json={
+            "endpoints": [
+                {
+                    "id": "ep-x",
+                    "name": "Real",
+                    "baseUrl": "https://api.example.com/v1",
+                    "apiKey": _REDACTED_APIKEY,
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    assert _REDACTED_APIKEY not in resp.text
+    body = resp.json()
+    assert "endpoints" not in body

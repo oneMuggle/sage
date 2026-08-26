@@ -214,6 +214,78 @@ def validate_settings_shape(settings: dict) -> None:
         )
 
 
+def redact_secrets(settings: Any) -> Any:
+    """剥离 settings 中的敏感字段 (endpoint.apiKey), 替换为 ``hasApiKey`` 标记。
+
+    背景 (2026-08-26):
+    - 真实 Electron 验证中发现 GET /api/v1/settings 明文回传端点 apiKey,
+      导致 settingsClient.getSettings() 把真实凭据写入 React state / localStorage
+      / 日志 / IPC 响应, 不符合 OWASP A02:2021 (Cryptographic Failures)。
+    - 修复: GET 响应里 apiKey 字段统一置空 (或 None), 同时增加
+      ``hasApiKey: bool`` 标记供前端识别 "该端点是否配置了真实 key"。
+    - 真实 key 仅在 PUT 接收并持久化到 SQLite preferences, 不再以任何形式
+      经 HTTP response / IPC 返回。
+
+    Args:
+        settings: 已经经过 ``to_camel`` + ``strip_unknown_fields`` 的 settings dict.
+            可以为 None, 非 dict, 或 dict — 全部走安全路径.
+
+    Returns:
+        与输入同构的新 dict, 但 endpoint.apiKey 被剥离并标记 hasApiKey.
+    """
+    if not isinstance(settings, dict):
+        return settings
+
+    out = dict(settings)
+    endpoints = out.get("endpoints")
+    if isinstance(endpoints, list):
+        cleaned: List[Any] = []
+        for ep in endpoints:
+            if not isinstance(ep, dict):
+                cleaned.append(ep)
+                continue
+            new_ep = dict(ep)
+            original_key = new_ep.get("apiKey")
+            existing_flag = new_ep.get("hasApiKey")
+            # 幂等性 (2026-08-26): 若输入已带 hasApiKey 标记 (即二次过
+            # canonicalizer, 如 preference GET round-trip / cache replay),
+            # 保留原标志 — 不从已被清空的 apiKey 重新计算, 否则 ``True``
+            # 会翻成 ``False``, 让前端误以为用户从未设置过 key, 下次启动
+            # 后 deepMerge remote-wins 用 ``""`` 覆盖本地真实 key。
+            if isinstance(existing_flag, bool):
+                has_key = existing_flag
+            else:
+                has_key = isinstance(original_key, str) and original_key != ""
+            new_ep["apiKey"] = ""
+            new_ep["hasApiKey"] = has_key
+            cleaned.append(new_ep)
+        out["endpoints"] = cleaned
+
+    return out
+
+
+def redact_secrets_json(value: Any) -> Any:
+    """``redact_secrets`` 的 JSON 字符串版本 — 适用于 preference GET 返回字符串 value。
+
+    当 preference key='app_settings' 且 value 是合法 JSON 字符串时, 解析 +
+    脱敏 + 重新序列化。非 JSON / 非 dict 直接原样返回。
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        import json as _json
+
+        parsed = _json.loads(value)
+    except (ValueError, TypeError):
+        return value
+    redacted = redact_secrets(parsed)
+    if redacted is parsed:
+        return value
+    import json as _json
+
+    return _json.dumps(redacted, ensure_ascii=False)
+
+
 def strip_unknown_fields(settings: Any) -> Any:
     """递归剥离 AppSettings 各层白名单外的字段, 返回干净 dict。
 

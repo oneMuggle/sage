@@ -22,6 +22,131 @@ const CACHE_KEY = SETTINGS_STORAGE_KEY;
 const MIGRATION_MARKER = 'sage-settings.migrated_to_backend';
 const CACHE_RETENTION_DAYS = 7;
 
+// 2026-08-26: 前端 canonical 字段白名单 — 与后端 ``LEGAL_TOP_KEYS`` /
+// ``LEGAL_ENDPOINT_KEYS`` 对齐, 防止 localStorage 历史残留 (memory_server_sync /
+// local_model_path 等) 在 maybeAutoMigrate / saveSettings 重新上传到后端时
+// 被 Pydantic validate_settings_shape 拒绝 (400 'unknown top-level field').
+// 仅含前端当前 schema 接受且会发给后端的字段 — 与后端白名单同步.
+const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
+  'streaming',
+  'autoMemory',
+  'confirmDelete',
+  'endpoints',
+  'modelSelections',
+  'maxContext',
+  'temperature',
+  'timezone',
+  'wiki',
+  'orch',
+  'version',
+  // 'memoryServerSync' 不在此白名单内 — 后端已下线该字段, 前端发出去会 400.
+]);
+const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
+  'id',
+  'name',
+  'baseUrl',
+  'apiKey',
+  'protocol',
+  'modelId',
+  'discoveredModels',
+  'lastDiscoveredAt',
+  // 'localModelPath' 不在此白名单内 — UI 已隐藏, 后端白名单已收紧.
+]);
+const SNAKE_KEYS_TO_DROP: ReadonlySet<string> = new Set([
+  // 历史 schema 的 snake_case 残留 — 后端 canonicalizer to_camel 会把它们翻成
+  // camelCase 但仍不在 LEGAL_TOP_KEYS / LEGAL_ENDPOINT_KEYS, 触发 400. 直接
+  // 在源头丢弃更安全.
+  'memory_server_sync',
+  'memoryServerSync',
+  'local_model_path',
+  'localModelPath',
+  'max_iterations',
+  'subagent_max_iterations',
+  'compact_mode',
+  'proxy_mode',
+  'proxy_url',
+  'tls_version',
+]);
+
+function sanitizeForBackend<T extends Partial<AppSettings>>(partial: T): T {
+  // 防御性拷贝 + 字段级净化:
+  // 1) 顶层: 只保留白名单内 key, 丢弃 snake_case 残留 (含 known-bad list).
+  // 2) endpoints[*]: 同样只保留白名单内字段.
+  // 不修改入参, 返回新对象.
+  if (!partial || typeof partial !== 'object') return partial;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(partial as Record<string, unknown>)) {
+    if (SNAKE_KEYS_TO_DROP.has(k)) continue;
+    if (!TOP_KEYS.has(k as keyof AppSettings)) continue;
+    if (k === 'endpoints' && Array.isArray(v)) {
+      out[k] = (v as unknown[]).map((ep) => {
+        if (!ep || typeof ep !== 'object') return ep;
+        const cleanEp: Record<string, unknown> = {};
+        for (const [ek, ev] of Object.entries(ep as Record<string, unknown>)) {
+          if (SNAKE_KEYS_TO_DROP.has(ek)) continue;
+          if (!ENDPOINT_KEYS.has(ek as keyof EndpointConfig)) continue;
+          cleanEp[ek] = ev;
+        }
+        return cleanEp;
+      });
+    } else {
+      out[k] = v;
+    }
+  }
+  return out as T;
+}
+
+// 暴露给单测 (vitest) 验证 canonical 净化行为.
+export const __test__sanitizeForBackend = sanitizeForBackend;
+export const __test__SNAKE_KEYS_TO_DROP = SNAKE_KEYS_TO_DROP;
+
+/**
+ * 2026-08-26 (OWASP A02:2021): 从 localStorage 找回被后端 redact_secrets
+ * 脱敏的 apiKey. 后端 GET 返回 ``{apiKey: "", hasApiKey: true}``; 若 local
+ * 中相同 id 的 endpoint 还有非空 apiKey, 用本地值覆盖脱敏值, 让下游
+ * deepMerge 拿到非冲突的字段, 避免 remote-wins 把真实 key 覆盖掉.
+ *
+ * 必须按 id 匹配 — 数组顺序不可靠 (loadSettings 跑过几次后端可能 reorder).
+ *
+ * 不会凭空捏造 key: 仅在 local 已有非空 apiKey 且 remote 显式标注
+ * ``hasApiKey === true`` 时才还原. 若用户主动清空 key (local 也为空),
+ * 保持空; 若后端没设 ``hasApiKey`` 字段 (历史响应), 不动 apiKey 避免覆盖真实值.
+ *
+ * 函数纯: 不修改入参, 返回新对象.
+ */
+export function restoreRedactedApiKeys(
+  remote: Partial<AppSettings>,
+  local: Partial<AppSettings>,
+): Partial<AppSettings> {
+  if (!remote || typeof remote !== 'object') return remote;
+  const remoteEndpoints = Array.isArray(remote.endpoints) ? remote.endpoints : [];
+  if (remoteEndpoints.length === 0) return remote;
+  const localEndpoints = Array.isArray(local.endpoints) ? local.endpoints : [];
+  if (localEndpoints.length === 0) return remote;
+  const localById = new Map<string, EndpointConfig>();
+  for (const ep of localEndpoints) {
+    if (ep && typeof ep === 'object' && typeof ep.id === 'string') {
+      localById.set(ep.id, ep);
+    }
+  }
+  const restored = remoteEndpoints.map((re): EndpointConfig => {
+    if (!re || typeof re !== 'object') return re as EndpointConfig;
+    const r = re as Partial<EndpointConfig>;
+    if (
+      r.hasApiKey === true &&
+      (r.apiKey === '' || r.apiKey === null || r.apiKey === undefined) &&
+      typeof r.id === 'string'
+    ) {
+      const localEp = localById.get(r.id);
+      if (localEp && typeof localEp.apiKey === 'string' && localEp.apiKey !== '') {
+        return { ...(r as EndpointConfig), apiKey: localEp.apiKey };
+      }
+    }
+    return re as EndpointConfig;
+  });
+  return { ...remote, endpoints: restored };
+}
+
 function readLocalCacheSync(): Partial<AppSettings> | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
@@ -77,7 +202,8 @@ async function maybeAutoMigrate(remote: AppSettings | null): Promise<void> {
   if (marker) return; // 已迁移过
 
   try {
-    await settingsClient.setSettings({ ...DEFAULT_SETTINGS, ...local });
+    // 2026-08-26: 先 canonical 净化, 防止 localStorage 旧字段 PUT → 400.
+    await settingsClient.setSettings(sanitizeForBackend({ ...DEFAULT_SETTINGS, ...local }));
     try {
       localStorage.setItem(MIGRATION_MARKER, new Date().toISOString());
     } catch {
@@ -152,7 +278,13 @@ export async function loadSettings(): Promise<AppSettings> {
   if (remote) {
     // 远端成功 → 以远端为权威, local 仅作 merge 兜底
     const local = readLocalCacheSync() ?? {};
-    const merged = deepMerge<Partial<AppSettings>>(local, remote, {
+    // 2026-08-26 (OWASP A02:2021): 后端 redact_secrets 把 GET 响应里的
+    // apiKey 替换成 "" + hasApiKey=true. deepMerge remote-wins 策略会用空字
+    // 符串覆盖 local.apiKey, 用户每次启动都会丢 key. 这里按 endpoint id 从
+    // local 把被脱敏的 apiKey 找回来, 再让 deepMerge 跑不冲突的值. plan §1:
+    // "同步保留已有设置的 API key, 不因脱敏 GET 覆盖用户输入."
+    const restoredRemote = restoreRedactedApiKeys(remote, local);
+    const merged = deepMerge<Partial<AppSettings>>(local, restoredRemote, {
       policy: 'remote-wins',
     });
     const finalSettings = mergeWithDefaults(merged);
@@ -183,7 +315,8 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<void>
   } as AppSettings;
   writeLocalCacheSync(merged);
   try {
-    await settingsClient.setSettings(partial);
+    // 2026-08-26: 同样净化 PUT 载荷, 防止带历史字段的 partial 触发 400.
+    await settingsClient.setSettings(sanitizeForBackend(partial));
   } catch {
     // settingsClient 内部已 warn
   }

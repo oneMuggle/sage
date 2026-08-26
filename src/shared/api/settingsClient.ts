@@ -44,8 +44,12 @@ async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<
 
 export const settingsClient = {
   async getSettings(): Promise<AppSettings | null> {
-    const resp = await ipcCall<{ data: AppSettings | null }>('get_settings');
-    return resp?.data ?? null;
+    // 2026-08-26: invokeBackend 直接 res.json() 出后端 JSON, 无 envelope.
+    // 旧实现 ``resp?.data ?? null`` 永远返回 null (resp 是裸 dict),
+    // 导致 loadSettings 永远回退 localStorage 触发自动迁移, 把脏字段 PUT 上
+    // 后端 → 400. 修复: 直接返回 resp.
+    const resp = await ipcCall<AppSettings | null>('get_settings');
+    return resp ?? null;
   },
 
   async setSettings(partial: Partial<AppSettings>): Promise<void> {
@@ -53,6 +57,8 @@ export const settingsClient = {
   },
 
   async getPreference<T extends string = string>(key: PreferenceKey): Promise<T | null> {
+    // 2026-08-26: 与 get_settings 对齐, PreferenceItem 是 {value, value_type, category}
+    // 不是 envelope. value 才是真实载荷.
     const resp = await ipcCall<{ value: T | null }>('get_preference', { key });
     return resp?.value ?? null;
   },

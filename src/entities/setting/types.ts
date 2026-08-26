@@ -25,11 +25,7 @@ export interface DiscoveredModel {
  * 后端 _migrate_default_protocol 对历史端点写入默认值 'openai-compatible',
  * 前端新建端点也强制写入, 防止空字符串落到 DB.
  */
-export type EndpointProtocol =
-  | 'openai-compatible'
-  | 'anthropic'
-  | 'gemini'
-  | 'ollama';
+export type EndpointProtocol = 'openai-compatible' | 'anthropic' | 'gemini' | 'ollama';
 
 /** Configuration for a single endpoint */
 export interface EndpointConfig {
@@ -54,6 +50,12 @@ export interface EndpointConfig {
   localModelPath: string;
   discoveredModels: DiscoveredModel[];
   lastDiscoveredAt: number | null;
+  /**
+   * 2026-08-26 (OWASP A02:2021): 后端 redact_secrets 在 GET 响应里把
+   * apiKey 置为 "" 并打这个 flag. 客户端按 id 在 localStorage 中找回真实 key.
+   * sanitizeForBackend 不在白名单里, 不会回写; 仅在 GET → loadSettings 路径消费.
+   */
+  hasApiKey?: boolean;
 }
 
 /** User's model selection — binds a model to its source endpoint */

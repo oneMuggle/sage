@@ -288,6 +288,8 @@ async def get_settings() -> Optional[dict]:
     """
     from backend.data.settings_canonicalizer import (
         detect_legacy_snake_pollution,
+        redact_secrets,
+        strip_unknown_fields,
         to_camel,
     )
     from backend.data.settings_repo import SettingsRepository
@@ -306,7 +308,9 @@ async def get_settings() -> Optional[dict]:
     translated = to_camel(raw)
     # Task 1 (2026-08-23): 历史 endpoints[*] 无 protocol 字段 → 默认 ``openai-compatible``.
     _migrate_default_protocol(translated)
-    return translated
+    # 2026-08-26: 边界净化 + 脱敏 apiKey (与 legacy GET 保持一致).
+    cleaned = strip_unknown_fields(translated)
+    return redact_secrets(cleaned)
 
 
 def _migrate_default_protocol(settings: dict) -> None:
@@ -338,12 +342,20 @@ class PreferenceItem(BaseModel):
 
 @router.get("/preferences/{key}", response_model=PreferenceItem)
 async def get_preference(key: str) -> PreferenceItem:
-    """通用 KV 读取（白名单限定 key）。"""
+    """通用 KV 读取（白名单限定 key）。
+
+    2026-08-26: 当 key=='app_settings' 时, 对 value (JSON 字符串) 做
+    ``redact_secrets_json`` —— 把 endpoint.apiKey 替换为 hasApiKey 标记,
+    防止明文凭据通过 preference GET 返回前端 (OWASP A02:2021).
+    """
+    from backend.data.settings_canonicalizer import redact_secrets_json
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
     val = SettingsRepository().get(key)
+    if key == "app_settings":
+        val = redact_secrets_json(val)
     return PreferenceItem(value=val)
 
 
