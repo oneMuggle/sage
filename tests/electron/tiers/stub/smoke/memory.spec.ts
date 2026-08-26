@@ -11,8 +11,10 @@ test('memory smoke: add memory item appears in episodic list', async () => {
   await page.locator('[data-testid="memory-content"]').fill('test memory item');
   await page.locator('[data-testid="memory-submit"]').click();
 
-  await expect(page.locator('[data-testid="memory-episodic-item"]').last())
-    .toContainText('test memory item', { timeout: 10_000 });
+  await expect(page.locator('[data-testid="memory-episodic-item"]').last()).toContainText(
+    'test memory item',
+    { timeout: 10_000 },
+  );
 
   await app.close();
   stub.stop();

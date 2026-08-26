@@ -10,8 +10,10 @@ test('chat smoke: send hello, receive fixture response, message persisted', asyn
   await page.locator('[data-testid="chat-input"]').fill('hello');
   await page.locator('[data-testid="chat-send"]').click();
 
-  await expect(page.locator('[data-testid="chat-message-assistant"]').last())
-    .toContainText(/hi|hello|fixture/, { timeout: 10_000 });
+  await expect(page.locator('[data-testid="chat-message-assistant"]').last()).toContainText(
+    /hi|hello|fixture/,
+    { timeout: 10_000 },
+  );
 
   await app.close();
   stub.stop();

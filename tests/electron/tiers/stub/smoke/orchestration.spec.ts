@@ -10,7 +10,7 @@ test('orchestration smoke: create run with 3 agents, lanes render', async () => 
   // hidden until first visit, so the sidebar <a> may not render at all.
   // Setting the hash triggers React Router regardless of disclosure state.
   await page.evaluate(() => {
-    window.location.hash = "#/orchestration";
+    window.location.hash = '#/orchestration';
   });
   await page.locator('[data-testid="orch-create"]').click();
   await page.locator('[data-testid="orch-plan"]').fill(orchFixture.plan);
