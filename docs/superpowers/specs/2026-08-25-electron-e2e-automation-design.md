@@ -89,7 +89,7 @@ Sage 项目当前已有三层自动化测试，但**没有覆盖 5 个核心功�
 4. **playwright.config.ts 新增 4 个 project**：electron-stub-smoke / electron-stub-deep / electron-live-boot / electron-live-deep。
 5. **package.json 新增 5 个 npm script**：test:smoke / test:pr / test:nightly / test:release / test:dev。
 6. **GitHub Actions 新增 2 个 workflow**：`.github/workflows/e2e-pr-gate.yml` + `.github/workflows/e2e-nightly.yml`。
-7. **test_stub_backend.py 扩展**：从 29 个 case 扩展到约 80 个，覆盖新端点契约。
+7. **test_stub_backend.py 扩展**：从 29 个 case 扩展到 ~50 minimum / ~80 stretch，覆盖 5 个核心模块 (chat / orchestration / wiki / memory / evolution) 的 happy-path 契约。
 8. **fixtures/ 目录**：共享 test seed data（sample_session.json / sample_memory.json / sample_orchestration.json）。
 9. **README.md 重写**：完整 tier + stage 文档。
 
@@ -138,7 +138,7 @@ tests/electron/
 ├── README.md                          # 重写
 ├── conftest.py                        # 扩展：stub_backend() + real_backend()
 ├── stub_backend.py                    # 扩展：+~600 行（5 功能端点）
-├── test_stub_backend.py               # 扩展：29 → ~80 unit case
+├── test_stub_backend.py               # 扩展：29 → ~50 minimum / ~80 stretch unit case
 ├── fixtures/                          # 新建
 │   ├── __init__.py
 │   ├── sample_session.json
@@ -361,7 +361,7 @@ jobs:
 
 - `tests/electron/stub_backend.py`：新增 ~600 行（5 功能端点）
 - `tests/electron/conftest.py`：新增 `real_backend()` fixture（~80 行）
-- `tests/electron/test_stub_backend.py`：扩展到 ~80 unit case（+50 行）
+- `tests/electron/test_stub_backend.py`：扩展到 ~50 minimum / ~80 stretch unit case
 - `tests/electron/README.md`：完整重写（~200 行）
 - `playwright.config.ts`：新增 4 个 project 配置
 - `package.json`：新增 5 个 npm script
