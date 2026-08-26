@@ -34,6 +34,7 @@ vi.mock('../../../features/manage-settings/useSettings', () => ({
   useSettings: vi.fn(() => ({
     settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
     isLoading: false,
+    loadSettings: vi.fn().mockResolvedValue(undefined),
     updateSettings: mocks.updateSettings,
     resetSettings: vi.fn(),
   })),
@@ -59,6 +60,7 @@ beforeEach(() => {
   vi.mocked(useSettings).mockImplementation(() => ({
     settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
     isLoading: false,
+    loadSettings: vi.fn().mockResolvedValue(undefined),
     updateSettings: mocks.updateSettings,
     resetSettings: vi.fn(),
   }));
@@ -85,6 +87,7 @@ describe('GeneralTab 编排 section', () => {
     vi.mocked(useSettings).mockReturnValue({
       settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch } },
       isLoading: false,
+      loadSettings: vi.fn().mockResolvedValue(undefined),
       updateSettings,
       resetSettings: vi.fn(),
     });
@@ -109,6 +112,7 @@ describe('GeneralTab 编排 section', () => {
     vi.mocked(useSettings).mockReturnValue({
       settings: { ...DEFAULT_SETTINGS, orch: { ...DEFAULT_SETTINGS.orch, maxRetries: 2 } },
       isLoading: false,
+      loadSettings: vi.fn().mockResolvedValue(undefined),
       updateSettings,
       resetSettings: vi.fn(),
     });
