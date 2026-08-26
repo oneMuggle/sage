@@ -326,7 +326,7 @@ def _attach_stream(ctx: StubContext, body: dict, *, sid: str):
             {
                 "state": "content_delta",
                 "iteration": 0,
-                "content": "Hello from stub backend",
+                "content": "hello from stub backend fixture",
                 "reasoning": None,
                 "tool_call": None,
                 "tool_result": None,
@@ -336,7 +336,7 @@ def _attach_stream(ctx: StubContext, body: dict, *, sid: str):
             {
                 "state": "done",
                 "iteration": 0,
-                "content": "Hello from stub backend",
+                "content": "hello from stub backend fixture",
                 "reasoning": None,
                 "tool_call": None,
                 "tool_result": None,
