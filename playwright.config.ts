@@ -58,9 +58,12 @@ export default defineConfig({
         baseURL: 'http://localhost:1420',
       },
     },
-    // Tier-based Electron E2E projects (Tier 1: stub; Tier 2: live)
-    // Stub projects spawn their own Python stub server (stub_world fixture);
-    // they MUST NOT inherit the top-level vite webServer (overridden below).
+    // Tier-based Electron E2E projects (Tier 1: stub; Tier 2: live).
+    // Stub projects DO need the top-level Vite dev server (Electron loads
+    // the renderer from http://localhost:1420 in dev mode — main.ts:73,642).
+    // The Python stub backend is a separate Node-side server spun up by
+    // launchElectronWithStub() on a random port (SAGE_BACKEND_URL), and
+    // lives alongside Vite on 1420 — not in place of it.
     // Live projects spawn the real sage-backend via per-project webServer.
     {
       name: 'electron-stub-smoke',
@@ -68,7 +71,6 @@ export default defineConfig({
       timeout: 60_000,
       retries: process.env.CI ? 1 : 0,
       outputDir: './tests/electron/tiers/stub/smoke/test-results',
-      webServer: undefined, // stub_world spawns its own server (R18/R20)
     },
     {
       name: 'electron-stub-deep',
@@ -76,7 +78,6 @@ export default defineConfig({
       timeout: 120_000,
       retries: process.env.CI ? 1 : 0,
       outputDir: './tests/electron/tiers/stub/deep/test-results',
-      webServer: undefined, // stub_world spawns its own server (R18/R20)
     },
     {
       name: 'electron-live-boot',
