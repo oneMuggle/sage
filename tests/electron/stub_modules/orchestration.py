@@ -35,6 +35,16 @@ def register_orchestration_routes(registry: dict) -> None:
     registry[("POST", r"^/api/v1/orchestration/lanes$")] = _create_lanes
     # P2-5 board snapshot endpoint (commands.ts:391) — keeps refresh() healthy.
     registry[("GET", r"^/api/v1/orchestration/board$")] = _board_snapshot
+    # orchRunClient.ts IPC contract (commands.ts:401-425): /api/v1/orch/runs
+    # 4 endpoints — list / get / resume / cancel / plan.
+    # Frontend LaneBoard / Orchestration.tsx boot-time listRuns() must 200
+    # (not 404), otherwise React reconciliation retries delay orch-create
+    # button appearance past the 60s test timeout in CI.
+    registry[("GET", r"^/api/v1/orch/runs$")] = _list_orch_runs
+    registry[("GET", r"^/api/v1/orch/runs/(?P<rid>[^/]+)$")] = _get_orch_run
+    registry[("POST", r"^/api/v1/orch/runs/(?P<rid>[^/]+)/resume$")] = _resume_orch_run
+    registry[("POST", r"^/api/v1/orch/runs/(?P<rid>[^/]+)/cancel$")] = _cancel_orch_run
+    registry[("POST", r"^/api/v1/orch/runs/(?P<rid>[^/]+)/plan$")] = _update_orch_plan
 
 
 def _ensure_table(ctx):
@@ -218,3 +228,47 @@ def _board_snapshot(ctx, body, **_):
             "dead": 0,
         },
     })
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# /api/v1/orch/runs 5 endpoints — orchRunClient.ts IPC contract.
+#
+# Smoke tests don't exercise run-list/get/resume/cancel/plan, but the
+# frontend LaneBoard calls listRuns() on mount (commands.ts:401). Without
+# these the frontend console floods with 404s and React reconciliation
+# retries delay orch-create button past the 60s CI test timeout.
+# All handlers return a minimal valid shape; real flow lives in
+# /api/v1/orchestration/*.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _list_orch_runs(ctx, body, **_):
+    send_json(ctx, 200, [])
+
+
+def _get_orch_run(ctx, body, rid, **_):
+    send_json(ctx, 200, {
+        "run_id": rid,
+        "session_id": "",
+        "status": "running",
+        "created_at": int(time.time() * 1000),
+        "plan": [],
+        "tasks": [],
+    })
+
+
+def _resume_orch_run(ctx, body, rid, **_):
+    send_json(ctx, 200, {
+        "ok": True,
+        "new_run_id": rid,
+        "session_id": body.get("session_id", ""),
+        "plan": body.get("plan", []),
+    })
+
+
+def _cancel_orch_run(ctx, body, rid, **_):
+    send_json(ctx, 200, {"ok": True, "run_id": rid, "status": "cancelled"})
+
+
+def _update_orch_plan(ctx, body, rid, **_):
+    send_json(ctx, 200, {"ok": True})

@@ -5,9 +5,15 @@ test('memory smoke: add memory item appears in episodic list', async () => {
   const { app, page, stub } = await launchElectronWithStub();
 
   // HashRouter: sidebar nav is <Link to={path}> → <a href="#/memory">.
-  // page.goto('/memory') fails (relative URL invalid in Electron Page context).
-  await page.locator('a[href*="/memory"]').click();
+  // Use window.location.hash so we don't depend on sidebar disclosure or
+  // actionTimeout=0 default. waitForSelector replaces the implicit click().
+  await page.evaluate(() => {
+    window.location.hash = '#/memory';
+  });
+  await page.waitForSelector('[data-testid="memory-add"]', { timeout: 15_000 });
   await page.locator('[data-testid="memory-add"]').click();
+
+  await page.waitForSelector('[data-testid="memory-content"]', { timeout: 10_000 });
   await page.locator('[data-testid="memory-content"]').fill('test memory item');
   await page.locator('[data-testid="memory-submit"]').click();
 
