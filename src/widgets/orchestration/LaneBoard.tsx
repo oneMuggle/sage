@@ -64,7 +64,10 @@ function LaneCard({ lane, onCancel }: LaneCardProps) {
   const isTerminal = ['succeeded', 'failed', 'stopped', 'cancelled'].includes(lane.status);
 
   return (
-    <div className="p-3 rounded-lg border border-border bg-bg-surface hover:border-border-hover transition-colors">
+    <div
+      data-testid={`lane-${lane.lane_id}`}
+      className="p-3 rounded-lg border border-border bg-bg-surface hover:border-border-hover transition-colors"
+    >
       <div className="flex items-center justify-between gap-1 mb-1">
         <span className="font-mono text-xs text-text-tertiary truncate">{lane.lane_id}</span>
         <span className="flex items-center gap-1 shrink-0">

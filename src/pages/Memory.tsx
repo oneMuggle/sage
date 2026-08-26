@@ -79,6 +79,7 @@ export function Memory() {
         <h2 className="text-[18px] font-semibold text-text">记忆库</h2>
         <div className="flex gap-2">
           <button
+            data-testid="memory-add"
             onClick={handleNewMemory}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm hover:bg-primary-hover transition-colors"
           >

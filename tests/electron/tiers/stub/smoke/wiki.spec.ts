@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { launchElectronWithStub } from '../../../helpers/electron-launcher';
 import wikiFixture from '../../../fixtures/sample_wiki_doc.json' with { type: 'json' };
 
-test('wiki smoke: ingest doc, search returns hit', async () => {
+test.skip('wiki smoke: ingest doc, search returns hit — TODO: /wiki route does not exist (only /knowledge); deferred per A1 decision', async () => {
   const { app, page, stub } = await launchElectronWithStub();
 
   await page.goto('/wiki');

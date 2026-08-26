@@ -297,6 +297,7 @@ export function InputCard({
               placeholder={placeholder}
               disabled={disabled}
               autoFocus={autoFocus}
+              data-testid="chat-input"
               className="flex-1 resize-none border-none bg-transparent outline-none text-sm text-text disabled:opacity-50 max-h-[200px] overflow-y-auto placeholder:text-muted"
               aria-label="message input"
             />
@@ -400,6 +401,7 @@ export function InputCard({
         ) : (
           <button
             type="button"
+            data-testid="chat-send"
             onClick={onSubmit}
             disabled={(!value.trim() && !hasAttachments) || disabled}
             className="h-9 px-4 bg-primary text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"

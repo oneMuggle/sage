@@ -59,6 +59,7 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
           </label>
           <textarea
             id="new-memory-content"
+            data-testid="memory-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={4}
