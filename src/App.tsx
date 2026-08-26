@@ -10,6 +10,7 @@ import {
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
+import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { Settings } from './pages';
 import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
@@ -21,7 +22,6 @@ import { ScheduledTasks } from './pages/ScheduledTasks';
 import Skills from './pages/Skills';
 import { Welcome } from './pages/Welcome';
 import { useStore } from './shared/lib/store';
-import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
 import { ApprovalDialog } from './widgets/permission';

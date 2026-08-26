@@ -11,8 +11,8 @@ vi.mock('../../../entities/setting/storage', () => ({
 }));
 
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
-import { useSettings } from '../useSettings';
 import { useSettingsStore } from '../settingsStore';
+import { useSettings } from '../useSettings';
 
 function resetStore() {
   useSettingsStore.setState({

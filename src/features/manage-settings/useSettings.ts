@@ -1,5 +1,6 @@
-import { useSettingsStore } from './settingsStore';
 import type { AppSettings } from '../../entities/setting/types';
+
+import { useSettingsStore } from './settingsStore';
 
 export interface UseSettingsReturn {
   settings: AppSettings;

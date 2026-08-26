@@ -11,7 +11,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { __test__sanitizeForBackend, __test__SNAKE_KEYS_TO_DROP } from '../storage';
-
 import type { AppSettings } from '../types';
 
 type LooseSettings = Partial<AppSettings> & Record<string, unknown>;
