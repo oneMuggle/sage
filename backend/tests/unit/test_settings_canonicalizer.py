@@ -619,7 +619,7 @@ def test_redact_secrets_strips_endpoint_api_key_and_marks_has_api_key():
     assert ep["apiKey"] == ""
     assert ep["hasApiKey"] is True
     assert ep["baseUrl"] == "https://api.example.com/v1"
-    # 原始对象未被修改 (immutability)
+    # immutability check
     assert settings["endpoints"][0]["apiKey"] == "sk-test-SECRET-do-not-leak-1f2e3d4c5b6a"
 
 

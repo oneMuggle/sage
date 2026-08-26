@@ -11,10 +11,10 @@ import { usePermissionState } from '../../../entities/permission/permissionState
 import { useQuestionState } from '../../../entities/question/questionState';
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
+import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
 import { useStore } from '../../../shared/lib/store';
 import { useChatStreamStore } from '../chatStreamStore';
 import { useChat } from '../useChat';
-import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
 // 默认 mockResolvedValue(undefined) 让未 mock 的 IPC 调用（如 useSettings

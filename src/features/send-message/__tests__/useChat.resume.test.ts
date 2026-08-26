@@ -13,9 +13,9 @@ import { usePermissionState } from '../../../entities/permission/permissionState
 import { useQuestionState } from '../../../entities/question/questionState';
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
+import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
 import { useStore } from '../../../shared/lib/store';
 import { useChat } from '../useChat';
-import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
 
 const invokeMock = vi.fn().mockResolvedValue(undefined);
 const listenMock = vi.fn();
