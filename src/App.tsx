@@ -21,6 +21,7 @@ import { ScheduledTasks } from './pages/ScheduledTasks';
 import Skills from './pages/Skills';
 import { Welcome } from './pages/Welcome';
 import { useStore } from './shared/lib/store';
+import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
 import { ApprovalDialog } from './widgets/permission';
@@ -62,6 +63,16 @@ function AppStartupRestore() {
       cancelled = true;
     };
   }, [requestedSessionId]);
+  return null;
+}
+
+// 2026-08-26: 全局 settings 在 App 启动时加载一次 — 所有 useSettings() 调用
+// 共享同一份 state. 之前的 useSettings 在每个组件 mount 时独立 loadSettings,
+// Sidebar 永远显示首次 mount 时的 "未配置".
+function AppStartupSettings() {
+  useEffect(() => {
+    void useSettingsStore.getState().loadSettings();
+  }, []);
   return null;
 }
 
@@ -107,6 +118,7 @@ function App() {
       <NavHistoryProvider>
         <BackendStatusBanner />
         <AppStartupRestore />
+        <AppStartupSettings />
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/chat" replace />} />
