@@ -12,6 +12,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePermissionState } from '../../../entities/permission/permissionState';
 import { useQuestionState } from '../../../entities/question/questionState';
 import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
+import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
+import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
 import { useStore } from '../../../shared/lib/store';
 import { useChat } from '../useChat';
 
@@ -54,9 +56,13 @@ function seedActiveEndpoint(): void {
   localStorage.setItem('sage-settings.migrated_to_backend', new Date().toISOString());
 }
 
+/**
+ * 2026-08-26: useSettings 改为订阅全局 zustand store 后, loadSettings 不再
+ * 在 mount 时自动触发. 显式调 store.loadSettings() 启动加载.
+ */
 async function waitForSettingsLoaded(): Promise<void> {
-  await waitFor(() => {
-    expect(invokeMock).toHaveBeenCalledWith('get_settings', {});
+  await act(async () => {
+    await useSettingsStore.getState().loadSettings();
   });
   await act(async () => {
     await Promise.resolve();
@@ -72,6 +78,8 @@ beforeEach(() => {
   // mockResolvedValueOnce（后者针对 orchestration_resume_run 等具体 cmd）
   invokeMock.mockResolvedValueOnce({ data: null });
   listenMock.mockReset();
+  // 2026-08-26: 重置 settings store,避免用例间串扰
+  useSettingsStore.setState({ settings: { ...DEFAULT_SETTINGS }, isLoading: true });
   // sendMessage 内 `sid = sessionId ?? currentSessionId` —— 缺 session 直接 return
   useStore.setState({
     sessions: [],

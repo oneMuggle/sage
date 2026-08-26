@@ -19,8 +19,11 @@ import type { EndpointsTabProps } from './components';
 
 // Task 1 (2026-08-23): 协议下拉选项 — 与后端 canonicalizer / EndpointProtocol 类型对齐.
 // 显示名本地化为中文, value 与协议字面量一致 (用于 EndpointConfig.protocol 字段).
+// 2026-08-26: openai-compatible 文案明确 LM Studio / OpenAI / 其他兼容服务, 防止用户
+// 把它当作 "OpenAI 云 API 专用" 而去找并不存在的 LM Studio 独立 provider. LM Studio
+// 是 OpenAI-compatible (/v1/chat/completions) 服务, 空 key 时 Authorization 头跳过.
 const PROTOCOL_OPTIONS: ReadonlyArray<{ value: EndpointProtocol; label: string }> = [
-  { value: 'openai-compatible', label: 'OpenAI 兼容 (/v1/chat/completions)' },
+  { value: 'openai-compatible', label: 'OpenAI 兼容 (LM Studio / OpenAI / 其他 /v1/*)' },
   { value: 'ollama', label: 'Ollama 原生 (/api/chat)' },
   { value: 'anthropic', label: 'Anthropic Messages' },
   { value: 'gemini', label: 'Google Gemini' },
@@ -46,7 +49,6 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
       apiKey: '',
       protocol: 'openai-compatible',
       modelId: '',
-      localModelPath: '',
     });
   };
 
@@ -121,10 +123,8 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
         const name = form.name ?? ep.name;
         const baseUrl = form.baseUrl ?? ep.baseUrl;
         const apiKey = form.apiKey ?? ep.apiKey;
-        const protocol: EndpointProtocol =
-          (form.protocol ?? ep.protocol ?? 'openai-compatible');
+        const protocol: EndpointProtocol = form.protocol ?? ep.protocol ?? 'openai-compatible';
         const modelId = form.modelId ?? ep.modelId ?? '';
-        const localModelPath = form.localModelPath ?? ep.localModelPath ?? '';
         const result = testResult[ep.id];
 
         return (
@@ -149,7 +149,6 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                         apiKey: ep.apiKey,
                         protocol: ep.protocol,
                         modelId: ep.modelId,
-                        localModelPath: ep.localModelPath,
                       });
                     }}
                     className="text-xs text-muted hover:text-text transition-colors"
@@ -198,7 +197,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-muted block mb-1">协议 (Task 1 2026-08-23)</label>
+                  <label className="text-xs text-muted block mb-1">协议</label>
                   <select
                     data-testid="endpoint-protocol-select"
                     value={protocol}
@@ -214,28 +213,26 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="text-xs text-muted block mb-1">模型 ID (Task 1 2026-08-23)</label>
+                <div className="opacity-75">
+                  <label className="text-[11px] text-muted/80 block mb-1">
+                    模型 ID（高级，可选）
+                  </label>
                   <input
                     type="text"
                     value={modelId}
                     onChange={(e) => setEditForm({ ...form, modelId: e.target.value })}
-                    placeholder="qwen2.5-7b-instruct"
-                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+                    placeholder="留空走 ModelsTab 选择"
+                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-[11px] font-mono bg-surface text-text"
                   />
+                  <p className="text-[10px] text-muted/70 mt-0.5">
+                    仅作 OpenAI 兼容服务的兜底；正常选择走"模型"页。
+                  </p>
                 </div>
-                <div>
-                  <label className="text-xs text-muted block mb-1">
-                    本地模型路径 (Task 1 2026-08-23, 选填)
-                  </label>
-                  <input
-                    type="text"
-                    value={localModelPath}
-                    onChange={(e) => setEditForm({ ...form, localModelPath: e.target.value })}
-                    placeholder="/path/to/local/model.gguf"
-                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
-                  />
-                </div>
+                {/* 2026-08-26: localModelPath 输入已移除. 该字段在 EndpointConfig
+                    上保留 (DEFAULT_ENDPOINT.localModelPath = '') 仅用于向后兼容
+                    读取旧设置; UI 不再询问本地 .gguf 路径, 因为 LM Studio 等本地
+                    OpenAI-compatible 服务完全通过 baseUrl + modelId 路由, 不需要
+                    该字段. plan §4. */}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleSave(ep.id)}
@@ -310,9 +307,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 text-[11px] text-muted">
+                <div className="flex items-center gap-3 text-[10px] text-muted/70">
                   <span>协议: {ep.protocol}</span>
-                  {ep.modelId && <span>模型: {ep.modelId}</span>}
+                  {ep.modelId && <span>模型(高级): {ep.modelId}</span>}
                 </div>
               </div>
             )}

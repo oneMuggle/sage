@@ -169,6 +169,7 @@ function MessageComponent({
 
   return (
     <div
+      data-testid={isAssistant ? 'chat-message-assistant' : undefined}
       className={`flex gap-3 mb-5 w-full animate-message-enter ${isUser ? 'flex-row-reverse' : ''}`}
     >
       {/* 头像 */}

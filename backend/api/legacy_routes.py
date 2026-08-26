@@ -1427,6 +1427,8 @@ def legacy_get_settings() -> dict | None:
     """
     from backend.data.settings_canonicalizer import (
         detect_legacy_snake_pollution,
+        redact_secrets,
+        strip_unknown_fields,
         to_camel,
     )
     from backend.data.settings_repo import SettingsRepository
@@ -1449,7 +1451,11 @@ def legacy_get_settings() -> dict | None:
     # → 迁移默认值 ``openai-compatible`` (OpenAI 兼容端点是最常见的 LM Studio /
     # Ollama / OpenAI 替代品). 这样旧客户端无需再写一次 PUT 就能看到正确 protocol.
     _migrate_default_protocol(translated)
-    return translated
+    # 2026-08-26: 边界净化白名单外字段 + 脱敏 apiKey, 防止历史残留
+    # (memory_server_sync / local_model_path 等) 重新污染 GET 响应,
+    # 同时保证明文凭据不通过 HTTP 回前端 (OWASP A02:2021).
+    cleaned = strip_unknown_fields(translated)
+    return redact_secrets(cleaned)
 
 
 def _migrate_default_protocol(settings: dict) -> None:
@@ -1541,12 +1547,20 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
 @router.get("/preferences/{key}", response_model=LegacyPreferenceItem)
 @with_db_lock
 def legacy_get_preference(key: str) -> LegacyPreferenceItem:
-    """通用 KV 读取（白名单限定 key）。"""
+    """通用 KV 读取（白名单限定 key）。
+
+    2026-08-26: 当 key=='app_settings' 时, 对 value (JSON 字符串) 做
+    ``redact_secrets_json`` —— 把 endpoint.apiKey 替换为 hasApiKey 标记,
+    防止明文凭据通过 preference GET 返回前端 (OWASP A02:2021).
+    """
+    from backend.data.settings_canonicalizer import redact_secrets_json
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
     val = SettingsRepository().get(key)
+    if key == "app_settings":
+        val = redact_secrets_json(val)
     return LegacyPreferenceItem(value=val)
 
 

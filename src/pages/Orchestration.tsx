@@ -43,6 +43,7 @@ export function Orchestration() {
         </header>
 
         <form
+          data-testid="orch-create"
           className="flex items-center gap-2 mb-4"
           onSubmit={(e) => {
             e.preventDefault();
@@ -51,6 +52,7 @@ export function Orchestration() {
         >
           <input
             type="text"
+            data-testid="orch-plan"
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
             placeholder={t('orchestration.goal_placeholder')}
@@ -59,6 +61,7 @@ export function Orchestration() {
           />
           <button
             type="submit"
+            data-testid="orch-submit"
             disabled={creating || goal.trim().length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >

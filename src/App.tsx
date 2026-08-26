@@ -10,6 +10,7 @@ import {
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { loadCurrentSessionId } from './entities/session/storage';
+import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { Settings } from './pages';
 import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
@@ -65,6 +66,16 @@ function AppStartupRestore() {
   return null;
 }
 
+// 2026-08-26: 全局 settings 在 App 启动时加载一次 — 所有 useSettings() 调用
+// 共享同一份 state. 之前的 useSettings 在每个组件 mount 时独立 loadSettings,
+// Sidebar 永远显示首次 mount 时的 "未配置".
+function AppStartupSettings() {
+  useEffect(() => {
+    void useSettingsStore.getState().loadSettings();
+  }, []);
+  return null;
+}
+
 // Phase 7: gate /chat by currentSessionId; fall back to /welcome when missing.
 // 批次三 step 6 (spec §4.3 line 150): Memory 页"来源会话跳转"以
 // /chat?session=<id> 形式进入 — ChatRoute 消费该参数写入 store,
@@ -107,6 +118,7 @@ function App() {
       <NavHistoryProvider>
         <BackendStatusBanner />
         <AppStartupRestore />
+        <AppStartupSettings />
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/chat" replace />} />

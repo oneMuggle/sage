@@ -1,0 +1,21 @@
+name: E2E Nightly
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+jobs:
+  live-deep-nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: conda-incubator/setup-miniconda@v3
+        with: { python-version: '3.11' }
+      - run: conda create -n sage-backend python=3.11 -y
+      - run: conda run -n sage-backend pip install -r backend/requirements.txt
+      - run: npm ci && npm run build:electron
+      - name: Run nightly live deep E2E
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: npm run test:nightly
