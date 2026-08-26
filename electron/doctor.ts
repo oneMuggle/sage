@@ -18,9 +18,30 @@
 import { spawn } from 'node:child_process';
 
 export interface DoctorLaunchOptions {
+  /**
+   * The python binary to invoke. For dev-conda / dev-SAGE_PYTHON this is
+   * `'conda'` / `'python3'` (i.e. the supervisor command), and the full argv
+   * lives in `args`. For legacy CI smoke callers passing just a python
+   * interpreter, doctor.ts fills in a default `-m backend.cli.doctor --json`.
+   */
   pythonBin: string;
+  /**
+   * Full argv to pass after `pythonBin`. When omitted (legacy callers),
+   * doctor.ts defaults to `['-m', 'backend.cli.doctor', '--json']` so a
+   * bare `runDoctorCheck('python', '/path')` call still works.
+   */
+  args?: string[];
+  /** Filesystem root of the project (used for cwd fallback + PYTHONPATH fallback). */
   packageRoot: string;
+  /** Subprocess cwd. Defaults to `packageRoot`. */
   cwd?: string;
+  /**
+   * Subprocess env. PYTHONPATH handling:
+   *   - If supplied here, **kept verbatim** — packaged supervisor builds
+   *     `resourcesPath/backend:resourcesPath/sage-core` and must not be
+   *     clobbered (otherwise `import backend.cli.doctor` crashes).
+   *   - If omitted, falls back to `packageRoot` so legacy dev calls work.
+   */
   env?: NodeJS.ProcessEnv;
 }
 
@@ -100,9 +121,28 @@ export async function runDoctorCheck(
         }
       : pythonBinOrOptions;
   const startedAt = Date.now();
-  const proc = spawn(options.pythonBin, ['-m', 'backend.cli.doctor', '--json'], {
+  // 2026-08-26: argv is now caller-supplied (via DoctorLaunchOptions.args)
+  // when the supervisor can produce a complete spawn plan (dev-conda,
+  // packaged-bundled, …). For legacy string-only callers we fall back to
+  // the historical `python -m backend.cli.doctor --json` shape.
+  const argv = options.args ?? ['-m', 'backend.cli.doctor', '--json'];
+  // 2026-08-26: env merge order matters. Earlier code did
+  //   `{ ...process.env, ...options.env, PYTHONPATH: options.packageRoot }`
+  // which unconditionally clobbered the packaged supervisor's
+  // `resourcesPath/backend:resourcesPath/sage-core` PYTHONPATH with a
+  // single `packageRoot`, breaking `import backend.cli.doctor`. New order:
+  // process.env defaults < caller options.env override < PYTHONPATH fallback
+  // (only if caller didn't already set one).
+  const mergedEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...options.env,
+  };
+  if (!('PYTHONPATH' in mergedEnv) || mergedEnv.PYTHONPATH === undefined) {
+    mergedEnv.PYTHONPATH = options.packageRoot;
+  }
+  const proc = spawn(options.pythonBin, argv, {
     cwd: options.cwd ?? options.packageRoot,
-    env: { ...process.env, ...options.env, PYTHONPATH: options.packageRoot },
+    env: mergedEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });

@@ -56,11 +56,7 @@ async function waitForAppWindow(app: ElectronApplication, timeoutMs: number): Pr
     const windows = app.windows();
     for (const w of windows) {
       const url = w.url();
-      if (
-        url !== 'about:blank' &&
-        !url.startsWith('devtools://') &&
-        !url.startsWith('chrome://')
-      ) {
+      if (url !== 'about:blank' && !url.startsWith('devtools://') && !url.startsWith('chrome://')) {
         return w;
       }
     }

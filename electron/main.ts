@@ -57,7 +57,7 @@ import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
-import { resolveBackendLaunchCommand } from './backendLauncher';
+import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
 import { killOrphanedBackendOnPort } from './orphanBackendKiller';
@@ -115,7 +115,11 @@ const MIN_WINDOW_WIDTH = 1024;
 const MIN_WINDOW_HEIGHT = 640;
 
 // Timeouts (milliseconds)
-const BACKEND_HEALTH_TIMEOUT_MS = 30_000;
+// 2026-08-26: bump 30_000 → 90_000 — 实测 conda wrapper + Python + uvicorn 在
+// Linux 上启动 + bind 8765 需要 ~50-65s (60s 仍然卡边界超时). 90s 给后端充足
+// 启动窗口, 避免触发"startup failed"对话框. 用户实测在 60s 边界 listen 8765,
+// 后端实际可用但 Electron poll 已先 timeout.
+const BACKEND_HEALTH_TIMEOUT_MS = 90_000;
 const BACKEND_SHUTDOWN_TIMEOUT_MS = 3_000;
 const HTTP_REQUEST_TIMEOUT_MS = 1_000;
 
@@ -1226,7 +1230,14 @@ app.whenReady().then(async () => {
   // experiences via Show Logs. Hard 5s timeout is enforced inside runDoctorCheck.
   if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
     try {
-      const doctorPlan = resolveBackendLaunchCommand({
+      // 2026-08-26: use `resolveDoctorLaunchCommand` so the doctor
+      // subprocess runs under the EXACT same argv/env the supervisor will
+      // use for the backend — replacing `backend.main` with
+      // `backend.cli.doctor --json` in the same chain. Without this, dev-conda
+      // produced `conda -m backend.cli.doctor --json` (conda has no `-m`
+      // subcommand), and packaged supervisors had their PYTHONPATH
+      // clobbered by `doctor.ts`'s `PYTHONPATH: packageRoot` default.
+      const supervisorPlan = resolveBackendLaunchCommand({
         env: process.env,
         resourcesPath: process.resourcesPath,
         platform: process.platform,
@@ -1235,42 +1246,57 @@ app.whenReady().then(async () => {
         sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
         port: BACKEND_PORT,
       });
-      // Round 2 (fast-follow E): thread the supervisor's launcher context
-      // (command / cwd / env) into the doctor subprocess so the
-      // ``import backend.main`` probe runs under the EXACT env the
-      // backend will see. ``runDoctorCheck`` already merges ``options.env``
-      // into the child env, so these three SAGE_BACKEND_* keys reach
-      // ``backend.cli.doctor.main`` which reads them via the new
-      // ``_resolve_backend_context`` helper.
-      let doctorEnv: NodeJS.ProcessEnv | undefined;
-      if (doctorPlan.kind === 'spawn') {
-        const launcherArgv = [doctorPlan.command, ...(doctorPlan.args ?? [])];
-        // Surface only the env keys the supervisor would actually set on
-        // the backend (plan.env + plan.extraEnv); the host env is already
-        // inherited via ``process.env`` in runDoctorCheck.
+      const doctorPlan =
+        supervisorPlan.kind === 'spawn'
+          ? resolveDoctorLaunchCommand({
+              env: process.env,
+              resourcesPath: process.resourcesPath,
+              platform: process.platform,
+              isPackaged: app.isPackaged,
+              sageDbPath: process.env.SAGE_DB_PATH ?? join(process.cwd(), 'data', 'sage.db'),
+              sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
+              port: BACKEND_PORT,
+            })
+          : undefined;
+
+      // Thread the supervisor's launcher context (command / cwd / env)
+      // into the doctor subprocess so `backend.cli.doctor._resolve_backend_context`
+      // can probe the same plan. `resolveDoctorLaunchCommand` already merged
+      // plan.env + plan.extraEnv into doctorPlan.env, so we only need to add
+      // the SAGE_BACKEND_* JSON-encoded context keys on top.
+      let doctorSummary: Awaited<ReturnType<typeof runDoctorCheck>>;
+      if (doctorPlan) {
+        const supervisorArgv = [
+          supervisorPlan.kind === 'spawn' ? supervisorPlan.command : '',
+          ...(supervisorPlan.kind === 'spawn' ? (supervisorPlan.args ?? []) : []),
+        ];
         const supervisorEnv: Record<string, string> = {};
-        for (const [k, v] of Object.entries({
-          ...doctorPlan.env,
-          ...doctorPlan.extraEnv,
-        })) {
-          if (typeof v === 'string') supervisorEnv[k] = v;
+        if (supervisorPlan.kind === 'spawn') {
+          for (const [k, v] of Object.entries({
+            ...supervisorPlan.env,
+            ...supervisorPlan.extraEnv,
+          })) {
+            if (typeof v === 'string') supervisorEnv[k] = v;
+          }
         }
-        doctorEnv = {
-          ...supervisorEnv,
-          SAGE_BACKEND_CMD: JSON.stringify(launcherArgv),
-          SAGE_BACKEND_CWD: doctorPlan.cwd,
+        const doctorEnv: NodeJS.ProcessEnv = {
+          ...doctorPlan.env,
+          SAGE_BACKEND_CMD: JSON.stringify(supervisorArgv),
+          SAGE_BACKEND_CWD: supervisorPlan.kind === 'spawn' ? supervisorPlan.cwd : process.cwd(),
           SAGE_BACKEND_ENV: JSON.stringify(supervisorEnv),
         };
+        doctorSummary = await runDoctorCheck({
+          pythonBin: doctorPlan.command,
+          args: doctorPlan.args,
+          cwd: doctorPlan.cwd,
+          env: doctorEnv,
+          packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
+        });
+      } else {
+        // broken-installer (no bundled Python / unsupported platform) —
+        // fall back to bare `python` so doctor still runs in CI.
+        doctorSummary = await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
       }
-      const doctorSummary =
-        doctorPlan.kind === 'spawn'
-          ? await runDoctorCheck({
-              pythonBin: doctorPlan.command,
-              packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
-              cwd: doctorPlan.cwd,
-              env: doctorEnv,
-            })
-          : await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
       logger.info('main: doctor check complete', doctorSummary);
       if (doctorSummary.status === 'critical') {
         logger.warn('main: doctor reported CRITICAL — user may see degraded experience', {
