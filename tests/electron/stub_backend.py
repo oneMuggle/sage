@@ -233,6 +233,10 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     server = StubBackend(port=port)
     server.start()
+    # Task 9: emit STUB_URL handshake so the Playwright helper can parse
+    # the bound URL from stdout. The older "Stub backend running at ..."
+    # line is kept for human readability; the helper matches STUB_URL=.
+    print("STUB_URL={}".format(server.url), flush=True)
     print("Stub backend running at {}".format(server.url))
     try:
         while True:
