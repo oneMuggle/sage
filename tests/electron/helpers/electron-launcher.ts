@@ -16,11 +16,31 @@
  * Notes:
  *   - The Electron app must already be built (`npm run build:electron`).
  *     The launch will fail with ENOENT otherwise.
- *   - We pass `args: ['.']` so Electron uses the project's package.json
- *     `main` field (dist-electron/electron/main.js).
+ *   - We pass `args: [MAIN_JS]` (NOT `args: ['.']`). When Electron is launched
+ *     with `.` as the app arg it sets `process.defaultApp = true`, which
+ *     triggers a fast-exit path that closes the main process after the
+ *     first log line — Playwright then sees `electron.launch: Process failed
+ *     to launch!` (ws disconnected code=1006, exitCode=0). The Office spec
+ *     (tests/electron/tiers/stub/smoke/office.spec.ts:215) already uses an
+ *     explicit `mainJs` path; the helper must match.
+ *   - `cwd` is set to the project root explicitly. Without it, Playwright's
+ *     electron.launch inherits the test runner's cwd, which can shift between
+ *     `npm run test:smoke` (project root) and direct `npx playwright` invocations.
  */
+import { existsSync } from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { _electron as electron, ElectronApplication, Page } from '@playwright/test';
 import { StubBackend } from './stub-backend';
+
+const _filename = typeof __filename !== 'undefined' ? __filename : fileURLToPath(import.meta.url);
+const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(_filename);
+
+// Project root = two levels up from tests/electron/helpers/electron-launcher.ts.
+// Resolved at module load so the path is stable regardless of where Playwright
+// is invoked from.
+const PROJECT_ROOT = path.resolve(_dirname, '..', '..', '..');
+const MAIN_JS = path.join(PROJECT_ROOT, 'dist-electron', 'electron', 'main.js');
 
 export interface ElectronWithStub {
   app: ElectronApplication;
@@ -29,16 +49,25 @@ export interface ElectronWithStub {
 }
 
 export async function launchElectronWithStub(): Promise<ElectronWithStub> {
+  if (!existsSync(MAIN_JS)) {
+    throw new Error(
+      `${MAIN_JS} not found — run \`npm run build:electron\` before launching the smoke suite.`,
+    );
+  }
+
   const stub = new StubBackend();
   await stub.start();
   const app = await electron.launch({
-    args: ['.'],
+    // Explicit path (NOT '.') — see Notes above for why this matters.
+    args: [MAIN_JS],
+    cwd: PROJECT_ROOT,
     env: {
       ...process.env,
       SAGE_BACKEND_URL: stub.url,
       PYTHON_BACKEND_PORT: String(stub.port),
       SAGE_SKIP_BACKEND: '1',
     },
+    timeout: 30_000,
   });
   // Pick the Sage app window, NOT Chromium DevTools or the initial blank page.
   // When main.ts opens DevTools in detach mode (isDev=true), it spawns a second
