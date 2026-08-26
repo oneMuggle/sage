@@ -25,7 +25,8 @@
  *     to stdout (added by Task 9). We parse that line, NOT the older
  *     "Stub backend running at ..." format.
  */
-import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, ChildProcessByStdio } from 'node:child_process';
+import { Readable } from 'node:stream';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,13 +35,11 @@ const _filename = typeof __filename !== 'undefined' ? __filename : fileURLToPath
 const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(_filename);
 
 export class StubBackend {
-  process: ChildProcessWithoutNullStreams | null = null;
+  process: ChildProcessByStdio<null, Readable, Readable> | null = null;
   url = '';
   port = 0;
 
-  constructor(
-    private pythonPath = '/home/fz/anaconda3/envs/sage-backend/bin/python',
-  ) {}
+  constructor(private pythonPath = '/home/fz/anaconda3/envs/sage-backend/bin/python') {}
 
   async start(): Promise<void> {
     const stubScript = path.resolve(_dirname, '..', 'stub_backend.py');

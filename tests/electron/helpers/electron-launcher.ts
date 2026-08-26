@@ -10,7 +10,7 @@
  * Environment contract:
  *   SAGE_BACKEND_URL   — stub base URL (renderer picks it up)
  *   PYTHON_BACKEND_PORT — port only (Electron main.ts constructs backend URL)
- *   SAGE_SKIP_BACKEND   — "0" so Electron does NOT spawn a real backend process
+ *   SAGE_SKIP_BACKEND   — "1" so Electron does NOT spawn a real backend process
  *                         (we have a stub on this port already)
  *
  * Notes:
@@ -37,7 +37,7 @@ export async function launchElectronWithStub(): Promise<ElectronWithStub> {
       ...process.env,
       SAGE_BACKEND_URL: stub.url,
       PYTHON_BACKEND_PORT: String(stub.port),
-      SAGE_SKIP_BACKEND: '0',
+      SAGE_SKIP_BACKEND: '1',
     },
   });
   const page = await app.firstWindow();
