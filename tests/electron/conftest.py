@@ -12,6 +12,7 @@ Both variables are restored (or unset) on teardown so fixtures don't leak.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 
 import pytest
@@ -19,6 +20,7 @@ import pytest
 # Ensure the stub_backend module is importable from tests/electron/
 sys.path.insert(0, os.path.dirname(__file__))
 
+from _real_backend import RealBackend
 from stub_backend import StubBackend
 
 
@@ -51,12 +53,6 @@ def stub_backend():
             os.environ.pop("PYTHON_BACKEND_PORT", None)
 
 
-import subprocess
-import time
-
-from _real_backend import RealBackend
-
-
 def _conda_env_available(env_name: str) -> bool:
     try:
         subprocess.run(
@@ -81,7 +77,13 @@ def real_backend():
     try:
         yield backend
     finally:
-        backend.stop()
+        # Q3 fix: wrap stop() so PYTHON_BACKEND_PORT restoration runs even if stop() raises.
+        # stop() may swallow a benign error from SIGKILL escalation; we don't want that to
+        # leak the test's stub port into the parent process env.
+        try:
+            backend.stop()
+        except Exception:
+            pass
         if old_port is not None:
             os.environ["PYTHON_BACKEND_PORT"] = old_port
         else:

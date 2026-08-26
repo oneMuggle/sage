@@ -17,7 +17,7 @@ class RealBackend:
             ["conda", "run", "-n", "sage-backend", "python", "-m", "backend.main"],
             cwd=str(Path(__file__).resolve().parents[2]),
             env={**os.environ, "PYTHON_BACKEND_PORT": str(self.port)},
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
         deadline = time.time() + self.timeout_s
@@ -44,3 +44,7 @@ class RealBackend:
                     os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
                 except (ProcessLookupError, PermissionError):
                     self.process.kill()
+                try:
+                    self.process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
