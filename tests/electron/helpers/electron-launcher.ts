@@ -40,6 +40,33 @@ export async function launchElectronWithStub(): Promise<ElectronWithStub> {
       SAGE_SKIP_BACKEND: '1',
     },
   });
-  const page = await app.firstWindow();
+  // Pick the Sage app window, NOT Chromium DevTools. When main.ts opens
+  // DevTools in detach mode (isDev=true), it spawns a second top-level
+  // BrowserWindow whose URL starts with `devtools://`. Playwright's
+  // firstWindow() may return that window if it opens before the React app
+  // finishes loading — yielding a DevTools page with no <a> tags and no
+  // React route handlers. Filter to the first non-devtools window instead.
+  const page = await waitForAppWindow(app, 30_000);
   return { app, page, stub };
+}
+
+async function waitForAppWindow(
+  app: ElectronApplication,
+  timeoutMs: number,
+): Promise<Page> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const windows = app.windows();
+    for (const w of windows) {
+      const url = w.url();
+      if (!url.startsWith('devtools://') && !url.startsWith('chrome://')) {
+        return w;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(
+    `Sage app window not found within ${timeoutMs}ms ` +
+      `(saw ${app.windows().length} windows, all devtools:// or chrome://)`,
+  );
 }

@@ -255,13 +255,21 @@ def _create_stream(ctx: StubContext, body: dict, **_):
     session_id = body.get("session_id", "")
     office_refs = body.get("office_refs", [])
 
-    # Validate session exists
+    # Validate session exists. Stub: auto-create if missing — the renderer
+    # persists session_id in localStorage across runs, but each test launches
+    # a fresh stub with an empty SQLite. A missing session is not a stub-level
+    # failure; real backend validates ownership, stub is permissive.
     row = ctx.db.execute(
         "SELECT * FROM sessions WHERE id = ?", (session_id,)
     ).fetchone()
     if not row:
-        send_json(ctx, 404, {"type": "session_not_found", "message": "会话不存在"})
-        return
+        now = int(time.time() * 1000)
+        ctx.db.execute(
+            "INSERT OR IGNORE INTO sessions (id, title, created_at, updated_at, parent_id)"
+            " VALUES (?, ?, ?, ?, NULL)",
+            (session_id, "新对话", now, now),
+        )
+        ctx.db.commit()
 
     # Validate office_refs if provided (Task 6 authorization)
     if office_refs:

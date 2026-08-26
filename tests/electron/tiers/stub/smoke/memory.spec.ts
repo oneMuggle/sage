@@ -4,7 +4,9 @@ import { launchElectronWithStub } from '../../../helpers/electron-launcher';
 test('memory smoke: add memory item appears in episodic list', async () => {
   const { app, page, stub } = await launchElectronWithStub();
 
-  await page.goto('/memory');
+  // HashRouter: sidebar nav is <Link to={path}> → <a href="#/memory">.
+  // page.goto('/memory') fails (relative URL invalid in Electron Page context).
+  await page.locator('a[href*="/memory"]').click();
   await page.locator('[data-testid="memory-add"]').click();
   await page.locator('[data-testid="memory-content"]').fill('test memory item');
   await page.locator('[data-testid="memory-submit"]').click();

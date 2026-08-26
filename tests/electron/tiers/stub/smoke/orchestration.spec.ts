@@ -5,12 +5,18 @@ import orchFixture from '../../../fixtures/sample_orchestration.json' with { typ
 test('orchestration smoke: create run with 3 agents, lanes render', async () => {
   const { app, page, stub } = await launchElectronWithStub();
 
-  await page.goto('/orchestration');
+  // HashRouter: navigate via window.location.hash. /orchestration is a
+  // progressive-disclosure nav item (ADVANCED_FEATURE_BY_PATH in Sidebar.tsx)
+  // hidden until first visit, so the sidebar <a> may not render at all.
+  // Setting the hash triggers React Router regardless of disclosure state.
+  await page.evaluate(() => {
+    window.location.hash = "#/orchestration";
+  });
   await page.locator('[data-testid="orch-create"]').click();
   await page.locator('[data-testid="orch-plan"]').fill(orchFixture.plan);
   await page.locator('[data-testid="orch-submit"]').click();
 
-  await expect(page.locator('[data-testid^="lane-"]')).toHaveCount(3, { timeout: 10_000 });
+  await expect(page.locator('[data-testid^="lane-lane_"]')).toHaveCount(3, { timeout: 10_000 });
 
   await app.close();
   stub.stop();
