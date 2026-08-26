@@ -3,9 +3,9 @@ import { test, expect, request } from '@playwright/test';
 import { launchElectronWithStub } from '../../../helpers/electron-launcher';
 
 test.describe('memory deep', () => {
-  let app, page, stub, apiCtx;
+  let app, stub, apiCtx;
   test.beforeAll(async () => {
-    ({ app, page, stub } = await launchElectronWithStub());
+    ({ app, stub } = await launchElectronWithStub());
     apiCtx = await request.newContext({ baseURL: stub.url });
   });
   test.afterAll(async () => {

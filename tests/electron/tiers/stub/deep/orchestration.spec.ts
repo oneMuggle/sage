@@ -24,6 +24,7 @@ test.describe('orchestration deep', () => {
     await expect(page.locator('[data-testid^="lane-"]')).toHaveCount(3);
 
     // 通过 stub API 拿 run_id 验证状态
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- probe-only call
     const list = await apiCtx.get('/api/v1/orchestration/runs').catch(() => null);
     // stub 当前没有 list endpoint；至少 get single run
     const rid = await page.locator('[data-testid="orch-run-id"]').first().textContent();
