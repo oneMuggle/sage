@@ -119,11 +119,25 @@ jobs:
 
       - name: Create stable-named Linux artifacts (A8 from OpenWorker)
         if: matrix.os == 'ubuntu-latest'
+        shell: pwsh
         run: |
           # Copy versioned artifacts to stable names
           # Download URLs like releases/latest/download/Sage-latest.AppImage never need updating
-          cp release/*/Sage-*.AppImage release/linux-unpacked/Sage-latest.AppImage || true
-          cp release/*/sage_*_amd64.deb release/linux-unpacked/sage-latest_amd64.deb || true
+          # Ensure stable-named artifact directory exists (electron-builder writes
+          # to release/${version}/linux-unpacked/, not release/linux-unpacked/).
+          # Previous bash `cp ... || true` silently swallowed the missing-dir
+          # bug, so latest-named artifacts were never uploaded. Switched to
+          # PowerShell to mirror the Windows step's behavior and surface failures.
+          $stableDir = "release/linux-unpacked"
+          if (-not (Test-Path $stableDir)) {
+            New-Item -ItemType Directory -Force -Path $stableDir | Out-Null
+          }
+          Get-ChildItem -Path release -Filter "Sage-*.AppImage" -Recurse | ForEach-Object {
+            Copy-Item $_.FullName -Destination (Join-Path $stableDir "Sage-latest.AppImage")
+          }
+          Get-ChildItem -Path release -Filter "sage_*_amd64.deb" -Recurse | ForEach-Object {
+            Copy-Item $_.FullName -Destination (Join-Path $stableDir "sage-latest_amd64.deb")
+          }
 
       - name: Fetch VC++ Redistributable (Windows)
         if: matrix.os == 'windows-latest'
@@ -166,8 +180,18 @@ jobs:
         run: |
           # Copy versioned artifact to stable name
           # Download URLs like releases/latest/download/Sage-Setup-latest.exe never need updating
+          # Ensure stable-named artifact directory exists (electron-builder writes
+          # to release/${version}/win-unpacked/, not release/win-unpacked/).
+          # Without this, Copy-Item fails with "Could not find a part of the path"
+          # because PowerShell's Copy-Item requires the destination parent dir
+          # to exist. Replaces the previous bash `cp ... || true` workaround,
+          # which silently swallowed the same bug on the Linux side.
+          $stableDir = "release/win-unpacked"
+          if (-not (Test-Path $stableDir)) {
+            New-Item -ItemType Directory -Force -Path $stableDir | Out-Null
+          }
           Get-ChildItem -Path release -Filter "Sage-Setup-*.exe" -Recurse | ForEach-Object {
-            Copy-Item $_.FullName -Destination "release/win-unpacked/Sage-Setup-latest.exe"
+            Copy-Item $_.FullName -Destination (Join-Path $stableDir "Sage-Setup-latest.exe")
           }
 
       - name: Upload artifacts to GitHub Release (versioned)
