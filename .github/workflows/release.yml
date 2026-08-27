@@ -123,21 +123,45 @@ jobs:
         run: |
           # Copy versioned artifacts to stable names
           # Download URLs like releases/latest/download/Sage-latest.AppImage never need updating
-          # Ensure stable-named artifact directory exists (electron-builder writes
-          # to release/${version}/linux-unpacked/, not release/linux-unpacked/).
-          # Previous bash `cp ... || true` silently swallowed the missing-dir
-          # bug, so latest-named artifacts were never uploaded. Switched to
-          # PowerShell to mirror the Windows step's behavior and surface failures.
+          #
+          # electron-builder writes to release/${version}/ (see electron-builder.yml
+          # directories.output). Restrict search to release/<version>/ top-level
+          # and exclude both the destination directory and 'latest' filenames
+          # (mirrors the Windows fix that prevents "Cannot overwrite ... with itself"
+          # when Get-ChildItem -Recurse picks up our own destination file).
           $stableDir = "release/linux-unpacked"
           if (-not (Test-Path $stableDir)) {
             New-Item -ItemType Directory -Force -Path $stableDir | Out-Null
           }
-          Get-ChildItem -Path release -Filter "Sage-*.AppImage" -Recurse | ForEach-Object {
-            Copy-Item $_.FullName -Destination (Join-Path $stableDir "Sage-latest.AppImage")
+          $versionDirs = Get-ChildItem -Path release -Directory |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+' -and $_.Name -ne 'win-unpacked' -and $_.Name -ne 'linux-unpacked' }
+          if (-not $versionDirs) {
+            Write-Error "::error::Could not find release/<version>/ directory created by electron-builder"
+            exit 1
           }
-          Get-ChildItem -Path release -Filter "sage_*_amd64.deb" -Recurse | ForEach-Object {
-            Copy-Item $_.FullName -Destination (Join-Path $stableDir "sage-latest_amd64.deb")
+          $sourceDir = $versionDirs[0].FullName
+
+          $appImage = Get-ChildItem -Path $sourceDir -Filter "Sage-*.AppImage" |
+            Where-Object { $_.Name -ne 'Sage-latest.AppImage' } |
+            Select-Object -First 1
+          if (-not $appImage) {
+            Write-Error "::error::Could not find Sage-*.AppImage under $sourceDir"
+            exit 1
           }
+          $appImageDest = Join-Path $stableDir "Sage-latest.AppImage"
+          Copy-Item -Path $appImage.FullName -Destination $appImageDest -Force
+          Write-Host "Copied $($appImage.FullName) -> $appImageDest"
+
+          $deb = Get-ChildItem -Path $sourceDir -Filter "sage_*_amd64.deb" |
+            Where-Object { $_.Name -ne 'sage-latest_amd64.deb' } |
+            Select-Object -First 1
+          if (-not $deb) {
+            Write-Error "::error::Could not find sage_*_amd64.deb under $sourceDir"
+            exit 1
+          }
+          $debDest = Join-Path $stableDir "sage-latest_amd64.deb"
+          Copy-Item -Path $deb.FullName -Destination $debDest -Force
+          Write-Host "Copied $($deb.FullName) -> $debDest"
 
       - name: Fetch VC++ Redistributable (Windows)
         if: matrix.os == 'windows-latest'
@@ -180,19 +204,34 @@ jobs:
         run: |
           # Copy versioned artifact to stable name
           # Download URLs like releases/latest/download/Sage-Setup-latest.exe never need updating
-          # Ensure stable-named artifact directory exists (electron-builder writes
-          # to release/${version}/win-unpacked/, not release/win-unpacked/).
-          # Without this, Copy-Item fails with "Could not find a part of the path"
-          # because PowerShell's Copy-Item requires the destination parent dir
-          # to exist. Replaces the previous bash `cp ... || true` workaround,
-          # which silently swallowed the same bug on the Linux side.
+          #
+          # electron-builder writes the NSIS installer to release/${version}/
+          # (see electron-builder.yml directories.output). The previous attempt
+          # used 'Get-ChildItem -Path release -Recurse' which on Windows picked
+          # up the destination file we just created via New-Item and tried to
+          # copy it onto itself ("Cannot overwrite the item ... with itself").
+          # Restrict search to release/<version>/ top-level and explicitly
+          # exclude both the destination directory and 'latest' filenames.
           $stableDir = "release/win-unpacked"
           if (-not (Test-Path $stableDir)) {
             New-Item -ItemType Directory -Force -Path $stableDir | Out-Null
           }
-          Get-ChildItem -Path release -Filter "Sage-Setup-*.exe" -Recurse | ForEach-Object {
-            Copy-Item $_.FullName -Destination (Join-Path $stableDir "Sage-Setup-latest.exe")
+          $versionDirs = Get-ChildItem -Path release -Directory |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+' -and $_.Name -ne 'win-unpacked' -and $_.Name -ne 'linux-unpacked' }
+          if (-not $versionDirs) {
+            Write-Error "::error::Could not find release/<version>/ directory created by electron-builder"
+            exit 1
           }
+          $source = Get-ChildItem -Path $versionDirs[0].FullName -Filter "Sage-Setup-*.exe" |
+            Where-Object { $_.Name -ne 'Sage-Setup-latest.exe' } |
+            Select-Object -First 1
+          if (-not $source) {
+            Write-Error "::error::Could not find Sage-Setup-*.exe under $($versionDirs[0].FullName)"
+            exit 1
+          }
+          $dest = Join-Path $stableDir "Sage-Setup-latest.exe"
+          Copy-Item -Path $source.FullName -Destination $dest -Force
+          Write-Host "Copied $($source.FullName) -> $dest"
 
       - name: Upload artifacts to GitHub Release (versioned)
         uses: softprops/action-gh-release@v2
