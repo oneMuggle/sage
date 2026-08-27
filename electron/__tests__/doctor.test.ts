@@ -45,7 +45,7 @@ function makeFakeProc() {
   const stderrEE = new EventEmitter();
   proc.stdout = stdoutEE as unknown as Readable;
   proc.stderr = stderrEE as unknown as Readable;
-  proc.kill = (_signal?: string) => true;
+  proc.kill = () => true;
   // Emit close asynchronously after listeners attach, mirroring real spawn.
   queueMicrotask(() => {
     if (nextStdout) stdoutEE.emit('data', Buffer.from(nextStdout, 'utf8'));
