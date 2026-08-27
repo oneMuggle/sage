@@ -25,11 +25,7 @@ export interface DiscoveredModel {
  * 后端 _migrate_default_protocol 对历史端点写入默认值 'openai-compatible',
  * 前端新建端点也强制写入, 防止空字符串落到 DB.
  */
-export type EndpointProtocol =
-  | 'openai-compatible'
-  | 'anthropic'
-  | 'gemini'
-  | 'ollama';
+export type EndpointProtocol = 'openai-compatible' | 'anthropic' | 'gemini' | 'ollama';
 
 /** Configuration for a single endpoint */
 export interface EndpointConfig {
@@ -54,6 +50,13 @@ export interface EndpointConfig {
   localModelPath: string;
   discoveredModels: DiscoveredModel[];
   lastDiscoveredAt: number | null;
+  /**
+   * alpha.8 (2026-08-27): 端点 ``apiKey`` 脱敏元数据. 后端 GET /settings 把真实 apiKey 抹掉
+   * 只回显 ``hasApiKey``, 前端据此按 endpoint ID 从 localStorage 找回原 key.
+   * 仅后端 / settingsClient 写入; 用户手动编辑 settings JSON 时若不存在则视为 ``false``
+   * (保守不恢复旧值, 与 main 一致).
+   */
+  hasApiKey?: boolean;
 }
 
 /** User's model selection — binds a model to its source endpoint */

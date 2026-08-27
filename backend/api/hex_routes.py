@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from typing import List, Optional
@@ -288,6 +289,7 @@ async def get_settings() -> Optional[dict]:
     """
     from backend.data.settings_canonicalizer import (
         detect_legacy_snake_pollution,
+        redact_secrets,
         to_camel,
     )
     from backend.data.settings_repo import SettingsRepository
@@ -306,7 +308,9 @@ async def get_settings() -> Optional[dict]:
     translated = to_camel(raw)
     # Task 1 (2026-08-23): 历史 endpoints[*] 无 protocol 字段 → 默认 ``openai-compatible``.
     _migrate_default_protocol(translated)
-    return translated
+    # alpha.8 (2026-08-27): 脱敏 endpoints[*].apiKey 明文 — 与 legacy GET 对齐.
+    # redact_secrets 不修改入参, 返回新 dict.
+    return redact_secrets(translated)
 
 
 def _migrate_default_protocol(settings: dict) -> None:
@@ -338,18 +342,35 @@ class PreferenceItem(BaseModel):
 
 @router.get("/preferences/{key}", response_model=PreferenceItem)
 async def get_preference(key: str) -> PreferenceItem:
-    """通用 KV 读取（白名单限定 key）。"""
+    """通用 KV 读取（白名单限定 key）。
+
+    alpha.8 (2026-08-27): 当 key == "app_settings" 时, value 是整棵 settings JSON
+    字符串. 必须走 redact_secrets_json() 抹掉 apiKey 留下 hasApiKey 元数据.
+    与 legacy 对齐.
+    """
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
     val = SettingsRepository().get(key)
+    if key == "app_settings" and val is not None and isinstance(val, str):
+        from backend.data.settings_canonicalizer import redact_secrets_json
+
+        val = redact_secrets_json(val)
     return PreferenceItem(value=val)
 
 
 @router.put("/preferences/{key}", response_model=PreferenceItem)
 async def put_preference(key: str, item: PreferenceItem) -> PreferenceItem:
-    """通用 KV 写入（白名单限定 key）。"""
+    """通用 KV 写入（白名单限定 key）。
+
+    alpha.8 (2026-08-27): PUT 响应回显的 value 同样走 redact_secrets_json
+    (与 GET 对齐); DB 里存原值, 由 GET 路径保证.
+
+    Defense-in-depth (2026-08-27): ``item.value`` 类型上是 ``Optional[str]`` 但
+    若调用方绕过 Pydantic 直接传入 dict (例如未来 ``set_json`` 路径), 仍走
+    ``redact_secrets`` + ``json.dumps`` 兜底, 永不回显明文 apiKey.
+    """
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
@@ -357,6 +378,20 @@ async def put_preference(key: str, item: PreferenceItem) -> PreferenceItem:
     if item.value is not None:
         SettingsRepository().set(
             key, item.value, value_type=item.value_type, category=item.category
+        )
+    if key == "app_settings" and item.value is not None:
+        from backend.data.settings_canonicalizer import redact_secrets, redact_secrets_json
+
+        if isinstance(item.value, str):
+            redacted_value = redact_secrets_json(item.value)
+        elif isinstance(item.value, dict):
+            redacted_value = json.dumps(redact_secrets(item.value), ensure_ascii=False)
+        else:
+            redacted_value = item.value
+        return PreferenceItem(
+            value=redacted_value,
+            value_type=item.value_type,
+            category=item.category,
         )
     return item
 

@@ -18,6 +18,8 @@ from backend.data.settings_canonicalizer import (
     ALIASES,
     detect_legacy_snake_pollution,
     from_camel,
+    redact_secrets,
+    redact_secrets_json,
     strip_unknown_fields,
     to_camel,
     validate_endpoint_payload,
@@ -592,3 +594,112 @@ def test_model_dump_compat_falls_back_to_pydantic_v1_dict() -> None:
             return {"id": "ep-1"}
 
     assert model_dump_compat(PydanticV1ShapedModel(), exclude_none=True) == {"id": "ep-1"}
+
+
+# === alpha.8 (2026-08-27): secret redaction helpers ===
+#
+# Background (main already implemented, see [[sage-settings-redaction-key-preservation]]
+# + [[sage-settings-redaction-idempotency-fix]]):
+#   GET /settings and /preferences/app_settings MUST NOT echo plaintext ``apiKey``
+#   back to the renderer. Win7 alpha.8 cherry-picks the contract: redact at the
+#   canonicalizer boundary so legacy + hex share the same logic.
+#
+# Contract:
+#   redact_secrets(payload)        -> payload dict, mutated copy with:
+#                                     endpoints[i].apiKey set to empty string (always)
+#                                     endpoints[i].hasApiKey set to bool(apiKey != "")
+#                                     (non-empty -> True, empty -> False)
+#   redact_secrets_json(json_str)  -> JSON string of redact_secrets(json.loads(json_str))
+#                                     non-JSON / non-dict input -> original string returned
+#   Idempotency: calling redact twice yields the same result as calling once
+#   Immutability: redact(x) does not mutate x
+#
+# ImportError on ImportError below is the RED signal — these symbols do not
+# exist in Win7 alpha.7 settings_canonicalizer yet.
+
+
+def test_redact_secrets_non_empty_api_key_sets_has_api_key_true() -> None:
+    """非空 apiKey → apiKey 置空, hasApiKey=True。"""
+    payload = {"endpoints": [{"id": "e1", "name": "LM Studio", "apiKey": "sk-real-key"}]}
+    redacted = redact_secrets(payload)
+    assert redacted["endpoints"][0]["apiKey"] == ""
+    assert redacted["endpoints"][0]["hasApiKey"] is True
+
+
+def test_redact_secrets_empty_api_key_sets_has_api_key_false() -> None:
+    """空 apiKey → apiKey 保持空, hasApiKey=False (幂等下二次 redact 仍是 False)。"""
+    payload = {"endpoints": [{"id": "e1", "apiKey": ""}]}
+    redacted = redact_secrets(payload)
+    assert redacted["endpoints"][0]["apiKey"] == ""
+    assert redacted["endpoints"][0]["hasApiKey"] is False
+
+
+def test_redact_secrets_is_idempotent() -> None:
+    """连续两次 redact 必须等价于一次 —— 防止 [sage-settings-redaction-idempotency-fix]
+    那种 hasApiKey True→False 的退化。"""
+    payload = {"endpoints": [{"id": "e1", "apiKey": "sk-secret"}]}
+    once = redact_secrets(payload)
+    twice = redact_secrets(once)
+    assert once == twice
+    # hasApiKey 在第二次必须仍然 True (而不是变成 False)
+    assert twice["endpoints"][0]["hasApiKey"] is True
+
+
+def test_redact_secrets_json_string_redacts_endpoints() -> None:
+    """JSON 字符串输入 → 返回 JSON 字符串, 内部 endpoints[*].apiKey 全部脱敏。"""
+    raw = (
+        '{"endpoints":[{"id":"e1","apiKey":"sk-a"},{"id":"e2","apiKey":""}],'
+        '"maxContext":4096}'
+    )
+    import json as _json
+
+    redacted_str = redact_secrets_json(raw)
+    parsed = _json.loads(redacted_str)
+    assert parsed["endpoints"][0]["apiKey"] == ""
+    assert parsed["endpoints"][0]["hasApiKey"] is True
+    assert parsed["endpoints"][1]["apiKey"] == ""
+    assert parsed["endpoints"][1]["hasApiKey"] is False
+    assert parsed["maxContext"] == 4096
+
+
+def test_redact_secrets_json_passes_through_invalid_input() -> None:
+    """非 JSON / 非 dict 输入 → 原样返回 (避免 500 阻断读)。"""
+    assert redact_secrets_json("not-valid-json{") == "not-valid-json{"
+    assert redact_secrets_json("[1, 2, 3]") == "[1, 2, 3]"
+    assert redact_secrets_json('"just-a-string"') == '"just-a-string"'
+    assert redact_secrets_json("null") == "null"
+
+
+def test_redact_secrets_does_not_mutate_input() -> None:
+    """输入 dict / list / 子对象都不得被修改 —— 返回新副本 (前端 restore 才能
+    安全地把 remote 端回灌到 local)。"""
+    payload = {
+        "endpoints": [
+            {"id": "e1", "apiKey": "sk-real"},
+            {"id": "e2", "apiKey": ""},
+        ],
+        "maxContext": 4096,
+    }
+    snapshot_endpoints = [
+        {"id": ep["id"], "apiKey": ep["apiKey"]} for ep in payload["endpoints"]
+    ]
+    snapshot_max = payload["maxContext"]
+
+    redacted = redact_secrets(payload)
+
+    # 原始 payload 任何字段都未改变
+    assert payload["endpoints"] == snapshot_endpoints
+    assert payload["maxContext"] == snapshot_max
+    assert payload["endpoints"][0]["apiKey"] == "sk-real"
+    assert payload["endpoints"][1]["apiKey"] == ""
+    # 返回的是新对象 (不强制同一性, 但应当非 alias)
+    assert redacted is not payload
+    assert redacted["endpoints"] is not payload["endpoints"]
+
+
+def test_redact_secrets_passes_through_non_dict_input() -> None:
+    """非 dict (None / list / scalar) → 原样返回, 不抛错。"""
+    assert redact_secrets(None) is None
+    assert redact_secrets([]) == []
+    assert redact_secrets("scalar") == "scalar"
+    assert redact_secrets(42) == 42

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -475,3 +476,81 @@ def validate_settings_payload(
             except ValueError as exc:
                 # 重新包装, 带上 endpoints 索引, 便于用户定位
                 raise ValueError(f"endpoints[{i}]: {exc}") from exc
+
+
+# === alpha.8 (2026-08-27): secret redaction helpers ===
+#
+# GET /settings 和 /preferences/app_settings 必须把 ``endpoints[i].apiKey``
+# 字段从明文抹掉, 只回显 ``endpoints[i].hasApiKey`` 元数据, 前端据此从
+# localStorage 按 endpoint ID 找回原 key (见 [[sage-settings-redaction-key-
+# preservation]] + [[sage-settings-redaction-idempotency-fix]]).
+#
+# 集中放在 canonicalizer 是为了让 legacy + hex 两套路由共享同一脱敏逻辑,
+# 避免单边漏掉或单边改坏。
+
+def _redact_endpoint(ep: Any) -> Any:
+    """对单个 endpoint 脱敏: apiKey 永远置空, hasApiKey 标记原非空状态.
+
+    幂等性: ``redact(redact(x)) == redact(x)``. 实现方式是: 如果 dict 里
+    已经有 ``hasApiKey`` 布尔字段, 说明已经被 redact 过一次, 必须保留它
+    (否则首次 ``apiKey="sk-secret"`` → ``apiKey="", hasApiKey=True``;
+    二次 redact 时按当前 ``apiKey=""`` 推导出 ``hasApiKey=False``,
+    把 True 退化成 False — 见 main [[sage-settings-redaction-idempotency-fix]]
+    的 bug). 首次 redact 时 ``hasApiKey`` 不存在, 从 ``apiKey != ""`` 推导.
+    """
+    if not isinstance(ep, dict):
+        return ep
+    api_key = ep.get("apiKey", "")
+    if not isinstance(api_key, str):
+        api_key = ""
+    existing = ep.get("hasApiKey")
+    if isinstance(existing, bool):
+        has_api_key = existing
+    else:
+        has_api_key = bool(api_key)
+    return {**ep, "apiKey": "", "hasApiKey": has_api_key}
+
+
+def redact_secrets(payload: Any) -> Any:
+    """脱敏一个 settings payload 副本, 不修改入参.
+
+    Returns:
+        与原 payload 等结构的新对象 (dict 走 dict 复制, list 走 list 复制);
+        非 dict / list / scalar 原样返回 (None / scalar / 损坏类型).
+        ``endpoints`` 列表内每个 endpoint 通过 :func:`_redact_endpoint` 脱敏.
+    """
+    if isinstance(payload, dict):
+        out: Dict[str, Any] = {}
+        for k, v in payload.items():
+            if k == "endpoints" and isinstance(v, list):
+                out[k] = [_redact_endpoint(ep) for ep in v]
+            else:
+                out[k] = redact_secrets(v)
+        return out
+    if isinstance(payload, list):
+        return [redact_secrets(item) for item in payload]
+    return payload
+
+
+def redact_secrets_json(json_str: str) -> str:
+    """字符串版本: 解析失败 / 非 dict 输入原样返回, 避免 500 阻断 GET.
+
+    用于 ``app_settings`` preference value (整棵 settings 作为 JSON 字符串
+    持久化在 SQLite) 取出时脱敏; 也兼容 hex 路由裸 JSON 响应.
+
+    alpha.8 (2026-08-27): 解析失败时记一条 warning (DB 行可能损坏),
+    但**不**抛 — 与原有 fail-open 契约一致, 让 GET 不 500 阻断.
+    """
+    try:
+        parsed = json.loads(json_str)
+    except (ValueError, TypeError) as exc:
+        # alpha.8: 加 warning, 让 DB 损坏可见 (避免 silent failure 隐藏后续用户问题).
+        # 不抛以维持现有 fail-open 行为; 但留 audit trail.
+        logger.warning(
+            "redact_secrets_json: malformed JSON, returning verbatim (snippet=%r)",
+            json_str[:80],
+        )
+        return json_str
+    if not isinstance(parsed, dict):
+        return json_str
+    return json.dumps(redact_secrets(parsed), ensure_ascii=False)

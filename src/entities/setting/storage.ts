@@ -130,6 +130,59 @@ export function mergeWithDefaults(partial: Partial<AppSettings>): AppSettings {
 }
 
 /**
+ * alpha.8 (2026-08-27): 还原被后端 redact_secrets 抹掉的 endpoints[*].apiKey.
+ *
+ * 后端 GET /settings 已走 ``backend.data.settings_canonicalizer.redact_secrets``,
+ * 把真实 apiKey 抹成 ``""`` + 留下 ``hasApiKey`` 元数据. 前端 ``deepMerge(remote-
+ * wins)`` 之后, localStorage 里的真实 key 已经被空串覆盖, 必须按 endpoint ID
+ * 从 localStorage 把非空 apiKey 找回, 否则用户每次重启都会"丢 key"。
+ *
+ * 契约:
+ * - ``remote.endpoints[i].hasApiKey === true`` 且 ``local`` 有同 id 且 apiKey 非空
+ *   → 用 local.apiKey 覆盖 (用户没动过 key, 只是后端抹了显示).
+ * - ``remote.endpoints[i].hasApiKey === false`` → 保持 ``apiKey=""`` 不恢复
+ *   (用户在 UI 主动清空 key, 哪怕 local 有旧值也不能复活).
+ * - ``remote.endpoints[i].hasApiKey`` 缺失 / 非布尔 → 视为 ``false`` 不恢复
+ *   (legacy 兼容: alpha.7 及之前 schema 没有这字段).
+ * - local === null → 返回 remote 原样 (首次启动 / 缓存为空).
+ * - local 有但 remote 没有的 endpoint → 不添加到结果 (用户已删除).
+ * - remote 有但 local 没有的 endpoint → 保持 apiKey="" (新端点无本地 key).
+ * - endpoint 顺序按 remote 排列, 与 local 不同也无影响.
+ * - 不修改入参 remote / local.
+ */
+export function restoreRedactedApiKeys(
+  remote: AppSettings,
+  local: Partial<AppSettings> | null,
+): AppSettings {
+  if (!local) {
+    return remote;
+  }
+  const localById = new Map<string, EndpointConfig>();
+  for (const ep of local.endpoints ?? []) {
+    if (ep && typeof ep.id === 'string') {
+      localById.set(ep.id, ep);
+    }
+  }
+  const restoredEndpoints: EndpointConfig[] = remote.endpoints.map((remoteEp) => {
+    if (!remoteEp || typeof remoteEp.id !== 'string') {
+      return remoteEp;
+    }
+    const hasApiKey = remoteEp.hasApiKey;
+    if (hasApiKey !== true) {
+      // hasApiKey === false / undefined / 非布尔 → 不恢复, 保留 remote 当前 apiKey.
+      return remoteEp;
+    }
+    const localEp = localById.get(remoteEp.id);
+    if (!localEp || typeof localEp.apiKey !== 'string' || localEp.apiKey === '') {
+      // local 没缓存过非空 key → 不强行填, 保持空.
+      return remoteEp;
+    }
+    return { ...remoteEp, apiKey: localEp.apiKey };
+  });
+  return { ...remote, endpoints: restoredEndpoints };
+}
+
+/**
  * 加载 settings：后端 → localStorage → DEFAULT_SETTINGS
  * 首次加载会触发自动迁移
  *
@@ -155,7 +208,12 @@ export async function loadSettings(): Promise<AppSettings> {
     const merged = deepMerge<Partial<AppSettings>>(local, remote, {
       policy: 'remote-wins',
     });
-    const finalSettings = mergeWithDefaults(merged);
+    const mergedSettings = mergeWithDefaults(merged);
+    // alpha.8 (2026-08-27): 后端 GET /settings 已走 redact_secrets, 端点 apiKey
+    // 是空串 + hasApiKey 元数据. deepMerge remote-wins 已把本地真实 key 抹掉了,
+    // 必须按 endpoint ID 从 localStorage 把非空 apiKey 找回 (见
+    // [[sage-settings-redaction-key-preservation]]). 不修改入参 remote / local.
+    const finalSettings = restoreRedactedApiKeys(mergedSettings, local);
     writeLocalCacheSync(finalSettings);
     return finalSettings;
   }

@@ -17,11 +17,87 @@
 
 import { spawn } from 'node:child_process';
 
+/**
+ * alpha.8 (2026-08-27): doctor 子进程环境白名单 — 防止宿主 shell 里
+ * OPENAI_API_KEY/ANTHROPIC_API_KEY 等凭据通过 ``process.env`` 扩散到
+ * 子进程 stdout/stderr 进而落到 NDJSON 日志。
+ *
+ * 设计：双层过滤：
+ *   1. 显式 allowlist (POSIX/Win + Python + Sage 自有变量)
+ *   2. 黑名单 regex (api[_]?key / secret / token / password / credential,
+ *      大小写不敏感, 子串匹配)
+ *
+ * ``options.env`` 显式传入的 key 总被信任 (调用方必须保证它们无敏感值)。
+ */
+const SAFE_ENV_ALLOWLIST = new Set([
+  // POSIX basics
+  'PATH',
+  'HOME',
+  'SHELL',
+  'USER',
+  'LOGNAME',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TZ',
+  // Windows basics
+  'SYSTEMROOT',
+  'WINDIR',
+  'TEMP',
+  'TMP',
+  'USERPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'PATHEXT',
+  // Python runtime
+  'PYTHONPATH',
+  'PYTHONHOME',
+  'PYTHONIOENCODING',
+  'PYTHONUNBUFFERED',
+  'PYTHONDONTWRITEBYTECODE',
+  // Node / Electron
+  'NODE_ENV',
+  'ELECTRON_RUN_AS_NODE',
+  'ELECTRON_NO_ATTACH_CONSOLE',
+  // Sage internal — supervisor 通过 plan.env / plan.extraEnv 注入
+  'SAGE_BACKEND_CMD',
+  'SAGE_BACKEND_CWD',
+  'SAGE_BACKEND_ENV',
+  'SAGE_BACKEND_PORT',
+  'SAGE_DB_PATH',
+  'SAGE_USER_DATA_DIR',
+  'SAGE_DOCTOR_ON_START',
+  'SAGE_API_MODE',
+  'SAGE_PYTHON',
+  'SAGE_LOG_LEVEL',
+]);
+
+const SECRET_KEY_PATTERN = /api[_-]?key|secret|token|password|credential|private[_-]?key/i;
+
+export function filterProcessEnvForChild(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (typeof v !== 'string') continue;
+    if (SECRET_KEY_PATTERN.test(k)) continue;
+    if (SAFE_ENV_ALLOWLIST.has(k)) {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 export interface DoctorLaunchOptions {
   pythonBin: string;
   packageRoot: string;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  /**
+   * alpha.8 (2026-08-27): 后端 launcher plan 的 argv. 不提供时回退到
+   * ``['-m', 'backend.cli.doctor', '--json']`` (向后兼容老调用).
+   * 来自 BackendLaunchPlan.args 时已包含 conda run 前缀或 -m 主程序前缀,
+   * doctor 直接 spawn(command, args), 不再追加 -m.
+   */
+  args?: string[];
 }
 
 export type DoctorStatus = 'ok' | 'warn' | 'critical' | 'timeout' | 'error';
@@ -100,9 +176,24 @@ export async function runDoctorCheck(
         }
       : pythonBinOrOptions;
   const startedAt = Date.now();
-  const proc = spawn(options.pythonBin, ['-m', 'backend.cli.doctor', '--json'], {
+  // alpha.8 (2026-08-27): 使用 options.args (来自后端 BackendLaunchPlan).
+  // 不提供时回退到 ``['-m', 'backend.cli.doctor', '--json']`` (向后兼容老调用).
+  // dev-conda plan 的 argv 形如 ``['run', '-n', 'sage-backend', 'python',
+  // '-m', 'backend.cli.doctor', '--json']``, 不再被硬编码覆盖成 ``-m ...``.
+  const doctorArgs = options.args ?? ['-m', 'backend.cli.doctor', '--json'];
+  // alpha.8 (2026-08-27): 保留 packaged 端设的 PYTHONPATH
+  // (``resources/backend + resources/sage-core``). 之前无条件覆盖为
+  // ``options.packageRoot`` 会让 packaged 后端 import 不到 backend.main.
+  // options.env.PYTHONPATH 缺省时回退到 options.packageRoot.
+  // 用 ``??`` 而非 ``||``: 空字符串 PYTHONPATH 是合法配置 (override), 不应被
+  // falsy 短路回退成 packageRoot.
+  const pythonPath = options.env?.PYTHONPATH ?? options.packageRoot;
+  // alpha.8 (2026-08-27): 宿主 ``process.env`` 走白名单 + 凭据黑名单过滤后再
+  // merge, 防止 OPENAI_API_KEY/ANTHROPIC_API_KEY 等扩散到子进程 stderr.
+  const safeHostEnv = filterProcessEnvForChild(process.env);
+  const proc = spawn(options.pythonBin, doctorArgs, {
     cwd: options.cwd ?? options.packageRoot,
-    env: { ...process.env, ...options.env, PYTHONPATH: options.packageRoot },
+    env: { ...safeHostEnv, ...options.env, PYTHONPATH: pythonPath },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
