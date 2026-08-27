@@ -76,3 +76,43 @@ async def test_hex_put_survives_legacy_residue_and_cleans_db(client):
     assert stored["maxContext"] == 8192
     assert "compactMode" not in stored
     assert "proxyMode" not in stored
+
+
+# === alpha.8 (2026-08-27): hex GET /settings 不回显明文 apiKey ===
+#
+# hex 路径走 hex_routes.py + SettingsRequest schema, 与 legacy 并行存在
+# (API_MODE=hex). 同样的 redaction 契约: GET 不许 echo 真实 key.
+#
+# 与 legacy 测试并行: 复用 SettingsRepository().set_json() 灌入原始 key,
+# GET 响应必须脱敏. hex 与 legacy 各自独立走自己的 handler,
+# 一头漏一头 catch.
+
+
+@pytest.mark.asyncio()
+@_HEX_ONLY
+async def test_hex_get_settings_redacts_api_key_in_response(client):
+    """hex GET /settings 响应中 endpoints[*].apiKey 必须是空串, 不得回显真实 key。"""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "e1",
+                    "name": "OpenAI",
+                    "baseUrl": "https://api.openai.com/v1",
+                    "apiKey": "sk-real-key-xyz789",
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["endpoints"][0]["id"] == "e1"
+    assert body["endpoints"][0]["apiKey"] == ""
+    assert "sk-real-key-xyz789" not in resp.text
+    assert body["endpoints"][0]["hasApiKey"] is True

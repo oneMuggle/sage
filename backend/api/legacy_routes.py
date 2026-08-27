@@ -1354,6 +1354,7 @@ def legacy_get_settings() -> Optional[dict]:
     """
     from backend.data.settings_canonicalizer import (
         detect_legacy_snake_pollution,
+        redact_secrets,
         to_camel,
     )
     from backend.data.settings_repo import SettingsRepository
@@ -1376,7 +1377,11 @@ def legacy_get_settings() -> Optional[dict]:
     # → 迁移默认值 ``openai-compatible`` (OpenAI 兼容端点是最常见的 LM Studio /
     # Ollama / OpenAI 替代品). 这样旧客户端无需再写一次 PUT 就能看到正确 protocol.
     _migrate_default_protocol(translated)
-    return translated
+    # alpha.8 (2026-08-27): 脱敏 endpoints[*].apiKey 明文 — 抹掉真实 key,
+    # 留下 ``hasApiKey`` 元数据, 让前端按 endpoint ID 从 localStorage 找回本地 key
+    # (见 [[sage-settings-redaction-key-preservation]]). redact_secrets 不修改入参,
+    # 返回新 dict.
+    return redact_secrets(translated)
 
 
 def _migrate_default_protocol(settings: dict) -> None:
@@ -1468,19 +1473,40 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
 @router.get("/preferences/{key}", response_model=LegacyPreferenceItem)
 @with_db_lock
 def legacy_get_preference(key: str) -> LegacyPreferenceItem:
-    """通用 KV 读取（白名单限定 key）。"""
+    """通用 KV 读取（白名单限定 key）。
+
+    alpha.8 (2026-08-27): 当 key == "app_settings" 时, value 是整棵 settings JSON
+    字符串. 原样回显会把真实 apiKey 暴露给前端 — 必须走 redact_secrets_json()
+    抹掉 apiKey 留下 hasApiKey 元数据. 与 hex GET /preferences/{key} 对齐.
+    """
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
     val = SettingsRepository().get(key)
+    if key == "app_settings" and val is not None and isinstance(val, str):
+        # DB 里存的是 raw JSON (含真实 apiKey); 响应里必须脱敏.
+        from backend.data.settings_canonicalizer import redact_secrets_json
+
+        val = redact_secrets_json(val)
     return LegacyPreferenceItem(value=val)
 
 
 @router.put("/preferences/{key}", response_model=LegacyPreferenceItem)
 @with_db_lock
 def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPreferenceItem:
-    """通用 KV 写入（白名单限定 key）。"""
+    """通用 KV 写入（白名单限定 key）。
+
+    alpha.8 (2026-08-27): PUT 响应原样回显 item.value, 对 app_settings 来说就是
+    把真实 apiKey 写到 HTTP 响应里. 与 GET 对齐: PUT 响应也走 redact_secrets_json,
+    DB 里原值不动 (由 GET 路径保证).
+
+    Defense-in-depth (2026-08-27): ``item.value`` 类型上是 ``Optional[str]`` 但
+    若调用方绕过 Pydantic 直接传入 dict (例如未来 ``set_json`` 路径), 仍走
+    ``redact_secrets`` + ``json.dumps`` 兜底, 永不回显明文 apiKey.
+    """
+    import json
+
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
@@ -1488,6 +1514,20 @@ def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPrefere
     if item.value is not None:
         SettingsRepository().set(
             key, item.value, value_type=item.value_type, category=item.category
+        )
+    if key == "app_settings" and item.value is not None:
+        from backend.data.settings_canonicalizer import redact_secrets, redact_secrets_json
+
+        if isinstance(item.value, str):
+            redacted_value = redact_secrets_json(item.value)
+        elif isinstance(item.value, dict):
+            redacted_value = json.dumps(redact_secrets(item.value), ensure_ascii=False)
+        else:
+            redacted_value = item.value
+        return LegacyPreferenceItem(
+            value=redacted_value,
+            value_type=item.value_type,
+            category=item.category,
         )
     return item
 

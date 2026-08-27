@@ -53,7 +53,12 @@ async def _override_get_chat_service():
 
 @pytest.mark.asyncio()
 async def test_get_translates_legacy_snake_to_camel(client):
-    """DB 里手插一条 snake_case 行, GET 应翻译为 camelCase 返回。"""
+    """DB 里手插一条 snake_case 行, GET 应翻译为 camelCase 返回。
+
+    alpha.8 (2026-08-27): GET 走 redact_secrets() 后, endpoints[*].apiKey
+    永远空串 + hasApiKey 元数据; 不再回显真实 key. 翻译到 camelCase 这一步
+    仍生效 (``base_url`` → ``baseUrl``), 验证点从 apiKey 值改为 hasApiKey 标记.
+    """
     SettingsRepository().set_json(
         "app_settings",
         {
@@ -73,7 +78,9 @@ async def test_get_translates_legacy_snake_to_camel(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["endpoints"][0]["baseUrl"] == "u"
-    assert body["endpoints"][0]["apiKey"] == "k"
+    # alpha.8: apiKey 被脱敏为空串 + hasApiKey 元数据; 不再断言 apiKey 值.
+    assert body["endpoints"][0]["apiKey"] == ""
+    assert body["endpoints"][0]["hasApiKey"] is True
     assert "base_url" not in body["endpoints"][0]
 
 
@@ -313,3 +320,72 @@ async def test_get_round_trips_new_fields_through_canonicalizer(client):
     assert ep["protocol"] == "openai-compatible"
     assert ep["modelId"] == "qwen2.5-7b-instruct"
     assert ep["localModelPath"] == "/tmp/qwen.gguf"
+
+
+# === alpha.8 (2026-08-27): GET /settings 不回显明文 apiKey ===
+#
+# Background: settings_canonicalizer.redact_secrets 是主要防线; legacy GET 路由
+# 必须在 ``return translated`` 前调用它, 否则真实 key 经 IPC 进入 renderer,
+# 触发 [[sage-settings-redaction-key-preservation]] 的"GET hasApiKey=true 但
+# apiKey 是空串"陷阱——前端 deepMerge remote-wins 会用空串覆盖本地真实 key。
+#
+# RED signal: 本测试会失败因为 alpha.7 canonicalizer 还没有 redact_secrets,
+# GET 直接 echo 了 DB 中原始 key (DB 中有非空 key 时)。
+
+
+@pytest.mark.asyncio()
+async def test_get_settings_redacts_api_key_in_response(client):
+    """legacy GET /settings 响应中 endpoints[*].apiKey 必须是空串, 不得回显真实 key。
+
+    DB 存的是原始 key ("sk-real-key"), 响应必须经 redact_secrets() 把它抹掉并
+    加上 hasApiKey=True, 让前端按 endpoint ID 找回本地 key 而不是覆盖之。
+    """
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "e1",
+                    "name": "LM Studio",
+                    "baseUrl": "http://127.0.0.1:1234/v1",
+                    "apiKey": "sk-real-key-abc123",
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["endpoints"][0]["id"] == "e1"
+    # 真实 key 不得出现在响应中
+    assert body["endpoints"][0]["apiKey"] == ""
+    assert "sk-real-key-abc123" not in resp.text
+    # hasApiKey 元数据必须为 True (原来 key 是非空)
+    assert body["endpoints"][0]["hasApiKey"] is True
+
+
+@pytest.mark.asyncio()
+async def test_get_settings_redacts_empty_api_key_correctly(client):
+    """DB 里 apiKey 本来就是空 → 响应里 apiKey="" 且 hasApiKey=False (幂等)。"""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "e1",
+                    "apiKey": "",
+                    "protocol": "openai-compatible",
+                }
+            ]
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["endpoints"][0]["apiKey"] == ""
+    assert body["endpoints"][0]["hasApiKey"] is False

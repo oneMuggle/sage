@@ -80,7 +80,7 @@ const buildManifest = loadBuildManifest(
   // which spawns fs calls that error out in jsdom), so we cannot mock
   // `loadBuildManifest` away cleanly. Optional-chaining + a stable fallback
   // lets tests pass without forking the load path.
-  { version: (typeof app.getVersion === 'function' ? app.getVersion() : 'unknown') },
+  { version: typeof app.getVersion === 'function' ? app.getVersion() : 'unknown' },
 );
 
 // A process-wide single-instance lock prevents two Electron supervisors from
@@ -93,9 +93,7 @@ const buildManifest = loadBuildManifest(
 // suite actually exercises. Same rationale as the app.getVersion() guard at
 // line 84 above.
 const gotSingleInstanceLock =
-  typeof app.requestSingleInstanceLock === 'function'
-    ? app.requestSingleInstanceLock()
-    : true;
+  typeof app.requestSingleInstanceLock === 'function' ? app.requestSingleInstanceLock() : true;
 if (!gotSingleInstanceLock) {
   // CRITICAL: short-circuit ALL subsequent initialization, not just app.quit().
   //
@@ -314,8 +312,12 @@ function spawnBackend(): ChildProcess {
     args: plan.args,
   });
 
-  proc.stdout?.on('data', (b) => logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }));
-  proc.stderr?.on('data', (b) => logger.error('backend: stderr', { line: stderrDecoder.push(b).trim() }));
+  proc.stdout?.on('data', (b) =>
+    logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }),
+  );
+  proc.stderr?.on('data', (b) =>
+    logger.error('backend: stderr', { line: stderrDecoder.push(b).trim() }),
+  );
   proc.on('exit', (code) => {
     if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
       logger.debug('main: stale backend exit ignored', { generation, pid: proc.pid });
@@ -422,10 +424,7 @@ export function scheduleBackendRestart(): void {
     return;
   }
   restartCount++;
-  const delay = Math.min(
-    RESTART_BASE_DELAY_MS * 2 ** (restartCount - 1),
-    RESTART_MAX_DELAY_MS,
-  );
+  const delay = Math.min(RESTART_BASE_DELAY_MS * 2 ** (restartCount - 1), RESTART_MAX_DELAY_MS);
   logger.warn('main: scheduling backend restart', {
     attempt: restartCount,
     delayMs: delay,
@@ -1308,6 +1307,11 @@ app.whenReady().then(async () => {
               packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
               cwd: doctorPlan.cwd,
               env: doctorEnv,
+              // alpha.8 (2026-08-27): 复用 BackendLaunchPlan 的 argv (含
+              // dev-conda 路径 ``conda run -n sage-backend python -m ...``).
+              // 不再走硬编码 ``-m backend.cli.doctor --json`` 回退, 与
+              // supervisor spawnBackend 的 argv 完全对齐.
+              args: doctorPlan.args,
             })
           : await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
       logger.info('main: doctor check complete', doctorSummary);
