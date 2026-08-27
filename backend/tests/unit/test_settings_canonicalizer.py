@@ -605,13 +605,13 @@ def test_model_dump_compat_falls_back_to_pydantic_v1_dict() -> None:
 #   canonicalizer boundary so legacy + hex share the same logic.
 #
 # Contract:
-#   redact_secrets(payload)        → payload dict, mutated copy with:
-#                                    endpoints[i].apiKey = "" (always)
-#                                    endpoints[i].hasApiKey = bool(apiKey != "")
-#                                    (non-empty → True, empty → False)
-#   redact_secrets_json(json_str)  → JSON string of redact_secrets(json.loads(json_str))
-#                                    non-JSON / non-dict input → original string returned
-#   Idempotency: redact(redact(x)) == redact(x)
+#   redact_secrets(payload)        -> payload dict, mutated copy with:
+#                                     endpoints[i].apiKey set to empty string (always)
+#                                     endpoints[i].hasApiKey set to bool(apiKey != "")
+#                                     (non-empty -> True, empty -> False)
+#   redact_secrets_json(json_str)  -> JSON string of redact_secrets(json.loads(json_str))
+#                                     non-JSON / non-dict input -> original string returned
+#   Idempotency: calling redact twice yields the same result as calling once
 #   Immutability: redact(x) does not mutate x
 #
 # ImportError on ImportError below is the RED signal — these symbols do not
