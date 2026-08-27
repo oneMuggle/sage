@@ -46,11 +46,96 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Documentation
 - docs(wiki): 25-llm-wiki-integration.md 新增 "流式架构" section (10 章节) 描述 PR-114+115+116 架构 (PR-125)
 
-## [Unreleased] — for changes after v0.4.5-alpha.3
+## [v0.4.9-alpha.29] - 2026-08-27
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**Main 分支累积发布**(v0.4.5-alpha.26 → v0.4.9-alpha.29),涵盖 50+ commit、四大块新能力:**Chat-Native 多 agent 编排** (#296+#314+#315+#316+#317+#318+#355+#356+#357+#361+#363),**Electron tier-based E2E 自动化基础设施** (#376),**事件循环阻塞根治 + 日志/医生扩容** (#293+#294+#295+#306),以及 §5.1/§5.2/§5.4 evolution/memory IPC 接线 (#339+#342)。Win10+Linux+Mac 验证用版本;Win7 LTS 用户请用 `v0.4.9-alpha.8-win7` 或更新 `-win7` 后缀的发布。
 
 ### Added
 
-- **feat: add sage doctor CLI for installation/env self-check** — `python -m backend.cli.doctor` 命令入口，覆盖 8 项 CRITICAL / WARN / INFO 三级检查（conda_env / backend_health / sqlite_writable / config_integrity / port_backend / port_frontend / py_version_match / disk_space）。退出码 0/1/2 对应 OK / WARN / CRITICAL，可直接接入 shell / CI / 监控。`--json` 参数输出机器可读报告（timestamp + python_version + platform + checks + summary）。electron 启动前自动跑（`electron/doctor.ts` 5 秒硬超时 + SIGTERM→SIGKILL 双保险 + fail-open），结果通过 `logger.info('main: doctor check complete', ...)` 写入 NDJSON 启动日志；`SAGE_DOCTOR_ON_START=false` 可跳过（CI / 轻量 smoke 用）。模块 stdlib-only（无新增第三方依赖），Py3.8 + Py3.11 兼容，`release/win7` 可直接 cherry-pick。详见 `docs/technical/41-sage-doctor.md` + `docs/user-manual/11-sage-doctor.md`。
+#### 多 agent 编排(Chat-Native Multi-Agent Orchestration)
+- **feat: Chat-Native 多 agent 编排 (#296)** — `orchestration_mode` 接入 chat 链路,run 级 task_plan/task_progress/task_review/lanes 全套数据模型与 SSE 推送
+- **Wave 1 编排执行控制 (#314)** — retry 策略、reviewer 异步评审、scratch 草稿空间
+- **Wave 2 编排计划生命周期 (#315)** — 计划持久化 / resume 恢复流 / 计划卡 UI / `depends_on` 拓扑依赖 / `task_review` 阶段产物
+- **Wave 3 PR A (#316)** — P2-7 计划权威 `task_id` 全局递增、P2-8 模板库、P2-9 配置化重试次数、P2-11 run 级 cancel
+- **Wave 3 PR B (#317)** — P2-10 休眠层:review 模块化拆分、lanes 真实执行(LaneBoard 监控)、board 实时面板
+- **编排计划卡前端接线 (#318)** — 三态视图(规划中/执行中/已结束)、取消执行、模板选择器、resume 恢复流
+- **depends_on 拓扑调度 (#355)** — 分波执行(同一 wave 内并发,跨 wave 串行)+ 级联取消(上游 cancel → 下游全部 cancel)
+- **agent todo 清单全链路接线 (#356)** — `todo_write` 后端暴露 + SSE 快照推送 + 前端 `TodoListCard` 渲染
+- **前端 mirror 编排计划到 todo 卡 (#357)** — read-only 镜像,主区域只读,左侧 todo 卡可勾选
+- **编排 P2 五项 (#361)** — schema 结构化返回 / followup 续聊 / worktree 隔离 / legacy 清理 / LaneBoard 激活
+- **编排 P2 fast-follow 五项遗留 (#363)** — task_id 串号修复 + 残留 plan 双调用链清理 + 5 处 UX 修复
+- **编排 control plane P0 修复 (#353)** — task_review 提交竞态 + plan lock 死锁 + cancel 信号丢失
+
+#### Electron E2E 自动化基础设施
+- **feat(electron-e2e): tier-based E2E automation infrastructure (#376, 20 commits / 49 files / +3047/-959)** — `tests/electron/` 全新目录,3-tier 架构:
+  - **Tier 1 stub-smoke**:Playwright + 自带 stub backend,3 个 spec(chat / sidebar / settings),无 LLM 真实调用,CI 默认跑
+  - **Tier 2 deep**:Playwright + 真实后端 + 真实 SQLite,跳过 wiki/evolution(需 LLM),`run-deep` tag 触发
+  - **Tier 3 live**:真人手动 + `__TAURI__` IPC hook,本地验证用
+  - 含 `stub-backend.ts` + `_real_backend.py` 复用 main `python backend/main.py` 启动逻辑,IPC 契约对齐(`/memory/save`、`/memory/list`、`/orchestration/lanes`、`/orchestration/board`),`data-testid` 选择器全覆盖,Windows NSIS 安装包 CI 红 6 项修复(import/order + session upsert + DevTools 窗口过滤 + portable Python resolver + settingsStore 顺序 + AppStartupSettings 死代码)
+  - 详见 `docs/superpowers/specs/2026-08-25-electron-e2e-automation-design.md` + `docs/superpowers/plans/2026-08-25-electron-e2e-automation.md`
+
+#### §5 章节 wiring(scheduler / memory / background review)
+- **feat(scheduler): evolution 任务 lifespan 接入 (§5.1) (#342)** — evolution scheduler 任务跨请求存活,重启后从 SQLite 恢复运行状态
+- **fix(memory): wire review collaborators + memory IPC (§5.2 + §5.4) (#339)** — memory 模块审阅协作 + IPC 通道补全
+
+#### Doctor 二期扩容
+- **feat(doctor): §1.5 二期扩容 (#293)** — 从 8 个 check 扩到 13 个(新增 5 项:sqlite_writable / config_integrity / port_frontend / py_version_match / disk_space),CI 中 doctor 报错可视化
+- **feat: add sage doctor CLI for installation/env self-check** — `python -m backend.cli.doctor` 命令入口,8 项 CRITICAL / WARN / INFO 三级检查,`--json` 输出机器可读报告,electron 启动前自动跑(`SAGE_DOCTOR_ON_START=false` 可跳过)。详见 `docs/technical/41-sage-doctor.md` + `docs/user-manual/11-sage-doctor.md`。
+
+#### 后端 / 前端杂项
+- **feat(electron+frontend): backend 异常退出自动重启 + ECONNREFUSED 友好翻译 + UI 横幅 (PR-B)** — 防止 backend crash 后 UI 永久卡死;中文化错误提示
+- **feat(orch+agent): 配置化 max_iterations + 子代理预算 + 中文错误提示 (#333)** — `DEFAULT_MAX_ITERATIONS` 5→10 + 子代理 6 次上限 + AGENT_RUNTIME_MESSAGES 全中文化
+- **feat(rightpanel): 面板内添加 × 关闭按钮 (closes #298) (#299)** — 之前只能拖动整个面板,不能单独关
+- **feat(orchestration): 进度可视化 (#300)** — `task_progress` 5 元组(stage / current / total / eta / message)+ UI 编排摘要卡片
+
+#### Win7 LTS parity + base CI
+- **feat(win7): complete Task 0-3 platform parity + base CI fixes (#368)** — 平台差异 Py3.8/Py3.11 适配 6 项(PEP 604 in shared models + certifi 回归 + LM Studio protocol/modelId/localModelPath + Asia/Shanghai + pydantic 1/2 model_dump_compat + streaming teardown),后续已通过 PR #377 cherry-pick 到 release/win7
+
+### Fixed
+
+#### 事件循环阻塞根治(§1.2 PR-A + PR-B)
+- **fix(event-loop): §1.2 PR A (#294)** — `legacy_routes` 全部 `async→def`(34 handler)+ `threading.Lock` 替换 `asyncio.Lock` + jieba 热启动后台化
+- **fix(event-loop): §1.2 PR B (#295)** — `storage` 适配器改 `asyncio.to_thread` + 共享 `_SQLITE_LOCK`(`per-instance Lock` 会导致跨请求死锁)
+
+#### 日志 / 设置 / 编排 P0
+- **fix(logging): 日志基础设施修复 (#306)** — 6 类故障场景排查从 10-30min 降至 2-5min(`logging.py` 启动顺序 + SageLogger 路径优先级 + audit JSONL 落盘 + structured log JSON parse + threading name 标识 + NDJSON 启动日志)
+- **fix(settings): 恢复设置保存 + 测试连接用端点自身模型 (#323)** — `strip_unknown_fields` 净化残留 + `testEndpointConnection` 改用端点自身 model(避免空 model 422)
+- **fix(orchestration): task_id 全局递增修复 3/6 假象 + 普通聊天 artifacts 落库 (#302)** — 旧 `task_id = (run_id, sequence)` 导致同 run 内 hash 冲突;改为进程内单调递增 + DB 唯一约束
+- **fix(orch): §13.7 计划卡延后项收尾 (#322)** — 双击防重入 + 409 Conflict 区分 + resume 时 NULL plan_id 兜底
+- **fix(ci): remove stale Determine ARTIFACT_SUFFIX step in main's release-win7.yml (#352)** — main 分支 release workflow 残留 win7 死代码
+
+#### Chat 链路 + 后端 SSL / 内存
+- **fix(chat-stream): accept explicit null orchestration_mode from IPC (#297)** — 前端 `null` 被错误序列化为 `"null"` 字符串
+- **fix(chat-stream): CI 修复 (#345)** — `TS6133 runId` 未使用变量豁免 + import/order 空行修复
+- **fix(chat): 欢迎页/输入框/新对话 三处 UI 缺陷 (#305)** — 路由切换后欢迎页残留 + 输入框失焦 + 新对话按钮 race
+- **fix: preserve chat messages across route switches (#350)** — Memory / Wiki 路由切换时 Chat 缓存被清空
+- **fix(backend): inject memory manager + bootstrap SSL CA from certifi (#349)** — memory 模块未注入 manager 依赖 + certifi 缺失导致自签名 CA 校验失败
+- **fix(llm-proxy): dedupe /v1 when baseURL already ends with /v1 (#308)** — LM Studio 用户配置 `http://localhost:1234/v1` 时代理变成 `/v1/v1/chat/completions` 报 404
+
+#### 测试 / CI flake 治理
+- **fix(tests): bandaid two CI flakes (#299)** — Event-loop closed asyncio 警告 + §1.2 gate 阈值敏感度 100→200ms
+- **test: remove stale respx xfail markers (#310)** — 104 个测试从 mock fallback 改回真实验证(`respx` 升级后 httpx mock 行为变更)
+- **test(llm_client): align 2 chat_stream tests to LLMError (#309)** — 异常类型从 `httpx.HTTPError` 对齐到项目 `LLMError`
+- **test(event-loop): 5-round median P99 gate, 400ms threshold (CI-reality) (#312)** — §1.2 5 轮中位数 P99 守门,从单次 P99 升级
+- **fix(electron-e2e): portable Python resolver for stub_backend (CI ENOENT)** — Windows CI runner 无 `python` 在 PATH,resolver 走 `python.exe` 显式路径
+
+### Changed
+
+- **refactor(orch): M4 收口 — 删除 updatePlan 双调用链 (#321)** — `plan_router.update_plan` 与 `orchestration_service.update_plan` 双调用链收敛到单入口
+- **chore(plans): remove completed plan file (#334)** — `docs/plans/2026-08-13_orch-p0-execution-control.md` 已 merge 到 technical/42 §10,plans/ 不保留已完成
+- **chore(repo): §1.4 假功能/死设置清理 (#292)** — 30 文件删 + 12 改,清理未实现的假设置项
+
+### Documentation
+
+- **docs(orchestration): 归档编排修复 + 进度可视化 + Wave 3 编排 (#301+#303+#319+#320)** — 4 个 plans/ 文件删除,内容并入 `docs/technical/42-*.md` §9 / §10 / §11 / §13
+- **docs: 编排技术手册 §15(拓扑调度 + agent todo 全链路)+ README 章节简介更新 (#360)**
+- **docs(technical): §1.2 event-loop gate upgrade history — 5-round median P99 (#313)**
+- **docs(technical): 日志基础设施修复归档 (#307)** — 29 §修复记录 + 41 §日志路径优先级
+- **docs(spec): Electron E2E 自动化测试基础设施设计 + 实施计划 (15 任务) (#376 配套)**
+
+## [Unreleased]
+
+### Added
 
 ### Fixed
 
