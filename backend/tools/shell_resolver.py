@@ -14,6 +14,7 @@ bash 时退 PowerShell，此时把 ``SHELL_FALLBACK_NOTE`` 放进工具结果—
 from __future__ import annotations
 
 import functools
+import ntpath
 import os
 import shutil
 from dataclasses import dataclass
@@ -32,7 +33,7 @@ _POSIX_CANDIDATES: Tuple[Tuple[str, str], ...] = (
 )
 
 #: Git for Windows 默认安装位置下的 bash 相对路径
-_GIT_BASH_RELATIVE = os.path.join("Git", "bin", "bash.exe")
+_GIT_BASH_RELATIVE = ntpath.join("Git", "bin", "bash.exe")
 
 
 @dataclass(frozen=True)
@@ -72,7 +73,7 @@ def _find_windows_bash() -> Optional[str]:
         base = os.environ.get(env_key)
         if not base:
             continue
-        candidate = os.path.join(base, _GIT_BASH_RELATIVE)
+        candidate = ntpath.join(base, _GIT_BASH_RELATIVE)
         if os.path.exists(candidate):
             return candidate
     return None

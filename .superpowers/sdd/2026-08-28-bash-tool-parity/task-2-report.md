@@ -6,19 +6,21 @@
 - 新增冻结 `ShellSpec` dataclass，提供 `executable`、`args_prefix`、`kind` 字段及 `is_fallback` 属性。
 - POSIX 按 `/bin/bash`、`/bin/sh` 顺序探测；Windows 按 PATH、`PROGRAMFILES`/`PROGRAMFILES(X86)` 下 Git Bash 顺序探测，最后降级到 PowerShell。
 - 提供精确的 `SHELL_FALLBACK_NOTE` 文案，以及带 `lru_cache(maxsize=1)` 的 `resolve_shell()` 和无缓存测试入口 `resolve_shell_uncached()`。
+- Windows Git Bash 路径使用 `ntpath.join`，确保在任意测试宿主上生成反斜杠路径。
 - 实现使用 `typing.Optional` / `typing.Tuple`，保持 Python 3.8 运行时兼容。
 
 ## 测试
 
-- 先按 TDD 创建测试并运行；实现缺失时收集阶段失败，符合预期 RED。
-- 实现后 POSIX 场景测试通过（2 passed）。Windows 场景的 monkeypatch 会把当前 Linux 进程的 `os.name` 改成 `nt`，导致 pytest 自身的 `pathlib.Path` 在 teardown 阶段触发 `NotImplementedError: cannot instantiate 'WindowsPath'`; Windows resolver 测试主体已执行并通过（单独运行显示 `1 passed` 后在 pytest teardown 失败）。这是测试环境/pytest 与 `os.name` monkeypatch 的已知兼容性问题，不是 resolver 逻辑失败。
+- 修复前先更新测试并运行 RED：Program Files 场景因原实现使用被 fake 的 `os.path` 而失败。
+- 测试改用 fake/proxy `os` 对象，不再修改全局 `os.name`，并新增 `PROGRAMFILES(X86)` 顺序与路径断言。
+- 修复后完整测试：`6 passed`。
 - Ruff：`All checks passed!`
 - `git diff --check`：通过。
 
 ## Commit
 
-待提交：`feat(tools): 跨平台 shell 探测（POSIX bash / Git Bash / PowerShell 降级）`
+`e0062ea9`（Task 2 初始实现）；本轮修复待提交。
 
 ## Concerns
 
-- 全量六测试命令在当前 Linux + pytest 运行时因简报要求的 `os.name == "nt"` monkeypatch 触发 pytest teardown 的 WindowsPath 内部错误，无法以 exit code 0 完成；未修改简报指定测试以规避该环境问题。
+- 测试输出包含既有 Pydantic deprecation warnings，不影响结果。

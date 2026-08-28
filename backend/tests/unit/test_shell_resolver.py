@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+import os
+from types import SimpleNamespace
+
 import pytest
 
 from backend.tools import shell_resolver
@@ -14,11 +17,22 @@ from backend.tools.shell_resolver import resolve_shell_uncached
 pytestmark = pytest.mark.unit
 
 
+def _fake_os(monkeypatch, name, exists, environ=None):
+    monkeypatch.setattr(
+        shell_resolver,
+        "os",
+        SimpleNamespace(
+            name=name,
+            path=SimpleNamespace(exists=exists),
+            environ=dict(os.environ if environ is None else environ),
+        ),
+    )
+
+
 def test_posix_prefers_bin_bash(monkeypatch):
     """POSIX: /bin/bash 存在 → 用它, args_prefix 为 -c。"""
     # Arrange
-    monkeypatch.setattr(shell_resolver.os, "name", "posix")
-    monkeypatch.setattr(shell_resolver.os.path, "exists", lambda p: p == "/bin/bash")
+    _fake_os(monkeypatch, "posix", lambda p: p == "/bin/bash")
 
     # Act
     spec = resolve_shell_uncached()
@@ -32,8 +46,7 @@ def test_posix_prefers_bin_bash(monkeypatch):
 def test_posix_falls_back_to_bin_sh(monkeypatch):
     """POSIX: 无 /bin/bash → 退 /bin/sh。"""
     # Arrange
-    monkeypatch.setattr(shell_resolver.os, "name", "posix")
-    monkeypatch.setattr(shell_resolver.os.path, "exists", lambda p: p == "/bin/sh")
+    _fake_os(monkeypatch, "posix", lambda p: p == "/bin/sh")
 
     # Act
     spec = resolve_shell_uncached()
@@ -46,7 +59,7 @@ def test_posix_falls_back_to_bin_sh(monkeypatch):
 def test_windows_uses_bash_from_path(monkeypatch):
     """Windows: PATH 里有 bash → 用它（Git Bash 常见形态）。"""
     # Arrange
-    monkeypatch.setattr(shell_resolver.os, "name", "nt")
+    _fake_os(monkeypatch, "nt", lambda p: False)
     monkeypatch.setattr(
         shell_resolver.shutil, "which", lambda name: r"C:\Git\bin\bash.exe" if name == "bash" else None
     )
@@ -64,10 +77,8 @@ def test_windows_probes_program_files_git(monkeypatch):
     """Windows: PATH 无 bash → 探测 Program Files 下的 Git Bash。"""
     # Arrange
     git_bash = r"C:\Program Files\Git\bin\bash.exe"
-    monkeypatch.setattr(shell_resolver.os, "name", "nt")
+    _fake_os(monkeypatch, "nt", lambda p: p == git_bash, {"PROGRAMFILES": r"C:\Program Files", "PROGRAMFILES(X86)": r"C:\Program Files (x86)"})
     monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: None)
-    monkeypatch.setenv("PROGRAMFILES", r"C:\Program Files")
-    monkeypatch.setattr(shell_resolver.os.path, "exists", lambda p: p == git_bash)
 
     # Act
     spec = resolve_shell_uncached()
@@ -77,14 +88,39 @@ def test_windows_probes_program_files_git(monkeypatch):
     assert spec.kind == "bash"
 
 
-def test_windows_falls_back_to_powershell(monkeypatch):
+def test_windows_probes_program_files_x86_after_program_files(monkeypatch):
+    """Windows: 无 64-bit Git Bash → 按顺序探测 Program Files(X86)。"""
+    # Arrange
+    git_bash = r"C:\Program Files (x86)\Git\bin\bash.exe"
+    probes = []
+
+    def _exists(path):
+        probes.append(path)
+        return path == git_bash
+
+    _fake_os(
+        monkeypatch,
+        "nt",
+        _exists,
+        {"PROGRAMFILES": r"C:\Program Files", "PROGRAMFILES(X86)": r"C:\Program Files (x86)"},
+    )
+    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: None)
+
+    # Act
+    spec = resolve_shell_uncached()
+
+    # Assert
+    assert spec.executable == git_bash
+    assert probes == [
+        r"C:\Program Files\Git\bin\bash.exe",
+        git_bash,
+    ]
+
+
     """Windows: 找不到任何 bash → 退 PowerShell, kind 标记降级。"""
     # Arrange
-    monkeypatch.setattr(shell_resolver.os, "name", "nt")
+    _fake_os(monkeypatch, "nt", lambda p: False, {})
     monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: None)
-    monkeypatch.setattr(shell_resolver.os.path, "exists", lambda p: False)
-    monkeypatch.delenv("PROGRAMFILES", raising=False)
-    monkeypatch.delenv("PROGRAMFILES(X86)", raising=False)
 
     # Act
     spec = resolve_shell_uncached()
@@ -104,8 +140,7 @@ def test_resolve_shell_caches_result(monkeypatch):
         calls.append(path)
         return path == "/bin/bash"
 
-    monkeypatch.setattr(shell_resolver.os, "name", "posix")
-    monkeypatch.setattr(shell_resolver.os.path, "exists", _counting_exists)
+    _fake_os(monkeypatch, "posix", _counting_exists)
 
     # Act
     first = shell_resolver.resolve_shell()
