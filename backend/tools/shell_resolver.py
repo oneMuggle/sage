@@ -1,15 +1,4 @@
-"""跨平台 shell 探测。
-
-模型写出的命令按 POSIX shell 语法（``&&`` ``|`` ``$()``）组织，所以优先
-找真 bash：POSIX 上是 ``/bin/bash``，Windows 上是 Git Bash。Windows 找不到
-bash 时退 PowerShell，此时把 ``SHELL_FALLBACK_NOTE`` 放进工具结果——让模型
-知道语法可能不适用，而不是对着看不懂的报错反复重试。
-
-``release/win7`` 分支尤其依赖 PowerShell 降级路径：Win7 机器未必装 Git。
-
-探测结果进程内缓存一次（``resolve_shell``）。测试用 ``resolve_shell_uncached``
-绕过缓存。
-"""
+"""跨平台 shell 探测。"""
 
 from __future__ import annotations
 
@@ -20,31 +9,20 @@ import shutil
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-#: PowerShell 降级时放进 ToolResult.content 的提示，供模型调整命令写法
 SHELL_FALLBACK_NOTE = (
     "未找到 bash（已尝试 PATH 与 Git for Windows 安装目录），"
     "改用 PowerShell 执行。bash 专有语法（&&、||、$()、管道到 sh）可能不生效，"
     "请改用 PowerShell 等价写法。"
 )
 
-_POSIX_CANDIDATES: Tuple[Tuple[str, str], ...] = (
-    ("/bin/bash", "bash"),
-    ("/bin/sh", "sh"),
-)
-
-#: Git for Windows 默认安装位置下的 bash 相对路径
+_POSIX_CANDIDATES: Tuple[Tuple[str, str], ...] = (("/bin/bash", "bash"), ("/bin/sh", "sh"))
 _GIT_BASH_RELATIVE = ntpath.join("Git", "bin", "bash.exe")
+_POWERSHELL_RELATIVE = ntpath.join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")
 
 
 @dataclass(frozen=True)
 class ShellSpec:
-    """一次 shell 调用需要的全部信息。
-
-    Attributes:
-        executable:  shell 可执行文件路径
-        args_prefix: 命令前的固定参数（bash 为 ``("-c",)``）
-        kind:        ``"bash"`` / ``"sh"`` / ``"powershell"``
-    """
+    """一次 shell 调用需要的全部信息。"""
 
     executable: str
     args_prefix: Tuple[str, ...]
@@ -52,29 +30,62 @@ class ShellSpec:
 
     @property
     def is_fallback(self) -> bool:
-        """是否为 PowerShell 降级（调用方据此附加 SHELL_FALLBACK_NOTE）。"""
+        """是否为 PowerShell 降级。"""
         return self.kind == "powershell"
+
+
+def _is_local_windows_absolute(path: object) -> bool:
+    """只接受带盘符且盘符后以分隔符开头的本地 Windows 路径。"""
+    if not isinstance(path, str):
+        return False
+    drive, tail = ntpath.splitdrive(path)
+    return len(drive) == 2 and drive[1] == ":" and tail.startswith(("\\", "/"))
+
+
+def _is_regular_file(path: object) -> bool:
+    return isinstance(path, str) and bool(os.path.isfile(path))  # noqa: PTH113
+
+
+def _is_trusted_git_bash(path: object) -> bool:
+    if not _is_local_windows_absolute(path) or not _is_regular_file(path):
+        return False
+    if path.endswith(("\\", "/")):
+        return False
+    normalized = ntpath.normcase(ntpath.normpath(path)).replace("/", "\\")
+    return normalized.endswith("\\git\\bin\\bash.exe")
 
 
 def _resolve_posix() -> ShellSpec:
     for path, kind in _POSIX_CANDIDATES:
         if os.path.exists(path):
             return ShellSpec(executable=path, args_prefix=("-c",), kind=kind)
-    # 连 /bin/sh 都没有的 POSIX 系统极罕见；仍返回 /bin/sh 让 Popen 报
-    # 具体的 FileNotFoundError，比在这里抛一个更模糊的异常有用。
     return ShellSpec(executable="/bin/sh", args_prefix=("-c",), kind="sh")
 
 
 def _find_windows_bash() -> Optional[str]:
     from_path = shutil.which("bash")
-    if from_path:
+    if _is_trusted_git_bash(from_path):
         return from_path
     for env_key in ("PROGRAMFILES", "PROGRAMFILES(X86)"):
         base = os.environ.get(env_key)
-        if not base or not ntpath.isabs(base) or base.startswith(("\\\\", "//")):
+        if not _is_local_windows_absolute(base):
             continue
         candidate = ntpath.join(base, _GIT_BASH_RELATIVE)
-        if os.path.isfile(candidate):  # noqa: PTH113
+        if _is_regular_file(candidate):
+            return candidate
+    return None
+
+
+def _find_powershell() -> Optional[str]:
+    from_path = shutil.which("powershell")
+    if _is_local_windows_absolute(from_path) and _is_regular_file(from_path):
+        return from_path
+    for env_key in ("SystemRoot", "WINDIR"):
+        root = os.environ.get(env_key)
+        if not _is_local_windows_absolute(root):
+            continue
+        candidate = ntpath.join(root, _POWERSHELL_RELATIVE)
+        if _is_regular_file(candidate):
             return candidate
     return None
 
@@ -83,12 +94,10 @@ def _resolve_windows() -> ShellSpec:
     bash_path = _find_windows_bash()
     if bash_path:
         return ShellSpec(executable=bash_path, args_prefix=("-c",), kind="bash")
-    powershell = shutil.which("powershell") or "powershell.exe"
-    return ShellSpec(
-        executable=powershell,
-        args_prefix=("-NoProfile", "-Command"),
-        kind="powershell",
-    )
+    powershell = _find_powershell()
+    if not powershell:
+        raise RuntimeError("未找到可信的 PowerShell 可执行文件；拒绝使用不安全的裸文件名。")
+    return ShellSpec(executable=powershell, args_prefix=("-NoProfile", "-Command"), kind="powershell")
 
 
 def resolve_shell_uncached() -> ShellSpec:
@@ -104,9 +113,4 @@ def resolve_shell() -> ShellSpec:
     return resolve_shell_uncached()
 
 
-__all__ = [
-    "ShellSpec",
-    "SHELL_FALLBACK_NOTE",
-    "resolve_shell",
-    "resolve_shell_uncached",
-]
+__all__ = ["ShellSpec", "SHELL_FALLBACK_NOTE", "resolve_shell", "resolve_shell_uncached"]

@@ -32,6 +32,11 @@ def _fake_os(monkeypatch, name, exists, isfile=None, environ=None):
     )
 
 
+def _windows(monkeypatch, *, isfile, environ=None):
+    _fake_os(monkeypatch, "nt", lambda _path: False, isfile=isfile, environ=environ or {})
+    monkeypatch.setattr(shell_resolver.shutil, "which", lambda _name: None)
+
+
 def test_posix_prefers_bin_bash(monkeypatch):
     _fake_os(monkeypatch, "posix", lambda p: p == "/bin/bash")
     spec = resolve_shell_uncached()
@@ -47,27 +52,42 @@ def test_posix_falls_back_to_bin_sh(monkeypatch):
     assert spec.kind == "sh"
 
 
-def test_windows_uses_bash_from_path(monkeypatch):
-    _fake_os(monkeypatch, "nt", lambda p: False)
-    monkeypatch.setattr(
-        shell_resolver.shutil, "which", lambda name: r"C:\Git\bin\bash.exe" if name == "bash" else None
-    )
+def test_windows_uses_trusted_bash_from_path(monkeypatch):
+    path_bash = r"C:\Git\bin\bash.exe"
+    _windows(monkeypatch, isfile=lambda p: p == path_bash)
+    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: path_bash if name == "bash" else None)
     spec = resolve_shell_uncached()
-    assert spec.executable == r"C:\Git\bin\bash.exe"
+    assert spec.executable == path_bash
     assert spec.args_prefix == ("-c",)
     assert spec.kind == "bash"
 
 
+@pytest.mark.parametrize(
+    "path",
+    [r"C:\Other\bash.exe", "bash.exe", "C:\\Git\\bin\\bash.exe\\", r"C:\Git\bash.exe"],
+)
+def test_windows_rejects_untrusted_bash_from_path(monkeypatch, path):
+    _windows(monkeypatch, isfile=lambda _path: True, environ={})
+    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: path if name == "bash" else None)
+    with pytest.raises(RuntimeError, match="PowerShell"):
+        resolve_shell_uncached()
+
+
+def test_windows_rejects_bash_directory_from_path(monkeypatch):
+    path_bash = r"C:\Git\bin\bash.exe"
+    _windows(monkeypatch, isfile=lambda _path: False, environ={"SystemRoot": r"C:\Windows"})
+    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: path_bash if name == "bash" else None)
+    with pytest.raises(RuntimeError, match="PowerShell"):
+        resolve_shell_uncached()
+
+
 def test_windows_probes_program_files_git(monkeypatch):
     git_bash = r"C:\Program Files\Git\bin\bash.exe"
-    _fake_os(
+    _windows(
         monkeypatch,
-        "nt",
-        lambda p: False,
         isfile=lambda p: p == git_bash,
         environ={"PROGRAMFILES": r"C:\Program Files", "PROGRAMFILES(X86)": r"C:\Program Files (x86)"},
     )
-    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: None)
     spec = resolve_shell_uncached()
     assert spec.executable == git_bash
     assert spec.kind == "bash"
@@ -81,25 +101,33 @@ def test_windows_probes_program_files_x86_after_program_files(monkeypatch):
         probes.append(path)
         return path == git_bash
 
-    _fake_os(
+    _windows(
         monkeypatch,
-        "nt",
-        lambda p: False,
         isfile=isfile,
         environ={"PROGRAMFILES": r"C:\Program Files", "PROGRAMFILES(X86)": r"C:\Program Files (x86)"},
     )
-    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: None)
     spec = resolve_shell_uncached()
     assert spec.executable == git_bash
     assert probes == [r"C:\Program Files\Git\bin\bash.exe", git_bash]
 
 
-def test_windows_falls_back_to_powershell_path(monkeypatch):
-    _fake_os(monkeypatch, "nt", lambda p: False, environ={})
+@pytest.mark.parametrize("base", [r"\foo", "/foo", r"C:foo", r"\\server\share", r"\\?\C:\Windows", "relative"])
+def test_windows_rejects_untrusted_program_files_roots(monkeypatch, base):
+    _windows(monkeypatch, isfile=lambda _path: True, environ={"PROGRAMFILES": base})
+    with pytest.raises(RuntimeError, match="PowerShell"):
+        resolve_shell_uncached()
+
+
+def test_windows_rejects_program_files_directory(monkeypatch):
+    _windows(monkeypatch, isfile=lambda _path: False, environ={"PROGRAMFILES": r"C:\Program Files"})
+    with pytest.raises(RuntimeError, match="PowerShell"):
+        resolve_shell_uncached()
+
+
+def test_windows_accepts_trusted_powershell_from_path(monkeypatch):
     powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-    monkeypatch.setattr(
-        shell_resolver.shutil, "which", lambda name: powershell if name == "powershell" else None
-    )
+    _windows(monkeypatch, isfile=lambda p: p == powershell)
+    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: powershell if name == "powershell" else None)
     spec = resolve_shell_uncached()
     assert spec.executable == powershell
     assert spec.kind == "powershell"
@@ -108,14 +136,26 @@ def test_windows_falls_back_to_powershell_path(monkeypatch):
     assert shell_resolver.SHELL_FALLBACK_NOTE
 
 
-def test_windows_falls_back_to_powershell_default(monkeypatch):
-    _fake_os(monkeypatch, "nt", lambda p: False, environ={})
-    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: None)
+def test_windows_uses_trusted_system_powershell_fallback(monkeypatch):
+    powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    _windows(monkeypatch, isfile=lambda p: p == powershell, environ={"SystemRoot": r"C:\Windows"})
     spec = resolve_shell_uncached()
-    assert spec.executable == "powershell.exe"
+    assert spec.executable == powershell
     assert spec.kind == "powershell"
-    assert spec.args_prefix == ("-NoProfile", "-Command")
     assert spec.is_fallback
+
+
+def test_windows_uses_windir_when_systemroot_missing(monkeypatch):
+    powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    _windows(monkeypatch, isfile=lambda p: p == powershell, environ={"WINDIR": r"C:\Windows"})
+    assert resolve_shell_uncached().executable == powershell
+
+
+def test_windows_fails_without_trusted_powershell(monkeypatch):
+    _windows(monkeypatch, isfile=lambda _path: False, environ={})
+    monkeypatch.setattr(shell_resolver.shutil, "which", lambda name: "powershell.exe" if name == "powershell" else None)
+    with pytest.raises(RuntimeError, match="可信.*PowerShell"):
+        resolve_shell_uncached()
 
 
 def test_shell_spec_is_frozen():
