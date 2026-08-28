@@ -20,6 +20,10 @@ _POSIX_CANDIDATES: Tuple[Tuple[str, str], ...] = (("/bin/bash", "bash"), ("/bin/
 _GIT_BASH_RELATIVE = ntpath.join("Git", "bin", "bash.exe")
 _POWERSHELL_RELATIVE = ntpath.join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")
 _PROGRAM_FILES_CSIDL = (0x0026, 0x002A)
+_FILE_READ_ATTRIBUTES = 0x0080
+_FILE_SHARE_ALL = 0x00000007
+_OPEN_EXISTING = 3
+_INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
 
 @dataclass(frozen=True)
@@ -49,7 +53,10 @@ def _is_regular_file(path: object) -> bool:
 
 
 def _canonical_windows_path(path: str) -> str:
-    return ntpath.normcase(ntpath.normpath(path)).replace("/", "\\").rstrip("\\")
+    normalized = path
+    if normalized.startswith("\\\\?\\"):
+        normalized = normalized[4:]
+    return ntpath.normcase(ntpath.normpath(normalized)).replace("/", "\\").rstrip("\\")
 
 
 def _get_windows_program_files_roots() -> Tuple[str, ...]:
@@ -66,7 +73,7 @@ def _get_windows_program_files_roots() -> Tuple[str, ...]:
             if result == 0 and value and _is_local_windows_absolute(value):
                 roots.append(value)
         return tuple(roots)
-    except (AttributeError, OSError, TypeError):
+    except Exception:
         return ()
 
 
@@ -78,30 +85,53 @@ def _get_windows_system_directory() -> Optional[str]:
         kernel32 = ctypes.windll.kernel32
         buffer = ctypes.create_unicode_buffer(32768)
         length = kernel32.GetWindowsDirectoryW(buffer, len(buffer))
-        value = buffer.value if length else ""
+        if not isinstance(length, int) or length <= 0 or length >= len(buffer):
+            return None
+        value = buffer.value
         return value if value and _is_local_windows_absolute(value) else None
-    except (AttributeError, OSError, TypeError):
+    except Exception:
         return None
+
+
+def _verify_windows_file_identity(path: str, expected: str) -> bool:
+    """验证文件最终解析对象仍是 expected；API 不可用或 reparse 则拒绝。"""
+    if os.name != "nt" or not _is_local_windows_absolute(path) or not _is_local_windows_absolute(expected):
+        return False
+    try:
+        kernel32 = ctypes.windll.kernel32
+        attributes = kernel32.GetFileAttributesW(path)
+        if attributes == 0xFFFFFFFF or attributes & 0x400:
+            return False
+        handle = kernel32.CreateFileW(path, _FILE_READ_ATTRIBUTES, _FILE_SHARE_ALL, None, _OPEN_EXISTING, 0, None)
+        if handle in (None, _INVALID_HANDLE_VALUE):
+            return False
+        try:
+            buffer = ctypes.create_unicode_buffer(32768)
+            length = kernel32.GetFinalPathNameByHandleW(handle, buffer, len(buffer), 0)
+            if not isinstance(length, int) or length <= 0 or length >= len(buffer):
+                return False
+            return _canonical_windows_path(buffer.value) == _canonical_windows_path(expected)
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception:
+        return False
 
 
 def _resolve_posix() -> ShellSpec:
     for path, kind in _POSIX_CANDIDATES:
         if _is_regular_file(path):
             return ShellSpec(executable=path, args_prefix=("-c",), kind=kind)
-    return ShellSpec(executable="/bin/sh", args_prefix=("-c",), kind="sh")
+    raise RuntimeError("未找到可用的 POSIX shell（/bin/bash 和 /bin/sh 均不是 regular file）。")
 
 
 def _trusted_git_bash_path(path: object, roots: Tuple[str, ...]) -> Optional[str]:
-    if not _is_local_windows_absolute(path) or not _is_regular_file(path):
+    if not _is_local_windows_absolute(path) or not _is_regular_file(path) or path.endswith(("\\", "/")):
         return None
-    if path.endswith(("\\", "/")):
-        return None
-    candidate = _canonical_windows_path(path)
     for root in roots:
         if not _is_local_windows_absolute(root):
             continue
-        expected = _canonical_windows_path(ntpath.join(root, _GIT_BASH_RELATIVE))
-        if candidate == expected:
+        expected = ntpath.join(root, _GIT_BASH_RELATIVE)
+        if _canonical_windows_path(path) == _canonical_windows_path(expected) and _verify_windows_file_identity(path, expected):
             return path
     return None
 
@@ -115,7 +145,7 @@ def _find_windows_bash() -> Optional[str]:
         if not _is_local_windows_absolute(root):
             continue
         candidate = ntpath.join(root, _GIT_BASH_RELATIVE)
-        if _is_regular_file(candidate):
+        if _is_regular_file(candidate) and _verify_windows_file_identity(candidate, candidate):
             return candidate
     return None
 
@@ -125,7 +155,9 @@ def _find_powershell() -> Optional[str]:
     if not root or not _is_local_windows_absolute(root):
         return None
     candidate = ntpath.join(root, _POWERSHELL_RELATIVE)
-    return candidate if _is_regular_file(candidate) else None
+    if _is_regular_file(candidate) and _verify_windows_file_identity(candidate, candidate):
+        return candidate
+    return None
 
 
 def _resolve_windows() -> ShellSpec:
