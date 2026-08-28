@@ -2,24 +2,26 @@
 
 ## 实现
 
-- 保留 `ShellSpec`、`resolve_shell()`、`resolve_shell_uncached()` 与 `SHELL_FALLBACK_NOTE` 接口，以及 POSIX `/bin/bash`、`/bin/sh` 和 Windows PATH → `PROGRAMFILES` → `PROGRAMFILES(X86)` → PowerShell 探测顺序。
-- 增加本地 Windows 绝对路径校验：要求非空盘符、盘符后以 `\\` 或 `/` 开头，拒绝 rooted、drive-relative、UNC、device 与相对路径。
-- Git Bash 与 PowerShell 候选均要求 regular file；PATH bash 仅接受可信的 `Git\\bin\\bash.exe` 形态，PowerShell 仅接受可信 PATH 文件或 `SystemRoot`/`WINDIR` 系统路径，彻底移除裸 `powershell.exe` fallback。
-- 测试通过 fake/proxy `os` 隔离，未 monkeypatch 宿主 `os.name`；保留原有行为并补充不可信路径、目录、环境根、可信系统 fallback 与显式失败覆盖。
+- 保留 `ShellSpec`、`resolve_shell()`、`resolve_shell_uncached()` 与 `SHELL_FALLBACK_NOTE` 接口及既定探测顺序。
+- POSIX `/bin/bash`、`/bin/sh` 均改用 `os.path.isfile`，不接受目录。
+- Windows 不读取 `PROGRAMFILES`、`PROGRAMFILES(X86)`、`SystemRoot` 或 `WINDIR`；通过惰性 Win32 API helper 获取 known Program Files roots（`SHGetFolderPathW`）和系统目录（`GetWindowsDirectoryW`）。API 不可用时安全返回空结果。
+- PATH bash 仅当 regular file 且规范路径严格等于 known Program Files root + `Git\\bin\\bash.exe` 时接受；安装目录按 API 返回顺序探测。PowerShell 完全不信任 PATH，仅从 API 系统目录构造标准路径并要求 regular file。
+- 继续拒绝 rooted、drive-relative、UNC、device、相对路径；测试通过 fake/proxy `os` 与 monkeypatch helper 隔离，未修改宿主 `os.name`。
 
 ## 测试
 
-- TDD RED：先新增安全契约测试，旧实现对不可信 PATH、裸 PowerShell 和系统 fallback 测试失败。
-- 目标单测：`23 passed`。
+- TDD RED：先调整测试验证旧的后缀信任、环境变量信任、PATH PowerShell 和 `exists` 行为失败。
+- 目标单测：`24 passed`。
 - Ruff：`All checks passed`。
 - `git diff --check`：通过。
 
 ## Commit
 
-`fix(tools): validate trusted Windows shell executables`（见下方 commit hash）。
+待提交本 fix round 2 commit。
 
 ## Concerns
 
-- 测试环境使用 Python 3.10 的 `sage-backend` 环境；实现仅使用 Python 3.8 兼容语法。
-- 测试仍有既有 Pydantic deprecation warnings，不影响结果。
-- 相较旧 brief 中“任意 PATH bash”断言，本 fix round 按安全审查要求收紧为仅可信 Git `Git\\bin\\bash.exe`，并拒绝可能被 PATH 劫持的裸 PowerShell 文件名。
+- 测试环境使用 Python 3.10 的 `sage-backend`；实现保持 Python 3.8 兼容且无新增依赖。
+- 测试运行仍有既有 Pydantic deprecation warnings。
+- Linux fake 测试无法验证真实 Windows symlink/reparse-point 语义；实现至少使用 Win32 API 信任根、严格路径比较和 regular-file 校验，不扩大候选范围。
+- 相较旧 brief 中“任意 PATH bash”与环境变量构造路径，本轮按安全审查要求改为 only Win32 known-folder/system-directory API 来源。

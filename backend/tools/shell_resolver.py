@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import functools
 import ntpath
 import os
@@ -18,6 +19,7 @@ SHELL_FALLBACK_NOTE = (
 _POSIX_CANDIDATES: Tuple[Tuple[str, str], ...] = (("/bin/bash", "bash"), ("/bin/sh", "sh"))
 _GIT_BASH_RELATIVE = ntpath.join("Git", "bin", "bash.exe")
 _POWERSHELL_RELATIVE = ntpath.join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+_PROGRAM_FILES_CSIDL = (0x0026, 0x002A)
 
 
 @dataclass(frozen=True)
@@ -46,48 +48,84 @@ def _is_regular_file(path: object) -> bool:
     return isinstance(path, str) and bool(os.path.isfile(path))  # noqa: PTH113
 
 
-def _is_trusted_git_bash(path: object) -> bool:
-    if not _is_local_windows_absolute(path) or not _is_regular_file(path):
-        return False
-    if path.endswith(("\\", "/")):
-        return False
-    normalized = ntpath.normcase(ntpath.normpath(path)).replace("/", "\\")
-    return normalized.endswith("\\git\\bin\\bash.exe")
+def _canonical_windows_path(path: str) -> str:
+    return ntpath.normcase(ntpath.normpath(path)).replace("/", "\\").rstrip("\\")
+
+
+def _get_windows_program_files_roots() -> Tuple[str, ...]:
+    """通过 Win32 known folders 获取受信任的 Program Files 根目录。"""
+    if os.name != "nt":
+        return ()
+    try:
+        shell32 = ctypes.windll.shell32
+        roots = []
+        for csidl in _PROGRAM_FILES_CSIDL:
+            buffer = ctypes.create_unicode_buffer(32768)
+            result = shell32.SHGetFolderPathW(None, csidl, None, 0, buffer)
+            value = buffer.value
+            if result == 0 and value and _is_local_windows_absolute(value):
+                roots.append(value)
+        return tuple(roots)
+    except (AttributeError, OSError, TypeError):
+        return ()
+
+
+def _get_windows_system_directory() -> Optional[str]:
+    """通过 Win32 API 获取系统目录的根路径，不信任环境变量。"""
+    if os.name != "nt":
+        return None
+    try:
+        kernel32 = ctypes.windll.kernel32
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = kernel32.GetWindowsDirectoryW(buffer, len(buffer))
+        value = buffer.value if length else ""
+        return value if value and _is_local_windows_absolute(value) else None
+    except (AttributeError, OSError, TypeError):
+        return None
 
 
 def _resolve_posix() -> ShellSpec:
     for path, kind in _POSIX_CANDIDATES:
-        if os.path.exists(path):
+        if _is_regular_file(path):
             return ShellSpec(executable=path, args_prefix=("-c",), kind=kind)
     return ShellSpec(executable="/bin/sh", args_prefix=("-c",), kind="sh")
 
 
-def _find_windows_bash() -> Optional[str]:
-    from_path = shutil.which("bash")
-    if _is_trusted_git_bash(from_path):
-        return from_path
-    for env_key in ("PROGRAMFILES", "PROGRAMFILES(X86)"):
-        base = os.environ.get(env_key)
-        if not _is_local_windows_absolute(base):
+def _trusted_git_bash_path(path: object, roots: Tuple[str, ...]) -> Optional[str]:
+    if not _is_local_windows_absolute(path) or not _is_regular_file(path):
+        return None
+    if path.endswith(("\\", "/")):
+        return None
+    candidate = _canonical_windows_path(path)
+    for root in roots:
+        if not _is_local_windows_absolute(root):
             continue
-        candidate = ntpath.join(base, _GIT_BASH_RELATIVE)
+        expected = _canonical_windows_path(ntpath.join(root, _GIT_BASH_RELATIVE))
+        if candidate == expected:
+            return path
+    return None
+
+
+def _find_windows_bash() -> Optional[str]:
+    roots = _get_windows_program_files_roots()
+    from_path = _trusted_git_bash_path(shutil.which("bash"), roots)
+    if from_path:
+        return from_path
+    for root in roots:
+        if not _is_local_windows_absolute(root):
+            continue
+        candidate = ntpath.join(root, _GIT_BASH_RELATIVE)
         if _is_regular_file(candidate):
             return candidate
     return None
 
 
 def _find_powershell() -> Optional[str]:
-    from_path = shutil.which("powershell")
-    if _is_local_windows_absolute(from_path) and _is_regular_file(from_path):
-        return from_path
-    for env_key in ("SystemRoot", "WINDIR"):
-        root = os.environ.get(env_key)
-        if not _is_local_windows_absolute(root):
-            continue
-        candidate = ntpath.join(root, _POWERSHELL_RELATIVE)
-        if _is_regular_file(candidate):
-            return candidate
-    return None
+    root = _get_windows_system_directory()
+    if not root or not _is_local_windows_absolute(root):
+        return None
+    candidate = ntpath.join(root, _POWERSHELL_RELATIVE)
+    return candidate if _is_regular_file(candidate) else None
 
 
 def _resolve_windows() -> ShellSpec:
