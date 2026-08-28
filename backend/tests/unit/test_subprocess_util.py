@@ -110,10 +110,18 @@ def test_kill_process_tree_kills_grandchild_on_posix(tmp_path):
     if os.name == "nt":
         pytest.skip("进程组语义仅在 POSIX 验证")
     marker = tmp_path / "orphan.txt"
+    grandchild_started = tmp_path / "grandchild-ready.txt"
+    child_started = tmp_path / "child-ready.txt"
+    grandchild_code = (
+        "import time; "
+        f"open({str(grandchild_started)!r}, 'w').close(); "
+        "time.sleep(3); "
+        f"open({str(marker)!r}, 'w').write('orphan')"
+    )
     child_code = (
         "import subprocess, sys, time\n"
-        "subprocess.Popen([sys.executable, '-c', "
-        f"\"import time; time.sleep(3); open({str(marker)!r}, 'w').write('orphan')\"]\n"
+        f"subprocess.Popen([sys.executable, '-c', {grandchild_code!r}])\n"
+        f"open({str(child_started)!r}, 'w').close()\n"
         "time.sleep(5)\n"
     )
     process = subprocess.Popen(
@@ -122,7 +130,13 @@ def test_kill_process_tree_kills_grandchild_on_posix(tmp_path):
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
-    time.sleep(0.5)
+    deadline = time.monotonic() + 5
+    while not child_started.exists() or not grandchild_started.exists():
+        if time.monotonic() >= deadline:
+            process.kill()
+            process.wait()
+            pytest.fail("child/grandchild 未在超时前启动")
+        time.sleep(0.01)
 
     # Act
     kill_process_tree(process)
