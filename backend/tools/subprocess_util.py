@@ -13,13 +13,13 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import signal
 import subprocess
 import tempfile
-from typing import Tuple
+import threading
+from typing import BinaryIO, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,65 @@ _OUTPUT_OVERREAD_MARGIN = 1
 
 #: 杀进程组后回收子进程的宽限超时（秒）
 _REAP_TIMEOUT_SECONDS = 5.0
+
+
+class BoundedOutputCollector:
+    """后台消费一个 PIPE，并将最多 ``max_bytes`` 写入临时文件。
+
+    线程持续消费 PIPE，即使达到上限也继续读取并丢弃后续数据，避免子进程
+    因 PIPE 背压永久卡住。``overflowed`` 是可观察的生命周期状态。
+    """
+
+    def __init__(self, stream: BinaryIO, path: str, max_bytes: int) -> None:
+        if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
+            raise ValueError("max_bytes must be a positive integer")
+        self._stream = stream
+        self.path = path
+        self.max_bytes = max_bytes
+        self.bytes_written = 0
+        self.overflowed = False
+        self._thread = threading.Thread(target=self._collect, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def join(self, timeout: Optional[float] = None) -> None:
+        self._thread.join(timeout)
+
+    @property
+    def is_alive(self) -> bool:
+        return self._thread.is_alive()
+
+    def _collect(self) -> None:
+        try:
+            with open(self.path, "ab") as output:
+                while True:
+                    chunk = self._stream.read(64 * 1024)
+                    if not chunk:
+                        return
+                    remaining = self.max_bytes - self.bytes_written
+                    if remaining > 0:
+                        output.write(chunk[:remaining])
+                        output.flush()
+                        self.bytes_written += min(len(chunk), remaining)
+                    if len(chunk) > remaining:
+                        self.overflowed = True
+        except (OSError, ValueError) as exc:
+            logger.warning("输出 collector 失败（文件摘要=%s）: %s", os.path.basename(self.path), exc)
+
+
+def start_bounded_output_collectors(
+    stdout: BinaryIO, stderr: BinaryIO, stdout_path: str, stderr_path: str,
+    max_bytes: int = MAX_OUTPUT_CAP_BYTES,
+) -> Tuple[BoundedOutputCollector, BoundedOutputCollector]:
+    """启动 stdout/stderr 有界 collector；调用方把返回对象随会话保存并 join。"""
+    collectors = (
+        BoundedOutputCollector(stdout, stdout_path, max_bytes),
+        BoundedOutputCollector(stderr, stderr_path, max_bytes),
+    )
+    for collector in collectors:
+        collector.start()
+    return collectors
 
 
 def make_temp_output_file(prefix: str = "sage_") -> str:
@@ -108,9 +167,13 @@ def kill_process_tree(process: subprocess.Popen) -> None:
 
 
 def unlink_quietly(path: str) -> None:
-    """删临时文件；不存在/被占用等一律静默（清理路径不报错）。"""
-    with contextlib.suppress(OSError):
+    """删除临时文件；失败不抛出，但记录非敏感 basename 便于观测。"""
+    try:
         os.unlink(path)
+    except FileNotFoundError:
+        return
+    except OSError:
+        logger.warning("临时输出文件清理失败: %s", os.path.basename(path))
 
 
 __all__ = [
@@ -118,6 +181,8 @@ __all__ = [
     "read_capped_output",
     "kill_process_tree",
     "unlink_quietly",
+    "BoundedOutputCollector",
+    "start_bounded_output_collectors",
     "MAX_OUTPUT_CAP_BYTES",
     "MAX_OUTPUT_OFFSET_BYTES",
 ]
