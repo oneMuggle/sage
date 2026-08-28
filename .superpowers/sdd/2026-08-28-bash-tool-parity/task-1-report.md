@@ -46,3 +46,14 @@
   - `git diff --check` → 通过。
 - Commit：`e8bf77e5` — `fix(tests): 稳定子进程树终止测试并恢复计划文档`。
 - Concerns：无功能性 concerns；既有 Pydantic 弃用警告仍存在。
+
+## Fix round 2
+
+- 加固 `/home/fz/project/sage/.claude/worktrees/bash-tool-parity-impl/backend/tools/subprocess_util.py`：`read_capped_output` 入口拒绝 bool/非 int/负数参数，并将 `cap` 限制为共享最大值 `MAX_OUTPUT_CAP_BYTES`（10 MiB）；POSIX 仅在 `pgid == pid` 时调用 `os.killpg`，否则退化为 `process.kill()`。
+- 补充 `/home/fz/project/sage/.claude/worktrees/bash-tool-parity-impl/backend/tests/unit/test_subprocess_util.py`：覆盖负 cap/offset、超最大 cap、bool 参数，以及非独立进程组不调用 `killpg`；保留独立进程组 grandchild 真实回收测试。
+- 验证命令：
+  - `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_subprocess_util.py backend/tests/unit/test_repl_tool.py -q` → `38 passed`（8 个既有 Pydantic 弃用警告）。
+  - `cd /home/fz/project/sage/.claude/worktrees/bash-tool-parity-impl/backend && /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check tools/subprocess_util.py tools/repl_tool.py tests/unit/test_subprocess_util.py` → `All checks passed!`。
+  - `git diff --check` → 通过。
+- Commit：待提交。
+- Concerns：既有 Pydantic 弃用警告仍存在；无功能性 concerns。

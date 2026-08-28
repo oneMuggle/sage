@@ -6,10 +6,12 @@ import os
 import subprocess
 import sys
 import time
+from unittest import mock
 
 import pytest
 
 from backend.tools.subprocess_util import (
+    MAX_OUTPUT_CAP_BYTES,
     kill_process_tree,
     make_temp_output_file,
     read_capped_output,
@@ -102,6 +104,48 @@ def test_read_capped_output_missing_file_returns_error_text_not_raise():
     assert "读取子进程输出失败" in text
     assert truncated is False
     assert offset == 0
+
+
+@pytest.mark.parametrize(
+    ("cap", "offset"),
+    [(-1, 0), (0, -1)],
+)
+def test_read_capped_output_rejects_negative_limits(cap, offset):
+    """读取边界不得为负数。"""
+    with pytest.raises(ValueError, match="non-negative"):
+        read_capped_output("/unused", cap=cap, offset=offset)
+
+
+def test_read_capped_output_rejects_cap_above_shared_maximum():
+    """读取上限必须受共享最大值约束。"""
+    with pytest.raises(ValueError, match="maximum"):
+        read_capped_output("/unused", cap=MAX_OUTPUT_CAP_BYTES + 1)
+
+
+@pytest.mark.parametrize(
+    ("parameter", "value"),
+    [("cap", True), ("cap", False), ("offset", True), ("offset", False)],
+)
+def test_read_capped_output_rejects_bool_limits(parameter, value):
+    """bool 虽是 int 子类, 但不是合法边界参数。"""
+    kwargs = {"cap": 0, **{parameter: value}}
+    with pytest.raises(ValueError, match="integer"):
+        read_capped_output("/unused", **kwargs)
+
+
+def test_kill_process_tree_falls_back_for_non_independent_process_group():
+    """POSIX: 非独立进程组不得误杀整个后端进程组。"""
+    if os.name == "nt":
+        pytest.skip("进程组语义仅在 POSIX 验证")
+    process = mock.Mock(pid=123)
+    process.communicate.return_value = None
+    with mock.patch("backend.tools.subprocess_util.os.getpgid", return_value=456), mock.patch(
+        "backend.tools.subprocess_util.os.killpg"
+    ) as killpg, mock.patch("backend.tools.subprocess_util.os.name", "posix"):
+        kill_process_tree(process)
+
+    killpg.assert_not_called()
+    process.kill.assert_called_once_with()
 
 
 def test_kill_process_tree_kills_grandchild_on_posix(tmp_path):

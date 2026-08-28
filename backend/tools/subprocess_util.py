@@ -23,6 +23,9 @@ from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
+#: 读取输出的共享最大上限，防止调用者请求一次性无界内存
+MAX_OUTPUT_CAP_BYTES = 10 * 1024 * 1024
+
 #: 读输出时多读的字节数——超过上限 1 字节即判定截断
 _OUTPUT_OVERREAD_MARGIN = 1
 
@@ -47,6 +50,15 @@ def read_capped_output(file_path: str, cap: int, offset: int = 0) -> Tuple[str, 
     读取失败（文件被删、权限变更等）返回说明文本而非抛异常——本函数常在
     清理路径调用，不允许崩。
     """
+    if isinstance(cap, bool) or not isinstance(cap, int):
+        raise ValueError("cap must be an integer")
+    if isinstance(offset, bool) or not isinstance(offset, int):
+        raise ValueError("offset must be an integer")
+    if cap < 0 or offset < 0:
+        raise ValueError("cap and offset must be non-negative")
+    if cap > MAX_OUTPUT_CAP_BYTES:
+        raise ValueError(f"cap exceeds maximum of {MAX_OUTPUT_CAP_BYTES} bytes")
+
     try:
         with open(file_path, "rb") as handle:
             handle.seek(offset)
@@ -69,10 +81,15 @@ def kill_process_tree(process: subprocess.Popen) -> None:
     try:
         if os.name != "nt":
             try:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                pgid = os.getpgid(process.pid)
             except (ProcessLookupError, PermissionError):
                 # 组号拿不到（极端竞态）→ 退化只杀子进程本体
                 process.kill()
+            else:
+                if pgid == process.pid:
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    process.kill()
         else:
             process.kill()
     except Exception:  # noqa: BLE001 — 清理路径：杀失败也不允许抛出
@@ -94,4 +111,5 @@ __all__ = [
     "read_capped_output",
     "kill_process_tree",
     "unlink_quietly",
+    "MAX_OUTPUT_CAP_BYTES",
 ]
