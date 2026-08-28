@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -132,3 +133,68 @@ def test_register_beyond_limit_raises(registry):
 
 def test_get_registry_returns_process_singleton():
     assert get_registry() is get_registry()
+
+
+def _wait_until(predicate, timeout=5):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.02)
+    return predicate()
+
+
+def test_running_status_has_no_exit_code(registry):
+    session = _spawn(registry, "import time; print('ready', flush=True); time.sleep(5)")
+    assert _wait_until(lambda: Path(session.stdout_path).stat().st_size > 0)
+    result = registry.read_increment(session.shell_id, READ_CAP)
+    assert result["status"] == "running"
+    assert result["exit_code"] is None
+
+
+def test_stderr_increment_and_small_cap_advances_cursor(registry):
+    session = _spawn(registry, "import sys; sys.stderr.write('abcdef'); sys.stderr.flush()")
+    assert _wait_until(lambda: Path(session.stderr_path).stat().st_size >= 6)
+    first = registry.read_increment(session.shell_id, 2)
+    second = registry.read_increment(session.shell_id, 20)
+    assert "ab" in first["stderr"]
+    assert "cd" in second["stderr"]
+    assert "ab" not in second["stderr"]
+
+
+def test_invalid_terminate_cap_keeps_session_manageable_and_cleans(registry):
+    session = _spawn(registry, "import time; time.sleep(5)")
+    with pytest.raises(ValueError, match="positive integer"):
+        registry.terminate(session.shell_id, 0)
+    assert registry.get(session.shell_id) is session
+    paths = (session.stdout_path, session.stderr_path)
+    registry.terminate(session.shell_id, 1)
+    for path in paths:
+        assert not Path(path).exists()
+
+
+def test_reentrant_lock_path(registry):
+    session = _spawn(registry, "print('x')")
+    with registry._lock:
+        assert registry.get(session.shell_id) is session
+        assert registry.count() == 1
+
+
+def test_bounded_collectors_stop_and_overflow():
+    import io
+
+    from backend.tools.subprocess_util import start_bounded_output_collectors
+
+    out = io.BytesIO(b"x" * 100)
+    err = io.BytesIO(b"y" * 100)
+    out_path = make_temp_output_file(prefix="collector_")
+    err_path = make_temp_output_file(prefix="collector_")
+    collectors = start_bounded_output_collectors(out, err, out_path, err_path, max_bytes=10)
+    for collector in collectors:
+        collector.join(2)
+    for collector in collectors:
+        assert collector.overflowed
+        assert collector.bytes_written == 10
+    assert Path(out_path).stat().st_size == Path(err_path).stat().st_size == 10
+    os.unlink(out_path)
+    os.unlink(err_path)

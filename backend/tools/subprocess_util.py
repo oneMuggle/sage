@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import signal
@@ -51,11 +52,18 @@ class BoundedOutputCollector:
         self.max_bytes = max_bytes
         self.bytes_written = 0
         self.overflowed = False
+        self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._collect, daemon=True)
 
     def start(self) -> None:
         self._thread.start()
 
+    def stop(self, timeout: Optional[float] = None) -> None:
+        """停止 collector；关闭 PIPE 使阻塞读取在各平台可返回。"""
+        self._stop_event.set()
+        with contextlib.suppress(OSError, ValueError):
+            self._stream.close()
+        self._thread.join(timeout)
     def join(self, timeout: Optional[float] = None) -> None:
         self._thread.join(timeout)
 
