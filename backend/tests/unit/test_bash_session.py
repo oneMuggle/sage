@@ -198,3 +198,44 @@ def test_bounded_collectors_stop_and_overflow():
     assert Path(out_path).stat().st_size == Path(err_path).stat().st_size == 10
     os.unlink(out_path)
     os.unlink(err_path)
+
+
+def test_invalid_caps_all_rejected_without_removing_session(registry):
+    session = _spawn(registry, "import time; time.sleep(5)")
+    for cap in (True, "2", -1, 0, 10 * 1024 * 1024 + 1):
+        with pytest.raises(ValueError):
+            registry.terminate(session.shell_id, cap)
+        assert registry.get(session.shell_id) is session
+
+
+def test_clear_removes_multiple_sessions_and_files(registry):
+    sessions = [_spawn(registry, "import time; time.sleep(5)") for _ in range(3)]
+    paths = [(s.stdout_path, s.stderr_path) for s in sessions]
+    registry.clear()
+    assert registry.count() == 0
+    assert all(s.process.poll() is not None for s in sessions)
+    assert all(not Path(p).exists() for pair in paths for p in pair)
+
+
+def test_terminate_drain_error_still_cleans_and_removes(registry, monkeypatch):
+    session = _spawn(registry, "import time; time.sleep(5)")
+    paths = (session.stdout_path, session.stderr_path)
+    def broken(*args, **kwargs):
+        raise RuntimeError("drain failure")
+    monkeypatch.setattr("backend.tools.bash_session.read_capped_output", broken)
+    with pytest.raises(RuntimeError, match="drain failure"):
+        registry.terminate(session.shell_id, 10)
+    assert registry.get(session.shell_id) is None
+    assert all(not Path(p).exists() for p in paths)
+
+
+def test_collector_stop_closes_blocking_stream(tmp_path):
+    import os
+    from backend.tools.subprocess_util import BoundedOutputCollector
+    read_fd, write_fd = os.pipe()
+    stream = os.fdopen(read_fd, "rb")
+    collector = BoundedOutputCollector(stream, str(tmp_path / "out"), 10)
+    collector.start()
+    collector.stop(timeout=2)
+    os.close(write_fd)
+    assert not collector.is_alive
