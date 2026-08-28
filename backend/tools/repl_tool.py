@@ -23,10 +23,7 @@ REPL 工具 - Python 代码片段隔离执行（移植 claw-code execute_repl）
 - stdout/stderr 各截断到 100 KiB 上限。
 """
 
-import contextlib
 import logging
-import os
-import signal
 import subprocess
 import sys
 import tempfile
@@ -34,6 +31,12 @@ import time
 from typing import Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
+from .subprocess_util import (
+    kill_process_tree,
+    make_temp_output_file,
+    read_capped_output,
+    unlink_quietly,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +47,6 @@ REPL_MAX_TIMEOUT_SECONDS = 120.0
 
 #: stdout / stderr 各自的输出截断上限（100 KiB）
 MAX_OUTPUT_BYTES = 100 * 1024
-
-#: 读输出临时文件时多读的字节数——超过上限 1 字节即判定截断
-_OUTPUT_OVERREAD_MARGIN = 1
-
-#: 杀进程组后回收子进程的宽限超时（秒）
-_REAP_TIMEOUT_SECONDS = 5.0
 
 
 def clamp_timeout(value: float) -> float:
@@ -78,52 +75,14 @@ def _write_temp_script(code: str) -> str:
 
 
 def _make_temp_output_file() -> str:
-    """建一个承接子进程输出的空临时文件，返回路径（调用方负责删除）。"""
-    handle = tempfile.NamedTemporaryFile(prefix="sage_repl_", suffix=".out", delete=False)
-    handle.close()
-    return handle.name
+    """建一个承接子进程输出的空临时文件（repl 前缀）。"""
+    return make_temp_output_file(prefix="sage_repl_")
 
 
 def _read_capped_output(file_path: str) -> Tuple[str, bool]:
-    """读输出临时文件的**前** ``MAX_OUTPUT_BYTES`` 字节；返回 (文本, 是否截断)。
-
-    父进程内存占用恒定 ≤ 100 KiB + margin——片段打印多少都不全量读。
-    """
-    try:
-        with open(file_path, "rb") as handle:
-            raw = handle.read(MAX_OUTPUT_BYTES + _OUTPUT_OVERREAD_MARGIN)
-    except OSError as exc:
-        return f"[读取子进程输出失败: {exc}]", False
-    if len(raw) <= MAX_OUTPUT_BYTES:
-        return raw.decode("utf-8", errors="replace"), False
-    capped = raw[:MAX_OUTPUT_BYTES].decode("utf-8", errors="replace")
-    return f"{capped}\n...[输出超过 100 KiB 上限，已截断]", True
-
-
-def _kill_process_tree(process: subprocess.Popen) -> None:
-    """杀整个进程组（POSIX）或进程自身（Windows 尽力，杀不到孙进程）。"""
-    try:
-        if os.name != "nt":
-            try:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                # 组号拿不到（极端竞态）→ 退化只杀子进程本体
-                process.kill()
-        else:
-            process.kill()
-    except Exception:  # noqa: BLE001 — 清理路径：杀失败也不允许抛出
-        logger.debug("repl 子进程终止失败", exc_info=True)
-    try:
-        # 回收僵尸；SIGKILL 后 communicate 应立即返回
-        process.communicate(timeout=_REAP_TIMEOUT_SECONDS)
-    except Exception:  # noqa: BLE001 — 同上
-        logger.debug("repl 子进程回收失败", exc_info=True)
-
-
-def _unlink_quietly(path: str) -> None:
-    """删临时文件；不存在/被占用等一律静默（清理路径不报错）。"""
-    with contextlib.suppress(OSError):
-        os.unlink(path)
+    """读输出文件前 ``MAX_OUTPUT_BYTES`` 字节；返回 (文本, 是否截断)。"""
+    text, truncated, _offset = read_capped_output(file_path, cap=MAX_OUTPUT_BYTES)
+    return text, truncated
 
 
 class ReplTool(BaseTool):
@@ -198,7 +157,7 @@ class ReplTool(BaseTool):
         finally:
             for path in (script_path, stdout_path, stderr_path):
                 if path is not None:
-                    _unlink_quietly(path)
+                    unlink_quietly(path)
 
     def _run_subprocess(
         self,
@@ -215,7 +174,7 @@ class ReplTool(BaseTool):
         try:
             # start_new_session: POSIX → 新会话+新进程组（超时 killpg 连孙进程
             # 一起杀）；Windows → CREATE_NEW_PROCESS_GROUP（杀进程组退化为
-            # p.kill() 尽力杀，见 _kill_process_tree）
+            # p.kill() 尽力杀，见共享 subprocess_util）
             process = subprocess.Popen(
                 [sys.executable, "-I", script_path],
                 stdin=subprocess.DEVNULL,
@@ -237,7 +196,7 @@ class ReplTool(BaseTool):
             process.communicate(timeout=effective_timeout)
         except subprocess.TimeoutExpired:
             timed_out = True
-            _kill_process_tree(process)
+            kill_process_tree(process)
 
         duration = time.monotonic() - started
         if timed_out:
