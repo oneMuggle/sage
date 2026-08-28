@@ -57,3 +57,15 @@
   - `git diff --check` → 通过。
 - Commit：待提交。
 - Concerns：既有 Pydantic 弃用警告仍存在；无功能性 concerns。
+
+## Fix round 3
+
+- 加固 `/home/fz/project/sage/.claude/worktrees/bash-tool-parity-impl/backend/tools/subprocess_util.py`：新增共享契约常量 `MAX_OUTPUT_OFFSET_BYTES = 2**63 - 1`，在文件打开/seek 前拒绝超限 offset；继续拒绝 bool/非 int/负数，并将读取阶段的 `OverflowError` 与 `OSError` 一并转为错误文本。
+- 补充 `/home/fz/project/sage/.claude/worktrees/bash-tool-parity-impl/backend/tests/unit/test_subprocess_util.py`：覆盖 `MAX_OUTPUT_OFFSET_BYTES + 1` 与 `10**100`，保留真实 grandchild 进程组回收测试。
+- TDD：先加测试运行失败（导入尚不存在的 `MAX_OUTPUT_OFFSET_BYTES`）；实现后测试通过。
+- 验证命令：
+  - `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_subprocess_util.py backend/tests/unit/test_repl_tool.py -q` → `40 passed`（8 个既有 Pydantic 弃用警告）。
+  - `cd /home/fz/project/sage/.claude/worktrees/bash-tool-parity-impl/backend && /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check tools/subprocess_util.py tests/unit/test_subprocess_util.py` → `All checks passed!`
+  - `git diff --check` → 通过。
+- Commit：待提交。
+- Concerns：既有 Pydantic 弃用警告仍存在；无功能性 concerns。

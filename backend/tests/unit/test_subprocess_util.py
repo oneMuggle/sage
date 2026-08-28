@@ -12,6 +12,7 @@ import pytest
 
 from backend.tools.subprocess_util import (
     MAX_OUTPUT_CAP_BYTES,
+    MAX_OUTPUT_OFFSET_BYTES,
     kill_process_tree,
     make_temp_output_file,
     read_capped_output,
@@ -120,6 +121,20 @@ def test_read_capped_output_rejects_cap_above_shared_maximum():
     """读取上限必须受共享最大值约束。"""
     with pytest.raises(ValueError, match="maximum"):
         read_capped_output("/unused", cap=MAX_OUTPUT_CAP_BYTES + 1)
+
+
+def test_read_capped_output_rejects_offset_above_shared_maximum():
+    """offset 超出共享最大值时, 在打开文件前明确拒绝。"""
+    with pytest.raises(ValueError, match="offset exceeds maximum"):
+        read_capped_output(
+            "/unused", cap=0, offset=MAX_OUTPUT_OFFSET_BYTES + 1
+        )
+
+
+def test_read_capped_output_rejects_extremely_large_offset():
+    """极大 Python 整数不能穿透到文件 seek。"""
+    with pytest.raises(ValueError, match="offset exceeds maximum"):
+        read_capped_output("/unused", cap=0, offset=10**100)
 
 
 @pytest.mark.parametrize(

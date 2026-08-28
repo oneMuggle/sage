@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 #: 读取输出的共享最大上限，防止调用者请求一次性无界内存
 MAX_OUTPUT_CAP_BYTES = 10 * 1024 * 1024
 
+#: 文件偏移的共享最大上限，避免平台相关 seek 溢出
+MAX_OUTPUT_OFFSET_BYTES = 2**63 - 1
+
 #: 读输出时多读的字节数——超过上限 1 字节即判定截断
 _OUTPUT_OVERREAD_MARGIN = 1
 
@@ -58,12 +61,16 @@ def read_capped_output(file_path: str, cap: int, offset: int = 0) -> Tuple[str, 
         raise ValueError("cap and offset must be non-negative")
     if cap > MAX_OUTPUT_CAP_BYTES:
         raise ValueError(f"cap exceeds maximum of {MAX_OUTPUT_CAP_BYTES} bytes")
+    if offset > MAX_OUTPUT_OFFSET_BYTES:
+        raise ValueError(
+            f"offset exceeds maximum of {MAX_OUTPUT_OFFSET_BYTES} bytes"
+        )
 
     try:
         with open(file_path, "rb") as handle:
             handle.seek(offset)
             raw = handle.read(cap + _OUTPUT_OVERREAD_MARGIN)
-    except OSError as exc:
+    except (OSError, OverflowError) as exc:
         return f"[读取子进程输出失败: {exc}]", False, offset
     if len(raw) <= cap:
         return raw.decode("utf-8", errors="replace"), False, offset + len(raw)
@@ -112,4 +119,5 @@ __all__ = [
     "kill_process_tree",
     "unlink_quietly",
     "MAX_OUTPUT_CAP_BYTES",
+    "MAX_OUTPUT_OFFSET_BYTES",
 ]
