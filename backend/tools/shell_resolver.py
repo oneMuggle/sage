@@ -71,10 +71,10 @@ def _find_windows_bash() -> Optional[str]:
         return from_path
     for env_key in ("PROGRAMFILES", "PROGRAMFILES(X86)"):
         base = os.environ.get(env_key)
-        if not base:
+        if not base or not ntpath.isabs(base) or base.startswith(("\\\\", "//")):
             continue
         candidate = ntpath.join(base, _GIT_BASH_RELATIVE)
-        if os.path.exists(candidate):
+        if os.path.isfile(candidate):  # noqa: PTH113
             return candidate
     return None
 
