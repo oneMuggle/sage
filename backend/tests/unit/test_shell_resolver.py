@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+from ctypes import wintypes
 from types import SimpleNamespace
 
 import pytest
@@ -136,27 +137,23 @@ def test_windows_rejects_reparse_resolved_executable(monkeypatch):
         resolve_shell_uncached()
 
 
-def test_fake_kernel32_verifies_final_path_and_closes_handle(monkeypatch):
-    root = r"C:\Windows"
-    expected = root + r"\System32\WindowsPowerShell\v1.0\powershell.exe"
-    closed = []
+class _Win32Function:
+    def __init__(self, callback):
+        self.callback = callback
+        self.argtypes = None
+        self.restype = None
 
-    class Function:
-        def __init__(self, callback):
-            self.callback = callback
-        def __call__(self, *args):
-            return self.callback(*args)
+    def __call__(self, *args):
+        return self.callback(*args)
 
-    kernel = SimpleNamespace(
-        GetFileAttributesW=Function(lambda _p: 0),
-        CreateFileW=Function(lambda *_args: 42),
-        GetFinalPathNameByHandleW=Function(lambda _h, buf, _size, _flags: _set_buffer(buf, expected)),
-        CloseHandle=Function(lambda handle: closed.append(handle) or 1),
+
+def _fake_kernel(monkeypatch, kernel):
+    monkeypatch.setattr(
+        shell_resolver,
+        "os",
+        SimpleNamespace(name="nt", path=SimpleNamespace(isfile=lambda _p: True)),
     )
-    monkeypatch.setattr(shell_resolver, "os", SimpleNamespace(name="nt", path=SimpleNamespace(isfile=lambda _p: True)))
     monkeypatch.setattr(shell_resolver.ctypes, "windll", SimpleNamespace(kernel32=kernel), raising=False)
-    assert shell_resolver._verify_windows_file_identity(expected, expected)
-    assert closed == [42]
 
 
 def _set_buffer(buffer, value):
@@ -164,24 +161,124 @@ def _set_buffer(buffer, value):
     return len(value)
 
 
-def test_fake_kernel32_reparse_and_invalid_results_fail_closed(monkeypatch):
-    root = r"C:\Windows"
-    expected = root + r"\System32\WindowsPowerShell\v1.0\powershell.exe"
-
-    class Function:
-        def __init__(self, callback):
-            self.callback = callback
-        def __call__(self, *args):
-            return self.callback(*args)
-
-    kernel = SimpleNamespace(
-        GetFileAttributesW=Function(lambda _p: 0x400),
-        CreateFileW=Function(lambda *_args: ctypes.c_void_p(-1).value),
-        GetFinalPathNameByHandleW=Function(lambda *_args: 32768),
-        CloseHandle=Function(lambda _h: 1),
+def test_canonical_windows_path_strips_extended_prefix():
+    assert shell_resolver._canonical_windows_path(r"\\?\C:\Program Files\Git\bin\bash.exe") == shell_resolver._canonical_windows_path(
+        r"C:\Program Files\Git\bin\bash.exe"
     )
-    monkeypatch.setattr(shell_resolver, "os", SimpleNamespace(name="nt", path=SimpleNamespace(isfile=lambda _p: True)))
-    monkeypatch.setattr(shell_resolver.ctypes, "windll", SimpleNamespace(kernel32=kernel), raising=False)
+
+
+@pytest.mark.parametrize("path", [r"\\server\share\tool.exe", r"\\.\PhysicalDrive0", r"\\?\UNC\server\share\tool.exe"])
+def test_canonical_windows_path_keeps_non_local_prefixes(path):
+    assert shell_resolver._canonical_windows_path(path) != shell_resolver._canonical_windows_path(
+        r"C:\tool.exe"
+    )
+
+
+def _identity_kernel(final_callback, *, attributes=None, create=None, close=None):
+    return SimpleNamespace(
+        GetFileAttributesW=_Win32Function(attributes or (lambda _p: 0)),
+        CreateFileW=_Win32Function(create or (lambda *_args: 42)),
+        GetFinalPathNameByHandleW=_Win32Function(final_callback),
+        CloseHandle=_Win32Function(close or (lambda _handle: 1)),
+    )
+
+
+def test_fake_kernel32_verifies_extended_final_path_and_configures_abi(monkeypatch):
+    expected = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    closed = []
+    kernel = _identity_kernel(
+        lambda _handle, buffer, _size, _flags: _set_buffer(buffer, "\\\\?\\" + expected),
+        close=lambda handle: closed.append(handle) or 1,
+    )
+    _fake_kernel(monkeypatch, kernel)
+
+    assert shell_resolver._verify_windows_file_identity(expected, expected)
+    assert closed == [42]
+    attributes, create, final_path, close = (
+        kernel.GetFileAttributesW,
+        kernel.CreateFileW,
+        kernel.GetFinalPathNameByHandleW,
+        kernel.CloseHandle,
+    )
+    assert attributes.argtypes == [wintypes.LPCWSTR]
+    assert attributes.restype == wintypes.DWORD
+    assert create.argtypes == [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    assert create.restype == wintypes.HANDLE
+    assert final_path.argtypes == [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD]
+    assert final_path.restype == wintypes.DWORD
+    assert close.argtypes == [wintypes.HANDLE]
+    assert close.restype == wintypes.BOOL
+
+
+@pytest.mark.parametrize(
+    "callback",
+    [
+        lambda *_args: 0,
+        lambda *_args: 32768,
+        lambda *_args: 32769,
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("final path")),
+    ],
+)
+def test_final_path_invalid_results_fail_closed(monkeypatch, callback):
+    expected = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    closed = []
+    kernel = _identity_kernel(callback, close=lambda handle: closed.append(handle) or 1)
+    _fake_kernel(monkeypatch, kernel)
+
+    assert not shell_resolver._verify_windows_file_identity(expected, expected)
+    assert closed == [42]
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [
+        lambda: {"attributes": lambda _p: 0x400},
+        lambda: {"attributes": lambda _p: (_ for _ in ()).throw(RuntimeError("attributes"))},
+        lambda: {"create": lambda *_args: (_ for _ in ()).throw(RuntimeError("create"))},
+        lambda: {"create": lambda *_args: ctypes.c_void_p(-1).value},
+    ],
+)
+def test_kernel_errors_and_invalid_handle_fail_closed(monkeypatch, setup):
+    expected = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    closed = []
+    kernel = _identity_kernel(
+        lambda _handle, buffer, _size, _flags: _set_buffer(buffer, expected),
+        close=lambda handle: closed.append(handle) or 1,
+        **setup(),
+    )
+    _fake_kernel(monkeypatch, kernel)
+
+    assert not shell_resolver._verify_windows_file_identity(expected, expected)
+    assert closed == []
+
+
+def test_close_handle_failure_fails_closed(monkeypatch):
+    expected = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    kernel = _identity_kernel(
+        lambda _handle, buffer, _size, _flags: _set_buffer(buffer, expected),
+        close=lambda _handle: 0,
+    )
+    _fake_kernel(monkeypatch, kernel)
+
+    assert not shell_resolver._verify_windows_file_identity(expected, expected)
+
+
+def test_close_handle_exception_fails_closed(monkeypatch):
+    expected = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    kernel = _identity_kernel(
+        lambda _handle, buffer, _size, _flags: _set_buffer(buffer, expected),
+        close=lambda _handle: (_ for _ in ()).throw(RuntimeError("close")),
+    )
+    _fake_kernel(monkeypatch, kernel)
+
     assert not shell_resolver._verify_windows_file_identity(expected, expected)
 
 

@@ -55,7 +55,7 @@ def _is_regular_file(path: object) -> bool:
 
 
 def _canonical_windows_path(path: str) -> str:
-    normalized = path[4:] if path.startswith("\\\\?\\\\") else path
+    normalized = path[4:] if path.startswith("\\\\?\\") else path
     return ntpath.normcase(ntpath.normpath(normalized)).replace("/", "\\").rstrip("\\")
 
 
@@ -143,9 +143,10 @@ def _verify_windows_file_identity(path: str, expected: str) -> bool:  # noqa: PL
             length = final_path(handle, buffer, len(buffer), 0)
             if not isinstance(length, int) or length <= 0 or length >= len(buffer):
                 return False
-            return _canonical_windows_path(buffer.value) == _canonical_windows_path(expected)
+            verified = _canonical_windows_path(buffer.value) == _canonical_windows_path(expected)
         finally:
-            close(handle)
+            close_succeeded = bool(close(handle))
+        return verified and close_succeeded
     except Exception:
         return False
 
