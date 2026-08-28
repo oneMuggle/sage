@@ -9,13 +9,13 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from .subprocess_util import (
     MAX_OUTPUT_CAP_BYTES,
+    BoundedOutputCollector,
     kill_process_tree,
     read_capped_output,
-    start_bounded_output_collectors,
     unlink_quietly,
 )
 
@@ -46,6 +46,7 @@ class BashSession:
     stdout_offset: int = 0
     stderr_offset: int = 0
     started_at: float = field(default_factory=time.monotonic)
+    collectors: Optional[Tuple[BoundedOutputCollector, BoundedOutputCollector]] = None
 
     def status(self) -> str:
         return STATUS_RUNNING if self.process.poll() is None else STATUS_EXITED
@@ -68,6 +69,7 @@ class BashSessionRegistry:
         command: str,
         stdout_path: str,
         stderr_path: str,
+        collectors: Optional[Tuple[BoundedOutputCollector, BoundedOutputCollector]] = None,
     ) -> BashSession:
         with self._lock:
             if len(self._sessions) >= MAX_BACKGROUND_SESSIONS:
@@ -85,6 +87,7 @@ class BashSessionRegistry:
                 command=command,
                 stdout_path=stdout_path,
                 stderr_path=stderr_path,
+                collectors=collectors,
             )
             self._sessions[session.shell_id] = session
             # 不记录 command：它可能含有凭据或其他用户秘密。
@@ -124,6 +127,9 @@ class BashSessionRegistry:
             if session is None:
                 return None
             kill_process_tree(session.process)
+            if session.collectors:
+                for collector in session.collectors:
+                    collector.stop(timeout=1.0)
             drain_error = None
             try:
                 payload = self._drain(session, cap)
