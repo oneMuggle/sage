@@ -13,6 +13,7 @@
 - 相关测试（shell resolver、subprocess util、repl tool）：`78 passed`。
 - Ruff：`All checks passed`。
 - `git diff --check`：通过。
+- Python 3.8 `py_compile`：resolver 源码通过；完整目标测试未在 py38 收集执行，因既有 `backend.tools` 导入链的 Pydantic 约束错误阻断收集。
 
 ## Commit
 
