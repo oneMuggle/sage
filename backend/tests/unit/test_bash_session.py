@@ -203,7 +203,7 @@ def test_bounded_collectors_stop_and_overflow():
 def test_invalid_caps_all_rejected_without_removing_session(registry):
     session = _spawn(registry, "import time; time.sleep(5)")
     for cap in (True, "2", -1, 0, 10 * 1024 * 1024 + 1):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="cap"):
             registry.terminate(session.shell_id, cap)
         assert registry.get(session.shell_id) is session
 
@@ -231,6 +231,7 @@ def test_terminate_drain_error_still_cleans_and_removes(registry, monkeypatch):
 
 def test_collector_stop_closes_blocking_stream(tmp_path):
     import os
+
     from backend.tools.subprocess_util import BoundedOutputCollector
     read_fd, write_fd = os.pipe()
     stream = os.fdopen(read_fd, "rb")
