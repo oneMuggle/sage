@@ -19,6 +19,7 @@
  *   ``source`` 字段决定徽章样式。
  */
 
+import { isDemoMode, searchDemoMemories } from './demoInterceptors';
 import { invoke } from './desktopInvoke';
 import type { Memory, MemoryListResponse, MemorySummariesListResponse } from './types';
 import { ApiException, handleApiError, sanitizeInput, withRetry } from './utils';
@@ -129,8 +130,7 @@ function coerceMemoryItem(raw: unknown): Memory {
     statusRaw && VALID_SUMMARY_STATUSES.has(statusRaw as NonNullable<Memory['status']>)
       ? (statusRaw as NonNullable<Memory['status']>)
       : undefined;
-  const errorMessage =
-    status === 'failed' ? asOptionalString(raw.error_message) : undefined;
+  const errorMessage = status === 'failed' ? asOptionalString(raw.error_message) : undefined;
 
   const createdAt = asNumber(raw.created_at, 0);
   const createdAtMs = asNumber(raw.created_at_ms, createdAt > 0 ? createdAt * 1000 : 0);
@@ -182,9 +182,7 @@ function coerceMemoryListResponse(raw: unknown): MemoryListResponse {
     };
   }
 
-  const items = Array.isArray(raw.items)
-    ? (raw.items as unknown[]).map(coerceMemoryItem)
-    : [];
+  const items = Array.isArray(raw.items) ? (raw.items as unknown[]).map(coerceMemoryItem) : [];
   const breakdown = isRecord(raw.source_breakdown) ? raw.source_breakdown : {};
   return {
     items,
@@ -215,9 +213,7 @@ function coerceSummariesListResponse(raw: unknown): MemorySummariesListResponse 
     return fallback;
   }
   const sessionId = typeof raw.session_id === 'string' ? raw.session_id : '';
-  const items = Array.isArray(raw.items)
-    ? (raw.items as unknown[]).map(coerceMemoryItem)
-    : [];
+  const items = Array.isArray(raw.items) ? (raw.items as unknown[]).map(coerceMemoryItem) : [];
   // spec §4.3 step 5:session_id 必须一致;否则视为坏响应,扔掉 items,
   // 防止"我在看会话 A、列表给我返回会话 B 的摘要"的串味。
   const consistent = items.every((m) => !m.session_id || m.session_id === sessionId);
@@ -236,6 +232,10 @@ export const memoryApi = {
    * 搜索记忆
    */
   async searchMemories(query: string, memoryType?: 'episodic' | 'semantic'): Promise<Memory[]> {
+    // 演示模式 (2026-08-27): 关键词包含匹配过滤 demo 集合
+    if (isDemoMode()) {
+      return searchDemoMemories(query, memoryType);
+    }
     // 安全化查询输入
     const safeQuery = sanitizeInput(query);
 

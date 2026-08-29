@@ -16,13 +16,16 @@
  *
  * @see docs/superpowers/plans/2026-06-13_*.md (Phase 4 in plan)
  */
+import path from 'node:path';
+
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test';
 
+const MAIN_JS = path.resolve(process.cwd(), 'dist-electron', 'electron', 'main.js');
 let app: ElectronApplication | null = null;
 
 test.beforeAll(async () => {
   app = await electron.launch({
-    args: ['.'],
+    args: [MAIN_JS],
     cwd: process.cwd(),
     env: {
       ...process.env,

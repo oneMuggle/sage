@@ -5,6 +5,8 @@
 
 import { clientLogger } from '../log/client';
 
+import { runDemoChatStream } from './demoChatScript';
+import { isDemoMode } from './demoInterceptors';
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
 import type { AgentEvent, ChatConfig, ChatOfficeRef, ChatResponse } from './types';
@@ -16,8 +18,14 @@ const STREAM_TRACE_MAX = 50;
 
 export const chatApi = {
   async chat(sessionId: string, message: string, config?: ChatConfig): Promise<ChatResponse> {
-    // 安全化消息输入
     const safeMessage = sanitizeInput(message);
+    if (isDemoMode()) {
+      throw new ApiException({
+        error: 'DEMO_MODE_UNSUPPORTED',
+        message: '演示模式不支持同步聊天，请使用流式聊天',
+        details: {},
+      });
+    }
 
     // 验证会话ID
     if (!isValidSessionId(sessionId)) {
@@ -89,19 +97,25 @@ export const chatApi = {
     officeRefs?: readonly ChatOfficeRef[],
   ): Promise<{ streamId: string; cancel: () => void }> {
     const safeMessage = sanitizeInput(message);
-    if (!isValidSessionId(sessionId)) {
-      throw new ApiException({
-        error: 'VALIDATION_ERROR',
-        message: '无效的会话ID格式',
-        details: { sessionId },
-      });
-    }
     if (!handlers || typeof handlers.onEvent !== 'function') {
       throw new ApiException({
         error: 'VALIDATION_ERROR',
         message: 'chatStream 缺少 onEvent 回调',
         details: {},
       });
+    }
+    const isBtwSession = sessionId === '__btw__';
+    if (!isBtwSession && !isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    // 演示模式 (2026-08-27): 不发请求, 按脚本时间线推同形事件流。
+    // 仅保留 /btw 使用的特殊会话，其余路径仍遵守 UUID 校验。
+    if (isDemoMode()) {
+      return runDemoChatStream(sessionId, safeMessage, handlers);
     }
 
     // 1) 启动流 (同步 invoke, 立即返回 { streamId: "..." } 对象)

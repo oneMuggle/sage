@@ -11,7 +11,8 @@ jobs:
         with: { node-version: '20' }
       - run: npm ci
       - run: npm run build:electron
-      - run: npm run test:smoke
+      # Electron needs an X server on the headless Ubuntu runner.
+      - run: xvfb-run -a npm run test:smoke
   stub-deep:
     runs-on: ubuntu-latest
     needs: stub-smoke
@@ -21,7 +22,7 @@ jobs:
         with: { node-version: '20' }
       - run: npm ci
       - run: npm run build:electron
-      - run: npx playwright test --project=electron-stub-deep
+      - run: xvfb-run -a npx playwright test --project=electron-stub-deep
   live-boot:
     runs-on: ubuntu-latest
     needs: stub-deep
@@ -34,4 +35,23 @@ jobs:
       - run: conda create -n sage-backend python=3.11 -y
       - run: conda run -n sage-backend pip install -r backend/requirements.txt
       - run: npm ci && npm run build:electron
-      - run: npx playwright test --project=electron-live-boot
+      - run: |
+          set -euo pipefail
+          conda run -n sage-backend python -m backend.main > backend.log 2>&1 &
+          backend_pid=$!
+          trap 'kill "$backend_pid" 2>/dev/null || true; cat backend.log' EXIT
+          for attempt in $(seq 1 60); do
+            if ! kill -0 "$backend_pid" 2>/dev/null; then
+              cat backend.log
+              exit 1
+            fi
+            if curl --fail --silent --show-error http://127.0.0.1:8765/health; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              cat backend.log
+              exit 1
+            fi
+            sleep 2
+          done
+          xvfb-run -a npx playwright test --project=electron-live-boot

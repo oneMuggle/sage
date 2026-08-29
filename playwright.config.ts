@@ -23,6 +23,7 @@ export default defineConfig({
   workers: 1,
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'list',
   use: {
+    baseURL: 'http://localhost:1420',
     screenshot: 'on',
     video: 'off',
     trace: 'retain-on-failure',
@@ -85,13 +86,6 @@ export default defineConfig({
       timeout: 60_000,
       retries: 0,
       outputDir: './tests/electron/tiers/live/boot-smoke/test-results',
-      webServer: {
-        command: '/home/fz/anaconda3/envs/sage-backend/bin/python -m backend.main',
-        url: 'http://127.0.0.1:8765/health',
-        reuseExistingServer: !process.env.CI,
-        timeout: 60_000,
-        cwd: '/home/fz/project/sage', // main repo (worktree has no node_modules + backend deps may be rooted there)
-      },
     },
     {
       name: 'electron-live-deep',
@@ -99,13 +93,6 @@ export default defineConfig({
       timeout: 180_000, // 3 min for LLM API calls (R24)
       retries: 0,
       outputDir: './tests/electron/tiers/live/deep/test-results',
-      webServer: {
-        command: '/home/fz/anaconda3/envs/sage-backend/bin/python -m backend.main',
-        url: 'http://127.0.0.1:8765/health',
-        reuseExistingServer: !process.env.CI,
-        timeout: 60_000,
-        cwd: '/home/fz/project/sage',
-      },
     },
   ],
 });

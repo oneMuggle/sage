@@ -1,5 +1,7 @@
 // src/features/artifacts/artifactApi.ts
 
+import { isDemoMode } from '../../shared/api/demoInterceptors';
+
 export type ArtifactKind = 'markdown' | 'code' | 'image' | 'csv' | 'json' | 'text';
 
 export interface Artifact {
@@ -22,11 +24,16 @@ export interface ArtifactContent {
   truncated?: boolean;
 }
 
+function ensureBackendAccess(): void {
+  if (isDemoMode()) throw new Error('演示模式不支持后端操作');
+}
+
 function httpError(fn: string, res: Response): Error {
   return new Error(`${fn} failed: ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`);
 }
 
 export async function listArtifacts(sessionId: string): Promise<Artifact[]> {
+  ensureBackendAccess();
   const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts`);
   if (!res.ok) {
     throw httpError('listArtifacts', res);
@@ -37,8 +44,9 @@ export async function listArtifacts(sessionId: string): Promise<Artifact[]> {
 
 export async function readArtifactContent(
   sessionId: string,
-  artifactId: string
+  artifactId: string,
 ): Promise<ArtifactContent> {
+  ensureBackendAccess();
   const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts/${artifactId}/content`);
   if (!res.ok) {
     throw httpError('readArtifactContent', res);
@@ -48,8 +56,9 @@ export async function readArtifactContent(
 
 export async function revealArtifact(
   sessionId: string,
-  artifactId: string
+  artifactId: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  ensureBackendAccess();
   const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts/${artifactId}/reveal`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

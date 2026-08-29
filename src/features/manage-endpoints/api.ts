@@ -1,4 +1,9 @@
-import type { DiscoveredModel, ModelCapability } from '../../entities/setting/types';
+import {
+  DEMO_ENDPOINT_MODELS,
+  type DiscoveredModel,
+  type ModelCapability,
+} from '../../entities/setting/types';
+import { isDemoMode } from '../../shared/api/demoInterceptors';
 
 interface OpenAIModelInfo {
   id: string;
@@ -49,6 +54,7 @@ function proxyHeaders(providerUrl: string, apiKey: string): HeadersInit {
  * 这样浏览器永远只跟同源后端对话,绕开 CORS。
  */
 export async function fetchModels(baseUrl: string, apiKey: string): Promise<DiscoveredModel[]> {
+  if (isDemoMode()) return DEMO_ENDPOINT_MODELS.map((model) => ({ ...model }));
   const response = await fetch(`${LLM_PROXY_BASE}/v1/models`, {
     method: 'GET',
     headers: proxyHeaders(baseUrl, apiKey),
@@ -126,6 +132,14 @@ export async function testEndpointConnection(
   chatModel?: string,
 ): Promise<ConnectionTestResult> {
   const start = Date.now();
+  if (isDemoMode()) {
+    return {
+      success: true,
+      message: `演示端点可用 · 发现 ${DEMO_ENDPOINT_MODELS.length} 个模型 · 未发送网络请求`,
+      latency: 0,
+      discoveredModels: DEMO_ENDPOINT_MODELS.map((model) => ({ ...model })),
+    };
+  }
   try {
     // Step 1: Test /models endpoint
     const models = await fetchModels(baseUrl, apiKey);
