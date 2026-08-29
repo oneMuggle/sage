@@ -23,6 +23,7 @@ export default defineConfig({
   workers: 1,
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'list',
   use: {
+    baseURL: 'http://localhost:1420',
     screenshot: 'on',
     video: 'off',
     trace: 'retain-on-failure',
