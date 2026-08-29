@@ -9,12 +9,16 @@ hello world / 异常 traceback（非零退出仍 success=True）/ 超时杀进�
 
 from __future__ import annotations
 
+import math
 import os
 import time
+from unittest.mock import Mock
 
 import pytest
 
+import backend.tools.repl_tool as repl_module
 from backend.tools.repl_tool import (
+    MAX_CODE_BYTES,
     MAX_OUTPUT_BYTES,
     REPL_DEFAULT_TIMEOUT_SECONDS,
     REPL_MAX_TIMEOUT_SECONDS,
@@ -22,6 +26,7 @@ from backend.tools.repl_tool import (
     ReplTool,
     clamp_timeout,
 )
+from backend.tools.subprocess_util import file_identity
 
 pytestmark = pytest.mark.unit
 
@@ -115,6 +120,110 @@ def test_repl_timeout_clamped_to_bounds(requested, expected):
     assert clamp_timeout(requested) == expected
 
 
+def test_repl_rejects_non_finite_timeout(tool):
+    for timeout in (math.nan, math.inf, -math.inf):
+        result = tool.execute(code="print(1)", timeout=timeout)
+        assert result.success is False
+        assert "timeout 必须是有限数字" in result.error
+
+
+def test_repl_rejects_timeout_integer_that_cannot_be_converted_to_float(tool):
+    result = tool.execute(code="print(1)", timeout=10**1000)
+
+    assert result.success is False
+    assert "timeout 必须是有限数字" in result.error
+
+
+@pytest.mark.skipif(os.name == "nt", reason="进程组 kill 仅 POSIX 支持")
+def test_repl_normal_exit_kills_descendant_process_group(tool, tmp_path):
+    """父片段正常退出时仍清理同组 descendant。"""
+    marker = tmp_path / "normal-exit-descendant.txt"
+    grandchild = (
+        f"import time; time.sleep(4); open({str(marker)!r}, 'w').write('orphan')"
+    )
+    code = (
+        "import subprocess, sys\n"
+        f"subprocess.Popen([sys.executable, '-c', {grandchild!r}])\n"
+    )
+
+    result = tool.execute(code=code, timeout=2)
+
+    assert result.success is True
+    assert result.content["exit_code"] == 0
+    time.sleep(5)
+    assert not marker.exists()
+
+
+def test_repl_initialization_failure_removes_created_output_files(tool, monkeypatch, tmp_path):
+    script = tmp_path / "script.py"
+    script.write_text("print(1)", encoding="utf-8")
+    stdout_path = tmp_path / "stdout.out"
+    stdout_path.touch()
+    call_count = 0
+
+    def make_output_file():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return str(stdout_path)
+        raise OSError("stderr allocation failed")
+
+    monkeypatch.setattr(repl_module, "_write_temp_script", lambda _code: str(script))
+    monkeypatch.setattr(repl_module, "_make_temp_output_file", make_output_file)
+
+    result = tool.execute(code="print(1)")
+
+    assert result.success is False
+    assert not script.exists()
+    assert not stdout_path.exists()
+
+
+def test_repl_pending_cleanup_is_retained_then_retried(monkeypatch, tmp_path):
+    process = Mock()
+    process.poll.return_value = None
+    collector = Mock()
+    collector.is_alive = True
+    collector.finish.return_value = False
+    collector.stop.return_value = False
+    stdout_path = tmp_path / "stdout.out"
+    stderr_path = tmp_path / "stderr.out"
+    stdout_path.touch()
+    stderr_path.touch()
+    kill = Mock(return_value=False)
+    reap = Mock(return_value=False)
+    monkeypatch.setattr(repl_module, "kill_process_tree", kill)
+    monkeypatch.setattr(repl_module, "reap_process", reap)
+    repl_module._PENDING_CLEANUPS.clear()
+
+    try:
+        repl_module._retain_pending_cleanup(
+            process=process,
+            collectors=(collector,),
+            stdout_path=str(stdout_path),
+            stderr_path=str(stderr_path),
+            process_group_id=None,
+            stdout_identity=file_identity(str(stdout_path)),
+            stderr_identity=file_identity(str(stderr_path)),
+            process_group_killed=True,
+        )
+        repl_module._retry_pending_cleanups()
+
+        assert len(repl_module._PENDING_CLEANUPS) == 1
+        assert stdout_path.exists()
+        assert stderr_path.exists()
+
+        process.poll.return_value = 0
+        collector.is_alive = False
+        reap.return_value = True
+        repl_module._retry_pending_cleanups()
+
+        assert [] == repl_module._PENDING_CLEANUPS
+        assert not stdout_path.exists()
+        assert not stderr_path.exists()
+    finally:
+        repl_module._PENDING_CLEANUPS.clear()
+
+
 def test_repl_output_capped_at_100kib(tool):
     """stdout 超 100 KiB → 截断并置 truncated=True。"""
     # Arrange: 打印约 300 KiB
@@ -131,9 +240,70 @@ def test_repl_output_capped_at_100kib(tool):
     assert "已截断" in result.content["stdout"]
 
 
-# ---------------------------------------------------------------------------
-# 参数校验
-# ---------------------------------------------------------------------------
+def test_repl_rejects_code_above_input_limit(tool):
+    result = tool.execute(code="x" * (MAX_CODE_BYTES + 1))
+
+    assert result.success is False
+    assert "大小上限" in result.error
+
+
+def test_repl_spawn_group_verification_failure_retains_process(monkeypatch, tool, tmp_path):
+    from backend.tools.subprocess_util import ProcessGroupVerificationError
+
+    process = Mock()
+    process.poll.return_value = None
+    stdout = tmp_path / "stdout.out"
+    stderr = tmp_path / "stderr.out"
+    stdout.touch()
+    stderr.touch()
+    process.stdout = Mock()
+    process.stderr = Mock()
+    monkeypatch.setattr(repl_module, "spawn_verified", Mock(
+        side_effect=ProcessGroupVerificationError("group unavailable", process)
+    ))
+    monkeypatch.setattr(repl_module, "file_identity", file_identity)
+    monkeypatch.setattr(repl_module, "kill_process_tree", Mock(return_value=False))
+    repl_module._PENDING_CLEANUPS.clear()
+
+    try:
+        with pytest.raises(ProcessGroupVerificationError):
+            tool._run_subprocess(
+                str(tmp_path / "script.py"), str(stdout), str(stderr), 1
+            )
+        assert repl_module._PENDING_CLEANUPS
+        assert repl_module._PENDING_CLEANUPS[0].process is process
+    finally:
+        repl_module._PENDING_CLEANUPS.clear()
+
+
+def test_repl_group_kill_failure_does_not_reap_live_process(monkeypatch, tmp_path):
+    process = Mock()
+    process.poll.return_value = None
+    process.stdout = Mock()
+    process.stderr = Mock()
+    stdout = tmp_path / "stdout.out"
+    stderr = tmp_path / "stderr.out"
+    stdout.touch()
+    stderr.touch()
+    monkeypatch.setattr(repl_module, "spawn_verified", Mock(
+        return_value=Mock(process=process, process_group_id=process.pid)
+    ))
+    monkeypatch.setattr(repl_module, "start_bounded_output_collectors", Mock(return_value=()))
+    monkeypatch.setattr(repl_module, "observe_process_exit", Mock(return_value=False))
+    monkeypatch.setattr(repl_module, "kill_process_tree", Mock(return_value=False))
+    reap = Mock(return_value=False)
+    monkeypatch.setattr(repl_module, "reap_process", reap)
+    repl_module._PENDING_CLEANUPS.clear()
+
+    try:
+        result = ReplTool()._run_subprocess(str(tmp_path / "script.py"), str(stdout), str(stderr), 1)
+        assert result.success is False
+        reap.assert_not_called()
+        assert repl_module._PENDING_CLEANUPS
+    finally:
+        repl_module._PENDING_CLEANUPS.clear()
+
+
 
 
 @pytest.mark.parametrize("bad_code", ["", "   ", "\n", None, 123])

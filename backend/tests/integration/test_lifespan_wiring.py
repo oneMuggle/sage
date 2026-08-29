@@ -13,9 +13,16 @@ TestClient, then inspect ``app.state`` after startup.
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 
 import pytest
+
+from backend.main import (
+    _build_health_metadata,
+    _shutdown_bash_sessions,
+    _shutdown_repl_cleanups,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -29,7 +36,7 @@ async def test_lifespan_wires_hooks_and_evolution_scheduler(tmp_db_path):
     import backend.data.database as db_mod
     from backend.main import app
 
-    # Redirect the global DB to a temp path for isolation.
+# Redirect the global DB to a temp path for isolation.
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
 
     # TestClient triggers lifespan startup/shutdown synchronously.
@@ -77,7 +84,7 @@ async def test_lifespan_wires_hooks_and_evolution_scheduler(tmp_db_path):
 # The watchdog helper ``_fetch_stale_session_ids`` is module-private but
 # re-exported as ``app.state._watchdog_query_fn`` so this test can hit it
 # without waiting 60 s. The assertion is: when invoked from the event loop,
-# the thread that actually runs the SQLite SELECT must NOT be the event
+# the thread that actually runs the SELECT must NOT be the event
 # loop's thread.
 # ----------------------------------------------------------------------------
 
@@ -134,3 +141,69 @@ async def test_watchdog_fetch_runs_sql_off_event_loop(tmp_db_path: str) -> None:
             "session-watchdog SELECT ran on the event-loop thread; "
             "it must be wrapped in asyncio.to_thread"
         )
+
+
+# ----------------------------------------------------------------------------
+# PR #381 cherry-pick — health metadata + shutdown helpers from main.
+#
+# ``_build_health_metadata`` reads SAGE_BUILD_ID / SAGE_BACKEND_GENERATION /
+# SAGE_BACKEND_OWNERSHIP_TOKEN from the process environment and folds the
+# live PID into the JSON envelope. ``_shutdown_bash_sessions`` clears the
+# BashSessionRegistry; ``_shutdown_repl_cleanups`` drains any pending REPL
+# cleanup callbacks. All three are wired into the FastAPI lifespan, and
+# both shutdown helpers must swallow cleanup exceptions so a stuck
+# subprocess / repl hook cannot abort shutdown.
+# ----------------------------------------------------------------------------
+
+
+def test_lifespan_health_metadata_uses_runtime_ownership_envelope(monkeypatch):
+    """Health metadata is derived from the process environment and is JSON-safe."""
+    monkeypatch.setenv("SAGE_BUILD_ID", "test-build")
+    monkeypatch.setenv("SAGE_BACKEND_GENERATION", "7")
+    monkeypatch.setenv("SAGE_BACKEND_OWNERSHIP_TOKEN", "token-7")
+
+    metadata = _build_health_metadata()
+
+    assert metadata["buildId"] == "test-build"
+    assert metadata["generation"] == 7
+    assert metadata["ownershipToken"] == "token-7"
+    assert metadata["pid"] == os.getpid()
+
+
+def test_shutdown_bash_sessions_clears_registry(monkeypatch):
+    registry = type("Registry", (), {"clear": lambda self: setattr(self, "cleared", True)})()
+    monkeypatch.setattr("backend.tools.bash_session.get_registry", lambda: registry)
+
+    _shutdown_bash_sessions()
+
+    assert registry.cleared is True
+
+
+def test_shutdown_bash_sessions_swallows_cleanup_failure(monkeypatch):
+    monkeypatch.setattr(
+        "backend.tools.bash_session.get_registry",
+        lambda: (_ for _ in ()).throw(RuntimeError("cleanup failed")),
+    )
+
+    _shutdown_bash_sessions()
+
+
+def test_shutdown_repl_cleanups_calls_pending_cleanup(monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        "backend.tools.repl_tool.shutdown_pending_cleanups",
+        lambda: called.append(True),
+    )
+
+    _shutdown_repl_cleanups()
+
+    assert called == [True]
+
+
+def test_shutdown_repl_cleanups_swallows_cleanup_failure(monkeypatch):
+    monkeypatch.setattr(
+        "backend.tools.repl_tool.shutdown_pending_cleanups",
+        lambda: (_ for _ in ()).throw(RuntimeError("cleanup failed")),
+    )
+
+    _shutdown_repl_cleanups()

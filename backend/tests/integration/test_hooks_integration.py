@@ -64,18 +64,18 @@ async def test_pre_hook_deny_blocks_tool_and_loop_continues(tmp_path):
         "payload = json.load(sys.stdin)\n"
         "print(json.dumps({'decision': 'deny', 'reason': 'blocked:' + payload['tool_name']}))\n",
     )
-    _install_hooks([{"event": "pre_tool_use", "matcher": "term*", "command": cmd}])
+    _install_hooks([{"event": "pre_tool_use", "matcher": "bash", "command": cmd}])
 
-    agent = _make_agent("terminal", '{"command": "rm -rf /"}', "已处理")
+    agent = _make_agent("bash", '{"command": "rm -rf /"}', "已处理")
 
     # 钩子 deny 后工具绝不能被执行
-    terminal_tool = agent.tool_registry.get("terminal")
-    assert terminal_tool is not None
+    bash_tool = agent.tool_registry.get("bash")
+    assert bash_tool is not None
 
     def _boom(**kwargs):
         raise AssertionError("denied tool must not execute")
 
-    terminal_tool.execute = _boom
+    bash_tool.execute = _boom
 
     events, messages = await _collect(agent)
 
@@ -84,7 +84,7 @@ async def test_pre_hook_deny_blocks_tool_and_loop_continues(tmp_path):
     observing = next(e for e in events if e.state == AgentState.OBSERVING)
     assert observing.tool_result.is_error is True
     assert "hook 拒绝" in observing.tool_result.content
-    assert "blocked:terminal" in observing.tool_result.content
+    assert "blocked:bash" in observing.tool_result.content
     tool_msgs = [m for m in messages if m.get("role") == "tool"]
     assert len(tool_msgs) == 1
     assert "hook 拒绝" in tool_msgs[0]["content"]

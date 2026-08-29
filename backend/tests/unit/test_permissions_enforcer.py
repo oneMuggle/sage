@@ -42,20 +42,20 @@ def _enforcer(mode, rules=()):
         # FULL_ACCESS 普通调用全放行
         (PermissionMode.FULL_ACCESS, "read_file", {}, True, False),
         (PermissionMode.FULL_ACCESS, "write_file", {}, True, False),
-        (PermissionMode.FULL_ACCESS, "terminal", {"command": "ls"}, True, False),
+        (PermissionMode.FULL_ACCESS, "bash", {"command": "ls"}, True, False),
         # READ_ONLY: 只读放行, 写/执行拒绝
         (PermissionMode.READ_ONLY, "read_file", {}, True, False),
         (PermissionMode.READ_ONLY, "list_dir", {}, True, False),
         (PermissionMode.READ_ONLY, "write_file", {}, False, False),
-        (PermissionMode.READ_ONLY, "terminal", {"command": "ls"}, False, False),
+        (PermissionMode.READ_ONLY, "bash", {"command": "ls"}, False, False),
         # WORKSPACE_WRITE: 读/写放行, 执行需审批
         (PermissionMode.WORKSPACE_WRITE, "read_file", {}, True, False),
         (PermissionMode.WORKSPACE_WRITE, "write_file", {}, True, False),
-        (PermissionMode.WORKSPACE_WRITE, "terminal", {"command": "ls"}, False, True),
+        (PermissionMode.WORKSPACE_WRITE, "bash", {"command": "ls"}, False, True),
         # PROMPT: 只读放行, 写/执行逐次审批
         (PermissionMode.PROMPT, "read_file", {}, True, False),
         (PermissionMode.PROMPT, "write_file", {}, False, True),
-        (PermissionMode.PROMPT, "terminal", {"command": "ls"}, False, True),
+        (PermissionMode.PROMPT, "bash", {"command": "ls"}, False, True),
         # 未知工具默认 WRITE 能力 (fail-safe)
         (PermissionMode.READ_ONLY, "mystery_tool", {}, False, False),
         (PermissionMode.WORKSPACE_WRITE, "mystery_tool", {}, True, False),
@@ -98,11 +98,11 @@ def test_enforcer_deny_rule_beats_full_access_mode():
     """deny 规则永远胜出——即使 FULL_ACCESS 模式。"""
     # Arrange
     enforcer = _enforcer(
-        PermissionMode.FULL_ACCESS, [PermissionRule("terminal", "deny")]
+        PermissionMode.FULL_ACCESS, [PermissionRule("bash", "deny")]
     )
 
     # Act
-    decision = enforcer.check("terminal", {"command": "ls"})
+    decision = enforcer.check("bash", {"command": "ls"})
 
     # Assert
     assert decision.allowed is False
@@ -116,13 +116,13 @@ def test_enforcer_deny_rule_beats_allow_rule_for_same_tool():
     enforcer = _enforcer(
         PermissionMode.WORKSPACE_WRITE,
         [
-            PermissionRule("terminal", "allow"),
-            PermissionRule("terminal", "deny"),
+            PermissionRule("bash", "allow"),
+            PermissionRule("bash", "deny"),
         ],
     )
 
     # Act
-    decision = enforcer.check("terminal", {"command": "ls"})
+    decision = enforcer.check("bash", {"command": "ls"})
 
     # Assert
     assert decision.allowed is False
@@ -165,7 +165,7 @@ def test_enforcer_wildcard_deny_rule_blocks_everything():
     enforcer = _enforcer(PermissionMode.FULL_ACCESS, [PermissionRule("*", "deny")])
 
     # Act / Assert
-    for tool in ("read_file", "write_file", "terminal", "unknown_x"):
+    for tool in ("read_file", "write_file", "bash", "unknown_x"):
         decision = enforcer.check(tool, {})
         assert decision.allowed is False, tool
 
@@ -193,7 +193,7 @@ def test_enforcer_destructive_bash_under_full_access_escalates_to_approval():
     enforcer = _enforcer(PermissionMode.FULL_ACCESS)
 
     # Act
-    decision = enforcer.check("terminal", {"command": "rm -rf /"})
+    decision = enforcer.check("bash", {"command": "rm -rf /"})
 
     # Assert
     assert decision.allowed is False
@@ -207,7 +207,7 @@ def test_enforcer_destructive_bash_under_read_only_is_denied():
     enforcer = _enforcer(PermissionMode.READ_ONLY)
 
     # Act
-    decision = enforcer.check("terminal", {"command": "mkfs.ext4 /dev/sda"})
+    decision = enforcer.check("bash", {"command": "mkfs.ext4 /dev/sda"})
 
     # Assert
     assert decision.allowed is False
@@ -219,11 +219,11 @@ def test_enforcer_destructive_bash_beats_explicit_allow_rule():
     """显式 allow 规则也不能放行破坏性命令 (安全网优先)。"""
     # Arrange
     enforcer = _enforcer(
-        PermissionMode.WORKSPACE_WRITE, [PermissionRule("terminal", "allow")]
+        PermissionMode.WORKSPACE_WRITE, [PermissionRule("bash", "allow")]
     )
 
     # Act
-    decision = enforcer.check("terminal", {"command": "dd if=/dev/zero of=/dev/sda"})
+    decision = enforcer.check("bash", {"command": "dd if=/dev/zero of=/dev/sda"})
 
     # Assert
     assert decision.allowed is False
@@ -236,10 +236,10 @@ def test_enforcer_suspicious_bash_does_not_escalate_beyond_mode():
     WORKSPACE_WRITE 下按 EXECUTE 常态 needs_approval 并在原因里注明可疑。"""
     # Arrange / Act
     full = _enforcer(PermissionMode.FULL_ACCESS).check(
-        "terminal", {"command": "sudo apt install nginx"}
+        "bash", {"command": "sudo apt install nginx"}
     )
     ws = _enforcer(PermissionMode.WORKSPACE_WRITE).check(
-        "terminal", {"command": "sudo apt install nginx"}
+        "bash", {"command": "sudo apt install nginx"}
     )
 
     # Assert
@@ -254,7 +254,7 @@ def test_enforcer_terminal_without_command_arg_skips_bash_validation():
     enforcer = _enforcer(PermissionMode.WORKSPACE_WRITE)
 
     # Act
-    decision = enforcer.check("terminal", {})
+    decision = enforcer.check("bash", {})
 
     # Assert
     assert decision.needs_approval is True
@@ -281,7 +281,7 @@ def test_classify_tool_known_tools():
     ):
         assert classify_tool(name) is ToolCapability.READ, name
     assert classify_tool("write_file") is ToolCapability.WRITE
-    assert classify_tool("terminal") is ToolCapability.EXECUTE
+    assert classify_tool("bash") is ToolCapability.EXECUTE
 
 
 def test_classify_tool_unknown_defaults_to_write_fail_safe():
@@ -300,7 +300,7 @@ def test_permission_rule_rejects_invalid_decision():
     """非法 decision 值在构造时即报错。"""
     # Arrange / Act / Assert
     with pytest.raises(ValueError, match="decision"):
-        PermissionRule("terminal", "maybe")
+        PermissionRule("bash", "maybe")
 
 
 def test_permission_rule_roundtrip_via_dict():
@@ -319,7 +319,7 @@ def test_parse_rules_skips_bad_entries_but_keeps_good_ones():
     """parse_rules 容错: 坏条目跳过, 好条目保留, 非 list 回退空。"""
     # Arrange
     raw = [
-        {"tool_pattern": "terminal", "decision": "deny"},
+        {"tool_pattern": "bash", "decision": "deny"},
         {"tool_pattern": "", "decision": "allow"},  # 空 pattern → 非法
         {"decision": "allow"},  # 缺字段 → 非法
         "not-a-dict",
@@ -331,7 +331,7 @@ def test_parse_rules_skips_bad_entries_but_keeps_good_ones():
 
     # Assert
     assert rules == [
-        PermissionRule("terminal", "deny"),
+        PermissionRule("bash", "deny"),
         PermissionRule("write_file", "ask"),
     ]
     assert parse_rules(None) == []

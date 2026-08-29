@@ -71,11 +71,24 @@ export function humanizeToolCall(
       return { verb: 'List', object: trunc(strArg(a, 'path', 'a directory'), MAX_OBJECT) };
 
     // ---- shell / code execution ----
+    case 'bash':
     case 'terminal':
     case 'run_shell':
       return {
         verb: 'Run',
         object: trunc(strArg(a, 'command'), MAX_OBJECT) || 'a command',
+        scope: 'local',
+      };
+    case 'bash_output':
+      return {
+        verb: 'Read output of',
+        object: trunc(strArg(a, 'shell_id', 'a background shell'), MAX_OBJECT),
+        scope: 'local',
+      };
+    case 'kill_shell':
+      return {
+        verb: 'Kill',
+        object: trunc(strArg(a, 'shell_id', 'a background shell'), MAX_OBJECT),
         scope: 'local',
       };
     case 'repl': {

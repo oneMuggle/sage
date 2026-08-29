@@ -132,13 +132,13 @@ class TestClassifyPrecedence:
 
     def test_overrides_win_over_base(self):
         """用户覆盖优先于按名兜底表"""
-        overrides = lambda name: RiskClass.READ if name == "terminal" else None  # noqa: E731
-        assert classify("terminal", overrides=overrides) is RiskClass.READ
+        overrides = lambda name: RiskClass.READ if name == "bash" else None  # noqa: E731
+        assert classify("bash", overrides=overrides) is RiskClass.READ
 
     def test_override_returning_none_defers(self):
         """覆盖解析器返回 None → 交给后续优先级"""
         overrides = lambda _name: None  # noqa: E731
-        assert classify("terminal", overrides=overrides) is RiskClass.EXEC
+        assert classify("bash", overrides=overrides) is RiskClass.EXEC
 
     def test_full_precedence_chain(self):
         """完整优先级:overrides > declared > base > metadata > READ"""
@@ -211,7 +211,7 @@ class TestRegistryRiskCollection:
         # 声明 READ 覆盖按名表的 WRITE_LOCAL
         assert registry.classify("write_file") is RiskClass.READ
         # 未注册工具回落按名表
-        assert registry.classify("terminal") is RiskClass.EXEC
+        assert registry.classify("bash") is RiskClass.EXEC
 
     def test_register_invalid_risk_falls_back_to_read(self):
         """子类误设非法 risk（如 None）→ 回退 READ 不崩溃"""
@@ -236,7 +236,7 @@ class TestBuiltinToolDeclarations:
             "read_file": RiskClass.READ,
             "write_file": RiskClass.WRITE_LOCAL,
             "list_dir": RiskClass.READ,
-            "terminal": RiskClass.EXEC,
+            "bash": RiskClass.EXEC,
             "web_search": RiskClass.EXTERNAL,
             "web_fetch": RiskClass.EXTERNAL,
             "calculator": RiskClass.READ,

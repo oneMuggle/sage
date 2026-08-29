@@ -10,6 +10,7 @@ from backend.domain.tool_policy import ToolPolicy
 from .agent_tool import AgentTool
 from .ask_user_tool import AskUserQuestionTool
 from .base import BaseTool, ToolResult, ToolSchema
+from .bash_tool import BashOutputTool, BashTool, KillShellTool
 from .calculator import CalculatorTool
 from .edit_tool import EditTool
 from .file_summary_tool import FileSummaryTool
@@ -23,7 +24,6 @@ from .search_tools import GlobSearchTool, GrepSearchTool
 from .skill import SkillHotLoader
 from .skill_tool import SkillTool
 from .structured_output_tool import StructuredOutputTool
-from .terminal import TerminalTool
 from .todo_tool import TodoWriteTool
 from .web_tool import WebFetchTool, WebSearchTool
 
@@ -37,7 +37,11 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
         policy:   M2 工具策略（缺省 ``ToolPolicy()``）；透传给每个内置工具。
     """
     policy = policy or ToolPolicy()
-    registry.register(TerminalTool(policy=policy))
+    registry.register(BashTool(policy=policy))
+    # 后台 shell 生命周期：bash(run_in_background=true) 起的进程由这两个工具
+    # 轮询与终止。bash_output 归 READ（只读已捕获输出），kill_shell 归 WRITE。
+    registry.register(BashOutputTool(policy=policy))
+    registry.register(KillShellTool(policy=policy))
     registry.register(ReadFileTool(policy=policy))
     registry.register(WriteFileTool(policy=policy))
     registry.register(ListDirTool(policy=policy))
@@ -84,7 +88,10 @@ __all__ = [
     "BaseTool",
     "ToolSchema",
     "ToolResult",
-    "TerminalTool",
+    "AgentTool",
+    "BashTool",
+    "BashOutputTool",
+    "KillShellTool",
     "ReadFileTool",
     "WriteFileTool",
     "ListDirTool",
@@ -104,7 +111,6 @@ __all__ = [
     "ReplTool",
     "SkillTool",
     "AskUserQuestionTool",
-"AgentTool",
     "FileSummaryTool",
     "SkillHotLoader",
     "register_all_tools",
