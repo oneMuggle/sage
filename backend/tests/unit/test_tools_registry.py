@@ -181,7 +181,9 @@ def test_register_all_tools_registers_builtin_set():
     register_all_tools(reg)
 
     expected = {
-        "terminal",
+        "bash",
+        "bash_output",
+        "kill_shell",
         "read_file",
         "write_file",
         "list_dir",

@@ -77,7 +77,7 @@ class TestEngineConstruction:
         engine = PermissionEngine(tmp_path, mode="auto")
 
         assert engine.mode is PermissionMode.AUTO
-        assert engine.evaluate("terminal", {"command": "ls"}).allowed is True
+        assert engine.evaluate("bash", {"command": "ls"}).allowed is True
 
     def test_invalid_mode_rejected(self, tmp_path):
         """非法模式值 fail-fast"""
@@ -97,7 +97,7 @@ class TestEngineConstruction:
         )
 
         commands.append("rm -rf /")
-        tools.add("terminal")
+        tools.add("bash")
         risks["deploy"] = RiskClass.READ
 
         assert engine.allowed_commands == ["git status"]
@@ -131,12 +131,14 @@ class TestHasShellOperators:
         """普通命令不误报"""
         assert has_shell_operators(command) is False
 
-    def test_terminal_tool_shares_same_source(self):
-        """TerminalTool.SHELL_OPERATORS 与 domain 单一来源一致（防漂移）"""
+    def test_bash_tool_does_not_shadow_operator_source(self):
+        """BashTool 不再自带 SHELL_OPERATORS 副本（统一由 domain.shell 提供）。"""
         from backend.domain.shell import SHELL_OPERATORS
-        from backend.tools.terminal import TerminalTool
+        from backend.tools.bash_tool import BashTool
 
-        assert TerminalTool.SHELL_OPERATORS == SHELL_OPERATORS
+        # BashTool 应仅引用 domain 源；自身没有平行的操作符副本。
+        assert not hasattr(BashTool, "SHELL_OPERATORS")
+        assert SHELL_OPERATORS  # 源仍在；空串/空列表都会被后续策略误判
 
 
 class TestReadOnlyModes:
@@ -166,7 +168,7 @@ class TestReadOnlyModes:
         """只读模式下 EXEC / EXTERNAL 一律拒绝"""
         engine = PermissionEngine(tmp_path, mode=mode)
 
-        assert engine.evaluate("terminal", {"command": "ls"}).allowed is False
+        assert engine.evaluate("bash", {"command": "ls"}).allowed is False
         assert engine.evaluate("web_search", {"query": "x"}).allowed is False
         assert engine.evaluate("memory_save", {"content": "x"}).allowed is False
 
@@ -247,7 +249,7 @@ class TestInteractiveMode:
     def test_exec_asks_user(self, tmp_path):
         """shell 命令 → 询问用户"""
         engine = PermissionEngine(tmp_path)
-        decision = engine.evaluate("terminal", {"command": "rm -rf node_modules"})
+        decision = engine.evaluate("bash", {"command": "rm -rf node_modules"})
 
         assert decision.allowed is False
         assert decision.needs_user is True
@@ -294,7 +296,7 @@ class TestAutoMode:
         engine = PermissionEngine(tmp_path, mode=PermissionMode.AUTO)
 
         assert engine.evaluate("write_file", {"path": str(tmp_path / "a.txt")}).allowed is True
-        assert engine.evaluate("terminal", {"command": "ls"}).allowed is True
+        assert engine.evaluate("bash", {"command": "ls"}).allowed is True
         assert engine.evaluate("web_search", {"query": "x"}).allowed is True
 
     def test_write_outside_workspace_still_denied(self, tmp_path):
@@ -312,7 +314,7 @@ class TestCommandAllowlist:
     def test_exact_match(self, tmp_path):
         """完整命令精确匹配 → 免审批"""
         engine = PermissionEngine(tmp_path, allowed_commands=["git status"])
-        decision = engine.evaluate("terminal", {"command": "git status"})
+        decision = engine.evaluate("bash", {"command": "git status"})
 
         assert decision.allowed is True
         assert decision.reason == "command on allowlist"
@@ -320,14 +322,14 @@ class TestCommandAllowlist:
     def test_token_prefix_match(self, tmp_path):
         """token 精确前缀匹配:`git status` 覆盖 `git status -s`"""
         engine = PermissionEngine(tmp_path, allowed_commands=["git status"])
-        decision = engine.evaluate("terminal", {"command": "git status -s"})
+        decision = engine.evaluate("bash", {"command": "git status -s"})
 
         assert decision.allowed is True
 
     def test_no_prefix_bleed(self, tmp_path):
         """前缀不得跨 token 边界:`git status` 不覆盖 `git statusfoo`"""
         engine = PermissionEngine(tmp_path, allowed_commands=["git status"])
-        decision = engine.evaluate("terminal", {"command": "git statusfoo"})
+        decision = engine.evaluate("bash", {"command": "git statusfoo"})
 
         assert decision.allowed is False
         assert decision.needs_user is True
@@ -335,14 +337,14 @@ class TestCommandAllowlist:
     def test_bare_command_not_matched_by_longer_entry(self, tmp_path):
         """裸 `git` 不被 `git status` 覆盖"""
         engine = PermissionEngine(tmp_path, allowed_commands=["git status"])
-        decision = engine.evaluate("terminal", {"command": "git"})
+        decision = engine.evaluate("bash", {"command": "git"})
 
         assert decision.allowed is False
 
     def test_shell_operators_disqualify(self, tmp_path):
         """携带 shell 操作符 → allowlist 失效（防绕过）"""
         engine = PermissionEngine(tmp_path, allowed_commands=["git status"])
-        decision = engine.evaluate("terminal", {"command": "git status && rm -rf ~"})
+        decision = engine.evaluate("bash", {"command": "git status && rm -rf ~"})
 
         assert decision.allowed is False
         assert decision.needs_user is True
@@ -350,14 +352,14 @@ class TestCommandAllowlist:
     def test_unbalanced_quotes_not_allowed(self, tmp_path):
         """引号不配对的命令 → 视为不在 allowlist"""
         engine = PermissionEngine(tmp_path, allowed_commands=["git status"])
-        decision = engine.evaluate("terminal", {"command": 'git "status'})
+        decision = engine.evaluate("bash", {"command": 'git "status'})
 
         assert decision.allowed is False
 
     def test_empty_command_not_allowed(self, tmp_path):
         """空命令 → 不在 allowlist"""
         engine = PermissionEngine(tmp_path, allowed_commands=["git status"])
-        decision = engine.evaluate("terminal", {"command": ""})
+        decision = engine.evaluate("bash", {"command": ""})
 
         assert decision.allowed is False
         assert decision.needs_user is True
@@ -365,7 +367,7 @@ class TestCommandAllowlist:
     def test_malformed_allowlist_entry_skipped(self, tmp_path):
         """allowlist 中引号不配对的条目被跳过,不抛异常"""
         engine = PermissionEngine(tmp_path, allowed_commands=['git "status'])
-        decision = engine.evaluate("terminal", {"command": "git status"})
+        decision = engine.evaluate("bash", {"command": "git status"})
 
         assert decision.allowed is False
 
@@ -388,7 +390,7 @@ class TestSessionMemory:
         """用户批准完整命令后,同命令免询问"""
         engine = PermissionEngine(tmp_path)
         engine.allow_command_for_session("pytest -x")
-        decision = engine.evaluate("terminal", {"command": "pytest -x"})
+        decision = engine.evaluate("bash", {"command": "pytest -x"})
 
         assert decision.allowed is True
         assert decision.reason == "command allowed for session"
@@ -397,7 +399,7 @@ class TestSessionMemory:
         """会话命令记忆是精确匹配,不做前缀放宽"""
         engine = PermissionEngine(tmp_path)
         engine.allow_command_for_session("pytest -x")
-        decision = engine.evaluate("terminal", {"command": "pytest -x tests/ && rm -rf /"})
+        decision = engine.evaluate("bash", {"command": "pytest -x tests/ && rm -rf /"})
 
         assert decision.allowed is False
 
@@ -445,7 +447,7 @@ class TestCustomMode:
         engine = PermissionEngine(
             tmp_path, mode=PermissionMode.CUSTOM, auto_allow_tools={"write_file"}
         )
-        decision = engine.evaluate("terminal", {"command": "ls"})
+        decision = engine.evaluate("bash", {"command": "ls"})
 
         assert decision.allowed is False
         assert decision.needs_user is True

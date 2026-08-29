@@ -64,7 +64,7 @@ def _make_response(content: str = "", tool_calls=None) -> LLMResponse:
 def _terminal_call(call_id: str = "call_term", command: str = "echo hi") -> LLMToolCall:
     return LLMToolCall(
         id=call_id,
-        name="terminal",
+        name="bash",
         arguments='{"command": "%s"}' % command  # noqa: UP031  # JSON 模板保留 % 格式更直观
     )
 
@@ -126,7 +126,7 @@ async def test_run_loop_prompt_mode_yields_permission_request_then_executes_on_a
         "message",
         "created_at",
     }
-    assert payload["tool_name"] == "terminal"
+    assert payload["tool_name"] == "bash"
     assert payload["request_id"] == answered["request"].request_id
     # permission_request 在 ACTING 之后, OBSERVING 之前
     assert states.index(AgentState.ACTING) < states.index(AgentState.PERMISSION_REQUEST)
@@ -258,7 +258,7 @@ async def test_run_loop_deny_rule_from_settings_blocks_tool_before_dispatch():
     # Arrange
     repo = SettingsRepository()
     repo.set("permission_mode", "full_access")
-    repo.set_json("permission_rules", [{"tool_pattern": "terminal", "decision": "deny"}])
+    repo.set_json("permission_rules", [{"tool_pattern": "bash", "decision": "deny"}])
     init_permission_gate()
     agent, mock_tool = _agent_with_stub_tool([_terminal_call()])
 

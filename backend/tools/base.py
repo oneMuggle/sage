@@ -99,8 +99,9 @@ class BaseTool(ABC):
     # A1: 工具风险声明 — 权限引擎（PermissionEngine）据此做模式门禁，
     # 取代按工具名硬编码集合的旧模式。默认 READ（无副作用）；有副作
     # 用的工具必须在子类覆盖（如 WriteFileTool → WRITE_LOCAL、
-    # TerminalTool → EXEC、WebSearchTool → EXTERNAL）。注册表在
-    # register() 时收集该声明，引擎经 declared_risks 注入。
+    # TerminalTool → EXEC（历史命名）、BashTool → EXEC（当前实现）、
+    # WebSearchTool → EXTERNAL）。注册表在 register() 时收集该声明，
+    # 引擎经 declared_risks 注入。
     #
     # ⚠️ fail-open 警示：注册表无法区分"显式声明 READ"与"继承默认
     # READ"，漏写 risk 的副作用工具会被静默放行。新增工具务必声明

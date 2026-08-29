@@ -12,8 +12,8 @@
 
 参数模式精化：写入的 ``path`` 必须为绝对路径且落在 ``workspace_root``
 内（所有模式）；命令 allowlist 采用 token 精确前缀匹配，且拒绝携带
-shell 操作符的命令（操作符定义与 A7 ``TerminalTool`` 同源，见
-``backend.domain.shell``）。
+shell 操作符的命令（操作符定义与 A7 ``BashTool`` / ``bash_validation``
+同源，见 ``backend.domain.shell``）。
 
 引擎**只做裁决**；上层（ChatService / agent loop）负责把 ``needs_user``
 裁决路由到 UI 审批，并经 ``allow_*_for_session`` 记录用户选择。

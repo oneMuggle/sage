@@ -68,7 +68,9 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "write_file": ToolCapability.WRITE,
     "office_create": ToolCapability.WRITE,
     "edit_file": ToolCapability.WRITE,
-    "terminal": ToolCapability.EXECUTE,
+    "bash": ToolCapability.EXECUTE,
+    "bash_output": ToolCapability.EXECUTE,  # 读取后台 shell 输出也算执行面扩展
+    "kill_shell": ToolCapability.EXECUTE,   # 终止后台进程：执行面副作用
     "repl": ToolCapability.EXECUTE,
     # M2 part B: skill 归 EXECUTE —— 技能可编排任意工具调用, SKILL.md 脚本
     # 更直接跑子进程(script_runner 沙箱内), 语义上是"执行任意动作",
@@ -206,7 +208,7 @@ class PermissionEnforcer:
         """工具分发前的许可检查（同步、无副作用）。
 
         Args:
-            tool_name: 工具名（如 ``"terminal"``）。
+            tool_name: 工具名（如 ``"bash"``）。
             args:      工具参数字典；EXECUTE 工具读 ``args["command"]`` 做
                        bash 风险校验。
 

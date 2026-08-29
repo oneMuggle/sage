@@ -98,6 +98,26 @@ def _build_health_metadata() -> dict:
     }
 
 
+def _shutdown_bash_sessions() -> None:
+    """在后端退出时尽力终止并清理后台 shell 会话。"""
+    try:
+        from backend.tools.bash_session import get_registry
+
+        get_registry().clear()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("后台 shell shutdown failed（异常类型=%s）", type(exc).__name__)
+
+
+def _shutdown_repl_cleanups() -> None:
+    """在后端退出时尽力清理 REPL 残留资源。"""
+    try:
+        from backend.tools.repl_tool import shutdown_pending_cleanups
+
+        shutdown_pending_cleanups()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("REPL shutdown failed（异常类型=%s）", type(exc).__name__)
+
+
 def _build_compute_adapter():
     """按 ``backend/config/ghm.yaml`` 装配 ComputePort。
 
@@ -509,6 +529,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # 关闭时清理
+    _shutdown_bash_sessions()
+    _shutdown_repl_cleanups()
     sweeper_task.cancel()
     with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
         await sweeper_task

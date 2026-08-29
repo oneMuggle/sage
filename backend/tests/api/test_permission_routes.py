@@ -34,7 +34,7 @@ def gate():
     reset_permission_gate()
 
 
-def _pending_request(tool_name: str = "terminal") -> ApprovalRequest:
+def _pending_request(tool_name: str = "bash") -> ApprovalRequest:
     return ApprovalRequest.create(
         tool_name=tool_name,
         args={"command": "ls"},
@@ -72,7 +72,7 @@ async def test_get_pending_returns_registered_requests(gate, client):
     assert len(items) == 1
     item = items[0]
     assert item["request_id"] == req.request_id
-    assert item["tool_name"] == "terminal"
+    assert item["tool_name"] == "bash"
     assert item["risk"] == "suspicious"
     assert item["message"] == "prompt 模式需要确认"
     assert "ls" in item["args_summary"]
@@ -167,7 +167,7 @@ async def test_remember_true_persists_allow_rule_to_settings(gate, client):
 async def test_remember_denial_persists_deny_rule(gate, client):
     """remember + rejected → deny 规则, 下次 enforcer 直接拒。"""
     # Arrange
-    req = _pending_request("terminal")
+    req = _pending_request("bash")
     holder = asyncio.create_task(gate.request(req, timeout=5.0))
     await asyncio.sleep(0.01)
 
@@ -181,7 +181,7 @@ async def test_remember_denial_persists_deny_rule(gate, client):
     # Assert
     assert resp.json() == {"ok": True}
     rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
-    assert PermissionRule("terminal", "deny") in rules
+    assert PermissionRule("bash", "deny") in rules
 
 
 async def test_remember_appends_to_existing_rules(gate, client):
@@ -189,7 +189,7 @@ async def test_remember_appends_to_existing_rules(gate, client):
     # Arrange
     repo = SettingsRepository()
     repo.set_json(SETTINGS_KEY_RULES, [{"tool_pattern": "read_file", "decision": "allow"}])
-    req = _pending_request("terminal")
+    req = _pending_request("bash")
     holder = asyncio.create_task(gate.request(req, timeout=5.0))
     await asyncio.sleep(0.01)
 
@@ -204,7 +204,7 @@ async def test_remember_appends_to_existing_rules(gate, client):
     rules = parse_rules(repo.get_json(SETTINGS_KEY_RULES))
     assert rules == [
         PermissionRule("read_file", "allow"),
-        PermissionRule("terminal", "allow"),
+        PermissionRule("bash", "allow"),
     ]
 
 
@@ -274,7 +274,7 @@ async def test_remember_rejects_fnmatch_metacharacters(gate, client, bad_name):
 async def test_remember_with_exact_tool_name_still_persisted(gate, client):
     """回归保护: 精确工具名（无元字符）remember 照常持久化。"""
     # Arrange
-    req = _pending_request("terminal")
+    req = _pending_request("bash")
     holder = asyncio.create_task(gate.request(req, timeout=5.0))
     await asyncio.sleep(0.01)
 
@@ -288,7 +288,7 @@ async def test_remember_with_exact_tool_name_still_persisted(gate, client):
     # Assert
     assert resp.json() == {"ok": True}
     rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
-    assert PermissionRule("terminal", "allow") in rules
+    assert PermissionRule("bash", "allow") in rules
 
 
 # ---------------------------------------------------------------------------
