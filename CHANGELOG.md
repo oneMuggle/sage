@@ -18,6 +18,13 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.9-win7] - 2026-08-29
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 main #381 bash-tool-parity:将 `TerminalTool` 替换为 `BashTool` / `BashOutputTool` / `KillShellTool` 三件套,与 Claude Code Bash 工具语义对齐。Cherry-pick 链路: main `81a20b0b` → win7 `00984167` (#382),37 文件 / +7481/-547。
+
+### Added
+- **feat(win7-tools): cherry-pick main bash-tool-parity (#382)** — main PR #381 (30 文件 / +3123/-630)。新增 `backend/tools/bash_session.py`(`BashSessionRegistry` 后台 shell 进程表,32 上限,内存态)、`bash_tool.py`(三件套实现 + 危险命令分级 → PermissionEnforcer)、`subprocess_util.py`(`BoundedOutputCollector` / `spawn_verified` / `kill_process_tree` 跨平台原语)、`shell_resolver.py`(POSIX bash→sh / Windows Git Bash→PowerShell 探测)。前端 `src/shared/lib/humanize.ts` 加 bash/bash_output/kill_shell 三工具的中文风险描述。docs `docs/technical/44-bash-tool.md` 新建章节。冲突解析 2 处:(1) `backend/tools/__init__.py` 的 `__all__` — win7 alpha.8 有重复/错位的 `AgentTool` 行 + 缺 BashTool trio,合并为单一完整列表;(2) `backend/tests/integration/test_lifespan_wiring.py` — 保留 win7 既有的 `test_lifespan_wires_hooks_and_evolution_scheduler` + `test_watchdog_fetch_runs_sql_off_event_loop` + PR 新增 `test_lifespan_health_metadata_uses_runtime_ownership_envelope` + 4 个 shutdown 测试 (`test_shutdown_bash_sessions_clears_registry`、`_swallows_cleanup_failure`、`test_shutdown_repl_cleanups_calls_pending_cleanup`、`_swallows_cleanup_failure`),补 `import os`。Python 3.8 兼容性已验证:`sage-backend-py38` (Python 3.8.20) 跑全量 backend 单测 `3522 passed`,Backend (Python 3.8, Win7 LTS) CI 8m10s pass。
+
 ## [v0.4.9-alpha.7-win7] - 2026-08-25
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 rightpanel 面板 × 关闭按钮 UI 改进:cherry-pick main 的 `5e43f8e6 feat(rightpanel): 面板内添加 × 关闭按钮 (closes #298)`。本批扫描 10 个 main 候选,核对发现仅 rightpanel × 按钮还未在 win7 适配 (其余 #345 / #350 / #363 / #339 / #349 / #310 / #352 / 331bd737 PR-B 等 9 个均已通过 #346 / #351 / #364 / #341 / #348 / #311 / alpha.5 / 756e165a 等 win7 适配版提前到位)。
