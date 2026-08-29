@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -10,12 +11,14 @@ from unittest import mock
 
 import pytest
 
+from backend.tools import subprocess_util
 from backend.tools.subprocess_util import (
     MAX_OUTPUT_CAP_BYTES,
     MAX_OUTPUT_OFFSET_BYTES,
     kill_process_tree,
     make_temp_output_file,
     read_capped_output,
+    unlink_owned,
     unlink_quietly,
 )
 
@@ -98,13 +101,101 @@ def test_read_capped_output_honors_offset_for_incremental_reads():
 
 def test_read_capped_output_missing_file_returns_error_text_not_raise():
     """文件不存在 → 返回错误说明文本, 不抛异常（清理路径不允许崩）。"""
-    # Arrange / Act
     text, truncated, offset = read_capped_output("/nonexistent/path/xyz", cap=1024)
 
-    # Assert
     assert "读取子进程输出失败" in text
     assert truncated is False
     assert offset == 0
+
+
+def test_read_capped_output_rejects_symlink_without_reading_target(tmp_path):
+    """输出路径为符号链接时不得读取链接目标。"""
+    if not hasattr(os, "O_NOFOLLOW"):
+        pytest.skip("平台不支持 O_NOFOLLOW")
+    target = tmp_path / "secret.txt"
+    target.write_text("secret", encoding="utf-8")
+    link = tmp_path / "output.out"
+    link.symlink_to(target)
+
+    text, truncated, offset = read_capped_output(str(link), cap=1024)
+
+    assert "读取子进程输出失败" in text
+    assert "secret" not in text
+    assert truncated is False
+    assert offset == 0
+
+
+def test_read_capped_output_rejects_path_replaced_after_lstat(tmp_path, monkeypatch):
+    """lstat 与 open 之间替换输出路径时不得读取新目标。"""
+    output = tmp_path / "output.out"
+    output.write_text("old", encoding="utf-8")
+    target = tmp_path / "secret.txt"
+    target.write_text("secret", encoding="utf-8")
+    original_open = os.open
+    replaced = False
+
+    def replace_before_open(path, flags, *args):
+        nonlocal replaced
+        if path == str(output) and not replaced:
+            replaced = True
+            output.unlink()
+            output.symlink_to(target)
+        return original_open(path, flags, *args)
+
+    monkeypatch.setattr("backend.tools.subprocess_util.os.open", replace_before_open)
+    text, truncated, offset = read_capped_output(str(output), cap=1024)
+
+    assert replaced is True
+    assert "读取子进程输出失败" in text
+    assert "secret" not in text
+    assert truncated is False
+    assert offset == 0
+
+
+def test_read_capped_output_rejects_non_regular_file(tmp_path):
+    """目录等非普通文件不能作为输出读取。"""
+    directory = tmp_path / "output.out"
+    directory.mkdir()
+
+    text, truncated, offset = read_capped_output(str(directory), cap=1024)
+
+    assert "不是普通文件" in text
+    assert truncated is False
+    assert offset == 0
+
+
+def test_read_capped_output_closes_fd_when_fstat_fails(tmp_path, monkeypatch):
+    """打开后 fstat 失败时必须关闭已取得的 descriptor。"""
+    output = tmp_path / "output.out"
+    output.write_bytes(b"data")
+    original_open = os.open
+    original_close = os.close
+    opened_fds = []
+    closed_fds = []
+
+    def open_and_record(path, flags, *args):
+        fd = original_open(path, flags, *args)
+        opened_fds.append(fd)
+        return fd
+
+    def fail_fstat(_fd):
+        raise OSError("fstat failed")
+
+    def close_and_record(fd):
+        closed_fds.append(fd)
+        return original_close(fd)
+
+    monkeypatch.setattr("backend.tools.subprocess_util.os.open", open_and_record)
+    monkeypatch.setattr("backend.tools.subprocess_util.os.fstat", fail_fstat)
+    monkeypatch.setattr("backend.tools.subprocess_util.os.close", close_and_record)
+
+    text, truncated, offset = read_capped_output(str(output), cap=1024)
+
+    assert "读取子进程输出失败" in text
+    assert truncated is False
+    assert offset == 0
+    assert opened_fds
+    assert closed_fds == opened_fds
 
 
 @pytest.mark.parametrize(
@@ -148,19 +239,42 @@ def test_read_capped_output_rejects_bool_limits(parameter, value):
         read_capped_output("/unused", **kwargs)
 
 
-def test_kill_process_tree_falls_back_for_non_independent_process_group():
+def test_kill_process_tree_exited_leader_does_not_kill_group_by_default():
+    process = mock.Mock(pid=123)
+    process.poll.return_value = 0
+
+    with mock.patch("backend.tools.subprocess_util.os.killpg") as killpg:
+        assert kill_process_tree(process, reap=False, process_group_id=123) is True
+
+    killpg.assert_not_called()
+
+
+def test_kill_process_tree_allows_observed_unreaped_exit_group_kill():
+    process = mock.Mock(pid=123)
+
+    with mock.patch("backend.tools.subprocess_util.os.killpg") as killpg:
+        assert kill_process_tree(
+            process,
+            reap=False,
+            process_group_id=123,
+            kill_exited_group=True,
+            leader_exit_observed=True,
+        ) is True
+
+    killpg.assert_called_once_with(123, signal.SIGKILL)
+
+
+def test_kill_process_tree_rejects_non_independent_process_group():
     """POSIX: 非独立进程组不得误杀整个后端进程组。"""
     if os.name == "nt":
         pytest.skip("进程组语义仅在 POSIX 验证")
     process = mock.Mock(pid=123)
-    process.communicate.return_value = None
-    with mock.patch("backend.tools.subprocess_util.os.getpgid", return_value=456), mock.patch(
-        "backend.tools.subprocess_util.os.killpg"
-    ) as killpg, mock.patch("backend.tools.subprocess_util.os.name", "posix"):
-        kill_process_tree(process)
+    with mock.patch("backend.tools.subprocess_util.os.killpg") as killpg:
+        result = kill_process_tree(process, reap=False, process_group_id=456)
 
+    assert result is False
     killpg.assert_not_called()
-    process.kill.assert_called_once_with()
+    process.kill.assert_not_called()
 
 
 def test_kill_process_tree_kills_grandchild_on_posix(tmp_path):
@@ -189,6 +303,8 @@ def test_kill_process_tree_kills_grandchild_on_posix(tmp_path):
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+    process_group_id = os.getpgid(process.pid)
+    assert process_group_id == process.pid
     deadline = time.monotonic() + 5
     while not child_started.exists() or not grandchild_started.exists():
         if time.monotonic() >= deadline:
@@ -198,14 +314,69 @@ def test_kill_process_tree_kills_grandchild_on_posix(tmp_path):
         time.sleep(0.01)
 
     # Act
-    kill_process_tree(process)
+    kill_process_tree(process, reap=True, process_group_id=process_group_id)
 
     # Assert
     time.sleep(4)
     assert not marker.exists(), "孙进程存活并写了 marker → 进程组未被完整终止"
 
 
-def test_unlink_quietly_on_missing_path_does_not_raise():
-    """删不存在的文件静默返回。"""
-    # Arrange / Act / Assert — 不抛即通过
-    unlink_quietly("/nonexistent/path/xyz")
+def test_start_collectors_rolls_back_all_collectors_when_second_start_fails(monkeypatch):
+    """第二个 collector 启动失败时，已构造的两个 collector 都要回滚。"""
+    instances = []
+
+    class FakeCollector:
+        def __init__(self, stream, path, max_bytes):
+            self.stream = stream
+            self.path = path
+            self.max_bytes = max_bytes
+            self.stop_calls = []
+            instances.append(self)
+
+        def start(self):
+            if len(instances) == 2:
+                raise RuntimeError("second collector failed")
+
+        def stop(self, timeout=None):
+            self.stop_calls.append(timeout)
+            return True
+
+        def abort(self, timeout=None):
+            self.stop_calls.append(("abort", timeout))
+            return True
+
+        def close(self):
+            self.stop_calls.append("close")
+
+    monkeypatch.setattr(subprocess_util, "BoundedOutputCollector", FakeCollector)
+
+    with pytest.raises(RuntimeError, match="second collector failed"):
+        subprocess_util.start_bounded_output_collectors(
+            mock.Mock(), mock.Mock(), "/tmp/stdout.out", "/tmp/stderr.out", max_bytes=1024
+        )
+
+    assert len(instances) == 2
+    assert instances[0].stop_calls == [("abort", 0.5)]
+    assert instances[1].stop_calls == [("abort", 0.5)]
+
+
+def test_unlink_owned_missing_path_is_idempotent_success(tmp_path):
+    path = tmp_path / "output.out"
+    path.touch()
+    identity = subprocess_util.file_identity(str(path))
+    path.unlink()
+
+    assert unlink_owned(str(path), identity) is True
+
+
+def test_unlink_owned_identity_mismatch_does_not_remove_replacement(tmp_path):
+    path = tmp_path / "output.out"
+    replacement = tmp_path / "replacement.out"
+    path.write_bytes(b"old")
+    identity = subprocess_util.file_identity(str(path))
+    replacement.write_bytes(b"new")
+    path.unlink()
+    replacement.rename(path)
+
+    assert unlink_owned(str(path), identity) is False
+    assert path.exists()
