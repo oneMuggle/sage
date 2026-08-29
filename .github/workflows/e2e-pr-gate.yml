@@ -11,7 +11,8 @@ jobs:
         with: { node-version: '20' }
       - run: npm ci
       - run: npm run build:electron
-      - run: npm run test:smoke
+      # Electron needs an X server on the headless Ubuntu runner.
+      - run: xvfb-run -a npm run test:smoke
   stub-deep:
     runs-on: ubuntu-latest
     needs: stub-smoke
@@ -21,7 +22,7 @@ jobs:
         with: { node-version: '20' }
       - run: npm ci
       - run: npm run build:electron
-      - run: npx playwright test --project=electron-stub-deep
+      - run: xvfb-run -a npx playwright test --project=electron-stub-deep
   live-boot:
     runs-on: ubuntu-latest
     needs: stub-deep
@@ -34,4 +35,4 @@ jobs:
       - run: conda create -n sage-backend python=3.11 -y
       - run: conda run -n sage-backend pip install -r backend/requirements.txt
       - run: npm ci && npm run build:electron
-      - run: npx playwright test --project=electron-live-boot
+      - run: xvfb-run -a npx playwright test --project=electron-live-boot

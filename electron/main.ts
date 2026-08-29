@@ -673,7 +673,20 @@ function isTrustedRendererUrl(url: string): boolean {
     }
   }
   const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
-  return url === pathToFileURL(indexHtml).toString();
+  try {
+    const current = new URL(url);
+    const expected = new URL(pathToFileURL(indexHtml).toString());
+    return (
+      current.protocol === 'file:' &&
+      current.host === '' &&
+      current.username === '' &&
+      current.password === '' &&
+      current.pathname === expected.pathname &&
+      current.search === ''
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isTrustedRenderer(sender: Electron.WebContents): boolean {
