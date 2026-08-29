@@ -56,6 +56,46 @@ describe('humanizeToolCall — Sage backend tools', () => {
     });
   });
 
+  it('renders bash with scope local', () => {
+    expect(humanizeToolCall('bash', { command: 'npm run dev', cwd: '/x' })).toEqual({
+      verb: 'Run',
+      object: 'npm run dev',
+      scope: 'local',
+    });
+  });
+
+  it('renders bash background launch the same as foreground', () => {
+    expect(humanizeToolCall('bash', { command: 'npm run dev', run_in_background: true })).toEqual({
+      verb: 'Run',
+      object: 'npm run dev',
+      scope: 'local',
+    });
+  });
+
+  it('renders bash_output with the shell id', () => {
+    expect(humanizeToolCall('bash_output', { shell_id: 'abc123' })).toEqual({
+      verb: 'Read output of',
+      object: 'abc123',
+      scope: 'local',
+    });
+  });
+
+  it('renders kill_shell with the shell id', () => {
+    expect(humanizeToolCall('kill_shell', { shell_id: 'abc123' })).toEqual({
+      verb: 'Kill',
+      object: 'abc123',
+      scope: 'local',
+    });
+  });
+
+  it('falls back to a placeholder when bash_output has no shell id', () => {
+    expect(humanizeToolCall('bash_output', {})).toEqual({
+      verb: 'Read output of',
+      object: 'a background shell',
+      scope: 'local',
+    });
+  });
+
   it('renders web_search (Sage name) with scope external', () => {
     expect(humanizeToolCall('web_search', { query: 'python asyncio' })).toEqual({
       verb: 'Search',
@@ -80,17 +120,21 @@ describe('humanizeToolCall — Sage backend tools', () => {
   });
 
   it('renders edit_file using the file_path argument', () => {
-    expect(humanizeToolCall('edit_file', { file_path: 'backend/main.py', new_string: '' })).toEqual({
-      verb: 'Edit',
-      object: 'backend/main.py',
-    });
+    expect(humanizeToolCall('edit_file', { file_path: 'backend/main.py', new_string: '' })).toEqual(
+      {
+        verb: 'Edit',
+        object: 'backend/main.py',
+      },
+    );
   });
 
   it('renders write_file in append mode as "Append to"', () => {
-    expect(humanizeToolCall('write_file', { path: 'log.txt', content: 'x', append: true })).toEqual({
-      verb: 'Append to',
-      object: 'log.txt',
-    });
+    expect(humanizeToolCall('write_file', { path: 'log.txt', content: 'x', append: true })).toEqual(
+      {
+        verb: 'Append to',
+        object: 'log.txt',
+      },
+    );
   });
 
   it('renders list_dir, glob_search and grep_search', () => {

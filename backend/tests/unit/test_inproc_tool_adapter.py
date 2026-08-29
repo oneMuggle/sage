@@ -285,17 +285,17 @@ def _enforcer_for(mode: PermissionMode, rules=()) -> PermissionEnforcer:
     return PermissionEnforcer(mode=mode, rules=list(rules), bash_validator=validate_bash)
 
 
-async def test_adapter_denies_terminal_under_read_only() -> None:
-    """READ_ONLY 模式 → EXECUTE 能力工具 terminal 被拒，且工具不被执行。"""
+async def test_adapter_denies_bash_under_read_only() -> None:
+    """READ_ONLY 模式 → EXECUTE 能力工具 bash 被拒，且工具不被执行。"""
     # Arrange
-    registry, executed = _fake_registry_with("terminal")
+    registry, executed = _fake_registry_with("bash")
     adapter = InprocToolAdapter(
         registry=registry,
         enforcer_factory=lambda: _enforcer_for(PermissionMode.READ_ONLY),
     )
 
     # Act
-    result = await adapter.execute("terminal", {"command": "ls"})
+    result = await adapter.execute("bash", {"command": "ls"})
 
     # Assert
     assert result.success is False
@@ -324,17 +324,17 @@ async def test_adapter_allows_read_file_under_read_only() -> None:
 async def test_adapter_default_denies_needs_approval_without_gate() -> None:
     """needs_approval 在 adapter 层没有审批通道 → default-deny（不静默放行）。
 
-    workspace_write 下 EXECUTE 工具 terminal 的矩阵结论是 needs_approval。
+    workspace_write 下 EXECUTE 工具 bash 的矩阵结论是 needs_approval。
     """
     # Arrange
-    registry, executed = _fake_registry_with("terminal")
+    registry, executed = _fake_registry_with("bash")
     adapter = InprocToolAdapter(
         registry=registry,
         enforcer_factory=lambda: _enforcer_for(PermissionMode.WORKSPACE_WRITE),
     )
 
     # Act
-    result = await adapter.execute("terminal", {"command": "ls"})
+    result = await adapter.execute("bash", {"command": "ls"})
 
     # Assert
     assert result.success is False
@@ -343,17 +343,17 @@ async def test_adapter_default_denies_needs_approval_without_gate() -> None:
     assert executed == []
 
 
-async def test_adapter_allows_terminal_under_full_access() -> None:
-    """FULL_ACCESS 模式 → terminal 放行（矩阵 allow 分支）。"""
+async def test_adapter_allows_bash_under_full_access() -> None:
+    """FULL_ACCESS 模式 → bash 放行（矩阵 allow 分支）。"""
     # Arrange
-    registry, executed = _fake_registry_with("terminal")
+    registry, executed = _fake_registry_with("bash")
     adapter = InprocToolAdapter(
         registry=registry,
         enforcer_factory=lambda: _enforcer_for(PermissionMode.FULL_ACCESS),
     )
 
     # Act
-    result = await adapter.execute("terminal", {"command": "ls"})
+    result = await adapter.execute("bash", {"command": "ls"})
 
     # Assert
     assert result.success is True
@@ -363,16 +363,16 @@ async def test_adapter_allows_terminal_under_full_access() -> None:
 async def test_adapter_deny_rule_wins_over_full_access() -> None:
     """显式 deny 规则优先于 FULL_ACCESS 模式（deny 永远胜出）。"""
     # Arrange
-    registry, executed = _fake_registry_with("terminal")
+    registry, executed = _fake_registry_with("bash")
     adapter = InprocToolAdapter(
         registry=registry,
         enforcer_factory=lambda: _enforcer_for(
-            PermissionMode.FULL_ACCESS, rules=(PermissionRule("terminal", "deny"),)
+            PermissionMode.FULL_ACCESS, rules=(PermissionRule("bash", "deny"),)
         ),
     )
 
     # Act
-    result = await adapter.execute("terminal", {"command": "ls"})
+    result = await adapter.execute("bash", {"command": "ls"})
 
     # Assert
     assert result.success is False
@@ -384,14 +384,14 @@ async def test_adapter_deny_rule_wins_over_full_access() -> None:
 async def test_adapter_destructive_command_denied_under_read_only() -> None:
     """READ_ONLY + 破坏性命令旗标变体 (rm -fr ~) → bash 校验升级拒绝。"""
     # Arrange
-    registry, executed = _fake_registry_with("terminal")
+    registry, executed = _fake_registry_with("bash")
     adapter = InprocToolAdapter(
         registry=registry,
         enforcer_factory=lambda: _enforcer_for(PermissionMode.READ_ONLY),
     )
 
     # Act
-    result = await adapter.execute("terminal", {"command": "rm -fr ~"})
+    result = await adapter.execute("bash", {"command": "rm -fr ~"})
 
     # Assert
     assert result.success is False
@@ -410,9 +410,9 @@ async def test_adapter_default_factory_loads_enforcer_from_settings() -> None:
     # Act — READ 工具放行
     ok = await adapter.execute("read_file", {"path": "/tmp/x"})
     # Act — 未注册工具在权限检查之后才走到注册表查询:
-    # workspace_write 下 terminal(EXECUTE) → needs_approval → default-deny，
+    # workspace_write 下 bash(EXECUTE) → needs_approval → default-deny，
     # 错误是"权限拒绝"而不是"tool not registered"，证明 choke point 在前。
-    denied = await adapter.execute("terminal", {"command": "ls"})
+    denied = await adapter.execute("bash", {"command": "ls"})
 
     # Assert
     assert ok.success is True

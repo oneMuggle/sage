@@ -45,7 +45,9 @@ class RiskClass(str, Enum):
 # 与 backend/tools 各工具类的 ``risk`` 声明保持一致；新工具应优先在
 # 类上声明 risk，此表仅作为历史/动态注册工具（如 MCP）的兜底。
 WRITE_TOOLS = frozenset({"write_file", "memory_save"})
-SHELL_TOOLS = frozenset({"terminal"})
+# 真实 bash 类工具风险由 BashTool.risk / BashOutputTool.risk / KillShellTool.risk
+# 在类上声明; 兜底表仅覆盖未声明风险的同名工具（动态注册/MCP）。
+SHELL_TOOLS = frozenset({"bash"})
 EXTERNAL_TOOLS = frozenset({"web_search", "web_fetch"})
 
 _BASE: Dict[str, RiskClass] = {
