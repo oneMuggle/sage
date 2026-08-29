@@ -20,6 +20,7 @@ export interface SettingRowProps {
 export interface ToggleProps {
   value: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }
 
 // ==================== 共用组件 ====================
@@ -36,9 +37,11 @@ export function SettingRow({ label, desc, children }: SettingRowProps) {
   );
 }
 
-export function Toggle({ value, onChange }: ToggleProps) {
+export function Toggle({ value, onChange, disabled = false }: ToggleProps) {
   return (
     <button
+      type="button"
+      disabled={disabled}
       className={`w-9 h-5 rounded-full relative transition-colors ${
         value ? 'bg-primary' : 'bg-border'
       }`}

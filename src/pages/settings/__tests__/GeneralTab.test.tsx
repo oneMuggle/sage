@@ -118,3 +118,54 @@ describe('GeneralTab permission mode selector (M1)', () => {
     expect(screen.getByText(/permission_rules JSON/)).toBeInTheDocument();
   });
 });
+
+describe('GeneralTab demo mode', () => {
+  beforeEach(() => {
+    delete (window as unknown as { electronAPI?: unknown }).electronAPI;
+    mocks.updateSettings.mockReset();
+    mocks.updateSettings.mockResolvedValue(undefined);
+  });
+
+  it('persists a successful demo mode toggle through settings and Electron IPC', async () => {
+    const setDemoMode = vi.fn().mockResolvedValue({ ok: true });
+    (window as unknown as { electronAPI: { setDemoMode: typeof setDemoMode } }).electronAPI = {
+      setDemoMode,
+    };
+    renderTab();
+
+    const toggle = screen.getByTestId('demo-mode-section').querySelector('button')!;
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(mocks.updateSettings).toHaveBeenCalledWith({ demoMode: true }));
+    expect(setDemoMode).toHaveBeenCalledWith(true);
+  });
+
+  it('rolls back and shows a stable error when IPC persistence fails', async () => {
+    const setDemoMode = vi.fn().mockResolvedValue({ ok: false, error: 'absolute/path' });
+    (window as unknown as { electronAPI: { setDemoMode: typeof setDemoMode } }).electronAPI = {
+      setDemoMode,
+    };
+    renderTab();
+
+    fireEvent.click(screen.getByTestId('demo-mode-section').querySelector('button')!);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('demo-mode-error')).toHaveTextContent('无法保存演示模式设置'),
+    );
+    expect(screen.getByTestId('demo-mode-error')).not.toHaveTextContent('absolute/path');
+    expect(mocks.updateSettings).toHaveBeenNthCalledWith(1, { demoMode: true });
+    expect(mocks.updateSettings).toHaveBeenNthCalledWith(2, { demoMode: false });
+  });
+
+  it('handles updateSettings rejection and clears the persistence state', async () => {
+    mocks.updateSettings.mockRejectedValue(new Error('storage unavailable'));
+    renderTab();
+
+    fireEvent.click(screen.getByTestId('demo-mode-section').querySelector('button')!);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('demo-mode-error')).toHaveTextContent('storage unavailable'),
+    );
+    expect(screen.queryByText('正在保存…')).toBeNull();
+  });
+});

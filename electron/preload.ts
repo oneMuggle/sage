@@ -192,6 +192,33 @@ const electronAPI = {
   setLogLevel(level: LogLevel): Promise<{ ok: true }> {
     return ipcRenderer.invoke('sage:log:set-level', { level }) as Promise<{ ok: true }>;
   },
+
+  /**
+   * Demo mode toggle (2026-08-27): 用户在 Settings → 通用 开关调用.
+   * 写入 <userData>/sage-demo-mode.json, 下次启动 main 进程时读取生效.
+   * 返回 { ok: boolean, error?: string } — 失败时由 renderer 决定是否 toast.
+   */
+  resetDemoMode(): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke('sage:demo-mode:set', { demoMode: false }) as Promise<{
+      ok: boolean;
+      error?: string;
+    }>;
+  },
+
+  setDemoMode(demoMode: boolean): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke('sage:demo-mode:set', { demoMode }) as Promise<{
+      ok: boolean;
+      error?: string;
+    }>;
+  },
+
+  /**
+   * 演示模式同步标志 (2026-08-27): main 进程在演示模式激活时经
+   * webPreferences.additionalArguments 注入 --sage-demo-mode=1。
+   * renderer 的 isDemoMode() 优先读它 — settings store 在首屏请求时尚未
+   * 从存储加载完成, 只读 store 会竞态漏拦截。
+   */
+  demoMode: process.argv.includes('--sage-demo-mode=1'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

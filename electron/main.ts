@@ -45,8 +45,20 @@ logger.info('main: process started', {
 
 import { spawn, ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import {
+  constants as fsConstants,
+  lstatSync,
+  existsSync,
+  openSync,
+  closeSync,
+  writeSync,
+  readFileSync,
+  mkdirSync,
+  renameSync,
+  unlinkSync,
+} from 'node:fs';
 import http from 'node:http';
 import fetch from 'node-fetch';
 import { relayChatStream, relayNdjsonToEvent } from './relay';
@@ -176,6 +188,43 @@ let appIsQuitting = false;
 const MAX_RESTART_ATTEMPTS = 3;
 const RESTART_BASE_DELAY_MS = 1000;
 const RESTART_MAX_DELAY_MS = 8000;
+
+/**
+ * 演示模式持久化 (2026-08-27): 用户在 Settings → 通用 里打开"演示模式"
+ * 开关后, renderer 通过 IPC 写入 <userData>/sage-demo-mode.json。
+ * main 启动时读取该文件: true → 跳过 Python 后端 spawn, 镜像
+ * SAGE_DEMO_MODE=1 环境变量分支 (electron/main.ts:1329). 关掉开关
+ * 用户下次启动即恢复正常 LLM 路径。
+ *
+ * 文件位置选择: 与 SAGE_DB_PATH / SAGE_USER_DATA_DIR 的用户级写入策略
+ * 一致 (见 spawnBackend() 注释 line 213-215), packaged 模式用
+ * app.getPath('userData'), dev 模式用 <project>/data。
+ */
+function getDemoModePath(): string {
+  if (app.isPackaged) return join(app.getPath('userData'), 'sage-demo-mode.json');
+  return join(process.cwd(), 'data', 'sage-demo-mode.json');
+}
+
+function readDemoMode(): boolean {
+  try {
+    const raw = readFileSync(getDemoModePath(), 'utf-8');
+    const parsed = JSON.parse(raw) as { demoMode?: unknown };
+    return parsed.demoMode === true;
+  } catch {
+    // 文件不存在/JSON 损坏 → 默认 false (正常 LLM 路径)
+    return false;
+  }
+}
+
+let demoModeFromSettings = false;
+try {
+  demoModeFromSettings = readDemoMode();
+  if (demoModeFromSettings) {
+    logger.info('main: demo mode active (persisted settings) — backend spawn suppressed');
+  }
+} catch (err) {
+  logger.warn('main: failed to read demo mode settings', { error: String(err) });
+}
 
 // Set by spawnBackend() when the resolver reports a broken installer, so the
 // startup-failure path in app.whenReady() can SKIP its own dialog (which
@@ -610,6 +659,32 @@ async function isPortStillBoundByPid(
  * 详见该文件头注)。本文件只保留 IPC handler 注册 + Electron 生命周期。
  */
 
+function isTrustedRendererUrl(url: string): boolean {
+  if (isDev) {
+    try {
+      const current = new URL(url);
+      const expected = new URL(VITE_DEV_URL);
+      return (
+        current.origin === expected.origin &&
+        current.pathname.replace(/\/$/, '') === expected.pathname.replace(/\/$/, '')
+      );
+    } catch {
+      return false;
+    }
+  }
+  const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
+  return url === pathToFileURL(indexHtml).toString();
+}
+
+function isTrustedRenderer(sender: Electron.WebContents): boolean {
+  const senderWindow = BrowserWindow.fromWebContents(sender);
+  return senderWindow === mainWindow && isTrustedRendererUrl(sender.getURL());
+}
+
+function isDemoProcess(): boolean {
+  return process.env.SAGE_DEMO_MODE === '1' || demoModeFromSettings;
+}
+
 function createMainWindow(): void {
   // Platform-specific titlebar configuration:
   // - macOS: hide traffic light area, custom titlebar from y=28
@@ -632,6 +707,10 @@ function createMainWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // Phase 3: keep false for Win7 compat (sandbox needs SUID)
+      // 演示模式 (2026-08-27): 同步把演示标志传给 renderer (preload 读 argv
+      // 暴露)。首屏请求早于 loadSettings 完成, renderer 的 isDemoMode() 若
+      // 只读 settings store 会竞态漏拦截 → 请求打到已跳过的后端报错。
+      ...(isDemoProcess() ? { additionalArguments: ['--sage-demo-mode=1'] } : {}),
     },
   });
   setMainWindow(win);
@@ -640,6 +719,12 @@ function createMainWindow(): void {
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url).catch(() => undefined);
     return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedRendererUrl(url)) {
+      event.preventDefault();
+      shell.openExternal(url).catch(() => undefined);
+    }
   });
 
   if (isDev) {
@@ -650,7 +735,11 @@ function createMainWindow(): void {
         detail: `URL: ${VITE_DEV_URL}\n错误: ${e.message}`,
       });
     });
-    win.webContents.openDevTools({ mode: 'detach' });
+    // 演示模式 (2026-08-27): 录屏时不弹分离式 DevTools, 避免入镜。
+    // 需要调试仍可手动 Ctrl+Shift+I 或菜单打开。
+    if (!isDemoProcess()) {
+      win.webContents.openDevTools({ mode: 'detach' });
+    }
   } else {
     // tsconfig.electron.json uses rootDirs: [electron, src], so the compiled
     // main.js lives at dist-electron/electron/main.js (one extra directory level
@@ -741,8 +830,13 @@ function createMainWindow(): void {
 function registerIpcHandlers(): void {
   ipcMain.handle(
     'sage:invoke',
-    async (_evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
-      // Streaming commands need their own dispatcher branch — they
+    async (evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      if (isDemoProcess()) {
+        throw new Error('演示模式不支持该后端操作');
+      }
       // fire-and-forget the relay and return { streamId } immediately so
       // the renderer can subscribe + unlisten via the existing IPC
       // channels without waiting for the backend to complete.
@@ -764,10 +858,10 @@ function registerIpcHandlers(): void {
         throw new BackendNotReadyError();
       }
       if (payload.cmd === 'wiki_chat_stream') {
-        return startWikiChatStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
+        return startWikiChatStream(evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       if (payload.cmd === 'wiki_ingest_stream') {
-        return startWikiIngestStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
+        return startWikiIngestStream(evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       try {
         return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
@@ -791,6 +885,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     'sage:listen',
     async (evt, payload: { event: string }): Promise<{ ok: true; event: string }> => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      if (isDemoProcess()) {
+        throw new Error('演示模式不支持该后端操作');
+      }
       const { event } = payload;
       const senderWebContents = evt.sender;
       logger.debug('ipc: listen subscribe', { event });
@@ -826,7 +926,13 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'sage:unlisten',
-    async (_evt, payload: { event: string; streamId?: string }): Promise<{ ok: true }> => {
+    async (evt, payload: { event: string; streamId?: string }): Promise<{ ok: true }> => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      if (isDemoProcess()) {
+        throw new Error('演示模式不支持该后端操作');
+      }
       const { event, streamId } = payload;
       // Streaming commands: abort the in-flight fetch so the backend
       // stops producing NDJSON. The relay's finally{} block will
@@ -855,17 +961,62 @@ function registerIpcHandlers(): void {
   // These handlers back the custom titlebar buttons (minimize/maximize/close)
   // and page capture for feedback screenshots.
 
+  // Demo mode toggle (2026-08-27): renderer 在 Settings → 通用 改 demoMode
+  // 后调用此 IPC 写盘. 主进程下次启动时 readDemoMode() 读取生效.
+  // 注意: 当前会话不会立即跳过后端 (已经决定 spawn). 用户需重启应用.
+  ipcMain.handle('sage:demo-mode:set', (evt, payload: { demoMode: boolean }) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      return { ok: false, error: '未授权的窗口请求' };
+    }
+    let tempFile: string | undefined;
+    try {
+      const file = getDemoModePath();
+      tempFile = `${file}.${randomUUID()}.tmp`;
+      mkdirSync(dirname(file), { recursive: true });
+      if (existsSync(file) && lstatSync(file).isSymbolicLink()) {
+        throw new Error('演示模式设置文件类型无效');
+      }
+      const noFollow = (fsConstants as { O_NOFOLLOW?: number }).O_NOFOLLOW ?? 0;
+      const fd = openSync(
+        tempFile,
+        fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow,
+        0o600,
+      );
+      try {
+        const content = JSON.stringify({ demoMode: payload?.demoMode === true }, null, 2);
+        writeSync(fd, content, undefined, 'utf8');
+      } finally {
+        closeSync(fd);
+      }
+      renameSync(tempFile, file);
+      logger.info('main: demo mode persisted', { demoMode: payload?.demoMode === true });
+      return { ok: true };
+    } catch (err) {
+      if (tempFile) {
+        try {
+          unlinkSync(tempFile);
+        } catch {
+          // Ignore cleanup failure; the original error is returned below.
+        }
+      }
+      logger.error('main: failed to persist demo mode', { error: String(err) });
+      return { ok: false, error: '无法保存演示模式设置' };
+    }
+  });
+
   /** Helper: get the BrowserWindow that sent the IPC event. */
   function getSenderWindow(evt: Electron.IpcMainInvokeEvent): BrowserWindow | null {
     return BrowserWindow.fromWebContents(evt.sender);
   }
 
   ipcMain.handle('sage:window-controls:minimize', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return;
     const win = getSenderWindow(evt);
     win?.minimize();
   });
 
   ipcMain.handle('sage:window-controls:toggle-maximize', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return;
     const win = getSenderWindow(evt);
     if (!win) return;
     if (win.isMaximized()) {
@@ -876,16 +1027,19 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('sage:window-controls:close', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return;
     const win = getSenderWindow(evt);
     win?.close();
   });
 
   ipcMain.handle('sage:window-controls:is-maximized', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return false;
     const win = getSenderWindow(evt);
     return win?.isMaximized() ?? false;
   });
 
   ipcMain.handle('sage:window-controls:capture-page', async (evt) => {
+    if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
     const win = getSenderWindow(evt);
     if (!win) throw new Error('No sender window');
     const image = await win.capturePage();
@@ -897,6 +1051,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     'sage:dialog:select-directory',
     async (evt, opts: { intent: 'create' | 'open'; defaultPath?: string }) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
       const win = BrowserWindow.fromWebContents(evt.sender);
       const properties: ('openDirectory' | 'createDirectory')[] = ['openDirectory'];
       if (opts?.intent === 'create') properties.push('createDirectory');
@@ -917,7 +1072,11 @@ function registerIpcHandlers(): void {
   //   skills:rescan     → POST /api/v1/skills/rescan
   //   skills:import     → POST /api/v1/skills/import (multipart)
   registerSkillsIpc((channel, handler) => {
-    ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
+    ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+      return handler(evt, ...args);
+    });
   });
 
   // Phase 1.3 (2026-07-16): Office document IPC handlers.
@@ -925,12 +1084,16 @@ function registerIpcHandlers(): void {
   //   office:save-dialog → native save dialog
   // The 5 office_* HTTP routes are auto-routed via COMMAND_ROUTES in commands.ts.
   registerOfficeIpc((channel, handler) => {
-    ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
+    ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+      return handler(evt, ...args);
+    });
   });
 
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
-  registerLogIpc(ipcMain);
+  registerLogIpc(ipcMain, (sender) => isTrustedRenderer(sender));
 }
 
 /**
@@ -1317,6 +1480,22 @@ app.whenReady().then(async () => {
     // user (or CI) has explicitly opted out of the backend — without this,
     // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before
     // reaching the dispatcher and fails the bridge round-trip assertion.
+    backendLifecycle = 'ready';
+    createMainWindow();
+    buildApplicationMenu();
+    return;
+  }
+  // Demo mode (录屏演示): skip Python backend spawn entirely so the
+  // frontend-only /demo scenario can record without conda/uvicorn.
+  // Mirrors SAGE_SKIP_BACKEND: flips lifecycle to 'ready' so any stray IPC
+  // call resolves BackendNotReadyError cleanly instead of crashing the bridge.
+  // 触发条件 (2026-08-27):
+  //   1. 环境变量 SAGE_DEMO_MODE=1 (CI / 命令行)
+  //   2. 持久化设置 demoModeFromSettings (用户在 Settings → 通用 开关)
+  if (isDemoProcess()) {
+    if (!demoModeFromSettings) {
+      logger.info('main: demo mode active (SAGE_DEMO_MODE=1) — backend spawn suppressed');
+    }
     backendLifecycle = 'ready';
     createMainWindow();
     buildApplicationMenu();

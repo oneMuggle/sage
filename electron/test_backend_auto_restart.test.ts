@@ -51,7 +51,18 @@ vi.mock('electron', () => ({
     quit: vi.fn(),
     getPath: vi.fn(() => '/tmp/userdata'),
   },
-  BrowserWindow: vi.fn(),
+  Menu: { buildFromTemplate: vi.fn(), setApplicationMenu: vi.fn() },
+  clipboard: { writeText: vi.fn() },
+  BrowserWindow: vi.fn(() => ({
+    webContents: {
+      setWindowOpenHandler: vi.fn(),
+      on: vi.fn(),
+      getURL: vi.fn(() => 'http://localhost:1420/'),
+    },
+    on: vi.fn(),
+    loadURL: vi.fn(() => Promise.resolve()),
+    loadFile: vi.fn(() => Promise.resolve()),
+  })),
   dialog: { showOpenDialog: vi.fn() },
   ipcMain: { handle: vi.fn(), on: vi.fn() },
   shell: { openExternal: vi.fn() },
@@ -77,7 +88,7 @@ describe('backend exit auto-restart logic (PR-B)', () => {
     vi.resetModules();
     const mockMainWindow = { webContents: { send: vi.fn() } };
     // mainWindow is re-created with the freshly-reset module each test.
-    vi.doMock('./mainWindow', () => ({ mainWindow: mockMainWindow }));
+    vi.doMock('./mainWindow', () => ({ mainWindow: mockMainWindow, setMainWindow: vi.fn() }));
     const mainMod = await import('./main');
     scheduleBackendRestart = mainMod.scheduleBackendRestart;
     mainWindow = mockMainWindow;
@@ -105,9 +116,7 @@ describe('backend exit auto-restart logic (PR-B)', () => {
     const disconnectedCalls = mainWindow.webContents.send.mock.calls.filter(
       ([channel]) => channel === 'backend:disconnected',
     );
-    expect(disconnectedCalls).toEqual([
-      ['backend:disconnected', { attempt: 1 }],
-    ]);
+    expect(disconnectedCalls).toEqual([['backend:disconnected', { attempt: 1 }]]);
     expect(vi.getTimerCount()).toBe(1);
   });
 

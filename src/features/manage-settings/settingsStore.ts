@@ -21,7 +21,8 @@ import {
   saveSettings,
 } from '../../entities/setting/storage';
 import type { AppSettings } from '../../entities/setting/types';
-import { DEFAULT_SETTINGS } from '../../entities/setting/types';
+import { DEFAULT_SETTINGS, withDemoSettingsDefaults } from '../../entities/setting/types';
+import { getDemoModeOverride, setDemoModeOverride } from '../../shared/api/demoRuntime';
 
 interface SettingsStoreState {
   settings: AppSettings;
@@ -39,7 +40,16 @@ export const useSettingsStore = create<SettingsStoreState>((set) => ({
   loadSettings: async () => {
     set({ isLoading: true });
     try {
-      const s = await loadSettingsFromStorage();
+      let s = await loadSettingsFromStorage();
+      // 演示模式 (2026-08-27): main 进程经 argv 注入演示标志时, 往内存注入
+      // 演示端点 + 模型选择 (不回写存储), 让聊天页前置校验通过、编排流可触发.
+      // 关闭演示模式重启即恢复真实配置.
+      if (typeof window !== 'undefined' && window.electronAPI?.demoMode === true) {
+        setDemoModeOverride(true);
+        s = withDemoSettingsDefaults(s);
+      } else if (typeof window !== 'undefined') {
+        setDemoModeOverride(false);
+      }
       set({ settings: s, isLoading: false });
     } catch {
       set({ isLoading: false });
@@ -52,7 +62,16 @@ export const useSettingsStore = create<SettingsStoreState>((set) => ({
   },
 
   resetSettings: async () => {
+    const wasDemoProcess = getDemoModeOverride() === true;
+    if (typeof window !== 'undefined') {
+      const result = await window.electronAPI?.resetDemoMode?.();
+      if (result && result.ok === false) {
+        setDemoModeOverride(true);
+        throw new Error('无法清理演示模式设置');
+      }
+    }
     await resetSettingsLib();
+    setDemoModeOverride(wasDemoProcess);
     set({ settings: { ...DEFAULT_SETTINGS } });
   },
 }));

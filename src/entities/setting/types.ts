@@ -122,6 +122,10 @@ export interface AppSettings {
   // Wave 3 P2-9
   orch: OrchSettings;
 
+  // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端
+  // spawn, 前端可走 /demo 路由录屏. 关闭时回到正常 LLM 调用路径.
+  demoMode: boolean;
+
   // Internal
   version: string;
 }
@@ -190,6 +194,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Wave 3 P2-9
   orch: DEFAULT_ORCH_SETTINGS,
 
+  // 演示模式: 默认关闭. 开启后 main 进程跳过 Python 后端启动.
+  demoMode: false,
+
   // Internal
   version: SETTINGS_VERSION,
 };
@@ -204,4 +211,100 @@ export function resolveEndpoint(
 ): EndpointConfig | undefined {
   if (!selection.endpointId) return undefined;
   return endpoints.find((ep) => ep.id === selection.endpointId);
+}
+
+/**
+ * 演示模式 (2026-08-27): 演示用端点 + 模型选择注入.
+ *
+ * settingsStore.loadSettings 在演示标志激活 (window.electronAPI.demoMode,
+ * main 进程经 argv 注入) 时调用本函数. 演示模式下 Python 后端不启动,
+ * 也没有真实 LLM 端点, 但聊天页发送前置校验要求
+ * ``resolveEndpoint(chatModel).baseUrl`` 与 ``chatModel.modelId`` 非空,
+ * 否则录屏时对话流发不出去. 这里往内存 settings 注入一份仿真本地端点
+ * (仅 settingsStore set, 不回写 localStorage), 关闭演示模式即恢复真实配置.
+ *
+ * 规则:
+ * - 用户已配置端点 → 不覆盖
+ * - 对应模型选择已有 modelId → 不覆盖
+ * - 强制 demoMode: true (设置页开关显示与运行态一致)
+ */
+export const DEMO_ENDPOINT_ID = 'ep-demo-lmstudio';
+
+export const DEMO_ENDPOINT_MODELS: DiscoveredModel[] = [
+  {
+    id: 'qwen2.5-14b-instruct',
+    capabilities: ['chat', 'vision'],
+    endpointId: DEMO_ENDPOINT_ID,
+  },
+  { id: 'bge-m3', capabilities: ['embedding'], endpointId: DEMO_ENDPOINT_ID },
+];
+
+function createDemoEndpoint(): EndpointConfig {
+  return {
+    id: DEMO_ENDPOINT_ID,
+    name: 'LM Studio (本地)',
+    baseUrl: 'http://127.0.0.1:1234/v1',
+    apiKey: '',
+    protocol: 'openai-compatible',
+    modelId: 'qwen2.5-14b-instruct',
+    localModelPath: '',
+    discoveredModels: [...DEMO_ENDPOINT_MODELS],
+    lastDiscoveredAt: Date.now() - 2 * 60 * 60 * 1000,
+  };
+}
+
+function hasUsableEndpoint(endpoint: EndpointConfig | undefined): endpoint is EndpointConfig {
+  return Boolean(endpoint?.id && endpoint.baseUrl);
+}
+
+function fillSelection(
+  sel: ModelSelection,
+  endpoints: EndpointConfig[],
+  fallbackModelId: string,
+): { selection: ModelSelection; endpoints: EndpointConfig[] } {
+  const selectedEndpoint = endpoints.find((endpoint) => endpoint.id === sel.endpointId);
+  if (sel.modelId && hasUsableEndpoint(selectedEndpoint)) {
+    return { selection: sel, endpoints };
+  }
+
+  const matchingEndpoint = endpoints.find(
+    (endpoint) =>
+      hasUsableEndpoint(endpoint) &&
+      endpoint.discoveredModels.some((model) => model.id === fallbackModelId),
+  );
+  if (matchingEndpoint) {
+    return {
+      selection: { endpointId: matchingEndpoint.id, modelId: fallbackModelId },
+      endpoints,
+    };
+  }
+
+  const demoEndpoint =
+    endpoints.find((endpoint) => endpoint.id === DEMO_ENDPOINT_ID) ?? createDemoEndpoint();
+  return {
+    selection: { endpointId: demoEndpoint.id, modelId: fallbackModelId },
+    endpoints: endpoints.some((endpoint) => endpoint.id === DEMO_ENDPOINT_ID)
+      ? endpoints
+      : [...endpoints, demoEndpoint],
+  };
+}
+
+export function withDemoSettingsDefaults(s: AppSettings): AppSettings {
+  const chat = fillSelection(s.modelSelections.chatModel, s.endpoints, 'qwen2.5-14b-instruct');
+  const vision = fillSelection(
+    s.modelSelections.visionModel,
+    chat.endpoints,
+    'qwen2.5-14b-instruct',
+  );
+  const embedding = fillSelection(s.modelSelections.embeddingModel, vision.endpoints, 'bge-m3');
+  return {
+    ...s,
+    demoMode: true,
+    endpoints: embedding.endpoints,
+    modelSelections: {
+      chatModel: chat.selection,
+      visionModel: vision.selection,
+      embeddingModel: embedding.selection,
+    },
+  };
 }
