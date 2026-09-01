@@ -3,6 +3,8 @@
 实现混合检索（token + 向量）→ RRF 融合 → LLM 综合回答。
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from collections.abc import AsyncIterator, Callable
@@ -13,6 +15,7 @@ from typing import Any, Dict, List, Tuple
 from . import llm_prompts
 from .context_budget import ContextBudget, truncate_pages
 from .embeddings import EmbeddingConfig, build_embed_request, parse_embed_response
+from .files import iter_wiki_markdown, secure_read_text
 from .llm_context import LLMContext
 from .models import RetrievalStats, WikiChatOutcome
 from .rrf import rrf_fuse
@@ -25,6 +28,9 @@ RETRIEVAL_LIMIT = 20
 FINAL_TOP_K = 5
 
 logger = logging.getLogger(__name__)
+
+CHAT_STREAM_ERROR_CODE = "wiki_chat_failed"
+CHAT_STREAM_ERROR_MESSAGE = "Wiki 聊天失败"
 
 
 @dataclass
@@ -130,10 +136,17 @@ async def _build_chat_context(
     pages = []
     citations = []
 
+    allowed_files = {
+        str(path.relative_to(project_root)).replace("\\", "/"): path
+        for path in iter_wiki_markdown(project_root)
+    }
     for path in fused_paths:
-        wiki_file = project_root / path
-        if wiki_file.exists():
-            content = wiki_file.read_text(encoding="utf-8")
+        wiki_file = allowed_files.get(path)
+        if wiki_file is not None:
+            try:
+                content = secure_read_text(project_root, wiki_file)
+            except OSError:
+                continue
             pages.append((path, content))
             citations.append(path)
 
@@ -242,10 +255,16 @@ async def chat_with_wiki_stream(
         )
         yield done_line.encode("utf-8")
     except Exception as e:
-        logger.exception("chat_with_wiki_stream 失败")
+        logger.error("chat_with_wiki_stream failed: error_type=%s", type(e).__name__)
         err_line = (
             json.dumps(
-                {"event": "error", "data": str(e)},
+                {
+                    "event": "error",
+                    "data": {
+                        "code": CHAT_STREAM_ERROR_CODE,
+                        "message": CHAT_STREAM_ERROR_MESSAGE,
+                    },
+                },
                 ensure_ascii=False,
             )
             + "\n"

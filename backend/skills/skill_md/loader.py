@@ -24,12 +24,26 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import stat
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+import yaml
+
+if TYPE_CHECKING:
+    from .script_runner import ScriptRunner
 
 from ..registry import SkillRegistry
-from .frontmatter import SkillMdParseError, parse_file
-from .gating import GatingContext, evaluate_gating
+from .frontmatter import (
+    _NAME_MAX_LENGTH,
+    _is_valid_name,
+    SkillMdParseError,
+    _split_frontmatter,
+    _strip_bom,
+    parse,
+)
+from .gating import GatingContext, build_gating_context, evaluate_gating
+from .resources import build_resource_index
 from .skill import DispatchMode, RequiresSpec, SkillMdDocument, SkillMdSkill
 from .validation import sanitize_for_logging
 
@@ -80,6 +94,125 @@ def discover_skill_md_dirs() -> List[Path]:
     return roots
 
 
+def _has_symlink_component(path: Path) -> bool:
+    """Return whether path itself or any lexical parent is a symlink."""
+    absolute_path = path.absolute()
+    return any(component.is_symlink() for component in (absolute_path, *absolute_path.parents))
+
+
+def _read_no_follow(path: Path) -> bytes:
+    """Read a regular file without following a final symlink.
+
+    Lexical parent checks are performed by callers; ``O_NOFOLLOW`` closes the
+    final-component replacement window on POSIX. Unsupported platforms fail
+    closed rather than falling back to ``Path.read_bytes``.
+    """
+    if _has_symlink_component(path) or not hasattr(os, "O_NOFOLLOW"):
+        raise OSError(f"refusing potentially symlinked path: {path}")
+    absolute_path = path.absolute()
+    if any(component in ("", ".", "..") for component in absolute_path.parts):
+        raise OSError(f"refusing non-canonical path: {path}")
+    directory_fd = os.open(os.sep, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        parts = absolute_path.parts[1:]
+        for component in parts[:-1]:
+            next_fd = os.open(
+                component,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=directory_fd,
+            )
+            os.close(directory_fd)
+            directory_fd = next_fd
+        fd = os.open(
+            parts[-1],
+            os.O_RDONLY | os.O_NOFOLLOW,
+            dir_fd=directory_fd,
+        )
+    finally:
+        os.close(directory_fd)
+    try:
+        stat_result = os.fstat(fd)
+        if not stat.S_ISREG(stat_result.st_mode) or stat_result.st_nlink != 1:
+            raise OSError(f"refusing non-private file: {path}")
+        chunks: List[bytes] = []
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def _parse_no_follow(path: Path) -> Tuple[Dict[str, Any], str]:
+    """Parse bytes read from a no-follow file descriptor."""
+    return parse(_read_no_follow(path).decode("utf-8"))
+
+
+def _has_explicit_invalid_name(path: Path) -> bool:
+    """Detect an explicitly supplied invalid name without exposing its value."""
+    try:
+        text = _strip_bom(_read_no_follow(path).decode("utf-8"))
+        if not text.startswith("---"):
+            return False
+        metadata_text, _ = _split_frontmatter(text)
+        if not metadata_text:
+            return False
+        metadata = yaml.safe_load(metadata_text)
+    except (OSError, UnicodeError, SkillMdParseError, yaml.YAMLError):
+        return False
+    if not isinstance(metadata, dict) or "name" not in metadata:
+        return False
+    value = metadata["name"]
+    return not _is_valid_name(value)
+
+
+def collect_required_bins(dirs: List[Path]) -> List[str]:
+    """收集目录中 SKILL.md frontmatter 声明的二进制依赖。
+
+    只读取声明的候选名称，不枚举 PATH；实际可用性仍由
+    :func:`build_gating_context` 对这些名称调用 ``shutil.which`` 判断。
+    Malformed files are ignored here and reported by the normal load pass.
+    """
+    required: set[str] = set()
+    for directory in dirs:
+        if not directory.is_dir():
+            continue
+        paths = sorted(
+            path
+            for entry in directory.iterdir()
+            if not entry.name.startswith(".")
+            and not entry.is_symlink()
+            for path in (
+                [entry / "SKILL.md"] if entry.is_dir() else ([entry] if entry.name == "SKILL.md" else [])
+            )
+            if path.is_file() and not _has_symlink_component(path)
+        )
+        for path in paths:
+            try:
+                meta, _ = _parse_no_follow(path)
+            except (OSError, SkillMdParseError, UnicodeError, ValueError):
+                continue
+            requires = meta.get("requires")
+            bins = requires.get("bins") if isinstance(requires, dict) else None
+            if isinstance(bins, list):
+                required.update(
+                    item
+                    for item in bins
+                    if isinstance(item, str)
+                    and item
+                    and "\x00" not in item
+                    and all(not char.isspace() for char in item)
+                )
+    return sorted(required)
+
+
+def build_gating_context_for_dirs(dirs: List[Path]) -> GatingContext:
+    """Build a gating snapshot from binaries declared by discovered skills."""
+    return build_gating_context(bin_whitelist=collect_required_bins(dirs))
+
+
 class SkillMdHotLoader:
     """从目录加载 SKILL.md 到 SkillRegistry, 支持哈希热重载。
 
@@ -95,12 +228,16 @@ class SkillMdHotLoader:
         registry: SkillRegistry,
         dirs: Optional[List[Path]] = None,
         gating_ctx: Optional[GatingContext] = None,
+        script_runner: Optional[ScriptRunner] = None,
     ) -> None:
         self._registry = registry
         self._dirs: List[Path] = list(dirs or [])
         self._file_hashes: Dict[str, str] = {}
         self._loaded_paths: Dict[str, str] = {}  # skill_name -> file_path str
         self._gating_ctx = gating_ctx  # None = 不门控 (v1 行为)
+        self._script_runner = script_runner
+        self.skipped: List[Dict[str, str]] = []
+        self._last_skip: Optional[Dict[str, str]] = None
 
     # ===== scan / load =====
 
@@ -121,6 +258,7 @@ class SkillMdHotLoader:
         """
         loaded = 0
         skipped = 0
+        self.skipped = []
         for d in self._dirs:
             if not d.is_dir():
                 continue
@@ -128,10 +266,12 @@ class SkillMdHotLoader:
             for entry in sorted(d.iterdir()):
                 if not entry.is_dir():
                     continue
+                if entry.is_symlink():
+                    continue
                 if entry.name.startswith("."):
                     continue
                 skill_md = entry / "SKILL.md"
-                if not skill_md.is_file():
+                if not skill_md.is_file() or _has_symlink_component(skill_md):
                     continue
                 try:
                     if self._load_from_path(skill_md):
@@ -145,9 +285,12 @@ class SkillMdHotLoader:
                         sanitize_for_logging(str(exc), max_len=200),
                     )
                     skipped += 1
+                    self.skipped.append(
+                        {"name": entry.name, "reason": "load_error"}
+                    )
             # 形态 B: 单文件形态 <dir>/SKILL.md (Task 5)
             root_skill_md = d / "SKILL.md"
-            if root_skill_md.is_file():
+            if root_skill_md.is_file() and not _has_symlink_component(root_skill_md):
                 try:
                     if self._load_from_path(root_skill_md):
                         loaded += 1
@@ -159,33 +302,40 @@ class SkillMdHotLoader:
                         root_skill_md,
                         sanitize_for_logging(str(exc), max_len=200),
                     )
+                    self._record_skip(
+                        root_skill_md.name,
+                        "load_error",
+                    )
                     skipped += 1
-        if loaded:
-            logger.info("SkillMd scan: %d loaded, %d skipped", loaded, skipped)
+            if loaded or skipped:
+                logger.info("SkillMd scan: %d loaded, %d skipped", loaded, skipped)
         return loaded, skipped
 
-    def _load_from_path(self, path: Path) -> bool:
+    def _load_from_path(self, path: Path, *, allow_existing: bool = False) -> bool:
         """从单个 SKILL.md 路径加载, 返回 True 表示成功注册, False 表示跳过。"""
+        if _has_symlink_component(path):
+            return False
         try:
-            meta, body = parse_file(path)
-        except SkillMdParseError as exc:
+            meta, body = _parse_no_follow(path)
+        except (SkillMdParseError, UnicodeDecodeError) as exc:
             logger.warning(
                 "SKILL.md parse error in %s: %s",
                 path,
                 sanitize_for_logging(str(exc), max_len=200),
             )
+            self._record_skip(
+                path.stem, "invalid_name" if isinstance(exc, SkillMdParseError) and _has_explicit_invalid_name(path) else "parse_error"
+            )
             return False
-
         name = meta["name"]
-        if self._registry.exists(name):
+        if self._registry.exists(name) and not allow_existing:
             logger.warning(
                 "SkillMd name collision: '%s' already in registry (builtin wins), skipping %s",
                 name,
                 path,
             )
+            self._record_skip(name, "builtin_conflict")
             return False
-
-        # 构造 SkillMdDocument (含 v2 字段)
         requires_data = meta.get("requires", {})
         if not isinstance(requires_data, dict):
             requires_data = {}
@@ -222,6 +372,7 @@ class SkillMdHotLoader:
             when_to_use=when_to_use_val if isinstance(when_to_use_val, str) else "",
             body=body,
             base_dir=path.parent,
+            is_root_file=path.parent in self._dirs,
             version=str(meta["version"]) if "version" in meta else None,
             metadata=dict(meta.get("metadata", {}))
             if isinstance(meta.get("metadata"), dict)
@@ -239,7 +390,7 @@ class SkillMdHotLoader:
                 else None,
                 command_dispatch=str(meta.get("command-dispatch", "auto")),
             ),
-            resources=None,  # ResourceIndex 后续构建
+            resources=build_resource_index(path.parent),
             # agentskills.io spec optional fields (Task 4)
             license=license_val if isinstance(license_val, str) else None,
             compatibility=compatibility_val if isinstance(compatibility_val, str) else None,
@@ -270,21 +421,33 @@ class SkillMdHotLoader:
                     doc.always,
                     gating_result.always_override,
                 )
+                self._record_skip(
+                    name, "; ".join(gating_result.reasons) or "gating_failed"
+                )
                 return False
 
         try:
-            skill = SkillMdSkill(doc, base_dir=path.parent)
+            skill = SkillMdSkill(
+                doc,
+                base_dir=path.parent,
+                script_runner=self._script_runner,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "SkillMdSkill instantiation failed for %s: %s",
                 name,
                 sanitize_for_logging(str(exc), max_len=200),
             )
+            self._record_skip(name, "instantiation_error")
             return False
 
+        # Read and hash the final file before mutating registry or loader state.
+        # This keeps a transient/failed upload from leaving an orphan registry
+        # entry or a path recorded as loaded.
+        file_hash = self._compute_hash(path)
         self._registry.register(skill)
         self._loaded_paths[name] = str(path)
-        self._file_hashes[str(path)] = self._compute_hash(path)
+        self._file_hashes[str(path)] = file_hash
         logger.info(
             "SkillMd loaded: %s (version=%s) from %s",
             name,
@@ -293,6 +456,9 @@ class SkillMdHotLoader:
         )
         return True
 
+    def _record_skip(self, name: str, reason: str) -> None:
+        self.skipped.append({"name": name, "reason": reason})
+
     # ===== hot reload =====
 
     def check_for_updates(self) -> List[str]:
@@ -300,7 +466,7 @@ class SkillMdHotLoader:
         updated: List[str] = []
         for path_str, old_hash in list(self._file_hashes.items()):
             path = Path(path_str)
-            if not path.exists():
+            if not path.exists() or _has_symlink_component(path):
                 continue
             new_hash = self._compute_hash(path)
             if new_hash != old_hash:
@@ -316,10 +482,28 @@ class SkillMdHotLoader:
         if not path_str:
             return False
         path = Path(path_str)
-        if not path.exists():
+        if not path.exists() or _has_symlink_component(path):
+            return False
+        temporary_registry = SkillRegistry()
+        candidate_loader = SkillMdHotLoader(
+            temporary_registry,
+            dirs=self._dirs,
+            gating_ctx=self._gating_ctx,
+            script_runner=self._script_runner,
+        )
+        if not candidate_loader._load_from_path(path):
+            return False
+        replacement = temporary_registry.get(skill_name)
+        if replacement is None:
+            return False
+        replacement_hash = candidate_loader._file_hashes.get(path_str)
+        if replacement_hash is None:
             return False
         self._registry.unregister(skill_name)
-        return self._load_from_path(path)
+        self._registry.register(replacement)
+        self._file_hashes[path_str] = replacement_hash
+        self._loaded_paths[skill_name] = path_str
+        return True
 
     def hot_reload_all(self) -> int:
         """批量热重载所有变更文件。返回成功数。"""
@@ -339,13 +523,14 @@ class SkillMdHotLoader:
     @staticmethod
     def _compute_hash(path: Path) -> str:
         """MD5(UTF-8 字节), 内容变化即触发热重载。"""
-        return hashlib.md5(path.read_bytes()).hexdigest()
+        return hashlib.md5(_read_no_follow(path)).hexdigest()
 
 
 def register_skill_md_skills(
     registry: SkillRegistry,
     dirs: Optional[List[str]] = None,
     gating_ctx: Optional[GatingContext] = None,
+    script_runner: Optional[ScriptRunner] = None,
 ) -> int:
     """便捷封装: 从 ``dirs`` (或 ``discover_skill_md_dirs()``) 加载 SKILL.md。
 
@@ -366,6 +551,11 @@ def register_skill_md_skills(
     if not skill_dirs:
         return 0
 
-    loader = SkillMdHotLoader(registry, skill_dirs, gating_ctx=gating_ctx)
+    loader = SkillMdHotLoader(
+        registry,
+        skill_dirs,
+        gating_ctx=gating_ctx,
+        script_runner=script_runner,
+    )
     loaded, _ = loader.scan_and_load()
     return loaded

@@ -13,9 +13,26 @@ import logging
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, conlist
 
 logger = logging.getLogger(__name__)
+
+
+def _constrained_list(item_type, *, min_length=None, max_length=None):
+    """Build a list constraint compatible with Pydantic v1 and v2."""
+    kwargs = {}
+    if min_length is not None:
+        kwargs["min_length"] = min_length
+    if max_length is not None:
+        kwargs["max_length"] = max_length
+    try:
+        return conlist(item_type, **kwargs)
+    except TypeError:
+        if "min_length" in kwargs:
+            kwargs["min_items"] = kwargs.pop("min_length")
+        if "max_length" in kwargs:
+            kwargs["max_items"] = kwargs.pop("max_length")
+        return conlist(item_type, **kwargs)
 
 
 class OfficeDocType(str, Enum):
@@ -204,7 +221,7 @@ class PptSlideSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=1, max_length=200)
-    bullets: List[str] = Field(default_factory=list, max_length=20)
+    bullets: _constrained_list(str, max_length=20) = Field(default_factory=list)
     notes: Optional[str] = Field(default=None, max_length=2000)
 
 
@@ -219,7 +236,7 @@ class OfficePptGenerateRequest(BaseModel):
         max_length=200,
         description="Output filename (without .pptx extension is OK; we'll add it)",
     )
-    slides: List[PptSlideSpec] = Field(min_length=1, max_length=100)
+    slides: _constrained_list(PptSlideSpec, min_length=1, max_length=100)
     template: Optional[str] = Field(default=None, description="'default' | 'minimal'")
 
 
@@ -237,8 +254,8 @@ class WordTableSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    headers: List[str] = Field(min_length=1, max_length=50)
-    rows: List[List[str]] = Field(default_factory=list, max_length=1000)
+    headers: _constrained_list(str, min_length=1, max_length=50)
+    rows: _constrained_list(_constrained_list(str), max_length=1000) = Field(default_factory=list)
 
 
 class OfficeWordGenerateRequest(BaseModel):
@@ -249,8 +266,8 @@ class OfficeWordGenerateRequest(BaseModel):
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
     title: str = Field(min_length=1, max_length=200)
-    paragraphs: List[WordParagraphSpec] = Field(default_factory=list, max_length=5000)
-    tables: List[WordTableSpec] = Field(default_factory=list, max_length=100)
+    paragraphs: _constrained_list(WordParagraphSpec, max_length=5000) = Field(default_factory=list)
+    tables: _constrained_list(WordTableSpec, max_length=100) = Field(default_factory=list)
 
 
 class ExcelSheetSpec(BaseModel):
@@ -259,8 +276,8 @@ class ExcelSheetSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=31, description="Excel sheet name max length")
-    headers: List[str] = Field(default_factory=list, max_length=100)
-    rows: List[List[str]] = Field(default_factory=list, max_length=10000)
+    headers: _constrained_list(str, max_length=100) = Field(default_factory=list)
+    rows: _constrained_list(_constrained_list(str), max_length=10000) = Field(default_factory=list)
 
 
 class OfficeExcelGenerateRequest(BaseModel):
@@ -270,7 +287,7 @@ class OfficeExcelGenerateRequest(BaseModel):
 
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
-    sheets: List[ExcelSheetSpec] = Field(min_length=1, max_length=50)
+    sheets: _constrained_list(ExcelSheetSpec, min_length=1, max_length=50)
 
 
 # ──────────────────────────────────────────────────────────────────────

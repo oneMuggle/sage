@@ -1,5 +1,6 @@
 // src/features/artifacts/artifactApi.ts
 
+import { backendRequest } from '../../shared/api/backendRequest';
 import { isDemoMode } from '../../shared/api/demoInterceptors';
 
 export type ArtifactKind = 'markdown' | 'code' | 'image' | 'csv' | 'json' | 'text';
@@ -28,18 +29,18 @@ function ensureBackendAccess(): void {
   if (isDemoMode()) throw new Error('演示模式不支持后端操作');
 }
 
-function httpError(fn: string, res: Response): Error {
-  return new Error(`${fn} failed: ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`);
-}
-
 export async function listArtifacts(sessionId: string): Promise<Artifact[]> {
   ensureBackendAccess();
-  const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts`);
-  if (!res.ok) {
-    throw httpError('listArtifacts', res);
+  try {
+    const data = await backendRequest<{ artifacts?: Artifact[] }>({
+      path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts`,
+    });
+    return data.artifacts ?? [];
+  } catch (error) {
+    throw new Error(
+      `listArtifacts failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-  const data = await res.json();
-  return data.artifacts ?? [];
 }
 
 export async function readArtifactContent(
@@ -47,11 +48,15 @@ export async function readArtifactContent(
   artifactId: string,
 ): Promise<ArtifactContent> {
   ensureBackendAccess();
-  const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts/${artifactId}/content`);
-  if (!res.ok) {
-    throw httpError('readArtifactContent', res);
+  try {
+    return await backendRequest<ArtifactContent>({
+      path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/content`,
+    });
+  } catch (error) {
+    throw new Error(
+      `readArtifactContent failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-  return res.json();
 }
 
 export async function revealArtifact(
@@ -59,12 +64,9 @@ export async function revealArtifact(
   artifactId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   ensureBackendAccess();
-  const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts/${artifactId}/reveal`, {
+  return backendRequest<{ ok: boolean; error?: string }>({
+    path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/reveal`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    throw httpError('revealArtifact', res);
-  }
-  return res.json();
 }

@@ -1,10 +1,20 @@
 /// <reference types="vitest" />
+import { createRequire } from 'node:module';
+
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+
+// 读 package.json 拿真实版本号，注入为编译期常量供 UI 展示（sidebar 页脚）。
+// 用 createRequire 而非 `import pkg from './package.json'`：后者会把整个
+// package.json（含 devDependencies）纳入模块图。
+const pkg = createRequire(import.meta.url)('./package.json') as { version: string };
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   // Phase 1 (2026-06-13): Tauri → Electron migration.
   // - base: './' required for Electron file:// loading (relative paths)
   // - watch.ignored now excludes archive/ (was src-tauri/, archived)
@@ -23,11 +33,18 @@ export default defineConfig({
   },
   clearScreen: false,
   server: {
+    // Keep the development server and Vitest UI on loopback only. Do not
+    // expose source files or the module transformer on a shared network.
+    host: '127.0.0.1',
     port: 1420,
     strictPort: true,
     watch: {
       ignored: ['**/src-tauri/**', '**/archive/**', '**/dist-electron/**'],
     },
+  },
+  preview: {
+    // Preview serves the built renderer; keep it local for the same reason.
+    host: '127.0.0.1',
   },
   build: {
     target: 'es2020',
@@ -51,7 +68,7 @@ export default defineConfig({
           'vendor-query': ['@tanstack/react-query'],
           'vendor-ui': ['@headlessui/react', 'sonner', 'lucide-react'],
           'vendor-flow': ['@xyflow/react'],
-          'vendor-markdown': ['react-markdown', 'remark-gfm', 'react-syntax-highlighter'],
+          'vendor-markdown': ['react-markdown', 'remark-gfm'],
           'vendor-state': ['zustand'],
         },
         chunkFileNames: 'assets/[name]-[hash].js',
@@ -73,6 +90,10 @@ export default defineConfig({
     format: 'esm',
   },
   test: {
+    // Vitest UI/API is a separate server from Vite's dev server.
+    api: {
+      host: '127.0.0.1',
+    },
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],

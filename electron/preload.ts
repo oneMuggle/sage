@@ -57,6 +57,17 @@ const electronAPI = {
     return ipcRenderer.invoke('sage:invoke', { cmd, args: args ?? {} }) as Promise<T>;
   },
 
+  /** Authenticated raw backend relay; the local capability stays in main. */
+  backendRequest<T>(request: {
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    path: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+    timeoutMs?: number;
+  }): Promise<T> {
+    return ipcRenderer.invoke('sage:backend-request', request) as Promise<T>;
+  },
+
   /**
    * Frontend listen shim — matches `@tauri-apps/api/event` listen<T>() signature.
    *
@@ -122,8 +133,7 @@ const electronAPI = {
   skills: {
     pickSkillFiles: () => ipcRenderer.invoke('skills:pick-files') as Promise<string[] | null>,
     rescanSkills: () => ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
-    importSkills: (paths: string[]) =>
-      ipcRenderer.invoke('skills:import', paths) as Promise<ImportResult>,
+    importSkills: () => ipcRenderer.invoke('skills:import') as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,
 
   /**

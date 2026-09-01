@@ -9,7 +9,11 @@ from backend.main import app
 @pytest.fixture()
 async def client():
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Sage-Local-Authorization": "Bearer test-local-auth-token"},
+    ) as ac:
         yield ac
 
 

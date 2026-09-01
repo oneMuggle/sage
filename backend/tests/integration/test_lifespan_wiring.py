@@ -22,8 +22,9 @@ def test_lifespan_health_metadata_uses_runtime_ownership_envelope(monkeypatch):
 
     assert metadata["buildId"] == "test-build"
     assert metadata["generation"] == 7
-    assert metadata["ownershipToken"] == "token-7"
+    assert "ownershipToken" not in metadata
     assert metadata["pid"] == os.getpid()
+    assert set(metadata) == {"buildId", "pid", "generation"}
 
 
 def test_shutdown_bash_sessions_clears_registry(monkeypatch):

@@ -32,6 +32,7 @@ Public surface:
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import threading
 import time
@@ -49,6 +50,12 @@ logger = logging.getLogger(__name__)
 MAX_FILE_BYTES: int = 20 * 1024 * 1024  # 20 MB
 MAX_TEXT_CHARS: int = 200_000           # 200 KB
 MAX_PARSE_SECONDS: float = 10.0
+# Keep the central directory bounded before ``infolist()`` can allocate an
+# unbounded ZipInfo list.  This is deliberately well above normal Office files.
+MAX_OFFICE_ZIP_MEMBERS: int = 10_000
+MAX_OFFICE_UNCOMPRESSED_BYTES: int = MAX_FILE_BYTES
+
+_OFFICE_SUFFIXES = frozenset({".docx", ".pptx", ".xlsx"})
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -185,6 +192,44 @@ def _enforce_size(file_path: Path, max_file_bytes: int) -> None:
         raise FileTooLargeError(file_path, size, max_file_bytes)
 
 
+def _office_zip_within_budget(file_path: Path) -> bool:
+    """Check Office ZIP metadata without inflating any member.
+
+    ``ZipFile.infolist()`` necessarily materializes the central directory in
+    Python's public ``zipfile`` API.  We therefore reject an excessive member
+    count immediately after that call, and bound every member plus the
+    aggregate uncompressed size before any Office reader or image extractor
+    can call ``read``.  The count check is the available defense at this API
+    boundary; central-directory bytes cannot be capped before ``infolist``.
+    """
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(file_path, "r") as archive:
+            members = archive.infolist()
+            if len(members) > MAX_OFFICE_ZIP_MEMBERS:
+                return False
+            total = 0
+            for info in members:
+                size = info.file_size
+                if size < 0 or size > MAX_OFFICE_UNCOMPRESSED_BYTES:
+                    return False
+                total += size
+                if total > MAX_OFFICE_UNCOMPRESSED_BYTES:
+                    return False
+        return True
+    except zipfile.BadZipFile:
+        # A malformed archive cannot be inflated by the Office reader; retain
+        # the established reader error contract for malformed Office files.
+        return True
+    except Exception as exc:
+        # Do not expose archive names or parser details to callers/logs.
+        logger.warning(
+            "Office ZIP metadata validation failed: error_type=%s", type(exc).__name__
+        )
+        return False
+
+
 def _truncate(text: str, max_text_chars: int) -> Tuple[str, bool]:
     """Return ``(text, truncated)`` honoring the byte cap.
 
@@ -248,6 +293,7 @@ def extract_text_for_ingest(
     max_text_chars: Optional[int] = None,
     max_seconds: Optional[float] = None,
     return_meta: bool = False,
+    opened_fd: Optional[int] = None,
 ):
     """Extract bounded text from a file the Wiki ingest pipeline accepts.
 
@@ -286,32 +332,57 @@ def extract_text_for_ingest(
             structured ingest failure).
     """
     file_path = Path(file_path)
-    if not file_path.exists():
-        raise FileNotFoundError(file_path)
+    if opened_fd is not None:
+        if os.name != "posix" or not hasattr(os, "readlink"):
+            raise OSError("Office 解析需要 POSIX 打开的安全文件描述符")
+        parse_path = Path("/proc/self/fd") / str(opened_fd)
+        try:
+            os.fstat(opened_fd)
+        except OSError:
+            raise FileNotFoundError(file_path)
+    else:
+        parse_path = file_path
+        if not parse_path.exists():
+            raise FileNotFoundError(file_path)
 
     cap_bytes = max_file_bytes if max_file_bytes is not None else MAX_FILE_BYTES
-    _enforce_size(file_path, cap_bytes)
+    if opened_fd is not None:
+        size = os.fstat(opened_fd).st_size
+        if size > cap_bytes:
+            raise FileTooLargeError(file_path, size, cap_bytes)
+    else:
+        _enforce_size(parse_path, cap_bytes)
 
     suffix = file_path.suffix.lower()
 
     meta: Dict[str, Any] = {
         "doc_type": None,
         "truncated": False,
-        "bytes_size": file_path.stat().st_size,
+        "bytes_size": os.fstat(opened_fd).st_size if opened_fd is not None else parse_path.stat().st_size,
     }
 
     if suffix in _PLAIN_TEXT_SUFFIXES:
-        text = file_path.read_text(encoding="utf-8", errors="ignore")
+        if opened_fd is not None:
+            os.lseek(opened_fd, 0, os.SEEK_SET)
+            with os.fdopen(
+                os.dup(opened_fd), "r", encoding="utf-8", errors="ignore"
+            ) as stream:
+                text = stream.read()
+        else:
+            text = parse_path.read_text(encoding="utf-8", errors="ignore")
         meta["doc_type"] = "text"
     elif suffix in _OFFICE_READERS:
         doc_type = _OFFICE_READERS[suffix]
         meta["doc_type"] = doc_type
-        # NB: resolve the reader via ``getattr`` at call time so tests can
-        # ``monkeypatch.setattr(ext, "_read_docx_text", slow_fn)`` and have
-        # the timeout path exercised without constructing a real DOCX.
         reader = getattr(sys.modules[__name__], f"_read_{doc_type}_text")
         cap_seconds = max_seconds if max_seconds is not None else MAX_PARSE_SECONDS
-        text = _time_limited_call(reader, (file_path,), {}, cap_seconds)
+
+        def _read_checked_office() -> str:
+            if not _office_zip_within_budget(parse_path):
+                raise ValueError("Office ZIP expansion exceeds configured limit")
+            return reader(parse_path)
+
+        text = _time_limited_call(_read_checked_office, (), {}, cap_seconds)
     else:
         raise ValueError(
             f"unsupported_suffix: {suffix!r} not handled by "

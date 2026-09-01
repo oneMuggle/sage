@@ -143,6 +143,16 @@ class LLMClient:
                 headers["Authorization"] = f"Bearer {self.config.api_key}"
             headers.update(self.config.extra_headers)
 
+            # The proxy's process-local capability is distinct from the
+            # provider API key. Read only the explicitly injected token: the
+            # local-auth helper's generated fallback is not available to an
+            # independently authenticated HTTP request. Omitting this header
+            # when the token is absent preserves the proxy's fail-closed 401.
+            if self.config.use_proxy:
+                local_auth_token = os.environ.get("SAGE_LOCAL_AUTH_TOKEN")
+                if local_auth_token:
+                    headers["X-Sage-Local-Authorization"] = f"Bearer {local_auth_token}"
+
             self._client = httpx.AsyncClient(
                 base_url=client_base_url,
                 headers=headers,

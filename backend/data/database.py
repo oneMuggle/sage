@@ -342,28 +342,9 @@ class Database:
             )
         """)
 
-        # 技能表
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS skills (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                version TEXT NOT NULL DEFAULT '1.0.0',
-                description TEXT,
-                triggers TEXT,
-                code TEXT NOT NULL,
-                author TEXT,
-                homepage TEXT,
-                icon TEXT,
-                permissions TEXT,
-                is_enabled INTEGER DEFAULT 1,
-                is_builtin INTEGER DEFAULT 0,
-                usage_count INTEGER DEFAULT 0,
-                success_count INTEGER DEFAULT 0,
-                last_used_at INTEGER,
-                created_at INTEGER NOT NULL,
-                updated_at INTEGER
-            )
-        """)
+        # 技能定义不再由 SQLite ``skills`` 表承载。
+        # 当前实现从 SkillRegistry / SKILL.md 文件加载；故新数据库不得创建
+        # 孤儿 ``skills`` 表。已有数据库中的旧表不主动 DROP，以保留用户数据。
 
         # 技能使用统计表（借鉴 hermes-agent 的 .usage.json 概念）:
         # 按技能名聚合 use_count / success_count / fail_count / last_used_at,
@@ -399,9 +380,26 @@ class Database:
             CREATE TABLE IF NOT EXISTS skill_lifecycle (
                 name TEXT PRIMARY KEY,
                 archived INTEGER DEFAULT 0,
-                archived_at INTEGER
+                archived_at INTEGER,
+                enabled INTEGER DEFAULT 1,
+                enabled_at INTEGER
             )
         """)
+
+        # 数据库迁移：为已有数据库的 skill_lifecycle 表补齐技能开关列。
+        # enabled 默认 1，确保历史技能和未登记技能保持启用语义；enabled_at
+        # 仅记录显式切换时间，存量行保持 NULL。
+        cursor.execute("PRAGMA table_info(skill_lifecycle)")
+        skill_lifecycle_columns = [row["name"] for row in cursor.fetchall()]
+        if "enabled" not in skill_lifecycle_columns:
+            cursor.execute(
+                "ALTER TABLE skill_lifecycle ADD COLUMN enabled INTEGER DEFAULT 1"
+            )
+        if "enabled_at" not in skill_lifecycle_columns:
+            cursor.execute(
+                "ALTER TABLE skill_lifecycle ADD COLUMN enabled_at INTEGER"
+            )
+        conn.commit()
 
         # 用户偏好表
         cursor.execute("""
@@ -798,8 +796,8 @@ class Database:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_skill_drafts_status ON skill_drafts(status)"
         )
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(is_enabled)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name)")
+        # ``skills`` 是历史遗留表；不为新数据库创建，也不为其创建索引。
+        # 若用户数据库已有该表，保留原数据，但不再由初始化流程维护其 schema。
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_preferences_category ON preferences(category)"
         )

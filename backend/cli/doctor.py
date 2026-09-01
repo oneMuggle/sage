@@ -353,6 +353,7 @@ def _import_all_checks() -> None:
         "heavy_deps",
         "log_dir_size",
         "frontend_dist",
+        "skills",
     ):
         importlib.import_module(f"{pkg}.{mod_name}")
 

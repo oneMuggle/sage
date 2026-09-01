@@ -83,7 +83,7 @@ export function killOrphanedBackendOnPort(opts: KillOrphanOpts): KillOrphanResul
   const killedPids: string[] = [];
   for (const pid of pids) {
     try {
-      execSyncFn(`taskkill /PID ${pid} /F`, { encoding: 'utf8' });
+      execSyncFn(`taskkill /PID ${pid} /F /T`, { encoding: 'utf8' });
       killedPids.push(pid);
     } catch {
       // Process may have exited between netstat and taskkill — that's

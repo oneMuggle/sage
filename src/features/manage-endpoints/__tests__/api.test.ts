@@ -22,6 +22,7 @@ type FetchCall = {
 };
 
 const fetchCalls: FetchCall[] = [];
+const relayRequests: Array<{ path: string; timeoutMs?: number }> = [];
 
 function makeJsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -42,8 +43,28 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Promise<Respons
 
 beforeEach(() => {
   fetchCalls.length = 0;
+  relayRequests.length = 0;
+  // 模拟 Electron relay：测试仍可捕获 relay 最终发出的 fetch，renderer 不绕过 bridge。
+  (window as unknown as { electronAPI?: unknown }).electronAPI = {
+    backendRequest: async (request: { path: string; method?: string; headers?: HeadersInit; body?: unknown; timeoutMs?: number }) => {
+      relayRequests.push({ path: request.path, timeoutMs: request.timeoutMs });
+      const response = await window.fetch(request.path, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body === undefined ? undefined : JSON.stringify(request.body),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      return response.json();
+    },
+  };
   // 默认 handler 不要再 push — wrapper mockFetch 已经做了
-  mockFetch(async () => makeJsonResponse(200, { object: 'list', data: [] }));
+  mockFetch(async (url) =>
+    url.endsWith('/v1/chat/completions')
+      ? makeJsonResponse(200, { choices: [] })
+      : makeJsonResponse(200, { object: 'list', data: [] }),
+  );
 });
 
 afterEach(() => {
@@ -115,11 +136,13 @@ describe('fetchModels', () => {
   // ============================================================
   describe('LM Studio', () => {
     it('discovers an OpenAI-compatible LM Studio endpoint without an API key', async () => {
-      mockFetch(async () =>
-        makeJsonResponse(200, {
-          object: 'list',
-          data: [{ id: 'qwen2.5-7b-instruct', object: 'model', owned_by: 'user' }],
-        }),
+      mockFetch(async (url) =>
+        url.endsWith('/v1/chat/completions')
+          ? makeJsonResponse(200, { choices: [] })
+          : makeJsonResponse(200, {
+              object: 'list',
+              data: [{ id: 'qwen2.5-7b-instruct', object: 'model', owned_by: 'user' }],
+            }),
       );
 
       await expect(fetchModels('http://127.0.0.1:1234/v1', '')).resolves.toEqual([
@@ -135,17 +158,20 @@ describe('fetchModels', () => {
     });
 
     it('testEndpointConnection 在 baseURL 已含 /v1 + 空 apiKey 时也能跑通 models 阶段', async () => {
-      mockFetch(async () =>
-        makeJsonResponse(200, {
-          object: 'list',
-          data: [{ id: 'qwen2.5-7b-instruct', object: 'model', owned_by: 'user' }],
-        }),
+      mockFetch(async (url) =>
+        url.endsWith('/v1/chat/completions')
+          ? makeJsonResponse(200, { choices: [] })
+          : makeJsonResponse(200, {
+              object: 'list',
+              data: [{ id: 'qwen2.5-7b-instruct', object: 'model', owned_by: 'user' }],
+            }),
       );
 
       // 不带 chatModel → testChatCompletion 不会跑 (被测端点无 chat 候选)
       // 用的是 default first non-embedding, qwen2.5-7b-instruct 是 chat 模型 → 会跑 chat 端点
       const result = await testEndpointConnection('http://127.0.0.1:1234/v1', '');
       expect(result.success).toBe(true);
+      expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
       const modelsCall = fetchCalls.find((c) => c.url.endsWith('/v1/models'));
       expect(modelsCall).toBeDefined();
       const headers = new Headers(modelsCall?.init?.headers);
@@ -155,17 +181,32 @@ describe('fetchModels', () => {
 });
 
 describe('testEndpointConnection', () => {
+  it('chat response without choices is not treated as success', async () => {
+    mockFetch(async (url) =>
+      url.endsWith('/v1/models')
+        ? makeJsonResponse(200, { object: 'list', data: [{ id: 'chat-model' }] })
+        : makeJsonResponse(200, { status: 'ok' }),
+    );
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('聊天端点异常');
+  });
+
   it('先打 /v1/models 拿模型列表,headers 带 provider url', async () => {
-    mockFetch(async () =>
-      makeJsonResponse(200, {
-        object: 'list',
-        data: [{ id: 'qwen2.5:7b', object: 'model', owned_by: 'user' }],
-      }),
+    mockFetch(async (url) =>
+      url.endsWith('/v1/chat/completions')
+        ? makeJsonResponse(200, { choices: [] })
+        : makeJsonResponse(200, {
+            object: 'list',
+            data: [{ id: 'qwen2.5:7b', object: 'model', owned_by: 'user' }],
+          }),
     );
 
     const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
 
     expect(result.success).toBe(true);
+    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
     expect(result.message).toContain('1 个模型');
     const modelsCall = fetchCalls.find((c) => c.url.endsWith('/v1/models'));
     expect(modelsCall).toBeDefined();
@@ -190,6 +231,7 @@ describe('testEndpointConnection', () => {
     const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY, 'agnes-2.0-flash');
 
     expect(result.success).toBe(true);
+    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
     const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
     expect(chatCall).toBeDefined();
     const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };
@@ -218,6 +260,7 @@ describe('testEndpointConnection', () => {
     );
 
     expect(result.success).toBe(true);
+    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
     const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
     expect(chatCall).toBeDefined();
     const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };
@@ -241,6 +284,7 @@ describe('testEndpointConnection', () => {
     const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
 
     expect(result.success).toBe(true);
+    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
     const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
     expect(chatCall).toBeDefined();
     const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };

@@ -53,3 +53,14 @@ def test_async_callback_returning_true_is_honored():
     adapter = CliConfirmationAdapter(callback=ok)
     result = asyncio.run(adapter.confirm("skill_x", Path("/tmp/x.sh"), ()))
     assert result is True
+
+
+@pytest.mark.parametrize("timeout_error", [asyncio.TimeoutError(), TimeoutError()])
+def test_timeout_errors_are_caught_and_rejected(timeout_error):
+    """asyncio 与内置超时异常都必须 fail-closed。"""
+    def timed_out(**_):
+        raise timeout_error
+
+    adapter = CliConfirmationAdapter(callback=timed_out)
+    result = asyncio.run(adapter.confirm("skill_x", Path("/tmp/x.sh"), ()))
+    assert result is False

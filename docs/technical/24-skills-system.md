@@ -1,16 +1,17 @@
 # 24 — Skills 系统端到端
 
-**最后更新**: 2026-06-19 (M11 收口)
+**最后更新**: 2026-08-30 (Skills remediation 收口与死代码决策记录)
 **覆盖范围**: PR-7 (v1 builtin 端到端) + PR-8 (SKILL.md v1) + v2 适配层 (M4-M10)
 
+> **当前实现边界（2026-08-30）**：技能请求经 Electron IPC 转发到 loopback FastAPI；后端所有非健康检查路由受进程级 Bearer capability（`SAGE_LOCAL_AUTH_TOKEN`）保护。浏览器/Vite 无 Electron bridge 时对后端 API fail-closed，返回 desktop-only `BackendNotAvailableError`，不会获得或暴露 capability；因此本地后端 API 的生产路径是 Electron-only。Electron raw relay 与普通 invoke 共用 readiness gate，后端重启时 token 在 main 进程内按 generation 更新，renderer 永不接触 token。 Supervisor readiness additionally uses the protected `/health/proof` endpoint and verifies a token-bound one-way proof; a stale process cannot become ready from public `/health` alone.端点连通性聊天探测经 relay 使用 15 秒有界超时，并要求结构化 `choices` 数组才算成功。SKILL.md 脚本只有在 `SAGE_SKILL_SCRIPT_ALLOWLIST` 精确允许技能名或绝对路径根时才会通过生产确认器，随后由 `ScriptRunner` 进行路径复核；在支持 `O_NOFOLLOW` 的平台上，确认前和确认后都通过 `lstat`、`open(O_NOFOLLOW)`、`fstat` 绑定到实际打开的普通文件对象，并比较 `(st_dev, st_ino)` 与 SHA-256，路径或 inode/content 变化均 fail-closed。确认内容写入随机 0700 临时目录中的 0600 快照后执行，执行 cwd 仍保持原技能目录，finally 清理快照；不支持可靠 `O_NOFOLLOW` 的平台不回退原路径读取，而是拒绝执行。上述脚本源文件保护不等同于操作系统级隔离：执行文件来自受控快照，但为保持现有技能相对资源访问语义，`SandboxRequest.cwd` 仍为原技能目录，该目录及其中其他资源不纳入同一快照/inode 绑定保证。
+
 > 本章合并记录 Skills 系统的全链路实现,涵盖:
-> - **PR-7 缺口 C 收口**: InprocSkillAdapter + 3 路由 (list/toggle/execute) + 4 builtin
+> - **PR-7 缺口 C 收口**: InprocSkillAdapter + Skills 管理 API + 4 builtin
 > - **PR-8 SKILL.md 适配层 v1**: frontmatter 解析 / hot loader / 路径校验
 > - **v2 适配层 (M4-M10)**:
 >   - M3 Loader gating (requires/os/always)
->   - M4 ResourceIndex (references/ 渲染)
->   - M5 沙箱 port (SandboxPort / subprocess 实现 / denylist)
->   - M6 确认 port (ConfirmationPort / CLI / auto-confirm)
+- **M4 ResourceIndex**：`backend/skills/skill_md/loader.py` 在构造 `SkillMdDocument` 时调用 `build_resource_index(path.parent)`，并将索引写入 `resources`；`SkillMdSkill` 和自动激活路径在渲染边界使用该索引授权资源，并仅输出安全逻辑相对路径。
+>   - M6 确认 port (ConfirmationPort / CLI；生产确认器默认 fail-closed，白名单由 `SAGE_SKILL_SCRIPT_ALLOWLIST` 控制)
 >   - M7 ScriptRunner 编排 (路径校验 → 确认 → 沙箱 → 异常收敛)
 >   - M8 execute_v2 路径 (SkillMdSkill.execute_v2 异步方法,回退 v1)
 >   - M9 DispatchMode 元数据序列化 (前端 SkillDispatch interface + SkillCard UI)
@@ -31,10 +32,9 @@
      │  invoke('toggle_skill', ...)      │ Adapter          │
      ▼                                    │   │              │
 ┌──────────────────┐                      │   ▼              │
-│ Tauri Rust       │   GET /api/v1/skills │ SkillRegistry    │
-│   list_skills    │ ──────────────────►  │   + 4 builtin    │
-│   toggle_skill   │                      │   (search/writer │
-│   execute_skill  │                      │    /coder/travel)│
+│ Electron main    │   GET /api/v1/skills │ SkillRegistry    │
+│   commands.ts    │ ──────────────────►  │   + builtin /    │
+│   IPC mappings   │                      │   SKILL.md       │
 └──────────────────┘                      └──────────────────┘
 ```
 
@@ -47,7 +47,7 @@
 | 方法                                               | 协议 | 说明                                                                                                                |
 | -------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------- |
 | `list_skills() -> list[SkillSpec]`                 | ✅   | 把 `SkillSchema` 适配为 `domain.skill.SkillSpec` (字段同构,直接构造)                                                |
-| `async execute(name, action, args) -> SkillResult` | ✅   | 内部调 `skill.execute(params, context={})` 同步方法;未注册 / disabled / builtin 缺工具 → `success=False, error=...` |
+| `async execute(name, action, args) -> SkillResult` | ✅   | 优先调 `SkillMdSkill.execute_v2(params, context={})`（脚本技能走确认与沙箱），其他技能回退 `skill.execute(params, context={})`;未注册 / disabled / 执行失败 → `success=False, error=...` |
 | `has_skill(name) -> bool`                          | 扩展 | 路由层 execute 前判 404 用                                                                                          |
 | `is_enabled(name) -> bool`                         | 扩展 | 路由层 list/toggle 用,默认 True                                                                                     |
 | `set_enabled(name, enabled) -> bool`               | 扩展 | 路由层 toggle 用,返回 False 表示 name 不存在                                                                        |
@@ -57,10 +57,10 @@
 设计要点 (来自模块 docstring):
 
 - 接受外部注入的 `SkillRegistry` (测试用 mock);缺省自动 `register_all_skills()` 装载 4 个 builtin
-- `enabled` / `usage_count` 进程内 state,重启归零 — 计划文档 §5 列为"未来可拆 PR-7.1"
+- `enabled` 状态由适配器缓存并由生命周期存储恢复；`usage_count` 由 `skill_usage` 持久化统计。
 - execute 失败 (未注册 / disabled / builtin 缺工具) 一律不抛异常,与端口契约"success=False 携带 error"一致
 
-### 2.2 `api/legacy_routes.py` — 3 个 skill 路由
+### 2.2 `api/legacy_routes.py` — skill REST routes
 
 | Method | Path                            | Body                           | 200                                     | 4xx                                                 |
 | ------ | ------------------------------- | ------------------------------ | --------------------------------------- | --------------------------------------------------- |
@@ -82,53 +82,42 @@
 注意:**builtin 大多依赖 `context.tools['web_search']` 等工具,路由层 execute 传 `context={}` 时多数 builtin 会返回 success=False "工具不可用"** —
 端到端跑通需在 ChatService 注入 context.tools,留作未来 PR。本 PR 负责"列表/启用/禁用"的端到端可见,execute 主要用来单测契约 (200 透传 success/error)。
 
-## 3. Tauri (`src-tauri/src/`)
+## 3. Electron (`electron/`)
 
-### 3.1 `models.rs` — Skill / SkillExecuteResult
+### 3.1 `commands.ts` — skill IPC mappings
 
-```rust
-pub struct Skill {
-    pub name, description, triggers, parameters, examples,
-    pub enabled: bool, pub usage_count: i32,
-}
-pub struct SkillExecuteResult {
-    pub success: bool, pub content: Option<Value>,
-    pub metadata: Value, pub error: Option<String>,
-}
-```
+Electron 的主进程命令表将 renderer 的 `invoke()` 请求转发到后端 REST API。技能相关映射包括 `list_skills`、`toggle_skill`、`archive_skill`、`execute_skill`、`delete_skill`、`list_slash_commands`、`approve_skill_draft` 和 `reject_skill_draft`。
 
-字段命名与后端 JSON 字段一致 (snake_case),与项目惯例对齐 (参考 `Agent.system_prompt` 等)。
+### 3.2 `skillsIpc.ts` — rescan and import
 
-### 3.2 `commands.rs` — 3 个 skill 命令
+需要文件选择或 multipart 上传的操作通过 `window.electronAPI.skills` bridge：
 
-| 命令                                                                      | 后端映射                                      |
-| ------------------------------------------------------------------------- | --------------------------------------------- |
-| `list_skills() -> Result<Vec<Skill>, String>`                             | `GET /api/v1/skills`                          |
-| `toggle_skill(name, enabled) -> Result<Skill, String>`                    | `POST /skills/{name}/toggle` (返回完整 Skill) |
-| `execute_skill(name, action, args) -> Result<SkillExecuteResult, String>` | `POST /skills/{name}/execute`                 |
+- `rescanSkills()` → `POST /api/v1/skills/rescan`
+- `importSkills(paths)` → `POST /api/v1/skills/import`
+- `pickSkillFiles()` → 系统文件选择器
 
-`main.rs` `invoke_handler!` 注册 3 个新命令。
 
 ## 4. 前端 (`src/`)
 
-### 4.1 `lib/api.ts` — `skillsApi`
+`skillsApi` 通过 `desktopInvoke` 提供 `list`、`toggle`、`execute`、`archive`、`delete` 和 `listSlashCommands`；`rescan` 与 `importFiles` 使用 `window.electronAPI.skills` bridge。
 
-| 方法                    | 签名                                                           | Tauri 命令      |
-| ----------------------- | -------------------------------------------------------------- | --------------- |
-| `list()`                | `Promise<Skill[]>`                                             | `list_skills`   |
-| `toggle(name, enabled)` | `Promise<Skill>` (返回完整 skill)                              | `toggle_skill`  |
-| `execute(name, req?)`   | `Promise<SkillExecuteResult>` (success/content/metadata/error) | `execute_skill` |
+### 4.1 `shared/api/skillsApi.ts`
 
-`Skill` interface 字段 snake_case (`usage_count`),与 AgentProfile 等保持一致。
+| 方法 | 签名 | Electron IPC |
+|---|---|---|
+| `list()` | `Promise<Skill[]>` | `list_skills` |
+| `toggle(name, enabled)` | `Promise<Skill>` | `toggle_skill` |
+| `execute(name, req?)` | `Promise<SkillExecuteResult>` | `execute_skill` |
 
 ### 4.2 `widgets/skills/{SkillCard,SkillList}.tsx`
 
-- `SkillCard` props 用 `usage_count: number` (替换原 `usageCount`)
-- `SkillList` 内部 `Skill` 类型从 `lib/api` 导入,去掉本地副本
+- `SkillCard` 显示来源、版本、生命周期徽章和 `usage_count`。
+- `SkillCard` 对 `source === "skillmd"` 的技能提供正文折叠区、归档/删除操作。
+- `SkillList` 使用共享 `Skill` 类型，不维护重复的本地技能模型。
 
 ### 4.3 `pages/Skills.tsx`
 
-已经在用 `skillsApi.list/toggle`,本 PR 仅把字段 `usageCount` → `usage_count`。
+负责加载技能列表、启用/禁用、归档/取消归档、删除、重扫和导入；草稿通过 `?tab=drafts` 进入 Pending Drafts 标签页。
 
 ## 5. 测试
 
@@ -141,29 +130,26 @@ pub struct SkillExecuteResult {
 
 `cargo check` 绿,`tsc --noEmit` 绿,`vitest run src/widgets/skills` 6/6 绿,`pytest test_routes_skills.py` 12/12 绿。
 
-## 6. 验收
+## 6. 当前验收
 
-- [x] `pytest backend/tests/integration/test_routes_skills.py` 12/12 绿
-- [x] `cargo check` 全绿
-- [x] `tsc --noEmit` 全绿
-- [x] `vitest run src/widgets/skills` 6/6 绿
-- [x] pre-commit + pre-push hooks 全绿
-- [ ] Manual: `npm run tauri dev` → Skills 页面展示 4 个 builtin (search/writer/coder/travel),toggle 持久化
-- [ ] Manual: 真实 Chat 场景中触发 skill (需 ChatService 注入 tools, 留作 PR-7.1 范围)
+- `npm run electron:dev` 是桌面端开发入口；本项目不再使用 `npm run tauri dev`。
+- 技能列表、管理路由和 Electron IPC 由各自的集成/组件测试覆盖。
+- 具体技能执行是否成功取决于运行上下文是否提供所需工具；列表可见不等于每个技能都能独立执行。
+- 真实 Chat 场景中的工具注入属于 ChatService 集成范围，不由技能列表页面单独保证。
 
 ## 7. 风险与限制
 
 | 风险                                                                    | 应对                                                                                  |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | 路由层 execute 不注入 context.tools,builtin 大多返 success=False        | 端到端 execute 实跑留作 PR-7.1 (ChatService 集成)                                     |
-| `enabled` / `usage_count` 进程内 state,重启归零                         | 未来可加 SQL 持久化,与 Agent toggle (PR-5) 对齐                                       |
+| `enabled` 状态由适配器缓存并由 `skill_lifecycle` 恢复；`usage_count` 由 `skill_usage` 持久化 | 列表读取时合并持久化状态，执行成功后更新使用统计 |
 | SkillExecuteResult.content 可能是 string / object / list,前端需安全渲染 | 已用 `unknown` + `Record<string, unknown>` metadata 类型,前端用 `JSON.stringify` 兜底 |
 | `Skill.parameters` JSON Schema 字段,前端未做表单生成                    | 留作未来 PR (UI: "execute skill with custom args")                                    |
 
 ## 8. 后续工作 (未在 PR-7 范围)
 
 - PR-7.1: ChatService 集成 SkillPort + context.tools 注入 + 端到端 execute 实跑
-- PR-7.2: Skill enabled 状态 SQL 持久化 (与 agents.enabled 同套路)
+- PR-7.2: ~~Skill enabled 状态 SQL 持久化~~（已由生命周期存储覆盖）
 - PR-7.3: 用户自定义 skill (UI 上传 SkillSpec JSON,存到 `user_skills` 表)
 - PR-7.4: Skill parameters 表单动态生成 (基于 JSON Schema) + execute UI
 
@@ -193,7 +179,21 @@ Sage 现在有两套技能加载机制,**共享同一个 `SkillRegistry`**:
 2. `$CWD/skills` (若存在) — 项目级
 3. `~/.sage/skills` (若存在) — 用户级
 
-每个根目录下识别 `<skill_name>/SKILL.md` 形态 (深度 1 子目录, 内含 SKILL.md 文件)。
+每个根目录下识别两种形态：`<skill_name>/SKILL.md`（深度 1 子目录）和根目录直接放置的 `SKILL.md` 单文件。两种形态都通过同一套 frontmatter、名称冲突和门控逻辑；同一根目录同时出现时，子目录形态先扫描，单文件形态随后扫描，已注册同名项按 builtin/先注册项优先规则跳过。
+### 9.2.1 写入安全边界（2026-08-31）
+
+`backend/skills/safe_writer.py::write_skill_file` 在 POSIX 上继续通过
+`O_NOFOLLOW` 目录 fd 链和 `O_EXCL`/`O_TRUNC` 打开叶文件，避免父目录替换造成
+TOCTOU。Windows Python 的普通 `os.open(str(path), ...)` 即使配合 `lstat`、
+`O_EXCL` 或可选的 `O_NOFOLLOW`，也不能锁定父目录并证明 junction/reparse point
+未在检查后替换；项目尚未接入经过验证的原生 Windows handle API。因此 Windows
+分支在任何写入前明确 fail-closed，不创建目录、不打开目标文件，也不伪称与
+POSIX 等价的保护。
+
+导入器和审批后的 `SkillLoader` 仍复用同一 writer：Windows 上会将该安全失败
+转换为既有的导入跳过/写入错误语义，POSIX 上保持原有导入、审批和非覆盖写入
+行为。当前测试通过 monkeypatch 模拟 Windows 分支、no-follow 缺失及 symlink
+路径拒绝；Windows 实机（包括 junction/reparse point race）尚未验证。
 
 ### 9.3 支持的 frontmatter 字段 (v1)
 
@@ -241,11 +241,11 @@ return SkillResult(
 )
 ```
 
-**v1 故意不调 LLM / 工具**。聊天层拿到 `content` 后自行组装到 system prompt。这样保持技能层的纯净,也避免双倍 LLM 调用 (写 builtin + 跑 skill)。
+**v1 故意不调 LLM / 工具**。`execute()` 在返回 `content` 前会在 prompt 边界调用资源渲染；聊天层拿到已渲染的 `content` 后自行组装到 system prompt。`execute_v2()` 在无 `script` 参数时回退到同一 `execute()` 路径，自动激活路径也在构造 prompt context block 时渲染。这样保持技能层的纯净,也避免双倍 LLM 调用 (写 builtin + 跑 skill)。
 
 ### 9.6 `{baseDir}` 占位符语义
 
-body 中可包含 `{baseDir}`, 由聊天层替换为 `metadata.base_dir` 的绝对路径。**路径遍历防御**通过 `backend/skills/skill_md/validation.py::validate_base_dir()` 强制 base_dir 必须落在允许根 (`~/.sage/skills`、`cwd/skills`、`$SAGE_SKILLS_DIR`) 之一。
+body 中可包含 `{baseDir}` 或 `{baseDir}/relative/path`。渲染时 `{baseDir}` 替换为安全逻辑根标识 `.`，资源引用替换为技能根目录下的逻辑相对路径（例如 `references/guide.md`、`scripts/check.py`），绝不输出宿主机绝对路径。带后缀的引用只有在 `ResourceIndex` 中记录且当前仍是 regular resource 时才允许；未索引资源、目录、symlink、路径遍历、绝对路径或 NUL 字符均拒绝并抛 `SkillMdSecurityError`。POSIX 索引继续要求 `O_NOFOLLOW`；Windows/Win7 仅恢复扫描阶段的元数据过滤索引和逻辑路径渲染，扫描时的 reparse/symlink、regular-file、隐藏项、扩展名和 containment 检查失败即跳过。该 metadata-only 索引不消除 pathname TOCTOU，不等于 Windows 实际资源读取、脚本执行或写入安全；渲染仍重新执行 reparse、regular、containment 与 index 检查，且不会在索引阶段读取内容。Windows/Win7 真机（含 junction/reparse race）尚未验证。
 
 ### 9.7 路由层 JSON 形状
 
@@ -254,8 +254,7 @@ body 中可包含 `{baseDir}`, 由聊天层替换为 `metadata.base_dir` 的绝�
 - builtin 时多一个 `"source": "builtin"`, **不** 输出 `body/base_dir/version`
 - SKILL.md 时输出 `"source": "skillmd"` + `"body": "..."` + `"base_dir": "/path/..."` + `"version": "0.1.0"`
 
-`POST /api/v1/skills/{name}/execute` 返回结构同 builtin, SKILL.md 技能的 `content` 是 markdown body, `metadata.source == "skillmd"`。
-
+`POST /api/v1/skills/{name}/execute` 返回结构同 builtin。当前 adapter 会优先探测 `SkillMdSkill.execute_v2()`：无 `script` 参数时，`execute_v2()` 回退到同步 `execute()` 并返回 markdown body；带 `script` 参数时才进入 `ScriptRunner` 的异步路径。也就是说，v2 是当前执行入口的兼容扩展，不是无条件的脚本执行；脚本路径仍须经过允许根校验、确认器和 subprocess 沙箱。生产确认器默认 fail-closed，并仅在 `SAGE_SKILL_SCRIPT_ALLOWLIST` 中显式允许技能名或绝对路径根时批准脚本。
 ### 9.8 前端展示
 
 `Skill` interface (`src/shared/api/api.ts`) 新增 5 个可选字段:
@@ -279,7 +278,7 @@ version?: string;
 | 特性 | 说明 | v2 计划 / 状态 |
 |---|---|---|
 | `scripts/*.py` 执行 | AgentSkills spec 支持, 但 `exec` 用户代码风险高 | ✅ M5-M8: subprocess 沙箱 + 用户确认 + ScriptRunner 编排 + `execute_v2` 路径 |
-| `references/`、`assets/`、`templates/` | 引用文件 / 模板资源 | ⏳ M4: ResourceIndex 构建（已实现）,渲染到聊天上下文待 M10+ |
+| `references/`、`assets/`、`templates/` | 引用文件 / 模板资源 | ✅ M4: `ResourceIndex` 由 SKILL.md loader 构建并挂载到 `SkillMdDocument.resources`；`execute()`、`execute_v2()` 的 body fallback 与 auto activation 在 prompt 边界渲染 |
 | `requires.bins/env/config` 门控 | 仅在依赖满足时加载 | ✅ M3: `gating.evaluate_gating` |
 | `os` 平台过滤 | 仅在指定 OS 加载 | ✅ M3: 同上 |
 | `always` 跳过门控 | 始终加载 | ✅ M3: 同上 |
@@ -326,6 +325,7 @@ SKILL.md v2 的 `user-invocable` / `user-invocable-name` 字段通过 `SlashComm
 | `/api/v1/skills/command` | POST | 执行 slash command,返回 SKILL.md body |
 | `/api/v1/skills/commands` | GET | 列出所有已注册命令(供前端自动补全) |
 
+技能管理与发现相关端点还包括 `POST /api/v1/skills/{name}/archive`、`POST /api/v1/skills/{name}/delete`、`POST /api/v1/skills/rescan` 和 `POST /api/v1/skills/import`；因此本章当前记录的 Skills API 共 9 个端点（含列表、切换、归档、执行、slash command、命令列表、删除、重扫、导入）。
 **SlashCommandRegistry** (`backend/skills/skill_md/slash_registry.py`):
 
 - `from_registry(registry)` 一次性构建索引:遍历 `SkillRegistry`,仅索引 `SkillMdSkill` 且 `dispatch.user_invocable=true` 的技能
@@ -436,7 +436,7 @@ PR-A 起,用户可以在 Skills 页面删除一个 SKILL.md 技能。
 
 ### 数据流
 
-参见 [design spec §"流 1"](../specs/2026-06-30-skills-management-delete-hotreload-design.md#流-1用户删除-skillmd-技能)。
+参见 [design spec §"流 1"](../superpowers/specs/2026-06-30-skills-management-delete-hotreload-design.md#流-1用户删除-skillmd-技能)。
 
 ## 管理:自动刷新(PR-B)
 
@@ -464,7 +464,7 @@ useEffect cleanup:`window.clearInterval(id)`,避免组件卸载后内存泄漏�
 - ❌ 实时秒级推送(需 WebSocket,不在 spec)
 - ❌ 文件 watcher 后端实现(spec 明确划掉)
 
-参见 [design spec §"流 2"](../specs/2026-06-30-skills-management-delete-hotreload-design.md#流-2用户切换-自动刷新-启用)。
+参见 [design spec §"流 2"](../superpowers/specs/2026-06-30-skills-management-delete-hotreload-design.md#流-2用户切换-自动刷新-启用)。
 
 ## 定时任务 (Phase 8)
 
@@ -573,7 +573,8 @@ PR-C 解决:Skills 页面头部新增 2 个图标按钮,**不重启 backend** �
 - Adapter init 时已 auto-load 已有 SKILL.md,首次 rescan 通常返回 0;**加新文件后再 rescan 才能看到非零 total_loaded**
 - 幂等:同样状态下重复调用 loaded=[]
 
-**`POST /api/v1/skills/import`** (multipart `files=File[]`) → 200 `{imported: [{name, path}], skipped: [{name, reason}]}`
+**`POST /api/v1/skills/import`** (multipart `files=File[]`) → 200 `{imported: [{name, path: "."}], skipped: [{name, reason}]} `
+- `imported[*].path` is always the safe logical label `"."`; the server's absolute storage path is never exposed.
 - 400 if `files` empty → `{"detail": {"type": "invalid_request"}}`
 - 500 on `NoSkillsDirError` → `{"detail": {"type": "no_skills_dir"}}`
 - partial success:即使部分文件失败,HTTP 仍 200,失败明细在 `skipped` 数组中
@@ -589,13 +590,12 @@ PR-C 解决:Skills 页面头部新增 2 个图标按钮,**不重启 backend** �
 | -------------------------- | --------------------------------------------------------- |
 | `builtin_conflict`         | name 与 builtin 冲突(builtin 胜)                        |
 | `already_exists`           | 磁盘上已有同名 SKILL.md(本期不覆盖)                     |
-| `invalid_name`             | name 不符合 `^[a-z0-9-]{1,64}$` slug 规则               |
-| `parse_error: <detail>`    | frontmatter 解析失败(缺 `name` 字段 / YAML 错等)        |
-| `write_failed: <detail>`   | 写盘时 OSError (PermissionError / DiskFull 等)            |
-| `file_too_large: ...`      | 文件 > 1MB (DoS 防御)                                     |
-| `read_failed: <detail>`    | multipart 读文件失败                                      |
-| `hot_reload_failed: ...`   | 写盘成功但注册到 registry 失败(已自动 rollback 文件)    |
-| `adapter_init_failed`      | (仅 rescan/import 在 init 时 import 失败时)              |
+| `invalid_name`         | name 不符合 `^[a-z0-9-]{1,64}$` slug 规则（包括 parser 抛出的 name-specific 校验错误）               |
+| `parse_error`          | 缺 frontmatter、缺 name、非法 UTF-8、YAML 或其他 frontmatter/schema 解析错误（不公开异常 detail） |
+| `file_too_large: ...`  | 文件 > 1MB (DoS 防御)                                     |
+| `read_failed`          | multipart 读文件失败（不公开异常 detail）                  |
+| `hot_reload_failed`    | 写盘成功但注册到 registry 失败（已自动 rollback 文件；不公开异常 detail） |
+| `adapter_init_failed`   | (仅 rescan/import 在 init 时 import 失败时)              |
 
 ### 10.5 落地目录解析
 
@@ -640,7 +640,7 @@ PR-C 解决:Skills 页面头部新增 2 个图标按钮,**不重启 backend** �
 
 ### 10.9 Known Limitations (计划内,不修)
 
-- `rescan_skill_mds()` 返回的 `skipped` 总是 `[]` (loader API 只返 count tuple, 不返 detail)。前端 `result.skipped.length > 0` 永不触发 toast.warn (符合 plan §4.1 + §10)。若需要 detail,需扩展 `SkillMdHotLoader.scan_and_load()` API。
+- `rescan_skill_mds()` 返回 `skipped: [{name, reason}]`，加载器会报告解析、门控、冲突和实例化失败原因。
 - `import` 不支持目录导入(只支持 `.md` 文件)。批量导入目录 (`dialog.showOpenDialog({properties: [openDirectory]})`) 留作未来。
 - 不支持运行时切换 `SAGE_SKILLS_DIR`(需重启 backend)。
 - 不支持 web 模式兼容(项目 Electron-only)。
@@ -704,3 +704,53 @@ nudge 文本在喂给记忆提取器前被剥离（避免被提取为"记忆事�
 - 新增：`backend/skills/usage.py`、`backend/tests/unit/test_skill_usage_tracking.py`
 - 修改：`backend/adapters/out/skill/inproc.py`、`backend/api/legacy_routes.py`、`backend/application/services/chat_service.py`
 - 新表：`skill_usage`（`database.py` 幂等建表）
+
+## 12. Remediation 收口：保留项与待接线决策（2026-08-30）
+
+本节记录对 Skills 全链路只读审计后的最终决策。本轮**只更新文档，不删除代码、测试或数据库表**；“保留”不等于已经接入生产调用链，具体状态见下表。
+
+### 12.1 `resources.py`：保留实现，已接入 loader
+
+`backend/skills/skill_md/resources.py` 已实现 `ResourceIndex`、`build_resource_index()` 与
+`render_body_with_resources()`，并由 `backend/skills/skill_md/__init__.py` 导出；资源目录白名单为
+`scripts/`、`references/`、`assets/`、`templates/`，路径替换会经过 `resolve()` 后的 base-dir 校验。
+
+当前 loader 在构造 `SkillMdDocument` 时为每个技能目录建立 `ResourceIndex` 并写入 `resources` 字段。
+`SkillMdSkill.execute()` 在 prompt 边界渲染 body；`execute_v2()` 在无 `script` 参数时 fallback 到该路径，
+而 `auto_activate()` 也在构造注入 system prompt 的 context block 时渲染。因此资源已经进入这些执行/激活路径的
+聊天 prompt 内容，不是“待接线”。渲染只输出安全逻辑根标识 `.` 或技能根目录下的相对路径，绝不输出宿主机
+绝对路径；只有索引中的当前 regular resource 才可引用。POSIX 索引要求 `O_NOFOLLOW`；Windows/Win7 仅提供
+metadata-only 的 ResourceIndex 枚举和逻辑路径渲染，不能宣称消除 pathname TOCTOU，也不代表 Windows 实际资源
+读取、脚本执行或写入安全。渲染仍重新检查 reparse/symlink、regular、containment 和 index，索引阶段不读取内容；
+Windows/Win7 真机验证（包括 junction/reparse race）尚未完成。未索引资源、目录、symlink/reparse point、路径遍历、
+绝对路径、反斜杠或 NUL 字符均拒绝并抛 `SkillMdSecurityError`。
+
+### 12.2 Slash command：保留后端能力，前端调用待接线
+
+Slash command 不是孤儿能力：`SlashCommandRegistry` 已由 `InprocSkillAdapter` 构建，
+`POST /api/v1/skills/command` 与 `GET /api/v1/skills/commands` 已有路由和集成测试，
+`backend/tools/skill_tool.py` 也复用 `execute_command()`。命令默认只返回 SKILL.md body 作为 prompt 模板，
+不直接执行脚本；脚本仍须走显式 `script` 参数的安全执行路径。这些是保留该能力的理由。
+
+`src/shared/api/skillsApi.ts::listSlashCommands()` 当前没有 renderer 调用方，因此前端自动补全仍是待接线项，
+不是已交付的用户流程。后续应在 ChatInput 的命令解析/补全链路中接入 GET 结果，并处理 registry reload 后的
+不可变快照重建；在此之前不得把“存在 API”写成“聊天框已支持 slash command”。
+
+### 12.3 只读审计后的死代码决策
+
+| 项目 | 当前事实 | 决策 | 状态标签与后续动作 |
+|---|---|---|---|
+| `backend/adapters/out/skill/persona_loader.py` 与 `personas/` | 实现完整且有独立测试，但当前后端没有生产调用方，并从该包导出 | **保留** | `待接线候选`：若恢复 Persona/A5 产品范围，另立接线计划；在未确定替代方案前不删实现和测试 |
+| `backend/skills/pattern_detector.py` | 有实现和测试；当前没有生产调用方，但被记忆/Background Review 文档作为能力引用 | **保留** | `待接线候选`：明确触发器、调用点和结果持久化后再接入；在此之前不得删除测试以掩盖未接线事实 |
+| `backend/tools/skill.py::SkillHotLoader` | 旧 Python `BaseSkill` 文件扫描/热加载器，仍被 `backend.tools` 导出且有完整测试；SKILL.md 使用的是 `skill_md/loader.py` | **保留，标记弃用候选** | `弃用候选`：新代码不得把它当作 SKILL.md loader；待确认 builtin 迁移、外部导入和 release/win7 影响后，再单独制定删除/迁移方案 |
+| `backend/data/database.py` 的 `skills` 表 | 旧 schema 含 `code TEXT NOT NULL` 等字段，当前后端没有读写；`skill_usage` 与 `skill_lifecycle` 才是当前 Skills 状态/统计表 | **保留，标记弃用候选** | `弃用候选`：本轮不复用、不新增写入；待数据库迁移策略、旧用户数据兼容和两分支验证完成后再决定弃表 |
+
+上述四项均不属于本轮可安全删除的“已确认死代码”。删除它们会同时改变测试边界、公开导出、历史兼容或数据库迁移语义，
+因此本章采用“保留 + 明确标签”，而不是以删除代替架构决策。
+
+### 12.4 剩余风险
+
+- ResourceIndex 已进入 SKILL.md loader，并挂载到每个 `SkillMdDocument.resources`；`execute()`、`execute_v2()` 的 body fallback 与 `auto_activate()` 已在 prompt 边界渲染资源。后续仍可补充资源数量/大小上限及更多聊天层消费集成测试，但不得放宽现有路径校验。
+- Slash command 的后端快照在 reload 后必须重建，且 renderer 尚未接入自动补全；当前仅能把它视为已测试的后端能力。
+- PersonaLoader、PatternDetector 的保留会维持维护成本和测试成本，但贸然删除可能丢失尚未兑现的产品能力；应以独立接线或弃用迁移任务收口。
+- 旧 `SkillHotLoader` 与 `skills` 表并存会造成“两个历史模型仍可见”的认知负担；在没有兼容性审计和 migration 方案前，继续保留比破坏现有安装更安全。

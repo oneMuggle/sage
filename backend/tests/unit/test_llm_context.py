@@ -118,6 +118,29 @@ def test_llm_stream_call_parses_sse_chunks():
     assert fake_async_client.stream.call_args.args[1].endswith("/chat/completions")
 
 
+def test_llm_stream_call_uses_nested_async_context_managers():
+    """流式请求在 Python 3.8 下仍正确进入并退出两个异步上下文。"""
+    ctx = make_llm_context("http://api.test/v1", "sk-abc", "gpt-4o-mini")
+    response = _sse_response(["data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}"])
+    stream_ctx = MagicMock()
+    stream_ctx.__aenter__ = AsyncMock(return_value=response)
+    stream_ctx.__aexit__ = AsyncMock(return_value=None)
+    fake_async_client = MagicMock()
+    fake_async_client.__aenter__ = AsyncMock(return_value=fake_async_client)
+    fake_async_client.__aexit__ = AsyncMock(return_value=None)
+    fake_async_client.stream = MagicMock(return_value=stream_ctx)
+
+    with patch("httpx.AsyncClient", return_value=fake_async_client):
+
+        async def collect():
+            return [d async for d in ctx.llm_stream_call([], 0.0)]
+
+        assert asyncio.run(collect()) == ["ok"]
+
+    fake_async_client.__aexit__.assert_awaited_once()
+    stream_ctx.__aexit__.assert_awaited_once()
+
+
 def test_llm_stream_call_skips_malformed_lines():
     """坏 JSON 行被静默跳过,有效 chunk 仍正常 yield."""
     ctx = make_llm_context("http://api.test/v1", "sk-abc", "gpt-4o-mini")

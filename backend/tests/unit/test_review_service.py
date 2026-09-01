@@ -45,6 +45,161 @@ VALID_LLM_OUTPUT = json.dumps(
 class TestGenerateDraftHappyPath:
     """Core happy-path tests for ReviewService.generate_draft."""
 
+    def test_default_review_service_uses_provider_client_contract(self, monkeypatch):
+        """The production default must expose ProviderClient.complete()."""
+        from backend.adapters.out.llm.openai import OpenAIProvider
+        from backend.data.settings_repo import SettingsRepository
+        from backend.ports.llm import ProviderClient
+        from backend.skills import review_service
+
+        monkeypatch.setattr(
+            SettingsRepository,
+            "get_json",
+            lambda self, key: {
+                "endpoints": [
+                    {
+                        "id": "e1",
+                        "baseUrl": "https://api.example.test/v1",
+                        "apiKey": "test-key",
+                    }
+                ],
+                "modelSelections": {"chatModel": {"endpointId": "e1", "modelId": "review-model"}},
+            },
+        )
+        review_service.reset_review_service()
+        try:
+            service = review_service.get_review_service()
+            assert isinstance(service.llm_provider, ProviderClient)
+            assert isinstance(service.llm_provider, OpenAIProvider)
+        finally:
+            review_service.reset_review_service()
+
+    @pytest.mark.asyncio()
+    async def test_default_provider_receives_selected_model_on_complete(self, monkeypatch):
+        """The selected model is passed to the provider's complete contract."""
+        from backend.data.settings_repo import SettingsRepository
+        from backend.skills import review_service
+
+        monkeypatch.setattr(
+            SettingsRepository,
+            "get_json",
+            lambda self, key: {
+                "endpoints": [
+                    {
+                        "id": "e1",
+                        "protocol": "openai-compatible",
+                        "baseUrl": "https://api.example.test/v1",
+                        "apiKey": "test-key",
+                    }
+                ],
+                "modelSelections": {
+                    "chatModel": {"endpointId": "e1", "modelId": "configured-review-model"}
+                },
+            },
+        )
+        review_service.reset_review_service()
+        try:
+            service = review_service.get_review_service()
+            service.llm_provider.complete = AsyncMock(
+                return_value=_make_mock_turn(VALID_LLM_OUTPUT)
+            )
+            await service.generate_draft("complex_turn", {})
+            assert service.llm_provider.complete.call_args.kwargs["model"] == "configured-review-model"
+        finally:
+            review_service.reset_review_service()
+
+    def test_default_review_service_does_not_create_unconfigured_external_provider(self, monkeypatch):
+        """Missing settings must not silently target api.openai.com."""
+        from backend.data.settings_repo import SettingsRepository
+        from backend.skills import review_service
+
+        monkeypatch.setattr(SettingsRepository, "get_json", lambda self, key: {})
+        review_service.reset_review_service()
+        try:
+            service = review_service.get_review_service()
+            assert type(service.llm_provider).__name__ == "_UnavailableReviewProvider"
+        finally:
+            review_service.reset_review_service()
+
+    def test_ollama_provider_allows_empty_api_key(self):
+        """Ollama is local and must remain usable without an API key."""
+        from backend.adapters.out.llm.ollama import OllamaProvider
+
+        provider = OllamaProvider(api_key="")
+        assert provider._api_key == ""  # noqa: SLF001
+
+    @pytest.mark.asyncio()
+    async def test_generate_draft_uses_selected_chat_model(self, monkeypatch):
+        """Background review follows the persisted model selection."""
+        from backend.data.settings_repo import SettingsRepository
+        from backend.skills.review_service import ReviewService
+
+        monkeypatch.setattr(
+            SettingsRepository,
+            "get_json",
+            lambda self, key: {
+                "modelSelections": {"chatModel": {"modelId": "configured-review-model"}}
+            },
+        )
+        provider = _make_mock_provider(VALID_LLM_OUTPUT)
+        await ReviewService(provider).generate_draft("complex_turn", {})
+
+        assert provider.complete.call_args.kwargs["model"] == "configured-review-model"
+
+    @pytest.mark.asyncio()
+    async def test_generate_draft_keeps_default_model_without_selection(self, monkeypatch):
+        """Missing model selection retains the backwards-compatible fallback."""
+        from backend.data.settings_repo import SettingsRepository
+        from backend.skills.review_service import ReviewService
+
+        monkeypatch.setattr(SettingsRepository, "get_json", lambda self, key: {})
+        provider = _make_mock_provider(VALID_LLM_OUTPUT)
+        await ReviewService(provider).generate_draft("complex_turn", {})
+
+        assert provider.complete.call_args.kwargs["model"] == "sonnet"
+
+    @pytest.mark.asyncio()
+    async def test_generate_draft_settings_failure_keeps_default_model(self, monkeypatch):
+        """Settings I/O failures do not prevent draft generation."""
+        from backend.data.settings_repo import SettingsRepository
+        from backend.skills.review_service import ReviewService
+
+        def fail(self, key):
+            raise RuntimeError("settings unavailable")
+
+        monkeypatch.setattr(SettingsRepository, "get_json", fail)
+        provider = _make_mock_provider(VALID_LLM_OUTPUT)
+        await ReviewService(provider).generate_draft("complex_turn", {})
+
+        assert provider.complete.call_args.kwargs["model"] == "sonnet"
+
+    @pytest.mark.asyncio()
+    async def test_injected_provider_uses_stable_model_snapshot(self, monkeypatch):
+        """注入 provider 后，设置变化不能让 endpoint/provider 与 model 拆配。"""
+        from backend.data.settings_repo import SettingsRepository
+        from backend.skills.review_service import ReviewService
+
+        monkeypatch.setattr(
+            SettingsRepository,
+            "get_json",
+            lambda self, key: {
+                "modelSelections": {"chatModel": {"modelId": "model-at-construction"}}
+            },
+        )
+        provider = _make_mock_provider(VALID_LLM_OUTPUT)
+        service = ReviewService(provider)
+        monkeypatch.setattr(
+            SettingsRepository,
+            "get_json",
+            lambda self, key: {
+                "modelSelections": {"chatModel": {"modelId": "different-model"}}
+            },
+        )
+
+        await service.generate_draft("complex_turn", {})
+
+        assert provider.complete.call_args.kwargs["model"] == "model-at-construction"
+
     @pytest.mark.asyncio()
     async def test_generate_draft_with_mock_llm(self):
         """generate_draft returns a SkillDraft with fields parsed from LLM JSON."""

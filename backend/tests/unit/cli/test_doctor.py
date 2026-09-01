@@ -406,7 +406,7 @@ class TestMain:
         data = json.loads(out)
         assert "checks" in data
         assert "summary" in data
-        assert len(data["checks"]) == 13
+        assert len(data["checks"]) == 14
 
     def test_main_runs_all_thirteen_checks(self, capsys):
         main([])
@@ -523,7 +523,7 @@ class TestImportAllChecks:
         before = len(d.ALL_CHECKS)
         d._import_all_checks()
         # After import, 8 unique classes should be registered
-        assert len(d.ALL_CHECKS) >= 8
+        assert len(d.ALL_CHECKS) >= 14
         # Calling twice doesn't crash (may double-register; that's fine)
         d._import_all_checks()
         assert len(d.ALL_CHECKS) >= before

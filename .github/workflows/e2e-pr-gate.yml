@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20' }
+        with: { node-version: '22.12' }
       - run: npm ci
       - run: npm run build:electron
       # Electron needs an X server on the headless Ubuntu runner.
@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20' }
+        with: { node-version: '22.12' }
       - run: npm ci
       - run: npm run build:electron
       - run: xvfb-run -a npx playwright test --project=electron-stub-deep
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20' }
+        with: { node-version: '22.12' }
       - uses: conda-incubator/setup-miniconda@v3
         with: { python-version: '3.11' }
       - run: conda create -n sage-backend python=3.11 -y

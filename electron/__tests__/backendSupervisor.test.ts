@@ -6,7 +6,7 @@ import {
   transitionBackend,
   type BackendSupervisorState,
 } from '../backendSupervisor';
-import { BUILD_MANIFEST_VERSION, createBuildManifest, ownsBackend } from '../buildManifest';
+import { BUILD_MANIFEST_VERSION, createBuildManifest, expectedHealthProof, ownsBackend } from '../buildManifest';
 
 describe('backend supervisor generation fencing', () => {
   it('creates unique ownership tokens for each generation', () => {
@@ -52,11 +52,13 @@ describe('build manifest and health ownership', () => {
       status: 'ok' as const,
       ...manifest,
       ...owner,
+      proof: expectedHealthProof(owner.ownershipToken, manifest.buildId, owner.generation, owner.pid),
     };
 
     expect(manifest.manifestVersion).toBe(BUILD_MANIFEST_VERSION);
     expect(ownsBackend(health, owner, manifest)).toBe(true);
     expect(ownsBackend({ ...health, pid: 405 }, owner, manifest)).toBe(false);
+    expect(ownsBackend({ ...health, generation: 5 }, owner, manifest)).toBe(false);
     expect(ownsBackend({ ...health, buildId: 'other' }, owner, manifest)).toBe(false);
   });
 });

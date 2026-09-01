@@ -9,12 +9,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, get_type_hints
 
 import pytest
 
 from backend.skills.base import SkillSchema
+from backend.skills.skill_md.resources import ResourceIndex, build_resource_index
 from backend.skills.skill_md.skill import SkillMdDocument, SkillMdSkill
+from backend.skills.skill_md.validation import SkillMdSecurityError
 
 pytestmark = pytest.mark.unit
 
@@ -50,9 +52,11 @@ def _make_doc(
     )
 
 
-# =====================================================================
-# SkillMdDocument dataclass
-# =====================================================================
+def test_document_type_hints_resolve_resource_index():
+    """运行时类型提示应解析 resources 字段, 包括 Python 3.8。"""
+    hints = get_type_hints(SkillMdDocument)
+
+    assert hints["resources"] == Optional[ResourceIndex]
 
 
 def test_document_required_fields_only():
@@ -123,9 +127,37 @@ def test_schema_is_cached_across_calls():
     assert s1 is s2
 
 
-# =====================================================================
-# SkillMdSkill.execute
-# =====================================================================
+def test_execute_renders_resource_placeholder(tmp_path):
+    (tmp_path / "references").mkdir()
+    (tmp_path / "references" / "guide.md").write_text("guide", encoding="utf-8")
+    doc = _make_doc(
+        body="See {baseDir}/references/guide.md",
+        base_dir=tmp_path,
+    )
+    doc.resources = build_resource_index(tmp_path)
+    result = SkillMdSkill(doc).execute(params={}, context={})
+
+    assert result.success is True
+    assert result.content == "See references/guide.md"
+    assert str(tmp_path) not in result.content
+
+
+def test_execute_returns_fixed_error_for_resource_security_failure(tmp_path, monkeypatch):
+    doc = _make_doc(body="See {baseDir}/outside", base_dir=tmp_path)
+    doc.resources = ResourceIndex()
+
+    def _raise(*args, **kwargs):
+        raise SkillMdSecurityError("/sensitive/path")
+
+    monkeypatch.setattr(
+        "backend.skills.skill_md.skill.render_body_with_resources", _raise
+    )
+    result = SkillMdSkill(doc).execute(params={}, context={})
+
+    assert result.success is False
+    assert result.content is None
+    assert result.error == "Skill resource security validation failed."
+    assert "/sensitive/path" not in result.error
 
 
 def test_execute_returns_body_string_in_content():

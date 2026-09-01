@@ -6,14 +6,16 @@ system. It analyzes sequences of tool calls, extracts signatures (tool name
 beyond a configurable threshold.
 """
 
+from __future__ import annotations
+
 from collections import Counter
-from typing import Optional
+from typing import Dict, List, Optional
 
 
 class PatternDetector:
     """Detect repeated tool call patterns within a conversation session."""
 
-    def _extract_signature(self, tool_call: dict) -> str:
+    def _extract_signature(self, tool_call: Dict) -> str:
         """
         Extract signature: tool_name + sorted parameter keys.
         Ignores parameter values to detect repeated patterns.
@@ -31,7 +33,7 @@ class PatternDetector:
 
     def detect_repeated_pattern(
         self,
-        tool_calls: list[dict],
+        tool_calls: List[Dict],
         threshold: int = 3,
         window_size: int = 5,
     ) -> Optional[dict]:
@@ -66,7 +68,8 @@ class PatternDetector:
         for sig, count in counter.most_common():
             if count >= threshold:
                 matching_calls = [
-                    tc for tc, s in zip(tool_calls, signatures, strict=False) if s == sig
+                    tc for tc, s in zip(tool_calls, signatures)  # noqa: B905
+                    if s == sig
                 ]
                 return {
                     "signature": sig,

@@ -16,8 +16,10 @@ from pathlib import Path
 import pytest
 
 from backend.skills.registry import SkillRegistry
+from backend.skills.skill_md import loader as skill_md_loader
 from backend.skills.skill_md.loader import (
     SkillMdHotLoader,
+    collect_required_bins,
     discover_skill_md_dirs,
     register_skill_md_skills,
 )
@@ -118,6 +120,32 @@ def test_scan_loads_skill_md_files(tmp_path):
     assert "alpha" in registry.list_names()
 
 
+def test_scan_builds_resource_index_on_document(tmp_path):
+    """加载技能时把资源索引接入 document，并在 execute 边界渲染资源路径。"""
+    registry = SkillRegistry()
+    skill_dir = tmp_path / "alpha"
+    _write_skill_md(
+        tmp_path,
+        "alpha",
+        body="Use {baseDir}/scripts/check.py\n",
+    )
+    scripts = skill_dir / "scripts"
+    scripts.mkdir()
+    script = scripts / "check.py"
+    script.write_text("print('ok')\n", encoding="utf-8")
+
+    loader = SkillMdHotLoader(registry, dirs=[tmp_path])
+    loaded, skipped = loader.scan_and_load()
+
+    assert (loaded, skipped) == (1, 0)
+    skill = registry.get("alpha")
+    assert skill._doc.resources is not None
+    assert skill._doc.resources.scripts == (script,)
+    result = skill.execute(params={}, context={})
+    assert result.content == "Use scripts/check.py\n"
+    assert str(skill_dir.resolve()) not in result.content
+
+
 def test_scan_skips_non_skill_md_files(tmp_path):
     """非 SKILL.md 文件(如 README.md)被忽略。"""
     registry = SkillRegistry()
@@ -142,6 +170,71 @@ def test_scan_skips_hidden_dirs(tmp_path):
     assert loaded == 1
     assert registry.exists("alpha")
     assert not registry.exists(".hidden-skill")
+
+
+def test_scan_skips_symlinked_skill_directory(tmp_path):
+    """技能目录是 symlink 时不跟随加载。"""
+    real_dir = tmp_path / "real"
+    _write_skill_md(real_dir, "linked")
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    (skills_dir / "linked").symlink_to(real_dir / "linked", target_is_directory=True)
+
+    registry = SkillRegistry()
+    loaded, skipped = SkillMdHotLoader(registry, dirs=[skills_dir]).scan_and_load()
+
+    assert (loaded, skipped) == (0, 0)
+    assert not registry.exists("linked")
+
+
+def test_scan_skips_symlinked_skill_md(tmp_path):
+    """SKILL.md 本身是 symlink 时不读取。"""
+    real_path = _write_skill_md(tmp_path / "real", "linked")
+    skill_dir = tmp_path / "skills" / "linked"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").symlink_to(real_path)
+
+    registry = SkillRegistry()
+    loaded, skipped = SkillMdHotLoader(registry, dirs=[tmp_path / "skills"]).scan_and_load()
+
+    assert (loaded, skipped) == (0, 0)
+    assert not registry.exists("linked")
+
+
+def test_scan_skips_candidate_with_symlinked_parent(tmp_path):
+    """候选路径任一父目录是 symlink 时不读取。"""
+    real_root = tmp_path / "real-root"
+    _write_skill_md(real_root, "linked")
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    (skills_root / "nested").symlink_to(real_root, target_is_directory=True)
+
+    registry = SkillRegistry()
+    loaded, skipped = SkillMdHotLoader(registry, dirs=[skills_root / "nested"]).scan_and_load()
+
+    assert (loaded, skipped) == (0, 0)
+    assert not registry.exists("linked")
+
+
+def test_collect_required_bins_skips_symlink_candidates(tmp_path):
+    """依赖预扫描同样跳过 symlink 目录、文件及父目录。"""
+    real_root = tmp_path / "real"
+    _write_skill_md(real_root, "real", "requires:\n  bins: [real-bin]\n")
+    root = tmp_path / "skills"
+    root.mkdir()
+    _write_skill_md(root, "normal", "requires:\n  bins: [normal-bin]\n")
+    (root / "linked-dir").symlink_to(real_root / "real", target_is_directory=True)
+
+    target = _write_skill_md(tmp_path / "target", "linked-file", "requires:\n  bins: [file-bin]\n")
+    file_dir = root / "linked-file"
+    file_dir.mkdir()
+    (file_dir / "SKILL.md").symlink_to(target)
+
+    parent_target = tmp_path / "parent-target"
+    _write_skill_md(parent_target, "parent-linked", "requires:\n  bins: [parent-bin]\n")
+    (root / "linked-parent").symlink_to(parent_target, target_is_directory=True)
+
+    assert collect_required_bins([root]) == ["normal-bin"]
 
 
 def test_scan_skips_malformed_file_but_continues(tmp_path):
@@ -178,6 +271,73 @@ def test_scan_skips_missing_required_field(tmp_path):
     assert not registry.exists("Has Spaces")
 
 
+@pytest.mark.parametrize("name_field", ["''", "null", "42", "Bad Name"])
+def test_scan_classifies_bom_invalid_name(tmp_path, name_field):
+    """A parser-stripped BOM must not hide an explicitly invalid name."""
+    registry = SkillRegistry()
+    loader = SkillMdHotLoader(registry, dirs=[tmp_path])
+    _write_bad_skill_md(
+        tmp_path,
+        "broken",
+        f"﻿---\nname: {name_field}\ndescription: invalid name\n---\nbody\n",
+    )
+
+    loaded, skipped = loader.scan_and_load()
+
+    assert (loaded, skipped) == (0, 1)
+    assert loader.skipped == [{"name": "SKILL", "reason": "invalid_name"}]
+
+
+def test_scan_classifies_trailing_name_newline_as_invalid_name(tmp_path):
+    """An explicitly quoted newline name is rejected without creating a skill."""
+    registry = SkillRegistry()
+    loader = SkillMdHotLoader(registry, dirs=[tmp_path])
+    _write_bad_skill_md(
+        tmp_path,
+        "broken",
+        '---\nname: "good\\n"\ndescription: invalid name\n---\nbody\n',
+    )
+
+    loaded, skipped = loader.scan_and_load()
+
+    assert (loaded, skipped) == (0, 1)
+    assert loader.skipped == [{"name": "SKILL", "reason": "invalid_name"}]
+    assert not registry.exists("good\n")
+    assert not (tmp_path / "good\n").exists()
+
+
+def test_scan_classifies_trailing_space_closing_fence_as_parse_error(tmp_path):
+    registry = SkillRegistry()
+    loader = SkillMdHotLoader(registry, dirs=[tmp_path])
+    _write_bad_skill_md(
+        tmp_path,
+        "broken",
+        "---\nname: Bad Name\ndescription: invalid name\n---   \nbody\n",
+    )
+
+    loaded, skipped = loader.scan_and_load()
+
+    assert (loaded, skipped) == (0, 1)
+    assert loader.skipped == [{"name": "SKILL", "reason": "parse_error"}]
+
+
+def test_scan_classifies_bom_overlong_slug_as_invalid_name(tmp_path):
+    """An explicitly supplied 65-character slug is invalid, not parse_error."""
+    registry = SkillRegistry()
+    loader = SkillMdHotLoader(registry, dirs=[tmp_path])
+    overlong_name = "a" * 65
+    _write_bad_skill_md(
+        tmp_path,
+        "broken",
+        f"﻿---\nname: {overlong_name}\ndescription: invalid name\n---\nbody\n",
+    )
+
+    loaded, skipped = loader.scan_and_load()
+
+    assert (loaded, skipped) == (0, 1)
+    assert loader.skipped == [{"name": "SKILL", "reason": "invalid_name"}]
+
+
 def test_scan_collision_with_builtin_skips_skillmd(tmp_path):
     """SKILL.md 与 builtin 同名 → builtin 胜, SKILL.md skip。"""
     from backend.skills import SearchSkill  # builtin
@@ -195,6 +355,25 @@ def test_scan_collision_with_builtin_skips_skillmd(tmp_path):
     assert builtin is not None
     result = builtin.execute(params={}, context={})
     assert result.content != "some other body"
+
+
+def test_scan_records_stable_reason_when_skill_instantiation_fails(tmp_path, monkeypatch):
+    """实例化异常的 skipped reason 不暴露异常正文。"""
+    registry = SkillRegistry()
+    loader = SkillMdHotLoader(registry, dirs=[tmp_path])
+    _write_skill_md(tmp_path, "broken")
+    exception_body = "secret exception details"
+
+    def raise_instantiation_error(*args, **kwargs):
+        raise RuntimeError(exception_body)
+
+    monkeypatch.setattr(skill_md_loader, "SkillMdSkill", raise_instantiation_error)
+
+    loaded, skipped = loader.scan_and_load()
+
+    assert (loaded, skipped) == (0, 1)
+    assert loader.skipped == [{"name": "broken", "reason": "instantiation_error"}]
+    assert exception_body not in str(loader.skipped)
 
 
 def test_scan_returns_zero_when_dir_empty(tmp_path):
@@ -274,6 +453,37 @@ def test_hot_reload_no_change_returns_false(tmp_path):
 
     assert loader.check_for_updates() == []
     assert loader.hot_reload("alpha") is True  # 强制 reload 仍能成功
+
+
+def test_hot_reload_fails_closed_when_loaded_path_becomes_symlink(tmp_path):
+    """已加载文件变为 symlink 后，检查与重载均不读取且保留旧注册。"""
+    registry = SkillRegistry()
+    loader = SkillMdHotLoader(registry, dirs=[tmp_path])
+    path = _write_skill_md(tmp_path, "alpha", body="original body")
+    loader.scan_and_load()
+    external = tmp_path / "external-SKILL.md"
+    external.write_text(
+        "---\nname: alpha\ndescription: test alpha\n---\nexternal body\n",
+        encoding="utf-8",
+    )
+    path.unlink()
+    path.symlink_to(external)
+
+    assert loader.check_for_updates() == []
+    assert loader.hot_reload("alpha") is False
+    assert registry.exists("alpha")
+    assert registry.get("alpha").execute(params={}, context={}).content == "original body"
+
+
+def test_compute_hash_fails_closed_for_symlink(tmp_path):
+    """哈希读取不跟随最终 symlink。"""
+    target = tmp_path / "target.md"
+    target.write_bytes(b"target")
+    link = tmp_path / "link.md"
+    link.symlink_to(target)
+
+    with pytest.raises(OSError):
+        SkillMdHotLoader._compute_hash(link)
 
 
 def test_hot_reload_unknown_skill_returns_false(tmp_path):

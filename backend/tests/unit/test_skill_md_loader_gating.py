@@ -17,7 +17,10 @@ import pytest
 
 from backend.skills.registry import SkillRegistry
 from backend.skills.skill_md.gating import GatingContext
-from backend.skills.skill_md.loader import SkillMdHotLoader
+from backend.skills.skill_md.loader import (
+    SkillMdHotLoader,
+    build_gating_context_for_dirs,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -31,9 +34,86 @@ def _write_skill_md(tmp_path: Path, name: str, content: str) -> Path:
     return path
 
 
-# =====================================================================
-# 基础门控集成
-# =====================================================================
+def test_loader_builds_bin_context_from_frontmatter(tmp_path, monkeypatch):
+    """生产式扫描只探测 frontmatter 声明的 bins，不枚举整个 PATH。"""
+    _write_skill_md(
+        tmp_path,
+        "needs-git",
+        """---
+name: needs-git
+description: Needs git
+requires:
+  bins: [git]
+---
+Body
+""",
+    )
+    _write_skill_md(
+        tmp_path,
+        "needs-missing",
+        """---
+name: needs-missing
+description: Needs missing tool
+requires:
+  bins: [missing-tool]
+---
+Body
+""",
+    )
+    calls = []
+    monkeypatch.setattr(
+        "backend.skills.skill_md.gating.shutil.which",
+        lambda name: calls.append(name) or ("/usr/bin/git" if name == "git" else None),
+    )
+
+    ctx = build_gating_context_for_dirs([tmp_path])
+
+    assert ctx.available_bins == frozenset({"git"})
+    assert calls == ["git", "missing-tool"]
+
+
+def test_loader_production_context_loads_git_and_skips_missing(tmp_path, monkeypatch):
+    """无显式上下文时，声明 git 的 skill 加载，缺失依赖的 skill 跳过。"""
+    _write_skill_md(
+        tmp_path,
+        "needs-git",
+        """---
+name: needs-git
+description: Needs git
+requires:
+  bins: [git]
+---
+Body
+""",
+    )
+    _write_skill_md(
+        tmp_path,
+        "needs-missing",
+        """---
+name: needs-missing
+description: Needs missing tool
+requires:
+  bins: [missing-tool]
+---
+Body
+""",
+    )
+    monkeypatch.setattr(
+        "backend.skills.skill_md.gating.shutil.which",
+        lambda name: "/usr/bin/git" if name == "git" else None,
+    )
+
+    registry = SkillRegistry()
+    loader = SkillMdHotLoader(
+        registry,
+        dirs=[tmp_path],
+        gating_ctx=build_gating_context_for_dirs([tmp_path]),
+    )
+    loaded, skipped = loader.scan_and_load()
+
+    assert (loaded, skipped) == (1, 1)
+    assert registry.exists("needs-git")
+    assert not registry.exists("needs-missing")
 
 
 def test_loader_without_gating_ctx_loads_all(tmp_path):
@@ -88,6 +168,36 @@ Body A
     assert loaded == 0
     assert skipped == 1
     assert not registry.exists("skill-a")
+
+
+def test_loader_reports_gating_skip_name_and_reason(tmp_path):
+    """门控跳过项应暴露技能名和可诊断原因。"""
+    registry = SkillRegistry()
+    ctx = GatingContext(
+        platform="linux",
+        available_bins=frozenset(),
+        available_env=frozenset(),
+        available_config=frozenset(),
+    )
+    loader = SkillMdHotLoader(registry, dirs=[tmp_path], gating_ctx=ctx)
+    _write_skill_md(
+        tmp_path,
+        "needs-tool",
+        """---
+name: needs-tool
+description: Needs a tool
+requires:
+  bins: [missing-tool]
+---
+Body
+""",
+    )
+
+    loader.scan_and_load()
+
+    assert loader.skipped == [
+        {"name": "needs-tool", "reason": "missing bin: missing-tool"}
+    ]
 
 
 def test_loader_with_gating_ctx_loads_met_requires(tmp_path):

@@ -101,7 +101,15 @@ class WebSearchClient:
             )
 
             if response.status_code != 200:
-                raise Exception(f"Tavily API 错误: {response.status_code} - {response.text}")
+                logger.warning(
+                    "Tavily search failed: status=%s error_type=HTTPStatusError",
+                    response.status_code,
+                )
+                raise httpx.HTTPStatusError(
+                    "Tavily search request failed",
+                    request=response.request,
+                    response=response,
+                )
 
             data = response.json()
             results = [
@@ -136,7 +144,15 @@ class WebSearchClient:
             )
 
             if response.status_code != 200:
-                raise Exception(f"SerpApi 错误: {response.status_code} - {response.text}")
+                logger.warning(
+                    "SerpApi search failed: status=%s error_type=HTTPStatusError",
+                    response.status_code,
+                )
+                raise httpx.HTTPStatusError(
+                    "SerpApi search request failed",
+                    request=response.request,
+                    response=response,
+                )
 
             data = response.json()
             results = [
@@ -170,7 +186,15 @@ class WebSearchClient:
             )
 
             if response.status_code != 200:
-                raise Exception(f"SearXNG 错误: {response.status_code} - {response.text}")
+                logger.warning(
+                    "SearXNG search failed: status=%s error_type=HTTPStatusError",
+                    response.status_code,
+                )
+                raise httpx.HTTPStatusError(
+                    "SearXNG search request failed",
+                    request=response.request,
+                    response=response,
+                )
 
             data = response.json()
             results = [
@@ -219,7 +243,7 @@ async def multi_query_search(
 
     for response in responses:
         if isinstance(response, Exception):
-            logger.error(f"搜索失败: {response}")
+            logger.warning("search failed: error_type=%s", type(response).__name__)
             continue
 
         for result in response.results:

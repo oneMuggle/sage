@@ -68,6 +68,7 @@ from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
 from backend.skills.loader import get_skill_loader
 from backend.skills.review_queue import get_review_queue
+from backend.skills.skill_md.frontmatter import SkillMdParseError, parse as parse_skill_md
 
 logger = logging.getLogger(__name__)
 
@@ -137,44 +138,44 @@ def _safe_log_field(value: object, max_length: int = 64) -> str:
 
 class SessionCreate(BaseModel):
     title: str = "新对话"
-    parent_id: str | None = None
+    parent_id: Optional[str] = None
 
 
 class SessionUpdate(BaseModel):
-    title: str | None = None
+    title: Optional[str] = None
 
-    is_pinned: bool | None = None
+    is_pinned: Optional[bool] = None
 
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    workspace_path: str | None = None
+    workspace_path: Optional[str] = None
     # 2026-07-30: 选 agent 的入口。None / 空字符串 → 端点 fallback 到 "primary"。
     # 真正的路由由 SageAgent(agent_id=...) 内部完成:从 SQLite 读 profile,
     # 透传到 get_available_tools → ToolRegistry.get_schemas_for_llm(allowed_tools=...)
     # 这样 memory_manager 之类的窄权限 agent 不会拿到 list_dir/read_file。
-    agent_id: str | None = None
-    api_key: str | None = None
+    agent_id: Optional[str] = None
+    api_key: Optional[str] = None
 
-    api_url: str | None = None
+    api_url: Optional[str] = None
 
-    model: str | None = None
+    model: Optional[str] = None
 
-    max_context: int | None = None
+    max_context: Optional[int] = None
 
-    temperature: float | None = None
+    temperature: Optional[float] = None
 
     # 透传字段:provider 让后端不再硬写,reasoning_effort/thinking_budget
     # 让上游 LLM 启用 thinking 输出(provider 决定哪种 key 会被接受)
     # - provider: openai / claude / gemini / deepseek / ollama / custom
     # - reasoning_effort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
     # - thinking_budget: Gemini 2.5 OpenAI 兼容模式
-    provider: str | None = None
+    provider: Optional[str] = None
 
-    reasoning_effort: str | None = None
+    reasoning_effort: Optional[str] = None
 
-    thinking_budget: int | None = None
+    thinking_budget: Optional[int] = None
 
     # Task 6 (M1-M2 chat-read): frontend 把 @mention 解析成
     # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
@@ -189,12 +190,12 @@ class ChatRequest(BaseModel):
     # Optional: 兼容渲染进程 IPC payload 里显式 null(undefined ?? null 序列化的产物)。
     # Pydantic 默认值只在字段缺失时生效，显式 null 仍按类型校验 →
     # 不加 Optional 会被 422 拒绝。业务层 `data.orchestration_mode or "auto"` 已兜底。
-    orchestration_mode: str | None = "auto"
+    orchestration_mode: Optional[str] = "auto"
 
     # Wave 3 A10 (2026-08-14): resume 恢复流 —— plan_override 非空时跳过 LLM
     # 拆解，直接用存储计划建 dispatcher；run_id 复用 resume 返回的 new_run_id。
-    plan_override: List[Dict[str, Any]] | None = None
-    run_id: str | None = None
+    plan_override: Optional[List[Dict[str, Any]]] = None
+    run_id: Optional[str] = None
 
 
 class MessageResponse(BaseModel):
@@ -203,9 +204,9 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: int
-    model: str | None = None
+    model: Optional[str] = None
 
-    tool_calls: str | None = None
+    tool_calls: Optional[str] = None
 
 
 class ChatErrorInfo(BaseModel):
@@ -216,19 +217,19 @@ class ChatErrorInfo(BaseModel):
 
     type: str
     message: str
-    status_code: int | None = None
+    status_code: Optional[int] = None
 
-    retry_after: int | None = None
+    retry_after: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
     """聊天响应：成功时含 message+session，失败时含 error+null message。"""
 
-    message: MessageResponse | None = None
+    message: Optional[MessageResponse] = None
 
-    session: dict | None = None
+    session: Optional[Dict] = None
 
-    error: ChatErrorInfo | None = None
+    error: Optional[ChatErrorInfo] = None
 
 
 class EvolutionLogResponse(BaseModel):
@@ -237,20 +238,20 @@ class EvolutionLogResponse(BaseModel):
     id: str
     evolution_type: str
     description: str
-    before_state: str | None = None
+    before_state: Optional[str] = None
 
-    after_state: str | None = None
+    after_state: Optional[str] = None
 
     trigger_type: str
-    trigger_condition: str | None = None
+    trigger_condition: Optional[str] = None
 
     status: str
-    error_message: str | None = None
+    error_message: Optional[str] = None
 
-    tokens_used: int | None = None
+    tokens_used: Optional[int] = None
 
     created_at: int
-    completed_at: int | None = None
+    completed_at: Optional[int] = None
 
 
 #: agent role 白名单（PATCH/POST 共用）。
@@ -290,25 +291,25 @@ class AgentUpdate(BaseModel):
     # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
     model_config = {"protected_namespaces": ()}
 
-    name: str | None = None
+    name: Optional[str] = None
 
     role: Union[str, None] = None  # 校验放在路由层 (依赖 Pydantic Literal 不直观)
 
-    system_prompt: str | None = None
+    system_prompt: Optional[str] = None
 
-    tools: List[str] | None = None
+    tools: Optional[List[str]] = None
 
-    memory_access: List[str] | None = None
+    memory_access: Optional[List[str]] = None
 
     model_config_data: Union[dict, None] = (
         None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
     )
 
-    max_iterations: int | None = None  # 路由层校验 1..50
+    max_iterations: Optional[int] = None  # 路由层校验 1..50
 
-    enabled: bool | None = None
+    enabled: Optional[bool] = None
 
-    description: str | None = None
+    description: Optional[str] = None
 
 
 class AgentCreate(BaseModel):
@@ -324,12 +325,12 @@ class AgentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     role: str = "general"
     system_prompt: str = ""
-    tools: List[str] | None = None
-    memory_access: List[str] | None = None
-    model_config_data: dict | None = None
-    max_iterations: int | None = None
-    enabled: bool | None = None
-    description: str | None = None
+    tools: Optional[List[str]] = None
+    memory_access: Optional[List[str]] = None
+    model_config_data: Optional[Dict] = None
+    max_iterations: Optional[int] = None
+    enabled: Optional[bool] = None
+    description: Optional[str] = None
 
 
 # ==================== 依赖注入 ====================
@@ -349,10 +350,10 @@ _PENDING_RUN_CANCELLATIONS: Set[str] = set()
 class InterruptRequest(BaseModel):
     """/interrupt 请求体 —— stream_id 可选，兼容不带 body 的旧调用方。"""
 
-    stream_id: str | None = None
+    stream_id: Optional[str] = None
 
 
-def interrupt_stream(stream_id: str | None) -> str:
+def interrupt_stream(stream_id: Optional[str]) -> str:
     """中断目标流：主 agent interrupt（+ multi 模式 cancel dispatcher）。
 
     返回命中标识（"stream"/"none"）供端点回传与测试断言。
@@ -410,7 +411,7 @@ def interrupt_run(run_id: str) -> str:
 
 
 def _finalize_orch_run(
-    run_id: str | None, status: str, final_summary: str | None
+    run_id: Optional[str], status: str, final_summary: Optional[str]
 ) -> None:
     """P0-4 (2026-08-20): orch run 生命周期闭环（降级型）。
 
@@ -432,9 +433,9 @@ def _build_orchestration_dispatcher(
     stream_id: str,
     entry_queue: Any,
     run_id: str,
-    llm_config: Dict[str, Any] | None,
-    total_tasks: int | None,
-    workspace_root: str | None,
+    llm_config: Optional[Dict[str, Any]],
+    total_tasks: Optional[int],
+    workspace_root: Optional[str],
 ) -> ChatDispatcher:
     """构造 ChatDispatcher；非法 run_id 的 ValueError 重抛为前端可读文案。
 
@@ -649,7 +650,7 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: dict | None) -> None:
+async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict]) -> None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -863,8 +864,8 @@ async def compact_session(session_id: str):
 class ForkSessionRequest(BaseModel):
     """POST /sessions/{session_id}/fork 请求体。"""
 
-    at_message_id: str | None = None
-    title: str | None = None
+    at_message_id: Optional[str] = None
+    title: Optional[str] = None
 
 
 @router.post("/sessions/{session_id}/fork", response_model=dict)
@@ -1310,11 +1311,11 @@ def list_slash_commands():
 def delete_skill(name: str):
     """物理删除一个 SKILL.md 技能 (用户主动管理, PR-A Task 3)。
 
-    - 200 + ``{"deleted": true, "name": ..., "base_dir": ...}``
-    - 400 + detail=str(exc): builtin 不可删 / name 非法 / base_dir 跑出
+    - 200 + ``{"deleted": true, "name": ..., "base_dir": "."}``
+    - 400 + stable detail: builtin 不可删 / name 非法 / base_dir 跑出
       SAGE_SKILLS_DIR
-    - 404 + detail=str(exc): skill 不存在 (registry 或磁盘)
-    - 500 + detail=str(exc): SAGE_SKILLS_DIR 未配置 / 其他文件系统错误
+    - 404 + stable detail: skill 不存在 (registry 或磁盘)
+    - 500 + stable detail: SAGE_SKILLS_DIR 未配置 / 其他文件系统错误
     """
     # 延迟导入避免循环 (legacy_routes → inproc → delete → registry → builtin)
     from backend.skills.skill_md.delete import (
@@ -1326,15 +1327,31 @@ def delete_skill(name: str):
     try:
         result = adapter.delete_skill_md(name)
     except BuiltinSkillError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("skill delete rejected: type=%s name=%s", type(exc).__name__, name)
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "builtin_skill", "message": "内置技能不可删除"},
+        ) from exc
     except SkillMdNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        logger.info("skill delete not found: name=%s", name)
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "skill_not_found", "message": "技能不存在"},
+        ) from exc
     except ValueError as exc:
-        # name 非法 / base_dir 跑出 SAGE_SKILLS_DIR
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        # name 非法 / base_dir 跑出 SAGE_SKILLS_DIR; keep diagnostics server-side.
+        logger.warning("skill delete invalid request: name=%s error=%s", name, exc)
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "invalid_skill_request", "message": "技能请求无效"},
+        ) from exc
     except FileNotFoundError as exc:
-        # SAGE_SKILLS_DIR 未配置 / 其他 fs 错误 — 路由层转 500
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        # SAGE_SKILLS_DIR 未配置 / 其他 fs 错误; keep diagnostics server-side.
+        logger.error("skill delete storage unavailable: name=%s error=%s", name, exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"type": "skills_storage_unavailable", "message": "技能目录不可用"},
+        ) from exc
     return result
 
 
@@ -1357,7 +1374,7 @@ def rescan_skills():
 async def import_skills(files: List[UploadFile] = File(default=[])):
     """导入 SKILL.md 文件 (multipart)。
 
-    - 200 + ``{"imported": [{"name", "path"}], "skipped": [{"name", "reason"}]}``
+    - 200 + ``{"imported": [{"name", "path": "."}], "skipped": [{"name", "reason"}]}``
     - 400 + detail: multipart 没 files (空列表)
     - 500 + detail: skills_dir 无法创建 (NoSkillsDirError)
 
@@ -1375,9 +1392,10 @@ async def import_skills(files: List[UploadFile] = File(default=[])):
     try:
         result = await adapter.import_skill_mds(files)
     except NoSkillsDirError as exc:
+        logger.error("skill import unavailable: error_type=%s", type(exc).__name__)
         raise HTTPException(
             status_code=500,
-            detail={"type": "no_skills_dir", "message": str(exc)},
+            detail={"type": "no_skills_dir", "message": "技能目录不可用"},
         ) from exc
 
     return result
@@ -1411,7 +1429,7 @@ class LegacySettingsResponse(BaseModel):
 class LegacyPreferenceItem(BaseModel):
     """GET/PUT /preferences/{key} 请求/响应体。"""
 
-    value: str | None = None
+    value: Optional[str] = None
 
     value_type: str = "string"
     category: str = "general"
@@ -1419,7 +1437,7 @@ class LegacyPreferenceItem(BaseModel):
 
 @router.get("/settings")
 @with_db_lock
-def legacy_get_settings() -> dict | None:
+def legacy_get_settings() -> Optional[Dict]:
     """读取持久化的 settings；不存在返回 null。
 
     翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
@@ -1487,6 +1505,8 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     - 白名单校验 (validate_settings_shape) 拒绝白名单外字段 → 400
     """
     from backend.data.settings_canonicalizer import (
+        classify_settings_shape_field,
+        classify_settings_validation_error,
         strip_unknown_fields,
         to_camel,
         validate_settings_payload,
@@ -1527,13 +1547,35 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     try:
         validate_settings_payload(camel_merged)
     except ValueError as exc:
-        logger.warning(f"[LEGACY] /settings rejected invalid value: {exc}")
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        field = classify_settings_validation_error(exc)
+        logger.warning(
+            "[LEGACY] /settings rejected: error_type=invalid_settings_payload field=%s",
+            field,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_settings_payload",
+                "message": "设置内容无效，请检查字段格式",
+                "field": field,
+            },
+        ) from exc
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
-        logger.warning(f"[LEGACY] /settings rejected unknown field: {exc}")
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        field = classify_settings_shape_field(exc)
+        logger.warning(
+            "[LEGACY] /settings rejected: error_type=invalid_settings_shape field=%s",
+            field,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "type": "invalid_settings_shape",
+                "message": "设置结构无效，请检查字段",
+                "field": field,
+            },
+        ) from exc
     repo.set_json("app_settings", camel_merged, category="general")
     changed_fields = [k for k in payload if k != "api_key"]
     if "api_key" in payload:
@@ -1568,13 +1610,28 @@ def legacy_get_preference(key: str) -> LegacyPreferenceItem:
 @with_db_lock
 def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPreferenceItem:
     """通用 KV 写入（白名单限定 key）。"""
+    from backend.data.settings_canonicalizer import (
+        parse_app_settings_object,
+        redact_secrets_json,
+    )
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
+    if key == "app_settings" and item.value is not None:
+        try:
+            parse_app_settings_object(item.value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="app_settings must be a JSON object") from exc
     if item.value is not None:
         SettingsRepository().set(
             key, item.value, value_type=item.value_type, category=item.category
+        )
+    if key == "app_settings":
+        return LegacyPreferenceItem(
+            value=redact_secrets_json(item.value),
+            value_type=item.value_type,
+            category=item.category,
         )
     return item
 
@@ -1805,7 +1862,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
             # CancelledError）会让 finally 触发 UnboundLocalError，既掩盖原始异常
             # 又跳过后续的 reset_tool_context 清理。
-            done_content: str | None = None
+            done_content: Optional[str] = None
             run_outcome = "failed"
 
             llm_config = None
@@ -1866,7 +1923,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
                     mode = "single"
-            run_id: str | None = None
+            run_id: Optional[str] = None
             dispatcher = None
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
@@ -2135,7 +2192,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
-            done_reasoning: str | None = None
+            done_reasoning: Optional[str] = None
 
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
@@ -2369,7 +2426,7 @@ def _ndjson(d: dict) -> str:
 
 @router.post("/interrupt")
 @with_db_lock
-def interrupt(data: InterruptRequest | None = Body(default=None)):
+def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
     """中断 Agent（P0-2: 经 stream_id 定位真实运行的 agent）"""
     stream_id = data.stream_id if data is not None else None
     target = interrupt_stream(stream_id)
@@ -2497,6 +2554,18 @@ def list_skill_drafts(status: str = "pending"):
     return {"drafts": [_draft_to_dict(d) for d in drafts]}
 
 
+def _validate_skill_draft_content(content: Any, draft_name: str) -> None:
+    """Validate approved draft content without loading or executing skill code."""
+    if not isinstance(content, str):
+        raise ValueError("content must be a UTF-8 string")
+
+    metadata, _ = parse_skill_md(content)
+    if metadata.get("name") != draft_name:
+        raise ValueError(
+            f"frontmatter name {metadata.get('name')!r} does not match draft name {draft_name!r}"
+        )
+
+
 @router.post("/skill-drafts/{draft_id}/approve")
 @with_db_lock
 def approve_skill_draft(draft_id: str):
@@ -2506,12 +2575,16 @@ def approve_skill_draft(draft_id: str):
     - 400 — invalid skill name (path traversal / separators / empty);
       draft status NOT updated (follow-up: regenerate or edit the draft)
     - 404 — draft not found
+    - 409 — a skill with the same name already exists; draft status NOT updated
     - 500 — file-system write failure (status NOT updated)
     """
     draft_store = get_skill_draft_store()
     draft = draft_store.get(draft_id)
     if draft is None:
-        raise HTTPException(status_code=404, detail="Draft not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "draft_not_found", "message": "Draft not found"},
+        )
 
     # I-1 fix: validate name *before* touching the filesystem so that
     # drafts with un-writable names (LLM hallucinations like "../foo")
@@ -2521,29 +2594,87 @@ def approve_skill_draft(draft_id: str):
     try:
         ReviewService._validate_skill_name(draft.name)
     except ValueError as exc:
+        logger.warning(
+            "Skill draft %s has an invalid name (error_type=%s)",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid skill name: {exc}",
+            detail={"code": "invalid_skill_name", "message": "Invalid skill name"},
+        ) from exc
+
+    try:
+        _validate_skill_draft_content(draft.content, draft.name)
+    except (SkillMdParseError, TypeError, ValueError, UnicodeError) as exc:
+        logger.warning(
+            "Skill draft %s has invalid SKILL.md content (error_type=%s)",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_skill_content",
+                "message": "Invalid SKILL.md content",
+            },
         ) from exc
 
     try:
         skill_loader = get_skill_loader()
-        skill_loader.write(draft.name, draft.content)
-    except ValueError as exc:
-        # Skill loader rejected the name (caught separately from OSError
-        # so the route can return 400 for invalid names vs 500 for FS errors).
-        logger.error("Failed to write skill %s: %s", draft.name, exc)
+        skill_loader.write(draft.name, draft.content, overwrite=False)
+    except FileExistsError as exc:
+        logger.info(
+            "Skill already exists; draft=%s remains pending",
+            _safe_log_field(draft_id),
+        )
         raise HTTPException(
-            status_code=400, detail=f"Failed to write skill: {exc}"
+            status_code=409,
+            detail={"code": "skill_already_exists", "message": "Skill already exists"},
+        ) from exc
+    except ValueError as exc:
+        # Keep diagnostics server-side without exposing loader internals to clients.
+        logger.error(
+            "Failed to write skill draft: draft=%s error_type=%s errno=%s",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+            getattr(exc, "errno", None),
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "skill_write_rejected", "message": "Failed to write skill"},
         ) from exc
     except (PermissionError, OSError) as exc:
-        logger.error("Failed to write skill %s: %s", draft.name, exc)
+        # Filesystem exceptions can include absolute paths or file contents.
+        logger.error(
+            "Failed to write skill draft: draft=%s error_type=%s errno=%s",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+            getattr(exc, "errno", None),
+        )
         raise HTTPException(
-            status_code=500, detail=f"Failed to write skill: {exc}"
+            status_code=500,
+            detail={"code": "skill_write_failed", "message": "Failed to write skill"},
         ) from exc
 
     draft_store.update_status(draft_id, "approved")
-    return {"status": "approved", "skill_name": draft.name, "draft_id": draft_id}
+    try:
+        reload_result = _get_skill_adapter().rescan_skill_mds()
+    except Exception as exc:  # noqa: BLE001 — approval succeeds even if reload fails
+        logger.warning(
+            "Approved skill rescan failed: draft=%s error_type=%s",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+        )
+        reload_result = {"loaded": []}
+    return {
+        "status": "approved",
+        "skill_name": draft.name,
+        "draft_id": draft_id,
+        "reloaded": any(
+            item.get("name") == draft.name for item in reload_result.get("loaded", [])
+        ),
+    }
 
 
 @router.post("/skill-drafts/{draft_id}/reject")
@@ -2557,7 +2688,10 @@ def reject_skill_draft(draft_id: str):
     draft_store = get_skill_draft_store()
     draft = draft_store.get(draft_id)
     if draft is None:
-        raise HTTPException(status_code=404, detail="Draft not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "draft_not_found", "message": "Draft not found"},
+        )
 
     draft_store.update_status(draft_id, "rejected")
     return {"status": "rejected", "draft_id": draft_id}
@@ -2589,7 +2723,7 @@ _MEMORY_LIST_MAX_PAGE = _MEMORY_LIST_MAX_FETCH // _MEMORY_LIST_MAX_PAGE_SIZE
 
 class MemorySearchRequest(BaseModel):
     query: str
-    memory_type: str | None = None
+    memory_type: Optional[str] = None
 
     limit: int = 20
 
@@ -2607,7 +2741,7 @@ class MemoryDeleteRequest(BaseModel):
 
 @router.get("/memory/search")
 @with_db_lock
-def search_memory(query: str, limit: int = 20, type: str | None = None):
+def search_memory(query: str, limit: int = 20, type: Optional[str] = None):
     """搜索记忆"""
     try:
         mm = get_memory_manager()
@@ -2798,7 +2932,7 @@ def list_memories(
                     limit=fetch_limit,
                 )
 
-            merged: list[dict] = []
+            merged: List[Dict] = []
             merged.extend(
                 _enrich_memory_records(episodic_items, layer="episodic", source="episodic")
             )

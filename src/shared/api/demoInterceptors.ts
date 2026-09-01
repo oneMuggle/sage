@@ -1385,7 +1385,9 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
   archive_skill: (args) => {
     const name = asStr(args.name);
     const archived = args.archived !== false;
-    demoSkills = demoSkills.map((s) => (s.name === name ? { ...s, enabled: !archived } : s));
+    demoSkills = demoSkills.map((s) =>
+      s.name === name ? { ...s, lifecycle: archived ? 'archived' : 'stale' } : s,
+    );
     return demoSkills.find((s) => s.name === name) ?? null;
   },
 
@@ -1407,7 +1409,7 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
 
   list_slash_commands: () => ({
     commands: demoSkills
-      .filter((s) => s.enabled && s.source === 'skillmd')
+      .filter((s) => s.enabled && s.source === 'skillmd' && s.lifecycle !== 'archived')
       .map((s) => `/${s.name}`),
   }),
 

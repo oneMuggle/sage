@@ -29,6 +29,37 @@ def _clean_settings():
 
 
 @pytest.mark.asyncio()
+async def test_put_invalid_settings_uses_safe_structured_error_and_log(client, caplog):
+    """Invalid protocol/path values never cross the HTTP or logging boundary."""
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    protocol = "sk-secret-protocol-value"
+    local_path = r"C:\Users\synthetic\private-model.gguf"
+
+    invalid_protocol = await client.put(
+        "/api/v1/settings",
+        json={"endpoints": [{"protocol": protocol}]},
+    )
+    invalid_path = await client.put(
+        "/api/v1/settings",
+        json={"endpoints": [{"protocol": "ollama", "localModelPath": local_path}]},
+    )
+
+    for response in (invalid_protocol, invalid_path):
+        assert response.status_code == 422
+        assert response.status_code != 500
+        assert response.json()["detail"]["type"] == "invalid_settings_payload"
+        assert response.json()["detail"]["message"] == "设置内容无效，请检查字段格式"
+        assert protocol not in response.text
+        assert local_path not in response.text
+    logs = " ".join(record.getMessage() for record in caplog.records)
+    assert protocol not in logs
+    assert local_path not in logs
+    assert "error_type=invalid_settings_payload" in logs
+
+
+@pytest.mark.asyncio()
 async def test_get_translates_legacy_snake_to_camel(client):
     """DB 里手插一条 snake_case 行, GET 应翻译为 camelCase 返回。
 
@@ -62,6 +93,41 @@ async def test_get_translates_legacy_snake_to_camel(client):
 
 
 @pytest.mark.asyncio()
+async def test_put_settings_prevalidation_error_is_fixed_and_non_echoing(client):
+    """Pydantic failures on legacy /settings never expose submitted values."""
+    secret = "synthetic-secret-legacy"
+    path = "/absolute/synthetic/legacy-model.gguf"
+    cases = [
+        ({"endpoints": [{"protocol": 123, "apiKey": secret, "localModelPath": path}]}, 422),
+        ({"endpoints": [{"protocol": "ollama", "localModelPath": [path]}]}, 422),
+        ({"unexpected": secret}, 400),
+    ]
+    for payload, expected_status in cases:
+        response = await client.put("/api/v1/settings", json=payload)
+        assert response.status_code == expected_status
+        if expected_status == 422:
+            assert response.json() == {
+                "detail": {
+                    "type": "invalid_settings_payload",
+                    "message": "设置内容无效，请检查字段格式",
+                }
+            }
+        else:
+            assert response.json()["detail"]["type"] == "invalid_settings_shape"
+        assert secret not in response.text
+        assert path not in response.text
+
+
+@pytest.mark.asyncio()
+async def test_other_validation_routes_keep_fastapi_default_handler(client):
+    """The scoped handler must not rewrite validation errors elsewhere."""
+    response = await client.patch("/api/v1/agents/primary/toggle", json={"enabled": "secret"})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][-1] == "enabled"
+    assert response.json()["detail"][0]["type"]
+
+
+@pytest.mark.asyncio()
 async def test_get_returns_null_when_corrupted_json(client):
     """DB 行 JSON 损坏 → GET 返回 null (不抛 500)。"""
     conn = SettingsRepository().db.get_connection()
@@ -76,6 +142,39 @@ async def test_get_returns_null_when_corrupted_json(client):
 
 
 @pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    "dirty_settings",
+    [
+        {"endpoints": 1},
+        {
+            "endpoints": [
+                {
+                    "apiKey": "synthetic-secret",
+                    "localModelPath": "/private/synthetic/path",
+                    "discoveredModels": 1,
+                }
+            ]
+        },
+        {"modelSelections": 1},
+        {"wiki": 1},
+        {"orch": 1},
+    ],
+)
+async def test_put_rejects_scalar_persisted_settings_containers_without_500(
+    client, dirty_settings
+):
+    """脏持久化容器应返回明确 4xx, 且错误响应不回显 secret/path."""
+    SettingsRepository().set_json("app_settings", dirty_settings, category="general")
+
+    resp = await client.put("/api/v1/settings", json={"streaming": True})
+
+    assert 400 <= resp.status_code < 500
+    assert resp.status_code != 500
+    assert "synthetic-secret" not in resp.text
+    assert "/private/synthetic/path" not in resp.text
+
+
+@pytest.mark.asyncio()
 async def test_put_with_unknown_field_rejected(client):
     """PUT 接受 schema 内字段 + 不在白名单的字段 → 400 + 详细信息。"""
     resp = await client.put(
@@ -86,7 +185,9 @@ async def test_put_with_unknown_field_rejected(client):
         },
     )
     assert resp.status_code == 400
-    assert "unknown top-level field 'foo'" in resp.text
+    assert resp.json()["detail"]["type"] == "invalid_settings_shape"
+    assert resp.json()["detail"]["field"] == "foo"
+    assert "foo" in resp.text
 
 
 @pytest.mark.asyncio()
@@ -250,6 +351,8 @@ async def test_settings_unknown_endpoint_field_still_rejected(client):
         },
     )
     assert resp.status_code == 400
+    assert resp.json()["detail"]["type"] == "invalid_settings_shape"
+    assert resp.json()["detail"]["field"] == "category"
     assert "category" in resp.text
 
 
@@ -425,6 +528,100 @@ async def test_get_preference_redacts_app_settings_payload(client):
     ep = parsed["endpoints"][0]
     assert ep.get("apiKey") in (None, "")
     assert ep.get("hasApiKey") is True
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    "scalar_value",
+    [
+        json.dumps("api-token-secret"),
+        "42",
+        "null",
+        "[]",
+    ],
+)
+async def test_get_preference_scalar_app_settings_returns_safe_object(client, scalar_value):
+    """历史 app_settings 标量不得在 preference GET 中原样回显."""
+    conn = SettingsRepository().db.get_connection()
+    conn.execute(
+        "INSERT OR REPLACE INTO preferences(key,value,value_type,category,created_at,updated_at) "
+        "VALUES('app_settings', ?, 'string', 'general', 1, 1)",
+        (scalar_value,),
+    )
+    conn.commit()
+
+    resp = await client.get("/api/v1/preferences/app_settings")
+
+    assert resp.status_code == 200
+    assert resp.json()["value"] == "{}"
+    assert "api-token-secret" not in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_put_preference_app_settings_redacts_response_and_preserves_storage(client):
+    payload = {
+        "endpoints": [{"id": "ep", "apiKey": _REDACTED_APIKEY}],
+        "token": "top-token",
+        "dbPassword": "db-secret",
+        "secretKey": "secret-key",
+        "privateKey": "private-key",
+        "authorization": "bearer-token",
+        "nested": {"secret": "nested-secret", "password": "nested-password"},
+    }
+    resp = await client.put(
+        "/api/v1/preferences/app_settings", json={"value": json.dumps(payload)}
+    )
+    assert resp.status_code == 200
+    for secret in (
+        _REDACTED_APIKEY,
+        "top-token",
+        "db-secret",
+        "secret-key",
+        "private-key",
+        "bearer-token",
+        "nested-secret",
+        "nested-password",
+    ):
+        assert secret not in resp.text
+    returned = json.loads(resp.json()["value"])
+    assert returned["endpoints"][0]["apiKey"] == ""
+    assert returned["endpoints"][0]["hasApiKey"] is True
+    assert returned["token"] == ""
+    assert returned["dbPassword"] == ""
+    assert returned["secretKey"] == ""
+    assert returned["privateKey"] == ""
+    assert returned["authorization"] == ""
+    assert returned["nested"]["secret"] == ""
+    assert returned["nested"]["password"] == ""
+    stored = SettingsRepository().get_json("app_settings")
+    assert stored["endpoints"][0]["apiKey"] == _REDACTED_APIKEY
+
+
+@pytest.mark.asyncio()
+async def test_put_preference_app_settings_invalid_json_never_echoes_body(client):
+    synthetic = 'invalid-json synthetic-secret "token": "top-token"'
+    SettingsRepository().set_json("app_settings", {"streaming": True}, category="general")
+    resp = await client.put("/api/v1/preferences/app_settings", json={"value": synthetic})
+    assert resp.status_code == 400
+    assert synthetic not in resp.text
+    assert "synthetic-secret" not in resp.text
+    assert "top-token" not in resp.text
+    assert SettingsRepository().get_json("app_settings") == {"streaming": True}
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize("invalid_value", ["[1, 2, 3]", "null", '"scalar"', "42"])
+async def test_put_preference_app_settings_rejects_non_object_without_overwrite(
+    client, invalid_value
+):
+    baseline = {"streaming": True, "endpoints": []}
+    SettingsRepository().set_json("app_settings", baseline, category="general")
+    resp = await client.put(
+        "/api/v1/preferences/app_settings", json={"value": invalid_value}
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "app_settings must be a JSON object"
+    assert SettingsRepository().get_json("app_settings") == baseline
 
 
 @pytest.mark.asyncio()

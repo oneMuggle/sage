@@ -23,16 +23,111 @@
 
 from __future__ import annotations
 
+import socket
+
+import httpcore
+import pytest
+
 from backend.api.llm_proxy_routes import build_upstream_url
 
-# === RED 核心场景:用户最常见的配置 ===
+
+class _RecordingBackend(httpcore.AsyncNetworkBackend):
+    def __init__(self):
+        self.calls = []
+
+    async def connect_tcp(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return object()
+
+    async def connect_unix_socket(self, path, timeout=None, socket_options=None):
+        raise NotImplementedError
+
+    async def sleep(self, seconds):
+        return None
+
+
+@pytest.mark.asyncio()
+async def test_fixed_ip_backend_always_connects_to_pinned_address():
+    from backend.api.llm_proxy_routes import _FixedIPNetworkBackend
+
+    backend = _FixedIPNetworkBackend("203.0.113.8")
+    delegate = _RecordingBackend()
+    backend._delegate = delegate
+
+    await backend.connect_tcp("provider.example", 443, timeout=2.0)
+
+    assert delegate.calls == [
+        (("203.0.113.8", 443), {"timeout": 2.0, "local_address": None, "socket_options": None})
+    ]
+
+
+@pytest.mark.asyncio()
+async def test_resolver_validates_all_addresses_and_pins_deterministically(monkeypatch):
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    monkeypatch.setattr(
+        proxy_routes,
+        "_resolve_addresses",
+        lambda host, port: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", port)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.1.1.1", port)),
+        ],
+    )
+    parsed = proxy_routes.urlparse("https://provider.example")
+
+    assert await proxy_routes._resolve_and_validate_upstream_host(parsed) == "1.1.1.1"
+
+
+@pytest.mark.asyncio()
+async def test_resolver_allows_private_addresses_only_for_allowlisted_host(monkeypatch):
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    monkeypatch.setattr(
+        proxy_routes,
+        "_resolve_addresses",
+        lambda host, port: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.20", port))
+        ],
+    )
+    parsed = proxy_routes.urlparse("http://lan.example")
+    with pytest.raises(proxy_routes.HTTPException) as blocked:
+        await proxy_routes._resolve_and_validate_upstream_host(parsed)
+    assert blocked.value.status_code == 403
+
+    monkeypatch.setenv("SAGE_LLM_PROXY_ALLOWED_HOSTS", "lan.example")
+    assert await proxy_routes._resolve_and_validate_upstream_host(parsed) == "192.168.1.20"
+
+@pytest.mark.asyncio()
+async def test_resolver_dns_timeout_maps_to_gaierror(monkeypatch):
+    import asyncio
+
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    async def delayed_wait_for(*args, **kwargs):
+        raise asyncio.TimeoutError()  # noqa: UP041
+
+    monkeypatch.setattr(proxy_routes.asyncio, "wait_for", delayed_wait_for)
+    with pytest.raises(socket.gaierror):
+        await proxy_routes._resolve_and_validate_upstream_host(
+            proxy_routes.urlparse("https://timeout.example")
+        )
+
+
+@pytest.mark.asyncio()
+async def test_resolver_rejects_when_dns_concurrency_is_saturated(monkeypatch):
+    """DNS waiters fail closed instead of growing an unbounded queue."""
+    import asyncio
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    monkeypatch.setattr(proxy_routes, "_DNS_SEMAPHORE", asyncio.Semaphore(0))
+    with pytest.raises(socket.gaierror, match="DNS resolution capacity"):
+        await proxy_routes._resolve_and_validate_upstream_host(
+            proxy_routes.urlparse("https://busy.example")
+        )
 
 
 def test_provider_url_with_v1_suffix_and_v1_models_path_does_not_duplicate():
-    """用户填 ``https://apihub.agnes-ai.com/v1`` + 拉 ``/v1/models`` → 不能产生 ``/v1/v1/models``。
-
-    这是用户当前报错: ``Invalid URL (GET /v1/v1/models)``。
-    """
+    """base URL 和 path 都含 ``/v1`` 时不得重复拼接。"""
     url = build_upstream_url(
         provider_url="https://apihub.agnes-ai.com/v1",
         path="v1/models",

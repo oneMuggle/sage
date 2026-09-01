@@ -140,6 +140,145 @@ jobs:
           flags: backend
           fail_ci_if_error: false
 
+  # ========== Dependency audit: read-only npm + Python reports ==========
+  # This job intentionally does not mutate package manifests or fix findings.
+  # Critical/high findings are enforced by the final gate after reports upload.
+  dependency-audit:
+    name: Dependency audit (Node 22.12 + Python 3.11)
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/develop' ||
+      (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.12
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12'
+          cache: 'npm'
+
+      - name: Pin npm
+        run: |
+          npm install --global npm@11.12.1
+          test "$(node --version)" = "v22.12.0"
+          test "$(npm --version)" = "11.12.1"
+
+      - name: Install npm dependencies
+        id: npm-ci
+        run: npm ci
+        continue-on-error: true
+
+      - name: npm audit (all dependencies)
+        id: npm-audit-all
+        if: always()
+        run: npm audit --json > npm-audit.json
+        continue-on-error: true
+
+      - name: npm audit (production dependencies)
+        id: npm-audit-prod
+        if: always()
+        run: npm audit --omit=dev --json > npm-audit-prod.json
+        continue-on-error: true
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create Python audit venv and install locked auditor
+        id: python-install
+        run: |
+          python -m venv .venv-dependency-audit
+          .venv-dependency-audit/bin/python -m pip install --disable-pip-version-check pip-audit==2.9.0
+          .venv-dependency-audit/bin/python -m pip install --disable-pip-version-check -r backend/requirements.txt
+        continue-on-error: true
+
+      - name: pip-audit (production requirements)
+        id: pip-audit
+        if: always()
+        run: |
+          if [ ! -x .venv-dependency-audit/bin/pip-audit ]; then
+            printf '%s\n' '{"error":"pip-audit environment was not created"}' > pip-audit.json
+            exit 1
+          fi
+          .venv-dependency-audit/bin/pip-audit -r backend/requirements.txt --format=json > pip-audit.json
+        continue-on-error: true
+
+      - name: Upload dependency audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-reports
+          path: |
+            npm-audit.json
+            npm-audit-prod.json
+            pip-audit.json
+          if-no-files-found: warn
+
+      - name: Enforce dependency audit gate
+        env:
+          NPM_CI_OUTCOME: ${{ steps.npm-ci.outcome }}
+          PYTHON_INSTALL_OUTCOME: ${{ steps.python-install.outcome }}
+          NPM_AUDIT_ALL_OUTCOME: ${{ steps.npm-audit-all.outcome }}
+          NPM_AUDIT_PROD_OUTCOME: ${{ steps.npm-audit-prod.outcome }}
+          PIP_AUDIT_OUTCOME: ${{ steps.pip-audit.outcome }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          failures = []
+          if os.environ['NPM_CI_OUTCOME'] != 'success':
+              failures.append(f"npm ci: {os.environ['NPM_CI_OUTCOME']}")
+          if os.environ['PYTHON_INSTALL_OUTCOME'] != 'success':
+              failures.append(f"Python audit environment: {os.environ['PYTHON_INSTALL_OUTCOME']}")
+          for name, outcome in {
+              'npm audit': os.environ['NPM_AUDIT_ALL_OUTCOME'],
+              'npm audit --omit=dev': os.environ['NPM_AUDIT_PROD_OUTCOME'],
+              'pip-audit': os.environ['PIP_AUDIT_OUTCOME'],
+          }.items():
+              if outcome != 'success':
+                  failures.append(f"{name} command: {outcome}")
+
+          def load_json(path):
+              try:
+                  return json.loads(Path(path).read_text())
+              except (OSError, json.JSONDecodeError) as exc:
+                  failures.append(f"{path}: unreadable audit report ({exc})")
+                  return None
+
+          npm_counts = []
+          for path in ('npm-audit.json', 'npm-audit-prod.json'):
+              report = load_json(path)
+              if report is not None:
+                  counts = report.get('metadata', {}).get('vulnerabilities', {})
+                  npm_counts.append((path, counts))
+                  if counts.get('critical', 0) or counts.get('high', 0):
+                      failures.append(
+                          f"{path}: critical={counts.get('critical', 0)}, high={counts.get('high', 0)}"
+                      )
+
+          pip_report = load_json('pip-audit.json')
+          if isinstance(pip_report, list):
+              pip_findings = sum(len(item.get('vulns', [])) for item in pip_report)
+              if pip_findings:
+                  failures.append(f"pip-audit: {pip_findings} vulnerable package findings")
+          elif pip_report is not None:
+              failures.append('pip-audit.json: expected a JSON list')
+
+          if failures:
+              print('::error::Dependency audit gate failed')
+              for failure in failures:
+                  print(f"::error::{failure}")
+              sys.exit(1)
+          print('Dependency audit gate passed: no critical/high npm findings and no Python findings.')
+          PY
+
   # ========== Frontend: lint + type + test + coverage ==========
   frontend:
     name: Frontend (TypeScript)
@@ -151,7 +290,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.12'
           cache: 'npm'
 
       - name: Install dependencies
@@ -198,7 +337,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.12'
           cache: 'npm'
 
       - name: Cache electron-builder downloads
@@ -391,7 +530,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.12'
           cache: 'npm'
 
       - name: Install npm dependencies
@@ -420,7 +559,7 @@ jobs:
   # - PR 也能在 backend job 上跑（见 backend/backend-py38 的 if: 改 PR + push 都触发）
   all-green:
     name: All Checks
-    needs: [backend, backend-py38, frontend, electron-smoke]
+    needs: [backend, backend-py38, frontend, electron-smoke, dependency-audit]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
@@ -430,6 +569,12 @@ jobs:
           # 必过项：frontend + electron-smoke 永远要过
           [ "${{ needs.frontend.result }}" = "success" ]
           [ "${{ needs.electron-smoke.result }}" = "success" ]
+          # Dependency audit only runs for main/develop and their PRs; release/win7
+          # intentionally remains on its independent Python 3.8 dependency contract.
+          if [ "${{ needs.dependency-audit.result }}" != "success" ] && [ "${{ needs.dependency-audit.result }}" != "skipped" ]; then
+            echo "::error::Dependency audit failed: ${{ needs.dependency-audit.result }}"
+            exit 1
+          fi
 
           backend_status="${{ needs.backend.result }}"
           py38_status="${{ needs.backend-py38.result }}"

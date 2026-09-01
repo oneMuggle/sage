@@ -39,6 +39,50 @@ def _table_columns(db_path: str, table_name: str) -> list[dict]:
     ]
 
 
+def test_fresh_database_does_not_create_legacy_skills_table():
+    """新数据库不应创建已废弃且无运行时消费者的 skills 表。"""
+    db_path = _init_fresh_db()
+    try:
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='skills'"
+            ).fetchone()
+            assert row is None
+    finally:
+        os.unlink(db_path)
+
+
+def test_init_db_preserves_existing_legacy_skills_table():
+    """迁移只停止新建，不删除已有用户数据库中的 skills 表或数据。"""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "CREATE TABLE skills (id TEXT PRIMARY KEY, name TEXT NOT NULL)"
+            )
+            conn.execute("INSERT INTO skills (id, name) VALUES ('legacy-1', '旧技能')")
+            conn.commit()
+
+        db = Database(db_path)
+        db.init_db()
+        db.close()
+
+        with sqlite3.connect(db_path) as conn:
+            table = conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='skills'"
+            ).fetchone()
+            row = conn.execute(
+                "SELECT id, name FROM skills WHERE id='legacy-1'"
+            ).fetchone()
+            assert table is not None
+            assert row == ("legacy-1", "旧技能")
+    finally:
+        os.unlink(db_path)
+
+
 # ------------------------------------------------------------------ #
 # Table existence
 # ------------------------------------------------------------------ #

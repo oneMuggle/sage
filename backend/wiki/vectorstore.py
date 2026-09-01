@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from .files import secure_atomic_write_file, secure_read_text
+
 
 @dataclass
 class ChunkRecord:
@@ -62,8 +64,11 @@ class VectorStore:
         """
         storage_path = project_root / ".llm-wiki" / "vectors.json"
 
-        if storage_path.exists():
-            data = json.loads(storage_path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(secure_read_text(project_root, storage_path))
+        except FileNotFoundError:
+            data = None
+        if data is not None:
             if data.get("dim") != dim:
                 raise ValueError(f"向量维度不匹配: 文件={data.get('dim')}, 请求={dim}")
 
@@ -80,7 +85,6 @@ class VectorStore:
             return cls(storage_path, dim, records)
 
         # 创建新存储
-        storage_path.parent.mkdir(parents=True, exist_ok=True)
         store = cls(storage_path, dim, [])
         store._flush()
         return store
@@ -177,14 +181,16 @@ class VectorStore:
             ],
         }
 
-        tmp_path = self.storage_path.with_suffix(".json.tmp")
-        tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp_path.replace(self.storage_path)
+        secure_atomic_write_file(
+            self.storage_path.parent.parent,
+            self.storage_path,
+            json.dumps(data, ensure_ascii=False, indent=2),
+        )
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     """计算余弦相似度。"""
-    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    dot = sum(x * y for x, y in zip(a, b))  # noqa: B905 — strict keyword is unavailable on Python 3.8
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
 
