@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ from backend.wiki.files import secure_open_file, secure_read_file, secure_write_
 
 def _make_hardlink_or_skip(source: Path, target: Path) -> None:
     try:
-        target.hardlink_to(source)
+        os.link(str(source), str(target))
     except (OSError, NotImplementedError):
         pytest.skip("hardlinks are not supported")
 
