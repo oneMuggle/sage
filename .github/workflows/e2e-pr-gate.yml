@@ -37,6 +37,7 @@ jobs:
       - run: npm ci && npm run build:electron
       - run: |
           set -euo pipefail
+          export SAGE_LOCAL_AUTH_TOKEN="$(conda run -n sage-backend python -c 'import secrets; print(secrets.token_urlsafe(32))')"
           conda run -n sage-backend python -m backend.main > backend.log 2>&1 &
           backend_pid=$!
           trap 'kill "$backend_pid" 2>/dev/null || true; cat backend.log' EXIT

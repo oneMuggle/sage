@@ -81,13 +81,26 @@ async def test_inproc_prefers_execute_v2_and_keeps_sync_fallback():
 def test_production_adapter_builds_fail_closed_script_runner(tmp_path, monkeypatch):
     monkeypatch.setenv("SAGE_SKILLS_DIR", str(tmp_path))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
     with patch("backend.skills.register_skill_md_skills") as register:
         adapter = InprocSkillAdapter(registry=SkillRegistry())
 
     runner = register.call_args.kwargs["script_runner"]
     assert isinstance(runner, ScriptRunner)
     assert isinstance(runner._sandbox, SubprocessSandboxAdapter)
-    assert runner._allowed_roots == [tmp_path]
+    allowed_roots = {Path(root).resolve() for root in runner._allowed_roots}
+    configured_root = tmp_path.resolve()
+    builtin_root = (Path(__file__).resolve().parents[2] / "skills").resolve()
+    assert configured_root in allowed_roots
+    assert builtin_root in allowed_roots
+    assert allowed_roots <= {configured_root, builtin_root}
+    outside_root = tmp_path.parent / "outside-skills"
+    outside_doc = SkillMdDocument(
+        name="outside", description="outside", base_dir=outside_root
+    )
+    result = asyncio.run(runner.run_script(outside_doc, "run.py", ()))
+    assert result.success is False
+    assert "路径校验失败" in (result.error or "")
     assert asyncio.run(runner._confirmer.confirm("demo", tmp_path / "x.py", ())) is False
     assert adapter._script_runner is runner
 
