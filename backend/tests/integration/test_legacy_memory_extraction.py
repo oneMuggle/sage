@@ -31,7 +31,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(autouse=True)
-def _isolate_legacy_memory_path():
+def _isolate_legacy_memory_path(client):
     """Keep this module on the legacy queue path regardless of prior tests."""
     previous_lifecycle = getattr(app.state, "lifecycle", None)
     previous_hooks = getattr(app.state, "hooks", None)
@@ -40,6 +40,9 @@ def _isolate_legacy_memory_path():
     try:
         yield
     finally:
+        from backend.memory.async_extractor import reset_memory_extraction_queue
+
+        reset_memory_extraction_queue()
         app.state.lifecycle = previous_lifecycle
         app.state.hooks = previous_hooks
 
