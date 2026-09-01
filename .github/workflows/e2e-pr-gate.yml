@@ -37,10 +37,22 @@ jobs:
       - run: npm ci && npm run build:electron
       - run: |
           set -euo pipefail
-          export SAGE_LOCAL_AUTH_TOKEN="$(conda run -n sage-backend python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-          conda run -n sage-backend python -m backend.main > backend.log 2>&1 &
+          if ! auth_token="$(conda run -n sage-backend python -c 'import secrets; print(secrets.token_urlsafe(32))')" || [ -z "$auth_token" ]; then
+            echo 'Failed to generate SAGE_LOCAL_AUTH_TOKEN' >&2
+            exit 1
+          fi
+          export SAGE_LOCAL_AUTH_TOKEN="$auth_token"
+          setsid --wait conda run -n sage-backend python -m backend.main > backend.log 2>&1 &
           backend_pid=$!
-          trap 'kill "$backend_pid" 2>/dev/null || true; cat backend.log' EXIT
+          cleanup() {
+            exit_code=$?
+            set +e
+            kill -- -"$backend_pid" 2>/dev/null
+            wait "$backend_pid"
+            cat backend.log
+            exit "$exit_code"
+          }
+          trap cleanup EXIT
           for attempt in $(seq 1 60); do
             if ! kill -0 "$backend_pid" 2>/dev/null; then
               cat backend.log

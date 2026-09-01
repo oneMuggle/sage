@@ -4,8 +4,9 @@
  * Hits 4 real backend routes to confirm the live server is up and the
  * most-used API surfaces are reachable. Each assertion targets the GET
  * handler explicitly (no 404/405 acceptance): the backend's real handlers
- * either succeed with 200, return a meaningful auth/project gate (401/403/404),
- * or fail with a 422 only when the request shape is wrong (memory/search).
+ * either succeed with 200, or return the expected project gate (403) for the
+ * deliberately unregistered wiki probe path. The memory/search assertion also
+ * permits the documented validation responses.
  *
  * Substitution note (Task 11 ruling R2): the brief originally requested
  *   GET /api/v1/evolution/scheduler/status
@@ -17,14 +18,12 @@
  * We test `/api/v1/evolution/logs` with bare GET (handler defaults are valid).
  *
  * Auth: gated by `SAGE_LOCAL_AUTH_TOKEN` (the workflow injects a random
- * capability token before live-boot). When the token is missing the spec
- * is skipped — every assertion requires a real authenticated request so
- * 401s don't pollute the smoke signal.
+ * capability token before live-boot). A missing token must fail at request
+ * execution time so every route test reports the misconfiguration.
  *
  * Wiki search params (verified against `backend/api/wiki_routes.py:630`):
- * the handler requires `query` (not `q`) and `project_path`. We supply
- * both and accept project-gating rejections (401/403/404) as evidence
- * that the GET handler is mounted on the live server.
+ * the handler requires `query` (not `q`) and `project_path`. We supply both
+ * and use an unregistered absolute path whose authenticated response is 403.
  */
 
 import { test, expect } from '@playwright/test';
@@ -39,8 +38,6 @@ function authenticatedHeaders(): { Authorization: string } {
 
   return { Authorization: `Bearer ${AUTH_TOKEN}` };
 }
-
-test.skip(!AUTH_TOKEN, 'SAGE_LOCAL_AUTH_TOKEN is not configured');
 
 test('GET /api/v1/sessions returns 200 (route mounted)', async ({ request }) => {
   const resp = await request.get(`${BACKEND_URL}/api/v1/sessions`, {
@@ -69,16 +66,14 @@ test('GET /api/v1/evolution/logs returns 200 (live; stub-world has scheduler/sta
   expect(200).toBe(resp.status());
 });
 
-test('GET /api/v1/wiki/search returns 200, 401, 403, or 404 (route mounted, project gated)', async ({
-  request,
-}) => {
+test('GET /api/v1/wiki/search rejects an unregistered project with 403', async ({ request }) => {
   // Real backend requires `query` (NOT `q`) and `project_path` (mandatory).
-  // Bare `?q=test` would yield 422, which would mask whether the GET handler
-  // is mounted at all — supply the actual handler params, then accept auth/
-  // project-gating rejections (401/403/404) as proof the route is reachable.
+  // Use the actual handler params and an unregistered absolute path. With a
+  // valid token, authorize_registered_project deterministically returns 403;
+  // 401 means authentication failed and 404 means the route is not mounted.
   const resp = await request.get(
     `${BACKEND_URL}/api/v1/wiki/search?query=test&project_path=/tmp/sage-route-smoke-probe`,
     { headers: authenticatedHeaders() },
   );
-  expect([200, 401, 403, 404]).toContain(resp.status());
+  expect(403).toBe(resp.status());
 });
