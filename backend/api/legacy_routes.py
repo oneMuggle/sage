@@ -2255,14 +2255,29 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
-# Important-1 (final review) — 生产聊天路径驱动生命周期:
-                # WS-C P0-2: 统一记忆写入路径 — assistant 落盘成功后才触发
-                # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
-                # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
+                # Important-1: when lifespan has installed a lifecycle manager,
+                # use it so memory_written hooks and traceability are emitted.
+                # Legacy boots without lifecycle use the async extraction queue.
                 if assistant_message_id is not None:
-                    await _extract_legacy_chat_memory(
-                        request_id, data.session_id, data.message, done_content
-                    )
+                    lifecycle = getattr(request.app.state, "lifecycle", None)
+                    if lifecycle is not None:
+                        try:
+                            await lifecycle.on_turn_complete(
+                                data.session_id,
+                                [
+                                    {"role": "user", "content": data.message},
+                                    {"role": "assistant", "content": done_content},
+                                ],
+                                source_message_id=assistant_message_id,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
+                            )
+                    else:
+                        await _extract_legacy_chat_memory(
+                            request_id, data.session_id, data.message, done_content
+                        )
 
                 # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
                 # 在推送 DONE 事件前完成，确保前端 onDone → loadSessions() 读到新标题。

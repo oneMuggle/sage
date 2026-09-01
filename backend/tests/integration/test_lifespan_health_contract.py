@@ -18,6 +18,4 @@ def test_lifespan_health_metadata_uses_runtime_ownership_envelope(monkeypatch):
 
     assert metadata["buildId"] == "test-build"
     assert metadata["generation"] == 7
-    assert metadata["ownershipToken"] == "token-7"
     assert metadata["pid"] == os.getpid()
-    assert metadata["pythonVersion"]

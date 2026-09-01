@@ -66,7 +66,7 @@ HEALTH_URL = "/health"
 # 5 轮中位数设计完全保留:阈值只放宽,逻辑不动。功能正确性由其他测试保障。
 #
 # 守门目标:"§1.2 修复真的失效时才应失败",而非"runner 资源抖动一次就红"。
-HEALTH_P99_THRESHOLD_MS = 400.0  # 5 轮 P99 中位数阈值(2026-08-13 spec, CI 现实校准)
+HEALTH_P99_THRESHOLD_MS = 500.0  # 5 轮 P99 中位数阈值；与 main CI 基线校准一致
 HEALTH_BASELINE_THRESHOLD_MS = 20.0  # 空闲时 /health 单次 < 20ms
 
 # 门禁重复次数:5 轮 P99 取中位数。抗 CI runner 抖动:
