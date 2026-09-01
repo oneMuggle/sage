@@ -1,6 +1,7 @@
 """安全技能写入器的跨平台安全契约测试。"""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -56,7 +57,7 @@ def test_overwrite_rejects_hardlink_without_modifying_outside(tmp_path: Path) ->
     outside.write_text("outside-secret", encoding="utf-8")
     target = target_dir / "SKILL.md"
     try:
-        target.hardlink_to(outside)
+        os.link(str(outside), str(target))
     except (OSError, NotImplementedError):
         pytest.skip("hardlinks are not supported")
 

@@ -680,6 +680,40 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
     )
 
 
+async def _extract_legacy_chat_memory(
+    request_id: str,
+    session_id: str,
+    user_text: str,
+    assistant_text: str,
+) -> None:
+    """将 legacy 聊天记忆提取非阻塞地投递到单 worker 队列。"""
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        settings = SettingsRepository().get_json("app_settings")
+        enabled = not isinstance(settings, dict) or bool(settings.get("autoMemory", True))
+        if not enabled:
+            return
+
+        from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
+        from backend.adapters.out.memory.adapter import MemoryAdapter
+        from backend.memory.async_extractor import ExtractionRequest, get_memory_extraction_queue
+        from backend.memory.extractor import MemoryExtractor
+
+        get_memory_extraction_queue().submit(
+            ExtractionRequest(
+                memory_port=MemoryAdapter(get_memory_manager()),
+                extractor=MemoryExtractor(llm_client=HttpxLLMAdapter()),
+                user_text=user_text,
+                assistant_text=assistant_text,
+                session_id=session_id,
+                enabled=True,
+            )
+        )
+    except Exception as exc:
+        logger.warning("[REQ %s] legacy 记忆提取失败(忽略, 不影响聊天): %s", request_id, exc)
+
+
 # 进程内重入护栏（MEDIUM-1 后端兜底）：同一会话并发手动压缩时，两者都会在
 # 对方落盘前通过 should_compact 检查，导致续接消息行重复写入。前端
 # isLoading 守卫是第一道防线，这里是便宜的第二道。
@@ -1373,6 +1407,7 @@ def legacy_get_settings() -> Optional[Dict]:
     from backend.data.settings_canonicalizer import (
         detect_legacy_snake_pollution,
         redact_secrets,
+        strip_unknown_fields,
         to_camel,
     )
     from backend.data.settings_repo import SettingsRepository
@@ -1395,11 +1430,11 @@ def legacy_get_settings() -> Optional[Dict]:
     # → 迁移默认值 ``openai-compatible`` (OpenAI 兼容端点是最常见的 LM Studio /
     # Ollama / OpenAI 替代品). 这样旧客户端无需再写一次 PUT 就能看到正确 protocol.
     _migrate_default_protocol(translated)
-    # alpha.8 (2026-08-27): 脱敏 endpoints[*].apiKey 明文 — 抹掉真实 key,
-    # 留下 ``hasApiKey`` 元数据, 让前端按 endpoint ID 从 localStorage 找回本地 key
-    # (见 [[sage-settings-redaction-key-preservation]]). redact_secrets 不修改入参,
-    # 返回新 dict.
-    return redact_secrets(translated)
+    # 2026-08-26: 边界净化白名单外字段 + 脱敏 apiKey, 防止历史残留
+    # (memory_server_sync / local_model_path 等) 重新污染 GET 响应,
+    # 同时保证明文凭据不通过 HTTP 回前端 (OWASP A02:2021).
+    cleaned = strip_unknown_fields(translated)
+    return redact_secrets(cleaned)
 
 
 def _migrate_default_protocol(settings: dict) -> None:
@@ -1483,7 +1518,6 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
             detail={
                 "type": "invalid_settings_payload",
                 "message": "设置内容无效，请检查字段格式",
-                "field": field,
             },
         ) from exc
     try:
@@ -2222,31 +2256,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
 # Important-1 (final review) — 生产聊天路径驱动生命周期:
-                # 让 legacy /chat/stream (renderer 唯一聊天命令) 也触发
-                # on_turn_complete → 提取 + 持久化 + memory_written → SSE
-                # /memory/events → 前端实时 toast/prepend。source_message_id
-                # 用真实持久化的 assistant 消息 id,保证 MemoryCard
-                # click-to-trace 命中 Chat 的 data-turn-id。auto_memory gate
-                # 在 lifecycle 内部处理 — 该开关从此对生产路径生效。
-                # 全程 try/except — 记忆系统故障绝不打断聊天流。
-                lifecycle = getattr(request.app.state, "lifecycle", None)
-                # #269 契约: assistant 落盘失败 (id None) 时不触发提取 —
-                # 不产生引用不存在消息的脏记忆。仅成功持久化后才驱动
-                # on_turn_complete (提取 + memory_written → SSE)。
-                if lifecycle is not None and assistant_message_id is not None:
-                    try:
-                        await lifecycle.on_turn_complete(
-                            data.session_id,
-                            [
-                                {"role": "user", "content": data.message},
-                                {"role": "assistant", "content": done_content},
-                            ],
-                            source_message_id=assistant_message_id,
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
-                        )
+                # WS-C P0-2: 统一记忆写入路径 — assistant 落盘成功后才触发
+                # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
+                # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
+                if assistant_message_id is not None:
+                    await _extract_legacy_chat_memory(
+                        request_id, data.session_id, data.message, done_content
+                    )
 
                 # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
                 # 在推送 DONE 事件前完成，确保前端 onDone → loadSessions() 读到新标题。

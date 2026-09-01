@@ -1,5 +1,6 @@
 """Security regressions for Vision ingest temporary-file handling."""
 
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -123,7 +124,7 @@ def test_bounded_read_rejects_hardlink_to_outside(tmp_path: Path):
     linked = tmp_path / "source.md"
     outside.write_bytes(b"outside secret")
     try:
-        linked.hardlink_to(outside)
+        os.link(str(outside), str(linked))
     except (OSError, NotImplementedError):
         pytest.skip("hardlinks are not supported")
 

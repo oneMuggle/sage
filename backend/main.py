@@ -5,6 +5,7 @@ FastAPI 后端入口
 import asyncio
 import logging
 import os
+import sys
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -103,8 +104,14 @@ def _build_health_metadata() -> dict:
     """Return only the non-sensitive fields needed by the supervisor."""
     return {
         "buildId": os.environ.get("SAGE_BUILD_ID", "dev-build"),
+        "commit": os.environ.get("SAGE_BUILD_COMMIT", "unknown"),
+        "branch": os.environ.get("SAGE_BUILD_BRANCH", "unknown"),
+        "version": os.environ.get("SAGE_BUILD_VERSION", "0.1.1"),
+        "electronVersion": os.environ.get("SAGE_ELECTRON_VERSION", "unknown"),
+        "pythonVersion": ".".join(str(part) for part in sys.version_info[:3]),
         "pid": os.getpid(),
         "generation": int(os.environ.get("SAGE_BACKEND_GENERATION", "0")),
+        "ownershipToken": os.environ.get("SAGE_BACKEND_OWNERSHIP_TOKEN", ""),
     }
 
 
