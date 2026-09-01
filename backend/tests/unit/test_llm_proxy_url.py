@@ -117,6 +117,7 @@ async def test_resolver_dns_timeout_maps_to_gaierror(monkeypatch):
 async def test_resolver_rejects_when_dns_concurrency_is_saturated(monkeypatch):
     """DNS waiters fail closed instead of growing an unbounded queue."""
     import asyncio
+
     import backend.api.llm_proxy_routes as proxy_routes
 
     monkeypatch.setattr(proxy_routes, "_DNS_SEMAPHORE", asyncio.Semaphore(0))

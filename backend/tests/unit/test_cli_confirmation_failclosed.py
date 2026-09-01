@@ -55,7 +55,13 @@ def test_async_callback_returning_true_is_honored():
     assert result is True
 
 
-@pytest.mark.parametrize("timeout_error", [asyncio.TimeoutError(), TimeoutError()])
+@pytest.mark.parametrize(
+    "timeout_error",
+    [
+        TimeoutError(),
+        type("AsyncTimeoutError", (asyncio.TimeoutError,), {})(),
+    ],
+)
 def test_timeout_errors_are_caught_and_rejected(timeout_error):
     """asyncio 与内置超时异常都必须 fail-closed。"""
     def timed_out(**_):

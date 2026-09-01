@@ -35,9 +35,8 @@ if TYPE_CHECKING:
 
 from ..registry import SkillRegistry
 from .frontmatter import (
-    _NAME_MAX_LENGTH,
-    _is_valid_name,
     SkillMdParseError,
+    _is_valid_name,
     _split_frontmatter,
     _strip_bom,
     parse,

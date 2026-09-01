@@ -121,7 +121,7 @@ def test_llm_stream_call_parses_sse_chunks():
 def test_llm_stream_call_uses_nested_async_context_managers():
     """流式请求在 Python 3.8 下仍正确进入并退出两个异步上下文。"""
     ctx = make_llm_context("http://api.test/v1", "sk-abc", "gpt-4o-mini")
-    response = _sse_response(["data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}"])
+    response = _sse_response(['data: {"choices":[{"delta":{"content":"ok"}}]}'])
     stream_ctx = MagicMock()
     stream_ctx.__aenter__ = AsyncMock(return_value=response)
     stream_ctx.__aexit__ = AsyncMock(return_value=None)

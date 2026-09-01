@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { resolve } from 'node:path';
 import { COMMAND_ROUTES, UnknownIpcCommandError } from '../commands';
 
 // ===== Skills IPC (Task 4: PR-C load-new) =====
@@ -82,13 +83,14 @@ describe('skills IPC (PR-C)', () => {
   });
 
   it('pick-files returns paths from dialog', async () => {
+    const selectedPaths = [resolve('path', 'a.md'), resolve('path', 'b.md')];
     mocks.dialog.showOpenDialog.mockResolvedValue({
       canceled: false,
-      filePaths: ['/path/a.md', '/path/b.md'],
+      filePaths: selectedPaths,
     });
     const handler = registeredHandlers.get('skills:pick-files')!;
     const result = await handler({});
-    expect(result).toEqual(['/path/a.md', '/path/b.md']);
+    expect(result).toEqual(selectedPaths);
     expect(mocks.dialog.showOpenDialog).toHaveBeenCalledTimes(1);
   });
 

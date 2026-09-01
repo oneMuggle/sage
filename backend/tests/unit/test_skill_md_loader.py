@@ -482,7 +482,7 @@ def test_compute_hash_fails_closed_for_symlink(tmp_path):
     link = tmp_path / "link.md"
     link.symlink_to(target)
 
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="symlink"):
         SkillMdHotLoader._compute_hash(link)
 
 

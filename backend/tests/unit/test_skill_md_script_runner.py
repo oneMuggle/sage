@@ -395,7 +395,7 @@ async def test_script_runner_rejects_replaced_regular_file_after_confirmation(tm
     async def confirm_then_replace(**kwargs):
         replacement = tmp_path / "replacement.py"
         replacement.write_text("print('after')\n", encoding="utf-8")
-        os.replace(str(replacement), str(script))
+        replacement.replace(script)
         return True
 
     confirmer = MagicMock(spec=ConfirmationPort)
@@ -422,7 +422,7 @@ async def test_script_runner_rejects_same_hash_different_inode_after_confirmatio
     async def confirm_then_replace_same_content(**kwargs):
         replacement = tmp_path / "replacement.py"
         replacement.write_bytes(content)
-        os.replace(str(replacement), str(script))
+        replacement.replace(script)
         return True
 
     confirmer = MagicMock(spec=ConfirmationPort)

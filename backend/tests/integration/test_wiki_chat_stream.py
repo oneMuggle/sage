@@ -189,7 +189,8 @@ async def test_chat_stream_llm_error_reraises_after_error_event(wiki_project, pa
     from backend.wiki.chat import ChatConfig, chat_with_wiki_stream
 
     events = []
-    with pytest.raises(RuntimeError, match="LLM exploded"):
+
+    async def collect_events() -> None:
         async for line in chat_with_wiki_stream(
             config=ChatConfig(
                 llm_base_url="http://api.test",
@@ -204,6 +205,9 @@ async def test_chat_stream_llm_error_reraises_after_error_event(wiki_project, pa
             ctx=_stub_llm_context_broken(),
         ):
             events.append(json.loads(line.decode("utf-8")))
+
+    with pytest.raises(RuntimeError, match="LLM exploded"):
+        await collect_events()
     assert events[-1] == {
         "event": "error",
         "data": {"code": "wiki_chat_failed", "message": "Wiki 聊天失败"},

@@ -26,7 +26,7 @@ def _is_ssl_bootstrap_test(request):
 
 
 @pytest.fixture(autouse=True)
-def configure_test_http_client_auth(request, monkeypatch):
+def _configure_test_http_client_auth(request, monkeypatch):
     """为直接创建的测试 HTTP 客户端注入合成本地 capability。"""
     # These tests intentionally verify that an empty Authorization header is
     # omitted when forwarding credentials to the configured LLM upstream.

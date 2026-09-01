@@ -142,18 +142,17 @@ async def test_execute_success(resolved_dummy: ResolvedExecutable) -> None:
         return_code=0,
     )
 
-    with patch.object(adapter, "_resolver") as mock_resolver:
-        with patch(
-            "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=mock_proc),
-        ):
-            mock_resolver.resolve.return_value = resolved_dummy
-            req = ComputeRequest(
-                operation="compute_shock",
-                params={"mach": 6.5, "gamma": 1.4, "p1": 1000, "t1": 250},
-            )
+    with patch.object(adapter, "_resolver") as mock_resolver, patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=mock_proc),
+    ):
+        mock_resolver.resolve.return_value = resolved_dummy
+        req = ComputeRequest(
+            operation="compute_shock",
+            params={"mach": 6.5, "gamma": 1.4, "p1": 1000, "t1": 250},
+        )
 
-            result = await adapter.execute(req)
+        result = await adapter.execute(req)
 
     assert result.success is True
     assert result.output == {"p2": 51000, "t2": 1456.8, "m2": 0.4}
@@ -217,20 +216,18 @@ async def test_execute_timeout(resolved_dummy: ResolvedExecutable) -> None:
     async def short_timeout(_coro: Any, timeout: float) -> Any:
         raise TimeoutError()
 
-    with patch.object(adapter, "_resolver") as mock_resolver:
-        with patch(
-            "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=mock_proc),
-        ):
-            with patch(
-                "backend.adapters.out.compute.subprocess_adapter.asyncio.wait_for",
-                new=short_timeout,
-            ):
-                mock_resolver.resolve.return_value = resolved_dummy
+    with patch.object(adapter, "_resolver") as mock_resolver, patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=mock_proc),
+    ), patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.wait_for",
+        new=short_timeout,
+    ):
+        mock_resolver.resolve.return_value = resolved_dummy
 
-                result = await adapter.execute(
-                    ComputeRequest(operation="compute_shock", params={"mach": 6.5})
-                )
+        result = await adapter.execute(
+            ComputeRequest(operation="compute_shock", params={"mach": 6.5})
+        )
 
     assert result.success is False
     assert result.error is not None
@@ -254,23 +251,21 @@ async def test_execute_per_request_timeout_overrides(
 
     mock_proc = _make_mock_proc(stdout=b"{}", return_code=0)
 
-    with patch.object(adapter, "_resolver") as mock_resolver:
-        with patch(
-            "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=mock_proc),
-        ):
-            with patch(
-                "backend.adapters.out.compute.subprocess_adapter.asyncio.wait_for",
-                new=capturing_wait_for,
-            ):
-                mock_resolver.resolve.return_value = resolved_dummy
-                await adapter.execute(
-                    ComputeRequest(
-                        operation="compute_shock",
-                        params={"mach": 6.5},
-                        timeout_ms=5000,
-                    )
-                )
+    with patch.object(adapter, "_resolver") as mock_resolver, patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=mock_proc),
+    ), patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.wait_for",
+        new=capturing_wait_for,
+    ):
+        mock_resolver.resolve.return_value = resolved_dummy
+        await adapter.execute(
+            ComputeRequest(
+                operation="compute_shock",
+                params={"mach": 6.5},
+                timeout_ms=5000,
+            )
+        )
 
     assert captured_timeouts == [5.0]  # 5000ms → 5s
 
@@ -289,15 +284,14 @@ async def test_execute_process_failed(resolved_dummy: ResolvedExecutable) -> Non
         return_code=1,
     )
 
-    with patch.object(adapter, "_resolver") as mock_resolver:
-        with patch(
-            "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=mock_proc),
-        ):
-            mock_resolver.resolve.return_value = resolved_dummy
-            result = await adapter.execute(
-                ComputeRequest(operation="compute_shock", params={"mach": 6.5})
-            )
+    with patch.object(adapter, "_resolver") as mock_resolver, patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=mock_proc),
+    ):
+        mock_resolver.resolve.return_value = resolved_dummy
+        result = await adapter.execute(
+            ComputeRequest(operation="compute_shock", params={"mach": 6.5})
+        )
 
     assert result.success is False
     assert result.error is not None
@@ -319,15 +313,14 @@ async def test_execute_invalid_params(resolved_dummy: ResolvedExecutable) -> Non
         return_code=2,
     )
 
-    with patch.object(adapter, "_resolver") as mock_resolver:
-        with patch(
-            "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=mock_proc),
-        ):
-            mock_resolver.resolve.return_value = resolved_dummy
-            result = await adapter.execute(
-                ComputeRequest(operation="compute_shock", params={"mach": 6.5})
-            )
+    with patch.object(adapter, "_resolver") as mock_resolver, patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=mock_proc),
+    ):
+        mock_resolver.resolve.return_value = resolved_dummy
+        result = await adapter.execute(
+            ComputeRequest(operation="compute_shock", params={"mach": 6.5})
+        )
 
     assert result.success is False
     assert result.error is not None
@@ -347,15 +340,14 @@ async def test_execute_output_parse_error(resolved_dummy: ResolvedExecutable) ->
         return_code=0,
     )
 
-    with patch.object(adapter, "_resolver") as mock_resolver:
-        with patch(
-            "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=mock_proc),
-        ):
-            mock_resolver.resolve.return_value = resolved_dummy
-            result = await adapter.execute(
-                ComputeRequest(operation="compute_shock", params={"mach": 6.5})
-            )
+    with patch.object(adapter, "_resolver") as mock_resolver, patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=mock_proc),
+    ):
+        mock_resolver.resolve.return_value = resolved_dummy
+        result = await adapter.execute(
+            ComputeRequest(operation="compute_shock", params={"mach": 6.5})
+        )
 
     assert result.success is False
     assert result.error is not None
@@ -370,15 +362,14 @@ async def test_execute_output_not_object(resolved_dummy: ResolvedExecutable) -> 
 
     mock_proc = _make_mock_proc(stdout=b"[1, 2, 3]", return_code=0)
 
-    with patch.object(adapter, "_resolver") as mock_resolver:
-        with patch(
-            "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
-            new=AsyncMock(return_value=mock_proc),
-        ):
-            mock_resolver.resolve.return_value = resolved_dummy
-            result = await adapter.execute(
-                ComputeRequest(operation="compute_shock", params={"mach": 6.5})
-            )
+    with patch.object(adapter, "_resolver") as mock_resolver, patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=mock_proc),
+    ):
+        mock_resolver.resolve.return_value = resolved_dummy
+        result = await adapter.execute(
+            ComputeRequest(operation="compute_shock", params={"mach": 6.5})
+        )
 
     assert result.success is False
     assert result.error is not None
@@ -395,15 +386,14 @@ async def test_execute_unexpected_exception_swallowed(
     """spawn 子进程时抛非预期异常 → 收敛为 INTERNAL_ERROR,不冒泡。"""
     adapter = SubprocessComputeAdapter(_make_config())
 
-    with patch.object(adapter, "_resolver") as mock_resolver:
-        with patch(
-            "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
-            new=AsyncMock(side_effect=OSError("permission denied")),
-        ):
-            mock_resolver.resolve.return_value = resolved_dummy
-            result = await adapter.execute(
-                ComputeRequest(operation="compute_shock", params={"mach": 6.5})
-            )
+    with patch.object(adapter, "_resolver") as mock_resolver, patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
+        new=AsyncMock(side_effect=OSError("permission denied")),
+    ):
+        mock_resolver.resolve.return_value = resolved_dummy
+        result = await adapter.execute(
+            ComputeRequest(operation="compute_shock", params={"mach": 6.5})
+        )
 
     assert result.success is False
     assert result.error is not None
@@ -428,18 +418,17 @@ async def test_argv_includes_subcommand_and_flags(
         captured_argv.extend(argv)
         return mock_proc
 
-    with patch.object(adapter, "_resolver") as mock_resolver:
-        with patch(
-            "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
-            new=capture_exec,
-        ):
-            mock_resolver.resolve.return_value = resolved_dummy
-            await adapter.execute(
-                ComputeRequest(
-                    operation="compute_shock",
-                    params={"mach": 6.5, "gamma": 1.4, "p1": 1000, "t1": 250},
-                )
+    with patch.object(adapter, "_resolver") as mock_resolver, patch(
+        "backend.adapters.out.compute.subprocess_adapter.asyncio.create_subprocess_exec",
+        new=capture_exec,
+    ):
+        mock_resolver.resolve.return_value = resolved_dummy
+        await adapter.execute(
+            ComputeRequest(
+                operation="compute_shock",
+                params={"mach": 6.5, "gamma": 1.4, "p1": 1000, "t1": 250},
             )
+        )
 
     assert captured_argv[:3] == ["/usr/bin/python3", "-m", "ghm"]
     assert "core" in captured_argv

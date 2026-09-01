@@ -226,58 +226,12 @@ jobs:
           NPM_AUDIT_PROD_OUTCOME: ${{ steps.npm-audit-prod.outcome }}
           PIP_AUDIT_OUTCOME: ${{ steps.pip-audit.outcome }}
         run: |
-          python - <<'PY'
-          import json
-          import os
-          import sys
-          from pathlib import Path
+          python scripts/check_dependency_audit.py \
+            --npm npm-audit.json \
+            --npm-prod npm-audit-prod.json \
+            --pip pip-audit.json \
+            --policy .github/dependency-audit-policy.json
 
-          failures = []
-          if os.environ['NPM_CI_OUTCOME'] != 'success':
-              failures.append(f"npm ci: {os.environ['NPM_CI_OUTCOME']}")
-          if os.environ['PYTHON_INSTALL_OUTCOME'] != 'success':
-              failures.append(f"Python audit environment: {os.environ['PYTHON_INSTALL_OUTCOME']}")
-          for name, outcome in {
-              'npm audit': os.environ['NPM_AUDIT_ALL_OUTCOME'],
-              'npm audit --omit=dev': os.environ['NPM_AUDIT_PROD_OUTCOME'],
-              'pip-audit': os.environ['PIP_AUDIT_OUTCOME'],
-          }.items():
-              if outcome != 'success':
-                  failures.append(f"{name} command: {outcome}")
-
-          def load_json(path):
-              try:
-                  return json.loads(Path(path).read_text())
-              except (OSError, json.JSONDecodeError) as exc:
-                  failures.append(f"{path}: unreadable audit report ({exc})")
-                  return None
-
-          npm_counts = []
-          for path in ('npm-audit.json', 'npm-audit-prod.json'):
-              report = load_json(path)
-              if report is not None:
-                  counts = report.get('metadata', {}).get('vulnerabilities', {})
-                  npm_counts.append((path, counts))
-                  if counts.get('critical', 0) or counts.get('high', 0):
-                      failures.append(
-                          f"{path}: critical={counts.get('critical', 0)}, high={counts.get('high', 0)}"
-                      )
-
-          pip_report = load_json('pip-audit.json')
-          if isinstance(pip_report, list):
-              pip_findings = sum(len(item.get('vulns', [])) for item in pip_report)
-              if pip_findings:
-                  failures.append(f"pip-audit: {pip_findings} vulnerable package findings")
-          elif pip_report is not None:
-              failures.append('pip-audit.json: expected a JSON list')
-
-          if failures:
-              print('::error::Dependency audit gate failed')
-              for failure in failures:
-                  print(f"::error::{failure}")
-              sys.exit(1)
-          print('Dependency audit gate passed: no critical/high npm findings and no Python findings.')
-          PY
 
   # ========== Frontend: lint + type + test + coverage ==========
   frontend:

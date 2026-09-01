@@ -526,27 +526,31 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
     if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) return false;
     try {
       const health = await new Promise<unknown>((resolve) => {
-        const req = http.get(BACKEND_HEALTH, {
-          headers: { 'X-Sage-Backend-Ownership': expectedBackend.ownershipToken },
-        }, (res) => {
-          let body = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk: string) => {
-            body += chunk;
-          });
-          res.on('end', () => {
-            if (res.statusCode !== 200) {
-              resolve(null);
-              return;
-            }
-            try {
-              resolve(JSON.parse(body) as unknown);
-            } catch {
-              resolve(null);
-            }
-          });
-          res.resume();
-        });
+        const req = http.get(
+          BACKEND_HEALTH,
+          {
+            headers: { 'X-Sage-Backend-Ownership': expectedBackend.ownershipToken },
+          },
+          (res) => {
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', (chunk: string) => {
+              body += chunk;
+            });
+            res.on('end', () => {
+              if (res.statusCode !== 200) {
+                resolve(null);
+                return;
+              }
+              try {
+                resolve(JSON.parse(body) as unknown);
+              } catch {
+                resolve(null);
+              }
+            });
+            res.resume();
+          },
+        );
         req.on('error', () => resolve(null));
         req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
@@ -947,7 +951,8 @@ function registerIpcHandlers(): void {
         typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs)
           ? Math.min(Math.max(request.timeoutMs, 1), 60_000)
           : undefined;
-      const timeout = timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
+      const timeout =
+        timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await fetch(`${BACKEND_URL}${backendPath}`, {
           method: request.method ?? 'GET',
