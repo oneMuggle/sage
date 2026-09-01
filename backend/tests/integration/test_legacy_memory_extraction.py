@@ -29,6 +29,21 @@ from backend.main import app
 
 pytestmark = pytest.mark.integration
 
+
+@pytest.fixture(autouse=True)
+def _isolate_legacy_memory_path():
+    """Keep this module on the legacy queue path regardless of prior tests."""
+    previous_lifecycle = getattr(app.state, "lifecycle", None)
+    previous_hooks = getattr(app.state, "hooks", None)
+    app.state.lifecycle = None
+    app.state.hooks = None
+    try:
+        yield
+    finally:
+        app.state.lifecycle = previous_lifecycle
+        app.state.hooks = previous_hooks
+
+
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
 
 # 提取器 mock 固定返回的事实（绕过真实 LLM 提取）
