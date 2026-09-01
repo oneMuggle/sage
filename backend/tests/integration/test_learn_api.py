@@ -19,7 +19,7 @@ def client():
     """Create a TestClient with the legacy router mounted."""
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    return TestClient(app, headers={"Authorization": "Bearer test-local-auth-token"})
 
 
 def _mock_session_exists(session_id: str):

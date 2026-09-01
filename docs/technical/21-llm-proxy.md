@@ -167,6 +167,14 @@ Sage 的设计允许用户在前端同时配多个端点(OpenAI / Ollama / 自�
 
 ## 安全考量
 
+### DNS rebinding 防护
+
+每个代理请求在建立连接前只解析上游 hostname 一次。解析在专用、有界的 DNS executor 中执行（最多 16 个并发任务）；当门限已满时请求立即 fail-closed，不排队。`socket.getaddrinfo` 的阻塞调用无法被 asyncio 取消：超时只取消等待 Future，底层线程可能继续运行，因此 executor 不能使用默认共享池，也不能在应用 shutdown 时 `wait=True`。应用生命周期以 `wait=False` 关闭专用池并取消尚未开始的任务；正在执行的 OS resolver 调用会自然结束，应用 shutdown 不会在此处等待（但 Python 解释器退出时，非 daemon 的 executor worker 仍可能受运行中的 `getaddrinfo` 影响，不能宣称进程退出完全不等待）。Python 3.8 不支持 `cancel_futures` 时使用兼容回退。超时或解析失败统一返回安全的 `upstream_unreachable` (502)。解析结果会先经过私网/环回/链路本地/保留地址检查，然后注入 request-scoped 的 fixed-IP `httpcore` network backend；TCP 连接只使用该已验证 IP，httpx URL/origin 仍保留原 hostname，因此 HTTPS 证书校验、TLS SNI 和 HTTP Host 都继续使用 hostname。非流式与 SSE 流式路径共用这一 transport。
+
+实现针对 `httpx==0.26.0` 配套的 `httpcore==1.0.9`，并集中封装、显式检查内部 pool API；升级 httpcore 若不再提供该接口会 fail-closed，而不会退回 hostname 二次解析。transport 使用 `trust_env=False`，所以 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 及其大小写变体不会把 fixed-IP provider 请求绕到环境代理；该路由不支持隐式代理链路。`SAGE_LLM_PROXY_ALLOWED_HOSTS` 中明确列出的 hostname 可连接本地/私有地址，但仍然固定到本次解析的 IP。
+
+该保护不覆盖恶意或被攻陷的本地 DNS resolver，也不提供跨请求的 DNS pinning；每个请求都会重新解析并重新校验。
+
 - **API Key 不暴露给浏览器以外**:
   之前 Ollama 默认无鉴权无所谓;以后若前端要接真要 key 的服务(OpenAI 等),
   API key 仍只在浏览器内存(用户在输入框填的),通过 `Authorization` 头传到后端,

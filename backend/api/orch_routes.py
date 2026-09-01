@@ -15,7 +15,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 from backend.data.database import _SQLITE_LOCK
 from backend.data.orch_run_repo import OrchRun, OrchRunRepository
@@ -62,7 +62,13 @@ class OrchRunDetail(BaseModel):
 
 
 class PlanUpdateRequest(BaseModel):
-    plan: List[Dict[str, Any]] = Field(min_length=1)  # ≥1 行守卫
+    plan: List[Dict[str, Any]] = Field()  # ≥1 行守卫
+
+    @validator("plan")
+    def _require_plan(cls, value: List[Dict[str, Any]]) -> List[Dict[str, Any]]:  # noqa: N805 — Pydantic v1 validator signature
+        if not value:
+            raise ValueError("plan must contain at least one item")
+        return value
 
 
 class ResumeResponse(BaseModel):

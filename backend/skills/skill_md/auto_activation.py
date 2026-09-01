@@ -41,10 +41,12 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, List, Sequence, Tuple
 
+from .resources import render_body_with_resources
 from .skill import SkillMdDocument
+from .validation import SkillMdSecurityError
 
 logger = logging.getLogger(__name__)
 
@@ -147,12 +149,24 @@ def build_context_block(activated: Sequence[SkillMdDocument]) -> str:
 
     parts: List[str] = []
     for doc in activated:
+        try:
+            body = doc.body
+            if doc.base_dir is not None and doc.resources is not None:
+                body = render_body_with_resources(
+                    body, base_dir=doc.base_dir, index=doc.resources
+                )
+        except SkillMdSecurityError:
+            logger.warning(
+                "Skipping auto-activated skill '%s' due to resource security validation",
+                doc.name,
+            )
+            continue
         parts.append(
             "<system-reminder>\n"
             f"Skill '{doc.name}' auto-activated: {doc.description}\n"
             "Follow the instructions below.\n"
             "</system-reminder>\n\n"
-            f"{doc.body}"
+            f"{body}"
         )
 
     header = "以下是根据用户本次消息自动激活的技能指令 (A16 Skill Auto-Activation):"
@@ -203,6 +217,21 @@ def auto_activate(
             continue
         if not _matches(message_lower, doc.when_to_use):
             continue
+        rendered_doc = doc
+        if doc.base_dir is not None and doc.resources is not None:
+            try:
+                rendered_body = render_body_with_resources(
+                    doc.body, base_dir=doc.base_dir, index=doc.resources
+                )
+            except SkillMdSecurityError:
+                logger.warning(
+                    "Skipping auto-activated skill '%s' due to resource security validation",
+                    doc.name,
+                )
+                continue
+            # Cache the rendered prompt and clear render metadata so the
+            # build step cannot render it a second time.
+            rendered_doc = replace(doc, body=rendered_body, base_dir=None, resources=None)
         if len(activated) >= MAX_AUTO_ACTIVATED_SKILLS:
             logger.debug(
                 "A16 auto-activation count cap reached (%d); remaining skills ignored",
@@ -211,7 +240,7 @@ def auto_activate(
             break
         # 尺寸闸门: 投影超限的整块跳过 (不截断 body), 后续较小的
         # 命中技能仍可参与 (first-fit); 超限技能显式 slash 调用不受影响
-        next_chars = projected_chars + len(doc.body) + _PER_SKILL_OVERHEAD_CHARS
+        next_chars = projected_chars + len(rendered_doc.body) + _PER_SKILL_OVERHEAD_CHARS
         if next_chars > MAX_CONTEXT_BLOCK_CHARS:
             logger.debug(
                 "A16 auto-activation skipping '%s': block would exceed %d chars",
@@ -219,7 +248,7 @@ def auto_activate(
                 MAX_CONTEXT_BLOCK_CHARS,
             )
             continue
-        activated.append(doc)
+        activated.append(rendered_doc)
         projected_chars = next_chars
 
     if not activated:

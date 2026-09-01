@@ -49,38 +49,52 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     expect(screen.getByText('对话')).toBeInTheDocument();
     expect(screen.getByText('设置')).toBeInTheDocument();
     // 高级入口隐藏
-    expect(screen.queryByText('技能')).not.toBeInTheDocument();
     expect(screen.queryByText('编排')).not.toBeInTheDocument();
     expect(screen.queryByText('Office')).not.toBeInTheDocument();
   });
 
   it('unlocks the entry for the currently visited advanced route', () => {
-    renderSidebarAt('/skills');
-    // 访问 /skills 即解锁并显示技能入口
-    expect(screen.getByText('技能')).toBeInTheDocument();
+    renderSidebarAt('/orchestration');
+    // 访问 /orchestration 即解锁并显示编排入口
+    expect(screen.getByText('编排')).toBeInTheDocument();
     // 未访问的高级入口仍然隐藏
-    expect(screen.queryByText('编排')).not.toBeInTheDocument();
     expect(screen.queryByText('Office')).not.toBeInTheDocument();
     // 解锁状态已持久化
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
-    expect(stored).toContain('skills');
+    expect(stored).toContain('orchestration');
   });
 
   it('keeps the entry visible on later loads once unlocked (sticky)', () => {
-    localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['skills']));
+    localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['orchestration']));
     renderSidebarAt('/chat');
-    expect(screen.getByText('技能')).toBeInTheDocument();
-    expect(screen.queryByText('编排')).not.toBeInTheDocument();
+    expect(screen.getByText('编排')).toBeInTheDocument();
+    expect(screen.queryByText('Office')).not.toBeInTheDocument();
   });
 
   it('shows all advanced entries when all are unlocked', () => {
-    localStorage.setItem(
-      FEATURE_UNLOCK_STORAGE_KEY,
-      JSON.stringify(['skills', 'orchestration', 'office']),
-    );
+    localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['orchestration', 'office']));
     renderSidebarAt('/chat');
-    expect(screen.getByText('技能')).toBeInTheDocument();
     expect(screen.getByText('编排')).toBeInTheDocument();
     expect(screen.getByText('Office')).toBeInTheDocument();
+  });
+});
+
+/**
+ * 技能入口不受渐进式披露门控（PR-1.1）。
+ *
+ * U10 sticky-unlock 曾把 `/skills` 纳入 `ADVANCED_FEATURE_BY_PATH`，造成自锁：
+ * 入口可见性依赖"已经用过入口"，而技能页是 SKILL.md 体系的唯一 UI 入口。
+ */
+describe('Sidebar — skills entry is not gated', () => {
+  it('renders the skills entry with no feature unlocked', () => {
+    renderSidebarAt('/chat');
+    expect(screen.getByText('技能')).toBeInTheDocument();
+  });
+
+  it('does not write a skills unlock record when visiting /skills', () => {
+    renderSidebarAt('/skills');
+    expect(screen.getByText('技能')).toBeInTheDocument();
+    const raw = localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY);
+    expect(raw == null ? [] : JSON.parse(raw)).not.toContain('skills');
   });
 });

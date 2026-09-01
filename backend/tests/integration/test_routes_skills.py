@@ -24,6 +24,23 @@ pytestmark = pytest.mark.integration
 PREFIX = "/api/v1"
 
 
+@pytest.mark.asyncio()
+async def test_skills_routes_require_local_bearer_token(client, reset_skill_adapter):
+    """敏感技能路由无 token/错误 token 返回 401，正确 token 通过。"""
+    missing = await client.get(f"{PREFIX}/skills", headers={"Authorization": ""})
+    assert missing.status_code == 401
+    wrong = await client.get(
+        f"{PREFIX}/skills", headers={"Authorization": "Bearer wrong-token"}
+    )
+    assert wrong.status_code == 401
+
+    allowed = await client.get(
+        f"{PREFIX}/skills",
+        headers={"Authorization": "Bearer test-local-auth-token"},
+    )
+    assert allowed.status_code == 200
+
+
 # ========== list_skills ==========
 
 

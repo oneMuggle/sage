@@ -10,6 +10,20 @@
 
 ---
 
+### Ingest 写入安全边界（2026-08-31）
+
+`backend/wiki/ingest.py::copy_to_raw` 不再使用 `exists()` 后的普通
+`write_bytes()`。POSIX 通过项目根、`raw`、`raw/sources` 的目录 fd 链，配合
+`O_NOFOLLOW` 打开目录，并用 `O_EXCL` 创建新文件；既有普通文件仍保持幂等跳过，
+但 broken symlink、其他非普通文件和 symlink 目标都会失败。文件名只允许叶名称，
+因此不能借助 `..` 或分隔符越出项目根。
+
+Windows 使用 `lstat` 检查目录/目标、`O_EXCL` 创建叶文件和可用的 `O_NOFOLLOW`；
+由于 Python/Windows 标准文件 API 无法将 junction/目录替换与 POSIX 目录 fd
+等价地锁定，缺少 no-follow 能力时会 fail-closed。即使启用该路径，Windows
+junction 替换仍是残余平台限制，不能宣称与 POSIX 同等级的 TOCTOU 保证。
+
+
 ## 流式架构 (PR-114+115+116, 2026-07-08 起)
 
 ### 1. 全景
@@ -681,9 +695,12 @@ pub async fn wiki_get_graph(
 
 ### 累计 wiki 测试: 115 passed (Phase 1 20 + Phase 2 24 + Phase 3 33 + Phase 4 18 + Phase 5 23)
 
-### 与后续 Phase 衔接
+### Wiki Markdown 递归读取安全（HIGH 修复）
 
-- **Phase 6 (Graph UI)**: 调 `getWikiGraph(project, query, limit)` 渲染 React Flow
+搜索、图谱缓存和聊天上下文统一通过 `backend/wiki/files.py::iter_wiki_markdown` 枚举 Wiki Markdown。遍历使用显式目录栈，不跟随 symlink；symlink 文件与 symlink 目录在读取前直接跳过，并对每个候选再次校验 canonical 路径位于项目根内。聊天只读取该 helper 产生的相对路径映射，因此 token 检索、向量检索融合后也不会通过伪造路径读取项目根外内容。合法普通 Markdown 文件仍保留搜索、图谱节点和聊天引用。
+
+回归测试覆盖 `wiki/leak.md -> outside.md`、symlink directory 以及合法 `wiki/legal.md`，验证 search/graph/chat 均不读取外部内容。
+
 - **Phase 7 (进度 + 流式 UI)**: Phase 5 提供 RAG 相关性辅助
 
 ## Phase 6: React Flow 知识图谱视图 ✅

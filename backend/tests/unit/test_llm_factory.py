@@ -11,7 +11,9 @@ from backend.data.settings_repo import SettingsRepository
 from backend.orchestration.llm_factory import (
     DEFAULT_MODEL,
     build_llm_client_from_settings,
+    build_provider_client_from_settings,
     load_llm_config_from_settings,
+    resolve_provider_and_model_from_settings,
 )
 
 
@@ -96,6 +98,122 @@ class TestLoadLLMConfig:
     def test_corrupted_top_level_returns_none(self):
         _seed_settings(["not", "a", "dict"])
         assert load_llm_config_from_settings() is None
+
+
+    def test_discovered_model_is_resolved_with_provider(self):
+        _seed_settings(
+            {
+                "endpoints": [
+                    {
+                        "id": "local",
+                        "protocol": "ollama",
+                        "baseUrl": "http://localhost:11434/v1",
+                        "apiKey": "",
+                        "discoveredModels": [{"id": "discovered-model"}],
+                    }
+                ],
+                "modelSelections": {"chatModel": {"endpointId": "local"}},
+            }
+        )
+
+        resolved = resolve_provider_and_model_from_settings()
+
+        assert resolved is not None
+        assert resolved[1] == "discovered-model"
+
+    def test_unknown_protocol_fails_closed(self):
+        _seed_settings(
+            {
+                "endpoints": [
+                    {
+                        "id": "unknown",
+                        "protocol": "not-supported",
+                        "baseUrl": "https://api.example.test/v1",
+                        "apiKey": "key",
+                    }
+                ],
+                "modelSelections": {"chatModel": {"endpointId": "unknown"}},
+            }
+        )
+
+        assert resolve_provider_and_model_from_settings() is None
+
+        _seed_settings(
+            {
+                "endpoints": [
+                    {
+                        "id": "local",
+                        "protocol": "ollama",
+                        "baseUrl": "http://localhost:11434/v1",
+                        "apiKey": "",
+                    },
+                    {
+                        "id": "remote",
+                        "protocol": "openai-compatible",
+                        "baseUrl": "https://api.example.test/v1",
+                        "apiKey": "remote-key",
+                    },
+                ],
+                "modelSelections": {"chatModel": {"endpointId": "local", "modelId": "llama3"}},
+            }
+        )
+
+        client = build_provider_client_from_settings(model="llama3")
+
+        from backend.adapters.out.llm.ollama import OllamaProvider
+
+        assert isinstance(client, OllamaProvider)
+        assert client._api_key == ""
+        assert client._base_url == "http://localhost:11434/v1"
+
+    def test_selected_openai_compatible_endpoint_allows_empty_api_key(self):
+        _seed_settings(
+            {
+                "endpoints": [
+                    {
+                        "id": "local-compatible",
+                        "protocol": "openai-compatible",
+                        "baseUrl": "http://localhost:8080/v1",
+                        "apiKey": "",
+                    },
+                    {
+                        "id": "remote",
+                        "protocol": "openai-compatible",
+                        "baseUrl": "https://api.example.test/v1",
+                        "apiKey": "remote-key",
+                    },
+                ],
+                "modelSelections": {
+                    "chatModel": {"endpointId": "local-compatible", "modelId": "local-model"}
+                },
+            }
+        )
+
+        client = build_provider_client_from_settings(model="local-model")
+
+        from backend.adapters.out.llm.openai import OpenAIProvider
+
+        assert isinstance(client, OpenAIProvider)
+        assert client._api_key == ""
+        assert client._base_url == "http://localhost:8080/v1"
+
+    def test_selected_endpoint_without_base_url_does_not_fallback(self):
+        _seed_settings(
+            {
+                "endpoints": [
+                    {"id": "selected", "protocol": "ollama", "apiKey": ""},
+                    {
+                        "id": "fallback",
+                        "protocol": "openai-compatible",
+                        "baseUrl": "https://api.example.test/v1",
+                        "apiKey": "fallback-key",
+                    },
+                ],
+                "modelSelections": {"chatModel": {"endpointId": "selected", "modelId": "local-model"}},
+            }
+        )
+
+        assert build_provider_client_from_settings(model="local-model") is None
 
 
 class TestBuildClient:

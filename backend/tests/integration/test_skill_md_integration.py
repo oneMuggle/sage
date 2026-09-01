@@ -117,6 +117,153 @@ def _build_adapter_from_existing(tmp_path: Path) -> InprocSkillAdapter:  # noqa:
     return adapter
 
 
+def test_script_dispatch_denied_before_sandbox(tmp_path: Path):
+    """REST/adapter script dispatch defaults to permission enforcement."""
+    from backend.adapters.out.skill import InprocSkillAdapter
+    from backend.skills.registry import SkillRegistry
+    from backend.skills.skill_md.skill import SkillMdDocument, SkillMdSkill
+    from backend.tools.permissions import PermissionEnforcer, PermissionMode
+
+    class RecordingRunner:
+        def __init__(self):
+            self.called = False
+
+        async def run_script(self, **kwargs):
+            self.called = True
+            raise AssertionError("sandbox must not be reached")
+
+    runner = RecordingRunner()
+    skill = SkillMdSkill(
+        SkillMdDocument(name="scripted", description="scripted", base_dir=tmp_path),
+        script_runner=runner,
+    )
+    registry = SkillRegistry()
+    registry.register(skill)
+    adapter = InprocSkillAdapter(
+        registry=registry,
+        enforcer_factory=lambda: PermissionEnforcer(
+            mode=PermissionMode.READ_ONLY, rules=[]
+        ),
+    )
+
+    result = asyncio.run(adapter.execute("scripted", "", {"script": "run.py"}))
+
+    assert result.success is False
+    assert "权限拒绝" in (result.error or "")
+    assert result.metadata["permission_denied"] is True
+    assert runner.called is False
+
+
+def test_script_dispatch_check_exception_fails_closed(tmp_path: Path):
+    """A permission backend failure must not become an unhandled REST error."""
+    from backend.adapters.out.skill import InprocSkillAdapter
+    from backend.skills.registry import SkillRegistry
+    from backend.skills.skill_md.skill import SkillMdDocument, SkillMdSkill
+
+    class RecordingRunner:
+        called = False
+
+        async def run_script(self, **kwargs):
+            self.called = True
+            raise AssertionError("sandbox must not be reached")
+
+    class RaisingEnforcer:
+        def check(self, *_args, **_kwargs):
+            raise RuntimeError("permission backend unavailable")
+
+    runner = RecordingRunner()
+    registry = SkillRegistry()
+    registry.register(
+        SkillMdSkill(
+            SkillMdDocument(name="scripted", description="scripted", base_dir=tmp_path),
+            script_runner=runner,
+        )
+    )
+    adapter = InprocSkillAdapter(registry=registry, enforcer_factory=RaisingEnforcer)
+
+    result = asyncio.run(adapter.execute("scripted", "", {"script": "run.py"}))
+
+    assert result.success is False
+    assert "权限检查失败" in (result.error or "")
+    assert result.metadata["permission_denied"] is True
+    assert runner.called is False
+
+
+def test_script_dispatch_needs_approval_is_not_auto_approved(tmp_path: Path):
+    """Approval decisions fail closed because adapter has no approval gate."""
+    from backend.adapters.out.skill import InprocSkillAdapter
+    from backend.skills.registry import SkillRegistry
+    from backend.skills.skill_md.skill import SkillMdDocument, SkillMdSkill
+    from backend.tools.permissions import PermissionDecision
+
+    class RecordingRunner:
+        called = False
+
+        async def run_script(self, **kwargs):
+            self.called = True
+            raise AssertionError("sandbox must not be reached")
+
+    runner = RecordingRunner()
+    registry = SkillRegistry()
+    registry.register(
+        SkillMdSkill(
+            SkillMdDocument(name="scripted", description="scripted", base_dir=tmp_path),
+            script_runner=runner,
+        )
+    )
+    adapter = InprocSkillAdapter(
+        registry=registry,
+        enforcer_factory=lambda: type(
+            "ApprovalOnlyEnforcer",
+            (),
+            {"check": lambda *_args, **_kwargs: PermissionDecision(False, True, "需要审批")},
+        )(),
+    )
+
+    result = asyncio.run(adapter.execute("scripted", "", {"script": "run.py"}))
+
+    assert result.success is False
+    assert "需要审批" in (result.error or "")
+    assert runner.called is False
+
+
+    """FULL_ACCESS permits a non-destructive script when the runner is injected."""
+    from backend.adapters.out.skill import InprocSkillAdapter
+    from backend.skills.registry import SkillRegistry
+    from backend.skills.skill_md.skill import SkillMdDocument, SkillMdSkill
+    from backend.tools.permissions import PermissionEnforcer, PermissionMode
+
+    class RecordingRunner:
+        def __init__(self):
+            self.called = False
+
+        async def run_script(self, **kwargs):
+            self.called = True
+            from backend.skills.base import SkillResult
+
+            return SkillResult(success=True, content="ok")
+
+    runner = RecordingRunner()
+    registry = SkillRegistry()
+    registry.register(
+        SkillMdSkill(
+            SkillMdDocument(name="scripted", description="scripted", base_dir=tmp_path),
+            script_runner=runner,
+        )
+    )
+    adapter = InprocSkillAdapter(
+        registry=registry,
+        enforcer_factory=lambda: PermissionEnforcer(
+            mode=PermissionMode.FULL_ACCESS, rules=[]
+        ),
+    )
+
+    result = asyncio.run(adapter.execute("scripted", "", {"script": "run.py"}))
+
+    assert result.success is True
+    assert runner.called is True
+
+
 # =====================================================================
 # InprocSkillAdapter 端到端
 # =====================================================================
@@ -147,7 +294,8 @@ def test_adapter_extended_serialization_for_skillmd(tmp_path):
     skillmd = by_name["alpha"]
     assert skillmd["source"] == "skillmd"
     assert skillmd["body"] == "my body"
-    assert skillmd["base_dir"] == str(tmp_path / "alpha")
+    assert skillmd["base_dir"] == "."
+    assert str(tmp_path) not in skillmd["base_dir"]
     assert skillmd["version"] == "0.1.0"
 
 

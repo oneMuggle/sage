@@ -3,8 +3,10 @@
 不用 freezegun：classify 用注入的 now_ms + 相对时间戳；store 用 autouse 临时 SQLite。
 """
 
+import sqlite3
 from unittest.mock import Mock
 
+from backend.data.database import Database
 from backend.skills.lifecycle import (
     DEFAULT_STALE_THRESHOLD_MS,
     LIFECYCLE_ACTIVE,
@@ -13,6 +15,7 @@ from backend.skills.lifecycle import (
     SkillLifecycleStore,
     classify_lifecycle,
     get_lifecycle_store,
+    get_stale_threshold_ms,
     reset_lifecycle_store,
 )
 
@@ -58,6 +61,16 @@ def test_custom_threshold():
     assert classify_lifecycle(_NOW - 10 * _DAY, False, _NOW, seven_days) == LIFECYCLE_STALE
 
 
+def test_configured_stale_threshold(monkeypatch):
+    monkeypatch.setenv("SAGE_SKILL_STALE_THRESHOLD_MS", "1234")
+    assert get_stale_threshold_ms() == 1234
+
+
+def test_invalid_stale_threshold_uses_default(monkeypatch):
+    monkeypatch.setenv("SAGE_SKILL_STALE_THRESHOLD_MS", "-1")
+    assert get_stale_threshold_ms() == DEFAULT_STALE_THRESHOLD_MS
+
+
 # ---------- SkillLifecycleStore（真实临时 SQLite，autouse setup_test_db） ---------- #
 
 
@@ -92,3 +105,45 @@ def test_get_archived_names_best_effort_on_db_error():
     bad = SkillLifecycleStore(db=Mock(get_connection=Mock(side_effect=RuntimeError("boom"))))
     assert bad.get_archived_names() == set()
     assert bad.is_archived("x") is False
+
+
+def test_old_lifecycle_schema_is_migrated_with_enabled_defaults(tmp_path):
+    """真实老库打开后补列，存量行默认启用。"""
+    db_path = str(tmp_path / "legacy.db")
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE skill_lifecycle ("
+        "name TEXT PRIMARY KEY, archived INTEGER DEFAULT 0, archived_at INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO skill_lifecycle (name, archived, archived_at) VALUES (?, ?, ?)",
+        ("legacy-skill", 0, None),
+    )
+    conn.commit()
+    conn.close()
+
+    db = Database(db_path=db_path)
+    db.init_db()
+    columns = {row["name"] for row in db.get_connection().execute("PRAGMA table_info(skill_lifecycle)")}
+    assert {"enabled", "enabled_at"}.issubset(columns)
+    assert db.get_connection().execute(
+        "SELECT enabled, enabled_at FROM skill_lifecycle WHERE name = ?",
+        ("legacy-skill",),
+    ).fetchone()["enabled"] == 1
+    assert SkillLifecycleStore(db=db).get_disabled_names() == set()
+    db.close()
+
+
+def test_set_enabled_roundtrip_across_store_instances():
+    """开关写入后，新的 store 实例能读回显式禁用名。"""
+    store = get_lifecycle_store()
+    store.set_enabled("search", False)
+    reset_lifecycle_store()
+    assert "search" in get_lifecycle_store().get_disabled_names()
+
+
+def test_set_enabled_is_best_effort_on_db_error(caplog):
+    """DB 异常只记录 warning，不向调用方抛出。"""
+    bad = SkillLifecycleStore(db=Mock(get_connection=Mock(side_effect=RuntimeError("boom"))))
+    bad.set_enabled("search", False)
+    assert "Skill lifecycle persist failed" in caplog.text

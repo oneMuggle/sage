@@ -23,13 +23,25 @@
 
 from __future__ import annotations
 
+import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 from sage_core import SkillResult, SkillSpec
 from sage_core.repositories import SkillPort  # noqa: F401  (structural typing target)
 
 from backend.skills.registry import SkillRegistry as _SkillRegistry
+from backend.tools.bash_validation import validate_bash
+from backend.tools.permissions import (
+    DEFAULT_PERMISSION_MODE,
+    PermissionEnforcer,
+    load_enforcer_from_settings,
+)
+
+# Client-facing skill responses use a logical placeholder instead of exposing
+# filesystem locations. Internal loaders and file operations retain real paths.
+_SAFE_SKILL_PATH = "."
 
 if TYPE_CHECKING:
     from backend.skills.skill_md.auto_activation import AutoActivationResult
@@ -51,7 +63,11 @@ class InprocSkillAdapter:
     用于前端折叠展示 SKILL.md 的 body。
     """
 
-    def __init__(self, registry: Optional[_SkillRegistry] = None) -> None:
+    def __init__(
+        self,
+        registry: Optional[_SkillRegistry] = None,
+        enforcer_factory: Optional[Callable[[], PermissionEnforcer]] = None,
+    ) -> None:
         # 接受外部注入(用于测试)或使用新建 registry 并装载 builtin
         if registry is not None:
             self._registry = registry
@@ -60,11 +76,39 @@ class InprocSkillAdapter:
 
             self._registry = _SkillRegistry()
             register_all_skills(self._registry)
+        # M1: REST/port skill dispatch has no approval gate, so approval decisions
+        # fail closed instead of being mistaken for local HTTP authentication.
+        self._enforcer_factory = enforcer_factory or load_enforcer_from_settings
         # v1: SKILL.md 适配层 (guarded 调用, 失败不破坏 adapter 构造)
+        self._script_runner = None
+        skill_dirs = []
         try:
+            from backend.adapters.out.skill_script.cli_confirmation import (
+                ConfiguredScriptConfirmationAdapter,
+            )
+            from backend.adapters.out.skill_script.subprocess_sandbox import (
+                SubprocessSandboxAdapter,
+            )
+            from backend.skills.skill_md.loader import (
+                build_gating_context_for_dirs,
+                discover_skill_md_dirs,
+            )
+            from backend.skills.skill_md.script_runner import ScriptRunner
+
+            skill_dirs = discover_skill_md_dirs()
+            self._script_runner = ScriptRunner(
+                sandbox=SubprocessSandboxAdapter(),
+                confirmer=ConfiguredScriptConfirmationAdapter.from_environment(),
+                allowed_roots=list(skill_dirs),
+            )
             from backend.skills import register_skill_md_skills
 
-            register_skill_md_skills(self._registry)
+            register_skill_md_skills(
+                self._registry,
+                dirs=[str(path) for path in skill_dirs],
+                gating_ctx=build_gating_context_for_dirs(skill_dirs),
+                script_runner=self._script_runner,
+            )
         except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
             import logging
 
@@ -72,10 +116,12 @@ class InprocSkillAdapter:
         # PR-C: store SkillMdHotLoader dirs + SkillMdImporter for rescan_skill_mds / import_skill_mds
         try:
             from backend.skills.skill_md.importer import SkillMdImporter
-            from backend.skills.skill_md.loader import discover_skill_md_dirs
 
-            self._skill_dirs = discover_skill_md_dirs()
-            self._skill_importer = SkillMdImporter(self._registry)
+            self._skill_dirs = list(skill_dirs)
+            self._skill_importer = SkillMdImporter(
+                self._registry,
+                script_runner=self._script_runner,
+            )
         except Exception as exc:  # noqa: BLE001 - adapter init must be tolerant
             import logging
 
@@ -84,6 +130,7 @@ class InprocSkillAdapter:
             self._skill_importer = None
         # enabled 状态: 未登记视为 enabled
         self._enabled: Dict[str, bool] = {}
+        self._hydrate_enabled_from_db()
         # usage_count: 进程内累计, 启动时从 skill_usage 表回填持久化计数
         # （"重启不归零"）; 运行期 bump 同时写内存 + DB。
         self._usage_count: Dict[str, int] = {}
@@ -137,17 +184,26 @@ class InprocSkillAdapter:
                 success=False,
                 error=f"skill '{name}' not found",
             )
-        if not self.is_enabled(name):
+        if not self.is_available(name):
             return SkillResult(
                 success=False,
-                error=f"skill '{name}' is disabled",
+                error=f"skill '{name}' is disabled or archived",
             )
         # BaseSkill.execute 接收 (params, context); action 当前未用
         # (BaseSkill 是单动作技能, action 留给未来的 multi-action skill)
         skill = self._registry.get(name)
         assert skill is not None  # exists() 已 guard
+        # Only the SKILL.md script path dispatches an external process.  Preserve
+        # the legacy builtin/body REST contract while gating the dangerous path.
+        if self._is_script_dispatch(skill, args):
+            denied = self._enforce_permission(args)
+            if denied is not None:
+                return denied
         try:
-            raw = skill.execute(args, context={})
+            if hasattr(skill, "execute_v2"):
+                raw = await skill.execute_v2(params=args, context={})
+            else:
+                raw = skill.execute(args, context={})
         except Exception as exc:  # pragma: no cover - 防御性兜底
             return SkillResult(
                 success=False,
@@ -164,21 +220,74 @@ class InprocSkillAdapter:
             error=raw.error,
         )
 
+    def _is_script_dispatch(self, skill: Any, args: Dict[str, Any]) -> bool:
+        """Return true only for SKILL.md's external-script execution path."""
+        from backend.skills.skill_md.skill import SkillMdSkill
+
+        return isinstance(skill, SkillMdSkill) and args.get("script") is not None
+
+    def _enforce_permission(self, args: Dict[str, Any]) -> Optional[SkillResult]:
+        """Check skill EXECUTE permission; no HTTP approval channel exists."""
+        try:
+            try:
+                enforcer = self._enforcer_factory()
+            except Exception as exc:  # noqa: BLE001 - fail closed on settings failure
+                logging.getLogger(__name__).warning(
+                    "技能权限执行器构造失败，回退默认 enforcer: %s", exc
+                )
+                enforcer = PermissionEnforcer(
+                    mode=DEFAULT_PERMISSION_MODE,
+                    rules=(),
+                    bash_validator=validate_bash,
+                )
+            decision = enforcer.check("skill", args)
+        except Exception as exc:  # noqa: BLE001 - permission checks fail closed
+            logging.getLogger(__name__).warning("技能权限检查失败，拒绝执行: %s", exc)
+            return SkillResult(
+                success=False,
+                error=f"权限拒绝: 权限检查失败: {exc}",
+                metadata={"permission_denied": True},
+            )
+        if decision.allowed and not decision.needs_approval:
+            return None
+        logging.getLogger(__name__).info(
+            "InprocSkillAdapter 权限拒绝: skill reason=%s", decision.reason
+        )
+        return SkillResult(
+            success=False,
+            error=f"权限拒绝: {decision.reason}",
+            metadata={"permission_denied": True},
+        )
+
     # ========== 路由层辅助方法 (端口协议外) ==========
 
     def has_skill(self, name: str) -> bool:
         """技能是否已注册(路由层用来在 execute 前判 404)。"""
         return self._registry.exists(name)
 
+    def is_available(self, name: str) -> bool:
+        """Whether a registered skill may be invoked right now."""
+        return self._registry.exists(name) and self.is_enabled(name) and not self.is_archived(name)
+
     def is_enabled(self, name: str) -> bool:
         """技能是否启用(默认 True)。"""
         return self._enabled.get(name, True)
 
     def set_enabled(self, name: str, enabled: bool) -> bool:
-        """设置技能 enabled 状态。返回 False 表示技能名不存在。"""
+        """设置技能 enabled 状态并持久化。返回 False 表示技能名不存在。"""
         if not self._registry.exists(name):
             return False
         self._enabled[name] = bool(enabled)
+        try:
+            from backend.skills.lifecycle import get_lifecycle_store
+
+            get_lifecycle_store().set_enabled(name, enabled)
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            import logging
+
+            logging.getLogger(__name__).warning(
+                f"Skill lifecycle persist failed for {name!r}: {exc}"
+            )
         return True
 
     def usage_count(self, name: str) -> int:
@@ -241,6 +350,19 @@ class InprocSkillAdapter:
 
             logging.getLogger(__name__).debug(f"技能归档状态回填跳过: {exc}")
 
+    def _hydrate_enabled_from_db(self) -> None:
+        """从 ``skill_lifecycle`` 回填显式禁用技能（best-effort）。"""
+        try:
+            from backend.skills.lifecycle import get_lifecycle_store
+
+            for name in get_lifecycle_store().get_disabled_names():
+                if name and self._registry.exists(name):
+                    self._enabled[name] = False
+        except Exception as exc:  # pragma: no cover - 防御性兜底
+            import logging
+
+            logging.getLogger(__name__).debug(f"技能开关状态回填跳过: {exc}")
+
     def is_archived(self, name: str) -> bool:
         """技能是否已归档（内存热缓存，O(1)）。"""
         return name in self._archived
@@ -276,7 +398,7 @@ class InprocSkillAdapter:
         active/stale 读取时即时算（对 ``now`` 比较 ``skill_usage.last_used_at``），
         archived 取内存缓存。供 ``list_skills_extended`` 一次性调用（非热路径）。
         """
-        from backend.skills.lifecycle import classify_lifecycle
+        from backend.skills.lifecycle import classify_lifecycle, get_stale_threshold_ms
         from backend.skills.usage import get_usage_store
 
         usage = {row["name"]: row for row in get_usage_store().get_all()}
@@ -284,7 +406,9 @@ class InprocSkillAdapter:
         result: Dict[str, str] = {}
         for name in self._registry.list_names():
             last = (usage.get(name) or {}).get("last_used_at")
-            result[name] = classify_lifecycle(last, name in self._archived, now_ms)
+            result[name] = classify_lifecycle(
+                last, name in self._archived, now_ms, get_stale_threshold_ms()
+            )
         return result
 
     # ========== A16: Skill Auto-Activation ==========
@@ -367,9 +491,8 @@ class InprocSkillAdapter:
         Raises:
             LookupError: 命令未注册 (路由层转 404)
         """
-        # 归档技能的 slash command 不可用（路由层转 404 command_not_found）
-        if self._command_archived(command):
-            raise LookupError(f"slash command archived: {command!r}")
+        if self._command_unavailable(command):
+            raise LookupError(f"slash command unavailable: {command!r}")
         result = await self._slash_registry.execute_command(
             command_name=command,
             args=tuple(args),
@@ -396,13 +519,24 @@ class InprocSkillAdapter:
         return [
             cmd
             for cmd in self._slash_registry.list_commands()
-            if not self._command_archived(cmd)
+            if not self._command_unavailable(cmd)
         ]
+
+    def _command_unavailable(self, command: str) -> bool:
+        """Return true when command's skill is disabled or archived."""
+        resolved = self._slash_registry.resolve(command)
+        return resolved is not None and not self.is_available(resolved.name)
 
     def _command_archived(self, command: str) -> bool:
         """slash command 对应的技能是否已归档。"""
         resolved = self._slash_registry.resolve(command)
         return resolved is not None and self.is_archived(resolved.name)
+
+    def _rebuild_slash_registry(self) -> None:
+        """Refresh the immutable slash-command index after registry mutations."""
+        from backend.skills.skill_md.slash_registry import SlashCommandRegistry
+
+        self._slash_registry = SlashCommandRegistry.from_registry(self._registry)
 
     # ========== Skills management: SKILL.md 删除 (PR-A) ==========
 
@@ -416,7 +550,9 @@ class InprocSkillAdapter:
             name: 技能名 (匹配 ``^[a-z0-9-]{1,64}$``)。
 
         Returns:
-            dict: ``{"deleted": True, "name": str, "base_dir": str}``
+            dict: ``{"deleted": True, "name": str, "base_dir": "."}``.
+            The logical path is intentionally safe for REST/IPC clients; the
+            deleter retains the real filesystem path for internal auditing.
 
         Raises:
             BuiltinSkillError: name 是 builtin (路由层 → 400)
@@ -429,9 +565,33 @@ class InprocSkillAdapter:
         # 引入 SkillMdDeleter 仅供管理 API 使用,不影响路由热路径)
         from backend.skills.skill_md.delete import SkillMdDeleter
 
-        deleter = SkillMdDeleter(self._registry)
+        registered = self._registry.get(name)
+        if registered is None:
+            # Keep the deleter's established 404 semantics for unregistered names.
+            deleter = SkillMdDeleter(self._registry)
+        else:
+            from backend.skills.skill_md.skill import SkillMdSkill
+
+            # Bind the allowed root to the registered document's root rather than
+            # rediscovering SAGE_SKILLS_DIR, which may have changed since loading.
+            if isinstance(registered, SkillMdSkill) and registered._doc.base_dir is not None:
+                registered_base_dir = Path(registered._doc.base_dir)
+                registered_root = (
+                    registered_base_dir
+                    if registered._doc.is_root_file
+                    else registered_base_dir.parent
+                ).resolve()
+                deleter = SkillMdDeleter(self._registry, skills_dir=registered_root)
+            else:
+                deleter = SkillMdDeleter(self._registry)
         result = deleter.delete(name)
-        return dict(result)
+        self._rebuild_slash_registry()
+        # Keep the deleter's filesystem result internal; never expose its absolute
+        # path through the REST/IPC management response.
+        safe_result = dict(result)
+        if "base_dir" in safe_result:
+            safe_result["base_dir"] = _SAFE_SKILL_PATH
+        return safe_result
 
     # ========== PR-C: Skills load-new (rescan + import) ==========
 
@@ -440,28 +600,43 @@ class InprocSkillAdapter:
 
         Returns:
             {
-                "loaded": [{"name", "source", "path"}],
-                "skipped": [{"name", "reason"}],  # currently always [] — plan-mandated limitation
+                "loaded": [{"name", "source", "path": "."}],
+                "skipped": [{"name", "reason"}],
                 "total_loaded": int,
             }
-
-        Note on `skipped`: SkillMdHotLoader.scan_and_load() returns (loaded_count, skipped_count)
-        as integers only, not detailed [{name, reason}]. Detailed skipped reporting requires
-        loader API extension (future work). See plan §4.1 and §10 risk notes.
         """
+
         if self._skill_importer is None:  # init-time import failed
             return {"loaded": [], "skipped": [], "total_loaded": 0}
-        from backend.skills.skill_md.loader import SkillMdHotLoader
+        from backend.skills.skill_md.loader import (
+            SkillMdHotLoader,
+            build_gating_context_for_dirs,
+            discover_skill_md_dirs,
+        )
 
-        loader = SkillMdHotLoader(self._registry, dirs=list(self._skill_dirs), gating_ctx=None)
+        # 目录可能在 adapter 初始化后才由审批/导入流程创建；每次重扫都
+        # 重新发现根目录，避免永久使用初始化时的快照。
+        skill_dirs = discover_skill_md_dirs()
+        self._skill_dirs = list(skill_dirs)
+        if self._script_runner is not None:
+            # 与扫描使用同一份已发现根目录，保持脚本路径校验的安全边界同步。
+            self._script_runner._allowed_roots = list(skill_dirs)
+
+        loader = SkillMdHotLoader(
+            self._registry,
+            dirs=list(skill_dirs),
+            gating_ctx=build_gating_context_for_dirs(list(skill_dirs)),
+            script_runner=self._script_runner,
+        )
         loaded_count, _ = loader.scan_and_load()
+        self._rebuild_slash_registry()
         # Fresh loader per call: _loaded_paths only contains THIS call's loads.
         return {
             "loaded": [
-                {"name": name, "source": "skillmd", "path": loader._loaded_paths.get(name) or ""}
+                {"name": name, "source": "skillmd", "path": _SAFE_SKILL_PATH}
                 for name in loader._loaded_paths
             ],
-            "skipped": [],  # plan-mandated limitation; see docstring
+            "skipped": loader.skipped,
             "total_loaded": loaded_count,
         }
 
@@ -472,7 +647,16 @@ class InprocSkillAdapter:
                 "imported": [],
                 "skipped": [{"name": "<unknown>", "reason": "adapter_init_failed"}],
             }
-        return await self._skill_importer.import_files(files)
+        result = await self._skill_importer.import_files(files)
+        self._rebuild_slash_registry()
+        # The importer needs the real path for filesystem work, but the adapter
+        # result is forwarded to REST/IPC clients and must remain path-neutral.
+        safe_result = dict(result)
+        safe_result["imported"] = [
+            {**item, "path": _SAFE_SKILL_PATH} if "path" in item else dict(item)
+            for item in result.get("imported", [])
+        ]
+        return safe_result
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
 
@@ -515,7 +699,7 @@ class InprocSkillAdapter:
                 item["body"] = doc.body
                 # A16: 自动激活触发场景原文，空串表示不参与自动激活
                 item["when_to_use"] = doc.when_to_use
-                item["base_dir"] = str(doc.base_dir) if doc.base_dir is not None else None
+                item["base_dir"] = _SAFE_SKILL_PATH if doc.base_dir is not None else None
                 item["version"] = doc.version
                 # agentskills.io spec optional fields (PR-84): 让 API consumer
                 # 能看到 SKILL.md frontmatter 的 license / compatibility /

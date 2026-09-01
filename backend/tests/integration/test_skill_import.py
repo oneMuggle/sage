@@ -42,7 +42,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     skills.mkdir()
     monkeypatch.setenv("SAGE_SKILLS_DIR", str(skills))
     _reset_skill_adapter_singleton()
-    return TestClient(app)
+    return TestClient(app, headers={"Authorization": "Bearer test-local-auth-token"})
 
 
 # ===== POST /skills/rescan =====
@@ -90,6 +90,27 @@ def test_post_skills_rescan_is_idempotent(client: TestClient, tmp_path: Path) ->
     r3 = client.post("/api/v1/skills/rescan").json()
     assert r3["total_loaded"] == 1
     assert any(s["name"] == "new-skill" for s in r3["loaded"])
+    assert all(s["path"] == "." for s in r3["loaded"])
+    assert str(skills) not in str(r3["loaded"])
+
+
+def test_post_skills_rescan_returns_skip_reason_for_gating(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Rescan exposes why a skill was rejected by its requirements."""
+    skills = tmp_path / "skills"
+    (skills / "needs-tool").mkdir()
+    (skills / "needs-tool" / "SKILL.md").write_text(
+        "---\nname: needs-tool\ndescription: Needs a tool\n"
+        "requires:\n  bins: [missing-tool]\n---\nBody\n",
+        encoding="utf-8",
+    )
+    _reset_skill_adapter_singleton()
+
+    body = client.post("/api/v1/skills/rescan").json()
+
+    assert {item["name"] for item in body["skipped"]} == {"needs-tool"}
+    assert "missing bin: missing-tool" in body["skipped"][0]["reason"]
 
 
 # ===== POST /skills/import =====
@@ -106,6 +127,8 @@ def test_post_skills_import_multipart_round_trip(client: TestClient, tmp_path: P
     body = resp.json()
     assert len(body["imported"]) == 1
     assert body["imported"][0]["name"] == "code-review"
+    assert body["imported"][0]["path"] == "."
+    assert str(tmp_path / "skills") not in str(body["imported"])
     assert (tmp_path / "skills" / "code-review" / "SKILL.md").is_file()
 
     # GET /skills 看到新 skill
@@ -130,7 +153,7 @@ def test_post_skills_import_returns_structured_skipped(client: TestClient, tmp_p
     assert body["imported"][0]["name"] == "good"
     skip_reasons = {s["name"]: s["reason"] for s in body["skipped"]}
     assert "broken" in skip_reasons
-    assert skip_reasons["broken"].startswith("parse_error:")
+    assert skip_reasons["broken"] == "parse_error"
 
 
 def test_post_skills_import_no_files_returns_400(client: TestClient) -> None:
@@ -159,6 +182,40 @@ def test_post_skills_import_to_sage_skills_dir_uses_env(
     assert (target / "code-review" / "SKILL.md").is_file()
 
 
+def test_post_skills_import_redacts_untrusted_filename_and_frontmatter_name(
+    client: TestClient,
+) -> None:
+    """Skipped names never expose POSIX/Windows paths or invalid YAML values."""
+    _reset_skill_adapter_singleton()
+    files = [
+        (
+            "files",
+            ("/home/user/private/broken.md", b"not frontmatter", "text/markdown"),
+        ),
+        (
+            "files",
+            (
+                r"C:\\Users\\private\\invalid.md",
+                b"---\nname: /home/user/private\ndescription: invalid\n---\nbody",
+                "text/markdown",
+            ),
+        ),
+    ]
+
+    response = client.post("/api/v1/skills/import", files=files)
+
+    assert response.status_code == 200
+    skipped = response.json()["skipped"]
+    assert skipped == [
+        {"name": "broken", "reason": "parse_error"},
+        {"name": "invalid", "reason": "invalid_name"},
+    ]
+    assert all("/" not in item["name"] for item in skipped)
+    assert all("\\\\" not in item["name"] for item in skipped)
+    assert "/home/user/private" not in response.text
+    assert "C:\\\\Users" not in response.text
+
+
 def test_post_skills_import_invalid_md_returns_parse_error_in_skipped(
     client: TestClient,
 ) -> None:
@@ -170,7 +227,25 @@ def test_post_skills_import_invalid_md_returns_parse_error_in_skipped(
 
     body = resp.json()
     assert body["imported"] == []
-    assert any(s["reason"].startswith("parse_error:") for s in body["skipped"])
+    assert body["skipped"] == [{"name": "bad", "reason": "parse_error"}]
+
+
+def test_post_skills_import_schema_and_decode_failures_use_stable_parse_error(
+    client: TestClient,
+) -> None:
+    _reset_skill_adapter_singleton()
+    files = [
+        ("files", ("schema.md", b"---\nname: schema\ndescription: [\n---\nbody", "text/markdown")),
+        ("files", ("encoding.md", b"\xff", "text/markdown")),
+    ]
+
+    body = client.post("/api/v1/skills/import", files=files).json()
+
+    assert body["imported"] == []
+    assert {item["name"]: item["reason"] for item in body["skipped"]} == {
+        "schema": "parse_error",
+        "encoding": "parse_error",
+    }
 
 
 def test_post_skills_import_concurrent_safe(client: TestClient) -> None:

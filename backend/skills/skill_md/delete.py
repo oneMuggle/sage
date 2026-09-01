@@ -65,7 +65,7 @@ class SkillMdDeleter:
         复用, 避免每次调用都做 env/expanduser/is_dir 检查。
         """
         if self._explicit_skills_dir is not None:
-            resolved = self._explicit_skills_dir
+            resolved = self._explicit_skills_dir.resolve()
             self._skills_dir = resolved
             return resolved
         env = os.environ.get("SAGE_SKILLS_DIR", "").strip()
@@ -99,20 +99,46 @@ class SkillMdDeleter:
                 f"Cannot delete builtin skill {name!r}; builtin skills are read-only"
             )
 
-        skills_dir = self._resolve_skills_dir()
-        target = (skills_dir / name).resolve()
+        registered = self._registry.get(name)
+        if registered is None:
+            raise SkillMdNotFoundError(f"SKILL.md skill {name!r} is not registered")
+
+        from .skill import SkillMdSkill
+
+        if not isinstance(registered, SkillMdSkill):
+            raise BuiltinSkillError(
+                f"Cannot delete builtin skill {name!r}; builtin skills are read-only"
+            )
+        registered_base_dir = registered._doc.base_dir
+        if registered_base_dir is None:
+            raise SkillMdNotFoundError(
+                f"SKILL.md skill {name!r} has no registered filesystem path"
+            )
+
+        self._resolve_skills_dir()
+        if registered_base_dir.is_symlink():
+            raise ValueError(f"Refusing to delete symlink skill path {registered_base_dir}")
+        target = Path(registered_base_dir).resolve()
         self._validate_path_under_skills_dir(target)
 
-        if not target.exists():
-            raise SkillMdNotFoundError(f"SKILL.md skill {name!r} not found at {target}")
-
-        # Fail-closed order: 先 unregister 再 rmtree。
-        # 若 rmtree 抛 OSError,skill 已不可路由 (no in-process dispatch),
-        # 但仍可能在 disk 上残留 — 下次 hot-reload scan 自动 re-register,
-        # 比 "registry 还在但 disk 已空" 更易检测和恢复。
-        if self._registry.exists(name):
-            self._registry.unregister(name)
-        shutil.rmtree(target)
+        if registered._doc.is_root_file:
+            skill_file = target / "SKILL.md"
+            if not skill_file.is_file() or skill_file.is_symlink():
+                raise SkillMdNotFoundError(
+                    f"SKILL.md skill {name!r} not found at {skill_file}"
+                )
+            self._unlink_root_skill_file(target)
+        else:
+            if target == self._skills_dir.resolve():
+                raise ValueError(
+                    f"Refusing to delete skills_dir as a directory skill path {target}"
+                )
+            if not target.is_dir() or not (target / "SKILL.md").is_file():
+                raise SkillMdNotFoundError(f"SKILL.md skill {name!r} not found at {target}")
+            # Keep registry state until the physical delete succeeds.  If rmtree
+            # fails, callers can retry and the registry remains routable.
+            shutil.rmtree(target)
+        self._registry.unregister(name)
 
         logger.warning("Deleted SKILL.md skill: name=%s base_dir=%s", name, target)
 
@@ -121,6 +147,39 @@ class SkillMdDeleter:
             name=name,
             base_dir=str(target),
         )
+
+    def _unlink_root_skill_file(self, target: Path) -> None:
+        """Unlink root ``SKILL.md`` without following a swapped root symlink.
+
+        ``target`` is resolved and validated before opening it.  Holding the
+        directory descriptor while unlinking makes the parent directory stable
+        on POSIX; Windows falls back to an inode-equivalent recheck immediately
+        before the normal unlink because ``dir_fd`` is unavailable there.
+        """
+        skill_file = target / "SKILL.md"
+        if not skill_file.is_file() or skill_file.is_symlink():
+            raise SkillMdNotFoundError(f"SKILL.md skill not found at {skill_file}")
+
+        try:
+            directory_fd = os.open(str(target), os.O_RDONLY)
+        except OSError:
+            # A missing/unreadable root cannot be safely re-resolved.
+            raise SkillMdNotFoundError(f"SKILL.md skill not accessible at {target}")
+
+        try:
+            if os.unlink in getattr(os, "supports_dir_fd", set()):
+                os.unlink("SKILL.md", dir_fd=directory_fd)
+                return
+
+            # Windows lacks unlinkat/dir_fd.  Recheck the opened directory's
+            # identity immediately before unlinking; if it changed, fail closed.
+            before = os.fstat(directory_fd)
+            current = target.stat(follow_symlinks=False)
+            if (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino):
+                raise ValueError(f"Refusing to delete replaced skills root {target}")
+            skill_file.unlink()
+        finally:
+            os.close(directory_fd)
 
     def _validate_path_under_skills_dir(self, target: Path) -> None:
         """防御性: target 必须在 self._skills_dir 之下 (或等于)。

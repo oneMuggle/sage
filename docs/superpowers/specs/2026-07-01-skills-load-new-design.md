@@ -130,10 +130,11 @@ files: another.md (binary)
 ```
 
 **响应 200:**
+成功项的 `path` 固定为安全逻辑标签 `"."`，不暴露服务端落盘绝对路径。
 ```json
 {
   "imported": [
-    {"name": "code-review", "path": "/home/user/.sage/skills/code-review/SKILL.md"}
+    {"name": "code-review", "path": "."}
   ],
   "skipped": [
     {"name": "coder", "reason": "builtin_conflict"},

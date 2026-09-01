@@ -1,14 +1,7 @@
-"""CLI 确认适配器（v2）。
+"""CLI 确认适配器。
 
-生产环境使用的 ``ConfirmationPort`` 实现，通过可注入的 callback 获取用户确认。
-
-设计要点
---------
-
-- callback 可以是 sync 或 async，统一通过 ``asyncio.iscoroutine`` 判断
-- callback 抛异常时返回 False（默认拒绝，更安全）
-- 无 callback 时默认返回 True（向后兼容，假设测试/开发环境）
-- 可配置超时（默认 60s）
+生产环境使用的 ``ConfirmationPort`` 实现，通过 callback 获取用户确认。
+所有确认器都 fail-closed：没有 callback 时拒绝执行。
 """
 
 from __future__ import annotations
@@ -16,11 +9,90 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+class ConfiguredScriptConfirmationAdapter:
+    """由显式配置白名单确认脚本执行的生产确认器。
+
+    配置通过 ``SAGE_SKILL_SCRIPT_ALLOWLIST`` 传入，使用逗号分隔的条目：
+    ``skill:<exact-name>`` 或 ``path:<absolute-directory>``。默认值为空，
+    且 malformed 条目不会放宽权限。技能名匹配是精确匹配；路径匹配要求
+    脚本解析后的路径位于配置目录内（不接受目录前缀伪匹配）。
+
+    这不是用户交互审批，也不替代 ``ApprovalGate``；它只为当前没有同步
+    HTTP→Electron 脚本 callback 的生产装配提供一个显式、可审计的 fail-closed
+    配置入口。
+    """
+
+    ENV_ALLOWLIST = "SAGE_SKILL_SCRIPT_ALLOWLIST"
+
+    def __init__(
+        self,
+        *,
+        allowed_skill_names: Iterable[str] = (),
+        allowed_path_roots: Iterable[Path] = (),
+    ) -> None:
+        self._allowed_skill_names = frozenset(
+            name for name in allowed_skill_names if isinstance(name, str) and name
+        )
+        self._allowed_path_roots = tuple(
+            path.resolve() for path in allowed_path_roots if isinstance(path, Path)
+        )
+
+    @classmethod
+    def from_environment(cls) -> ConfiguredScriptConfirmationAdapter:
+        """从环境变量解析白名单；未设置或包含非法项时仍保持最小授权。"""
+        skill_names = []
+        path_roots = []
+        raw = os.environ.get(cls.ENV_ALLOWLIST, "")
+        for raw_entry in raw.split(","):
+            entry = raw_entry.strip()
+            if not entry:
+                continue
+            kind, separator, value = entry.partition(":")
+            value = value.strip()
+            if not separator or not value:
+                logger.warning("忽略格式非法的脚本白名单条目")
+                continue
+            if kind == "skill":
+                skill_names.append(value)
+            elif kind == "path":
+                path = Path(value).expanduser()
+                if path.is_absolute() and path.is_dir():
+                    path_roots.append(path)
+                else:
+                    logger.warning("忽略非绝对或不存在的脚本白名单路径")
+            else:
+                logger.warning("忽略未知脚本白名单类型: %s", kind)
+        return cls(allowed_skill_names=skill_names, allowed_path_roots=path_roots)
+
+    def _path_is_allowed(self, script_path: Path) -> bool:
+        """使用 commonpath 做目录边界匹配，避免 ``/rooted`` 命中 ``/root``。"""
+        candidate = str(script_path.resolve())
+        for root in self._allowed_path_roots:
+            try:
+                if os.path.commonpath((candidate, str(root))) == str(root):
+                    return True
+            except ValueError:
+                # Windows 不同盘符等不可比较的路径必须拒绝。
+                continue
+        return False
+
+    async def confirm(
+        self,
+        skill_name: str,
+        script_path: Path,
+        args: Tuple[str, ...],
+    ) -> bool:
+        """仅在技能名或受控路径显式命中时批准；args 不参与授权。"""
+        del args
+        return skill_name in self._allowed_skill_names or self._path_is_allowed(script_path)
 
 
 class CliConfirmationAdapter:
@@ -84,7 +156,7 @@ class CliConfirmationAdapter:
 
             return bool(result)
 
-        except TimeoutError:
+        except (asyncio.TimeoutError, TimeoutError):  # noqa: UP041 - retain both names for Python 3.8/3.10 compatibility
             logger.warning(
                 "CliConfirmationAdapter timeout after %.1fs for skill %s",
                 self._timeout_s,

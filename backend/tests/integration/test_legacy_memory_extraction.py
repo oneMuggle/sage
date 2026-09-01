@@ -196,13 +196,12 @@ async def test_legacy_chat_stream_assistant_persist_failure_skips_extraction(cli
 
     _ensure_session(get_database(), session_id)
 
-    with (
-        patch(
-            "backend.memory.extractor.MemoryExtractor.extract",
-            new=AsyncMock(return_value=_FIXED_FACTS),
-        ) as mock_extract,
-        patch("backend.api.legacy_routes.MessageRepository") as MockMsgRepo,
-    ):
+    with patch(
+        "backend.memory.extractor.MemoryExtractor.extract",
+        new=AsyncMock(return_value=_FIXED_FACTS),
+    ) as mock_extract, patch(
+        "backend.api.legacy_routes.MessageRepository"
+    ) as MockMsgRepo:
         # 第一次 save(user) 成功, 第二次 save(assistant) 抛错
         MockMsgRepo.return_value.save.side_effect = [None, RuntimeError("simulated db down")]
         attach_text = await _run_chat_stream(client, session_id, "我喜欢吃火锅, 请记住这一点")

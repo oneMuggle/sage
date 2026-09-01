@@ -21,8 +21,11 @@ from typing import List, Tuple
 
 import pytest
 
-from backend.wiki.ingest import IngestConfig, ingest_source_stream
+from backend.wiki.ingest import IngestConfig, copy_to_raw, ingest_source_stream
 from backend.wiki.llm_context import LLMContext
+
+ingest_os = copy_to_raw.__globals__["os"]
+copy_to_raw_windows = copy_to_raw.__globals__["_copy_to_raw_windows"]
 
 pytestmark = pytest.mark.integration
 
@@ -90,9 +93,180 @@ def _make_wiki_project(tmp_path: Path) -> Tuple[Path, Path]:
     return project, source
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+@pytest.mark.asyncio()
+async def test_copy_to_raw_writes_legal_source(tmp_path):
+    project = tmp_path / "project"
+    source = tmp_path / "input.md"
+    project.mkdir()
+    source.write_bytes(b"legal")
+
+    target = await copy_to_raw(project, source)
+
+    assert target == project / "raw" / "sources" / "input.md"
+    assert target.read_bytes() == b"legal"
+
+
+def test_copy_to_raw_windows_fails_closed_without_no_follow(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    dest = project / "raw" / "sources" / "input.md"
+    project.mkdir()
+
+    monkeypatch.delattr(ingest_os, "O_NOFOLLOW", raising=False)
+
+    with pytest.raises(OSError, match="no-follow"):
+        copy_to_raw_windows(project, "input.md", b"windows-safe", dest)
+
+    assert not dest.exists()
+
+
+@pytest.mark.asyncio()
+async def test_copy_to_raw_preserves_existing_regular_file(tmp_path):
+    project = tmp_path / "project"
+    source = tmp_path / "input.md"
+    project.mkdir()
+    source.write_bytes(b"new")
+    target_dir = project / "raw" / "sources"
+    target_dir.mkdir(parents=True)
+    target = target_dir / source.name
+    target.write_bytes(b"existing")
+
+    result = await copy_to_raw(project, source)
+
+    assert result == target
+    assert target.read_bytes() == b"existing"
+
+
+@pytest.mark.asyncio()
+async def test_copy_to_raw_with_source_content_accepts_identical_existing_file(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    target_dir = project / "raw" / "sources"
+    target_dir.mkdir(parents=True)
+    target = target_dir / "input.md"
+    target.write_bytes(b"same")
+
+    result = await copy_to_raw(
+        project, tmp_path / "input.md", logical_filename="input.md", source_content=b"same"
+    )
+
+    assert result == target
+    assert target.read_bytes() == b"same"
+
+
+@pytest.mark.asyncio()
+async def test_copy_to_raw_with_source_content_rejects_conflicting_existing_file(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    target_dir = project / "raw" / "sources"
+    target_dir.mkdir(parents=True)
+    target = target_dir / "input.md"
+    target.write_bytes(b"old")
+
+    with pytest.raises(ValueError, match="不一致"):
+        await copy_to_raw(
+            project,
+            tmp_path / "input.md",
+            logical_filename="input.md",
+            source_content=b"new",
+        )
+
+    assert target.read_bytes() == b"old"
+
+
+@pytest.mark.asyncio()
+async def test_copy_to_raw_rejects_broken_symlink(tmp_path):
+    project = tmp_path / "project"
+    source = tmp_path / "input.md"
+    target_dir = project / "raw" / "sources"
+    project.mkdir()
+    source.write_bytes(b"new")
+    target_dir.mkdir(parents=True)
+    (target_dir / source.name).symlink_to(tmp_path / "missing.md")
+
+    with pytest.raises(OSError, match="no-follow|symlink|regular"):
+        await copy_to_raw(project, source)
+
+
+@pytest.mark.asyncio()
+async def test_copy_to_raw_does_not_follow_replaced_target(tmp_path):
+    project = tmp_path / "project"
+    source = tmp_path / "input.md"
+    outside = tmp_path / "outside.md"
+    project.mkdir()
+    source.write_bytes(b"new")
+    outside.write_bytes(b"keep")
+    target_dir = project / "raw" / "sources"
+    target_dir.mkdir(parents=True)
+    (target_dir / source.name).symlink_to(outside)
+
+    with pytest.raises(OSError, match="no-follow|symlink|regular"):
+        await copy_to_raw(project, source)
+    assert outside.read_bytes() == b"keep"
+
+
+def test_cache_identity_uses_raw_bytes_not_decoded_text(tmp_path):
+    from backend.wiki.ingest import _compute_source_sha256, cache_get, cache_put
+
+    project = tmp_path / "project"
+    (project / "raw" / "sources").mkdir(parents=True)
+    (project / ".llm-wiki").mkdir()
+    target = project / "raw" / "sources" / "same.md"
+    target.write_bytes(b"a\xffb")
+    cache_put(project, target, "wiki/sources/same.md", "source", source_name="same.md")
+
+    assert cache_get(project, target, source_name="same.md", source_content=b"a\xfeb") is None
+    assert cache_get(project, target, source_name="same.md", source_content=b"a\xffb") is not None
+    assert _compute_source_sha256(b"a\xffb") != _compute_source_sha256(b"a\xfeb")
+
+
+@pytest.mark.asyncio()
+async def test_ingest_stream_uses_logical_name_for_snapshot_path(tmp_path):
+    project, source = _make_wiki_project(tmp_path)
+    snapshot = project / ".llm-wiki" / ".tmp-random-name.md"
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.write_bytes(source.read_bytes())
+
+    events = []
+    async for line_bytes in ingest_source_stream(
+        _make_ingest_config(),
+        project,
+        snapshot,
+        _stub_llm_context(),
+        logical_filename="original.md",
+    ):
+        events.append(json.loads(line_bytes.decode("utf-8")))
+
+    assert (project / "raw" / "sources" / "original.md").exists()
+    assert not (project / "raw" / "sources" / snapshot.name).exists()
+    assert (project / "wiki" / "sources" / "original.md").exists()
+    cache = json.loads(
+        (project / ".llm-wiki" / "ingest-cache.json").read_text(encoding="utf-8")
+    )
+    assert "raw/sources/original.md" in cache
+    assert snapshot.name not in json.dumps(cache)
+    assert events[-1]["data"]["stage"] == "completed"
+
+
+@pytest.mark.asyncio()
+async def test_ingest_stream_rejects_oversized_source_before_raw_copy(tmp_path):
+    from backend.wiki.extract import MAX_FILE_BYTES
+
+    project = tmp_path / "project"
+    project.mkdir()
+    source = project / "oversized.md"
+    source.write_bytes(b"x" * (MAX_FILE_BYTES + 1))
+
+    stream = ingest_source_stream(_make_ingest_config(), project, source, _stub_llm_context())
+
+    async def consume_stream():
+        async for _event in stream:
+            pass
+
+    await stream.__anext__()
+    with pytest.raises(ValueError, match="configured read limit"):
+        await consume_stream()
+
+    assert (project / "raw").exists() is False
 
 
 @pytest.mark.asyncio()
@@ -281,7 +455,11 @@ async def test_ingest_stream_exception_yields_failed_then_reraises(tmp_path):
     assert last["event"] == "progress"
     assert last["data"]["stage"] == "failed"
     assert last["data"]["percent"] == 0
-    assert "LLM exploded" in last["data"]["message"]
+    assert last["data"]["message"] == {
+        "code": "wiki_ingest_failed",
+        "message": "Wiki 导入失败",
+    }
+    assert "LLM exploded" not in json.dumps(last, ensure_ascii=False)
 
     # 之前必须至少 emit 过 started
     assert collected[0]["data"]["stage"] == "started"

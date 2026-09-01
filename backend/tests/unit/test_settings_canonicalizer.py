@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from backend.data.settings_canonicalizer import (
@@ -164,11 +166,29 @@ def test_validate_settings_shape_rejects_unknown_model_selection_key() -> None:
         validate_settings_shape(settings)
 
 
-def test_validate_settings_shape_strips_snake_residue() -> None:
-    """即使翻译后仍有 snake_case 残留 (ALIASES 不覆盖到的字段), 应抛错"""
-    settings = {"base_url": "u"}
-    with pytest.raises(ValueError, match=r"unknown top-level field 'base_url'"):
-        validate_settings_shape(settings)
+def test_validate_settings_shape_rejects_scalar_container_values() -> None:
+    """容器字段若被持久化为标量, 应返回 ValueError 而不是 TypeError."""
+    invalid_settings = [
+        ({"endpoints": 1}, "endpoints must be a list"),
+        (
+            {"endpoints": [{"discoveredModels": 1}]},
+            "endpoints[0].discoveredModels must be a list",
+        ),
+        ({"modelSelections": 1}, "modelSelections must be a dict"),
+        ({"modelSelections": {"chatModel": 1}}, "modelSelections.chatModel is not a dict"),
+        ({"wiki": 1}, "wiki must be a dict"),
+        ({"orch": 1}, "orch is not a dict"),
+    ]
+    for settings, message in invalid_settings:
+        with pytest.raises(ValueError, match=re.escape(message)):
+            validate_settings_shape(settings)
+
+
+def test_strip_unknown_fields_preserves_malformed_discovered_model_items() -> None:
+    """净化未知字段时不得静默删除 discoveredModels 中的损坏项."""
+    malformed = {"endpoints": [{"discoveredModels": [1, {"id": "m1"}]}]}
+    cleaned = strip_unknown_fields(malformed)
+    assert cleaned["endpoints"][0]["discoveredModels"] == [1, {"id": "m1"}]
 
 
 # --- detect_legacy_snake_pollution ---
@@ -664,7 +684,48 @@ def test_redact_secrets_preserves_other_top_level_keys():
     assert out["modelSelections"]["chatModel"]["modelId"] == "x"
 
 
-def test_redact_secrets_json_parses_redacts_and_reserializes():
+def test_redact_secrets_recognizes_credential_key_variants_without_overmatching():
+    from backend.data.settings_canonicalizer import redact_secrets
+
+    settings = {
+        "dbPassword": "db-secret",
+        "secretKey": "secret-key",
+        "privateKey": "private-key",
+        "authorization": "bearer-token",
+        "authToken": "auth-secret",
+        "accessToken": "access-secret",
+        "refreshToken": "refresh-secret",
+        "clientSecret": "client-secret",
+        "bearerToken": "bearer-secret",
+        "apiToken": "api-token-secret",
+        "api_key": "snake-api-secret",
+        "API-KEY": "hyphen-api-secret",
+        "tokenization": "ordinary-tokenization-setting",
+        "passwordPolicy": "ordinary-password-policy-setting",
+        "publicKey": "ordinary-public-key-setting",
+    }
+
+    out = redact_secrets(settings)
+    for key in (
+        "dbPassword",
+        "secretKey",
+        "privateKey",
+        "authorization",
+        "authToken",
+        "accessToken",
+        "refreshToken",
+        "clientSecret",
+        "bearerToken",
+        "apiToken",
+        "api_key",
+        "API-KEY",
+    ):
+        assert out[key] == ""
+    assert out["tokenization"] == "ordinary-tokenization-setting"
+    assert out["passwordPolicy"] == "ordinary-password-policy-setting"
+    assert out["publicKey"] == "ordinary-public-key-setting"
+
+
     import json
 
     from backend.data.settings_canonicalizer import redact_secrets_json
@@ -684,7 +745,25 @@ def test_redact_secrets_json_passthrough_for_non_string():
 
     assert redact_secrets_json(None) is None
     assert redact_secrets_json(123) == 123
-    assert redact_secrets_json("not-valid-json{") == "not-valid-json{"
+    assert redact_secrets_json("not-valid-json{") == "{}"
+
+
+@pytest.mark.parametrize(
+    "scalar_json",
+    [
+        '"api-token-secret"',
+        "42",
+        "null",
+        "[]",
+    ],
+)
+def test_redact_secrets_json_replaces_json_scalars_with_empty_object(scalar_json):
+    from backend.data.settings_canonicalizer import redact_secrets_json
+
+    out = redact_secrets_json(scalar_json)
+
+    assert out == "{}"
+    assert "api-token-secret" not in out
 
 
 def test_redact_secrets_json_empty_string_round_trip():

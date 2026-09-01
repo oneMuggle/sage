@@ -68,9 +68,8 @@ def make_llm_context(
         messages: List[Dict],
         temperature: float,
     ) -> AsyncIterator[str]:
-        async with (
-            httpx.AsyncClient(timeout=timeout_seconds) as client,
-            client.stream(
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client:  # noqa: SIM117 - retain nested form for Python 3.8 syntax compatibility
+            async with client.stream(
                 "POST",
                 chat_url,
                 headers=auth_headers,
@@ -80,20 +79,19 @@ def make_llm_context(
                     "temperature": temperature,
                     "stream": True,
                 },
-            ) as r,
-        ):
-            async for line in r.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                payload = line[6:]
-                if payload == "[DONE]":
-                    break
-                try:
-                    delta = json.loads(payload)["choices"][0].get("delta", {}).get("content", "")
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
-                if delta:
-                    yield delta
+            ) as r:
+                async for line in r.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    payload = line[6:]
+                    if payload == "[DONE]":
+                        break
+                    try:
+                        delta = json.loads(payload)["choices"][0].get("delta", {}).get("content", "")
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
+                    if delta:
+                        yield delta
 
     async def http_post(url: str, headers: Dict[str, str], body: dict) -> str:
         async with httpx.AsyncClient(timeout=timeout_seconds) as client:

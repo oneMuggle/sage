@@ -68,11 +68,14 @@ export function useWikiChatStream(streamId: string | null) {
     // shapes arrive here — an object `{ error: string }` (HTTP non-2xx,
     // non-AbortError catch, synthetic NDJSON-parse error) and a bare `string`
     // (backend error event data relayed verbatim). Normalize both to string.
-    listen<{ error?: string } | string>(
+    listen<{ code?: string; message?: string; error?: string } | string>(
       errorEvent,
       (e) => {
+        const payload = e.payload;
         const errorMessage =
-          typeof e.payload === 'string' ? e.payload : (e.payload?.error ?? String(e.payload));
+          typeof payload === 'string'
+            ? payload
+            : (payload?.message ?? payload?.error ?? 'Wiki 聊天失败');
         setState((s) => ({ ...s, streaming: false, error: errorMessage }));
       },
       { streamId },

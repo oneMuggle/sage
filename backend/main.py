@@ -5,14 +5,15 @@ FastAPI 后端入口
 import asyncio
 import logging
 import os
-import sys
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Callable, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sage_core import Message, Role
 
 
@@ -55,6 +56,12 @@ from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
+from backend.api.local_auth import (
+    LocalAuthMiddleware,
+    initialize_local_auth_token,
+    is_ownership_health_valid,
+    ownership_health_proof,
+)
 from backend.api.mcp_routes import router as mcp_router
 from backend.api.office_routes import (
     register_office_exception_handlers,
@@ -83,18 +90,21 @@ from backend.services.scheduler import (
 logger = logging.getLogger(__name__)
 
 
+# Browser clients only need the local Vite dev origin. Electron's packaged
+# ``file://`` renderer does not send CORS preflight requests, and requests
+# without an Origin header remain unaffected.
+_ALLOWED_CORS_ORIGINS = (
+    "http://localhost:1420",
+    "http://127.0.0.1:1420",
+)
+
+
 def _build_health_metadata() -> dict:
-    """Return the immutable build/ownership envelope for health probes."""
+    """Return only the non-sensitive fields needed by the supervisor."""
     return {
         "buildId": os.environ.get("SAGE_BUILD_ID", "dev-build"),
-        "commit": os.environ.get("SAGE_BUILD_COMMIT", "unknown"),
-        "branch": os.environ.get("SAGE_BUILD_BRANCH", "unknown"),
-        "version": os.environ.get("SAGE_BUILD_VERSION", "0.1.1"),
-        "electronVersion": os.environ.get("SAGE_ELECTRON_VERSION", "unknown"),
-        "pythonVersion": ".".join(str(part) for part in sys.version_info[:3]),
         "pid": os.getpid(),
         "generation": int(os.environ.get("SAGE_BACKEND_GENERATION", "0")),
-        "ownershipToken": os.environ.get("SAGE_BACKEND_OWNERSHIP_TOKEN", ""),
     }
 
 
@@ -211,6 +221,10 @@ def _build_chat_service() -> ChatService:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理。"""
+    # Local desktop capability: resolve the token before serving any sensitive route.
+    # The value is intentionally never logged or returned by the health endpoint.
+    initialize_local_auth_token()
+
     # 启动时初始化
     db = Database()
     db.init_db()
@@ -407,10 +421,28 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         logger.warning("MemoryExtractionQueue shutdown failed: %s", exc)
 
+    # ReviewQueue worker uses a daemon thread; stop it explicitly so shutdown
+    # does not leave an active worker behind during orderly application exit.
+    try:
+        from backend.skills.review_queue import get_review_queue
+
+        get_review_queue().stop()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("ReviewQueue shutdown failed: %s", exc)
+
     # Phase 2: stop HeartbeatMonitor background task
     if hasattr(app.state, "heartbeat_monitor") and app.state.heartbeat_monitor is not None:
         await app.state.heartbeat_monitor.stop()
         logger.info("HeartbeatMonitor 已停止")
+
+    # Stop the bounded DNS resolver without waiting for uninterruptible
+    # getaddrinfo worker threads; cancellation cannot stop those OS calls.
+    try:
+        from backend.api.llm_proxy_routes import shutdown_dns_executor
+
+        shutdown_dns_executor()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("LLM proxy DNS executor shutdown failed: %s", exc)
 
     # M3: stop MCP server subprocesses held by the global pool
     try:
@@ -441,14 +473,47 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.exception_handler(RequestValidationError)
+async def settings_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Prevent Pydantic input values from leaking on the settings PUT boundary.
+
+    FastAPI's default validation response includes ``exc.errors()``.  That
+    structure can contain the rejected input value, so this narrowly scoped
+    handler replaces it only for the settings route; every other route keeps
+    FastAPI's default validation behavior.
+    """
+    if request.method == "PUT" and request.url.path.rstrip("/") == "/api/v1/settings":
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": {
+                    "type": "invalid_settings_payload",
+                    "message": "设置内容无效，请检查字段格式",
+                }
+            },
+        )
+    from fastapi.exception_handlers import request_validation_exception_handler
+
+    return await request_validation_exception_handler(request, exc)
+
+
 # 配置 CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境应限制
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=list(_ALLOWED_CORS_ORIGINS),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Sage-Local-Authorization", "X-Request-ID"],
 )
+
+
+# Local capability enforcement runs as a pure ASGI middleware (not
+# BaseHTTPMiddleware) so it does not add per-request task-group/stream overhead
+# to the event loop; see LocalAuthMiddleware's docstring for the measurement.
+app.add_middleware(LocalAuthMiddleware)
 
 
 @app.middleware("http")
@@ -508,6 +573,22 @@ app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v
 
 # M3: MCP multi-server management (status / servers CRUD)
 app.include_router(mcp_router, prefix="/api/v1")
+
+
+@app.get("/health/proof")
+async def health_proof(request: Request):
+    """Return a token-bound proof; the ownership token itself never leaves backend."""
+    if not is_ownership_health_valid(request):
+        raise HTTPException(status_code=404, detail="Not Found")
+    metadata = _build_health_metadata()
+    token = os.environ.get("SAGE_BACKEND_OWNERSHIP_TOKEN", "")
+    return {
+        "status": "ok",
+        **metadata,
+        "proof": ownership_health_proof(
+            token, metadata["buildId"], metadata["generation"], metadata["pid"]
+        ),
+    }
 
 
 @app.get("/health")

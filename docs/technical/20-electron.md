@@ -118,6 +118,7 @@ Tauri 2.x 通过 `webview2-com` crate 绑定到 Microsoft Edge WebView2 运行�
 `electron/main.ts` 读 `process.env.SAGE_SKIP_BACKEND === '1'`：
 
 - 跳过 `spawnBackend()` + 30s `/health` 等待
+- 正常启动使用受保护的 `/health/proof` 探针：Electron 通过 `X-Sage-Backend-Ownership` 发送仅主进程持有的 ownership token；后端只返回 token 绑定的不可逆 proof。公开 `/health` 永不包含 token，且就绪仍交叉校验 PID、generation、buildId。
 - 直接 `createMainWindow()`
 - 用于 CI 烟测（runner 没有 sage-backend conda env）+ 本地手动调试
 

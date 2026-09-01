@@ -4,24 +4,145 @@
 """
 import json
 import logging
+import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
 
+from fastapi import HTTPException
+
+from backend.api.wiki_routes import _canonical_project_root, _resolve_project_file
+from backend.storage.recent_projects import load_recent
 from backend.wiki import (
     build_graph,
     get_graph_cached,
     search_wiki,
 )
 from backend.wiki.community import detect_communities
+from backend.wiki.files import (
+    _require_posix_safety,
+    is_reparse_point,
+    iter_wiki_markdown,
+    secure_read_text,
+)
 from backend.wiki.insights import analyze_graph
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
 
 logger = logging.getLogger(__name__)
 
-# 创建 MCP Server 实例
-server = Server("sage-wiki")
+# MCP is an optional runtime feature.  Importing its server package can fail
+# when an installed MCP release is incompatible with the backend's Pydantic
+# pin, so keep the wiki helpers importable for the regular backend and tests.
+try:
+    from mcp.server import Server
+    from mcp.server.stdio import stdio_server
+    from mcp.types import TextContent, Tool
+except Exception as exc:  # noqa: BLE001 — optional integration must not break backend
+    Server = None  # type: ignore[assignment,misc]
+    stdio_server = None  # type: ignore[assignment]
+    _MCP_IMPORT_ERROR = exc
+
+    class TextContent:  # type: ignore[no-redef]
+        """Small fallback used by wiki helpers when MCP is unavailable."""
+
+        def __init__(self, *, type: str, text: str):
+            self.type = type
+            self.text = text
+
+    @dataclass
+    class Tool:  # type: ignore[no-redef]
+        """Fallback tool descriptor for helper tests without MCP."""
+
+        name: str
+        description: str
+        inputSchema: Dict[str, Any]  # noqa: N815 — MCP protocol field name
+else:
+    _MCP_IMPORT_ERROR = None
+
+try:
+    server = Server("sage-wiki") if _MCP_IMPORT_ERROR is None else None
+except Exception as exc:  # noqa: BLE001 — optional integration must not break backend
+    server = None
+    _MCP_IMPORT_ERROR = exc
+
+
+def _handler_decorator(method_name: str):
+    """Return an MCP decorator, or an identity decorator without MCP."""
+    if server is None:
+        return lambda function: function
+    return getattr(server, method_name)()
+
+
+def _require_mcp_runtime() -> None:
+    """Raise an actionable error when the optional MCP runtime is unavailable."""
+    if _MCP_IMPORT_ERROR is not None:
+        raise RuntimeError(
+            "Wiki MCP server requires a compatible 'mcp' installation; "
+            f"import failed with {type(_MCP_IMPORT_ERROR).__name__}: {_MCP_IMPORT_ERROR}"
+        ) from _MCP_IMPORT_ERROR
+
+
+_MCP_PROJECT_ROOTS_ENV = "SAGE_MCP_WIKI_PROJECT_ROOTS"
+
+
+def _recheck_project_tree(root: Path) -> None:
+    """Recheck symlinks immediately before recursive reads.
+
+    This is defense-in-depth, not an atomic TOCTOU guarantee: without
+    platform-specific directory-handle APIs, the tree can still change after
+    this check and before a later filesystem operation.
+    """
+    try:
+        if is_reparse_point(root):
+            raise HTTPException(status_code=400, detail="项目目录包含不安全的重解析点")
+        for current, directories, files in os.walk(root, followlinks=False):
+            if any(
+                Path(current, name).is_symlink() for name in directories + files
+            ):
+                raise HTTPException(status_code=400, detail="项目目录不能包含符号链接")
+            if any(
+                is_reparse_point(Path(current, name))
+                for name in directories + files
+            ):
+                raise HTTPException(status_code=400, detail="项目目录包含不安全的重解析点")
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="项目路径无效") from exc
+
+
+def _authorized_project_root(project_path: str) -> Path:
+    """Canonicalize and authorize a project root for every MCP operation.
+
+    MCP runs as an external process, so accepting an arbitrary path would turn
+    the read-only Wiki tools into a general filesystem browser (and make any
+    future write tool unsafe).  Authorization is explicit: roots listed in
+    ``SAGE_MCP_WIKI_PROJECT_ROOTS`` or roots already recorded by the Wiki
+    project picker are accepted.  With neither source configured, access is
+    denied (fail closed).
+    """
+    root = _canonical_project_root(project_path)
+    configured: set[str] = set()
+    for item in os.environ.get(_MCP_PROJECT_ROOTS_ENV, "").split(os.pathsep):
+        if not item.strip():
+            continue
+        try:
+            configured.add(_canonical_project_root(item).as_posix())
+        except HTTPException:
+            continue
+
+    registered: set[str] = set()
+    for item in load_recent():
+        if not item.path:
+            continue
+        try:
+            registered.add(_canonical_project_root(item.path).as_posix())
+        except HTTPException:
+            continue
+    if root.as_posix() not in configured | registered:
+        raise HTTPException(status_code=403, detail="项目根未获 MCP 授权")
+
+    # Do not allow a symlink anywhere in the project tree to be followed by
+    # graph/search implementations which recursively enumerate files.
+    _recheck_project_tree(root)
+    return root
 
 
 # ============================================================================
@@ -29,7 +150,7 @@ server = Server("sage-wiki")
 # ============================================================================
 
 
-@server.list_tools()
+@_handler_decorator("list_tools")
 async def list_tools() -> List[Tool]:
     """列出所有可用的 Wiki 工具。"""
     return [
@@ -161,7 +282,7 @@ async def list_tools() -> List[Tool]:
     ]
 
 
-@server.call_tool()
+@_handler_decorator("call_tool")
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:  # noqa: PLR0911
     """调用指定的 Wiki 工具。"""
     try:
@@ -182,8 +303,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]: 
         else:
             return [TextContent(type="text", text=f"未知工具: {name}")]
     except Exception as e:
-        logger.error(f"Wiki MCP 工具 '{name}' 执行失败: {e}")
-        return [TextContent(type="text", text=f"错误: {str(e)}")]
+        logger.error("Wiki MCP 工具执行失败: name=%s error_type=%s", name, type(e).__name__)
+        return [TextContent(type="text", text="错误: Wiki 工具执行失败")]
 
 
 # ============================================================================
@@ -191,19 +312,48 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]: 
 # ============================================================================
 
 
+def _count_regular_files_without_following_links(root: Path) -> int:
+    """Count source files without traversing symlink/reparse entries."""
+    count = 0
+    try:
+        entries = list(os.scandir(root))
+    except OSError:
+        return 0
+
+    for entry in entries:
+        try:
+            entry_path = Path(entry.path)
+            if entry.is_symlink() or is_reparse_point(entry_path):
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                count += _count_regular_files_without_following_links(entry_path)
+            elif entry.is_file(follow_symlinks=False):
+                count += 1
+        except OSError:
+            # Skip entries that disappear or become unsafe during the scan.
+            continue
+    return count
+
+
 async def _wiki_status(args: Dict[str, Any]) -> List[TextContent]:
     """获取 Wiki 状态信息。"""
-    project_path = Path(args["project_path"])
-
+    try:
+        _require_posix_safety()
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="Wiki 状态检查在当前平台不可用") from exc
+    project_path = _authorized_project_root(args["project_path"])
+    _recheck_project_tree(project_path)
     if not project_path.exists():
-        return [TextContent(type="text", text=f"项目路径不存在: {project_path}")]
+        return [TextContent(type="text", text="项目路径不存在")]
 
     # 统计文件数
     wiki_dir = project_path / "wiki"
-    wiki_files = list(wiki_dir.rglob("*.md")) if wiki_dir.exists() else []
+    wiki_files = list(iter_wiki_markdown(project_path)) if wiki_dir.exists() else []
 
     raw_dir = project_path / "raw" / "sources"
-    source_files = list(raw_dir.rglob("*")) if raw_dir.exists() else []
+    source_files = (
+        _count_regular_files_without_following_links(raw_dir) if raw_dir.exists() else 0
+    )
 
     # 构建图谱统计
     graph_data = build_graph(project_path)
@@ -211,7 +361,7 @@ async def _wiki_status(args: Dict[str, Any]) -> List[TextContent]:
     status = {
         "project_path": str(project_path),
         "wiki_pages": len(wiki_files),
-        "source_files": len(source_files),
+        "source_files": source_files,
         "graph_nodes": len(graph_data.nodes),
         "graph_edges": len(graph_data.edges),
     }
@@ -221,16 +371,19 @@ async def _wiki_status(args: Dict[str, Any]) -> List[TextContent]:
 
 async def _wiki_files(args: Dict[str, Any]) -> List[TextContent]:
     """列出 Wiki 项目中的文件。"""
-    project_path = Path(args["project_path"])
+    project_path = _authorized_project_root(args["project_path"])
+    _recheck_project_tree(project_path)
     relative_path = args.get("path", "")
-
-    target_dir = project_path / relative_path if relative_path else project_path
+    if relative_path:
+        _, target_dir = _resolve_project_file(str(project_path), relative_path)
+    else:
+        target_dir = project_path
 
     if not target_dir.exists():
-        return [TextContent(type="text", text=f"路径不存在: {target_dir}")]
+        return [TextContent(type="text", text="路径不存在")]
 
     if not target_dir.is_dir():
-        return [TextContent(type="text", text=f"不是目录: {target_dir}")]
+        return [TextContent(type="text", text="不是目录")]
 
     files = []
     for item in sorted(target_dir.iterdir()):
@@ -250,7 +403,8 @@ async def _wiki_files(args: Dict[str, Any]) -> List[TextContent]:
 
 async def _wiki_search(args: Dict[str, Any]) -> List[TextContent]:
     """搜索 Wiki 内容。"""
-    project_path = Path(args["project_path"])
+    project_path = _authorized_project_root(args["project_path"])
+    _recheck_project_tree(project_path)
     query = args["query"]
     limit = args.get("limit", 20)
 
@@ -282,15 +436,17 @@ async def _wiki_search(args: Dict[str, Any]) -> List[TextContent]:
 
 async def _wiki_read(args: Dict[str, Any]) -> List[TextContent]:
     """读取指定的 Wiki 页面。"""
-    project_path = Path(args["project_path"])
+    project_path = _authorized_project_root(args["project_path"])
+    _recheck_project_tree(project_path)
     relative_path = args["path"]
+    _, file_path = _resolve_project_file(str(project_path), relative_path)
 
-    file_path = project_path / relative_path
-
-    if not file_path.exists():
-        return [TextContent(type="text", text=f"文件不存在: {file_path}")]
-
-    content = file_path.read_text(encoding="utf-8")
+    try:
+        content = secure_read_text(project_path, file_path)
+    except FileNotFoundError:
+        return [TextContent(type="text", text="文件不存在")]
+    except (OSError, UnicodeError):
+        return [TextContent(type="text", text="文件读取失败")]
 
     return [
         TextContent(
@@ -309,7 +465,8 @@ async def _wiki_read(args: Dict[str, Any]) -> List[TextContent]:
 
 async def _wiki_graph(args: Dict[str, Any]) -> List[TextContent]:
     """获取知识图谱数据。"""
-    project_path = Path(args["project_path"])
+    project_path = _authorized_project_root(args["project_path"])
+    _recheck_project_tree(project_path)
     query = args.get("query")
     limit = args.get("limit", 100)
 
@@ -349,8 +506,8 @@ async def _wiki_graph(args: Dict[str, Any]) -> List[TextContent]:
 
 async def _wiki_communities(args: Dict[str, Any]) -> List[TextContent]:
     """获取社区检测结果。"""
-    project_path = Path(args["project_path"])
-
+    project_path = _authorized_project_root(args["project_path"])
+    _recheck_project_tree(project_path)
     graph_data = build_graph(project_path)
     communities = detect_communities(graph_data)
 
@@ -379,8 +536,8 @@ async def _wiki_communities(args: Dict[str, Any]) -> List[TextContent]:
 
 async def _wiki_insights(args: Dict[str, Any]) -> List[TextContent]:
     """获取图谱洞察。"""
-    project_path = Path(args["project_path"])
-
+    project_path = _authorized_project_root(args["project_path"])
+    _recheck_project_tree(project_path)
     insights = analyze_graph(project_path)
 
     return [
@@ -426,6 +583,9 @@ async def _wiki_insights(args: Dict[str, Any]) -> List[TextContent]:
 
 async def run_wiki_mcp_server() -> None:
     """运行 Wiki MCP Server。"""
+    _require_mcp_runtime()
+    assert server is not None
+    assert stdio_server is not None
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,

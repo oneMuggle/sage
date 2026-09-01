@@ -119,14 +119,14 @@ export const skillsApi = {
    *
    * Returns `{imported, skipped}` — 部分成功时仍返回 200。
    */
-  async importFiles(paths: string[]): Promise<ImportResult> {
+  async importFiles(_paths?: string[]): Promise<ImportResult> {
     return withRetry(async () => {
       try {
         const bridge = window.electronAPI?.skills;
         if (!bridge) {
           throw new Error('skills IPC bridge not available');
         }
-        return await bridge.importSkills(paths);
+        return await bridge.importSkills();
       } catch (error) {
         throw handleApiError(error);
       }

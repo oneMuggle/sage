@@ -136,7 +136,7 @@ def to_camel(value: Any) -> Any:
 
 def from_camel(value: Any) -> Any:
     """反向: ALIASES 仅翻译已知 snake↔camel 对; 其它 camelCase key 原样保留."""
-    if not isinstance(value, dict | list):
+    if not isinstance(value, (dict, list)):
         return value
     inverse = {v: k for k, v in ALIASES.items()}
     if isinstance(value, dict):
@@ -156,7 +156,10 @@ def validate_settings_shape(settings: dict) -> None:
             f"unknown top-level field {unknown[0]!r}; " f"allowed: {sorted(LEGAL_TOP_KEYS)}"
         )
 
-    for i, ep in enumerate(settings.get("endpoints") or []):
+    endpoints = settings.get("endpoints")
+    if endpoints is not None and not isinstance(endpoints, list):
+        raise ValueError("endpoints must be a list")
+    for i, ep in enumerate(endpoints or []):
         if not isinstance(ep, dict):
             raise ValueError(f"endpoints[{i}] is not a dict")
         bad_ep = [k for k in ep if k not in LEGAL_ENDPOINT_KEYS]
@@ -165,7 +168,10 @@ def validate_settings_shape(settings: dict) -> None:
                 f"unknown endpoint field {bad_ep[0]!r} at endpoints[{i}]; "
                 f"allowed: {sorted(LEGAL_ENDPOINT_KEYS)}"
             )
-        for j, model in enumerate(ep.get("discoveredModels") or []):
+        discovered_models = ep.get("discoveredModels")
+        if discovered_models is not None and not isinstance(discovered_models, list):
+            raise ValueError(f"endpoints[{i}].discoveredModels must be a list")
+        for j, model in enumerate(discovered_models or []):
             if not isinstance(model, dict):
                 raise ValueError(f"endpoints[{i}].discoveredModels[{j}] is not a dict")
             bad = [k for k in model if k not in LEGAL_DISCOVERED_MODEL_KEYS]
@@ -176,7 +182,10 @@ def validate_settings_shape(settings: dict) -> None:
                     f"allowed: {sorted(LEGAL_DISCOVERED_MODEL_KEYS)}"
                 )
 
-    ms = settings.get("modelSelections") or {}
+    ms = settings.get("modelSelections")
+    if ms is not None and not isinstance(ms, dict):
+        raise ValueError("modelSelections must be a dict")
+    ms = ms or {}
     # 校验 modelSelections 子对象 keys (chatModel/visionModel/embeddingModel);
     # 未知 key 会污染 DB, 应拒收. Contract test 保证此处与 AppSettings 同步.
     bad_ms_keys = [k for k in ms if k not in LEGAL_MODEL_SELECTIONS_KEYS]
@@ -186,9 +195,10 @@ def validate_settings_shape(settings: dict) -> None:
             f"allowed: {sorted(LEGAL_MODEL_SELECTIONS_KEYS)}"
         )
     for sel_key in ("chatModel", "visionModel", "embeddingModel"):
-        sel = ms.get(sel_key) or {}
-        if not isinstance(sel, dict):
+        sel = ms.get(sel_key)
+        if sel is not None and not isinstance(sel, dict):
             raise ValueError(f"modelSelections.{sel_key} is not a dict")
+        sel = sel or {}
         bad = [k for k in sel if k not in LEGAL_MODEL_SELECTION_KEYS]
         if bad:
             raise ValueError(
@@ -197,21 +207,80 @@ def validate_settings_shape(settings: dict) -> None:
                 f"allowed: {sorted(LEGAL_MODEL_SELECTION_KEYS)}"
             )
 
-    wiki = settings.get("wiki") or {}
+    wiki = settings.get("wiki")
+    if wiki is not None and not isinstance(wiki, dict):
+        raise ValueError("wiki must be a dict")
+    wiki = wiki or {}
     bad_wiki = [k for k in wiki if k not in LEGAL_WIKI_KEYS]
     if bad_wiki:
         raise ValueError(
             f"unknown wiki field {bad_wiki[0]!r}; " f"allowed: {sorted(LEGAL_WIKI_KEYS)}"
         )
 
-    orch = settings.get("orch") or {}
-    if not isinstance(orch, dict):
+    orch = settings.get("orch")
+    if orch is not None and not isinstance(orch, dict):
         raise ValueError("orch is not a dict")
+    orch = orch or {}
     bad_orch = [k for k in orch if k not in LEGAL_ORCH_KEYS]
     if bad_orch:
         raise ValueError(
             f"unknown orch field {bad_orch[0]!r}; " f"allowed: {sorted(LEGAL_ORCH_KEYS)}"
         )
+
+
+# Credential names are matched against a normalized spelling so legacy
+# aliases such as ``api_key`` and ``API-KEY`` have the same treatment as
+# ``apiKey``.  These are intentionally anchored rules: substring matching
+# would redact ordinary settings such as ``tokenization`` or ``passwordPolicy``.
+_SECRET_KEY_NAMES = frozenset({"apikey", "authorization", "token", "secret", "password"})
+_SECRET_SUFFIXES = frozenset({"password", "secret", "token", "apikey"})
+# A bare ``key`` suffix is too broad (for example, ``publicKey`` is not a
+# credential).  Restrict it to prefixes whose names unambiguously describe a
+# private credential; broader suffix rules above remain safe and auditable.
+_PRIVATE_KEY_PREFIXES = frozenset({"api", "private", "secret"})
+
+
+def _is_secret_key(key: Any) -> bool:
+    """Return whether *key* names a credential in a settings object.
+
+    Names are compared as lowercase alphanumeric strings, making common
+    snake_case, kebab-case, and acronym aliases equivalent.  Exact names and
+    credential suffixes are matched as whole names only; the narrow ``*key``
+    rule prevents false positives for ordinary configuration fields.
+    """
+    if not isinstance(key, str):
+        return False
+    normalized = re.sub(r"[^a-z0-9]", "", key.lower())
+    if normalized in _SECRET_KEY_NAMES:
+        return True
+    # ``hasApiKey`` is response metadata, not the credential itself; retain it
+    # so repeated redaction remains idempotent and endpoint state is preserved.
+    if normalized == "hasapikey" or normalized == "haskey":
+        return False
+    if any(normalized.endswith(suffix) for suffix in _SECRET_SUFFIXES):
+        return True
+    return normalized.endswith("key") and any(
+        normalized == f"{prefix}key" for prefix in _PRIVATE_KEY_PREFIXES
+    )
+
+
+def parse_app_settings_object(value: Any) -> Dict[str, Any]:
+    """Parse an ``app_settings`` preference and require a JSON object.
+
+    This is intentionally separate from :func:`redact_secrets_json`: the
+    latter is a defensive response helper whose non-string/scalar contract is
+    used by generic callers, while preference PUT must reject invalid data
+    before it reaches storage.
+    """
+    import json as _json
+
+    try:
+        parsed = _json.loads(value)
+    except (ValueError, TypeError):
+        raise ValueError("app_settings must be a JSON object") from None
+    if not isinstance(parsed, dict):
+        raise ValueError("app_settings must be a JSON object")
+    return parsed
 
 
 def redact_secrets(settings: Any) -> Any:
@@ -233,19 +302,24 @@ def redact_secrets(settings: Any) -> Any:
     Returns:
         与输入同构的新 dict, 但 endpoint.apiKey 被剥离并标记 hasApiKey.
     """
+    if isinstance(settings, list):
+        return [redact_secrets(item) for item in settings]
     if not isinstance(settings, dict):
         return settings
 
-    out = dict(settings)
-    endpoints = out.get("endpoints")
+    out: Dict[Any, Any] = {}
+    for key, value in settings.items():
+        out[key] = "" if _is_secret_key(key) else redact_secrets(value)
+
+    endpoints = settings.get("endpoints")
     if isinstance(endpoints, list):
         cleaned: List[Any] = []
         for ep in endpoints:
             if not isinstance(ep, dict):
-                cleaned.append(ep)
+                cleaned.append(redact_secrets(ep))
                 continue
-            new_ep = dict(ep)
-            original_key = new_ep.get("apiKey")
+            new_ep = redact_secrets(ep)
+            original_key = ep.get("apiKey")
             existing_flag = new_ep.get("hasApiKey")
             # 幂等性 (2026-08-26): 若输入已带 hasApiKey 标记 (即二次过
             # canonicalizer, 如 preference GET round-trip / cache replay),
@@ -277,10 +351,14 @@ def redact_secrets_json(value: Any) -> Any:
 
         parsed = _json.loads(value)
     except (ValueError, TypeError):
-        return value
+        # Never return malformed input: it may contain an unparseable credential.
+        return "{}"
+    if not isinstance(parsed, dict):
+        # Preference GET is a settings-object response.  Historical rows may
+        # contain valid JSON scalars or lists; never echo them, since a scalar
+        # string can itself be a credential.
+        return "{}"
     redacted = redact_secrets(parsed)
-    if redacted is parsed:
-        return value
     import json as _json
 
     return _json.dumps(redacted, ensure_ascii=False)
@@ -320,11 +398,17 @@ def strip_unknown_fields(settings: Any) -> Any:
             clean_ep = {k: v for k, v in ep.items() if k in LEGAL_ENDPOINT_KEYS}
             models = clean_ep.get("discoveredModels")
             if isinstance(models, list):
-                clean_ep["discoveredModels"] = [
-                    {k: v for k, v in m.items() if k in LEGAL_DISCOVERED_MODEL_KEYS}
-                    for m in models
-                    if isinstance(m, dict)
-                ]
+                clean_models: List[Any] = []
+                for model in models:
+                    if not isinstance(model, dict):
+                        # Preserve malformed items so validation exposes the bad
+                        # persisted data instead of silently dropping it.
+                        clean_models.append(model)
+                        continue
+                    clean_models.append(
+                        {k: v for k, v in model.items() if k in LEGAL_DISCOVERED_MODEL_KEYS}
+                    )
+                clean_ep["discoveredModels"] = clean_models
             cleaned_eps.append(clean_ep)
         out["endpoints"] = cleaned_eps
 
@@ -542,3 +626,48 @@ def validate_settings_payload(
             except ValueError as exc:
                 # 重新包装, 带上 endpoints 索引, 便于用户定位
                 raise ValueError(f"endpoints[{i}]: {exc}") from exc
+
+
+def classify_settings_validation_error(exc: ValueError) -> str:
+    """Return a non-sensitive field category for a settings validation error.
+
+    Validation exceptions remain detailed for internal callers; HTTP handlers
+    must not serialize those messages because they can contain user-controlled
+    protocols, paths, or other secrets.
+    """
+    message = str(exc)
+    if "timezone" in message:
+        return "timezone"
+    if "protocol" in message:
+        return "protocol"
+    if "localModelPath" in message:
+        return "localModelPath"
+    return "value"
+
+
+def classify_settings_shape_error(exc: ValueError) -> str:
+    """Return a coarse, non-sensitive category for a shape validation error."""
+    message = str(exc)
+    if "top-level" in message:
+        return "top_level"
+    if "endpoints" in message:
+        return "endpoints"
+    if "model-selection" in message or "modelSelections" in message:
+        return "modelSelections"
+    if "wiki" in message:
+        return "wiki"
+    if "orch" in message:
+        return "orch"
+    return "settings"
+
+
+def classify_settings_shape_field(exc: ValueError) -> str:
+    """Return the offending schema field name without exposing its value."""
+    message = str(exc)
+    match = re.search(
+        r"unknown (?:top-level|endpoint|discovered-model|model-selections|model-selection|wiki|orch) field '([^']+)'",
+        message,
+    )
+    if match and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,63}", match.group(1)):
+        return match.group(1)
+    return classify_settings_shape_error(exc)

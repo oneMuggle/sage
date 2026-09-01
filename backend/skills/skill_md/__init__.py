@@ -35,6 +35,7 @@ from .resources import (
     validate_resource_path,
 )
 from .sandbox import (
+    DEFAULT_ENV_ALLOWLIST,
     DEFAULT_ENV_DENYLIST,
     SandboxPort,
     SandboxRequest,
@@ -52,6 +53,7 @@ __all__ = [
     "AutoActivationResult",
     "BuiltinSkillError",
     "ConfirmationPort",
+    "DEFAULT_ENV_ALLOWLIST",
     "DEFAULT_ENV_DENYLIST",
     "DeleteSkillResult",
     "MAX_AUTO_ACTIVATED_SKILLS",

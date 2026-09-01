@@ -108,6 +108,11 @@ def test_record_recent_truncates_to_max(isolated_data_dir: Path):
     assert items[0].path == f"/p{MAX_RECENT + 4}"
 
 
+def test_record_recent_rejects_invalid_intent(isolated_data_dir: Path):
+    with pytest.raises(ValueError, match="create.*open"):
+        record_recent("/invalid", "invalid", "delete")  # type: ignore[arg-type]
+
+
 # 9. most_recent_parent: empty list -> None
 def test_most_recent_parent_returns_none_when_empty(isolated_data_dir: Path):
     assert most_recent_parent() is None
@@ -134,3 +139,44 @@ def test_most_recent_parent_returns_none_when_parent_missing(
 # 12. user_data_dir: env var priority
 def test_user_data_dir_uses_env_var_when_set(isolated_data_dir: Path, tmp_path: Path):
     assert user_data_dir() == isolated_data_dir
+
+
+# 13. Pydantic v1-compatible validation uses parse_obj when model_validate is absent
+def test_load_recent_supports_pydantic_v1_api(isolated_data_dir: Path, monkeypatch):
+    p = isolated_data_dir / "recent-projects.json"
+    p.write_text(json.dumps([{"path": "/v1", "name": "v1", "opened_at": 1.0, "intent": "open"}]))
+
+    class V1Project:
+        @classmethod
+        def parse_obj(cls, raw):
+            return cls(raw)
+
+        def __init__(self, raw):
+            self.path = raw["path"]
+
+    monkeypatch.setattr("backend.storage.recent_projects.RecentProject", V1Project)
+
+    items = load_recent()
+
+    assert len(items) == 1
+    assert items[0].path == "/v1"
+
+
+# 14. Pydantic v1-compatible serialization uses dict when model_dump is absent
+def test_save_recent_supports_pydantic_v1_api(isolated_data_dir: Path):
+    class V1Project:
+        def dict(self):
+            return {"path": "/v1", "name": "v1", "opened_at": 1.0, "intent": "open"}
+
+    save_recent([V1Project()])
+
+    assert json.loads((isolated_data_dir / "recent-projects.json").read_text())[0]["path"] == "/v1"
+
+
+def test_save_recent_does_not_swallow_serialization_errors(isolated_data_dir: Path):
+    class BrokenProject:
+        def dict(self):
+            raise RuntimeError("serialization failed")
+
+    with pytest.raises(RuntimeError, match="serialization failed"):
+        save_recent([BrokenProject()])
