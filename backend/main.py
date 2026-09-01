@@ -57,11 +57,10 @@ from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
 from backend.api.llm_proxy_routes import router as llm_proxy_router
 from backend.api.local_auth import (
+    LocalAuthMiddleware,
     initialize_local_auth_token,
     is_ownership_health_valid,
-    is_public_path,
     ownership_health_proof,
-    require_local_auth,
 )
 from backend.api.mcp_routes import router as mcp_router
 from backend.api.office_routes import (
@@ -511,21 +510,10 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def require_local_auth_for_api(request: Request, call_next):
-    """Require the process-local capability for every route except health probes."""
-    if request.method == "OPTIONS":
-        return await call_next(request)
-    if not is_public_path(request.url.path):
-        try:
-            require_local_auth(request)
-        except HTTPException as exc:
-            return JSONResponse(
-                status_code=exc.status_code,
-                content={"detail": exc.detail},
-                headers=exc.headers,
-            )
-    return await call_next(request)
+# Local capability enforcement runs as a pure ASGI middleware (not
+# BaseHTTPMiddleware) so it does not add per-request task-group/stream overhead
+# to the event loop; see LocalAuthMiddleware's docstring for the measurement.
+app.add_middleware(LocalAuthMiddleware)
 
 
 @app.middleware("http")

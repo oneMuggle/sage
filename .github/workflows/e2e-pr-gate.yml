@@ -2,11 +2,15 @@ name: E2E PR Gate
 on:
   pull_request:
     branches: [main]
+permissions:
+  contents: read
 jobs:
   stub-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with: { node-version: '22.12' }
       - run: npm ci
@@ -18,6 +22,8 @@ jobs:
     needs: stub-smoke
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with: { node-version: '22.12' }
       - run: npm ci
@@ -26,8 +32,11 @@ jobs:
   live-boot:
     runs-on: ubuntu-latest
     needs: stub-deep
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with: { node-version: '22.12' }
       - uses: conda-incubator/setup-miniconda@v3
@@ -37,32 +46,388 @@ jobs:
       - run: npm ci && npm run build:electron
       - run: |
           set -euo pipefail
+          # Initialize all state read by the EXIT trap before any fallible command.
+          supervisor_pid=""
+          backend_pid_file=""
+          backend_pid=""
+          cleanup_failed=0
+          supervisor_script=""
+          supervisor_log=""
+          # Walk /proc for live (non-zombie) members of the backend's process
+          # group.  Orphans reparented to PID 1 keep their pgid, so this finds
+          # descendants that detached from the supervisor's process tree.
+          #   MODE=kill   -> SIGKILL each member
+          #   MODE=report -> print each member; return non-zero if any exist
+          # /proc is re-listed on every call: a snapshot taken before the kills
+          # would miss a process forked in between, which is what we hunt for.
+          scan_backend_group() {
+            scan_mode="$1"
+            scan_found=0
+            [ -n "$backend_pid" ] || return 0
+            if ! proc_listing="$(ls -1 /proc 2>/dev/null)"; then
+              cleanup_failed=1
+              echo 'Failed to enumerate /proc during cleanup' >&2
+              return 0
+            fi
+            for entry in $proc_listing; do
+              case "$entry" in
+                ''|*[!0-9]*) continue ;;
+              esac
+              stat_content="$(cat "/proc/$entry/stat" 2>/dev/null || true)"
+              [ -n "$stat_content" ] || continue
+              # comm is the only field that may contain parentheses, and no
+              # later field can produce ") ", so this greedy strip lands just
+              # past comm.  Remaining fields then match proc(5): state, ppid,
+              # pgrp -> $1, $2, $3.
+              after="${stat_content##*) }"
+              [ -n "$after" ] || continue
+              # shellcheck disable=SC2086  # deliberate field split of /proc stat
+              set -- $after
+              [ "$#" -ge 3 ] || continue
+              if [ "$3" = "$backend_pid" ] && [ "$1" != "Z" ]; then
+                scan_found=1
+                if [ "$scan_mode" = "kill" ]; then
+                  kill -KILL "$entry" 2>/dev/null
+                else
+                  echo "Process $entry with pgid $backend_pid still alive" >&2
+                fi
+              fi
+            done
+            [ "$scan_found" -eq 0 ]
+          }
+          # Cleanup is the single EXIT trap, armed before any fallible command.
+          cleanup() {
+            exit_code=$?
+            set +e
+            # cleanup_failed is initialized to 0 before the trap is armed and is
+            # only ever set by this function, so it needs no reset here.
+            # backend_pid is only assigned after the quadruple validation passes,
+            # so a validation timeout would otherwise leave a booting backend
+            # running while we kill only its supervisor.  Recover the PID from
+            # the pidfile, re-checking parent and cmdline so a recycled PID is
+            # never signaled.  Group signals require pgid == pid; a child that
+            # has not reached setsid yet still carries the supervisor's pgid, so
+            # signaling its "group" would hit the wrong group.  Such a PID is
+            # therefore killed directly and swept by the /proc scan instead.
+            backend_group_owned=1
+            if [ -z "$backend_pid" ] && [ -n "$backend_pid_file" ] && [ -s "$backend_pid_file" ]; then
+              fallback_pid="$(tr -d '[:space:]' < "$backend_pid_file")"
+              case "$fallback_pid" in
+                ''|0|*[!0-9]*) ;;
+                *)
+                  fallback_cmdline="$(tr '\0' ' ' < "/proc/$fallback_pid/cmdline" 2>/dev/null || true)"
+                  fallback_ppid="$(ps -o ppid= -p "$fallback_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+                  fallback_pgid="$(ps -o pgid= -p "$fallback_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+                  if [ "$fallback_ppid" = "$supervisor_pid" ] \
+                    && printf '%s' "$fallback_cmdline" | grep -q 'backend.main'; then
+                    backend_pid="$fallback_pid"
+                    if [ "$fallback_pgid" != "$fallback_pid" ]; then
+                      backend_group_owned=0
+                    fi
+                    echo "Recovered unvalidated backend PID $backend_pid for teardown" >&2
+                  fi
+                  ;;
+              esac
+            fi
+            if [ -n "$backend_pid" ] && [ "$backend_group_owned" -eq 0 ]; then
+              kill -TERM "$backend_pid" 2>/dev/null
+              sleep 0.5
+              kill -KILL "$backend_pid" 2>/dev/null
+            fi
+            # Phase 1: TERM the backend's process group first.  The supervisor is
+            # the backend's reaper, so it must outlive its child: killing it first
+            # would leave the backend a zombie whose group still answers kill -0,
+            # and the verification below would then report a false leftover.
+            if [ -n "$backend_pid" ] && [ "$backend_group_owned" -eq 1 ]; then
+              kill -TERM -- -"$backend_pid" 2>/dev/null
+              backend_deadline=$((SECONDS + 4))
+              while [ "$SECONDS" -lt "$backend_deadline" ]; do
+                if scan_backend_group report >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 0.2
+              done
+            fi
+            # Phase 2: force-KILL the backend's process group.
+            if [ -n "$backend_pid" ] && [ "$backend_group_owned" -eq 1 ]; then
+              kill -KILL -- -"$backend_pid" 2>/dev/null
+              backend_deadline=$((SECONDS + 3))
+              while [ "$SECONDS" -lt "$backend_deadline" ]; do
+                if scan_backend_group report >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 0.1
+              done
+            fi
+            # Phase 3: KILL any live group member that escaped the group signals
+            # (e.g. a descendant that changed session but kept the pgid), then
+            # wait for the kills to land.  A just-SIGKILLed process is still
+            # non-zombie in /proc until it is scheduled, so reporting without a
+            # grace period would flag a false leftover and turn a pass red.
+            scan_backend_group kill
+            if [ -n "$backend_pid" ]; then
+              backend_deadline=$((SECONDS + 3))
+              while [ "$SECONDS" -lt "$backend_deadline" ]; do
+                if scan_backend_group report >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 0.1
+              done
+            fi
+            # Phase 4: the backend is gone, so the supervisor's waitpid returns
+            # and it exits on its own; TERM then KILL it if it lingers, and reap
+            # it explicitly so it cannot be counted as a leftover zombie.
+            if [ -n "$supervisor_pid" ] && kill -0 "$supervisor_pid" 2>/dev/null; then
+              kill -TERM "$supervisor_pid" 2>/dev/null
+              supervisor_deadline=$((SECONDS + 5))
+              while [ "$SECONDS" -lt "$supervisor_deadline" ]; do
+                if ! kill -0 "$supervisor_pid" 2>/dev/null; then
+                  break
+                fi
+                sleep 0.2
+              done
+            fi
+            if [ -n "$supervisor_pid" ] && kill -0 "$supervisor_pid" 2>/dev/null; then
+              kill -KILL "$supervisor_pid" 2>/dev/null
+              supervisor_deadline=$((SECONDS + 3))
+              while [ "$SECONDS" -lt "$supervisor_deadline" ]; do
+                if ! kill -0 "$supervisor_pid" 2>/dev/null; then
+                  break
+                fi
+                sleep 0.1
+              done
+            fi
+            # Reap the supervisor only if it actually died.  An unkillable
+            # (uninterruptible-sleep) supervisor would make an unbounded `wait`
+            # hang until the job timeout, which reports a timeout instead of a
+            # cleanup failure; the verification below flags it as a leak instead.
+            if [ -n "$supervisor_pid" ] && ! kill -0 "$supervisor_pid" 2>/dev/null; then
+              wait "$supervisor_pid" 2>/dev/null
+            fi
+            # Verification: a live (non-zombie) group member or a still-running
+            # supervisor is a leak.  Zombies are excluded deliberately — they
+            # hold no resources and are reaped by the init process.
+            if [ -n "$supervisor_pid" ] && kill -0 "$supervisor_pid" 2>/dev/null; then
+              cleanup_failed=1
+              echo 'Supervisor process remained after cleanup' >&2
+            fi
+            if ! scan_backend_group report; then
+              cleanup_failed=1
+            fi
+            if [ -n "$backend_pid_file" ]; then
+              rm -f "$backend_pid_file"
+            fi
+            if [ -n "$supervisor_script" ] && [ -f "$supervisor_script" ]; then
+              rm -f "$supervisor_script"
+            fi
+            # Print both logs before deleting them: on a health-check timeout or
+            # a Playwright failure this is the only surviving diagnostic.
+            if [ -f backend.log ]; then
+              echo '----- backend.log -----'
+              cat backend.log
+            fi
+            if [ -n "$supervisor_log" ] && [ -f "$supervisor_log" ]; then
+              echo '----- supervisor.log -----'
+              cat "$supervisor_log"
+              rm -f "$supervisor_log"
+            fi
+            if [ "$cleanup_failed" -eq 1 ] && [ "$exit_code" -eq 0 ]; then
+              exit_code=1
+            fi
+            exit "$exit_code"
+          }
+          trap cleanup EXIT
           if ! auth_token="$(conda run -n sage-backend python -c 'import secrets; print(secrets.token_urlsafe(32))')" || [ -z "$auth_token" ]; then
             echo 'Failed to generate SAGE_LOCAL_AUTH_TOKEN' >&2
             exit 1
           fi
+          printf '::add-mask::%s\n' "$auth_token"
           export SAGE_LOCAL_AUTH_TOKEN="$auth_token"
-          setsid --wait conda run -n sage-backend python -m backend.main > backend.log 2>&1 &
-          backend_pid=$!
-          cleanup() {
-            exit_code=$?
-            set +e
-            kill -- -"$backend_pid" 2>/dev/null
-            wait "$backend_pid"
-            cat backend.log
-            exit "$exit_code"
-          }
-          trap cleanup EXIT
+          backend_pid_file="$(mktemp)"
+          supervisor_log="supervisor.log"
+          supervisor_script="$(mktemp --suffix=.py)"
+          # Minimal Python supervisor: fork+exec the backend in a new
+          # session (so it owns its own pgid/sid), write its PID to the
+          # pidfile, then wait for it.  The supervisor does NOT manage
+          # cleanup: the shell cleanup is the watchdog, and it walks
+          # /proc to kill any process whose pgid equals the backend PID
+          # (which catches orphans reparented to PID 1).
+          cat > "$supervisor_script" <<'SUPERVISOR_EOF'
+          #!/usr/bin/env python3
+          """Minimal supervisor for the live-boot backend (e2e tests).
+
+          Starts the backend in a new session so it owns its own pgid/sid,
+          writes the backend's PID to a pidfile (fsync'd), and waits for it.
+          Cleanup is the shell's responsibility: it kills the backend's
+          process group and walks /proc to find any orphaned descendants.
+          """
+          import os
+          import subprocess
+          import sys
+
+
+          def write_pidfile(path, pid):
+              with open(path, 'w') as f:
+                  f.write('{}\n'.format(pid))
+                  f.flush()
+                  try:
+                      os.fsync(f.fileno())
+                  except OSError:
+                      pass
+
+          def main():
+              if len(sys.argv) < 4:
+                  print(
+                      'Usage: {} <backend_pidfile> <backend_logfile> <command...>'.format(sys.argv[0]),
+                      file=sys.stderr,
+                  )
+                  return 2
+
+              backend_pidfile = sys.argv[1]
+              backend_logfile = sys.argv[2]
+              cmd = list(sys.argv[3:])
+
+              try:
+                  log_fd = open(backend_logfile, 'ab', buffering=0)
+              except OSError as exc:
+                  print('Supervisor: cannot open log {}: {}'.format(backend_logfile, exc), file=sys.stderr)
+                  return 1
+
+              try:
+                  backend = subprocess.Popen(
+                      cmd,
+                      stdout=log_fd,
+                      stderr=subprocess.STDOUT,
+                      stdin=subprocess.DEVNULL,
+                      start_new_session=True,
+                      close_fds=True,
+                  )
+              except OSError as exc:
+                  print('Supervisor: failed to start backend: {}'.format(exc), file=sys.stderr)
+                  log_fd.close()
+                  return 1
+
+              write_pidfile(backend_pidfile, backend.pid)
+
+              try:
+                  status = backend.wait()
+              except OSError as exc:
+                  print('Supervisor: wait failed: {}'.format(exc), file=sys.stderr)
+                  return 1
+              finally:
+                  log_fd.close()
+
+              # Popen.wait() already translates the wait status: >= 0 is the
+              # exit code, negative is -signum.
+              if status < 0:
+                  return 128 - status
+              return status
+
+          if __name__ == '__main__':
+              sys.exit(main())
+          SUPERVISOR_EOF
+          # Resolve the environment's interpreter once so the supervisor can
+          # exec it directly.  `conda run` would otherwise sit between the
+          # supervisor and the server, buffering the child's entire output until
+          # it exits — and since this script always ends the server with a
+          # signal, backend.log would be empty on every failure path, exactly
+          # when the log is needed.  Removing the wrapper also makes backend_pid
+          # the real server process rather than a wrapper.
+          if ! backend_python="$(conda run -n sage-backend python -c 'import sys; print(sys.executable)')" \
+            || [ -z "$backend_python" ] || [ ! -x "$backend_python" ]; then
+            echo 'Failed to resolve the sage-backend interpreter' >&2
+            exit 1
+          fi
+          # Launch the supervisor in a new session so its own pgid does not
+          # match the runner shell's pgid (avoids pgid collisions when the
+          # backend detaches via setsid).  The supervisor then forks the
+          # backend into another new session, so the backend owns its own
+          # pgid/sid and the shell can kill the entire group with kill -- -PID.
+          # `$!` is the supervisor itself only because job control is off in a
+          # non-interactive shell: setsid skips its internal fork when the
+          # caller is not already a process-group leader.  If that ever changes,
+          # the ppid check below fails and the run exits non-zero (fail closed).
+          setsid python3 "$supervisor_script" "$backend_pid_file" backend.log \
+            "$backend_python" -m backend.main \
+            >/dev/null 2>"$supervisor_log" &
+          supervisor_pid=$!
+          if [ -z "$supervisor_pid" ] || ! kill -0 "$supervisor_pid" 2>/dev/null; then
+            echo 'Supervisor failed to launch' >&2
+            exit 1
+          fi
+          # Wait for the supervisor to write backend's PID file.  Validate
+          # the candidate is:
+          #   - numeric, non-zero
+          #   - alive
+          #   - a process-group leader (pgid == pid) so kill -- -PID works
+          #   - a session leader (sid == pid)
+          #   - its parent is supervisor_pid (prevents PID reuse from
+          #     matching an unrelated PID on the runner)
+          #   - its cmdline contains "backend.main" (sanity check)
+          # Every `ps` here appends `|| true`: ps exits non-zero for a dead PID,
+          # and under `set -e` that would abort the script before the explicit
+          # diagnostics below could run.
+          backend_pid_validated=0
+          for _ in $(seq 1 50); do
+            if [ -s "$backend_pid_file" ]; then
+              backend_pid_candidate="$(tr -d '[:space:]' < "$backend_pid_file")"
+              case "$backend_pid_candidate" in
+                ''|0|*[!0-9]*) ;;
+                *)
+                  backend_pgid="$(ps -o pgid= -p "$backend_pid_candidate" 2>/dev/null | tr -d '[:space:]' || true)"
+                  backend_sid="$(ps -o sid= -p "$backend_pid_candidate" 2>/dev/null | tr -d '[:space:]' || true)"
+                  backend_ppid="$(ps -o ppid= -p "$backend_pid_candidate" 2>/dev/null | tr -d '[:space:]' || true)"
+                  backend_cmdline="$(tr '\0' ' ' < "/proc/$backend_pid_candidate/cmdline" 2>/dev/null || true)"
+                  if [ "$backend_pgid" = "$backend_pid_candidate" ] \
+                    && [ "$backend_sid" = "$backend_pid_candidate" ] \
+                    && [ "$backend_ppid" = "$supervisor_pid" ] \
+                    && printf '%s' "$backend_cmdline" | grep -q 'backend.main'; then
+                    backend_pid="$backend_pid_candidate"
+                    backend_pid_validated=1
+                    break
+                  fi
+                  ;;
+              esac
+            fi
+            sleep 0.1
+          done
+          if [ "$backend_pid_validated" -ne 1 ]; then
+            echo 'Backend PID failed validation (pgid/sid/ppid/cmdline)' >&2
+            exit 1
+          fi
+          if ! kill -0 "$supervisor_pid" 2>/dev/null; then
+            echo 'Supervisor exited before backend became healthy' >&2
+            exit 1
+          fi
           for attempt in $(seq 1 60); do
-            if ! kill -0 "$backend_pid" 2>/dev/null; then
-              cat backend.log
+            backend_state="$(ps -o stat= -p "$backend_pid" 2>/dev/null || true)"
+            case "$backend_state" in
+              ''|Z*)
+                echo 'Backend process died before becoming healthy' >&2
+                exit 1
+                ;;
+            esac
+            if ! kill -0 "$supervisor_pid" 2>/dev/null; then
+              echo 'Supervisor exited during health check' >&2
               exit 1
             fi
-            if curl --fail --silent --show-error http://127.0.0.1:8765/health; then
+            # Assert identity, not just reachability: /health is unauthenticated
+            # and any listener on 8765 would satisfy a bare curl, so a foreign
+            # server could be mistaken for ours (uvicorn failing to bind, then a
+            # pre-existing process answering).  /health reports its own pid; the
+            # probe only counts when that pid is the backend we validated.
+            health_json="$(curl --fail --silent --show-error \
+              --connect-timeout 2 --max-time 5 \
+              http://127.0.0.1:8765/health 2>/dev/null || true)"
+            if [ -n "$health_json" ] \
+              && printf '%s' "$health_json" | grep -qE "\"pid\"[[:space:]]*:[[:space:]]*$backend_pid([^0-9]|\$)"; then
               break
             fi
             if [ "$attempt" -eq 60 ]; then
-              cat backend.log
+              echo "Backend did not report a healthy pid=$backend_pid within 120s" >&2
+              if [ -n "$health_json" ]; then
+                echo "Last /health response came from a different process: $health_json" >&2
+              fi
               exit 1
             fi
             sleep 2

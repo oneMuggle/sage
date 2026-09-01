@@ -16,6 +16,8 @@ import secrets
 from typing import Optional
 
 from fastapi import HTTPException, Request, status
+from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 _TOKEN_ENV = "SAGE_LOCAL_AUTH_TOKEN"
 _OWNERSHIP_TOKEN_ENV = "SAGE_BACKEND_OWNERSHIP_TOKEN"
@@ -94,6 +96,42 @@ def require_local_auth(
             detail="本地授权凭据无效或缺失",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+class LocalAuthMiddleware:
+    """Enforce the process-local capability as a pure ASGI middleware.
+
+    This is deliberately NOT a ``BaseHTTPMiddleware``.  Starlette implements
+    that base class with an anyio task group plus a request/response memory
+    object stream per call, so every request pays extra event-loop scheduling
+    hops.  Under the concurrent-write load exercised by
+    ``tests/integration/test_event_loop_blocking.py`` that overhead pushed the
+    ``/health`` P99 from tens of milliseconds to several hundred, because the
+    probe's own responses had to be pumped through the same event loop that was
+    already saturated by 200 in-flight session writes.  A plain ASGI callable
+    adds one ``await`` and no streams, keeping the loop free for the probes.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        if (
+            scope.get("method") != "OPTIONS"
+            and not is_public_path(scope["path"])
+            and not is_local_auth_valid(Request(scope, receive))
+        ):
+            response = JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": "本地授权凭据无效或缺失"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 # Make direct route-module imports safe while lifespan is not running (for tests
