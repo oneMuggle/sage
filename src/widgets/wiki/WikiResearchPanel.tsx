@@ -71,7 +71,7 @@ export function WikiResearchPanel({
         status: result.status === 'done' ? 'done' : 'error',
         topic,
         result,
-        error: result.error?.message || null,
+        error: result.error || null,
       });
     } catch (e) {
       setState({

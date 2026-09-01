@@ -31,6 +31,8 @@ export async function listArtifacts(sessionId: string): Promise<Artifact[]> {
   if (!res.ok) {
     throw httpError('listArtifacts', res);
   }
+  const data = await res.json();
+  return data.artifacts ?? [];
 }
 
 export async function readArtifactContent(
@@ -41,6 +43,7 @@ export async function readArtifactContent(
   if (!res.ok) {
     throw httpError('readArtifactContent', res);
   }
+  return res.json();
 }
 
 export async function revealArtifact(
@@ -51,4 +54,8 @@ export async function revealArtifact(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
+  if (!res.ok) {
+    throw httpError('revealArtifact', res);
+  }
+  return res.json();
 }
