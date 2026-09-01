@@ -87,6 +87,9 @@ def wiki_project(tmp_path):
     raw = project / "raw" / "sources"
     raw.mkdir(parents=True)
     (raw / "doc.md").write_text("# source\nbody")
+    from backend.storage.recent_projects import record_recent
+
+    record_recent(str(project), "wiki-project", "open")
     return project
 
 
@@ -97,7 +100,9 @@ def patch_ingest_stream(monkeypatch):
     def _setup(stages: List[Tuple[str, int, str]] = None, raise_after: BaseException = None):
         from backend.api import wiki_routes
 
-        async def _stub(config, project_root, source_file, ctx) -> AsyncIterator[bytes]:
+        async def _stub(
+            config, project_root, source_file, ctx, logical_filename=None
+        ) -> AsyncIterator[bytes]:
             async for chunk in _stub_progress_stream(stages=stages, raise_after=raise_after):
                 yield chunk
 
@@ -187,7 +192,7 @@ async def test_ingest_stream_returns_404_for_missing_source_file(wiki_project, p
     """Fast-fail BEFORE the stream opens — surface parse errors as
     HTTPException (500/400), not as half-streamed NDJSON."""
     patch_ingest_stream()
-    body = _make_request_body(wiki_project, source_abs="/nonexistent/path/missing.md")
+    body = _make_request_body(wiki_project, source_abs=str(wiki_project / "raw" / "sources" / "missing.md"))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post(INGEST_STREAM_PATH, json=body)
         assert r.status_code == 404

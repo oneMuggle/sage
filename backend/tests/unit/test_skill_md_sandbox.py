@@ -16,10 +16,11 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import backend.adapters.out.skill_script.subprocess_sandbox as sandbox_module
 from backend.adapters.out.skill_script.subprocess_sandbox import SubprocessSandboxAdapter
 from backend.skills.skill_md.sandbox import (
     DEFAULT_ENV_DENYLIST,
@@ -277,6 +278,71 @@ def test_adapter_filters_all_denylist_keys(tmp_path):
     assert env_arg.get("SAFE_VAR") == "safe"
 
 
+def test_adapter_uses_minimal_environment_allowlist(tmp_path, monkeypatch):
+    """子进程只继承运行时必需变量，不继承宿主机凭据或身份。"""
+    adapter = SubprocessSandboxAdapter()
+    script = tmp_path / "test_script.py"
+    script.write_text("print('test')\n", encoding="utf-8")
+    monkeypatch.setattr(
+        sandbox_module.os,
+        "environ",
+        {
+            "PATH": "/safe/bin",
+            "TMPDIR": "/safe/tmp",
+            "SSL_CERT_FILE": "/safe/ca.pem",
+            "HOME": "/private/home",
+            "SSH_AUTH_SOCK": "/private/agent.sock",
+            "DOCKER_HOST": "tcp://private",
+            "HTTP_PROXY": "http://user:password@proxy",
+            "BUILD_TOKEN": "token",
+        },
+    )
+
+    mock_process = AsyncMock()
+    mock_process.communicate = AsyncMock(return_value=(b"", b""))
+    mock_process.returncode = 0
+    with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
+        asyncio.run(adapter.run(SandboxRequest(script_path=script)))
+
+    env_arg = mock_exec.call_args.kwargs["env"]
+    assert env_arg == {
+        "PATH": "/safe/bin",
+        "TMPDIR": "/safe/tmp",
+        "SSL_CERT_FILE": "/safe/ca.pem",
+    }
+
+
+def test_request_env_cannot_override_runtime_policy(tmp_path, monkeypatch):
+    """request.env 不能注入敏感键或覆盖安全运行时变量。"""
+    adapter = SubprocessSandboxAdapter()
+    script = tmp_path / "test_script.py"
+    script.write_text("print('test')\n", encoding="utf-8")
+    monkeypatch.setattr(sandbox_module.os, "environ", {"PATH": "/safe/bin"})
+    request_env = {
+        "PATH": "/attacker/bin",
+        "HOME": "/private/home",
+        "SSH_AUTH_SOCK": "/private/agent.sock",
+        "DOCKER_HOST": "tcp://private",
+        "KUBECONFIG": "/private/config",
+        "HTTPS_PROXY": "http://user:password@proxy",
+        "SERVICE_SECRET": "secret",
+        "SAFE_VAR": "safe",
+    }
+
+    mock_process = AsyncMock()
+    mock_process.communicate = AsyncMock(return_value=(b"", b""))
+    mock_process.returncode = 0
+    with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
+        asyncio.run(adapter.run(SandboxRequest(script_path=script, env=request_env)))
+
+    env_arg = mock_exec.call_args.kwargs["env"]
+    assert env_arg["PATH"] == "/safe/bin"
+    assert env_arg["SAFE_VAR"] == "safe"
+    for key in request_env:
+        if key not in {"PATH", "SAFE_VAR"}:
+            assert key not in env_arg
+
+
 # =====================================================================
 # SubprocessSandboxAdapter - cwd
 # =====================================================================
@@ -391,9 +457,221 @@ def test_adapter_handles_subprocess_exception(tmp_path):
     assert "spawn failed" in result.error
 
 
+@pytest.mark.asyncio()
+async def test_adapter_handles_stdin_broken_pipe_and_cleans_up(tmp_path):
+    """stdin 写入 BrokenPipe 时返回失败结果并清理进程。"""
+    adapter = SubprocessSandboxAdapter()
+    script = tmp_path / "test_script.py"
+    script.write_text("print('test')\n", encoding="utf-8")
+
+    class BrokenPipeStdin:
+        def write(self, data):
+            raise BrokenPipeError("child exited")
+
+        def close(self):
+            return None
+
+    process = AsyncMock()
+    process.stdout = asyncio.StreamReader()
+    process.stderr = asyncio.StreamReader()
+    process.stdin = BrokenPipeStdin()
+    process.returncode = None
+    req = SandboxRequest(script_path=script, stdin_data=b"input")
+
+    with patch("asyncio.create_subprocess_exec", return_value=process):  # noqa: SIM117
+        with patch.object(adapter, "_terminate_process_tree", new=AsyncMock()) as terminate:
+            result = await adapter.run(req)
+
+    assert isinstance(result, SandboxResult)
+    assert result.success is False
+    assert "child exited" in result.error
+    terminate.assert_awaited_once_with(process)
+
+
+@pytest.mark.asyncio()
+async def test_adapter_handles_collection_exception_and_cleans_up(tmp_path):
+    """输出收集阶段的通用异常也应返回失败结果并清理进程。"""
+    adapter = SubprocessSandboxAdapter()
+    script = tmp_path / "test_script.py"
+    script.write_text("print('test')\n", encoding="utf-8")
+    process = AsyncMock()
+    process.returncode = None
+    req = SandboxRequest(script_path=script)
+
+    with patch("asyncio.create_subprocess_exec", return_value=process):  # noqa: SIM117
+        with patch.object(
+            adapter,
+            "_collect_output",
+            new=AsyncMock(side_effect=RuntimeError("reader failed")),
+        ):
+            with patch.object(
+                adapter, "_terminate_process_tree", new=AsyncMock()
+            ) as terminate:
+                result = await adapter.run(req)
+
+    assert isinstance(result, SandboxResult)
+    assert result.success is False
+    assert "reader failed" in result.error
+    terminate.assert_awaited_once_with(process)
+
+
 # =====================================================================
 # SubprocessSandboxAdapter - 真实 subprocess 集成
 # =====================================================================
+
+
+@pytest.mark.asyncio()
+async def test_windows_termination_uses_taskkill_tree_without_shell():
+    """Windows 清理使用 taskkill /T /F，且不经过 shell。"""
+    adapter = SubprocessSandboxAdapter()
+    process = AsyncMock()
+    process.pid = 4321
+    process.returncode = None
+    process.kill = MagicMock()
+    process.wait = AsyncMock()
+    killer = AsyncMock()
+    killer.returncode = 0
+    killer.wait = AsyncMock()
+
+    with patch.object(sandbox_module.os, "name", "nt"), patch.object(
+        sandbox_module.asyncio,
+        "create_subprocess_exec",
+        return_value=killer,
+    ) as spawn:
+        await adapter._terminate_process_tree(process)
+
+    assert spawn.call_args.args == (
+        "taskkill.exe",
+        "/PID",
+        "4321",
+        "/T",
+        "/F",
+    )
+    assert spawn.call_args.kwargs["stdin"] == asyncio.subprocess.DEVNULL
+    assert "shell" not in spawn.call_args.kwargs
+    process.kill.assert_not_called()
+    process.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio()
+async def test_windows_taskkill_failure_falls_back_and_reaps_process():
+    """taskkill 不可用或失败时仍直接终止并回收子进程。"""
+    adapter = SubprocessSandboxAdapter()
+    process = AsyncMock()
+    process.pid = 99
+    process.returncode = None
+    process.kill = MagicMock()
+    process.wait = AsyncMock()
+    killer = AsyncMock()
+    killer.returncode = None
+    killer.wait = AsyncMock(side_effect=OSError("taskkill unavailable"))
+    killer.kill = MagicMock()
+
+    with patch.object(sandbox_module.os, "name", "nt"), patch.object(
+        sandbox_module.asyncio,
+        "create_subprocess_exec",
+        return_value=killer,
+    ):
+        await adapter._terminate_process_tree(process)
+
+    killer.kill.assert_called_once_with()
+    process.kill.assert_called_once_with()
+    process.wait.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    "collection_result",
+    [
+        pytest.param((b"limited", b"", True), id="output-limit"),
+        pytest.param(TimeoutError("expired"), id="timeout"),
+        pytest.param(RuntimeError("reader failed"), id="collection-error"),
+    ],
+)
+async def test_windows_failure_paths_clean_up_process_tree(tmp_path, collection_result):
+    """Windows 的各类中断路径都调用进程树清理，而非仅杀直接子进程。"""
+    adapter = SubprocessSandboxAdapter()
+    script = tmp_path / "test_script.py"
+    script.write_text("print('test')\n", encoding="utf-8")
+    process = AsyncMock()
+    process.pid = 123
+    process.returncode = None
+    request = SandboxRequest(script_path=script)
+
+    cleanup = AsyncMock()
+    collection = AsyncMock()
+    if isinstance(collection_result, BaseException):
+        collection.side_effect = collection_result
+    else:
+        collection.return_value = collection_result
+
+    with patch.object(sandbox_module.os, "name", "nt"), patch.object(
+        sandbox_module.asyncio,
+        "create_subprocess_exec",
+        return_value=process,
+    ), patch.object(adapter, "_collect_output", new=collection), patch.object(
+        adapter, "_terminate_process_tree", new=cleanup
+    ):
+        result = await adapter.run(request)
+
+    assert result.success is False
+    cleanup.assert_awaited_once_with(process)
+
+
+@pytest.mark.asyncio()
+async def test_adapter_enforces_combined_stdout_stderr_limit(tmp_path):
+    """stdout and stderr share one output budget."""
+    adapter = SubprocessSandboxAdapter(max_output_bytes=10)
+    script = tmp_path / "both.py"
+    script.write_text(
+        "import sys; sys.stdout.write('123456'); sys.stderr.write('78901')\n",
+        encoding="utf-8",
+    )
+
+    result = await adapter.run(SandboxRequest(script_path=script))
+
+    assert result.success is False
+    assert "output exceeded" in result.error
+    assert len(result.stdout.encode()) + len(result.stderr.encode()) <= 10
+
+
+@pytest.mark.asyncio()
+async def test_adapter_rejects_oversized_stdin_without_spawning(tmp_path):
+    """stdin is rejected before a child can receive an unbounded payload."""
+    adapter = SubprocessSandboxAdapter()
+    script = tmp_path / "stdin.py"
+    script.write_text("print('unreachable')\n", encoding="utf-8")
+
+    result = await adapter.run(
+        SandboxRequest(script_path=script, stdin_data=b"x" * (1024 * 1024 + 1))
+    )
+
+    assert result.success is False
+    assert "stdin" in result.error
+
+
+@pytest.mark.asyncio()
+async def test_adapter_bounds_nonstandard_communicate_fallback(tmp_path):
+    """Fallback communicate results are capped across both returned streams."""
+    adapter = SubprocessSandboxAdapter(max_output_bytes=5)
+    script = tmp_path / "fallback.py"
+    script.write_text("pass\n", encoding="utf-8")
+
+    class NonStandardProcess:
+        stdout = object()
+        stderr = object()
+        returncode = 0
+
+        async def communicate(self, input=None):
+            return b"1234", b"5678"
+
+    process = NonStandardProcess()
+    with patch("asyncio.create_subprocess_exec", return_value=process):
+        result = await adapter.run(SandboxRequest(script_path=script))
+
+    assert result.success is False
+    assert "output exceeded" in result.error
+    assert len(result.stdout.encode()) + len(result.stderr.encode()) <= 5
 
 
 @pytest.mark.asyncio()

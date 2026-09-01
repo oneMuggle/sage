@@ -2,12 +2,13 @@
 
 > Sage 技能系统 — Python `BaseSkill` 类 + SKILL.md 文件两种形态，
 > 由 `SkillRegistry` 统一管理，`SkillMdHotLoader` 提供热重载与门控加载。
+> 本文是验证映射与历史基线；当前实现还包括 SKILL.md 单文件形态、脚本执行、生命周期和管理 API，具体以参考源码和测试为准。
 
 ---
 
 **状态**: 🔴 未验证  
 **维护者**: @backend-team  
-**最后更新**: 2026-06-19
+**最后更新**: 2026-08-30
 
 ---
 
@@ -17,7 +18,7 @@
 
 - 职责 1：**技能注册与匹配** — `SkillRegistry` 管理技能生命周期（register/unregister/get/match/match_all/execute），支持触发词匹配
 - 职责 2：**Python 技能管理** — 内置 `BaseSkill` 子类（`CoderSkill`, `SearchSkill`, `WriterSkill`, `TravelSkill`）的注册和执行
-- 职责 3：**SKILL.md 技能发现与加载** — `SkillMdHotLoader` 从 `$SAGE_SKILLS_DIR` → `./skills` → `~/.sage/skills` 三级目录发现 `<name>/SKILL.md` 模式
+- 职责 3：**SKILL.md 技能发现与加载** — `SkillMdHotLoader` 从 `$SAGE_SKILLS_DIR` → `./skills` → `~/.sage/skills` 三级目录发现 `<name>/SKILL.md` 子目录形态和根目录 `SKILL.md` 单文件形态
 - 职责 4：**技能热重载** — 基于 MD5 哈希的 SKILL.md 内容变化检测，支持 `hot_reload()` 和 `hot_reload_all()`
 - 职责 5：**门控条件评估** — `GatingContext` + `evaluate_gating()` 实现 requires/os/always 条件加载
 - 职责 6：**安全验证** — `validation.py` 提供路径遍历防御和不可信内容脱敏
@@ -363,12 +364,22 @@ def test_discovery_with_no_dirs():
 
 ### 5.1 单元测试
 
-**位置**：`tests/verification/g003/`
+**位置**：`backend/tests/unit/`、`backend/tests/integration/` 及 `backend/tests/skills/skill_md/`。
 
 **运行命令**：
 ```bash
-/home/fz/anaconda3/envs/sage-backend/bin/pytest tests/verification/g003/ -v --cov=backend/skills
+cd /home/fz/project/sage/backend
+/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest -q \
+  tests/unit/test_skills_registry.py \
+  tests/unit/test_skill_md_*.py \
+  tests/integration/test_routes_skills.py \
+  tests/integration/test_skill_delete.py \
+  tests/integration/test_skill_import.py \
+  tests/integration/test_skill_md_integration.py \
+  tests/integration/test_skills_archive_api.py
 ```
+
+**说明**：本文件原先引用的 `tests/verification/g003/` 目录在当前仓库不存在；上面的路径按当前测试布局列出。覆盖率需在依赖安装完整且测试命令成功后单独生成，本次不宣称已完成覆盖率验收。
 
 **覆盖范围**：
 - [ ] SkillRegistry register/unregister/get/match/match_all/execute
@@ -415,19 +426,13 @@ def test_discovery_with_no_dirs():
 
 ### 6.2 健康检查
 
-**端点**：`GET /health/skills`
+当前代码提供通用 `GET /health` 端点；没有证据表明存在独立的 `GET /health/skills` 技能专用端点。技能加载/跳过详情通过 loader 返回值和日志观察，不能把下方示例当作当前实际响应契约。
 
-**返回格式**：
+**通用健康检查示例**：
 ```json
 {
-  "status": "healthy",
-  "checks": {
-    "registry": "ok",
-    "builtin_count": 4,
-    "skill_md_count": 2,
-    "skill_names": ["search", "writer", "coder", "travel", "custom_1", "custom_2"]
-  },
-  "timestamp": "2026-06-19T12:00:00Z"
+  "status": "ok",
+  "timestamp": "2026-08-30T12:00:00Z"
 }
 ```
 
@@ -437,12 +442,14 @@ def test_discovery_with_no_dirs():
 
 ### 7.1 测试覆盖率
 
-| 验证类型 | 状态 | 覆盖率 | 最后运行 |
-|----------|------|--------|----------|
-| 单元测试 | 🔴 | 0% | - |
-| 集成测试 | 🔴 | 0% | - |
-| 性能测试 | 🔴 | 0% | - |
-| 属性测试 | 🔴 | 0% | - |
+| 验证类型 | 当前记录 | 覆盖率 | 说明 |
+|----------|----------|--------|------|
+| 单元测试 | 已有对应测试文件 | 未单独测量 | 见 `backend/tests/unit/` |
+| 集成测试 | 已有对应测试文件 | 未单独测量 | 见 `backend/tests/integration/` |
+| 性能测试 | 未形成独立门禁记录 | — | 本文保留性能目标，不伪造验收结果 |
+| 属性测试 | 未形成独立门禁记录 | — | 本文保留属性目标，不伪造验收结果 |
+
+> 原始版本中的 `0%` 是 2026-06-19 的初始占位值，并非当前覆盖率测量结果，已移除。测试文件存在也不等于覆盖率门禁已验收。
 
 ### 7.2 不变量验证
 

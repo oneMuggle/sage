@@ -56,11 +56,11 @@ This skill reads PDF files using pypdf.
 - **Strongly recommended**: add `license` and `compatibility` to your SKILL.md for ecosystem interop.
 - **Optional**: rename parent directories to match frontmatter `name` to silence the name-vs-parent warning.
 
-## Future Work (Not in This Spec)
+## Current scope
 
-- Wire `allowed-tools` into a tool gateway layer for permission pre-flight checks
-- Add `sage skills lint` CLI to validate SKILL.md against the spec
-- Author tutorial in `docs/user-manual/` for "Writing Your First SKILL.md"
+- `allowed-tools` is parsed and exposed as metadata; tool-gateway enforcement is not part of the current adapter contract.
+- `python -m backend.cli.skills lint` validates discovered or explicitly supplied SKILL.md roots using the same lightweight parser as `sage doctor`.
+- A user-facing authoring guide is available at [`../user-manual/04-skill-md-authoring.md`](../user-manual/04-skill-md-authoring.md).
 
 ## Related Documents
 

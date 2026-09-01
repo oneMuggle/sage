@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { resolve } from 'node:path';
 import { COMMAND_ROUTES, UnknownIpcCommandError } from '../commands';
 
 // ===== Skills IPC (Task 4: PR-C load-new) =====
@@ -18,7 +19,7 @@ import { COMMAND_ROUTES, UnknownIpcCommandError } from '../commands';
 const mocks = vi.hoisted(() => ({
   dialog: { showOpenDialog: vi.fn() },
   BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
-  fs: { readFileSync: vi.fn() },
+  fs: { readFileSync: vi.fn(), lstatSync: vi.fn(), realpathSync: vi.fn((path: string) => path) },
 }));
 
 vi.mock('electron', () => ({
@@ -33,8 +34,14 @@ vi.mock('electron', () => ({
 // relies on Node's default-export interop.
 vi.mock('fs', () => ({
   __esModule: true,
-  default: { readFileSync: mocks.fs.readFileSync },
+  default: {
+    readFileSync: mocks.fs.readFileSync,
+    lstatSync: mocks.fs.lstatSync,
+    realpathSync: mocks.fs.realpathSync,
+  },
   readFileSync: mocks.fs.readFileSync,
+  lstatSync: mocks.fs.lstatSync,
+  realpathSync: mocks.fs.realpathSync,
 }));
 
 // Injectable register fn captures all ipcMain.handle calls.
@@ -55,6 +62,14 @@ describe('skills IPC (PR-C)', () => {
     mocks.BrowserWindow.getFocusedWindow.mockReset();
     mocks.BrowserWindow.getFocusedWindow.mockReturnValue(null);
     mocks.fs.readFileSync.mockReset();
+    mocks.fs.lstatSync.mockReset();
+    mocks.fs.realpathSync.mockReset();
+    mocks.fs.realpathSync.mockImplementation((path: string) => path);
+    mocks.fs.lstatSync.mockReturnValue({
+      isFile: () => true,
+      isSymbolicLink: () => false,
+      size: 10,
+    });
     mocks.fs.readFileSync.mockReturnValue(Buffer.from('# content'));
     mockFetch.mockReset();
     (global as unknown as { fetch: typeof mockFetch }).fetch = mockFetch;
@@ -68,13 +83,14 @@ describe('skills IPC (PR-C)', () => {
   });
 
   it('pick-files returns paths from dialog', async () => {
+    const selectedPaths = [resolve('path', 'a.md'), resolve('path', 'b.md')];
     mocks.dialog.showOpenDialog.mockResolvedValue({
       canceled: false,
-      filePaths: ['/path/a.md', '/path/b.md'],
+      filePaths: selectedPaths,
     });
     const handler = registeredHandlers.get('skills:pick-files')!;
     const result = await handler({});
-    expect(result).toEqual(['/path/a.md', '/path/b.md']);
+    expect(result).toEqual(selectedPaths);
     expect(mocks.dialog.showOpenDialog).toHaveBeenCalledTimes(1);
   });
 
@@ -128,6 +144,8 @@ describe('skills IPC (PR-C)', () => {
       }),
     });
 
+    mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['/path/a.md'] });
+    await registeredHandlers.get('skills:pick-files')!({});
     const handler = registeredHandlers.get('skills:import')!;
     const result = (await handler({}, ['/path/a.md'])) as {
       imported: Array<{ name: string; path: string }>;
@@ -138,18 +156,46 @@ describe('skills IPC (PR-C)', () => {
     const [url, init] = mockFetch.mock.calls[0];
     expect(String(url)).toContain('/api/v1/skills/import');
     expect(init.method).toBe('POST');
-    // body is a FormData instance with one 'files' entry
-    const body = init.body as FormData;
-    expect(body).toBeInstanceOf(FormData);
-    const entries: string[][] = [];
-    body.forEach((_value) => {
-      // forEach on FormData iterates (value, key); keys are collected via getAll below
-      void _value;
+    // body is a Node 16-compatible multipart byte buffer with an explicit boundary.
+    const body = init.body as Buffer;
+    expect(Buffer.isBuffer(body)).toBe(true);
+    expect(init.headers['Content-Type']).toMatch(/^multipart\/form-data; boundary=----sage-/);
+    expect(body.toString('utf8')).toContain('name="files"; filename="a.md"');
+    expect(body.toString('utf8')).toContain('# content');
+    const contentType = init.headers['Content-Type'] as string;
+    const boundary = contentType.match(/boundary=([^;]+)/)?.[1];
+    expect(boundary).toBeTruthy();
+    expect(body.subarray(-Buffer.byteLength(`--${boundary}--\r\n`))).toEqual(
+      Buffer.from(`--${boundary}--\r\n`),
+    );
+    expect(body.subarray(-Buffer.byteLength(`--${boundary}--\r\n`)).toString('utf8')).not.toContain(
+      '\\\\r\\\\n',
+    );
+  });
+
+  it('import rejects a batch over the file count limit before fetching', async () => {
+    const paths = Array.from({ length: 101 }, (_, index) => `/path/${index}.md`);
+    mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: paths });
+    await registeredHandlers.get('skills:pick-files')!({});
+
+    await expect(registeredHandlers.get('skills:import')!({})).rejects.toThrow(/too many files/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('import rejects a batch over the total size limit before fetching', async () => {
+    mocks.fs.lstatSync.mockReturnValue({
+      isFile: () => true,
+      isSymbolicLink: () => false,
+      size: 600 * 1024,
     });
-    const all = body.getAll('files');
-    expect(all.length).toBe(1);
-    expect(all[0]).toBeInstanceOf(Blob);
-    void entries;
+    mocks.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: Array.from({ length: 18 }, (_, index) => `/path/${index}.md`),
+    });
+    await registeredHandlers.get('skills:pick-files')!({});
+
+    await expect(registeredHandlers.get('skills:import')!({})).rejects.toThrow(/batch too large/);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('import handles 400 response with detail.type as error', async () => {
@@ -160,6 +206,8 @@ describe('skills IPC (PR-C)', () => {
     });
 
     const handler = registeredHandlers.get('skills:import')!;
+    mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['/path/a.md'] });
+    await registeredHandlers.get('skills:pick-files')!({});
     await expect(handler({}, ['/path/a.md'])).rejects.toThrow(/invalid_request/);
   });
 
@@ -171,6 +219,8 @@ describe('skills IPC (PR-C)', () => {
     });
 
     const handler = registeredHandlers.get('skills:import')!;
+    mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['/path/a.md'] });
+    await registeredHandlers.get('skills:pick-files')!({});
     await expect(handler({}, ['/path/a.md'])).rejects.toThrow(/no_skills_dir/);
   });
 });

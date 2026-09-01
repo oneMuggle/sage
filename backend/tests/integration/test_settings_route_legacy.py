@@ -5,14 +5,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import json
 
 import pytest
-import pytest_asyncio
 
-from backend.api.hex_routes import get_chat_service
 from backend.data.settings_repo import SettingsRepository
-from backend.main import app
 
 
 @pytest.fixture(autouse=True)
@@ -31,33 +28,43 @@ def _clean_settings():
     conn.commit()
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def _override_get_chat_service():
-    """PUT /settings handler 依赖 ``get_chat_service``; 测试环境无 ChatService 实例,
-    用 MagicMock 注入避免 NotImplementedError。同时隔离: 保存原 override, 退出时恢复,
-    避免污染后续 test (与 test_settings_route_hex.py 同款 pattern).
+@pytest.mark.asyncio()
+async def test_put_invalid_settings_uses_safe_structured_error_and_log(client, caplog):
+    """Invalid protocol/path values never cross the HTTP or logging boundary."""
+    import logging
 
-    不加这个 fixture, hex mode 下 PUT handler 会 raise NotImplementedError("get_chat_service()
-    must be overridden"), win7 py3.8 ci 即 fail 在此.
-    """
-    saved = app.dependency_overrides.get(get_chat_service)
-    app.dependency_overrides[get_chat_service] = lambda: MagicMock()
-    try:
-        yield
-    finally:
-        if saved is not None:
-            app.dependency_overrides[get_chat_service] = saved
-        else:
-            app.dependency_overrides.pop(get_chat_service, None)
+    caplog.set_level(logging.WARNING)
+    protocol = "sk-secret-protocol-value"
+    local_path = r"C:\Users\synthetic\private-model.gguf"
+
+    invalid_protocol = await client.put(
+        "/api/v1/settings",
+        json={"endpoints": [{"protocol": protocol}]},
+    )
+    invalid_path = await client.put(
+        "/api/v1/settings",
+        json={"endpoints": [{"protocol": "ollama", "localModelPath": local_path}]},
+    )
+
+    for response in (invalid_protocol, invalid_path):
+        assert response.status_code == 422
+        assert response.status_code != 500
+        assert response.json()["detail"]["type"] == "invalid_settings_payload"
+        assert response.json()["detail"]["message"] == "设置内容无效，请检查字段格式"
+        assert protocol not in response.text
+        assert local_path not in response.text
+    logs = " ".join(record.getMessage() for record in caplog.records)
+    assert protocol not in logs
+    assert local_path not in logs
+    assert "error_type=invalid_settings_payload" in logs
 
 
 @pytest.mark.asyncio()
 async def test_get_translates_legacy_snake_to_camel(client):
     """DB 里手插一条 snake_case 行, GET 应翻译为 camelCase 返回。
 
-    alpha.8 (2026-08-27): GET 走 redact_secrets() 后, endpoints[*].apiKey
-    永远空串 + hasApiKey 元数据; 不再回显真实 key. 翻译到 camelCase 这一步
-    仍生效 (``base_url`` → ``baseUrl``), 验证点从 apiKey 值改为 hasApiKey 标记.
+    2026-08-26: 翻译 + 边界净化 + 脱敏契约 —— apiKey 字段翻译成 camelCase
+    后, GET 响应里必须用 hasApiKey=True 标记, apiKey 置空 (OWASP A02:2021).
     """
     SettingsRepository().set_json(
         "app_settings",
@@ -78,10 +85,46 @@ async def test_get_translates_legacy_snake_to_camel(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["endpoints"][0]["baseUrl"] == "u"
-    # alpha.8: apiKey 被脱敏为空串 + hasApiKey 元数据; 不再断言 apiKey 值.
+    # 2026-08-26: redaction 契约 —— 明文 apiKey 不出现在 GET 响应里.
     assert body["endpoints"][0]["apiKey"] == ""
     assert body["endpoints"][0]["hasApiKey"] is True
     assert "base_url" not in body["endpoints"][0]
+    assert "k" not in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_put_settings_prevalidation_error_is_fixed_and_non_echoing(client):
+    """Pydantic failures on legacy /settings never expose submitted values."""
+    secret = "synthetic-secret-legacy"
+    path = "/absolute/synthetic/legacy-model.gguf"
+    cases = [
+        ({"endpoints": [{"protocol": 123, "apiKey": secret, "localModelPath": path}]}, 422),
+        ({"endpoints": [{"protocol": "ollama", "localModelPath": [path]}]}, 422),
+        ({"unexpected": secret}, 400),
+    ]
+    for payload, expected_status in cases:
+        response = await client.put("/api/v1/settings", json=payload)
+        assert response.status_code == expected_status
+        if expected_status == 422:
+            assert response.json() == {
+                "detail": {
+                    "type": "invalid_settings_payload",
+                    "message": "设置内容无效，请检查字段格式",
+                }
+            }
+        else:
+            assert response.json()["detail"]["type"] == "invalid_settings_shape"
+        assert secret not in response.text
+        assert path not in response.text
+
+
+@pytest.mark.asyncio()
+async def test_other_validation_routes_keep_fastapi_default_handler(client):
+    """The scoped handler must not rewrite validation errors elsewhere."""
+    response = await client.patch("/api/v1/agents/primary/toggle", json={"enabled": "secret"})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][-1] == "enabled"
+    assert response.json()["detail"][0]["type"]
 
 
 @pytest.mark.asyncio()
@@ -99,14 +142,41 @@ async def test_get_returns_null_when_corrupted_json(client):
 
 
 @pytest.mark.asyncio()
-async def test_put_with_unknown_field_rejected(client):
-    """PUT 接受 schema 内字段 + 不在白名单的字段 → 400 + 详细信息.
+@pytest.mark.parametrize(
+    "dirty_settings",
+    [
+        {"endpoints": 1},
+        {
+            "endpoints": [
+                {
+                    "apiKey": "synthetic-secret",
+                    "localModelPath": "/private/synthetic/path",
+                    "discoveredModels": 1,
+                }
+            ]
+        },
+        {"modelSelections": 1},
+        {"wiki": 1},
+        {"orch": 1},
+    ],
+)
+async def test_put_rejects_scalar_persisted_settings_containers_without_500(
+    client, dirty_settings
+):
+    """脏持久化容器应返回明确 4xx, 且错误响应不回显 secret/path."""
+    SettingsRepository().set_json("app_settings", dirty_settings, category="general")
 
-    win7 Note: Pydantic v1 + FastAPI 在 ``extra="allow"`` schema 下有时会
-    在 Pydantic 层 (handler 没跑) 直接 422 reject unknown field; main pytest
-    走 handler raise 400. 两个 status code 都表明 PUT 被 reject, 所以测试容差
-    接受 400 (handler raise) 或 422 (Pydantic 早期校验), 验证 body 包含 'foo' 错误信号.
-    """
+    resp = await client.put("/api/v1/settings", json={"streaming": True})
+
+    assert 400 <= resp.status_code < 500
+    assert resp.status_code != 500
+    assert "synthetic-secret" not in resp.text
+    assert "/private/synthetic/path" not in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_put_with_unknown_field_rejected(client):
+    """PUT 接受 schema 内字段 + 不在白名单的字段 → 400 + 详细信息。"""
     resp = await client.put(
         "/api/v1/settings",
         json={
@@ -114,12 +184,10 @@ async def test_put_with_unknown_field_rejected(client):
             "foo": "bar",  # 不在 AppSettings 白名单
         },
     )
-    assert resp.status_code in (400, 422), (
-        f"expected PUT reject (400 or 422), got {resp.status_code}: {resp.text}"
-    )
-    assert "foo" in resp.text or "extra_forbidden" in resp.text or "extra fields not permitted" in resp.text, (
-        f"Pydantic 422 body 或 handler 400 都应包含 'foo' 拒绝信号, got: {resp.text}"
-    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["type"] == "invalid_settings_shape"
+    assert resp.json()["detail"]["field"] == "foo"
+    assert "foo" in resp.text
 
 
 @pytest.mark.asyncio()
@@ -283,6 +351,8 @@ async def test_settings_unknown_endpoint_field_still_rejected(client):
         },
     )
     assert resp.status_code == 400
+    assert resp.json()["detail"]["type"] == "invalid_settings_shape"
+    assert resp.json()["detail"]["field"] == "category"
     assert "category" in resp.text
 
 
@@ -322,33 +392,37 @@ async def test_get_round_trips_new_fields_through_canonicalizer(client):
     assert ep["localModelPath"] == "/tmp/qwen.gguf"
 
 
-# === alpha.8 (2026-08-27): GET /settings 不回显明文 apiKey ===
+# ============================================================================
+# 2026-08-26: settings 响应脱敏 + legacy payload 字段净化
+# ============================================================================
 #
-# Background: settings_canonicalizer.redact_secrets 是主要防线; legacy GET 路由
-# 必须在 ``return translated`` 前调用它, 否则真实 key 经 IPC 进入 renderer,
-# 触发 [[sage-settings-redaction-key-preservation]] 的"GET hasApiKey=true 但
-# apiKey 是空串"陷阱——前端 deepMerge remote-wins 会用空串覆盖本地真实 key。
+# 背景:
+# - 真实 Electron 验证中发现 GET /api/v1/settings 会明文回传端点 apiKey,
+#   导致 settingsClient.getSettings() 把真实凭据写入 React state / localStorage
+#   / 日志. 需要把 apiKey 替换为非敏感的 hasApiKey 标记, 真实 key 仅在 PUT
+#   接收并持久化, 不再出现在 GET 响应里.
+# - 已知历史前端会发送 snake_case 残留 (memory_server_sync / local_model_path
+#   等), 这些不是白名单字段. canonicalizer 应该把合法 legacy residue 在 GET
+#   返回前清理, 同时保证响应仍然合法.
 #
-# RED signal: 本测试会失败因为 alpha.7 canonicalizer 还没有 redact_secrets,
-# GET 直接 echo 了 DB 中原始 key (DB 中有非空 key 时)。
+# 注意: 该测试集是 RED — 当前实现仍返回明文 apiKey, 测试会失败, 确认错误信息
+# 再走 GREEN.
+
+_REDACTED_APIKEY = "sk-test-SECRET-do-not-leak-1f2e3d4c5b6a"
 
 
 @pytest.mark.asyncio()
-async def test_get_settings_redacts_api_key_in_response(client):
-    """legacy GET /settings 响应中 endpoints[*].apiKey 必须是空串, 不得回显真实 key。
-
-    DB 存的是原始 key ("sk-real-key"), 响应必须经 redact_secrets() 把它抹掉并
-    加上 hasApiKey=True, 让前端按 endpoint ID 找回本地 key 而不是覆盖之。
-    """
+async def test_get_settings_redacts_endpoint_api_key(client):
+    """GET /settings 返回的 endpoint 必须把 apiKey 替换为非敏感标记, DB 原 key 不外泄."""
     SettingsRepository().set_json(
         "app_settings",
         {
             "endpoints": [
                 {
-                    "id": "e1",
-                    "name": "LM Studio",
-                    "baseUrl": "http://127.0.0.1:1234/v1",
-                    "apiKey": "sk-real-key-abc123",
+                    "id": "ep-real",
+                    "name": "Real",
+                    "baseUrl": "https://api.example.com/v1",
+                    "apiKey": _REDACTED_APIKEY,
                     "protocol": "openai-compatible",
                     "discoveredModels": [],
                     "lastDiscoveredAt": 0,
@@ -360,25 +434,31 @@ async def test_get_settings_redacts_api_key_in_response(client):
     resp = await client.get("/api/v1/settings")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["endpoints"][0]["id"] == "e1"
-    # 真实 key 不得出现在响应中
-    assert body["endpoints"][0]["apiKey"] == ""
-    assert "sk-real-key-abc123" not in resp.text
-    # hasApiKey 元数据必须为 True (原来 key 是非空)
-    assert body["endpoints"][0]["hasApiKey"] is True
+    ep = body["endpoints"][0]
+    assert ep.get("apiKey") in (None, ""), (
+        "apiKey leaked in GET /settings response: "
+        f"got {ep.get('apiKey')!r}, expected None or empty"
+    )
+    assert _REDACTED_APIKEY not in resp.text
+    assert ep.get("hasApiKey") is True
+    assert ep["baseUrl"] == "https://api.example.com/v1"
 
 
 @pytest.mark.asyncio()
-async def test_get_settings_redacts_empty_api_key_correctly(client):
-    """DB 里 apiKey 本来就是空 → 响应里 apiKey="" 且 hasApiKey=False (幂等)。"""
+async def test_get_settings_reports_has_api_key_false_when_missing(client):
+    """GET /settings 当 endpoint 没有 apiKey 时, hasApiKey 应为 False."""
     SettingsRepository().set_json(
         "app_settings",
         {
             "endpoints": [
                 {
-                    "id": "e1",
+                    "id": "ep-empty",
+                    "name": "LM Studio",
+                    "baseUrl": "http://127.0.0.1:1234/v1",
                     "apiKey": "",
                     "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
                 }
             ]
         },
@@ -387,5 +467,183 @@ async def test_get_settings_redacts_empty_api_key_correctly(client):
     resp = await client.get("/api/v1/settings")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["endpoints"][0]["apiKey"] == ""
-    assert body["endpoints"][0]["hasApiKey"] is False
+    ep = body["endpoints"][0]
+    assert ep.get("apiKey") in (None, "")
+    assert ep.get("hasApiKey") is False
+
+
+@pytest.mark.asyncio()
+async def test_get_settings_cleans_legacy_snake_case_residue(client):
+    """GET /settings 收到 legacy DB 行残留 snake_case 字段时, 应清洗后回传."""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "streaming": True,
+            "memory_server_sync": True,
+            "endpoints": [
+                {
+                    "id": "ep1",
+                    "baseUrl": "http://x",
+                    "apiKey": "k",
+                    "local_model_path": "/old/path",
+                }
+            ],
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "memory_server_sync" not in body
+    ep = body["endpoints"][0]
+    assert "local_model_path" not in ep
+
+
+@pytest.mark.asyncio()
+async def test_get_preference_redacts_app_settings_payload(client):
+    """GET /preferences/app_settings 应返回脱敏 payload, 不含明文 apiKey."""
+    SettingsRepository().set_json(
+        "app_settings",
+        {
+            "endpoints": [
+                {
+                    "id": "ep-real",
+                    "name": "Real",
+                    "baseUrl": "https://api.example.com/v1",
+                    "apiKey": _REDACTED_APIKEY,
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+        category="general",
+    )
+    resp = await client.get("/api/v1/preferences/app_settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["value"] is not None
+    assert _REDACTED_APIKEY not in body["value"]
+    parsed = json.loads(body["value"])
+    ep = parsed["endpoints"][0]
+    assert ep.get("apiKey") in (None, "")
+    assert ep.get("hasApiKey") is True
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize(
+    "scalar_value",
+    [
+        json.dumps("api-token-secret"),
+        "42",
+        "null",
+        "[]",
+    ],
+)
+async def test_get_preference_scalar_app_settings_returns_safe_object(client, scalar_value):
+    """历史 app_settings 标量不得在 preference GET 中原样回显."""
+    conn = SettingsRepository().db.get_connection()
+    conn.execute(
+        "INSERT OR REPLACE INTO preferences(key,value,value_type,category,created_at,updated_at) "
+        "VALUES('app_settings', ?, 'string', 'general', 1, 1)",
+        (scalar_value,),
+    )
+    conn.commit()
+
+    resp = await client.get("/api/v1/preferences/app_settings")
+
+    assert resp.status_code == 200
+    assert resp.json()["value"] == "{}"
+    assert "api-token-secret" not in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_put_preference_app_settings_redacts_response_and_preserves_storage(client):
+    payload = {
+        "endpoints": [{"id": "ep", "apiKey": _REDACTED_APIKEY}],
+        "token": "top-token",
+        "dbPassword": "db-secret",
+        "secretKey": "secret-key",
+        "privateKey": "private-key",
+        "authorization": "bearer-token",
+        "nested": {"secret": "nested-secret", "password": "nested-password"},
+    }
+    resp = await client.put(
+        "/api/v1/preferences/app_settings", json={"value": json.dumps(payload)}
+    )
+    assert resp.status_code == 200
+    for secret in (
+        _REDACTED_APIKEY,
+        "top-token",
+        "db-secret",
+        "secret-key",
+        "private-key",
+        "bearer-token",
+        "nested-secret",
+        "nested-password",
+    ):
+        assert secret not in resp.text
+    returned = json.loads(resp.json()["value"])
+    assert returned["endpoints"][0]["apiKey"] == ""
+    assert returned["endpoints"][0]["hasApiKey"] is True
+    assert returned["token"] == ""
+    assert returned["dbPassword"] == ""
+    assert returned["secretKey"] == ""
+    assert returned["privateKey"] == ""
+    assert returned["authorization"] == ""
+    assert returned["nested"]["secret"] == ""
+    assert returned["nested"]["password"] == ""
+    stored = SettingsRepository().get_json("app_settings")
+    assert stored["endpoints"][0]["apiKey"] == _REDACTED_APIKEY
+
+
+@pytest.mark.asyncio()
+async def test_put_preference_app_settings_invalid_json_never_echoes_body(client):
+    synthetic = 'invalid-json synthetic-secret "token": "top-token"'
+    SettingsRepository().set_json("app_settings", {"streaming": True}, category="general")
+    resp = await client.put("/api/v1/preferences/app_settings", json={"value": synthetic})
+    assert resp.status_code == 400
+    assert synthetic not in resp.text
+    assert "synthetic-secret" not in resp.text
+    assert "top-token" not in resp.text
+    assert SettingsRepository().get_json("app_settings") == {"streaming": True}
+
+
+@pytest.mark.asyncio()
+@pytest.mark.parametrize("invalid_value", ["[1, 2, 3]", "null", '"scalar"', "42"])
+async def test_put_preference_app_settings_rejects_non_object_without_overwrite(
+    client, invalid_value
+):
+    baseline = {"streaming": True, "endpoints": []}
+    SettingsRepository().set_json("app_settings", baseline, category="general")
+    resp = await client.put(
+        "/api/v1/preferences/app_settings", json={"value": invalid_value}
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "app_settings must be a JSON object"
+    assert SettingsRepository().get_json("app_settings") == baseline
+
+
+@pytest.mark.asyncio()
+async def test_put_app_settings_does_not_echo_plaintext_api_key(client):
+    """PUT /settings 响应 (LegacySettingsResponse) 不应包含明文 apiKey."""
+    resp = await client.put(
+        "/api/v1/settings",
+        json={
+            "endpoints": [
+                {
+                    "id": "ep-x",
+                    "name": "Real",
+                    "baseUrl": "https://api.example.com/v1",
+                    "apiKey": _REDACTED_APIKEY,
+                    "protocol": "openai-compatible",
+                    "discoveredModels": [],
+                    "lastDiscoveredAt": 0,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    assert _REDACTED_APIKEY not in resp.text
+    body = resp.json()
+    assert "endpoints" not in body

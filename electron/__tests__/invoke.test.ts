@@ -50,6 +50,17 @@ describe('invokeBackend', () => {
     expect(result).toEqual([{ id: 's1' }]);
   });
 
+  it('adds the runtime Bearer capability without exposing it in the URL', async () => {
+    mockedFetch.mockResolvedValueOnce(mockJsonResponse([]));
+    await invokeBackend('list_sessions', {}, 'http://x', 'synthetic-capability-token');
+    const init = mockedFetch.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer synthetic-capability-token',
+    });
+    expect(mockedFetch.mock.calls[0][0]).not.toContain('synthetic-capability-token');
+  });
+
   it('passes custom limit/offset through to query string', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse([]));
     await invokeBackend('list_sessions', { limit: 5, offset: 20 }, 'http://127.0.0.1:8765');

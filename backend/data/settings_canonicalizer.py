@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -136,12 +135,7 @@ def to_camel(value: Any) -> Any:
 
 
 def from_camel(value: Any) -> Any:
-    """反向: ALIASES 仅翻译已知 snake↔camel 对; 其它 camelCase key 原样保留.
-
-    win7 Note: Python 3.8 不支持 ``dict | list`` PEP 604 union syntax 在
-    runtime isinstance 检查（即使 ``from __future__ import annotations`` 也
-    只注解层, runtime 表达式仍要 3.10+）。用 tuple form ``(dict, list)`` 兼容。
-    """
+    """反向: ALIASES 仅翻译已知 snake↔camel 对; 其它 camelCase key 原样保留."""
     if not isinstance(value, (dict, list)):
         return value
     inverse = {v: k for k, v in ALIASES.items()}
@@ -162,7 +156,10 @@ def validate_settings_shape(settings: dict) -> None:
             f"unknown top-level field {unknown[0]!r}; " f"allowed: {sorted(LEGAL_TOP_KEYS)}"
         )
 
-    for i, ep in enumerate(settings.get("endpoints") or []):
+    endpoints = settings.get("endpoints")
+    if endpoints is not None and not isinstance(endpoints, list):
+        raise ValueError("endpoints must be a list")
+    for i, ep in enumerate(endpoints or []):
         if not isinstance(ep, dict):
             raise ValueError(f"endpoints[{i}] is not a dict")
         bad_ep = [k for k in ep if k not in LEGAL_ENDPOINT_KEYS]
@@ -171,7 +168,10 @@ def validate_settings_shape(settings: dict) -> None:
                 f"unknown endpoint field {bad_ep[0]!r} at endpoints[{i}]; "
                 f"allowed: {sorted(LEGAL_ENDPOINT_KEYS)}"
             )
-        for j, model in enumerate(ep.get("discoveredModels") or []):
+        discovered_models = ep.get("discoveredModels")
+        if discovered_models is not None and not isinstance(discovered_models, list):
+            raise ValueError(f"endpoints[{i}].discoveredModels must be a list")
+        for j, model in enumerate(discovered_models or []):
             if not isinstance(model, dict):
                 raise ValueError(f"endpoints[{i}].discoveredModels[{j}] is not a dict")
             bad = [k for k in model if k not in LEGAL_DISCOVERED_MODEL_KEYS]
@@ -182,7 +182,10 @@ def validate_settings_shape(settings: dict) -> None:
                     f"allowed: {sorted(LEGAL_DISCOVERED_MODEL_KEYS)}"
                 )
 
-    ms = settings.get("modelSelections") or {}
+    ms = settings.get("modelSelections")
+    if ms is not None and not isinstance(ms, dict):
+        raise ValueError("modelSelections must be a dict")
+    ms = ms or {}
     # 校验 modelSelections 子对象 keys (chatModel/visionModel/embeddingModel);
     # 未知 key 会污染 DB, 应拒收. Contract test 保证此处与 AppSettings 同步.
     bad_ms_keys = [k for k in ms if k not in LEGAL_MODEL_SELECTIONS_KEYS]
@@ -192,9 +195,10 @@ def validate_settings_shape(settings: dict) -> None:
             f"allowed: {sorted(LEGAL_MODEL_SELECTIONS_KEYS)}"
         )
     for sel_key in ("chatModel", "visionModel", "embeddingModel"):
-        sel = ms.get(sel_key) or {}
-        if not isinstance(sel, dict):
+        sel = ms.get(sel_key)
+        if sel is not None and not isinstance(sel, dict):
             raise ValueError(f"modelSelections.{sel_key} is not a dict")
+        sel = sel or {}
         bad = [k for k in sel if k not in LEGAL_MODEL_SELECTION_KEYS]
         if bad:
             raise ValueError(
@@ -203,21 +207,161 @@ def validate_settings_shape(settings: dict) -> None:
                 f"allowed: {sorted(LEGAL_MODEL_SELECTION_KEYS)}"
             )
 
-    wiki = settings.get("wiki") or {}
+    wiki = settings.get("wiki")
+    if wiki is not None and not isinstance(wiki, dict):
+        raise ValueError("wiki must be a dict")
+    wiki = wiki or {}
     bad_wiki = [k for k in wiki if k not in LEGAL_WIKI_KEYS]
     if bad_wiki:
         raise ValueError(
             f"unknown wiki field {bad_wiki[0]!r}; " f"allowed: {sorted(LEGAL_WIKI_KEYS)}"
         )
 
-    orch = settings.get("orch") or {}
-    if not isinstance(orch, dict):
+    orch = settings.get("orch")
+    if orch is not None and not isinstance(orch, dict):
         raise ValueError("orch is not a dict")
+    orch = orch or {}
     bad_orch = [k for k in orch if k not in LEGAL_ORCH_KEYS]
     if bad_orch:
         raise ValueError(
             f"unknown orch field {bad_orch[0]!r}; " f"allowed: {sorted(LEGAL_ORCH_KEYS)}"
         )
+
+
+# Credential names are matched against a normalized spelling so legacy
+# aliases such as ``api_key`` and ``API-KEY`` have the same treatment as
+# ``apiKey``.  These are intentionally anchored rules: substring matching
+# would redact ordinary settings such as ``tokenization`` or ``passwordPolicy``.
+_SECRET_KEY_NAMES = frozenset({"apikey", "authorization", "token", "secret", "password"})
+_SECRET_SUFFIXES = frozenset({"password", "secret", "token", "apikey"})
+# A bare ``key`` suffix is too broad (for example, ``publicKey`` is not a
+# credential).  Restrict it to prefixes whose names unambiguously describe a
+# private credential; broader suffix rules above remain safe and auditable.
+_PRIVATE_KEY_PREFIXES = frozenset({"api", "private", "secret"})
+
+
+def _is_secret_key(key: Any) -> bool:
+    """Return whether *key* names a credential in a settings object.
+
+    Names are compared as lowercase alphanumeric strings, making common
+    snake_case, kebab-case, and acronym aliases equivalent.  Exact names and
+    credential suffixes are matched as whole names only; the narrow ``*key``
+    rule prevents false positives for ordinary configuration fields.
+    """
+    if not isinstance(key, str):
+        return False
+    normalized = re.sub(r"[^a-z0-9]", "", key.lower())
+    if normalized in _SECRET_KEY_NAMES:
+        return True
+    # ``hasApiKey`` is response metadata, not the credential itself; retain it
+    # so repeated redaction remains idempotent and endpoint state is preserved.
+    if normalized == "hasapikey" or normalized == "haskey":
+        return False
+    if any(normalized.endswith(suffix) for suffix in _SECRET_SUFFIXES):
+        return True
+    return normalized.endswith("key") and any(
+        normalized == f"{prefix}key" for prefix in _PRIVATE_KEY_PREFIXES
+    )
+
+
+def parse_app_settings_object(value: Any) -> Dict[str, Any]:
+    """Parse an ``app_settings`` preference and require a JSON object.
+
+    This is intentionally separate from :func:`redact_secrets_json`: the
+    latter is a defensive response helper whose non-string/scalar contract is
+    used by generic callers, while preference PUT must reject invalid data
+    before it reaches storage.
+    """
+    import json as _json
+
+    try:
+        parsed = _json.loads(value)
+    except (ValueError, TypeError):
+        raise ValueError("app_settings must be a JSON object") from None
+    if not isinstance(parsed, dict):
+        raise ValueError("app_settings must be a JSON object")
+    return parsed
+
+
+def redact_secrets(settings: Any) -> Any:
+    """剥离 settings 中的敏感字段 (endpoint.apiKey), 替换为 ``hasApiKey`` 标记。
+
+    背景 (2026-08-26):
+    - 真实 Electron 验证中发现 GET /api/v1/settings 明文回传端点 apiKey,
+      导致 settingsClient.getSettings() 把真实凭据写入 React state / localStorage
+      / 日志 / IPC 响应, 不符合 OWASP A02:2021 (Cryptographic Failures)。
+    - 修复: GET 响应里 apiKey 字段统一置空 (或 None), 同时增加
+      ``hasApiKey: bool`` 标记供前端识别 "该端点是否配置了真实 key"。
+    - 真实 key 仅在 PUT 接收并持久化到 SQLite preferences, 不再以任何形式
+      经 HTTP response / IPC 返回。
+
+    Args:
+        settings: 已经经过 ``to_camel`` + ``strip_unknown_fields`` 的 settings dict.
+            可以为 None, 非 dict, 或 dict — 全部走安全路径.
+
+    Returns:
+        与输入同构的新 dict, 但 endpoint.apiKey 被剥离并标记 hasApiKey.
+    """
+    if isinstance(settings, list):
+        return [redact_secrets(item) for item in settings]
+    if not isinstance(settings, dict):
+        return settings
+
+    out: Dict[Any, Any] = {}
+    for key, value in settings.items():
+        out[key] = "" if _is_secret_key(key) else redact_secrets(value)
+
+    endpoints = settings.get("endpoints")
+    if isinstance(endpoints, list):
+        cleaned: List[Any] = []
+        for ep in endpoints:
+            if not isinstance(ep, dict):
+                cleaned.append(redact_secrets(ep))
+                continue
+            new_ep = redact_secrets(ep)
+            original_key = ep.get("apiKey")
+            existing_flag = new_ep.get("hasApiKey")
+            # 幂等性 (2026-08-26): 若输入已带 hasApiKey 标记 (即二次过
+            # canonicalizer, 如 preference GET round-trip / cache replay),
+            # 保留原标志 — 不从已被清空的 apiKey 重新计算, 否则 ``True``
+            # 会翻成 ``False``, 让前端误以为用户从未设置过 key, 下次启动
+            # 后 deepMerge remote-wins 用 ``""`` 覆盖本地真实 key。
+            if isinstance(existing_flag, bool):
+                has_key = existing_flag
+            else:
+                has_key = isinstance(original_key, str) and original_key != ""
+            new_ep["apiKey"] = ""
+            new_ep["hasApiKey"] = has_key
+            cleaned.append(new_ep)
+        out["endpoints"] = cleaned
+
+    return out
+
+
+def redact_secrets_json(value: Any) -> Any:
+    """``redact_secrets`` 的 JSON 字符串版本 — 适用于 preference GET 返回字符串 value。
+
+    当 preference key='app_settings' 且 value 是合法 JSON 字符串时, 解析 +
+    脱敏 + 重新序列化。非 JSON / 非 dict 直接原样返回。
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        import json as _json
+
+        parsed = _json.loads(value)
+    except (ValueError, TypeError):
+        # Never return malformed input: it may contain an unparseable credential.
+        return "{}"
+    if not isinstance(parsed, dict):
+        # Preference GET is a settings-object response.  Historical rows may
+        # contain valid JSON scalars or lists; never echo them, since a scalar
+        # string can itself be a credential.
+        return "{}"
+    redacted = redact_secrets(parsed)
+    import json as _json
+
+    return _json.dumps(redacted, ensure_ascii=False)
 
 
 def strip_unknown_fields(settings: Any) -> Any:
@@ -254,11 +398,17 @@ def strip_unknown_fields(settings: Any) -> Any:
             clean_ep = {k: v for k, v in ep.items() if k in LEGAL_ENDPOINT_KEYS}
             models = clean_ep.get("discoveredModels")
             if isinstance(models, list):
-                clean_ep["discoveredModels"] = [
-                    {k: v for k, v in m.items() if k in LEGAL_DISCOVERED_MODEL_KEYS}
-                    for m in models
-                    if isinstance(m, dict)
-                ]
+                clean_models: List[Any] = []
+                for model in models:
+                    if not isinstance(model, dict):
+                        # Preserve malformed items so validation exposes the bad
+                        # persisted data instead of silently dropping it.
+                        clean_models.append(model)
+                        continue
+                    clean_models.append(
+                        {k: v for k, v in model.items() if k in LEGAL_DISCOVERED_MODEL_KEYS}
+                    )
+                clean_ep["discoveredModels"] = clean_models
             cleaned_eps.append(clean_ep)
         out["endpoints"] = cleaned_eps
 
@@ -478,79 +628,46 @@ def validate_settings_payload(
                 raise ValueError(f"endpoints[{i}]: {exc}") from exc
 
 
-# === alpha.8 (2026-08-27): secret redaction helpers ===
-#
-# GET /settings 和 /preferences/app_settings 必须把 ``endpoints[i].apiKey``
-# 字段从明文抹掉, 只回显 ``endpoints[i].hasApiKey`` 元数据, 前端据此从
-# localStorage 按 endpoint ID 找回原 key (见 [[sage-settings-redaction-key-
-# preservation]] + [[sage-settings-redaction-idempotency-fix]]).
-#
-# 集中放在 canonicalizer 是为了让 legacy + hex 两套路由共享同一脱敏逻辑,
-# 避免单边漏掉或单边改坏。
+def classify_settings_validation_error(exc: ValueError) -> str:
+    """Return a non-sensitive field category for a settings validation error.
 
-def _redact_endpoint(ep: Any) -> Any:
-    """对单个 endpoint 脱敏: apiKey 永远置空, hasApiKey 标记原非空状态.
-
-    幂等性: ``redact(redact(x)) == redact(x)``. 实现方式是: 如果 dict 里
-    已经有 ``hasApiKey`` 布尔字段, 说明已经被 redact 过一次, 必须保留它
-    (否则首次 ``apiKey="sk-secret"`` → ``apiKey="", hasApiKey=True``;
-    二次 redact 时按当前 ``apiKey=""`` 推导出 ``hasApiKey=False``,
-    把 True 退化成 False — 见 main [[sage-settings-redaction-idempotency-fix]]
-    的 bug). 首次 redact 时 ``hasApiKey`` 不存在, 从 ``apiKey != ""`` 推导.
+    Validation exceptions remain detailed for internal callers; HTTP handlers
+    must not serialize those messages because they can contain user-controlled
+    protocols, paths, or other secrets.
     """
-    if not isinstance(ep, dict):
-        return ep
-    api_key = ep.get("apiKey", "")
-    if not isinstance(api_key, str):
-        api_key = ""
-    existing = ep.get("hasApiKey")
-    if isinstance(existing, bool):
-        has_api_key = existing
-    else:
-        has_api_key = bool(api_key)
-    return {**ep, "apiKey": "", "hasApiKey": has_api_key}
+    message = str(exc)
+    if "timezone" in message:
+        return "timezone"
+    if "protocol" in message:
+        return "protocol"
+    if "localModelPath" in message:
+        return "localModelPath"
+    return "value"
 
 
-def redact_secrets(payload: Any) -> Any:
-    """脱敏一个 settings payload 副本, 不修改入参.
-
-    Returns:
-        与原 payload 等结构的新对象 (dict 走 dict 复制, list 走 list 复制);
-        非 dict / list / scalar 原样返回 (None / scalar / 损坏类型).
-        ``endpoints`` 列表内每个 endpoint 通过 :func:`_redact_endpoint` 脱敏.
-    """
-    if isinstance(payload, dict):
-        out: Dict[str, Any] = {}
-        for k, v in payload.items():
-            if k == "endpoints" and isinstance(v, list):
-                out[k] = [_redact_endpoint(ep) for ep in v]
-            else:
-                out[k] = redact_secrets(v)
-        return out
-    if isinstance(payload, list):
-        return [redact_secrets(item) for item in payload]
-    return payload
+def classify_settings_shape_error(exc: ValueError) -> str:
+    """Return a coarse, non-sensitive category for a shape validation error."""
+    message = str(exc)
+    if "top-level" in message:
+        return "top_level"
+    if "endpoints" in message:
+        return "endpoints"
+    if "model-selection" in message or "modelSelections" in message:
+        return "modelSelections"
+    if "wiki" in message:
+        return "wiki"
+    if "orch" in message:
+        return "orch"
+    return "settings"
 
 
-def redact_secrets_json(json_str: str) -> str:
-    """字符串版本: 解析失败 / 非 dict 输入原样返回, 避免 500 阻断 GET.
-
-    用于 ``app_settings`` preference value (整棵 settings 作为 JSON 字符串
-    持久化在 SQLite) 取出时脱敏; 也兼容 hex 路由裸 JSON 响应.
-
-    alpha.8 (2026-08-27): 解析失败时记一条 warning (DB 行可能损坏),
-    但**不**抛 — 与原有 fail-open 契约一致, 让 GET 不 500 阻断.
-    """
-    try:
-        parsed = json.loads(json_str)
-    except (ValueError, TypeError) as exc:
-        # alpha.8: 加 warning, 让 DB 损坏可见 (避免 silent failure 隐藏后续用户问题).
-        # 不抛以维持现有 fail-open 行为; 但留 audit trail.
-        logger.warning(
-            "redact_secrets_json: malformed JSON, returning verbatim (snippet=%r)",
-            json_str[:80],
-        )
-        return json_str
-    if not isinstance(parsed, dict):
-        return json_str
-    return json.dumps(redact_secrets(parsed), ensure_ascii=False)
+def classify_settings_shape_field(exc: ValueError) -> str:
+    """Return the offending schema field name without exposing its value."""
+    message = str(exc)
+    match = re.search(
+        r"unknown (?:top-level|endpoint|discovered-model|model-selections|model-selection|wiki|orch) field '([^']+)'",
+        message,
+    )
+    if match and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,63}", match.group(1)):
+        return match.group(1)
+    return classify_settings_shape_error(exc)

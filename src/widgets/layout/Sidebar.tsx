@@ -46,10 +46,12 @@ const navItems = [
  * 渐进式功能披露 (U10)：高级入口路径 → feature key 映射。
  * 这些入口在首次使用前从 sidebar 隐藏，首次使用（访问对应路由）后永久解锁。
  * 隐藏期间仍可经命令面板发现，避免成为无法触达的死功能。
+ *
+ * 只登记"多数用户不需要"的入口。`/skills` 曾在此处，但技能页是 SKILL.md 体系的
+ * 唯一 UI 入口，门控它会形成自锁——入口可见性依赖"已经用过入口"。
  */
 const ADVANCED_FEATURE_BY_PATH: Record<string, string> = {
   '/orchestration': 'orchestration',
-  '/skills': 'skills',
   '/office': 'office',
 };
 
@@ -96,11 +98,9 @@ export function Sidebar({ width = 240 }: SidebarProps) {
 
   // 渐进式功能披露 (U10)：高级入口的解锁状态。
   const [orchestrationUnlocked] = useFeatureUnlock('orchestration');
-  const [skillsUnlocked] = useFeatureUnlock('skills');
   const [officeUnlocked] = useFeatureUnlock('office');
   const unlockedByFeature: Record<string, boolean> = {
     orchestration: orchestrationUnlocked,
-    skills: skillsUnlocked,
     office: officeUnlocked,
   };
 
@@ -254,7 +254,7 @@ export function Sidebar({ width = 240 }: SidebarProps) {
             {connectionStatus === 'error' && '连接失败'}
           </span>
           {connectionStatus === 'error' && <AttnBadge count={1} title="连接失败,请检查端点配置" />}
-          <span className="ml-auto">v0.1.1</span>
+          <span className="ml-auto">v{__APP_VERSION__}</span>
         </div>
       </div>
     </aside>

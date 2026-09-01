@@ -105,6 +105,7 @@ export async function invokeBackend(
   cmd: string,
   args: Record<string, unknown> = {},
   backendUrl: string,
+  authToken?: string,
 ): Promise<unknown> {
   const route = COMMAND_ROUTES[cmd];
   if (!route) {
@@ -126,7 +127,7 @@ export async function invokeBackend(
   for (const k of Object.keys(pathParams)) delete bodyArgs[k];
   const init: import('node-fetch').RequestInit = {
     method: route.method,
-    headers: { 'Content-Type': 'application/json' },
+    headers,
   };
   if (route.method !== 'GET' && route.method !== 'DELETE') {
     // POST/PUT/PATCH: 把 args 转 snake_case 再序列化(前端 camelCase → 后端 Pydantic)

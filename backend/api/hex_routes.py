@@ -229,6 +229,8 @@ async def update_settings(
     canonical_payload = {k: v for k, v in payload.items() if k not in legacy_keys}
 
     from backend.data.settings_canonicalizer import (
+        classify_settings_shape_field,
+        classify_settings_validation_error,
         strip_unknown_fields,
         to_camel,
         validate_settings_payload,
@@ -256,13 +258,37 @@ async def update_settings(
     try:
         validate_settings_payload(camel_merged)
     except ValueError as exc:
-        logger.warning(f"[HEX REQ {request_id}] /settings rejected invalid value: {exc}")
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        field = classify_settings_validation_error(exc)
+        logger.warning(
+            "[HEX REQ %s] /settings rejected: error_type=invalid_settings_payload field=%s",
+            request_id,
+            field,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_settings_payload",
+                "message": "设置内容无效，请检查字段格式",
+                "field": field,
+            },
+        ) from exc
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
-        logger.warning(f"[HEX REQ {request_id}] /settings rejected unknown field: {exc}")
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        field = classify_settings_shape_field(exc)
+        logger.warning(
+            "[HEX REQ %s] /settings rejected: error_type=invalid_settings_shape field=%s",
+            request_id,
+            field,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "type": "invalid_settings_shape",
+                "message": "设置结构无效，请检查字段",
+                "field": field,
+            },
+        ) from exc
     repo.set_json("app_settings", camel_merged, category="general")
 
     # 审计：仅记录字段名，不记录值；api_key 永不进 audit payload (但进 changed_fields 占位)
@@ -362,34 +388,27 @@ async def get_preference(key: str) -> PreferenceItem:
 
 @router.put("/preferences/{key}", response_model=PreferenceItem)
 async def put_preference(key: str, item: PreferenceItem) -> PreferenceItem:
-    """通用 KV 写入（白名单限定 key）。
-
-    alpha.8 (2026-08-27): PUT 响应回显的 value 同样走 redact_secrets_json
-    (与 GET 对齐); DB 里存原值, 由 GET 路径保证.
-
-    Defense-in-depth (2026-08-27): ``item.value`` 类型上是 ``Optional[str]`` 但
-    若调用方绕过 Pydantic 直接传入 dict (例如未来 ``set_json`` 路径), 仍走
-    ``redact_secrets`` + ``json.dumps`` 兜底, 永不回显明文 apiKey.
-    """
+    """通用 KV 写入（白名单限定 key）。"""
+    from backend.data.settings_canonicalizer import (
+        parse_app_settings_object,
+        redact_secrets_json,
+    )
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
+    if key == "app_settings" and item.value is not None:
+        try:
+            parse_app_settings_object(item.value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="app_settings must be a JSON object") from exc
     if item.value is not None:
         SettingsRepository().set(
             key, item.value, value_type=item.value_type, category=item.category
         )
-    if key == "app_settings" and item.value is not None:
-        from backend.data.settings_canonicalizer import redact_secrets, redact_secrets_json
-
-        if isinstance(item.value, str):
-            redacted_value = redact_secrets_json(item.value)
-        elif isinstance(item.value, dict):
-            redacted_value = json.dumps(redact_secrets(item.value), ensure_ascii=False)
-        else:
-            redacted_value = item.value
+    if key == "app_settings":
         return PreferenceItem(
-            value=redacted_value,
+            value=redact_secrets_json(item.value),
             value_type=item.value_type,
             category=item.category,
         )

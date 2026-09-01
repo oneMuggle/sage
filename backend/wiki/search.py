@@ -6,6 +6,7 @@
 from pathlib import Path
 from typing import List
 
+from .files import iter_wiki_markdown, secure_read_text
 from .models import SearchResponse, SearchResult
 
 # 停止词
@@ -117,7 +118,7 @@ def search_wiki(project_root: Path, query: str, limit: int = 20) -> SearchRespon
     results = []
 
     # 收集所有 .md 文件
-    for md_file in wiki_dir.rglob("*.md"):
+    for md_file in iter_wiki_markdown(project_root):
         # 跳过隐藏目录
         if any(part.startswith(".") for part in md_file.parts):
             continue
@@ -127,7 +128,10 @@ def search_wiki(project_root: Path, query: str, limit: int = 20) -> SearchRespon
             continue
 
         # 读取内容
-        content = md_file.read_text(encoding="utf-8")
+        try:
+            content = secure_read_text(project_root, md_file)
+        except OSError:
+            continue
         title = _extract_title(content)
         relative_path = str(md_file.relative_to(project_root)).replace("\\", "/")
 

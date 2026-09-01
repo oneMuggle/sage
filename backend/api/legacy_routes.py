@@ -68,6 +68,7 @@ from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
 from backend.skills.loader import get_skill_loader
 from backend.skills.review_queue import get_review_queue
+from backend.skills.skill_md.frontmatter import SkillMdParseError, parse as parse_skill_md
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +225,7 @@ class ChatResponse(BaseModel):
 
     message: Optional[MessageResponse] = None
 
-    session: Optional[dict] = None
+    session: Optional[Dict] = None
 
     error: Optional[ChatErrorInfo] = None
 
@@ -325,7 +326,7 @@ class AgentCreate(BaseModel):
     system_prompt: str = ""
     tools: Optional[List[str]] = None
     memory_access: Optional[List[str]] = None
-    model_config_data: Optional[dict] = None
+    model_config_data: Optional[Dict] = None
     max_iterations: Optional[int] = None
     enabled: Optional[bool] = None
     description: Optional[str] = None
@@ -634,7 +635,7 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[dict]) -> None:
+async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict]) -> None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -1237,11 +1238,11 @@ def list_slash_commands():
 def delete_skill(name: str):
     """物理删除一个 SKILL.md 技能 (用户主动管理, PR-A Task 3)。
 
-    - 200 + ``{"deleted": true, "name": ..., "base_dir": ...}``
-    - 400 + detail=str(exc): builtin 不可删 / name 非法 / base_dir 跑出
+    - 200 + ``{"deleted": true, "name": ..., "base_dir": "."}``
+    - 400 + stable detail: builtin 不可删 / name 非法 / base_dir 跑出
       SAGE_SKILLS_DIR
-    - 404 + detail=str(exc): skill 不存在 (registry 或磁盘)
-    - 500 + detail=str(exc): SAGE_SKILLS_DIR 未配置 / 其他文件系统错误
+    - 404 + stable detail: skill 不存在 (registry 或磁盘)
+    - 500 + stable detail: SAGE_SKILLS_DIR 未配置 / 其他文件系统错误
     """
     # 延迟导入避免循环 (legacy_routes → inproc → delete → registry → builtin)
     from backend.skills.skill_md.delete import (
@@ -1253,15 +1254,31 @@ def delete_skill(name: str):
     try:
         result = adapter.delete_skill_md(name)
     except BuiltinSkillError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("skill delete rejected: type=%s name=%s", type(exc).__name__, name)
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "builtin_skill", "message": "内置技能不可删除"},
+        ) from exc
     except SkillMdNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        logger.info("skill delete not found: name=%s", name)
+        raise HTTPException(
+            status_code=404,
+            detail={"type": "skill_not_found", "message": "技能不存在"},
+        ) from exc
     except ValueError as exc:
-        # name 非法 / base_dir 跑出 SAGE_SKILLS_DIR
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        # name 非法 / base_dir 跑出 SAGE_SKILLS_DIR; keep diagnostics server-side.
+        logger.warning("skill delete invalid request: name=%s error=%s", name, exc)
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "invalid_skill_request", "message": "技能请求无效"},
+        ) from exc
     except FileNotFoundError as exc:
-        # SAGE_SKILLS_DIR 未配置 / 其他 fs 错误 — 路由层转 500
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        # SAGE_SKILLS_DIR 未配置 / 其他 fs 错误; keep diagnostics server-side.
+        logger.error("skill delete storage unavailable: name=%s error=%s", name, exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"type": "skills_storage_unavailable", "message": "技能目录不可用"},
+        ) from exc
     return result
 
 
@@ -1284,7 +1301,7 @@ def rescan_skills():
 async def import_skills(files: List[UploadFile] = File(default=[])):
     """导入 SKILL.md 文件 (multipart)。
 
-    - 200 + ``{"imported": [{"name", "path"}], "skipped": [{"name", "reason"}]}``
+    - 200 + ``{"imported": [{"name", "path": "."}], "skipped": [{"name", "reason"}]}``
     - 400 + detail: multipart 没 files (空列表)
     - 500 + detail: skills_dir 无法创建 (NoSkillsDirError)
 
@@ -1302,9 +1319,10 @@ async def import_skills(files: List[UploadFile] = File(default=[])):
     try:
         result = await adapter.import_skill_mds(files)
     except NoSkillsDirError as exc:
+        logger.error("skill import unavailable: error_type=%s", type(exc).__name__)
         raise HTTPException(
             status_code=500,
-            detail={"type": "no_skills_dir", "message": str(exc)},
+            detail={"type": "no_skills_dir", "message": "技能目录不可用"},
         ) from exc
 
     return result
@@ -1346,7 +1364,7 @@ class LegacyPreferenceItem(BaseModel):
 
 @router.get("/settings")
 @with_db_lock
-def legacy_get_settings() -> Optional[dict]:
+def legacy_get_settings() -> Optional[Dict]:
     """读取持久化的 settings；不存在返回 null。
 
     翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
@@ -1413,6 +1431,8 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     - 白名单校验 (validate_settings_shape) 拒绝白名单外字段 → 400
     """
     from backend.data.settings_canonicalizer import (
+        classify_settings_shape_field,
+        classify_settings_validation_error,
         strip_unknown_fields,
         to_camel,
         validate_settings_payload,
@@ -1453,13 +1473,35 @@ def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse
     try:
         validate_settings_payload(camel_merged)
     except ValueError as exc:
-        logger.warning(f"[LEGACY] /settings rejected invalid value: {exc}")
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        field = classify_settings_validation_error(exc)
+        logger.warning(
+            "[LEGACY] /settings rejected: error_type=invalid_settings_payload field=%s",
+            field,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_settings_payload",
+                "message": "设置内容无效，请检查字段格式",
+                "field": field,
+            },
+        ) from exc
     try:
         validate_settings_shape(camel_merged)
     except ValueError as exc:
-        logger.warning(f"[LEGACY] /settings rejected unknown field: {exc}")
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        field = classify_settings_shape_field(exc)
+        logger.warning(
+            "[LEGACY] /settings rejected: error_type=invalid_settings_shape field=%s",
+            field,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "type": "invalid_settings_shape",
+                "message": "设置结构无效，请检查字段",
+                "field": field,
+            },
+        ) from exc
     repo.set_json("app_settings", camel_merged, category="general")
     changed_fields = [k for k in payload if k != "api_key"]
     if "api_key" in payload:
@@ -1495,37 +1537,27 @@ def legacy_get_preference(key: str) -> LegacyPreferenceItem:
 @router.put("/preferences/{key}", response_model=LegacyPreferenceItem)
 @with_db_lock
 def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPreferenceItem:
-    """通用 KV 写入（白名单限定 key）。
-
-    alpha.8 (2026-08-27): PUT 响应原样回显 item.value, 对 app_settings 来说就是
-    把真实 apiKey 写到 HTTP 响应里. 与 GET 对齐: PUT 响应也走 redact_secrets_json,
-    DB 里原值不动 (由 GET 路径保证).
-
-    Defense-in-depth (2026-08-27): ``item.value`` 类型上是 ``Optional[str]`` 但
-    若调用方绕过 Pydantic 直接传入 dict (例如未来 ``set_json`` 路径), 仍走
-    ``redact_secrets`` + ``json.dumps`` 兜底, 永不回显明文 apiKey.
-    """
-    import json
-
+    """通用 KV 写入（白名单限定 key）。"""
+    from backend.data.settings_canonicalizer import (
+        parse_app_settings_object,
+        redact_secrets_json,
+    )
     from backend.data.settings_repo import SettingsRepository
 
     if key not in SettingsRepository.KEYS:
         raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
+    if key == "app_settings" and item.value is not None:
+        try:
+            parse_app_settings_object(item.value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="app_settings must be a JSON object") from exc
     if item.value is not None:
         SettingsRepository().set(
             key, item.value, value_type=item.value_type, category=item.category
         )
-    if key == "app_settings" and item.value is not None:
-        from backend.data.settings_canonicalizer import redact_secrets, redact_secrets_json
-
-        if isinstance(item.value, str):
-            redacted_value = redact_secrets_json(item.value)
-        elif isinstance(item.value, dict):
-            redacted_value = json.dumps(redact_secrets(item.value), ensure_ascii=False)
-        else:
-            redacted_value = item.value
+    if key == "app_settings":
         return LegacyPreferenceItem(
-            value=redacted_value,
+            value=redact_secrets_json(item.value),
             value_type=item.value_type,
             category=item.category,
         )
@@ -2467,6 +2499,18 @@ def list_skill_drafts(status: str = "pending"):
     return {"drafts": [_draft_to_dict(d) for d in drafts]}
 
 
+def _validate_skill_draft_content(content: Any, draft_name: str) -> None:
+    """Validate approved draft content without loading or executing skill code."""
+    if not isinstance(content, str):
+        raise ValueError("content must be a UTF-8 string")
+
+    metadata, _ = parse_skill_md(content)
+    if metadata.get("name") != draft_name:
+        raise ValueError(
+            f"frontmatter name {metadata.get('name')!r} does not match draft name {draft_name!r}"
+        )
+
+
 @router.post("/skill-drafts/{draft_id}/approve")
 @with_db_lock
 def approve_skill_draft(draft_id: str):
@@ -2476,12 +2520,16 @@ def approve_skill_draft(draft_id: str):
     - 400 — invalid skill name (path traversal / separators / empty);
       draft status NOT updated (follow-up: regenerate or edit the draft)
     - 404 — draft not found
+    - 409 — a skill with the same name already exists; draft status NOT updated
     - 500 — file-system write failure (status NOT updated)
     """
     draft_store = get_skill_draft_store()
     draft = draft_store.get(draft_id)
     if draft is None:
-        raise HTTPException(status_code=404, detail="Draft not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "draft_not_found", "message": "Draft not found"},
+        )
 
     # I-1 fix: validate name *before* touching the filesystem so that
     # drafts with un-writable names (LLM hallucinations like "../foo")
@@ -2491,29 +2539,87 @@ def approve_skill_draft(draft_id: str):
     try:
         ReviewService._validate_skill_name(draft.name)
     except ValueError as exc:
+        logger.warning(
+            "Skill draft %s has an invalid name (error_type=%s)",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid skill name: {exc}",
+            detail={"code": "invalid_skill_name", "message": "Invalid skill name"},
+        ) from exc
+
+    try:
+        _validate_skill_draft_content(draft.content, draft.name)
+    except (SkillMdParseError, TypeError, ValueError, UnicodeError) as exc:
+        logger.warning(
+            "Skill draft %s has invalid SKILL.md content (error_type=%s)",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_skill_content",
+                "message": "Invalid SKILL.md content",
+            },
         ) from exc
 
     try:
         skill_loader = get_skill_loader()
-        skill_loader.write(draft.name, draft.content)
-    except ValueError as exc:
-        # Skill loader rejected the name (caught separately from OSError
-        # so the route can return 400 for invalid names vs 500 for FS errors).
-        logger.error("Failed to write skill %s: %s", draft.name, exc)
+        skill_loader.write(draft.name, draft.content, overwrite=False)
+    except FileExistsError as exc:
+        logger.info(
+            "Skill already exists; draft=%s remains pending",
+            _safe_log_field(draft_id),
+        )
         raise HTTPException(
-            status_code=400, detail=f"Failed to write skill: {exc}"
+            status_code=409,
+            detail={"code": "skill_already_exists", "message": "Skill already exists"},
+        ) from exc
+    except ValueError as exc:
+        # Keep diagnostics server-side without exposing loader internals to clients.
+        logger.error(
+            "Failed to write skill draft: draft=%s error_type=%s errno=%s",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+            getattr(exc, "errno", None),
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "skill_write_rejected", "message": "Failed to write skill"},
         ) from exc
     except (PermissionError, OSError) as exc:
-        logger.error("Failed to write skill %s: %s", draft.name, exc)
+        # Filesystem exceptions can include absolute paths or file contents.
+        logger.error(
+            "Failed to write skill draft: draft=%s error_type=%s errno=%s",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+            getattr(exc, "errno", None),
+        )
         raise HTTPException(
-            status_code=500, detail=f"Failed to write skill: {exc}"
+            status_code=500,
+            detail={"code": "skill_write_failed", "message": "Failed to write skill"},
         ) from exc
 
     draft_store.update_status(draft_id, "approved")
-    return {"status": "approved", "skill_name": draft.name, "draft_id": draft_id}
+    try:
+        reload_result = _get_skill_adapter().rescan_skill_mds()
+    except Exception as exc:  # noqa: BLE001 — approval succeeds even if reload fails
+        logger.warning(
+            "Approved skill rescan failed: draft=%s error_type=%s",
+            _safe_log_field(draft_id),
+            type(exc).__name__,
+        )
+        reload_result = {"loaded": []}
+    return {
+        "status": "approved",
+        "skill_name": draft.name,
+        "draft_id": draft_id,
+        "reloaded": any(
+            item.get("name") == draft.name for item in reload_result.get("loaded", [])
+        ),
+    }
 
 
 @router.post("/skill-drafts/{draft_id}/reject")
@@ -2527,7 +2633,10 @@ def reject_skill_draft(draft_id: str):
     draft_store = get_skill_draft_store()
     draft = draft_store.get(draft_id)
     if draft is None:
-        raise HTTPException(status_code=404, detail="Draft not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "draft_not_found", "message": "Draft not found"},
+        )
 
     draft_store.update_status(draft_id, "rejected")
     return {"status": "rejected", "draft_id": draft_id}
@@ -2781,7 +2890,7 @@ def list_memories(
                     limit=fetch_limit,
                 )
 
-            merged: list[dict] = []
+            merged: List[Dict] = []
             merged.extend(
                 _enrich_memory_records(episodic_items, layer="episodic", source="episodic")
             )

@@ -129,7 +129,7 @@ core = core_profile[:_CORE_PROFILE_LIMIT] + core_retrieved[:_CORE_RETRIEVED_LIMI
 
 ### 4.4 审批队列
 
-- **API**: `POST /review/trigger`（/learn 触发）、`GET /skill-drafts`（列出草稿）、
+- **API**: `POST /learn`（用户显式触发）、`GET /skill-drafts`（列出草稿）、
   `POST /skill-drafts/:id/approve`、`POST /skill-drafts/:id/reject`
 - **前端**: Skills 页面新增 "Pending Drafts" 标签页（`SkillDraftList.tsx`），
   轮询草稿列表，Approve/Reject 按钮
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS skill_drafts (
 | `backend/skills/draft_store.py` | skill_drafts 表 CRUD |
 | `backend/skills/prompts/review.txt` | LLM prompt 模板 |
 | `backend/skills/usage.py` | `fail_count` 列（成功率跟踪） |
-| `backend/api/legacy_routes.py` | /review/trigger + /skill-drafts API |
+| `backend/api/legacy_routes.py` | /learn + /skill-drafts API |
 | `src/widgets/skills/SkillDraftList.tsx` | Pending Drafts UI 组件 |
 | `src/widgets/chat/ChatInput.tsx` | /learn 斜杠命令 |
 | `src/pages/Chat.tsx` | handleLearn IPC 调用 |

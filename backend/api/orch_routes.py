@@ -15,7 +15,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 from backend.data.database import _SQLITE_LOCK
 from backend.data.orch_run_repo import OrchRun, OrchRunRepository

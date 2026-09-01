@@ -31,7 +31,8 @@ import yaml
 logger = logging.getLogger(__name__)
 
 _FENCE = "---"
-_NAME_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_NAME_SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+_NAME_MAX_LENGTH = 64
 _BOM = "﻿"
 
 
@@ -85,15 +86,24 @@ def _split_frontmatter(text: str) -> Tuple[str, str]:
     raise SkillMdParseError("unclosed frontmatter fence: missing closing '---'")
 
 
+def _is_valid_name(name: Any) -> bool:
+    """Return whether ``name`` satisfies the canonical skill-name schema."""
+    return (
+        isinstance(name, str)
+        and 1 <= len(name) <= _NAME_MAX_LENGTH
+        and _NAME_SLUG_RE.fullmatch(name) is not None
+    )
+
+
 def _validate_name(name: Any) -> str:
     """校验 name 是合法 slug(小写字母/数字/连字符),长度 1-64 (agentskills.io spec)。"""
     if not isinstance(name, str) or not name:
         raise SkillMdParseError("frontmatter 'name' must be a non-empty string")
-    if not (1 <= len(name) <= 64):
+    if not (1 <= len(name) <= _NAME_MAX_LENGTH):
         raise SkillMdParseError(
-            f"frontmatter 'name' must be 1-64 chars, got {len(name)} chars: {name!r}"
+            f"frontmatter 'name' must be 1-{_NAME_MAX_LENGTH} chars, got {len(name)} chars: {name!r}"
         )
-    if not _NAME_SLUG_RE.match(name):
+    if not _is_valid_name(name):
         raise SkillMdParseError(
             f"frontmatter 'name' must be a slug (lowercase letters/digits/hyphens), got: {name!r}"
         )

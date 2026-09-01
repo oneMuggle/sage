@@ -77,9 +77,9 @@ class EndpointPayload(BaseModel):
     name: Optional[str] = None
     baseUrl: Optional[str] = None  # noqa: N815 — camelCase 对齐前端
     apiKey: Optional[str] = None  # noqa: N815
-    # Task 1 (2026-08-23): 协议枚举 + 模型身份.
-    # Literal 在 Pydantic 1.10+ 与 2 都生效; 非法值 → Pydantic 422.
-    protocol: Optional[EndpointProtocolLiteral] = None  # noqa: N815
+    # protocol 的最终枚举校验由 route handler 调用 canonicalizer 完成，确保
+    # Pydantic 自动错误不会把用户输入值（可能是 secret-like token）回显。
+    protocol: Optional[str] = None  # noqa: N815
     modelId: Optional[str] = None  # noqa: N815
     localModelPath: Optional[str] = None  # noqa: N815
     discoveredModels: Optional[List[dict]] = None  # noqa: N815

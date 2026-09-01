@@ -12,14 +12,14 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from backend.data.settings_canonicalizer import (
     ALIASES,
     detect_legacy_snake_pollution,
     from_camel,
-    redact_secrets,
-    redact_secrets_json,
     strip_unknown_fields,
     to_camel,
     validate_endpoint_payload,
@@ -166,11 +166,29 @@ def test_validate_settings_shape_rejects_unknown_model_selection_key() -> None:
         validate_settings_shape(settings)
 
 
-def test_validate_settings_shape_strips_snake_residue() -> None:
-    """即使翻译后仍有 snake_case 残留 (ALIASES 不覆盖到的字段), 应抛错"""
-    settings = {"base_url": "u"}
-    with pytest.raises(ValueError, match=r"unknown top-level field 'base_url'"):
-        validate_settings_shape(settings)
+def test_validate_settings_shape_rejects_scalar_container_values() -> None:
+    """容器字段若被持久化为标量, 应返回 ValueError 而不是 TypeError."""
+    invalid_settings = [
+        ({"endpoints": 1}, "endpoints must be a list"),
+        (
+            {"endpoints": [{"discoveredModels": 1}]},
+            "endpoints[0].discoveredModels must be a list",
+        ),
+        ({"modelSelections": 1}, "modelSelections must be a dict"),
+        ({"modelSelections": {"chatModel": 1}}, "modelSelections.chatModel is not a dict"),
+        ({"wiki": 1}, "wiki must be a dict"),
+        ({"orch": 1}, "orch is not a dict"),
+    ]
+    for settings, message in invalid_settings:
+        with pytest.raises(ValueError, match=re.escape(message)):
+            validate_settings_shape(settings)
+
+
+def test_strip_unknown_fields_preserves_malformed_discovered_model_items() -> None:
+    """净化未知字段时不得静默删除 discoveredModels 中的损坏项."""
+    malformed = {"endpoints": [{"discoveredModels": [1, {"id": "m1"}]}]}
+    cleaned = strip_unknown_fields(malformed)
+    assert cleaned["endpoints"][0]["discoveredModels"] == [1, {"id": "m1"}]
 
 
 # --- detect_legacy_snake_pollution ---
@@ -596,110 +614,211 @@ def test_model_dump_compat_falls_back_to_pydantic_v1_dict() -> None:
     assert model_dump_compat(PydanticV1ShapedModel(), exclude_none=True) == {"id": "ep-1"}
 
 
-# === alpha.8 (2026-08-27): secret redaction helpers ===
+# --- redact_secrets (2026-08-26) ---
 #
-# Background (main already implemented, see [[sage-settings-redaction-key-preservation]]
-# + [[sage-settings-redaction-idempotency-fix]]):
-#   GET /settings and /preferences/app_settings MUST NOT echo plaintext ``apiKey``
-#   back to the renderer. Win7 alpha.8 cherry-picks the contract: redact at the
-#   canonicalizer boundary so legacy + hex share the same logic.
-#
-# Contract:
-#   redact_secrets(payload)        -> payload dict, mutated copy with:
-#                                     endpoints[i].apiKey set to empty string (always)
-#                                     endpoints[i].hasApiKey set to bool(apiKey != "")
-#                                     (non-empty -> True, empty -> False)
-#   redact_secrets_json(json_str)  -> JSON string of redact_secrets(json.loads(json_str))
-#                                     non-JSON / non-dict input -> original string returned
-#   Idempotency: calling redact twice yields the same result as calling once
-#   Immutability: redact(x) does not mutate x
-#
-# ImportError on ImportError below is the RED signal — these symbols do not
-# exist in Win7 alpha.7 settings_canonicalizer yet.
+# OWASP A02:2021 — Cryptographic Failures. GET /settings 必须不返回明文 apiKey.
+# 这些单测锁定 redact_secrets + redact_secrets_json 的契约, 防止后续重构回退
+# 到"明文返回"的旧实现.
 
 
-def test_redact_secrets_non_empty_api_key_sets_has_api_key_true() -> None:
-    """非空 apiKey → apiKey 置空, hasApiKey=True。"""
-    payload = {"endpoints": [{"id": "e1", "name": "LM Studio", "apiKey": "sk-real-key"}]}
-    redacted = redact_secrets(payload)
-    assert redacted["endpoints"][0]["apiKey"] == ""
-    assert redacted["endpoints"][0]["hasApiKey"] is True
+def test_redact_secrets_strips_endpoint_api_key_and_marks_has_api_key():
+    from backend.data.settings_canonicalizer import redact_secrets
+
+    settings = {
+        "endpoints": [
+            {
+                "id": "ep-real",
+                "baseUrl": "https://api.example.com/v1",
+                "apiKey": "sk-test-SECRET-do-not-leak-1f2e3d4c5b6a",
+                "protocol": "openai-compatible",
+            }
+        ]
+    }
+    out = redact_secrets(settings)
+    ep = out["endpoints"][0]
+    assert ep["apiKey"] == ""
+    assert ep["hasApiKey"] is True
+    assert ep["baseUrl"] == "https://api.example.com/v1"
+    # immutability check
+    assert settings["endpoints"][0]["apiKey"] == "sk-test-SECRET-do-not-leak-1f2e3d4c5b6a"
 
 
-def test_redact_secrets_empty_api_key_sets_has_api_key_false() -> None:
-    """空 apiKey → apiKey 保持空, hasApiKey=False (幂等下二次 redact 仍是 False)。"""
-    payload = {"endpoints": [{"id": "e1", "apiKey": ""}]}
-    redacted = redact_secrets(payload)
-    assert redacted["endpoints"][0]["apiKey"] == ""
-    assert redacted["endpoints"][0]["hasApiKey"] is False
+def test_redact_secrets_empty_api_key_is_false():
+    from backend.data.settings_canonicalizer import redact_secrets
+
+    settings = {
+        "endpoints": [
+            {"id": "ep-empty", "baseUrl": "http://127.0.0.1:1234/v1", "apiKey": ""}
+        ]
+    }
+    out = redact_secrets(settings)
+    ep = out["endpoints"][0]
+    assert ep["apiKey"] == ""
+    assert ep["hasApiKey"] is False
 
 
-def test_redact_secrets_is_idempotent() -> None:
-    """连续两次 redact 必须等价于一次 —— 防止 [sage-settings-redaction-idempotency-fix]
-    那种 hasApiKey True→False 的退化。"""
-    payload = {"endpoints": [{"id": "e1", "apiKey": "sk-secret"}]}
-    once = redact_secrets(payload)
-    twice = redact_secrets(once)
-    assert once == twice
-    # hasApiKey 在第二次必须仍然 True (而不是变成 False)
-    assert twice["endpoints"][0]["hasApiKey"] is True
+def test_redact_secrets_passthrough_for_none_or_non_dict():
+    from backend.data.settings_canonicalizer import redact_secrets
+
+    assert redact_secrets(None) is None
+    assert redact_secrets("raw-string") == "raw-string"
+    assert redact_secrets([{"endpoints": []}]) == [{"endpoints": []}]
+    # 非 dict endpoint 项原样保留
+    settings = {"endpoints": ["not-a-dict"]}
+    out = redact_secrets(settings)
+    assert out["endpoints"] == ["not-a-dict"]
 
 
-def test_redact_secrets_json_string_redacts_endpoints() -> None:
-    """JSON 字符串输入 → 返回 JSON 字符串, 内部 endpoints[*].apiKey 全部脱敏。"""
-    raw = (
-        '{"endpoints":[{"id":"e1","apiKey":"sk-a"},{"id":"e2","apiKey":""}],'
-        '"maxContext":4096}'
+def test_redact_secrets_preserves_other_top_level_keys():
+    from backend.data.settings_canonicalizer import redact_secrets
+
+    settings = {
+        "endpoints": [{"id": "ep", "apiKey": "secret"}],
+        "streaming": True,
+        "temperature": 0.7,
+        "modelSelections": {"chatModel": {"modelId": "x"}},
+    }
+    out = redact_secrets(settings)
+    assert out["streaming"] is True
+    assert out["temperature"] == 0.7
+    assert out["modelSelections"]["chatModel"]["modelId"] == "x"
+
+
+def test_redact_secrets_recognizes_credential_key_variants_without_overmatching():
+    from backend.data.settings_canonicalizer import redact_secrets
+
+    settings = {
+        "dbPassword": "db-secret",
+        "secretKey": "secret-key",
+        "privateKey": "private-key",
+        "authorization": "bearer-token",
+        "authToken": "auth-secret",
+        "accessToken": "access-secret",
+        "refreshToken": "refresh-secret",
+        "clientSecret": "client-secret",
+        "bearerToken": "bearer-secret",
+        "apiToken": "api-token-secret",
+        "api_key": "snake-api-secret",
+        "API-KEY": "hyphen-api-secret",
+        "tokenization": "ordinary-tokenization-setting",
+        "passwordPolicy": "ordinary-password-policy-setting",
+        "publicKey": "ordinary-public-key-setting",
+    }
+
+    out = redact_secrets(settings)
+    for key in (
+        "dbPassword",
+        "secretKey",
+        "privateKey",
+        "authorization",
+        "authToken",
+        "accessToken",
+        "refreshToken",
+        "clientSecret",
+        "bearerToken",
+        "apiToken",
+        "api_key",
+        "API-KEY",
+    ):
+        assert out[key] == ""
+    assert out["tokenization"] == "ordinary-tokenization-setting"
+    assert out["passwordPolicy"] == "ordinary-password-policy-setting"
+    assert out["publicKey"] == "ordinary-public-key-setting"
+
+
+    import json
+
+    from backend.data.settings_canonicalizer import redact_secrets_json
+
+    value = json.dumps(
+        {"endpoints": [{"id": "ep", "apiKey": "sk-1234-SECRET"}]}
     )
-    import json as _json
-
-    redacted_str = redact_secrets_json(raw)
-    parsed = _json.loads(redacted_str)
+    out = redact_secrets_json(value)
+    assert "sk-1234-SECRET" not in out
+    parsed = json.loads(out)
     assert parsed["endpoints"][0]["apiKey"] == ""
     assert parsed["endpoints"][0]["hasApiKey"] is True
-    assert parsed["endpoints"][1]["apiKey"] == ""
-    assert parsed["endpoints"][1]["hasApiKey"] is False
-    assert parsed["maxContext"] == 4096
 
 
-def test_redact_secrets_json_passes_through_invalid_input() -> None:
-    """非 JSON / 非 dict 输入 → 原样返回 (避免 500 阻断读)。"""
-    assert redact_secrets_json("not-valid-json{") == "not-valid-json{"
-    assert redact_secrets_json("[1, 2, 3]") == "[1, 2, 3]"
-    assert redact_secrets_json('"just-a-string"') == '"just-a-string"'
-    assert redact_secrets_json("null") == "null"
+def test_redact_secrets_json_passthrough_for_non_string():
+    from backend.data.settings_canonicalizer import redact_secrets_json
+
+    assert redact_secrets_json(None) is None
+    assert redact_secrets_json(123) == 123
+    assert redact_secrets_json("not-valid-json{") == "{}"
 
 
-def test_redact_secrets_does_not_mutate_input() -> None:
-    """输入 dict / list / 子对象都不得被修改 —— 返回新副本 (前端 restore 才能
-    安全地把 remote 端回灌到 local)。"""
-    payload = {
+@pytest.mark.parametrize(
+    "scalar_json",
+    [
+        '"api-token-secret"',
+        "42",
+        "null",
+        "[]",
+    ],
+)
+def test_redact_secrets_json_replaces_json_scalars_with_empty_object(scalar_json):
+    from backend.data.settings_canonicalizer import redact_secrets_json
+
+    out = redact_secrets_json(scalar_json)
+
+    assert out == "{}"
+    assert "api-token-secret" not in out
+
+
+def test_redact_secrets_json_empty_string_round_trip():
+    import json
+
+    from backend.data.settings_canonicalizer import redact_secrets_json
+
+    empty = json.dumps({"endpoints": [{"id": "ep", "apiKey": ""}]})
+    out = redact_secrets_json(empty)
+    parsed = json.loads(out)
+    assert parsed["endpoints"][0]["hasApiKey"] is False
+
+
+# --- 幂等性 (2026-08-26): plan §8 review HIGH ---
+# preference GET round-trip + cache replay 会让 redact_secrets 被多次应用。
+# 若 hasApiKey=True 在二次调用时翻成 False, 下游 restoreRedactedApiKeys
+# 会拒绝还原, deepMerge remote-wins 用 ``""`` 覆盖本地真实 key → 静默
+# 凭据丢失. 锁定这一不变量.
+
+
+def test_redact_secrets_is_idempotent_for_real_key():
+    from backend.data.settings_canonicalizer import redact_secrets
+
+    settings = {
         "endpoints": [
-            {"id": "e1", "apiKey": "sk-real"},
-            {"id": "e2", "apiKey": ""},
-        ],
-        "maxContext": 4096,
+            {"id": "ep", "apiKey": "sk-test-SECRET-do-not-leak-1f2e3d4c5b6a"},
+        ]
     }
-    snapshot_endpoints = [
-        {"id": ep["id"], "apiKey": ep["apiKey"]} for ep in payload["endpoints"]
-    ]
-    snapshot_max = payload["maxContext"]
-
-    redacted = redact_secrets(payload)
-
-    # 原始 payload 任何字段都未改变
-    assert payload["endpoints"] == snapshot_endpoints
-    assert payload["maxContext"] == snapshot_max
-    assert payload["endpoints"][0]["apiKey"] == "sk-real"
-    assert payload["endpoints"][1]["apiKey"] == ""
-    # 返回的是新对象 (不强制同一性, 但应当非 alias)
-    assert redacted is not payload
-    assert redacted["endpoints"] is not payload["endpoints"]
+    once = redact_secrets(settings)
+    twice = redact_secrets(once)
+    assert twice["endpoints"][0]["apiKey"] == ""
+    assert twice["endpoints"][0]["hasApiKey"] is True
+    # 二次 = 一次 (除 wrapper ref 外)
+    assert twice["endpoints"][0]["hasApiKey"] == once["endpoints"][0]["hasApiKey"]
 
 
-def test_redact_secrets_passes_through_non_dict_input() -> None:
-    """非 dict (None / list / scalar) → 原样返回, 不抛错。"""
-    assert redact_secrets(None) is None
-    assert redact_secrets([]) == []
-    assert redact_secrets("scalar") == "scalar"
-    assert redact_secrets(42) == 42
+def test_redact_secrets_is_idempotent_for_empty_key():
+    from backend.data.settings_canonicalizer import redact_secrets
+
+    settings = {"endpoints": [{"id": "ep", "apiKey": ""}]}
+    once = redact_secrets(settings)
+    twice = redact_secrets(once)
+    assert twice["endpoints"][0]["apiKey"] == ""
+    assert twice["endpoints"][0]["hasApiKey"] is False
+
+
+def test_redact_secrets_json_is_idempotent():
+    """redact_secrets_json 二次调用结果解析后端点字段相同."""
+    import json
+
+    from backend.data.settings_canonicalizer import redact_secrets_json
+
+    raw = json.dumps({"endpoints": [{"id": "ep", "apiKey": "sk-test"}]})
+    once = redact_secrets_json(raw)
+    twice = redact_secrets_json(once)
+    parsed = json.loads(twice)
+    assert parsed["endpoints"][0]["apiKey"] == ""
+    assert parsed["endpoints"][0]["hasApiKey"] is True

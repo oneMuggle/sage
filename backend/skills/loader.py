@@ -20,6 +20,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from .safe_writer import write_skill_file
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +37,7 @@ class SkillLoader:
     def __init__(self, skills_dir: Optional[Path] = None) -> None:
         self._explicit_skills_dir = skills_dir
 
-    def write(self, name: str, content: str) -> Path:
+    def write(self, name: str, content: str, *, overwrite: bool = True) -> Path:
         """Write a skill's content to ``<skills_dir>/<name>/SKILL.md``.
 
         Args:
@@ -54,11 +56,7 @@ class SkillLoader:
             raise ValueError(f"Invalid skill name: {name!r}")
 
         skills_dir = self._resolve_skills_dir()
-        target_dir = skills_dir / name
-        target_file = target_dir / "SKILL.md"
-
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target_file.write_text(content, encoding="utf-8")
+        target_file = write_skill_file(skills_dir, name, content, overwrite=overwrite)
 
         logger.info("Skill written to %s", target_file)
         return target_file

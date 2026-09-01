@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from . import frontmatter
+from .files import (
+    iter_wiki_markdown,
+    secure_delete_path,
+    secure_read_text,
+    secure_write_file,
+)
 from .vectorstore import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -44,13 +50,16 @@ def cascade_delete_source(project_root: Path, source_path: str) -> dict:
 
     # Step 1: 查找引用此 source 的 wiki 页面
     pages_to_delete = []
-    for md_file in wiki_dir.rglob("*.md"):
+    for md_file in iter_wiki_markdown(project_root):
         if md_file.name in ("index.md", "log.md", "schema.md"):
             continue
         if any(part.startswith(".") for part in md_file.parts):
             continue
 
-        content = md_file.read_text(encoding="utf-8")
+        try:
+            content = secure_read_text(project_root, md_file)
+        except OSError:
+            continue
         parsed = frontmatter.parse(content)
 
         # 检查 frontmatter.sources 是否包含此 source
@@ -61,11 +70,21 @@ def cascade_delete_source(project_root: Path, source_path: str) -> dict:
     vector_store = None
     try:
         vector_store = VectorStore.open(project_root, dim=1536)
-    except Exception as e:
-        logger.warning(f"无法打开向量存储: {e}")
+    except Exception as exc:
+        logger.warning("无法打开向量存储: error_type=%s", type(exc).__name__)
 
+    deleted_titles = set()
     for page_path in pages_to_delete:
         relative_path = str(page_path.relative_to(project_root)).replace("\\", "/")
+
+        # Read before deletion; the path must not be reopened after secure delete.
+        try:
+            page_content = secure_read_text(project_root, page_path)
+            parsed_page = frontmatter.parse(page_content)
+            if parsed_page.frontmatter.title:
+                deleted_titles.add(parsed_page.frontmatter.title)
+        except Exception as exc:
+            logger.warning("读取待删除页面失败 %s: error_type=%s", relative_path, type(exc).__name__)
 
         # 删除嵌入向量
         if vector_store:
@@ -73,28 +92,21 @@ def cascade_delete_source(project_root: Path, source_path: str) -> dict:
                 deleted_count = vector_store.delete_by_page(relative_path)
                 stats["deleted_vectors"] += deleted_count
                 logger.info(f"删除 {relative_path} 的 {deleted_count} 个向量")
-            except Exception as e:
-                logger.error(f"删除向量失败 {relative_path}: {e}")
+            except Exception as exc:
+                logger.error("删除向量失败 %s: error_type=%s", relative_path, type(exc).__name__)
 
         # 删除 wiki 页面文件
         try:
-            page_path.unlink()
+            secure_delete_path(project_root, page_path)
             stats["deleted_wiki_pages"].append(relative_path)
             logger.info(f"删除 wiki 页面: {relative_path}")
-        except Exception as e:
-            logger.error(f"删除文件失败 {relative_path}: {e}")
+        except Exception as exc:
+            logger.error("删除文件失败 %s: error_type=%s", relative_path, type(exc).__name__)
 
     # Step 3: 清理其他页面中的死链
     if pages_to_delete:
-        deleted_titles = set()
-        for page_path in pages_to_delete:
-            content = page_path.read_text(encoding="utf-8")
-            parsed = frontmatter.parse(content)
-            if parsed.frontmatter.title:
-                deleted_titles.add(parsed.frontmatter.title)
-
         # 遍历所有剩余页面，清理死链
-        for md_file in wiki_dir.rglob("*.md"):
+        for md_file in iter_wiki_markdown(project_root):
             if md_file.name in ("index.md", "log.md", "schema.md"):
                 continue
             if any(part.startswith(".") for part in md_file.parts):
@@ -103,7 +115,7 @@ def cascade_delete_source(project_root: Path, source_path: str) -> dict:
                 continue  # 跳过已删除的页面
 
             try:
-                content = md_file.read_text(encoding="utf-8")
+                content = secure_read_text(project_root, md_file)
                 parsed = frontmatter.parse(content)
 
                 # 检查 related 字段中是否有死链
@@ -115,19 +127,19 @@ def cascade_delete_source(project_root: Path, source_path: str) -> dict:
                     # 更新 frontmatter
                     parsed.frontmatter.related = updated_related
                     new_content = frontmatter.serialize(parsed)
-                    md_file.write_text(new_content, encoding="utf-8")
+                    secure_write_file(project_root, md_file, new_content)
 
                     deadlinks_removed = len(parsed.frontmatter.related) - len(updated_related)
                     stats["cleaned_deadlinks"] += deadlinks_removed
                     logger.info(f"清理 {md_file.name} 中的 {deadlinks_removed} 个死链")
-            except Exception as e:
-                logger.error(f"清理死链失败 {md_file}: {e}")
+            except Exception as exc:
+                logger.error("清理死链失败 %s: error_type=%s", md_file, type(exc).__name__)
 
     # Step 4: 更新 index.md
     try:
         _update_wiki_index(project_root)
-    except Exception as e:
-        logger.error(f"更新 index.md 失败: {e}")
+    except Exception as exc:
+        logger.error("更新 index.md 失败: error_type=%s", type(exc).__name__)
 
     logger.info(
         f"级联删除完成: 删除 {len(stats['deleted_wiki_pages'])} 个页面, "
@@ -151,14 +163,17 @@ def _update_wiki_index(project_root: Path) -> None:
     # 收集所有页面
     pages_by_type: Dict[str, List[Tuple[str, str]]] = {}  # type -> [(title, path)]
 
-    for md_file in wiki_dir.rglob("*.md"):
+    for md_file in iter_wiki_markdown(project_root):
         if md_file.name in ("index.md", "log.md", "schema.md"):
             continue
         if any(part.startswith(".") for part in md_file.parts):
             continue
 
         try:
-            content = md_file.read_text(encoding="utf-8")
+            content = secure_read_text(project_root, md_file)
+        except OSError:
+            continue
+        try:
             parsed = frontmatter.parse(content)
 
             title = parsed.frontmatter.title or md_file.stem
@@ -168,8 +183,8 @@ def _update_wiki_index(project_root: Path) -> None:
             if page_type not in pages_by_type:
                 pages_by_type[page_type] = []
             pages_by_type[page_type].append((title, relative_path))
-        except Exception as e:
-            logger.warning(f"解析 {md_file} 失败: {e}")
+        except Exception as exc:
+            logger.warning("解析 %s 失败: error_type=%s", md_file, type(exc).__name__)
 
     # 生成 index.md
     from datetime import datetime
@@ -183,5 +198,5 @@ def _update_wiki_index(project_root: Path) -> None:
         for title, path in sorted(pages, key=lambda x: x[0]):
             lines.append(f"- [[{title}]]({path})\n")
 
-    index_file.write_text("".join(lines), encoding="utf-8")
+    secure_write_file(project_root, index_file, "".join(lines))
     logger.info(f"更新 index.md: {sum(len(p) for p in pages_by_type.values())} 个页面")

@@ -1,16 +1,6 @@
 """Subprocess 沙箱适配器（v2）。
 
-实现 ``SandboxPort`` 协议，使用 ``asyncio.create_subprocess_exec`` 执行 Python 脚本。
-
-设计要点
---------
-
-- argv 构造: 元组拼接，不使用 shell=True (防命令注入)
-- 环境变量: 合并父进程 env + request.env，剥离 ``env_denylist`` 中的敏感键
-- cwd: 默认为脚本所在目录，可在 request 中覆盖
-- 超时: ``asyncio.wait_for`` + ``proc.kill()`` + ``await proc.wait()`` 防僵尸进程
-- stdout/stderr: ``PIPE`` 收集，避免泄漏到父进程
-- 异常处理: 任何错误都通过 ``SandboxResult.success=False`` 表达，不向上抛异常
+该 runner 仅提供受限环境、超时和输出边界，不是 OS-level sandbox；脚本仍与宿主进程共享操作系统权限。
 """
 
 from __future__ import annotations
@@ -18,11 +8,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
 import sys
 import time
-from typing import Dict, FrozenSet
+from contextlib import suppress
+from typing import Dict, FrozenSet, Optional, Tuple
 
 from backend.skills.skill_md.sandbox import (
+    DEFAULT_ENV_ALLOWLIST,
     DEFAULT_ENV_DENYLIST,
     SandboxRequest,
     SandboxResult,
@@ -30,16 +23,15 @@ from backend.skills.skill_md.sandbox import (
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
+_READ_CHUNK_BYTES = 4096
+_WINDOWS_TASKKILL = "taskkill.exe"
+_WINDOWS_TASKKILL_TIMEOUT_S = 5.0
+_MAX_STDIN_BYTES = 1024 * 1024
+
 
 class SubprocessSandboxAdapter:
-    """基于 asyncio subprocess 的沙箱适配器（v2）。
-
-    Args:
-        python_executable: Python 解释器路径（默认 = 当前进程的解释器）
-        default_timeout_s: 默认超时时间（秒），默认 30s
-        max_timeout_s: 超时上限（秒），默认 300s（防止单次脚本执行占用过多资源）
-        env_denylist: 敏感环境变量黑名单（frozenset[str]），默认 ``DEFAULT_ENV_DENYLIST``
-    """
+    """基于 asyncio subprocess 的沙箱适配器（v2）。"""
 
     def __init__(
         self,
@@ -47,132 +39,316 @@ class SubprocessSandboxAdapter:
         python_executable: str = sys.executable,
         default_timeout_s: float = 30.0,
         max_timeout_s: float = 300.0,
+        max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
         env_denylist: FrozenSet[str] = DEFAULT_ENV_DENYLIST,
     ) -> None:
+        if max_output_bytes <= 0:
+            raise ValueError("max_output_bytes must be positive")
         self._python_executable = python_executable
         self._default_timeout_s = default_timeout_s
         self._max_timeout_s = max_timeout_s
+        self._max_output_bytes = max_output_bytes
         self._env_denylist = env_denylist
 
     async def run(self, req: SandboxRequest) -> SandboxResult:
-        """执行沙箱请求（永不抛异常）。
-
-        Args:
-            req: 沙箱请求
-
-        Returns:
-            ``SandboxResult``: 执行结果
-        """
         start_time = time.monotonic()
-
-        # 限制 timeout 不超过 max_timeout_s
+        if req.stdin_data is not None and len(req.stdin_data) > _MAX_STDIN_BYTES:
+            return self._failure(
+                start_time,
+                f"stdin exceeds limit of {_MAX_STDIN_BYTES} bytes",
+            )
         timeout = min(req.timeout_s, self._max_timeout_s)
-        # 如果 request 的 timeout 是默认值（30.0），使用 default_timeout_s
         if req.timeout_s == 30.0:
             timeout = self._default_timeout_s
-
-        # 构造 argv: [python, script_path, *args]
-        argv = [
-            self._python_executable,
-            str(req.script_path.resolve()),
-            *req.args,
-        ]
-
-        # 确定 cwd
-        cwd = req.cwd if req.cwd is not None else req.script_path.parent
-        cwd = cwd.resolve()
-
-        # 构造 env: 父进程 env + request.env（去敏感键）
+        argv = [self._python_executable, str(req.script_path.resolve()), *req.args]
+        cwd = (req.cwd if req.cwd is not None else req.script_path.parent).resolve()
         env = self._build_env(req.env)
+        kwargs = {
+            "stdout": asyncio.subprocess.PIPE,
+            "stderr": asyncio.subprocess.PIPE,
+            "stdin": asyncio.subprocess.PIPE
+            if req.stdin_data is not None
+            else asyncio.subprocess.DEVNULL,
+            "env": env,
+            "cwd": cwd,
+        }
+        if os.name == "posix":
+            kwargs["start_new_session"] = True
+        else:
+            # Windows lacks a portable asyncio API for terminating a process tree.
+            # _terminate_process_tree uses the native taskkill.exe fallback below.
+            logger.debug("Sandbox subprocess will use taskkill.exe for tree cleanup")
 
         try:
-            # 启动子进程（无 shell=True，argv 直接拼接）
-            process = await asyncio.create_subprocess_exec(
-                *argv,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                stdin=asyncio.subprocess.PIPE
-                if req.stdin_data is not None
-                else asyncio.subprocess.DEVNULL,
-                env=env,
-                cwd=cwd,
-            )
+            process = await asyncio.create_subprocess_exec(*argv, **kwargs)
         except OSError as exc:
-            duration_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning("Sandbox subprocess spawn failed: %s", exc)
-            return SandboxResult(
-                success=False,
-                exit_code=-1,
-                stdout="",
-                stderr="",
-                duration_ms=duration_ms,
-                error=f"spawn failed: {exc}",
-            )
+            return self._failure(start_time, f"spawn failed: {exc}")
 
-        # 通信 + 超时
         try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                process.communicate(input=req.stdin_data),
-                timeout=timeout,
+            stdout, stderr, output_exceeded = await asyncio.wait_for(
+                self._collect_output(process, req.stdin_data), timeout=timeout
             )
         except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041
-            # 超时: kill 子进程
-            # 注: Python 3.10 中 asyncio.wait_for 抛出 asyncio.TimeoutError，
-            # 而 Python 3.11+ 中它抛出内置 TimeoutError，因此需要同时捕获两者
-            try:
-                process.kill()
-                await process.wait()
-            except ProcessLookupError:
-                pass  # 子进程已退出
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-            logger.warning(
-                "Sandbox subprocess timeout after %.1fs: %s",
-                timeout,
-                req.script_path,
+            await self._terminate_process_tree(process)
+            return self._failure(
+                start_time, f"timeout after {timeout:.1f}s", timed_out=True
             )
+        except Exception as exc:
+            logger.warning("Sandbox subprocess execution failed: %s", exc)
+            await self._terminate_process_tree(process)
+            return self._failure(start_time, f"execution failed: {exc}")
+
+        if output_exceeded:
+            await self._terminate_process_tree(process)
             return SandboxResult(
                 success=False,
-                exit_code=-1,
-                stdout="",
-                stderr="",
-                duration_ms=duration_ms,
-                timed_out=True,
-                error=f"timeout after {timeout:.1f}s",
+                exit_code=process.returncode if process.returncode is not None else -1,
+                stdout=stdout.decode("utf-8", errors="replace"),
+                stderr=stderr.decode("utf-8", errors="replace"),
+                duration_ms=self._duration_ms(start_time),
+                error=f"output exceeded limit of {self._max_output_bytes} bytes",
             )
 
-        duration_ms = int((time.monotonic() - start_time) * 1000)
         exit_code = process.returncode if process.returncode is not None else -1
-
-        stdout = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
-        stderr = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
-
-        success = exit_code == 0
-
         return SandboxResult(
-            success=success,
+            success=exit_code == 0,
             exit_code=exit_code,
-            stdout=stdout,
-            stderr=stderr,
-            duration_ms=duration_ms,
+            stdout=stdout.decode("utf-8", errors="replace"),
+            stderr=stderr.decode("utf-8", errors="replace"),
+            duration_ms=self._duration_ms(start_time),
+        )
+
+    async def _collect_output(
+        self, process: asyncio.subprocess.Process, stdin_data: Optional[bytes]  # noqa: UP045
+    ) -> Tuple[bytes, bytes, bool]:
+        """并发增量读取；任一流超限即停止等待并由调用方终止进程树。"""
+        if not isinstance(process.stdout, asyncio.StreamReader) or not isinstance(
+            process.stderr, asyncio.StreamReader
+        ):
+            stdout, stderr = await process.communicate(input=stdin_data)
+            stdout, stderr, exceeded = self._cap_output(stdout or b"", stderr or b"")
+            return stdout, stderr, exceeded
+
+        budget = [self._max_output_bytes]
+        stdout_task = asyncio.ensure_future(self._read_stream(process.stdout, budget))
+        stderr_task = asyncio.ensure_future(self._read_stream(process.stderr, budget))
+        stdin_task = (
+            asyncio.ensure_future(self._write_stdin(process, stdin_data))
+            if stdin_data is not None and process.stdin is not None
+            else None
+        )
+        tasks = {stdout_task, stderr_task}
+        if stdin_task is not None:
+            tasks.add(stdin_task)
+        stdout_result = (b"", b"", False)
+        stderr_result = (b"", b"", False)
+        try:
+            while tasks:
+                done, tasks = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in done:
+                    if task is stdin_task:
+                        task.result()
+                        continue
+                    result = task.result()
+                    if task is stdout_task:
+                        stdout_result = result
+                    else:
+                        stderr_result = result
+                if stdout_result[2] or stderr_result[2]:
+                    return stdout_result[0], stderr_result[0], True
+            await process.wait()
+            return stdout_result[0], stderr_result[0], False
+        finally:
+            for task in tasks:
+                task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _write_stdin(self, process, stdin_data: bytes) -> None:
+        try:
+            process.stdin.write(stdin_data)
+            await process.stdin.drain()
+        finally:
+            process.stdin.close()
+
+    def _cap_output(self, stdout: bytes, stderr: bytes) -> Tuple[bytes, bytes, bool]:
+        """Cap both streams against one shared byte budget."""
+        combined = stdout + stderr
+        exceeded = len(combined) > self._max_output_bytes
+        if not exceeded:
+            return stdout, stderr, False
+        limited = combined[: self._max_output_bytes]
+        stdout_len = min(len(stdout), len(limited))
+        return limited[:stdout_len], limited[stdout_len:], True
+
+    async def _read_stream(self, stream, budget) -> Tuple[bytes, bytes, bool]:
+        chunks = bytearray()
+        while True:
+            chunk = await stream.read(_READ_CHUNK_BYTES)
+            if not chunk:
+                return bytes(chunks), b"", False
+            remaining = budget[0]
+            if remaining > 0:
+                accepted = chunk[:remaining]
+                chunks.extend(accepted)
+                budget[0] -= len(accepted)
+            if len(chunk) > remaining:
+                return bytes(chunks), b"", True
+
+    async def _terminate_process_tree(self, process: asyncio.subprocess.Process) -> None:
+        """Terminate the child and all descendants without invoking a shell."""
+        if process.returncode is not None:
+            return
+
+        if os.name == "posix" and process.pid is not None:
+            with suppress(ProcessLookupError, OSError):
+                os.killpg(process.pid, signal.SIGKILL)
+            await self._wait_for_process(process)
+            return
+
+        if os.name == "nt" and process.pid is not None:
+            taskkill_argv = [
+                _WINDOWS_TASKKILL,
+                "/PID",
+                str(process.pid),
+                "/T",
+                "/F",
+            ]
+            killer = None
+            taskkill_succeeded = False
+            try:
+                # Use a separate native process with a bounded wait.  In
+                # particular, do not use shell=True or interpolate user data.
+                killer = await asyncio.create_subprocess_exec(
+                    *taskkill_argv,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                    stdin=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(killer.wait(), _WINDOWS_TASKKILL_TIMEOUT_S)
+                if killer.returncode not in (None, 0):
+                    raise OSError(
+                        f"taskkill exited with code {killer.returncode}"
+                    )
+                taskkill_succeeded = True
+            except (OSError, asyncio.TimeoutError, TimeoutError) as exc:  # noqa: UP041
+                logger.warning("taskkill failed for sandbox pid %s: %s", process.pid, exc)
+                if killer is not None and killer.returncode is None:
+                    with suppress(ProcessLookupError, OSError):
+                        killer.kill()
+                    await self._wait_for_process(killer)
+            finally:
+                # taskkill can race with process exit or be unavailable (for
+                # example in a restricted test environment), so retain a
+                # direct-kill fallback and always reap the asyncio process.
+                if not taskkill_succeeded and process.returncode is None:
+                    with suppress(ProcessLookupError, OSError):
+                        process.kill()
+                await self._wait_for_process(process)
+            return
+
+        with suppress(ProcessLookupError, OSError):
+            process.kill()
+        await self._wait_for_process(process)
+
+    @staticmethod
+    async def _wait_for_process(process: asyncio.subprocess.Process) -> None:
+        with suppress(ProcessLookupError, OSError):
+            await process.wait()
+
+    @staticmethod
+    def _duration_ms(start_time: float) -> int:
+        return int((time.monotonic() - start_time) * 1000)
+
+    def _failure(
+        self, start_time: float, error: str, timed_out: bool = False
+    ) -> SandboxResult:
+        return SandboxResult(
+            success=False,
+            exit_code=-1,
+            stdout="",
+            stderr="",
+            duration_ms=self._duration_ms(start_time),
+            timed_out=timed_out,
+            error=error,
         )
 
     def _build_env(self, request_env: Dict[str, str]) -> Dict[str, str]:
-        """构造子进程环境变量（剥离敏感键）。
+        """Build a small, non-sensitive environment for the skill process."""
+        inherited = {
+            key: value
+            for key, value in os.environ.items()
+            if key in DEFAULT_ENV_ALLOWLIST and key not in self._env_denylist
+        }
+        # Runtime policy wins: request.env may add only non-sensitive custom
+        # variables and cannot replace inherited values such as PATH/cert paths.
+        for key, value in request_env.items():
+            if (
+                _is_safe_env_key(key)
+                and key not in self._env_denylist
+                and key not in inherited
+                and _is_safe_env_value(value)
+            ):
+                inherited[key] = value
+        return inherited
 
-        Args:
-            request_env: request 中要求注入的环境变量
 
-        Returns:
-            合并后的环境变量 dict（敏感键已剥离）
-        """
-        # 从父进程继承
-        env = dict(os.environ)
+def _is_safe_env_key(key: object) -> bool:
+    """Reject identity, transport, and credential-bearing environment names."""
+    if not isinstance(key, str) or not key or "\x00" in key:
+        return False
+    normalized = key.upper()
+    if not all(char.isalnum() or char == "_" for char in normalized):
+        return False
+    forbidden_exact = {
+        "HOME",
+        "USERPROFILE",
+        "SSH_AUTH_SOCK",
+        "DOCKER_HOST",
+        "KUBECONFIG",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "FTP_PROXY",
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "WINDIR",
+        "TMP",
+        "TEMP",
+        "TMPDIR",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+    }
+    if normalized in forbidden_exact:
+        return normalized in DEFAULT_ENV_ALLOWLIST and normalized not in {
+            "NO_PROXY"
+        }
+    sensitive_fragments = (
+        "TOKEN",
+        "SECRET",
+        "PASSWORD",
+        "API_KEY",
+        "APIKEY",
+        "PRIVATE_KEY",
+        "CREDENTIAL",
+        "AUTH",
+    )
+    return not any(fragment in normalized for fragment in sensitive_fragments)
 
-        # 注入 request.env（覆盖父进程同名键）
-        env.update(request_env)
 
-        # 剥离敏感键
-        for key in self._env_denylist:
-            env.pop(key, None)
-
-        return env
+def _is_safe_env_value(value: object) -> bool:
+    """Accept only scalar, bounded environment values without control chars."""
+    return (
+        isinstance(value, str)
+        and len(value) <= 4096
+        and "\x00" not in value
+        and "\r" not in value
+        and "\n" not in value
+    )

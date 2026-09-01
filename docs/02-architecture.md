@@ -1,5 +1,7 @@
 # Sage - 系统架构
 
+> **文档范围说明（2026-08-30）**：本文保留早期整体架构草图，部分 Tauri/Rust、旧目录和旧 IPC 示例属于历史设计，不能作为当前运行时实现依据。当前桌面入口是 Electron 21.4.4 + React，技能系统的实际入口、加载和脚本边界以 [`technical/24-skills-system.md`](technical/24-skills-system.md) 为准。
+
 ## 2.1 架构概览
 
 ### 2.1.1 三层架构
@@ -216,6 +218,7 @@ export const agentApi = {
 
 ## 2.3 后端架构 (Python)
 
+> **当前技能入口**：本节原有的非技能后端树为历史概览；技能相关路径以其中标注的当前入口为准，不应据此推断存在 `SkillManager` 或 `SkillStore`。
 ### 2.3.1 模块结构
 
 ```
@@ -242,16 +245,19 @@ backend/
 │   ├── file_tool.py      # 文件工具
 │   ├── web_tool.py       # 网络工具
 │   └── calculator.py     # 计算器
-├── skills/                 # 技能系统
-│   ├── __init__.py
-│   ├── base.py           # 技能基类
-│   ├── manager.py        # 技能管理器
-│   ├── builtin/          # 内置技能
-│   │   ├── __init__.py
-│   │   ├── search.py     # 搜索技能
-│   │   ├── writer.py    # 写作技能
-│   │   └── coder.py      # 编程技能
-│   └── store.py          # 技能商店
+├── skills/                 # 技能系统（当前入口见 technical/24-skills-system.md）
+│   ├── __init__.py         # 导出技能注册与 SKILL.md 加载入口
+│   ├── base.py             # BaseSkill / SkillSchema / SkillResult 契约
+│   ├── registry.py         # SkillRegistry：统一注册 builtin 与 SKILL.md 技能
+│   ├── lifecycle.py        # enabled / archived 生命周期持久化
+│   ├── usage.py            # skill_usage 聚合统计
+│   ├── loader.py           # 审批草稿写入 SKILL.md（非运行时扫描器）
+│   ├── builtin/             # Python BaseSkill 内置技能
+│   └── skill_md/            # SKILL.md frontmatter、门控、ResourceIndex、脚本执行适配
+│       ├── loader.py        # 当前 SKILL.md 发现/加载入口
+│       ├── resources.py     # ResourceIndex（由 loader 接入 SkillMdDocument）
+│       ├── script_runner.py # 路径校验 → 确认 → 沙箱
+│       └── skill.py         # SkillMdDocument / SkillMdSkill
 ├── plugins/               # 插件系统
 │   ├── __init__.py
 │   ├── base.py           # 插件基类
@@ -283,7 +289,7 @@ backend/
 │ - session_manager: SessionManager                       │
 │ - memory_manager: MemoryManager                         │
 │ - tool_registry: ToolRegistry                           │
-│ - skill_manager: SkillManager                           │
+│ - skill_registry: SkillRegistry                         │
 ├─────────────────────────────────────────────────────────┤
 │ + chat(session_id, message) -> str                      │
 │ + create_session() -> str                              │
@@ -309,7 +315,7 @@ backend/
          │                    │                │
          ▼                    ▼                ▼
 ┌─────────────┐      ┌─────────────┐   ┌─────────────┐
-│MemoryManager│      │ToolRegistry │   │SkillManager │
+│MemoryManager│      │ToolRegistry │   │SkillRegistry │
 ├─────────────┤      ├─────────────┤   ├─────────────┤
 │- working    │      │- tools: dict│   │- skills: dict│
 │- episodic    │      │- registry   │   │- enabled    │

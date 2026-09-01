@@ -2,17 +2,24 @@
 
 实现多步骤研究：网络搜索 → 收集来源 → LLM 综合 → 自动 Ingest。
 """
-
+import asyncio
 import json
 import logging
+from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List
+from typing import Dict, List, Optional
 
+from .files import secure_delete_path, secure_write_temp_file
 from .ingest import IngestConfig, ingest_source
 from .web_search import SearchProvider, WebSearchResult, multi_query_search
 
 logger = logging.getLogger(__name__)
+
+RESEARCH_ERROR_CODE = "deep_research_failed"
+RESEARCH_ERROR_MESSAGE = "Deep Research 失败"
+RESEARCH_SYNTHESIS_ERROR_MESSAGE = "研究综合失败"
 
 
 @dataclass
@@ -26,7 +33,7 @@ class ResearchTask:
     web_results: List[WebSearchResult] = field(default_factory=list)
     synthesis: str = ""
     saved_path: str = ""
-    error: str = ""
+    error: Optional[Dict[str, str]] = None
 
 
 async def generate_search_queries(topic: str, llm_call: Callable) -> List[str]:
@@ -74,7 +81,7 @@ async def generate_search_queries(topic: str, llm_call: Callable) -> List[str]:
         return [str(q) for q in queries[:5]]  # 最多 5 个查询
 
     except Exception as e:
-        logger.error(f"生成搜索查询失败: {e}")
+        logger.error("generate_search_queries failed: error_type=%s", type(e).__name__)
         # 回退：使用主题作为查询
         return [topic]
 
@@ -130,8 +137,8 @@ async def synthesize_research(
         return await llm_call(messages, temperature=0.3)
 
     except Exception as e:
-        logger.error(f"综合研究失败: {e}")
-        return f"# 研究综合失败\n\n主题: {topic}\n\n错误: {str(e)}"
+        logger.error("synthesize_research failed: error_type=%s", type(e).__name__)
+        return f"# {RESEARCH_SYNTHESIS_ERROR_MESSAGE}\n\n主题: {topic}\n"
 
 
 async def deep_research(
@@ -143,6 +150,7 @@ async def deep_research(
     llm_call: Callable = None,
     ingest_config: IngestConfig = None,
     auto_ingest: bool = True,
+    http_post: Optional[Callable] = None,
 ) -> ResearchTask:
     """执行 Deep Research 流程。
 
@@ -161,7 +169,7 @@ async def deep_research(
     """
     if llm_call is None:
         task.status = "error"
-        task.error = "LLM 调用函数未提供"
+        task.error = {"code": RESEARCH_ERROR_CODE, "message": "LLM 配置缺失"}
         return task
 
     try:
@@ -184,7 +192,7 @@ async def deep_research(
 
         if not task.web_results:
             task.status = "error"
-            task.error = "未找到相关搜索结果"
+            task.error = {"code": RESEARCH_ERROR_CODE, "message": "未找到相关搜索结果"}
             return task
 
         # Step 3: LLM 综合
@@ -196,10 +204,21 @@ async def deep_research(
         if auto_ingest and ingest_config is not None:
             task.status = "ingesting"
 
-            # 将综合报告保存为临时文件
-            temp_file = project_root / ".llm-wiki" / f"research_{task.id}.md"
-            temp_file.parent.mkdir(parents=True, exist_ok=True)
-            temp_file.write_text(task.synthesis, encoding="utf-8")
+            if not callable(http_post):
+                task.status = "error"
+                task.error = {
+                    "code": "deep_research_ingest_failed",
+                    "message": "自动 Ingest 失败",
+                }
+                return task
+
+            # 将综合报告保存为随机、私有临时文件
+            temp_file = secure_write_temp_file(
+                project_root,
+                project_root / ".llm-wiki",
+                ".md",
+                task.synthesis,
+            )
 
             try:
                 # 执行 Ingest
@@ -208,26 +227,34 @@ async def deep_research(
                     project_root=project_root,
                     source_file_path=temp_file,
                     llm_call=llm_call,
-                    http_post=None,  # Ingest 会使用配置中的嵌入 API
+                    http_post=http_post,
+                    logical_filename=f"research_{task.id}.md",
                 )
 
                 task.saved_path = result.wiki_page_path
                 logger.info(f"研究结果已保存到: {result.wiki_page_path}")
 
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                logger.error(f"自动 Ingest 失败: {e}")
-                # Ingest 失败不影响整体流程
-
-            # 清理临时文件
-            if temp_file.exists():
-                temp_file.unlink()
+                logger.error("deep_research auto ingest failed: error_type=%s", type(e).__name__)
+                task.status = "error"
+                task.error = {
+                    "code": "deep_research_ingest_failed",
+                    "message": "自动 Ingest 失败",
+                }
+                return task
+            finally:
+                # Cancellation/BaseException must not leave the report behind.
+                with suppress(BaseException):
+                    secure_delete_path(project_root, temp_file)
 
         task.status = "done"
         logger.info(f"研究完成: {task.topic}")
 
     except Exception as e:
-        logger.error(f"Deep Research 失败: {e}")
+        logger.error("deep_research failed: error_type=%s", type(e).__name__)
         task.status = "error"
-        task.error = str(e)
+        task.error = {"code": RESEARCH_ERROR_CODE, "message": RESEARCH_ERROR_MESSAGE}
 
     return task

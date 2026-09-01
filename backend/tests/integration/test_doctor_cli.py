@@ -98,7 +98,7 @@ class TestDoctorCLIJsonMode:
         result = _run_doctor("--json")
         data = json.loads(result.stdout)
         assert isinstance(data["checks"], list)
-        assert len(data["checks"]) == 13
+        assert len(data["checks"]) == 14
 
     def test_json_check_entry_shape(self):
         result = _run_doctor("--json")
@@ -114,7 +114,7 @@ class TestDoctorCLIJsonMode:
         result = _run_doctor("--json")
         data = json.loads(result.stdout)
         summary = data["summary"]
-        assert summary["critical"] + summary["warn"] + summary["info"] == 13
+        assert summary["critical"] + summary["warn"] + summary["info"] == 14
 
     def test_json_python_version_format(self):
         result = _run_doctor("--json")
@@ -146,6 +146,7 @@ class TestDoctorCLIJsonMode:
             "heavy_deps",
             "log_dir_size",
             "frontend_dist",
+            "skills",
         }
         assert expected.issubset(names)
 
@@ -170,7 +171,7 @@ class TestDoctorCLIExitCodes:
         data = json.loads(json_result.stdout)
         assert text_result.returncode == json_result.returncode
         assert "总计:" in text_result.stdout
-        assert data["summary"]["critical"] + data["summary"]["warn"] + data["summary"]["info"] == 13
+        assert data["summary"]["critical"] + data["summary"]["warn"] + data["summary"]["info"] == 14
 
 
 class TestDoctorCLIHelp:

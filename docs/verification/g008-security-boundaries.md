@@ -6,7 +6,11 @@
 
 **状态**: 🔴 未验证
 **维护者**: @security-team
-**最后更新**: 2026-06-19
+**最后更新**: 2026-08-31
+
+> 本次验证补充了 `backend/skills/safe_writer.py` 的跨平台文件写入边界：
+> POSIX 保持目录 fd + `O_NOFOLLOW`，Windows 在缺少经过验证的原生
+> reparse-safe handle 方案时 fail-closed；Windows 实机尚未验证。
 
 ---
 

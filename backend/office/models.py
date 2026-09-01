@@ -13,9 +13,26 @@ import logging
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, conlist
 
 logger = logging.getLogger(__name__)
+
+
+def _constrained_list(item_type, *, min_length=None, max_length=None):
+    """Build a list constraint compatible with Pydantic v1 and v2."""
+    kwargs = {}
+    if min_length is not None:
+        kwargs["min_length"] = min_length
+    if max_length is not None:
+        kwargs["max_length"] = max_length
+    try:
+        return conlist(item_type, **kwargs)
+    except TypeError:
+        if "min_length" in kwargs:
+            kwargs["min_items"] = kwargs.pop("min_length")
+        if "max_length" in kwargs:
+            kwargs["max_items"] = kwargs.pop("max_length")
+        return conlist(item_type, **kwargs)
 
 
 class OfficeDocType(str, Enum):
@@ -43,6 +60,7 @@ class OfficeDocumentMetadata(BaseModel):
     """Per-document metadata captured at read/generate time."""
 
     class Config:
+
         extra = "forbid"
 
     page_count: Optional[int] = Field(
@@ -58,6 +76,7 @@ class OfficeDocumentSummary(BaseModel):
     """Compact document record — used in list API and as a sub-field in read results."""
 
     class Config:
+
         extra = "forbid"
 
     id: str = Field(description="UUIDv4 assigned by storage layer")
@@ -99,6 +118,7 @@ class PptSlideContent(BaseModel):
     """One PPT slide's extracted content."""
 
     class Config:
+
         extra = "forbid"
 
     index: int = Field(ge=0)
@@ -113,6 +133,7 @@ class OfficePptReadResult(BaseModel):
     """Result of POST /api/v1/office/ppt/read."""
 
     class Config:
+
         extra = "forbid"
 
     summary: OfficeDocumentSummary
@@ -123,6 +144,7 @@ class WordParagraphContent(BaseModel):
     """One Word paragraph."""
 
     class Config:
+
         extra = "forbid"
 
     style: str = Field(description="Paragraph style name, e.g. 'Normal', 'Heading 1'")
@@ -134,6 +156,7 @@ class WordTableContent(BaseModel):
     """One Word table."""
 
     class Config:
+
         extra = "forbid"
 
     rows: List[List[str]]
@@ -143,6 +166,7 @@ class OfficeWordReadResult(BaseModel):
     """Result of POST /api/v1/office/word/read."""
 
     class Config:
+
         extra = "forbid"
 
     summary: OfficeDocumentSummary
@@ -155,6 +179,7 @@ class ExcelSheetContent(BaseModel):
     """One Excel sheet."""
 
     class Config:
+
         extra = "forbid"
 
     name: str
@@ -167,6 +192,7 @@ class OfficeExcelReadResult(BaseModel):
     """Result of POST /api/v1/office/excel/read."""
 
     class Config:
+
         extra = "forbid"
 
     summary: OfficeDocumentSummary
@@ -182,6 +208,7 @@ class OfficeReadRequest(BaseModel):
     """Common shape for all three read endpoints."""
 
     class Config:
+
         extra = "forbid"
 
     workspace_path: str = Field(description="Absolute path to the workspace dir")
@@ -212,10 +239,11 @@ class PptSlideSpec(BaseModel):
     """One slide to generate in a PPT."""
 
     class Config:
+
         extra = "forbid"
 
     title: str = Field(min_length=1, max_length=200)
-    bullets: List[str] = Field(default_factory=list, max_items=20)
+    bullets: _constrained_list(str, max_length=20) = Field(default_factory=list)
     notes: Optional[str] = Field(default=None, max_length=2000)
 
 
@@ -223,6 +251,7 @@ class OfficePptGenerateRequest(BaseModel):
     """POST /api/v1/office/ppt/generate."""
 
     class Config:
+
         extra = "forbid"
 
     workspace_path: str
@@ -231,7 +260,7 @@ class OfficePptGenerateRequest(BaseModel):
         max_length=200,
         description="Output filename (without .pptx extension is OK; we'll add it)",
     )
-    slides: List[PptSlideSpec] = Field(min_items=1, max_items=100)
+    slides: _constrained_list(PptSlideSpec, min_length=1, max_length=100)
     template: Optional[str] = Field(default=None, description="'default' | 'minimal'")
 
 
@@ -239,6 +268,7 @@ class WordParagraphSpec(BaseModel):
     """One paragraph in a generated Word document."""
 
     class Config:
+
         extra = "forbid"
 
     heading: Optional[str] = Field(default=None, description="'h1' | 'h2' | 'h3' or None")
@@ -249,45 +279,49 @@ class WordTableSpec(BaseModel):
     """One table in a generated Word document."""
 
     class Config:
+
         extra = "forbid"
 
-    headers: List[str] = Field(min_items=1, max_items=50)
-    rows: List[List[str]] = Field(default_factory=list, max_items=1000)
+    headers: _constrained_list(str, min_length=1, max_length=50)
+    rows: _constrained_list(_constrained_list(str), max_length=1000) = Field(default_factory=list)
 
 
 class OfficeWordGenerateRequest(BaseModel):
     """POST /api/v1/office/word/generate."""
 
     class Config:
+
         extra = "forbid"
 
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
     title: str = Field(min_length=1, max_length=200)
-    paragraphs: List[WordParagraphSpec] = Field(default_factory=list, max_items=5000)
-    tables: List[WordTableSpec] = Field(default_factory=list, max_items=100)
+    paragraphs: _constrained_list(WordParagraphSpec, max_length=5000) = Field(default_factory=list)
+    tables: _constrained_list(WordTableSpec, max_length=100) = Field(default_factory=list)
 
 
 class ExcelSheetSpec(BaseModel):
     """One sheet in a generated Excel workbook."""
 
     class Config:
+
         extra = "forbid"
 
     name: str = Field(min_length=1, max_length=31, description="Excel sheet name max length")
-    headers: List[str] = Field(default_factory=list, max_items=100)
-    rows: List[List[str]] = Field(default_factory=list, max_items=10000)
+    headers: _constrained_list(str, max_length=100) = Field(default_factory=list)
+    rows: _constrained_list(_constrained_list(str), max_length=10000) = Field(default_factory=list)
 
 
 class OfficeExcelGenerateRequest(BaseModel):
     """POST /api/v1/office/excel/generate."""
 
     class Config:
+
         extra = "forbid"
 
     workspace_path: str
     filename: str = Field(min_length=1, max_length=200)
-    sheets: List[ExcelSheetSpec] = Field(min_items=1, max_items=50)
+    sheets: _constrained_list(ExcelSheetSpec, min_length=1, max_length=50)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -299,6 +333,7 @@ class OfficeDocumentListResponse(BaseModel):
     """GET /api/v1/office/documents."""
 
     class Config:
+
         extra = "forbid"
 
     documents: List[OfficeDocumentSummary]
@@ -309,6 +344,7 @@ class OfficeDeleteResponse(BaseModel):
     """DELETE /api/v1/office/documents/{id}."""
 
     class Config:
+
         extra = "forbid"
 
     id: str

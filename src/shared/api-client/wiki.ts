@@ -18,15 +18,8 @@ async function httpPost<T>(endpoint: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body,
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`HTTP ${response.status}: ${error}`);
-  }
-
-  return response.json();
 }
 
 async function httpGet<T>(
@@ -36,35 +29,18 @@ async function httpGet<T>(
   const url = new URL(`${API_BASE}${endpoint}`);
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        url.searchParams.append(key, String(value));
-      }
+      if (value !== undefined) url.searchParams.append(key, String(value));
     });
   }
-
-  const response = await fetch(url.toString());
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`HTTP ${response.status}: ${error}`);
-  }
-
-  return response.json();
+  return backendRequest<T>({ path: url.pathname + url.search });
 }
 
 async function httpDelete<T>(endpoint: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body,
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`HTTP ${response.status}: ${error}`);
-  }
-
-  return response.json();
 }
 
 // ==================== Project API ====================
@@ -321,7 +297,7 @@ export interface ResearchResponse {
   web_results: WebResultData[];
   synthesis: string;
   saved_path: string;
-  error: string;
+  error: { code: string; message: string } | null;
 }
 
 export async function startWikiResearch(req: ResearchRequest): Promise<ResearchResponse> {

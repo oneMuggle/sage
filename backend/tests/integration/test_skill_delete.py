@@ -53,19 +53,131 @@ def registry() -> SkillRegistry:
 
 
 def test_delete_skill_md_succeeds(tmp_skills_dir: Path, registry: SkillRegistry) -> None:
+    from backend.skills.skill_md.loader import register_skill_md_skills
+
+    register_skill_md_skills(registry, dirs=[tmp_skills_dir])
     deleter = SkillMdDeleter(registry, skills_dir=tmp_skills_dir)
-    # 用 SkillMdDeleter 的简易 API: 直接尝试删
-    # 但 SkillMdDeleter 不在 registry 注册 — 注册 step 在 Task 2 才做。
-    # 此处仅验证 "物理 unlink 整目录 + logger.warning" 部分。
-    # 用 pathlib 写文件 + 删
-    (tmp_skills_dir / "web-search").mkdir(exist_ok=True)
-    (tmp_skills_dir / "web-search" / "SKILL.md").write_text(SAMPLE_SKILL_MD, encoding="utf-8")
 
     result = deleter.delete("web-search")
 
     assert result["deleted"] is True
     assert result["name"] == "web-search"
     assert (tmp_skills_dir / "web-search").exists() is False
+
+
+def test_delete_unregistered_directory_is_not_touched(tmp_path: Path, registry: SkillRegistry) -> None:
+    target = tmp_path / "web-search"
+    target.mkdir()
+    (target / "sentinel.txt").write_text("keep", encoding="utf-8")
+
+    with pytest.raises(SkillMdNotFoundError):
+        SkillMdDeleter(registry, skills_dir=tmp_path).delete("web-search")
+
+    assert target.exists()
+    assert (target / "sentinel.txt").exists()
+
+
+def test_delete_uses_registered_base_dir_not_current_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registry: SkillRegistry
+) -> None:
+    from backend.skills.skill_md.loader import register_skill_md_skills
+
+    registered_root = tmp_path / "registered"
+    current_root = tmp_path / "current"
+    for root in (registered_root, current_root):
+        (root / "web-search").mkdir(parents=True)
+        (root / "web-search" / "SKILL.md").write_text(SAMPLE_SKILL_MD, encoding="utf-8")
+    register_skill_md_skills(registry, dirs=[registered_root])
+    monkeypatch.setenv("SAGE_SKILLS_DIR", str(current_root))
+
+    SkillMdDeleter(registry, skills_dir=registered_root).delete("web-search")
+
+    assert not (registered_root / "web-search").exists()
+    assert (current_root / "web-search").exists()
+
+
+def test_delete_single_file_skill_does_not_remove_skills_root(
+    tmp_path: Path, registry: SkillRegistry
+) -> None:
+    from backend.skills.skill_md.loader import register_skill_md_skills
+
+    (tmp_path / "SKILL.md").write_text(SAMPLE_SKILL_MD, encoding="utf-8")
+    (tmp_path / "other.txt").write_text("keep", encoding="utf-8")
+    register_skill_md_skills(registry, dirs=[tmp_path])
+
+    result = SkillMdDeleter(registry, skills_dir=tmp_path).delete("web-search")
+
+    assert result["deleted"] is True
+    assert tmp_path.is_dir()
+    assert not (tmp_path / "SKILL.md").exists()
+    assert (tmp_path / "other.txt").exists()
+    assert not registry.exists("web-search")
+
+
+def test_delete_registered_symlink_is_blocked(tmp_path: Path, registry: SkillRegistry) -> None:
+    from backend.skills.skill_md.skill import SkillMdDocument, SkillMdSkill
+
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "SKILL.md").write_text(SAMPLE_SKILL_MD, encoding="utf-8")
+    link = tmp_path / "web-search"
+    link.symlink_to(real, target_is_directory=True)
+    registry.register(
+        SkillMdSkill(
+            SkillMdDocument(
+                name="web-search", description="search", body="body", base_dir=link
+            )
+        )
+    )
+
+    with pytest.raises(ValueError, match="symlink"):
+        SkillMdDeleter(registry, skills_dir=tmp_path).delete("web-search")
+
+    assert real.exists()
+    assert link.is_symlink()
+
+
+def test_inproc_delete_root_single_file_preserves_other_skills(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registry: SkillRegistry
+) -> None:
+    """Inproc deletion must not rmtree the root for root-level SKILL.md."""
+    from backend.adapters.out.skill.inproc import InprocSkillAdapter
+
+    (tmp_path / "SKILL.md").write_text(SAMPLE_SKILL_MD, encoding="utf-8")
+    other = tmp_path / "other-skill"
+    other.mkdir()
+    (other / "SKILL.md").write_text(
+        SAMPLE_SKILL_MD.replace("web-search", "other-skill"), encoding="utf-8"
+    )
+    monkeypatch.setenv("SAGE_SKILLS_DIR", str(tmp_path))
+
+    adapter = InprocSkillAdapter(registry=registry)
+    result = adapter.delete_skill_md("web-search")
+
+    assert result["deleted"] is True
+    assert tmp_path.is_dir()
+    assert not (tmp_path / "SKILL.md").exists()
+    assert (other / "SKILL.md").exists()
+    assert not adapter.has_skill("web-search")
+    assert adapter.has_skill("other-skill")
+
+
+def test_delete_filesystem_failure_keeps_registered_skill(
+    tmp_skills_dir: Path, registry: SkillRegistry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.skills.skill_md.loader import register_skill_md_skills
+
+    register_skill_md_skills(registry, dirs=[tmp_skills_dir])
+    monkeypatch.setattr(
+        "backend.skills.skill_md.delete.shutil.rmtree",
+        lambda _path: (_ for _ in ()).throw(OSError("denied")),
+    )
+
+    with pytest.raises(OSError, match="denied"):
+        SkillMdDeleter(registry, skills_dir=tmp_skills_dir).delete("web-search")
+
+    assert registry.exists("web-search")
+    assert (tmp_skills_dir / "web-search").exists()
 
 
 def test_delete_builtin_blocked(registry: SkillRegistry) -> None:
@@ -138,7 +250,7 @@ def test_delete_unregisters_from_registry(tmp_skills_dir: Path, registry: SkillR
 async def test_delete_endpoint_returns_200(
     tmp_skills_dir: Path, client, reset_skill_adapter
 ) -> None:
-    """POST /api/v1/skills/{name}/delete 成功 → 200 + {deleted, name, base_dir}。"""
+    """POST /api/v1/skills/{name}/delete 成功 → 200 + 安全的删除结果。"""
     # 触发 lazy init: 单例创建时 InprocSkillAdapter.__init__ 会调
     # register_skill_md_skills → discover_skill_md_dirs() → SAGE_SKILLS_DIR=tmp_path
     # → 自动加载 tmp_skills_dir/web-search/SKILL.md
@@ -154,7 +266,8 @@ async def test_delete_endpoint_returns_200(
     body = response.json()
     assert body["deleted"] is True
     assert body["name"] == "web-search"
-    assert "base_dir" in body
+    assert body["base_dir"] == "."
+    assert str(tmp_skills_dir) not in body["base_dir"]
     # 物理 unlink: 目录不存在
     assert (tmp_skills_dir / "web-search").exists() is False
     # registry unregister
@@ -170,7 +283,8 @@ async def test_delete_endpoint_builtin_returns_400(
 
     assert response.status_code == 400, response.text
     detail = response.json()["detail"]
-    assert "builtin" in detail.lower()
+    assert detail["type"] == "builtin_skill"
+    assert "内置技能" in detail["message"]
 
 
 @pytest.mark.asyncio()

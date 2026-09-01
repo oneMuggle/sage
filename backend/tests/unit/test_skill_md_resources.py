@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.skills.skill_md import resources as resources_module
 from backend.skills.skill_md.resources import (
     ALLOWED_RESOURCE_DIRS,
     ResourceIndex,
@@ -23,6 +24,19 @@ from backend.skills.skill_md.resources import (
 from backend.skills.skill_md.validation import SkillMdSecurityError
 
 pytestmark = pytest.mark.unit
+
+
+def _patch_os_name(monkeypatch, name: str) -> None:
+    """Patch only resources' platform view without mutating process-wide os.name."""
+    original_os = resources_module.os
+
+    class OsProxy:
+        def __getattr__(self, attribute):
+            return getattr(original_os, attribute)
+
+    proxy = OsProxy()
+    proxy.name = name
+    monkeypatch.setattr(resources_module, "os", proxy)
 
 
 def _create_resource_files(base_dir: Path) -> None:
@@ -96,9 +110,112 @@ def test_allowed_resource_dirs():
     assert frozenset({"scripts", "references", "assets", "templates"}) == ALLOWED_RESOURCE_DIRS
 
 
-# =====================================================================
-# build_resource_index - 扫描
-# =====================================================================
+def test_build_resource_index_fails_closed_without_verified_platform_support(tmp_path, monkeypatch):
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "safe.py").write_text("pass", encoding="utf-8")
+    monkeypatch.setattr(resources_module, "_resource_index_platform_supported", lambda: False)
+
+    assert build_resource_index(tmp_path) == ResourceIndex()
+
+
+def test_build_resource_index_windows_metadata_only_normal_resource(tmp_path, monkeypatch):
+    """Synthetic Windows branch indexes regular resources after metadata checks."""
+    base = tmp_path / "skill"
+    scripts = base / "scripts"
+    scripts.mkdir(parents=True)
+    target = scripts / "check.py"
+    target.write_text("pass\n", encoding="utf-8")
+    _patch_os_name(monkeypatch, "nt")
+    monkeypatch.setattr(resources_module, "_is_reparse_point", lambda path: False)
+
+    index = build_resource_index(base)
+
+    assert index.scripts == (target,)
+
+
+def test_build_resource_index_windows_does_not_recurse_into_reparse_directory(
+    tmp_path, monkeypatch
+):
+    """Known reparse directories are skipped before their descendants are enumerated."""
+    base = tmp_path / "skill"
+    scripts = base / "scripts"
+    scripts.mkdir(parents=True)
+    reparse_dir = scripts / "junction"
+    reparse_dir.mkdir()
+    descendant = reparse_dir / "should-not-be-seen.py"
+    descendant.write_text("secret\n", encoding="utf-8")
+    safe = scripts / "safe.py"
+    safe.write_text("pass\n", encoding="utf-8")
+    _patch_os_name(monkeypatch, "nt")
+    monkeypatch.setattr(
+        resources_module,
+        "_is_reparse_point",
+        lambda path: Path(path) == reparse_dir,
+    )
+
+    index = build_resource_index(base)
+
+    assert index.scripts == (safe,)
+
+
+def test_build_resource_index_windows_lstat_error_skips_branch(
+    tmp_path, monkeypatch
+):
+    """A metadata failure prevents enumeration of that directory branch."""
+    base = tmp_path / "skill"
+    scripts = base / "scripts"
+    scripts.mkdir(parents=True)
+    broken_dir = scripts / "broken"
+    broken_dir.mkdir()
+    (broken_dir / "should-not-be-seen.py").write_text("secret\n", encoding="utf-8")
+    safe = scripts / "safe.py"
+    safe.write_text("pass\n", encoding="utf-8")
+    _patch_os_name(monkeypatch, "nt")
+
+    def fail_for_broken(path):
+        if Path(path) == broken_dir:
+            raise OSError("lstat unavailable")
+        return False
+
+    monkeypatch.setattr(resources_module, "_is_reparse_point", fail_for_broken)
+
+    index = build_resource_index(base)
+
+    assert index.scripts == (safe,)
+
+
+@pytest.mark.parametrize("metadata_result", [True, OSError("metadata unavailable")])
+def test_build_resource_index_windows_skips_reparse_or_metadata_error(
+    tmp_path, monkeypatch, metadata_result
+):
+    """Synthetic Windows metadata failures and reparse points fail closed."""
+    base = tmp_path / "skill"
+    scripts = base / "scripts"
+    scripts.mkdir(parents=True)
+    target = scripts / "unsafe.py"
+    target.write_text("secret\n", encoding="utf-8")
+    _patch_os_name(monkeypatch, "nt")
+
+    def fake_is_reparse_point(path):
+        if Path(path) == target:
+            if isinstance(metadata_result, OSError):
+                raise metadata_result
+            return metadata_result
+        return False
+
+    monkeypatch.setattr(resources_module, "_is_reparse_point", fake_is_reparse_point)
+
+    assert build_resource_index(base).scripts == ()
+
+
+def test_build_resource_index_non_posix_non_windows_returns_empty(tmp_path, monkeypatch):
+    """Unsupported platforms remain fail-closed."""
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "check.py").write_text("pass\n", encoding="utf-8")
+    _patch_os_name(monkeypatch, "java")
+
+    assert build_resource_index(tmp_path) == ResourceIndex()
 
 
 def test_build_resource_index_empty_dir(tmp_path):
@@ -131,6 +248,27 @@ def test_build_resource_index_scans_whitelist_dirs(tmp_path):
     # templates/** 应被索引
     assert len(idx.templates) == 1
     assert idx.templates[0].name == "default.txt"
+
+
+
+
+def test_relative_base_dir_index_renders_indexed_resource_without_absolute_path(
+    tmp_path, monkeypatch
+):
+    """Relative roots use one canonical path across indexing and authorization."""
+    base = tmp_path / "skill"
+    (base / "references").mkdir(parents=True)
+    (base / "references" / "guide.md").write_text("guide", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    index = build_resource_index(Path("skill"))
+
+    assert index.references == (base.resolve() / "references" / "guide.md",)
+    rendered = render_body_with_resources(
+        "See {baseDir}/references/guide.md", Path("skill"), index
+    )
+    assert rendered == "See references/guide.md"
+    assert str(base.resolve()) not in rendered
 
 
 def test_build_resource_index_ignores_non_whitelist_dirs(tmp_path):
@@ -190,6 +328,38 @@ def test_build_resource_index_nonexistent_dir(tmp_path):
     idx = build_resource_index(nonexistent)
     assert idx.scripts == ()
     assert idx.references == ()
+
+
+def test_build_resource_index_skips_symlink_escape(tmp_path):
+    """白名单目录中的越界符号链接不应进入资源索引。"""
+    base = tmp_path / "skill"
+    base.mkdir()
+    scripts = base / "scripts"
+    scripts.mkdir()
+    outside = tmp_path / "secret.py"
+    outside.write_text("print('secret')\n", encoding="utf-8")
+    link = scripts / "linked.py"
+    link.symlink_to(outside)
+
+    index = build_resource_index(base)
+
+    assert index.scripts == ()
+
+
+def test_build_resource_index_skips_symlink_inside_base(tmp_path):
+    """即使 symlink 目标仍在 base_dir 内，也不纳入资源索引。"""
+    base = tmp_path / "skill"
+    base.mkdir()
+    scripts = base / "scripts"
+    scripts.mkdir()
+    target = scripts / "real.py"
+    target.write_text("print('real')\n", encoding="utf-8")
+    link = scripts / "linked.py"
+    link.symlink_to(target)
+
+    index = build_resource_index(base)
+
+    assert index.scripts == (target,)
 
 
 # =====================================================================
@@ -265,13 +435,13 @@ def test_validate_resource_path_accepts_file_in_nested_subdir(tmp_path):
 
 
 def test_render_body_with_resources_replaces_base_dir(tmp_path):
-    """body 中的 {baseDir} 占位符应被替换为绝对路径。"""
+    """body 中的资源引用应替换为安全逻辑相对路径。"""
     _create_resource_files(tmp_path)
     idx = build_resource_index(tmp_path)
     body = "Reference the script at {baseDir}/scripts/lint.py"
     rendered = render_body_with_resources(body, base_dir=tmp_path, index=idx)
-    expected = f"Reference the script at {tmp_path}/scripts/lint.py"
-    assert rendered == expected
+    assert rendered == "Reference the script at scripts/lint.py"
+    assert str(tmp_path) not in rendered
 
 
 def test_render_body_with_resources_replaces_multiple_references(tmp_path):
@@ -285,9 +455,9 @@ def test_render_body_with_resources_replaces_multiple_references(tmp_path):
     )
     rendered = render_body_with_resources(body, base_dir=tmp_path, index=idx)
     expected = (
-        f"Script: {tmp_path}/scripts/lint.py\n"
-        f"Guide: {tmp_path}/references/guide.md\n"
-        f"Asset: {tmp_path}/assets/logo.png"
+        "Script: scripts/lint.py\n"
+        "Guide: references/guide.md\n"
+        "Asset: assets/logo.png"
     )
     assert rendered == expected
 
@@ -310,8 +480,9 @@ def test_render_body_with_resources_preserves_other_text(tmp_path):
     assert "for details.\n" in rendered
     # 占位符应被替换
     assert "{baseDir}" not in rendered
-    assert f"{tmp_path}/scripts/lint.py" in rendered
-    assert f"{tmp_path}/references/guide.md" in rendered
+    assert "scripts/lint.py" in rendered
+    assert "references/guide.md" in rendered
+    assert str(tmp_path) not in rendered
 
 
 def test_render_body_with_resources_no_references(tmp_path):
@@ -332,21 +503,166 @@ def test_render_body_with_resources_handles_repeated_references(tmp_path):
     )
     rendered = render_body_with_resources(body, base_dir=tmp_path, index=idx)
     expected = (
-        f"First: {tmp_path}/scripts/lint.py\n"
-        f"Second: {tmp_path}/scripts/lint.py\n"
-        f"Third: {tmp_path}/scripts/lint.py"
+        "First: scripts/lint.py\n"
+        "Second: scripts/lint.py\n"
+        "Third: scripts/lint.py"
     )
     assert rendered == expected
+
+
+def test_render_body_with_resources_rejects_unindexed_resource(tmp_path):
+    (tmp_path / "references").mkdir()
+    (tmp_path / "references" / "guide.md").write_text("guide", encoding="utf-8")
+    with pytest.raises(SkillMdSecurityError):
+        render_body_with_resources(
+            "{baseDir}/references/guide.md", tmp_path, ResourceIndex()
+        )
+
+
+@pytest.mark.parametrize("punctuation", [".", ",", ")", "]", ":", "!"])
+def test_render_body_with_resources_preserves_trailing_path_punctuation(
+    tmp_path, punctuation
+):
+    references = tmp_path / "references"
+    references.mkdir()
+    guide = references / "guide.md"
+    guide.write_text("guide", encoding="utf-8")
+    index = ResourceIndex(references=(guide,))
+
+    body = f"See {{baseDir}}/references/guide.md{punctuation}"
+    assert render_body_with_resources(body, tmp_path, index) == (
+        f"See references/guide.md{punctuation}"
+    )
+
+
+def test_render_body_with_resources_rejects_traversal_with_trailing_punctuation(
+    tmp_path,
+):
+    references = tmp_path / "references"
+    references.mkdir()
+    guide = references / "guide.md"
+    guide.write_text("guide", encoding="utf-8")
+    index = ResourceIndex(references=(guide,))
+
+    with pytest.raises(SkillMdSecurityError):
+        render_body_with_resources(
+            "{baseDir}/references/guide.md/../secret.", tmp_path, index
+        )
+
+
+def test_render_body_with_resources_rejects_directory_and_nul(tmp_path):
+    (tmp_path / "references").mkdir()
+    idx = ResourceIndex(references=(tmp_path / "references",))
+    with pytest.raises(SkillMdSecurityError):
+        render_body_with_resources("{baseDir}/references", tmp_path, idx)
+    with pytest.raises(SkillMdSecurityError):
+        render_body_with_resources("{baseDir}/references/\x00x", tmp_path, idx)
+
+
+def test_render_body_with_resources_rejects_symlink_even_if_indexed(tmp_path):
+    (tmp_path / "references").mkdir()
+    outside = tmp_path.parent / "secret-resource.txt"
+    outside.write_text("secret", encoding="utf-8")
+    link = tmp_path / "references" / "link.txt"
+    link.symlink_to(outside)
+    idx = ResourceIndex(references=(link,))
+    with pytest.raises(SkillMdSecurityError):
+        render_body_with_resources("{baseDir}/references/link.txt", tmp_path, idx)
+
+
+def test_render_body_with_resources_replaces_root_safely(tmp_path):
+    rendered = render_body_with_resources("root={baseDir}", tmp_path, ResourceIndex())
+    assert rendered == "root=."
+    assert str(tmp_path) not in rendered
+
+
+def test_render_body_with_resources_rejects_forged_index_entries(tmp_path):
+    """Rendering must re-check hand-built indexes against resource policy."""
+    references = tmp_path / "references"
+    references.mkdir()
+    (references / "guide.md").write_text("guide", encoding="utf-8")
+    secret_dir = tmp_path / "secret"
+    secret_dir.mkdir()
+    secret = secret_dir / "credentials.txt"
+    secret.write_text("secret", encoding="utf-8")
+    hidden = references / ".hidden.md"
+    hidden.write_text("hidden", encoding="utf-8")
+    script_sh = tmp_path / "scripts"
+    script_sh.mkdir()
+    shell_script = script_sh / "run.sh"
+    shell_script.write_text("#!/bin/sh", encoding="utf-8")
+
+    forged_indexes = (
+        ResourceIndex(references=(secret,)),
+        ResourceIndex(references=(hidden,)),
+        ResourceIndex(scripts=(shell_script,)),
+    )
+    for index in forged_indexes:
+        with pytest.raises(SkillMdSecurityError):
+            render_body_with_resources(
+                "{baseDir}/references/guide.md", tmp_path, index
+            )
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["{baseDir}..", "{baseDir}../secret", r"{baseDir}..\\secret", "{baseDir}./secret"],
+)
+def test_render_body_with_resources_rejects_root_dot_path_combinations(tmp_path, body):
+    """A root token followed by path-like dots cannot become a traversal."""
+    with pytest.raises(SkillMdSecurityError):
+        render_body_with_resources(body, tmp_path, ResourceIndex())
+
+
+def test_render_body_with_resources_rejects_backslash_references(tmp_path):
+    """反斜杠资源引用必须进入拒绝逻辑，不能降级为根目录引用。"""
+    for body in (
+        r"Reference: {baseDir}\references\secret.txt",
+        r"Traversal: {baseDir}\..\..\secret",
+    ):
+        with pytest.raises(SkillMdSecurityError):
+            render_body_with_resources(body, tmp_path, ResourceIndex())
+
+
+def test_render_body_with_resources_rejects_nul_after_placeholder(tmp_path):
+    """占位符后的 NUL 必须拒绝，不能残留控制字符或伪路径。"""
+    with pytest.raises(SkillMdSecurityError):
+        render_body_with_resources(
+            "Reference: {baseDir}\x00/secret", tmp_path, ResourceIndex()
+        )
+
+
+def test_render_body_with_resources_rejects_adjacent_root_placeholders(tmp_path):
+    """相邻根占位符必须拒绝，避免渲染成歧义路径。"""
+    with pytest.raises(SkillMdSecurityError):
+        render_body_with_resources("Reference: {baseDir}{baseDir}", tmp_path, ResourceIndex())
+
+
+@pytest.mark.parametrize("invalid_suffix", ["x", "_x", "\\x", "\x00x", "\x1fx"])
+def test_render_body_with_resources_rejects_non_boundary_suffix(
+    tmp_path, invalid_suffix
+):
+    """占位符紧邻路径/标识符或控制字符时必须拒绝。"""
+    with pytest.raises(SkillMdSecurityError):
+        render_body_with_resources(
+            f"Reference: {{baseDir}}{invalid_suffix}", tmp_path, ResourceIndex()
+        )
+
+
+@pytest.mark.parametrize("punctuation", [".", ":", "!", "*", "'", '"', "—"])
+def test_render_body_with_resources_allows_prose_punctuation_after_root(
+    tmp_path, punctuation
+):
+    """根占位符后可跟 Markdown/Unicode 标点，不应误判为伪路径。"""
+    body = f"Reference: {{baseDir}}{punctuation}"
+    assert render_body_with_resources(body, tmp_path, ResourceIndex()) == f"Reference: .{punctuation}"
 
 
 def test_render_body_with_resources_path_validation(tmp_path):
     """render_body_with_resources 应校验 {baseDir} 路径不逃逸。"""
     _create_resource_files(tmp_path)
     idx = build_resource_index(tmp_path)
-    # 模拟一个恶意 body，引用 base_dir 之外的路径
     evil_body = "Evil: {baseDir}/../secret.txt"
 
-    # 这应该被检测到并抛异常（或替换失败）
-    # 由于 {baseDir} 在 base_dir 内，但 /../ 会逃逸
     with pytest.raises(SkillMdSecurityError):
         render_body_with_resources(evil_body, base_dir=tmp_path, index=idx)

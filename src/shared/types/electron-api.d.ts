@@ -38,7 +38,7 @@ export interface SkillsElectronApiBridge {
   /** POST /api/v1/skills/rescan — incremental load of new SKILL.md on disk. */
   rescanSkills: () => Promise<RescanResult>;
   /** POST /api/v1/skills/import (multipart FormData) — write + hot-reload selected files. */
-  importSkills: (paths: string[]) => Promise<ImportResult>;
+  importSkills: () => Promise<ImportResult>;
 }
 
 /**
@@ -125,38 +125,18 @@ export interface OfficeElectronApiBridge {
   showOfficeDocumentInFolder: (ref: OfficeManagedRef) => Promise<void>;
 }
 
-/**
- * Memory bridge exposed at `window.electronAPI.memory`. Task 1 wired the
- * IPC commands; Task 2 (Gap B) types the shape and lands the Settings UI
- * toggle that calls `getAutoMemory` / `setAutoMemory`. The remaining 3
- * methods (`findByTurn`, `getProfile`, `getSummary`) type-stub for T5/T6.
- */
-export interface MemoryElectronApiBridge {
-  search: (args: { query: string; type?: string }) => Promise<unknown>;
-  save: (args: { content: string; importance?: number; category?: string }) => Promise<unknown>;
-  list: (args: { page?: number; page_size?: number; type?: string }) => Promise<unknown>;
-  delete: (args: { memory_id: string }) => Promise<unknown>;
-  /** GET /api/v1/preferences/auto_memory → "true" | "false" | null (default True). */
-  getAutoMemory: () => Promise<unknown>;
-  /** PUT /api/v1/preferences/auto_memory with body { value: boolean }. */
-  setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
-  /** Important-2 — GET /api/v1/preferences/memory_retrieval → "true" | "false" | null (default True). */
-  getMemoryRetrieval: () => Promise<unknown>;
-  /** Important-2 — PUT /api/v1/preferences/memory_retrieval with body { value: boolean }. */
-  setMemoryRetrieval: (args: { value: boolean }) => Promise<unknown>;
-  findByTurn: (args: { turn_id: string }) => Promise<unknown>;
-  getProfile: () => Promise<unknown>;
-  getSummary: (args: { session_id: string }) => Promise<unknown>;
-  /**
-   * Task 6 — subscribe to backend memory_written SSE events (via main relay).
-   * The callback receives the raw JSON string payload of each SSE event.
-   * Resolves to an unsubscribe function, or `null` when the relay could not
-   * be established (caller should fall back to polling).
-   */
-  subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
+export interface BackendRequest {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  headers?: HeadersInit;
+  body?: unknown;
+  /** Optional bounded cancellation timeout for the main-process relay. */
+  timeoutMs?: number;
 }
 
 export interface ElectronAPI {
+  /** Authenticated renderer-to-backend request; main injects the local capability. */
+  backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
   invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>;
   /**
    * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`

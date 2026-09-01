@@ -44,12 +44,24 @@ logger.info('main: process started', {
 });
 
 import { spawn, ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { join, dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import {
+  constants as fsConstants,
+  lstatSync,
+  existsSync,
+  openSync,
+  closeSync,
+  writeSync,
+  readFileSync,
+  mkdirSync,
+  renameSync,
+  unlinkSync,
+} from 'node:fs';
 import http from 'node:http';
 import fetch from 'node-fetch';
-
-import { relayChatStream, relayNdjsonToEvent } from './relay';
+import { relayChatStream, relayNdjsonToEvent, WIKI_STREAM_ERROR } from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { buildApplicationMenu } from './menu';
@@ -67,7 +79,7 @@ import { mainWindow, setMainWindow } from './mainWindow';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
-const BACKEND_HEALTH = `${BACKEND_URL}/health`;
+const BACKEND_HEALTH = `${BACKEND_URL}/health/proof`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
 const buildManifest = loadBuildManifest(
@@ -152,6 +164,7 @@ let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
+let backendAuthToken: string | null = null;
 
 // PR-B: backend auto-restart state
 //
@@ -253,6 +266,7 @@ function spawnBackend(): ChildProcess {
   }
   const generation = ++backendGeneration;
   const ownershipToken = randomUUID();
+  backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? randomBytes(32).toString('base64url');
   currentBackend = { generation, pid: -1, ownershipToken };
   backendLifecycle = 'starting';
   // Task 0 review round 1, finding #6: tell the renderer the new lifecycle
@@ -294,6 +308,7 @@ function spawnBackend(): ChildProcess {
       SAGE_PYTHON_VERSION: buildManifest.pythonVersion,
       SAGE_BACKEND_GENERATION: String(generation),
       SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
+      SAGE_LOCAL_AUTH_TOKEN: backendAuthToken,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -470,25 +485,31 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
     if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) return false;
     try {
       const health = await new Promise<unknown>((resolve) => {
-        const req = http.get(BACKEND_HEALTH, (res) => {
-          let body = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk: string) => {
-            body += chunk;
-          });
-          res.on('end', () => {
-            if (res.statusCode !== 200) {
-              resolve(null);
-              return;
-            }
-            try {
-              resolve(JSON.parse(body) as unknown);
-            } catch {
-              resolve(null);
-            }
-          });
-          res.resume();
-        });
+        const req = http.get(
+          BACKEND_HEALTH,
+          {
+            headers: { 'X-Sage-Backend-Ownership': expectedBackend.ownershipToken },
+          },
+          (res) => {
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', (chunk: string) => {
+              body += chunk;
+            });
+            res.on('end', () => {
+              if (res.statusCode !== 200) {
+                resolve(null);
+                return;
+              }
+              try {
+                resolve(JSON.parse(body) as unknown);
+              } catch {
+                resolve(null);
+              }
+            });
+            res.resume();
+          },
+        );
         req.on('error', () => resolve(null));
         req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
@@ -752,11 +773,87 @@ function registerIpcHandlers(): void {
         return startWikiIngestStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       try {
-        return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
+        return await invokeBackend(
+          payload.cmd,
+          payload.args ?? {},
+          BACKEND_URL,
+          backendAuthToken ?? undefined,
+        );
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
         throw new Error(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'sage:backend-request',
+    async (
+      evt,
+      request: {
+        method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+        path: string;
+        headers?: Record<string, string>;
+        body?: unknown;
+        timeoutMs?: number;
+      },
+    ) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+      // Raw requests use the same lifecycle gate as sage:invoke. In particular,
+      // never probe a stale port with the previous generation's capability.
+      if (backendLifecycle !== 'ready') {
+        logger.warn('ipc: backend-request blocked — backend not ready', {
+          lifecycle: backendLifecycle,
+        });
+        throw new BackendNotReadyError();
+      }
+      if (!request || typeof request.path !== 'string') {
+        throw new Error('无效的后端请求路径');
+      }
+      let backendPath: string;
+      try {
+        const parsed = new URL(request.path, BACKEND_URL);
+        const backendOrigin = new URL(BACKEND_URL);
+        const isLoopbackBackendOrigin =
+          (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') &&
+          parsed.port === backendOrigin.port;
+        if (
+          (!isLoopbackBackendOrigin && parsed.origin !== BACKEND_URL) ||
+          !parsed.pathname.startsWith('/api/v1/')
+        ) {
+          throw new Error('outside backend API');
+        }
+        backendPath = `${parsed.pathname}${parsed.search}`;
+      } catch {
+        throw new Error('无效的后端请求路径');
+      }
+      const headers: Record<string, string> = {
+        ...(request.headers ?? {}),
+        'X-Sage-Local-Authorization': `Bearer ${backendAuthToken ?? ''}`,
+      };
+      const controller = new AbortController();
+      const timeoutMs =
+        typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs)
+          ? Math.min(Math.max(request.timeoutMs, 1), 60_000)
+          : undefined;
+      const timeout =
+        timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(`${BACKEND_URL}${backendPath}`, {
+          method: request.method ?? 'GET',
+          headers,
+          body: request.body === undefined ? undefined : JSON.stringify(request.body),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const text = await response.text().catch(() => '');
+          throw new Error(`Backend request failed: ${response.status} ${text}`);
+        }
+        return response.json();
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
       }
     },
   );
@@ -790,13 +887,18 @@ function registerIpcHandlers(): void {
         eventSubscriptions.set(event, abort);
         // I2: 直接用 streamId attach 到后端已有流 — 不再需要 pendingChatArgs
         // 缓存 args(后端持有,前端只关心 streamId)
-        relayChatStream(senderWebContents, event, streamId, BACKEND_URL, abort.signal).catch(
-          (e) => {
-            if (e instanceof Error && e.name !== 'AbortError') {
-              logger.error('ipc: relay error', { event, err: e.message });
-            }
-          },
-        );
+        relayChatStream(
+          senderWebContents,
+          event,
+          streamId,
+          BACKEND_URL,
+          abort.signal,
+          backendAuthToken ?? undefined,
+        ).catch((e) => {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            logger.error('ipc: relay error', { event, err: e.message });
+          }
+        });
         return { ok: true, event };
       }
 
@@ -958,8 +1060,27 @@ function registerIpcHandlers(): void {
   //   skills:pick-files → native multi-select dialog
   //   skills:rescan     → POST /api/v1/skills/rescan
   //   skills:import     → POST /api/v1/skills/import (multipart)
-  registerSkillsIpc((channel, handler) => {
-    ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
+  registerSkillsIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(evt, ...args);
+      });
+    },
+    () => backendAuthToken ?? undefined,
+  );
+
+  // Phase 1.3 (2026-07-16): Office document IPC handlers.
+  //   office:pick-file   → native open dialog filtered by doc type
+  //   office:save-dialog → native save dialog
+  // The 5 office_* HTTP routes are auto-routed via COMMAND_ROUTES in commands.ts.
+  registerOfficeIpc((channel, handler) => {
+    ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+      return handler(evt, ...args);
+    });
   });
 
   // PR: log IPC — write renderer-side logs through the main process logger
@@ -1011,14 +1132,15 @@ function startWikiChatStream(
     try {
       const res = await fetch(`${backendUrl}/api/v1/wiki/chat/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
+        },
         body: JSON.stringify(args),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
-        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, {
-          error: `HTTP ${res.status}`,
-        });
+        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, WIKI_STREAM_ERROR);
         return;
       }
       await relayNdjsonToEvent(
@@ -1029,7 +1151,7 @@ function startWikiChatStream(
       );
     } catch (e) {
       if (e instanceof Error && e.name !== 'AbortError') {
-        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, { error: String(e) });
+        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, WIKI_STREAM_ERROR);
       }
     } finally {
       streamControllers.delete(streamId);
@@ -1073,7 +1195,10 @@ function startWikiIngestStream(
     try {
       const res = await fetch(`${backendUrl}/api/v1/wiki/ingest/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
+        },
         body: JSON.stringify(args),
         signal: controller.signal,
       });
@@ -1081,7 +1206,8 @@ function startWikiIngestStream(
         wc.webContents.send(`sage:event:wiki-ingest-${streamId}-progress`, {
           stage: 'failed',
           percent: 0,
-          message: `HTTP ${res.status}`,
+          message: WIKI_STREAM_ERROR.message,
+          code: WIKI_STREAM_ERROR.code,
         });
         return;
       }
@@ -1111,7 +1237,8 @@ function startWikiIngestStream(
               data: {
                 stage: 'failed',
                 percent: 0,
-                message: String((rawEvent as { data?: unknown }).data ?? 'unknown error'),
+                message: WIKI_STREAM_ERROR.message,
+                code: WIKI_STREAM_ERROR.code,
               },
             };
           }
@@ -1129,7 +1256,8 @@ function startWikiIngestStream(
         wc.webContents.send(`sage:event:wiki-ingest-${streamId}-progress`, {
           stage: 'failed',
           percent: 0,
-          message: String(e),
+          message: WIKI_STREAM_ERROR.message,
+          code: WIKI_STREAM_ERROR.code,
         });
       }
     } finally {

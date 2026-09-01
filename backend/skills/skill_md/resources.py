@@ -19,10 +19,12 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Set, Tuple
 
 from .validation import SkillMdSecurityError
 
@@ -33,9 +35,75 @@ ALLOWED_RESOURCE_DIRS = frozenset({"scripts", "references", "assets", "templates
 
 # scripts/ 仅接受 .py 文件
 _SCRIPT_EXTENSIONS = frozenset({".py"})
+_WINDOWS_REPARSE_POINT = 0x0400
 
-# {baseDir} 占位符正则（匹配 {baseDir}/任意路径）
-_BASEDIR_PATTERN = re.compile(r"\{baseDir\}(/[^\s\)\]\}\,]*)?")
+
+def _is_reparse_point(path: Path) -> bool:
+    """Return whether a path has a link/reparse attribute; errors are unsafe."""
+    try:
+        result = os.lstat(path)
+    except OSError:
+        return True
+    if stat.S_ISLNK(result.st_mode):
+        return True
+    attributes = getattr(result, "st_file_attributes", 0)
+    return bool(attributes & _WINDOWS_REPARSE_POINT)
+
+
+def _resource_index_platform_supported() -> bool:
+    """Return whether metadata-only resource enumeration is available.
+
+    POSIX requires ``O_NOFOLLOW`` because indexed resources are consumed through
+    the no-follow reopen path.  Windows may enumerate after metadata filtering,
+    but this does not make pathname TOCTOU safe: rendering rechecks reparse
+    points, regular-file status, containment, and index membership and never
+    reads resource contents here.  Other platforms fail closed.
+    """
+    if os.name == "posix":
+        return bool(getattr(os, "O_NOFOLLOW", 0))
+    return os.name == "nt"
+
+
+def _has_unsafe_component(path: Path, base_dir: Path) -> bool:
+    """Check every lexical component without resolving through a link."""
+    try:
+        relative = path.relative_to(base_dir)
+    except ValueError:
+        return True
+    current = base_dir
+    for component in relative.parts:
+        current /= component
+        if _is_reparse_point(current):
+            return True
+    return False
+
+
+_BASEDIR_PATTERN = re.compile(r"\{baseDir\}([\\/][^\s]*)?")
+_BASEDIR_TOKEN = "{baseDir}"
+# Punctuation that commonly terminates a resource reference in prose or Markdown.
+# It is stripped only from the parsed path and retained in the rendered body.
+_RESOURCE_TRAILING_PUNCTUATION = frozenset(
+    ".,;:!?*_~`'\"-–—…，。；：！？、)]}）》」』】）〕"
+)
+
+
+def _split_trailing_resource_punctuation(suffix: str) -> Tuple[str, str]:
+    """Separate prose punctuation from the resource path suffix."""
+    split_at = len(suffix)
+    while split_at > 1 and suffix[split_at - 1] in _RESOURCE_TRAILING_PUNCTUATION:
+        split_at -= 1
+    return suffix[:split_at], suffix[split_at:]
+
+
+def _is_safe_root_placeholder_boundary(character: str, following: str = "") -> bool:
+    """Allow prose punctuation, but not token/path concatenation."""
+    if character in {"\x00", "\\", "{", "}"} or not character.isprintable():
+        return False
+    # A single dot can be prose punctuation (``{baseDir}.``), but a dot
+    # followed by another dot or a path separator is a path-like suffix.
+    if character == "." and following in {".", "/", "\\"}:
+        return False
+    return not (character.isalnum() or character == "_")
 
 
 @dataclass(frozen=True)
@@ -49,6 +117,32 @@ class ResourceIndex:
     references: Tuple[Path, ...] = ()
     assets: Tuple[Path, ...] = ()
     templates: Tuple[Path, ...] = ()
+
+
+def _iter_resource_files(directory: Path):
+    """Yield files from a directory without descending through known reparse points.
+
+    This metadata-first walk prevents recursion through reparse directories that are
+    already known to be unsafe.  It is not an atomic handle-based defense against
+    Windows TOCTOU races; consumers still perform their own no-follow reopen checks.
+    """
+    try:
+        children = sorted(directory.iterdir(), key=lambda path: path.name)
+    except OSError:
+        return
+
+    for child in children:
+        # Check metadata before is_dir()/is_file(), both of which can follow links.
+        try:
+            if _is_reparse_point(child):
+                continue
+            if child.is_dir():
+                yield from _iter_resource_files(child)
+            elif child.is_file():
+                yield child
+        except OSError:
+            # A metadata or traversal failure must not expose that branch.
+            continue
 
 
 def build_resource_index(base_dir: Path) -> ResourceIndex:
@@ -67,9 +161,19 @@ def build_resource_index(base_dir: Path) -> ResourceIndex:
     Returns:
         ``ResourceIndex``: 分类后的资源路径元组。base_dir 不存在时返回空索引（不抛异常）。
     """
-    if not base_dir.is_dir():
+    if not _resource_index_platform_supported():
+        logger.warning("Resource index unavailable: platform lacks verified no-follow support")
+        return ResourceIndex()
+    try:
+        if _is_reparse_point(base_dir) or not base_dir.is_dir():
+            return ResourceIndex()
+        # Store only canonical absolute paths so an index built from a relative
+        # base remains valid when it is later re-authorized for rendering.
+        canonical_base = base_dir.resolve(strict=True)
+    except (OSError, RuntimeError):
         return ResourceIndex()
 
+    base_dir = canonical_base
     scripts: List[Path] = []
     references: List[Path] = []
     assets: List[Path] = []
@@ -77,15 +181,29 @@ def build_resource_index(base_dir: Path) -> ResourceIndex:
 
     for subdir_name in ALLOWED_RESOURCE_DIRS:
         subdir = base_dir / subdir_name
-        if not subdir.is_dir():
+        try:
+            if _has_unsafe_component(subdir, base_dir) or not subdir.is_dir():
+                continue
+        except OSError:
+            # Metadata failures at the whitelist root fail closed.
             continue
 
-        # 递归扫描子目录中的所有文件
-        for file_path in sorted(subdir.rglob("*")):
-            if not file_path.is_file():
-                continue
-            # 跳过隐藏文件
-            if any(part.startswith(".") for part in file_path.relative_to(subdir).parts):
+        # A controlled walk checks each child before descending, unlike rglob(),
+        # which may recurse into a junction/reparse directory first.
+        for file_path in _iter_resource_files(subdir):
+            try:
+                if not file_path.is_file():
+                    continue
+                # 跳过隐藏文件
+                if any(part.startswith(".") for part in file_path.relative_to(subdir).parts):
+                    continue
+
+                if _has_unsafe_component(file_path, base_dir):
+                    logger.warning("Skipping symlinked/reparse resource: %s", file_path)
+                    continue
+                validate_resource_path(file_path, base_dir=base_dir)
+            except (OSError, RuntimeError, ValueError, SkillMdSecurityError):
+                logger.warning("Skipping unsafe resource candidate: %s", file_path)
                 continue
 
             # scripts/ 仅接受 .py 文件
@@ -139,50 +257,121 @@ def validate_resource_path(path: Path, base_dir: Path) -> Path:
     raise SkillMdSecurityError(f"resource path {path} is not under base_dir {base_dir}")
 
 
-def render_body_with_resources(body: str, base_dir: Path, index: ResourceIndex) -> str:
-    """替换 body 中的 ``{baseDir}/...`` 引用为绝对路径。
+def _indexed_regular_resources(index: ResourceIndex, base_dir: Path) -> Set[Path]:
+    """Return canonical regular files authorized by ``index``.
 
-    校验逻辑:
-      - ``{baseDir}`` 替换为 ``base_dir`` 的绝对路径
-      - 替换后的路径必须通过 ``validate_resource_path`` 校验（不逃逸 base_dir）
-      - 任何逃逸尝试抛 ``SkillMdSecurityError``
-
-    Args:
-        body: 原始 markdown body
-        base_dir: skill 根目录
-        index: 资源索引（当前未使用，保留接口）
-
-    Returns:
-        替换后的 body 字符串
-
-    Raises:
-        SkillMdSecurityError: 替换后的路径逃逸 base_dir
+    ``ResourceIndex`` is an internal value, but callers can construct one by
+    hand.  Re-apply the complete resource policy here instead of trusting the
+    index fields to have been produced by :func:`build_resource_index`.
     """
-    # 查找所有 {baseDir} 引用
-    matches = list(_BASEDIR_PATTERN.finditer(body))
+    authorized: Set[Path] = set()
+    try:
+        resolved_base = base_dir.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return authorized
 
+    for category, resources in (
+        ("scripts", index.scripts),
+        ("references", index.references),
+        ("assets", index.assets),
+        ("templates", index.templates),
+    ):
+        for resource in resources:
+            try:
+                resource_path = Path(resource)
+                if not resource_path.is_absolute():
+                    # ResourceIndex entries are canonical absolute paths.  The
+                    # relative fallback preserves compatibility with hand-built
+                    # indexes while using the same canonical root.
+                    resource_path = resolved_base / resource_path
+                lexical_path = resource_path
+                relative = lexical_path.relative_to(resolved_base)
+                if (
+                    not relative.parts
+                    or relative.parts[0] != category
+                    or any(part in {".", ".."} or part.startswith(".") for part in relative.parts)
+                    or (category == "scripts" and resource_path.suffix not in _SCRIPT_EXTENSIONS)
+                ):
+                    continue
+                if _has_unsafe_component(lexical_path, resolved_base):
+                    continue
+                resolved_resource = lexical_path.resolve(strict=True)
+                if resolved_base not in resolved_resource.parents:
+                    continue
+                result = os.lstat(lexical_path)
+                if not stat.S_ISREG(result.st_mode) or stat.S_ISLNK(result.st_mode):
+                    continue
+                if _is_reparse_point(lexical_path):
+                    continue
+                authorized.add(resolved_resource)
+            except (OSError, RuntimeError, TypeError, ValueError):
+                continue
+    return authorized
+
+
+def render_body_with_resources(body: str, base_dir: Path, index: ResourceIndex) -> str:
+    """Replace placeholders with safe logical skill-relative paths.
+
+    ``{baseDir}`` becomes ``.`` and a suffixed reference becomes its relative
+    path.  Suffixed references must identify indexed regular resources.
+    """
+    matches = list(_BASEDIR_PATTERN.finditer(body))
+    token_positions = [match.start() for match in matches]
+    for token_position in token_positions:
+        token_end = token_position + len(_BASEDIR_TOKEN)
+        if token_end >= len(body):
+            continue
+        next_character = body[token_end]
+        if not _is_safe_root_placeholder_boundary(
+            next_character, body[token_end + 1 : token_end + 2]
+        ):
+            raise SkillMdSecurityError("invalid resource reference")
     if not matches:
         return body
 
-    # 从后往前替换（避免索引偏移）
-    resolved_base = base_dir.resolve()
+    try:
+        resolved_base = base_dir.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise SkillMdSecurityError("invalid skill resource base") from exc
+    if not resolved_base.is_dir() or _is_reparse_point(base_dir):
+        raise SkillMdSecurityError("invalid skill resource base")
+
+    authorized = _indexed_regular_resources(index, base_dir)
     result = body
-
     for match in reversed(matches):
-        # 获取 {baseDir} 后面的路径部分（如果有）
-        path_suffix = match.group(1) or ""
-
-        if path_suffix:
-            # 构造完整路径并校验
-            full_path = Path(str(resolved_base) + path_suffix)
-            # 校验路径在 base_dir 内（防止 ../ 逃逸）
-            validate_resource_path(full_path, base_dir=base_dir)
-            resolved_path = full_path.resolve(strict=False)
+        suffix = match.group(1) or ""
+        trailing_punctuation = ""
+        if suffix:
+            suffix, trailing_punctuation = _split_trailing_resource_punctuation(suffix)
+        if not suffix:
+            replacement = "." + trailing_punctuation
         else:
-            # 纯 {baseDir} 占位符，无路径后缀
-            resolved_path = resolved_base
-
-        # 替换占位符
-        result = result[: match.start()] + str(resolved_path) + result[match.end() :]
+            if not suffix.startswith("/"):
+                raise SkillMdSecurityError("invalid resource reference")
+            relative_text = suffix[1:]
+            if (
+                not relative_text
+                or "\x00" in relative_text
+                or "\\" in relative_text
+                or relative_text.startswith("/")
+            ):
+                raise SkillMdSecurityError("invalid resource reference")
+            relative = Path(relative_text)
+            if relative.is_absolute() or ".." in relative.parts or "." in relative.parts:
+                raise SkillMdSecurityError("invalid resource reference")
+            candidate = base_dir / relative
+            try:
+                resolved_candidate = validate_resource_path(candidate, base_dir=base_dir)
+                result_stat = os.lstat(candidate)
+            except (OSError, SkillMdSecurityError) as exc:
+                raise SkillMdSecurityError("invalid resource reference") from exc
+            if (
+                not stat.S_ISREG(result_stat.st_mode)
+                or stat.S_ISLNK(result_stat.st_mode)
+                or resolved_candidate not in authorized
+            ):
+                raise SkillMdSecurityError("resource is not indexed")
+            replacement = relative.as_posix() + trailing_punctuation
+        result = result[: match.start()] + replacement + result[match.end() :]
 
     return result

@@ -1,5 +1,7 @@
 # Sage - 目录结构
 
+> **文档范围说明（2026-08-30）**：本文包含早期目录草图；其中 `src-tauri/`、Tauri 命令、旧测试目录等内容属于历史设计/非当前实现。当前技能系统位于 `backend/skills/`，以 `InprocSkillAdapter` → `SkillRegistry` → builtin 与 `backend/skills/skill_md/loader.py` 为实际入口；技能系统的详细边界以 [`technical/24-skills-system.md`](technical/24-skills-system.md) 为准。
+
 ## 11.1 项目根目录
 
 ```
@@ -54,7 +56,7 @@ sage/
 │   ├── 04-memory.md          # 记忆系统
 │   ├── 05-agent.md           # Agent 引擎
 │   ├── 06-tools.md           # 工具系统
-│   ├── 07-skills.md          # 技能系统
+│   ├── 24-skills-system.md  # 技能系统技术专题（见 docs/technical/）
 │   ├── 08-evolution.md       # 进化系统
 │   ├── 09-frontend.md        # 前端设计
 │   ├── 10-api.md             # API 接口
@@ -377,23 +379,10 @@ backend/
 ├── skills/                  # 技能系统
 │   ├── __init__.py
 │   ├── registry.py         # 技能注册表
-│   ├── base.py             # 技能基类
-│   │   ├── class BaseSkill
-│   │   └── class SkillSchema
-│   │
-│   ├── manager.py          # 技能管理器
-│   │   └── class SkillManager
-│   │
-│   ├── builtin/            # 内置技能
-│   │   ├── __init__.py
-│   │   ├── search.py       # SearchSkill
-│   │   ├── writer.py       # WriterSkill
-│   │   ├── coder.py        # CoderSkill
-│   │   ├── travel.py       # TravelSkill
-│   │   └── calculator.py    # CalculatorSkill
-│   │
-│   └── store.py            # 技能商店
-│       └── class SkillStore
+│   ├── lifecycle.py        # 技能生命周期状态
+│   ├── loader.py           # 技能加载入口
+│   ├── skill_md/            # SKILL.md 适配层
+│   └── builtin/             # 内置技能
 │
 ├── plugins/                 # 插件系统
 │   ├── __init__.py

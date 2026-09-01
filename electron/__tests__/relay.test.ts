@@ -16,7 +16,12 @@ vi.mock('node-fetch', async () => {
 });
 
 import nodeFetch from 'node-fetch';
-import { parseNdjsonStream, relayChatStream, relayNdjsonToEvent } from '../relay';
+import {
+  parseNdjsonStream,
+  relayChatStream,
+  relayNdjsonToEvent,
+  WIKI_STREAM_ERROR,
+} from '../relay';
 
 const mockedFetch = nodeFetch as unknown as ReturnType<typeof vi.fn>;
 
@@ -136,6 +141,26 @@ describe('relayChatStream (I2: attach to existing stream via GET)', () => {
     ]);
   });
 
+  it('adds the runtime Bearer capability to the attach request', async () => {
+    const wc = new MockWebContents();
+    mockedFetch.mockResolvedValueOnce(makeNdjsonFetchResponse([]));
+
+    await relayChatStream(
+      wc as unknown as Electron.WebContents,
+      'chat-stream-auth',
+      'abc',
+      'http://x',
+      new AbortController().signal,
+      'synthetic-capability-token',
+    );
+
+    const init = mockedFetch.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toEqual({
+      Accept: 'application/x-ndjson',
+      Authorization: 'Bearer synthetic-capability-token',
+    });
+  });
+
   it('url-encodes streamId with special characters', async () => {
     const wc = new MockWebContents();
     mockedFetch.mockResolvedValueOnce(makeNdjsonFetchResponse([JSON.stringify({ state: 'done' })]));
@@ -222,9 +247,12 @@ describe('relayNdjsonToEvent (PR-2 Task 3: wiki_chat_stream relay)', () => {
     ]);
   });
 
-  it('forwards backend "error" event as {prefix}-error', async () => {
+  it('sanitizes backend error payloads before forwarding to renderer', async () => {
     const wc = new MockWebContents();
-    const body = makeNdjsonReadable([JSON.stringify({ event: 'error', data: 'LLM exploded' })]);
+    const secret = 'synthetic-secret-upstream-body-token';
+    const body = makeNdjsonReadable([
+      JSON.stringify({ event: 'error', data: { message: secret, path: '/private/token' } }),
+    ]);
     await relayNdjsonToEvent(
       body,
       'wiki-chat-stream-s1',
@@ -234,9 +262,11 @@ describe('relayNdjsonToEvent (PR-2 Task 3: wiki_chat_stream relay)', () => {
     expect(wc.sent).toEqual([
       {
         channel: 'sage:event:wiki-chat-stream-s1-error',
-        payload: 'LLM exploded',
+        payload: WIKI_STREAM_ERROR,
       },
     ]);
+    expect(JSON.stringify(wc.sent)).not.toContain(secret);
+    expect(JSON.stringify(wc.sent)).not.toContain('/private/token');
   });
 
   it('synthesizes {prefix}-error for non-object NDJSON lines', async () => {
@@ -254,7 +284,7 @@ describe('relayNdjsonToEvent (PR-2 Task 3: wiki_chat_stream relay)', () => {
     expect(wc.sent).toEqual([
       {
         channel: 'sage:event:wiki-chat-stream-s1-error',
-        payload: { error: 'invalid NDJSON line' },
+        payload: { ...WIKI_STREAM_ERROR },
       },
     ]);
   });
