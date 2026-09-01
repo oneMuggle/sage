@@ -678,7 +678,6 @@ function isTrustedRendererUrl(url: string): boolean {
     }
   }
   const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
-<<<<<<< HEAD
   try {
     const current = new URL(url);
     const expected = new URL(pathToFileURL(indexHtml).toString());
@@ -693,9 +692,6 @@ function isTrustedRendererUrl(url: string): boolean {
   } catch {
     return false;
   }
-=======
-  return url === pathToFileURL(indexHtml).toString();
->>>>>>> bee99553 (feat: add secure demo mode runtime)
 }
 
 function isTrustedRenderer(sender: Electron.WebContents): boolean {
