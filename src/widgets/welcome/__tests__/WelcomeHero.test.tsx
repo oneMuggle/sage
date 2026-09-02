@@ -18,6 +18,17 @@ describe('WelcomeHero', () => {
     expect(avatar).toBeInTheDocument();
   });
 
+  it('renders brand logo image with proper alt text', () => {
+    render(<WelcomeHero />);
+    // U-Brand: <img> 继承 testId "welcome-avatar"。
+    // useI18n mock 返回 identity（t(key)===key），所以 alt 文本是字面量 "brand.alt"。
+    const img = screen.getByTestId('welcome-avatar');
+    expect(img).toBeInTheDocument();
+    expect(img.tagName).toBe('IMG');
+    expect(img).toHaveAttribute('src', '/sage.svg');
+    expect(img).toHaveAttribute('alt', 'brand.alt');
+  });
+
   it('renders greeting and subtitle', () => {
     render(<WelcomeHero />);
     expect(screen.getByText('welcome.hero.greeting')).toBeInTheDocument();

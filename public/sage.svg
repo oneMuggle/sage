@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sage logo">
+  <!-- Dark navy rounded background -->
+  <rect width="64" height="64" rx="12" fill="#0f172a"/>
+
+  <!-- Teal-to-purple linear gradient used by both ribbon halves -->
+  <defs>
+    <linearGradient id="sageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2dd4bf"/>
+      <stop offset="50%" stop-color="#5eead4"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Top ribbon half: chevron-like polygon, upper-left -->
+  <polygon points="14,18 36,14 44,28 30,34 22,30" fill="url(#sageGrad)" opacity="0.95"/>
+
+  <!-- Bottom ribbon half: chevron-like polygon, lower-right (mirrored tilt) -->
+  <polygon points="22,30 44,32 50,46 30,52 18,42" fill="url(#sageGrad)" opacity="0.85"/>
+
+  <!-- 4-pointed sparkle between the two ribbon halves -->
+  <polygon points="46,22 48,30 56,32 48,34 46,42 44,34 36,32 44,30" fill="#ffffff"/>
+</svg>
