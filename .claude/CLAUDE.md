@@ -122,8 +122,80 @@ conda activate sage-backend-py38
 - **禁止**在 release/win7 分支上修改 `backend/requirements.txt`
 - 如需在两个分支间同步代码,**必须**使用 cherry-pick 并手动验证兼容性
 
+## 后端启动契约与 SAGE_LOCAL_AUTH_TOKEN（2026-09 事件后置入）
+
+后端是 FastAPI + `LocalAuthMiddleware` 守护的本地服务（默认 8765）。
+中间件要求每个非公开请求带 `Authorization: Bearer ${SAGE_LOCAL_AUTH_TOKEN}`，
+缺/不匹配 → 401 `{"detail":"本地授权凭据无效或缺失"}`。
+
+### 两种启动模式必须保持 token 一致
+
+| 模式 | 谁启动后端 | token 来源 | 何时使用 |
+|---|---|---|---|
+| **正常模式**（推荐） | Electron `spawnBackend()` | Electron mint 随机 token，通过 spawn env 注入到子进程 | `npm run dev` + `./node_modules/.bin/electron --no-sandbox .` |
+| **SKIP_BACKEND 模式** | 外部进程（开发者手启 / CI fixture） | 启动前 **必须** 由调用方设置 `SAGE_LOCAL_AUTH_TOKEN=<shared>`，Electron 与后端读同一个值 | 调试、CI、隔离验证 |
+
+### 禁止的反模式（导致本次 401 事件）
+
+- ❌ 手动 `python backend/main.py` 而 Electron 处于正常模式 → 后端用 `secrets.token_urlsafe(32)` 自生成 token，与 Electron 注入的不匹配 → 三页全 401
+- ❌ 启动后端时忘了 export `SAGE_LOCAL_AUTH_TOKEN`（SKIP_BACKEND 模式）→ 同上
+- ❌ 用 `SAGE_SKIP_BACKEND=1` 启动 Electron 但不传 token → 启动期会 `logger.warn` 提醒，但请求时仍 401
+
+### 正常模式启动顺序（按 `.claude/skills/run-desktop/SKILL.md`）
+
+```bash
+# 1. Vite (后台)
+npm run dev
+# 2. Electron（自带 spawnBackend，自动注入匹配的 token）
+./node_modules/.bin/electron --no-sandbox .
+```
+
+**不要**用 `npm run electron:dev`（缺 `--no-sandbox`，Linux 容器会 SUID abort）；
+**不要**手启后端让 Electron 走 SKIP_BACKEND。
+
+### SKIP_BACKEND 模式启动顺序（仅调试/必要时）
+
+```bash
+# 1. 选一个固定 token（必须双方一致）
+export SAGE_LOCAL_AUTH_TOKEN="sage-dev-shared-$(date +%s)"
+
+# 2. 启动后端（用同一 shell 让 env 生效）
+conda activate sage-backend && python -m backend.main &
+
+# 3. 启动 Electron
+SAGE_SKIP_BACKEND=1 SAGE_LOCAL_AUTH_TOKEN="$SAGE_LOCAL_AUTH_TOKEN" \
+  ./node_modules/.bin/electron --no-sandbox .
+```
+
+### 401 时怎么快速诊断
+
+1. `curl http://127.0.0.1:8765/health` — 应 200。如果失败 → 后端根本没启
+2. 找 Electron pid（`pgrep -f 'electron/dist/electron' | head -1`），再找后端 pid（`pgrep -f 'backend.main'`）
+3. 比对两者 environ 中 `SAGE_LOCAL_AUTH_TOKEN`：
+
+   ```bash
+   for p in $(pgrep -f 'electron/dist/electron' | head -1) $(pgrep -f 'backend.main'); do
+     grep -z '^SAGE_LOCAL_AUTH_TOKEN=' /proc/$p/environ 2>/dev/null \
+       | tr '\0' '\n' | sed 's/^/    pid='$p' /'
+   done
+   ```
+
+   两个 sha256 前缀不一致 → token 失配，重启桌面端
+4. **不要**把 raw token 贴进日志或聊天（项目安全规范）
+
+### 启动期 token 失配检测（2026-09 后已加）
+
+SKIP_BACKEND 模式下，`electron/main.ts` 在 `createMainWindow()` 之后会
+fire-and-forget 启动 `probeBackendAuthForSkipBackend()`，打
+`/api/v1/memory/list?page_size=1` 验证 token 是否被后端接受。
+
+- 200 → 一切正常，静默
+- 401 → 发 `backend:auth-failed` IPC，`BackendStatusBanner` 统一显示诊断
+  「后端授权凭据失效（HTTP 401）。请重启 Sage 桌面端恢复」
+
 ## 默认任务规范
 
 - 任何涉及后端 Python 代码的运行/调试/测试，**必须**使用 `sage-backend` conda 环境。
-- 启动顺序：先启后端（`python backend/main.py`），再启前端（`npm run dev`）。
+- **正常模式**：先启前端 `npm run dev`（Vite, 端口 1420），再启 `./node_modules/.bin/electron --no-sandbox .`（Electron 自带 `spawnBackend()`，不需要也不应该手启后端）。
+- **仅当确实需要 SKIP_BACKEND 模式**（调试后端、CI fixture 等）：参考上方"SKIP_BACKEND 模式启动顺序"，并保证两边 token 一致。
 - 端口冲突时优先修改后端端口 `PYTHON_BACKEND_PORT`，不要改前端默认端口。
