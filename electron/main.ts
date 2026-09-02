@@ -825,13 +825,11 @@ function registerIpcHandlers(): void {
           BACKEND_URL,
           abort.signal,
           backendAuthToken ?? undefined,
-        ).catch(
-          (e) => {
-            if (e instanceof Error && e.name !== 'AbortError') {
-              logger.error('ipc: relay error', { event, err: e.message });
-            }
-          },
-        );
+        ).catch((e) => {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            logger.error('ipc: relay error', { event, err: e.message });
+          }
+        });
         return { ok: true, event };
       }
 
@@ -998,9 +996,12 @@ function registerIpcHandlers(): void {
   // may execute AFTER this registerSkillsIpc call on cold start.
   // `?? undefined` because SkillsAuthToken expects `string | undefined`,
   // not `string | null` (skillIpc narrow in `resolveAuthToken`).
-  registerSkillsIpc((channel, handler) => {
-    ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
-  }, () => backendAuthToken ?? undefined);
+  registerSkillsIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
+    },
+    () => backendAuthToken ?? undefined,
+  );
 
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
@@ -1053,9 +1054,7 @@ function startWikiChatStream(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(backendAuthToken
-            ? { Authorization: `Bearer ${backendAuthToken}` }
-            : {}),
+          ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
         },
         body: JSON.stringify(args),
         signal: controller.signal,
@@ -1120,9 +1119,7 @@ function startWikiIngestStream(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(backendAuthToken
-            ? { Authorization: `Bearer ${backendAuthToken}` }
-            : {}),
+          ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
         },
         body: JSON.stringify(args),
         signal: controller.signal,
@@ -1429,7 +1426,8 @@ app.whenReady().then(async () => {
       });
       if (probe.status === 401) {
         logger.error(
-          'main: backend rejected local auth token (HTTP 401) at ' + PROBE_PATH +
+          'main: backend rejected local auth token (HTTP 401) at ' +
+            PROBE_PATH +
             ' — Electron 与后端 SAGE_LOCAL_AUTH_TOKEN 失配。请重启 Sage 桌面端恢复。',
         );
         mainWindow?.webContents.send('backend:auth-failed', { status: 401 });
@@ -1453,6 +1451,20 @@ app.whenReady().then(async () => {
   // and exposes window.electronAPI for IPC contract verification).
   if (process.env.SAGE_SKIP_BACKEND === '1') {
     logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
+    // In SKIP_BACKEND mode the Python backend is launched externally with
+    // its own SAGE_LOCAL_AUTH_TOKEN; Electron must read the SAME value from
+    // its env to send matching Authorization headers. spawnBackend() (which
+    // mints+injects) is bypassed in this mode, so we resolve the token here
+    // — and DO NOT mint a random fallback, because a minted value would
+    // disagree with the externally-launched backend and every IPC call would
+    // 401. If the caller forgot to export the env var, warn (probe will fire
+    // 401 and the renderer shows the diagnostic banner) but do not crash.
+    backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? null;
+    if (!backendAuthToken) {
+      logger.warn(
+        'main: SAGE_SKIP_BACKEND=1 without SAGE_LOCAL_AUTH_TOKEN — every IPC call will 401 until you export the same token the backend uses',
+      );
+    }
     // The IPC readiness gate (BackendNotReadyError) is meaningless when the
     // user (or CI) has explicitly opted out of the backend — without this,
     // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before
