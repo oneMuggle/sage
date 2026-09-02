@@ -460,8 +460,7 @@ export function useChat() {
               } else if (evt.state === 'reasoning' && evt.reasoning) {
                 // 兼容旧后端：收尾事件仍使用 reasoning，但 payload 是累计全量。
                 // 若它包含当前累积内容，替换而非再次追加，避免旧协议重复显示。
-                const currentReasoning =
-                  useChatStreamStore.getState().streaming?.reasoning ?? '';
+                const currentReasoning = useChatStreamStore.getState().streaming?.reasoning ?? '';
                 if (evt.reasoning.startsWith(currentReasoning)) {
                   useChatStreamStore.getState().replaceReasoning(assistantId, evt.reasoning);
                 } else {

@@ -675,14 +675,7 @@ export interface UpdateTaskInput {
 // ============================================================================
 
 export type LaneStatus =
-  | 'created'
-  | 'ready'
-  | 'running'
-  | 'blocked'
-  | 'succeeded'
-  | 'failed'
-  | 'stopped'
-  | 'cancelled';
+  'created' | 'ready' | 'running' | 'blocked' | 'succeeded' | 'failed' | 'stopped' | 'cancelled';
 
 export type HeartbeatStatus = 'healthy' | 'stalled' | 'transport_dead';
 
