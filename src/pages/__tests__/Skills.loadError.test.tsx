@@ -101,4 +101,26 @@ describe('Skills page — surfaces real load error (不再吞掉)', () => {
     expect(text).toMatch(/500/);
     expect(text).toMatch(/db pool exhausted/); // 后端 detail 必须保留
   });
+
+  it('main 错误格式不含 "→ <code>:" 时回退到 raw message（不假装有状态码）', async () => {
+    // 锁定 describeLoadError 的 fallthrough 行为：
+    // 当 main 改了错误模板（例如 "status=401" 而非 "→ 401:"），
+    // regex 不匹配 → 走"保留 raw message"分支，不显示 401/403 友好提示。
+    // 这避免在非 token 错误下给用户误导性的"请重启 Sage"提示。
+    listMock.mockRejectedValueOnce(
+      new Error('Backend GET http://127.0.0.1:8765/api/v1/skills — unexpected format'),
+    );
+
+    renderSkills();
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).not.toBeNull();
+    });
+
+    const alert = screen.getByRole('alert');
+    const text = alert.textContent ?? '';
+    expect(text).not.toBe('加载技能列表失败');
+    expect(text).toMatch(/unexpected format/); // raw message 保留
+    expect(text).not.toMatch(/请重启 Sage/); // 没有 401 友好提示（regex 未匹配）
+  });
 });

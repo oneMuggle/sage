@@ -150,8 +150,12 @@ npm run dev
 ./node_modules/.bin/electron --no-sandbox .
 ```
 
-**不要**用 `npm run electron:dev`（缺 `--no-sandbox`，Linux 容器会 SUID abort）；
-**不要**手启后端让 Electron 走 SKIP_BACKEND。
+**正常模式启动顺序**任选其一（`package.json` 的 `electron:dev` 已带 `--no-sandbox`，2026-09 后），效果等价：
+
+- 一键式：`npm run electron:dev`（自动跑 `build:electron` + `electron --no-sandbox .`）
+- 分步式：`npm run dev` + `./node_modules/.bin/electron --no-sandbox .`（Vite 和 Electron 在各自 shell，便于独立看日志）
+
+**不要**手启后端让 Electron 走 SKIP_BACKEND 模式（除非真的需要）。
 
 ### SKIP_BACKEND 模式启动顺序（仅调试/必要时）
 

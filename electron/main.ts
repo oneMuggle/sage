@@ -1630,14 +1630,16 @@ app.whenReady().then(async () => {
     }
 
     // 选 /api/v1/memory/list — 用户报告现象的源头之一，且 page_size=1 让响应体最小。
+    // 路径提取为常量，未来如路由改名只改这一处。
+    const PROBE_PATH = '/api/v1/memory/list?page=1&page_size=1';
     try {
-      const probe = await fetch(`${BACKEND_URL}/api/v1/memory/list?page=1&page_size=1`, {
+      const probe = await fetch(`${BACKEND_URL}${PROBE_PATH}`, {
         headers: { Authorization: `Bearer ${backendAuthToken}` },
       });
       if (probe.status === 401) {
         logger.error(
-          'main: backend rejected local auth token (HTTP 401) at /api/v1/memory/list — ' +
-            'Electron 与后端 SAGE_LOCAL_AUTH_TOKEN 失配。请重启 Sage 桌面端恢复。',
+          'main: backend rejected local auth token (HTTP 401) at ' + PROBE_PATH +
+            ' — Electron 与后端 SAGE_LOCAL_AUTH_TOKEN 失配。请重启 Sage 桌面端恢复。',
         );
         mainWindow?.webContents.send('backend:auth-failed', { status: 401 });
         return;
@@ -1685,18 +1687,6 @@ app.whenReady().then(async () => {
     // instead of letting each page report its own 401.
     void probeBackendAuthForSkipBackend();
     return;
-  }
-  // Educational nudge (2026-09): if the user reached main.ts via the
-  // `npm run electron:dev` script (which now adds --no-sandbox), remind them
-  // that the canonical launch path is the direct binary with --no-sandbox
-  // — see .claude/skills/run-desktop/SKILL.md. Production paths
-  // (electron:build/electron:dist) don't hit this branch because they're
-  // packaged (`app.isPackaged` true), so the nudge is dev-only.
-  if (process.env.npm_lifecycle_event === 'electron:dev') {
-    logger.info(
-      'main: launched via "npm run electron:dev"; for the canonical dev ' +
-        'launch see .claude/skills/run-desktop/SKILL.md',
-    );
   }
   // Demo mode (录屏演示): skip Python backend spawn entirely so the
   // frontend-only /demo scenario can record without conda/uvicorn.
