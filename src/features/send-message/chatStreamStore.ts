@@ -69,6 +69,14 @@ interface ChatStreamStoreState {
   appendContent: (messageId: string, next: string) => void;
   replaceContent: (messageId: string, next: string) => void;
   appendReasoning: (messageId: string, next: string) => void;
+  /**
+   * 整体替换 streaming.reasoning —— 2026-09-02 修复引入。
+   * 后端在每段 reasoning 流式末尾发一条 `state: 'reasoning_final'` 事件,
+   * 携带 done_reasoning 全量(对齐持久化字段);前端必须 replace 而非 append,
+   * 否则 deltas + final 双重累积会导致用户视觉上"思考过程重复两遍"。
+   * 与已有 replaceContent 对称 — append 用于流式 delta,replace 用于收尾全量。
+   */
+  replaceReasoning: (messageId: string, next: string) => void;
   /** 更新 meta 字段（currentAgentId / iteration / state），不碰 content/reasoning */
   setStreamingMeta: (
     messageId: string,
@@ -137,6 +145,15 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
     set((prev) =>
       prev.streaming && prev.streaming.messageId === messageId
         ? { streaming: { ...prev.streaming, reasoning: prev.streaming.reasoning + next } }
+        : prev,
+    ),
+
+  // 2026-09-02 bug fix: 与 replaceContent 对称, 用于替换 reasoning 全量。
+  // 后端 reasoning_final 事件带 done_reasoning 全量 → 整体替换,不追加。
+  replaceReasoning: (messageId: string, next: string): void =>
+    set((prev) =>
+      prev.streaming && prev.streaming.messageId === messageId
+        ? { streaming: { ...prev.streaming, reasoning: next } }
         : prev,
     ),
 

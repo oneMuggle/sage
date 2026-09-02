@@ -7,6 +7,7 @@ export type AgentState =
   | 'thinking'
   | 'reasoning'
   | 'reasoning_delta'
+  | 'reasoning_final' // 2026-09-02: 后端 reasoning 流末尾发的全量事件,前端必须 replace 而非 append
   | 'acting'
   | 'observing'
   | 'content_delta'

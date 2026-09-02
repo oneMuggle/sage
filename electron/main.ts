@@ -1589,6 +1589,17 @@ app.whenReady().then(async () => {
   // and exposes window.electronAPI for IPC contract verification).
   if (process.env.SAGE_SKIP_BACKEND === '1') {
     logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
+    // SAGE_SKIP_BACKEND means any backend is owned by another process (for
+    // example, a CI smoke fixture or a developer's shell). Its capability
+    // token cannot be changed from this process, so it must be supplied before
+    // both processes start. Do not mint a token here that the backend cannot
+    // know; callers that need backend IPC must set SAGE_LOCAL_AUTH_TOKEN.
+    backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? null;
+    if (!backendAuthToken) {
+      logger.warn(
+        'main: SAGE_SKIP_BACKEND=1 without SAGE_LOCAL_AUTH_TOKEN; backend IPC requires a shared token',
+      );
+    }
     // The IPC readiness gate (BackendNotReadyError) is meaningless when the
     // user (or CI) has explicitly opted out of the backend — without this,
     // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before

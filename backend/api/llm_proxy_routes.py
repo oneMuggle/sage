@@ -62,9 +62,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # 透传请求 / 响应头时需过滤的 hop-by-hop 头(RFC 7230 §6.1)
-# 额外过滤 content-encoding: 即使 proxy 向上游发 Accept-Encoding: identity,
-# 某些上游仍可能返回 Content-Encoding: gzip。如果不把这个 header 过滤掉,
-# httpx 客户端会尝试解压响应,导致 zlib.error: Error -3 while decompressing data。
+# 注: content-encoding 也需过滤,因为 httpx 的 response.content / aiter_bytes
+# 会透明解压上游响应;下游拿到的是明文,不能再带原始压缩编码声明。这样既能
+# 兼容无视 Accept-Encoding: identity 的上游,也保证响应头和响应体一致。
 HOP_BY_HOP_HEADERS: FrozenSet[str] = frozenset(
     {
         "host",
@@ -77,7 +77,7 @@ HOP_BY_HOP_HEADERS: FrozenSet[str] = frozenset(
         "transfer-encoding",
         "upgrade",
         "content-length",
-        "content-encoding",  # v2: 防止 httpx 尝试解压已处理的响应
+        "content-encoding",
     }
 )
 
@@ -325,7 +325,7 @@ async def _read_response_body_limited(response: httpx.Response) -> bytes:
 
     chunks: list[bytes] = []
     size = 0
-    async for chunk in response.aiter_raw():
+    async for chunk in response.aiter_bytes():
         size += len(chunk)
         if size > MAX_RESPONSE_BODY_BYTES:
             raise ValueError("response exceeds configured limit")
@@ -907,8 +907,12 @@ async def _proxy_streaming(
             total_bytes = 0
             request_context_closed = False
             try:
-                # 用 aiter_raw 透传原始字节,把解压责任交给调用方。
-                async for chunk in upstream_resp.aiter_raw():
+                # 用 aiter_bytes 透传透明解压后的字节 (2026-09-02 修复):
+                # 上游若无视 Accept-Encoding: identity 仍返回 gzip, aiter_raw
+                # 会把 gzip block 当 chunk 边界吐出, SSE 解析会失败 (commit
+                # 3e60bc4f 历史问题)。aiter_bytes 让 httpx 按 content-encoding
+                # 自动解压后再吐 chunk, 与非流式路径保持语义一致。
+                async for chunk in upstream_resp.aiter_bytes():
                     remaining = MAX_RESPONSE_BODY_BYTES - total_bytes
                     if remaining <= 0:
                         logger.warning(
