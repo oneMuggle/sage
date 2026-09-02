@@ -2254,12 +2254,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             }
                         )
                         await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
-                    # 最终 reasoning 事件携带累积全量 (而非单次 evt.reasoning)。
-                    # 这样: 持久化、最终事件、前端累积 三者 reasoning 文本一致,
-                    # 不依赖前端每个 delta 都没丢。
-                    final_reasoning_event = evt.to_dict()
-                    final_reasoning_event["reasoning"] = done_reasoning
-                    await entry.queue.put(final_reasoning_event)
+                    # 2026-09-02 bug fix: 之前用 evt.to_dict() 复制出来的 final 事件
+                    # state 字段是 "reasoning",前端 appendReasoning 又把它当作增量追加,
+                    # 导致 reasoning_delta + reasoning 双重累积 (用户视觉上"重复两遍")。
+                    # 改成显式 state="reasoning_final" 区分:
+                    #   - reasoning_delta: 增量,前端 append
+                    #   - reasoning_final: 全量(对齐持久化字段),前端 replace 兜底
+                    # 不再依赖 evt.to_dict() 的隐式 state,避免类似 future 漂移。
+                    await entry.queue.put(
+                        {
+                            "state": "reasoning_final",
+                            "iteration": evt.iteration,
+                            "agent_id": evt.agent_id,
+                            "reasoning": done_reasoning,
+                        }
+                    )
                 else:
                     await entry.queue.put(evt.to_dict())
 

@@ -451,9 +451,17 @@ export function useChat() {
                 return;
               }
 
-              // 处理 reasoning 事件：累积 reasoning 内容（支持完整事件和增量事件）
-              if ((evt.state === 'reasoning' || evt.state === 'reasoning_delta') && evt.reasoning) {
+              // 处理 reasoning 事件：三种 state 不同处理 (2026-09-02 bug fix)
+              //   - reasoning_delta: 增量, appendReasoning 累积
+              //   - reasoning:       旧路径兼容 (非流式 LLM, 直接 yield 全量), append 累加
+              //   - reasoning_final: 后端每段末尾发 done_reasoning 全量, replace 替换
+              //                     (不再 append → 避免与 reasoning_delta 重复显示)
+              if (evt.state === 'reasoning_delta' && evt.reasoning) {
                 useChatStreamStore.getState().appendReasoning(assistantId, evt.reasoning);
+              } else if (evt.state === 'reasoning' && evt.reasoning) {
+                useChatStreamStore.getState().appendReasoning(assistantId, evt.reasoning);
+              } else if (evt.state === 'reasoning_final' && evt.reasoning) {
+                useChatStreamStore.getState().replaceReasoning(assistantId, evt.reasoning);
               }
 
               // P0: 实时工具调用 — acting 事件到达时立即追加到 store
@@ -510,10 +518,15 @@ export function useChat() {
               // - thinking/acting/observing 的 uiText 触发 replaceContent 覆盖
               //   (切换中间态占位, 避免 "🤔 思考中…🤔 思考中…" 重复前缀)
               // - reasoning 事件已在上面处理，不触发 content 更新
-              if (evt.state === 'reasoning' || evt.state === 'reasoning_delta') {
+              if (
+                evt.state === 'reasoning' ||
+                evt.state === 'reasoning_delta' ||
+                evt.state === 'reasoning_final'
+              ) {
                 // reasoning 事件不更新 content，仅更新 state。
                 // reasoning_delta 复用同一处理,避免依赖 producer 必须以
                 // 完整 reasoning 事件收尾的顺序不变式。
+                // reasoning_final (2026-09-02): 后端每段末尾全量对齐事件,同样不进 content。
                 useChatStreamStore.getState().setStreamingMeta(assistantId, { state: evt.state });
               } else if (typeof evt.content === 'string' && evt.content.length > 0) {
                 appendContent(evt.content);

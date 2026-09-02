@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 
 import pytest
@@ -90,6 +91,28 @@ async def test_non_streaming_response_over_limit_returns_safe_error(client, monk
 
 
 @pytest.mark.asyncio()
+async def test_non_streaming_decoded_response_does_not_forward_content_encoding(client):
+    """解码后的非流式响应不能继续声明上游的压缩编码。"""
+    body = b'{"object":"list","data":[]}'
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        mock.get("/v1/models").mock(
+            return_value=Response(
+                200,
+                content=gzip.compress(body),
+                headers={"content-type": "application/json", "content-encoding": "gzip"},
+            )
+        )
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": UPSTREAM},
+        )
+
+    assert resp.status_code == 200
+    assert resp.content == body
+    assert "content-encoding" not in resp.headers
+
+
+@pytest.mark.asyncio()
 async def test_streaming_response_stops_at_cumulative_limit(client, monkeypatch):
     """流式响应累计越过上限时截断并关闭,不继续转发。"""
     import backend.api.llm_proxy_routes as proxy_routes
@@ -104,6 +127,33 @@ async def test_streaming_response_stops_at_cumulative_limit(client, monkeypatch)
 
     assert resp.status_code == 200
     assert resp.content == b"123456"[:4]
+
+
+@pytest.mark.asyncio()
+async def test_streaming_decoded_response_does_not_forward_content_encoding(client):
+    """解码后的流不能继续声明上游的压缩编码。"""
+    chunks = b'data: {"choices": []}\n\n'
+    compressed_chunks = gzip.compress(chunks)
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        mock.post("/v1/chat/completions").mock(
+            return_value=Response(
+                200,
+                content=compressed_chunks,
+                headers={
+                    "content-type": "text/event-stream",
+                    "content-encoding": "gzip",
+                },
+            )
+        )
+        resp = await client.post(
+            f"{PROXY_BASE}/v1/chat/completions?stream=true",
+            headers={"X-LLM-Provider-Url": UPSTREAM},
+            content=b"{}",
+        )
+
+    assert resp.status_code == 200
+    assert resp.content == chunks
+    assert "content-encoding" not in resp.headers
 
 
 @pytest.mark.asyncio()
@@ -910,9 +960,16 @@ async def test_streaming_upstream_disconnect_after_first_chunk_closes_context(cl
         headers = {"content-type": "text/event-stream"}
         is_success = True
 
+        # 2026-09-02 修复: stream_iter 改用 aiter_bytes 让 httpx 透明解压,
+        # FakeResponse 需要补 aiter_bytes (与 aiter_raw 行为一致, 测试只关心
+        # "上游断开是否能截断流", 不区分 chunk 来源是 raw 还是解压后)。
         async def aiter_raw(self):
             yield b"data: first\\n\\n"
             raise RuntimeError("upstream disconnected after first chunk")
+
+        async def aiter_bytes(self):
+            async for chunk in self.aiter_raw():
+                yield chunk
 
     class FakeRequestContext:
         def __init__(self):
