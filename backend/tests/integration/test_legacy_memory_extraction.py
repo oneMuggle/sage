@@ -63,6 +63,13 @@ _FIXED_FACTS = [
 async def _run_chat_stream(client, session_id: str, message: str) -> str:
     """POST /chat/stream + attach 消费 + 等 producer 跑完，返回 attach 响应文本。"""
 
+    # This helper specifically verifies the legacy queue path.  A previous
+    # TestClient-based integration test can leave a lifecycle manager on the
+    # process-global app state; make the path selection deterministic before
+    # the background producer starts.  The module fixture restores the value.
+    app.state.lifecycle = None
+    app.state.hooks = None
+
     # mock SageAgent.run_loop 直接 DONE（不调真实 LLM）
     async def mock_run_loop(messages, max_iterations=5, **kwargs):
         yield AgentEvent(state=AgentState.THINKING, iteration=0)
