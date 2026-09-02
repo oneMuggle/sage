@@ -85,6 +85,20 @@ nsis:
   # VC++ Redistributable: bundled by build/installer.nsh customInstall (no user action).
 
 # macOS: skip for now (focus is Win7 first; can revisit later)
+# U-Brand (2026-09): macOS packaging currently disabled (target: null), so .icns
+# isn't consumed today. When mac packaging is enabled, add:
+#   icon: build/icon.icns
+# and ensure build/icon.icns is generated from the same master design as
+# build/icon.{ico,png} (committed in 27fcb09c).
+#
+# Toolchain gap: this repo has no local .icns generator. options when mac
+# packaging is enabled:
+#   1. macOS CI runner: run `iconutil --convert icns icons.iconset/` from a
+#      1024/512/256/128/64/32/16 PNG set.
+#   2. cross-platform npm deps: `png2icons` or `icon-gen` Node packages can
+#      emit .icns from a single 1024×1024 PNG source.
+# Until then, resources/icon.icns (June 23, pre-U-Brand) is stale relative to
+# build/icon.{ico,png} (Sept 2, post-U-Brand) but unused.
 mac:
   target: null
   identity: null

@@ -394,4 +394,8 @@ export const en: Record<TranslationKey, string> = {
   'session.export_failed': 'Export failed: {message}',
   'session.export_html': 'Export as HTML',
   'session.export_html_exporting': 'Exporting…',
+
+  // ─── Brand (BrandLogo component) ──────
+  // U-Brand: a11y alt text. Only rendered on <img>; sidebar.brand is the wordmark.
+  'brand.alt': 'Sage logo',
 };
