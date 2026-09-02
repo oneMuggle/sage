@@ -19,7 +19,7 @@ import { useSettings } from '../../features/manage-settings/useSettings';
 import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
 import { useStore } from '../../shared/lib/store';
-import { AttnBadge, LiveDot, type LiveState } from '../../shared/ui';
+import { AttnBadge, BrandLogo, LiveDot, type LiveState } from '../../shared/ui';
 import {
   ConversationsSection,
   CronJobSection,
@@ -193,12 +193,9 @@ export function Sidebar({ width = 240 }: SidebarProps) {
       style={{ width: `${width}px` }}
       className="h-screen bg-surface border-r border-border flex flex-col flex-shrink-0"
     >
-      {/* Logo 区域 */}
+      {/* U-Brand: 替换 197-202 的硬编码 S+Sage 块为共享 <BrandLogo withWordmark />，wordmark 用 sidebar.brand */}
       <div className="h-12 flex items-center px-4 border-b border-border">
-        <div className="w-6 h-6 bg-primary rounded-sm flex items-center justify-center text-text-inverse font-bold text-xs mr-2.5">
-          S
-        </div>
-        <span className="font-semibold text-sm text-text">Sage</span>
+        <BrandLogo size="sm" withWordmark />
       </div>
 
       {/* 导航列表 */}

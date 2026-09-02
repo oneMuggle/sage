@@ -98,3 +98,22 @@ describe('Sidebar — skills entry is not gated', () => {
     expect(raw == null ? [] : JSON.parse(raw)).not.toContain('skills');
   });
 });
+
+/**
+ * U-Brand: Sidebar 顶部 logo + wordmark 必须从共享 <BrandLogo> 渲染。
+ * 防止后续 commit 把硬编码 S 方块重新引回 Sidebar。
+ */
+describe('Sidebar — brand header (U-Brand)', () => {
+  it('renders brand logo img with proper alt', () => {
+    renderSidebarAt('/chat');
+    // img 通过 a11y 名 "Sage 标志"（zh）或 "Sage logo"（en）查找
+    const img = screen.getByRole('img', { name: /Sage/i });
+    expect(img).toHaveAttribute('src', '/sage.svg');
+  });
+
+  it('renders Sage wordmark from sidebar.brand translation', () => {
+    renderSidebarAt('/chat');
+    // wordmark 与 nav 文字都包含 "Sage"；至少出现一次即可
+    expect(screen.getAllByText('Sage').length).toBeGreaterThanOrEqual(1);
+  });
+});

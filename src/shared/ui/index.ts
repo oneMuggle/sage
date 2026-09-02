@@ -13,3 +13,7 @@ export type { LiveDotProps, LiveState } from './LiveDot';
 
 export { AttnBadge, ATTN_BADGE_MAX_DISPLAY } from './AttnBadge';
 export type { AttnBadgeProps } from './AttnBadge';
+
+// U-Brand: 共享品牌标识，favicon 之外所有 UI 位点都通过本组件复用
+export { BrandLogo } from './BrandLogo';
+export type { BrandLogoProps, BrandLogoSize } from './BrandLogo';

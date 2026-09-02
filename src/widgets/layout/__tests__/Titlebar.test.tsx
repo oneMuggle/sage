@@ -106,4 +106,42 @@ describe('Titlebar', () => {
 
     expect(container.firstChild).toHaveClass('h-10');
   });
+
+  // U-Brand: Windows/Linux 渲染 brand logo；macOS/web 不渲染（空间留给 traffic lights / 简洁）
+  it('renders brand logo on Windows', () => {
+    mockDetectPlatform.mockReturnValue('windows');
+    mockIsElectronDesktop.mockReturnValue(true);
+
+    render(<Titlebar />);
+
+    // useI18n mock 返回 identity：t('brand.alt') === 'brand.alt'
+    expect(screen.getByRole('img', { name: 'brand.alt' })).toBeInTheDocument();
+  });
+
+  it('renders brand logo on Linux', () => {
+    mockDetectPlatform.mockReturnValue('linux');
+    mockIsElectronDesktop.mockReturnValue(true);
+
+    render(<Titlebar />);
+
+    expect(screen.getByRole('img', { name: 'brand.alt' })).toBeInTheDocument();
+  });
+
+  it('does NOT render brand logo on macOS (traffic lights take precedence)', () => {
+    mockDetectPlatform.mockReturnValue('macos');
+    mockIsElectronDesktop.mockReturnValue(true);
+
+    render(<Titlebar />);
+
+    expect(screen.queryByRole('img', { name: 'brand.alt' })).not.toBeInTheDocument();
+  });
+
+  it('does NOT render brand logo on web', () => {
+    mockDetectPlatform.mockReturnValue('web');
+    mockIsElectronDesktop.mockReturnValue(false);
+
+    render(<Titlebar />);
+
+    expect(screen.queryByRole('img', { name: 'brand.alt' })).not.toBeInTheDocument();
+  });
 });
