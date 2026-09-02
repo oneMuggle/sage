@@ -311,7 +311,7 @@ window.electronAPI = {
 - [ ] `npm run typecheck` 通过(前端 TS)
 - [ ] `npm run lint` 通过
 - [ ] `npm run test:run` 通过,新增测试覆盖率 ≥80%
-- [ ] `electron:dev` 模式下,devtools 看到 console + `%APPDATA%/sage/logs/sage-*.ndjson` 同步有内容
+- [ ] `electron:dev` 模式下（含 `--no-sandbox`，2026-09 后），devtools 看到 console + `%APPDATA%/sage/logs/sage-*.ndjson` 同步有内容
 - [ ] `electron:build` 产物能跑(在 macOS / Linux dev 验证)
 - [ ] Win7 启动失败 → 看到对话框 → 点 「打开日志目录」 → 资源管理器打开
 - [ ] cherry-pick 到 release/win7 后,ci.yml py38 job + electron build job 全绿

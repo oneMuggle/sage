@@ -70,6 +70,25 @@ const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
+
+// Local capability auth token — backend `LocalAuthMiddleware` requires every
+// non-public request to carry `Authorization: Bearer ${SAGE_LOCAL_AUTH_TOKEN}`.
+// Electron is the only thing that spawns the backend in normal mode, so we
+// mint a random bearer here and inject it into the Python subprocess env.
+// Mismatch → backend rejects everything with 401 "本地授权凭据无效或缺失".
+// Win7 minimal port of main's d280b851 token lifecycle — we don't pull in
+// main's 171-line main.ts rewrite, only the pieces needed to fix 401.
+//
+// SKIP_BACKEND mode: caller (developer / CI) sets SAGE_LOCAL_AUTH_TOKEN in
+// the Electron env; `mintBackendAuthToken()` honours it so both sides agree.
+let backendAuthToken: string | null = null;
+function mintBackendAuthToken(): string {
+  const explicit = process.env.SAGE_LOCAL_AUTH_TOKEN;
+  if (explicit && explicit.length > 0) return explicit;
+  // randomUUID hex (no dashes) — alphabet-compatible with backend's
+  // secrets.token_urlsafe(32) default and short enough for env var.
+  return randomUUID().replace(/-/g, '');
+}
 const buildManifest = loadBuildManifest(
   process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
   // CRITICAL: guard app.getVersion() for vitest environments where the
@@ -280,6 +299,9 @@ function spawnBackend(): ChildProcess {
     });
   }
 
+  // Mint the capability token before spawning the backend so the Python
+  // subprocess picks up the matching SAGE_LOCAL_AUTH_TOKEN in its env.
+  backendAuthToken = mintBackendAuthToken();
   const proc = spawn(plan.command, plan.args, {
     cwd: plan.cwd,
     env: {
@@ -294,6 +316,7 @@ function spawnBackend(): ChildProcess {
       SAGE_PYTHON_VERSION: buildManifest.pythonVersion,
       SAGE_BACKEND_GENERATION: String(generation),
       SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
+      SAGE_LOCAL_AUTH_TOKEN: backendAuthToken,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -752,7 +775,12 @@ function registerIpcHandlers(): void {
         return startWikiIngestStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       try {
-        return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
+        return await invokeBackend(
+          payload.cmd,
+          payload.args ?? {},
+          BACKEND_URL,
+          backendAuthToken ?? undefined,
+        );
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
@@ -790,13 +818,18 @@ function registerIpcHandlers(): void {
         eventSubscriptions.set(event, abort);
         // I2: 直接用 streamId attach 到后端已有流 — 不再需要 pendingChatArgs
         // 缓存 args(后端持有,前端只关心 streamId)
-        relayChatStream(senderWebContents, event, streamId, BACKEND_URL, abort.signal).catch(
-          (e) => {
-            if (e instanceof Error && e.name !== 'AbortError') {
-              logger.error('ipc: relay error', { event, err: e.message });
-            }
-          },
-        );
+        relayChatStream(
+          senderWebContents,
+          event,
+          streamId,
+          BACKEND_URL,
+          abort.signal,
+          backendAuthToken ?? undefined,
+        ).catch((e) => {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            logger.error('ipc: relay error', { event, err: e.message });
+          }
+        });
         return { ok: true, event };
       }
 
@@ -958,9 +991,17 @@ function registerIpcHandlers(): void {
   //   skills:pick-files → native multi-select dialog
   //   skills:rescan     → POST /api/v1/skills/rescan
   //   skills:import     → POST /api/v1/skills/import (multipart)
-  registerSkillsIpc((channel, handler) => {
-    ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
-  });
+  // Pass a getter (not a string) so skillsIpc reads the live token at
+  // request time — mintBackendAuthToken() runs inside spawnBackend(), which
+  // may execute AFTER this registerSkillsIpc call on cold start.
+  // `?? undefined` because SkillsAuthToken expects `string | undefined`,
+  // not `string | null` (skillIpc narrow in `resolveAuthToken`).
+  registerSkillsIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
+    },
+    () => backendAuthToken ?? undefined,
+  );
 
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
@@ -1011,7 +1052,10 @@ function startWikiChatStream(
     try {
       const res = await fetch(`${backendUrl}/api/v1/wiki/chat/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
+        },
         body: JSON.stringify(args),
         signal: controller.signal,
       });
@@ -1073,7 +1117,10 @@ function startWikiIngestStream(
     try {
       const res = await fetch(`${backendUrl}/api/v1/wiki/ingest/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
+        },
         body: JSON.stringify(args),
         signal: controller.signal,
       });
@@ -1324,12 +1371,100 @@ app.whenReady().then(async () => {
       logger.warn('main: doctor check threw', { error: String(err) });
     }
   }
+  /**
+   * 启动期鉴权探针（仅 SAGE_SKIP_BACKEND=1 模式使用）。
+   *
+   * 背景：当 SKIP_BACKEND=1 时，后端由外部进程（开发者手启、CI fixture 等）
+   * 拥有，本 Electron 进程的 backendAuthToken 必须是它启动时也看到过的同一个
+   * SAGE_LOCAL_AUTH_TOKEN。如果开发者手启后端时漏传环境变量，后端会用
+   * `secrets.token_urlsafe(32)` 自己生成一个 → /health 仍然 200（白名单），
+   * 但受保护端点全部 401，三个页面（记忆面板/编排看板/技能）各自报错，没有
+   * 统一诊断 banner，用户只能挨个看 401 才拼出"凭据问题"。
+   *
+   * 修复：在 SKIP_BACKEND 分支结尾 fire-and-forget 启动一次轻量探针：
+   *   1. 等 /health ready（最多 6s, 后端可能刚冷启动）
+   *   2. 立刻打一个受保护端点（page_size=1 让响应体最小）
+   *   3. 仅 401 → 判定为 token 失配，发 backend:auth-failed 给前端 banner
+   *   4. 其他状态（5xx / ECONNREFUSED / 超时）→ 不是 token 问题，让正常
+   *      disconnected 路径处理，不污染 banner 语义
+   *
+   * 用户最终恢复手段是「重启 Sage 桌面端」（token 是 process-local 的，新
+   * 进程从同一 env 拿 → 匹配）。
+   */
+  async function probeBackendAuthForSkipBackend(): Promise<void> {
+    if (!backendAuthToken) {
+      // 已在 SKIP_BACKEND 分支 logger.warn；不再重复
+      return;
+    }
+    const HEALTH_DEADLINE_MS = 6000;
+    const HEALTH_RETRY_MS = 200;
+    const deadline = Date.now() + HEALTH_DEADLINE_MS;
+    let healthReady = false;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`${BACKEND_URL}/health`);
+        if (r.ok) {
+          healthReady = true;
+          break;
+        }
+      } catch {
+        // 后端可能还没起 — 短暂退避后重试
+      }
+      await new Promise((res) => setTimeout(res, HEALTH_RETRY_MS));
+    }
+    if (!healthReady) {
+      logger.warn('main: auth probe skipped — backend /health never ready in 6s');
+      return;
+    }
+
+    // 选 /api/v1/memory/list — 用户报告现象的源头之一，且 page_size=1 让响应体最小。
+    // 路径提取为常量，未来如路由改名只改这一处。
+    const PROBE_PATH = '/api/v1/memory/list?page=1&page_size=1';
+    try {
+      const probe = await fetch(`${BACKEND_URL}${PROBE_PATH}`, {
+        headers: { Authorization: `Bearer ${backendAuthToken}` },
+      });
+      if (probe.status === 401) {
+        logger.error(
+          'main: backend rejected local auth token (HTTP 401) at ' +
+            PROBE_PATH +
+            ' — Electron 与后端 SAGE_LOCAL_AUTH_TOKEN 失配。请重启 Sage 桌面端恢复。',
+        );
+        mainWindow?.webContents.send('backend:auth-failed', { status: 401 });
+        return;
+      }
+      if (!probe.ok) {
+        // 其他非 2xx 不是 token 问题（5xx/404），让 disconnected 路径处理
+        logger.warn(
+          `main: auth probe returned HTTP ${probe.status} (not 401 — not a token mismatch)`,
+        );
+      }
+    } catch (err) {
+      // 网络层断 — 不是 token 问题
+      logger.warn('main: auth probe network error (not a token mismatch)', err);
+    }
+  }
+
   registerIpcHandlers();
   // Phase 4 lightweight smoke test path: skip backend spawn + health wait
   // (CI doesn't have the sage-backend conda env; main renderer still loads
   // and exposes window.electronAPI for IPC contract verification).
   if (process.env.SAGE_SKIP_BACKEND === '1') {
     logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
+    // In SKIP_BACKEND mode the Python backend is launched externally with
+    // its own SAGE_LOCAL_AUTH_TOKEN; Electron must read the SAME value from
+    // its env to send matching Authorization headers. spawnBackend() (which
+    // mints+injects) is bypassed in this mode, so we resolve the token here
+    // — and DO NOT mint a random fallback, because a minted value would
+    // disagree with the externally-launched backend and every IPC call would
+    // 401. If the caller forgot to export the env var, warn (probe will fire
+    // 401 and the renderer shows the diagnostic banner) but do not crash.
+    backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? null;
+    if (!backendAuthToken) {
+      logger.warn(
+        'main: SAGE_SKIP_BACKEND=1 without SAGE_LOCAL_AUTH_TOKEN — every IPC call will 401 until you export the same token the backend uses',
+      );
+    }
     // The IPC readiness gate (BackendNotReadyError) is meaningless when the
     // user (or CI) has explicitly opted out of the backend — without this,
     // smoke.spec.ts's "unknown IPC cmd" probe gets blocked at the gate before
@@ -1337,6 +1472,12 @@ app.whenReady().then(async () => {
     backendLifecycle = 'ready';
     createMainWindow();
     buildApplicationMenu();
+    // Probe a protected endpoint now that the renderer can receive the event;
+    // a 401 means the external backend holds a different SAGE_LOCAL_AUTH_TOKEN
+    // than this Electron process (e.g. dev hand-launched backend without the
+    // env var). backend:auth-failed triggers a unified diagnostic banner
+    // instead of letting each page report its own 401.
+    void probeBackendAuthForSkipBackend();
     return;
   }
   backendProc = spawnBackend();

@@ -33,19 +33,46 @@ const Skills: React.FC = () => {
     [setSearchParams],
   );
 
+  /**
+   * 把后端抛出的错误翻译成用户可读的字符串。
+   *
+   * 背景：main 进程把后端响应打包为 `new Error("Backend GET <url> → <code>: <body>")`，
+   * desktopInvoke 已用 STATUS_RE 把 `status_code` 挂在 Error 上，但 ApiException
+   * 包装会丢失这个属性。Skills 页面需要的只是「带状态码的可读消息」——
+   *
+   * - 401（LocalAuthMiddleware 拒绝）→ 不暴露后端内部 detail ("本地授权凭据..."),
+   *   改给用户一个可操作的提示 + 状态码（与记忆面板/编排看板的 401 文案对齐体验）。
+   * - 其他 → 保留原始 message（含后端 detail），让用户和后续日志可追源。
+   *
+   * 不在此处把 detail 做 JSON.parse——后端偶尔会把 HTML / 字符串 detail 写进 body，
+   * 保持 message 字符串原样最稳。
+   */
+  const describeLoadError = useCallback((err: unknown): string => {
+    const raw = err instanceof Error ? err.message : String(err);
+    const statusMatch = raw.match(/→ (\d{3}):/);
+    const status = statusMatch?.[1];
+    if (status === '401') {
+      return '加载技能列表失败（HTTP 401：后端授权凭据失效）。请重启 Sage 桌面端恢复';
+    }
+    if (status === '403') {
+      return '加载技能列表失败（HTTP 403：后端拒绝访问）。请重启 Sage 桌面端恢复';
+    }
+    return `加载技能列表失败：${raw}`;
+  }, []);
+
   const loadSkills = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await skillsApi.list();
       setSkills(data);
-    } catch {
-      setError('加载技能列表失败');
+    } catch (error) {
+      setError(describeLoadError(error));
       setSkills([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [describeLoadError]);
 
   useEffect(() => {
     loadSkills();
@@ -255,7 +282,11 @@ const Skills: React.FC = () => {
 
         <TabsContent value="skills" className="flex-1 overflow-y-auto p-5">
           {error && (
-            <div className="mb-4 p-3 rounded-radius-sm bg-error/10 text-error text-sm flex items-center justify-between">
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="mb-4 p-3 rounded-radius-sm bg-error/10 text-error text-sm flex items-center justify-between"
+            >
               <span>{error}</span>
               <div className="flex items-center gap-2">
                 <RetryButton onRetry={loadSkills} label="重试" className="!px-2 !py-1 !text-xs" />

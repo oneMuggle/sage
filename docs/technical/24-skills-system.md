@@ -132,7 +132,7 @@ Electron 的主进程命令表将 renderer 的 `invoke()` 请求转发到后端 
 
 ## 6. 当前验收
 
-- `npm run electron:dev` 是桌面端开发入口；本项目不再使用 `npm run tauri dev`。
+- `npm run electron:dev` 是桌面端开发入口（已加 `--no-sandbox`，见 package.json）；沙箱环境推荐直接用 `./node_modules/.bin/electron --no-sandbox .`，详见 `.claude/skills/run-desktop/SKILL.md`。本项目不再使用 `npm run tauri dev`。
 - 技能列表、管理路由和 Electron IPC 由各自的集成/组件测试覆盖。
 - 具体技能执行是否成功取决于运行上下文是否提供所需工具；列表可见不等于每个技能都能独立执行。
 - 真实 Chat 场景中的工具注入属于 ChatService 集成范围，不由技能列表页面单独保证。
