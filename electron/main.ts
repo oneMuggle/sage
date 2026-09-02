@@ -70,6 +70,25 @@ const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
+
+// Local capability auth token — backend `LocalAuthMiddleware` requires every
+// non-public request to carry `Authorization: Bearer ${SAGE_LOCAL_AUTH_TOKEN}`.
+// Electron is the only thing that spawns the backend in normal mode, so we
+// mint a random bearer here and inject it into the Python subprocess env.
+// Mismatch → backend rejects everything with 401 "本地授权凭据无效或缺失".
+// Win7 minimal port of main's d280b851 token lifecycle — we don't pull in
+// main's 171-line main.ts rewrite, only the pieces needed to fix 401.
+//
+// SKIP_BACKEND mode: caller (developer / CI) sets SAGE_LOCAL_AUTH_TOKEN in
+// the Electron env; `mintBackendAuthToken()` honours it so both sides agree.
+let backendAuthToken: string | null = null;
+function mintBackendAuthToken(): string {
+  const explicit = process.env.SAGE_LOCAL_AUTH_TOKEN;
+  if (explicit && explicit.length > 0) return explicit;
+  // randomUUID hex (no dashes) — alphabet-compatible with backend's
+  // secrets.token_urlsafe(32) default and short enough for env var.
+  return randomUUID().replace(/-/g, '');
+}
 const buildManifest = loadBuildManifest(
   process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
   // CRITICAL: guard app.getVersion() for vitest environments where the
@@ -280,6 +299,9 @@ function spawnBackend(): ChildProcess {
     });
   }
 
+  // Mint the capability token before spawning the backend so the Python
+  // subprocess picks up the matching SAGE_LOCAL_AUTH_TOKEN in its env.
+  backendAuthToken = mintBackendAuthToken();
   const proc = spawn(plan.command, plan.args, {
     cwd: plan.cwd,
     env: {
@@ -294,6 +316,7 @@ function spawnBackend(): ChildProcess {
       SAGE_PYTHON_VERSION: buildManifest.pythonVersion,
       SAGE_BACKEND_GENERATION: String(generation),
       SAGE_BACKEND_OWNERSHIP_TOKEN: ownershipToken,
+      SAGE_LOCAL_AUTH_TOKEN: backendAuthToken,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -752,7 +775,12 @@ function registerIpcHandlers(): void {
         return startWikiIngestStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       try {
-        return await invokeBackend(payload.cmd, payload.args ?? {}, BACKEND_URL);
+        return await invokeBackend(
+          payload.cmd,
+          payload.args ?? {},
+          BACKEND_URL,
+          backendAuthToken ?? undefined,
+        );
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         logger.error('ipc: invoke failed', { cmd: payload.cmd, err: msg });
@@ -790,7 +818,14 @@ function registerIpcHandlers(): void {
         eventSubscriptions.set(event, abort);
         // I2: 直接用 streamId attach 到后端已有流 — 不再需要 pendingChatArgs
         // 缓存 args(后端持有,前端只关心 streamId)
-        relayChatStream(senderWebContents, event, streamId, BACKEND_URL, abort.signal).catch(
+        relayChatStream(
+          senderWebContents,
+          event,
+          streamId,
+          BACKEND_URL,
+          abort.signal,
+          backendAuthToken ?? undefined,
+        ).catch(
           (e) => {
             if (e instanceof Error && e.name !== 'AbortError') {
               logger.error('ipc: relay error', { event, err: e.message });
@@ -958,9 +993,14 @@ function registerIpcHandlers(): void {
   //   skills:pick-files → native multi-select dialog
   //   skills:rescan     → POST /api/v1/skills/rescan
   //   skills:import     → POST /api/v1/skills/import (multipart)
+  // Pass a getter (not a string) so skillsIpc reads the live token at
+  // request time — mintBackendAuthToken() runs inside spawnBackend(), which
+  // may execute AFTER this registerSkillsIpc call on cold start.
+  // `?? undefined` because SkillsAuthToken expects `string | undefined`,
+  // not `string | null` (skillIpc narrow in `resolveAuthToken`).
   registerSkillsIpc((channel, handler) => {
     ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
-  });
+  }, () => backendAuthToken ?? undefined);
 
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
@@ -1011,7 +1051,12 @@ function startWikiChatStream(
     try {
       const res = await fetch(`${backendUrl}/api/v1/wiki/chat/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(backendAuthToken
+            ? { Authorization: `Bearer ${backendAuthToken}` }
+            : {}),
+        },
         body: JSON.stringify(args),
         signal: controller.signal,
       });
@@ -1073,7 +1118,12 @@ function startWikiIngestStream(
     try {
       const res = await fetch(`${backendUrl}/api/v1/wiki/ingest/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(backendAuthToken
+            ? { Authorization: `Bearer ${backendAuthToken}` }
+            : {}),
+        },
         body: JSON.stringify(args),
         signal: controller.signal,
       });
