@@ -22,7 +22,7 @@
     "format:check": "prettier --check .",
     "build:electron": "tsc -p tsconfig.electron.json && node -e \"require('fs').writeFileSync('dist-electron/package.json', JSON.stringify({type:'commonjs'},null,2))\"",
     "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
-    "electron:dev": "npm run build:electron && electron .",
+    "electron:dev": "npm run build:electron && electron --no-sandbox .",
     "electron:build": "npm run build && npm run build:electron",
     "electron:dist": "npm run electron:build && electron-builder --publish never",
     "postinstall": "bash scripts/fix-chrome-sandbox.sh"

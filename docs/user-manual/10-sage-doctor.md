@@ -170,6 +170,8 @@ fi
 - 排查 doctor 自身 bug
 
 ```bash
+# canonical launch path — see .claude/skills/run-desktop/SKILL.md
+# electron:dev 现在带 --no-sandbox，sandbox 环境两种方式都可以
 SAGE_DOCTOR_ON_START=false npm run electron:dev
 ```
 
