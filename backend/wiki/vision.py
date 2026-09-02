@@ -15,6 +15,8 @@ from typing import Dict, Optional
 
 import httpx
 
+from .files import secure_atomic_write_file, secure_read_file
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,22 +58,25 @@ def _get_cache_path(project_root: Path) -> Path:
 def _load_cache(project_root: Path) -> Dict[str, str]:
     """加载视觉描述缓存。"""
     cache_path = _get_cache_path(project_root)
-    if not cache_path.exists():
-        return {}
     try:
-        return json.loads(cache_path.read_text(encoding="utf-8"))
-    except Exception as e:
-        logger.warning(f"加载视觉描述缓存失败: {e}")
+        data = json.loads(secure_read_file(project_root, cache_path).decode("utf-8"))
+        if not isinstance(data, dict) or not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in data.items()
+        ):
+            return {}
+        return data
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError):
+        logger.warning("加载视觉描述缓存失败: error_type=cache_read_failure")
         return {}
 
 
 def _save_cache(project_root: Path, cache: Dict[str, str]) -> None:
     """保存视觉描述缓存。"""
     cache_path = _get_cache_path(project_root)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(
+    secure_atomic_write_file(
+        project_root,
+        cache_path,
         json.dumps(cache, ensure_ascii=False, indent=2),
-        encoding="utf-8",
     )
 
 

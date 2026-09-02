@@ -3,6 +3,8 @@
 实现 4 信号图谱构建：DirectLink、SourceOverlap、TypeAffinity，以及 2-hop 相关性传播。
 """
 
+from __future__ import annotations
+
 import json
 import re
 from collections import defaultdict
@@ -10,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import frontmatter
+from .files import iter_wiki_markdown, secure_atomic_write_file, secure_read_text
 from .models import GraphData, GraphEdge, GraphNode, GraphSignal
 
 # 常量
@@ -37,7 +40,7 @@ def build_graph(project_root: Path) -> GraphData:
     nodes = []
     node_map = {}  # id → GraphNode
 
-    for md_file in wiki_dir.rglob("*.md"):
+    for md_file in iter_wiki_markdown(project_root):
         # 跳过隐藏目录
         if any(part.startswith(".") for part in md_file.parts):
             continue
@@ -47,7 +50,10 @@ def build_graph(project_root: Path) -> GraphData:
             continue
 
         # 读取内容
-        content = md_file.read_text(encoding="utf-8")
+        try:
+            content = secure_read_text(project_root, md_file)
+        except OSError:
+            continue
         parsed = frontmatter.parse(content)
 
         # 提取标题
@@ -232,25 +238,25 @@ def get_graph_cached(
         return build_graph(project_root)
 
     latest_mtime = max(
-        (p.stat().st_mtime for p in wiki_dir.rglob("*.md") if p.is_file()),
+        (p.stat().st_mtime for p in iter_wiki_markdown(project_root)),
         default=0.0,
     )
 
     graph: Optional[GraphData] = None
-    if cache_path.exists():
-        try:
-            cache = json.loads(cache_path.read_text(encoding="utf-8"))
-            # Match on mtime only — query/limit are filtered at read time
-            # (Important #1 fix).
-            if cache.get("latest_mtime") == latest_mtime:
-                graph = _deserialize_graph_data(cache["data"])
-        except (json.JSONDecodeError, KeyError, OSError):
-            pass  # corrupt cache, rebuild
+    try:
+        cache = json.loads(secure_read_text(project_root, cache_path))
+        # Match on mtime only — query/limit are filtered at read time
+        # (Important #1 fix).
+        if cache.get("latest_mtime") == latest_mtime:
+            graph = _deserialize_graph_data(cache["data"])
+    except (json.JSONDecodeError, KeyError, OSError, UnicodeError, TypeError, ValueError):
+        pass  # corrupt or unavailable cache, rebuild
 
     if graph is None:
         graph = build_graph(project_root)
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(
+        secure_atomic_write_file(
+            project_root,
+            cache_path,
             json.dumps(
                 {
                     "latest_mtime": latest_mtime,
@@ -258,7 +264,6 @@ def get_graph_cached(
                 },
                 ensure_ascii=False,
             ),
-            encoding="utf-8",
         )
 
     # Apply query/limit filtering at call time so the cached full graph

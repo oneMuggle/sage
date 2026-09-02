@@ -6,6 +6,17 @@ import { listArtifacts, readArtifactContent, revealArtifact } from '../artifactA
 describe('artifactApi', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  (window as unknown as { electronAPI: unknown }).electronAPI = {
+    backendRequest: async (request: { path: string; method?: string; headers?: HeadersInit; body?: unknown }) => {
+      const response = await global.fetch(request.path, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body === undefined ? undefined : JSON.stringify(request.body),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText ?? ''}`);
+      return response.json();
+    },
+  };
   });
 
   it('listArtifacts returns artifacts array', async () => {
@@ -17,7 +28,7 @@ describe('artifactApi', () => {
     const result = await listArtifacts('sess_001');
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('a1');
-    expect(global.fetch).toHaveBeenCalledWith('/api/v1/sessions/sess_001/artifacts');
+    expect(global.fetch).toHaveBeenCalledWith('/api/v1/sessions/sess_001/artifacts', expect.anything());
   });
 
   it('listArtifacts returns [] when artifacts missing', async () => {
@@ -43,7 +54,7 @@ describe('artifactApi', () => {
     });
     const result = await readArtifactContent('sess_001', 'a1');
     expect(result.content).toBe('# Hi');
-    expect(global.fetch).toHaveBeenCalledWith('/api/v1/sessions/sess_001/artifacts/a1/content');
+    expect(global.fetch).toHaveBeenCalledWith('/api/v1/sessions/sess_001/artifacts/a1/content', expect.anything());
   });
 
   it('readArtifactContent rejects on non-ok response', async () => {

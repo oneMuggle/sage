@@ -111,6 +111,12 @@ const DEFAULT_EVENT_SPLIT: Record<NdjsonEvent, string> = {
   progress: '-progress',
 };
 
+/** Stable renderer-facing error envelope. Never include upstream payloads. */
+export const WIKI_STREAM_ERROR = {
+  code: 'wiki_stream_failed',
+  message: 'Wiki 流处理失败',
+} as const;
+
 export type NdjsonEventTransform = (rawEvent: unknown) => { suffix: string; data: unknown } | null;
 
 /**
@@ -140,16 +146,12 @@ export async function relayNdjsonToEvent(
     body,
     (rawEvent: unknown) => {
       if (typeof rawEvent !== 'object' || rawEvent === null) {
-        webContents.send(`sage:event:${eventPrefix}-error`, {
-          error: 'invalid NDJSON line',
-        });
+        webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
         return;
       }
       const ev = (rawEvent as { event?: unknown }).event;
       if (typeof ev !== 'string') {
-        webContents.send(`sage:event:${eventPrefix}-error`, {
-          error: 'invalid NDJSON line',
-        });
+        webContents.send(`sage:event:${eventPrefix}-error`, WIKI_STREAM_ERROR);
         return;
       }
       let result: { suffix: string; data: unknown } | null;
@@ -158,7 +160,10 @@ export async function relayNdjsonToEvent(
       } else {
         const suffix = DEFAULT_EVENT_SPLIT[ev as NdjsonEvent];
         if (!suffix) return; // unknown event, skip
-        result = { suffix, data: (rawEvent as { data?: unknown }).data };
+        result = {
+          suffix,
+          data: ev === 'error' ? WIKI_STREAM_ERROR : (rawEvent as { data?: unknown }).data,
+        };
       }
       if (!result) return;
       webContents.send(`sage:event:${eventPrefix}${result.suffix}`, result.data);
@@ -180,6 +185,7 @@ export async function relayChatStream(
   streamId: string,
   backendUrl: string,
   signal: AbortSignal,
+  authToken?: string,
 ): Promise<void> {
   let res: import('node-fetch').Response;
   try {
@@ -188,7 +194,10 @@ export async function relayChatStream(
     // 这里 relay 直接拼 URL 漏了 — 本 PR 修。
     res = await fetch(`${backendUrl}/api/v1/chat/stream/${encodeURIComponent(streamId)}`, {
       method: 'GET',
-      headers: { Accept: 'application/x-ndjson' },
+      headers: {
+        Accept: 'application/x-ndjson',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
       signal,
     });
   } catch (e) {

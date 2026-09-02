@@ -14,7 +14,7 @@
 4. [记忆系统](./04-memory.md)
 5. [Agent 引擎](./05-agent.md)
 6. [工具系统](./06-tools.md)
-7. [技能系统](./07-skills.md)
+7. [技能系统](./technical/24-skills-system.md)
 8. [进化系统](./08-evolution.md)
 9. [前端设计](./09-frontend.md)
 10. [API 接口](./10-api.md)

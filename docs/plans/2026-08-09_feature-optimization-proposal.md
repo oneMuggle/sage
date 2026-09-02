@@ -199,7 +199,7 @@
 - [ ] PR-7.2 Skill enabled 状态 SQL 持久化（当前进程内态重启归零）
 - [ ] 技能**编辑**端点（当前只能删了重建）；用户自定义 skill（PR-7.3）
 - [ ] gating 修 `requires.config` v1 不支持（声明 config 依赖的技能永远过不了门控，死功能）
-- [ ] rescan 返回的 skipped 恒为 []（loader 不返 detail，前端 warn toast 永不触发）
+- [x] rescan 返回的 skipped 恒为 []（loader 不返 detail，前端 warn toast 永不触发）
 - [ ] lifecycle active/stale 30 天阈值硬编码 → settings 可配
 - [ ] 定时任务补执行历史/运行结果端点（当前失败只记日志，用户零可见性）——与 §3.3 投递互补
 

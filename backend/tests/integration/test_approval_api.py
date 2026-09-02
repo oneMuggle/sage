@@ -24,7 +24,7 @@ def client():
     """Create a TestClient with the legacy router mounted."""
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    return TestClient(app, headers={"Authorization": "Bearer test-local-auth-token"})
 
 
 def _make_draft(
@@ -142,12 +142,81 @@ class TestApproveSkillDraft:
     """POST /skill-drafts/{id}/approve endpoint tests."""
 
     def test_approve_writes_to_disk_and_updates_status(self, client):
-        """Approving a draft writes SKILL.md and marks it approved."""
-        draft = _make_draft("draft-42", "cool-skill", content="# Cool\n\nContent here.")
+        """Approving a new draft writes SKILL.md and marks it approved."""
+        content = "---\nname: cool-skill\ndescription: Use this skill for testing.\n---\n# Cool\n\nContent here."
+        draft = _make_draft("draft-42", "cool-skill", content=content)
 
         mock_store = MagicMock()
         mock_store.get.return_value = draft
 
+        mock_loader = MagicMock()
+        mock_port = MagicMock()
+        mock_port.rescan_skill_mds.return_value = {
+            "loaded": [{"name": "cool-skill"}], "skipped": [], "total_loaded": 1
+        }
+
+        with patch(
+            "backend.api.legacy_routes.get_skill_draft_store",
+            return_value=mock_store,
+        ), patch(
+            "backend.api.legacy_routes.get_skill_loader",
+            return_value=mock_loader,
+        ), patch(
+            "backend.api.legacy_routes._get_skill_adapter",
+            return_value=mock_port,
+        ):
+            response = client.post("/skill-drafts/draft-42/approve")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "approved"
+        assert data["skill_name"] == "cool-skill"
+        assert data["reloaded"] is True
+        mock_port.rescan_skill_mds.assert_called_once_with()
+
+        # Approval must explicitly request the non-overwriting behavior.
+        mock_loader.write.assert_called_once_with("cool-skill", content, overwrite=False)
+
+        mock_store.update_status.assert_called_once_with("draft-42", "approved")
+
+    def test_approve_existing_skill_returns_409_without_overwriting(self, client):
+        """An existing skill blocks approval and leaves the draft pending."""
+        content = "---\nname: cool-skill\ndescription: Use this skill for testing.\n---\n# New"
+        draft = _make_draft("draft-existing", "cool-skill", content=content)
+
+        mock_store = MagicMock()
+        mock_store.get.return_value = draft
+        mock_loader = MagicMock()
+        mock_loader.write.side_effect = FileExistsError("/skills/cool-skill/SKILL.md")
+        mock_port = MagicMock()
+
+        with patch(
+            "backend.api.legacy_routes.get_skill_draft_store",
+            return_value=mock_store,
+        ), patch(
+            "backend.api.legacy_routes.get_skill_loader",
+            return_value=mock_loader,
+        ), patch(
+            "backend.api.legacy_routes._get_skill_adapter",
+            return_value=mock_port,
+        ):
+            response = client.post("/skill-drafts/draft-existing/approve")
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == {
+            "code": "skill_already_exists",
+            "message": "Skill already exists",
+        }
+        mock_loader.write.assert_called_once_with("cool-skill", content, overwrite=False)
+        mock_store.update_status.assert_not_called()
+        mock_port.rescan_skill_mds.assert_not_called()
+
+    def test_approve_invalid_content_returns_400_without_side_effects(self, client):
+        """Malformed SKILL.md content is rejected before writing or approval."""
+        draft = _make_draft("draft-invalid-content", "bad-skill", content="# Missing frontmatter")
+
+        mock_store = MagicMock()
+        mock_store.get.return_value = draft
         mock_loader = MagicMock()
 
         with patch(
@@ -157,18 +226,33 @@ class TestApproveSkillDraft:
             "backend.api.legacy_routes.get_skill_loader",
             return_value=mock_loader,
         ):
-            response = client.post("/skill-drafts/draft-42/approve")
+            response = client.post("/skill-drafts/draft-invalid-content/approve")
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "approved"
-        assert data["skill_name"] == "cool-skill"
+        assert response.status_code == 400
+        mock_loader.write.assert_not_called()
+        mock_store.update_status.assert_not_called()
 
-        # Verify write was called with draft name and content
-        mock_loader.write.assert_called_once_with("cool-skill", "# Cool\n\nContent here.")
+    def test_approve_mismatched_frontmatter_name_returns_400_without_side_effects(self, client):
+        """Frontmatter name must match the draft name."""
+        content = "---\nname: another-skill\ndescription: Use this skill for testing.\n---\n# Skill"
+        draft = _make_draft("draft-mismatched-name", "expected-skill", content=content)
 
-        # Verify status was updated
-        mock_store.update_status.assert_called_once_with("draft-42", "approved")
+        mock_store = MagicMock()
+        mock_store.get.return_value = draft
+        mock_loader = MagicMock()
+
+        with patch(
+            "backend.api.legacy_routes.get_skill_draft_store",
+            return_value=mock_store,
+        ), patch(
+            "backend.api.legacy_routes.get_skill_loader",
+            return_value=mock_loader,
+        ):
+            response = client.post("/skill-drafts/draft-mismatched-name/approve")
+
+        assert response.status_code == 400
+        mock_loader.write.assert_not_called()
+        mock_store.update_status.assert_not_called()
 
     def test_approve_not_found_returns_404(self, client):
         """Approving a non-existent draft returns 404."""
@@ -183,15 +267,17 @@ class TestApproveSkillDraft:
 
         assert response.status_code == 404
 
-    def test_approve_write_failure_returns_500(self, client):
-        """If writing to disk fails, return 500 and don't update status."""
-        draft = _make_draft("draft-99", "fail-skill", content="# Fail")
+    def test_approve_write_failure_does_not_expose_filesystem_details(self, client):
+        """Filesystem diagnostics stay out of the client-facing error response."""
+        content = "---\nname: fail-skill\ndescription: Use this skill for testing.\n---\n# Fail"
+        draft = _make_draft("draft-os-error", "fail-skill", content=content)
+        absolute_path = "/home/fz/private/skills/fail-skill/SKILL.md"
+        raw_error = "[Errno 13] Permission denied: " + absolute_path
 
         mock_store = MagicMock()
         mock_store.get.return_value = draft
-
         mock_loader = MagicMock()
-        mock_loader.write.side_effect = OSError("Disk full")
+        mock_loader.write.side_effect = OSError(raw_error)
 
         with patch(
             "backend.api.legacy_routes.get_skill_draft_store",
@@ -200,10 +286,15 @@ class TestApproveSkillDraft:
             "backend.api.legacy_routes.get_skill_loader",
             return_value=mock_loader,
         ):
-            response = client.post("/skill-drafts/draft-99/approve")
+            response = client.post("/skill-drafts/draft-os-error/approve")
 
         assert response.status_code == 500
-        # Status should NOT be updated when write fails
+        assert response.json()["detail"] == {
+            "code": "skill_write_failed",
+            "message": "Failed to write skill",
+        }
+        assert absolute_path not in response.text
+        assert raw_error not in response.text
         mock_store.update_status.assert_not_called()
 
 
@@ -322,7 +413,10 @@ class TestApproveSkillDraftNameValidation:
 
         assert response.status_code == 400
         detail = response.json()["detail"]
-        assert "../bad" in detail or "Invalid skill name" in detail
+        assert detail == {
+            "code": "invalid_skill_name",
+            "message": "Invalid skill name",
+        }
 
 
 # ------------------------------------------------------------------ #

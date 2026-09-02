@@ -14,13 +14,31 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Optional, Set
 
 logger = logging.getLogger(__name__)
 
-# active/stale 分界阈值（默认 30 天）。v1 固定常量；settings 可配留待后续。
+# active/stale 分界阈值（默认 30 天）。可通过环境变量覆盖。
 DEFAULT_STALE_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000
+STALE_THRESHOLD_ENV = "SAGE_SKILL_STALE_THRESHOLD_MS"
+
+
+def get_stale_threshold_ms() -> int:
+    """读取技能 stale 阈值；无效配置安全回退默认值。"""
+    raw = os.environ.get(STALE_THRESHOLD_ENV)
+    if raw is None:
+        return DEFAULT_STALE_THRESHOLD_MS
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s=%r; using default", STALE_THRESHOLD_ENV, raw)
+        return DEFAULT_STALE_THRESHOLD_MS
+    if value < 0:
+        logger.warning("Invalid %s=%r; using default", STALE_THRESHOLD_ENV, raw)
+        return DEFAULT_STALE_THRESHOLD_MS
+    return value
 
 # 生命周期三态
 LIFECYCLE_ACTIVE = "active"
@@ -109,6 +127,36 @@ class SkillLifecycleStore:
             rows = (
                 self._conn()
                 .execute("SELECT name FROM skill_lifecycle WHERE archived = 1")
+                .fetchall()
+            )
+            return {row["name"] for row in rows}
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.warning(f"Skill lifecycle read failed: {exc}")
+            return set()
+
+    def set_enabled(self, name: str, enabled: bool) -> None:
+        """持久化技能开关状态（best-effort，DB 失败只 warning）。"""
+        if not name:
+            return
+        try:
+            conn = self._conn()
+            conn.execute(
+                "INSERT INTO skill_lifecycle (name, enabled, enabled_at) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(name) DO UPDATE SET "
+                "enabled = excluded.enabled, enabled_at = excluded.enabled_at",
+                (name, 1 if enabled else 0, _now_ms()),
+            )
+            conn.commit()
+        except Exception as exc:  # noqa: BLE001 - best-effort 契约
+            logger.warning(f"Skill lifecycle persist failed for {name!r}: {exc}")
+
+    def get_disabled_names(self) -> Set[str]:
+        """返回显式禁用的技能名集合；未登记技能默认启用。"""
+        try:
+            rows = (
+                self._conn()
+                .execute("SELECT name FROM skill_lifecycle WHERE enabled = 0")
                 .fetchall()
             )
             return {row["name"] for row in rows}

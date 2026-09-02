@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 /** Versioned build/capability provenance shared by the Electron boundary. */
@@ -58,6 +59,18 @@ export interface BackendOwnership {
 
 export interface BackendHealthEnvelope extends BuildManifest, BackendOwnership {
   status: 'ok';
+  proof?: string;
+}
+
+export function expectedHealthProof(
+  ownershipToken: string,
+  buildId: string,
+  generation: number,
+  pid: number,
+): string {
+  return createHmac('sha256', ownershipToken)
+    .update(`sage-health-v1:${buildId}:${generation}:${pid}`)
+    .digest('hex');
 }
 
 export function ownsBackend(
@@ -67,9 +80,10 @@ export function ownsBackend(
 ): health is BackendHealthEnvelope {
   return (
     health.status === 'ok' &&
+    typeof health.proof === 'string' &&
+    health.proof === expectedHealthProof(ownership.ownershipToken, manifest.buildId, ownership.generation, ownership.pid) &&
     health.pid === ownership.pid &&
     health.generation === ownership.generation &&
-    health.ownershipToken === ownership.ownershipToken &&
     health.buildId === manifest.buildId
   );
 }

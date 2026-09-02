@@ -111,9 +111,11 @@ describe('killOrphanedBackendOnPort', () => {
 
   it('kills a single orphan and returns its PID', () => {
     const killed: string[] = [];
+    const taskkillCommands: string[] = [];
     const execSyncFn = makeExecSync({
       netstat: '  TCP    0.0.0.0:8765    0.0.0.0:0    LISTENING    12345\r\n',
       taskkill: (_cmd: string) => {
+        taskkillCommands.push(_cmd);
         const match = _cmd.match(/\/PID\s+(\d+)/);
         if (match) killed.push(match[1]!);
         return '';
@@ -122,6 +124,7 @@ describe('killOrphanedBackendOnPort', () => {
     const result = killOrphanedBackendOnPort(makeOpts({ execSyncFn }));
     expect(result).toEqual({ kind: 'killed', pids: ['12345'] });
     expect(killed).toEqual(['12345']);
+    expect(taskkillCommands).toEqual(['taskkill /PID 12345 /F /T']);
   });
 
   it('kills multiple orphans and dedupes', () => {

@@ -24,6 +24,52 @@ logger = logging.getLogger(__name__)
 
 # Required keys in the LLM's JSON output
 _REQUIRED_FIELDS = ("name", "description", "when_to_use", "content")
+_DEFAULT_REVIEW_MODEL = "sonnet"
+
+
+class _UnavailableReviewProvider:
+    """Explicitly fail when no configured provider is available."""
+
+    async def complete(self, **_: Any) -> Any:
+        raise RuntimeError("Review provider is not configured")
+
+
+
+@dataclass(frozen=True)
+class _ReviewConfig:
+    """不可拆分的 review provider/model 配置快照。"""
+
+    provider: Any
+    model: str
+
+
+def _build_review_config() -> _ReviewConfig:
+    """Resolve provider and model atomically from the same settings snapshot."""
+    try:
+        from backend.orchestration.llm_factory import resolve_provider_and_model_from_settings
+
+        resolved = resolve_provider_and_model_from_settings()
+        if resolved is not None:
+            provider, model = resolved
+            return _ReviewConfig(provider=provider, model=model)
+    except Exception:  # noqa: BLE001 - review remains best-effort
+        logger.warning("Unable to build configured review provider", exc_info=True)
+    return _ReviewConfig(
+        provider=_UnavailableReviewProvider(), model=_DEFAULT_REVIEW_MODEL
+    )
+
+
+def _resolve_injected_provider_model() -> str:
+    """Resolve the injected provider's model once at service construction."""
+    try:
+        from backend.orchestration.llm_factory import resolve_model_from_settings
+
+        model = resolve_model_from_settings()
+        if model:
+            return model
+    except Exception:  # noqa: BLE001 - retain safe fallback for fake providers
+        logger.warning("Unable to resolve review model", exc_info=True)
+    return _DEFAULT_REVIEW_MODEL
 
 
 @dataclass
@@ -56,8 +102,9 @@ class ReviewService:
             object with a ``.text`` attribute.
     """
 
-    def __init__(self, llm_provider: Any) -> None:
+    def __init__(self, llm_provider: Any, model: Optional[str] = None) -> None:
         self.llm_provider = llm_provider
+        self._model = model or _resolve_injected_provider_model()
         self._prompt_template = self._load_prompt_template()
 
     # ------------------------------------------------------------------ #
@@ -118,7 +165,7 @@ class ReviewService:
         ]
 
         turn = await self.llm_provider.complete(
-            model="sonnet",
+            model=self._model,
             messages=messages,
         )
 
@@ -229,8 +276,9 @@ def get_review_service(
 
     Args:
         llm_provider: An async ``complete()``-compatible object
-            (``ProviderClient`` protocol). If ``None``, a lazy
-            ``HttpxLLMAdapter`` is constructed on first call.
+            (``ProviderClient`` protocol). If ``None``, a settings-derived
+            ``ProviderClient`` is constructed; without usable settings the
+            service fails closed rather than sending data to a default endpoint.
 
     Subsequent calls ignore the ``llm_provider`` argument and return
     the cached singleton — this mirrors the behaviour of
@@ -239,10 +287,10 @@ def get_review_service(
     global _review_service
     if _review_service is None:
         if llm_provider is None:
-            from backend.adapters.out.llm.httpx_adapter import HttpxLLMAdapter
-
-            llm_provider = HttpxLLMAdapter()
-        _review_service = ReviewService(llm_provider)
+            config = _build_review_config()
+            _review_service = ReviewService(config.provider, model=config.model)
+        else:
+            _review_service = ReviewService(llm_provider)
     return _review_service
 
 

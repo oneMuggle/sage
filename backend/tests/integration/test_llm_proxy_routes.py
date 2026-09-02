@@ -47,6 +47,66 @@ async def test_get_models_forwards_to_upstream(client):
 
 
 @pytest.mark.asyncio()
+async def test_oversized_request_body_is_rejected_before_upstream(client, monkeypatch):
+    """请求体超过代理上限时 fail-closed,且不得触达上游。"""
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    monkeypatch.setattr(proxy_routes, "MAX_REQUEST_BODY_BYTES", 4)
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.post("/v1/chat/completions").mock(return_value=Response(200))
+        resp = await client.post(
+            f"{PROXY_BASE}/v1/chat/completions",
+            headers={"X-LLM-Provider-Url": UPSTREAM},
+            content=b"12345",
+        )
+
+    assert resp.status_code == 413
+    assert resp.json()["detail"] == {
+        "type": "request_body_too_large",
+        "message": "The request body exceeds the maximum allowed size.",
+    }
+    assert not route.called
+
+
+@pytest.mark.asyncio()
+async def test_non_streaming_response_over_limit_returns_safe_error(client, monkeypatch):
+    """非流式上游响应超过上限时不得在 proxy 内无限累积。"""
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    monkeypatch.setattr(proxy_routes, "MAX_RESPONSE_BODY_BYTES", 4)
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(return_value=Response(200, content=b"12345"))
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": UPSTREAM},
+        )
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"] == {
+        "type": "response_body_too_large",
+        "message": "The upstream response exceeds the maximum allowed size.",
+    }
+    assert route.called
+
+
+@pytest.mark.asyncio()
+async def test_streaming_response_stops_at_cumulative_limit(client, monkeypatch):
+    """流式响应累计越过上限时截断并关闭,不继续转发。"""
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    monkeypatch.setattr(proxy_routes, "MAX_RESPONSE_BODY_BYTES", 4)
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        mock.get("/v1/models").mock(return_value=Response(200, content=b"123456"))
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models?stream=true",
+            headers={"X-LLM-Provider-Url": UPSTREAM},
+        )
+
+    assert resp.status_code == 200
+    assert resp.content == b"123456"[:4]
+
+
+@pytest.mark.asyncio()
 async def test_post_chat_forwards_body(client):
     """POST /v1/chat/completions 应携带 body 字节级转发。"""
     sent_body = {
@@ -121,6 +181,95 @@ async def test_authorization_header_reaches_upstream(client):
 
 
 @pytest.mark.asyncio()
+async def test_local_capability_header_not_forwarded_but_provider_authorization_is(client):
+    """本地 capability header 不得到达上游,provider Authorization 必须保留。"""
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(
+            return_value=Response(200, json={"object": "list", "data": []})
+        )
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "X-SAGE-LOCAL-AUTHORIZATION": "Bearer test-local-auth-token",
+                "Authorization": "Bearer provider-key",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert route.called
+    upstream_headers = route.calls[0].request.headers
+    assert upstream_headers.get("authorization") == "Bearer provider-key"
+    assert "x-sage-local-authorization" not in upstream_headers
+
+
+@pytest.mark.asyncio()
+async def test_canonical_local_authorization_is_not_forwarded(client):
+    """本地 canonical Bearer capability 不得泄露到公网 provider。"""
+    local_token = "test-local-auth-token"
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(
+            return_value=Response(200, json={"object": "list", "data": []})
+        )
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "Authorization": f"bEaReR {local_token}",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert route.called
+    upstream_headers = route.calls[0].request.headers
+    assert "authorization" not in upstream_headers
+    assert local_token not in str(route.calls[0].request.headers)
+
+
+@pytest.mark.asyncio()
+async def test_local_compatibility_authorization_preserves_provider_authorization(client):
+    """兼容本地 header 认证时，独立的 provider Authorization 仍应透传。"""
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(
+            return_value=Response(200, json={"object": "list", "data": []})
+        )
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "X-SAGE-LOCAL-AUTHORIZATION": "Bearer test-local-auth-token",
+                "Authorization": "Bearer provider-key",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert route.called
+    upstream_headers = route.calls[0].request.headers
+    assert upstream_headers.get("authorization") == "Bearer provider-key"
+    assert "x-sage-local-authorization" not in upstream_headers
+
+
+@pytest.mark.asyncio()
+async def test_canonical_provider_authorization_is_forwarded(client):
+    """不是本地 capability 的 canonical Authorization 应作为 provider key 透传。"""
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(
+            return_value=Response(200, json={"object": "list", "data": []})
+        )
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={
+                "X-LLM-Provider-Url": UPSTREAM,
+                "Authorization": "Bearer provider-key",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert route.called
+    assert route.calls[0].request.headers.get("authorization") == "Bearer provider-key"
+
+
+@pytest.mark.asyncio()
 async def test_query_string_forwarded(client):
     """查询串应原样转发到上游。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
@@ -140,31 +289,42 @@ async def test_query_string_forwarded(client):
 
 
 @pytest.mark.asyncio()
-async def test_upstream_4xx_passes_through(client):
-    """上游 401 应原样透传给客户端(状态码 + body)。"""
+async def test_upstream_4xx_returns_safe_error(client):
+    """上游 401 保留状态码和错误类型,但不回显敏感 body。"""
+    sensitive_body = '{"error":"invalid key sk-upstream-secret"}'
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
-        mock.get("/v1/models").mock(return_value=Response(401, json={"error": "bad key"}))
+        mock.get("/v1/models").mock(return_value=Response(401, text=sensitive_body))
         resp = await client.get(
-            f"{PROXY_BASE}/v1/models",
+            f"{PROXY_BASE}/v1/models?token=query-secret",
             headers={"X-LLM-Provider-Url": UPSTREAM},
         )
 
     assert resp.status_code == 401
-    assert resp.json() == {"error": "bad key"}
+    detail = resp.json()["detail"]
+    assert detail == {
+        "type": "upstream_error",
+        "message": "Upstream returned HTTP 401.",
+    }
+    assert "provider-secret" not in resp.text
+    assert "query-secret" not in resp.text
+    assert "sk-upstream-secret" not in resp.text
 
 
 @pytest.mark.asyncio()
-async def test_upstream_5xx_passes_through(client):
-    """上游 500 应原样透传给客户端。"""
+async def test_upstream_5xx_returns_safe_error(client):
+    """上游 500 保留状态码和错误类型,但不回显错误 body。"""
     with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
-        mock.get("/v1/models").mock(return_value=Response(500, text="internal error"))
+        mock.get("/v1/models").mock(
+            return_value=Response(500, text="authorization=Bearer upstream-secret")
+        )
         resp = await client.get(
             f"{PROXY_BASE}/v1/models",
             headers={"X-LLM-Provider-Url": UPSTREAM},
         )
 
     assert resp.status_code == 500
-    assert "internal error" in resp.text
+    assert resp.json()["detail"]["type"] == "upstream_error"
+    assert "upstream-secret" not in resp.text
 
 
 @pytest.mark.asyncio()
@@ -219,6 +379,40 @@ async def test_userinfo_in_provider_url_rejected(client):
 
 
 @pytest.mark.asyncio()
+async def test_malformed_provider_url_returns_safe_detail(client):
+    """URL 解析异常不得把凭据或完整 URL 放入客户端 detail。"""
+    provider = "http://user:pass@upstream.example.com:bad-port?token=bad-url-secret"
+    resp = await client.get(
+        f"{PROXY_BASE}/v1/models",
+        headers={"X-LLM-Provider-Url": provider},
+    )
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["type"] == "invalid_provider_url"
+    assert detail["message"] == "X-LLM-Provider-Url is not a valid URL"
+    assert "pass" not in resp.text
+    assert "bad-url-secret" not in resp.text
+
+
+@pytest.mark.asyncio()
+async def test_provider_url_is_redacted_in_proxy_logs(client, caplog):
+    """日志不得包含 provider URL 的 userinfo 或完整路径/query。"""
+    import logging
+
+    provider = "http://user:secret@upstream.example.com/private/v1?token=secret"
+    with caplog.at_level(logging.INFO):
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": provider},
+        )
+
+    assert resp.status_code == 400
+    assert "secret" not in caplog.text
+    assert "X-LLM-Provider-Url=" not in caplog.text
+
+
+@pytest.mark.asyncio()
 async def test_upstream_timeout_returns_504(client):
     """httpx.TimeoutException 应映射为 504 upstream_timeout。"""
     import httpx as _httpx
@@ -264,6 +458,39 @@ async def test_upstream_transport_error_returns_502(client):
 
     assert resp.status_code == 502
     assert resp.json()["detail"]["type"] == "upstream_transport_error"
+
+
+@pytest.mark.asyncio()
+async def test_transport_failure_does_not_log_or_return_sensitive_exception_text(client, caplog):
+    """传输异常中的 URL/query/token 不得进入日志或客户端 detail。"""
+    import logging
+
+    import httpx as _httpx
+
+    sensitive = "https://user:pass@upstream.example.com/v1/models?token=exception-secret"
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        mock.get("/v1/models").mock(
+            side_effect=_httpx.RemoteProtocolError(
+                f"connection failed for {sensitive} Authorization=Bearer auth-secret"
+            )
+        )
+        with caplog.at_level(logging.WARNING):
+            resp = await client.get(
+                f"{PROXY_BASE}/v1/models?token=query-secret",
+                headers={
+                    "X-LLM-Provider-Url": UPSTREAM,
+                    "Authorization": "Bearer auth-secret",
+                },
+            )
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"] == {
+        "type": "upstream_transport_error",
+        "message": "The upstream request failed during transport.",
+    }
+    for secret in ("exception-secret", "provider-secret", "query-secret", "auth-secret"):
+        assert secret not in resp.text
+        assert secret not in caplog.text
 
 
 @pytest.mark.asyncio()
@@ -416,9 +643,80 @@ async def test_non_streaming_path_unchanged(client):
     assert route.called
 
 
-# ============================================================================
-# Task 1 (2026-08-23) — LM Studio + structured TLS diagnostics
-# ============================================================================
+@pytest.mark.asyncio()
+async def test_dns_rebinding_does_not_connect_to_later_private_answer(client, monkeypatch):
+    """Validation and connect use the same public address, never a later private DNS answer."""
+    import socket
+
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    answers = [("8.8.8.8",), ("127.0.0.1",)]
+    seen = []
+
+    def rebinding_getaddrinfo(host, *args, **kwargs):
+        answer = answers[min(len(seen), len(answers) - 1)]
+        seen.append(answer[0])
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (answer[0], args[0] if args else 80))]
+
+    monkeypatch.setattr(proxy_routes.socket, "getaddrinfo", rebinding_getaddrinfo)
+    with respx.mock(base_url="http://rebinding.example.com", assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(return_value=Response(200, json={"data": []}))
+        response = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": "http://rebinding.example.com"},
+        )
+    assert response.status_code == 200
+    assert route.called
+    assert seen == ["8.8.8.8"]
+
+
+@pytest.mark.asyncio()
+async def test_allowlisted_local_host_is_pinned_and_allowed(client, monkeypatch):
+    import socket
+
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    monkeypatch.setenv("SAGE_LLM_PROXY_ALLOWED_HOSTS", "local.example.com")
+    calls = []
+
+    def local_getaddrinfo(host, *args, **kwargs):
+        calls.append(host)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", args[0] if args else 80))]
+
+    monkeypatch.setattr(proxy_routes.socket, "getaddrinfo", local_getaddrinfo)
+    with respx.mock(base_url="http://local.example.com", assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(return_value=Response(200, json={"data": []}))
+        response = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": "http://local.example.com"},
+        )
+    assert response.status_code == 200
+    assert route.called
+    assert calls == ["local.example.com"]
+
+
+@pytest.mark.asyncio()
+async def test_public_https_preserves_hostname_for_host_and_sni(client, monkeypatch):
+    import socket
+
+    import backend.api.llm_proxy_routes as proxy_routes
+
+    monkeypatch.setattr(proxy_routes.socket, "getaddrinfo", lambda *args, **kwargs: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
+    ])
+    with respx.mock(assert_all_called=False) as mock:
+        route = mock.get("https://secure.example.com/v1/models").mock(return_value=Response(200, json={"data": []}))
+        response = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": "https://secure.example.com"},
+        )
+    assert response.status_code == 200
+    assert route.called
+    sent = route.calls[0].request
+    assert sent.url.host == "secure.example.com"
+    assert sent.headers["host"] == "secure.example.com"
+
+
 #
 # 覆盖：
 # 1. LM Studio 本地端点 ``http://127.0.0.1:1234/v1`` + 空 Authorization 透传
@@ -434,8 +732,64 @@ LM_STUDIO = "http://127.0.0.1:1234/v1"
 LM_STUDIO_BASE = "http://127.0.0.1:1234"
 
 
+@pytest.fixture(autouse=True)
+def _allow_test_local_provider(monkeypatch):
+    """Model the explicit user opt-in required for local providers."""
+    monkeypatch.setenv("SAGE_LLM_PROXY_ALLOWED_HOSTS", "127.0.0.1")
+
+
+@pytest.fixture(autouse=True)
+def _resolve_mock_provider_names(monkeypatch):
+    """Give respx-only provider names a deterministic public test address."""
+    import socket
+
+    original = socket.getaddrinfo
+
+    def getaddrinfo(host, *args, **kwargs):
+        if host in {"upstream.example.com", "public.example.com"}:
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", args[0] if args else 80))]
+        return original(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+
 @pytest.mark.asyncio()
-async def test_lm_studio_get_models_empty_authorization(client):
+async def test_blocked_local_target_requires_explicit_allowlist(client, monkeypatch):
+    monkeypatch.delenv("SAGE_LLM_PROXY_ALLOWED_HOSTS", raising=False)
+    resp = await client.get(
+        f"{PROXY_BASE}/v1/models",
+        headers={"X-LLM-Provider-Url": "http://127.0.0.1:11434"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == {
+        "type": "blocked_provider_target",
+        "message": "The upstream target is not allowed.",
+    }
+
+
+@pytest.mark.asyncio()
+async def test_rfc1918_and_metadata_targets_are_blocked(client):
+    for host in ("10.0.0.1", "192.168.1.5", "169.254.169.254", "[::1]"):
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": f"http://{host}:11434"},
+        )
+        assert resp.status_code == 403
+
+
+@pytest.mark.asyncio()
+async def test_public_provider_remains_allowed(client):
+    with respx.mock(base_url=UPSTREAM, assert_all_called=False) as mock:
+        route = mock.get("/v1/models").mock(return_value=Response(200, json={"data": []}))
+        resp = await client.get(
+            f"{PROXY_BASE}/v1/models",
+            headers={"X-LLM-Provider-Url": UPSTREAM},
+        )
+    assert resp.status_code == 200
+    assert route.called
+
+
+
     """LM Studio 本地端点 GET /v1/models: 无 Authorization header 时仍 200,
     且 respx mock 收到上游空 Authorization(浏览器不发 ``Bearer ``)而非 ``null``.
     """

@@ -50,7 +50,7 @@
 |------|----------|------|------|
 | `sessions` | `id`, `title`, `created_at`, `updated_at` | - | `idx_sessions_created` |
 | `messages` | `id`, `session_id`, `role`, `content`, `created_at` | `session_id → sessions.id` | `idx_messages_session` |
-| `skills` | `id`, `name`, `description`, `config` | - | `idx_skills_name` |
+| `skill_lifecycle` / `skill_usage` | 生命周期标记 / 使用统计 | - | 按技能名称寻址 |
 | `config` | `key`, `value`, `updated_at` | - | 主键 `key` |
 
 ### 2.3 数据库操作接口

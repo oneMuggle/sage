@@ -5,12 +5,26 @@
 
 import json
 import logging
+import os
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import hnswlib
 import numpy as np
+
+from .files import (
+    _require_posix_safety,
+    secure_atomic_write_file,
+    secure_create_temp_file,
+    secure_delete_path,
+    secure_ensure_directory,
+    secure_publish_held_temp,
+    secure_read_file,
+    secure_read_text,
+    secure_write_temp_bytes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,17 +90,32 @@ class HNSWVectorStore:
 
     def _load_or_create_index(self) -> hnswlib.Index:
         """加载或创建 HNSW 索引。"""
+        # hnswlib only accepts pathnames.  Materialize a verified snapshot in
+        # the controlled directory instead of handing it the user pathname.
+        _require_posix_safety()
+        index_bytes = None
+        with suppress(FileNotFoundError):
+            index_bytes = secure_read_file(self.storage_path.parent.parent, self.index_path)
+
         # 创建新索引
         index = hnswlib.Index(space="cosine", dim=self.dim)
 
-        if self.index_path.exists() and self.meta_path.exists():
-            # 加载现有索引
+        if index_bytes is not None:
             try:
-                index.load_index(str(self.index_path))
+                temp_path = secure_write_temp_bytes(
+                    self.storage_path.parent.parent,
+                    self.index_path.parent,
+                    ".hnsw",
+                    index_bytes,
+                )
+                try:
+                    index.load_index(str(temp_path))
+                finally:
+                    secure_delete_path(self.storage_path.parent.parent, temp_path)
                 index.set_ef(self.ef_search)
 
                 # 加载元数据
-                meta_data = json.loads(self.meta_path.read_text(encoding="utf-8"))
+                meta_data = json.loads(secure_read_text(self.storage_path.parent.parent, self.meta_path))
                 self.records = {k: ChunkRecord(**v) for k, v in meta_data["records"].items()}
                 self.label_to_id = {int(k): v for k, v in meta_data["label_to_id"].items()}
                 self.next_label = meta_data.get("next_label", len(self.records))
@@ -94,6 +123,8 @@ class HNSWVectorStore:
                 logger.info(f"加载 HNSW 索引: {len(self.records)} 个记录, " f"维度 {self.dim}")
                 return index
 
+            except OSError:
+                raise
             except Exception as e:
                 logger.warning(f"加载 HNSW 索引失败，重新创建: {e}")
 
@@ -243,8 +274,22 @@ class HNSWVectorStore:
 
     def _save(self) -> None:
         """保存索引和元数据。"""
-        # 保存 HNSW 索引
-        self.index.save_index(str(self.index_path))
+        _require_posix_safety()
+        # hnswlib writes by pathname, so give it a private, exclusive regular
+        # file and publish that file only after the native writer returns.
+        temp_index_path, temp_fd = secure_create_temp_file(
+            self.storage_path.parent.parent, self.index_path.parent, ".hnsw"
+        )
+        try:
+            self.index.save_index(f"/proc/self/fd/{temp_fd}")
+            secure_publish_held_temp(
+                self.storage_path.parent.parent, temp_index_path, self.index_path, temp_fd
+            )
+        finally:
+            with suppress(OSError):
+                os.close(temp_fd)
+            with suppress(OSError):
+                secure_delete_path(self.storage_path.parent.parent, temp_index_path)
 
         # 保存元数据
         meta_data = {
@@ -261,9 +306,10 @@ class HNSWVectorStore:
             "next_label": self.next_label,
         }
 
-        self.meta_path.write_text(
+        secure_atomic_write_file(
+            self.storage_path.parent.parent,
+            self.meta_path,
             json.dumps(meta_data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
         )
 
     @classmethod
@@ -284,7 +330,7 @@ class HNSWVectorStore:
             HNSWVectorStore: 向量存储实例
         """
         storage_path = project_root / ".llm-wiki" / "vectors.hnsw"
-        storage_path.parent.mkdir(parents=True, exist_ok=True)
+        secure_ensure_directory(project_root, storage_path.parent)
 
         return cls(
             storage_path=storage_path,

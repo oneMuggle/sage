@@ -1,4 +1,5 @@
 import type { DiscoveredModel, ModelCapability } from '../../entities/setting/types';
+import { backendRequest } from '../../shared/api/backendRequest';
 
 interface OpenAIModelInfo {
   id: string;
@@ -49,17 +50,12 @@ function proxyHeaders(providerUrl: string, apiKey: string): HeadersInit {
  * 这样浏览器永远只跟同源后端对话,绕开 CORS。
  */
 export async function fetchModels(baseUrl: string, apiKey: string): Promise<DiscoveredModel[]> {
-  const response = await fetch(`${LLM_PROXY_BASE}/v1/models`, {
+  const response = await backendRequest<OpenAIModelsResponse>({
+    path: `${LLM_PROXY_BASE}/v1/models`,
     method: 'GET',
     headers: proxyHeaders(baseUrl, apiKey),
   });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`HTTP ${response.status}: ${text || response.statusText}`);
-  }
-
-  const data: OpenAIModelsResponse = await response.json();
+  const data = response;
   return data.data.map((m) => ({
     id: m.id,
     capabilities: inferCapabilities(m.id),
@@ -78,36 +74,22 @@ async function testChatCompletion(
   model: string,
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    const response = await fetch(`${LLM_PROXY_BASE}/v1/chat/completions`, {
+    const response = await backendRequest<{ choices?: unknown[] }>({
+      path: `${LLM_PROXY_BASE}/v1/chat/completions`,
       method: 'POST',
       headers: proxyHeaders(baseUrl, apiKey),
-      signal: controller.signal,
-      body: JSON.stringify({
+      body: {
         model,
         messages: [{ role: 'user', content: 'Hi' }],
         max_tokens: 10,
-      }),
+      },
+      timeoutMs: 15_000,
     });
 
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      return { success: true, message: '聊天端点正常' };
+    if (!response || typeof response !== 'object' || !Array.isArray(response.choices)) {
+      return { success: false, message: '聊天端点异常' };
     }
-
-    // 401 means bad API key, 429 means rate limited
-    if (response.status === 401) {
-      return { success: false, message: 'API Key 无效' };
-    }
-    if (response.status === 429) {
-      return { success: false, message: '请求频率限制' };
-    }
-
-    const text = await response.text().catch(() => '');
-    return { success: false, message: `HTTP ${response.status}: ${text || response.statusText}` };
+    return { success: true, message: '聊天端点正常' };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       return { success: false, message: '请求超时 (15s)' };

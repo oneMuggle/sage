@@ -411,7 +411,7 @@ sage/
 | [记忆系统](./docs/04-memory.md)       | 三层记忆、检索、进化         |
 | [Agent 引擎](./docs/05-agent.md)      | 对话引擎、消息构建、工具执行 |
 | [工具系统](./docs/06-tools.md)        | 内置工具、注册表、权限       |
-| [技能系统](./docs/07-skills.md)       | 技能定义、管理器、商店       |
+| [技能系统](./docs/technical/24-skills-system.md) | SKILL.md 技能、生命周期和 Electron/REST 管理链路 |
 | [进化系统](./docs/08-evolution.md)    | 定时任务、摘要、修剪         |
 | [前端设计](./docs/09-frontend.md)     | UI 组件、状态管理            |
 | [API 接口](./docs/10-api.md)          | BrowserWindow IPC、REST API  |

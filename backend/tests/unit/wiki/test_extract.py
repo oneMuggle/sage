@@ -269,6 +269,71 @@ def test_unsupported_suffix_raises_value_error(tmp_path: Path):
         extract_text_for_ingest(weird)
 
 
+def test_office_zip_budget_rejects_before_reader(monkeypatch, tmp_path: Path):
+    """The public ingest adapter gates Office expansion before its reader."""
+    import backend.wiki.extract as ext
+
+    source = tmp_path / "bomb.docx"
+    source.write_bytes(b"small")
+    monkeypatch.setattr(ext, "_read_docx_text", lambda _path: "must not run")
+    monkeypatch.setattr(ext, "_office_zip_within_budget", lambda _path: False)
+
+    with pytest.raises(ValueError, match="Office ZIP expansion"):
+        ext.extract_text_for_ingest(source)
+
+
+def test_office_zip_member_count_rejects_before_reader(monkeypatch, tmp_path: Path):
+    """An excessive central-directory member count is rejected pre-reader."""
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import backend.wiki.extract as ext
+
+    source = tmp_path / "many.docx"
+    source.write_bytes(b"small")
+    archive = Mock()
+    archive.__enter__ = Mock(return_value=archive)
+    archive.__exit__ = Mock(return_value=False)
+    archive.infolist.return_value = [SimpleNamespace(file_size=0)] * (
+        ext.MAX_OFFICE_ZIP_MEMBERS + 1
+    )
+    monkeypatch.setitem(
+        sys.modules, "zipfile", SimpleNamespace(ZipFile=Mock(return_value=archive))
+    )
+    reader = Mock(side_effect=AssertionError("reader must not run"))
+    monkeypatch.setattr(ext, "_read_docx_text", reader)
+
+    with pytest.raises(ValueError, match="Office ZIP expansion"):
+        ext.extract_text_for_ingest(source)
+    reader.assert_not_called()
+
+
+def test_office_reader_uses_held_fd_proc_path(monkeypatch, tmp_path: Path):
+    """The ZIP check and reader both use the held descriptor pathname."""
+    import os
+
+    import backend.wiki.extract as ext
+
+    source = tmp_path / "held.docx"
+    source.write_bytes(b"small")
+    fd = os.open(source, os.O_RDONLY)
+    seen = []
+    try:
+        monkeypatch.setattr(
+            ext,
+            "_office_zip_within_budget",
+            lambda path: seen.append(path) or True,
+        )
+        monkeypatch.setattr(
+            ext, "_read_docx_text", lambda path: seen.append(path) or "ok"
+        )
+        assert ext.extract_text_for_ingest(source, opened_fd=fd) == "ok"
+    finally:
+        os.close(fd)
+    assert all(str(path).startswith("/proc/self/fd/") for path in seen)
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Module surface
 # ──────────────────────────────────────────────────────────────────────

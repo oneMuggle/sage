@@ -38,7 +38,7 @@ export interface SkillsElectronApiBridge {
   /** POST /api/v1/skills/rescan — incremental load of new SKILL.md on disk. */
   rescanSkills: () => Promise<RescanResult>;
   /** POST /api/v1/skills/import (multipart FormData) — write + hot-reload selected files. */
-  importSkills: (paths: string[]) => Promise<ImportResult>;
+  importSkills: () => Promise<ImportResult>;
 }
 
 /**
@@ -156,7 +156,18 @@ export interface MemoryElectronApiBridge {
   subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
 }
 
+export interface BackendRequest {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  headers?: HeadersInit;
+  body?: unknown;
+  /** Optional bounded cancellation timeout for the main-process relay. */
+  timeoutMs?: number;
+}
+
 export interface ElectronAPI {
+  /** Authenticated renderer-to-backend request; main injects the local capability. */
+  backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
   invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>;
   /**
    * Streaming callers (wiki chat / wiki ingest) pass `options.streamId`

@@ -1,5 +1,7 @@
 # Sage - Win7 兼容 AI 助手设计方案
 
+> **文档范围说明（2026-08-30）**：本文是早期整体设计/历史方案，技能系统与运行时部分不代表当前实现。当前技能定义由 `SkillRegistry` 与 `SKILL.md` 承载；实际 loader、脚本确认与沙箱边界、local capability auth 以及 Windows 进程清理行为请以 [`technical/24-skills-system.md`](technical/24-skills-system.md) 为准。
+
 ## 一、项目概述
 
 **项目名称**: Sage
@@ -183,6 +185,7 @@ class HermesWin7Agent:
 
 ### 4.4 技能系统 (Skills)
 
+> **历史设计/非当前实现**：本节保留早期 `load_skills()`、技能商店和示例技能清单，仅作背景记录。当前实现请以 [`technical/24-skills-system.md`](technical/24-skills-system.md) 为准。
 参考 Hermes `skills/` + agency-agents:
 
 ```python
@@ -321,14 +324,8 @@ CREATE TABLE memories (
     accessed_at INTEGER
 );
 
--- 技能表
-CREATE TABLE skills (
-    id TEXT PRIMARY KEY,
-    name TEXT,
-    code TEXT,
-    enabled INTEGER,
-    created_at INTEGER
-);
+-- 技能定义由 SkillRegistry / SKILL.md 承载，不创建历史 skills 表。
+-- 已有数据库中的 skills 表由 Database.init_db() 保留，不执行 DROP。
 
 -- 用户偏好表
 CREATE TABLE preferences (

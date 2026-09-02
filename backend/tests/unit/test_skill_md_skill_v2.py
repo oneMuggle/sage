@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from backend.skills.base import SkillResult
+from backend.skills.skill_md.resources import build_resource_index
 from backend.skills.skill_md.script_runner import ScriptRunner
 from backend.skills.skill_md.skill import SkillMdDocument, SkillMdSkill
 
@@ -53,7 +54,32 @@ def _make_runner_mock() -> MagicMock:
 
 
 @pytest.mark.asyncio()
-async def test_execute_v2_without_script_runner_falls_back_to_v1(tmp_path):
+async def test_execute_v2_fallback_renders_resources(tmp_path):
+    (tmp_path / "references").mkdir()
+    (tmp_path / "references" / "guide.md").write_text("guide", encoding="utf-8")
+    doc = _make_doc(body="See {baseDir}/references/guide.md", base_dir=tmp_path)
+    doc.resources = build_resource_index(tmp_path)
+
+    result = await SkillMdSkill(doc).execute_v2(params={}, context={})
+
+    assert result.success is True
+    assert result.content == "See references/guide.md"
+    assert str(tmp_path) not in result.content
+
+
+@pytest.mark.asyncio()
+async def test_execute_v2_fallback_returns_fixed_security_error(tmp_path):
+    doc = _make_doc(body="See {baseDir}/references/missing.md", base_dir=tmp_path)
+    doc.resources = build_resource_index(tmp_path)
+
+    result = await SkillMdSkill(doc).execute_v2(params={}, context={})
+
+    assert result.success is False
+    assert result.content is None
+    assert result.error == "Skill resource security validation failed."
+    assert str(tmp_path) not in (result.error or "")
+
+
     """execute_v2 未注入 ScriptRunner → 回退到 v1，返回 body。
 
     关键不变量：现有不传 ScriptRunner 的代码路径必须保持完全兼容。

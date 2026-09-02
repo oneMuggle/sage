@@ -16,7 +16,6 @@
 │   │  sessions      │           │  memories       │            │
 │   │  messages       │           │  (语义记忆)      │            │
 │   │  memories       │           │                 │            │
-│   │  skills         │           │                 │            │
 │   │  preferences    │           │                 │            │
 │   │  evolution_log  │           │                 │            │
 │   └─────────────────┘           └─────────────────┘            │
@@ -31,8 +30,8 @@
 | sessions          | 会话表       | id   |
 | messages          | 消息表       | id   |
 | memories_episodic | 情景记忆表   | id   |
-| skills            | 技能表       | id   |
-| preferences       | 用户偏好表   | key  |
+| skill_lifecycle   | 技能生命周期标记 | name |
+| skill_usage       | 技能使用统计 | name  |
 | evolution_log     | 进化日志表   | id   |
 | tool_usage        | 工具使用记录 | id   |
 
@@ -157,45 +156,12 @@ CREATE TABLE memories_episodic (
 CREATE VIRTUAL TABLE memories_episodic_fts USING fts5(content, summary);
 ```
 
-### 3.2.4 技能表 (skills)
+### 3.2.4 技能存储说明
 
-```sql
-CREATE TABLE skills (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    version TEXT NOT NULL DEFAULT '1.0.0',
-
-    -- 技能定义
-    description TEXT,
-    triggers TEXT,  -- JSON: ["写代码", "编程"]
-    code TEXT NOT NULL,
-
-    -- 技能元数据
-    author TEXT,
-    homepage TEXT,
-    icon TEXT,
-
-    -- 权限
-    permissions TEXT,  -- JSON: ["file:read", "terminal"]
-
-    -- 状态
-    is_enabled INTEGER DEFAULT 1,
-    is_builtin INTEGER DEFAULT 0,
-
-    -- 统计
-    usage_count INTEGER DEFAULT 0,
-    success_count INTEGER DEFAULT 0,
-    last_used_at INTEGER,
-
-    -- 版本
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER,
-
-    -- 索引
-    INDEX idx_skills_enabled (is_enabled),
-    INDEX idx_skills_name (name)
-);
-```
+技能定义当前由 `SkillRegistry` 和文件系统中的 `SKILL.md` 承载，
+不再由 SQLite `skills` 表承载。`Database.init_db()` 不会为新数据库创建该历史遗留表，
+但也不会删除已有数据库中的表或数据；该旧表属于**保留的弃用候选**，本轮不复用、不新增写入，待完成迁移策略、旧用户数据兼容和 release/win7 双分支验证后再决定弃表。技能生命周期与使用统计仍分别使用
+`skill_lifecycle` 和 `skill_usage` 表。
 
 ### 3.2.5 用户偏好表 (preferences)
 

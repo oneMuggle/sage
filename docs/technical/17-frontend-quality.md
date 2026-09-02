@@ -67,7 +67,7 @@ Sage 前端（React + TypeScript + Vite）当前阶段质量基线：
 | ------ | --------------------------------------------------------------------------------------------------------- | ---- |
 | PG0-2  | 3 条 ESLint pre-existing 错误（`useEndpoints.ts`、`useKnowledge.ts`、`lib/api.ts`）                       | P2   |
 | PG1-L1 | `src/components/` 仍有 legacy 目录（layout / session / common）                                           | P2   |
-| PG1-L2 | `src/components/wiki/`、`src/components/skills/`、`src/components/agents/`、`src/components/memory/` 目录 | P2   |
+| PG1-L2 | `src/widgets/skills/`、`src/widgets/wiki/`、`src/widgets/agents/`、`src/widgets/memory/` 目录 | P2   |
 | PG1-L3 | `lib/store.ts` 跨实体未拆分                                                                               | P2   |
 | PG1-L4 | ErrorBoundary / LoadingState / RetryButton / Skeleton 共享组件未建                                        | P3   |
 | PG1-L5 | 9 个共享组件 + 5 页面 a11y 改造                                                                           | P3   |

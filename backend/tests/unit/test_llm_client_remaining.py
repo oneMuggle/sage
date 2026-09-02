@@ -591,9 +591,9 @@ def test_to_dict_exports_config_subset():
 
 
 @pytest.mark.asyncio()
-async def test_proxy_default_routes_through_backend():
+async def test_proxy_default_routes_through_backend(monkeypatch):
     """v2: 默认 ``use_proxy=True`` 时,_get_client 把请求发到本机 backend proxy,
-    并把 base_url(用户填的真实上游)放在 ``X-LLM-Provider-Url`` header。
+    并携带独立的本地 capability header，同时保留 provider Authorization。
     """
     config = LLMConfig(
         base_url="https://api.minimaxi.com/",
@@ -601,6 +601,7 @@ async def test_proxy_default_routes_through_backend():
         model="minimax-m3",
         # 不传 use_proxy → 默认 True
     )
+    monkeypatch.setenv("SAGE_LOCAL_AUTH_TOKEN", "local-capability")
     captured: dict = {}
 
     def fake_init(self, *args, **kwargs):
@@ -622,12 +623,13 @@ async def test_proxy_default_routes_through_backend():
     assert captured["base_url"] == "http://127.0.0.1:8765/api/v1/llm"
     # 真实上游 URL 应在 X-LLM-Provider-Url header
     assert captured["init_headers"]["X-LLM-Provider-Url"] == "https://api.minimaxi.com/"
-    # 鉴权仍透传
+    # provider API key 与本地 capability 各自使用独立 header
     assert captured["init_headers"]["Authorization"] == "Bearer sk-test"
+    assert captured["init_headers"]["X-Sage-Local-Authorization"] == "Bearer local-capability"
 
 
 @pytest.mark.asyncio()
-async def test_use_proxy_false_bypasses_proxy():
+async def test_use_proxy_false_bypasses_proxy(monkeypatch):
     """v2: ``use_proxy=False`` 时,LLMClient 直连 base_url(单测场景),不走 proxy,
     也不发 X-LLM-Provider-Url header。"""
     import os
@@ -656,8 +658,35 @@ async def test_use_proxy_false_bypasses_proxy():
     assert captured["base_url"] == "https://api.example.com/"
     # 不应发 X-LLM-Provider-Url(因为没走 proxy)
     assert "X-LLM-Provider-Url" not in captured["init_headers"]
+    # 直连上游也不得携带本地 proxy capability
+    assert "X-Sage-Local-Authorization" not in captured["init_headers"]
     # 鉴权仍透传
     assert captured["init_headers"]["Authorization"] == "Bearer test-key"
+
+
+@pytest.mark.asyncio()
+async def test_proxy_omits_local_capability_when_token_is_missing(monkeypatch):
+    """缺少显式本地 token 时不发送空/伪造 capability header。"""
+    monkeypatch.delenv("SAGE_LOCAL_AUTH_TOKEN", raising=False)
+    captured: dict = {}
+
+    def fake_init(self, *args, **kwargs):
+        captured["init_headers"] = dict(kwargs.get("headers", {}))
+        raise RuntimeError("STOP_AT_INIT")
+
+    with patch.object(httpx.AsyncClient, "__init__", new=fake_init):
+        client = LLMClient(
+            LLMConfig(
+                base_url="https://api.example.com",
+                api_key="provider-key",
+                use_proxy=True,
+            )
+        )
+        with pytest.raises(RuntimeError, match="STOP_AT_INIT"):
+            await client.chat([{"role": "user", "content": "hi"}])
+
+    assert "X-Sage-Local-Authorization" not in captured["init_headers"]
+    assert captured["init_headers"]["Authorization"] == "Bearer provider-key"
 
 
 @pytest.mark.asyncio()

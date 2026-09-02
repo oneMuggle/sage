@@ -7,6 +7,7 @@ export interface IngestProgress {
   stage: string;
   percent: number;
   message?: string | null;
+  code?: string;
 }
 
 export interface IngestState {

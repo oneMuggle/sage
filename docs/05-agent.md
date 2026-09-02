@@ -1,5 +1,7 @@
 # Sage - Agent 引擎
 
+> **技能相关说明（2026-08-30）**：本章的 `SageAgent`/`MessageBuilder` 示例主要是历史 legacy 设计；其中“技能调度”不代表当前 ChatService 已完成全自动技能注入。当前技能入口与执行边界请以 [`technical/24-skills-system.md`](technical/24-skills-system.md) 为准。
+
 > **P2 备注（2026-06-06）**：Sage 后端已迁移到六边形架构（Ports & Adapters）。
 > 本章中标注的旧 `backend/core/*` 路径已迁移到 `backend/core/legacy/*`（双轨安全网）；
 > 新业务代码位于 `backend/domain/*`（纯领域模型）、`backend/application/services/chat_service.py`（用例编排）、
@@ -42,7 +44,7 @@ Sage Agent 是核心对话引擎，负责:
 │   - model: ChatModel              # LLM 适配器               │
 │   - memory: MemoryManager         # 记忆管理器               │
 │   - tool_registry: ToolRegistry   # 工具注册表               │
-│   - skill_manager: SkillManager   # 技能管理器               │
+│   - skill_registry: SkillRegistry # 技能注册表               │
 │   - config: AgentConfig           # 配置                     │
 │                                                              │
 │ Methods:                                                     │

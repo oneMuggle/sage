@@ -1,5 +1,7 @@
 // src/features/artifacts/artifactApi.ts
 
+import { backendRequest } from '../../shared/api/backendRequest';
+
 export type ArtifactKind = 'markdown' | 'code' | 'image' | 'csv' | 'json' | 'text';
 
 export interface Artifact {
@@ -22,40 +24,46 @@ export interface ArtifactContent {
   truncated?: boolean;
 }
 
-function httpError(fn: string, res: Response): Error {
-  return new Error(`${fn} failed: ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`);
-}
-
 export async function listArtifacts(sessionId: string): Promise<Artifact[]> {
-  const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts`);
-  if (!res.ok) {
-    throw httpError('listArtifacts', res);
+  try {
+    const data = await backendRequest<{ artifacts?: Artifact[] }>({
+      path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts`,
+    });
+    return data.artifacts ?? [];
+  } catch (error) {
+    throw new Error(
+      `listArtifacts failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-  const data = await res.json();
-  return data.artifacts ?? [];
 }
 
 export async function readArtifactContent(
   sessionId: string,
-  artifactId: string
+  artifactId: string,
 ): Promise<ArtifactContent> {
-  const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts/${artifactId}/content`);
-  if (!res.ok) {
-    throw httpError('readArtifactContent', res);
+  try {
+    return await backendRequest<ArtifactContent>({
+      path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/content`,
+    });
+  } catch (error) {
+    throw new Error(
+      `readArtifactContent failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-  return res.json();
 }
 
 export async function revealArtifact(
   sessionId: string,
-  artifactId: string
+  artifactId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`/api/v1/sessions/${sessionId}/artifacts/${artifactId}/reveal`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (!res.ok) {
-    throw httpError('revealArtifact', res);
+  try {
+    return await backendRequest<{ ok: boolean; error?: string }>({
+      method: 'POST',
+      path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/reveal`,
+    });
+  } catch (error) {
+    throw new Error(
+      `revealArtifact failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-  return res.json();
 }

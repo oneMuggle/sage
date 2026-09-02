@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-44；本索引以目录中的实际文件为准。
 
 ---
 
@@ -18,7 +18,7 @@
 | 21   | [LLM 代理路由](./21-llm-proxy.md)                    | `/api/v1/llm/*` 透传上游,绕开浏览器到 Ollama/OpenAI 的 CORS 拦截                                      |
 | 22   | [Agents CRUD 端到端](./22-agents-crud.md)            | list/update/toggle 三层链路 (后端路由 → Electron IPC → 前端 API → UI)                                 |
 | 23   | [Chat 流式响应端到端](./23-chat-streaming.md)        | NDJSON 协议 + Electron IPC event 桥接 + NDJSON relay + chatStream 中间态文案                          |
-| 24   | [Skills 系统端到端](./24-skills-system.md)           | InprocSkillAdapter + 5 路由 + 4 builtin + SKILL.md v2 (gating/scripts/dispatch/slash command) + 使用跟踪/Nudge |
+| 24   | [Skills 系统端到端](./24-skills-system.md)           | InprocSkillAdapter + 9 个 Skills API 端点 + 4 builtin + SKILL.md v2（gating/scripts/dispatch/slash command）+ 使用跟踪/Nudge |
 | 25   | [LLM Wiki 集成 (PR-8)](./25-llm-wiki-integration.md) | 4 LLM provider 抽象 + prompt 模板 + LanceDB RAG + 知识图谱 8 阶段实施                                 |
 | 26   | [跨平台打包矩阵](./26-packaging-matrix.md)            | Win7/10/11 NSIS + VCRedist bundling 与 Ubuntu deb 覆盖,用户安装指南                                  |
 | 27   | [多 Agent 编排层 (M1 typed 化)](./27-multi-agent-orchestration.md) | 12 条 PolicyEngine 规则 + Report schema v1 + Approval token 8 项校验门（参考 claw-code）               |
@@ -38,6 +38,7 @@
 | 42   | [Chat-Native Multi-Agent Orchestration](./42-chat-multi-agent-orchestration.md) | 聊天链路多 agent 编排：语义判定 + tool-toggle 门 + ChatDispatcher 拓扑分波调度（depends_on/级联取消）+ task_plan/task_status/todo_snapshot 事件 + 前端任务树与 todo 清单镜像 + output_schema 结构化返回/followup 续聊/worktree 隔离（默认关）/LaneBoard 快照激活 |
 | 43   | [§1.2 事件循环门禁升级](./43-event-loop-gate.md) | 单点 P99 → 5 轮 P99 中位数门禁：阈值演进 50→100→200→150→400ms 设计历史 + 抗抖动/回归敏感权衡 |
 | 44   | [bash 命令行工具](./44-bash-tool.md) | 对齐 Claude Code Bash tool：放开 shell 操作符（危险判定收敛到 bash_validation + PermissionEnforcer）+ 后台执行三工具（bash/bash_output/kill_shell）+ 30 KiB 有界输出 + 进程组回收 + 跨平台 shell 探测（Git Bash / PowerShell 降级） |
+| 45   | [渐进式功能披露](./44-progressive-disclosure.md) | sticky-unlock 存储、受门控入口及 `/skills` 始终可发现的设计边界 |
 
 ---
 
@@ -46,7 +47,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-32）                                             |
+| 横切关注点 | 本目录（15-44）                                             |
 
 ---
 

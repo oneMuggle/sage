@@ -32,7 +32,9 @@ from backend.skills.skill_md.auto_activation import (
 )
 from backend.skills.skill_md.frontmatter import SkillMdParseError, parse
 from backend.skills.skill_md.loader import SkillMdHotLoader
+from backend.skills.skill_md.resources import ResourceIndex
 from backend.skills.skill_md.skill import DispatchMode, SkillMdDocument
+from backend.skills.skill_md.validation import SkillMdSecurityError
 
 pytestmark = pytest.mark.unit
 
@@ -231,6 +233,44 @@ class TestAutoActivate:
         assert "Follow the instructions below." in block
         assert "# Review checklist" in block
 
+    def test_unindexed_resource_skips_only_bad_skill(self, tmp_path):
+        """实际资源校验失败只隔离坏技能。"""
+        (tmp_path / "references").mkdir()
+        (tmp_path / "references" / "guide.md").write_text("guide", encoding="utf-8")
+        bad = _doc(
+            "bad-real",
+            when_to_use='"review"',
+            body="{baseDir}/references/guide.md",
+        )
+        bad.base_dir = tmp_path
+        bad.resources = ResourceIndex()
+        good = _doc("good-real", when_to_use='"review"', body="good body")
+
+        result = auto_activate("review this", [bad, good])
+
+        assert result.names == ("good-real",)
+        assert "guide.md" not in result.context_block
+        assert "good body" in result.context_block
+
+    def test_resource_security_failure_skips_only_bad_skill(self, monkeypatch, tmp_path):
+        """资源安全错误只跳过坏技能，其他命中技能仍注入。"""
+        bad = _doc("bad", when_to_use='"review"', body="bad body")
+        bad.base_dir = tmp_path
+        bad.resources = ResourceIndex()
+        good = _doc("good", when_to_use='"review"', body="good body")
+
+        def _render(body, base_dir, index):
+            if body == "bad body":
+                raise SkillMdSecurityError("sensitive path")
+            return body.replace("review", "rendered")
+
+        monkeypatch.setattr("backend.skills.skill_md.auto_activation.render_body_with_resources", _render)
+        result = auto_activate("review this", [bad, good])
+
+        assert result.names == ("good",)
+        assert "bad body" not in result.context_block
+        assert "good body" in result.context_block
+
     def test_multiple_blocks_separated(self):
         """多技能块之间用 --- 分隔。"""
         docs = [
@@ -243,7 +283,6 @@ class TestAutoActivate:
         assert "\n\n---\n\n" in block
 
 
-class TestBuildContextBlock:
     def test_empty_sequence_returns_empty(self):
         """空序列返回空串。"""
         assert build_context_block([]) == ""

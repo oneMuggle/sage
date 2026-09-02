@@ -22,9 +22,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ..base import BaseSkill, SkillResult, SkillSchema
+from .resources import ResourceIndex, render_body_with_resources
+from .validation import SkillMdSecurityError
 
 if TYPE_CHECKING:
     from .script_runner import ScriptRunner
+
+
+_RESOURCE_SECURITY_ERROR = "Skill resource security validation failed."
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,10 @@ class SkillMdDocument:
     when_to_use: str = ""
     body: str = ""
     base_dir: Optional[Path] = None
+    # True when this document came from the root-level ``<root>/SKILL.md``
+    # form rather than ``<root>/<name>/SKILL.md``.  Deletion uses this
+    # distinction to avoid treating the skills root as a removable skill dir.
+    is_root_file: bool = False
     version: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     raw_frontmatter: Dict[str, Any] = field(default_factory=dict)
@@ -68,7 +77,7 @@ class SkillMdDocument:
     os: List[str] = field(default_factory=list)  # 平台过滤
     always: bool = False  # 跳过条件加载
     dispatch: DispatchMode = field(default_factory=DispatchMode)
-    resources: Optional[Any] = None  # ResourceIndex，由 loader 构建
+    resources: Optional[ResourceIndex] = None  # ResourceIndex，由 loader 构建
 
     # agentskills.io spec optional fields (Task 3)
     license: Optional[str] = None
@@ -113,6 +122,20 @@ class SkillMdSkill(BaseSkill):
             examples=[],
         )
 
+    def _render_body(self) -> str:
+        """Render resource placeholders only at a prompt/execute boundary."""
+        if self._doc.base_dir is None or self._doc.resources is None:
+            return self._doc.body
+        return render_body_with_resources(
+            self._doc.body,
+            base_dir=self._doc.base_dir,
+            index=self._doc.resources,
+        )
+
+    @staticmethod
+    def _resource_security_failure() -> SkillResult:
+        return SkillResult(success=False, error=_RESOURCE_SECURITY_ERROR)
+
     def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         """返回 body + 元数据, 不消费 params/context (v1 设计)。
 
@@ -122,9 +145,14 @@ class SkillMdSkill(BaseSkill):
 
         注意: 这是同步方法, 不支持脚本执行。脚本执行请用 ``execute_v2()``。
         """
+        try:
+            body = self._render_body()
+        except SkillMdSecurityError:
+            return self._resource_security_failure()
+
         return SkillResult(
             success=True,
-            content=self._doc.body,
+            content=body,
             metadata={
                 "source": "skillmd",
                 "name": self._doc.name,

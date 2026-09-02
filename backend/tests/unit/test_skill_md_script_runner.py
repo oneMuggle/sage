@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from pathlib import Path
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
@@ -124,8 +126,9 @@ async def test_script_runner_happy_path(tmp_path):
     call_args = sandbox.run.call_args
     req = call_args.args[0]
     assert isinstance(req, SandboxRequest)
-    assert req.script_path == script.resolve()
-    assert req.args == ()
+    assert req.script_path != script.resolve()
+    assert req.script_path.name == script.name
+    assert req.cwd == script.parent.resolve()
 
 
 @pytest.mark.asyncio()
@@ -237,6 +240,49 @@ async def test_script_runner_rejects_script_not_in_base_dir(tmp_path):
 
 
 @pytest.mark.asyncio()
+async def test_script_runner_rejects_absolute_script_path(tmp_path):
+    """绝对路径不能跳过当前技能目录边界。"""
+    base = tmp_path / "skill-a"
+    base.mkdir()
+    outside = tmp_path / "skill-b.py"
+    outside.write_text("print('outside')\n", encoding="utf-8")
+    doc = _make_doc(base_dir=base)
+    sandbox = MagicMock(spec=SandboxPort)
+    confirmer = MagicMock(spec=ConfirmationPort)
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
+
+    result = await runner.run_script(doc=doc, script_name=str(outside), args=())
+
+    assert result.success is False
+    assert "skill" in result.error.lower() or "路径" in result.error
+    confirmer.confirm.assert_not_called()
+    sandbox.run.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_script_runner_rejects_symlink_component(tmp_path):
+    """技能目录内的符号链接不能把脚本解析到另一技能。"""
+    base = tmp_path / "skill-a"
+    other = tmp_path / "skill-b"
+    base.mkdir()
+    other.mkdir()
+    target = other / "evil.py"
+    target.write_text("print('outside')\n", encoding="utf-8")
+    link = base / "scripts"
+    link.symlink_to(other, target_is_directory=True)
+    doc = _make_doc(base_dir=base)
+    sandbox = MagicMock(spec=SandboxPort)
+    confirmer = MagicMock(spec=ConfirmationPort)
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
+
+    result = await runner.run_script(doc=doc, script_name="scripts/evil.py", args=())
+
+    assert result.success is False
+    confirmer.confirm.assert_not_called()
+    sandbox.run.assert_not_called()
+
+
+@pytest.mark.asyncio()
 async def test_script_runner_accepts_script_in_nested_subdir(tmp_path):
     """ScriptRunner 接受嵌套子目录中的脚本。"""
     base = tmp_path / "skills"
@@ -309,8 +355,178 @@ async def test_script_runner_user_declined_returns_error(tmp_path):
 
 
 # =====================================================================
-# ScriptRunner.run_script - 沙箱执行
+# ScriptRunner.run_script - 确认后快照
 # =====================================================================
+
+
+@pytest.mark.asyncio()
+async def test_script_runner_rejects_content_changed_after_confirmation(tmp_path):
+    """确认后普通文件内容变化必须 fail-closed。"""
+    script = tmp_path / "test.py"
+    script.write_text("print('before')\n", encoding="utf-8")
+    doc = _make_doc(base_dir=tmp_path)
+    sandbox = MagicMock(spec=SandboxPort)
+    sandbox.run = AsyncMock()
+
+    async def confirm_then_change(**kwargs):
+        script.write_text("print('after')\n", encoding="utf-8")
+        return True
+
+    confirmer = MagicMock(spec=ConfirmationPort)
+    confirmer.confirm = confirm_then_change
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
+
+    result = await runner.run_script(doc, "test.py", ())
+
+    assert result.success is False
+    assert "变化" in result.error or "changed" in result.error.lower() or "hash" in result.error.lower()
+    sandbox.run.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_script_runner_rejects_replaced_regular_file_after_confirmation(tmp_path):
+    """确认后替换为另一普通文件即使内容不同也必须拒绝。"""
+    script = tmp_path / "test.py"
+    script.write_text("print('before')\n", encoding="utf-8")
+    doc = _make_doc(base_dir=tmp_path)
+    sandbox = MagicMock(spec=SandboxPort)
+    sandbox.run = AsyncMock()
+
+    async def confirm_then_replace(**kwargs):
+        replacement = tmp_path / "replacement.py"
+        replacement.write_text("print('after')\n", encoding="utf-8")
+        replacement.replace(script)
+        return True
+
+    confirmer = MagicMock(spec=ConfirmationPort)
+    confirmer.confirm = confirm_then_replace
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
+
+    result = await runner.run_script(doc, "test.py", ())
+
+    assert result.success is False
+    assert "changed" in result.error.lower() or "变化" in result.error
+    sandbox.run.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_script_runner_rejects_same_hash_different_inode_after_confirmation(tmp_path):
+    """确认后 inode 改变但 SHA-256 不变仍必须拒绝（不能只依赖 hash）。"""
+    script = tmp_path / "test.py"
+    content = b"print('same')\n"
+    script.write_bytes(content)
+    doc = _make_doc(base_dir=tmp_path)
+    sandbox = MagicMock(spec=SandboxPort)
+    sandbox.run = AsyncMock()
+
+    async def confirm_then_replace_same_content(**kwargs):
+        replacement = tmp_path / "replacement.py"
+        replacement.write_bytes(content)
+        replacement.replace(script)
+        return True
+
+    confirmer = MagicMock(spec=ConfirmationPort)
+    confirmer.confirm = confirm_then_replace_same_content
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
+
+    result = await runner.run_script(doc, "test.py", ())
+
+    assert result.success is False
+    assert "identity" in result.error.lower() or "inode" in result.error.lower()
+    sandbox.run.assert_not_called()
+@pytest.mark.asyncio()
+async def test_script_runner_executes_private_snapshot_and_cleans_it(tmp_path):
+    """沙箱接收受控快照，权限正确且执行后清理。"""
+    script = tmp_path / "test.py"
+    content = "print('snapshot')\n"
+    script.write_text(content, encoding="utf-8")
+    doc = _make_doc(base_dir=tmp_path)
+    captured = {}
+
+    async def run(request):
+        captured["request"] = request
+        assert request.script_path.read_text(encoding="utf-8") == content
+        assert stat.S_IMODE(request.script_path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(request.script_path.parent.stat().st_mode) == 0o700
+        return SandboxResult(True, 0, "ok", "", 1)
+
+    sandbox = MagicMock(spec=SandboxPort)
+    sandbox.run = run
+    confirmer = MagicMock(spec=ConfirmationPort)
+    confirmer.confirm = AsyncMock(return_value=True)
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
+
+    result = await runner.run_script(doc, "test.py", ())
+
+    assert result.success is True
+    snapshot = captured["request"].script_path
+    assert snapshot != script.resolve()
+    assert not snapshot.exists()
+    assert not snapshot.parent.exists()
+
+
+    """沙箱异常时也必须清理快照。"""
+    script = tmp_path / "test.py"
+    script.write_text("print('x')\n", encoding="utf-8")
+    doc = _make_doc(base_dir=tmp_path)
+    captured = {}
+
+    async def run(request):
+        captured["path"] = request.script_path
+        raise RuntimeError("boom")
+
+    sandbox = MagicMock(spec=SandboxPort)
+    sandbox.run = run
+    confirmer = MagicMock(spec=ConfirmationPort)
+    confirmer.confirm = AsyncMock(return_value=True)
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
+
+    result = await runner.run_script(doc, "test.py", ())
+
+    assert result.success is False
+    assert not captured["path"].parent.exists()
+
+
+@pytest.mark.asyncio()
+async def test_script_runner_rejects_snapshot_creation_failure(tmp_path, monkeypatch):
+    """快照无法安全创建时必须拒绝执行。"""
+    script = tmp_path / "test.py"
+    script.write_text("print('x')\n", encoding="utf-8")
+    doc = _make_doc(base_dir=tmp_path)
+    sandbox = MagicMock(spec=SandboxPort)
+    sandbox.run = AsyncMock()
+    confirmer = MagicMock(spec=ConfirmationPort)
+    confirmer.confirm = AsyncMock(return_value=True)
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
+    monkeypatch.setattr(runner, "_create_snapshot", lambda path, content: (_ for _ in ()).throw(OSError("no snapshot")))
+
+    result = await runner.run_script(doc, "test.py", ())
+
+    assert result.success is False
+    assert "快照" in result.error
+    sandbox.run.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_script_runner_fails_closed_without_o_nofollow(tmp_path, monkeypatch):
+    """不支持 O_NOFOLLOW 时拒绝读取，且不进入确认或沙箱。"""
+    script = tmp_path / "test.py"
+    script.write_text("print('x')\n", encoding="utf-8")
+    doc = _make_doc(base_dir=tmp_path)
+    sandbox = MagicMock(spec=SandboxPort)
+    sandbox.run = AsyncMock()
+    confirmer = MagicMock(spec=ConfirmationPort)
+    confirmer.confirm = AsyncMock(return_value=True)
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+
+    result = await runner.run_script(doc, "test.py", ())
+
+    assert result.success is False
+    confirmer.confirm.assert_not_called()
+    sandbox.run.assert_not_called()
+
+
 
 
 @pytest.mark.asyncio()
@@ -440,6 +656,48 @@ async def test_script_runner_confirmer_exception_does_not_propagate(tmp_path):
 
     assert result.success is False
     sandbox.run.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_script_runner_invalid_path_construction_is_converged():
+    """doc.base_dir/script_name 构造异常时也应返回失败结果。"""
+    doc = _make_doc(base_dir=object())  # type: ignore[arg-type]
+    sandbox = MagicMock(spec=SandboxPort)
+    confirmer = MagicMock(spec=ConfirmationPort)
+    runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[])
+
+    result = await runner.run_script(doc=doc, script_name="script.py", args=())
+
+    assert result.success is False
+    assert result.error is not None
+    sandbox.run.assert_not_called()
+    confirmer.confirm.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_script_runner_invalid_args_are_converged(tmp_path):
+    """args 非 tuple[str, ...] 时应返回失败结果而不是抛异常。"""
+    script = tmp_path / "test.py"
+    script.write_text("print('test')\n", encoding="utf-8")
+    doc = _make_doc(base_dir=tmp_path)
+    sandbox = MagicMock(spec=SandboxPort)
+    confirmer = MagicMock(spec=ConfirmationPort)
+    runner = ScriptRunner(
+        sandbox=sandbox,
+        confirmer=confirmer,
+        allowed_roots=[tmp_path],
+    )
+
+    result = await runner.run_script(
+        doc=doc,
+        script_name="test.py",
+        args=("valid", 123),  # type: ignore[arg-type]
+    )
+
+    assert result.success is False
+    assert result.error is not None
+    sandbox.run.assert_not_called()
+    confirmer.confirm.assert_not_called()
 
 
 # =====================================================================

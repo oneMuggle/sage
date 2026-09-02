@@ -25,6 +25,33 @@ def _is_ssl_bootstrap_test(request):
     return str(request.node.fspath).endswith(_SSL_BOOTSTRAP_TEST)
 
 
+@pytest.fixture(autouse=True)
+def _configure_test_http_client_auth(request, monkeypatch):
+    """为直接创建的测试 HTTP 客户端注入合成本地 capability。"""
+    # These tests intentionally verify that an empty Authorization header is
+    # omitted when forwarding credentials to the configured LLM upstream.
+    if str(request.node.fspath).endswith("backend/tests/integration/test_llm_proxy_routes.py"):
+        return
+
+    import httpx
+    from starlette.testclient import TestClient
+
+    headers = {"X-Sage-Local-Authorization": "Bearer test-local-auth-token"}
+    original_test_client_init = TestClient.__init__
+    original_async_client_init = httpx.AsyncClient.__init__
+
+    def test_client_init(self, *args, **kwargs):
+        kwargs.setdefault("headers", headers.copy())
+        return original_test_client_init(self, *args, **kwargs)
+
+    def async_client_init(self, *args, **kwargs):
+        kwargs.setdefault("headers", headers.copy())
+        return original_async_client_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(TestClient, "__init__", test_client_init)
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", async_client_init)
+
+
 @pytest.fixture()
 def tmp_db_path():
     """创建临时数据库文件，测试后自动清理"""
@@ -47,6 +74,9 @@ def setup_test_db(request):
     tmp_db_path = request.getfixturevalue("tmp_db_path")
     import backend.data.database as db_mod
 
+    # Local desktop capability: deterministic test-only token, never a production secret.
+    from backend.api.local_auth import initialize_local_auth_token
+
     # A4: WakeStore 单例绑定全局 Database，必须随临时库一起重置，
     # 否则下一个用例拿到持有已关闭连接的旧 store。
     from backend.application.services.wake_store import reset_wake_store
@@ -61,6 +91,12 @@ def setup_test_db(request):
 
     # SkillUsageStore 单例同理
     from backend.skills.usage import reset_usage_store
+
+    monkeypatch = request.getfixturevalue("monkeypatch")
+    monkeypatch.setenv("SAGE_LOCAL_AUTH_TOKEN", "test-local-auth-token")
+    from backend.api import local_auth
+    local_auth._local_auth_token = None
+    initialize_local_auth_token()
 
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
     db_mod._db.init_db()
@@ -131,7 +167,9 @@ async def client():
 
         app.state.streams = StreamRegistry()
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-Sage-Local-Authorization": "Bearer test-local-auth-token"},
     ) as c:
         yield c
     # 清理:取消任何残留 task,清空注册表

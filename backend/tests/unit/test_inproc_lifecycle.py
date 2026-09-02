@@ -27,6 +27,27 @@ def test_unarchive(adapter):
     assert not adapter.is_archived("search")
 
 
+def test_set_enabled_unknown_skill_returns_false(adapter):
+    assert adapter.set_enabled("no-such-skill", False) is False
+
+
+def test_set_enabled_persists_across_adapter_instances(adapter):
+    """DB 真相：新 adapter 实例 hydrate 后仍禁用。"""
+    adapter.set_enabled("coder", False)
+    inproc_mod._skill_adapter_singleton = None
+    assert not get_singleton().is_enabled("coder")
+
+
+def test_hydrate_enabled_ignores_unknown_registry_names(adapter):
+    """DB 中孤儿开关不应进入内存缓存。"""
+    from backend.skills.lifecycle import get_lifecycle_store
+
+    get_lifecycle_store().set_enabled("no-such-skill", False)
+    adapter._hydrate_enabled_from_db()
+    assert "no-such-skill" not in adapter._enabled
+    assert adapter.is_enabled("no-such-skill") is True
+
+
 def test_set_archived_unknown_skill_returns_false(adapter):
     assert adapter.set_archived("no-such-skill", True) is False
 
@@ -103,6 +124,15 @@ def test_slash_list_excludes_archived():
     assert "/review" in adapter.list_slash_commands()
     adapter.set_archived("review", True)
     assert "/review" not in adapter.list_slash_commands()
+
+
+@pytest.mark.asyncio()
+async def test_disabled_slash_command_is_hidden_and_rejected():
+    adapter = _skillmd_adapter("review", user_invocable=True, user_invocable_name="/review")
+    adapter.set_enabled("review", False)
+    assert "/review" not in adapter.list_slash_commands()
+    with pytest.raises(LookupError):
+        await adapter.execute_command("/review")
 
 
 @pytest.mark.asyncio()

@@ -2,16 +2,20 @@
 
 提供 Wiki 子系统的 HTTP API：文件操作、搜索、Ingest、Chat、Graph、Research、Clip。
 """
+
+from __future__ import annotations
+
 import logging
 import os
 import re
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import AsyncIterator, List, Optional
+from typing import AsyncIterator, List, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from backend.wiki import (
@@ -24,28 +28,136 @@ from backend.wiki import (
     ingest_source_stream,
     search_wiki,
 )
+from backend.wiki.extract import MAX_FILE_BYTES
 from backend.wiki.file_parser import parse_document
+from backend.wiki.files import (
+    iter_wiki_markdown,
+    secure_delete_path,
+    secure_ensure_directory,
+    secure_list_directory,
+    secure_open_file,
+    secure_read_file,
+    secure_read_file_bounded,
+    secure_read_text,
+    secure_rename_path,
+    secure_write_file,
+    secure_write_file_if_missing,
+    secure_write_temp_bytes,
+    secure_write_temp_file,
+)
 from backend.wiki.llm_context import make_llm_context
+from backend.wiki.project_authorization import (
+    authorize_registered_project,
+    authorize_registration,
+    canonical_project_path,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/wiki", tags=["wiki"])
 
 
-def _http_exception_from_llm(e: Exception, fallback_detail: str) -> HTTPException:
-    """Map an exception to HTTPException, preserving upstream status code.
+def _cleanup_temp_paths(*paths: Optional[Path], project_root: Optional[Path] = None) -> None:
+    """Best-effort cleanup that preserves the operation's original failure."""
+    for path in paths:
+        if path is not None:
+            with suppress(OSError):
+                if project_root is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    secure_delete_path(project_root, path)
 
-    `httpx.HTTPStatusError` (raised by `r.raise_for_status()`) carries the
-    upstream LLM/embedding provider's response status. Map it through so
-    clients can distinguish 401/403/429/5xx instead of seeing a flat 500.
-    Everything else falls back to 500.
-    """
+
+def _canonical_project_root(project_path: str) -> Path:
+    """Return a canonical root and reject invalid declarations."""
+    canonical = canonical_project_path(project_path)
+    if canonical is None:
+        raise HTTPException(status_code=400, detail="项目路径无效")
+    return canonical
+
+
+def _path_is_within(root: Path, candidate: Path) -> bool:
+    try:
+        candidate.resolve().relative_to(root)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _reject_symlink_components(root: Path, candidate: Path) -> None:
+    """Reject symlinks in a user-controlled path, including missing leaves."""
+    try:
+        relative = candidate.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="路径不在项目目录内") from exc
+    current = root
+    for component in relative.parts:
+        current /= component
+        try:
+            if current.is_symlink():
+                raise HTTPException(status_code=400, detail="路径不能是符号链接")
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail="路径无效") from exc
+
+
+def _resolve_project_file(project_path: str, path: str) -> Tuple[Path, Path]:
+    """Resolve a relative project path and enforce canonical containment."""
+    root = _canonical_project_root(project_path)
+    if not path or "\x00" in path:
+        raise HTTPException(status_code=400, detail="路径无效")
+    candidate = Path(path).expanduser()
+    if candidate.is_absolute():
+        raise HTTPException(status_code=400, detail="路径必须是项目目录内的相对路径")
+    lexical = root / candidate
+    try:
+        _reject_symlink_components(root, lexical)
+        resolved = lexical.resolve(strict=False)
+        resolved.relative_to(root)
+    except HTTPException:
+        raise
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="路径不在项目目录内") from exc
+    return root, resolved
+
+
+def _resolve_source_file(project_path: str, source_file: str) -> Tuple[Path, Path]:
+    """Resolve an ingest source (legacy absolute or relative) within the root."""
+    root = _canonical_project_root(project_path)
+    if not source_file or "\x00" in source_file:
+        raise HTTPException(status_code=400, detail="源文件路径无效")
+    supplied = Path(source_file).expanduser()
+    lexical = supplied if supplied.is_absolute() else root / supplied
+    try:
+        _reject_symlink_components(root, lexical)
+        resolved = lexical.resolve(strict=False)
+        resolved.relative_to(root)
+    except HTTPException:
+        raise
+    except (OSError, ValueError) as exc:
+        if supplied.is_absolute() and not lexical.exists():
+            try:
+                lexical.relative_to(root)
+            except ValueError as containment_exc:
+                raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from containment_exc
+            raise HTTPException(status_code=404, detail="源文件不存在") from exc
+        raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from exc
+    return root, resolved
+
+
+def _http_exception_from_llm(e: Exception, fallback_detail: str) -> HTTPException:
+    """Map upstream failures without exposing provider response data."""
     if isinstance(e, httpx.HTTPStatusError):
-        upstream_text = e.response.text if e.response is not None else ""
-        return HTTPException(
-            status_code=e.response.status_code,
-            detail=f"{fallback_detail} (upstream {e.response.status_code}): {upstream_text}",
+        status_code = e.response.status_code if e.response is not None else 502
+        logger.warning(
+            "wiki upstream HTTP failure: status=%s error_type=%s",
+            status_code,
+            type(e).__name__,
         )
+        return HTTPException(
+            status_code=status_code,
+            detail=f"{fallback_detail} (upstream HTTP {status_code})",
+        )
+    logger.warning("wiki operation failed: error_type=%s", type(e).__name__)
     return HTTPException(status_code=500, detail=fallback_detail)
 
 
@@ -85,21 +197,26 @@ def _create_wiki_structure(project_path: Path) -> None:
     """
     from datetime import datetime
 
-    project_path.mkdir(parents=True, exist_ok=True)
+    secure_ensure_directory(project_path.parent, project_path)
 
     # 创建标准目录
-    (project_path / "raw" / "sources").mkdir(parents=True, exist_ok=True)
-    (project_path / "raw" / "assets").mkdir(parents=True, exist_ok=True)
-    (project_path / "wiki" / "entities").mkdir(parents=True, exist_ok=True)
-    (project_path / "wiki" / "concepts").mkdir(parents=True, exist_ok=True)
-    (project_path / "wiki" / "sources").mkdir(parents=True, exist_ok=True)
-    (project_path / "wiki" / "queries").mkdir(parents=True, exist_ok=True)
-    (project_path / ".llm-wiki").mkdir(parents=True, exist_ok=True)
+    for relative_dir in (
+        "raw/sources",
+        "raw/assets",
+        "wiki/entities",
+        "wiki/concepts",
+        "wiki/sources",
+        "wiki/queries",
+        ".llm-wiki",
+    ):
+        secure_ensure_directory(project_path, project_path / relative_dir)
 
     # 创建 schema.md
     schema_file = project_path / "wiki" / "schema.md"
     if not schema_file.exists():
-        schema_file.write_text(
+        secure_write_file_if_missing(
+            project_path,
+            schema_file,
             "# Schema\n\n"
             "本项目的 Wiki 结构定义。\n\n"
             "## 目录结构\n\n"
@@ -109,25 +226,30 @@ def _create_wiki_structure(project_path: Path) -> None:
             "- `wiki/concepts/` - 概念页面\n"
             "- `wiki/sources/` - 源文档摘要页面\n"
             "- `wiki/queries/` - 查询结果页面\n",
-            encoding="utf-8",
         )
 
     # 创建 overview.md
     overview_file = project_path / "wiki" / "overview.md"
     if not overview_file.exists():
-        overview_file.write_text(
-            f"# {project_path.name}\n\n" f"创建于 {datetime.now(tz=timezone.utc).isoformat()}\n\n",  # noqa: DTZ011, UP017
-            "## 概述\n\n" "这是一个新的 Wiki 项目。开始添加源文档来构建知识库。\n",
-            encoding="utf-8",
+        secure_write_file_if_missing(
+            project_path,
+            overview_file,
+            f"# {project_path.name}\n\n"
+            f"创建于 {datetime.now(tz=timezone.utc).isoformat()}\n\n"  # noqa: UP017
+            "## 概述\n\n"
+            "这是一个新的 Wiki 项目。开始添加源文档来构建知识库。\n",
         )
 
     # 创建 index.md
     index_file = project_path / "wiki" / "index.md"
     if not index_file.exists():
-        index_file.write_text(
-            f"# Wiki 索引\n\n" f"自动生成于 {datetime.now(tz=timezone.utc).isoformat()}\n\n",  # noqa: DTZ011, UP017
-            "## 页面\n\n" "_暂无页面_\n",
-            encoding="utf-8",
+        secure_write_file_if_missing(
+            project_path,
+            index_file,
+            f"# Wiki 索引\n\n"
+            f"自动生成于 {datetime.now(tz=timezone.utc).isoformat()}\n\n"  # noqa: UP017
+            "## 页面\n\n"
+            "_暂无页面_\n",
         )
 
 
@@ -144,20 +266,21 @@ async def create_project(req: CreateProjectRequest) -> ProjectInfo:
     import uuid
     from datetime import datetime
 
-    project_path = Path(req.base_path).expanduser().resolve()
+    project_path = _canonical_project_root(req.base_path)
 
     if not project_path.exists():
         try:
             _create_wiki_structure(project_path)
         except Exception as e:
             logger.error(f"创建项目失败: {e}")
-            raise HTTPException(status_code=500, detail=f"创建项目失败: {e}")
+            raise HTTPException(status_code=500, detail="创建项目失败") from e
     elif not (project_path / "wiki").exists():
         # 路径存在但不是 Wiki 项目，创建目录结构
         _create_wiki_structure(project_path)
 
     # 生成项目 ID
     project_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(project_path)))
+    record_recent(str(project_path), req.name, "create")
 
     return ProjectInfo(
         id=project_id,
@@ -184,7 +307,7 @@ async def open_project(req: OpenProjectRequest) -> ProjectInfo:
     import uuid
     from datetime import datetime
 
-    project_path = Path(req.path).expanduser().resolve()
+    project_path = _canonical_project_root(req.path)
 
     if not project_path.exists():
         raise HTTPException(status_code=404, detail="项目路径不存在")
@@ -194,11 +317,11 @@ async def open_project(req: OpenProjectRequest) -> ProjectInfo:
 
     # 生成项目 ID
     project_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(project_path)))
+    record_recent(str(project_path), project_path.name, "open")
 
     # 检查是否有内容
     has_content = False
-    wiki_dir = project_path / "wiki"
-    for md_file in wiki_dir.rglob("*.md"):
+    for md_file in iter_wiki_markdown(project_path):
         if md_file.name not in ("index.md", "schema.md", "overview.md"):
             has_content = True
             break
@@ -234,7 +357,7 @@ async def list_projects(base_path: str = "") -> List[ProjectInfo]:
 
     projects = []
     for item in base.iterdir():
-        if not item.is_dir():
+        if item.is_symlink() or not item.is_dir():
             continue
         if not (item / "wiki").exists():
             continue
@@ -242,7 +365,7 @@ async def list_projects(base_path: str = "") -> List[ProjectInfo]:
         project_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(item)))
         has_content = any(
             md.name not in ("index.md", "schema.md", "overview.md")
-            for md in (item / "wiki").rglob("*.md")
+            for md in iter_wiki_markdown(item)
         )
 
         projects.append(
@@ -296,41 +419,36 @@ class ChatRequest(BaseModel):
 
 
 def list_directory_impl(path: str, project_path: str, depth: int = 10) -> List[dict]:
-    """递归列出目录内容（pure helper，便于单元测试）。
+    """Recursively list directories via no-follow dirfd snapshots."""
+    project_root, base = _resolve_project_file(project_path, path or ".")
 
-    行为：
-    - 递归到指定 depth（默认 10），到达 depth 后子目录不再展开（children=[]）
-    - 过滤隐藏文件（名称以 . 开头）
-    - 目录排在文件前，按 name（lowercase）升序
-
-    Args:
-        path: 相对路径（相对于 project_path）
-        project_path: 项目根目录
-        depth: 最大递归深度
-
-    Returns:
-        list[dict]: 根节点列表，每个节点包含 name/path/is_dir/children
-    """
-    project_root = Path(project_path)
-    base = project_root / path if path else project_root
-
-    def walk(p: Path, d: int) -> dict:
+    def walk(current: Path, remaining: int) -> dict:
+        entries = secure_list_directory(project_root, current)
         node = {
-            "name": p.name,
-            "path": str(p.relative_to(project_root)).replace("\\", "/"),
-            "is_dir": p.is_dir(),
+            "name": current.name,
+            "path": str(current.relative_to(project_root)).replace("\\", "/")
+            if current != project_root
+            else ".",
+            "is_dir": True,
+            "children": [],
         }
-        if p.is_dir() and d > 0:
-            node["children"] = [
-                walk(child, d - 1)
-                for child in sorted(
-                    p.iterdir(),
-                    key=lambda x: (not x.is_dir(), x.name.lower()),
-                )
-                if not child.name.startswith(".")
-            ]
-        else:
-            node["children"] = []
+        if remaining <= 0:
+            return node
+        children = []
+        for name, is_dir in sorted(entries, key=lambda item: (not item[1], item[0].lower())):
+            if name.startswith("."):
+                continue
+            child = current / name
+            child_node = {
+                "name": name,
+                "path": str(child.relative_to(project_root)).replace("\\", "/"),
+                "is_dir": is_dir,
+                "children": [],
+            }
+            if is_dir and remaining > 0:
+                child_node = walk(child, remaining - 1)
+            children.append(child_node)
+        node["children"] = children
         return node
 
     return [walk(base, depth)]
@@ -350,8 +468,8 @@ async def list_directory(path: str, project_path: str) -> List[dict]:
     Raises:
         HTTPException: 如果目标路径不存在
     """
-    project_root = Path(project_path)
-    target_dir = project_root / path if path else project_root
+    authorize_registered_project(project_path)
+    _, target_dir = _resolve_project_file(project_path, path or ".")
 
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail="目录不存在")
@@ -370,12 +488,18 @@ async def read_file(path: str, project_path: str) -> str:
     Returns:
         str: 文件内容
     """
-    file_path = Path(project_path) / path
+    project_root = authorize_registered_project(project_path)
+    _, file_path = _resolve_project_file(project_path, path)
 
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="文件不存在")
+    try:
+        content = secure_read_text(project_root, file_path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="文件不存在") from exc
+    except (OSError, UnicodeError) as exc:
+        logger.warning("Wiki 读取拒绝: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=400, detail="文件读取失败") from exc
 
-    return file_path.read_text(encoding="utf-8")
+    return content
 
 
 @router.post("/write")
@@ -390,9 +514,13 @@ async def write_file(path: str, content: str, project_path: str) -> dict:
     Returns:
         dict: 成功消息
     """
-    file_path = Path(project_path) / path
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(content, encoding="utf-8")
+    project_root = authorize_registered_project(project_path)
+    _, file_path = _resolve_project_file(project_path, path)
+    try:
+        secure_write_file(project_root, file_path, content)
+    except OSError as exc:
+        logger.warning("Wiki 写入拒绝: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=400, detail="文件写入失败") from exc
 
     return {"success": True}
 
@@ -408,17 +536,15 @@ async def delete_file(path: str, project_path: str) -> dict:
     Returns:
         dict: 成功消息
     """
-    file_path = Path(project_path) / path
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="文件不存在")
-
-    if file_path.is_dir():
-        import shutil
-
-        shutil.rmtree(file_path)
-    else:
-        file_path.unlink()
+    authorize_registered_project(project_path)
+    project_root, file_path = _resolve_project_file(project_path, path)
+    try:
+        secure_delete_path(project_root, file_path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="文件不存在") from exc
+    except OSError as exc:
+        logger.warning("Wiki 删除拒绝: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=400, detail="文件删除失败") from exc
 
     return {"success": True}
 
@@ -443,18 +569,18 @@ async def delete_source(source_path: str, project_path: str) -> dict:
     """
     from backend.wiki.lifecycle import cascade_delete_source
 
-    project_root = Path(project_path)
-    source_file = project_root / source_path
+    project_root = authorize_registered_project(project_path)
+    project_root, source_file = _resolve_project_file(project_path, source_path)
 
     if not source_file.exists():
         raise HTTPException(status_code=404, detail="Source 文件不存在")
 
     # 先删除原始 source 文件
     try:
-        source_file.unlink()
+        secure_delete_path(project_root, source_file)
     except Exception as e:
-        logger.error(f"删除 source 文件失败: {e}")
-        raise HTTPException(status_code=500, detail=f"删除 source 文件失败: {e}")
+        logger.error("删除 source 文件失败: error_type=%s", type(e).__name__)
+        raise HTTPException(status_code=500, detail="删除 source 文件失败") from e
 
     # 执行级联删除
     try:
@@ -465,8 +591,8 @@ async def delete_source(source_path: str, project_path: str) -> dict:
             **stats,
         }
     except Exception as e:
-        logger.error(f"级联删除失败: {e}")
-        raise HTTPException(status_code=500, detail=f"级联删除失败: {e}")
+        logger.error("级联删除失败: error_type=%s", type(e).__name__)
+        raise HTTPException(status_code=500, detail="级联删除失败") from e
 
 
 @router.post("/rename")
@@ -481,14 +607,17 @@ async def rename_file(old_path: str, new_path: str, project_path: str) -> dict:
     Returns:
         dict: 成功消息
     """
-    old_file = Path(project_path) / old_path
-    new_file = Path(project_path) / new_path
+    authorize_registered_project(project_path)
+    project_root, old_file = _resolve_project_file(project_path, old_path)
+    _, new_file = _resolve_project_file(project_path, new_path)
 
-    if not old_file.exists():
-        raise HTTPException(status_code=404, detail="文件不存在")
-
-    new_file.parent.mkdir(parents=True, exist_ok=True)
-    old_file.rename(new_file)
+    try:
+        secure_rename_path(project_root, old_file, new_file)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="文件不存在") from exc
+    except OSError as exc:
+        logger.warning("Wiki 重命名拒绝: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=400, detail="文件重命名失败") from exc
 
     return {"success": True}
 
@@ -510,7 +639,7 @@ async def search(query: str, project_path: str, limit: int = 20) -> SearchRespon
     Returns:
         SearchResponse: 搜索结果
     """
-    project_root = Path(project_path)
+    project_root = authorize_registered_project(project_path)
     return search_wiki(project_root, query, limit)
 
 
@@ -538,31 +667,39 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
     Returns:
         StreamingResponse: NDJSON 流式响应
     """
-    project_root = Path(req.project_path)
-    source_file = Path(req.source_file)
+    authorize_registered_project(req.project_path)
+    project_root, source_file = _resolve_source_file(req.project_path, req.source_file)
 
-    if not source_file.exists():
-        raise HTTPException(status_code=404, detail="源文件不存在")
-
-    # 同步解析文档（PDF/DOCX 等），失败时在 stream 开启前抛 HTTPException
+    source_snapshot: Optional[Path] = None
     temp_md: Optional[Path] = None
+    parse_path: Optional[Path] = None
     try:
-        content = parse_document(source_file)
+        payload = secure_read_file_bounded(project_root, source_file, MAX_FILE_BYTES)
+        suffix = source_file.suffix.lower() or ".bin"
+        source_snapshot = secure_write_temp_bytes(
+            project_root, project_root / ".llm-wiki", suffix, payload
+        )
+        parse_path = source_snapshot
+        parse_fd = secure_open_file(project_root, parse_path)
+        try:
+            content = parse_document(parse_path, opened_fd=parse_fd)
+        finally:
+            os.close(parse_fd)
 
-        # 如果是非 Markdown，先转换为临时 Markdown 文件
-        if source_file.suffix.lower() not in (".md", ".markdown", ".txt"):
-            import tempfile
+        # If non-Markdown, convert to a private temporary Markdown snapshot.
+        if suffix not in (".md", ".markdown", ".txt"):
+            temp_md = secure_write_temp_file(
+                project_root, project_root / ".llm-wiki", ".md", content
+            )
+            parse_path = temp_md
+    except FileNotFoundError as exc:
+        _cleanup_temp_paths(temp_md, source_snapshot, project_root=project_root)
+        raise HTTPException(status_code=404, detail="源文件不存在") from exc
+    except (OSError, UnicodeError, ValueError, ImportError) as exc:
+        logger.error("文档解析失败: error_type=%s", type(exc).__name__)
+        _cleanup_temp_paths(temp_md, source_snapshot, project_root=project_root)
+        raise HTTPException(status_code=400, detail="文档解析失败") from exc
 
-            temp_md = Path(tempfile.mktemp(suffix=".md"))
-            temp_md.write_text(content, encoding="utf-8")
-            source_file = temp_md
-    except Exception as e:
-        logger.error(f"文档解析失败: {e}")
-        if temp_md is not None:
-            temp_md.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=f"文档解析失败: {e}")
-
-    # 配置
     config = IngestConfig(
         llm_base_url=req.llm_base_url,
         llm_api_key=req.llm_api_key,
@@ -581,11 +718,16 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
 
     async def _stream_with_cleanup() -> AsyncIterator[bytes]:
         try:
-            async for chunk in ingest_source_stream(config, project_root, source_file, ctx):
+            async for chunk in ingest_source_stream(
+                config,
+                project_root,
+                source_snapshot,
+                ctx,
+                logical_filename=source_file.name,
+            ):
                 yield chunk
         finally:
-            if temp_md is not None:
-                temp_md.unlink(missing_ok=True)
+            _cleanup_temp_paths(temp_md, source_snapshot, project_root=project_root)
 
     return StreamingResponse(
         _stream_with_cleanup(),
@@ -618,7 +760,7 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
     Returns:
         StreamingResponse: NDJSON 流式响应
     """
-    project_root = Path(req.project_path)
+    project_root = authorize_registered_project(req.project_path)
 
     # 配置
     config = ChatConfig(
@@ -665,7 +807,7 @@ async def get_graph(project_path: str, query: Optional[str] = None, limit: int =
     Returns:
         GraphData: 图谱数据
     """
-    project_root = Path(project_path)
+    project_root = authorize_registered_project(project_path)
     return get_graph_cached(project_root, query, limit)
 
 
@@ -690,7 +832,7 @@ async def get_communities(project_path: str) -> dict:
     """
     from backend.wiki.community import get_communities_with_nodes
 
-    project_root = Path(project_path)
+    project_root = authorize_registered_project(project_path)
 
     try:
         communities, graph_data = get_communities_with_nodes(project_root)
@@ -728,7 +870,7 @@ async def get_communities(project_path: str) -> dict:
             },
         }
     except Exception as e:
-        logger.error(f"社区检测失败: {e}")
+        logger.error("社区检测失败: error_type=%s", type(e).__name__)
         raise _http_exception_from_llm(e, "社区检测失败")
 
 
@@ -754,7 +896,7 @@ async def get_insights(project_path: str) -> dict:
     """
     from backend.wiki.insights import analyze_graph
 
-    project_root = Path(project_path)
+    project_root = authorize_registered_project(project_path)
 
     try:
         insights = analyze_graph(project_root)
@@ -785,7 +927,7 @@ async def get_insights(project_path: str) -> dict:
             "stats": insights.stats,
         }
     except Exception as e:
-        logger.error(f"图谱洞察分析失败: {e}")
+        logger.error("图谱洞察分析失败: error_type=%s", type(e).__name__)
         raise _http_exception_from_llm(e, "图谱洞察分析失败")
 
 
@@ -829,7 +971,7 @@ async def start_research(req: ResearchRequest) -> dict:
         deep_research,
     )
 
-    project_root = Path(req.project_path)
+    project_root = authorize_registered_project(req.project_path)
 
     # 创建研究任务
     task = ResearchTask(
@@ -867,6 +1009,7 @@ async def start_research(req: ResearchRequest) -> dict:
             llm_call=ctx.llm_call,
             ingest_config=ingest_config,
             auto_ingest=req.auto_ingest,
+            http_post=ctx.http_post,
         )
 
         return {
@@ -890,7 +1033,7 @@ async def start_research(req: ResearchRequest) -> dict:
         }
 
     except Exception as e:
-        logger.error(f"Deep Research 失败: {e}")
+        logger.error("Deep Research failed: error_type=%s", type(e).__name__)
         raise _http_exception_from_llm(e, "Deep Research 失败")
 
 
@@ -923,7 +1066,7 @@ async def clip_webpage(req: ClipRequest) -> dict:
     Returns:
         dict: 包含保存结果
     """
-    project_root = Path(req.project_path)
+    project_root = authorize_registered_project(req.project_path)
 
     # 添加备注到内容
     full_content = req.content
@@ -932,7 +1075,6 @@ async def clip_webpage(req: ClipRequest) -> dict:
 
     # 保存为临时 Markdown 文件
     raw_sources_dir = project_root / "raw" / "sources"
-    raw_sources_dir.mkdir(parents=True, exist_ok=True)
 
     # 生成文件名（基于 URL）
     safe_title = re.sub(r"[^a-zA-Z0-9一-鿿\-_]", "-", req.title)
@@ -941,7 +1083,11 @@ async def clip_webpage(req: ClipRequest) -> dict:
     filename = f"webclip-{timestamp}-{safe_title}.md"
     source_file = raw_sources_dir / filename
 
-    source_file.write_text(full_content, encoding="utf-8")
+    try:
+        secure_write_file(project_root, source_file, full_content)
+    except OSError as exc:
+        logger.warning("Wiki 剪藏写入拒绝: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=400, detail="剪藏文件写入失败") from exc
 
     result = {
         "source_path": f"raw/sources/{filename}",
@@ -951,7 +1097,19 @@ async def clip_webpage(req: ClipRequest) -> dict:
 
     # 如果启用自动 Ingest
     if req.auto_ingest:
+        source_snapshot: Optional[Path] = None
         try:
+            # Snapshot the authorized file before handing a pathname to ingest.
+            # The saved source may be replaced after this point; ingest only sees
+            # this private, 0600 temporary copy.
+            payload = secure_read_file(project_root, source_file)
+            source_snapshot = secure_write_temp_bytes(
+                project_root,
+                project_root / ".llm-wiki",
+                source_file.suffix or ".bin",
+                payload,
+            )
+
             # 从环境变量或配置获取 LLM 设置
             # 这里使用简单的 OpenAI 兼容 API
             from backend.wiki import IngestConfig, ingest_source
@@ -983,16 +1141,19 @@ async def clip_webpage(req: ClipRequest) -> dict:
             ingest_result = await ingest_source(
                 config=config,
                 project_root=project_root,
-                source_file_path=source_file,
+                source_file_path=source_snapshot,
                 llm_call=ctx.llm_call,
                 http_post=ctx.http_post,
+                logical_filename=filename,
             )
 
             result["wiki_page_path"] = ingest_result.wiki_page_path
             result["auto_ingested"] = True
         except Exception as e:
-            logger.warning(f"自动 Ingest 失败，仅保存源文件: {e}")
-            result["auto_ingest_error"] = str(e)
+            logger.warning("自动 Ingest 失败，仅保存源文件: error_type=%s", type(e).__name__)
+            result["auto_ingest_error"] = "自动 Ingest 失败"
+        finally:
+            _cleanup_temp_paths(source_snapshot, project_root=project_root)
 
     return result
 
@@ -1000,6 +1161,10 @@ async def clip_webpage(req: ClipRequest) -> dict:
 # ============================================================================
 # Vision Caption
 # ============================================================================
+
+
+MAX_VISION_IMAGE_DATA_BYTES = 10 * 1024 * 1024
+MAX_VISION_BASE64_CHARS = 14 * 1024 * 1024
 
 
 class VisionRequest(BaseModel):
@@ -1036,10 +1201,14 @@ async def caption_image_endpoint(req: VisionRequest) -> dict:
     from backend.wiki import VisionConfig, VisionProvider, caption_image
 
     # 解码 base64 图片数据
+    if len(req.image_data) > MAX_VISION_BASE64_CHARS:
+        raise HTTPException(status_code=413, detail="图片数据超过大小限制")
     try:
-        image_data = base64.b64decode(req.image_data)
+        image_data = base64.b64decode(req.image_data, validate=True)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"图片数据解码失败: {e}")
+        raise HTTPException(status_code=400, detail="图片数据解码失败") from e
+    if len(image_data) > MAX_VISION_IMAGE_DATA_BYTES:
+        raise HTTPException(status_code=413, detail="图片数据超过大小限制")
 
     # 构建配置
     config = VisionConfig(
@@ -1051,7 +1220,7 @@ async def caption_image_endpoint(req: VisionRequest) -> dict:
     )
 
     # 项目根目录（用于缓存）
-    project_root = Path(req.project_path) if req.project_path else None
+    project_root = authorize_registered_project(req.project_path) if req.project_path else None
 
     # 生成描述
     try:
@@ -1070,8 +1239,8 @@ async def caption_image_endpoint(req: VisionRequest) -> dict:
             "image_path": result.image_path,
         }
     except Exception as e:
-        logger.error(f"Vision Caption 失败: {e}")
-        raise HTTPException(status_code=500, detail=f"Vision Caption 失败: {e}")
+        logger.error("Vision Caption failed: error_type=%s", type(e).__name__)
+        raise HTTPException(status_code=500, detail="Vision Caption 失败") from e
 
 
 # --- Project folder picker support (added 2026-06-27) ---------------------
@@ -1204,8 +1373,14 @@ async def get_recent_projects() -> List[RecentProject]:
     return load_recent()
 
 
-@router.post("/recent-projects/record", status_code=204)
+@router.post(
+    "/recent-projects/record",
+    status_code=204,
+    response_class=Response,
+    response_model=None,
+)
 async def record_recent_project(req: RecordRecentRequest) -> None:
     """Persist a successful create/open for next-time default-path."""
-    name = req.name or Path(req.path).name
-    record_recent(req.path, name, req.intent)
+    canonical = authorize_registration(req.path, req.intent)
+    name = req.name or canonical.name
+    record_recent(str(canonical), name, req.intent)

@@ -148,6 +148,14 @@ def test_parse_invalid_name_slug_raises():
         parse(text)
 
 
+@pytest.mark.parametrize("name_line", ['name: "good\\n"', "name: good\\n"])
+def test_parse_rejects_name_with_trailing_newline(name_line: str):
+    """A YAML name ending in a newline must not pass slug validation."""
+    text = f"---\n{name_line}\ndescription: y\n---\nbody\n"
+    with pytest.raises(SkillMdParseError):
+        parse(text)
+
+
 # =====================================================================
 # line endings & BOM
 # =====================================================================
