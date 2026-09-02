@@ -1,6 +1,7 @@
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 import { useI18n } from '../../shared/lib/i18n';
+import { BrandLogo } from '../../shared/ui';
 
 interface WelcomeHeroProps {
   onBack?: () => void;
@@ -23,12 +24,8 @@ export function WelcomeHero({ onBack }: WelcomeHeroProps) {
         </button>
       )}
 
-      <div
-        data-testid="welcome-avatar"
-        className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg"
-      >
-        <Sparkles className="w-8 h-8 text-white" />
-      </div>
+      {/* U-Brand: 用 BrandLogo 替代 lucide Sparkles 占位；保留 welcome-avatar testid 给现有 e2e/快照测试用 */}
+      <BrandLogo size="xl" testId="welcome-avatar" />
 
       <div>
         <h1 className="text-2xl font-semibold text-text mb-2">{t('welcome.hero.greeting')}</h1>

@@ -400,6 +400,10 @@ export const zh = {
   'session.export_failed': '导出失败：{message}',
   'session.export_html': '导出为 HTML',
   'session.export_html_exporting': '正在导出…',
+
+  // ─── 品牌 (BrandLogo component) ──────
+  // U-Brand: a11y alt 文本。仅在 <img> 渲染时使用，sidebar.brand 是 wordmark 文案。
+  'brand.alt': 'Sage 标志',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
