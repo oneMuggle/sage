@@ -23,19 +23,19 @@ pytestmark = pytest.mark.unit
 # ---------------------- 枚举值 & 字符串继承 ----------------------
 
 
-def test_agent_state_enum_has_ten_states():
-    """状态机应有 10 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
-    CONTENT_DELTA/PERMISSION_REQUEST/ASK_USER_QUESTION/DONE/FAILED。
+def test_agent_state_enum_has_eleven_states():
+    """状态机应覆盖所有协议状态,包括 reasoning_final 收尾快照事件。
 
     CONTENT_DELTA 由 I4 引入,用于流式 LLM 响应 — 每个 token chunk 推一个
     CONTENT_DELTA 事件,前端 appendContent 累积实现逐字渲染。
     REASONING 用于携带 LLM 思考/推理过程内容（reasoning_content）。
+    REASONING_FINAL 用于携带累计完整 reasoning,前端整体替换而非追加。
     PERMISSION_REQUEST 由 M1 工具安全加固引入 — 工具调用需要用户审批时
     携带 permission_request 字段,前端渲染审批对话框。
     ASK_USER_QUESTION 由 M2 part B 引入 — ask_user_question 工具向用户
     提问时携带 user_question 字段,前端渲染提问对话框。
     """
-    assert len(AgentState) == 10
+    assert len(AgentState) == 11
 
 
 def test_agent_state_enum_string_inheritance():
@@ -72,6 +72,7 @@ def test_agent_state_iteration_order():
         "idle",
         "thinking",
         "reasoning",
+        "reasoning_final",
         "acting",
         "observing",
         "content_delta",

@@ -120,6 +120,7 @@ export type AgentState =
   | 'thinking'
   | 'reasoning' // 新增：携带 LLM 思考/推理过程内容
   | 'reasoning_delta' // 新增：reasoning 增量事件（流式输出）
+  | 'reasoning_final' // 2026-09-02 (win7 cherry-pick): 后端 reasoning 流末尾发的全量事件,前端必须 replace 而非 append
   | 'acting'
   | 'permission_request' // M1: 工具审批卡点 — 等待用户批准/拒绝
   | 'ask_user_question' // M2 part B: AskUserQuestion 卡点 — 等待用户选择/填写
@@ -674,14 +675,7 @@ export interface UpdateTaskInput {
 // ============================================================================
 
 export type LaneStatus =
-  | 'created'
-  | 'ready'
-  | 'running'
-  | 'blocked'
-  | 'succeeded'
-  | 'failed'
-  | 'stopped'
-  | 'cancelled';
+  'created' | 'ready' | 'running' | 'blocked' | 'succeeded' | 'failed' | 'stopped' | 'cancelled';
 
 export type HeartbeatStatus = 'healthy' | 'stalled' | 'transport_dead';
 

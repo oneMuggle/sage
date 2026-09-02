@@ -50,6 +50,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
       return '❌ 失败';
     case 'reasoning':
     case 'reasoning_delta':
+    case 'reasoning_final': // 2026-09-02 (win7 cherry-pick): 全量对齐事件,不渲染占位文本(同 reasoning_delta)
     case 'content_delta':
     case 'idle':
     case 'done':
@@ -77,6 +78,7 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
       return { iconName: 'Brain', label: '思考中' };
     case 'reasoning':
     case 'reasoning_delta':
+    case 'reasoning_final': // 2026-09-02 (win7 cherry-pick): 全量对齐事件,显示同 reasoning_delta(Brain + 推理中)
       return { iconName: 'Brain', label: '推理中' };
     case 'acting':
       return { iconName: 'Wrench', label: '执行工具' };

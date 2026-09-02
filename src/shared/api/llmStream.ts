@@ -7,6 +7,7 @@ export type AgentState =
   | 'thinking'
   | 'reasoning'
   | 'reasoning_delta'
+  | 'reasoning_final' // 2026-09-02 (win7 cherry-pick): 后端 reasoning 流末尾发的全量事件,前端必须 replace 而非 append
   | 'acting'
   | 'observing'
   | 'content_delta'
@@ -112,6 +113,7 @@ export interface AgentEvent {
   state: AgentState;
   iteration: number;
   content?: string;
+  reasoning?: string;
   tool_call?: ToolCallRequestFE;
   tool_result?: ToolCallResultFE;
   error?: string;
