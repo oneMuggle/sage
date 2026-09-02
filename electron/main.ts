@@ -1583,6 +1583,79 @@ app.whenReady().then(async () => {
       logger.warn('main: doctor check threw', { error: String(err) });
     }
   }
+  /**
+   * 启动期鉴权探针（仅 SAGE_SKIP_BACKEND=1 模式使用）。
+   *
+   * 背景：当 SKIP_BACKEND=1 时，后端由外部进程（开发者手启、CI fixture 等）
+   * 拥有，本 Electron 进程的 backendAuthToken 必须是它启动时也看到过的同一个
+   * SAGE_LOCAL_AUTH_TOKEN。如果开发者手启后端时漏传环境变量，后端会用
+   * `secrets.token_urlsafe(32)` 自己生成一个 → /health 仍然 200（白名单），
+   * 但受保护端点全部 401，三个页面（记忆面板/编排看板/技能）各自报错，没有
+   * 统一诊断 banner，用户只能挨个看 401 才拼出"凭据问题"。
+   *
+   * 修复：在 SKIP_BACKEND 分支结尾 fire-and-forget 启动一次轻量探针：
+   *   1. 等 /health ready（最多 6s, 后端可能刚冷启动）
+   *   2. 立刻打一个受保护端点（page_size=1 让响应体最小）
+   *   3. 仅 401 → 判定为 token 失配，发 backend:auth-failed 给前端 banner
+   *   4. 其他状态（5xx / ECONNREFUSED / 超时）→ 不是 token 问题，让正常
+   *      disconnected 路径处理，不污染 banner 语义
+   *
+   * 用户最终恢复手段是「重启 Sage 桌面端」（token 是 process-local 的，新
+   * 进程从同一 env 拿 → 匹配）。
+   */
+  async function probeBackendAuthForSkipBackend(): Promise<void> {
+    if (!backendAuthToken) {
+      // 已在 SKIP_BACKEND 分支 logger.warn；不再重复
+      return;
+    }
+    const HEALTH_DEADLINE_MS = 6000;
+    const HEALTH_RETRY_MS = 200;
+    const deadline = Date.now() + HEALTH_DEADLINE_MS;
+    let healthReady = false;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`${BACKEND_URL}/health`);
+        if (r.ok) {
+          healthReady = true;
+          break;
+        }
+      } catch {
+        // 后端可能还没起 — 短暂退避后重试
+      }
+      await new Promise((res) => setTimeout(res, HEALTH_RETRY_MS));
+    }
+    if (!healthReady) {
+      logger.warn('main: auth probe skipped — backend /health never ready in 6s');
+      return;
+    }
+
+    // 选 /api/v1/memory/list — 用户报告现象的源头之一，且 page_size=1 让响应体最小。
+    // 路径提取为常量，未来如路由改名只改这一处。
+    const PROBE_PATH = '/api/v1/memory/list?page=1&page_size=1';
+    try {
+      const probe = await fetch(`${BACKEND_URL}${PROBE_PATH}`, {
+        headers: { Authorization: `Bearer ${backendAuthToken}` },
+      });
+      if (probe.status === 401) {
+        logger.error(
+          'main: backend rejected local auth token (HTTP 401) at ' + PROBE_PATH +
+            ' — Electron 与后端 SAGE_LOCAL_AUTH_TOKEN 失配。请重启 Sage 桌面端恢复。',
+        );
+        mainWindow?.webContents.send('backend:auth-failed', { status: 401 });
+        return;
+      }
+      if (!probe.ok) {
+        // 其他非 2xx 不是 token 问题（5xx/404），让 disconnected 路径处理
+        logger.warn(
+          `main: auth probe returned HTTP ${probe.status} (not 401 — not a token mismatch)`,
+        );
+      }
+    } catch (err) {
+      // 网络层断 — 不是 token 问题
+      logger.warn('main: auth probe network error (not a token mismatch)', err);
+    }
+  }
+
   registerIpcHandlers();
   // Phase 4 lightweight smoke test path: skip backend spawn + health wait
   // (CI doesn't have the sage-backend conda env; main renderer still loads
@@ -1607,6 +1680,12 @@ app.whenReady().then(async () => {
     backendLifecycle = 'ready';
     createMainWindow();
     buildApplicationMenu();
+    // Probe a protected endpoint now that the renderer can receive the event;
+    // a 401 means the external backend holds a different SAGE_LOCAL_AUTH_TOKEN
+    // than this Electron process (e.g. dev hand-launched backend without the
+    // env var). backend:auth-failed triggers a unified diagnostic banner
+    // instead of letting each page report its own 401.
+    void probeBackendAuthForSkipBackend();
     return;
   }
   // Demo mode (录屏演示): skip Python backend spawn entirely so the

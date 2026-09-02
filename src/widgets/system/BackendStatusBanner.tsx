@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import './BackendStatusBanner.css';
 
-type BannerState = 'ok' | 'starting' | 'reconnecting' | 'failed' | 'recovered';
+type BannerState = 'ok' | 'starting' | 'reconnecting' | 'failed' | 'recovered' | 'auth_failed';
 
 const RECOVERED_VISIBLE_MS = 2000;
 
@@ -36,34 +36,45 @@ export function BackendStatusBanner() {
       }
       // window.electronAPI.listen returns Promise<UnlistenFn> in production
       // (see electron/preload.ts). Await all before scheduling teardown.
-      const [offStarting, offReady, offDisconnected, offReconnected] = await Promise.all([
-        api.listen('backend:starting', () => {
-          // Don't overwrite a more severe state (e.g. 'failed') with 'starting'.
-          setState((prev) => (prev === 'failed' ? prev : 'starting'));
-        }),
-        api.listen('backend:ready', () => {
-          setState('ok');
-        }),
-        api.listen('backend:disconnected', (p: { attempt: number }) => {
-          setAttempt(p.attempt);
-          setState(p.attempt === -1 ? 'failed' : 'reconnecting');
-        }),
-        api.listen('backend:reconnected', () => {
-          setState('recovered');
-          if (recoverTimer) clearTimeout(recoverTimer);
-          recoverTimer = setTimeout(() => {
-            setState('ok');
-          }, RECOVERED_VISIBLE_MS);
-        }),
-      ]);
+      const [offStarting, offReady, offDisconnected, offReconnected, offAuthFailed] =
+        await Promise.all([
+          api.listen('backend:starting', () => {
+            // Don't overwrite a more severe state (e.g. 'failed' or 'auth_failed') with 'starting'.
+            setState((prev) => (prev === 'failed' || prev === 'auth_failed' ? prev : 'starting'));
+          }),
+          api.listen('backend:ready', () => {
+            // Auth mismatch is only cleared by a full app restart (token is process-local
+            // and won't change until then). backend:ready in between won't help.
+            setState((prev) => (prev === 'auth_failed' ? prev : 'ok'));
+          }),
+          api.listen('backend:disconnected', (p: { attempt: number }) => {
+            setAttempt(p.attempt);
+            setState(p.attempt === -1 ? 'failed' : 'reconnecting');
+          }),
+          api.listen('backend:reconnected', () => {
+            setState((prev) => (prev === 'auth_failed' ? prev : 'recovered'));
+            if (recoverTimer) clearTimeout(recoverTimer);
+            recoverTimer = setTimeout(() => {
+              setState((prev) => (prev === 'auth_failed' ? prev : 'ok'));
+            }, RECOVERED_VISIBLE_MS);
+          }),
+          api.listen('backend:auth-failed', (p: { status: number }) => {
+            // Probe in main.ts detected token mismatch on startup. Distinct from
+            // 'failed' (which means backend itself is unreachable) — here backend
+            // is alive but rejects our capability; only restart fixes it.
+            console.error(`[BackendStatusBanner] backend auth probe rejected (HTTP ${p.status})`);
+            setState('auth_failed');
+          }),
+        ]);
       if (cancelled) {
         offStarting();
         offReady();
         offDisconnected();
         offReconnected();
+        offAuthFailed();
         return;
       }
-      offs.push(offStarting, offReady, offDisconnected, offReconnected);
+      offs.push(offStarting, offReady, offDisconnected, offReconnected, offAuthFailed);
     };
 
     setup().catch((err) => {
@@ -81,15 +92,24 @@ export function BackendStatusBanner() {
 
   if (state === 'ok') return null;
 
-  const variant = state === 'failed' || state === 'starting' ? 'warning' : state === 'recovered' ? 'success' : 'warning';
+  const variant =
+    state === 'auth_failed'
+      ? 'error'
+      : state === 'failed' || state === 'starting'
+        ? 'warning'
+        : state === 'recovered'
+          ? 'success'
+          : 'warning';
   const message =
     state === 'starting'
       ? '后端服务正在启动…'
       : state === 'reconnecting'
         ? `后端暂时断开，正在自动重连（第 ${attempt}/3 次）...`
-        : state === 'failed'
-          ? '后端连接失败，请重启 Sage'
-          : '已恢复';
+        : state === 'auth_failed'
+          ? '后端授权凭据失效（HTTP 401）。请重启 Sage 桌面端恢复'
+          : state === 'failed'
+            ? '后端连接失败，请重启 Sage'
+            : '已恢复';
 
   return (
     <div
