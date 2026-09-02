@@ -14,6 +14,7 @@ def test_agent_state_enum_values():
     assert AgentState.IDLE.value == "idle"
     assert AgentState.THINKING.value == "thinking"
     assert AgentState.REASONING.value == "reasoning"  # 新增：reasoning 状态
+    assert AgentState.REASONING_FINAL.value == "reasoning_final"
     assert AgentState.ACTING.value == "acting"
     assert AgentState.OBSERVING.value == "observing"
     assert AgentState.DONE.value == "done"

@@ -21,6 +21,8 @@ class AgentState(str, Enum):
     # REASONING: 携带 LLM 思考/推理过程内容（reasoning_content）
     # 区别于 THINKING（仅表示"LLM 正在思考"阶段标记）
     REASONING = "reasoning"
+    # 收尾时携带累计完整 reasoning，前端应整体替换而非追加。
+    REASONING_FINAL = "reasoning_final"
     ACTING = "acting"
     OBSERVING = "observing"
     # I4: 流式 LLM 响应时,每个 token chunk 推一个 CONTENT_DELTA 事件,
