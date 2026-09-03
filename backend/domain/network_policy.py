@@ -15,7 +15,46 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlparse
+
+
+def _extract_hostname(url: str) -> Optional[str]:
+    """从 URL 字符串提取 hostname。
+
+    手写实现以保持 ``domain/`` 纯净性（``test_no_external_imports_in_domain``
+    仅允许基础 stdlib，``urllib.parse`` 不在白名单）。覆盖常见形式：
+
+    - ``scheme://[userinfo@]host[:port][/path][?query][#fragment]``
+    - IPv6: ``http://[::1]:8080/path`` → ``::1``
+    - 带 userinfo: ``http://user:pwd@host/path`` → ``host``
+    - 无 ``://`` 或 host 为空 → ``None``
+    """
+    s = url
+    for sep in ("#", "?"):
+        idx = s.find(sep)
+        if idx >= 0:
+            s = s[:idx]
+    sep_idx = s.find("://")
+    if sep_idx < 0:
+        return None
+    s = s[sep_idx + 3:]
+    if "@" in s:
+        s = s.split("@", 1)[1]
+    end = len(s)
+    for i, c in enumerate(s):
+        if c == "/":
+            end = i
+            break
+    hostport = s[:end]
+    if not hostport:
+        return None
+    if hostport.startswith("["):
+        end_bracket = hostport.find("]")
+        if end_bracket < 0:
+            return None
+        return hostport[1:end_bracket] or None
+    if ":" in hostport:
+        hostport = hostport.rsplit(":", 1)[0]
+    return hostport or None
 
 
 class NetworkMode(str, Enum):
@@ -131,7 +170,7 @@ class NetworkPolicy:
             return None
         if self.mode is NetworkMode.OFFLINE:
             return "network_mode_offline: 当前为气隙模式，禁止一切出网访问"
-        hostname = urlparse(url).hostname
+        hostname = _extract_hostname(url)
         if not hostname:
             return f"invalid_url: 无法从 {url!r} 解析主机名"
         if any(host_matches(hostname, pattern) for pattern in self.allowed_hosts):
@@ -143,7 +182,7 @@ class NetworkPolicy:
 
     def allows_insecure_tls(self, url: str) -> bool:
         """该 URL 的 host 是否豁免 TLS 校验。"""
-        hostname = urlparse(url).hostname
+        hostname = _extract_hostname(url)
         if not hostname:
             return False
         return any(host_matches(hostname, pattern) for pattern in self.insecure_tls_hosts)
