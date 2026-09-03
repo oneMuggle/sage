@@ -128,10 +128,12 @@ value 的合成示例（非真实内网地址）：
 
 丢弃 `script` / `style` / `noscript` / `svg` / `template` 的**内容**（不只是标签）。
 
-**双实现，schema 一致。** 能 `import lxml.html` 就走快路径，否则用 stdlib
-`html.parser.HTMLParser` 子类。这不是可选优化而是硬需求：`backend/requirements.txt`
-**没有**声明 lxml（当前 conda 环境里的 lxml 是其他包的传递依赖），气隙 Win7 打包
-不能假设它存在。stdlib 路径是主路径，lxml 是加速。
+**只用 stdlib，不做 lxml 双实现。** 原型对比发现 lxml 的 `text_content()`
+在嵌套表格上会把内层表格的文字并进外层单元格（`<td>外<table>...<td>内` →
+lxml 得 `["外内", "右"]`，栈式实现得 `["外", "右"]` 加独立内层表），这是 DOM
+语义的必然结果而非可修的 bug。加上 `requirements.txt` 并不声明 lxml，保留双
+路径等于让抽取结果取决于环境里碰巧装了什么。实测 79 KB 页面 stdlib 44.8 ms、
+lxml 22.5 ms，省下的时间相对一次网络请求可忽略。
 
 `web_fetch` 新增 `mode` 参数控制返回哪些段：`text`（默认）/ `links` / `tables` /
 `raw`。`raw` 保留现有整页行为作为逃生舱。
@@ -293,7 +295,7 @@ CI 对 backend 是 coverage ≥ 80% 硬门禁（`.github/workflows/ci.yml:127` �
 | 测试文件 | 覆盖点 |
 |---|---|
 | `test_network_policy.py`（新） | 通配匹配；`*` 与 `*.net` 必须被拒；`insecure_tls_hosts` 子集校验；三种模式的 `search_enabled` / `check_host`；host 大小写与尾点归一 |
-| `test_html_extract.py`（新） | script/style 内容剥离；相对链接绝对化；表格抽取；**monkeypatch 让 lxml import 失败**，断言 stdlib 路径产出同构结果 |
+| `test_html_extract.py`（新） | script/style 内容剥离；相对链接绝对化；表格抽取；嵌套表格保持内外分离；编码嗅探各路径；畸形/残缺标签不崩 |
 | `test_http_download.py`（新） | 流式落盘；`Content-Length` 撒谎时按实际字节中断并清理半成品；绝对路径拒绝；`../` 文件名净化；**`workspace_root=None` 时拒绝下载**（§3.1） |
 | `test_web_tool.py`（扩充） | GBK 页面解码；三种模式门禁；白名单 host 跳过公网 IP 检查；`online` 模式无回归 |
 | `test_network_config.py`（新） | JSON 损坏 / mode 非法 / 类型错误 → fail-safe 到 ONLINE |
