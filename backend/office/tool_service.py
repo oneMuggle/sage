@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from backend.domain.tool_policy import ToolPolicy
+from backend.office.errors import OfficeError
 from backend.office.models import (
     OfficeDocStatus,
     OfficeDocType,
@@ -49,7 +50,12 @@ from backend.office.session_workspace import (
     get_active_workspace,
     get_document_in_workspace,
 )
-from backend.office.storage import document_path, list_documents, save_document
+from backend.office.storage import (
+    delete_document,
+    document_path,
+    list_documents,
+    save_document,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +135,20 @@ def _strip_workspace_path_from_read_result(data: Dict[str, Any]) -> Dict[str, An
     if isinstance(summary, dict):
         summary.pop("workspace_path", None)
     return data
+
+
+def _update_document(
+    doc_type: str, path: Path, ops: List[Dict[str, Any]]
+) -> tuple:
+    """Deferred import of the editor dispatcher (mirrors the reader pattern).
+
+    Importing :mod:`backend.office.edit` pulls in python-docx/openpyxl/
+    python-pptx depending on doc_type; deferring keeps a broken optional
+    dependency from breaking unrelated code paths at import time.
+    """
+    from backend.office.edit import update_document
+
+    return update_document(doc_type, path, ops)
 
 
 def _truncate_to_byte_cap(data: Dict[str, Any], max_bytes: int) -> Dict[str, Any]:
@@ -437,6 +457,131 @@ class OfficeToolService:
                 "doc_type": normalized_doc_type.value,
                 "filename": filename,
             },
+        }
+
+    # ──────────────────────────────────────────────────────────────
+    # update (改 — 原地编辑)
+    # ──────────────────────────────────────────────────────────────
+
+    def update(
+        self,
+        conn: sqlite3.Connection,
+        session_id: str,
+        binding_generation: int,
+        doc_id: str,
+        ops: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Apply in-place edits to a workspace-managed document.
+
+        Steps:
+            1. Re-verify the session-workspace binding + resolve the doc
+               (stale / revoked / archived all collapse to not-found).
+            2. Apply the same ``max_read_bytes`` disk cap as ``read`` —
+               editing loads the whole file too.
+            3. Dispatch to :mod:`backend.office.edit`; the editor is
+               all-or-nothing (a failed op leaves the file untouched).
+            4. On success, refresh the DB row: status → EDITED,
+               ``updated_at`` → now, ``file_size_bytes`` → new size.
+
+        The absolute workspace path never appears in the returned dict.
+        """
+        doc = self._resolve_doc(conn, session_id, binding_generation, doc_id)
+        if doc is None:
+            return _not_found()
+
+        path = document_path(doc)
+        try:
+            if path.is_file() and path.stat().st_size > self._policy.max_read_bytes:
+                return {
+                    "success": False,
+                    "error": {
+                        "code": "file_too_large",
+                        "message": "file exceeds edit cap",
+                        "max_read_bytes": self._policy.max_read_bytes,
+                    },
+                }
+            saved, results = _update_document(doc.doc_type.value, path, ops)
+        except OfficeError as exc:
+            return {
+                "success": False,
+                "error": {"code": "update_failed", "message": str(exc)},
+            }
+        except Exception as exc:  # noqa: BLE001 — 编辑器未归类异常按失败处理
+            return {
+                "success": False,
+                "error": {"code": "update_failed", "message": str(exc)},
+            }
+
+        if not saved:
+            return {
+                "success": False,
+                "error": {"code": "operation_failed", "message": "one or more ops failed"},
+                "results": results,
+            }
+
+        self._mark_edited(conn, doc, path)
+        return {
+            "success": True,
+            "content": {
+                "document_id": doc.id,
+                "doc_type": doc.doc_type.value,
+                "results": results,
+            },
+        }
+
+    def _mark_edited(
+        self,
+        conn: sqlite3.Connection,
+        doc: OfficeDocumentSummary,
+        path: Path,
+    ) -> None:
+        """Persist the post-edit state: EDITED status + fresh size/mtime."""
+        try:
+            doc.status = OfficeDocStatus.EDITED
+            doc.updated_at = int(time.time() * 1000)
+            doc.metadata.file_size_bytes = path.stat().st_size
+            save_document(conn, doc)
+        except Exception:  # noqa: BLE001 — 文件已改成功，登记失败只记日志
+            logger.warning("office edit applied but DB refresh failed: doc=%s", doc.id)
+
+    # ──────────────────────────────────────────────────────────────
+    # delete (删 — 整文件删除)
+    # ──────────────────────────────────────────────────────────────
+
+    def delete(
+        self,
+        conn: sqlite3.Connection,
+        session_id: str,
+        binding_generation: int,
+        doc_id: str,
+    ) -> Dict[str, Any]:
+        """Delete a workspace-managed document (DB row + managed directory).
+
+        Order matters: the managed directory is removed **first**; only
+        on success does the DB row go away. A locked file (Word holding
+        it open) therefore keeps a consistent row+file state and surfaces
+        ``delete_failed`` instead of orphaning files.
+        """
+        doc = self._resolve_doc(conn, session_id, binding_generation, doc_id)
+        if doc is None:
+            return _not_found()
+
+        managed_dir = document_path(doc).parent
+        if managed_dir.is_dir():
+            import shutil
+
+            try:
+                shutil.rmtree(managed_dir)
+            except OSError as exc:
+                return {
+                    "success": False,
+                    "error": {"code": "delete_failed", "message": str(exc)},
+                }
+
+        delete_document(conn, doc.id)
+        return {
+            "success": True,
+            "content": {"document_id": doc.id, "doc_type": doc.doc_type.value},
         }
 
 

@@ -64,6 +64,15 @@ class OfficeGenerateError(OfficeError):
         super().__init__(message, file_path=file_path)
 
 
+class OfficeEditError(OfficeError):
+    """Tried to edit a document in place but the save step failed.
+
+    Per-op failures do NOT raise — editors report them as per-op result
+    dicts and leave the file untouched. This error is reserved for
+    file-level edit failures (load ok, save failed).
+    """
+
+
 class OfficeSizeLimitError(OfficeError):
     """File exceeds the configured size limit."""
 
@@ -82,6 +91,10 @@ class OfficeSizeLimitError(OfficeError):
         self.max_size = max_size
 
 
+#: 写入类失败 → 500（元组常量避免 UP038 的 isinstance union 语法，保持 py38 兼容）
+_WRITE_FAILURE_ERRORS = (OfficeGenerateError, OfficeEditError)
+
+
 def office_error_to_http_status(error: OfficeError) -> int:
     """Map an OfficeError to its HTTP status code.
 
@@ -95,6 +108,6 @@ def office_error_to_http_status(error: OfficeError) -> int:
         return 422
     if isinstance(error, OfficeSizeLimitError):
         return 413
-    if isinstance(error, OfficeGenerateError):
+    if isinstance(error, _WRITE_FAILURE_ERRORS):
         return 500
     return 500  # base OfficeError or unknown subclass
