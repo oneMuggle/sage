@@ -136,6 +136,9 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ## [Unreleased]
 
 ### Added
+- feat: 网络模式门禁（online/intranet/offline）+ 主机白名单，内网/气隙下搜索工具按模式不加载
+- feat: web_fetch 正文抽取（text/links/tables/raw 四模式）+ GBK/GB18030 编码嗅探，stdlib 栈式实现
+- feat: http_download 流式下载工具（工作区边界 + Content-Length/实际字节双重大小上限 + 文件名净化）
 
 ### Fixed
 

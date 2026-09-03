@@ -40,6 +40,7 @@
 | 44   | [bash 命令行工具](./44-bash-tool.md) | 对齐 Claude Code Bash tool：放开 shell 操作符（危险判定收敛到 bash_validation + PermissionEnforcer）+ 后台执行三工具（bash/bash_output/kill_shell）+ 30 KiB 有界输出 + 进程组回收 + 跨平台 shell 探测（Git Bash / PowerShell 降级） |
 | 45   | [渐进式功能披露](./44-progressive-disclosure.md) | sticky-unlock 存储、受门控入口及 `/skills` 始终可发现的设计边界 |
 | 46   | [Sage 品牌图标资产与复用](./45-brand-icons.md) | 品牌主形象（几何 S + 星点 + 青紫渐变）的资产层级、`<BrandLogo>` 共享组件规范、macOS `.icns` 缺口与未来补全路径 |
+| 46   | [内网 Web 访问（网络模式门禁 + 取页下载）](./46-intranet-web-access.md) | NetworkPolicy 三档门禁 + host 白名单通配 + web_fetch 四 mode + http_download 边界约束 + 不变量 |
 
 ---
 

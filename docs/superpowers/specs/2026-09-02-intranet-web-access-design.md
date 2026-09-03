@@ -1,6 +1,6 @@
 # 内网 Web 访问设计（2026-09-02）
 
-> 状态: 设计中
+> 状态: 已实施（2026-09-03）
 
 ## 背景与目标
 
@@ -145,9 +145,9 @@ lxml 22.5 ms，省下的时间相对一次网络请求可忽略。
 1. HTTP `Content-Type` 头的 `charset` —— 用 stdlib `email.message.Message.get_param('charset')`
    解析（已验证能正确处理 `text/html; charset=GBK`）
 2. HTML 内的 `<meta charset=...>` / `<meta http-equiv="Content-Type">`
-3. 按 `GB18030` 试解 —— 它是 GBK 的超集，能解 GBK 也能解 GB2312，覆盖内网镜像站
-   的主要情形
-4. UTF-8 兜底
+3. UTF-8 试解 —— 内网/公网场景下 UTF-8 仍占多数，先试命中率高
+4. GB18030 兜底 —— 它是 GBK 的超集，能解 GBK 也能解 GB2312，覆盖内网镜像站
+   的情形
 
 全程 `errors="replace"`，绝不因编码问题抛异常。思路与 `backend/tools/file_tool.py:45`
 的 `detect_bom_encoding` 一致 —— 先按显式声明，再按启发式，最后兜底。
