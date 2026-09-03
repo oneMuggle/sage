@@ -106,5 +106,8 @@ async def test_get_agent_by_id_returns_profile(client):
     coder = resp.json()
     assert coder["id"] == "coder"
     assert coder["role"] == "coder"
-    assert "file_write" in coder["tools"]
+    # 2026-09-03 (win7 cherry-pick of PR #402, 保守 backport):
+    # 工具名对齐 PR #381 重命名 (file_write → write_file,
+    # file_read → read_file, terminal → bash)。
+    assert "write_file" in coder["tools"]
     assert coder["max_iterations"] == 15

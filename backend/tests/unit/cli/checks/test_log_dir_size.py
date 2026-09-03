@@ -1,4 +1,5 @@
 """Tests for backend.cli.checks.log_dir_size.LogDirSizeCheck."""
+
 # ruff: noqa: SIM117 — nested with blocks are intentional for clarity in tests
 from __future__ import annotations
 
@@ -46,25 +47,28 @@ class TestDirSize:
         assert _dir_size(tmp_path) == 350
 
     def test_skips_unreadable_files(self, tmp_path):
-        """模拟 stat() 抛 OSError → 跳过该文件,继续累加其它。"""
+        """模拟某文件的 stat() 抛 OSError → 跳过该文件,继续累加其它。
+
+        修复说明:旧实现用 ``call_count == 1`` 当 trigger,Python 3.11+ ``os.scandir``
+        不保证文件顺序, ``a.log`` 不一定先被访问,导致 ``b.log`` 反而失败 → 总数错。
+        改用 **path 过滤**:只对 ``a.log`` 抛错,与遍历顺序无关。
+        """
         (tmp_path / "a.log").write_bytes(b"x" * 100)
         (tmp_path / "b.log").write_bytes(b"y" * 200)
 
-        # 用 wraps 保留原函数,只在调用次数为 1 时抛错
+        # 用 wraps 保留原函数,只对 a.log 抛 OSError
         from pathlib import Path
 
         original_stat = Path.stat
-        call_count = {"n": 0}
 
-        def selective_stat(self, *args, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] == 1:
+        def fail_a_stat(self, *args, **kwargs):
+            if self.name == "a.log":
                 raise OSError("perm denied")
             return original_stat(self, *args, **kwargs)
 
-        with mock.patch.object(Path, "stat", selective_stat):
-            assert _dir_size(tmp_path) == 200  # a 跳过(100 字节),b 计入(200 字节)
-        assert call_count["n"] == 2
+        with mock.patch.object(Path, "stat", fail_a_stat):
+            # a 跳过(100 字节),b 计入(200 字节) → 200
+            assert _dir_size(tmp_path) == 200
 
 
 class TestResolveLogDir:
