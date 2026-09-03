@@ -8,7 +8,7 @@ from __future__ import annotations
 import ipaddress
 from ipaddress import IPv4Address, IPv6Address
 from typing import Any, Dict, Optional, Set, Union
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -160,6 +160,12 @@ class WebFetchTool(BaseTool):
     #: 只对这些 content-type 做 HTML 抽取；JSON / 纯文本直接给原文
     _HTML_CONTENT_TYPES = ("text/html", "application/xhtml")
 
+    #: 手动跟随重定向的最大跳数
+    _MAX_REDIRECTS = 5
+
+    #: 网页响应体硬上限，避免 max_length 事后截断导致无限缓冲
+    _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+
     def __init__(
         self,
         policy: Optional[ToolPolicy] = None,
@@ -262,6 +268,9 @@ class WebFetchTool(BaseTool):
             return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
 
         network_policy = self._effective_network_policy()
+        url_error = self._validate_target_url(url)
+        if url_error:
+            return ToolResult(success=False, error=url_error)
         host_rejection = network_policy.check_host(url)
         if host_rejection:
             return ToolResult(success=False, error=host_rejection)
@@ -275,32 +284,90 @@ class WebFetchTool(BaseTool):
                 return ToolResult(success=False, error=validation_error)
 
         try:
-            response = self.client.get(url)
-            redirect_error = self._check_redirect(response, network_policy, gated_by_whitelist)
-            if redirect_error:
-                return ToolResult(success=False, error=redirect_error)
+            response, final_url = self._get_with_redirects(url, network_policy, gated_by_whitelist)
             response.raise_for_status()
-            return ToolResult(success=True, content=self._render(url, response, mode, max_length))
+            return ToolResult(
+                success=True, content=self._render(final_url, response, mode, max_length)
+            )
         except httpx.HTTPError as e:
             return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
         except Exception as e:
             return ToolResult(success=False, error=f"获取网页失败: {str(e)}")
 
-    def _check_redirect(
+    @staticmethod
+    def _validate_target_url(url: str) -> Optional[str]:
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        return None
+
+    def _get_with_redirects(
         self,
-        response: httpx.Response,
+        url: str,
         network_policy: NetworkPolicy,
         gated_by_whitelist: bool,
-    ) -> Optional[str]:
-        """重定向目标校验。返回拒绝原因；``None`` 表示放行。"""
-        if not response.is_redirect:
-            return None
-        location = response.headers.get("location", "")
-        if gated_by_whitelist:
-            return network_policy.check_host(location)
-        if self._policy.subagent_only:
-            return self._validate_subagent_redirect(location)
-        return None
+    ) -> tuple:
+        current_url = url
+        for redirect_count in range(self._MAX_REDIRECTS + 1):
+            url_error = self._validate_target_url(current_url)
+            if url_error:
+                raise ValueError(url_error)
+            host_rejection = network_policy.check_host(current_url)
+            if host_rejection:
+                raise ValueError(host_rejection)
+            if self._policy.subagent_only and not gated_by_whitelist:
+                validation_error = self._validate_subagent_url(current_url)
+                if validation_error:
+                    raise ValueError(validation_error)
+
+            with httpx.Client(
+                timeout=30.0,
+                follow_redirects=False,
+                verify=not network_policy.allows_insecure_tls(current_url),
+                trust_env=not self._policy.subagent_only,
+            ) as client:
+                request = client.build_request("GET", current_url)
+                response = client.send(request, stream=True)
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    response.close()
+                    if redirect_count >= self._MAX_REDIRECTS:
+                        raise ValueError(
+                            f"redirect_limit_exceeded: 重定向次数超过 {self._MAX_REDIRECTS} 次"
+                        )
+                    if not location:
+                        raise ValueError("invalid_redirect: 重定向缺少 Location")
+                    current_url = urljoin(current_url, location)
+                    continue
+                response.raise_for_status()
+                declared = response.headers.get("content-length", "")
+                if declared.isdigit() and int(declared) > self._MAX_RESPONSE_BYTES:
+                    response.close()
+                    raise ValueError(
+                        f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
+                    )
+                content = bytearray()
+                try:
+                    for chunk in response.iter_bytes(64 * 1024):
+                        content.extend(chunk)
+                        if len(content) > self._MAX_RESPONSE_BYTES:
+                            raise ValueError(
+                                f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
+                            )
+                finally:
+                    response.close()
+                response = httpx.Response(
+                    response.status_code,
+                    headers=response.headers,
+                    content=bytes(content),
+                    request=response.request,
+                )
+            return response, current_url
+
+        raise ValueError("redirect_limit_exceeded: 重定向次数超限")
 
     def _render(
         self, url: str, response: httpx.Response, mode: str, max_length: int

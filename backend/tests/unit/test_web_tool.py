@@ -134,6 +134,14 @@ def test_web_fetch_invalid_url_scheme():
     assert "无效" in result.error or "http" in result.error.lower()
 
 
+def test_web_fetch_rejects_malformed_ipv6_url():
+    tool = WebFetchTool()
+    result = tool.execute(url="http://[bad")
+
+    assert result.success is False
+    assert "无效的 URL" in result.error
+
+
 def test_web_fetch_truncates_by_max_length():
     """max_length 截断响应"""
     big = "A" * 5000
@@ -312,6 +320,60 @@ def test_web_fetch_intranet_redirect_target_must_also_pass_whitelist():
 
     assert result.success is False
     assert "host_not_allowed" in result.error
+
+
+def test_web_fetch_intranet_follows_relative_redirect():
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get("https://mirror.example.internal/start").mock(
+            return_value=Response(302, headers={"location": "/page"})
+        )
+        mock.get("https://mirror.example.internal/page").mock(
+            return_value=Response(200, text="final")
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/start")
+
+    assert result.success is True
+    assert result.content["url"] == "https://mirror.example.internal/page"
+    assert result.content["content"] == "final"
+
+
+def test_web_fetch_rejects_redirect_with_invalid_final_scheme():
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get("https://mirror.example.internal/start").mock(
+            return_value=Response(
+                302, headers={"location": "ftp://mirror.example.internal/file"}
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/start")
+
+    assert result.success is False
+    assert "无效的 URL" in result.error
+
+
+def test_web_fetch_sets_tls_verification_per_target(monkeypatch):
+    calls = []
+    original_client = httpx.Client
+
+    class RecordingClient(original_client):
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs.get("verify"))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("backend.tools.web_tool.httpx.Client", RecordingClient)
+    policy = NetworkPolicy(
+        mode=NetworkMode.INTRANET,
+        allowed_hosts=("*.example.internal",),
+        insecure_tls_hosts=("mirror.example.internal",),
+    )
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/page").mock(return_value=Response(200, text="ok"))
+        tool = WebFetchTool(network_policy=policy)
+        result = tool.execute(url="https://mirror.example.internal/page")
+
+    assert result.success is True
+    assert calls[-1] is False
 
 
 def test_web_fetch_loads_policy_from_settings_when_not_injected(monkeypatch):

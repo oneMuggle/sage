@@ -13,12 +13,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import unicodedata
 from email.message import Message
 from pathlib import Path, PurePosixPath
 from typing import Optional
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
 
@@ -44,6 +45,9 @@ _FALLBACK_NAME = "download.bin"
 
 #: 文件名长度上限，给冲突后缀留余量（Windows MAX_PATH 与 ext4 255 字节都够）
 _MAX_NAME_CHARS = 120
+
+#: 手动跟随重定向的最大跳数
+_MAX_REDIRECTS = 5
 
 
 def sanitize_filename(name: Optional[str]) -> str:
@@ -100,6 +104,20 @@ def _unique_path(directory: Path, filename: str) -> Path:
     raise OSError(f"无法为 {filename!r} 找到可用文件名（同名文件过多）")
 
 
+def _open_exclusive(directory: Path, filename: str):
+    """Open a new regular file without following a symlink."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if os.name != "posix" or not nofollow:
+        raise OSError("下载写盘缺少可靠的 no-follow 原语")
+    directory_fd = os.open(str(directory), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | nofollow)
+    try:
+        fd = os.open(filename, flags | nofollow, 0o600, dir_fd=directory_fd)
+    finally:
+        os.close(directory_fd)
+    return os.fdopen(fd, "wb")
+
+
 class HttpDownloadTool(BaseTool):
     """http_download —— 流式下载到工作区。"""
 
@@ -115,7 +133,7 @@ class HttpDownloadTool(BaseTool):
         self._network_policy = network_policy
         self.client = httpx.Client(
             timeout=self._policy.timeout_seconds,
-            follow_redirects=True,
+            follow_redirects=False,
             trust_env=not self._policy.subagent_only,
         )
 
@@ -163,8 +181,9 @@ class HttpDownloadTool(BaseTool):
             filename:  工作区内相对文件名；``None`` 则自动推断
             max_bytes: 大小上限（声明值与实际字节双重校验）
         """
-        if not url.startswith(("http://", "https://")):
-            return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
+        url_error = self._validate_target_url(url)
+        if url_error:
+            return ToolResult(success=False, error=url_error)
 
         root = self._policy.workspace_root
         if not root:
@@ -183,71 +202,127 @@ class HttpDownloadTool(BaseTool):
             if blocked is not None:
                 return blocked
 
-        host_rejection = self._effective_network_policy().check_host(url)
+        network_policy = self._effective_network_policy()
+        host_rejection = network_policy.check_host(url)
         if host_rejection:
             return ToolResult(success=False, error=host_rejection)
 
         try:
-            return self._stream_to_disk(url, filename, max_bytes, Path(root))
+            return self._stream_to_disk(url, filename, max_bytes, Path(root), network_policy)
         except httpx.HTTPError as e:
             return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
         except Exception as e:
             return ToolResult(success=False, error=f"下载失败: {str(e)}")
 
-    def _stream_to_disk(
-        self, url: str, filename: Optional[str], max_bytes: int, root: Path
+    def _stream_to_disk(  # noqa: PLR0911 — 每个拒绝路径独立 return，保持下载流程直读
+        self,
+        url: str,
+        filename: Optional[str],
+        max_bytes: int,
+        root: Path,
+        network_policy: NetworkPolicy,
     ) -> ToolResult:
         """边下边写。返回成功或失败的 ``ToolResult``。"""
-        with self.client.stream("GET", url) as response:
-            response.raise_for_status()
-
-            declared = response.headers.get("content-length", "")
-            if declared.isdigit() and int(declared) > max_bytes:
+        current_url = url
+        for redirect_count in range(_MAX_REDIRECTS + 1):
+            parsed = urlparse(current_url)
+            if parsed.scheme not in ("http", "https") or not parsed.hostname:
                 return ToolResult(
                     success=False,
-                    error=(
-                        f"content_length_exceeds_limit: 服务器声明 {declared} 字节，"
-                        f"超过上限 {max_bytes}"
-                    ),
+                    error="无效的 URL，必须包含 http:// 或 https:// 以及主机名",
                 )
+            host_rejection = network_policy.check_host(current_url)
+            if host_rejection:
+                return ToolResult(success=False, error=host_rejection)
 
-            name = sanitize_filename(filename) if filename else derive_filename(
-                url, response.headers.get("content-disposition")
+            with httpx.Client(
+                timeout=self._policy.timeout_seconds,
+                follow_redirects=False,
+                verify=not network_policy.allows_insecure_tls(current_url),
+                trust_env=not self._policy.subagent_only,
+            ) as client:
+                request = client.build_request("GET", current_url)
+                response = client.send(request, stream=True)
+                if response.is_redirect:
+                    if redirect_count >= _MAX_REDIRECTS:
+                        response.close()
+                        return ToolResult(
+                            success=False,
+                            error=f"redirect_limit_exceeded: 重定向次数超过 {_MAX_REDIRECTS} 次",
+                        )
+                    location = response.headers.get("location")
+                    response.close()
+                    if not location:
+                        return ToolResult(
+                            success=False, error="invalid_redirect: 重定向缺少 Location"
+                        )
+                    current_url = urljoin(current_url, location)
+                    continue
+
+                response.raise_for_status()
+
+                declared = response.headers.get("content-length", "")
+                if declared.isdigit() and int(declared) > max_bytes:
+                    response.close()
+                    return ToolResult(
+                        success=False,
+                        error=(
+                            f"content_length_exceeds_limit: 服务器声明 {declared} 字节，"
+                            f"超过上限 {max_bytes}"
+                        ),
+                    )
+
+                name = sanitize_filename(filename) if filename else derive_filename(
+                    current_url, response.headers.get("content-disposition")
+                )
+                root.mkdir(parents=True, exist_ok=True)
+                target = _unique_path(root, name)
+
+                written = 0
+                try:
+                    with _open_exclusive(root, target.name) as handle:
+                        for chunk in response.iter_bytes(_CHUNK_BYTES):
+                            written += len(chunk)
+                            # Content-Length 是服务器说的，不可信；按实际字节兜底
+                            if written > max_bytes:
+                                raise _DownloadTooLarge(written)
+                            handle.write(chunk)
+                except _DownloadTooLarge as exc:
+                    target.unlink(missing_ok=True)
+                    response.close()
+                    return ToolResult(
+                        success=False,
+                        error=f"download_exceeds_limit: 实际接收 {exc.written} 字节，超过上限 {max_bytes}",
+                    )
+                except Exception:
+                    target.unlink(missing_ok=True)
+                    response.close()
+                    raise
+
+                response.close()
+            return ToolResult(
+                success=True,
+                content={
+                    "url": current_url,
+                    "path": str(target),
+                    "filename": target.name,
+                    "bytes_written": written,
+                    "content_type": response.headers.get("content-type", ""),
+                },
+                output=str(target),
             )
-            root.mkdir(parents=True, exist_ok=True)
-            target = _unique_path(root, name)
 
-            written = 0
-            try:
-                with open(target, "wb") as handle:  # noqa: PTH123 — ruff.toml 已忽略
-                    for chunk in response.iter_bytes(_CHUNK_BYTES):
-                        written += len(chunk)
-                        # Content-Length 是服务器说的，不可信；按实际字节兜底
-                        if written > max_bytes:
-                            raise _DownloadTooLarge(written)
-                        handle.write(chunk)
-            except _DownloadTooLarge as exc:
-                target.unlink(missing_ok=True)
-                return ToolResult(
-                    success=False,
-                    error=f"download_exceeds_limit: 实际接收 {exc.written} 字节，超过上限 {max_bytes}",
-                )
-            except Exception:
-                target.unlink(missing_ok=True)
-                raise
+        return ToolResult(success=False, error="redirect_limit_exceeded: 重定向次数超限")
 
-        self._record_artifact(str(target), written)
-        return ToolResult(
-            success=True,
-            content={
-                "url": url,
-                "path": str(target),
-                "filename": target.name,
-                "bytes_written": written,
-                "content_type": response.headers.get("content-type", ""),
-            },
-            output=str(target),
-        )
+    @staticmethod
+    def _validate_target_url(url: str) -> Optional[str]:
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        return None
 
     @staticmethod
     def _record_artifact(path: str, size: int) -> None:

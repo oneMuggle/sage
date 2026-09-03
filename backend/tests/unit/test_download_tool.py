@@ -119,7 +119,68 @@ def test_download_honors_network_policy(tmp_path):
     assert "host_not_allowed" in result.error
 
 
-def test_download_offline_mode_rejects(tmp_path):
+def test_download_follows_relative_redirect_and_returns_final_url(tmp_path):
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_BASE}/start").mock(
+            return_value=Response(302, headers={"location": "/paper.pdf"})
+        )
+        mock.get(f"{_BASE}/paper.pdf").mock(
+            return_value=Response(200, content=b"pdf")
+        )
+        result = _tool(tmp_path).execute(url=f"{_BASE}/start")
+
+    assert result.success is True
+    assert result.content["url"] == f"{_BASE}/paper.pdf"
+    assert (tmp_path / "paper.pdf").read_bytes() == b"pdf"
+
+
+def test_download_rejects_redirect_to_non_whitelisted_host(tmp_path):
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_BASE}/start").mock(
+            return_value=Response(
+                302, headers={"location": "https://evil.example.com/file"}
+            )
+        )
+        result = _tool(tmp_path).execute(url=f"{_BASE}/start")
+
+    assert result.success is False
+    assert "host_not_allowed" in result.error
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_download_sets_tls_verification_for_each_target(tmp_path, monkeypatch):
+    calls = []
+    original_client = httpx.Client
+
+    class RecordingClient(original_client):
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs.get("verify"))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("backend.tools.download_tool.httpx.Client", RecordingClient)
+    policy = NetworkPolicy(
+        mode=NetworkMode.INTRANET,
+        allowed_hosts=("*.example.internal",),
+        insecure_tls_hosts=("mirror.example.internal",),
+    )
+    with respx.mock(base_url=_BASE, assert_all_called=False) as mock:
+        mock.get("/paper.pdf").mock(return_value=Response(200, content=b"pdf"))
+        tool = HttpDownloadTool(
+            policy=ToolPolicy(workspace_root=str(tmp_path)), network_policy=policy
+        )
+        result = tool.execute(url=f"{_BASE}/paper.pdf")
+
+    assert result.success is True
+    assert calls[-1] is False
+
+
+def test_download_rejects_malformed_ipv6_url(tmp_path):
+    result = _tool(tmp_path).execute(url="http://[bad")
+
+    assert result.success is False
+    assert "无效的 URL" in result.error
+
+
     tool = HttpDownloadTool(
         policy=ToolPolicy(workspace_root=str(tmp_path)),
         network_policy=NetworkPolicy(mode=NetworkMode.OFFLINE),
