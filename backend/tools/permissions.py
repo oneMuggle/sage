@@ -67,6 +67,8 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "structured_output": ToolCapability.READ,
     "write_file": ToolCapability.WRITE,
     "office_create": ToolCapability.WRITE,
+    "office_update": ToolCapability.WRITE,
+    "office_delete": ToolCapability.WRITE,
     "edit_file": ToolCapability.WRITE,
     "bash": ToolCapability.EXECUTE,
     "bash_output": ToolCapability.EXECUTE,  # 读取后台 shell 输出也算执行面扩展
@@ -301,38 +303,51 @@ class PermissionEnforcer:
 def make_office_path_boundary(
     boundary_resolver: Optional[Callable[[], Optional[str]]] = None,
 ) -> Callable[[str, Dict[str, Any]], Optional[PermissionDecision]]:
-    """构造 ``office_create`` 的 path-boundary 校验器。
+    """构造 office 写类工具（create/update/delete）的 path-boundary 校验器。
 
     ``boundary_resolver`` 每次调用返回当前会话 workspace_root（``None`` 表示
     未绑定 → 不检查边界，与 write_file 未绑定语义一致）。返回的校验器仅对
-    ``office_create`` 且带非空 ``output_dir`` 参数生效：目标目录 resolve 后
-    落在 workspace 内 → ``None``（放行）；在外 → ``ask``（写工作区外需确认）。
+    office 写类工具且带对应路径参数时生效：
+
+    - ``office_create`` 的 ``output_dir``：目录 resolve 后落在 workspace 内 →
+      ``None``（放行）；在外 → ``ask``（写工作区外需确认）。
+    - ``office_update`` / ``office_delete`` 的 ``file_path``：对既有文件的原地
+      修改 / 删除，越界（工作区外）同样升级为 ``ask``。
 
     ``boundary_resolver`` 抛异常（DB 故障等）时 **fail-closed**：升级为 ask，
     绝不因无法解析边界而静默放行越界写入。
     """
 
+    #: 工具名 → 需要校验的路径参数名
+    _BOUNDARY_TOOLS = {
+        "office_create": "output_dir",
+        "office_update": "file_path",
+        "office_delete": "file_path",
+    }
+
     def _validator(tool_name: str, args: Dict[str, Any]) -> Optional[PermissionDecision]:
-        if tool_name != "office_create":
+        if tool_name not in _BOUNDARY_TOOLS:
             return None
         if boundary_resolver is None:
             return None
         try:
             root = boundary_resolver()
         except Exception:  # noqa: BLE001 — 解析失败必须 fail-closed（升级审批）
-            return _ask("office_create 无法解析会话工作区边界，需人工审批")
+            return _ask(f"{tool_name} 无法解析会话工作区边界，需人工审批")
         if not root:
             return None
-        return _check_output_dir(args, root)
+        return _check_path_arg(args, _BOUNDARY_TOOLS[tool_name], root, tool_name)
 
-    def _check_output_dir(args: Dict[str, Any], root: str) -> Optional[PermissionDecision]:
-        """校验 ``args["output_dir"]`` 是否落在 ``root`` 内；外 → ask，内/缺失 → None。"""
-        output_dir = args.get("output_dir")
-        if not isinstance(output_dir, str) or not output_dir.strip():
+    def _check_path_arg(
+        args: Dict[str, Any], key: str, root: str, tool_name: str
+    ) -> Optional[PermissionDecision]:
+        """校验 ``args[key]`` 是否落在 ``root`` 内；外 → ask，内/缺失 → None。"""
+        target = args.get(key)
+        if not isinstance(target, str) or not target.strip():
             return None
-        if _is_safe_path(output_dir, root):
+        if _is_safe_path(target, root):
             return None
-        return _ask(f"office_create 写入工作区外的路径 {output_dir}，需要用户确认")
+        return _ask(f"{tool_name} 读写工作区外的路径 {target}，需要用户确认")
 
     return _validator
 

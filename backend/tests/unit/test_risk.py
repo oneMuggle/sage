@@ -245,6 +245,9 @@ class TestBuiltinToolDeclarations:
             "memory_save": RiskClass.WRITE_LOCAL,
             "office_list": RiskClass.READ,
             "office_read": RiskClass.READ,
+            "office_create": RiskClass.WRITE_LOCAL,
+            "office_update": RiskClass.WRITE_LOCAL,
+            "office_delete": RiskClass.WRITE_LOCAL,
         }
         for name, risk in expected.items():
             assert registry.risk_of(name) is risk, f"{name} risk mismatch"
