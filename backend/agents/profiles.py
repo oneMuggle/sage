@@ -227,21 +227,27 @@ def ensure_default_agents() -> int:
             inserted += 1
     # P0-5 (2026-08-20): 存量 DB primary 升级 —— 旧种子白名单追加 "agent"。
     # 一次 get() 缓存为 primary 局部引用，本函数三段都对它读写（dict 原地变更）。
-    # repo.upsert(primary) 后内存与 DB 一致，无需重新 get。
+    # repo.upsert(primary) 后内存与 DB 一致，无需重新 get。三段判定合一个外层 if
+    # 满足 ruff SIM102；researcher 升级另起一个 if（变量不同）。
     primary = repo.get("primary")
     if primary is not None:
+        # P1 todo 接线 (2026-08-21): 存量 DB 二段升级 —— 旧种子追加 todo_write。
+        # 顺序敏感：先 agent 后 todo。两级判定互斥（旧种子集合不含 todo_write、
+        # 本段集合含 agent），一段升级后集合恰好等于二段判定集，链式生效；
+        # 任意自定义白名单都不匹配任一集合，天然不动。
         tools = primary.get("tools") or []
         if set(tools) == _PRIMARY_TOOLS_BEFORE_AGENT:
             primary["tools"] = tools + ["agent"]
             repo.upsert(primary)
-    # P1 todo 接线 (2026-08-21): 存量 DB 二段升级 —— 旧种子追加 todo_write。
-    # 顺序敏感：先 agent 后 todo。两级判定互斥（旧种子集合不含 todo_write、
-    # 本段集合含 agent），一段升级后集合恰好等于二段判定集，链式生效；
-    # 任意自定义白名单都不匹配任一集合，天然不动。
-    if primary is not None:
         tools = primary.get("tools") or []
         if set(tools) == _PRIMARY_TOOLS_BEFORE_TODO:
             primary["tools"] = tools + ["todo_write"]
+            repo.upsert(primary)
+        # 2026-09-03 (PR #396 后置迁移): 存量 DB primary system_prompt 升级 ——
+        # 命中旧字符串则替换为 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION（含 agent 子代理委派提示）。
+        # 与 tools 迁移相同的"集合相等/字符串相等"判定：用户自定义 system_prompt 一律不动。
+        if primary.get("system_prompt") == _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION:
+            primary["system_prompt"] = PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
             repo.upsert(primary)
     # 2026-09-03 (PR #396 后置迁移): 存量 DB researcher 升级 —— 旧种子白名单追加
     # http_download。与 primary 升级模式一致：仅当白名单恰好等于旧集合时追加，
@@ -252,13 +258,6 @@ def ensure_default_agents() -> int:
         if set(tools) == _RESEARCHER_TOOLS_BEFORE_HTTP_DOWNLOAD:
             researcher["tools"] = tools + ["http_download"]
             repo.upsert(researcher)
-    # 2026-09-03 (PR #396 后置迁移): 存量 DB primary system_prompt 升级 —— 命中旧
-    # 字符串则替换为 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION（含 agent 子代理委派提示）。
-    # 与 tools 迁移相同的"集合相等/字符串相等"判定：用户自定义 system_prompt 一律不动。
-    if primary is not None:
-        if primary.get("system_prompt") == _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION:
-            primary["system_prompt"] = PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
-            repo.upsert(primary)
     return inserted
 
 
