@@ -28,6 +28,18 @@ def test_default_primary_system_prompt_has_delegation_hint():
     assert "委派" in primary.system_prompt or "子代理" in primary.system_prompt
 
 
+def test_default_seed_coder_uses_current_tool_names():
+    """代码默认 coder 工具白名单必须用 PR #381 重命名后的工具名。
+
+    触发原因: PR #381 把 TerminalTool 重写为 BashTool (name="bash"),
+    旧名 "terminal" 在 tools/ 已不存在。同时 file_read/file_write 是
+    拼写错位(真实工具名是 read_file/write_file)。coder 硬编码若不修,
+    UI 选 coder 后 LLM 看到的工具列表近乎为空。
+    """
+    coder = next(a for a in profiles.create_default_agents() if a.id == "coder")
+    assert coder.tools == ["read_file", "write_file", "bash", "calculator"]
+
+
 class FakeRepo:
     """最小化 AgentRepository mock —— 复刻 test_profiles_todo_upgrade 风格。"""
 

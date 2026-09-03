@@ -108,7 +108,9 @@ def create_default_agents() -> List[AgentProfile]:
             role="coder",
             description="负责代码生成、调试和解释的 Agent",
             system_prompt="你是一个专业的编码 Agent。负责生成高质量代码、调试、代码审查。",
-            tools=["file_read", "file_write", "terminal", "calculator"],
+            # 2026-09-03: PR #381 把 TerminalTool 重写为 BashTool (name="bash"),
+            # file_read/file_write 是拼写错位(真实工具名 read_file/write_file)。
+            tools=["read_file", "write_file", "bash", "calculator"],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.3),
             max_iterations=15,
