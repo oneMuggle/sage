@@ -43,6 +43,83 @@ function proxyHeaders(providerUrl: string, apiKey: string): HeadersInit {
 }
 
 /**
+ * 后端 LLM 代理 (backend/api/llm_proxy_routes.py) 在上游非 2xx / 网络故障 /
+ * TLS 失败时透传一段稳定的 envelope, ``detail.type`` 标识错误种类, ``detail.message``
+ * 是不泄露上游响应体的安全提示 (如 ``"Upstream returned HTTP 401."``)。
+ *
+ * Electron IPC 层 (electron/main.ts sage:backend-request) 把这种 envelope 当作非 2xx
+ * raw body 抛出 Error, message 形如::
+ *
+ *     Backend request failed: 401 {"detail":{"type":"upstream_error","message":"Upstream returned HTTP 401."}}
+ *
+ * 直接把这段贴给前端既冗长又无法辨识。本函数从 message 里抽出 status + JSON detail,
+ * 翻译成中文友好提示, 让 toast 不再粘贴整段 IPC 错误。
+ *
+ * 解析失败一律降级到 ``<原 message>``, 不抛错 — 任何 I/O 边界 helper 都应保持非抛。
+ */
+function _parseUpstreamError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  // 1. 抽 JSON detail 子串。message 形如
+  //    ``Backend request failed: 401 {"detail":{...}}``, 用非贪婪 JSON 切片拿到 detail。
+  const jsonMatch = raw.match(/\{\s*"detail"\s*:[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
+  let detailType: string | undefined;
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]) as { detail?: { type?: string; message?: string } };
+      detailType = parsed.detail?.type;
+    } catch {
+      // JSON 损坏时静默降级 — 走 status 分支
+    }
+  }
+  // 2. 抽 status code。兼容两种 message 形态:
+  //    - IPC raw: ``Backend request failed: 401 <body>``
+  //    - 测试 mock: ``HTTP 401: <body>``
+  const statusMatch = raw.match(/(?:Backend request failed:|HTTP\s+)(\d{3})/i);
+  const status = statusMatch ? Number(statusMatch[1]) : undefined;
+
+  // 3. 按 detail.type 优先翻译 (类型稳定, 跨 status 都适用)
+  if (detailType === 'upstream_unreachable') {
+    return '上游服务不可达：请检查 Base URL 与网络连通性';
+  }
+  if (detailType === 'upstream_transport_error') {
+    return '上游连接中断：请稍后重试';
+  }
+  if (detailType === 'tls_certificate_failed') {
+    return '上游 TLS 证书校验失败：请检查 Base URL 与证书配置';
+  }
+  if (detailType === 'upstream_timeout') {
+    return '上游请求超时';
+  }
+  if (detailType === 'request_body_too_large') {
+    return '请求体过大';
+  }
+  if (detailType === 'response_body_too_large') {
+    return '上游响应过大';
+  }
+  // 4. upstream_error + status: 给常见状态码定制提示, 其它落到通用模板
+  if (detailType === 'upstream_error' && status !== undefined) {
+    if (status === 401) return '上游返回 401：API Key 无效或已过期，请检查 endpoint 配置';
+    if (status === 403) return '上游返回 403：权限不足，请检查 API Key 权限或账户状态';
+    if (status === 404) return '上游返回 404：请检查 Base URL 是否正确（缺少 /v1 路径或地址拼错）';
+    if (status === 429) return '上游返回 429：请求频率限制，请稍后重试';
+    if (status >= 500 && status <= 599) {
+      return `上游返回 ${status}：服务异常，请稍后重试`;
+    }
+    return `上游返回 ${status}：请检查 endpoint 配置`;
+  }
+  // 5. 已知 status 但无 detail.type (非 envelope 路径, 例如裸 fetch 失败或测试 mock)
+  if (status !== undefined) {
+    if (status === 401) return '上游返回 401：API Key 无效或已过期';
+    if (status === 403) return '上游返回 403：权限不足';
+    if (status === 404) return '上游返回 404：Base URL 路径错误';
+    if (status === 429) return '上游返回 429：请求频率限制';
+    if (status >= 500 && status <= 599) return `上游返回 ${status}：服务异常`;
+  }
+  // 6. 兜底 — 保留原 message, 与现有行为兼容
+  return raw;
+}
+
+/**
  * Fetch available models from an OpenAI-compatible endpoint.
  *
  * 实际打到本机后端代理 ``${LLM_PROXY_BASE}/v1/models``;
@@ -94,7 +171,8 @@ async function testChatCompletion(
     if (error instanceof DOMException && error.name === 'AbortError') {
       return { success: false, message: '请求超时 (15s)' };
     }
-    return { success: false, message: error instanceof Error ? error.message : String(error) };
+// 401/429/上游 envelope → _parseUpstreamError 统一翻译; 其它降级到原 message。
+    return { success: false, message: _parseUpstreamError(error) };
   }
 }
 
@@ -149,9 +227,11 @@ export async function testEndpointConnection(
       discoveredModels: models,
     };
   } catch (error) {
+    // fetchModels 阶段抛出的 error 含 backend upstream_error envelope, _parseUpstreamError
+    // 会翻译成中文友好提示; 兜底时保留 raw message, 不抛错。
     return {
       success: false,
-      message: `连接失败: ${error instanceof Error ? error.message : String(error)}`,
+      message: `连接失败: ${_parseUpstreamError(error)}`,
       latency: Date.now() - start,
     };
   }

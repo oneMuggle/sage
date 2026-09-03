@@ -46,7 +46,13 @@ beforeEach(() => {
   relayRequests.length = 0;
   // 模拟 Electron relay：测试仍可捕获 relay 最终发出的 fetch，renderer 不绕过 bridge。
   (window as unknown as { electronAPI?: unknown }).electronAPI = {
-    backendRequest: async (request: { path: string; method?: string; headers?: HeadersInit; body?: unknown; timeoutMs?: number }) => {
+    backendRequest: async (request: {
+      path: string;
+      method?: string;
+      headers?: HeadersInit;
+      body?: unknown;
+      timeoutMs?: number;
+    }) => {
       relayRequests.push({ path: request.path, timeoutMs: request.timeoutMs });
       const response = await window.fetch(request.path, {
         method: request.method,
@@ -171,7 +177,9 @@ describe('fetchModels', () => {
       // 用的是 default first non-embedding, qwen2.5-7b-instruct 是 chat 模型 → 会跑 chat 端点
       const result = await testEndpointConnection('http://127.0.0.1:1234/v1', '');
       expect(result.success).toBe(true);
-      expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
+      expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(
+        15000,
+      );
       const modelsCall = fetchCalls.find((c) => c.url.endsWith('/v1/models'));
       expect(modelsCall).toBeDefined();
       const headers = new Headers(modelsCall?.init?.headers);
@@ -206,7 +214,9 @@ describe('testEndpointConnection', () => {
     const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
 
     expect(result.success).toBe(true);
-    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
+    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(
+      15000,
+    );
     expect(result.message).toContain('1 个模型');
     const modelsCall = fetchCalls.find((c) => c.url.endsWith('/v1/models'));
     expect(modelsCall).toBeDefined();
@@ -231,7 +241,9 @@ describe('testEndpointConnection', () => {
     const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY, 'agnes-2.0-flash');
 
     expect(result.success).toBe(true);
-    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
+    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(
+      15000,
+    );
     const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
     expect(chatCall).toBeDefined();
     const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };
@@ -260,7 +272,9 @@ describe('testEndpointConnection', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
+    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(
+      15000,
+    );
     const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
     expect(chatCall).toBeDefined();
     const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };
@@ -284,7 +298,9 @@ describe('testEndpointConnection', () => {
     const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
 
     expect(result.success).toBe(true);
-    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(15000);
+    expect(relayRequests.find((r) => r.path.endsWith('/v1/chat/completions'))?.timeoutMs).toBe(
+      15000,
+    );
     const chatCall = fetchCalls.find((c) => c.url.endsWith('/v1/chat/completions'));
     expect(chatCall).toBeDefined();
     const body = JSON.parse(String(chatCall?.init?.body)) as { model: string };
@@ -298,5 +314,147 @@ describe('testEndpointConnection', () => {
     expect(result.success).toBe(true);
     expect(fetchCalls.some((c) => c.url.endsWith('/v1/chat/completions'))).toBe(false);
     expect(result.message).toContain('0 个模型');
+  });
+});
+
+/**
+ * 上游错误 envelope 翻译测试 — 验证 backend 透传的
+ * ``{"detail":{"type":"upstream_error","message":"Upstream returned HTTP <code>."}}``
+ * 被前端翻译为用户可读的中文提示, 而不是把整段 IPC + JSON 糊到 toast 上。
+ *
+ * 测试 mock (line 57) 抛出的 Error 形态是 ``HTTP <code>: <body>``, body 是字符串
+ * 形式的 JSON envelope — 与真实 IPC 链路 (sage:backend-request → ``Backend request
+ * failed: <code> <body>``) 同源, 区别只是前缀, _parseUpstreamError 的两条正则都
+ * 能命中。
+ */
+describe('upstream error envelope → 中文友好提示', () => {
+  const UPSTREAM_401_BODY = JSON.stringify({
+    detail: { type: 'upstream_error', message: 'Upstream returned HTTP 401.' },
+  });
+
+  it('fetchModels 阶段 upstream 401 → testEndpointConnection 翻译为「API Key 无效或已过期」', async () => {
+    mockFetch(
+      async () =>
+        new Response(UPSTREAM_401_BODY, {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('连接失败');
+    expect(result.message).toContain('API Key 无效或已过期');
+    // 关键: 整段 JSON envelope 不能漏到用户面前
+    expect(result.message).not.toContain('"detail"');
+    expect(result.message).not.toContain('upstream_error');
+    expect(result.message).not.toContain('Upstream returned HTTP 401.');
+  });
+
+  it('chat 阶段 upstream 401 → 翻译提示且不粘 envelope', async () => {
+    mockFetch(async (url) => {
+      if (url.endsWith('/v1/models')) {
+        return makeJsonResponse(200, {
+          object: 'list',
+          data: [{ id: 'qwen2.5:7b', object: 'model' }],
+        });
+      }
+      // /v1/chat/completions 上游 401
+      return new Response(UPSTREAM_401_BODY, {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('聊天端点异常');
+    expect(result.message).toContain('API Key 无效或已过期');
+    expect(result.message).not.toContain('"detail"');
+    expect(result.message).not.toContain('upstream_error');
+  });
+
+  it('upstream_unreachable envelope (502) → 「上游服务不可达」', async () => {
+    const unreachableBody = JSON.stringify({
+      detail: {
+        type: 'upstream_unreachable',
+        message: 'The upstream service could not be reached.',
+      },
+    });
+    mockFetch(
+      async () =>
+        new Response(unreachableBody, {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('上游服务不可达');
+    expect(result.message).not.toContain('"detail"');
+  });
+
+  it('upstream_error 404 → 「Base URL 是否正确」', async () => {
+    const body = JSON.stringify({
+      detail: { type: 'upstream_error', message: 'Upstream returned HTTP 404.' },
+    });
+    mockFetch(
+      async () =>
+        new Response(body, { status: 404, headers: { 'content-type': 'application/json' } }),
+    );
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('404');
+    expect(result.message).toContain('Base URL');
+    expect(result.message).not.toContain('"detail"');
+  });
+
+  it('upstream_error 500 → 「服务异常」', async () => {
+    const body = JSON.stringify({
+      detail: { type: 'upstream_error', message: 'Upstream returned HTTP 500.' },
+    });
+    mockFetch(
+      async () =>
+        new Response(body, { status: 500, headers: { 'content-type': 'application/json' } }),
+    );
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('500');
+    expect(result.message).toContain('服务异常');
+    expect(result.message).not.toContain('"detail"');
+  });
+
+  it('裸 401 (无 envelope) → 翻译为「上游返回 401」', async () => {
+    // fetch 直接抛裸错误而非 JSON envelope — 模拟纯网络错
+    mockFetch(async () => new Response('Unauthorized', { status: 401 }));
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('401');
+    expect(result.message).toContain('API Key');
+    expect(result.message).not.toContain('"detail"');
+  });
+
+  it('裸网络错误 (fetch throw TypeError) → 兜底为「连接失败: <message>」不抛错', async () => {
+    // 模拟 fetch 自身抛错 (非 HTTP 状态码), e.g. DNS / 网络断开
+    window.fetch = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    }) as unknown as typeof fetch;
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('连接失败');
+    // 兜底保留原 message
+    expect(result.message).toContain('Failed to fetch');
   });
 });

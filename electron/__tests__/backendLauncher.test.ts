@@ -26,6 +26,8 @@ describe('resolveBackendLaunchCommand', () => {
 
   describe('dev (isPackaged=false)', () => {
     it('uses `conda run -n sage-backend python -m backend.main` by default', () => {
+      // Default = no CONDA_PREFIX (CI sandbox or power dev running outside
+      // a conda env). Must still use the legacy `conda run -n` wrapper.
       const plan = resolveBackendLaunchCommand(makeOpts({ isPackaged: false }));
       expect(plan).toMatchObject({
         kind: 'spawn',
@@ -41,6 +43,91 @@ describe('resolveBackendLaunchCommand', () => {
         });
         expect(plan.extraEnv).not.toHaveProperty('PYTHONPATH');
       }
+    });
+
+    it('uses ${CONDA_PREFIX}/bin/python directly when CONDA_PREFIX is set (avoids conda-run wrapper pid mismatch)', () => {
+      // Regression guard for the dev-mode "后端服务在 30 秒内未响应"
+      // dialog: `conda run -n sage-backend python` spawns a 3-deep
+      // process tree (conda → bash → python) so child_process.spawn's
+      // ``proc.pid`` is the conda wrapper, not the python child. The
+      // backend's ``/health/proof`` returns ``os.getpid()``, so
+      // ``ownsBackend`` (``health.pid === ownership.pid``) always fails
+      // and the supervisor times out 90s later. Invoking the env's
+      // python binary directly makes ``proc.pid`` == the python PID
+      // and the check passes.
+      const plan = resolveBackendLaunchCommand(
+        makeOpts({
+          isPackaged: false,
+          platform: 'linux',
+          env: { CONDA_PREFIX: '/opt/anaconda3/envs/sage-backend' },
+          existsSyncFn: (p) => p === '/opt/anaconda3/envs/sage-backend/bin/python',
+        }),
+      );
+      expect(plan).toMatchObject({
+        kind: 'spawn',
+        cmd: '/opt/anaconda3/envs/sage-backend/bin/python',
+        args: ['-m', 'backend.main'],
+        reason: 'dev-conda',
+      });
+      if (plan.kind === 'spawn') {
+        expect(plan.extraEnv).toEqual({
+          SAGE_DB_PATH: '/mock/sage.db',
+          SAGE_USER_DATA_DIR: '/mock/userData',
+          PYTHON_BACKEND_PORT: '8765',
+        });
+        // CRITICAL: must NOT include `run`, `-n`, or `sage-backend` —
+        // that's the legacy conda-wrapper shape and it would re-introduce
+        // the pid mismatch.
+        expect(plan.args).not.toContain('run');
+        expect(plan.args).not.toContain('-n');
+        expect(plan.args).not.toContain('sage-backend');
+      }
+    });
+
+    it('uses windows python.exe directly when CONDA_PREFIX is set on win32', () => {
+      // Symmetric guard for the win32 dev branch: ``condaEnvPythonPath``
+      // joins ``python.exe`` directly under the prefix (Windows conda
+      // envs don't nest it under ``bin/``). Note: we use literal
+      // backslashes here, NOT ``path.win32.join`` — the source uses
+      // string concatenation so the output preserves whatever separator
+      // the caller passed in (real conda on Windows reports backslash
+      // paths, on linux forward-slash).
+      const plan = resolveBackendLaunchCommand(
+        makeOpts({
+          isPackaged: false,
+          platform: 'win32',
+          env: { CONDA_PREFIX: 'C:\\Users\\dev\\anaconda3\\envs\\sage-backend' },
+          existsSyncFn: (p) => p === 'C:\\Users\\dev\\anaconda3\\envs\\sage-backend\\python.exe',
+        }),
+      );
+      expect(plan).toMatchObject({
+        kind: 'spawn',
+        cmd: 'C:\\Users\\dev\\anaconda3\\envs\\sage-backend\\python.exe',
+        args: ['-m', 'backend.main'],
+        reason: 'dev-conda',
+      });
+    });
+
+    it('falls back to `conda run -n sage-backend` when CONDA_PREFIX is set but the env python is missing', () => {
+      // Defensive: if the user has CONDA_PREFIX pointing at a partially
+      // constructed env (or a Windows env that hasn't been bootstrapped
+      // yet), the launcher must not silently produce a broken spawn —
+      // fall through to the legacy `conda run -n` path, which will fail
+      // loudly if conda itself can't find the env.
+      const plan = resolveBackendLaunchCommand(
+        makeOpts({
+          isPackaged: false,
+          platform: 'linux',
+          env: { CONDA_PREFIX: '/opt/empty/env' },
+          existsSyncFn: () => false,
+        }),
+      );
+      expect(plan).toMatchObject({
+        kind: 'spawn',
+        cmd: 'conda',
+        args: ['run', '-n', 'sage-backend', 'python', '-m', 'backend.main'],
+        reason: 'dev-conda',
+      });
     });
 
     it('honors SAGE_PYTHON env override (e.g. "python3") for power devs', () => {
