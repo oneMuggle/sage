@@ -521,3 +521,42 @@ def test_path_boundary_resolver_exception_fails_closed(tmp_path):
     assert decision.needs_approval is True
     assert "无法解析会话工作区边界" in decision.reason
 
+
+
+def test_office_update_delete_registered_as_write_capability():
+    assert TOOL_CAPABILITIES["office_update"] is ToolCapability.WRITE
+    assert TOOL_CAPABILITIES["office_delete"] is ToolCapability.WRITE
+
+
+def test_path_boundary_office_update_outside_workspace_asks(tmp_path, tmp_path_factory):
+    """office_update 的 file_path 越界（工作区外）→ ask（与 office_create 同链）。"""
+    workspace = tmp_path
+    outside = tmp_path_factory.mktemp("outside")
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(lambda: str(workspace)),
+    )
+    decision = enforcer.check("office_update", {"file_path": str(outside / "a.docx")})
+    assert decision.allowed is False
+    assert decision.needs_approval is True
+
+    inside = enforcer.check("office_update", {"file_path": str(workspace / "a.docx")})
+    assert inside.allowed is True
+
+
+def test_path_boundary_office_delete_outside_workspace_asks(tmp_path, tmp_path_factory):
+    """office_delete 的 file_path 越界 → ask；工作区内放行。"""
+    workspace = tmp_path
+    outside = tmp_path_factory.mktemp("outside")
+    enforcer = PermissionEnforcer(
+        mode=PermissionMode.WORKSPACE_WRITE,
+        rules=[],
+        path_boundary_validator=make_office_path_boundary(lambda: str(workspace)),
+    )
+    decision = enforcer.check("office_delete", {"file_path": str(outside / "a.xlsx")})
+    assert decision.allowed is False
+    assert decision.needs_approval is True
+
+    inside = enforcer.check("office_delete", {"file_path": str(workspace / "a.xlsx")})
+    assert inside.allowed is True
