@@ -272,15 +272,19 @@ class HttpDownloadTool(BaseTool):
                         ),
                     )
 
-                name = sanitize_filename(filename) if filename else derive_filename(
-                    current_url, response.headers.get("content-disposition")
+                name = (
+                    sanitize_filename(filename)
+                    if filename
+                    else derive_filename(current_url, response.headers.get("content-disposition"))
                 )
                 root.mkdir(parents=True, exist_ok=True)
                 target = _unique_path(root, name)
 
                 written = 0
+                owns_target = False
                 try:
                     with _open_exclusive(root, target.name) as handle:
+                        owns_target = True
                         for chunk in response.iter_bytes(_CHUNK_BYTES):
                             written += len(chunk)
                             # Content-Length 是服务器说的，不可信；按实际字节兜底
@@ -288,18 +292,20 @@ class HttpDownloadTool(BaseTool):
                                 raise _DownloadTooLarge(written)
                             handle.write(chunk)
                 except _DownloadTooLarge as exc:
-                    target.unlink(missing_ok=True)
-                    response.close()
+                    if owns_target:
+                        target.unlink(missing_ok=True)
                     return ToolResult(
                         success=False,
                         error=f"download_exceeds_limit: 实际接收 {exc.written} 字节，超过上限 {max_bytes}",
                     )
                 except Exception:
-                    target.unlink(missing_ok=True)
-                    response.close()
+                    if owns_target:
+                        target.unlink(missing_ok=True)
                     raise
+                finally:
+                    response.close()
 
-                response.close()
+            self._record_artifact(str(target), written)
             return ToolResult(
                 success=True,
                 content={

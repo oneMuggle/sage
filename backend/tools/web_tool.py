@@ -331,40 +331,40 @@ class WebFetchTool(BaseTool):
             ) as client:
                 request = client.build_request("GET", current_url)
                 response = client.send(request, stream=True)
-                if response.is_redirect:
-                    location = response.headers.get("location")
-                    response.close()
-                    if redirect_count >= self._MAX_REDIRECTS:
-                        raise ValueError(
-                            f"redirect_limit_exceeded: 重定向次数超过 {self._MAX_REDIRECTS} 次"
-                        )
-                    if not location:
-                        raise ValueError("invalid_redirect: 重定向缺少 Location")
-                    current_url = urljoin(current_url, location)
-                    continue
-                response.raise_for_status()
-                declared = response.headers.get("content-length", "")
-                if declared.isdigit() and int(declared) > self._MAX_RESPONSE_BYTES:
-                    response.close()
-                    raise ValueError(
-                        f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
-                    )
-                content = bytearray()
                 try:
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if redirect_count >= self._MAX_REDIRECTS:
+                            raise ValueError(
+                                f"redirect_limit_exceeded: 重定向次数超过 {self._MAX_REDIRECTS} 次"
+                            )
+                        if not location:
+                            raise ValueError("invalid_redirect: 重定向缺少 Location")
+                        current_url = urljoin(current_url, location)
+                        continue
+
+                    response.raise_for_status()
+                    declared = response.headers.get("content-length", "")
+                    if declared.isdigit() and int(declared) > self._MAX_RESPONSE_BYTES:
+                        raise ValueError(
+                            f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
+                        )
+                    content = bytearray()
                     for chunk in response.iter_bytes(64 * 1024):
                         content.extend(chunk)
                         if len(content) > self._MAX_RESPONSE_BYTES:
                             raise ValueError(
                                 f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
                             )
+                    buffered_response = httpx.Response(
+                        response.status_code,
+                        headers=response.headers,
+                        content=bytes(content),
+                        request=response.request,
+                    )
                 finally:
                     response.close()
-                response = httpx.Response(
-                    response.status_code,
-                    headers=response.headers,
-                    content=bytes(content),
-                    request=response.request,
-                )
+                response = buffered_response
             return response, current_url
 
         raise ValueError("redirect_limit_exceeded: 重定向次数超限")

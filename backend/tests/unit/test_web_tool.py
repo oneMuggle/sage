@@ -165,6 +165,24 @@ def test_web_fetch_http_error():
     assert "HTTP" in result.error or "失败" in result.error
 
 
+def test_web_fetch_http_error_closes_stream_response(monkeypatch):
+    closed = []
+    original_close = httpx.Response.close
+
+    def recording_close(response):
+        closed.append(response)
+        return original_close(response)
+
+    monkeypatch.setattr(httpx.Response, "close", recording_close)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/server-error").mock(return_value=Response(500, text="server down"))
+        tool = WebFetchTool()
+        result = tool.execute(url="https://example.com/server-error")
+
+    assert result.success is False
+    assert closed
+
+
 def test_web_fetch_subagent_blocks_private_destinations():
     tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
 
@@ -188,7 +206,9 @@ def test_web_fetch_subagent_blocks_private_destinations():
 def test_web_fetch_subagent_blocks_non_global_literal_addresses(address):
     tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
 
-    result = tool.execute(url=f"http://[{address}]/metadata" if ":" in address else f"http://{address}/metadata")
+    result = tool.execute(
+        url=f"http://[{address}]/metadata" if ":" in address else f"http://{address}/metadata"
+    )
 
     assert result.success is False
     assert "subagent_web_fetch_blocked" in result.error
@@ -341,9 +361,7 @@ def test_web_fetch_intranet_follows_relative_redirect():
 def test_web_fetch_rejects_redirect_with_invalid_final_scheme():
     with respx.mock(assert_all_called=True) as mock:
         mock.get("https://mirror.example.internal/start").mock(
-            return_value=Response(
-                302, headers={"location": "ftp://mirror.example.internal/file"}
-            )
+            return_value=Response(302, headers={"location": "ftp://mirror.example.internal/file"})
         )
         tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
         result = tool.execute(url="https://mirror.example.internal/start")
@@ -452,9 +470,7 @@ def test_web_fetch_mode_controls_returned_sections(mode, present, absent):
 def test_web_fetch_links_are_absolutized():
     with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
         mock.get("/list").mock(
-            return_value=Response(
-                200, text=_MIRROR_PAGE, headers={"content-type": "text/html"}
-            )
+            return_value=Response(200, text=_MIRROR_PAGE, headers={"content-type": "text/html"})
         )
         tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
         result = tool.execute(url="https://mirror.example.internal/list", mode="links")
@@ -466,9 +482,7 @@ def test_web_fetch_links_are_absolutized():
 def test_web_fetch_tables_become_nested_lists():
     with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
         mock.get("/t").mock(
-            return_value=Response(
-                200, text=_MIRROR_PAGE, headers={"content-type": "text/html"}
-            )
+            return_value=Response(200, text=_MIRROR_PAGE, headers={"content-type": "text/html"})
         )
         tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
         result = tool.execute(url="https://mirror.example.internal/t", mode="tables")
@@ -520,9 +534,7 @@ def test_web_fetch_non_html_content_type_skips_extraction():
 
 def test_web_fetch_max_length_truncates_extracted_text():
     long_body = (
-        '<html><head><meta charset="utf-8"></head><body><p>'
-        + ("甲" * 5000)
-        + "</p></body></html>"
+        '<html><head><meta charset="utf-8"></head><body><p>' + ("甲" * 5000) + "</p></body></html>"
     )
     with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
         mock.get("/long").mock(
