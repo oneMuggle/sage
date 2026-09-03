@@ -14,11 +14,12 @@ import { GeneralTab } from './GeneralTab';
 import { McpTab } from './McpTab';
 import { MemoryTab } from './MemoryTab';
 import { ModelsTab } from './ModelsTab';
+import { NetworkTab } from './NetworkTab';
 
 // NOTE (win7 sync #292): main 移除了 network tab(代理设置为死设置,
 // proxyMode/proxyUrl/tlsVersion 无实际消费点,已从 schema/canonicalizer 删除)。
 // win7 保留顶部 tab 布局(#292 只清理假功能,不含 main 的 U15 左侧导航改版)。
-type SettingsTab = 'general' | 'endpoints' | 'models' | 'memory' | 'mcp' | 'evolution';
+type SettingsTab = 'general' | 'endpoints' | 'models' | 'memory' | 'network' | 'mcp' | 'evolution';
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -29,6 +30,7 @@ export function Settings() {
     { key: 'endpoints', label: '端点' },
     { key: 'models', label: '模型' },
     { key: 'memory', label: '记忆' },
+    { key: 'network', label: '网络' },
     { key: 'mcp', label: 'MCP' },
     { key: 'evolution', label: '进化' },
   ];
@@ -72,6 +74,7 @@ export function Settings() {
             {activeTab === 'memory' && (
               <MemoryTab settings={settings} updateSettings={updateSettings} />
             )}
+            {activeTab === 'network' && <NetworkTab />}
             {activeTab === 'mcp' && <McpTab />}
             {activeTab === 'evolution' && (
               <div className="space-y-6">

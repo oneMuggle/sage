@@ -102,6 +102,7 @@ class TestReadonlyWhitelist:
             "list_dir",
             "web_search",
             "web_fetch",
+            "http_download",
             "memory_search",
             "calculator",
         }

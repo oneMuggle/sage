@@ -95,7 +95,7 @@ def create_default_agents() -> List[AgentProfile]:
             role="researcher",
             description="负责网络搜索和信息收集的 Agent",
             system_prompt="你是一个专业的研究 Agent。负责搜索信息、综合资料、生成研究报告。",
-            tools=["web_search", "web_fetch", "memory_search", "memory_save"],
+            tools=["web_search", "web_fetch", "http_download", "memory_search", "memory_save"],
             memory_access=["episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.5),
             max_iterations=8,

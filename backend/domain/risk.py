@@ -48,7 +48,7 @@ WRITE_TOOLS = frozenset({"write_file", "memory_save"})
 # 真实 bash 类工具风险由 BashTool.risk / BashOutputTool.risk / KillShellTool.risk
 # 在类上声明; 兜底表仅覆盖未声明风险的同名工具（动态注册/MCP）。
 SHELL_TOOLS = frozenset({"bash"})
-EXTERNAL_TOOLS = frozenset({"web_search", "web_fetch"})
+EXTERNAL_TOOLS = frozenset({"web_search", "web_fetch", "http_download"})
 
 _BASE: Dict[str, RiskClass] = {
     **{name: RiskClass.WRITE_LOCAL for name in WRITE_TOOLS},
