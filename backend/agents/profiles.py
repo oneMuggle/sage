@@ -63,7 +63,9 @@ def create_default_agents() -> List[AgentProfile]:
             name="Sage 主助手",
             role="coordinator",
             description="面向用户的协调 Agent，负责意图识别和任务分发",
-            system_prompt="你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。",
+            # 2026-09-03: 改用 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION 常量。
+            # 出网任务通过 agent 工具委派给只读子代理，coordinator 不直接出网。
+            system_prompt=PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION,
             # 2026-07-30: 加 list_dir/read_file 让 chat 默认能跑代码 review;
             # max_iterations=15 给 coder 类工作流留出预算(否则会复现 max_iterations_exceeded)
             # 2026-08-01: 加 grep_search/glob_search/file_summary 三件套，
@@ -174,6 +176,32 @@ _PRIMARY_TOOLS_BEFORE_TODO = {
     "grep_search", "glob_search", "file_summary", "agent",
 }
 
+# 2026-09-03 (PR #396 后置迁移): 加 "http_download" 之前的 researcher 种子集合
+# —— 存量 DB 三段升级判定。仅当白名单恰好等于旧种子时追加 http_download;
+# 用户自定义（任何增删）一律不动。
+_RESEARCHER_TOOLS_BEFORE_HTTP_DOWNLOAD = {
+    "web_search", "web_fetch", "memory_search",
+}
+
+# 2026-09-03 (PR #396 后置迁移): 加 "agent 子代理委派" 提示之前的 primary 系统提示。
+# 存量 DB 命中此字符串才升级 —— 用户自定义 system_prompt 一律不动。
+_PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION = (
+    "你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。"
+)
+
+
+# 2026-09-03 (PR #396 后置迁移): 升级后的 primary system_prompt。新增一段明确指引:
+# 网页访问/文件下载/网络搜索等出网任务 → 用 agent 工具委派给只读子代理
+# (子代理 SUBAGENT_TOOL_WHITELIST 已含 web_search/web_fetch/http_download)。
+# 保持 primary 的 coordinator 定位 —— 出网任务不直接进 primary 白名单,
+# 避免 coordinator 同时承担"协调"与"出网执行"两个角色。
+PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION = (
+    "你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。\n\n"
+    "对于网页访问、文件下载、网络搜索等出网任务，使用 agent 工具委派给"
+    "只读子代理执行（子代理具备 web_search / web_fetch / http_download / memory_search"
+    " 等只读工具）。直接回答时不要假装调用了这些工具。"
+)
+
 
 def _default_repo():
     from backend.data.agent_repo import AgentRepository
@@ -198,22 +226,38 @@ def ensure_default_agents() -> int:
             repo.upsert(agent.to_dict())
             inserted += 1
     # P0-5 (2026-08-20): 存量 DB primary 升级 —— 旧种子白名单追加 "agent"。
+    # 一次 get() 缓存为 primary 局部引用，本函数三段都对它读写（dict 原地变更）。
+    # repo.upsert(primary) 后内存与 DB 一致，无需重新 get。三段判定合一个外层 if
+    # 满足 ruff SIM102；researcher 升级另起一个 if（变量不同）。
     primary = repo.get("primary")
     if primary is not None:
+        # P1 todo 接线 (2026-08-21): 存量 DB 二段升级 —— 旧种子追加 todo_write。
+        # 顺序敏感：先 agent 后 todo。两级判定互斥（旧种子集合不含 todo_write、
+        # 本段集合含 agent），一段升级后集合恰好等于二段判定集，链式生效；
+        # 任意自定义白名单都不匹配任一集合，天然不动。
         tools = primary.get("tools") or []
         if set(tools) == _PRIMARY_TOOLS_BEFORE_AGENT:
             primary["tools"] = tools + ["agent"]
             repo.upsert(primary)
-    # P1 todo 接线 (2026-08-21): 存量 DB 二段升级 —— 旧种子追加 todo_write。
-    # 顺序敏感：先 agent 后 todo。两级判定互斥（旧种子集合不含 todo_write、
-    # 本段集合含 agent），一段升级后集合恰好等于二段判定集，链式生效；
-    # 任意自定义白名单都不匹配任一集合，天然不动。
-    primary = repo.get("primary")
-    if primary is not None:
         tools = primary.get("tools") or []
         if set(tools) == _PRIMARY_TOOLS_BEFORE_TODO:
             primary["tools"] = tools + ["todo_write"]
             repo.upsert(primary)
+        # 2026-09-03 (PR #396 后置迁移): 存量 DB primary system_prompt 升级 ——
+        # 命中旧字符串则替换为 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION（含 agent 子代理委派提示）。
+        # 与 tools 迁移相同的"集合相等/字符串相等"判定：用户自定义 system_prompt 一律不动。
+        if primary.get("system_prompt") == _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION:
+            primary["system_prompt"] = PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
+            repo.upsert(primary)
+    # 2026-09-03 (PR #396 后置迁移): 存量 DB researcher 升级 —— 旧种子白名单追加
+    # http_download。与 primary 升级模式一致：仅当白名单恰好等于旧集合时追加，
+    # 用户自定义不动。researcher 自身不是迁移链多段，一次升级即可。
+    researcher = repo.get("researcher")
+    if researcher is not None:
+        tools = researcher.get("tools") or []
+        if set(tools) == _RESEARCHER_TOOLS_BEFORE_HTTP_DOWNLOAD:
+            researcher["tools"] = tools + ["http_download"]
+            repo.upsert(researcher)
     return inserted
 
 
