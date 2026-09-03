@@ -615,3 +615,206 @@ def test_create_rolls_back_file_on_registration_failure(tmp_path: Path, monkeypa
     # The orphan file must have been cleaned up.
     office_files = list(work.rglob("*.docx"))
     assert office_files == [], f"orphan files remain: {office_files}"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# update: in-place edit — binding-scoped, status flips to EDITED,
+#         failed ops leave the file (and row) untouched.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_update_applies_ops_and_marks_row_edited(tmp_path: Path):
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-upd")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-upd", str(work), now_ms=1)
+    doc_summary = _make_doc(doc_id="doc-a", workspace_path=binding.workspace_path)
+    save_document(conn, doc_summary)
+    from backend.office.storage import document_path
+
+    _write_minimal_docx(document_path(doc_summary))
+
+    service = OfficeToolService()
+    result = service.update(
+        conn,
+        "sess-upd",
+        binding.generation,
+        "doc-a",
+        [{"op": "replace_text", "find": "hello world", "replace": "goodbye world"}],
+    )
+    assert result["success"] is True
+    assert result["content"]["document_id"] == "doc-a"
+    assert result["content"]["results"][0]["replacements"] >= 1
+    assert "workspace_path" not in str(result["content"])
+
+    row = conn.execute(
+        "SELECT status, updated_at FROM office_documents WHERE id = 'doc-a'"
+    ).fetchone()
+    assert row["status"] == OfficeDocStatus.EDITED.value
+    assert row["updated_at"] > doc_summary.updated_at
+
+
+def test_update_unknown_doc_returns_not_found(tmp_path: Path):
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-upd")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-upd", str(work), now_ms=1)
+
+    service = OfficeToolService()
+    result = service.update(
+        conn, "sess-upd", binding.generation, "ghost", [{"op": "replace_text", "find": "a", "replace": "b"}]
+    )
+    assert result == {
+        "success": False,
+        "error": {"code": "document_not_found", "message": "document not found"},
+    }
+
+
+def test_update_failed_ops_leave_file_and_row_untouched(tmp_path: Path):
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-upd")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-upd", str(work), now_ms=1)
+    doc_summary = _make_doc(doc_id="doc-a", workspace_path=binding.workspace_path)
+    save_document(conn, doc_summary)
+    from backend.office.storage import document_path
+
+    _write_minimal_docx(document_path(doc_summary))
+    before = document_path(doc_summary).stat().st_mtime_ns
+
+    service = OfficeToolService()
+    result = service.update(
+        conn,
+        "sess-upd",
+        binding.generation,
+        "doc-a",
+        [{"op": "replace_text", "find": "不存在的句子", "replace": "x"}],
+    )
+    assert result["success"] is False
+    assert result["error"]["code"] == "operation_failed"
+    assert result["results"][0]["ok"] is False
+    assert document_path(doc_summary).stat().st_mtime_ns == before
+    row = conn.execute("SELECT status FROM office_documents WHERE id = 'doc-a'").fetchone()
+    assert row["status"] == OfficeDocStatus.GENERATED.value
+
+
+def test_update_respects_max_read_bytes(tmp_path: Path):
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-upd")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-upd", str(work), now_ms=1)
+    doc_summary = _make_doc(doc_id="doc-a", workspace_path=binding.workspace_path)
+    save_document(conn, doc_summary)
+    from backend.office.storage import document_path
+
+    _write_minimal_docx(document_path(doc_summary))
+
+    service = OfficeToolService(policy=ToolPolicy(max_read_bytes=10))
+    result = service.update(
+        conn, "sess-upd", binding.generation, "doc-a", [{"op": "replace_text", "find": "a", "replace": "b"}]
+    )
+    assert result["success"] is False
+    assert result["error"]["code"] == "file_too_large"
+
+
+def test_update_stale_generation_returns_not_found(tmp_path: Path):
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-upd")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-upd", str(work), now_ms=1)
+    save_document(conn, _make_doc(doc_id="doc-a", workspace_path=binding.workspace_path))
+
+    service = OfficeToolService()
+    result = service.update(
+        conn, "sess-upd", binding.generation + 1, "doc-a", [{"op": "replace_text", "find": "a", "replace": "b"}]
+    )
+    assert result["error"]["code"] == "document_not_found"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# delete: binding-scoped — managed dir + row removed together,
+#         files-first so a locked file keeps a consistent state.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_delete_removes_managed_dir_and_row(tmp_path: Path):
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-del")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-del", str(work), now_ms=1)
+    doc_summary = _make_doc(doc_id="doc-a", workspace_path=binding.workspace_path)
+    save_document(conn, doc_summary)
+    from backend.office.storage import document_path
+
+    _write_minimal_docx(document_path(doc_summary))
+    managed_dir = document_path(doc_summary).parent
+    assert managed_dir.is_dir()
+
+    service = OfficeToolService()
+    result = service.delete(conn, "sess-del", binding.generation, "doc-a")
+    assert result["success"] is True
+    assert result["content"] == {"document_id": "doc-a", "doc_type": "word"}
+    assert not managed_dir.exists()
+    assert conn.execute("SELECT COUNT(*) c FROM office_documents WHERE id='doc-a'").fetchone()["c"] == 0
+    # list 不再可见
+    assert service.list(conn, "sess-del", binding.generation) == []
+
+
+def test_delete_unknown_doc_returns_not_found(tmp_path: Path):
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-del")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-del", str(work), now_ms=1)
+
+    service = OfficeToolService()
+    result = service.delete(conn, "sess-del", binding.generation, "ghost")
+    assert result["error"]["code"] == "document_not_found"
+
+
+def test_delete_rmtree_failure_keeps_row(tmp_path: Path, monkeypatch):
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-del")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-del", str(work), now_ms=1)
+    doc_summary = _make_doc(doc_id="doc-a", workspace_path=binding.workspace_path)
+    save_document(conn, doc_summary)
+    from backend.office.storage import document_path
+
+    _write_minimal_docx(document_path(doc_summary))
+
+    def _boom(_path):
+        raise OSError("file locked by Word")
+
+    monkeypatch.setattr("shutil.rmtree", _boom)
+
+    service = OfficeToolService()
+    result = service.delete(conn, "sess-del", binding.generation, "doc-a")
+    assert result["success"] is False
+    assert result["error"]["code"] == "delete_failed"
+    # 行保留，文件保留 —— 状态一致，用户可重试
+    assert conn.execute("SELECT COUNT(*) c FROM office_documents WHERE id='doc-a'").fetchone()["c"] == 1
+    assert document_path(doc_summary).is_file()
