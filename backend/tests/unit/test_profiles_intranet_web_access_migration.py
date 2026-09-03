@@ -82,7 +82,7 @@ def test_customized_researcher_whitelist_untouched(monkeypatch):
 
 
 def test_current_shape_researcher_untouched(monkeypatch):
-    """已是当前形状（含 http_download）→ 绝不再追加（防重复）。"""
+    """已是当前形状（含 http_download）→ 绝不再追加（防重复写入 + updated_at 抖动）。"""
     current = ["web_search", "web_fetch", "http_download", "memory_search"]
     stored = {
         "primary": {"id": "primary", "enabled": True, "tools": []},
@@ -92,6 +92,10 @@ def test_current_shape_researcher_untouched(monkeypatch):
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
     assert sorted(stored["researcher"]["tools"]) == sorted(current)
+    # 幂等性断言：与 test_current_primary_system_prompt_untouched 对称。
+    # researcher 已是当前形状 → 不应再 upsert（避免 updated_at 抖动 + 无意义写盘）。
+    researcher_upserts = [u for u in repo.upserts if u["id"] == "researcher"]
+    assert researcher_upserts == [], f"researcher 不应被 upsert，但收到: {researcher_upserts}"
 
 
 # ---------------------------------------------------------------------------
