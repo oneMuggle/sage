@@ -46,6 +46,7 @@
 | 2026-08-11 | [Chat-Native Multi-Agent Orchestration Design](./2026-08-11-multi-agent-orchestration-design.md) | 聊天链路多 agent 编排：计划先行 + conductor 驱动 + 双失败模式门 |
 | 2026-08-20 | [Win7 Memory Manager Initialization and SSL Fix](./2026-08-20-win7-memory-manager-init-design.md) | memory tool 注入、Win7 certifi 打包与 SSL CA bootstrap |
 | 2026-08-23 | [Win7 与主分支平台能力修复](./2026-08-23-win7-parity-platform-fixes-design.md) | 修复记忆、流式 UI、LM Studio、工具、Office、知识库、摘要、时区与工作区设置 |
+| 2026-09-02 | [内网 Web 访问设计](./2026-09-02-intranet-web-access-design.md) | 网络模式门禁（online/intranet/offline）+ 域名白名单 + HTML 正文抽取 + 流式下载工具 |
 
 ## 与其他目录关系
 

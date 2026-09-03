@@ -59,6 +59,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
+from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
 from backend.orchestration.events import EventProvenance, EventRecorder, LaneEvent
 from backend.orchestration.lane_registry import LaneRegistry
@@ -68,8 +69,10 @@ from backend.orchestration.orch_settings import load_orch_settings
 from backend.orchestration.task_registry import TaskRegistry
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.calculator import CalculatorTool
+from backend.tools.download_tool import HttpDownloadTool
 from backend.tools.file_tool import ListDirTool, ReadFileTool
 from backend.tools.memory_tool import MemorySearchTool
+from backend.tools.network_config import load_network_policy
 from backend.tools.registry import ToolRegistry
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
 
@@ -82,6 +85,7 @@ SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
     "list_dir",
     "web_search",
     "web_fetch",
+    "http_download",
     "memory_search",
     "calculator",
 )
@@ -180,14 +184,25 @@ def _subagent_policy(policy: Optional[ToolPolicy]) -> tuple[ToolPolicy, Path | N
     )
 
 
-def build_readonly_tool_registry(policy: Optional[ToolPolicy] = None) -> ToolRegistry:
-    """Build the restricted read-only registry given to sub-agents."""
+def build_readonly_tool_registry(
+    policy: Optional[ToolPolicy] = None,
+    network_policy: Optional[NetworkPolicy] = None,
+) -> ToolRegistry:
+    """Build the restricted read-only registry given to sub-agents.
+
+    ``network_policy`` 缺省从 settings 读；出网工具按模式门禁 —— 子代理路径
+    不过门禁的话，agent 工具就成了绕过网络模式的后门。
+    """
     policy, owned_root = _subagent_policy(policy)
+    network_policy = network_policy if network_policy is not None else load_network_policy()
     registry = ToolRegistry()
     registry.register(ReadFileTool(policy=policy, enforce_workspace=True))
     registry.register(ListDirTool(policy=policy, enforce_workspace=True))
-    registry.register(WebSearchTool(policy=policy))
-    registry.register(WebFetchTool(policy=policy))
+    if network_policy.search_enabled():
+        registry.register(WebSearchTool(policy=policy))
+    if network_policy.fetch_enabled():
+        registry.register(WebFetchTool(policy=policy, network_policy=network_policy))
+        registry.register(HttpDownloadTool(policy=policy, network_policy=network_policy))
     registry.register(MemorySearchTool(policy=policy))
     registry.register(CalculatorTool(policy=policy))
     registry._owned_workspace_root = owned_root  # noqa: SLF001 — lifecycle metadata

@@ -6,6 +6,7 @@
 
 from typing import Optional
 
+from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
 
 from .agent_tool import AgentTool
@@ -13,10 +14,12 @@ from .ask_user_tool import AskUserQuestionTool
 from .base import BaseTool, ToolResult, ToolSchema
 from .bash_tool import BashOutputTool, BashTool, KillShellTool
 from .calculator import CalculatorTool
+from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
 from .file_summary_tool import FileSummaryTool
 from .file_tool import ListDirTool, ReadFileTool, WriteFileTool
 from .memory_tool import MemorySaveTool, MemorySearchTool
+from .network_config import load_network_policy
 from .office_create_tool import OfficeCreateTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .registry import ToolRegistry
@@ -29,15 +32,23 @@ from .todo_tool import TodoWriteTool
 from .web_tool import WebFetchTool, WebSearchTool
 
 
-def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = None) -> None:
+def register_all_tools(
+    registry: ToolRegistry,
+    policy: Optional[ToolPolicy] = None,
+    network_policy: Optional[NetworkPolicy] = None,
+) -> None:
     """
     注册所有内置工具到注册表
 
     Args:
         registry: 工具注册表
         policy:   M2 工具策略（缺省 ``ToolPolicy()``）；透传给每个内置工具。
+        network_policy: 网络策略；``None`` 时从 settings 读。决定三个出网工具
+            是否注册 —— 内网/气隙模式下不注册比返回错误更省 token，因为 LLM
+            看到工具就会试（与 ``get_schemas_for_llm`` 隐藏 office 工具同理）。
     """
     policy = policy or ToolPolicy()
+    network_policy = network_policy if network_policy is not None else load_network_policy()
     registry.register(BashTool(policy=policy))
     # 后台 shell 生命周期：bash(run_in_background=true) 起的进程由这两个工具
     # 轮询与终止。bash_output 归 READ（只读已捕获输出），kill_shell 归 WRITE。
@@ -46,8 +57,11 @@ def register_all_tools(registry: ToolRegistry, policy: Optional[ToolPolicy] = No
     registry.register(ReadFileTool(policy=policy))
     registry.register(WriteFileTool(policy=policy))
     registry.register(ListDirTool(policy=policy))
-    registry.register(WebSearchTool(policy=policy))
-    registry.register(WebFetchTool(policy=policy))
+    if network_policy.search_enabled():
+        registry.register(WebSearchTool(policy=policy))
+    if network_policy.fetch_enabled():
+        registry.register(WebFetchTool(policy=policy, network_policy=network_policy))
+        registry.register(HttpDownloadTool(policy=policy, network_policy=network_policy))
     registry.register(CalculatorTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))
     registry.register(MemorySaveTool(policy=policy))
@@ -99,6 +113,7 @@ __all__ = [
     "ListDirTool",
     "WebSearchTool",
     "WebFetchTool",
+    "HttpDownloadTool",
     "CalculatorTool",
     "MemorySearchTool",
     "MemorySaveTool",
