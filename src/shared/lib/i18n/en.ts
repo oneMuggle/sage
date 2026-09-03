@@ -97,6 +97,32 @@ export const en: Record<TranslationKey, string> = {
   'settings.tab.models': 'Models',
   'settings.tab.memory': 'Memory',
   'settings.tab.network': 'Network',
+  'settings.network.mode': 'Network mode',
+  'settings.network.mode.online': 'Online (default)',
+  'settings.network.mode.online.desc': 'Search available, any address reachable',
+  'settings.network.mode.intranet': 'Intranet',
+  'settings.network.mode.intranet.desc': 'Search tool not loaded; only whitelisted hosts reachable',
+  'settings.network.mode.offline': 'Air-gapped',
+  'settings.network.mode.offline.desc': 'All outbound access blocked; no network tools loaded',
+  'settings.network.allowed_hosts': 'Host allowlist',
+  'settings.network.allowed_hosts.hint':
+    'Supports *. prefix wildcards (e.g. *.cnki.net matches the domain and all subdomains). At least two labels required after *.',
+  'settings.network.insecure_tls': 'Hosts skipping TLS verification',
+  'settings.network.insecure_tls.hint':
+    'For intranet self-signed certificates. Must already be covered by the host allowlist.',
+  'settings.network.host.add': 'Add',
+  'settings.network.host.remove': 'Remove',
+  'settings.network.host.empty': 'None yet',
+  'settings.network.empty_whitelist_warning':
+    'Intranet mode with an empty allowlist blocks every address. Add the hosts you need.',
+  'settings.network.error.empty': 'Host cannot be empty',
+  'settings.network.error.wildcard_format':
+    'Invalid wildcard: only a single leading *. is supported',
+  'settings.network.error.wildcard_too_broad':
+    'Wildcard too broad: at least two labels required after *.',
+  'settings.network.error.duplicate': 'Host already in the list',
+  'settings.network.error.tls_not_covered':
+    'Host is not covered by the allowlist; add it to the host allowlist first',
   'settings.tab.evolution': 'Evolution',
   'settings.section.theme': 'Theme',
   'settings.section.appearance': 'Appearance',

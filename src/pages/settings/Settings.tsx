@@ -14,8 +14,9 @@ import { GeneralTab } from './GeneralTab';
 import { McpTab } from './McpTab';
 import { MemoryTab } from './MemoryTab';
 import { ModelsTab } from './ModelsTab';
+import { NetworkTab } from './NetworkTab';
 
-type SettingsTab = 'general' | 'endpoints' | 'models' | 'memory' | 'mcp' | 'evolution';
+type SettingsTab = 'general' | 'endpoints' | 'models' | 'memory' | 'network' | 'mcp' | 'evolution';
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -26,6 +27,7 @@ export function Settings() {
     { key: 'endpoints', label: '端点' },
     { key: 'models', label: '模型' },
     { key: 'memory', label: '记忆' },
+    { key: 'network', label: '网络' },
     { key: 'mcp', label: 'MCP' },
     { key: 'evolution', label: '进化' },
   ];
@@ -69,6 +71,7 @@ export function Settings() {
             {activeTab === 'memory' && (
               <MemoryTab settings={settings} updateSettings={updateSettings} />
             )}
+            {activeTab === 'network' && <NetworkTab />}
             {activeTab === 'mcp' && <McpTab />}
             {activeTab === 'evolution' && (
               <div className="space-y-6">
