@@ -26,7 +26,8 @@ export type PreferenceKey =
   | 'theme_preset'
   | 'current_session_id'
   | 'permission_mode'
-  | 'permission_rules';
+  | 'permission_rules'
+  | 'network_policy';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
