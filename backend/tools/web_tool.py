@@ -7,13 +7,16 @@ from __future__ import annotations
 
 import ipaddress
 from ipaddress import IPv4Address, IPv6Address
-from typing import Optional, Set, Union
-from urllib.parse import urlparse
+from typing import Any, Dict, Optional, Set, Union
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools.network_config import load_network_policy
+from backend.wiki.html_extract import decode_html, extract
 
 from .base import BaseTool, ToolResult, ToolSchema
 
@@ -151,13 +154,37 @@ class WebFetchTool(BaseTool):
     # A1: 出网调用 — 最严门禁（只读模式禁止，交互模式询问）
     risk = RiskClass.EXTERNAL
 
-    def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
+    #: mode 合法取值。text 只给正文，links/tables 额外带对应段，raw 给原始 HTML
+    VALID_MODES = ("text", "links", "tables", "raw")
+
+    #: 只对这些 content-type 做 HTML 抽取；JSON / 纯文本直接给原文
+    _HTML_CONTENT_TYPES = ("text/html", "application/xhtml")
+
+    #: 手动跟随重定向的最大跳数
+    _MAX_REDIRECTS = 5
+
+    #: 网页响应体硬上限，避免 max_length 事后截断导致无限缓冲
+    _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+
+    def __init__(
+        self,
+        policy: Optional[ToolPolicy] = None,
+        network_policy: Optional[NetworkPolicy] = None,
+    ) -> None:
         super().__init__(policy=policy)
+        # None 表示"每次 execute 现读 settings"——用户改白名单立即生效，不必
+        # 重开会话。显式传入则固定（测试注入用）。
+        self._network_policy = network_policy
         self.client = httpx.Client(
             timeout=30.0,
             follow_redirects=False,
             trust_env=not self._policy.subagent_only,
         )
+
+    def _effective_network_policy(self) -> NetworkPolicy:
+        if self._network_policy is not None:
+            return self._network_policy
+        return load_network_policy()
 
     @staticmethod
     def _literal_ip(url: str) -> Optional[Union[IPv4Address, IPv6Address]]:
@@ -199,58 +226,173 @@ class WebFetchTool(BaseTool):
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="web_fetch",
-            description="获取网页内容",
+            description=(
+                "获取网页内容并抽取正文。mode=text 返回正文（默认），"
+                "links 额外返回页面链接列表，tables 额外返回表格（文献列表页用），"
+                "raw 返回未处理的原始 HTML。"
+            ),
             parameters={
                 "type": "object",
                 "properties": {
                     "url": {"type": "string", "description": "网页 URL"},
-                    "max_length": {"type": "integer", "description": "最大获取长度 (默认 10000)"},
+                    "mode": {
+                        "type": "string",
+                        "enum": list(self.VALID_MODES),
+                        "description": "抽取模式 (默认 text)",
+                    },
+                    "max_length": {
+                        "type": "integer",
+                        "description": "正文最大长度 (默认 10000)",
+                    },
                 },
                 "required": ["url"],
             },
         )
 
-    def execute(self, url: str, max_length: int = 10000, **kwargs) -> ToolResult:
-        """
-        获取网页内容
+    def execute(  # noqa: PLR0911 — 每个拒绝路径独立 return，扁平比提取辅助函数更直读
+        self, url: str, mode: str = "text", max_length: int = 10000, **kwargs
+    ) -> ToolResult:
+        """获取网页并按 ``mode`` 抽取。
 
         Args:
-            url: 网页 URL
-            max_length: 最大获取长度
+            url:        网页 URL
+            mode:       ``text`` / ``links`` / ``tables`` / ``raw``
+            max_length: 正文最大长度
         """
-        try:
-            # 验证 URL
-            if not url.startswith(("http://", "https://")):
-                return ToolResult(
-                    success=False, error="无效的 URL，必须以 http:// 或 https:// 开头"
-                )
-            if self._policy.subagent_only:
-                validation_error = self._validate_subagent_url(url)
-                if validation_error:
-                    return ToolResult(success=False, error=validation_error)
-
-            response = self.client.get(url)
-            if self._policy.subagent_only and response.is_redirect:
-                location = response.headers.get("location", "")
-                validation_error = self._validate_subagent_redirect(location)
-                if validation_error:
-                    return ToolResult(success=False, error=validation_error)
-            response.raise_for_status()
-
-            content = response.text[:max_length]
-
+        if mode not in self.VALID_MODES:
             return ToolResult(
-                success=True,
-                content={
-                    "url": url,
-                    "status_code": response.status_code,
-                    "content": content,
-                    "content_type": response.headers.get("content-type", ""),
-                    "encoding": response.encoding or "utf-8",
-                },
+                success=False,
+                error=f"无效的 mode {mode!r}，可选：{', '.join(self.VALID_MODES)}",
             )
+        if not url.startswith(("http://", "https://")):
+            return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
 
+        network_policy = self._effective_network_policy()
+        url_error = self._validate_target_url(url)
+        if url_error:
+            return ToolResult(success=False, error=url_error)
+        host_rejection = network_policy.check_host(url)
+        if host_rejection:
+            return ToolResult(success=False, error=host_rejection)
+
+        # 非 online 模式下 host 已过白名单，跳过公网 IP 校验：内网地址解析出
+        # 私有 IP 是预期的。online 模式 check_host 恒放行，走原有校验不变。
+        gated_by_whitelist = network_policy.mode is not NetworkMode.ONLINE
+        if self._policy.subagent_only and not gated_by_whitelist:
+            validation_error = self._validate_subagent_url(url)
+            if validation_error:
+                return ToolResult(success=False, error=validation_error)
+
+        try:
+            response, final_url = self._get_with_redirects(url, network_policy, gated_by_whitelist)
+            response.raise_for_status()
+            return ToolResult(
+                success=True, content=self._render(final_url, response, mode, max_length)
+            )
         except httpx.HTTPError as e:
             return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
         except Exception as e:
             return ToolResult(success=False, error=f"获取网页失败: {str(e)}")
+
+    @staticmethod
+    def _validate_target_url(url: str) -> Optional[str]:
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        return None
+
+    def _get_with_redirects(
+        self,
+        url: str,
+        network_policy: NetworkPolicy,
+        gated_by_whitelist: bool,
+    ) -> tuple:
+        current_url = url
+        for redirect_count in range(self._MAX_REDIRECTS + 1):
+            url_error = self._validate_target_url(current_url)
+            if url_error:
+                raise ValueError(url_error)
+            host_rejection = network_policy.check_host(current_url)
+            if host_rejection:
+                raise ValueError(host_rejection)
+            if self._policy.subagent_only and not gated_by_whitelist:
+                validation_error = self._validate_subagent_url(current_url)
+                if validation_error:
+                    raise ValueError(validation_error)
+
+            with httpx.Client(
+                timeout=30.0,
+                follow_redirects=False,
+                verify=not network_policy.allows_insecure_tls(current_url),
+                trust_env=not self._policy.subagent_only,
+            ) as client:
+                request = client.build_request("GET", current_url)
+                response = client.send(request, stream=True)
+                try:
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if redirect_count >= self._MAX_REDIRECTS:
+                            raise ValueError(
+                                f"redirect_limit_exceeded: 重定向次数超过 {self._MAX_REDIRECTS} 次"
+                            )
+                        if not location:
+                            raise ValueError("invalid_redirect: 重定向缺少 Location")
+                        current_url = urljoin(current_url, location)
+                        continue
+
+                    response.raise_for_status()
+                    declared = response.headers.get("content-length", "")
+                    if declared.isdigit() and int(declared) > self._MAX_RESPONSE_BYTES:
+                        raise ValueError(
+                            f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
+                        )
+                    content = bytearray()
+                    for chunk in response.iter_bytes(64 * 1024):
+                        content.extend(chunk)
+                        if len(content) > self._MAX_RESPONSE_BYTES:
+                            raise ValueError(
+                                f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
+                            )
+                    buffered_response = httpx.Response(
+                        response.status_code,
+                        headers=response.headers,
+                        content=bytes(content),
+                        request=response.request,
+                    )
+                finally:
+                    response.close()
+                response = buffered_response
+            return response, current_url
+
+        raise ValueError("redirect_limit_exceeded: 重定向次数超限")
+
+    def _render(
+        self, url: str, response: httpx.Response, mode: str, max_length: int
+    ) -> Dict[str, Any]:
+        """把响应渲染成工具结果的 ``content`` dict。"""
+        content_type = response.headers.get("content-type", "")
+        text, encoding = decode_html(response.content, content_type)
+        result: Dict[str, Any] = {
+            "url": url,
+            "status_code": response.status_code,
+            "content_type": content_type,
+            "encoding": encoding,
+            "mode": mode,
+        }
+
+        is_html = any(marker in content_type.lower() for marker in self._HTML_CONTENT_TYPES)
+        if mode == "raw" or not is_html:
+            result["content"] = text[:max_length]
+            return result
+
+        page = extract(text, url)
+        result["title"] = page.title
+        result["content"] = page.text[:max_length]
+        if mode == "links":
+            result["links"] = page.links[: self._policy.max_result_items]
+        elif mode == "tables":
+            result["tables"] = page.tables[: self._policy.max_result_items]
+        return result

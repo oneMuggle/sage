@@ -8,6 +8,7 @@ import pytest
 import respx
 from httpx import Response
 
+from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
 
@@ -133,6 +134,14 @@ def test_web_fetch_invalid_url_scheme():
     assert "无效" in result.error or "http" in result.error.lower()
 
 
+def test_web_fetch_rejects_malformed_ipv6_url():
+    tool = WebFetchTool()
+    result = tool.execute(url="http://[bad")
+
+    assert result.success is False
+    assert "无效的 URL" in result.error
+
+
 def test_web_fetch_truncates_by_max_length():
     """max_length 截断响应"""
     big = "A" * 5000
@@ -154,6 +163,24 @@ def test_web_fetch_http_error():
 
     assert result.success is False
     assert "HTTP" in result.error or "失败" in result.error
+
+
+def test_web_fetch_http_error_closes_stream_response(monkeypatch):
+    closed = []
+    original_close = httpx.Response.close
+
+    def recording_close(response):
+        closed.append(response)
+        return original_close(response)
+
+    monkeypatch.setattr(httpx.Response, "close", recording_close)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/server-error").mock(return_value=Response(500, text="server down"))
+        tool = WebFetchTool()
+        result = tool.execute(url="https://example.com/server-error")
+
+    assert result.success is False
+    assert closed
 
 
 def test_web_fetch_subagent_blocks_private_destinations():
@@ -179,7 +206,9 @@ def test_web_fetch_subagent_blocks_private_destinations():
 def test_web_fetch_subagent_blocks_non_global_literal_addresses(address):
     tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
 
-    result = tool.execute(url=f"http://[{address}]/metadata" if ":" in address else f"http://{address}/metadata")
+    result = tool.execute(
+        url=f"http://[{address}]/metadata" if ":" in address else f"http://{address}/metadata"
+    )
 
     assert result.success is False
     assert "subagent_web_fetch_blocked" in result.error
@@ -226,3 +255,292 @@ def test_web_fetch_network_exception():
 
     assert result.success is False
     assert "失败" in result.error
+
+
+# ---------- 网络模式门禁（Task 4） ----------
+
+
+def _intranet(*hosts):
+    return NetworkPolicy(mode=NetworkMode.INTRANET, allowed_hosts=hosts)
+
+
+def test_web_fetch_intranet_allows_whitelisted_host():
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/p").mock(
+            return_value=Response(
+                200,
+                text="<html><title>镜像站</title><body><p>正文内容</p></body></html>",
+                headers={"content-type": "text/html; charset=utf-8"},
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/p")
+
+    assert result.success is True
+    assert result.content["title"] == "镜像站"
+    assert "正文内容" in result.content["content"]
+
+
+def test_web_fetch_intranet_rejects_non_whitelisted_host():
+    tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+    result = tool.execute(url="https://evil.example.com/p")
+
+    assert result.success is False
+    assert "host_not_allowed" in result.error
+
+
+def test_web_fetch_intranet_with_empty_whitelist_rejects_everything():
+    tool = WebFetchTool(network_policy=NetworkPolicy(mode=NetworkMode.INTRANET))
+    result = tool.execute(url="https://anything.internal/p")
+
+    assert result.success is False
+    assert "host_not_allowed" in result.error
+
+
+def test_web_fetch_offline_rejects():
+    tool = WebFetchTool(network_policy=NetworkPolicy(mode=NetworkMode.OFFLINE))
+    result = tool.execute(url="https://anything.internal/p")
+
+    assert result.success is False
+    assert "network_mode_offline" in result.error
+
+
+def test_web_fetch_online_ignores_allowed_hosts():
+    """online 模式下 allowed_hosts 不参与判定 —— 填了白名单不该收紧访问范围。"""
+    policy = NetworkPolicy(mode=NetworkMode.ONLINE, allowed_hosts=("only.internal",))
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/p").mock(return_value=Response(200, text="<html><body>ok</body></html>"))
+        tool = WebFetchTool(network_policy=policy)
+        result = tool.execute(url="https://example.com/p")
+
+    assert result.success is True
+
+
+def test_web_fetch_intranet_whitelisted_private_ip_bypasses_public_ip_check():
+    """内网 host 解析出私有 IP 是预期的，白名单命中就不该被公网规则拦。"""
+    with respx.mock(base_url="http://10.10.0.5", assert_all_called=False) as mock:
+        mock.get("/p").mock(return_value=Response(200, text="<html><body>内网页</body></html>"))
+        tool = WebFetchTool(
+            policy=ToolPolicy(subagent_only=True),
+            network_policy=_intranet("10.10.0.5"),
+        )
+        result = tool.execute(url="http://10.10.0.5/p")
+
+    assert result.success is True
+    assert "内网页" in result.content["content"]
+
+
+def test_web_fetch_intranet_redirect_target_must_also_pass_whitelist():
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get("https://mirror.example.internal/r").mock(
+            return_value=Response(302, headers={"location": "https://evil.example.com/x"})
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/r")
+
+    assert result.success is False
+    assert "host_not_allowed" in result.error
+
+
+def test_web_fetch_intranet_follows_relative_redirect():
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get("https://mirror.example.internal/start").mock(
+            return_value=Response(302, headers={"location": "/page"})
+        )
+        mock.get("https://mirror.example.internal/page").mock(
+            return_value=Response(200, text="final")
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/start")
+
+    assert result.success is True
+    assert result.content["url"] == "https://mirror.example.internal/page"
+    assert result.content["content"] == "final"
+
+
+def test_web_fetch_rejects_redirect_with_invalid_final_scheme():
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get("https://mirror.example.internal/start").mock(
+            return_value=Response(302, headers={"location": "ftp://mirror.example.internal/file"})
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/start")
+
+    assert result.success is False
+    assert "无效的 URL" in result.error
+
+
+def test_web_fetch_sets_tls_verification_per_target(monkeypatch):
+    calls = []
+    original_client = httpx.Client
+
+    class RecordingClient(original_client):
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs.get("verify"))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("backend.tools.web_tool.httpx.Client", RecordingClient)
+    policy = NetworkPolicy(
+        mode=NetworkMode.INTRANET,
+        allowed_hosts=("*.example.internal",),
+        insecure_tls_hosts=("mirror.example.internal",),
+    )
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/page").mock(return_value=Response(200, text="ok"))
+        tool = WebFetchTool(network_policy=policy)
+        result = tool.execute(url="https://mirror.example.internal/page")
+
+    assert result.success is True
+    assert calls[-1] is False
+
+
+def test_web_fetch_loads_policy_from_settings_when_not_injected(monkeypatch):
+    """未注入 network_policy 时每次 execute 现读 —— 改白名单立即生效。"""
+    calls = []
+
+    def _fake_load():
+        calls.append(1)
+        return NetworkPolicy(mode=NetworkMode.OFFLINE)
+
+    monkeypatch.setattr("backend.tools.web_tool.load_network_policy", _fake_load)
+    tool = WebFetchTool()
+
+    first = tool.execute(url="https://a.internal/p")
+    second = tool.execute(url="https://b.internal/p")
+
+    assert first.success is False
+    assert second.success is False
+    assert len(calls) == 2
+
+
+# ---------- 抽取模式与编码（Task 4） ----------
+
+_MIRROR_PAGE = (
+    "<html><head><title>知网检索</title></head><body>"
+    "<table><tr><th>标题</th></tr><tr><td>论文甲</td></tr></table>"
+    '<a href="/detail?id=9">详情</a>'
+    "<p>摘要正文</p></body></html>"
+)
+
+
+def test_web_fetch_decodes_gbk_page():
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/gbk").mock(
+            return_value=Response(
+                200,
+                content=_MIRROR_PAGE.encode("gbk"),
+                headers={"content-type": "text/html; charset=GBK"},
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/gbk")
+
+    assert result.success is True
+    assert result.content["encoding"] == "gbk"
+    assert "摘要正文" in result.content["content"]
+
+
+@pytest.mark.parametrize(
+    ("mode", "present", "absent"),
+    [
+        ("text", (), ("links", "tables")),
+        ("links", ("links",), ("tables",)),
+        ("tables", ("tables",), ("links",)),
+    ],
+)
+def test_web_fetch_mode_controls_returned_sections(mode, present, absent):
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/p").mock(
+            return_value=Response(
+                200,
+                text=_MIRROR_PAGE,
+                headers={"content-type": "text/html; charset=utf-8"},
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/p", mode=mode)
+
+    assert result.success is True
+    for key in present:
+        assert key in result.content
+    for key in absent:
+        assert key not in result.content
+
+
+def test_web_fetch_links_are_absolutized():
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/list").mock(
+            return_value=Response(200, text=_MIRROR_PAGE, headers={"content-type": "text/html"})
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/list", mode="links")
+
+    urls = [link["url"] for link in result.content["links"]]
+    assert "https://mirror.example.internal/detail?id=9" in urls
+
+
+def test_web_fetch_tables_become_nested_lists():
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/t").mock(
+            return_value=Response(200, text=_MIRROR_PAGE, headers={"content-type": "text/html"})
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/t", mode="tables")
+
+    assert result.content["tables"] == [[["标题"], ["论文甲"]]]
+
+
+def test_web_fetch_raw_mode_returns_unextracted_html():
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/raw").mock(
+            return_value=Response(
+                200,
+                text="<html><script>x=1</script>H</html>",
+                headers={"content-type": "text/html"},
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/raw", mode="raw")
+
+    assert result.success is True
+    assert "<script>" in result.content["content"]
+
+
+def test_web_fetch_rejects_unknown_mode():
+    tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+    result = tool.execute(url="https://mirror.example.internal/p", mode="telepathy")
+
+    assert result.success is False
+    assert "mode" in result.error
+
+
+def test_web_fetch_non_html_content_type_skips_extraction():
+    """JSON / 纯文本响应不该被当 HTML 抽取 —— 直接给原文。"""
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/api").mock(
+            return_value=Response(
+                200,
+                content=b'{"total": 2}',
+                headers={"content-type": "application/json"},
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/api")
+
+    assert result.success is True
+    assert result.content["content"] == '{"total": 2}'
+    assert "title" not in result.content
+
+
+def test_web_fetch_max_length_truncates_extracted_text():
+    long_body = (
+        '<html><head><meta charset="utf-8"></head><body><p>' + ("甲" * 5000) + "</p></body></html>"
+    )
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/long").mock(
+            return_value=Response(200, text=long_body, headers={"content-type": "text/html"})
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/long", max_length=100)
+
+    assert len(result.content["content"]) == 100

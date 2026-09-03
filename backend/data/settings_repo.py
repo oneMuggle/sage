@@ -41,6 +41,9 @@ class SettingsRepository:
             "compact_threshold_tokens",
             # M6 生态扩展: 用户自定义工具钩子 (JSON 列表)
             "hooks",
+            # 内网 Web 访问: 网络模式 + host 白名单 (JSON)
+            # 见 backend/tools/network_config.py
+            "network_policy",
         }
     )
 

@@ -174,11 +174,12 @@ def test_registry_get_schemas_allowed_tools_empty_returns_empty():
 
 
 def test_register_all_tools_registers_builtin_set():
-    """register_all_tools 注册所有内置工具"""
+    """register_all_tools 注册所有内置工具（online 模式，出网工具齐全）"""
+    from backend.domain.network_policy import NetworkMode, NetworkPolicy
     from backend.tools import register_all_tools
 
     reg = ToolRegistry()
-    register_all_tools(reg)
+    register_all_tools(reg, network_policy=NetworkPolicy(mode=NetworkMode.ONLINE))
 
     expected = {
         "bash",
@@ -189,6 +190,7 @@ def test_register_all_tools_registers_builtin_set():
         "list_dir",
         "web_search",
         "web_fetch",
+        "http_download",
         "calculator",
         "memory_search",
         "memory_save",
