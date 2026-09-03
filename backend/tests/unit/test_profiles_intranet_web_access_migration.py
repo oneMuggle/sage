@@ -230,7 +230,6 @@ def test_default_seed_primary_uses_fetch_direct_prompt():
     """
     primary = next(a for a in profiles.create_default_agents() if a.id == "primary")
     assert primary.system_prompt == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
-    # 委派段必须保留 (复杂研究任务仍走子代理)
     assert "委派" in primary.system_prompt or "子代理" in primary.system_prompt
     # 直接 fetch/download 段必须新增
     assert "web_fetch" in primary.system_prompt
