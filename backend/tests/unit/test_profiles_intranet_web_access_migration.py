@@ -116,7 +116,10 @@ def test_current_shape_researcher_untouched(monkeypatch):
 
 
 def test_legacy_primary_system_prompt_gets_upgraded(monkeypatch):
-    """旧 primary system_prompt（无委派提示）→ 替换为 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION。"""
+    """旧 primary system_prompt（无委派提示）→ 升级到 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT。
+
+    2026-09-03: chain migration 合并为单次 upsert, final state 是 WITH_FETCH_DIRECT
+    (含直接 fetch/download 段 + 保留委派段)。"""
     stored = {
         "primary": {
             "id": "primary",
@@ -128,7 +131,7 @@ def test_legacy_primary_system_prompt_gets_upgraded(monkeypatch):
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
 
 
 def test_customized_primary_system_prompt_untouched(monkeypatch):
@@ -149,19 +152,22 @@ def test_customized_primary_system_prompt_untouched(monkeypatch):
 
 
 def test_current_primary_system_prompt_untouched(monkeypatch):
-    """已是当前形状（含委派提示）→ 绝不再覆写（防重复写入 + updated_at 抖动）。"""
+    """已是当前形状（含 fetch_direct 提示）→ 绝不再覆写（防重复写入 + updated_at 抖动）。
+
+    2026-09-03: '当前' 改为 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT；WITH_DELEGATION
+    已不再是 current, 见 test_primary_system_prompt_with_delegation_one_step_migration。"""
     stored = {
         "primary": {
             "id": "primary",
             "enabled": True,
             "tools": [],
-            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION,
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
         },
     }
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
     # 应只发生"已有 primary 不插入"的写入 —— 即没有针对 primary 的 upsert
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert primary_upserts == [], f"primary 不应被 upsert，但收到: {primary_upserts}"
@@ -197,7 +203,88 @@ def test_legacy_db_full_migration_chain(monkeypatch):
     # primary 应完成两段升级 + system_prompt 升级
     assert "agent" in stored["primary"]["tools"]
     assert "todo_write" in stored["primary"]["tools"]
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
+    # 2026-09-03: chain migration 合并, 终态是 WITH_FETCH_DIRECT
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
 
     # researcher 应追加 http_download
     assert "http_download" in stored["researcher"]["tools"]
+
+
+# ---------------------------------------------------------------------------
+# primary 直接 fetch/download（§5, 2026-09-03）
+# ---------------------------------------------------------------------------
+
+
+def test_default_seed_primary_includes_fetch_download():
+    """代码默认 primary 工具白名单含 web_fetch + http_download（§5 用户可见方向）。"""
+    primary = next(a for a in profiles.create_default_agents() if a.id == "primary")
+    assert "web_fetch" in primary.tools
+    assert "http_download" in primary.tools
+
+
+def test_default_seed_primary_uses_fetch_direct_prompt():
+    """代码默认 primary system_prompt 升级为 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT。
+
+    保留委派段（含 "委派" / "子代理"）— 复杂研究仍走 agent 工具委派。
+    新增直接 fetch/download 段 — 用户可见 LLM 行为, 便于分步指导。
+    """
+    primary = next(a for a in profiles.create_default_agents() if a.id == "primary")
+    assert primary.system_prompt == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    # 委派段必须保留 (复杂研究任务仍走子代理)
+    assert "委派" in primary.system_prompt or "子代理" in primary.system_prompt
+    # 直接 fetch/download 段必须新增
+    assert "web_fetch" in primary.system_prompt
+    assert "http_download" in primary.system_prompt
+
+
+def test_primary_system_prompt_legacy_two_step_chain_migration(monkeypatch):
+    """DB system_prompt 是 _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION →
+    一气呵成升级到 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT (合并为单次 upsert)。
+    """
+    stored = {
+        "primary": {
+            "id": "primary", "enabled": True, "tools": [],
+            "system_prompt": profiles._PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION,
+        },
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    # 链式合并: 仅 1 次 primary upsert (而不是 2 次)
+    primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
+    assert len(primary_upserts) == 1, f"应有 1 次 upsert（链式合并），收到 {len(primary_upserts)}"
+
+
+def test_primary_system_prompt_with_delegation_one_step_migration(monkeypatch):
+    """DB system_prompt 是 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION →
+    一步升级到 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT。
+    """
+    stored = {
+        "primary": {
+            "id": "primary", "enabled": True, "tools": [],
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION,
+        },
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
+    assert len(primary_upserts) == 1
+
+
+def test_primary_system_prompt_already_fetch_direct_no_upsert(monkeypatch):
+    """DB system_prompt 已是 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT → 0 upsert。"""
+    stored = {
+        "primary": {
+            "id": "primary", "enabled": True, "tools": [],
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
+        },
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+    primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
+    assert primary_upserts == [], f"primary 不应被 upsert，但收到: {primary_upserts}"

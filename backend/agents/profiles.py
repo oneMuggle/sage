@@ -63,13 +63,16 @@ def create_default_agents() -> List[AgentProfile]:
             name="Sage 主助手",
             role="coordinator",
             description="面向用户的协调 Agent，负责意图识别和任务分发",
-            # 2026-09-03: 改用 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION 常量。
-            # 出网任务通过 agent 工具委派给只读子代理，coordinator 不直接出网。
-            system_prompt=PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION,
+            # 2026-09-03: 改用 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT 常量。
+            # 简单 fetch/download 由 primary 直调 (用户可见 LLM 行为, 便于分步指导)；
+            # 复杂多步研究仍走 agent 工具委派给只读子代理 —— 守 PR #396 coordinator/executor 边界。
+            system_prompt=PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
             # 2026-07-30: 加 list_dir/read_file 让 chat 默认能跑代码 review;
             # max_iterations=15 给 coder 类工作流留出预算(否则会复现 max_iterations_exceeded)
             # 2026-08-01: 加 grep_search/glob_search/file_summary 三件套，
             # 解决大代码库分析时 max_iterations_exceeded 问题（PR #264）
+            # 2026-09-03: 加 web_fetch/http_download —— 用户可见 LLM 取页/下载行为,
+            # 便于分步指导。OFFLINE 模式下 ToolRegistry 不注册 (NetworkPolicy 门禁)。
             tools=[
                 "calculator",
                 "memory_search",
@@ -86,6 +89,10 @@ def create_default_agents() -> List[AgentProfile]:
                 # P1 todo 接线 (2026-08-21): 任务清单工具 —— 主助手可在多步
                 # 任务中记录/更新计划（todo_state 存会话，无文件副作用）。
                 "todo_write",
+                # 2026-09-03 (post-§2 subset 迁移): 用户可见 LLM 取页/下载行为,
+                # 便于分步指导和交互。受 NetworkPolicy 门禁, OFFLINE 不注册。
+                "web_fetch",
+                "http_download",
             ],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
@@ -205,6 +212,22 @@ PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION = (
 )
 
 
+# 2026-09-03 (post-PR-#396 subset 迁移): primary 也可直接 fetch/download。
+# 保留委派段 (复杂多步研究仍走子代理, 不破 PR #396 coordinator/executor 边界);
+# 加一段明确指引 simple fetch/download 可由 primary 直调 —— 用户可见 LLM 行为
+# (URL / 文件名), 便于分步指导和交互。OFFLINE 模式下 ToolRegistry 不注册
+# web_fetch/http_download, primary 白名单里有也调不到 (NetworkPolicy 门禁)。
+PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT = (
+    "你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。\n\n"
+    "你可以直接调用 web_fetch（取网页内容）和 http_download（下载文件到工作区）"
+    "进行简单的网页访问/文件下载，让用户能实时看到你访问的 URL 和下载的文件，"
+    "便于分步指导和交互。\n"
+    "对于复杂的多步研究任务，使用 agent 工具委派给只读子代理执行"
+    "（子代理具备 web_search / web_fetch / http_download / memory_search 等只读工具）。"
+    "直接回答时不要假装调用了这些工具。"
+)
+
+
 def _default_repo():
     from backend.data.agent_repo import AgentRepository
 
@@ -245,11 +268,17 @@ def ensure_default_agents() -> int:
         if set(tools) == _PRIMARY_TOOLS_BEFORE_TODO:
             primary["tools"] = tools + ["todo_write"]
             repo.upsert(primary)
-        # 2026-09-03 (PR #396 后置迁移): 存量 DB primary system_prompt 升级 ——
-        # 命中旧字符串则替换为 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION（含 agent 子代理委派提示）。
-        # 与 tools 迁移相同的"集合相等/字符串相等"判定：用户自定义 system_prompt 一律不动。
-        if primary.get("system_prompt") == _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION:
-            primary["system_prompt"] = PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
+        # 2026-09-03 (PR #396 后置迁移): 存量 DB primary system_prompt 升级。
+        # 链式合并：BEFORE_DELEGATION → WITH_DELEGATION → WITH_FETCH_DIRECT。
+        # 任一段命中就一气呵成, 合并为单次 upsert 防 updated_at 抖动。
+        # 用户自定义 system_prompt（不等于任一旧字符串）→ 全段跳过 → 不动。
+        prompt = primary.get("system_prompt")
+        if prompt == _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION:
+            prompt = PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
+        if prompt == PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION:
+            prompt = PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+        if prompt != primary.get("system_prompt"):
+            primary["system_prompt"] = prompt
             repo.upsert(primary)
     # 2026-09-03 (PR #396 后置迁移): 存量 DB researcher 升级 —— 旧种子白名单追加
     # http_download。与 primary 升级模式一致：仅当白名单恰好等于旧集合时追加，
