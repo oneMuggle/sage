@@ -122,6 +122,21 @@ def with_db_lock(func):
     return wrapper
 
 
+async def _run_db_sync(func, *args, **kwargs):
+    """在线程池中执行一个受 SQLite 锁保护的同步操作。
+
+    异步 handler 不能直接调用共享连接；锁必须在线程池 worker 内获取，
+    才能同时保护同步路由和 storage adapter 的访问。
+    """
+    loop = asyncio.get_running_loop()
+
+    def locked_call():
+        with _SQLITE_LOCK:
+            return func(*args, **kwargs)
+
+    return await loop.run_in_executor(None, locked_call)
+
+
 def _safe_log_field(value: object, max_length: int = 64) -> str:
     """Sanitize a user-controlled field for safe logging.
 
@@ -651,9 +666,25 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
 
     本函数**可以抛 CompactionError / 其他异常**——调用方（producer）
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
+
+    重入保护（PR A §1.2 cherry-pick from main #294）：
+    自动压缩路径也必须在 ``_compact_in_progress`` 中登记，与手动 compact
+    互斥。否则同会话并发自动压缩，或自动压缩与手动 compact 重叠，
+    会两次读取旧快照、两次写入续接摘要，破坏 message_count。
     """
+    # 进队列前先检查；如果已经被压缩中（手动或并发自动），直接跳过。
+    # 本进程内手动/自动 compact 共用同一 ``_compact_in_progress``。
+    if session_id in _compact_in_progress:
+        logger.debug(
+            "[M4] session=%s 已在压缩中, 跳过本次自动压缩",
+            _safe_log_field(session_id),
+        )
+        return
+
     message_repo = MessageRepository()
-    messages = message_repo.get_by_session(session_id, limit=100000)
+    messages = await _run_db_sync(
+        message_repo.get_by_session, session_id, limit=100000
+    )
     if not should_compact(messages):
         return
 
@@ -670,14 +701,40 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
         )
         return
 
-    new_messages, removed_count = await compact_messages(messages, llm_complete)
-    after = _persist_compaction(session_id, messages, new_messages, removed_count)
-    logger.info(
-        "[M4] session=%s 自动压缩完成: removed=%s after=%s",
-        _safe_log_field(session_id),
-        removed_count,
-        after,
-    )
+    # 二次检查 + 占位：should_compact 检查与 LLM 调用之间，并发请求
+    # 可能已进入压缩流程（``_compact_in_progress`` 已被占用）。
+    # 此处 ``add`` 返回 None 表示占位成功，否则意味着已经有别人先抢到。
+    if _compact_in_progress_add(session_id) is False:
+        logger.debug(
+            "[M4] session=%s 并发抢先, 跳过本次自动压缩",
+            _safe_log_field(session_id),
+        )
+        return
+    try:
+        new_messages, removed_count = await compact_messages(messages, llm_complete)
+        after = await _run_db_sync(
+            _persist_compaction, session_id, messages, new_messages, removed_count
+        )
+        logger.info(
+            "[M4] session=%s 自动压缩完成: removed=%s after=%s",
+            _safe_log_field(session_id),
+            removed_count,
+            after,
+        )
+    finally:
+        _compact_in_progress.discard(session_id)
+
+
+def _compact_in_progress_add(session_id: str) -> bool:
+    """原子地把 session_id 加入 ``_compact_in_progress``，返回是否成功占位。
+
+    手动 compact 直接 ``_compact_in_progress.add()``，自动 compact 因为
+    需要"二次检查 + 占位"语义而走本 helper。
+    """
+    if session_id in _compact_in_progress:
+        return False
+    _compact_in_progress.add(session_id)
+    return True
 
 
 async def _extract_legacy_chat_memory(
@@ -734,11 +791,13 @@ async def compact_session(session_id: str):
       DB 不动（落盘走单事务，失败整体回滚）
     """
     session_repo = SessionRepository()
-    if session_repo.get(session_id) is None:
+    if await _run_db_sync(session_repo.get, session_id) is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
     message_repo = MessageRepository()
-    messages = message_repo.get_by_session(session_id, limit=100000)
+    messages = await _run_db_sync(
+        message_repo.get_by_session, session_id, limit=100000
+    )
     before = len(messages)
 
     if not should_compact(messages):
@@ -782,16 +841,25 @@ async def compact_session(session_id: str):
         try:
             new_messages, removed_count = await compact_messages(messages, llm_complete)
         except CompactionError as exc:
+            # MEDIUM-2: 不要把 CompactionError 文本直接返给客户端——
+            # upstream HTTPException 可能含 URL/响应体/供应商内部信息。
+            # 详细异常只进服务端日志,客户端只看到稳定的错误码与固定文案。
             logger.warning(
                 "[M4] compact session=%s 失败(DB 未改动): %s", _safe_log_field(session_id), exc
             )
             return JSONResponse(
                 status_code=502,
-                content={"ok": False, "error": "compaction_failed", "message": str(exc)},
+                content={
+                    "ok": False,
+                    "error": "compaction_failed",
+                    "message": "压缩摘要生成失败",
+                },
             )
 
         try:
-            after = _persist_compaction(session_id, messages, new_messages, removed_count)
+            after = await _run_db_sync(
+                _persist_compaction, session_id, messages, new_messages, removed_count
+            )
         except Exception as exc:
             # 单事务已回滚——DB 保持压缩前状态（CRITICAL-1 的核心保证）。
             logger.warning(
@@ -828,6 +896,7 @@ class ForkSessionRequest(BaseModel):
 
 
 @router.post("/sessions/{session_id}/fork", response_model=dict)
+@with_db_lock
 def fork_session(session_id: str, data: ForkSessionRequest):
     """从当前会话分叉出新会话（M4）。
 
@@ -2138,18 +2207,24 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
             # session metadata。每个落盘独立 try/except,失败只 logger.warning
             # 不破坏流。
-            message_repo = MessageRepository()
-            session_repo = SessionRepository()
+            #
+            # PR A §1.2 (cherry-pick from main #294): 这些调用必须经
+            # ``_run_db_sync`` 包装,否则:
+            # 1) 同步 SQLite I/O 直接跑在事件循环线程,会阻塞其他 SSE/chat handler;
+            # 2) 与 ``_SQLITE_LOCK`` 守护的 compact / fork / watchdog / storage
+            #    adapter 路径并发时,会触发
+            #    "cannot start a transaction within a transaction"。
             user_now = int(time.time() * 1000)
             try:
-                message_repo.save(
+                await _run_db_sync(
+                    MessageRepository().save,
                     DbMessage(
                         id=str(uuid.uuid4()),
                         session_id=data.session_id,
                         role="user",
                         content=data.message,
                         created_at=user_now,
-                    )
+                    ),
                 )
             except Exception as db_err:
                 logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
@@ -2233,11 +2308,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             # run_loop 正常结束 (DONE) → 持久化 assistant + 更新 session。
             # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
+            #
+            # PR A §1.2: 这些落盘也必须经 ``_run_db_sync``,与用户消息持久化
+            # 路径走同一把 ``_SQLITE_LOCK``,保证会话级串行写。
             if done_content:
                 assistant_now = int(time.time() * 1000)
                 assistant_message_id: Optional[str] = None
                 try:
-                    saved = message_repo.save(
+                    saved = await _run_db_sync(
+                        MessageRepository().save,
                         DbMessage(
                             id=str(uuid.uuid4()),
                             session_id=data.session_id,
@@ -2246,21 +2325,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             reasoning_content=done_reasoning,
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
-                        )
+                        ),
                     )
                     assistant_message_id = getattr(saved, "id", None)
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
+                sess = None
                 try:
-                    sess = session_repo.get(data.session_id)
-                    if sess is not None:
-                        session_repo.update(
+                    sess = await _run_db_sync(
+                        SessionRepository().get, data.session_id
+                    )
+                except Exception as db_err:
+                    logger.warning(f"[REQ {request_id}] 会话读取失败: {db_err}")
+                if sess is not None:
+                    try:
+                        await _run_db_sync(
+                            SessionRepository().update,
                             data.session_id,
                             last_message_at=assistant_now,
                             message_count=sess.message_count + 2,
                         )
-                except Exception as db_err:
-                    logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
+                    except Exception as db_err:
+                        logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
                 # Important-1: when lifespan has installed a lifecycle manager,
                 # use it so memory_written hooks and traceability are emitted.
                 # Legacy boots without lifecycle use the async extraction queue.
@@ -2300,7 +2386,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 data.message, done_content
                             )
                             if title:
-                                session_repo.update(data.session_id, title=title)
+                                # PR A §1.2: 标题更新同样需经 ``_run_db_sync``
+                                # 走 ``_SQLITE_LOCK``,与本会话其他写入串行化。
+                                await _run_db_sync(
+                                    SessionRepository().update,
+                                    data.session_id,
+                                    title=title,
+                                )
                                 await entry.queue.put(
                                     {
                                         "type": "session_updated",

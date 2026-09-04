@@ -143,6 +143,28 @@ async def test_watchdog_fetch_runs_sql_off_event_loop(tmp_db_path: str) -> None:
         )
 
 
+@pytest.mark.asyncio()
+async def test_watchdog_fetch_waits_for_shared_sqlite_lock(tmp_db_path: str) -> None:
+    """Watchdog 查询必须与其他共享连接访问互斥。"""
+    from fastapi.testclient import TestClient
+
+    import backend.data.database as db_mod
+    from backend.main import app
+
+    db_mod._db = db_mod.Database(db_path=tmp_db_path)
+    with TestClient(app):
+        fetch = app.state._watchdog_query_fn
+        lock = db_mod._SQLITE_LOCK
+        lock.acquire()
+        try:
+            task = asyncio.create_task(fetch(cutoff_ts=0))
+            await asyncio.sleep(0.05)
+            assert not task.done()
+        finally:
+            lock.release()
+        assert await task == []
+
+
 # ----------------------------------------------------------------------------
 # PR #381 cherry-pick — health metadata + shutdown helpers from main.
 #
