@@ -533,6 +533,25 @@ class TestSchemaValidation:
         assert draft.name == name
 
     @pytest.mark.asyncio()
+    async def test_description_too_long(self):
+        """Description must be ≤ 80 chars."""
+        from backend.skills.review_service import ReviewService
+
+        bad = json.dumps(
+            {
+                "name": "test-skill",
+                "description": "x" * 81,
+                "when_to_use": "w" * 40,
+                "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+            }
+        )
+        provider = _make_mock_provider(bad)
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="≤ 80"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
     @pytest.mark.parametrize(
         "missing_section, content",
         [
@@ -566,23 +585,6 @@ class TestSchemaValidation:
         service = ReviewService(provider)
 
         with pytest.raises(ValueError, match=missing_section):
-            await service.generate_draft(trigger_type="t", context={})
-
-        """Description must be ≤ 80 chars."""
-        from backend.skills.review_service import ReviewService
-
-        bad = json.dumps(
-            {
-                "name": "test-skill",
-                "description": "x" * 81,
-                "when_to_use": "w" * 40,
-                "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
-            }
-        )
-        provider = _make_mock_provider(bad)
-        service = ReviewService(provider)
-
-        with pytest.raises(ValueError, match="≤ 80"):
             await service.generate_draft(trigger_type="t", context={})
 
     @pytest.mark.asyncio()
