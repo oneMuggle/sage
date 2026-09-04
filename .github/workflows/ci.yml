@@ -65,7 +65,7 @@ jobs:
       - name: Pytest (py38, hex mode) with coverage
         shell: bash -el {0}
         run: |
-          conda run -n sage-backend-py38 bash -c "cd backend && pytest --cov --cov-report=xml --cov-report=term --cov-fail-under=80"
+          conda run -n sage-backend-py38 bash -c "cd backend && pytest --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
 
       - name: Upload coverage
         if: always()
@@ -136,7 +136,7 @@ jobs:
       - name: Pytest hex (default) with coverage
         shell: bash -el {0}
         run: |
-          conda run -n sage-backend bash -c "cd backend && pytest --cov --cov-report=xml --cov-report=term --cov-fail-under=80"
+          conda run -n sage-backend bash -c "cd backend && pytest --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
 
       - name: Pytest legacy (smoke, no-cov)
         shell: bash -el {0}
