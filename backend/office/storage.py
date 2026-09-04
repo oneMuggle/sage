@@ -7,10 +7,16 @@ Two responsibilities:
    `<workspace>/office/<doc_type>/<doc_id>/`. Any attempt to escape the
    workspace (via `..`, absolute paths, or symlinks) raises OfficePathError.
 
-2. **SQLite persistence** — `save_document()`, `list_documents()`, `delete_document()`
-   wrap the office_documents table defined in backend/data/database.py. The
-   schema is created by Database.init_db(); callers must initialize the DB
-   before using these helpers.
+2. **SQLite persistence** — `save_document()`, `list_documents()`, `delete_document()`,
+   `archive_document()`, `restore_document()` wrap the office_documents
+   table defined in backend/data/database.py. The schema is created by
+   Database.init_db(); callers must initialize the DB before using these helpers.
+
+3. **Pre-edit snapshots** — `snapshot_pre_edit()` copies the current on-disk
+   file to ``<managed_dir>/.snapshots/<ts>-<filename>`` so a recent edit
+   can be reverted independently of the archive/restore soft-delete path.
+   Snapshot failures are non-fatal — the user's primary intent (the edit)
+   always runs.
 
 This module is **connection-agnostic** — functions take a sqlite3.Connection
 so tests can use `:memory:` and production uses the real Database.get_connection().
@@ -20,9 +26,11 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import sqlite3
+import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from .errors import OfficePathError
 from .models import OfficeDocType, OfficeDocumentSummary
@@ -255,3 +263,101 @@ def delete_document(conn: sqlite3.Connection, doc_id: str) -> bool:
     cursor = conn.execute("DELETE FROM office_documents WHERE id = ?", (doc_id,))
     conn.commit()
     return cursor.rowcount > 0
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Archive / restore (PR-2: soft-delete lifecycle)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def archive_document(
+    conn: sqlite3.Connection,
+    doc_id: str,
+    now_ms: Optional[int] = None,
+) -> bool:
+    """Set ``archived_at`` to the current (or supplied) ms epoch.
+
+    Soft-delete the document: the row stays, but ``list_documents(include_archived=False)``
+    hides it from the default view. ``now_ms`` is injectable so unit tests
+    can pin the timestamp without sleeping.
+
+    Returns:
+        True iff a row matched the id (and was actually marked archived).
+    """
+    timestamp = int(time.time() * 1000) if now_ms is None else int(now_ms)
+    cursor = conn.execute(
+        "UPDATE office_documents SET archived_at = ? WHERE id = ?",
+        (timestamp, doc_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def restore_document(
+    conn: sqlite3.Connection,
+    doc_id: str,
+) -> bool:
+    """Clear ``archived_at`` back to NULL (un-archive / live again).
+
+    Returns:
+        True iff a row matched the id. The caller treats unknown ids as
+        not-found identically to unknown ids passed to ``archive_document``
+        so the two operations stay symmetric.
+    """
+    cursor = conn.execute(
+        "UPDATE office_documents SET archived_at = NULL WHERE id = ?",
+        (doc_id,),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Pre-edit snapshots (PR-2: "undo last edit" path)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def snapshot_pre_edit(
+    summary: OfficeDocumentSummary,
+    *,
+    now_ms: Optional[int] = None,
+) -> Optional[Path]:
+    """Copy the current on-disk file to a timestamped sibling snapshot.
+
+    Called by :class:`backend.office.tool_service.OfficeToolService.update`
+    immediately before applying the edit ops. The new content overwrites
+    the original file; this snapshot keeps the *pre-edit* bytes recoverable
+    so a user can revert a single edit without going through the
+    archive/restore soft-delete path.
+
+    Layout:
+        ``<managed_dir>/.snapshots/<int(now_ms)>-<generated_filename>``
+
+    The ``.snapshots`` subdirectory is created on demand (``mkdir -p``).
+    The timestamp is millisecond epoch so two edits in the same second
+    still produce distinct filenames.
+
+    Returns:
+        The destination ``Path`` on success; ``None`` on any failure
+        (source missing, permission denied, IO error). Snapshots are
+        best-effort: a failed snapshot must NEVER block the user's edit.
+    """
+    try:
+        source = document_path(summary)
+        if not source.is_file():
+            return None
+        managed_dir = source.parent
+        snapshot_dir = managed_dir / ".snapshots"
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        ts = int(now_ms if now_ms is not None else time.time() * 1000)
+        destination = snapshot_dir / f"{ts}-{summary.generated_filename}"
+        # ``copy2`` preserves mtime/atime so the snapshot is byte-identical
+        # to what the editor was about to overwrite.
+        shutil.copy2(source, destination)
+        return destination
+    except (OSError, ValueError):
+        logger.warning(
+            "snapshot_pre_edit failed for doc=%s (non-fatal; edit will proceed)",
+            summary.id,
+        )
+        return None
