@@ -63,11 +63,16 @@ def create_default_agents() -> List[AgentProfile]:
             name="Sage 主助手",
             role="coordinator",
             description="面向用户的协调 Agent，负责意图识别和任务分发",
-            system_prompt="你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。",
+            # 2026-09-03: 改用 PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT 常量。
+            # 简单 fetch/download 由 primary 直调 (用户可见 LLM 行为, 便于分步指导)；
+            # 复杂多步研究仍走 agent 工具委派给只读子代理 —— 守 PR #396 coordinator/executor 边界。
+            system_prompt=PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
             # 2026-07-30: 加 list_dir/read_file 让 chat 默认能跑代码 review;
             # max_iterations=15 给 coder 类工作流留出预算(否则会复现 max_iterations_exceeded)
             # 2026-08-01: 加 grep_search/glob_search/file_summary 三件套，
             # 解决大代码库分析时 max_iterations_exceeded 问题（PR #264）
+            # 2026-09-03: 加 web_fetch/http_download —— 用户可见 LLM 取页/下载行为,
+            # 便于分步指导。OFFLINE 模式下 ToolRegistry 不注册 (NetworkPolicy 门禁)。
             tools=[
                 "calculator",
                 "memory_search",
@@ -84,6 +89,24 @@ def create_default_agents() -> List[AgentProfile]:
                 # P1 todo 接线 (2026-08-21): 任务清单工具 —— 主助手可在多步
                 # 任务中记录/更新计划（todo_state 存会话，无文件副作用）。
                 "todo_write",
+                # 2026-09-03 (post-§2 subset 迁移): 用户可见 LLM 取页/下载行为,
+                # 便于分步指导和交互。受 NetworkPolicy 门禁, OFFLINE 不注册。
+                "web_fetch",
+                "http_download",
+                # 2026-09-04: Office CRUD 五件套接线 —— system prompt 已声明这些
+                # 能力（_OFFICE_CREATE_CAPABILITY_PROMPT），但白名单一直没有，
+                # LLM 从来看不见。office_list / office_read 标记了
+                # requires_tool_context 工具上下文依赖 —— 未绑定工作区时由
+                # ToolRegistry 自动隐藏。
+                # PR-2: 增加 office_restore（PR #405 没挂 profile, 本批补齐）。
+                # file_path 模式仍受 path_boundary_validator 升级审批,
+                # 不会因本白名单变更而绕过。
+                "office_list",
+                "office_read",
+                "office_create",
+                "office_update",
+                "office_delete",
+                "office_restore",
             ],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
@@ -95,6 +118,9 @@ def create_default_agents() -> List[AgentProfile]:
             role="researcher",
             description="负责网络搜索和信息收集的 Agent",
             system_prompt="你是一个专业的研究 Agent。负责搜索信息、综合资料、生成研究报告。",
+            # win7 保留 memory_save —— researcher 查到资料后必须能落地为记忆,
+            # 否则下次 session 找不到（PR #396 knowledge persistence 闭环）。
+            # main 上此字段缺, 属 PR-2..4 合并未覆盖的 win7 差异。
             tools=["web_search", "web_fetch", "http_download", "memory_search", "memory_save"],
             memory_access=["episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.5),
@@ -106,11 +132,8 @@ def create_default_agents() -> List[AgentProfile]:
             role="coder",
             description="负责代码生成、调试和解释的 Agent",
             system_prompt="你是一个专业的编码 Agent。负责生成高质量代码、调试、代码审查。",
-            # 2026-09-03 (win7 cherry-pick of PR #402, 保守 backport):
-            # PR #381 把 TerminalTool 重写为 BashTool (name="bash"),
-            # 旧名 "terminal" 在 tools/ 已不存在。同时 file_read/file_write 是
-            # 拼写错位（真实工具名 read_file/write_file）—— UI 选 coder 后 LLM
-            # 看到的工具列表近乎为空, 报"没有 bash 工具"。与 main 对齐。
+            # 2026-09-03: PR #381 把 TerminalTool 重写为 BashTool (name="bash"),
+            # file_read/file_write 是拼写错位(真实工具名 read_file/write_file)。
             tools=["read_file", "write_file", "bash", "calculator"],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.3),
@@ -136,7 +159,14 @@ def create_default_agents() -> List[AgentProfile]:
                 "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
                 "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
             ),
-            tools=["read_file", "write_file", "memory_search"],
+# 2026-09-04: 写作 agent 此前只能产出 markdown; 加 Office 读写四件套
+            # 让它能直接落 docx/xlsx/pptx。不给 delete —— 写作职责不含删档。
+            # PR-2: 补 office_restore —— 可恢复误改的 Office 文档。
+            tools=[
+                "read_file", "write_file", "memory_search",
+                "office_list", "office_read", "office_create", "office_update",
+                "office_restore",
+            ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
             max_iterations=10,
@@ -179,6 +209,107 @@ _PRIMARY_TOOLS_BEFORE_TODO = {
     "grep_search", "glob_search", "file_summary", "agent",
 }
 
+# 2026-09-03 (PR #396 后置迁移): 加 "http_download" 之前的 researcher 种子集合
+# —— 存量 DB 三段升级判定。仅当白名单恰好等于旧种子时追加 http_download;
+# 用户自定义（任何增删）一律不动。
+_RESEARCHER_TOOLS_BEFORE_HTTP_DOWNLOAD = {
+    "web_search", "web_fetch", "memory_search",
+}
+
+# 2026-09-03 (PR #396 后置迁移): 加 "agent 子代理委派" 提示之前的 primary 系统提示。
+# 存量 DB 命中此字符串才升级 —— 用户自定义 system_prompt 一律不动。
+_PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION = (
+    "你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。"
+)
+
+
+# 2026-09-03 (PR #396 后置迁移): 升级后的 primary system_prompt。新增一段明确指引:
+# 网页访问/文件下载/网络搜索等出网任务 → 用 agent 工具委派给只读子代理
+# (子代理 SUBAGENT_TOOL_WHITELIST 已含 web_search/web_fetch/http_download)。
+# 保持 primary 的 coordinator 定位 —— 出网任务不直接进 primary 白名单,
+# 避免 coordinator 同时承担"协调"与"出网执行"两个角色。
+PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION = (
+    "你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。\n\n"
+    "对于网页访问、文件下载、网络搜索等出网任务，使用 agent 工具委派给"
+    "只读子代理执行（子代理具备 web_search / web_fetch / http_download / memory_search"
+    " 等只读工具）。直接回答时不要假装调用了这些工具。"
+)
+
+
+# 2026-09-03 (post-PR-#396 subset 迁移): primary 也可直接 fetch/download。
+# 保留委派段 (复杂多步研究仍走子代理, 不破 PR #396 coordinator/executor 边界);
+# 加一段明确指引 simple fetch/download 可由 primary 直调 —— 用户可见 LLM 行为
+# (URL / 文件名), 便于分步指导和交互。OFFLINE 模式下 ToolRegistry 不注册
+# web_fetch/http_download, primary 白名单里有也调不到 (NetworkPolicy 门禁)。
+PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT = (
+    "你是 Sage，一个智能 AI 助手。负责理解用户需求并协调其他 Agent 完成任务。\n\n"
+    "你可以直接调用 web_fetch（取网页内容）和 http_download（下载文件到工作区）"
+    "进行简单的网页访问/文件下载，让用户能实时看到你访问的 URL 和下载的文件，"
+    "便于分步指导和交互。\n"
+    "对于复杂的多步研究任务，使用 agent 工具委派给只读子代理执行"
+    "（子代理具备 web_search / web_fetch / http_download / memory_search 等只读工具）。"
+    "直接回答时不要假装调用了这些工具。"
+)
+
+
+# 2026-09-03: PR #381 把 TerminalTool 重写为 BashTool (name="bash"),
+# file_read/file_write 是拼写错位(真实工具名 read_file/write_file)。
+# 重命名段遍历所有 agent 的 tools 列表, 按此映射逐元素 in-place 替换;
+# 用户额外项一字不动; 幂等(第二次跑不触发 upsert)。
+LEGACY_TOOL_NAME_RENAMES: Dict[str, str] = {
+    "terminal":   "bash",
+    "file_read":  "read_file",
+    "file_write": "write_file",
+}
+
+
+# 2026-09-04: 差集兜底段用的"当前默认"列表。既有 4 段迁移用"集合相等"判定,
+# 存量 DB 只要落在任何历史快照之外就全部哑炮 —— 差集段兜住所有子集情况。
+# primary 不含 bash 是 PR #396 的架构决定(coordinator 不直接执行);
+# 变更时手动维护, 与既有 _BEFORE_* 常量同模式。
+_PRIMARY_CURRENT_DEFAULT_TOOLS: List[str] = [
+    "calculator", "memory_search", "memory_save",
+    "list_dir", "read_file",
+    "grep_search", "glob_search", "file_summary",
+    "agent", "todo_write",
+    "web_fetch", "http_download",
+    # 2026-09-04: Office CRUD 五件套 —— 与上方白名单同步, 存量 DB 差集段
+    # 必须带 office_* 才能补齐; 反向约束由 test_office_tools_are_in_current_default_constants 锁。
+    # PR-2 (cherry-picked to win7): 增 office_restore。
+    "office_list", "office_read", "office_create", "office_update", "office_delete",
+    "office_restore",
+]
+
+_RESEARCHER_CURRENT_DEFAULT_TOOLS: List[str] = [
+    "web_search", "web_fetch", "http_download", "memory_search",
+]
+
+_WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
+    "read_file", "write_file", "memory_search",
+    # 2026-09-04: 写作 agent 的 Office 读写四件套(不给 delete), 与上方 writer.tools 同步。
+    # PR-2 (cherry-picked to win7): 增 office_restore。
+    "office_list", "office_read", "office_create", "office_update",
+    "office_restore",
+]
+
+
+def _append_missing_tools(agent: Dict[str, Any], current_default_tools: List[str]) -> bool:
+    """当前默认集 ⊆ DB 时补齐缺项, 返回是否发生变更。
+
+    只在 DB 缺当前默认项时追加(按 current_default_tools 顺序), 保留 DB 原有
+    顺序与用户额外项。真超集 / 完全不相交都会返回 False —— 前者本就齐全,
+    后者是用户整体替换过白名单, 不该被默认集"补回来"。
+    """
+    tools = agent.get("tools") or []
+    existing = set(tools)
+    missing = [t for t in current_default_tools if t not in existing]
+    if not missing:
+        return False
+    if not (existing & set(current_default_tools)):
+        return False
+    agent["tools"] = list(tools) + missing
+    return True
+
 
 def _default_repo():
     from backend.data.agent_repo import AgentRepository
@@ -197,28 +328,76 @@ def ensure_default_agents() -> int:
     writer —— 本函数逐个检查缺失的默认 id 并补插。返回补插条数。
     """
     repo = _repo_factory_for_tests() if _repo_factory_for_tests else _default_repo()
+    # 2026-09-03: 工具名重命名迁移(§1)。先于种子补插 + 既有 4 段
+    # "集合相等"判定 + subset 兜底段, 让后续所有判定都在重命名后的
+    # tools 上运行 (例如 coder 重命名后的 tools 才能与 _BEFORE_* 段比较)。
+    # 遍历 create_default_agents() 的默认 ID 集合, 用 repo.get() 拉取再重命名;
+    # 不用 list_all() —— 既有 FakeRepo (intranet/todo) 还没实现 list_all(),
+    # 走 get() 兼容老测试 mock。
+    for default in create_default_agents():
+        row = repo.get(default.id)
+        if row is None:
+            continue
+        tools = row.get("tools") or []
+        renamed = [LEGACY_TOOL_NAME_RENAMES.get(t, t) for t in tools]
+        if renamed != tools:
+            row["tools"] = renamed
+            repo.upsert(row)
     inserted = 0
     for agent in create_default_agents():
         if repo.get(agent.id) is None:
             repo.upsert(agent.to_dict())
             inserted += 1
     # P0-5 (2026-08-20): 存量 DB primary 升级 —— 旧种子白名单追加 "agent"。
+    # 一次 get() 缓存为 primary 局部引用，本函数三段都对它读写（dict 原地变更）。
+    # repo.upsert(primary) 后内存与 DB 一致，无需重新 get。三段判定合一个外层 if
+    # 满足 ruff SIM102；researcher 升级另起一个 if（变量不同）。
     primary = repo.get("primary")
     if primary is not None:
+        # P1 todo 接线 (2026-08-21): 存量 DB 二段升级 —— 旧种子追加 todo_write。
+        # 顺序敏感：先 agent 后 todo。两级判定互斥（旧种子集合不含 todo_write、
+        # 本段集合含 agent），一段升级后集合恰好等于二段判定集，链式生效；
+        # 任意自定义白名单都不匹配任一集合，天然不动。
         tools = primary.get("tools") or []
         if set(tools) == _PRIMARY_TOOLS_BEFORE_AGENT:
             primary["tools"] = tools + ["agent"]
             repo.upsert(primary)
-    # P1 todo 接线 (2026-08-21): 存量 DB 二段升级 —— 旧种子追加 todo_write。
-    # 顺序敏感：先 agent 后 todo。两级判定互斥（旧种子集合不含 todo_write、
-    # 本段集合含 agent），一段升级后集合恰好等于二段判定集，链式生效；
-    # 任意自定义白名单都不匹配任一集合，天然不动。
-    primary = repo.get("primary")
-    if primary is not None:
         tools = primary.get("tools") or []
         if set(tools) == _PRIMARY_TOOLS_BEFORE_TODO:
             primary["tools"] = tools + ["todo_write"]
             repo.upsert(primary)
+        # 2026-09-03 (PR #396 后置迁移): 存量 DB primary system_prompt 升级。
+        # 链式合并：BEFORE_DELEGATION → WITH_DELEGATION → WITH_FETCH_DIRECT。
+        # 任一段命中就一气呵成, 合并为单次 upsert 防 updated_at 抖动。
+        # 用户自定义 system_prompt（不等于任一旧字符串）→ 全段跳过 → 不动。
+        prompt = primary.get("system_prompt")
+        if prompt == _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION:
+            prompt = PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION
+        if prompt == PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION:
+            prompt = PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT
+        if prompt != primary.get("system_prompt"):
+            primary["system_prompt"] = prompt
+            repo.upsert(primary)
+    # 2026-09-03 (PR #396 后置迁移): 存量 DB researcher 升级 —— 旧种子白名单追加
+    # http_download。与 primary 升级模式一致：仅当白名单恰好等于旧集合时追加，
+    # 用户自定义不动。researcher 自身不是迁移链多段，一次升级即可。
+    researcher = repo.get("researcher")
+    if researcher is not None:
+        tools = researcher.get("tools") or []
+        if set(tools) == _RESEARCHER_TOOLS_BEFORE_HTTP_DOWNLOAD:
+            researcher["tools"] = tools + ["http_download"]
+            repo.upsert(researcher)
+    # 2026-09-04: 差集兜底 —— 上面的"集合相等"段只覆盖恰好命中历史快照的 DB。
+    # 这一段兜住任意子集形状(如 PR-3 时期的 5 工具 primary)。真超集与
+    # 完全不相交都不动, 见 _append_missing_tools 的 docstring。
+    for agent_id, current_defaults in (
+        ("primary", _PRIMARY_CURRENT_DEFAULT_TOOLS),
+        ("researcher", _RESEARCHER_CURRENT_DEFAULT_TOOLS),
+        ("writer", _WRITER_CURRENT_DEFAULT_TOOLS),
+    ):
+        row = repo.get(agent_id)
+        if row is not None and _append_missing_tools(row, current_defaults):
+            repo.upsert(row)
     return inserted
 
 
@@ -279,7 +458,7 @@ def format_agents_for_prompt() -> str:
     return "\n\n你可以向用户介绍以下可用 Agent：\n" + "\n".join(lines)
 
 
-#: 默认 system prompt 的工具能力声明——明确告知 LLM 可调用的 Office CRUD
+#: 默认 system prompt 的工具能力声明——明确告知 LLM 可调用的 Office 创建
 #: 能力，避免其凭训练先验回复"没有创建本地文件的权限"（T6 Electron 实测
 #: 暴露）。工具/能力变化时手动维护，与 legacy_routes 的 DIAGRAM_TOOL_PROMPT
 #: 同模式。
@@ -290,6 +469,9 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "- 修改已有文档（原地编辑，按 op 列表执行）：office_update"
     "（用 doc_id 或绝对路径 file_path 定位文件）。\n"
     "- 删除文档（不可恢复）：office_delete（同样支持 doc_id / file_path）。\n"
+    "- 归档文档（隐藏但不删）：office_archive；还原被归档文档：office_restore。"
+    "office_update 改前会自动把旧版复制到 <managed_dir>/.snapshots/，可作为"
+    "「撤销最近一次编辑」路径。"
     "写入或修改工作区外的路径（如桌面）时，用户会看到确认框，批准后才会真正执行。"
 )
 

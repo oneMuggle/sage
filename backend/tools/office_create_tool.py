@@ -109,7 +109,8 @@ class OfficeCreateTool(BaseTool):
                             "{sheets:[{name, headers[], rows[]}]}; ppt → "
                             "{slides:[{title, bullets[], notes?}]}. A plain "
                             "string is also accepted for word (treated as body "
-                            "text)."
+                            "text). excel 与 ppt 必须传对象（分别含 sheets / "
+                            "slides），只有 word 接受纯字符串。"
                         ),
                         "properties": {
                             "title": {

@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from backend.domain.tool_policy import ToolPolicy
-from backend.office.errors import OfficeError
+from backend.office.errors import OfficeContentShapeError, OfficeError
 from backend.office.models import (
     OfficeDocStatus,
     OfficeDocType,
@@ -49,12 +49,16 @@ from backend.office.models import (
 from backend.office.session_workspace import (
     get_active_workspace,
     get_document_in_workspace,
+    get_document_in_workspace_any_status,
 )
 from backend.office.storage import (
+    archive_document,
     delete_document,
     document_path,
     list_documents,
+    restore_document,
     save_document,
+    snapshot_pre_edit,
 )
 
 logger = logging.getLogger(__name__)
@@ -406,6 +410,11 @@ class OfficeToolService:
                 content=content,
                 workspace_path=binding.workspace_path,
             )
+        except OfficeContentShapeError as exc:
+            return {
+                "success": False,
+                "error": {"code": "content_shape_invalid", "message": str(exc)},
+            }
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return {
                 "success": False,
@@ -500,6 +509,10 @@ class OfficeToolService:
                         "max_read_bytes": self._policy.max_read_bytes,
                     },
                 }
+            # PR-2: pre-edit snapshot — capture the bytes that the editor
+            # is about to overwrite. Best-effort: a snapshot failure must
+            # never block the user's edit (edit is the primary intent).
+            snapshot_pre_edit(doc)
             saved, results = _update_document(doc.doc_type.value, path, ops)
         except OfficeError as exc:
             return {
@@ -584,6 +597,125 @@ class OfficeToolService:
             "content": {"document_id": doc.id, "doc_type": doc.doc_type.value},
         }
 
+    # ──────────────────────────────────────────────────────────────
+    # archive / restore (PR-2: soft-delete lifecycle)
+    # ──────────────────────────────────────────────────────────────
+
+    def archive(
+        self,
+        conn: sqlite3.Connection,
+        session_id: str,
+        binding_generation: int,
+        doc_id: str,
+    ) -> Dict[str, Any]:
+        """Soft-delete a workspace-managed document.
+
+        Sets ``office_documents.archived_at`` to the current ms epoch so
+        the row hides from the default ``list`` view but stays recoverable
+        via ``restore``. Idempotent: re-archiving an already-archived doc
+        is a success (the timestamp is preserved — re-archiving a doc
+        intentionally does NOT bump the timestamp).
+
+        Returns the canonical ``document_not_found`` for unknown / stale /
+        cross-workspace ids, identical to other read/write methods — no
+        path leak to the LLM tool output.
+        """
+        # Archive deliberately uses the any-status lookup: an archived doc
+        # must still be reachable so the idempotent re-archive path can
+        # return the existing timestamp. Read/write paths still hide
+        # archived docs via the standard ``get_document_in_workspace``.
+        binding = get_active_workspace(
+            conn, session_id, expected_generation=binding_generation
+        )
+        if binding is None:
+            return _not_found()
+        doc = get_document_in_workspace_any_status(conn, doc_id, binding.workspace_path)
+        if doc is None:
+            return _not_found()
+
+        if doc.archived_at is not None:
+            # Idempotent: already archived → return the existing timestamp
+            # so the caller can display "archived since ..." without a
+            # second list round-trip.
+            return {
+                "success": True,
+                "content": {
+                    "document_id": doc.id,
+                    "was_archived": True,
+                    "archived_at": doc.archived_at,
+                },
+            }
+
+        # Compute the timestamp once and pass it down so the value echoed
+        # back to the LLM matches the value persisted to SQLite exactly
+        # (avoids sub-millisecond drift between two separate ``time.time()``
+        # calls in the same request).
+        now_ms = int(time.time() * 1000)
+        ok = archive_document(conn, doc.id, now_ms=now_ms)
+        if not ok:
+            # Row vanished between _resolve_doc and the UPDATE (concurrent
+            # delete from another request) → indistinguishable not-found.
+            return _not_found()
+
+        return {
+            "success": True,
+            "content": {
+                "document_id": doc.id,
+                "was_archived": True,
+                "archived_at": now_ms,
+            },
+        }
+
+    def restore(
+        self,
+        conn: sqlite3.Connection,
+        session_id: str,
+        binding_generation: int,
+        doc_id: str,
+    ) -> Dict[str, Any]:
+        """Un-archive a workspace-managed document (live again).
+
+        Clears ``office_documents.archived_at`` so the row reappears in
+        the default ``list`` view. Idempotent: restoring a live doc
+        returns success without bumping ``updated_at`` (the doc state is
+        already what the caller wants).
+
+        Returns the canonical ``document_not_found`` for unknown / stale /
+        cross-workspace ids, identical to other methods.
+        """
+        # Restore uses the any-status lookup too: the whole point is to
+        # find a doc whose ``archived_at`` is currently set and clear it.
+        binding = get_active_workspace(
+            conn, session_id, expected_generation=binding_generation
+        )
+        if binding is None:
+            return _not_found()
+        doc = get_document_in_workspace_any_status(conn, doc_id, binding.workspace_path)
+        if doc is None:
+            return _not_found()
+
+        if doc.archived_at is None:
+            # Idempotent: already live → report success without rewriting.
+            return {
+                "success": True,
+                "content": {
+                    "document_id": doc.id,
+                    "was_archived": False,
+                },
+            }
+
+        ok = restore_document(conn, doc.id)
+        if not ok:
+            return _not_found()
+
+        return {
+            "success": True,
+            "content": {
+                "document_id": doc.id,
+                "was_archived": False,
+            },
+        }
+
 
 def _generate_managed_document(
     *,
@@ -658,31 +790,30 @@ def _coerce_word_request(
 def _coerce_excel_request(
     doc_id: str, filename: str, content: Any, workspace_path: str
 ) -> OfficeExcelGenerateRequest:
-    if not isinstance(content, dict):
-        raise TypeError("excel content must be dict")
-    sheets = content.get("sheets")
-    if not sheets:
-        raise ValueError("excel content requires non-empty 'sheets'")
+    if not isinstance(content, dict) or not content.get("sheets"):
+        raise OfficeContentShapeError(
+            "excel content 需要形如 {'sheets': [{'name', 'headers', 'rows'}]} 的对象"
+        )
     return OfficeExcelGenerateRequest(
         workspace_path=workspace_path,
         filename=filename,
-        sheets=sheets,
+        sheets=content["sheets"],
     )
 
 
 def _coerce_ppt_request(
     doc_id: str, filename: str, content: Any, workspace_path: str
 ) -> OfficePptGenerateRequest:
-    if not isinstance(content, dict):
-        raise TypeError("ppt content must be dict")
-    slides = content.get("slides")
-    if not slides:
-        raise ValueError("ppt content requires non-empty 'slides'")
+    if not isinstance(content, dict) or not content.get("slides"):
+        raise OfficeContentShapeError(
+            "ppt content 需要形如 {'slides': [{'title', 'bullets', 'notes'}]} 的对象"
+        )
+    # OfficePptGenerateRequest 是 extra="forbid" 且没有 title 字段 —— 传 title 会
+    # ValidationError, 这是 PR #405 前每次 ppt 创建都失败的原因。
     return OfficePptGenerateRequest(
         workspace_path=workspace_path,
         filename=filename,
-        title=filename,
-        slides=slides,
+        slides=content["slides"],
     )
 
 
