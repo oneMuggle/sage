@@ -228,6 +228,17 @@ PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT = (
 )
 
 
+# 2026-09-03: PR #381 把 TerminalTool 重写为 BashTool (name="bash"),
+# file_read/file_write 是拼写错位(真实工具名 read_file/write_file)。
+# 重命名段遍历所有 agent 的 tools 列表, 按此映射逐元素 in-place 替换;
+# 用户额外项一字不动; 幂等(第二次跑不触发 upsert)。
+LEGACY_TOOL_NAME_RENAMES: Dict[str, str] = {
+    "terminal":   "bash",
+    "file_read":  "read_file",
+    "file_write": "write_file",
+}
+
+
 def _default_repo():
     from backend.data.agent_repo import AgentRepository
 
@@ -245,6 +256,21 @@ def ensure_default_agents() -> int:
     writer —— 本函数逐个检查缺失的默认 id 并补插。返回补插条数。
     """
     repo = _repo_factory_for_tests() if _repo_factory_for_tests else _default_repo()
+    # 2026-09-03: 工具名重命名迁移(§1)。先于种子补插 + 既有 4 段
+    # "集合相等"判定 + subset 兜底段, 让后续所有判定都在重命名后的
+    # tools 上运行 (例如 coder 重命名后的 tools 才能与 _BEFORE_* 段比较)。
+    # 遍历 create_default_agents() 的默认 ID 集合, 用 repo.get() 拉取再重命名;
+    # 不用 list_all() —— 既有 FakeRepo (intranet/todo) 还没实现 list_all(),
+    # 走 get() 兼容老测试 mock。
+    for default in create_default_agents():
+        row = repo.get(default.id)
+        if row is None:
+            continue
+        tools = row.get("tools") or []
+        renamed = [LEGACY_TOOL_NAME_RENAMES.get(t, t) for t in tools]
+        if renamed != tools:
+            row["tools"] = renamed
+            repo.upsert(row)
     inserted = 0
     for agent in create_default_agents():
         if repo.get(agent.id) is None:
