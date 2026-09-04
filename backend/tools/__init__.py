@@ -21,6 +21,7 @@ from .memory_tool import MemorySaveTool, MemorySearchTool
 from .network_config import load_network_policy
 from .office_create_tool import OfficeCreateTool
 from .office_delete_tool import OfficeDeleteTool
+from .office_restore_tool import OfficeRestoreTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
 from .registry import ToolRegistry
@@ -76,6 +77,11 @@ def register_all_tools(
     # 升级为审批（permissions.make_office_path_boundary 覆盖三个工具）。
     registry.register(OfficeUpdateTool(policy=policy))
     registry.register(OfficeDeleteTool(policy=policy))
+    # PR-2: office_restore —— 把 archived_at 抹掉的「还原」工具。
+    # requires_tool_context=True (与 office_archive 对称), doc_id 模式唯一。
+    # 与 office_update 配合使用可实现"撤销最近一次编辑"（pre-edit snapshot
+    # 留在 <managed>/.snapshots/，可由 LLM 通过 read_file + write_file 还原）。
+    registry.register(OfficeRestoreTool(policy=policy))
     # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
     registry.register(EditTool(policy=policy))
     registry.register(GlobSearchTool(policy=policy))
@@ -127,6 +133,7 @@ __all__ = [
     "OfficeCreateTool",
     "OfficeUpdateTool",
     "OfficeDeleteTool",
+    "OfficeRestoreTool",
     "EditTool",
     "GlobSearchTool",
     "GrepSearchTool",

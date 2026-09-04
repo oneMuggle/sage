@@ -98,11 +98,15 @@ def create_default_agents() -> List[AgentProfile]:
                 # LLM 从来看不见。office_list / office_read 标记了
                 # requires_tool_context 工具上下文依赖 —— 未绑定工作区时由
                 # ToolRegistry 自动隐藏。
+                # PR-2: 增加 office_restore（PR #405 没挂 profile, 本批补齐）。
+                # file_path 模式仍受 path_boundary_validator 升级审批,
+                # 不会因本白名单变更而绕过。
                 "office_list",
                 "office_read",
                 "office_create",
                 "office_update",
                 "office_delete",
+                "office_restore",
             ],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
@@ -152,11 +156,13 @@ def create_default_agents() -> List[AgentProfile]:
                 "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
                 "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
             ),
-            # 2026-09-04: 写作 agent 此前只能产出 markdown; 加 Office 读写四件套
+# 2026-09-04: 写作 agent 此前只能产出 markdown; 加 Office 读写四件套
             # 让它能直接落 docx/xlsx/pptx。不给 delete —— 写作职责不含删档。
+            # PR-2: 补 office_restore —— 可恢复误改的 Office 文档。
             tools=[
                 "read_file", "write_file", "memory_search",
                 "office_list", "office_read", "office_create", "office_update",
+                "office_restore",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -450,9 +456,16 @@ def format_agents_for_prompt() -> str:
 #: 暴露）。工具/能力变化时手动维护，与 legacy_routes 的 DIAGRAM_TOOL_PROMPT
 #: 同模式。
 _OFFICE_CREATE_CAPABILITY_PROMPT = (
-    "\n\n你可以创建 Office 文档：当用户要求生成 Word/Excel/PPT 文件时，"
-    "调用 office_create 工具（提供 doc_type / output_dir / filename / 内容结构）。"
-    "写入工作区外（如桌面）时，用户会看到确认框，批准后才会真正写入。"
+    "\n\n你可以对 Office 文档（Word/Excel/PPT）执行增删改查：\n"
+    "- 创建：调用 office_create 工具（提供 doc_type / output_dir / filename / 内容结构）。\n"
+    "- 查看当前会话工作区里的文档：office_list；读取内容：office_read。\n"
+    "- 修改已有文档（原地编辑，按 op 列表执行）：office_update"
+    "（用 doc_id 或绝对路径 file_path 定位文件）。\n"
+    "- 删除文档（不可恢复）：office_delete（同样支持 doc_id / file_path）。\n"
+    "- 归档文档（隐藏但不删）：office_archive；还原被归档文档：office_restore。"
+    "office_update 改前会自动把旧版复制到 <managed_dir>/.snapshots/，可作为"
+    "「撤销最近一次编辑」路径。"
+    "写入或修改工作区外的路径（如桌面）时，用户会看到确认框，批准后才会真正执行。"
 )
 
 
