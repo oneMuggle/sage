@@ -107,6 +107,13 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_update",
                 "office_delete",
                 "office_restore",
+                # 2026-09-04: 本地开发环境助手 — runtime_probe + project_diagnose
+                # (READ 类, coordinator 安全); runtime_exec 不放 primary 白名单
+                # (EXEC, 与 PR #396 coordinator/executor 边界一致 —— primary 不
+                # 直接执行, 由 coder 子代理委派)。OFFLINE 模式下 ToolRegistry
+                # 仍会注册 (NetworkPolicy 不门禁本地子进程)。
+                "runtime_probe",
+                "project_diagnose",
             ],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
@@ -134,7 +141,16 @@ def create_default_agents() -> List[AgentProfile]:
             system_prompt="你是一个专业的编码 Agent。负责生成高质量代码、调试、代码审查。",
             # 2026-09-03: PR #381 把 TerminalTool 重写为 BashTool (name="bash"),
             # file_read/file_write 是拼写错位(真实工具名 read_file/write_file)。
-            tools=["read_file", "write_file", "bash", "calculator"],
+            tools=[
+                "read_file", "write_file", "bash", "calculator",
+                # 2026-09-04: 本地开发环境助手 — coder 直接拿到 3 件套:
+                # runtime_probe / project_diagnose / runtime_exec。
+                # 探测 + 诊断全程只读,EXEC 类的 runtime_exec 与 bash 同样需
+                # 用户审批(M1 PermissionEnforcer 矩阵统一门禁),不破既有边界。
+                "runtime_probe",
+                "project_diagnose",
+                "runtime_exec",
+            ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.3),
             max_iterations=15,
@@ -278,7 +294,21 @@ _PRIMARY_CURRENT_DEFAULT_TOOLS: List[str] = [
     # PR-2 (cherry-picked to win7): 增 office_restore。
     "office_list", "office_read", "office_create", "office_update", "office_delete",
     "office_restore",
+    # 2026-09-04: 本地开发环境助手 — primary 只拿探测+诊断(READ 类)。
+    # runtime_exec 不放 primary (EXEC, 与 PR #396 coordinator/executor 边界一致)。
+    "runtime_probe",
+    "project_diagnose",
 ]
+
+# 2026-09-04: 注意 —— coder 没有 _CODER_CURRENT_DEFAULT_TOOLS 兜底常量。
+# 历史 primary / researcher / writer 都有, 因为他们的 fallback 段在
+# PR #396 后置迁移 + office_restore 期间已稳定。coder 是新接入的本地
+# 开发环境三件套 (runtime_probe / project_diagnose / runtime_exec)，
+# 历史测试 (test_profiles_legacy_tool_rename 等) 用 minimal stored
+# 模拟旧 DB, 期望 fallback 不触发 —— 给 coder 单独建兜底常量会反向
+# 触发这些测试。决策: coder 不走差集兜底, 由 ensure_default_agents
+# 仅在 DB 完全缺失时 (created_at is null) 重建, 已存在的 DB 不动
+# (避免 silent 改用户白名单)。
 
 _RESEARCHER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "web_search", "web_fetch", "http_download", "memory_search",
