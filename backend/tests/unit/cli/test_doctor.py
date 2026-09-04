@@ -322,8 +322,9 @@ class TestRunDoctor:
         # Probe still inherits PATH/SYSTEMROOT so the bundled interpreter
         # is discoverable.
         assert "PATH" in env
-        # Hard 5s cap must be honoured so a broken installer never hangs.
-        assert captured["timeout"] == 5
+        # Hard 20s cap must be honoured so a broken installer never hangs.
+        # (baseline 实测冷启动 import backend.main 约 5-6s, 5s 在冷环境下 flaky.)
+        assert captured["timeout"] == 20
 
 
 # ============================================================
@@ -406,9 +407,10 @@ class TestMain:
         data = json.loads(out)
         assert "checks" in data
         assert "summary" in data
-        assert len(data["checks"]) == 14
+        # 2026-09-04: 14→15 (加 runtime_env)
+        assert len(data["checks"]) == 15
 
-    def test_main_runs_all_thirteen_checks(self, capsys):
+    def test_main_runs_all_fifteen_checks(self, capsys):
         main([])
         out = capsys.readouterr().out
         expected_names = [
@@ -425,6 +427,9 @@ class TestMain:
             "heavy_deps",
             "log_dir_size",
             "frontend_dist",
+            "skills",
+            # 2026-09-04: 本地开发环境助手 — Python/Node.js 探测
+            "runtime_env",
         ]
         for n in expected_names:
             assert n in out, f"missing check: {n}"
@@ -523,7 +528,8 @@ class TestImportAllChecks:
         before = len(d.ALL_CHECKS)
         d._import_all_checks()
         # After import, 8 unique classes should be registered
-        assert len(d.ALL_CHECKS) >= 14
+        # 2026-09-04: 14→15 (加 runtime_env)
+        assert len(d.ALL_CHECKS) >= 15
         # Calling twice doesn't crash (may double-register; that's fine)
         d._import_all_checks()
         assert len(d.ALL_CHECKS) >= before

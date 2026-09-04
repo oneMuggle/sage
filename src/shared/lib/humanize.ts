@@ -50,10 +50,7 @@ export function shortArgs(args: ToolArgs | null | undefined): string {
     .join('  ');
 }
 
-export function humanizeToolCall(
-  tool: string,
-  args?: ToolArgs | null,
-): HumanizedToolCall {
+export function humanizeToolCall(tool: string, args?: ToolArgs | null): HumanizedToolCall {
   const a: ToolArgs = args && typeof args === 'object' ? args : {};
 
   switch (tool) {
@@ -128,12 +125,11 @@ export function humanizeToolCall(
 
     // ---- planning / delegation / misc ----
     case 'todo_write': {
-      const items = Array.isArray(a.todos)
-        ? a.todos
-        : Array.isArray(a.items)
-          ? a.items
-          : [];
-      return { verb: 'Update plan', object: `${items.length} item${items.length === 1 ? '' : 's'}` };
+      const items = Array.isArray(a.todos) ? a.todos : Array.isArray(a.items) ? a.items : [];
+      return {
+        verb: 'Update plan',
+        object: `${items.length} item${items.length === 1 ? '' : 's'}`,
+      };
     }
     case 'agent':
       return {
@@ -153,6 +149,26 @@ export function humanizeToolCall(
     case 'structured_output':
       return { verb: 'Output', object: 'structured data' };
 
+    // ---- runtime / dev-env assistant (2026-09) ----
+    case 'runtime_probe': {
+      const langs = Array.isArray(a.languages) ? (a.languages as string[]) : [];
+      return {
+        verb: 'Probe',
+        object: langs.length ? langs.join(', ') : 'available runtimes',
+      };
+    }
+    case 'project_diagnose':
+      return {
+        verb: 'Diagnose',
+        object: trunc(strArg(a, 'project_root') || 'workspace', MAX_OBJECT),
+      };
+    case 'runtime_exec':
+      return {
+        verb: 'Run in',
+        object: trunc(strArg(a, 'language') || 'runtime', MAX_OBJECT),
+        scope: 'local',
+      };
+
     default: {
       // MCP tools arrive namespaced: mcp__<server>__<tool> → "Use <server> · <tool>".
       // They act on remote services, hence the external chip.
@@ -168,7 +184,10 @@ export function humanizeToolCall(
       }
       // Synthetic name from backend/tools/agent_tool.py for running sub-agents.
       if (tool.startsWith('subagent:')) {
-        return { verb: 'Delegate', object: trunc(tool.slice('subagent:'.length).trim(), MAX_OBJECT) };
+        return {
+          verb: 'Delegate',
+          object: trunc(tool.slice('subagent:'.length).trim(), MAX_OBJECT),
+        };
       }
       // Long tail: keep the raw name as verb, compact args as object.
       return { verb: tool, object: trunc(shortArgs(a), MAX_ARGS) };

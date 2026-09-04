@@ -22,7 +22,7 @@ PROJECT_ROOT = os.path.dirname(
 SAGE_BACKEND_PY = sys.executable
 
 
-def _run_doctor(*args, timeout=15):
+def _run_doctor(*args, timeout=30):
     """Invoke ``python -m backend.cli.doctor`` and capture output."""
     cmd = [SAGE_BACKEND_PY, "-m", "backend.cli.doctor"] + list(args)
     return subprocess.run(
@@ -61,9 +61,14 @@ class TestDoctorCLITextMode:
 
     def test_text_output_includes_severity_tags(self):
         result = _run_doctor()
+        # Severity tags are emitted as `[<padded>]` lines (e.g. `[    INFO]` /
+        # `[WARN]` / `[CRITICAL]`). The padding width depends on the longest
+        # severity label. We don't require every tag to appear (some envs
+        # produce no CRITICAL/WARN); we just assert at least one of them
+        # appears as a bracketed severity tag.
         assert any(
             tag in result.stdout
-            for tag in ("[CRITICAL]", "[WARN", "[INFO")
+            for tag in ("[    INFO]", "[INFO]", "[WARN]", "[CRITICAL]")
         ), "no severity tag found in stdout"
 
     def test_text_output_summary_counts_match(self):
@@ -94,11 +99,11 @@ class TestDoctorCLIJsonMode:
         for key in ("checks", "summary", "timestamp", "python_version", "platform"):
             assert key in data, f"missing key: {key}"
 
-    def test_json_has_thirteen_checks(self):
+    def test_json_has_fifteen_checks(self):
         result = _run_doctor("--json")
         data = json.loads(result.stdout)
         assert isinstance(data["checks"], list)
-        assert len(data["checks"]) == 14
+        assert len(data["checks"]) == 15
 
     def test_json_check_entry_shape(self):
         result = _run_doctor("--json")
@@ -114,7 +119,7 @@ class TestDoctorCLIJsonMode:
         result = _run_doctor("--json")
         data = json.loads(result.stdout)
         summary = data["summary"]
-        assert summary["critical"] + summary["warn"] + summary["info"] == 14
+        assert summary["critical"] + summary["warn"] + summary["info"] == 15
 
     def test_json_python_version_format(self):
         result = _run_doctor("--json")
@@ -171,7 +176,7 @@ class TestDoctorCLIExitCodes:
         data = json.loads(json_result.stdout)
         assert text_result.returncode == json_result.returncode
         assert "总计:" in text_result.stdout
-        assert data["summary"]["critical"] + data["summary"]["warn"] + data["summary"]["info"] == 14
+        assert data["summary"]["critical"] + data["summary"]["warn"] + data["summary"]["info"] == 15
 
 
 class TestDoctorCLIHelp:
