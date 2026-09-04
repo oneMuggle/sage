@@ -3,8 +3,20 @@ name: CI
 on:
   push:
     branches: [main, develop, release/win7]
+    # paths-ignore: skip CI for docs/markdown-only commits (no source/test changes).
+    # Saves ~5-10 min of backend pytest + frontend vitest on pure documentation PRs.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.github/CODEOWNERS'
+      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
     branches: [main, develop, release/**]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.github/CODEOWNERS'
+      - '.github/ISSUE_TEMPLATE/**'
   workflow_dispatch:
 
 concurrency:
@@ -251,10 +263,15 @@ jobs:
         run: npm ci --force --force
 
       - name: Lint
-        run: npm run lint
+        # --cache: ESLint stores results in node_modules/.cache/eslint/ between
+        # runs. Subsequent CI invocations skip already-validated unchanged files,
+        # typically cutting lint time from ~25s to <5s on warm cache.
+        run: npm run lint -- --cache
 
       - name: Type check
-        run: npm run typecheck
+        # --incremental: tsc writes .tsbuildinfo and only re-checks changed files.
+        # Cold ~40s → warm <15s on subsequent runs.
+        run: npm run typecheck -- -- --incremental
 
       - name: Test with coverage
         run: npm run test:coverage
@@ -297,9 +314,17 @@ jobs:
       - name: Cache electron-builder downloads
         uses: actions/cache@v4
         with:
+          # electron-builder writes its binary cache to:
+          #   Linux/macOS: ~/.cache/electron-builder (and ~/.cache/electron)
+          #   Windows:     %LOCALAPPDATA%\electron-builder\Cache
+          #               (= ~/AppData/Local/electron-builder/Cache)
+          # The original config only listed POSIX paths, so Windows runners
+          # never matched the cache key → full re-download every build.
           path: |
             ~/.cache/electron
             ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
           key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
