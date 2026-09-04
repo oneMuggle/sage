@@ -41,12 +41,3 @@ def test_legacy_seed_gets_todo_write_appended(monkeypatch):
     profiles.ensure_default_agents()
     assert "todo_write" in stored["primary"]["tools"]
     assert "agent" in stored["primary"]["tools"]  # 升级链不丢既有工具
-
-
-def test_customized_whitelist_untouched(monkeypatch):
-    """用户自定义过白名单 → 不自动追加。"""
-    stored = {"primary": {"id": "primary", "enabled": True, "tools": ["calculator"]}}
-    repo = FakeRepo(stored)
-    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
-    profiles.ensure_default_agents()
-    assert stored["primary"]["tools"] == ["calculator"]

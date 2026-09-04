@@ -239,6 +239,45 @@ LEGACY_TOOL_NAME_RENAMES: Dict[str, str] = {
 }
 
 
+# 2026-09-04: 差集兜底段用的"当前默认"列表。既有 4 段迁移用"集合相等"判定,
+# 存量 DB 只要落在任何历史快照之外就全部哑炮 —— 差集段兜住所有子集情况。
+# primary 不含 bash 是 PR #396 的架构决定(coordinator 不直接执行);
+# 变更时手动维护, 与既有 _BEFORE_* 常量同模式。
+_PRIMARY_CURRENT_DEFAULT_TOOLS: List[str] = [
+    "calculator", "memory_search", "memory_save",
+    "list_dir", "read_file",
+    "grep_search", "glob_search", "file_summary",
+    "agent", "todo_write",
+    "web_fetch", "http_download",
+]
+
+_RESEARCHER_CURRENT_DEFAULT_TOOLS: List[str] = [
+    "web_search", "web_fetch", "http_download", "memory_search",
+]
+
+_WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
+    "read_file", "write_file", "memory_search",
+]
+
+
+def _append_missing_tools(agent: Dict[str, Any], current_default_tools: List[str]) -> bool:
+    """当前默认集 ⊆ DB 时补齐缺项, 返回是否发生变更。
+
+    只在 DB 缺当前默认项时追加(按 current_default_tools 顺序), 保留 DB 原有
+    顺序与用户额外项。真超集 / 完全不相交都会返回 False —— 前者本就齐全,
+    后者是用户整体替换过白名单, 不该被默认集"补回来"。
+    """
+    tools = agent.get("tools") or []
+    existing = set(tools)
+    missing = [t for t in current_default_tools if t not in existing]
+    if not missing:
+        return False
+    if not (existing & set(current_default_tools)):
+        return False
+    agent["tools"] = list(tools) + missing
+    return True
+
+
 def _default_repo():
     from backend.data.agent_repo import AgentRepository
 
@@ -315,6 +354,17 @@ def ensure_default_agents() -> int:
         if set(tools) == _RESEARCHER_TOOLS_BEFORE_HTTP_DOWNLOAD:
             researcher["tools"] = tools + ["http_download"]
             repo.upsert(researcher)
+    # 2026-09-04: 差集兜底 —— 上面的"集合相等"段只覆盖恰好命中历史快照的 DB。
+    # 这一段兜住任意子集形状(如 PR-3 时期的 5 工具 primary)。真超集与
+    # 完全不相交都不动, 见 _append_missing_tools 的 docstring。
+    for agent_id, current_defaults in (
+        ("primary", _PRIMARY_CURRENT_DEFAULT_TOOLS),
+        ("researcher", _RESEARCHER_CURRENT_DEFAULT_TOOLS),
+        ("writer", _WRITER_CURRENT_DEFAULT_TOOLS),
+    ):
+        row = repo.get(agent_id)
+        if row is not None and _append_missing_tools(row, current_defaults):
+            repo.upsert(row)
     return inserted
 
 
