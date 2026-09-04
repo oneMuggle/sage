@@ -1,0 +1,14 @@
+[run]
+source = .
+branch = true
+omit =
+    */main.py
+    */tests/*
+    */__pycache__/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
