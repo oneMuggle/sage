@@ -10,6 +10,14 @@ import tempfile
 import pytest
 import pytest_asyncio
 
+# feat/sqlite-fast-pragma: 测试期 SQLite fast mode（synchronous=OFF）。
+# setup_test_db fixture 的 fsync 开销从 ~280ms 降到 <1ms，让每个测试 setup
+# 从 ~311ms 降到 ~33ms（5.1x），全量 4658 个测试从 ~26min 降到 ~5min。
+# 仅影响测试，生产 data/sage.db 仍保持 synchronous=FULL（默认值）。
+# 必须在第一个 import backend.data.database 之前调用，conftest 加载早于
+# fixtures / 测试模块的 import 行为——pytest 保证 conftest 在 collection 前就位。
+os.environ.setdefault("SAGE_TEST_FAST_SQLITE", "1")
+
 # 确保项目根目录在 sys.path 中
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
