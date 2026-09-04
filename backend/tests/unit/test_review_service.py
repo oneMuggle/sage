@@ -464,7 +464,110 @@ class TestSchemaValidation:
             await service.generate_draft(trigger_type="t", context={})
 
     @pytest.mark.asyncio()
-    async def test_description_too_long(self):
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "test_skill",
+            "test skill",
+            "test/skill",
+            "test--skill",
+            "-test-skill",
+            "test-skill-",
+        ],
+    )
+    async def test_name_regex_rejects_invalid_kebab_case(self, bad_name):
+        """Skill names must use lowercase kebab-case without malformed hyphens."""
+        from backend.skills.review_service import ReviewService
+
+        bad = json.dumps(
+            {
+                "name": bad_name,
+                "description": "d",
+                "when_to_use": "w" * 40,
+                "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+            }
+        )
+        provider = _make_mock_provider(bad)
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="kebab-case"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
+    async def test_name_regex_rejects_too_long(self):
+        """Skill name must be no longer than 40 chars."""
+        from backend.skills.review_service import ReviewService
+
+        bad = json.dumps(
+            {
+                "name": "a" * 41,
+                "description": "d",
+                "when_to_use": "w" * 40,
+                "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+            }
+        )
+        provider = _make_mock_provider(bad)
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="3..40"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
+    @pytest.mark.parametrize("name", ["abc", "a" * 40])
+    async def test_name_regex_accepts_length_boundaries(self, name):
+        """Three and 40 character names are valid length boundaries."""
+        from backend.skills.review_service import ReviewService
+
+        good = json.dumps(
+            {
+                "name": name,
+                "description": "d",
+                "when_to_use": "w" * 40,
+                "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+            }
+        )
+        provider = _make_mock_provider(good)
+        service = ReviewService(provider)
+
+        draft = await service.generate_draft(trigger_type="t", context={})
+        assert draft.name == name
+
+    @pytest.mark.asyncio()
+    @pytest.mark.parametrize(
+        "missing_section, content",
+        [
+            (
+                "## 步骤",
+                "# Skill\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+            ),
+            (
+                "## 触发条件",
+                "# Skill\n\n## 步骤\n\n1. x\n\n## 示例\n\ne",
+            ),
+            (
+                "## 示例",
+                "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt",
+            ),
+        ],
+    )
+    async def test_content_missing_each_required_section(self, missing_section, content):
+        """content must contain each required section independently."""
+        from backend.skills.review_service import ReviewService
+
+        bad = json.dumps(
+            {
+                "name": "test-skill",
+                "description": "d",
+                "when_to_use": "w" * 40,
+                "content": content,
+            }
+        )
+        provider = _make_mock_provider(bad)
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match=missing_section):
+            await service.generate_draft(trigger_type="t", context={})
+
         """Description must be ≤ 80 chars."""
         from backend.skills.review_service import ReviewService
 
@@ -502,25 +605,6 @@ class TestSchemaValidation:
             await service.generate_draft(trigger_type="t", context={})
 
     @pytest.mark.asyncio()
-    async def test_content_missing_required_sections(self):
-        """content must contain ## 步骤, ## 触发条件, ## 示例."""
-        from backend.skills.review_service import ReviewService
-
-        bad = json.dumps(
-            {
-                "name": "test-skill",
-                "description": "d",
-                "when_to_use": "w" * 40,
-                "content": "# Skill\n\nJust a description, no sections.",
-            }
-        )
-        provider = _make_mock_provider(bad)
-        service = ReviewService(provider)
-
-        with pytest.raises(ValueError, match="## 步骤"):
-            await service.generate_draft(trigger_type="t", context={})
-
-    @pytest.mark.asyncio()
     async def test_valid_schema_passes(self):
         """A fully compliant draft should pass all schema checks."""
         from backend.skills.review_service import ReviewService, SkillDraft
@@ -530,7 +614,7 @@ class TestSchemaValidation:
                 "name": "git-branch-hopping",
                 "description": "Switch between git branches while preserving uncommitted work",
                 "when_to_use": "When the user repeatedly switches branches and needs to stash/unstash changes",
-                "content": "# Git Branch Hopping\n\n## 步骤\n\n1. git stash\n2. git switch <branch>\n3. git stash pop\n\n## 触发条件\n\nUser switches branches with dirty working tree\n\n## 示例\n\n```bash\ngit stash && git switch main && git stash pop\n```",
+                "content": "# Git Branch Hopping\n\n## 步骤\n\n1. git stash\n2. git switch <branch>\n3. git stash pop\n\n## 触发条件\n\nUser switches branches with dirty working tree\n\n## 示例\n\nRun the three commands in order to move the changes safely.",
             }
         )
         provider = _make_mock_provider(good)
