@@ -61,9 +61,14 @@ class TestDoctorCLITextMode:
 
     def test_text_output_includes_severity_tags(self):
         result = _run_doctor()
+        # Severity tags are emitted as `[<padded>]` lines (e.g. `[    INFO]` /
+        # `[WARN]` / `[CRITICAL]`). The padding width depends on the longest
+        # severity label. We don't require every tag to appear (some envs
+        # produce no CRITICAL/WARN); we just assert at least one of them
+        # appears as a bracketed severity tag.
         assert any(
             tag in result.stdout
-            for tag in ("[CRITICAL]", "[WARN", "[INFO")
+            for tag in ("[    INFO]", "[INFO]", "[WARN]", "[CRITICAL]")
         ), "no severity tag found in stdout"
 
     def test_text_output_summary_counts_match(self):
