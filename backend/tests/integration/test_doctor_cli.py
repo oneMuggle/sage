@@ -63,7 +63,7 @@ class TestDoctorCLITextMode:
         result = _run_doctor()
         assert any(
             tag in result.stdout
-            for tag in ("[CRITICAL]", "[WARN", "[INFO")
+            for tag in ("[CRITICAL]", "[    WARN", "[    INFO")
         ), "no severity tag found in stdout"
 
     def test_text_output_summary_counts_match(self):
