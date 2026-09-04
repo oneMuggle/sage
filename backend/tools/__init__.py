@@ -25,11 +25,11 @@ from .office_delete_tool import OfficeDeleteTool
 from .office_restore_tool import OfficeRestoreTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
+from .project_diagnose import ProjectDiagnoseTool
 from .registry import ToolRegistry
 from .repl_tool import ReplTool
 from .runtime_exec import RuntimeExecTool
 from .runtime_probe import RuntimeProbeTool
-from .project_diagnose import ProjectDiagnoseTool
 from .search_tools import GlobSearchTool, GrepSearchTool
 from .skill import SkillHotLoader
 from .skill_tool import SkillTool

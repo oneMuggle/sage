@@ -40,10 +40,8 @@ from backend.domain.runtime import (
 from backend.tools.runtime_adapter import (
     AdapterContext,
     CommandRequest,
-    RuntimeAdapter,
     classify_python_source,
 )
-
 
 DEFAULT_CONDA_BASE_DIRS: Tuple[str, ...] = (
     "/opt/anaconda3",
@@ -126,11 +124,11 @@ class PythonAdapter:
                 continue
             for name in CANDIDATE_NAMES:
                 candidate = os.path.join(directory, name)
-                if os.path.isfile(candidate):
+                if Path(candidate).is_file():
                     yield candidate
 
         for extra in include_paths:
-            if os.path.isfile(extra):
+            if Path(extra).is_file():
                 yield extra
 
         for base in DEFAULT_CONDA_BASE_DIRS:
@@ -142,7 +140,7 @@ class PythonAdapter:
                 try:
                     for entry in sorted(os.listdir(envs_dir)):
                         sub = os.path.join(envs_dir, entry, "bin", "python3")
-                        if os.path.isfile(sub):
+                        if Path(sub).is_file():
                             yield sub
                 except OSError:
                     continue
@@ -343,7 +341,7 @@ class PythonAdapter:
         path: str,
         ctx: AdapterContext,
     ) -> Optional[RuntimeInfo]:
-        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+        if not (Path(path).is_file() and os.access(path, os.X_OK)):
             return None
         real = os.path.realpath(path)
         if real != path:
@@ -402,18 +400,18 @@ def _target_version_meet(target: Optional[str]):
 
 def _parse_version(text: str) -> Tuple[int, ...]:
     parts: List[int] = []
-    for chunk in text.split("."):
-        chunk = chunk.strip()
-        if not chunk:
+    for raw_segment in text.split("."):
+        segment = raw_segment.strip()
+        if not segment:
             continue
         try:
-            parts.append(int(chunk))
+            parts.append(int(segment))
         except ValueError as exc:
-            raise ValueError(f"invalid version segment: {chunk}") from exc
+            raise ValueError(f"invalid version segment: {segment}") from exc
     return tuple(parts)
 
 
-def _compare(actual: Tuple[int, ...], target: Tuple[int, ...], op: str) -> bool:
+def _compare(actual: Tuple[int, ...], target: Tuple[int, ...], op: str) -> bool:  # noqa: PLR0911
     a = actual + (0,) * (len(target) - len(actual))
     b = target + (0,) * (len(actual) - len(target))
     if op == ">=":

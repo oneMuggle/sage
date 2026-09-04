@@ -30,9 +30,7 @@ from backend.domain.runtime import (
 from backend.tools.runtime_adapter import (
     AdapterContext,
     CommandRequest,
-    RuntimeAdapter,
 )
-
 
 NODE_CANDIDATE_NAMES: Tuple[str, ...] = ("node",)
 TOOL_CANDIDATE_NAMES: Tuple[str, ...] = ("npm", "pnpm", "yarn", "bun")
@@ -203,14 +201,14 @@ class NodeAdapter:
             for name in names:
                 for suffix in ("", ".exe", ".cmd"):
                     candidate = os.path.join(directory, name + suffix)
-                    if os.path.isfile(candidate):
+                    if Path(candidate).is_file():
                         yield candidate
         for extra in include_paths:
-            if os.path.isfile(extra):
+            if Path(extra).is_file():
                 yield extra
 
     def _probe_node(self, path: str, ctx: AdapterContext) -> Optional[RuntimeInfo]:
-        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+        if not (Path(path).is_file() and os.access(path, os.X_OK)):
             return None
         result = ctx.safe_run([path, "-v"], timeout=5.0)
         if result.exit_code != 0:
@@ -228,7 +226,7 @@ class NodeAdapter:
         )
 
     def _probe_tool(self, path: str, tool: str, ctx: AdapterContext) -> Optional[RuntimeInfo]:
-        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+        if not (Path(path).is_file() and os.access(path, os.X_OK)):
             return None
         result = ctx.safe_run([path, "--version"], timeout=5.0)
         if result.exit_code != 0:

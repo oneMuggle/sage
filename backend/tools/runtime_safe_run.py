@@ -15,6 +15,7 @@ import logging
 import os
 import subprocess
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import List, Optional
 
@@ -125,20 +126,16 @@ def safe_run(
     finally:
         for stream in (process.stdout, process.stderr):
             if stream is not None:
-                try:
+                with suppress(Exception):
                     stream.close()
-                except Exception:  # noqa: BLE001
-                    pass
 
     stdout_text, stdout_truncated, _ = read_capped_output(stdout_path, capped_output, 0)
     stderr_text, stderr_truncated, _ = read_capped_output(stderr_path, capped_output, 0)
     output_truncated = stdout_truncated or stderr_truncated
 
     for path in (stdout_path, stderr_path):
-        try:
+        with suppress(OSError):
             os.unlink(path)
-        except OSError:
-            pass
 
     return SafeRunResult(
         exit_code=exit_code,

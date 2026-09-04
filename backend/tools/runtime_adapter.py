@@ -18,10 +18,8 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Protocol
 
 from backend.domain.runtime import (
-    Diagnostic,
     ExecutionRequest,
     ProbeRequest,
-    ProbeResult,
     ProjectDiagnosis,
     ProjectManifest,
     RuntimeInfo,
