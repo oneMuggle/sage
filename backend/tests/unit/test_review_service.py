@@ -415,3 +415,127 @@ class TestSkillDraftDataclass:
             source_context={},
         )
         assert draft.status == "pending"
+
+
+# ---------------------------------------------------------------------------
+# Tests: schema validation (PR-1 UX closure)
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaValidation:
+    """PR-1: LLM output must satisfy the enhanced schema constraints."""
+
+    @pytest.mark.asyncio()
+    async def test_name_regex_rejects_uppercase(self):
+        """Skill name must be kebab-case (lowercase + digits + hyphens)."""
+        from backend.skills.review_service import ReviewService
+
+        bad = json.dumps(
+            {
+                "name": "Test-Skill",  # uppercase T, S
+                "description": "d",
+                "when_to_use": "w" * 40,
+                "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+            }
+        )
+        provider = _make_mock_provider(bad)
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="kebab-case"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
+    async def test_name_regex_rejects_too_short(self):
+        """Skill name must be ≥ 3 chars."""
+        from backend.skills.review_service import ReviewService
+
+        bad = json.dumps(
+            {
+                "name": "ab",  # too short
+                "description": "d",
+                "when_to_use": "w" * 40,
+                "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+            }
+        )
+        provider = _make_mock_provider(bad)
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="3..40"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
+    async def test_description_too_long(self):
+        """Description must be ≤ 80 chars."""
+        from backend.skills.review_service import ReviewService
+
+        bad = json.dumps(
+            {
+                "name": "test-skill",
+                "description": "x" * 81,
+                "when_to_use": "w" * 40,
+                "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+            }
+        )
+        provider = _make_mock_provider(bad)
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="≤ 80"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
+    async def test_when_to_use_too_short(self):
+        """when_to_use must be ≥ 30 chars."""
+        from backend.skills.review_service import ReviewService
+
+        bad = json.dumps(
+            {
+                "name": "test-skill",
+                "description": "d",
+                "when_to_use": "too short",  # 9 chars
+                "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+            }
+        )
+        provider = _make_mock_provider(bad)
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="≥ 30"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
+    async def test_content_missing_required_sections(self):
+        """content must contain ## 步骤, ## 触发条件, ## 示例."""
+        from backend.skills.review_service import ReviewService
+
+        bad = json.dumps(
+            {
+                "name": "test-skill",
+                "description": "d",
+                "when_to_use": "w" * 40,
+                "content": "# Skill\n\nJust a description, no sections.",
+            }
+        )
+        provider = _make_mock_provider(bad)
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match="## 步骤"):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
+    async def test_valid_schema_passes(self):
+        """A fully compliant draft should pass all schema checks."""
+        from backend.skills.review_service import ReviewService, SkillDraft
+
+        good = json.dumps(
+            {
+                "name": "git-branch-hopping",
+                "description": "Switch between git branches while preserving uncommitted work",
+                "when_to_use": "When the user repeatedly switches branches and needs to stash/unstash changes",
+                "content": "# Git Branch Hopping\n\n## 步骤\n\n1. git stash\n2. git switch <branch>\n3. git stash pop\n\n## 触发条件\n\nUser switches branches with dirty working tree\n\n## 示例\n\n```bash\ngit stash && git switch main && git stash pop\n```",
+            }
+        )
+        provider = _make_mock_provider(good)
+        service = ReviewService(provider)
+
+        draft = await service.generate_draft(trigger_type="complex_turn", context={})
+        assert isinstance(draft, SkillDraft)
+        assert draft.name == "git-branch-hopping"
