@@ -56,7 +56,7 @@ import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
-import { resolveBackendLaunchCommand } from './backendLauncher';
+import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
 import { killOrphanedBackendOnPort } from './orphanBackendKiller';
@@ -67,7 +67,7 @@ import { mainWindow, setMainWindow } from './mainWindow';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
-const BACKEND_HEALTH = `${BACKEND_URL}/health`;
+const BACKEND_HEALTH = `${BACKEND_URL}/health/proof`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
 
@@ -133,7 +133,7 @@ const MIN_WINDOW_WIDTH = 1024;
 const MIN_WINDOW_HEIGHT = 640;
 
 // Timeouts (milliseconds)
-const BACKEND_HEALTH_TIMEOUT_MS = 30_000;
+const BACKEND_HEALTH_TIMEOUT_MS = 90_000;
 const BACKEND_SHUTDOWN_TIMEOUT_MS = 3_000;
 const HTTP_REQUEST_TIMEOUT_MS = 1_000;
 
@@ -493,7 +493,19 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
     if (!isCurrentGeneration(expectedBackend, currentBackend) || appIsQuitting) return false;
     try {
       const health = await new Promise<unknown>((resolve) => {
-        const req = http.get(BACKEND_HEALTH, (res) => {
+        const req = http.get(
+          BACKEND_HEALTH,
+          {
+            // /health/proof is gated by LocalAuthMiddleware's
+            // ``is_ownership_health_valid`` check — the supervisor's
+            // ownershipToken MUST be presented as
+            // X-Sage-Backend-Ownership for the request to be admitted.
+            // Without this header the endpoint returns 401 and
+            // ``ownsBackend`` never matches, leaving the desktop stuck in
+            // the "30s 无响应" loop even when the backend is up.
+            headers: { 'X-Sage-Backend-Ownership': expectedBackend.ownershipToken },
+          },
+          (res) => {
           let body = '';
           res.setEncoding('utf8');
           res.on('data', (chunk: string) => {
@@ -1311,7 +1323,11 @@ app.whenReady().then(async () => {
   // experiences via Show Logs. Hard 5s timeout is enforced inside runDoctorCheck.
   if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
     try {
-      const doctorPlan = resolveBackendLaunchCommand({
+      // alpha.12-win7: derive the doctor launch plan from the supervisor plan
+      // so the doctor subprocess runs `python -m backend.cli.doctor --json`
+      // (NOT `python -m backend.main`, which would spawn uvicorn, bind 8765,
+      // and block the supervisor from binding the port after the 5s SIGTERM).
+      const supervisorPlan = resolveBackendLaunchCommand({
         env: process.env,
         resourcesPath: process.resourcesPath,
         platform: process.platform,
@@ -1320,47 +1336,57 @@ app.whenReady().then(async () => {
         sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
         port: BACKEND_PORT,
       });
-      // Round 2 (fast-follow E): thread the supervisor's launcher context
-      // (command / cwd / env) into the doctor subprocess so the
-      // ``import backend.main`` probe runs under the EXACT env the
-      // backend will see. ``runDoctorCheck`` already merges ``options.env``
-      // into the child env, so these three SAGE_BACKEND_* keys reach
-      // ``backend.cli.doctor.main`` which reads them via the new
-      // ``_resolve_backend_context`` helper.
-      let doctorEnv: NodeJS.ProcessEnv | undefined;
-      if (doctorPlan.kind === 'spawn') {
-        const launcherArgv = [doctorPlan.command, ...(doctorPlan.args ?? [])];
-        // Surface only the env keys the supervisor would actually set on
-        // the backend (plan.env + plan.extraEnv); the host env is already
-        // inherited via ``process.env`` in runDoctorCheck.
+      const doctorPlan =
+        supervisorPlan.kind === 'spawn'
+          ? resolveDoctorLaunchCommand({
+              env: process.env,
+              resourcesPath: process.resourcesPath,
+              platform: process.platform,
+              isPackaged: app.isPackaged,
+              sageDbPath: process.env.SAGE_DB_PATH ?? join(process.cwd(), 'data', 'sage.db'),
+              sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
+              port: BACKEND_PORT,
+            })
+          : undefined;
+
+      // Thread the supervisor's launcher context (command / cwd / env) into
+      // the doctor subprocess so `backend.cli.doctor._resolve_backend_context`
+      // can probe the same plan. `resolveDoctorLaunchCommand` already merged
+      // plan.env + plan.extraEnv into doctorPlan.env, so we only need to add
+      // the SAGE_BACKEND_* JSON-encoded context keys on top.
+      let doctorSummary: Awaited<ReturnType<typeof runDoctorCheck>>;
+      if (doctorPlan) {
+        const supervisorArgv = [
+          supervisorPlan.kind === 'spawn' ? supervisorPlan.command : '',
+          ...(supervisorPlan.kind === 'spawn' ? (supervisorPlan.args ?? []) : []),
+        ];
         const supervisorEnv: Record<string, string> = {};
-        for (const [k, v] of Object.entries({
-          ...doctorPlan.env,
-          ...doctorPlan.extraEnv,
-        })) {
-          if (typeof v === 'string') supervisorEnv[k] = v;
+        if (supervisorPlan.kind === 'spawn') {
+          for (const [k, v] of Object.entries({
+            ...supervisorPlan.env,
+            ...supervisorPlan.extraEnv,
+          })) {
+            if (typeof v === 'string') supervisorEnv[k] = v;
+          }
         }
-        doctorEnv = {
-          ...supervisorEnv,
-          SAGE_BACKEND_CMD: JSON.stringify(launcherArgv),
-          SAGE_BACKEND_CWD: doctorPlan.cwd,
+        const doctorEnv: NodeJS.ProcessEnv = {
+          ...doctorPlan.env,
+          SAGE_BACKEND_CMD: JSON.stringify(supervisorArgv),
+          SAGE_BACKEND_CWD: supervisorPlan.kind === 'spawn' ? supervisorPlan.cwd : process.cwd(),
           SAGE_BACKEND_ENV: JSON.stringify(supervisorEnv),
         };
+        doctorSummary = await runDoctorCheck({
+          pythonBin: doctorPlan.command,
+          args: doctorPlan.args,
+          cwd: doctorPlan.cwd,
+          env: doctorEnv,
+          packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
+        });
+      } else {
+        // broken-installer (no bundled Python / unsupported platform) —
+        // fall back to bare `python` so doctor still runs in CI.
+        doctorSummary = await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
       }
-      const doctorSummary =
-        doctorPlan.kind === 'spawn'
-          ? await runDoctorCheck({
-              pythonBin: doctorPlan.command,
-              packageRoot: app.isPackaged ? process.resourcesPath : process.cwd(),
-              cwd: doctorPlan.cwd,
-              env: doctorEnv,
-              // alpha.8 (2026-08-27): 复用 BackendLaunchPlan 的 argv (含
-              // dev-conda 路径 ``conda run -n sage-backend python -m ...``).
-              // 不再走硬编码 ``-m backend.cli.doctor --json`` 回退, 与
-              // supervisor spawnBackend 的 argv 完全对齐.
-              args: doctorPlan.args,
-            })
-          : await runDoctorCheck(process.env.SAGE_PYTHON ?? 'python', process.cwd());
       logger.info('main: doctor check complete', doctorSummary);
       if (doctorSummary.status === 'critical') {
         logger.warn('main: doctor reported CRITICAL — user may see degraded experience', {
