@@ -354,6 +354,9 @@ def _import_all_checks() -> None:
         "log_dir_size",
         "frontend_dist",
         "skills",
+        # 2026-09-04: 本地开发环境助手 — runtime_probe 工具的 doctor 集成。
+        # 只探 Python/Node.js 可用性, 不附带工具链明细 (避免 doctor 变慢)。
+        "runtime_env",
     ):
         importlib.import_module(f"{pkg}.{mod_name}")
 

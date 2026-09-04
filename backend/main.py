@@ -70,6 +70,7 @@ from backend.api.office_routes import (
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
 from backend.api.question_routes import router as question_router
+from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
 from backend.api.usage_routes import router as usage_router
@@ -558,6 +559,11 @@ app.include_router(usage_router, prefix="/api/v1")
 app.include_router(export_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
+
+# 本地开发环境助手: /api/v1/runtime/{probe, diagnose, exec}
+# 复用 ChatService.tools 路径, runtime_exec 自动走 PermissionEnforcer 审批
+# (与 BashTool 同等门禁), 见 docs/plans/2026-09-04_local-development-assistant.md
+app.include_router(runtime_router, prefix="/api/v1")
 
 _API_MODE = os.environ.get("API_MODE", "legacy").lower()  # PG-A1: was "hex"
 if _API_MODE == "hex":

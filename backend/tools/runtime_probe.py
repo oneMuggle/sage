@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from backend.domain.risk import RiskClass
 from backend.domain.runtime import (
@@ -15,9 +15,15 @@ from backend.domain.runtime import (
     ProbeResult,
     RuntimeInfo,
 )
+
+# 自注册: 保证工具类被直接实例化时 (如 doctor check / 单测) 也能拿到已注册
+# 的适配器。register_default_adapters 幂等, 与 register_all_tools 的重复调用无副作用。
+from backend.tools.adapters import register_default_adapters
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.runtime_adapter import AdapterContext, registry
 from backend.tools.runtime_safe_run import safe_run
+
+register_default_adapters()
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +55,7 @@ class RuntimeProbeTool(BaseTool):
                     },
                     "target_version": {
                         "type": "string",
-                        "description": "可选的最低版本约束（如 \">=3.10\")，用于兼容性标记",
+                        "description": '可选的最低版本约束（如 ">=3.10")，用于兼容性标记',
                     },
                     "include_paths": {
                         "type": "array",
@@ -79,10 +85,9 @@ class RuntimeProbeTool(BaseTool):
         root = Path(workspace_root) if workspace_root else Path.cwd()
         ctx = AdapterContext(workspace_root=root, safe_run=safe_run)
 
-        if request.languages:
-            adapter_languages = list(request.languages)
-        else:
-            adapter_languages = registry.languages()
+        adapter_languages = (
+            list(request.languages) if request.languages else registry.languages()
+        )
 
         runtimes: List[RuntimeInfo] = []
         errors: List[str] = []
