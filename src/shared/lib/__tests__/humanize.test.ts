@@ -198,6 +198,42 @@ describe('humanizeToolCall — Sage backend tools', () => {
     const result = humanizeToolCall('repl', { code: 'import os\nprint(os.getcwd())' });
     expect(result).toEqual({ verb: 'Run', object: 'import os', scope: 'local' });
   });
+
+  // ---- runtime / dev-env assistant (2026-09) ----
+  it('renders runtime_probe as "Probe <language list>"', () => {
+    expect(humanizeToolCall('runtime_probe', { languages: ['python', 'javascript'] })).toEqual({
+      verb: 'Probe',
+      object: 'python, javascript',
+    });
+  });
+
+  it('renders runtime_probe with no languages as "Probe available runtimes"', () => {
+    expect(humanizeToolCall('runtime_probe', {})).toEqual({
+      verb: 'Probe',
+      object: 'available runtimes',
+    });
+  });
+
+  it('renders project_diagnose as "Diagnose <project_root or workspace>"', () => {
+    expect(humanizeToolCall('project_diagnose', { project_root: '/home/dev/sage' })).toEqual({
+      verb: 'Diagnose',
+      object: '/home/dev/sage',
+    });
+    expect(humanizeToolCall('project_diagnose', {})).toEqual({
+      verb: 'Diagnose',
+      object: 'workspace',
+    });
+  });
+
+  it('renders runtime_exec as "Run in <language>" with scope local', () => {
+    expect(
+      humanizeToolCall('runtime_exec', { language: 'python', code: 'print(1)' }),
+    ).toEqual({
+      verb: 'Run in',
+      object: 'python',
+      scope: 'local',
+    });
+  });
 });
 
 describe('humanizeToolCall — MCP and subagent names', () => {

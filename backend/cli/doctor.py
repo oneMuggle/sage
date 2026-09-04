@@ -321,7 +321,10 @@ def _try_import_backend(
             env=probe_env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=5,
+            # baseline 实测: 冷启动 import backend.main 约 5-6s (jieba 词典 1s +
+            # FastAPI/Pydantic 装配 + 路由注册). 5s timeout 在冷环境下 flaky,
+            # 放到 20s 留足裕量, 仍属 fail-open (不影响用户体感).
+            timeout=20,
         )
         return result.returncode == 0
     except (OSError, subprocess.SubprocessError):
@@ -354,6 +357,9 @@ def _import_all_checks() -> None:
         "log_dir_size",
         "frontend_dist",
         "skills",
+        # 2026-09-04: 本地开发环境助手 — runtime_probe 工具的 doctor 集成。
+        # 只探 Python/Node.js 可用性, 不附带工具链明细 (避免 doctor 变慢)。
+        "runtime_env",
     ):
         importlib.import_module(f"{pkg}.{mod_name}")
 

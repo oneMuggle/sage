@@ -25,8 +25,11 @@ from .office_delete_tool import OfficeDeleteTool
 from .office_restore_tool import OfficeRestoreTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
+from .project_diagnose import ProjectDiagnoseTool
 from .registry import ToolRegistry
 from .repl_tool import ReplTool
+from .runtime_exec import RuntimeExecTool
+from .runtime_probe import RuntimeProbeTool
 from .search_tools import GlobSearchTool, GrepSearchTool
 from .skill import SkillHotLoader
 from .skill_tool import SkillTool
@@ -90,6 +93,15 @@ def register_all_tools(
     registry.register(TodoWriteTool(policy=policy))
     registry.register(StructuredOutputTool(policy=policy))
     registry.register(ReplTool(policy=policy))
+    # 本地开发环境助手（runtime_probe 只读探测 + project_diagnose 静态分析 +
+    # runtime_exec 经审批后执行本地运行时）。Python 解释器/Node.js 适配器
+    # 由 register_default_adapters() 在进程启动期注入。
+    from backend.tools.adapters import register_default_adapters
+
+    register_default_adapters()
+    registry.register(RuntimeProbeTool(policy=policy))
+    registry.register(ProjectDiagnoseTool(policy=policy))
+    registry.register(RuntimeExecTool(policy=policy))
     # M2 part B: in-loop 技能调用（EXECUTE，M1 审批闸口按模式矩阵拦截）
     registry.register(SkillTool(policy=policy))
     # M2 part B: AskUserQuestion（READ，run_loop 分发前特判 + 提问闸口）
@@ -142,6 +154,9 @@ __all__ = [
     "TodoWriteTool",
     "StructuredOutputTool",
     "ReplTool",
+    "RuntimeProbeTool",
+    "RuntimeExecTool",
+    "ProjectDiagnoseTool",
     "SkillTool",
     "AskUserQuestionTool",
     "FileSummaryTool",
