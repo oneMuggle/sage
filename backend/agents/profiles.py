@@ -93,6 +93,16 @@ def create_default_agents() -> List[AgentProfile]:
                 # 便于分步指导和交互。受 NetworkPolicy 门禁, OFFLINE 不注册。
                 "web_fetch",
                 "http_download",
+                # 2026-09-04: Office CRUD 五件套接线 —— system prompt 已声明这些
+                # 能力（_OFFICE_CREATE_CAPABILITY_PROMPT），但白名单一直没有，
+                # LLM 从来看不见。office_list / office_read 标记了
+                # requires_tool_context 工具上下文依赖 —— 未绑定工作区时由
+                # ToolRegistry 自动隐藏。
+                "office_list",
+                "office_read",
+                "office_create",
+                "office_update",
+                "office_delete",
             ],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
@@ -142,7 +152,12 @@ def create_default_agents() -> List[AgentProfile]:
                 "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
                 "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
             ),
-            tools=["read_file", "write_file", "memory_search"],
+            # 2026-09-04: 写作 agent 此前只能产出 markdown; 加 Office 读写四件套
+            # 让它能直接落 docx/xlsx/pptx。不给 delete —— 写作职责不含删档。
+            tools=[
+                "read_file", "write_file", "memory_search",
+                "office_list", "office_read", "office_create", "office_update",
+            ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
             max_iterations=10,
@@ -249,6 +264,9 @@ _PRIMARY_CURRENT_DEFAULT_TOOLS: List[str] = [
     "grep_search", "glob_search", "file_summary",
     "agent", "todo_write",
     "web_fetch", "http_download",
+    # 2026-09-04: Office CRUD 五件套 —— 与上方白名单同步, 存量 DB 差集段
+    # 必须带 office_* 才能补齐; 反向约束由 test_office_tools_are_in_current_default_constants 锁。
+    "office_list", "office_read", "office_create", "office_update", "office_delete",
 ]
 
 _RESEARCHER_CURRENT_DEFAULT_TOOLS: List[str] = [
@@ -257,6 +275,8 @@ _RESEARCHER_CURRENT_DEFAULT_TOOLS: List[str] = [
 
 _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "read_file", "write_file", "memory_search",
+    # 2026-09-04: 写作 agent 的 Office 读写四件套(不给 delete), 与上方 writer.tools 同步。
+    "office_list", "office_read", "office_create", "office_update",
 ]
 
 
