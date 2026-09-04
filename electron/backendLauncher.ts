@@ -58,6 +58,18 @@ export interface ResolveOpts {
   userDataPath?: string;
 }
 
+export interface DoctorLaunchPlan {
+  command: string;
+  args: string[];
+  cwd: string;
+  env: Record<string, string>;
+  reason:
+    | 'dev-conda'
+    | 'dev-conda-overridden'
+    | 'packaged-win32-bundled'
+    | 'packaged-linux-bundled';
+}
+
 export type BackendLaunchPlan =
   | {
       kind: 'spawn';
@@ -262,5 +274,66 @@ function packagedEnv(
     SAGE_USER_DATA_DIR: sageUserDataDir,
     SAGE_LOG_LEVEL: process.env.SAGE_LOG_LEVEL ?? 'info',
     PYTHONPATH: [join(resourcesPath, 'backend'), join(resourcesPath, 'sage-core')].join(sep),
+  };
+}
+
+/**
+ * Resolve the launch command for the pre-launch ``python -m backend.cli.doctor
+ * --json`` subprocess, derived from the supervisor plan returned by
+ * ``resolveBackendLaunchCommand``.
+ *
+ * Design (alpha.12-win7):
+ *   - Forks the supervisor plan and replaces the trailing ``-m backend.main``
+ *     with ``-m backend.cli.doctor --json``. Conda- and packaged-launched
+ *     Python both consume ``-m <module>`` identically, so the swap is safe
+ *     across all four spawn reasons (dev-conda, dev-conda-overridden,
+ *     packaged-win32-bundled, packaged-linux-bundled).
+ *   - Merges ``plan.env + plan.extraEnv`` so the doctor subprocess sees the
+ *     same SAGE_DB_PATH / SAGE_USER_DATA_DIR / PYTHON_BACKEND_PORT the
+ *     backend supervisor will set on the real spawn. Without the merge the
+ *     doctor would probe against host defaults and miss the user-data-dir /
+ *     port / db-path the production backend uses.
+ *   - Returns ``undefined`` for broken-installer (caller falls back to a
+ *     bare ``python`` invocation so doctor remains fail-open in CI).
+ *
+ * Critical regression (alpha.11-win7):
+ *   Previously main.ts passed ``pythonBin=supervisorPlan.command`` and
+ *   ``args=supervisorPlan.args`` (which is ``["-m", "backend.main"]`` in
+ *   packaged-win32 mode) to ``runDoctorCheck``. ``doctor.ts`` then spawned
+ *   ``python.exe -m backend.main`` — i.e. a full uvicorn server — instead
+ *   of the doctor CLI. SIGTERM at the 5s timeout didn't propagate to the
+ *   orphaned uvicorn child, which kept listening on 8765 and blocked
+ *   subsequent ``spawnBackend()`` from binding the port, leaving the
+ *   desktop stuck in the "30s 无响应" loop.
+ */
+export function resolveDoctorLaunchCommand(opts: ResolveOpts): DoctorLaunchPlan | undefined {
+  const plan = resolveBackendLaunchCommand(opts);
+  if (plan.kind === 'broken-installer') return undefined;
+
+  // Swap the trailing `-m backend.main` for the doctor entry. All four
+  // spawn reasons end with `-m backend.main`; replacing the last token
+  // preserves any conda/argv prefix verbatim.
+  const args = [...plan.args];
+  const mainIdx = args.lastIndexOf('backend.main');
+  if (mainIdx >= 0) {
+    args.splice(mainIdx, 1, 'backend.cli.doctor', '--json');
+  } else {
+    // Defensive: if for any reason the parent plan doesn't end with
+    // `-m backend.main` (future refactor), append the doctor entry so
+    // we still produce a runnable command rather than spawning the
+    // backend by mistake.
+    args.push('-m', 'backend.cli.doctor', '--json');
+  }
+
+  // Merge supervisor env so the doctor subprocess probes the exact
+  // context the real backend will see.
+  const env: Record<string, string> = { ...plan.env, ...plan.extraEnv };
+
+  return {
+    command: plan.command,
+    args,
+    cwd: plan.cwd,
+    env,
+    reason: plan.reason,
   };
 }
