@@ -17,6 +17,7 @@ Public surface:
     get_active_workspace(conn, sid, exp_gen=None) # active row, gen check
     revoke_session_workspace(conn, sid, now)      # tombstone + bump generation
     get_document_in_workspace(conn, doc_id, ws)   # workspace-scoped lookup
+    find_document_by_filename(conn, ws, filename) # filename-scoped lookup
 """
 
 from __future__ import annotations
@@ -322,5 +323,40 @@ def get_document_in_workspace_any_status(
         WHERE id = ? AND workspace_path = ?
         """,
         (document_id, workspace_path),
+    ).fetchone()
+    return None if row is None else _row_to_summary(row)
+
+
+def find_document_by_filename(
+    conn: sqlite3.Connection,
+    workspace_path: str,
+    filename: str,
+) -> Optional[OfficeDocumentSummary]:
+    """Look up a document by its on-disk filename within a workspace.
+
+    Mirrors :func:`get_document_in_workspace` except the lookup key is
+    ``generated_filename`` instead of ``id``. Used by the chat ``@<file>``
+    reference authorization path, where the renderer hands us the
+    user-visible filename rather than the managed UUID stored in
+    ``office_documents.id``.
+
+    Same return semantics as :func:`get_document_in_workspace`:
+
+    - ``None`` when the filename is unknown in the workspace.
+    - ``None`` for archived rows so a soft-deleted doc can't be
+      resurrected via a stale chat reference.
+    - ``None`` for rows owned by a different workspace — keeps the
+      cross-workspace isolation that id-based lookups also enforce.
+    """
+    row = conn.execute(
+        """
+        SELECT id, workspace_path, doc_type, original_filename,
+               generated_filename, status, created_at, updated_at, metadata,
+               derived_from, archived_at
+        FROM office_documents
+        WHERE generated_filename = ? AND workspace_path = ?
+              AND archived_at IS NULL
+        """,
+        (filename, workspace_path),
     ).fetchone()
     return None if row is None else _row_to_summary(row)

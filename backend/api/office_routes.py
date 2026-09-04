@@ -51,6 +51,7 @@ from backend.office.path_safety import resolve_within
 from backend.office.ppt import generate_ppt, read_ppt
 from backend.office.storage import (
     delete_document,
+    get_document,
     list_documents,
     save_document,
     validate_workspace,
@@ -215,6 +216,18 @@ def _persist_read_summary(
     place so the response body reflects the persisted identifiers (the
     reader builds the summary with ``document_id=file_path.stem`` which
     is *not* the managed UUID when the file lives in a UUID directory).
+
+    PR-3 merge semantics: a row that already exists keeps its
+    ``archived_at`` / ``derived_from`` (lineage + soft-delete state) and
+    its ``original_filename`` (user's uploaded name) when the caller
+    passes ``None`` for that field on a re-read. ``status`` and
+    ``metadata`` (including ``file_size_bytes`` which the readers set
+    via ``file_path.stat().st_size``) are always refreshed from the
+    reader because a re-parse produces fresh content + filesystem
+    facts. Without this merge, every read would re-INSERT OR REPLACE
+    the row and un-archive previously archived documents, drop
+    derived_from lineage, and stomp the user-visible original
+    filename.
     """
     from backend.office.models import OfficeDocumentSummary  # local: avoids cycle
 
@@ -225,19 +238,47 @@ def _persist_read_summary(
     # managed-import layout); ``original_filename`` is the user-visible
     # uploaded name when the caller tracked it.
     generated_filename = file_path.name
-    persisted = OfficeDocumentSummary(
-        id=document_id,
-        workspace_path=canonical_workspace,
-        doc_type=summary.doc_type,
-        original_filename=original_filename,
-        generated_filename=generated_filename,
-        status=summary.status,
-        created_at=summary.created_at,
-        updated_at=summary.updated_at,
-        metadata=summary.metadata,
-        derived_from=summary.derived_from,
-        archived_at=summary.archived_at,
-    )
+    # PR-3: read the existing row first so we can preserve lineage,
+    # archive state, and original_filename on re-read.
+    existing = get_document(conn, document_id)
+    if existing is not None:
+        # Preserve user/system-managed fields; only refresh reader-derived
+        # ones (status, updated_at, metadata facts that the reader sets).
+        # ``original_filename`` is kept as the prior value when the
+        # caller passed ``None`` on this re-read — the user-supplied
+        # name shouldn't silently clear because we re-parsed the file.
+        merged_original_filename = (
+            original_filename if original_filename is not None
+            else existing.original_filename
+        )
+        persisted = OfficeDocumentSummary(
+            id=document_id,
+            workspace_path=canonical_workspace,
+            doc_type=summary.doc_type,
+            original_filename=merged_original_filename,
+            generated_filename=generated_filename,
+            status=summary.status,
+            created_at=existing.created_at,
+            updated_at=summary.updated_at,
+            metadata=summary.metadata,
+            derived_from=existing.derived_from,
+            archived_at=existing.archived_at,
+        )
+    else:
+        # Fresh read — no prior row to merge with.
+        persisted = OfficeDocumentSummary(
+            id=document_id,
+            workspace_path=canonical_workspace,
+            doc_type=summary.doc_type,
+            original_filename=original_filename,
+            generated_filename=generated_filename,
+            status=summary.status,
+            created_at=summary.created_at,
+            updated_at=summary.updated_at,
+            metadata=summary.metadata,
+            derived_from=summary.derived_from,
+            archived_at=summary.archived_at,
+        )
     save_document(conn, persisted)
     # Patch the returned summary so the caller sees the same id/filename
     # that was persisted (otherwise the reader's default ``file_path.stem``

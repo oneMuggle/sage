@@ -30,12 +30,19 @@ Authorization rules:
    a. ``data.workspace_path`` set and != binding.workspace_path
       -> ``WorkspacePathMismatchError`` (400).
    b. For each ref, look up the doc by id within the binding's canonical
-      workspace via :func:`get_document_in_workspace`. Any of:
-      - unknown doc id
+      workspace via :func:`get_document_in_workspace`. If the id lookup
+      returns ``None``, fall back to :func:`find_document_by_filename`
+      so the renderer-supplied ``@<filename>`` reference resolves to the
+      managed UUID. On filename hit, the resolved id (not the filename)
+      is the value appended to ``office_doc_scope``. Any of:
+      - unknown doc id (and filename)
       - archived doc
-      - type literal mismatch
-      - filename mismatch
-      -> ``WorkspaceDocumentNotFoundError`` (404).
+      - type literal mismatch (when resolved via filename)
+      -> ``WorkspaceDocumentNotFoundError`` (404) for id-lookup misses
+      and ``WorkspacePathMismatchError`` (400) for filename-resolved
+      type mismatches. The split is intentional: a type mismatch on a
+      doc that exists but doesn't match the ref's claimed type is a
+      400-shape mismatch, not a 404-not-found.
 
 5. Happy path -> return :class:`AuthorizedOfficeRequest` with the binding
    generation captured and the canonical workspace path (backend-derived,
@@ -62,6 +69,7 @@ from backend.office.errors import OfficePathError
 from backend.office.storage import validate_workspace
 
 from .session_workspace import (
+    find_document_by_filename,
     get_document_in_workspace,
     get_workspace_binding,
 )
@@ -206,16 +214,38 @@ def authorize_chat_office_request(
             )
 
     # Rule 4b: validate every ref against the binding's canonical workspace.
+    # Prefer the id-based lookup (renderer hands us a managed UUID when
+    # it can). When the id misses, fall back to filename-based lookup
+    # so chat ``@<filename>`` references resolve to the same UUID that
+    # ``_persist_read_summary`` already wrote into the row.
     validated: List[str] = []
     for ref in office_refs:
         doc = get_document_in_workspace(conn, ref.doc_id, binding.workspace_path)
+        resolved_via_filename = False
         if doc is None:
-            # Covers unknown id, archived doc, and cross-workspace lookups
-            # (the SQL scope is `(id, workspace_path, archived_at IS NULL)`).
-            raise WorkspaceDocumentNotFoundError(
-                f"Office document '{ref.doc_id}' is not visible in the active workspace"
+            doc = find_document_by_filename(
+                conn, binding.workspace_path, ref.filename
             )
+            if doc is None:
+                # Covers unknown id + unknown filename, archived doc, and
+                # cross-workspace lookups (the SQL scope filters
+                # ``archived_at IS NULL`` and ``workspace_path = ?``).
+                raise WorkspaceDocumentNotFoundError(
+                    f"Office document '{ref.doc_id}' "
+                    f"(filename '{ref.filename}') is not visible "
+                    f"in the active workspace"
+                )
+            resolved_via_filename = True
         if doc.doc_type.value != ref.doc_type:
+            # Filename-resolved hits raise 400 (the ref's declared type
+            # disagrees with the actual doc); id-resolved hits keep the
+            # existing 404 mapping for backward compatibility.
+            if resolved_via_filename:
+                raise WorkspacePathMismatchError(
+                    f"Office document '{ref.filename}' resolved via "
+                    f"filename lookup has type '{doc.doc_type.value}', "
+                    f"but the reference declared '{ref.doc_type}'"
+                )
             raise WorkspaceDocumentNotFoundError(
                 f"Office document '{ref.doc_id}' type does not match the ref"
             )
@@ -223,7 +253,7 @@ def authorize_chat_office_request(
             raise WorkspaceDocumentNotFoundError(
                 f"Office document '{ref.doc_id}' filename does not match the ref"
             )
-        validated.append(ref.doc_id)
+        validated.append(doc.id)
 
     return AuthorizedOfficeRequest(
         session_id=session_id,
