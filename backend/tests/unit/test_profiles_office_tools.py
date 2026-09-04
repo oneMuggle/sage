@@ -53,18 +53,21 @@ def _visible_office_tools(registry, ctx, allowed_tools):
 
 def test_primary_sees_all_office_tools(registry, bound_ctx):
     visible = _visible_office_tools(registry, bound_ctx, _profile("primary").tools)
+    # 2026-09-04: PR-2 (archive/restore) 给 primary 加了 office_restore, 测试同步更新。
     assert visible == [
         "office_create",
         "office_delete",
         "office_list",
         "office_read",
+        "office_restore",
         "office_update",
     ]
 
 
 def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
     visible = _visible_office_tools(registry, bound_ctx, _profile("writer").tools)
-    assert visible == ["office_create", "office_list", "office_read", "office_update"]
+    # 2026-09-04: PR-2 (archive/restore) 给 writer 加了 office_restore, 测试同步更新。
+    assert visible == ["office_create", "office_list", "office_read", "office_restore", "office_update"]
     assert "office_delete" not in visible
 
 

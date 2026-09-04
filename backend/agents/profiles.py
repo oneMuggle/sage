@@ -273,9 +273,11 @@ _PRIMARY_CURRENT_DEFAULT_TOOLS: List[str] = [
     "grep_search", "glob_search", "file_summary",
     "agent", "todo_write",
     "web_fetch", "http_download",
-    # 2026-09-04: Office CRUD 五件套 —— 与上方白名单同步, 存量 DB 差集段
-    # 必须带 office_* 才能补齐; 反向约束由 test_office_tools_are_in_current_default_constants 锁。
+    # 2026-09-04: Office CRUD 六件套(含 PR-2 office_restore) —— 与上方白名单同步,
+    # 存量 DB 差集段必须带 office_* 才能补齐; 反向约束由
+    # test_office_tools_are_in_current_default_constants 锁。
     "office_list", "office_read", "office_create", "office_update", "office_delete",
+    "office_restore",
 ]
 
 _RESEARCHER_CURRENT_DEFAULT_TOOLS: List[str] = [
@@ -284,8 +286,9 @@ _RESEARCHER_CURRENT_DEFAULT_TOOLS: List[str] = [
 
 _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "read_file", "write_file", "memory_search",
-    # 2026-09-04: 写作 agent 的 Office 读写四件套(不给 delete), 与上方 writer.tools 同步。
-    "office_list", "office_read", "office_create", "office_update",
+    # 2026-09-04: 写作 agent 的 Office 读写五件套(不给 delete, 给 restore),
+    # 与上方 writer.tools 同步。
+    "office_list", "office_read", "office_create", "office_update", "office_restore",
 ]
 
 
