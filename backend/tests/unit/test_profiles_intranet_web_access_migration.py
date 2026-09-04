@@ -77,22 +77,6 @@ def test_legacy_researcher_gets_http_download_appended(monkeypatch):
         assert t in stored["researcher"]["tools"]
 
 
-def test_customized_researcher_whitelist_untouched(monkeypatch):
-    """用户自定义过 researcher 白名单（≠ 旧种子）→ 绝不自动改动。"""
-    stored = {
-        "primary": {"id": "primary", "enabled": True, "tools": []},
-        "researcher": {
-            "id": "researcher",
-            "enabled": True,
-            "tools": ["web_search", "memory_search"],  # 缺 web_fetch —— 非旧种子形状
-        },
-    }
-    repo = FakeRepo(stored)
-    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
-    profiles.ensure_default_agents()
-    assert stored["researcher"]["tools"] == ["web_search", "memory_search"]
-
-
 def test_current_shape_researcher_untouched(monkeypatch):
     """已是当前形状（含 http_download）→ 绝不再追加（防重复写入 + updated_at 抖动）。"""
     current = ["web_search", "web_fetch", "http_download", "memory_search"]

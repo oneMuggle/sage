@@ -91,11 +91,15 @@ class OfficeSizeLimitError(OfficeError):
         self.max_size = max_size
 
 
+class OfficeContentShapeError(OfficeError):
+    """LLM 传来的 content 结构不符合该 doc_type 的要求（缺 sheets / slides 等）。"""
+
+
 #: 写入类失败 → 500（元组常量避免 UP038 的 isinstance union 语法，保持 py38 兼容）
 _WRITE_FAILURE_ERRORS = (OfficeGenerateError, OfficeEditError)
 
 
-def office_error_to_http_status(error: OfficeError) -> int:
+def office_error_to_http_status(error: OfficeError) -> int:  # noqa: PLR0911 — 逐子类分支是这套契约的可读形式
     """Map an OfficeError to its HTTP status code.
 
     Used by the FastAPI exception handler in office_routes.py.
@@ -105,6 +109,8 @@ def office_error_to_http_status(error: OfficeError) -> int:
     if isinstance(error, OfficePathError):
         return 400
     if isinstance(error, OfficeParseError):
+        return 422
+    if isinstance(error, OfficeContentShapeError):
         return 422
     if isinstance(error, OfficeSizeLimitError):
         return 413

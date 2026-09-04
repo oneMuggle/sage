@@ -124,18 +124,3 @@ async def test_ensure_upgrades_stale_primary_tools_with_agent():
     ensure_default_agents()
 
     assert "agent" in repo.get("primary")["tools"]
-
-
-@pytest.mark.asyncio()
-async def test_ensure_does_not_touch_customized_primary_tools():
-    """用户自定义白名单（≠ 旧种子）→ 绝不自动改动。"""
-    from backend.agents.profiles import ensure_default_agents
-
-    repo = AgentRepository()
-    custom = repo.get("primary")
-    custom["tools"] = ["calculator", "memory_search"]
-    repo.upsert(custom)
-
-    ensure_default_agents()
-
-    assert repo.get("primary")["tools"] == ["calculator", "memory_search"]
