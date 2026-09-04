@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from backend.domain.tool_policy import ToolPolicy
-from backend.office.errors import OfficeError
+from backend.office.errors import OfficeContentShapeError, OfficeError
 from backend.office.models import (
     OfficeDocStatus,
     OfficeDocType,
@@ -406,6 +406,11 @@ class OfficeToolService:
                 content=content,
                 workspace_path=binding.workspace_path,
             )
+        except OfficeContentShapeError as exc:
+            return {
+                "success": False,
+                "error": {"code": "content_shape_invalid", "message": str(exc)},
+            }
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return {
                 "success": False,
@@ -658,31 +663,30 @@ def _coerce_word_request(
 def _coerce_excel_request(
     doc_id: str, filename: str, content: Any, workspace_path: str
 ) -> OfficeExcelGenerateRequest:
-    if not isinstance(content, dict):
-        raise TypeError("excel content must be dict")
-    sheets = content.get("sheets")
-    if not sheets:
-        raise ValueError("excel content requires non-empty 'sheets'")
+    if not isinstance(content, dict) or not content.get("sheets"):
+        raise OfficeContentShapeError(
+            "excel content 需要形如 {'sheets': [{'name', 'headers', 'rows'}]} 的对象"
+        )
     return OfficeExcelGenerateRequest(
         workspace_path=workspace_path,
         filename=filename,
-        sheets=sheets,
+        sheets=content["sheets"],
     )
 
 
 def _coerce_ppt_request(
     doc_id: str, filename: str, content: Any, workspace_path: str
 ) -> OfficePptGenerateRequest:
-    if not isinstance(content, dict):
-        raise TypeError("ppt content must be dict")
-    slides = content.get("slides")
-    if not slides:
-        raise ValueError("ppt content requires non-empty 'slides'")
+    if not isinstance(content, dict) or not content.get("slides"):
+        raise OfficeContentShapeError(
+            "ppt content 需要形如 {'slides': [{'title', 'bullets', 'notes'}]} 的对象"
+        )
+    # OfficePptGenerateRequest 是 extra="forbid" 且没有 title 字段 —— 传 title 会
+    # ValidationError, 这是 PR #405 前每次 ppt 创建都失败的原因。
     return OfficePptGenerateRequest(
         workspace_path=workspace_path,
         filename=filename,
-        title=filename,
-        slides=slides,
+        slides=content["slides"],
     )
 
 

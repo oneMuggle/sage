@@ -818,3 +818,84 @@ def test_delete_rmtree_failure_keeps_row(tmp_path: Path, monkeypatch):
     # 行保留，文件保留 —— 状态一致，用户可重试
     assert conn.execute("SELECT COUNT(*) c FROM office_documents WHERE id='doc-a'").fetchone()["c"] == 1
     assert document_path(doc_summary).is_file()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# create: ppt / excel 路径（PR #405 前只测过 word）
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _bound_service(tmp_path: Path):
+    """建库 + 建会话 + 绑定工作区，返回 (conn, binding, service, work)。"""
+    db = Database(db_path=str(tmp_path / "t.db"))
+    db.init_db()
+    conn = db.get_connection()
+    _seed_session(conn, "sess-c")
+    work = tmp_path / "work"
+    work.mkdir()
+    binding = bind_session_workspace(conn, "sess-c", str(work), now_ms=1)
+    return conn, binding, OfficeToolService(), work
+
+
+def test_create_ppt_succeeds_and_is_listed(tmp_path: Path):
+    """绑定工作区下创建 PPT 必须成功——修复前 _coerce_ppt_request 传 title 必崩。"""
+    conn, binding, service, _work = _bound_service(tmp_path)
+    result = service.create(
+        conn,
+        "sess-c",
+        binding.generation,
+        doc_type="ppt",
+        filename="deck.pptx",
+        content={"slides": [{"title": "封面", "bullets": ["要点一", "要点二"]}]},
+    )
+    assert result["success"] is True, result
+    doc_id = result["content"]["document_id"]
+    listed = service.list(conn, "sess-c", binding.generation)
+    assert [d["id"] for d in listed] == [doc_id]
+    assert listed[0]["doc_type"] == "ppt"
+
+
+def test_create_excel_succeeds_and_is_listed(tmp_path: Path):
+    conn, binding, service, _work = _bound_service(tmp_path)
+    result = service.create(
+        conn,
+        "sess-c",
+        binding.generation,
+        doc_type="excel",
+        filename="data.xlsx",
+        content={"sheets": [{"name": "Sheet1", "headers": ["a", "b"], "rows": [["1", "2"]]}]},
+    )
+    assert result["success"] is True, result
+    listed = service.list(conn, "sess-c", binding.generation)
+    assert listed[0]["doc_type"] == "excel"
+
+
+def test_create_excel_with_string_content_returns_shape_error(tmp_path: Path):
+    """excel 不接受纯字符串——错误码要可操作，而不是笼统的 generation_failed。"""
+    conn, binding, service, _work = _bound_service(tmp_path)
+    result = service.create(
+        conn,
+        "sess-c",
+        binding.generation,
+        doc_type="excel",
+        filename="data.xlsx",
+        content="随便一段文字",
+    )
+    assert result["success"] is False
+    assert result["error"]["code"] == "content_shape_invalid"
+    assert "sheets" in result["error"]["message"]
+
+
+def test_create_ppt_with_string_content_returns_shape_error(tmp_path: Path):
+    conn, binding, service, _work = _bound_service(tmp_path)
+    result = service.create(
+        conn,
+        "sess-c",
+        binding.generation,
+        doc_type="ppt",
+        filename="deck.pptx",
+        content="随便一段文字",
+    )
+    assert result["success"] is False
+    assert result["error"]["code"] == "content_shape_invalid"
+    assert "slides" in result["error"]["message"]
