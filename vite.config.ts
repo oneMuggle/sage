@@ -24,7 +24,12 @@ export default defineConfig({
     // Keep the development server and Vitest UI on loopback only. Do not
     // expose source files or the module transformer on a shared network.
     host: '127.0.0.1',
-    port: 1420,
+    // Allow port override via env so multiple worktrees can run side-by-side
+    // (see scripts/worktree.sh + docs/technical/47-git-worktree-workflow.md).
+    // Default 1420 preserves single-worktree behavior.
+    port: Number(process.env.VITE_DEV_PORT ?? 1420),
+    // Fail fast if the (potentially-overridden) port is taken; the worktree
+    // helper writes a unique port into .env.local per worktree.
     strictPort: true,
     watch: {
       ignored: ['**/src-tauri/**', '**/archive/**', '**/dist-electron/**'],

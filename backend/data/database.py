@@ -90,6 +90,13 @@ class Database:
             # session_workspace_bindings 等表的 ON DELETE CASCADE 是 silent no-op,
             # 删会话后留下悬挂行 (见 docs/technical/33-office-m1-m2-completion.md §6-2).
             self._connection.execute("PRAGMA foreign_keys=ON")
+            # feat/sqlite-fast-pragma: 测试期跳过 fsync (~5x faster setup)。
+            # 仅当 SAGE_TEST_FAST_SQLITE=1 时启用 synchronous=OFF。
+            # 注意：synchronous=OFF 在断电/OS crash 时可能丢最后几个事务，但
+            # Sage 测试用 tempfile，OS crash 后整个文件不存在 → 仅对测试场景安全。
+            # 生产 DB（data/sage.db）始终保持 synchronous=FULL（默认值）。
+            if os.environ.get("SAGE_TEST_FAST_SQLITE") == "1":
+                self._connection.execute("PRAGMA synchronous=OFF")
         return self._connection
 
     def close(self):

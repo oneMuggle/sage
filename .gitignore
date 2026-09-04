@@ -89,6 +89,13 @@ htmlcov/
 # Test coverage reports
 coverage/
 .coverage
+# Stray parallel-mode coverage data files (pytest-xdist). Without this rule
+# the backend directory accumulates dozens of `.coverage.g-X1C.pid<NNNN>.*`
+# untracked files after every local pytest run. The base `.coverage` rule
+# above only matches the single combined-data file; pytest-xdist writes one
+# per worker using the `.<basename>.<host>.<pid>.<random>` pattern.
+.coverage.*
+!backend/data/.coverage.*
 
 # Claude Code local config (per-developer)
 .claude/
