@@ -41,6 +41,7 @@
 | 45   | [渐进式功能披露](./44-progressive-disclosure.md) | sticky-unlock 存储、受门控入口及 `/skills` 始终可发现的设计边界 |
 | 46   | [Sage 品牌图标资产与复用](./45-brand-icons.md) | 品牌主形象（几何 S + 星点 + 青紫渐变）的资产层级、`<BrandLogo>` 共享组件规范、macOS `.icns` 缺口与未来补全路径 |
 | 46   | [内网 Web 访问（网络模式门禁 + 取页下载）](./46-intranet-web-access.md) | NetworkPolicy 三档门禁 + host 白名单通配 + web_fetch 四 mode + http_download 边界约束 + 不变量 |
+| 47   | [Git Worktree 并行开发](./47-git-worktree-workflow.md) | `scripts/worktree.sh` helper（new/list/ports/remove/clean）+ `.worktrees/` 端口分配机制 + main/release-win7 并行 cherry-pick 场景 + 与 `.claude/worktrees/` agent 隔离的边界 |
 
 ---
 
