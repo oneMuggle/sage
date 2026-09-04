@@ -60,11 +60,25 @@ cd /home/fz/project/sage && npm run build
 
 ## 端口约定
 
-| 服务           | 端口 | 备注                                  |
-| -------------- | ---- | ------------------------------------- |
-| 前端 (Vite)    | 1420 | `vite.config.ts` 锁定                 |
-| 后端 (FastAPI) | 8765 | `backend/main.py` 中默认值            |
-| Electron 桌面  | —    | Electron 21.4.4 已装                  |
+| 服务           | 端口 | 备注                                                                  |
+| -------------- | ---- | --------------------------------------------------------------------- |
+| 前端 (Vite)    | 1420 | `vite.config.ts` 默认;worktree 用 `VITE_DEV_PORT` 环境变量覆盖         |
+| 后端 (FastAPI) | 8765 | `backend/main.py` 默认;worktree 用 `PYTHON_BACKEND_PORT` 环境变量覆盖  |
+| Electron 桌面  | —    | Electron 21.4.4 已装                                                   |
+
+## 并行开发（Git Worktree）
+
+当需要同时持有多个 `feat/*` / `fix/*` 分支、或与 `release/win7` 维护工作并行 cherry-pick 时,
+**优先使用** `scripts/worktree.sh new <branch>` 开 worktree,而不是反复 `git switch`。
+
+每个 worktree 自动分配独立端口对(主目录 8765/1420 → worktree A 8766/1421 → worktree B 8767/1422 ...),
+通过 `set -a && source .env.local && set +a` 让端口生效。
+
+完整用法、`.claude/worktrees/` agent 隔离边界、故障排查见
+[`docs/technical/47-git-worktree-workflow.md`](../docs/technical/47-git-worktree-workflow.md)。
+
+⚠️ **不要** 在 worktree 里装包到共享 `sage-backend` 环境——会污染 main。如需临时依赖,
+worktree 内用 `python -m venv .venv` 隔离。
 
 ## Electron 桌面构建
 
