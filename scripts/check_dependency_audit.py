@@ -193,9 +193,31 @@ def npm_findings(
     identities: dict[str, str],
     failures: list[str],
 ) -> tuple[set[Key], dict[str, int], bool]:
-    if not isinstance(report, dict) or not isinstance(report.get("vulnerabilities"), dict):
+    empty = {level: 0 for level in LEVELS}
+    if not isinstance(report, dict):
         report_error(f"{path}: invalid npm audit report structure", failures)
-        return set(), {level: 0 for level in LEVELS}, False
+        return set(), empty, False
+    # npm 11+ emits an HTTP error envelope (statusCode/message/uri/method)
+    # when the security advisories endpoint is unreachable (e.g. registry 503
+    # behind Cloudflare). Surface that as a transient infrastructure failure
+    # distinct from a malformed audit report, and report has_valid_advisory=True
+    # so the outcome gate does not pile on a redundant "command failed
+    # without findings" error for the same root cause.
+    if (
+        "vulnerabilities" not in report
+        and isinstance(report.get("statusCode"), int)
+        and report["statusCode"] >= 400
+        and isinstance(report.get("message"), str)
+    ):
+        report_error(
+            f"{path}: npm registry returned HTTP {report['statusCode']} "
+            f"({report['message']}) — transient infrastructure failure, re-run CI",
+            failures,
+        )
+        return set(), empty, True
+    if not isinstance(report.get("vulnerabilities"), dict):
+        report_error(f"{path}: invalid npm audit report structure", failures)
+        return set(), empty, False
     metadata = report.get("metadata")
     counts = metadata.get("vulnerabilities") if isinstance(metadata, dict) else None
     if not isinstance(counts, dict) or any(
