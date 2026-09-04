@@ -31,8 +31,8 @@ VALID_LLM_OUTPUT = json.dumps(
     {
         "name": "test-skill",
         "description": "A test skill",
-        "when_to_use": "When testing",
-        "content": "# Test Skill\n\n## Steps\n\n1. Test",
+        "when_to_use": "When repeatedly testing a workflow that benefits from a reusable skill",
+        "content": "# Test Skill\n\n## 步骤\n\n1. Test\n\n## 触发条件\n\nWhen the workflow repeats\n\n## 示例\n\nUse the skill for the repeated workflow.",
     }
 )
 
@@ -217,7 +217,7 @@ class TestGenerateDraftHappyPath:
         assert draft.name == "test-skill"
         assert draft.description == "A test skill"
         assert draft.trigger_type == "complex_turn"
-        assert draft.when_to_use == "When testing"
+        assert draft.when_to_use == "When repeatedly testing a workflow that benefits from a reusable skill"
         assert "# Test Skill" in draft.content
         assert draft.status == "pending"
         assert draft.id  # non-empty UUID string

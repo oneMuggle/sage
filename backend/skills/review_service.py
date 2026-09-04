@@ -180,6 +180,9 @@ class ReviewService:
         for key in _REQUIRED_FIELDS:
             _ = parsed[key]
 
+        # Validate the enhanced draft schema before filesystem-specific checks.
+        self._validate_skill_schema(parsed)
+
         # Validate skill name for safe filesystem storage (I-1 fix).
         # Catches LLM hallucinations like "../etc/cron.d/backdoor" or
         # "foo/bar" before the draft enters the store, so the user can
@@ -202,6 +205,49 @@ class ReviewService:
     # ------------------------------------------------------------------ #
     # Internal helpers
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _validate_skill_schema(parsed: Dict[str, Any]) -> None:
+        """Validate LLM output against the enhanced skill draft schema.
+
+        Raises ``ValueError`` if the draft violates any constraint:
+        - ``name`` must match ``^[a-z][a-z0-9-]{2,40}$`` (kebab-case)
+        - ``description`` must be ≤ 80 chars
+        - ``when_to_use`` must be ≥ 30 chars
+        - ``content`` must contain ``## 步骤``, ``## 触发条件``, ``## 示例``
+
+        Args:
+            parsed: The parsed JSON dict from LLM output.
+
+        Raises:
+            ValueError: A schema constraint is violated.
+        """
+        import re
+
+        name = parsed.get("name", "")
+        if not re.fullmatch(r"[a-z](?:[a-z0-9]|-[a-z0-9]){2,39}", name):
+            raise ValueError(
+                f"Skill name must be kebab-case (3..40 chars, lowercase+digits+hyphens): {name!r}"
+            )
+
+        description = parsed.get("description", "")
+        if len(description) > 80:
+            raise ValueError(
+                f"Description must be ≤ 80 chars, got {len(description)}: {description!r}"
+            )
+
+        when_to_use = parsed.get("when_to_use", "")
+        if len(when_to_use) < 30:
+            raise ValueError(
+                f"when_to_use must be ≥ 30 chars, got {len(when_to_use)}: {when_to_use!r}"
+            )
+
+        content = parsed.get("content", "")
+        for section in ("## 步骤", "## 触发条件", "## 示例"):
+            if section not in content:
+                raise ValueError(
+                    f"content must contain '{section}' section, got: {content[:100]!r}..."
+                )
 
     @staticmethod
     def _validate_skill_name(name: str) -> None:
