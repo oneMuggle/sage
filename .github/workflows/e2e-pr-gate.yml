@@ -2,6 +2,14 @@ name: E2E PR Gate
 on:
   pull_request:
     branches: [main]
+# concurrency: cancel previous in-progress runs when a new commit is pushed
+# to the same PR. Without this, repeated pushes queue up runs (previously
+# accumulated 58+ hours of e2e gate wait time). Per-PR key prevents one PR
+# from cancelling another's run. push events use github.ref so different
+# branches don't cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
