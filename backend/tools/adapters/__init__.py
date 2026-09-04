@@ -10,8 +10,8 @@ from typing import Iterable
 
 from backend.tools.runtime_adapter import RuntimeAdapter, registry
 
-from .python_adapter import PythonAdapter
 from .node_adapter import NodeAdapter
+from .python_adapter import PythonAdapter
 
 
 def register_default_adapters() -> None:
