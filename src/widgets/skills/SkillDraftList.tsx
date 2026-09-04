@@ -11,6 +11,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { skillDraftsApi, type SkillDraft } from '../../shared/api';
+import { useI18n } from '../../shared/lib/i18n';
+
+/** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
+function fill(template: string, vars: Record<string, string | number>): string {
+  return Object.entries(vars).reduce(
+    (acc, [key, value]) => acc.replace(`{${key}}`, String(value)),
+    template,
+  );
+}
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -18,6 +27,8 @@ const SkillDraftList: React.FC = () => {
   const [drafts, setDrafts] = useState<SkillDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { t } = useI18n();
 
   const fetchDrafts = useCallback(async () => {
     try {
@@ -41,26 +52,30 @@ const SkillDraftList: React.FC = () => {
     try {
       await skillDraftsApi.approve(draft.id);
       setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
-      toast.success(`已批准 ${draft.name}`);
+      toast.success(fill(t('skill_draft.approved'), { name: draft.name }));
     } catch (err) {
-      toast.error(`批准失败: ${(err as Error).message}`);
+      toast.error(
+        fill(t('skill_draft.approve_failed'), { error: (err as Error).message }),
+      );
     }
-  }, []);
+  }, [t]);
 
   const handleReject = useCallback(async (draft: SkillDraft) => {
     try {
       await skillDraftsApi.reject(draft.id);
       setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
-      toast.success(`已拒绝 ${draft.name}`);
+      toast.success(fill(t('skill_draft.rejected'), { name: draft.name }));
     } catch (err) {
-      toast.error(`拒绝失败: ${(err as Error).message}`);
+      toast.error(
+        fill(t('skill_draft.reject_failed'), { error: (err as Error).message }),
+      );
     }
-  }, []);
+  }, [t]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <p className="text-muted">加载草稿中...</p>
+        <p className="text-muted">{t('skill_draft.loading')}</p>
       </div>
     );
   }
@@ -68,13 +83,13 @@ const SkillDraftList: React.FC = () => {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-3">
-        <p className="text-error">加载失败: {error}</p>
+        <p className="text-error">{fill(t('skill_draft.load_failed'), { error })}</p>
         <button
           type="button"
           onClick={fetchDrafts}
           className="px-3 py-1.5 text-sm rounded-radius-sm bg-primary text-white hover:bg-primary/90"
         >
-          重试
+          {t('skill_draft.retry')}
         </button>
       </div>
     );
@@ -83,7 +98,7 @@ const SkillDraftList: React.FC = () => {
   if (drafts.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-muted">暂无待审草稿</p>
+        <p className="text-muted">{t('skill_draft.no_drafts')}</p>
       </div>
     );
   }
@@ -103,24 +118,27 @@ const SkillDraftList: React.FC = () => {
           </div>
           <p className="text-sm text-muted line-clamp-2">{draft.description}</p>
           <p className="text-xs text-muted">
-            <strong className="text-text">何时使用:</strong> {draft.when_to_use}
+            <strong className="text-text">
+              {t('skill_draft.when_to_use').replace(/: ?\{text\}$/, ':')}
+            </strong>{' '}
+            {draft.when_to_use}
           </p>
           <div className="flex items-center gap-2 mt-auto pt-2">
             <button
               type="button"
               onClick={() => handleApprove(draft)}
-              aria-label={`Approve ${draft.name}`}
+              aria-label={`${t('skill_draft.approve')} ${draft.name}`}
               className="flex-1 px-3 py-1.5 text-xs rounded-radius-sm bg-success/10 text-success hover:bg-success/20 transition-colors"
             >
-              Approve
+              {t('skill_draft.approve')}
             </button>
             <button
               type="button"
               onClick={() => handleReject(draft)}
-              aria-label={`Reject ${draft.name}`}
+              aria-label={`${t('skill_draft.reject')} ${draft.name}`}
               className="flex-1 px-3 py-1.5 text-xs rounded-radius-sm bg-error/10 text-error hover:bg-error/20 transition-colors"
             >
-              Reject
+              {t('skill_draft.reject')}
             </button>
           </div>
         </div>
