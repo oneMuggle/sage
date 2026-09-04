@@ -322,8 +322,9 @@ class TestRunDoctor:
         # Probe still inherits PATH/SYSTEMROOT so the bundled interpreter
         # is discoverable.
         assert "PATH" in env
-        # Hard 5s cap must be honoured so a broken installer never hangs.
-        assert captured["timeout"] == 5
+        # Hard 20s cap must be honoured so a broken installer never hangs.
+        # (baseline 实测冷启动 import backend.main 约 5-6s, 5s 在冷环境下 flaky.)
+        assert captured["timeout"] == 20
 
 
 # ============================================================
