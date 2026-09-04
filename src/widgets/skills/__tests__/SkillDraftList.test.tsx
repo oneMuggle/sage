@@ -91,7 +91,7 @@ describe('SkillDraftList component', () => {
     });
 
     renderDraftList();
-    const approveBtn = await screen.findByRole('button', { name: /approve alpha-skill/i });
+    const approveBtn = await screen.findByRole('button', { name: /批准 alpha-skill/i });
     fireEvent.click(approveBtn);
 
     await waitFor(() => expect(approveMock).toHaveBeenCalledWith('d1'));
@@ -107,7 +107,7 @@ describe('SkillDraftList component', () => {
     });
 
     renderDraftList();
-    const rejectBtn = await screen.findByRole('button', { name: /reject alpha-skill/i });
+    const rejectBtn = await screen.findByRole('button', { name: /拒绝 alpha-skill/i });
     fireEvent.click(rejectBtn);
 
     await waitFor(() => expect(rejectMock).toHaveBeenCalledWith('d1'));
@@ -147,7 +147,7 @@ describe('SkillDraftList component', () => {
     approveMock.mockRejectedValue(new Error('network error'));
 
     renderDraftList();
-    const approveBtn = await screen.findByRole('button', { name: /approve alpha-skill/i });
+    const approveBtn = await screen.findByRole('button', { name: /批准 alpha-skill/i });
     fireEvent.click(approveBtn);
 
     await waitFor(() => expect(approveMock).toHaveBeenCalledWith('d1'));
