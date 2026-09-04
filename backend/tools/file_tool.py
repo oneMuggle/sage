@@ -31,6 +31,24 @@ MAX_READ_SIZE_BYTES = 5 * 1024 * 1024  # 5 MiB —— 超过报错，建议 offs
 MAX_WRITE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MiB —— 超过报错
 BINARY_SNIFF_BYTES = 8 * 1024  # 8 KiB —— 二进制嗅探窗口
 
+# 写入目标扩展名黑名单（PR-4 of office CRUD completion）
+# 写入路径无法做 NUL 嗅探（要写的内容已是 unicode 字符串），
+# 所以只能按扩展名预检——避免 LLM 把 UTF-8 文本流写到二进制文件位置
+# 产生半截字节序列损坏文件。LLM 应改用 office_create 等专用二进制工具。
+_BINARY_WRITE_BLACKLIST = frozenset({
+    # 图片
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico",
+    # 文档/Office/PDF
+    ".pdf", ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
+    # 归档
+    ".zip", ".tar", ".gz", ".tgz", ".bz2", ".7z", ".rar", ".xz",
+    # 音视频
+    ".mp3", ".mp4", ".mov", ".avi", ".mkv", ".flac", ".wav", ".ogg",
+    # 可执行 / 编译产物
+    ".exe", ".dll", ".so", ".dylib", ".class", ".jar", ".pyc", ".pyo",
+    ".wasm", ".o", ".obj",
+})
+
 #: (BOM 字节序列, Python 编码名) —— NUL 嗅探之前先匹配 BOM。
 #: UTF-16 文本（.reg / .ps1 / .csv 导出）每个 ASCII 字符后都跟 NUL 字节，
 #: 不做 BOM 识别会被 NUL 启发式误判为二进制。"utf-16" 解码按 BOM 选字节序
@@ -306,6 +324,20 @@ class WriteFileTool(BaseTool):
                 )
         else:
             logger.debug("write_file: 未绑定 workspace_root，跳过边界检查: %s", path)
+
+        # PR-4: 二进制扩展名预检。write_file 不会写二进制内容 (content 是
+        # unicode 字符串)，落到已知二进制扩展名上等于把 UTF-8 文本流写进去
+        # 损坏文件——一律早返回拒绝。
+        ext = Path(path).suffix.lower()
+        if ext in _BINARY_WRITE_BLACKLIST:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"binary_extension_blocked: 目标路径扩展名 {ext!r} 是已知二进制格式，"
+                    f"write_file 仅支持文本/源代码写入；如需生成二进制请用专用工具（"
+                    f"office_create / 后续 binary 工具），不要让 LLM 直接写文本到二进制扩展名"
+                ),
+            )
 
         try:
             # M1: 写入硬限额（按 UTF-8 编码后字节数计）
