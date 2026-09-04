@@ -271,7 +271,7 @@ jobs:
       - name: Type check
         # --incremental: tsc writes .tsbuildinfo and only re-checks changed files.
         # Cold ~40s → warm <15s on subsequent runs.
-        run: npm run typecheck -- -- --incremental
+        run: npm run typecheck -- --incremental
 
       - name: Test with coverage
         run: npm run test:coverage
