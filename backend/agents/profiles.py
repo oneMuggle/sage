@@ -93,16 +93,16 @@ def create_default_agents() -> List[AgentProfile]:
                 # 便于分步指导和交互。受 NetworkPolicy 门禁, OFFLINE 不注册。
                 "web_fetch",
                 "http_download",
-                # 2026-09-04: Office CRUD 五件套接线 —— system prompt 已声明这些
-                # 能力（_OFFICE_CREATE_CAPABILITY_PROMPT），但白名单一直没有，
-                # LLM 从来看不见。office_list / office_read 标记了
-                # requires_tool_context 工具上下文依赖 —— 未绑定工作区时由
-                # ToolRegistry 自动隐藏。
+                # PR-1 (office CRUD 闭环接线) + PR-2 (archive/restore):
+                # primary 代用户执行增/改/删/还原, 加上只读 list/read 方便
+                # 引导。office_* doc_id 模式走 session binding 守护,
+                # file_path 模式仍受 path_boundary_validator 升级审批。
                 "office_list",
                 "office_read",
                 "office_create",
                 "office_update",
                 "office_delete",
+                "office_restore",
             ],
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
@@ -152,11 +152,21 @@ def create_default_agents() -> List[AgentProfile]:
                 "你是一个专业的写作 Agent。负责把资料整理成结构清晰、可执行的 "
                 "学习资料、操作指南等 markdown 文档。产出文档请用 write_file 工具落盘。"
             ),
-            # 2026-09-04: 写作 agent 此前只能产出 markdown; 加 Office 读写四件套
-            # 让它能直接落 docx/xlsx/pptx。不给 delete —— 写作职责不含删档。
+            # PR-1 (office CRUD 接线) + PR-2 (archive/restore):
+            # 写作 agent 现在可生成/编辑/还原 Office 文档 (report / 操作手册
+            # 等适合 docx/xlsx/pptx 形态)。office_* 工具与 write_file 互补:
+            # markdown 学习笔记走 write_file, 正式报告走 office_* (可被
+            # office_restore 还原)。不给 office_delete —— 写作职责不含删档。
             tools=[
-                "read_file", "write_file", "memory_search",
-                "office_list", "office_read", "office_create", "office_update",
+                "read_file",
+                "write_file",
+                "memory_search",
+                "office_list",
+                "office_read",
+                "office_create",
+                "office_update",
+                "office_restore",
+            ],
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -456,6 +466,9 @@ _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "- 修改已有文档（原地编辑，按 op 列表执行）：office_update"
     "（用 doc_id 或绝对路径 file_path 定位文件）。\n"
     "- 删除文档（不可恢复）：office_delete（同样支持 doc_id / file_path）。\n"
+    "- 归档文档（隐藏但不删）：office_archive；还原被归档文档：office_restore。"
+    "office_update 改前会自动把旧版复制到 <managed_dir>/.snapshots/，可作为"
+    "「撤销最近一次编辑」路径。"
     "写入或修改工作区外的路径（如桌面）时，用户会看到确认框，批准后才会真正执行。"
 )
 

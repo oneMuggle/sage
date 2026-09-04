@@ -297,3 +297,30 @@ def get_document_in_workspace(
         (document_id, workspace_path),
     ).fetchone()
     return None if row is None else _row_to_summary(row)
+
+
+def get_document_in_workspace_any_status(
+    conn: sqlite3.Connection,
+    document_id: str,
+    workspace_path: str,
+) -> Optional[OfficeDocumentSummary]:
+    """Look up a document by id, including archived rows.
+
+    Same workspace-scope guard as :func:`get_document_in_workspace` but
+    without the ``archived_at IS NULL`` filter -- used by the archive /
+    restore service methods (PR-2) that legitimately need to find a row
+    whose ``archived_at`` is already set. Read / update / delete continue
+    to use the archived-hiding variant so soft-deleted docs remain
+    invisible to the default LLM surface.
+    """
+    row = conn.execute(
+        """
+        SELECT id, workspace_path, doc_type, original_filename,
+               generated_filename, status, created_at, updated_at, metadata,
+               derived_from, archived_at
+        FROM office_documents
+        WHERE id = ? AND workspace_path = ?
+        """,
+        (document_id, workspace_path),
+    ).fetchone()
+    return None if row is None else _row_to_summary(row)
