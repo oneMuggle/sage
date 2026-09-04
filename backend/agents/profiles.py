@@ -167,7 +167,6 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_update",
                 "office_restore",
             ],
-            ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
             max_iterations=10,
