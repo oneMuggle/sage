@@ -607,6 +607,41 @@ class TestSchemaValidation:
             await service.generate_draft(trigger_type="t", context={})
 
     @pytest.mark.asyncio()
+    @pytest.mark.parametrize(
+        "field, raw_value, expected_fragment",
+        [
+            ("name", 123, "name must be a string, got int"),
+            ("description", None, "description must be a string, got NoneType"),
+            (
+                "when_to_use",
+                ["not", "a", "string"],
+                "when_to_use must be a string, got list",
+            ),
+            ("content", {"oops": "dict"}, "content must be a string, got dict"),
+        ],
+    )
+    async def test_non_string_field_raises_value_error(
+        self, field, raw_value, expected_fragment
+    ):
+        """Non-string values for required fields must raise an explicit ValueError."""
+        import re
+
+        from backend.skills.review_service import ReviewService
+
+        payload = {
+            "name": "test-skill",
+            "description": "Switch between git branches while preserving uncommitted work",
+            "when_to_use": "When the user repeatedly switches branches and needs to stash/unstash changes",
+            "content": "# Skill\n\n## 步骤\n\n1. x\n\n## 触发条件\n\nt\n\n## 示例\n\ne",
+        }
+        payload[field] = raw_value
+        provider = _make_mock_provider(json.dumps(payload))
+        service = ReviewService(provider)
+
+        with pytest.raises(ValueError, match=re.escape(expected_fragment)):
+            await service.generate_draft(trigger_type="t", context={})
+
+    @pytest.mark.asyncio()
     async def test_valid_schema_passes(self):
         """A fully compliant draft should pass all schema checks."""
         from backend.skills.review_service import ReviewService, SkillDraft

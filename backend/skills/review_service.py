@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -210,11 +211,19 @@ class ReviewService:
     def _validate_skill_schema(parsed: Dict[str, Any]) -> None:
         """Validate LLM output against the enhanced skill draft schema.
 
+        Length checks use Python ``len()``, i.e. UTF-16 code units, not graphemes.
+        Mirrors the counting convention used by ``backend/skills/skill_md/frontmatter.py``.
+
         Raises ``ValueError`` if the draft violates any constraint:
-        - ``name`` must match ``^[a-z][a-z0-9-]{2,40}$`` (kebab-case)
-        - ``description`` must be ≤ 80 chars
-        - ``when_to_use`` must be ≥ 30 chars
-        - ``content`` must contain ``## 步骤``, ``## 触发条件``, ``## 示例``
+        - ``name`` must be a non-empty string matching the canonical kebab-case
+          pattern (3..40 chars, lowercase+digits+hyphens, no leading/trailing or
+          consecutive hyphens)
+        - ``description`` must be a string of ≤ 80 chars
+        - ``when_to_use`` must be a string of ≥ 30 chars
+        - ``content`` must be a string containing ``## 步骤``, ``## 触发条件``, ``## 示例``
+
+        Non-string values for any of the four fields raise ``ValueError`` so the
+        failure mode matches the surrounding ``KeyError``/``ValueError`` contracts.
 
         Args:
             parsed: The parsed JSON dict from LLM output.
@@ -222,27 +231,43 @@ class ReviewService:
         Raises:
             ValueError: A schema constraint is violated.
         """
-        import re
-
         name = parsed.get("name", "")
+        if not isinstance(name, str):
+            raise ValueError(
+                f"name must be a string, got {type(name).__name__}"
+            )
+        if not name:
+            raise ValueError("Skill name must not be empty")
         if not re.fullmatch(r"[a-z](?:[a-z0-9]|-[a-z0-9]){2,39}", name):
             raise ValueError(
                 f"Skill name must be kebab-case (3..40 chars, lowercase+digits+hyphens): {name!r}"
             )
 
         description = parsed.get("description", "")
+        if not isinstance(description, str):
+            raise ValueError(
+                f"description must be a string, got {type(description).__name__}"
+            )
         if len(description) > 80:
             raise ValueError(
                 f"Description must be ≤ 80 chars, got {len(description)}: {description!r}"
             )
 
         when_to_use = parsed.get("when_to_use", "")
+        if not isinstance(when_to_use, str):
+            raise ValueError(
+                f"when_to_use must be a string, got {type(when_to_use).__name__}"
+            )
         if len(when_to_use) < 30:
             raise ValueError(
                 f"when_to_use must be ≥ 30 chars, got {len(when_to_use)}: {when_to_use!r}"
             )
 
         content = parsed.get("content", "")
+        if not isinstance(content, str):
+            raise ValueError(
+                f"content must be a string, got {type(content).__name__}"
+            )
         for section in ("## 步骤", "## 触发条件", "## 示例"):
             if section not in content:
                 raise ValueError(
