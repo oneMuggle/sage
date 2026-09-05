@@ -140,8 +140,8 @@ def fill_pdf_form(req: PdfFormFillRequest) -> PdfFormFillResult:
     template_path = resolve_within(workspace, template_path)
 
     if not template_path.is_file():
-        raise OfficePdfParseError(
-            "Path is not a file", file_path=template_path
+        raise OfficePathError(
+            "Path is not a regular file", file_path=template_path
         )
 
     _validate_pdf_file(template_path)
