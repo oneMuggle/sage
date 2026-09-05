@@ -1,7 +1,12 @@
 // src/widgets/chat/progress/TaskTreeSection.tsx
-import type { TaskBoard } from '../../../features/send-message/useChat';
+import { useState } from 'react';
+
+import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
+import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
+
+import { SubagentDetailDrawer } from './SubagentDetailDrawer';
 
 const STATUS_ICON: Record<TaskStatusValue, string> = {
   queued: '○',
@@ -29,6 +34,18 @@ interface TaskTreeSectionProps {
 }
 
 export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const selectTask = useRunControlStore((s) => s.selectTask);
+
+  const handleTaskClick = (taskId: string, runId: string) => {
+    selectTask(runId, taskId);
+    setDrawerOpen(true);
+  };
+
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false);
+  };
+
   const total = board.progress?.total ?? board.plan.length;
   const doneCount =
     board.progress?.done ??
@@ -97,9 +114,18 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
           <div
             key={item.task_id}
             data-testid={`task-tree-item-${item.task_id}`}
-            className={`flex flex-col gap-1 px-2 py-1 rounded text-xs bg-bg-hover ${
+            className={`flex flex-col gap-1 px-2 py-1 rounded text-xs bg-bg-hover cursor-pointer hover:bg-bg-active transition-colors ${
               hasDeps ? 'ml-4' : ''
             }`}
+            onClick={() => handleTaskClick(item.task_id, board.runId)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleTaskClick(item.task_id, board.runId);
+              }
+            }}
           >
             {hasDeps && (
               <div
@@ -134,6 +160,7 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
           </div>
         );
       })}
+      <SubagentDetailDrawer open={drawerOpen} onClose={handleCloseDrawer} />
     </div>
   );
 }

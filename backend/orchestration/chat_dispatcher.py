@@ -92,6 +92,10 @@ WORKTREES_ROOT = "orch_worktrees"
 # 下划线、连字符，上限 128 字符。生产生成值 ``orch-<uuid4>`` 天然合规。
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
+#: task_id 白名单 —— 与 run_id 同策略，防止 ``../../`` 路径穿越。
+#: 生产值来自 LLM 计划（``t1``..``tN``）或自分配计数器，格式严格可控。
+_TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+
 
 async def _classify_orchestration_mode(
     message: str,
@@ -334,6 +338,11 @@ class ChatDispatcher:
                 self._next_task_index += 1
                 agent_id = str(raw.get("agent_id", "primary"))
                 goal = str(raw.get("goal", ""))
+            # 安全前置：task_id 白名单校验，防止路径穿越。
+            if not _TASK_ID_RE.fullmatch(task_id):
+                safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", task_id)[:64] or "t_unsafe"
+                logger.warning("task_id 不合规，已替换: %r -> %s", task_id, safe_id)
+                task_id = safe_id
             followup_of = raw.get("followup_of")
             # L1 (2026-08-23): 自指 followup 守卫 —— task 引用自身不构成有效续聊。
             # 缺守卫时隐式自环依赖会被 build_waves 判环拒掉整批；改为 warning 后
@@ -652,7 +661,12 @@ class ChatDispatcher:
     def _scratch_dir_for(self, state: ChatTaskState) -> Path:
         """子任务隔离目录：``<data_dir>/orch_scratch/<run_id>/<task_id>``。"""
         data_dir = Path(get_database().db_path).parent
-        return data_dir / self.settings.scratch_root / self.run_id / state.task_id
+        root = (data_dir / self.settings.scratch_root / self.run_id).resolve()
+        candidate = (root / state.task_id).resolve()
+        # containment: resolve() 后必须仍在 root 内，防符号链接或 ".." 逃逸
+        if not str(candidate).startswith(str(root) + "/"):
+            raise ValueError(f"task_id 路径穿越: {state.task_id!r}")
+        return candidate
 
     def _emit_task_status(self, state: ChatTaskState) -> None:
         """推 task_status 事件；队列满/关闭静默降级（进度尽力而为）。"""
