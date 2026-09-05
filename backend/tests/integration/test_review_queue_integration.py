@@ -72,7 +72,7 @@ def mock_llm_provider():
     async def mock_complete(model, messages):
         return AssistantTurn(
             text='{"name": "test-skill", "description": "A test skill", '
-            '"when_to_use": "When testing", '
+            '"when_to_use": "Use this skill whenever repeated testing steps need consistent validation", '
             '"content": "# Test Skill\\n\\nTest content"}'
         )
 
@@ -274,7 +274,7 @@ def test_explicit_learn_worker_loads_messages_from_db(temp_db, mock_llm_provider
     mock_llm_provider.complete = AsyncMock(
         return_value=AssistantTurn(
             text='{"name": "test-skill", "description": "A test skill", '
-            '"when_to_use": "When testing", '
+            '"when_to_use": "Use this skill whenever repeated testing steps need consistent validation", '
             '"content": "# Test Skill\\n\\nTest content"}'
         )
     )
@@ -379,7 +379,7 @@ def test_explicit_learn_load_failure_is_swallowed(temp_db, mock_llm_provider):
     mock_llm_provider.complete = AsyncMock(
         return_value=AssistantTurn(
             text='{"name": "test-skill", "description": "A test skill", '
-            '"when_to_use": "When testing", '
+            '"when_to_use": "Use this skill whenever repeated testing steps need consistent validation", '
             '"content": "# Test Skill\\n\\nTest content"}'
         )
     )
