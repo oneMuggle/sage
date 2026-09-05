@@ -38,13 +38,25 @@ function createResponse(status: number, body: unknown): Response {
   } as Response;
 }
 
+function updaterChannelFile(channel: 'stable' | 'beta' | 'alpha'): string {
+  const prefix = channel === 'stable' ? 'latest' : channel;
+  if (process.platform === 'linux') return `${prefix}-linux.yml`;
+  if (process.platform === 'darwin') return `${prefix}-mac.yml`;
+  return `${prefix}.yml`;
+}
+
 function createManifest(
   version: string,
-  options: { minimum?: string; includePlatformFile?: boolean } = {},
+  options: {
+    channel?: 'stable' | 'beta' | 'alpha';
+    minimum?: string;
+    includePlatformFile?: boolean;
+  } = {},
 ): Record<string, unknown> {
+  const channel = options.channel ?? 'stable';
   return {
     version,
-    channel: 'stable',
+    channel,
     release_date: '2026-09-05T12:00:00Z',
     release_notes: '## New features',
     min_upgradable_version: options.minimum ?? '1.0.0',
@@ -54,7 +66,7 @@ function createManifest(
         : {
             [platformKey]: {
               filename: `Sage-Setup-${version}.bin`,
-              url: `https://updates.sage.app/Sage-Setup-${version}.bin`,
+              url: `https://updates.sage.app/releases/${version}/${updaterChannelFile(channel)}`,
               sha512: 'a'.repeat(128),
               size: 104857600,
               signature: 'sig',
@@ -76,7 +88,18 @@ interface FakeUpdater {
 function createFakeUpdater(): FakeUpdater {
   return {
     setFeedURL: vi.fn(),
-    checkForUpdates: vi.fn().mockResolvedValue(null),
+    checkForUpdates: vi.fn().mockResolvedValue({
+      updateInfo: {
+        version: '1.3.0',
+        files: [
+          {
+            url: 'https://updates.sage.app/releases/1.3.0/Sage-Setup-1.3.0.bin',
+            sha512: 'a'.repeat(128),
+            size: 104857600,
+          },
+        ],
+      },
+    }),
     downloadUpdate: vi.fn().mockResolvedValue([]),
     quitAndInstall: vi.fn(),
     on: vi.fn(),
@@ -118,7 +141,9 @@ describe('UpdateManager', () => {
     expect(result.updateAvailable).toBe(true);
     expect(result.version).toBe('1.3.0');
     expect(result.releaseNotes).toBe('## New features');
-    expect(result.downloadUrl).toBe('https://updates.sage.app/Sage-Setup-1.3.0.bin');
+    expect(result.downloadUrl).toBe(
+      `https://updates.sage.app/releases/1.3.0/${updaterChannelFile('stable')}`,
+    );
   });
 
   it('returns updateAvailable: false when current version is up to date', async () => {
@@ -253,7 +278,18 @@ describe('UpdateManager', () => {
     updater.setFeedURL.mockImplementation(() => callOrder.push('setFeedURL'));
     updater.checkForUpdates.mockImplementation(async () => {
       callOrder.push('checkForUpdates');
-      return null;
+      return {
+        updateInfo: {
+          version: '1.3.0',
+          files: [
+            {
+              url: 'https://updates.sage.app/releases/1.3.0/Sage-Setup-1.3.0.bin',
+              sha512: 'a'.repeat(128),
+              size: 104857600,
+            },
+          ],
+        },
+      };
     });
     updater.downloadUpdate.mockImplementation(async () => {
       callOrder.push('downloadUpdate');
@@ -264,10 +300,154 @@ describe('UpdateManager', () => {
 
     expect(updater.setFeedURL).toHaveBeenCalledWith({
       provider: 'generic',
-      url: 'https://updates.sage.app/',
-      channel: 'stable',
+      url: 'https://updates.sage.app/releases/1.3.0/',
+      channel: 'latest',
     });
     expect(callOrder).toEqual(['setFeedURL', 'checkForUpdates', 'downloadUpdate']);
+  });
+
+  it.each([
+    ['beta', 'beta'],
+    ['alpha', 'alpha'],
+  ] as const)('preserves the %s channel for updater metadata', async (channel, updaterChannel) => {
+    await fs.writeFile(
+      `${mockUserData}/update-config.json`,
+      JSON.stringify({
+        updateStrategy: 'manual',
+        channel,
+        rollbackWindowDays: 7,
+        autoRollbackThreshold: 3,
+        checkIntervalHours: 24,
+        updateServerUrl: 'https://updates.sage.app',
+        enableTelemetry: false,
+        cacheRetentionDays: 30,
+      }),
+    );
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0', { channel })));
+    await updateManager.checkForUpdates();
+
+    await updateManager.downloadUpdate();
+
+    expect(updater.setFeedURL).toHaveBeenCalledWith({
+      provider: 'generic',
+      url: 'https://updates.sage.app/releases/1.3.0/',
+      channel: updaterChannel,
+    });
+  });
+
+  it('does not persist pendingUpdate when updater reports no matching update', async () => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+    await updateManager.checkForUpdates();
+    updater.checkForUpdates.mockResolvedValue(null);
+
+    await expect(updateManager.downloadUpdate()).rejects.toThrow(
+      'Updater metadata does not match the checked update',
+    );
+    expect(updater.downloadUpdate).not.toHaveBeenCalled();
+    const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+    expect(state.pendingUpdate).toBeNull();
+  });
+
+  it('does not persist pendingUpdate when updater metadata check fails', async () => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+    await updateManager.checkForUpdates();
+    updater.checkForUpdates.mockRejectedValue(new Error('metadata unavailable'));
+
+    await expect(updateManager.downloadUpdate()).rejects.toThrow(
+      'Failed to download update: metadata unavailable',
+    );
+    const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+    expect(state.pendingUpdate).toBeNull();
+  });
+
+  it.each([
+    ['version', { version: '1.3.1' }],
+    [
+      'filename',
+      {
+        files: [
+          {
+            url: 'https://updates.sage.app/releases/1.3.0/other.bin',
+            sha512: 'a'.repeat(128),
+            size: 104857600,
+          },
+        ],
+      },
+    ],
+    [
+      'sha512',
+      {
+        files: [
+          {
+            url: 'https://updates.sage.app/releases/1.3.0/Sage-Setup-1.3.0.bin',
+            sha512: 'b'.repeat(128),
+            size: 104857600,
+          },
+        ],
+      },
+    ],
+    [
+      'size',
+      {
+        files: [
+          {
+            url: 'https://updates.sage.app/releases/1.3.0/Sage-Setup-1.3.0.bin',
+            sha512: 'a'.repeat(128),
+            size: 1,
+          },
+        ],
+      },
+    ],
+  ])('rejects updater metadata with mismatched %s', async (_field, updateInfo) => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+    await updateManager.checkForUpdates();
+    updater.checkForUpdates.mockResolvedValue({ updateInfo });
+
+    await expect(updateManager.downloadUpdate()).rejects.toThrow(
+      'Updater metadata does not match the checked update',
+    );
+    expect(updater.downloadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('accepts relative artifact basenames from updater metadata', async () => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+    await updateManager.checkForUpdates();
+    updater.checkForUpdates.mockResolvedValue({
+      updateInfo: {
+        version: '1.3.0',
+        files: [
+          {
+            url: 'Sage-Setup-1.3.0.bin',
+            sha512: 'a'.repeat(128),
+            size: 104857600,
+          },
+        ],
+      },
+    });
+
+    await expect(updateManager.downloadUpdate()).resolves.toBeUndefined();
+  });
+
+  it('accepts URL-encoded artifact basenames from updater metadata', async () => {
+    const manifest = createManifest('1.3.0');
+    (manifest.files as Record<string, Record<string, unknown>>)[platformKey].filename =
+      'Sage Setup 1.3.0.bin';
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, manifest));
+    await updateManager.checkForUpdates();
+    updater.checkForUpdates.mockResolvedValue({
+      updateInfo: {
+        version: '1.3.0',
+        files: [
+          {
+            url: 'https://updates.sage.app/releases/1.3.0/Sage%20Setup%201.3.0.bin',
+            sha512: 'a'.repeat(128),
+            size: 104857600,
+          },
+        ],
+      },
+    });
+
+    await expect(updateManager.downloadUpdate()).resolves.toBeUndefined();
   });
 
   it('persists pendingUpdate after a successful download', async () => {

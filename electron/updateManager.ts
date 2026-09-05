@@ -40,9 +40,23 @@ export interface UpdaterBoundary {
   off(event: 'download-progress', listener: (event: { percent: number }) => void): void;
 }
 
+interface UpdaterCheckResult {
+  updateInfo?: {
+    version?: string;
+    files?: Array<{
+      url?: string;
+      sha512?: string;
+      size?: number;
+    }>;
+  };
+}
+
 interface CheckedUpdate {
   version: string;
   fileUrl: string;
+  filename: string;
+  sha512: string;
+  size: number;
   channel: string;
 }
 
@@ -111,6 +125,9 @@ export class UpdateManager {
         this.lastCheckedUpdate = {
           version: manifest.version,
           fileUrl: fileMeta.url,
+          filename: fileMeta.filename,
+          sha512: fileMeta.sha512,
+          size: fileMeta.size,
           channel: config.channel,
         };
 
@@ -145,9 +162,23 @@ export class UpdateManager {
       this.updater.setFeedURL({
         provider: 'generic',
         url: feedUrl,
-        channel: checkedUpdate.channel,
+        channel: this.getUpdaterChannel(checkedUpdate.channel),
       });
-      await this.updater.checkForUpdates();
+      const updaterResult = (await this.updater.checkForUpdates()) as UpdaterCheckResult | null;
+      const updaterVersion = updaterResult?.updateInfo?.version;
+      if (!updaterVersion || updaterVersion !== checkedUpdate.version) {
+        throw new Error('Updater metadata does not match the checked update');
+      }
+      const updaterFile = updaterResult?.updateInfo?.files?.find(
+        (file) => this.getArtifactBasename(file.url, feedUrl) === checkedUpdate.filename,
+      );
+      if (
+        !updaterFile ||
+        updaterFile.sha512 !== checkedUpdate.sha512 ||
+        updaterFile.size !== checkedUpdate.size
+      ) {
+        throw new Error('Updater metadata does not match the checked update');
+      }
       await this.updater.downloadUpdate();
 
       const state = await this.stateManager.getState();
@@ -174,6 +205,21 @@ export class UpdateManager {
     const url = new URL(fileUrl);
     const directoryPath = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1);
     return `${url.origin}${directoryPath}`;
+  }
+
+  private getUpdaterChannel(channel: string): string {
+    return channel === 'stable' ? 'latest' : channel;
+  }
+
+  private getArtifactBasename(fileUrl: string | undefined, baseUrl: string): string | null {
+    if (!fileUrl) return null;
+    try {
+      const pathname = new URL(fileUrl, baseUrl).pathname;
+      const basename = pathname.slice(pathname.lastIndexOf('/') + 1);
+      return decodeURIComponent(basename);
+    } catch {
+      return null;
+    }
   }
 
   async installUpdate(): Promise<void> {
@@ -314,7 +360,7 @@ export class UpdateManager {
     return {
       version: value.version,
       min_upgradable_version: value.min_upgradable_version,
-      release_notes: value.release_notes,
+      release_notes: typeof value.release_notes === 'string' ? value.release_notes : undefined,
       files: {
         [platformKey]: {
           filename: file.filename,

@@ -24,7 +24,7 @@ def sample_manifest():
         files={
             "win-x64": FileMeta(
                 filename="Sage-Setup-1.2.3.exe",
-                url="https://updates.sage.app/Sage-Setup-1.2.3.exe",
+                url="https://updates.sage.app/releases/1.2.3/latest.yml",
                 sha512="a" * 128,
                 size=104857600,
                 signature="sig-placeholder"

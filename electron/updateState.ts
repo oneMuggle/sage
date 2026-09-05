@@ -74,9 +74,6 @@ export class StateManager {
   }
 
   private computeHmac(data: string): string {
-    return crypto
-      .createHmac('sha256', this.hmacSecret)
-      .update(data)
-      .digest('hex');
+    return crypto.createHmac('sha256', this.hmacSecret).update(data).digest('hex');
   }
 }
