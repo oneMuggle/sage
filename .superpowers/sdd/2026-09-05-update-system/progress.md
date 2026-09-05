@@ -450,3 +450,70 @@ Scanning plan for conflicts before execution...
 7. **TypeScript 顶层 await** — 测试文件使用 top-level await，但 `tsconfig.electron.json` 的 module/target 配置不支持（TS1378）。运行时由 vitest 处理，但类型检查失败。需要修改 tsconfig 或测试文件结构。
 
 ---
+
+## Main/Release-win7 分支对齐审计
+
+**审计时间：** 2026-09-06
+
+**分支状态：**
+
+| 分支 | 本地 HEAD | 升级子系统状态 |
+|---|---|---|
+| `worktree-feat-update-system` | `6728e0ec` | ✅ 完整实现（99 测试通过） |
+| `main` | `96ced2fd` | 仅有设计文档（`9c9693f7 docs: add update system design spec`），无实现代码 |
+| `origin/main` | `379f014d` | 无升级相关文件（实现尚未合入） |
+| `release/win7` | `d48488ee` | 完全不含升级子系统 |
+
+**升级子系统文件（`worktree-feat-update-system` vs `main`）：**
+
+| 文件 | main 存在 | win7 存在 | 说明 |
+|---|---|---|---|
+| `electron/updateManager.ts` | ❌ | ❌ | 核心状态机 |
+| `electron/updateState.ts` | ❌ | ❌ | StateManager + HMAC |
+| `electron/updateConfig.ts` | ❌ | ❌ | ConfigManager + HMAC |
+| `electron/updateIpc.ts` | ❌ | ❌ | Electron IPC 暴露 |
+| `electron/updateHealthChecker.ts` | ❌ | ❌ | 启动健康检查 |
+| `electron/tests/update*.test.ts` (6 files) | ❌ | ❌ | 99 个测试 |
+| `backend/services/update_metadata.py` | ❌ | ❌ | FastAPI 元数据服务 |
+| `backend/routes/updates.py` | ❌ | ❌ | FastAPI 路由 |
+| `backend/tests/test_update_*.py` | ❌ | ❌ | 后端测试 |
+| `build/installer.nsh` | ❌ | ❌ | NSIS 自定义宏（main 仅有基础 VC++ redist 版本） |
+| `src/components/UpdateDialog.tsx` | ❌ | ❌ | React 升级对话框 |
+| `src/components/UpdatesTab.tsx` | ❌ | ❌ | 设置页升级选项卡 |
+| `electron/preload.ts` | ✅ 修改 | ✅ 修改 | 新增 `updates` API 暴露 |
+| `electron/main.ts` | ✅ 修改 | ✅ 修改 | 注册 IPC、启动期健康检查 |
+| `src/App.tsx` | ✅ 修改 | ✅ 修改 | 全局 UpdateDialog 挂载 |
+| `src/shared/types/electron-api.d.ts` | ✅ 修改 | ✅ 修改 | 类型暴露 |
+| `src/locales/{en,zh}.ts` | ✅ 修改 | ✅ 修改 | i18n keys |
+
+**对齐结论：**
+
+1. **main 分支**：升级子系统实现尚未合入 `main`，仅在本地 `worktree-feat-update-system` 分支。待 PR 合入后 main 即拥有完整实现。无需额外对齐操作。
+2. **release/win7 分支**：**设计上不包含升级子系统**（Win7 LTS 维护分支，Python 3.8，使用独立发布通道）。升级功能仅适用于 `main` 分支（Electron 21 + Python 3.10）。因此：
+   - ❌ 不做跨分支 cherry-pick（升级子系统依赖 Python 3.10 后端，与 win7 的 py38 不兼容）
+   - ❌ 不同步 win7 的 NSIS installer.nsh（win7 使用独立构建通道）
+   - ✅ 已验证 win7 的 `build/installer.nsh` 仍保持原始 VC++ redist 安装逻辑，未受影响
+   - ✅ win7 的 Python 3.8 依赖边界完好
+
+**对齐操作禁止事项：**
+- ❌ 不可执行 `git merge release/win7`
+- ❌ 不可执行 `git cherry-pick` 升级系统到 win7
+- ❌ 不可删除 `release/win7` 分支
+- ❌ 不可在 win7 上修改 `backend/requirements-py38.txt`
+- ❌ 不可在 main 上修改 `backend/requirements.txt`
+
+**验证命令：**
+```bash
+# 确认 main 无升级实现
+git ls-tree -r main -- electron/updateManager.ts backend/services/update_metadata.py
+# (输出应为空)
+
+# 确认 win7 无升级文件
+git ls-tree -r release/win7 -- electron/updateManager.ts build/installer.nsh
+# (仅 installer.nsh 的 VC++ 版本，非升级系统)
+
+# 确认 feature worktree 包含完整实现
+git ls-tree -r worktree-feat-update-system -- electron/updateManager.ts backend/services/update_metadata.py
+```
+
+---
