@@ -18,6 +18,7 @@ vi.mock('electron-updater', () => ({
 }));
 
 const { UpdateManager } = await import('../updateManager');
+const { StateManager } = await import('../updateState');
 
 const platformKey =
   process.platform === 'linux'
@@ -506,5 +507,139 @@ describe('UpdateManager', () => {
 
     unsubscribe();
     expect(updater.off).toHaveBeenCalledWith('download-progress', expect.any(Function));
+  });
+
+  describe('installUpdate', () => {
+    const tempInstallRoot = '/tmp/test-install-root-task6';
+    const tempInstallDir = `${tempInstallRoot}/app`;
+    const tempPrevDir = `${tempInstallRoot}/.prev`;
+    const tempBatScript = `${tempInstallRoot}/.prepare-rollback.bat`;
+    let originalExecPath: string;
+    let originalPlatform: PropertyDescriptor | undefined;
+
+    beforeEach(async () => {
+      originalExecPath = process.execPath;
+      originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'execPath', {
+        value: `${tempInstallDir}/Sage`,
+        configurable: true,
+      });
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+      await fs.mkdir(tempInstallDir, { recursive: true });
+    });
+
+    afterEach(async () => {
+      Object.defineProperty(process, 'execPath', {
+        value: originalExecPath,
+        configurable: true,
+      });
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+    });
+
+    async function seedPendingUpdate(
+      version: string | null,
+      overrides: Record<string, unknown> = {},
+    ): Promise<void> {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        ...overrides,
+        pendingUpdate:
+          version === null
+            ? null
+            : { version, downloadedAt: new Date().toISOString() },
+      });
+    }
+
+    it('throws when no pending update exists', async () => {
+      await seedPendingUpdate(null);
+
+      await expect(updateManager.installUpdate()).rejects.toThrow(
+        'No pending update to install',
+      );
+      expect(updater.quitAndInstall).not.toHaveBeenCalled();
+    });
+
+    it('calls quitAndInstall after preparing for upgrade', async () => {
+      await seedPendingUpdate('1.3.0');
+
+      await updateManager.installUpdate();
+
+      expect(updater.quitAndInstall).toHaveBeenCalledTimes(1);
+    });
+
+    it('updates state with new version and preserves the old as lastKnownGood', async () => {
+      await seedPendingUpdate('1.3.0');
+
+      await updateManager.installUpdate();
+
+      const state = JSON.parse(
+        await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'),
+      );
+      expect(state.currentVersion).toBe('1.3.0');
+      expect(state.lastKnownGoodVersion).toBe('1.0.0');
+      expect(state.pendingUpdate).toBeNull();
+      expect(state.crashCount).toBe(0);
+      expect(Date.parse(state.lastKnownGoodInstallDate)).not.toBeNaN();
+    });
+
+    it('sets lastKnownGoodInstallDate to a recent ISO timestamp', async () => {
+      await seedPendingUpdate('1.3.0');
+
+      const before = Date.now();
+      await updateManager.installUpdate();
+      const after = Date.now();
+
+      const state = JSON.parse(
+        await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'),
+      );
+      const recorded = Date.parse(state.lastKnownGoodInstallDate);
+      expect(recorded).toBeGreaterThanOrEqual(before);
+      expect(recorded).toBeLessThanOrEqual(after);
+    });
+
+    it('writes a .prepare-rollback.bat on Windows', async () => {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      await seedPendingUpdate('1.3.0');
+
+      await updateManager.installUpdate();
+
+      const batContent = await fs.readFile(tempBatScript, 'utf8');
+      expect(batContent).toContain('@echo off');
+      expect(batContent).toContain('timeout /t 2');
+      expect(batContent).toContain('move /y');
+      expect(batContent).toContain(tempInstallDir);
+      expect(batContent).toContain('.prev');
+      expect(updater.quitAndInstall).toHaveBeenCalled();
+    });
+
+    it('renames the install directory on non-Windows platforms', async () => {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+      await seedPendingUpdate('1.3.0');
+
+      await updateManager.installUpdate();
+
+      await expect(fs.access(tempInstallDir)).rejects.toThrow();
+      await expect(fs.access(tempPrevDir)).resolves.toBeUndefined();
+      expect(updater.quitAndInstall).toHaveBeenCalled();
+    });
+
+    it('removes a stale .prev directory before creating a new one', async () => {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+      await fs.mkdir(tempPrevDir, { recursive: true });
+      await fs.writeFile(`${tempPrevDir}/marker.txt`, 'stale');
+      await seedPendingUpdate('1.3.0');
+
+      await updateManager.installUpdate();
+
+      const markerExists = await fs
+        .access(`${tempPrevDir}/marker.txt`)
+        .then(() => true, () => false);
+      expect(markerExists).toBe(false);
+    });
   });
 });

@@ -1,4 +1,6 @@
 import { autoUpdater } from 'electron-updater';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { StateManager } from './updateState';
 import { ConfigManager } from './updateConfig';
 
@@ -223,8 +225,54 @@ export class UpdateManager {
   }
 
   async installUpdate(): Promise<void> {
-    // TODO: Implement in Task 6 (cover upgrade coordinator)
-    throw new Error('Not implemented');
+    const state = await this.stateManager.getState();
+
+    if (!state.pendingUpdate) {
+      throw new Error('No pending update to install');
+    }
+
+    await this.prepareForUpgrade();
+
+    this.updater.quitAndInstall();
+
+    // If we reach here, quitAndInstall() hasn't exited the process yet.
+    await this.stateManager.setState({
+      ...state,
+      currentVersion: state.pendingUpdate.version,
+      lastKnownGoodVersion: state.currentVersion,
+      lastKnownGoodInstallDate: new Date().toISOString(),
+      crashCount: 0,
+      pendingUpdate: null,
+    });
+  }
+
+  private async prepareForUpgrade(): Promise<void> {
+    const installDir = path.dirname(process.execPath);
+    const prevDir = path.join(path.dirname(installDir), '.prev');
+
+    // Clean up stale .prev from a prior upgrade
+    try {
+      await fs.rm(prevDir, { recursive: true, force: true });
+    } catch {
+      // Ignore if absent or not removable
+    }
+
+    if (process.platform === 'win32') {
+      // Windows locks the running executable's directory, so defer the rename
+      // to a post-exit batch script that the installer can invoke.
+      const scriptPath = path.join(path.dirname(installDir), '.prepare-rollback.bat');
+      const script = [
+        '@echo off',
+        'timeout /t 2 /nobreak >nul',
+        `move /y "${installDir}" "${prevDir}"`,
+        'del "%~f0"',
+        '',
+      ].join('\r\n');
+      await fs.writeFile(scriptPath, script, { mode: 0o755 });
+    } else {
+      // On Linux/macOS, rename the install directory directly.
+      await fs.rename(installDir, prevDir);
+    }
   }
 
   private isNewerVersion(latest: string, current: string): boolean {
