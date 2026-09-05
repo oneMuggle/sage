@@ -380,7 +380,8 @@ class PlaceholderLocation(str, Enum):
 class TemplatePlaceholder(BaseModel):
     """One placeholder found in a Word template."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     name: str
     raw_tag: str
@@ -396,7 +397,8 @@ class TemplatePlaceholder(BaseModel):
 class WordTemplateAnalysis(BaseModel):
     """Result of analyzing a Word template."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     file_path: str
     placeholders: List[TemplatePlaceholder]
@@ -407,7 +409,8 @@ class WordTemplateAnalysis(BaseModel):
 class WordTemplateAnalyzeRequest(BaseModel):
     """Request to analyze a Word template."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     template_path: str
@@ -416,7 +419,8 @@ class WordTemplateAnalyzeRequest(BaseModel):
 class WordTemplateFillRequest(BaseModel):
     """Request to fill a Word template with data."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     template_path: str
@@ -428,7 +432,8 @@ class WordTemplateFillRequest(BaseModel):
 class WordTemplateFillResult(BaseModel):
     """Result of filling a Word template."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     output_path: str
     filename: str
@@ -445,7 +450,8 @@ class WordTemplateFillResult(BaseModel):
 class PdfPageContent(BaseModel):
     """Content of one PDF page."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     page_number: int
     text: str
@@ -456,7 +462,8 @@ class PdfPageContent(BaseModel):
 class PdfReadResult(BaseModel):
     """Result of reading a PDF file."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     summary: OfficeDocumentSummary
     pages: List[PdfPageContent]
@@ -466,7 +473,8 @@ class PdfReadResult(BaseModel):
 class PdfReadRequest(BaseModel):
     """Request to read a PDF file."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     file_path: str
@@ -475,7 +483,8 @@ class PdfReadRequest(BaseModel):
 class PdfPageSpec(BaseModel):
     """One page in a generated PDF."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     title: Optional[str] = None
     paragraphs: List[str] = Field(default_factory=list)
@@ -485,7 +494,8 @@ class PdfPageSpec(BaseModel):
 class PdfGenerateRequest(BaseModel):
     """Request to generate a PDF."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     filename: str
@@ -497,7 +507,8 @@ class PdfGenerateRequest(BaseModel):
 class PdfGenerateResult(BaseModel):
     """Result of generating a PDF."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     output_path: str
     filename: str
@@ -508,7 +519,8 @@ class PdfGenerateResult(BaseModel):
 class PdfFormField(BaseModel):
     """One PDF form field."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     name: str
     type: str
@@ -521,7 +533,8 @@ class PdfFormField(BaseModel):
 class PdfFormReadResult(BaseModel):
     """Result of reading PDF form fields."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     file_path: str
     fields: List[PdfFormField]
@@ -531,7 +544,8 @@ class PdfFormReadResult(BaseModel):
 class PdfFormReadRequest(BaseModel):
     """Request to read PDF form fields."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     file_path: str
@@ -540,7 +554,8 @@ class PdfFormReadRequest(BaseModel):
 class PdfFormFillRequest(BaseModel):
     """Request to fill a PDF form."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     workspace_path: str
     template_path: str
@@ -552,7 +567,8 @@ class PdfFormFillRequest(BaseModel):
 class PdfFormFillResult(BaseModel):
     """Result of filling a PDF form."""
 
-    model_config = ConfigDict(extra="forbid")
+    class Config:
+        extra = "forbid"
 
     output_path: str
     filename: str
