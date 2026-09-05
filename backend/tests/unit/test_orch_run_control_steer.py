@@ -147,7 +147,7 @@ def test_steer_broadcasts_control_events(app_deps) -> None:
                 try:
                     evt = await asyncio.wait_for(sub.__anext__(), timeout=0.01)
                     events.append(evt)
-                except asyncio.TimeoutError:
+                except asyncio.TimeoutError:  # noqa: UP041
                     break
             # Now fire the steer request (in a thread — TestClient is sync)
             def _post():
@@ -165,7 +165,7 @@ def test_steer_broadcasts_control_events(app_deps) -> None:
                 try:
                     evt = await asyncio.wait_for(sub.__anext__(), timeout=0.5)
                     events.append(evt)
-                except asyncio.TimeoutError:
+                except asyncio.TimeoutError:  # noqa: UP041
                     break
             return events
         finally:

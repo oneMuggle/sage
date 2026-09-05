@@ -130,7 +130,7 @@ _steer_attempts: dict[tuple[str, str], Deque[float]] = defaultdict(deque)
 
 
 @router.post("/{run_id}/tasks/{task_id}/steer")
-async def steer_task(
+async def steer_task(  # noqa: PLR0911 — many early-return validation paths
     request: Request,
     run_id: str,
     task_id: str,
