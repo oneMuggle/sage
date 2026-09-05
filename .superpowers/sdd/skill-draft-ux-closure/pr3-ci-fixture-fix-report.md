@@ -2,22 +2,23 @@
 
 ## Status
 
-Fixture compatibility update completed. Production code and unrelated files were not modified.
+Fixture compatibility fixes completed. Production code and unrelated files were not modified.
 
-## Change
+## Changes
 
-Updated all three mock LLM `when_to_use` values in `backend/tests/integration/test_review_queue_integration.py` from the 12-character value `When testing` to the concrete English string:
+Updated all three mock LLM JSON fixtures in `backend/tests/integration/test_review_queue_integration.py`:
 
-`Use this skill whenever repeated testing steps need consistent validation`
+- Replaced the 12-character `when_to_use` value `When testing` with `Use this skill whenever repeated testing steps need consistent validation`.
+- Replaced `content` value `# Test Skill\n\nTest content` with content containing the required `## 步骤`, `## 触发条件`, and `## 示例` sections.
 
 ## Verification
 
 - Focused integration test command: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/integration/test_review_queue_integration.py -q`
-- Result: failed, `6 failed, 2 passed`
-- Remaining failure cause: the existing mock `content` value (`# Test Skill\n\nTest content`) does not contain the newly required `## 步骤`, `## 触发条件`, and `## 示例` sections. This change removes the reported `when_to_use` length failure only.
+- Result: passed, `9 passed`
 - Ruff command: `conda run -n sage-backend ruff check backend/tests/integration/test_review_queue_integration.py`
 - Ruff result: passed
 
-## Commit
+## Commits
 
-`fix(test): update review queue fixture for schema validation`
+- `0cb2148d fix(test): update review queue fixture for schema validation`
+- `fix(test): complete review queue schema fixture`

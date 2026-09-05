@@ -73,7 +73,7 @@ def mock_llm_provider():
         return AssistantTurn(
             text='{"name": "test-skill", "description": "A test skill", '
             '"when_to_use": "Use this skill whenever repeated testing steps need consistent validation", '
-            '"content": "# Test Skill\\n\\nTest content"}'
+            '"content": "# Test Skill\\n\\n## 步骤\\n\\n1. Run the test\\n\\n## 触发条件\\n\\nUse when repeated testing needs validation\\n\\n## 示例\\n\\nExample test run"}'
         )
 
     provider.complete = mock_complete
@@ -275,7 +275,7 @@ def test_explicit_learn_worker_loads_messages_from_db(temp_db, mock_llm_provider
         return_value=AssistantTurn(
             text='{"name": "test-skill", "description": "A test skill", '
             '"when_to_use": "Use this skill whenever repeated testing steps need consistent validation", '
-            '"content": "# Test Skill\\n\\nTest content"}'
+            '"content": "# Test Skill\\n\\n## 步骤\\n\\n1. Run the test\\n\\n## 触发条件\\n\\nUse when repeated testing needs validation\\n\\n## 示例\\n\\nExample test run"}'
         )
     )
 
@@ -380,7 +380,7 @@ def test_explicit_learn_load_failure_is_swallowed(temp_db, mock_llm_provider):
         return_value=AssistantTurn(
             text='{"name": "test-skill", "description": "A test skill", '
             '"when_to_use": "Use this skill whenever repeated testing steps need consistent validation", '
-            '"content": "# Test Skill\\n\\nTest content"}'
+            '"content": "# Test Skill\\n\\n## 步骤\\n\\n1. Run the test\\n\\n## 触发条件\\n\\nUse when repeated testing needs validation\\n\\n## 示例\\n\\nExample test run"}'
         )
     )
 
