@@ -52,6 +52,7 @@ from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
 from backend.api.chat_stream_registry import StreamRegistry
+from backend.api.v1 import updates as updates_router_module
 from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
@@ -559,6 +560,9 @@ app.include_router(usage_router, prefix="/api/v1")
 app.include_router(export_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
+
+# Update system: /api/v1/updates/{latest, history, channels}
+app.include_router(updates_router_module.router, prefix="/api/v1")
 
 # 本地开发环境助手: /api/v1/runtime/{probe, diagnose, exec}
 # 复用 ChatService.tools 路径, runtime_exec 自动走 PermissionEnforcer 审批
