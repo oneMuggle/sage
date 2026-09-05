@@ -22,6 +22,7 @@ class OrchTask:
     goal: str
     status: str = "queued"  # queued|running|done|failed
     retry_count: int = 0
+    revision: int = 0
     error: Optional[str] = None
     output_preview: Optional[str] = None
     blocked_by: Optional[List[str]] = None
@@ -68,6 +69,9 @@ class OrchTaskRepository:
                 output_preview=excluded.output_preview,
                 started_at=excluded.started_at,
                 finished_at=excluded.finished_at
+                -- revision is intentionally NOT touched here: it is an
+                -- append-only audit counter bumped only by
+                -- ``bump_revision_for_steer`` after a successful steer INSERT.
             """,
             (
                 task_id,
@@ -111,6 +115,7 @@ class OrchTaskRepository:
             goal=row["goal"],
             status=row["status"],
             retry_count=row["retry_count"],
+            revision=row["revision"] if "revision" in row.keys() else 0,
             error=row["error"],
             output_preview=row["output_preview"],
             blocked_by=blocked_by,
@@ -118,3 +123,25 @@ class OrchTaskRepository:
             started_at=row["started_at"],
             finished_at=row["finished_at"],
         )
+
+    # ------------------------------------------------------------------ CAS
+
+    def bump_revision_for_steer(self, task_id: str) -> bool:
+        """Bump ``revision`` unconditionally after a successful steer INSERT.
+
+        This makes the DB ``revision`` column an observable audit trail of
+        successful steers. It is **not** the CAS authority — the in-memory
+        ``SnapshotStore`` task revision is. The two counters count different
+        things:
+          - ``SnapshotStore.revision``: every task event (created/started/progress/...)
+          - ``orch_tasks.revision``: successful steer count only
+
+        Returns True iff a row was updated (task existed in the DB).
+        """
+        conn = self.db.get_connection()
+        cursor = conn.execute(
+            "UPDATE orch_tasks SET revision = revision + 1 WHERE task_id = ?",
+            (task_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
