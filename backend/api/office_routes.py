@@ -46,8 +46,16 @@ from backend.office.models import (
     OfficeReadRequest,
     OfficeWordGenerateRequest,
     OfficeWordReadResult,
+    PdfFormFillRequest,
+    PdfFormReadRequest,
+    PdfGenerateRequest,
+    PdfReadRequest,
+    WordTemplateAnalyzeRequest,
+    WordTemplateFillRequest,
 )
 from backend.office.path_safety import resolve_within
+from backend.office.pdf import generate_pdf, read_pdf
+from backend.office.pdf_forms import fill_pdf_form, read_pdf_form
 from backend.office.ppt import generate_ppt, read_ppt
 from backend.office.storage import (
     delete_document,
@@ -57,6 +65,7 @@ from backend.office.storage import (
     validate_workspace,
 )
 from backend.office.word import generate_docx, read_docx
+from backend.office.word_template import analyze_word_template, fill_word_template
 
 if TYPE_CHECKING:
     pass
@@ -446,6 +455,65 @@ def generate_excel_endpoint(req: OfficeExcelGenerateRequest) -> dict:
     }
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Word Template endpoints (Phase 2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/word/analyze-template")
+def analyze_word_template_endpoint(req: WordTemplateAnalyzeRequest):
+    """Analyze a Word template and extract {{}} placeholders."""
+    file_path = _validate_file_in_workspace(req.template_path, req.workspace_path)
+    return analyze_word_template(file_path, workspace_path=req.workspace_path)
+
+
+@router.post("/word/fill-template")
+def fill_word_template_endpoint(req: WordTemplateFillRequest):
+    """Fill a Word template with data.
+
+    Service function handles all validation internally (workspace boundary,
+    output path safety, template safety scan).
+    """
+    return fill_word_template(req)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# PDF endpoints (Phase 2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/pdf/read")
+def read_pdf_endpoint(req: PdfReadRequest):
+    """Read a PDF file and extract content."""
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    return read_pdf(file_path, workspace_path=req.workspace_path)
+
+
+@router.post("/pdf/generate")
+def generate_pdf_endpoint(req: PdfGenerateRequest):
+    """Generate a PDF from structured data.
+
+    Service function handles workspace validation and output path safety.
+    """
+    return generate_pdf(req)
+
+
+@router.post("/pdf/read-form")
+def read_pdf_form_endpoint(req: PdfFormReadRequest):
+    """Read PDF form fields (AcroForm)."""
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    return read_pdf_form(file_path, workspace_path=req.workspace_path)
+
+
+@router.post("/pdf/fill-form")
+def fill_pdf_form_endpoint(req: PdfFormFillRequest):
+    """Fill a PDF form with data.
+
+    Service function handles all validation internally.
+    """
+    return fill_pdf_form(req)
+
+
 __all__ = [
     "router",
     "register_office_exception_handlers",
@@ -457,4 +525,11 @@ __all__ = [
     "generate_ppt_endpoint",
     "generate_word_endpoint",
     "generate_excel_endpoint",
+    # Phase 2: Word template + PDF
+    "analyze_word_template_endpoint",
+    "fill_word_template_endpoint",
+    "read_pdf_endpoint",
+    "generate_pdf_endpoint",
+    "read_pdf_form_endpoint",
+    "fill_pdf_form_endpoint",
 ]

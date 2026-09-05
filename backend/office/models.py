@@ -366,6 +366,15 @@ class WordTemplateAnalysis(BaseModel):
     has_jinja_control: bool = False
 
 
+class WordTemplateAnalyzeRequest(BaseModel):
+    """Request to analyze a Word template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    template_path: str
+
+
 class WordTemplateFillRequest(BaseModel):
     """Request to fill a Word template with data."""
 
@@ -414,6 +423,15 @@ class PdfReadResult(BaseModel):
     summary: OfficeDocumentSummary
     pages: List[PdfPageContent]
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PdfReadRequest(BaseModel):
+    """Request to read a PDF file."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
 
 
 class PdfPageSpec(BaseModel):
@@ -470,6 +488,15 @@ class PdfFormReadResult(BaseModel):
     file_path: str
     fields: List[PdfFormField]
     has_xfa: bool = False
+
+
+class PdfFormReadRequest(BaseModel):
+    """Request to read PDF form fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    file_path: str
 
 
 class PdfFormFillRequest(BaseModel):
