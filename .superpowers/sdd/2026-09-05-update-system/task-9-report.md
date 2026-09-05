@@ -1,7 +1,7 @@
 Status: DONE_WITH_CONCERNS
 
 Commits:
-- 1d826437 feat: expose update operations over electron ipc
+- 9f5bff0e feat: expose update operations over electron ipc
 
 Implementation:
 - Added `electron/updateIpc.ts` with six trusted-renderer update invoke handlers, input validation, state/progress relay, duplicate-registration protection, and cleanup.
