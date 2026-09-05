@@ -1,7 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
-import * as path from 'path';
 
 // Mock Electron app
 const mockUserData = '/tmp/test-user-data-config';
@@ -20,12 +19,10 @@ type UpdateConfig = import('../updateConfig').UpdateConfig;
 
 describe('ConfigManager', () => {
   let configManager: InstanceType<typeof ConfigManager>;
-  let configPath: string;
 
   beforeEach(async () => {
     await fs.mkdir(mockUserData, { recursive: true });
     configManager = new ConfigManager();
-    configPath = path.join(mockUserData, 'update-config.json');
   });
 
   afterEach(async () => {
