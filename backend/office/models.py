@@ -482,3 +482,14 @@ class PdfFormFillRequest(BaseModel):
     output_filename: str
     data: Dict[str, Any]
     flatten: bool = False
+
+
+class PdfFormFillResult(BaseModel):
+    """Result of filling a PDF form."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    output_path: str
+    filename: str
+    file_size_bytes: int
+    filled_count: int
