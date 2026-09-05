@@ -794,6 +794,9 @@ function createMainWindow(): void {
     });
     // Diagnostic: log when page finishes loading (or fails)
     win.webContents.on('did-finish-load', () => {
+      updateManager?.getState().then((state) => {
+        win.webContents.send('update:state-changed', { type: 'state', state });
+      });
       logger.info('main: frontend did-finish-load', { url: win.webContents.getURL() });
       // Diagnostic: check if React root is mounted after page loads
       win.webContents

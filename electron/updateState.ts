@@ -11,9 +11,15 @@ export interface UpdateState {
   rollbackWindowDays: number;
   updateStrategy: 'manual' | 'auto-download' | 'auto-install';
   lastCheckTime: string | null; // ISO 8601
+  updateAvailable?: boolean;
+  availableUpdate?: {
+    version: string;
+    releaseNotes?: string;
+  } | null;
   pendingUpdate: {
     version: string;
     downloadedAt: string; // ISO 8601
+    releaseNotes?: string;
   } | null;
   lastRecordedVersion: string;
 }
@@ -68,6 +74,8 @@ export class StateManager {
       rollbackWindowDays: 7,
       updateStrategy: 'auto-download',
       lastCheckTime: null,
+      updateAvailable: false,
+      availableUpdate: null,
       pendingUpdate: null,
       lastRecordedVersion: currentVersion,
     };

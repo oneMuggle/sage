@@ -74,6 +74,8 @@ export class UpdateManager {
   private configManager: ConfigManager;
   private updater: UpdaterBoundary;
   private lastCheckedUpdate: CheckedUpdate | null = null;
+  private lastCheckedReleaseNotes: string | undefined = undefined;
+  private stateChangeListeners: Array<(state: UpdateState) => void> = [];
 
   constructor(updater: UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary) {
     this.stateManager = new StateManager();
@@ -81,8 +83,32 @@ export class UpdateManager {
     this.updater = updater;
   }
 
+  /** Return the current persisted state for renderer initialization. */
+  async getState(): Promise<UpdateState> {
+    return this.stateManager.getState();
+  }
+
+  /** Register a listener that fires after every state mutation. */
+  onStateChange(listener: (state: UpdateState) => void): () => void {
+    this.stateChangeListeners.push(listener);
+    return () => {
+      this.stateChangeListeners = this.stateChangeListeners.filter((l) => l !== listener);
+    };
+  }
+
+  private notifyStateChange(state: UpdateState): void {
+    for (const listener of this.stateChangeListeners) {
+      try {
+        listener(state);
+      } catch {
+        // Listener errors must not break the update flow
+      }
+    }
+  }
+
   async checkForUpdates(): Promise<CheckResult> {
     this.lastCheckedUpdate = null;
+    this.lastCheckedReleaseNotes = undefined;
     const config = await this.configManager.getConfig();
     const state = await this.stateManager.getState();
 
@@ -96,7 +122,10 @@ export class UpdateManager {
         this.lastCheckedUpdate = null;
         if (response.status === 404) {
           state.lastCheckTime = new Date().toISOString();
+          state.updateAvailable = false;
+          state.availableUpdate = null;
           await this.stateManager.setState(state);
+          this.notifyStateChange(state);
           return { updateAvailable: false };
         }
         throw new Error(`Server returned ${response.status}`);
@@ -112,6 +141,11 @@ export class UpdateManager {
           console.warn(
             `Current version ${state.currentVersion} cannot upgrade to ${manifest.version}`,
           );
+          state.lastCheckTime = new Date().toISOString();
+          state.updateAvailable = false;
+          state.availableUpdate = null;
+          await this.stateManager.setState(state);
+          this.notifyStateChange(state);
           return { updateAvailable: false };
         }
 
@@ -122,11 +156,21 @@ export class UpdateManager {
         if (!fileMeta) {
           this.lastCheckedUpdate = null;
           console.warn(`No update file for platform ${platformKey}`);
+          state.lastCheckTime = new Date().toISOString();
+          state.updateAvailable = false;
+          state.availableUpdate = null;
+          await this.stateManager.setState(state);
+          this.notifyStateChange(state);
           return { updateAvailable: false };
         }
 
-        // Update state with check time
+        // Update state with check time and availability
         state.lastCheckTime = new Date().toISOString();
+        state.updateAvailable = true;
+        state.availableUpdate = {
+          version: manifest.version,
+          releaseNotes: manifest.release_notes,
+        };
         await this.stateManager.setState(state);
         this.lastCheckedUpdate = {
           version: manifest.version,
@@ -136,6 +180,8 @@ export class UpdateManager {
           size: fileMeta.size,
           channel: config.channel,
         };
+        this.lastCheckedReleaseNotes = manifest.release_notes;
+        this.notifyStateChange(state);
 
         return {
           updateAvailable: true,
@@ -148,7 +194,9 @@ export class UpdateManager {
       // No update available
       this.lastCheckedUpdate = null;
       state.lastCheckTime = new Date().toISOString();
+      state.updateAvailable = false;
       await this.stateManager.setState(state);
+      this.notifyStateChange(state);
 
       return { updateAvailable: false };
     } catch (error) {
@@ -188,13 +236,18 @@ export class UpdateManager {
       await this.updater.downloadUpdate();
 
       const state = await this.stateManager.getState();
-      await this.stateManager.setState({
+      const newState: UpdateState = {
         ...state,
+        updateAvailable: false,
+        availableUpdate: null,
         pendingUpdate: {
           version: checkedUpdate.version,
           downloadedAt: new Date().toISOString(),
+          releaseNotes: this.lastCheckedReleaseNotes,
         },
-      });
+      };
+      await this.stateManager.setState(newState);
+      this.notifyStateChange(newState);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to download update: ${message}`);
@@ -259,14 +312,18 @@ export class UpdateManager {
     this.updater.quitAndInstall();
 
     // If we reach here, quitAndInstall() hasn't exited the process yet.
-    await this.stateManager.setState({
+    const newState: UpdateState = {
       ...state,
       currentVersion: state.pendingUpdate.version,
       lastKnownGoodVersion: state.currentVersion,
       lastKnownGoodInstallDate: new Date().toISOString(),
       crashCount: 0,
       pendingUpdate: null,
-    });
+      updateAvailable: false,
+      availableUpdate: null,
+    };
+    await this.stateManager.setState(newState);
+    this.notifyStateChange(newState);
   }
 
   async onAppStartup(getWindow: () => BrowserWindow | null): Promise<void> {

@@ -40,6 +40,7 @@ function createManager() {
     }),
     setChannel: vi.fn().mockResolvedValue(undefined),
     onDownloadProgress: vi.fn().mockReturnValue(() => undefined),
+    onStateChange: vi.fn().mockReturnValue(() => undefined),
   };
 }
 

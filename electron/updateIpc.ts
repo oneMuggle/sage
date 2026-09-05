@@ -91,9 +91,13 @@ export function registerUpdateIpc(
   const stopProgress = updateManager.onDownloadProgress((percent) => {
     options.sendToRenderer?.('update:state-changed', { type: 'progress', percent });
   });
+  const stopStateRelay = updateManager.onStateChange((state) => {
+    options.sendToRenderer?.('update:state-changed', { type: 'state', state });
+  });
   const cleanup = () => {
     for (const channel of channels) ipcMain.removeHandler(channel);
     stopProgress();
+    stopStateRelay();
     if (currentCleanup === cleanup) currentCleanup = null;
   };
   currentCleanup = cleanup;

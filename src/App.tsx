@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
+import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { Settings } from './pages';
@@ -139,6 +140,8 @@ function App() {
         <ApprovalDialog />
         {/* M2 part B: 全局提问模态框 — 由 ask_user_question 流事件驱动 */}
         <QuestionDialog />
+        {/* Task 11: 全局更新对话框 — 由 update:state-changed 事件驱动 */}
+        <UpdateDialog />
       </NavHistoryProvider>
     </HashRouter>
   );
