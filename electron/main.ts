@@ -69,6 +69,8 @@ import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
+import { registerUpdateIpc } from './updateIpc';
+import { UpdateManager } from './updateManager';
 import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
@@ -170,6 +172,8 @@ let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
+const updateManager = new UpdateManager();
+let cleanupUpdateIpc: (() => void) | null = null;
 
 // PR-B: backend auto-restart state
 //
@@ -1200,6 +1204,13 @@ function registerIpcHandlers(): void {
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
   registerLogIpc(ipcMain, (sender) => isTrustedRenderer(sender));
+  cleanupUpdateIpc?.();
+  cleanupUpdateIpc = registerUpdateIpc(ipcMain, updateManager, {
+    isTrustedRenderer,
+    sendToRenderer: (_channel, payload) => {
+      mainWindow?.webContents.send('update:state-changed', payload);
+    },
+  });
 }
 
 /**
@@ -1760,6 +1771,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   appIsQuitting = true;
+  cleanupUpdateIpc?.();
+  cleanupUpdateIpc = null;
   void shutdownBackend();
 });
 

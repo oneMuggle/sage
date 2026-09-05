@@ -5,6 +5,7 @@ import * as path from 'path';
 import { StateManager } from './updateState';
 import type { UpdateState } from './updateState';
 import { ConfigManager } from './updateConfig';
+import type { UpdateStrategy } from './updateConfig';
 import { LauncherHealthChecker } from './updateHealthChecker';
 
 export interface CheckResult {
@@ -204,6 +205,11 @@ export class UpdateManager {
     const listener = (event: { percent: number }) => callback(event.percent);
     this.updater.on('download-progress', listener);
     return () => this.updater.off('download-progress', listener);
+  }
+
+  async setStrategy(strategy: UpdateStrategy): Promise<void> {
+    const config = await this.configManager.getConfig();
+    await this.configManager.setConfig({ ...config, updateStrategy: strategy });
   }
 
   private getFeedUrl(fileUrl: string): string {
