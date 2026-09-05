@@ -8,8 +8,17 @@
  *
  * Decision tree:
  *   dev  (isPackaged=false)
- *     → conda run -n sage-backend python -m backend.main
- *     → SAGE_PYTHON env can override `conda` to e.g. `python3` for power devs
+ *     → SAGE_PYTHON env set: use that interpreter directly with -m backend.main
+ *       (e.g. power devs running `pip install -e` into a system Python)
+ *     → CONDA_PREFIX env set + env python present:
+ *       invoke ${CONDA_PREFIX}/bin/python (or python.exe on win32) directly.
+ *       This avoids the 3-deep `conda run` wrapper tree, which would make
+ *       ``child_process.spawn``'s ``proc.pid`` the conda wrapper rather than
+ *       the actual python child and trip the ``ownsBackend`` pid check in
+ *       ``waitForBackend``. See the inline comment in
+ *       ``resolveBackendLaunchCommand`` for full rationale.
+ *     → fallback (CI / outside any conda env):
+ *       `conda run -n sage-backend python -m backend.main`
  *
  *   packaged win32
  *     → resourcesPath/python/python.exe + PYTHONPATH for backend/sage-core
@@ -101,6 +110,27 @@ const PYTHONPATH_SEP_WIN = ';';
 const PYTHONPATH_SEP_UNIX = ':';
 
 /**
+ * Resolve the absolute path of the python interpreter inside an activated
+ * conda env given the env's prefix directory. Used by the dev branch to
+ * bypass the ``conda run -n`` wrapper script (see the call site for the
+ * pid-mismatch rationale). Behaviour mirrors what ``conda run`` would
+ * do for a normal user: unix envs expose ``bin/python``; Windows envs
+ * expose ``python.exe`` directly under the prefix.
+ *
+ * Uses string concatenation rather than ``path.join`` so the result
+ * preserves the input separator — conda on Windows reports
+ * ``CONDA_PREFIX`` as a backslash path (``C:\…``) and on linux as a
+ * forward-slash path (``/opt/…``); mixing in the host's path.sep would
+ * silently produce a wrong path when the host platform differs from
+ * the env's platform (e.g. tests simulating win32 on a posix runner).
+ */
+function condaEnvPythonPath(condaPrefix: string, platform: NodeJS.Platform): string {
+  return platform === 'win32'
+    ? `${condaPrefix}\\python.exe`
+    : `${condaPrefix}/bin/python`;
+}
+
+/**
  * Pick which Python process to launch.
  *
  * Pure function: takes a snapshot of the runtime (`env`, `resourcesPath`,
@@ -147,6 +177,44 @@ export function resolveBackendLaunchCommand(opts: ResolveOpts): BackendLaunchPla
         },
         reason: 'dev-conda-overridden',
       };
+    }
+    // 2026-09-03: prefer the resolved conda env's python binary directly
+    // over `conda run -n sage-backend python -m backend.main`. The
+    // `conda run` wrapper script produces a 3-deep process tree
+    // (conda → bash → python), so ``child_process.spawn``'s ``proc.pid``
+    // is the conda wrapper PID, not the python PID. The backend's
+    // ``/health/proof`` reports ``os.getpid()`` (the python PID), so
+    // Electron's ``waitForBackend`` ``ownsBackend`` check
+    // (``health.pid === ownership.pid``) fails and the supervisor
+    // times out 90s later with a misleading "后端服务在 30 秒内未响应"
+    // dialog — even though the backend was healthy the whole time.
+    // Invoking the env's python binary directly gives ``proc.pid`` =
+    // the python PID and the check passes. CI sandboxes and power devs
+    // who start Electron outside a conda env (no ``CONDA_PREFIX``)
+    // still fall through to the ``conda run -n`` path below.
+    const condaPrefix = opts.env.CONDA_PREFIX;
+    if (condaPrefix) {
+      const pythonBin = condaEnvPythonPath(condaPrefix, opts.platform);
+      if (existsSyncFn(pythonBin)) {
+        return {
+          kind: 'spawn',
+          command: pythonBin,
+          cmd: pythonBin,
+          args: ['-m', 'backend.main'],
+          cwd: process.cwd(),
+          env: {
+            SAGE_DB_PATH: opts.sageDbPath,
+            SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+            PYTHON_BACKEND_PORT: String(opts.port),
+          },
+          extraEnv: {
+            SAGE_DB_PATH: opts.sageDbPath,
+            SAGE_USER_DATA_DIR: opts.sageUserDataDir,
+            PYTHON_BACKEND_PORT: String(opts.port),
+          },
+          reason: 'dev-conda',
+        };
+      }
     }
     return {
       kind: 'spawn',
