@@ -7,15 +7,17 @@ Completed. Implemented `fill_word_template(req: WordTemplateFillRequest) -> Word
 ## Implementation
 
 - Reuses `analyze_word_template()` for workspace containment, file validation, and DOCX ZIP preflight.
-- Resolves the output path within the template workspace and rejects traversal or symlink escapes.
-- Reports missing placeholder data in `unfilled_placeholders` while rendering missing values as empty strings.
-- Wraps docxtpl render/save failures as `OfficeTemplateFillError`.
-- Added tests for complete data, partial data, output path traversal, and render failure.
+- Scans DOCX XML for unsafe Jinja imports/includes and Python introspection attributes, then renders with `SandboxedEnvironment`.
+- Resolves the output path within the template workspace, rejects traversal, absolute paths, symlink escapes, directories, and overwriting the input template.
+- Supports image placeholders from workspace-contained file paths or validated data-URI base64 values via `InlineImage`.
+- Normalizes `date` and `datetime` values to ISO text and reports missing data while rendering missing values as empty strings.
+- Wraps docxtpl render/save and image failures as `OfficeTemplateFillError` without exposing underlying absolute paths.
+- Tests read generated DOCX files to verify substituted text and embedded images.
 
 ## Verification
 
-- Focused Word template tests: `16 passed`
-- Office unit regression: `269 passed`
+- Focused Word template tests: `19 passed`
+- Office unit regression: `272 passed`
 - `ruff check ... --ignore UP045,PT001`: passed
 - Python `compileall`: passed
 - `git diff --check`: passed
