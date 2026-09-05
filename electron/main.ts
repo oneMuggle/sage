@@ -49,7 +49,7 @@ import { join } from 'node:path';
 import http from 'node:http';
 import fetch from 'node-fetch';
 
-import { relayChatStream, relayNdjsonToEvent, relayOrchEventsStream, WIKI_STREAM_ERROR } from './relay';
+import { relayChatStream, relayNdjsonToEvent, relayOrchEventsStream } from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { buildApplicationMenu } from './menu';

@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 
 from backend.domain.orch_events import (
+    SCHEMA_VERSION,
     RunEvent,
     RunEventType,
     RunSnapshot,
     RunStatus,
-    SCHEMA_VERSION,
     StepEventType,
     StepStatus,
     TaskEventType,
@@ -21,7 +21,6 @@ from backend.domain.orch_events import (
     validate_task_transition,
 )
 
-
 # ---------------------------------------------------------------------------
 # Run status state machine
 # ---------------------------------------------------------------------------
@@ -31,7 +30,7 @@ class TestRunStateMachine:
     """Run 状态机合法转移测试。"""
 
     @pytest.mark.parametrize(
-        "from_status,to_status",
+        ("from_status", "to_status"),
         [
             (RunStatus.DRAFT, RunStatus.QUEUED),
             (RunStatus.DRAFT, RunStatus.CANCELLED),
@@ -56,7 +55,7 @@ class TestRunStateMachine:
         assert validate_run_transition(from_status, to_status) is True
 
     @pytest.mark.parametrize(
-        "from_status,to_status",
+        ("from_status", "to_status"),
         [
             # 终态不可转出
             (RunStatus.COMPLETED, RunStatus.RUNNING),
@@ -107,7 +106,7 @@ class TestTaskStateMachine:
     """Task 状态机合法转移测试。"""
 
     @pytest.mark.parametrize(
-        "from_status,to_status",
+        ("from_status", "to_status"),
         [
             (TaskStatus.PLANNED, TaskStatus.QUEUED),
             (TaskStatus.PLANNED, TaskStatus.BLOCKED),
@@ -140,7 +139,7 @@ class TestTaskStateMachine:
         assert validate_task_transition(from_status, to_status) is True
 
     @pytest.mark.parametrize(
-        "from_status,to_status",
+        ("from_status", "to_status"),
         [
             # 终态不可转出
             (TaskStatus.SUCCEEDED, TaskStatus.RUNNING),
@@ -178,7 +177,7 @@ class TestStepStateMachine:
     """Step 状态机合法转移测试。"""
 
     @pytest.mark.parametrize(
-        "from_status,to_status",
+        ("from_status", "to_status"),
         [
             (StepStatus.PENDING, StepStatus.RUNNING),
             (StepStatus.PENDING, StepStatus.SKIPPED),
@@ -199,7 +198,7 @@ class TestStepStateMachine:
         assert validate_step_transition(from_status, to_status) is True
 
     @pytest.mark.parametrize(
-        "from_status,to_status",
+        ("from_status", "to_status"),
         [
             # 终态不可转出
             (StepStatus.SUCCEEDED, StepStatus.RUNNING),

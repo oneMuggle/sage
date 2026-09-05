@@ -22,7 +22,7 @@ from backend.domain.orch_events import RunEvent, TaskEventType
 from backend.orchestration.events import EventRecorder
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.lane_registry import LaneRegistry
-from backend.orchestration.models import LaneStatus, RecoveryPolicy, TaskPacket
+from backend.orchestration.models import RecoveryPolicy, TaskPacket
 from backend.orchestration.run_event_adapter import RunEventSink
 from backend.orchestration.task_registry import TaskRegistry
 
