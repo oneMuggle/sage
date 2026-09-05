@@ -253,12 +253,12 @@ export function Chat() {
   const handleLearn = async () => {
     if (!currentSessionId || isLoading) return;
     try {
-      toast.info('Reviewing...');
+      toast.info(t('chat.learn_reviewing'));
       await learnApi.trigger(currentSessionId);
-      toast.success('Review queued — check Pending Drafts');
+      toast.success(t('chat.learn_queued'));
       navigate('/skills?tab=drafts');
     } catch (e) {
-      toast.error(`Review failed: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }));
     }
   };
 

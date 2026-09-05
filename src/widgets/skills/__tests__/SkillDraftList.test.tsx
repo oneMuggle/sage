@@ -81,7 +81,7 @@ describe('SkillDraftList component', () => {
     expect(screen.getByText('beta-skill')).toBeInTheDocument();
   });
 
-  it('approve button calls API and removes draft from list', async () => {
+  it('preview → approve calls API and removes draft from list', async () => {
     const drafts = [makeDraft('d1', 'alpha-skill')];
     listMock.mockResolvedValue({ drafts });
     approveMock.mockResolvedValue({
@@ -91,14 +91,18 @@ describe('SkillDraftList component', () => {
     });
 
     renderDraftList();
-    const approveBtn = await screen.findByRole('button', { name: /approve alpha-skill/i });
+    // Click Preview on card → modal opens
+    const previewBtn = await screen.findByRole('button', { name: /预览 alpha-skill/i });
+    fireEvent.click(previewBtn);
+    // In modal, click Approve
+    const approveBtn = await screen.findByRole('button', { name: /^批准$/ });
     fireEvent.click(approveBtn);
 
     await waitFor(() => expect(approveMock).toHaveBeenCalledWith('d1'));
     await waitFor(() => expect(screen.queryByText('alpha-skill')).not.toBeInTheDocument());
   });
 
-  it('reject button calls API and removes draft from list', async () => {
+  it('preview → reject calls API and removes draft from list', async () => {
     const drafts = [makeDraft('d1', 'alpha-skill')];
     listMock.mockResolvedValue({ drafts });
     rejectMock.mockResolvedValue({
@@ -107,7 +111,11 @@ describe('SkillDraftList component', () => {
     });
 
     renderDraftList();
-    const rejectBtn = await screen.findByRole('button', { name: /reject alpha-skill/i });
+    // Click Preview on card → modal opens
+    const previewBtn = await screen.findByRole('button', { name: /预览 alpha-skill/i });
+    fireEvent.click(previewBtn);
+    // In modal, click Reject
+    const rejectBtn = await screen.findByRole('button', { name: /^拒绝$/ });
     fireEvent.click(rejectBtn);
 
     await waitFor(() => expect(rejectMock).toHaveBeenCalledWith('d1'));
@@ -141,13 +149,17 @@ describe('SkillDraftList component', () => {
     expect(listMock).toHaveBeenCalledTimes(3);
   });
 
-  it('approve failure shows error and keeps draft', async () => {
+  it('preview → approve failure keeps draft in list', async () => {
     const drafts = [makeDraft('d1', 'alpha-skill')];
     listMock.mockResolvedValue({ drafts });
     approveMock.mockRejectedValue(new Error('network error'));
 
     renderDraftList();
-    const approveBtn = await screen.findByRole('button', { name: /approve alpha-skill/i });
+    // Click Preview on card → modal opens
+    const previewBtn = await screen.findByRole('button', { name: /预览 alpha-skill/i });
+    fireEvent.click(previewBtn);
+    // In modal, click Approve
+    const approveBtn = await screen.findByRole('button', { name: /^批准$/ });
     fireEvent.click(approveBtn);
 
     await waitFor(() => expect(approveMock).toHaveBeenCalledWith('d1'));
