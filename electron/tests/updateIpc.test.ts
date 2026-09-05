@@ -28,6 +28,17 @@ function createManager() {
     rollback: vi.fn().mockResolvedValue(undefined),
     canManualRollback: vi.fn().mockResolvedValue({ allowed: true }),
     setStrategy: vi.fn().mockResolvedValue(undefined),
+    getConfig: vi.fn().mockResolvedValue({
+      updateStrategy: 'auto-download',
+      channel: 'stable',
+      rollbackWindowDays: 7,
+      autoRollbackThreshold: 3,
+      checkIntervalHours: 24,
+      updateServerUrl: 'https://updates.sage.app',
+      enableTelemetry: false,
+      cacheRetentionDays: 30,
+    }),
+    setChannel: vi.fn().mockResolvedValue(undefined),
     onDownloadProgress: vi.fn().mockReturnValue(() => undefined),
   };
 }
@@ -52,6 +63,8 @@ describe('registerUpdateIpc', () => {
     await ipc.handlers.get('update:rollback')?.(trustedEvent, 'user requested');
     await ipc.handlers.get('update:can-rollback')?.(trustedEvent);
     await ipc.handlers.get('update:set-strategy')?.(trustedEvent, 'auto-install');
+    await ipc.handlers.get('update:get-config')?.(trustedEvent);
+    await ipc.handlers.get('update:set-channel')?.(trustedEvent, 'beta');
 
     expect(manager.checkForUpdates).toHaveBeenCalledOnce();
     expect(manager.downloadUpdate).toHaveBeenCalledOnce();
@@ -59,6 +72,8 @@ describe('registerUpdateIpc', () => {
     expect(manager.rollback).toHaveBeenCalledWith('user requested');
     expect(manager.canManualRollback).toHaveBeenCalledOnce();
     expect(manager.setStrategy).toHaveBeenCalledWith('auto-install');
+    expect(manager.getConfig).toHaveBeenCalledOnce();
+    expect(manager.setChannel).toHaveBeenCalledWith('beta');
   });
 
   it('rejects untrusted senders before calling the manager', async () => {
@@ -73,6 +88,12 @@ describe('registerUpdateIpc', () => {
     );
     await expect(
       ipc.handlers.get('update:set-strategy')?.(untrustedEvent, 'manual'),
+    ).rejects.toThrow('未授权的窗口请求');
+    await expect(ipc.handlers.get('update:get-config')?.(untrustedEvent)).rejects.toThrow(
+      '未授权的窗口请求',
+    );
+    await expect(
+      ipc.handlers.get('update:set-channel')?.(untrustedEvent, 'beta'),
     ).rejects.toThrow('未授权的窗口请求');
     expect(manager.checkForUpdates).not.toHaveBeenCalled();
     expect(manager.setStrategy).not.toHaveBeenCalled();
@@ -95,6 +116,9 @@ describe('registerUpdateIpc', () => {
     expect(manager.rollback).toHaveBeenLastCalledWith('123');
     await expect(ipc.handlers.get('update:set-strategy')?.(trustedEvent, 'bad')).rejects.toThrow(
       '无效的更新策略',
+    );
+    await expect(ipc.handlers.get('update:set-channel')?.(trustedEvent, 'nightly')).rejects.toThrow(
+      '无效的更新渠道',
     );
   });
 
@@ -178,6 +202,8 @@ describe('preload update bridge', () => {
     await exposed.updates.rollback('manual');
     await exposed.updates.canRollback();
     await exposed.updates.setStrategy('manual');
+    await exposed.updates.getConfig();
+    await exposed.updates.setChannel('beta');
     expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
       'update:check',
       'update:download',
@@ -185,6 +211,8 @@ describe('preload update bridge', () => {
       'update:rollback',
       'update:can-rollback',
       'update:set-strategy',
+      'update:get-config',
+      'update:set-channel',
     ]);
 
     const handler = vi.fn();
