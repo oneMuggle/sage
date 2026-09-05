@@ -118,6 +118,7 @@ export function Chat() {
     if (addedUserMessage || wasAtBottomRef.current) {
       el.scrollTop = el.scrollHeight;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- messages 本身不加入 deps，避免每次 render 都触发；通过 messages.length + lastMsg 字段变化驱动
   }, [
     messages.length,
     lastMsg?.content,
@@ -258,7 +259,9 @@ export function Chat() {
       toast.success(t('chat.learn_queued'));
       navigate('/skills?tab=drafts');
     } catch (e) {
-      toast.error(fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }));
+      toast.error(
+        fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }),
+      );
     }
   };
 

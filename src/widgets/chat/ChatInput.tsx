@@ -164,7 +164,7 @@ export function ChatInput({
       setValue(newValue);
       setCursorPos(atQuery.startIdx + 1 + filePath.length + 1);
     },
-    [value, atQuery],
+    [value, atQuery, setValue],
   );
 
   /**
@@ -224,7 +224,7 @@ export function ChatInput({
     const newValue = value.slice(0, atQuery.startIdx) + value.slice(atQuery.endIdx);
     setValue(newValue);
     setCursorPos(atQuery.startIdx);
-  }, [value, atQuery]);
+  }, [value, atQuery, setValue]);
 
   const handleSend = () => {
     if (!value.trim() || isLoading) return;
@@ -329,7 +329,7 @@ export function ChatInput({
       setValue('');
       onSend(prompt);
     },
-    [value, onSend, onClear, onCompact, onLearn, slashCommands, isLoading, disabled],
+    [value, onSend, onClear, onCompact, onLearn, slashCommands, isLoading, disabled, setValue],
   );
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

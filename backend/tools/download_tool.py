@@ -1,4 +1,4 @@
-# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
+# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
 """http_download —— 流式下载文件到工作区。
 
 与 ``bash`` + ``curl`` 的区别：走 EXTERNAL 风险类而非 EXEC，落盘路径受工作区
