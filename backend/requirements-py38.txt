@@ -104,6 +104,10 @@ certifi>=2024.7.4
 python-pptx==0.6.23   # PPTX read/write, ~5MB wheel; py38 兼容 (0.7.0+ 弃 3.8)
 python-docx==1.1.2    # DOCX read/write, ~2MB wheel; py38 兼容
 openpyxl==3.1.5       # XLSX read/write (low-level), ~1MB wheel; py38 兼容
+# Phase 2 (2026-09-05): Word template + PDF operations
+docxtpl==0.20.0       # Word template fill with {{}} placeholders, ~0.5MB wheel; py38 兼容
+PyMuPDF==1.25.0       # PDF read + form fill (C extension), ~15MB wheel; py38 兼容
+reportlab==4.2.5      # PDF generation from structured data, ~3MB wheel; py38 兼容
 
 # Testing
 pytest==7.4.4
