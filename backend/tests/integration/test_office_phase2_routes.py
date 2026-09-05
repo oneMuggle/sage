@@ -79,17 +79,17 @@ def _make_pdf(workspace: Path) -> Path:
 
 def _make_pdf_form(workspace: Path) -> Path:
     """Create a PDF with two AcroForm text fields."""
-    import fitz
+    import pymupdf
 
     path = workspace / "form.pdf"
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page()
 
     for i, field_name in enumerate(["name", "email"]):
-        widget = fitz.Widget()
+        widget = pymupdf.Widget()
         widget.field_name = field_name
-        widget.field_type = fitz.PDF_WIDGET_TYPE_TEXT
-        widget.rect = fitz.Rect(72, 700 - i * 50, 300, 720 - i * 50)
+        widget.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
+        widget.rect = pymupdf.Rect(72, 700 - i * 50, 300, 720 - i * 50)
         widget.field_value = ""
         page.add_widget(widget)
 
@@ -429,7 +429,7 @@ def test_http_generate_pdf_route_checks_output_content(
     http_client: TestClient, workspace: Path
 ) -> None:
     """The mounted PDF generate route writes a readable PDF."""
-    import fitz
+    import pymupdf
 
     response = http_client.post(
         "/api/v1/office/pdf/generate",
@@ -443,7 +443,7 @@ def test_http_generate_pdf_route_checks_output_content(
     assert response.status_code == 200
     output_path = Path(response.json()["output_path"])
     assert output_path.is_file()
-    with fitz.open(str(output_path)) as document:
+    with pymupdf.open(str(output_path)) as document:
         assert "Generated content" in "\n".join(page.get_text() for page in document)
 
 
@@ -468,7 +468,7 @@ def test_http_fill_pdf_form_route_checks_filled_values(
     http_client: TestClient, workspace: Path
 ) -> None:
     """The mounted PDF form fill route persists submitted widget values."""
-    import fitz
+    import pymupdf
 
     form_path = _make_pdf_form(workspace)
     response = http_client.post(
@@ -484,7 +484,7 @@ def test_http_fill_pdf_form_route_checks_filled_values(
     assert response.status_code == 200
     output_path = Path(response.json()["output_path"])
     assert output_path.is_file()
-    with fitz.open(str(output_path)) as document:
+    with pymupdf.open(str(output_path)) as document:
         values = {
             widget.field_name: widget.field_value
             for page in document

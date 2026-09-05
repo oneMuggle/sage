@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from .errors import (
     OfficeFileNotFoundError,
@@ -58,7 +58,7 @@ def _validate_pdf_file(file_path: Path) -> None:
         )
 
     try:
-        doc = fitz.open(str(file_path))
+        doc = pymupdf.open(str(file_path))
     except OfficeSizeLimitError:
         raise
     except Exception as exc:
@@ -122,7 +122,7 @@ def read_pdf(
 
     # Re-open for content extraction (preflight closed its own handle).
     try:
-        doc = fitz.open(str(file_path))
+        doc = pymupdf.open(str(file_path))
     except Exception as exc:
         raise OfficePdfParseError("Failed to open PDF", file_path=file_path) from exc
 

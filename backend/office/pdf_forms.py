@@ -15,7 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from .errors import (
     OfficeFileNotFoundError,
@@ -47,7 +47,7 @@ _WIDGET_TYPE_NAMES: Dict[int, str] = {
 }
 
 
-def _widget_type_name(widget: fitz.Widget) -> str:
+def _widget_type_name(widget: pymupdf.Widget) -> str:
     """Map a PyMuPDF widget field_type int to a string name."""
     return _WIDGET_TYPE_NAMES.get(widget.field_type, "unknown")
 
@@ -78,7 +78,7 @@ def read_pdf_form(
     _validate_pdf_file(file_path)
 
     try:
-        doc = fitz.open(str(file_path))
+        doc = pymupdf.open(str(file_path))
     except OfficeSizeLimitError:
         raise
     except OfficePdfParseError:
@@ -167,7 +167,7 @@ def fill_pdf_form(req: PdfFormFillRequest) -> PdfFormFillResult:
 
     # ── Open template ───────────────────────────────────────────────────
     try:
-        doc = fitz.open(str(template_path))
+        doc = pymupdf.open(str(template_path))
     except OfficeSizeLimitError:
         raise
     except OfficePdfParseError:

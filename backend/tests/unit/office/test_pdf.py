@@ -251,7 +251,7 @@ def test_generate_pdf_rejects_existing_output_file(tmp_path: Path):
 
 def test_generate_pdf_content_verification(tmp_path: Path):
     """After generating, open the output with fitz and verify text content."""
-    import fitz
+    import pymupdf
 
     from backend.office.pdf import generate_pdf
 
@@ -265,7 +265,7 @@ def test_generate_pdf_content_verification(tmp_path: Path):
     )
     result = generate_pdf(req)
 
-    doc = fitz.open(result.output_path)
+    doc = pymupdf.open(result.output_path)
     try:
         assert len(doc) == 2
         page0_text = doc[0].get_text()
