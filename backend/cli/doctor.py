@@ -360,6 +360,8 @@ def _import_all_checks() -> None:
         # 2026-09-04: 本地开发环境助手 — runtime_probe 工具的 doctor 集成。
         # 只探 Python/Node.js 可用性, 不附带工具链明细 (避免 doctor 变慢)。
         "runtime_env",
+        # §1.6 三期扩容(2026-09-05) — 网络访问策略（mode / host 白名单 / httpx 依赖）。
+        "network",
     ):
         importlib.import_module(f"{pkg}.{mod_name}")
 
