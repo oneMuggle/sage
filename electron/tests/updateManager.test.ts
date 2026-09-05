@@ -1099,4 +1099,22 @@ describe('UpdateManager', () => {
       expect(result.reason).toBe('Rollback window unknown');
     });
   });
+
+  describe('setChannel', () => {
+    it('invalidates cached check result when channel changes', async () => {
+      vi.mocked(fetch).mockResolvedValue(createResponse(404, {}));
+      await updateManager.checkForUpdates();
+
+      await updateManager.setChannel('beta');
+
+      const state = await updateManager.canManualRollback();
+      expect(state.allowed).toBe(false);
+
+      const config = await updateManager.getConfig();
+      expect(config.channel).toBe('beta');
+
+      const downloadResult = updateManager.downloadUpdate();
+      await expect(downloadResult).rejects.toThrow('No update is available to download');
+    });
+  });
 });

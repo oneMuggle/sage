@@ -221,6 +221,9 @@ export class UpdateManager {
   async setChannel(channel: UpdateChannel): Promise<void> {
     const config = await this.configManager.getConfig();
     await this.configManager.setConfig({ ...config, channel });
+    // Channel change invalidates any cached check result from a previous
+    // check (which may have targeted a different channel's manifest).
+    this.lastCheckedUpdate = null;
   }
 
   private getFeedUrl(fileUrl: string): string {
