@@ -2,7 +2,7 @@ Status: DONE_WITH_CONCERNS
 
 Commits:
 - ed572d84 test(update): add integration coverage for upgrade flows
-- <pending> test(update): harden integration test isolation
+- ac16476b test(update): harden integration test isolation
 
 Implementation:
 - Added `electron/tests/updateIntegration.test.ts` with 14 deterministic integration tests covering all six required scenarios.
@@ -13,10 +13,10 @@ Implementation:
 - Deferred Playwright coverage as requested because this task is scoped to integration tests and no Electron Playwright fixture is required here.
 
 Verification:
-- `npm run test:run -- electron/tests/updateIntegration.test.ts` — passed after isolation hardening, 14/14 tests.
-- `npm run test:run -- electron/tests/update*.test.ts` — passed before isolation hardening, 6 files and 88/88 tests.
+- `npm run test:run -- electron/tests/update*.test.ts` — passed after isolation hardening, 6 files and 88/88 tests.
 - Direct TypeScript check for the new test (`npx tsc --noEmit --target es2022 --module esnext --moduleResolution bundler --skipLibCheck --types vitest/globals electron/tests/updateIntegration.test.ts`) — passed after isolation hardening.
 - `npm exec eslint electron/tests/updateIntegration.test.ts` — passed after isolation hardening.
+- `git diff --check` — passed for committed task changes.
 - `npm run build` — blocked by existing `electron/tests/*.test.ts` top-level `await` TS1378 errors under `tsconfig.electron.json`; the same pre-existing pattern affects updateConfig, updateHealthChecker, updateManager, and updateState tests, not only the new file.
 
 Concerns:
