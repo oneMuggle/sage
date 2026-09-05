@@ -44,6 +44,7 @@
 | 48   | [Git Worktree 并行开发](./47-git-worktree-workflow.md) | `scripts/worktree.sh` helper（new/list/ports/remove/clean）+ `.worktrees/` 端口分配机制 + main/release-win7 并行 cherry-pick 场景 + 与 `.claude/worktrees/` agent 隔离的边界 |
 | 48   | [Office CRUD 闭环完成](./48-office-crud-completion.md) | 2026-09 PR-1..5：profile 白名单接通 + archive/restore + pre-edit snapshot + chat @filename 兜底 + re-read 元数据保留 + write_file 二进制黑名单 + win7 同步；闭环增删改查 + chat ref + 二进制防护 + win7 兼容 |
 | 49   | [本地开发环境助手](./49-local-development-assistant.md) | 运行时探测 + 项目诊断 + 安全执行：`backend/domain` + 3 tools + `/api/v1/runtime/*` + Electron IPC + Settings 开发环境 Tab + humanize 渲染 + doctor check |
+| 50   | [main ↔ release/win7 分支对齐状态](./50-main-win7-alignment-status.md) | 20+ 已对齐 main-only commit 清单 + 故意保留的 win7-only + 后续对齐策略 + 验证方法 |
 
 ---
 
