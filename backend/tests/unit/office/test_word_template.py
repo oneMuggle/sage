@@ -11,10 +11,15 @@ from backend.office.errors import (
     OfficeFileNotFoundError,
     OfficePathError,
     OfficeSizeLimitError,
+    OfficeTemplateFillError,
     OfficeTemplateParseError,
 )
-from backend.office.models import PlaceholderLocation, TemplatePlaceholderType
-from backend.office.word_template import analyze_word_template
+from backend.office.models import (
+    PlaceholderLocation,
+    TemplatePlaceholderType,
+    WordTemplateFillRequest,
+)
+from backend.office.word_template import analyze_word_template, fill_word_template
 
 
 @pytest.fixture()
@@ -154,6 +159,67 @@ def test_analyze_rejects_template_outside_workspace(tmp_path: Path):
 
     with pytest.raises(OfficePathError):
         analyze_word_template(outside, workspace_path=str(tmp_path))
+
+
+def test_fill_simple_template(simple_template: Path, tmp_path: Path):
+    req = WordTemplateFillRequest(
+        workspace_path=str(simple_template.parent),
+        template_path=str(simple_template),
+        output_filename="filled.docx",
+        data={"甲方姓名": "张三", "乙方姓名": "李四", "合同金额": "100,000"},
+    )
+    result = fill_word_template(req)
+
+    assert result.filename == "filled.docx"
+    assert result.filled_count == 3
+    assert len(result.unfilled_placeholders) == 0
+    assert Path(result.output_path).exists()
+
+
+def test_fill_template_partial_data(simple_template: Path, tmp_path: Path):
+    req = WordTemplateFillRequest(
+        workspace_path=str(simple_template.parent),
+        template_path=str(simple_template),
+        output_filename="partial.docx",
+        data={"甲方姓名": "张三"},
+    )
+    result = fill_word_template(req)
+
+    assert result.filled_count == 1
+    assert len(result.unfilled_placeholders) == 2
+    assert "乙方姓名" in result.unfilled_placeholders
+
+
+def test_fill_rejects_output_path_traversal(simple_template: Path):
+    req = WordTemplateFillRequest(
+        workspace_path=str(simple_template.parent),
+        template_path=str(simple_template),
+        output_filename="../filled.docx",
+        data={},
+    )
+
+    with pytest.raises(OfficePathError):
+        fill_word_template(req)
+
+
+def test_fill_wraps_render_errors(simple_template: Path, monkeypatch):
+    class BrokenTemplate:
+        def __init__(self, path):
+            pass
+
+        def render(self, context):
+            raise RuntimeError("render exploded")
+
+    monkeypatch.setattr(word_template, "DocxTemplate", BrokenTemplate)
+    req = WordTemplateFillRequest(
+        workspace_path=str(simple_template.parent),
+        template_path=str(simple_template),
+        output_filename="broken.docx",
+        data={},
+    )
+
+    with pytest.raises(OfficeTemplateFillError, match="Template fill failed"):
+        fill_word_template(req)
 
 
 def test_analyze_rejects_oversized_docx_zip(tmp_path: Path, monkeypatch):
