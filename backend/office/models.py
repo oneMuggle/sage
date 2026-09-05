@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, conlist
 
@@ -41,6 +41,7 @@ class OfficeDocType(str, Enum):
     PPT = "ppt"
     WORD = "word"
     EXCEL = "excel"
+    PDF = "pdf"  # Phase 2: PDF support
 
 
 class OfficeDocStatus(str, Enum):
@@ -349,3 +350,173 @@ class OfficeDeleteResponse(BaseModel):
 
     id: str
     deleted: bool
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Word Template models (Phase 2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TemplatePlaceholderType(str, Enum):
+    """Type of placeholder in a Word template."""
+
+    TEXT = "text"
+    IMAGE = "image"
+    TABLE = "table"
+    DATE = "date"
+    RICH_TEXT = "rich_text"
+
+
+class PlaceholderLocation(str, Enum):
+    """Location of placeholder in the document."""
+
+    BODY = "body"
+    TABLE = "table"
+    HEADER = "header"
+    FOOTER = "footer"
+    TEXT_BOX = "text_box"
+
+
+class TemplatePlaceholder(BaseModel):
+    """One placeholder found in a Word template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    raw_tag: str
+    type: TemplatePlaceholderType
+    location: PlaceholderLocation
+    paragraph_index: Optional[int] = None
+    table_index: Optional[int] = None
+    row_index: Optional[int] = None
+    col_index: Optional[int] = None
+    format_hint: Optional[str] = None
+
+
+class WordTemplateAnalysis(BaseModel):
+    """Result of analyzing a Word template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str
+    placeholders: List[TemplatePlaceholder]
+    summary: OfficeDocumentSummary
+    has_jinja_control: bool = False
+
+
+class WordTemplateFillRequest(BaseModel):
+    """Request to fill a Word template with data."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    template_path: str
+    output_filename: str
+    data: Dict[str, Any]
+    images: Optional[Dict[str, str]] = None
+
+
+class WordTemplateFillResult(BaseModel):
+    """Result of filling a Word template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    output_path: str
+    filename: str
+    file_size_bytes: int
+    filled_count: int
+    unfilled_placeholders: List[str]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# PDF models (Phase 2)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class PdfPageContent(BaseModel):
+    """Content of one PDF page."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    page_number: int
+    text: str
+    tables: List[List[List[str]]] = Field(default_factory=list)
+    images: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PdfReadResult(BaseModel):
+    """Result of reading a PDF file."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: OfficeDocumentSummary
+    pages: List[PdfPageContent]
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PdfPageSpec(BaseModel):
+    """One page in a generated PDF."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = None
+    paragraphs: List[str] = Field(default_factory=list)
+    tables: List[List[List[str]]] = Field(default_factory=list)
+
+
+class PdfGenerateRequest(BaseModel):
+    """Request to generate a PDF."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    filename: str
+    pages: List[PdfPageSpec]
+    page_size: str = "A4"
+    orientation: str = "portrait"
+
+
+class PdfGenerateResult(BaseModel):
+    """Result of generating a PDF."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    output_path: str
+    filename: str
+    file_size_bytes: int
+    page_count: int
+
+
+class PdfFormField(BaseModel):
+    """One PDF form field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: str
+    value: Optional[Any] = None
+    options: Optional[List[str]] = None
+    required: bool = False
+    read_only: bool = False
+
+
+class PdfFormReadResult(BaseModel):
+    """Result of reading PDF form fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str
+    fields: List[PdfFormField]
+    has_xfa: bool = False
+
+
+class PdfFormFillRequest(BaseModel):
+    """Request to fill a PDF form."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_path: str
+    template_path: str
+    output_filename: str
+    data: Dict[str, Any]
+    flatten: bool = False
