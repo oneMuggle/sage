@@ -8,6 +8,7 @@ M4 手动压缩路由 API 测试 — POST /api/v1/sessions/{id}/compact
 - LLM 失败: DB 不被触碰
 """
 
+import threading
 import time
 
 import pytest
@@ -207,3 +208,41 @@ async def test_compact_without_llm_config_returns_error(client, monkeypatch):
     assert data["ok"] is False
     assert data["error"] == "llm_not_configured"
     assert len(MessageRepository().get_by_session(sess.id)) == 14
+
+
+@pytest.mark.asyncio()
+async def test_compact_database_access_runs_off_event_loop(client, monkeypatch):
+    """Compact 的同步 SQLite 读写必须在线程池中执行。"""
+    monkeypatch.setenv("SAGE_COMPACT_THRESHOLD", "100")
+    sess = _seed_session_with_messages(14)
+    _patch_llm(monkeypatch, _fake_llm_ok)
+
+    loop_thread_id = threading.get_ident()
+    observed_thread_ids = []
+    original_get = SessionRepository.get
+    original_get_by_session = MessageRepository.get_by_session
+    original_replace = MessageRepository.replace_prefix_with_continuation
+
+    def probe_get(self, session_id):
+        observed_thread_ids.append(threading.get_ident())
+        return original_get(self, session_id)
+
+    def probe_get_by_session(self, session_id, *args, **kwargs):
+        observed_thread_ids.append(threading.get_ident())
+        return original_get_by_session(self, session_id, *args, **kwargs)
+
+    def probe_replace(self, *args, **kwargs):
+        observed_thread_ids.append(threading.get_ident())
+        return original_replace(self, *args, **kwargs)
+
+    monkeypatch.setattr(SessionRepository, "get", probe_get)
+    monkeypatch.setattr(MessageRepository, "get_by_session", probe_get_by_session)
+    monkeypatch.setattr(
+        MessageRepository, "replace_prefix_with_continuation", probe_replace
+    )
+
+    response = await client.post(f"{PREFIX}/sessions/{sess.id}/compact")
+
+    assert response.status_code == 200, response.text
+    assert observed_thread_ids
+    assert all(thread_id != loop_thread_id for thread_id in observed_thread_ids)

@@ -78,7 +78,7 @@ from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
 from backend.application.services.wake_store import get_wake_store
-from backend.data.database import Database
+from backend.data.database import _SQLITE_LOCK, get_database
 from backend.data.session_repo import MessageRepository, SessionRepository
 from backend.domain.wake import Wake
 from backend.memory import get_memory_manager
@@ -245,7 +245,11 @@ async def lifespan(app: FastAPI):
     initialize_local_auth_token()
 
     # 启动时初始化
-    db = Database()
+    # PR A §1.2 测试隔离修复：lifespan 通过 ``get_database()`` 拿全局
+    # 单例，测试可以把 ``backend.data.database._db`` 提前指向临时库。
+    # 直接 ``Database()`` 会忽略该 hook，导致测试污染生产 ``data/sage.db``。
+    # ``init_db()`` 全部走 ``CREATE TABLE IF NOT EXISTS``，重复调用幂等。
+    db = get_database()
     db.init_db()
     app.state.db = db
 
@@ -295,13 +299,14 @@ async def lifespan(app: FastAPI):
         internal mutex.
         """
         def _query() -> List[str]:
-            conn = db.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id FROM sessions WHERE updated_at < ? LIMIT 50",
-                (cutoff_ts,),
-            )
-            return [row["id"] for row in cursor.fetchall()]
+            with _SQLITE_LOCK:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id FROM sessions WHERE updated_at < ? LIMIT 50",
+                    (cutoff_ts,),
+                )
+                return [row["id"] for row in cursor.fetchall()]
 
         return await asyncio.get_event_loop().run_in_executor(None, _query)
 

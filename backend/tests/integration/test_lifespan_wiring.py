@@ -143,6 +143,85 @@ async def test_watchdog_fetch_runs_sql_off_event_loop(tmp_db_path: str) -> None:
         )
 
 
+@pytest.mark.asyncio()
+async def test_watchdog_fetch_waits_for_shared_sqlite_lock(tmp_db_path: str) -> None:
+    """Watchdog 查询必须与其他共享连接访问互斥。
+
+    把 ``_SQLITE_LOCK`` 替换为 ``_TrackingLock``:用 ``__enter__`` 计数,
+    用真实 ``threading.Lock`` 提供互斥语义。测试主线程 ``with tracking_lock:``
+    持有锁,期间启动 fetch 任务;worker 调用 ``_query`` 时 ``__enter__`` 会把
+    acquire 计数 +1,但被 ``threading.Lock`` 阻塞,任务保持 pending。退出
+    ``with`` 后释放,worker 完成任务。
+
+    该测试比简单 ``lock.acquire() + sleep(50ms)`` 更鲁棒:不依赖时序竞争,
+    而是依赖锁的语义保证——即使 worker 在锁释放前已经被 executor 调度并
+    阻塞了,``acquire_attempts >= 2`` 也能证明它确实试图进入临界区。
+    """
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    import backend.data.database as db_mod
+    import backend.main as main_mod
+    from backend.main import app
+
+    class _TrackingLock:
+        """``threading.Lock`` 的薄包装,记录 ``__enter__`` 次数。"""
+
+        def __init__(self) -> None:
+            self._lock = threading.Lock()
+            self.acquire_attempts = 0
+
+        def __enter__(self) -> _TrackingLock:
+            self.acquire_attempts += 1
+            self._lock.acquire()
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            self._lock.release()
+
+    tracking_lock = _TrackingLock()
+    # 重要:main.py 顶部 ``from backend.data.database import _SQLITE_LOCK``
+    # 把原始 lock **按值** 导入 main 模块命名空间。``_query`` 闭包引用
+    # ``_SQLITE_LOCK`` 时,通过 LEGB 规则解析到 ``main.__dict__``,而不是
+    # ``backend.data.database.__dict__``。所以必须同步 patch 两个模块。
+    original_db_lock = db_mod._SQLITE_LOCK
+    original_main_lock = main_mod._SQLITE_LOCK
+    db_mod._SQLITE_LOCK = tracking_lock
+    main_mod._SQLITE_LOCK = tracking_lock
+    try:
+        db_mod._db = db_mod.Database(db_path=tmp_db_path)
+        with TestClient(app):
+            fetch = app.state._watchdog_query_fn
+            assert main_mod._SQLITE_LOCK is tracking_lock, (
+                "TestClient lifespan 重置了 main._SQLITE_LOCK。"
+                "本测试需要 _query 在 worker 线程中调用 tracking_lock。"
+            )
+            with tracking_lock:
+                task = asyncio.create_task(fetch(cutoff_ts=0))
+                # 给 executor 充分时间调度 worker 线程进入 _query。
+                # worker 调用 ``with _SQLITE_LOCK:`` 时会被阻塞,但
+                # ``__enter__`` 仍会执行,所以 ``acquire_attempts`` 计数 +1。
+                await asyncio.sleep(0.2)
+                assert not task.done(), (
+                    "watchdog 任务在 _SQLITE_LOCK 被持有期间完成了;"
+                    "说明 _query 路径未走 _SQLITE_LOCK,或 worker 跳过了锁。"
+                )
+            # ``with tracking_lock`` 退出 → __exit__ → 锁释放
+            # worker 现在可以 acquire 并完成 _query。
+            result = await asyncio.wait_for(task, timeout=5)
+            assert result == [], (
+                f"expected empty stale list with cutoff_ts=0; got {result!r}"
+            )
+            assert tracking_lock.acquire_attempts >= 2, (
+                f"expected acquire_attempts >= 2 (test + worker); "
+                f"got {tracking_lock.acquire_attempts}"
+            )
+    finally:
+        db_mod._SQLITE_LOCK = original_db_lock
+        main_mod._SQLITE_LOCK = original_main_lock
+
+
 # ----------------------------------------------------------------------------
 # PR #381 cherry-pick — health metadata + shutdown helpers from main.
 #

@@ -293,7 +293,7 @@ async def test_cross_path_concurrent_no_sqlite_programming_error(client):
     for r in responses:
         if isinstance(r, BaseException):
             # OperationalError 同样是连接竞争的表现形式之一
-            if isinstance(r, sqlite3.ProgrammingError | sqlite3.OperationalError):
+            if isinstance(r, (sqlite3.ProgrammingError, sqlite3.OperationalError)):
                 sqlite_errors.append(r)
             else:
                 other_errors.append(r)
