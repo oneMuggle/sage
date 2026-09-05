@@ -249,6 +249,9 @@ def _read_capped_output(file_path: str) -> Tuple[str, bool]:
 class ReplTool(BaseTool):
     """REPL 工具 - 在隔离子进程中执行 Python 片段"""
 
+    # 子进程执行可达超时上限，与 BashTool 同理需卸载到 executor 线程。
+    is_blocking = True
+
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="repl",

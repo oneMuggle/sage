@@ -353,10 +353,14 @@ async def lifespan(app: FastAPI):
 
     # PR-3: agents 表种子化 — 用 ensure_default_agents 替代 seed_defaults_if_empty:
     # 首次启动插全量默认集, 已存在的 DB 增量补 writer 等新增默认角色。
-    from backend.agents.profiles import ensure_default_agents
+    from backend.agents.profiles import ensure_default_agents, validate_profile_tools
     from backend.data.agent_repo import AgentRepository
 
     ensure_default_agents()
+    # T3 (2026-09-04): 启动期白名单校验 —— profile 引用未注册工具名
+    # （改名/拼写漂移）时告警。仅告警不剔除：未注册名对 LLM 本就不可见，
+    # 剔除会误伤引用 MCP 等动态工具的自定义 profile。
+    validate_profile_tools()
 
     # I2: chat 流注册表 — 拆分 /chat/stream 为 create + attach,避免 LLM 被调两次
     app.state.streams = StreamRegistry()

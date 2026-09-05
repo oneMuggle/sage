@@ -77,13 +77,19 @@ def test_renames_preserve_user_extras(monkeypatch):
 
 
 def test_renames_idempotent_no_upsert(monkeypatch):
-    """tools 已是新名 → 重命名段不触发 upsert。"""
+    """tools 已是新名 → 重命名段不触发 upsert。
+
+    存量行用当前 coder 种子形状 —— 旧的 4 工具形状在 T2 bash 迁移合并后
+    会触发 bash_output/kill_shell 补齐（见 test_profiles_bash_migration.py），
+    与本测试"重命名幂等"的意图无关。
+    """
+    current_coder = list(profiles._CODER_SEED_TOOLS)
     stored = {
-        "coder": {"id": "coder", "enabled": True, "tools": ["read_file", "write_file", "bash", "calculator"]},
+        "coder": {"id": "coder", "enabled": True, "tools": list(current_coder)},
     }
     _seed_repo(monkeypatch, stored)
     profiles.ensure_default_agents()
-    assert stored["coder"]["tools"] == ["read_file", "write_file", "bash", "calculator"]
+    assert stored["coder"]["tools"] == current_coder
 
 
 def test_renames_only_affects_three_legacy_names(monkeypatch):
