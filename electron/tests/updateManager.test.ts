@@ -72,8 +72,34 @@ vi.doMock('../updateHealthChecker', () => ({
   })),
 }));
 
+// Mutable fs/promises mock: keeps all real functions but replaces `rename`
+// with a delegating function so individual tests can toggle failure modes.
+// The ESM module namespace is non-configurable, so vi.spyOn cannot replace
+// individual exports — we use a doMock factory with a mutable flag instead.
+// Controls which fs.rename calls fail in tests.
+// null = all succeed; string = fail when oldPath starts with this value.
+let renameFailWhenOldPathStartsWith: string | null = null;
+const realFsPromises = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+vi.doMock('fs/promises', () => ({
+  ...realFsPromises,
+  rename: async (...args: Parameters<typeof realFsPromises.rename>) => {
+    const [oldPath] = args;
+    if (
+      renameFailWhenOldPathStartsWith !== null &&
+      typeof oldPath === 'string' &&
+      oldPath.startsWith(renameFailWhenOldPathStartsWith)
+    ) {
+      throw new Error('simulated rename failure');
+    }
+    return realFsPromises.rename(...args);
+  },
+}));
+
 const { UpdateManager } = await import('../updateManager');
 const { StateManager } = await import('../updateState');
+const { LauncherHealthChecker: MockedLauncherHealthChecker } = await import(
+  '../updateHealthChecker'
+);
 
 const platformKey =
   process.platform === 'linux'
@@ -770,6 +796,7 @@ describe('UpdateManager', () => {
         ...base,
         crashCount: 0,
         lastRecordedVersion: base.currentVersion,
+        postInstallMarker: { version: base.currentVersion, installedAt: new Date().toISOString() },
       });
 
       await expect(
@@ -793,6 +820,7 @@ describe('UpdateManager', () => {
         crashCount: 2,
         lastRecordedVersion: base.currentVersion,
         lastKnownGoodVersion: '0.9.0',
+        postInstallMarker: { version: '1.0.0', installedAt: new Date().toISOString() },
       });
 
       // Mock rollback to avoid actual rollback execution
@@ -840,6 +868,7 @@ describe('UpdateManager', () => {
         ...base,
         crashCount: 1,
         lastRecordedVersion: base.currentVersion,
+        postInstallMarker: { version: base.currentVersion, installedAt: new Date().toISOString() },
       });
 
       await expect(
@@ -1255,6 +1284,231 @@ describe('UpdateManager', () => {
 
       const downloadResult = updateManager.downloadUpdate();
       await expect(downloadResult).rejects.toThrow('No update is available to download');
+    });
+  });
+
+  describe('backendUrl injection', () => {
+    it('passes backendUrl to LauncherHealthChecker in onAppStartup', async () => {
+      mockRunPostStartupChecks = vi.fn().mockResolvedValue({ passed: true, details: [] });
+      const customBackendUrl = 'http://127.0.0.1:9999';
+      const visibleWindow = {
+        isDestroyed: () => false,
+        isVisible: () => true,
+      };
+
+      await updateManager.onAppStartup(
+        () => visibleWindow as Electron.BrowserWindow,
+        customBackendUrl,
+      );
+
+      const ctorCalls = (MockedLauncherHealthChecker as unknown as vi.Mock).mock.calls;
+      expect(ctorCalls.length).toBeGreaterThan(0);
+      const lastOptions = ctorCalls[ctorCalls.length - 1][0];
+      expect(lastOptions.backendUrl).toBe(customBackendUrl);
+    });
+
+    it('defaults backendUrl to http://127.0.0.1:8765 when not provided', async () => {
+      mockRunPostStartupChecks = vi.fn().mockResolvedValue({ passed: true, details: [] });
+      const visibleWindow = {
+        isDestroyed: () => false,
+        isVisible: () => true,
+      };
+
+      await updateManager.onAppStartup(() => visibleWindow as Electron.BrowserWindow);
+
+      const ctorCalls = (MockedLauncherHealthChecker as unknown as vi.Mock).mock.calls;
+      expect(ctorCalls.length).toBeGreaterThan(0);
+      const lastOptions = ctorCalls[ctorCalls.length - 1][0];
+      expect(lastOptions.backendUrl).toBe('http://127.0.0.1:8765');
+    });
+  });
+
+  describe('postInstallMarker', () => {
+    function createVisibleWindow(): object {
+      return {
+        isDestroyed: () => false,
+        isVisible: () => true,
+      };
+    }
+
+    const tempInstallRoot = '/tmp/test-install-root-marker';
+    const tempInstallDir = `${tempInstallRoot}/app`;
+    let originalExecPath: string;
+
+    beforeEach(async () => {
+      originalExecPath = process.execPath;
+      Object.defineProperty(process, 'execPath', {
+        value: `${tempInstallDir}/Sage`,
+        configurable: true,
+      });
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+      await fs.mkdir(tempInstallDir, { recursive: true });
+      mockRunPostStartupChecks = vi.fn();
+    });
+
+    afterEach(async () => {
+      Object.defineProperty(process, 'execPath', {
+        value: originalExecPath,
+        configurable: true,
+      });
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+    });
+
+    it('writes postInstallMarker during installUpdate', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        pendingUpdate: { version: '1.3.0', downloadedAt: new Date().toISOString() },
+      });
+
+      const before = Date.now();
+      await updateManager.installUpdate();
+      const after = Date.now();
+
+      const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+      expect(state.postInstallMarker).not.toBeNull();
+      expect(state.postInstallMarker.version).toBe('1.3.0');
+      const installedAt = Date.parse(state.postInstallMarker.installedAt);
+      expect(installedAt).toBeGreaterThanOrEqual(before);
+      expect(installedAt).toBeLessThanOrEqual(after);
+    });
+
+    it('clears postInstallMarker after health checks pass', async () => {
+      mockRunPostStartupChecks.mockResolvedValue({ passed: true, details: [] });
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        postInstallMarker: {
+          version: base.currentVersion,
+          installedAt: new Date().toISOString(),
+        },
+      });
+
+      await updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow);
+
+      const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+      expect(state.postInstallMarker).toBeNull();
+    });
+
+    it('does not auto-rollback when postInstallMarker version does not match currentVersion', async () => {
+      mockRunPostStartupChecks.mockResolvedValue({
+        passed: false,
+        details: [{ name: 'backend', passed: false, error: 'unhealthy' }],
+      });
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        crashCount: 2,
+        lastRecordedVersion: base.currentVersion,
+        lastKnownGoodVersion: '0.9.0',
+        // Marker version does NOT match currentVersion ('1.0.0')
+        postInstallMarker: { version: '1.3.0', installedAt: new Date().toISOString() },
+      });
+
+      await expect(
+        updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow),
+      ).rejects.toThrow('Health check failed (no post-install marker for current version)');
+
+      // Crash count should NOT have been incremented
+      const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+      expect(state.crashCount).toBe(2);
+    });
+
+    it('auto-rollback only when postInstallMarker.version === currentVersion', async () => {
+      mockRunPostStartupChecks.mockResolvedValue({
+        passed: false,
+        details: [{ name: 'backend', passed: false, error: 'unhealthy' }],
+      });
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        crashCount: 2,
+        lastRecordedVersion: base.currentVersion,
+        lastKnownGoodVersion: '0.9.0',
+        // Marker version matches currentVersion ('1.0.0')
+        postInstallMarker: { version: '1.0.0', installedAt: new Date().toISOString() },
+      });
+
+      const rollbackSpy = vi.spyOn(updateManager, 'rollback').mockResolvedValue(undefined);
+
+      await updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow);
+
+      expect(rollbackSpy).toHaveBeenCalledWith('auto-rollback:health-check-failed');
+
+      const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+      expect(state.crashCount).toBe(3);
+
+      rollbackSpy.mockRestore();
+    });
+  });
+
+  describe('rollback recovery', () => {
+    const tempInstallRoot = '/tmp/test-install-root-rollback-recovery';
+    const tempInstallDir = `${tempInstallRoot}/app`;
+    const tempPrevDir = `${tempInstallRoot}/.prev`;
+    let originalExecPath: string;
+
+    beforeEach(async () => {
+      originalExecPath = process.execPath;
+      Object.defineProperty(process, 'execPath', {
+        value: `${tempInstallDir}/Sage`,
+        configurable: true,
+      });
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+      await fs.mkdir(tempInstallDir, { recursive: true });
+      const { app } = await import('electron');
+      vi.mocked(app.relaunch).mockClear();
+      vi.mocked(app.exit).mockClear();
+    });
+
+    afterEach(async () => {
+      Object.defineProperty(process, 'execPath', {
+        value: originalExecPath,
+        configurable: true,
+      });
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+    });
+
+    it('restores installDir when prevDir rename fails', async () => {
+      await fs.mkdir(tempPrevDir, { recursive: true });
+      await fs.writeFile(`${tempInstallDir}/current-data.txt`, 'current install');
+      await fs.writeFile(`${tempPrevDir}/marker.txt`, 'previous version');
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        currentVersion: '1.3.0',
+        lastKnownGoodVersion: '1.0.0',
+        crashCount: 3,
+      });
+
+      vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+
+      // Make fs.rename fail only when moving prevDir (not the first rename)
+      renameFailWhenOldPathStartsWith = tempPrevDir;
+      try {
+        await expect(updateManager.rollback('test-recovery')).rejects.toThrow(
+          'Failed to restore .prev as install dir',
+        );
+      } finally {
+        renameFailWhenOldPathStartsWith = null;
+      }
+
+      // installDir should be restored with its original contents
+      await expect(fs.access(tempInstallDir)).resolves.toBeUndefined();
+      const marker = await fs.readFile(`${tempInstallDir}/current-data.txt`, 'utf8');
+      expect(marker).toBe('current install');
+
+      // .prev should still be intact (rename failed before it could be moved)
+      await expect(fs.access(tempPrevDir)).resolves.toBeUndefined();
     });
   });
 });

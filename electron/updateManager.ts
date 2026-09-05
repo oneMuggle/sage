@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as fs from 'fs/promises';
+import * as fssync from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { StateManager } from './updateState';
@@ -68,6 +69,13 @@ interface CheckedUpdate {
   channel: string;
 }
 
+interface PreparedUpgradeInfo {
+  version: string;
+  installDir: string;
+  prevDir: string;
+  wasRenamed: boolean;
+}
+
 const UPDATE_SIGNING_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA28+4qGf6PSfwqA97ST5x
 +3MW1Udtg9UJDB2gL5CP55tRM2kMg3qFkk3bY548BgJsAVEZxRyE+jS6cS4sTKEK
@@ -90,6 +98,7 @@ export class UpdateManager {
   private stateChangeListeners: Array<(state: UpdateState) => void> = [];
   private automaticUpdateInProgress = false;
   private checkPromise: Promise<CheckResult> | null = null;
+  private preparedUpgrade: PreparedUpgradeInfo | null = null;
 
   constructor(updater: UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary) {
     this.stateManager = new StateManager();
@@ -374,7 +383,7 @@ export class UpdateManager {
     // Prepare the filesystem before committing state. If preparation fails,
     // the current installation is still active and the pending update must
     // remain retryable rather than being recorded as already installed.
-    await this.prepareForUpgrade();
+    const prepared = await this.prepareForUpgrade();
 
     // CRITICAL: persist the post-install state BEFORE calling quitAndInstall().
     // quitAndInstall() hands off to the native installer and may exit the
@@ -390,14 +399,32 @@ export class UpdateManager {
       pendingUpdate: null,
       updateAvailable: false,
       availableUpdate: null,
+      postInstallMarker: {
+        version: state.pendingUpdate.version,
+        installedAt: new Date().toISOString(),
+      },
     };
-    await this.stateManager.setState(newState);
+    try {
+      await this.stateManager.setState(newState);
+    } catch (setStateError) {
+      // State write failed after prepareForUpgrade renamed the install dir
+      // (non-Windows). Attempt to restore before giving up so the app can
+      // still launch from the previous installation.
+      if (prepared?.wasRenamed) {
+        await this.restorePreparedUpgrade(prepared);
+      }
+      throw setStateError;
+    }
+    this.preparedUpgrade = null;
     this.notifyStateChange(newState);
 
     this.updater.quitAndInstall();
   }
 
-  async onAppStartup(getWindow: () => BrowserWindow | null): Promise<void> {
+  async onAppStartup(
+    getWindow: () => BrowserWindow | null,
+    backendUrl = 'http://127.0.0.1:8765',
+  ): Promise<void> {
     const state = await this.stateManager.getState();
 
     // Reset crash count if version changed since last recording
@@ -408,25 +435,40 @@ export class UpdateManager {
     }
 
     // Run post-startup health checks
-    const healthChecker = new LauncherHealthChecker({ getWindow });
+    const healthChecker = new LauncherHealthChecker({ getWindow, backendUrl });
     const health = await healthChecker.runPostStartupChecks();
 
     if (!health.passed) {
-      state.crashCount += 1;
-      await this.stateManager.setState(state);
+      // Auto-rollback only proceeds when a postInstallMarker confirms the
+      // current version was genuinely installed (not just a stale state file
+      // pointing at a version that never completed installation).
+      const marker = state.postInstallMarker;
+      if (marker && marker.version === state.currentVersion) {
+        state.crashCount += 1;
+        await this.stateManager.setState(state);
 
-      const config = await this.configManager.getConfig();
-      if (state.crashCount >= config.autoRollbackThreshold) {
-        await this.rollback('auto-rollback:health-check-failed');
-        return; // rollback() calls app.exit(), but TypeScript needs this
+        const config = await this.configManager.getConfig();
+        if (state.crashCount >= config.autoRollbackThreshold) {
+          await this.rollback('auto-rollback:health-check-failed');
+          return; // rollback() calls app.exit(), but TypeScript needs this
+        }
+
+        throw new Error(
+          `Health check failed (${state.crashCount}/${config.autoRollbackThreshold})`,
+        );
       }
 
-      throw new Error(`Health check failed (${state.crashCount}/${config.autoRollbackThreshold})`);
+      // No matching post-install marker: skip crash counting / auto-rollback
+      // because the current version was not installed by this update flow.
+      throw new Error('Health check failed (no post-install marker for current version)');
     }
 
-    // Health checks passed: reset crash count if it was non-zero
-    if (state.crashCount > 0) {
-      state.crashCount = 0;
+    // Health checks passed: clear postInstallMarker and reset crash count
+    const needsMarkerClear = !!state.postInstallMarker;
+    const needsCrashReset = state.crashCount > 0;
+    if (needsMarkerClear || needsCrashReset) {
+      if (needsMarkerClear) state.postInstallMarker = null;
+      if (needsCrashReset) state.crashCount = 0;
       await this.stateManager.setState(state);
     }
   }
@@ -443,24 +485,53 @@ export class UpdateManager {
 
     if (!(await this.pathExists(prevDir))) {
       // No .prev, try reinstalling from cached package
-      await this.reinstallFromPackage(state, installDir);
+      await this.reinstallFromPackage(state);
       return;
     }
 
-    // 3. Delete current install dir
-    await fs.rm(installDir, { recursive: true, force: true });
+    // 3. Recoverable directory swap:
+    //    a) rename installDir → tempDir (preserves data as fallback)
+    //    b) rename prevDir → installDir
+    //    c) only after (b) succeeds, delete tempDir
+    //    On failure at any step, restore original layout before propagating.
+    const tempDir = `${installDir}.rollback-temp-${Date.now()}`;
+    try {
+      await fs.rename(installDir, tempDir);
+    } catch (renameCurrentErr) {
+      throw new Error(
+        `Failed to move current install for rollback: ${(renameCurrentErr as Error).message}`,
+      );
+    }
 
-    // 4. Restore .prev as install dir
-    await fs.rename(prevDir, installDir);
+    try {
+      await fs.rename(prevDir, installDir);
+    } catch (renamePrevErr) {
+      // Restore: move tempDir back to installDir
+      try {
+        await fs.rename(tempDir, installDir);
+      } catch {
+        // Best-effort; if this also fails the install dir is missing
+      }
+      throw new Error(
+        `Failed to restore .prev as install dir: ${(renamePrevErr as Error).message}`,
+      );
+    }
 
-    // 5. Update state
+    // Success — safe to remove the temp copy of the failed install
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // Non-fatal: temp dir will be cleaned up on next rollback attempt
+    }
+
+    // 4. Update state
     await this.stateManager.setState({
       ...state,
       currentVersion: state.lastKnownGoodVersion,
       crashCount: 0,
     });
 
-    // 6. Restart app
+    // 5. Restart app
     app.relaunch();
     app.exit(0);
   }
@@ -516,7 +587,7 @@ export class UpdateManager {
     }
   }
 
-  private async reinstallFromPackage(state: UpdateState, installDir: string): Promise<void> {
+  private async reinstallFromPackage(state: UpdateState): Promise<void> {
     const cached = state.cachedRollbackPackage;
     if (!cached || cached.version !== state.lastKnownGoodVersion) {
       throw new Error('No verified rollback package available');
@@ -529,25 +600,53 @@ export class UpdateManager {
     if (!(await this.pathExists(packagePath))) {
       throw new Error('No verified rollback package available');
     }
-    const stats = await fs.stat(packagePath);
-    if (stats.size !== cached.size || !/^[a-f0-9]{128}$/i.test(cached.sha512)) {
-      throw new Error('Rollback package integrity validation failed');
-    }
-    const digest = await this.hashFile(packagePath);
-    if (
-      digest !== cached.sha512.toLowerCase() ||
-      !this.verifyArtifactSignature({
-        version: cached.version,
-        filename: path.basename(packagePath),
-        url: `https://updates.sage.app/releases/${cached.version}/${path.basename(packagePath)}`,
-        sha512: digest,
-        size: cached.size,
-        signature: cached.signature,
-      })
-    ) {
-      throw new Error('Rollback package signature validation failed');
+
+    // Open with O_NOFOLLOW to reject symlinks — an attacker who replaces
+    // the cached installer with a symlink could redirect hash verification
+    // at an arbitrary file on disk.
+    const noFollow = (fssync.constants as { O_NOFOLLOW?: number }).O_NOFOLLOW ?? 0;
+    let handle: fs.FileHandle | undefined;
+    try {
+      handle = await fs.open(
+        packagePath,
+        fssync.constants.O_RDONLY | noFollow,
+      );
+      const stats = await handle.stat();
+      if (stats.isSymbolicLink()) {
+        throw new Error('Rollback package is a symbolic link');
+      }
+      if (stats.size !== cached.size || !/^[a-f0-9]{128}$/i.test(cached.sha512)) {
+        throw new Error('Rollback package integrity validation failed');
+      }
+      const digest = await this.hashFileHandle(handle);
+      if (
+        digest !== cached.sha512.toLowerCase() ||
+        !this.verifyArtifactSignature({
+          version: cached.version,
+          filename: path.basename(packagePath),
+          url: `https://updates.sage.app/releases/${cached.version}/${path.basename(packagePath)}`,
+          sha512: digest,
+          size: cached.size,
+          signature: cached.signature,
+        })
+      ) {
+        throw new Error('Rollback package signature validation failed');
+      }
+    } catch (err) {
+      // Distinguish O_NOFOLLOW rejection (ELOOP) from other open failures
+      if (
+        err instanceof Error &&
+        'code' in err &&
+        (err as NodeJS.ErrnoException).code === 'ELOOP'
+      ) {
+        throw new Error('Rollback package is a symbolic link');
+      }
+      throw err;
+    } finally {
+      await handle?.close();
     }
 
+    const installDir = path.dirname(process.execPath);
     const { spawn } = await import('child_process');
     const installer = spawn(packagePath, ['/S', `/D=${installDir}`]);
 
@@ -580,7 +679,14 @@ export class UpdateManager {
     return crypto.createHash('sha512').update(content).digest('hex');
   }
 
-  private async prepareForUpgrade(): Promise<void> {
+  private async hashFileHandle(handle: fs.FileHandle): Promise<string> {
+    const { size } = await handle.stat();
+    const buffer = Buffer.alloc(size);
+    await handle.read(buffer, 0, size, 0);
+    return crypto.createHash('sha512').update(buffer).digest('hex');
+  }
+
+  private async prepareForUpgrade(): Promise<PreparedUpgradeInfo | null> {
     const installDir = path.dirname(process.execPath);
     const prevDir = path.join(path.dirname(installDir), '.prev');
 
@@ -603,9 +709,29 @@ export class UpdateManager {
         '',
       ].join('\r\n');
       await fs.writeFile(scriptPath, script, { mode: 0o755 });
-    } else {
-      // On Linux/macOS, rename the install directory directly.
-      await fs.rename(installDir, prevDir);
+      // On Windows the rename is deferred; no filesystem change to track
+      return null;
+    }
+
+    // On Linux/macOS, rename the install directory directly.
+    await fs.rename(installDir, prevDir);
+    const info: PreparedUpgradeInfo = {
+      version: '',
+      installDir,
+      prevDir,
+      wasRenamed: true,
+    };
+    this.preparedUpgrade = info;
+    return info;
+  }
+
+  private async restorePreparedUpgrade(info: PreparedUpgradeInfo): Promise<void> {
+    this.preparedUpgrade = null;
+    if (!info.wasRenamed) return;
+    try {
+      await fs.rename(info.prevDir, info.installDir);
+    } catch {
+      // Best-effort restoration; if this also fails the install dir is missing
     }
   }
 

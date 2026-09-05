@@ -306,6 +306,23 @@ Scanning plan for conflicts before execution...
 
 ---
 
+### Post-task hardening: complete (commits b54c5943, 187fc929)
+
+**Security and lifecycle fixes:** ✅ — Manifest signatures now use RSA-SHA256 verification; artifact URLs are HTTPS + hostname allowlisted; concurrent checks are deduplicated; rollback IPC enforces manual rollback eligibility; cached rollback packages are path/size/hash/signature validated; backend channels are allowlisted.
+
+**Production wiring fixes:** ✅ — Startup health checks are invoked after the main window is created (including retry startup); install state is prepared then persisted before `quitAndInstall()`; Windows NSIS `customInit` executes `.prepare-rollback.bat` before installing the new package.
+
+**Verification:**
+- Electron update suite: **91/91 tests passing** across 6 files.
+- Backend update tests: **15/15 passing**.
+- Renderer TypeScript check: passed.
+- ESLint: changed TypeScript files clean; NSIS is outside ESLint configuration.
+- `src/components/UpdateDialog.tsx` formatting changes remain unmodified, per user instruction.
+
+**Main/win7 alignment:** `release/win7` does not contain the update subsystem files, so no compatible cherry-pick was applied. Its Python 3.8 dependency boundary remains untouched.
+
+---
+
 ### Task 11: complete (commits 42cefc71..b3b87fd0, review approved after fix round 1)
 
 **Spec compliance:** ✅ — All 13 acceptance criteria met

@@ -105,9 +105,7 @@ export function UpdateDialog() {
       try {
         await operation();
       } catch (err: unknown) {
-        safeSetError(
-          t('updateDialog.operationFailed').replace('{message}', getErrorMessage(err)),
-        );
+        safeSetError(t('updateDialog.operationFailed').replace('{message}', getErrorMessage(err)));
       } finally {
         safeSetInFlight(false);
       }
@@ -141,7 +139,8 @@ export function UpdateDialog() {
   const isUpdateAvailable = state?.updateAvailable === true;
   const isDownloading = progress !== null && !hasPendingUpdate;
   const isDismissed =
-    dismissedVersion != null && currentDisplayVersion != null &&
+    dismissedVersion != null &&
+    currentDisplayVersion != null &&
     dismissedVersion === currentDisplayVersion;
 
   if (isDismissed) return null;
@@ -151,11 +150,7 @@ export function UpdateDialog() {
   if (hasPendingUpdate) {
     const version = state!.pendingUpdate!.version;
     return (
-      <DialogShell
-        ariaLabel={t('updateDialog.readyToInstall')}
-        dialogRef={dialogRef}
-        error={error}
-      >
+      <DialogShell ariaLabel={t('updateDialog.readyToInstall')} dialogRef={dialogRef} error={error}>
         <h3 className="text-sm font-semibold text-text mb-2">{t('updateDialog.readyToInstall')}</h3>
         <p className="text-xs text-text-secondary mb-4">
           {t('updateDialog.readyMessage').replace('{version}', version)}

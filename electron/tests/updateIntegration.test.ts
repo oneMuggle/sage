@@ -494,6 +494,7 @@ describe('Update System Integration', () => {
         lastKnownGoodInstallDate: new Date().toISOString(),
         crashCount: 2,
         lastRecordedVersion: '2.0.0',
+        postInstallMarker: { version: '2.0.0', installedAt: new Date().toISOString() },
       });
 
       // Mock fetch for rollback event report (non-blocking)
@@ -544,6 +545,7 @@ describe('Update System Integration', () => {
         ...baseState,
         crashCount: 0,
         lastRecordedVersion: baseState.currentVersion,
+        postInstallMarker: { version: baseState.currentVersion, installedAt: new Date().toISOString() },
       });
 
       mockRunPostStartupChecks.mockResolvedValue({

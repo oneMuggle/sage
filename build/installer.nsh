@@ -26,7 +26,7 @@
   ; The prepare-rollback batch lives in its parent.
   StrCpy $0 "$INSTDIR\.."
   StrCpy $1 "$0\.prepare-rollback.bat"
-  IfFileExists "$1" rollback_staging_done
+  IfFileExists "$1" 0 rollback_staging_done
   DetailPrint "Running rollback staging script: $1"
   nsExec::ExecToLog '"$1"'
   Pop $2

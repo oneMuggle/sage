@@ -35,6 +35,10 @@ export interface UpdateState {
     signature: string;
   } | null;
   lastRecordedVersion: string;
+  postInstallMarker?: {
+    version: string;
+    installedAt: string;
+  } | null;
 }
 
 const STATE_FILE = 'update-state.json';
@@ -92,6 +96,7 @@ export class StateManager {
       pendingUpdate: null,
       cachedRollbackPackage: null,
       lastRecordedVersion: currentVersion,
+      postInstallMarker: null,
     };
   }
 

@@ -1763,10 +1763,8 @@ app.whenReady().then(async () => {
       // and drive the crash counter / auto-rollback path; they must not
       // block the UI from appearing.
       void updateManager
-        ?.onAppStartup(() => mainWindow)
-        .catch((err) =>
-          logger.warn('main: startup health check failed', { error: String(err) }),
-        );
+        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
     // 'open-logs' or 'quit' — quit is handled inside showStartupFailureDialog
@@ -1781,10 +1779,8 @@ app.whenReady().then(async () => {
   // increments the crash counter and may trigger auto-rollback; it must not
   // block the UI. Errors are logged for diagnostics.
   void updateManager
-    ?.onAppStartup(() => mainWindow)
-    .catch((err) =>
-      logger.warn('main: startup health check failed', { error: String(err) }),
-    );
+    ?.onAppStartup(() => mainWindow, BACKEND_URL)
+    .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
 });
 
 app.on('window-all-closed', () => {
