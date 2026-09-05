@@ -62,6 +62,14 @@ RUNTIME_PROBE_TOOLS = ("runtime_probe", "project_diagnose")
 RUNTIME_EXEC_TOOLS = ("runtime_exec",)
 RUNTIME_TOOLS = RUNTIME_PROBE_TOOLS + RUNTIME_EXEC_TOOLS
 
+# 一等 git 工具组（2026-09-06 对标增强 Phase-1）：读三件 READ 免审，
+# git_commit 为 WRITE_LOCAL 审批；只 commit 不 push。
+GIT_TOOLS = ("git_commit", "git_diff", "git_log", "git_status")
+
+# 工作区检查点（2026-09-06 对标增强 Phase-1）：create/list 只写 sage
+# 自有数据目录 → READ；restore 覆盖工作区 → WRITE_LOCAL 审批。
+CHECKPOINT_TOOLS = ("checkpoint_create", "checkpoint_list", "checkpoint_restore")
+
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 技能 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "skill", "ask_user_question")
 
@@ -79,6 +87,8 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(MEMORY_TOOLS)
         | set(OFFICE_TOOLS)
         | set(RUNTIME_TOOLS)
+        | set(GIT_TOOLS)
+        | set(CHECKPOINT_TOOLS)
         | set(ORCH_TOOLS)
         | set(SANDBOX_TOOLS)
     )
@@ -86,9 +96,11 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
 
 __all__ = [
     "ALL_BUILTIN_TOOL_NAMES",
+    "CHECKPOINT_TOOLS",
     "CODE_SEARCH_TOOLS",
     "EXEC_TOOLS",
     "FILE_TOOLS",
+    "GIT_TOOLS",
     "MEMORY_TOOLS",
     "OFFICE_TOOLS",
     "ORCH_TOOLS",

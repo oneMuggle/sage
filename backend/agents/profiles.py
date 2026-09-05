@@ -12,8 +12,10 @@ from typing import Any, Dict, List
 # 不写字面量 —— 历史两次漂移（terminal、file_read）见 tool_names 模块注释。
 from backend.domain.tool_names import (
     ALL_BUILTIN_TOOL_NAMES,
+    CHECKPOINT_TOOLS,
     CODE_SEARCH_TOOLS,
     EXEC_TOOLS,
+    GIT_TOOLS,
     MEMORY_TOOLS,
     OFFICE_TOOLS,
     RUNTIME_EXEC_TOOLS,
@@ -106,6 +108,10 @@ _PRIMARY_SEED_TOOLS = (
     *RUNTIME_PROBE_TOOLS,
     # D1: bash 三件套尾部追加。
     *EXEC_TOOLS,
+    # 2026-09-06 对标增强 Phase-1: 一等 git 工具组 + 工作区检查点。
+    # git_commit / checkpoint_restore 为 WRITE_LOCAL（INTERACTIVE 先审批）。
+    *GIT_TOOLS,
+    *CHECKPOINT_TOOLS,
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为
@@ -113,6 +119,7 @@ _PRIMARY_SEED_TOOLS = (
 # read_file/write_file），旧种子曾导致 UI 选 coder 后 LLM 工具面近乎为空。
 # 2026-09-04: 本地开发环境三件套 — coder 是唯一拿 runtime_exec 的 agent
 # （探测+诊断只读，runtime_exec 与 bash 同样受 PermissionEnforcer 审批）。
+# 2026-09-06: git 工具组 + 工作区检查点（编码场景主消费者）。
 _CODER_SEED_TOOLS = (
     "read_file",
     "write_file",
@@ -120,6 +127,8 @@ _CODER_SEED_TOOLS = (
     "calculator",
     *RUNTIME_PROBE_TOOLS,
     *RUNTIME_EXEC_TOOLS,
+    *GIT_TOOLS,
+    *CHECKPOINT_TOOLS,
 )
 
 
@@ -250,7 +259,8 @@ _PRIMARY_TOOLS_BEFORE_TODO = {
 # 种子集合 —— 存量 DB 三段升级判定。合并远端 office CRUD + 本地开发环境助手
 # 后，快照 = fetch_direct 种子 + office 六件套 + runtime 探测两件（remote 在
 # WIP 期间演进出的形状）。历史快照有意写字面量：种子未来演进时判定集必须
-# 保持冻结，否则旧 DB 无法命中；快照之后的新增项由差集兜底段补齐。
+# 保持冻结，否则旧 DB 无法命中；快照之后的新增项（bash 三件套、2026-09-06
+# 的 git 工具组与检查点）由差集兜底段按 CURRENT_DEFAULT 补齐。
 _PRIMARY_TOOLS_BEFORE_BASH = {
     "calculator", "memory_search", "memory_save", "list_dir", "read_file",
     "grep_search", "glob_search", "file_summary", "agent", "todo_write",
