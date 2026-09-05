@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs/promises';
 
@@ -128,6 +129,20 @@ describe('UpdateManager', () => {
     await fs.mkdir(mockUserData, { recursive: true });
     await fs.rm(`${mockUserData}/update-state.json`, { force: true });
     await fs.rm(`${mockUserData}/update-config.json`, { force: true });
+    // Set manual strategy by default so tests have explicit control
+    await fs.writeFile(
+      `${mockUserData}/update-config.json`,
+      JSON.stringify({
+        updateStrategy: 'manual',
+        channel: 'stable',
+        rollbackWindowDays: 7,
+        autoRollbackThreshold: 3,
+        checkIntervalHours: 24,
+        updateServerUrl: 'https://updates.sage.app',
+        enableTelemetry: false,
+        cacheRetentionDays: 30,
+      }),
+    );
     updater = createFakeUpdater();
     updateManager = new UpdateManager(updater);
     vi.stubGlobal('fetch', vi.fn());

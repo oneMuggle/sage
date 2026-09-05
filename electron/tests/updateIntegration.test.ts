@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Integration tests for the update system end-to-end upgrade flow.
  *
