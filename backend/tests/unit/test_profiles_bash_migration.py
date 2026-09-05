@@ -80,8 +80,12 @@ def test_legacy_primary_gets_bash_trio_appended(monkeypatch):
 
 
 def test_current_primary_untouched(monkeypatch):
-    """已是当前形状（含 bash 三件套）→ 绝不再追加（防重复写入 + updated_at 抖动）。"""
-    current = sorted(profiles._PRIMARY_TOOLS_BEFORE_BASH) + list(EXEC_TOOLS)
+    """已是当前形状（= 当前种子全集）→ 绝不再追加（防重复写入 + updated_at 抖动）。
+
+    2026-09-06 起按当前种子常量构造（git 工具组 + 检查点并入后，
+    BEFORE_BASH+EXEC 不再等于当前形状，兜底段会合法补齐那 7 件）。
+    """
+    current = list(profiles._PRIMARY_SEED_TOOLS)
     stored = {
         "primary": {"id": "primary", "enabled": True, "tools": current},
     }

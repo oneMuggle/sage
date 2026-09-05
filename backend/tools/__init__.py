@@ -13,10 +13,12 @@ from .ask_user_tool import AskUserQuestionTool
 from .base import BaseTool, ToolResult, ToolSchema
 from .bash_tool import BashOutputTool, BashTool, KillShellTool
 from .calculator import CalculatorTool
+from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
 from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
 from .file_summary_tool import FileSummaryTool
 from .file_tool import ListDirTool, ReadFileTool, WriteFileTool
+from .git_tool import GitCommitTool, GitDiffTool, GitLogTool, GitStatusTool
 from .memory_tool import MemorySaveTool, MemorySearchTool
 from .network_config import load_network_policy
 from .office_create_tool import OfficeCreateTool
@@ -110,6 +112,16 @@ def register_all_tools(
     registry.register(AgentTool(policy=policy))
     # 2026-08-01: 代码探索工具 - 文件结构摘要（解决大代码库 max_iterations_exceeded）
     registry.register(FileSummaryTool(policy=policy))
+    # 2026-09-06 对标增强 Phase-1: 一等 git 工具组（读三件免审，commit 走
+    # WRITE_LOCAL 审批；只 commit 不 push）+ 工作区检查点（create 只写
+    # sage 自有数据目录 → READ；restore 覆盖工作区 → WRITE_LOCAL 审批）。
+    registry.register(GitStatusTool(policy=policy))
+    registry.register(GitDiffTool(policy=policy))
+    registry.register(GitLogTool(policy=policy))
+    registry.register(GitCommitTool(policy=policy))
+    registry.register(CheckpointCreateTool(policy=policy))
+    registry.register(CheckpointListTool(policy=policy))
+    registry.register(CheckpointRestoreTool(policy=policy))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
@@ -158,6 +170,13 @@ __all__ = [
     "SkillTool",
     "AskUserQuestionTool",
     "FileSummaryTool",
+    "GitStatusTool",
+    "GitDiffTool",
+    "GitLogTool",
+    "GitCommitTool",
+    "CheckpointCreateTool",
+    "CheckpointListTool",
+    "CheckpointRestoreTool",
     "SkillHotLoader",
     "register_all_tools",
 ]
