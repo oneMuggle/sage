@@ -32,7 +32,7 @@ interface UpdateManifest {
 }
 
 export interface UpdaterBoundary {
-  setFeedURL(options: { provider: 'generic'; url: string }): void;
+  setFeedURL(options: { provider: 'generic'; url: string; channel: string }): void;
   checkForUpdates(): Promise<unknown>;
   downloadUpdate(): Promise<unknown>;
   quitAndInstall(): void;
@@ -43,6 +43,7 @@ export interface UpdaterBoundary {
 interface CheckedUpdate {
   version: string;
   fileUrl: string;
+  channel: string;
 }
 
 const SEMVER_PATTERN =
@@ -107,7 +108,11 @@ export class UpdateManager {
         // Update state with check time
         state.lastCheckTime = new Date().toISOString();
         await this.stateManager.setState(state);
-        this.lastCheckedUpdate = { version: manifest.version, fileUrl: fileMeta.url };
+        this.lastCheckedUpdate = {
+          version: manifest.version,
+          fileUrl: fileMeta.url,
+          channel: config.channel,
+        };
 
         return {
           updateAvailable: true,
@@ -137,7 +142,11 @@ export class UpdateManager {
 
     try {
       const feedUrl = this.getFeedUrl(checkedUpdate.fileUrl);
-      this.updater.setFeedURL({ provider: 'generic', url: feedUrl });
+      this.updater.setFeedURL({
+        provider: 'generic',
+        url: feedUrl,
+        channel: checkedUpdate.channel,
+      });
       await this.updater.checkForUpdates();
       await this.updater.downloadUpdate();
 

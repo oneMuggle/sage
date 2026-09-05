@@ -265,6 +265,7 @@ describe('UpdateManager', () => {
     expect(updater.setFeedURL).toHaveBeenCalledWith({
       provider: 'generic',
       url: 'https://updates.sage.app/',
+      channel: 'stable',
     });
     expect(callOrder).toEqual(['setFeedURL', 'checkForUpdates', 'downloadUpdate']);
   });
@@ -281,6 +282,23 @@ describe('UpdateManager', () => {
     expect(state.pendingUpdate.version).toBe('1.3.0');
     expect(Date.parse(state.pendingUpdate.downloadedAt)).toBeGreaterThanOrEqual(before);
     expect(Date.parse(state.pendingUpdate.downloadedAt)).toBeLessThanOrEqual(after);
+  });
+
+  it('keeps pendingUpdate valid when downloading the same checked update twice', async () => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+    await updateManager.checkForUpdates();
+
+    await updateManager.downloadUpdate();
+    const firstState = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+    await updateManager.downloadUpdate();
+    const secondState = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(2);
+    expect(secondState.pendingUpdate.version).toBe('1.3.0');
+    expect(Date.parse(secondState.pendingUpdate.downloadedAt)).not.toBeNaN();
+    expect(Date.parse(secondState.pendingUpdate.downloadedAt)).toBeGreaterThanOrEqual(
+      Date.parse(firstState.pendingUpdate.downloadedAt),
+    );
   });
 
   it('does not persist pendingUpdate when download fails', async () => {
