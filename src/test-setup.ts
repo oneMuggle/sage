@@ -7,6 +7,7 @@ import '@testing-library/jest-dom/vitest';
  * jsdom 测试环境下工作。
  */
 function installInMemoryStorage(key: 'localStorage' | 'sessionStorage'): void {
+  if (typeof window === 'undefined') return; // Skip for node environment
   const existing = (window as unknown as Record<string, unknown>)[key] as Storage | undefined;
   // 探测原生实现是否真的可用
   if (existing) {
