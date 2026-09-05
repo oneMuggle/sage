@@ -5,7 +5,7 @@ import * as path from 'path';
 import { StateManager } from './updateState';
 import type { UpdateState } from './updateState';
 import { ConfigManager } from './updateConfig';
-import type { UpdateStrategy } from './updateConfig';
+import type { UpdateChannel, UpdateConfig, UpdateStrategy } from './updateConfig';
 import { LauncherHealthChecker } from './updateHealthChecker';
 
 export interface CheckResult {
@@ -212,6 +212,15 @@ export class UpdateManager {
     // cause lost updates. Add mutex or atomic rename in ConfigManager.
     const config = await this.configManager.getConfig();
     await this.configManager.setConfig({ ...config, updateStrategy: strategy });
+  }
+
+  async getConfig(): Promise<UpdateConfig> {
+    return this.configManager.getConfig();
+  }
+
+  async setChannel(channel: UpdateChannel): Promise<void> {
+    const config = await this.configManager.getConfig();
+    await this.configManager.setConfig({ ...config, channel });
   }
 
   private getFeedUrl(fileUrl: string): string {

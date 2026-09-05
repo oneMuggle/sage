@@ -1,6 +1,6 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron';
 import type { UpdateManager } from './updateManager';
-import type { UpdateStrategy } from './updateConfig';
+import type { UpdateChannel, UpdateStrategy } from './updateConfig';
 import type { UpdateState } from './updateState';
 
 export type UpdateStateChangedEvent =
@@ -16,6 +16,7 @@ type InvokeHandler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
 type UpdateIpcMain = Pick<IpcMain, 'handle' | 'removeHandler'>;
 
 const UPDATE_STRATEGIES: readonly UpdateStrategy[] = ['manual', 'auto-download', 'auto-install'];
+const UPDATE_CHANNELS: readonly UpdateChannel[] = ['stable', 'beta', 'alpha'];
 let currentCleanup: (() => void) | null = null;
 
 export function registerUpdateIpc(
@@ -31,6 +32,8 @@ export function registerUpdateIpc(
     'update:rollback',
     'update:can-rollback',
     'update:set-strategy',
+    'update:get-config',
+    'update:set-channel',
   ];
   const requireTrusted = (event: IpcMainInvokeEvent): void => {
     if (!options.isTrustedRenderer(event.sender)) throw new Error('未授权的窗口请求');
@@ -69,6 +72,17 @@ export function registerUpdateIpc(
       throw new Error('无效的更新策略');
     }
     return updateManager.setStrategy(payload as UpdateStrategy);
+  });
+  register('update:get-config', async (event) => {
+    requireTrusted(event as IpcMainInvokeEvent);
+    return updateManager.getConfig();
+  });
+  register('update:set-channel', async (event, payload?: unknown) => {
+    requireTrusted(event as IpcMainInvokeEvent);
+    if (typeof payload !== 'string' || !UPDATE_CHANNELS.includes(payload as UpdateChannel)) {
+      throw new Error('无效的更新渠道');
+    }
+    return updateManager.setChannel(payload as UpdateChannel);
   });
 
   // State events are relayed to the renderer via the sendToRenderer callback

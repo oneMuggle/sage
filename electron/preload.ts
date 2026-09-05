@@ -31,7 +31,7 @@ import type {
 } from '../src/shared/types/electron-api';
 import type { CheckResult } from './updateManager';
 import type { UpdateStateChangedEvent } from './updateIpc';
-import type { UpdateStrategy } from './updateConfig';
+import type { UpdateChannel, UpdateConfig, UpdateStrategy } from './updateConfig';
 import type { LogLevel } from '../src/shared/log/levels';
 
 /** UnlistenFn signature mirrors Tauri 2.x for drop-in Phase 2 compatibility. */
@@ -190,6 +190,9 @@ const electronAPI = {
       ipcRenderer.invoke('update:can-rollback') as Promise<{ allowed: boolean; reason?: string }>,
     setStrategy: (strategy: UpdateStrategy) =>
       ipcRenderer.invoke('update:set-strategy', strategy) as Promise<void>,
+    getConfig: () => ipcRenderer.invoke('update:get-config') as Promise<UpdateConfig>,
+    setChannel: (channel: UpdateChannel) =>
+      ipcRenderer.invoke('update:set-channel', channel) as Promise<void>,
     onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void): UnlistenFn => {
       const listener = (_event: IpcRendererEvent, payload: UpdateStateChangedEvent) =>
         handler(payload);

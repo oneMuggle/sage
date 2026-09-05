@@ -10,7 +10,7 @@
  * PR-C (2026-07-02): added skills bridge for Rescan + Import buttons.
  */
 
-import type { UpdateStrategy } from '../../../electron/updateConfig';
+import type { UpdateChannel, UpdateConfig, UpdateStrategy } from '../../../electron/updateConfig';
 import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
 import type { CheckResult } from '../../../electron/updateManager';
 import type { WindowControlsBridge } from '../api/windowControlsClient';
@@ -144,6 +144,8 @@ export interface UpdateElectronApiBridge {
   rollback: (reason?: string) => Promise<void>;
   canRollback: () => Promise<{ allowed: boolean; reason?: string }>;
   setStrategy: (strategy: UpdateStrategy) => Promise<void>;
+  getConfig: () => Promise<UpdateConfig>;
+  setChannel: (channel: UpdateChannel) => Promise<void>;
   onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void) => UnlistenFn;
 }
 
