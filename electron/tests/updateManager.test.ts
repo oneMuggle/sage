@@ -44,17 +44,18 @@ function createManifest(
     release_date: '2026-09-05T12:00:00Z',
     release_notes: '## New features',
     min_upgradable_version: options.minimum ?? '1.0.0',
-    files: options.includePlatformFile === false
-      ? {}
-      : {
-          [platformKey]: {
-            filename: `Sage-Setup-${version}.bin`,
-            url: `https://updates.sage.app/Sage-Setup-${version}.bin`,
-            sha512: 'a'.repeat(128),
-            size: 104857600,
-            signature: 'sig',
+    files:
+      options.includePlatformFile === false
+        ? {}
+        : {
+            [platformKey]: {
+              filename: `Sage-Setup-${version}.bin`,
+              url: `https://updates.sage.app/Sage-Setup-${version}.bin`,
+              sha512: 'a'.repeat(128),
+              size: 104857600,
+              signature: 'sig',
+            },
           },
-        },
     components: {},
   };
 }
@@ -121,18 +122,35 @@ describe('UpdateManager', () => {
     expect(result.updateAvailable).toBe(false);
   });
 
-  it('compares prerelease versions according to semver ordering', () => {
+  it('compares prerelease versions and large numeric identifiers according to semver ordering', () => {
     const compareVersions = (updateManager as unknown as {
       compareVersions: (left: unknown, right: unknown) => number;
-    }).compareVersions;
+    }).compareVersions.bind(updateManager);
     const parseVersion = (updateManager as unknown as {
       parseVersion: (version: string, field: string) => unknown;
     }).parseVersion;
 
-    expect(compareVersions(parseVersion('1.0.0-beta.2', 'test'), parseVersion('1.0.0-beta.11', 'test')))
-      .toBeLessThan(0);
-    expect(compareVersions(parseVersion('1.0.0', 'test'), parseVersion('1.0.0-rc.1', 'test')))
-      .toBeGreaterThan(0);
+    expect(
+      compareVersions(
+        parseVersion('1.0.0-beta.2', 'test'),
+        parseVersion('1.0.0-beta.11', 'test'),
+      ),
+    ).toBeLessThan(0);
+    expect(
+      compareVersions(parseVersion('1.0.0', 'test'), parseVersion('1.0.0-rc.1', 'test')),
+    ).toBeGreaterThan(0);
+    expect(
+      compareVersions(
+        parseVersion('9007199254740993.0.0', 'test'),
+        parseVersion('9007199254740992.0.0', 'test'),
+      ),
+    ).toBeGreaterThan(0);
+    expect(
+      compareVersions(
+        parseVersion('1.0.0-9007199254740993', 'test'),
+        parseVersion('1.0.0-9007199254740992', 'test'),
+      ),
+    ).toBeGreaterThan(0);
   });
 
   it('throws a diagnostic error for an invalid manifest', async () => {
@@ -165,12 +183,14 @@ describe('UpdateManager', () => {
     await expect(updateManager.checkForUpdates()).rejects.toThrow(`files.${platformKey}.sha512`);
   });
 
-  it('rejects unsupported host architectures instead of selecting another platform file', async () => {
+  it('rejects unsupported host architectures instead of selecting another platform file', () => {
     const originalArch = process.arch;
-    Object.defineProperty(process, 'arch', { value: 'arm64', configurable: true });
+    const unsupportedArch = process.platform === 'darwin' ? 'ia32' : 'arm64';
+    Object.defineProperty(process, 'arch', { value: unsupportedArch, configurable: true });
     try {
-      expect(() => (updateManager as unknown as { getPlatformKey: () => string }).getPlatformKey())
-        .toThrow(`Unsupported platform: ${process.platform}-arm64`);
+      expect(() =>
+        (updateManager as unknown as { getPlatformKey: () => string }).getPlatformKey(),
+      ).toThrow(`Unsupported platform: ${process.platform}-${unsupportedArch}`);
     } finally {
       Object.defineProperty(process, 'arch', { value: originalArch, configurable: true });
     }

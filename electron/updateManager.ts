@@ -9,10 +9,10 @@ export interface CheckResult {
 }
 
 interface SemVer {
-  major: number;
-  minor: number;
-  patch: number;
-  prerelease: Array<number | string>;
+  major: string;
+  minor: string;
+  patch: string;
+  prerelease: string[];
 }
 
 interface UpdateFile {
@@ -30,7 +30,8 @@ interface UpdateManifest {
   files: Record<string, UpdateFile>;
 }
 
-const SEMVER_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const SEMVER_PATTERN =
+  /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export class UpdateManager {
   private stateManager: StateManager;
@@ -115,14 +116,21 @@ export class UpdateManager {
   }
 
   private isNewerVersion(latest: string, current: string): boolean {
-    return this.compareVersions(this.parseVersion(latest, 'latest'), this.parseVersion(current, 'currentVersion')) > 0;
+    return (
+      this.compareVersions(
+        this.parseVersion(latest, 'latest'),
+        this.parseVersion(current, 'currentVersion'),
+      ) > 0
+    );
   }
 
   private meetsMinimumVersion(current: string, minimum: string): boolean {
-    return this.compareVersions(
-      this.parseVersion(current, 'currentVersion'),
-      this.parseVersion(minimum, 'minimum'),
-    ) >= 0;
+    return (
+      this.compareVersions(
+        this.parseVersion(current, 'currentVersion'),
+        this.parseVersion(minimum, 'minimum'),
+      ) >= 0
+    );
   }
 
   private getPlatformKey(): string {
@@ -146,21 +154,30 @@ export class UpdateManager {
   private parseVersion(version: string, field: string): SemVer {
     const match = SEMVER_PATTERN.exec(version);
     if (!match) throw new Error(`Invalid ${field}: ${JSON.stringify(version)}`);
-    const prerelease = (match[4] ?? '').split('.').filter(Boolean).map((identifier) => {
-      if (/^\d+$/.test(identifier)) {
-        if (identifier.length > 1 && identifier.startsWith('0')) {
-          throw new Error(`Invalid ${field}: ${JSON.stringify(version)}`);
+    const prerelease = (match[4] ?? '')
+      .split('.')
+      .filter(Boolean)
+      .map((identifier) => {
+        if (/^\d+$/.test(identifier)) {
+          if (identifier.length > 1 && identifier.startsWith('0')) {
+            throw new Error(`Invalid ${field}: ${JSON.stringify(version)}`);
+          }
+          return identifier;
         }
-        return Number(identifier);
-      }
-      return identifier;
-    });
-    return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease };
+        return identifier;
+      });
+    return {
+      major: match[1],
+      minor: match[2],
+      patch: match[3],
+      prerelease,
+    };
   }
 
   private compareVersions(left: SemVer, right: SemVer): number {
     for (const field of ['major', 'minor', 'patch'] as const) {
-      if (left[field] !== right[field]) return left[field] > right[field] ? 1 : -1;
+      const comparison = this.compareNumericIdentifiers(left[field], right[field]);
+      if (comparison !== 0) return comparison;
     }
     if (left.prerelease.length === 0 && right.prerelease.length === 0) return 0;
     if (left.prerelease.length === 0) return 1;
@@ -172,11 +189,28 @@ export class UpdateManager {
       if (leftIdentifier === undefined) return -1;
       if (rightIdentifier === undefined) return 1;
       if (leftIdentifier === rightIdentifier) continue;
-      if (typeof leftIdentifier === 'number' && typeof rightIdentifier === 'string') return -1;
-      if (typeof leftIdentifier === 'string' && typeof rightIdentifier === 'number') return 1;
-      return leftIdentifier > rightIdentifier ? 1 : -1;
+      const leftIsNumeric = /^\d+$/.test(leftIdentifier);
+      const rightIsNumeric = /^\d+$/.test(rightIdentifier);
+      if (leftIsNumeric && !rightIsNumeric) return -1;
+      if (!leftIsNumeric && rightIsNumeric) return 1;
+      if (leftIsNumeric && rightIsNumeric) {
+        const comparison = this.compareNumericIdentifiers(leftIdentifier, rightIdentifier);
+        if (comparison !== 0) return comparison;
+      } else {
+        return leftIdentifier > rightIdentifier ? 1 : -1;
+      }
     }
     return 0;
+  }
+
+  private compareNumericIdentifiers(left: string, right: string): number {
+    const normalizedLeft = left.replace(/^0+(?=\d)/, '');
+    const normalizedRight = right.replace(/^0+(?=\d)/, '');
+    if (normalizedLeft.length !== normalizedRight.length) {
+      return normalizedLeft.length > normalizedRight.length ? 1 : -1;
+    }
+    if (normalizedLeft === normalizedRight) return 0;
+    return normalizedLeft > normalizedRight ? 1 : -1;
   }
 
   private validateManifest(value: unknown): UpdateManifest {
