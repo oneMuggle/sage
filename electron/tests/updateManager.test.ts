@@ -11,10 +11,20 @@ vi.mock('electron', () => ({
     },
     getVersion: () => '1.0.0',
   },
+  BrowserWindow: vi.fn(),
 }));
 
 vi.mock('electron-updater', () => ({
   autoUpdater: {},
+}));
+
+// Mock the health checker so onAppStartup tests run instantly instead of
+// waiting through 10 retry cycles (10+ seconds of real timers).
+let mockRunPostStartupChecks: ReturnType<typeof vi.fn>;
+vi.doMock('../updateHealthChecker', () => ({
+  LauncherHealthChecker: vi.fn().mockImplementation(() => ({
+    runPostStartupChecks: mockRunPostStartupChecks,
+  })),
 }));
 
 const { UpdateManager } = await import('../updateManager');
@@ -549,18 +559,14 @@ describe('UpdateManager', () => {
         ...base,
         ...overrides,
         pendingUpdate:
-          version === null
-            ? null
-            : { version, downloadedAt: new Date().toISOString() },
+          version === null ? null : { version, downloadedAt: new Date().toISOString() },
       });
     }
 
     it('throws when no pending update exists', async () => {
       await seedPendingUpdate(null);
 
-      await expect(updateManager.installUpdate()).rejects.toThrow(
-        'No pending update to install',
-      );
+      await expect(updateManager.installUpdate()).rejects.toThrow('No pending update to install');
       expect(updater.quitAndInstall).not.toHaveBeenCalled();
     });
 
@@ -577,9 +583,7 @@ describe('UpdateManager', () => {
 
       await updateManager.installUpdate();
 
-      const state = JSON.parse(
-        await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'),
-      );
+      const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
       expect(state.currentVersion).toBe('1.3.0');
       expect(state.lastKnownGoodVersion).toBe('1.0.0');
       expect(state.pendingUpdate).toBeNull();
@@ -594,9 +598,7 @@ describe('UpdateManager', () => {
       await updateManager.installUpdate();
       const after = Date.now();
 
-      const state = JSON.parse(
-        await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'),
-      );
+      const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
       const recorded = Date.parse(state.lastKnownGoodInstallDate);
       expect(recorded).toBeGreaterThanOrEqual(before);
       expect(recorded).toBeLessThanOrEqual(after);
@@ -636,10 +638,138 @@ describe('UpdateManager', () => {
 
       await updateManager.installUpdate();
 
-      const markerExists = await fs
-        .access(`${tempPrevDir}/marker.txt`)
-        .then(() => true, () => false);
+      const markerExists = await fs.access(`${tempPrevDir}/marker.txt`).then(
+        () => true,
+        () => false,
+      );
       expect(markerExists).toBe(false);
+    });
+  });
+
+  describe('onAppStartup', () => {
+    function createVisibleWindow(): object {
+      return {
+        isDestroyed: () => false,
+        isVisible: () => true,
+      };
+    }
+
+    async function readState(): Promise<Record<string, unknown>> {
+      const data = await fs.readFile(`${mockUserData}/update-state.json`, 'utf8');
+      return JSON.parse(data);
+    }
+
+    beforeEach(() => {
+      mockRunPostStartupChecks = vi.fn();
+    });
+
+    it('resets crash count when version changes', async () => {
+      mockRunPostStartupChecks.mockResolvedValue({
+        passed: true,
+        details: [],
+      });
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        currentVersion: '1.1.0',
+        lastRecordedVersion: '1.0.0',
+        crashCount: 2,
+      });
+
+      await updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow);
+
+      const state = await readState();
+      expect(state.crashCount).toBe(0);
+      expect(state.lastRecordedVersion).toBe('1.1.0');
+    });
+
+    it('increments crash count when health checks fail', async () => {
+      mockRunPostStartupChecks.mockResolvedValue({
+        passed: false,
+        details: [{ name: 'backend', passed: false, error: 'unhealthy' }],
+      });
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        crashCount: 0,
+        lastRecordedVersion: base.currentVersion,
+      });
+
+      await expect(
+        updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow),
+      ).rejects.toThrow('Health check failed');
+
+      const state = await readState();
+      expect(state.crashCount).toBe(1);
+    });
+
+    it('throws auto-rollback error when crash count reaches threshold', async () => {
+      mockRunPostStartupChecks.mockResolvedValue({
+        passed: false,
+        details: [{ name: 'backend', passed: false, error: 'unhealthy' }],
+      });
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        crashCount: 2,
+        lastRecordedVersion: base.currentVersion,
+      });
+
+      await expect(
+        updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow),
+      ).rejects.toThrow('Auto-rollback triggered: 3 consecutive failed startups');
+
+      const state = await readState();
+      expect(state.crashCount).toBe(3);
+    });
+
+    it('resets crash count to 0 when health checks pass after prior failures', async () => {
+      mockRunPostStartupChecks.mockResolvedValue({
+        passed: true,
+        details: [],
+      });
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        crashCount: 2,
+        lastRecordedVersion: base.currentVersion,
+      });
+
+      await updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow);
+
+      const state = await readState();
+      expect(state.crashCount).toBe(0);
+    });
+
+    it('preserves crash count when version is unchanged and checks fail', async () => {
+      mockRunPostStartupChecks.mockResolvedValue({
+        passed: false,
+        details: [{ name: 'backend', passed: false, error: 'unhealthy' }],
+      });
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        crashCount: 1,
+        lastRecordedVersion: base.currentVersion,
+      });
+
+      await expect(
+        updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow),
+      ).rejects.toThrow('Health check failed');
+
+      const state = await readState();
+      // Was 1, incremented to 2 (version did not change, so no reset)
+      expect(state.crashCount).toBe(2);
     });
   });
 });

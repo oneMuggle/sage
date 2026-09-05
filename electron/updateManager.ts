@@ -1,8 +1,10 @@
+import { BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { StateManager } from './updateState';
 import { ConfigManager } from './updateConfig';
+import { LauncherHealthChecker } from './updateHealthChecker';
 
 export interface CheckResult {
   updateAvailable: boolean;
@@ -244,6 +246,44 @@ export class UpdateManager {
       crashCount: 0,
       pendingUpdate: null,
     });
+  }
+
+  async onAppStartup(getWindow: () => BrowserWindow | null): Promise<void> {
+    const state = await this.stateManager.getState();
+
+    // Reset crash count if version changed since last recording
+    if (state.currentVersion !== state.lastRecordedVersion) {
+      state.crashCount = 0;
+      state.lastRecordedVersion = state.currentVersion;
+      await this.stateManager.setState(state);
+    }
+
+    // Run post-startup health checks
+    const healthChecker = new LauncherHealthChecker({ getWindow });
+    const health = await healthChecker.runPostStartupChecks();
+
+    if (!health.passed) {
+      state.crashCount += 1;
+      await this.stateManager.setState(state);
+
+      const config = await this.configManager.getConfig();
+      if (state.crashCount >= config.autoRollbackThreshold) {
+        throw new Error(
+          `Auto-rollback triggered: ${state.crashCount} consecutive failed startups`,
+        );
+        // Actual rollback execution is Task 8
+      }
+
+      throw new Error(
+        `Health check failed (${state.crashCount}/${config.autoRollbackThreshold})`,
+      );
+    }
+
+    // Health checks passed: reset crash count if it was non-zero
+    if (state.crashCount > 0) {
+      state.crashCount = 0;
+      await this.stateManager.setState(state);
+    }
   }
 
   private async prepareForUpgrade(): Promise<void> {
