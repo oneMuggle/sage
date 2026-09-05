@@ -61,7 +61,7 @@ import {
 } from 'node:fs';
 import http from 'node:http';
 import fetch from 'node-fetch';
-import { relayChatStream, relayNdjsonToEvent, WIKI_STREAM_ERROR } from './relay';
+import { relayChatStream, relayNdjsonToEvent, relayOrchEventsStream, WIKI_STREAM_ERROR } from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { registerOfficeIpc } from './officeIpc';
@@ -1016,6 +1016,30 @@ function registerIpcHandlers(): void {
         ).catch((e) => {
           if (e instanceof Error && e.name !== 'AbortError') {
             logger.error('ipc: relay error', { event, err: e.message });
+          }
+        });
+        return { ok: true, event };
+      }
+
+      // orch-events-{runId}-{afterSeq} dynamic events: relay orchestration run events
+      // Format: orch-events-{runId} or orch-events-{runId}-seq-{afterSeq}
+      const orchEventsMatch = event.match(/^orch-events-([^-]+?)(?:-seq-(\d+))?$/);
+      if (orchEventsMatch) {
+        const runId = orchEventsMatch[1];
+        const afterSeq = orchEventsMatch[2] ? parseInt(orchEventsMatch[2], 10) : 0;
+        const abort = new AbortController();
+        eventSubscriptions.set(event, abort);
+        relayOrchEventsStream(
+          senderWebContents,
+          event,
+          runId,
+          afterSeq,
+          BACKEND_URL,
+          abort.signal,
+          backendAuthToken ?? undefined,
+        ).catch((e) => {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            logger.error('ipc: orch relay error', { event, err: e.message });
           }
         });
         return { ok: true, event };

@@ -382,18 +382,27 @@ async def lifespan(app: FastAPI):
 
     # Phase 1 observability: SnapshotStore + EventHub + REST endpoints
     from backend.api import orch_run_control
+    from backend.data.orch_context_repo import OrchestrationContextRepository
     from backend.data.orch_events_repo import OrchEventRepository
+    from backend.data.orch_task_repo import OrchTaskRepository
     from backend.orchestration.event_hub import EventHub
     from backend.orchestration.snapshot_store import SnapshotStore
 
     app.state.snapshot_store = SnapshotStore()
     app.state.orch_event_repository = OrchEventRepository()
+    app.state.orch_task_repository = OrchTaskRepository()
+    app.state.orch_context_repository = OrchestrationContextRepository()
     app.state.event_hub = EventHub(
         event_repository=app.state.orch_event_repository,
         event_applier=app.state.snapshot_store.apply_event,
     )
     restored_events = await app.state.event_hub.restore_runs()
-    orch_run_control.configure(app.state.snapshot_store, app.state.event_hub)
+    orch_run_control.configure(
+        app.state.snapshot_store,
+        app.state.event_hub,
+        context_repo=app.state.orch_context_repository,
+        task_repo=app.state.orch_task_repository,
+    )
     logger.info(
         "Phase 1 observability: SnapshotStore + EventHub + /orch/runs 已就绪，恢复 %s 个事件",
         restored_events,

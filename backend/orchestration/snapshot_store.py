@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -199,6 +200,7 @@ class SnapshotStore:
                     status=t.status,
                     current_step_id=t.current_step_id,
                     output_preview=t.output_preview,
+                    revision=t.revision,
                     error=t.error,
                 )
                 for t in run.tasks.values()
@@ -207,6 +209,39 @@ class SnapshotStore:
 
     def list_run_ids(self) -> List[str]:
         return list(self._runs.keys())
+
+    def get_task_revision(self, run_id: str, task_id: str) -> Optional[int]:
+        """Return the current in-memory task revision for compatibility callers."""
+        state = self.get_task_steering_state(run_id, task_id)
+        return state[1] if state is not None else None
+
+    @asynccontextmanager
+    async def task_steering_context(self, run_id: str, task_id: str):
+        """Hold the snapshot lock while validating and persisting a steer."""
+        async with self._lock:
+            yield self.get_task_steering_state(run_id, task_id)
+
+    def get_task_producer_generation(self, run_id: str, task_id: str) -> int:
+        """Return the task's current ``producer_generation`` (0 if unknown)."""
+        run = self._runs.get(run_id)
+        if run is None:
+            return 0
+        task = run.tasks.get(task_id)
+        if task is None:
+            return 0
+        return task.producer_generation
+
+    def get_task_steering_state(
+        self, run_id: str, task_id: str
+    ) -> Optional[tuple[str, int]]:
+        """Return task status and revision for a lock-protected steering check."""
+        run = self._runs.get(run_id)
+        if run is None:
+            return None
+        task = run.tasks.get(task_id)
+        if task is None:
+            return None
+        return task.status, task.revision
 
 
 __all__ = ["SnapshotStore"]

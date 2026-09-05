@@ -406,6 +406,7 @@ class TaskSummary:
     last_progress_at: Optional[int] = None
     output_preview: Optional[str] = None
     retry_count: int = 0
+    revision: int = 0
     error: Optional[str] = None
 
 
@@ -436,6 +437,7 @@ class RunSnapshot:
                     "last_progress_at": t.last_progress_at,
                     "output_preview": t.output_preview,
                     "retry_count": t.retry_count,
+                    "revision": t.revision,
                     "error": t.error,
                 }
                 for t in self.tasks

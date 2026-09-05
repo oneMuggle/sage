@@ -216,3 +216,54 @@ export async function relayChatStream(
     signal,
   );
 }
+
+/**
+ * Subscribe to orchestration run events and forward to renderer.
+ *
+ * Flow:
+ *   1. renderer calls listen('orch-events-{runId}', handler)
+ *   2. main process opens GET /orch/runs/{runId}/events?after_seq={seq}
+ *   3. Each NDJSON line is forwarded via webContents.send
+ *   4. renderer unsubscribes → abort signal → fetch destroyed
+ *
+ * Auth: uses the same backendAuthToken as other API calls.
+ */
+export async function relayOrchEventsStream(
+  webContents: WebContentsLike,
+  eventName: string,
+  runId: string,
+  afterSeq: number,
+  backendUrl: string,
+  signal: AbortSignal,
+  authToken?: string,
+): Promise<void> {
+  let res: import('node-fetch').Response;
+  try {
+    const url = `${backendUrl}/api/v1/orch/runs/${encodeURIComponent(runId)}/events?after_seq=${afterSeq}`;
+    res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/x-ndjson',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      signal,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') return;
+    // 网络错误静默吞掉,不要把 main 进程炸了
+    return;
+  }
+
+  if (!res.ok) {
+    // 非 2xx (如 401/404) 静默返回,renderer 侧会收到流结束信号
+    return;
+  }
+
+  await parseNdjsonStream(
+    res.body,
+    (event) => {
+      webContents.send(`sage:event:${eventName}`, event);
+    },
+    signal,
+  );
+}

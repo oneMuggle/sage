@@ -840,6 +840,12 @@ class Database:
         _orch_cols = {row[1] for row in cursor.fetchall()}
         if "original_request" not in _orch_cols:
             cursor.execute("ALTER TABLE orch_runs ADD COLUMN original_request TEXT")
+        # Phase 3 (2026-09-06): revision 列 —— CAS 并发控制（steer_subagent 用）。
+        # orch_runs/orch_tasks 每次状态变更自增，steer 接口以此作为 expected 比对。
+        if "revision" not in _orch_cols:
+            cursor.execute(
+                "ALTER TABLE orch_runs ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"
+            )
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS orch_tasks (
@@ -849,6 +855,7 @@ class Database:
                 goal TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'queued',
                 retry_count INTEGER NOT NULL DEFAULT 0,
+                revision INTEGER NOT NULL DEFAULT 0,
                 error TEXT,
                 output_preview TEXT,
                 blocked_by TEXT,
@@ -864,6 +871,13 @@ class Database:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_orch_tasks_status ON orch_tasks(status)"
         )
+        # Phase 3 (2026-09-06): revision 列回填（已存在的旧库）。幂等。
+        cursor.execute("PRAGMA table_info(orch_tasks)")
+        _task_cols = {row[1] for row in cursor.fetchall()}
+        if "revision" not in _task_cols:
+            cursor.execute(
+                "ALTER TABLE orch_tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"
+            )
 
         # Subagent 实时可观测性 schema (run-events@1.0)。全部 DDL 幂等，兼容旧库。
         cursor.execute(
@@ -928,13 +942,16 @@ class Database:
                 context_id TEXT PRIMARY KEY,
                 run_id TEXT NOT NULL REFERENCES orch_runs(run_id),
                 task_id TEXT NOT NULL REFERENCES orch_tasks(task_id),
-                source TEXT NOT NULL,
+                source TEXT NOT NULL CHECK (source IN ('user', 'parent_agent', 'system')),
+                message_type TEXT NOT NULL CHECK (message_type IN ('constraint', 'clarification', 'additional_context', 'correction', 'priority_update', 'reference')),
                 content_redacted TEXT NOT NULL,
+                apply_mode TEXT NOT NULL DEFAULT 'next_boundary' CHECK (apply_mode IN ('next_boundary', 'new_followup')),
+                expected_task_revision INTEGER,
                 created_at INTEGER NOT NULL,
                 created_by TEXT,
                 applied_at INTEGER,
                 applied_step_id TEXT,
-                status TEXT NOT NULL DEFAULT 'pending'
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'delivered', 'acknowledged', 'rejected'))
             )
             """
         )
@@ -942,6 +959,29 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_orch_context_task_status "
             "ON orch_context_messages(task_id, status)"
         )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_context_run "
+            "ON orch_context_messages(run_id)"
+        )
+        # Phase 3 (2026-09-06): message_type / apply_mode / expected_task_revision
+        # 列回填（旧库）。幂等。
+        cursor.execute("PRAGMA table_info(orch_context_messages)")
+        _ctx_cols = {row[1] for row in cursor.fetchall()}
+        if "message_type" not in _ctx_cols:
+            cursor.execute(
+                "ALTER TABLE orch_context_messages "
+                "ADD COLUMN message_type TEXT NOT NULL DEFAULT 'additional_context'"
+            )
+        if "apply_mode" not in _ctx_cols:
+            cursor.execute(
+                "ALTER TABLE orch_context_messages "
+                "ADD COLUMN apply_mode TEXT NOT NULL DEFAULT 'next_boundary'"
+            )
+        if "expected_task_revision" not in _ctx_cols:
+            cursor.execute(
+                "ALTER TABLE orch_context_messages "
+                "ADD COLUMN expected_task_revision INTEGER"
+            )
 
         # FTS 幂等回填：把 memories_semantic 现有行同步进索引（含绕过 SemanticMemory
         # 直接写主表的行，如 evolution 晋升；重建后 force 全量重填，否则行数一致即跳过）
