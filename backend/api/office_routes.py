@@ -47,11 +47,17 @@ from backend.office.models import (
     OfficeWordGenerateRequest,
     OfficeWordReadResult,
     PdfFormFillRequest,
+    PdfFormFillResult,
     PdfFormReadRequest,
+    PdfFormReadResult,
     PdfGenerateRequest,
+    PdfGenerateResult,
     PdfReadRequest,
+    PdfReadResult,
+    WordTemplateAnalysis,
     WordTemplateAnalyzeRequest,
     WordTemplateFillRequest,
+    WordTemplateFillResult,
 )
 from backend.office.path_safety import resolve_within
 from backend.office.pdf import generate_pdf, read_pdf
@@ -460,15 +466,19 @@ def generate_excel_endpoint(req: OfficeExcelGenerateRequest) -> dict:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@router.post("/word/analyze-template")
-def analyze_word_template_endpoint(req: WordTemplateAnalyzeRequest):
+@router.post("/word/analyze-template", response_model=WordTemplateAnalysis)
+def analyze_word_template_endpoint(
+    req: WordTemplateAnalyzeRequest,
+) -> WordTemplateAnalysis:
     """Analyze a Word template and extract {{}} placeholders."""
     file_path = _validate_file_in_workspace(req.template_path, req.workspace_path)
     return analyze_word_template(file_path, workspace_path=req.workspace_path)
 
 
-@router.post("/word/fill-template")
-def fill_word_template_endpoint(req: WordTemplateFillRequest):
+@router.post("/word/fill-template", response_model=WordTemplateFillResult)
+def fill_word_template_endpoint(
+    req: WordTemplateFillRequest,
+) -> WordTemplateFillResult:
     """Fill a Word template with data.
 
     Service function handles all validation internally (workspace boundary,
@@ -482,15 +492,15 @@ def fill_word_template_endpoint(req: WordTemplateFillRequest):
 # ──────────────────────────────────────────────────────────────────────
 
 
-@router.post("/pdf/read")
-def read_pdf_endpoint(req: PdfReadRequest):
+@router.post("/pdf/read", response_model=PdfReadResult)
+def read_pdf_endpoint(req: PdfReadRequest) -> PdfReadResult:
     """Read a PDF file and extract content."""
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     return read_pdf(file_path, workspace_path=req.workspace_path)
 
 
-@router.post("/pdf/generate")
-def generate_pdf_endpoint(req: PdfGenerateRequest):
+@router.post("/pdf/generate", response_model=PdfGenerateResult)
+def generate_pdf_endpoint(req: PdfGenerateRequest) -> PdfGenerateResult:
     """Generate a PDF from structured data.
 
     Service function handles workspace validation and output path safety.
@@ -498,15 +508,15 @@ def generate_pdf_endpoint(req: PdfGenerateRequest):
     return generate_pdf(req)
 
 
-@router.post("/pdf/read-form")
-def read_pdf_form_endpoint(req: PdfFormReadRequest):
+@router.post("/pdf/read-form", response_model=PdfFormReadResult)
+def read_pdf_form_endpoint(req: PdfFormReadRequest) -> PdfFormReadResult:
     """Read PDF form fields (AcroForm)."""
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     return read_pdf_form(file_path, workspace_path=req.workspace_path)
 
 
-@router.post("/pdf/fill-form")
-def fill_pdf_form_endpoint(req: PdfFormFillRequest):
+@router.post("/pdf/fill-form", response_model=PdfFormFillResult)
+def fill_pdf_form_endpoint(req: PdfFormFillRequest) -> PdfFormFillResult:
     """Fill a PDF form with data.
 
     Service function handles all validation internally.
