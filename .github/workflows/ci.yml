@@ -3,20 +3,8 @@ name: CI
 on:
   push:
     branches: [main, develop, release/win7]
-    # paths-ignore: skip CI for docs/markdown-only commits (no source/test changes).
-    # Saves ~5-10 min of backend pytest + frontend vitest on pure documentation PRs.
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
-      - '.github/CODEOWNERS'
-      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
     branches: [main, develop, release/**]
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
-      - '.github/CODEOWNERS'
-      - '.github/ISSUE_TEMPLATE/**'
   workflow_dispatch:
 
 concurrency:
