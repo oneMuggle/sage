@@ -31,6 +31,28 @@ function normalizeWorkspaceSearchLimit(value: unknown): number {
 }
 
 export const COMMAND_ROUTES: Record<string, CommandRoute> = {
+  // orchestration run control
+  orchestration_get_run_snapshot: {
+    method: 'GET',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/snapshot`,
+  },
+
+  // Phase 3: parent agent steering — POST /orch/runs/{run_id}/tasks/{task_id}/steer
+  // Appends a context message (constraint/clarification/additional_context/...)
+  // that the executor drains at the next boundary. Returns 409 task_state_changed
+  // on CAS revision mismatch.
+  orchestration_steer_task: {
+    method: 'POST',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/steer`,
+  },
+
+  // Phase 3: run cancellation control — POST /orch/runs/{run_id}/cancel
+  // Broadcasts run.cancel_requested; executor-driven abort belongs to Phase 4.
+  orchestration_cancel_run_control: {
+    method: 'POST',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/cancel`,
+  },
+
   // chat
   // I2: create + attach split — POST 立即返回 {streamId} 启动后台 LLM 调用,
   // GET attach 到同一 stream 拉取 NDJSON 事件。LLM 只跑一次。

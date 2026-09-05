@@ -350,8 +350,22 @@ class LaneBoardBuilder:
     - `lane.heartbeat.last_heartbeat_at` (optional)
     """
 
-    def __init__(self, lane_registry: Any) -> None:
+    def __init__(self, lane_registry: Any, event_stream: Optional[Any] = None) -> None:
         self.lane_registry = lane_registry
+        self.event_stream = event_stream
+
+    def last_event_for(self, lane: Any) -> Tuple[int, str]:
+        """Return the latest persisted lane event, or a creation fallback."""
+        raw_created_at = getattr(lane, "created_at", None)
+        fallback_at = raw_created_at if isinstance(raw_created_at, int) else 0
+        fallback_type = "lane.created"
+        if self.event_stream is None:
+            return fallback_at, fallback_type
+        events = self.event_stream.get_lane_events(lane.lane_id, limit=1000)
+        if not events:
+            return fallback_at, fallback_type
+        event = max(events, key=lambda item: int(item["timestamp"]))
+        return int(event["timestamp"]), str(event["event_type"])
 
     def freshness_for(self, lane: Any, now_ms: Optional[int] = None) -> LaneFreshness:
         last_hb: Optional[int] = None
@@ -375,14 +389,15 @@ class LaneBoardBuilder:
             status_value = lane.status.value if hasattr(lane.status, "value") else str(lane.status)
             freshness = self.freshness_for(lane, now_ms=now)
             all_freshness.append(freshness)
+            last_event_at, last_event_type = self.last_event_for(lane)
             entry = BoardEntry(
                 lane_id=lane.lane_id,
                 task_id=lane.task_id,
                 agent_id=lane.agent_id,
                 status=status_value,
                 freshness=freshness,
-                last_event_at=now,
-                last_event_type="board.snapshot",
+                last_event_at=last_event_at,
+                last_event_type=last_event_type,
                 heartbeat_status=freshness.level,
             )
             if status_value in _ACTIVE_STATUSES:

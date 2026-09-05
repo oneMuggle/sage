@@ -1,10 +1,10 @@
-"""
-StreamRegistry 单元测试
+"""StreamRegistry 单元测试
 
 覆盖 backend/api/chat_stream_registry.py 的 StreamRegistry 类。
 - create / get / pop_if_done / sweep_expired 生命周期
 - 状态字段（pending / running / done / failed）
 - 边界:未知 streamId、过期 stream、并发 pop_if_done
+- 多 subscriber 广播与独立消费游标
 """
 
 from __future__ import annotations
@@ -106,6 +106,44 @@ async def test_producer_task_actually_runs_and_emits_done_sentinel():
         events.append(ev)
     assert events[0]["state"] == "thinking"
     assert events[1]["state"] == "done"
+
+
+@pytest.mark.asyncio()
+async def test_broadcast_delivers_each_event_to_all_subscribers():
+    """多个 attach 必须各自收到完整事件序列。"""
+    reg = StreamRegistry()
+    await reg.create("sid-1", queue_maxsize=10)
+    first = await reg.subscribe("sid-1")
+    second = await reg.subscribe("sid-1")
+    assert first is not None
+    assert second is not None
+
+    entry = reg.get("sid-1")
+    event = _make_event("thinking")
+    await entry.queue.put(event)
+    await entry.queue.put(SENTINEL)
+
+    assert await first.get() == event
+    assert await second.get() == event
+    assert (await first.get()) is SENTINEL
+    assert (await second.get()) is SENTINEL
+    await reg.unsubscribe("sid-1", first)
+    await reg.unsubscribe("sid-1", second)
+
+
+@pytest.mark.asyncio()
+async def test_subscribe_replays_events_emitted_before_first_attach():
+    """首次 attach 前产生的缓冲事件转移到其 subscriber queue。"""
+    reg = StreamRegistry()
+    await reg.create("sid-1", queue_maxsize=10)
+    entry = reg.get("sid-1")
+    event = _make_event("buffered")
+    await entry.queue.put(event)
+
+    subscriber = await reg.subscribe("sid-1")
+    assert subscriber is not None
+    assert await subscriber.get() == event
+    await reg.unsubscribe("sid-1", subscriber)
 
 
 @pytest.mark.asyncio()

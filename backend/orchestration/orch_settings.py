@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from pathlib import PurePath
 
 from backend.data.settings_repo import SettingsRepository
 
@@ -63,5 +64,23 @@ def load_orch_settings() -> OrchSettings:
                 continue
             settings = replace(settings, **{field_name: value})
         elif isinstance(current, str) and isinstance(value, str):
-            settings = replace(settings, **{field_name: value})
+            settings = replace(settings, **{field_name: _sanitize_scratch_root(value, current)})
     return settings
+
+
+def _sanitize_scratch_root(value: str, fallback: str) -> str:
+    """约束 scratch_root 为安全相对单目录名。
+
+    拒绝绝对路径、含 ``..`` 的穿越、空字符串、以及带路径分隔符的多段
+    输入。无效值回落为调用方传入的默认值，保证编排写入目录始终在
+    预期数据目录内。
+    """
+    if not value:
+        return fallback
+    if PurePath(value).is_absolute():
+        return fallback
+    if ".." in value.split("/"):
+        return fallback
+    if "/" in value or "\\" in value:
+        return fallback
+    return value
