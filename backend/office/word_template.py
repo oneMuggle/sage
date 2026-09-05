@@ -84,7 +84,7 @@ def _validate_docx_zip(file_path: Path) -> None:
         raise
     except (OSError, zipfile.BadZipFile) as exc:
         raise OfficeTemplateParseError(
-            f"Failed to inspect DOCX ZIP: {exc}", file_path=file_path
+            "Failed to inspect DOCX ZIP", file_path=file_path
         ) from exc
 
 
@@ -265,7 +265,7 @@ def analyze_word_template(
         raise OfficeFileNotFoundError(file_path)
     if not file_path.is_file():
         raise OfficeTemplateParseError(
-            f"Path is not a file: {file_path}", file_path=file_path
+            "Path is not a file", file_path=file_path
         )
 
     _validate_docx_zip(file_path)
@@ -273,7 +273,7 @@ def analyze_word_template(
         doc = Document(str(file_path))
     except Exception as exc:
         raise OfficeTemplateParseError(
-            f"Failed to parse DOCX: {exc}", file_path=file_path
+            "Failed to parse DOCX", file_path=file_path
         ) from exc
 
     placeholders: List[TemplatePlaceholder] = []
@@ -364,11 +364,15 @@ def fill_word_template(req: WordTemplateFillRequest) -> WordTemplateFillResult:
     output_name = req.output_filename
     if not output_name or Path(output_name).is_absolute():
         raise OfficeTemplateFillError("Invalid output filename")
+    if "/" in output_name or "\\" in output_name:
+        raise OfficeTemplateFillError("Invalid output filename")
     try:
         output_path = resolve_within(workspace, template_path.parent / output_name)
     except OfficePathError as exc:
         raise OfficeTemplateFillError("Invalid output filename") from exc
     if output_path == template_path or output_path.is_dir():
+        raise OfficeTemplateFillError("Invalid output filename")
+    if output_path.exists():
         raise OfficeTemplateFillError("Invalid output filename")
 
     placeholder_names = {placeholder.name for placeholder in analysis.placeholders}
