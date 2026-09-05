@@ -234,8 +234,16 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
         # GENERIC message — never interpolate ``exc`` or the path.
         raise OfficePdfGenerateError("PDF generation failed") from exc
 
-    if output_path.stat().st_size > MAX_PDF_OUTPUT_SIZE:
-        output_path.unlink()
+    try:
+        output_size = output_path.stat().st_size
+    except OSError as exc:
+        raise OfficePdfGenerateError("Unable to validate generated PDF") from exc
+
+    if output_size > MAX_PDF_OUTPUT_SIZE:
+        try:
+            output_path.unlink()
+        except OSError:
+            pass
         raise OfficePdfGenerateError("Generated PDF exceeds size limit")
 
     return PdfGenerateResult(
