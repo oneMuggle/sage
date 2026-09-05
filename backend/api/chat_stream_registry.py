@@ -27,8 +27,60 @@ from typing import (  # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscr
     Any,
     Callable,
     Dict,
+    List,
     Optional,
 )
+
+
+class BroadcastQueue(asyncio.Queue):
+    """把 producer 的每条消息复制到所有 subscriber queue。
+
+    继承 ``asyncio.Queue`` 保持旧 producer/测试的类型和消费 API 兼容；无
+    subscriber 时，父队列本身承担待 attach 缓冲，注册 subscriber 后再转移。
+    """
+
+    def __init__(self, maxsize: int) -> None:
+        super().__init__(maxsize=maxsize)
+        self._subscribers: List[asyncio.Queue] = []
+        self._lock = asyncio.Lock()
+
+    async def put(self, item: Any) -> None:
+        """广播消息，不让慢订阅者阻塞 producer。"""
+        if not self._subscribers:
+            await super().put(item)
+            return
+        self.put_nowait(item)
+
+    def put_nowait(self, item: Any) -> None:
+        """非阻塞广播；满队列的订阅者被移除并丢弃其后续事件。"""
+        queues = list(self._subscribers)
+        if not queues:
+            super().put_nowait(item)
+            return
+        for queue in queues:
+            try:
+                queue.put_nowait(item)
+            except asyncio.QueueFull:
+                # A disconnected client must not hold the producer hostage.
+                with contextlib.suppress(ValueError):
+                    self._subscribers.remove(queue)
+
+    async def subscribe(self) -> asyncio.Queue:
+        """注册一个 subscriber，并返回其独立队列。"""
+        queue: asyncio.Queue = asyncio.Queue(maxsize=self.maxsize)
+        async with self._lock:
+            self._subscribers.append(queue)
+            # attach 之前产生的消息转移给第一个 subscriber，保持重连行为。
+            while not self.empty():
+                queue.put_nowait(super().get_nowait())
+        return queue
+
+    async def unsubscribe(self, queue: asyncio.Queue) -> None:
+        """注销 subscriber，避免关闭连接后继续占用广播列表。"""
+        async with self._lock:
+            with contextlib.suppress(ValueError):
+                self._subscribers.remove(queue)
+
 
 # 当 Queue.get() 收到此 sentinel,attach 端点就关闭 NDJSON 流。
 # 必须是单例(用 `is` 比较),不能是 None 或 dict(None) 等可能的合法事件值。
@@ -57,7 +109,7 @@ class StreamEntry:
         wake_id: 挂起时注册的唤醒记录 ID(便于排障关联 wakes 表)
     """
 
-    queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=1000))
+    queue: BroadcastQueue = field(default_factory=lambda: BroadcastQueue(maxsize=1000))
     task: Optional[asyncio.Task] = None
     status: str = "pending"
     created_at: float = field(default_factory=time.time)
@@ -100,7 +152,7 @@ class StreamRegistry:
         if stream_id in self._entries:
             raise ValueError(f"streamId already exists: {stream_id}")
         entry = StreamEntry(
-            queue=asyncio.Queue(maxsize=queue_maxsize),
+            queue=BroadcastQueue(maxsize=queue_maxsize),
             status="pending",
             created_at=time.time(),
             session_id=session_id,
@@ -171,6 +223,19 @@ class StreamRegistry:
 
     def get(self, stream_id: str) -> StreamEntry | None:
         return self._entries.get(stream_id)
+
+    async def subscribe(self, stream_id: str) -> Optional[asyncio.Queue]:
+        """为 stream 创建独立消费游标；stream 不存在时返回 None。"""
+        entry = self._entries.get(stream_id)
+        if entry is None:
+            return None
+        return await entry.queue.subscribe()
+
+    async def unsubscribe(self, stream_id: str, queue: asyncio.Queue) -> None:
+        """注销 stream subscriber。"""
+        entry = self._entries.get(stream_id)
+        if entry is not None:
+            await entry.queue.unsubscribe(queue)
 
     def pop(self, stream_id: str) -> bool:
         """立即移除(用于显式 cancel 或 shutdown)。"""

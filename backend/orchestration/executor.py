@@ -9,6 +9,7 @@ Handles the complete execution flow for a Lane:
 - Integration with existing agent/task execution
 """
 
+import asyncio
 import logging
 from typing import Any, Callable, Dict, Optional
 
@@ -32,6 +33,10 @@ from backend.orchestration.permission import (
 from backend.orchestration.report_schema import (
     ProjectionRef,
     ReviewReport,
+)
+from backend.orchestration.run_event_adapter import (
+    RunEventSink,
+    lane_event_to_run_event,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,6 +68,9 @@ class LaneExecutor:
         task_registry: Any,
         event_recorder: Optional[EventRecorder] = None,
         agent_runner: Optional[Callable] = None,
+        interrupt_event: Optional[asyncio.Event] = None,
+        run_event_sink: Optional[RunEventSink] = None,
+        run_id: Optional[str] = None,
     ) -> None:
         """
         Initialize LaneExecutor.
@@ -78,8 +86,11 @@ class LaneExecutor:
         self.task_registry = task_registry
         self.event_recorder = event_recorder or EventRecorder()
         self.agent_runner = agent_runner or self._default_agent_runner
+        self.interrupt_event = interrupt_event
+        self.run_event_sink = run_event_sink
+        self.run_id = run_id
 
-    async def execute_lane(
+    async def execute_lane(  # noqa: PLR0911 — 7 returns: cancel/perm/fail/succeed/retry/abort/default
         self,
         lane: Lane,
         agent_id: Optional[str] = None,
@@ -100,6 +111,9 @@ class LaneExecutor:
         if agent_id:
             lane.agent_id = agent_id
 
+        if self._is_cancelled(lane):
+            return self._cancelled_result(lane)
+
         # Step 1: Validate permissions before execution
         if not await self._validate_permissions(lane):
             return await self._fail_lane(
@@ -116,12 +130,19 @@ class LaneExecutor:
                 EventProvenance.LIVE_LANE,
                 {"agent_id": lane.agent_id},
             )
+            await self._publish_run_event(
+                lane, LaneEvent.READY, EventProvenance.LIVE_LANE,
+                {"agent_id": lane.agent_id},
+            )
             lane.mark_ready()
             self.lane_registry.update_lane(lane)
 
         # Step 3: Transition READY -> RUNNING
         if lane.status == LaneStatus.READY:
             self._record_event(lane, LaneEvent.RUNNING, EventProvenance.LIVE_LANE)
+            await self._publish_run_event(
+                lane, LaneEvent.RUNNING, EventProvenance.LIVE_LANE
+            )
             lane.mark_running()
             self.lane_registry.update_lane(lane)
 
@@ -138,12 +159,23 @@ class LaneExecutor:
         try:
             result = await self.agent_runner(task, lane.agent_id)
 
-            # Step 6: Mark succeeded
+            # Step 6: Mark succeeded only if cancellation did not win the race.
+            if self._is_cancelled(lane):
+                return self._cancelled_result(lane)
+            succeeded_metadata = {
+                "result_keys": list(result.keys()) if isinstance(result, dict) else None,
+            }
             self._record_event(
                 lane,
                 LaneEvent.SUCCEEDED,
                 EventProvenance.LIVE_LANE,
-                {"result_keys": list(result.keys()) if isinstance(result, dict) else None},
+                succeeded_metadata,
+            )
+            await self._publish_run_event(
+                lane,
+                LaneEvent.SUCCEEDED,
+                EventProvenance.LIVE_LANE,
+                succeeded_metadata,
             )
             lane.mark_succeeded()
             self.lane_registry.update_lane(lane)
@@ -159,6 +191,8 @@ class LaneExecutor:
 
         except Exception as exc:
             logger.exception("Lane %s execution failed", lane.lane_id)
+            if self._is_cancelled(lane):
+                return self._cancelled_result(lane)
             # Preserve structured error_code from LaneExecutionError
             error_code = exc.error_code if isinstance(exc, LaneExecutionError) else None
             return await self._handle_failure(lane, task, str(exc), error_code=error_code)
@@ -227,6 +261,8 @@ class LaneExecutor:
         Returns:
             Failure result dict
         """
+        if self._is_cancelled(lane):
+            return self._cancelled_result(lane)
         recovery_policy = self._get_recovery_policy(task)
         action = recovery_policy.get("on_failure", "fail")
 
@@ -243,15 +279,22 @@ class LaneExecutor:
 
             if retry_count < max_retries:
                 # Record retry event
+                retry_metadata = {
+                    "retry_count": retry_count + 1,
+                    "max_retries": max_retries,
+                    "error": error_message,
+                }
                 self._record_event(
                     lane,
                     LaneEvent.RUNNING,
                     EventProvenance.RETRY,
-                    {
-                        "retry_count": retry_count + 1,
-                        "max_retries": max_retries,
-                        "error": error_message,
-                    },
+                    retry_metadata,
+                )
+                await self._publish_run_event(
+                    lane,
+                    LaneEvent.RUNNING,
+                    EventProvenance.RETRY,
+                    retry_metadata,
                 )
                 # Reset lane for retry
                 lane.status = LaneStatus.READY
@@ -299,11 +342,20 @@ class LaneExecutor:
         Returns:
             Failure result dict
         """
+        if self._is_cancelled(lane):
+            return self._cancelled_result(lane)
+        failed_metadata = {"error": error_message, "error_code": error_code}
         self._record_event(
             lane,
             LaneEvent.FAILED,
             EventProvenance.LIVE_LANE,
-            {"error": error_message, "error_code": error_code},
+            failed_metadata,
+        )
+        await self._publish_run_event(
+            lane,
+            LaneEvent.FAILED,
+            EventProvenance.LIVE_LANE,
+            failed_metadata,
         )
         # Direct state set — lane may be in CREATED/READY/BLOCKED
         # (e.g., permission denied before RUNNING)
@@ -346,16 +398,36 @@ class LaneExecutor:
                 "reason": f"lane already in terminal state: {lane.status}",
             }
 
+        stop_metadata = {"reason": reason}
         self._record_event(
             lane,
             LaneEvent.STOPPED,
             EventProvenance.MANUAL,
-            {"reason": reason},
+            stop_metadata,
+        )
+        await self._publish_run_event(
+            lane,
+            LaneEvent.STOPPED,
+            EventProvenance.MANUAL,
+            stop_metadata,
         )
         lane.mark_stopped()
         self.lane_registry.update_lane(lane)
 
         return {"status": "cancelled", "lane_id": lane.lane_id, "reason": reason}
+
+    def _is_cancelled(self, lane: Lane) -> bool:
+        current = self.lane_registry.get_lane(lane.lane_id)
+        return bool(
+            self.interrupt_event is not None and self.interrupt_event.is_set()
+        ) or bool(current and current.status in (LaneStatus.STOPPED, LaneStatus.CANCELLED))
+
+    def _cancelled_result(self, lane: Lane) -> Dict[str, Any]:
+        """Return cancellation without allowing a late worker result to win."""
+        if lane.status not in (LaneStatus.STOPPED, LaneStatus.CANCELLED):
+            lane.status = LaneStatus.STOPPED
+            self.lane_registry.update_lane(lane)
+        return {"status": "cancelled", "lane_id": lane.lane_id}
 
     def _get_recovery_policy(self, task: Task) -> Dict[str, Any]:
         """
@@ -465,6 +537,37 @@ class LaneExecutor:
             metadata=metadata or {},
         )
         self.event_recorder.record_payload(payload)
+
+    async def _publish_run_event(
+        self,
+        lane: Lane,
+        event: LaneEvent,
+        provenance: EventProvenance,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Translate a legacy lane event into a canonical RunEvent and publish it.
+
+        No-op when no sink or run_id was provided, so existing callers that do
+        not participate in the observability pipeline are unaffected.
+        """
+        if self.run_event_sink is None or not self.run_id:
+            return
+        try:
+            await self.run_event_sink.publish(
+                lane_event_to_run_event(
+                    run_id=self.run_id,
+                    lane=lane,
+                    event=event,
+                    provenance=provenance,
+                    metadata=metadata,
+                )
+            )
+        except Exception:  # pragma: no cover - observability must not break the lane
+            logger.exception(
+                "Failed to publish canonical RunEvent for lane %s (%s)",
+                lane.lane_id,
+                event,
+            )
 
     async def _default_agent_runner(
         self,

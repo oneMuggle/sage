@@ -748,6 +748,84 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_orch_tasks_status ON orch_tasks(status)"
         )
 
+        # Subagent 实时可观测性 schema (run-events@1.0)。全部 DDL 幂等，兼容旧库。
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orch_events (
+                event_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES orch_runs(run_id),
+                seq INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                task_id TEXT,
+                lane_id TEXT,
+                step_id TEXT,
+                agent_id TEXT,
+                occurred_at INTEGER NOT NULL,
+                producer TEXT NOT NULL,
+                producer_generation INTEGER NOT NULL DEFAULT 0,
+                payload TEXT NOT NULL,
+                visibility TEXT NOT NULL DEFAULT 'user',
+                command_id TEXT,
+                schema_version TEXT NOT NULL DEFAULT 'run-events@1.0',
+                UNIQUE(run_id, seq),
+                UNIQUE(command_id)
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_events_run_seq ON orch_events(run_id, seq)"
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orch_steps (
+                step_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES orch_runs(run_id),
+                task_id TEXT NOT NULL REFERENCES orch_tasks(task_id),
+                sequence INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                input_summary TEXT,
+                output_preview TEXT,
+                tool_name TEXT,
+                error_code TEXT,
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                started_at INTEGER,
+                finished_at INTEGER,
+                created_at INTEGER NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_steps_run_seq ON orch_steps(run_id, sequence)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_steps_task_seq ON orch_steps(task_id, sequence)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_steps_task_status ON orch_steps(task_id, status)"
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orch_context_messages (
+                context_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES orch_runs(run_id),
+                task_id TEXT NOT NULL REFERENCES orch_tasks(task_id),
+                source TEXT NOT NULL,
+                content_redacted TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                created_by TEXT,
+                applied_at INTEGER,
+                applied_step_id TEXT,
+                status TEXT NOT NULL DEFAULT 'pending'
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orch_context_task_status "
+            "ON orch_context_messages(task_id, status)"
+        )
+
         conn.commit()
         print(f"数据库初始化完成: {self.db_path}")  # noqa: T201 (历史遗留, init 阶段一次性输出)
 
