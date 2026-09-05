@@ -1,16 +1,15 @@
 """Unit tests for extended office error types (template + PDF)."""
 
-import pytest
 from pathlib import Path
 
 from backend.office.errors import (
-    OfficeTemplateError,
-    OfficeTemplateParseError,
-    OfficeTemplateFillError,
     OfficePdfError,
-    OfficePdfParseError,
-    OfficePdfGenerateError,
     OfficePdfFormError,
+    OfficePdfGenerateError,
+    OfficePdfParseError,
+    OfficeTemplateError,
+    OfficeTemplateFillError,
+    OfficeTemplateParseError,
     office_error_to_http_status,
 )
 
