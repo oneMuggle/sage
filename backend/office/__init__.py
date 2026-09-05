@@ -10,3 +10,8 @@ Module map:
 
 See docs/plans/2026-07-16_office-features.md for design.
 """
+
+# Phase 2: Word template + PDF operations
+from .pdf import generate_pdf, read_pdf
+from .pdf_forms import fill_pdf_form, read_pdf_form
+from .word_template import analyze_word_template, fill_word_template
