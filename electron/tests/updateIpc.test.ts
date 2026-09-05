@@ -50,7 +50,7 @@ const untrustedEvent = { sender: { id: 2 } } as never;
 describe('registerUpdateIpc', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('registers all six operations and forwards expected arguments', async () => {
+  it('registers all eight operations and forwards expected arguments', async () => {
     const ipc = createIpcMain();
     const manager = createManager();
     registerUpdateIpc(ipc as never, manager as never, {
