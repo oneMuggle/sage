@@ -6,7 +6,13 @@ import pytest
 from docx import Document
 from docx.shared import Inches
 
-from backend.office.errors import OfficeFileNotFoundError, OfficeTemplateParseError
+from backend.office import word_template
+from backend.office.errors import (
+    OfficeFileNotFoundError,
+    OfficePathError,
+    OfficeSizeLimitError,
+    OfficeTemplateParseError,
+)
 from backend.office.models import PlaceholderLocation, TemplatePlaceholderType
 from backend.office.word_template import analyze_word_template
 
@@ -75,14 +81,20 @@ def test_analyze_non_body_placeholders_and_indices(tmp_path: Path):
     body_table = doc.add_table(rows=1, cols=2)
     body_table.cell(0, 0).text = "日期：{{合同日期}}"
     body_table.cell(0, 1).text = "图片：{{签名图片}}"
+    nested = body_table.cell(0, 0).add_table(rows=1, cols=1)
+    nested.cell(0, 0).text = "嵌套：{{nested_text}}"
 
     section = doc.sections[0]
     section.header.paragraphs[0].text = "页眉：{{页眉文本}}"
     header_table = section.header.add_table(rows=1, cols=1, width=Inches(1))
     header_table.cell(0, 0).text = "页眉表格：{{header_image}}"
+    header_nested = header_table.cell(0, 0).add_table(rows=1, cols=1)
+    header_nested.cell(0, 0).text = "页眉嵌套：{{header_nested}}"
     section.footer.paragraphs[0].text = "页脚：{{页脚文本}}"
     footer_table = section.footer.add_table(rows=1, cols=1, width=Inches(1))
     footer_table.cell(0, 0).text = "页脚表格：{{footer_date}}"
+    footer_nested = footer_table.cell(0, 0).add_table(rows=1, cols=1)
+    footer_nested.cell(0, 0).text = "页脚嵌套：{{footer_nested}}"
 
     path = tmp_path / "locations.docx"
     doc.save(str(path))
@@ -95,26 +107,38 @@ def test_analyze_non_body_placeholders_and_indices(tmp_path: Path):
     assert (placeholders["合同日期"].table_index, placeholders["合同日期"].row_index,
             placeholders["合同日期"].col_index) == (0, 0, 0)
     assert placeholders["签名图片"].type == TemplatePlaceholderType.IMAGE
+    assert placeholders["nested_text"].location == PlaceholderLocation.TABLE
+    assert (placeholders["nested_text"].table_index, placeholders["nested_text"].row_index,
+            placeholders["nested_text"].col_index) == (0, 0, 0)
     assert placeholders["页眉文本"].location == PlaceholderLocation.HEADER
     assert placeholders["页脚文本"].location == PlaceholderLocation.FOOTER
     assert placeholders["header_image"].location == PlaceholderLocation.HEADER
     assert (placeholders["header_image"].table_index, placeholders["header_image"].row_index,
             placeholders["header_image"].col_index) == (0, 0, 0)
+    assert placeholders["header_nested"].location == PlaceholderLocation.HEADER
+    assert (placeholders["header_nested"].table_index, placeholders["header_nested"].row_index,
+            placeholders["header_nested"].col_index) == (0, 0, 0)
     assert placeholders["footer_date"].location == PlaceholderLocation.FOOTER
     assert (placeholders["footer_date"].table_index, placeholders["footer_date"].row_index,
             placeholders["footer_date"].col_index) == (0, 0, 0)
     assert placeholders["footer_date"].type == TemplatePlaceholderType.DATE
+    assert placeholders["footer_nested"].location == PlaceholderLocation.FOOTER
+    assert (placeholders["footer_nested"].table_index, placeholders["footer_nested"].row_index,
+            placeholders["footer_nested"].col_index) == (0, 0, 0)
 
 
 @pytest.mark.parametrize("control_location", ["body_table", "header", "footer"])
 def test_analyze_jinja_control_in_all_stories(tmp_path: Path, control_location: str):
     doc = Document()
     if control_location == "body_table":
-        doc.add_table(rows=1, cols=1).cell(0, 0).text = "{%tr for row in rows %}"
+        outer = doc.add_table(rows=1, cols=1)
+        outer.cell(0, 0).add_table(rows=1, cols=1).cell(0, 0).text = "{%tr for row in rows %}"
     elif control_location == "header":
-        doc.sections[0].header.paragraphs[0].text = "{% if show_header %}"
+        header_table = doc.sections[0].header.add_table(rows=1, cols=1, width=Inches(1))
+        header_table.cell(0, 0).add_table(rows=1, cols=1).cell(0, 0).text = "{% if show_header %}"
     else:
-        doc.sections[0].footer.paragraphs[0].text = "{% if show_footer %}"
+        footer_table = doc.sections[0].footer.add_table(rows=1, cols=1, width=Inches(1))
+        footer_table.cell(0, 0).add_table(rows=1, cols=1).cell(0, 0).text = "{% if show_footer %}"
 
     path = tmp_path / (control_location + ".docx")
     doc.save(str(path))
@@ -122,3 +146,38 @@ def test_analyze_jinja_control_in_all_stories(tmp_path: Path, control_location: 
     result = analyze_word_template(path, workspace_path=str(tmp_path))
 
     assert result.has_jinja_control is True
+
+
+def test_analyze_rejects_template_outside_workspace(tmp_path: Path):
+    outside = tmp_path.parent / "outside-template.docx"
+    Document().save(str(outside))
+
+    with pytest.raises(OfficePathError):
+        analyze_word_template(outside, workspace_path=str(tmp_path))
+
+
+def test_analyze_rejects_oversized_docx_zip(tmp_path: Path, monkeypatch):
+    path = tmp_path / "template.docx"
+    Document().save(str(path))
+    monkeypatch.setattr(word_template, "MAX_DOCX_COMPRESSED_SIZE", 1)
+
+    with pytest.raises(OfficeSizeLimitError):
+        analyze_word_template(path, workspace_path=str(tmp_path))
+
+
+def test_analyze_rejects_too_many_zip_members(tmp_path: Path, monkeypatch):
+    path = tmp_path / "template.docx"
+    Document().save(str(path))
+    monkeypatch.setattr(word_template, "MAX_DOCX_MEMBERS", 1)
+
+    with pytest.raises(OfficeSizeLimitError):
+        analyze_word_template(path, workspace_path=str(tmp_path))
+
+
+def test_analyze_rejects_too_much_uncompressed_zip_data(tmp_path: Path, monkeypatch):
+    path = tmp_path / "template.docx"
+    Document().save(str(path))
+    monkeypatch.setattr(word_template, "MAX_DOCX_UNCOMPRESSED_SIZE", 1)
+
+    with pytest.raises(OfficeSizeLimitError):
+        analyze_word_template(path, workspace_path=str(tmp_path))

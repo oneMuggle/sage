@@ -10,12 +10,17 @@ from __future__ import annotations
 
 import re
 import time
+import zipfile
 from pathlib import Path
 from typing import List, Optional
 
 from docx import Document
 
-from .errors import OfficeFileNotFoundError, OfficeTemplateParseError
+from .errors import (
+    OfficeFileNotFoundError,
+    OfficeSizeLimitError,
+    OfficeTemplateParseError,
+)
 from .models import (
     OfficeDocStatus,
     OfficeDocType,
@@ -26,9 +31,47 @@ from .models import (
     TemplatePlaceholderType,
     WordTemplateAnalysis,
 )
+from .path_safety import resolve_within
+from .storage import validate_workspace
 
 PLACEHOLDER_RE = re.compile(r"\{\{([^}]+)\}\}")
 JINJA_CONTROL_RE = re.compile(r"\{%[^%]+%\}")
+MAX_DOCX_COMPRESSED_SIZE = 50 * 1024 * 1024
+MAX_DOCX_MEMBERS = 10_000
+MAX_DOCX_UNCOMPRESSED_SIZE = 250 * 1024 * 1024
+
+
+def _validate_docx_zip(file_path: Path) -> None:
+    """Reject oversized or malformed DOCX ZIP containers before parsing."""
+    try:
+        compressed_size = file_path.stat().st_size
+        if compressed_size > MAX_DOCX_COMPRESSED_SIZE:
+            raise OfficeSizeLimitError(
+                compressed_size,
+                MAX_DOCX_COMPRESSED_SIZE,
+                file_path=file_path,
+            )
+        with zipfile.ZipFile(str(file_path)) as archive:
+            members = archive.infolist()
+            if len(members) > MAX_DOCX_MEMBERS:
+                raise OfficeSizeLimitError(
+                    len(members),
+                    MAX_DOCX_MEMBERS,
+                    file_path=file_path,
+                )
+            uncompressed_size = sum(member.file_size for member in members)
+            if uncompressed_size > MAX_DOCX_UNCOMPRESSED_SIZE:
+                raise OfficeSizeLimitError(
+                    uncompressed_size,
+                    MAX_DOCX_UNCOMPRESSED_SIZE,
+                    file_path=file_path,
+                )
+    except OfficeSizeLimitError:
+        raise
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise OfficeTemplateParseError(
+            f"Failed to inspect DOCX ZIP: {exc}", file_path=file_path
+        ) from exc
 
 
 def _extract_placeholders_from_text(
@@ -82,42 +125,45 @@ def _scan_paragraphs(doc: Document) -> List[TemplatePlaceholder]:
     return placeholders
 
 
+def _cell_direct_text(cell) -> str:
+    """Return paragraph text directly in a cell, excluding nested tables."""
+    return "\n".join(paragraph.text for paragraph in cell.paragraphs)
+
+
+def _scan_table(table, location: PlaceholderLocation, table_index: int) -> List[TemplatePlaceholder]:
+    """Scan a table and nested tables using the outer table index."""
+    placeholders = []
+    for row_idx, row in enumerate(table.rows):
+        for col_idx, cell in enumerate(row.cells):
+            text = _cell_direct_text(cell)
+            if PLACEHOLDER_RE.search(text):
+                placeholders.extend(
+                    _extract_placeholders_from_text(
+                        text,
+                        location,
+                        table_index=table_index,
+                        row_index=row_idx,
+                        col_index=col_idx,
+                    )
+                )
+            for nested_table in cell.tables:
+                placeholders.extend(_scan_table(nested_table, location, table_index))
+    return placeholders
+
+
 def _scan_tables(doc: Document) -> List[TemplatePlaceholder]:
-    """Scan all tables for placeholders."""
+    """Scan all tables, including nested tables."""
     placeholders = []
     for table_idx, table in enumerate(doc.tables):
-        for row_idx, row in enumerate(table.rows):
-            for col_idx, cell in enumerate(row.cells):
-                text = cell.text
-                if PLACEHOLDER_RE.search(text):
-                    placeholders.extend(
-                        _extract_placeholders_from_text(
-                            text,
-                            PlaceholderLocation.TABLE,
-                            table_index=table_idx,
-                            row_index=row_idx,
-                            col_index=col_idx,
-                        )
-                    )
+        placeholders.extend(_scan_table(table, PlaceholderLocation.TABLE, table_idx))
     return placeholders
 
 
 def _scan_story_tables(story, location: PlaceholderLocation) -> List[TemplatePlaceholder]:
-    """Scan tables in a document story, preserving its location."""
+    """Scan tables in a document story, including nested tables."""
     placeholders = []
     for table_idx, table in enumerate(story.tables):
-        for row_idx, row in enumerate(table.rows):
-            for col_idx, cell in enumerate(row.cells):
-                if PLACEHOLDER_RE.search(cell.text):
-                    placeholders.extend(
-                        _extract_placeholders_from_text(
-                            cell.text,
-                            location,
-                            table_index=table_idx,
-                            row_index=row_idx,
-                            col_index=col_idx,
-                        )
-                    )
+        placeholders.extend(_scan_table(table, location, table_idx))
     return placeholders
 
 
@@ -138,16 +184,22 @@ def _scan_headers_footers(doc: Document) -> List[TemplatePlaceholder]:
     return placeholders
 
 
+def _table_has_jinja_control(table) -> bool:
+    """Check direct cell text and nested tables for Jinja controls."""
+    for row in table.rows:
+        for cell in row.cells:
+            if JINJA_CONTROL_RE.search(_cell_direct_text(cell)):
+                return True
+            if any(_table_has_jinja_control(nested) for nested in cell.tables):
+                return True
+    return False
+
+
 def _story_has_jinja_control(story) -> bool:
-    """Check paragraphs and table cells in one document story."""
+    """Check paragraphs and nested table cells in one document story."""
     if any(JINJA_CONTROL_RE.search(para.text) for para in story.paragraphs):
         return True
-    return any(
-        JINJA_CONTROL_RE.search(cell.text)
-        for table in story.tables
-        for row in table.rows
-        for cell in row.cells
-    )
+    return any(_table_has_jinja_control(table) for table in story.tables)
 
 
 def _has_jinja_control(doc: Document) -> bool:
@@ -190,6 +242,10 @@ def analyze_word_template(
 ) -> WordTemplateAnalysis:
     """Analyze a Word template and extract all {{}} placeholders."""
     file_path = Path(file_path)
+    workspace = validate_workspace(Path(workspace_path))
+    if not file_path.exists():
+        raise OfficeFileNotFoundError(file_path)
+    file_path = resolve_within(workspace, file_path)
 
     if not file_path.exists():
         raise OfficeFileNotFoundError(file_path)
@@ -198,6 +254,7 @@ def analyze_word_template(
             f"Path is not a file: {file_path}", file_path=file_path
         )
 
+    _validate_docx_zip(file_path)
     try:
         doc = Document(str(file_path))
     except Exception as exc:

@@ -86,6 +86,25 @@ ModuleNotFoundError: No module named 'backend.office.word_template'
 
 warnings 仍为既有 Pydantic class-based config 弃用警告。
 
-### Concern
+## 第二轮审查修复（commit 待生成）
 
-页眉/页脚段落的现有 `TemplatePlaceholder` 模型没有 section index 字段；本修复保持 brief 约定，仅记录 `HEADER`/`FOOTER` location，表格内容记录 story 内的 table/row/col 索引。
+针对 scoped review 的 HIGH 问题完成以下修复：
+
+- `_scan_tables`、`_scan_story_tables` 和 `_story_has_jinja_control` 递归遍历 cell 内嵌套表格；嵌套表格继续使用外层 story 的 `table_index`，并补充正文、页眉、页脚嵌套表格占位符和 Jinja 控制标签测试。
+- `analyze_word_template` 先调用 `validate_workspace(Path(workspace_path))`，再调用 `resolve_within(workspace, file_path)`；现有不存在文件行为保持 `OfficeFileNotFoundError`，真实存在的 workspace 外文件抛路径安全错误，返回路径 canonicalized。
+- 在 `Document()` 前新增 DOCX ZIP 预检：压缩文件大小上限 50 MiB、成员数上限 10,000、总 uncompressed 大小上限 250 MiB；超限抛 `OfficeSizeLimitError`。
+- ZIP 结构检查捕获 `OSError` 和 `zipfile.BadZipFile`，转换为 `OfficeTemplateParseError`；未实现 Task 5 或路由。
+
+### 第二轮验证结果
+
+- focused tests：`12 passed, 8 warnings`
+- office 回归：`265 passed, 8 warnings`
+- Ruff：`All checks passed!`
+- Python compileall：通过（无输出）
+- `git diff --check`：通过（无输出）
+
+warnings 仍为既有 Pydantic class-based config 弃用警告。
+
+### 第二轮 Concern
+
+页眉/页脚段落仍无 section index，这是现有 `TemplatePlaceholder` 模型无法表达的字段；本次继续按 brief 契约保持现有 location 语义。ZIP 限制常量为模块级策略值，测试通过 monkeypatch 各自验证三类上限。
