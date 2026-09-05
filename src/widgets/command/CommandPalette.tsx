@@ -1,5 +1,5 @@
 import { Command } from 'cmdk';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useTheme } from '../../app/providers/useTheme';
@@ -28,28 +28,34 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     }
   }, [open]);
 
-  const handleNav = (path: string) => {
-    navigate(path);
-    onOpenChange(false);
-  };
+  const handleNav = useCallback(
+    (path: string) => {
+      navigate(path);
+      onOpenChange(false);
+    },
+    [navigate, onOpenChange],
+  );
 
-  const handleNewChat = async () => {
+  const handleNewChat = useCallback(async () => {
     const sessionId = await createSession();
     setCurrentSessionId(sessionId);
     navigate('/chat');
     onOpenChange(false);
-  };
+  }, [createSession, setCurrentSessionId, navigate, onOpenChange]);
 
-  const handleToggleTheme = () => {
+  const handleToggleTheme = useCallback(() => {
     setMode(resolved === 'light' ? 'dark' : 'light');
     onOpenChange(false);
-  };
+  }, [setMode, resolved, onOpenChange]);
 
-  const handleOpenSession = (sessionId: string) => {
-    setCurrentSessionId(sessionId);
-    navigate('/chat');
-    onOpenChange(false);
-  };
+  const handleOpenSession = useCallback(
+    (sessionId: string) => {
+      setCurrentSessionId(sessionId);
+      navigate('/chat');
+      onOpenChange(false);
+    },
+    [setCurrentSessionId, navigate, onOpenChange],
+  );
 
   // 最近会话（按时间排序，取前 8 个）
   const recentSessions = [...sessions]
@@ -90,7 +96,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, recentSessions]);
+  }, [open, recentSessions, handleNav, handleNewChat, handleToggleTheme, handleOpenSession]);
 
   return (
     <Command.Dialog
