@@ -159,7 +159,7 @@ def test_steer_broadcasts_control_events(app_deps) -> None:
                         "expected_task_revision": current_revision,
                     },
                 )
-            await asyncio.to_thread(_post)
+            await asyncio.get_event_loop().run_in_executor(None, _post)
             # Collect broadcast events
             while True:
                 try:

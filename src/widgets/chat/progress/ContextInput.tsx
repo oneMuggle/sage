@@ -18,8 +18,8 @@
 
 import { useMemo, useState } from 'react';
 
-import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
+import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 
 type MessageType =
   | 'constraint'

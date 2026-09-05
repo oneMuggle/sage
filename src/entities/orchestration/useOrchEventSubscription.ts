@@ -7,10 +7,11 @@
 
 import { useEffect, useRef } from 'react';
 
-import { useRunControlStore } from './runControlStore';
 import { subscribeOrchEvents } from '../../shared/api/orchEventStream';
-import { orchRunControlClient } from '../../shared/api/orchRunControlClient';
 import type { RunSnapshot } from '../../shared/api/orchEvents';
+import { orchRunControlClient } from '../../shared/api/orchRunControlClient';
+
+import { useRunControlStore } from './runControlStore';
 
 /**
  * Subscribe to a run's events and feed them into the store.
