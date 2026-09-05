@@ -15,10 +15,12 @@ from pathlib import Path
 from typing import List, Optional
 
 from docx import Document
+from docxtpl import DocxTemplate
 
 from .errors import (
     OfficeFileNotFoundError,
     OfficeSizeLimitError,
+    OfficeTemplateFillError,
     OfficeTemplateParseError,
 )
 from .models import (
@@ -30,6 +32,8 @@ from .models import (
     TemplatePlaceholder,
     TemplatePlaceholderType,
     WordTemplateAnalysis,
+    WordTemplateFillRequest,
+    WordTemplateFillResult,
 )
 from .path_safety import resolve_within
 from .storage import validate_workspace
@@ -278,3 +282,43 @@ def analyze_word_template(
         summary=summary,
         has_jinja_control=_has_jinja_control(doc),
     )
+
+
+def fill_word_template(req: WordTemplateFillRequest) -> WordTemplateFillResult:
+    """Fill a Word template with data using docxtpl."""
+    template_path = Path(req.template_path)
+
+    analysis = analyze_word_template(
+        template_path,
+        workspace_path=req.workspace_path,
+    )
+    template_path = Path(analysis.file_path)
+    placeholder_names = {placeholder.name for placeholder in analysis.placeholders}
+    unfilled = sorted(placeholder_names - set(req.data.keys()))
+
+    workspace = validate_workspace(Path(req.workspace_path))
+    output_path = resolve_within(workspace, template_path.parent / req.output_filename)
+
+    try:
+        template = DocxTemplate(str(template_path))
+        context = {
+            name: req.data.get(name, "")
+            for name in placeholder_names
+        }
+        template.render(context)
+        template.save(str(output_path))
+        filled_count = len(placeholder_names) - len(unfilled)
+        return WordTemplateFillResult(
+            output_path=str(output_path),
+            filename=req.output_filename,
+            file_size_bytes=output_path.stat().st_size,
+            filled_count=filled_count,
+            unfilled_placeholders=unfilled,
+        )
+    except OfficeTemplateFillError:
+        raise
+    except Exception as exc:
+        raise OfficeTemplateFillError(
+            f"Template fill failed: {exc}",
+            file_path=template_path,
+        ) from exc
