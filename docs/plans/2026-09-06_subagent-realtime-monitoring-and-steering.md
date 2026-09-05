@@ -1,6 +1,6 @@
 # Subagent 实时监控与父 agent 注入方案
 
-> 状态：草案（未授权实施）
+> 状态：Phase 0-3 已实施；main + `release/win7` 已完成代码对齐，CI 收尾中
 > 日期：2026-09-06
 > 触发需求：
 > 1. 主 agent 能监测子 agent 并获取当前执行步骤内容
@@ -516,15 +516,15 @@ interface RunControlState {
 ### Phase 1：后端只读可观测性（预计 3-4 天）
 
 - [ ] 实现 `RunController` 外观层
-- [ ] 实现 `EventHub` 内存 pub/sub
-- [ ] 实现 `SnapshotStore`
+- [x] 实现 `EventHub` 内存 pub/sub
+- [x] 实现 `SnapshotStore`
 - [ ] 扩展 `SubagentRunner` 集成 `ProgressReporter`
-- [ ] 新建 `orch_events` / `orch_steps` 表
-- [ ] 实现 `GET /orch/runs/{id}/snapshot`
-- [ ] 实现 `GET /orch/runs/{id}/events?after_seq=N`（NDJSON 流）
-- [ ] 实现 `observe_subagents` 工具
-- [ ] 实现 Electron relay 订阅
-- [ ] 编写事件序号单调性、subscriber 广播、断线重连测试
+- [x] 新建 `orch_events` / `orch_steps` 表
+- [x] 实现 `GET /orch/runs/{id}/snapshot`
+- [x] 实现 `GET /orch/runs/{id}/events?after_seq=N`（NDJSON 流）
+- [x] 实现 `observe_subagents` 工具
+- [x] 实现 Electron relay 订阅
+- [x] 编写事件序号单调性、subscriber 广播、断线重连测试
 
 **验收**：
 - 主 agent 可读取子 agent 结构化快照
@@ -534,14 +534,14 @@ interface RunControlState {
 
 ### Phase 2：前端实时详情面板（预计 3-4 天）
 
-- [ ] 实现 `runControlStore`
-- [ ] 实现 `orchEventStream` NDJSON 客户端
-- [ ] 实现 `SubagentDetailDrawer`
-- [ ] 实现 `EventTimeline` 组件
-- [ ] `TaskTreeSection` 任务行增加点击事件
-- [ ] 实现断线重连和 seq gap 处理
-- [ ] 实现实时输出节流
-- [ ] 编写前端 reducer、断线恢复、乱序事件测试
+- [x] 实现 `runControlStore`
+- [x] 实现 `orchEventStream` NDJSON 客户端
+- [x] 实现 `SubagentDetailDrawer`
+- [x] 实现 `EventTimeline` 组件
+- [x] `TaskTreeSection` 任务行增加点击事件
+- [x] 实现断线重连和 seq gap 处理
+- [x] 实现实时输出节流
+- [x] 编写前端 reducer、断线恢复、乱序事件测试
 
 **验收**：
 - 用户点击 subagent 可看实时进程
