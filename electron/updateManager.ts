@@ -268,15 +268,11 @@ export class UpdateManager {
 
       const config = await this.configManager.getConfig();
       if (state.crashCount >= config.autoRollbackThreshold) {
-        throw new Error(
-          `Auto-rollback triggered: ${state.crashCount} consecutive failed startups`,
-        );
-        // Actual rollback execution is Task 8
+        // Actual rollback execution is Task 8 — for now, just throw to signal the caller.
+        throw new Error(`Auto-rollback triggered: ${state.crashCount} consecutive failed startups`);
       }
 
-      throw new Error(
-        `Health check failed (${state.crashCount}/${config.autoRollbackThreshold})`,
-      );
+      throw new Error(`Health check failed (${state.crashCount}/${config.autoRollbackThreshold})`);
     }
 
     // Health checks passed: reset crash count if it was non-zero
