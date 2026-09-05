@@ -194,6 +194,7 @@ export const en: Record<TranslationKey, string> = {
   'updateDialog.rollbackConfirm':
     'Are you sure you want to roll back? The application will restart.',
   'updateDialog.rollbackNotAvailable': 'Rollback unavailable: {reason}',
+  'updateDialog.operationFailed': 'Operation failed: {message}',
 
   // ─── Decorative themes ───────────
   'theme.name.mint_blue': 'Mint Blue',

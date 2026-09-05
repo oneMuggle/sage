@@ -188,6 +188,7 @@ export const zh = {
   'updateDialog.rollback': '回退到上一版本',
   'updateDialog.rollbackConfirm': '确定要回退到上一版本吗？回退后需要重启应用。',
   'updateDialog.rollbackNotAvailable': '当前无法回退：{reason}',
+  'updateDialog.operationFailed': '操作失败：{message}',
 
   // ─── 装饰主题 ─────────────────────
   'theme.name.mint_blue': '薄荷蓝',
