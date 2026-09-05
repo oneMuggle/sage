@@ -124,6 +124,7 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.error.tls_not_covered':
     'Host is not covered by the allowlist; add it to the host allowlist first',
   'settings.tab.evolution': 'Evolution',
+  'settings.tab.updates': 'Updates',
   'settings.section.theme': 'Theme',
   'settings.section.appearance': 'Appearance',
   'settings.section.chat': 'Chat',
@@ -158,6 +159,24 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.error.name_invalid':
     'Name may only contain lowercase letters, digits, underscores, hyphens (≤64 chars)',
   'settings.mcp.error.command_required': 'Command is required',
+
+  // ─── Settings · Updates ────────────────
+  'updates.strategy': 'Update strategy',
+  'updates.strategy.manual': 'Manual updates',
+  'updates.strategy.manual.desc': 'Confirm each download and installation',
+  'updates.strategy.autoDownload': 'Auto-download, manual install',
+  'updates.strategy.autoDownload.desc': 'Recommended: download quietly, confirm before installing',
+  'updates.strategy.autoInstall': 'Auto-download and install',
+  'updates.strategy.autoInstall.desc': 'Most aggressive: install automatically after download, restart to apply',
+  'updates.channel': 'Update channel',
+  'updates.channel.stable': 'Stable (recommended)',
+  'updates.channel.beta': 'Beta (may contain bugs)',
+  'updates.channel.alpha': 'Alpha (latest features, unstable)',
+  'updates.checkNow': 'Check for updates now',
+  'updates.checking': 'Checking...',
+  'updates.upToDate': 'You are using the latest version',
+  'updates.available': 'New version {version} available',
+  'updates.checkFailed': 'Failed to check for updates. Please try again later.',
 
   // ─── Decorative themes ───────────
   'theme.name.mint_blue': 'Mint Blue',

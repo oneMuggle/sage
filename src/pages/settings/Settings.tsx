@@ -16,6 +16,7 @@ import { MemoryTab } from './MemoryTab';
 import { ModelsTab } from './ModelsTab';
 import { NetworkTab } from './NetworkTab';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
+import { UpdatesTab } from './UpdatesTab';
 
 type SettingsTab =
   | 'general'
@@ -25,7 +26,8 @@ type SettingsTab =
   | 'network'
   | 'mcp'
   | 'runtime'
-  | 'evolution';
+  | 'evolution'
+  | 'updates';
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -40,6 +42,7 @@ export function Settings() {
     { key: 'mcp', label: 'MCP' },
     { key: 'runtime', label: '开发环境' },
     { key: 'evolution', label: '进化' },
+    { key: 'updates', label: '更新' },
   ];
 
   return (
@@ -90,6 +93,7 @@ export function Settings() {
                 <EvolutionLog />
               </div>
             )}
+            {activeTab === 'updates' && <UpdatesTab />}
           </div>
         </div>
       </div>
