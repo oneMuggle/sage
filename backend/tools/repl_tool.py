@@ -20,7 +20,7 @@ REPL 工具 - Python 代码片段隔离执行（移植 claw-code execute_repl）
 - stdout/stderr 各截断到 100 KiB 上限。
 """
 # Python 3.8 compatibility requires Optional annotations in this module.
-# ruff: noqa: UP045
+# ruff: noqa: UP007
 
 import contextlib
 import logging

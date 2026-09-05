@@ -411,7 +411,8 @@ class TestBlockingToolOffload:
         await heartbeat
 
         # Assert — 工具确实执行过，且 sleep 期间事件循环保持响应。
-        assert started.is_set() and finished.is_set()
+        assert started.is_set()
+        assert finished.is_set()
         assert any(e.state == AgentState.DONE for e in events)
         assert len(ticks) >= 3, (
             f"事件循环在阻塞工具执行期间被卡死（ticks={len(ticks)}）—— "
