@@ -1,6 +1,6 @@
 # Subagent 实时监控与父 agent 注入方案
 
-> 状态：Phase 0-3 已实施；main + `release/win7` 已完成代码对齐，CI 收尾中
+> 状态：Phase 0-3 已实施；main PR #439 + win7 PR #438 双分支 CI 全绿，代码对齐完成
 > 日期：2026-09-06
 > 触发需求：
 > 1. 主 agent 能监测子 agent 并获取当前执行步骤内容
