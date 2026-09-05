@@ -76,6 +76,7 @@ export class UpdateManager {
   private lastCheckedUpdate: CheckedUpdate | null = null;
   private lastCheckedReleaseNotes: string | undefined = undefined;
   private stateChangeListeners: Array<(state: UpdateState) => void> = [];
+  private automaticUpdateInProgress = false;
 
   constructor(updater: UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary) {
     this.stateManager = new StateManager();
@@ -183,6 +184,10 @@ export class UpdateManager {
         this.lastCheckedReleaseNotes = manifest.release_notes;
         this.notifyStateChange(state);
 
+        if (config.updateStrategy !== 'manual' && !this.automaticUpdateInProgress) {
+          await this.runAutomaticUpdate(config.updateStrategy);
+        }
+
         return {
           updateAvailable: true,
           version: manifest.version,
@@ -202,6 +207,18 @@ export class UpdateManager {
     } catch (error) {
       console.error('Failed to check for updates:', error);
       throw error;
+    }
+  }
+
+  private async runAutomaticUpdate(strategy: UpdateStrategy): Promise<void> {
+    this.automaticUpdateInProgress = true;
+    try {
+      await this.downloadUpdate();
+      if (strategy === 'auto-install') {
+        await this.installUpdate();
+      }
+    } finally {
+      this.automaticUpdateInProgress = false;
     }
   }
 

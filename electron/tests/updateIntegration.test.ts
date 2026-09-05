@@ -311,6 +311,7 @@ describe('Update System Integration', () => {
     });
 
     it('notifies state-change listeners through the full flow', async () => {
+      await updateManager.setStrategy('manual');
       vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('2.0.0')));
 
       const events: string[] = [];
@@ -343,16 +344,12 @@ describe('Update System Integration', () => {
       // Mock server manifest
       vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('2.0.0')));
 
-      // check returns update available
+      // check returns update available; production orchestration auto-downloads
       const checkResult = await updateManager.checkForUpdates();
       expect(checkResult.updateAvailable).toBe(true);
       expect(checkResult.version).toBe('2.0.0');
 
-      // Orchestrate download (in production, the state-change listener or
-      // IPC layer triggers this automatically when strategy is auto-download)
-      await updateManager.downloadUpdate();
-
-      // Verify download completed
+      // Verify download completed automatically
       expect(updater.downloadUpdate).toHaveBeenCalled();
       const state = await readState();
       expect(state.pendingUpdate).not.toBeNull();
@@ -371,7 +368,6 @@ describe('Update System Integration', () => {
       vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('2.0.0')));
 
       await updateManager.checkForUpdates();
-      await updateManager.downloadUpdate();
 
       // State should show pending update, NOT installed
       const state = await readState();
@@ -393,17 +389,14 @@ describe('Update System Integration', () => {
 
       vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('2.0.0')));
 
-      // check
-      const checkResult = await updateManager.checkForUpdates();
-      expect(checkResult.updateAvailable).toBe(true);
-
-      // download (auto-triggered by orchestration layer)
-      await updateManager.downloadUpdate();
-
-      // install (auto-triggered by orchestration layer)
+      // Prepare the install directory before check: auto-install runs as part
+      // of checkForUpdates() and must move it to .prev during installation.
       const { installDir } = useTempInstallDir();
       await fs.mkdir(installDir, { recursive: true });
-      await updateManager.installUpdate();
+
+      // check triggers automatic download + install
+      const checkResult = await updateManager.checkForUpdates();
+      expect(checkResult.updateAvailable).toBe(true);
 
       // Verify full flow completed
       expect(updater.quitAndInstall).toHaveBeenCalled();
@@ -419,12 +412,11 @@ describe('Update System Integration', () => {
       await updateManager.setStrategy('auto-install');
       vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('2.0.0')));
 
-      await updateManager.checkForUpdates();
-      await updateManager.downloadUpdate();
-
+      // Prepare install directory before the automatic install triggered by check.
       const { installDir } = useTempInstallDir();
       await fs.mkdir(installDir, { recursive: true });
-      await updateManager.installUpdate();
+
+      await updateManager.checkForUpdates();
 
       const state = await readState();
       expect(state.lastKnownGoodVersion).toBe('1.0.0');
