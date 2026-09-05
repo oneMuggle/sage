@@ -201,7 +201,14 @@ function applyEventToSnapshot(
   // Derive run-level status from terminal task states.
   // Priority: failed > cancelled > completed. Run-level events
   // (run.completed/run.failed/run.cancelled) always take precedence
-  // over this heuristic — they're applied in the run.* branch above.
+  // over this heuristic — they're applied in the run.* branch above
+  // and short-circuit before reaching this point.
+  //
+  // Apply whenever the run is not already in a terminal state. Some
+  // backends may emit terminal task events without a preceding
+  // `run.started` (e.g., crash recovery, or synthetic test fixtures),
+  // so gating on `run.status === 'running'` would miss those cases.
+  const terminalRunStatuses = new Set(['completed', 'failed', 'cancelled']);
   const allTerminal = tasks.every(
     (t) =>
       t.status === 'succeeded' ||
@@ -209,7 +216,7 @@ function applyEventToSnapshot(
       t.status === 'failed' ||
       t.status === 'cancelled',
   );
-  if (allTerminal && tasks.length > 0 && run.status === 'running') {
+  if (allTerminal && tasks.length > 0 && !terminalRunStatuses.has(run.status)) {
     const hasFailed = tasks.some((t) => t.status === 'failed');
     const hasCancelled = tasks.some((t) => t.status === 'cancelled');
     const derivedStatus: RunSnapshot['status'] = hasFailed
