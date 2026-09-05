@@ -98,7 +98,6 @@ export class UpdateManager {
   private stateChangeListeners: Array<(state: UpdateState) => void> = [];
   private automaticUpdateInProgress = false;
   private checkPromise: Promise<CheckResult> | null = null;
-  private preparedUpgrade: PreparedUpgradeInfo | null = null;
 
   constructor(updater: UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary) {
     this.stateManager = new StateManager();
@@ -415,7 +414,6 @@ export class UpdateManager {
       }
       throw setStateError;
     }
-    this.preparedUpgrade = null;
     this.notifyStateChange(newState);
 
     this.updater.quitAndInstall();
@@ -674,11 +672,6 @@ export class UpdateManager {
     }
   }
 
-  private async hashFile(filePath: string): Promise<string> {
-    const content = await fs.readFile(filePath);
-    return crypto.createHash('sha512').update(content).digest('hex');
-  }
-
   private async hashFileHandle(handle: fs.FileHandle): Promise<string> {
     const { size } = await handle.stat();
     const buffer = Buffer.alloc(size);
@@ -721,12 +714,10 @@ export class UpdateManager {
       prevDir,
       wasRenamed: true,
     };
-    this.preparedUpgrade = info;
     return info;
   }
 
   private async restorePreparedUpgrade(info: PreparedUpgradeInfo): Promise<void> {
-    this.preparedUpgrade = null;
     if (!info.wasRenamed) return;
     try {
       await fs.rename(info.prevDir, info.installDir);

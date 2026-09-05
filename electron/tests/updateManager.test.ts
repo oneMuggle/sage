@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 
@@ -1301,7 +1301,7 @@ describe('UpdateManager', () => {
         customBackendUrl,
       );
 
-      const ctorCalls = (MockedLauncherHealthChecker as unknown as vi.Mock).mock.calls;
+      const ctorCalls = (MockedLauncherHealthChecker as unknown as Mock).mock.calls;
       expect(ctorCalls.length).toBeGreaterThan(0);
       const lastOptions = ctorCalls[ctorCalls.length - 1][0];
       expect(lastOptions.backendUrl).toBe(customBackendUrl);
@@ -1316,7 +1316,7 @@ describe('UpdateManager', () => {
 
       await updateManager.onAppStartup(() => visibleWindow as Electron.BrowserWindow);
 
-      const ctorCalls = (MockedLauncherHealthChecker as unknown as vi.Mock).mock.calls;
+      const ctorCalls = (MockedLauncherHealthChecker as unknown as Mock).mock.calls;
       expect(ctorCalls.length).toBeGreaterThan(0);
       const lastOptions = ctorCalls[ctorCalls.length - 1][0];
       expect(lastOptions.backendUrl).toBe('http://127.0.0.1:8765');
