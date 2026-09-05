@@ -12,6 +12,7 @@ Security posture mirrors ``word_template.py``:
 
 from __future__ import annotations
 
+import contextlib
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -237,17 +238,13 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
     try:
         output_size = output_path.stat().st_size
     except OSError as exc:
-        try:
+        with contextlib.suppress(OSError):
             output_path.unlink()
-        except OSError:
-            pass
         raise OfficePdfGenerateError("Unable to validate generated PDF") from exc
 
     if output_size > MAX_PDF_OUTPUT_SIZE:
-        try:
+        with contextlib.suppress(OSError):
             output_path.unlink()
-        except OSError:
-            pass
         raise OfficePdfGenerateError("Generated PDF exceeds size limit")
 
     return PdfGenerateResult(

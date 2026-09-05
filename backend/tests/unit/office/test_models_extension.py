@@ -1,15 +1,14 @@
 """Unit tests for extended office data models (template + PDF)."""
 
-import pytest
 from backend.office.models import (
     OfficeDocType,
-    TemplatePlaceholderType,
+    PdfFormField,
+    PdfGenerateRequest,
+    PdfPageSpec,
     PlaceholderLocation,
     TemplatePlaceholder,
+    TemplatePlaceholderType,
     WordTemplateFillRequest,
-    PdfPageSpec,
-    PdfGenerateRequest,
-    PdfFormField,
 )
 
 
