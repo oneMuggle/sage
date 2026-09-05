@@ -208,6 +208,8 @@ export class UpdateManager {
   }
 
   async setStrategy(strategy: UpdateStrategy): Promise<void> {
+    // TODO (Task 10): read-modify-write is non-atomic; concurrent calls may
+    // cause lost updates. Add mutex or atomic rename in ConfigManager.
     const config = await this.configManager.getConfig();
     await this.configManager.setConfig({ ...config, updateStrategy: strategy });
   }
@@ -376,10 +378,7 @@ export class UpdateManager {
 
   private async reinstallFromPackage(state: UpdateState, installDir: string): Promise<void> {
     const cacheDir = path.join(app.getPath('userData'), 'updates', 'cache');
-    const packagePath = path.join(
-      cacheDir,
-      `Sage-Setup-${state.lastKnownGoodVersion}.exe`,
-    );
+    const packagePath = path.join(cacheDir, `Sage-Setup-${state.lastKnownGoodVersion}.exe`);
 
     if (!(await this.pathExists(packagePath))) {
       throw new Error('No rollback package available');

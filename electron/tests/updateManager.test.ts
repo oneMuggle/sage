@@ -725,9 +725,7 @@ describe('UpdateManager', () => {
       });
 
       // Mock rollback to avoid actual rollback execution
-      const rollbackSpy = vi
-        .spyOn(updateManager, 'rollback')
-          .mockResolvedValue(undefined);
+      const rollbackSpy = vi.spyOn(updateManager, 'rollback').mockResolvedValue(undefined);
 
       await updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow);
 
@@ -978,10 +976,10 @@ describe('UpdateManager', () => {
 
       await freshManager.rollback('test-rollback');
 
-      expect(mockSpawn).toHaveBeenCalledWith(
-        `${cacheDir}/Sage-Setup-1.0.0.exe`,
-        ['/S', `/D=${tempInstallDir}`],
-      );
+      expect(mockSpawn).toHaveBeenCalledWith(`${cacheDir}/Sage-Setup-1.0.0.exe`, [
+        '/S',
+        `/D=${tempInstallDir}`,
+      ]);
       expect(mockApp.relaunch).toHaveBeenCalled();
       expect(mockApp.exit).toHaveBeenCalledWith(0);
 

@@ -1,9 +1,11 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron';
-import type { CheckResult, UpdateManager } from './updateManager';
+import type { UpdateManager } from './updateManager';
 import type { UpdateStrategy } from './updateConfig';
 import type { UpdateState } from './updateState';
 
-export type UpdateStateChangedEvent = { state: UpdateState } | { percent: number };
+export type UpdateStateChangedEvent =
+  | { type: 'state'; state: UpdateState }
+  | { type: 'progress'; percent: number };
 
 export interface UpdateIpcRegistrationOptions {
   isTrustedRenderer: (sender: IpcMainInvokeEvent['sender']) => boolean;
@@ -11,20 +13,17 @@ export interface UpdateIpcRegistrationOptions {
 }
 
 type InvokeHandler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
-type UpdateIpcMain = Pick<IpcMain, 'handle' | 'on'> & {
-  removeHandler?: (channel: string) => void;
-  off?: (channel: string, listener: (...args: unknown[]) => void) => void;
-};
+type UpdateIpcMain = Pick<IpcMain, 'handle' | 'removeHandler'>;
 
 const UPDATE_STRATEGIES: readonly UpdateStrategy[] = ['manual', 'auto-download', 'auto-install'];
-const registrations = new WeakMap<object, () => void>();
+let currentCleanup: (() => void) | null = null;
 
 export function registerUpdateIpc(
   ipcMain: UpdateIpcMain,
   updateManager: UpdateManager,
   options: UpdateIpcRegistrationOptions,
 ): () => void {
-  registrations.get(ipcMain)?.();
+  currentCleanup?.();
   const channels = [
     'update:check',
     'update:download',
@@ -33,12 +32,6 @@ export function registerUpdateIpc(
     'update:can-rollback',
     'update:set-strategy',
   ];
-  const stateChangedListener = (...args: unknown[]) => {
-    const event = args[0] as IpcMainInvokeEvent | undefined;
-    if (!event || !options.isTrustedRenderer(event.sender)) return;
-    const payload = args[1] as UpdateStateChangedEvent | undefined;
-    if (payload !== undefined) options.sendToRenderer?.('update:state-changed', payload);
-  };
   const requireTrusted = (event: IpcMainInvokeEvent): void => {
     if (!options.isTrustedRenderer(event.sender)) throw new Error('未授权的窗口请求');
   };
@@ -48,7 +41,7 @@ export function registerUpdateIpc(
 
   register('update:check', async (event) => {
     requireTrusted(event as IpcMainInvokeEvent);
-    return updateManager.checkForUpdates() as Promise<CheckResult>;
+    return updateManager.checkForUpdates();
   });
   register('update:download', async (event) => {
     requireTrusted(event as IpcMainInvokeEvent);
@@ -60,8 +53,8 @@ export function registerUpdateIpc(
   });
   register('update:rollback', async (event, payload?: unknown) => {
     requireTrusted(event as IpcMainInvokeEvent);
-    const reason = payload === undefined ? 'manual' : payload;
-    if (typeof reason !== 'string' || reason.trim().length === 0) {
+    const reason = (payload === undefined ? 'manual' : String(payload)).trim();
+    if (reason.length === 0) {
       throw new Error('回滚原因必须是非空字符串');
     }
     return updateManager.rollback(reason);
@@ -78,16 +71,17 @@ export function registerUpdateIpc(
     return updateManager.setStrategy(payload as UpdateStrategy);
   });
 
-  ipcMain.on('update:state-changed', stateChangedListener);
+  // State events are relayed to the renderer via the sendToRenderer callback
+  // (main.ts passes mainWindow?.webContents.send directly). No ipcMain.on relay
+  // is needed — sendToRenderer already targets the trusted mainWindow instance.
   const stopProgress = updateManager.onDownloadProgress((percent) => {
-    options.sendToRenderer?.('update:state-changed', { percent });
+    options.sendToRenderer?.('update:state-changed', { type: 'progress', percent });
   });
   const cleanup = () => {
-    for (const channel of channels) ipcMain.removeHandler?.(channel);
-    ipcMain.off?.('update:state-changed', stateChangedListener);
+    for (const channel of channels) ipcMain.removeHandler(channel);
     stopProgress();
-    if (registrations.get(ipcMain) === cleanup) registrations.delete(ipcMain);
+    if (currentCleanup === cleanup) currentCleanup = null;
   };
-  registrations.set(ipcMain, cleanup);
+  currentCleanup = cleanup;
   return cleanup;
 }

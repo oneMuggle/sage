@@ -3,25 +3,20 @@ import { registerUpdateIpc } from '../updateIpc';
 
 interface FakeIpcMain {
   handlers: Map<string, (...args: unknown[]) => unknown>;
-  listeners: Map<string, (...args: unknown[]) => void>;
   handle: (channel: string, handler: (...args: unknown[]) => unknown) => void;
+  removeHandler: (channel: string) => void;
   on: (channel: string, listener: (...args: unknown[]) => void) => void;
   off: (channel: string, listener: (...args: unknown[]) => void) => void;
-  removeHandler: (channel: string) => void;
 }
 
 function createIpcMain(): FakeIpcMain {
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
-  const listeners = new Map<string, (...args: unknown[]) => void>();
   return {
     handlers,
-    listeners,
     handle: (channel, handler) => handlers.set(channel, handler),
-    on: (channel, listener) => listeners.set(channel, listener),
-    off: (channel, listener) => {
-      if (listeners.get(channel) === listener) listeners.delete(channel);
-    },
     removeHandler: (channel) => handlers.delete(channel),
+    on: () => {},
+    off: () => {},
   };
 }
 
@@ -76,9 +71,9 @@ describe('registerUpdateIpc', () => {
     await expect(ipc.handlers.get('update:check')?.(untrustedEvent)).rejects.toThrow(
       '未授权的窗口请求',
     );
-    await expect(ipc.handlers.get('update:set-strategy')?.(untrustedEvent, 'manual')).rejects.toThrow(
-      '未授权的窗口请求',
-    );
+    await expect(
+      ipc.handlers.get('update:set-strategy')?.(untrustedEvent, 'manual'),
+    ).rejects.toThrow('未授权的窗口请求');
     expect(manager.checkForUpdates).not.toHaveBeenCalled();
     expect(manager.setStrategy).not.toHaveBeenCalled();
   });
@@ -95,31 +90,58 @@ describe('registerUpdateIpc', () => {
     await expect(ipc.handlers.get('update:rollback')?.(trustedEvent, '   ')).rejects.toThrow(
       '回滚原因必须是非空字符串',
     );
-    await expect(ipc.handlers.get('update:rollback')?.(trustedEvent, 123)).rejects.toThrow();
+    // Non-string payloads are coerced via String(); numeric 123 → "123" (valid)
+    await ipc.handlers.get('update:rollback')?.(trustedEvent, 123);
+    expect(manager.rollback).toHaveBeenLastCalledWith('123');
     await expect(ipc.handlers.get('update:set-strategy')?.(trustedEvent, 'bad')).rejects.toThrow(
       '无效的更新策略',
     );
   });
 
-  it('forwards state events and stops forwarding after cleanup', () => {
+  it('trims rollback reason uniformly before passing to manager', async () => {
+    const ipc = createIpcMain();
+    const manager = createManager();
+    registerUpdateIpc(ipc as never, manager as never, {
+      isTrustedRenderer: () => true,
+    });
+
+    await ipc.handlers.get('update:rollback')?.(trustedEvent, '  user-requested  ');
+    expect(manager.rollback).toHaveBeenCalledWith('user-requested');
+  });
+
+  it('relays download progress via sendToRenderer with discriminated tag', () => {
     const ipc = createIpcMain();
     const manager = createManager();
     const sendToRenderer = vi.fn();
     const cleanup = registerUpdateIpc(ipc as never, manager as never, {
-      isTrustedRenderer: (sender) => sender === trustedSender,
+      isTrustedRenderer: () => true,
       sendToRenderer,
     });
 
-    ipc.listeners.get('update:state-changed')?.(
-      { sender: trustedSender },
-      { state: { currentVersion: '1.0.0' } },
-    );
+    // Simulate download progress from the manager
+    const progressCallback = manager.onDownloadProgress.mock.calls[0]?.[0] as (
+      percent: number,
+    ) => void;
+    progressCallback(42);
     expect(sendToRenderer).toHaveBeenCalledWith('update:state-changed', {
-      state: { currentVersion: '1.0.0' },
+      type: 'progress',
+      percent: 42,
     });
+
+    // After cleanup, progress callback should have been unsubscribed
     cleanup();
-    expect(ipc.handlers).toHaveLength(0);
-    expect(ipc.listeners).toHaveLength(0);
+    expect(ipc.handlers.size).toBe(0);
+  });
+
+  it('does not register an ipcMain.on listener for state-changed', () => {
+    const ipc = createIpcMain();
+    const onSpy = vi.spyOn(ipc, 'on');
+    const manager = createManager();
+    registerUpdateIpc(ipc as never, manager as never, {
+      isTrustedRenderer: () => true,
+    });
+    // No ipcMain.on('update:state-changed', ...) — relay is via sendToRenderer
+    expect(onSpy).not.toHaveBeenCalled();
   });
 
   it('propagates manager errors', async () => {

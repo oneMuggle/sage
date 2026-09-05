@@ -185,14 +185,14 @@ const electronAPI = {
     check: () => ipcRenderer.invoke('update:check') as Promise<CheckResult>,
     download: () => ipcRenderer.invoke('update:download') as Promise<void>,
     install: () => ipcRenderer.invoke('update:install') as Promise<void>,
-    rollback: (reason?: string) =>
-      ipcRenderer.invoke('update:rollback', reason) as Promise<void>,
+    rollback: (reason?: string) => ipcRenderer.invoke('update:rollback', reason) as Promise<void>,
     canRollback: () =>
       ipcRenderer.invoke('update:can-rollback') as Promise<{ allowed: boolean; reason?: string }>,
     setStrategy: (strategy: UpdateStrategy) =>
       ipcRenderer.invoke('update:set-strategy', strategy) as Promise<void>,
     onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void): UnlistenFn => {
-      const listener = (_event: IpcRendererEvent, payload: UpdateStateChangedEvent) => handler(payload);
+      const listener = (_event: IpcRendererEvent, payload: UpdateStateChangedEvent) =>
+        handler(payload);
       ipcRenderer.on('update:state-changed', listener);
       return () => ipcRenderer.off('update:state-changed', listener);
     },

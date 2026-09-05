@@ -11,7 +11,7 @@
  */
 
 import type { UpdateStrategy } from '../../../electron/updateConfig';
-import type { UpdateElectronApiBridge } from '../../../electron/updateIpc';
+import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
 import type { CheckResult } from '../../../electron/updateManager';
 import type { WindowControlsBridge } from '../api/windowControlsClient';
 import type { LogLevel } from '../log/levels';
