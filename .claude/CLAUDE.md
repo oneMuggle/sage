@@ -171,6 +171,20 @@ npm run dev
 - 一键式：`npm run electron:dev`（自动跑 `build:electron` + `electron --no-sandbox .`）
 - 分步式：`npm run dev` + `./node_modules/.bin/electron --no-sandbox .`（Vite 和 Electron 在各自 shell，便于独立看日志）
 
+**Linux 上强烈建议显式 `SAGE_PYTHON`**（绕开 conda wrapper 的 pid mismatch）：
+
+```bash
+SAGE_PYTHON=/home/fz/anaconda3/envs/sage-backend/bin/python \
+  ./node_modules/.bin/electron --no-sandbox .
+```
+
+原因：默认 dev 路径用 `conda run -n sage-backend python -m backend.main`，
+spawn 出来的是 conda wrapper 进程，wrapper 再 fork 真 Python。Electron 探活
+`/health/proof` 的 `ownsBackend()` 会校验 `health.pid === currentBackend.pid`，
+wrapper pid ≠ 真 backend pid → 校验失败 → 90 秒探活超时 → 弹"后端服务未
+响应"对话框并陷入 restart 循环。**只影响 Linux**（Windows 由
+`killOrphanedBackendOnPort` 处理 orphan；macOS 由 conda 路径默认行为保障）。
+
 **不要**手启后端让 Electron 走 SKIP_BACKEND 模式（除非真的需要）。
 
 ### SKIP_BACKEND 模式启动顺序（仅调试/必要时）
