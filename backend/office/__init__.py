@@ -11,7 +11,29 @@ Module map:
 See docs/plans/2026-07-16_office-features.md for design.
 """
 
-# Phase 2: Word template + PDF operations
-from .pdf import generate_pdf, read_pdf
-from .pdf_forms import fill_pdf_form, read_pdf_form
-from .word_template import analyze_word_template, fill_word_template
+# Phase 2 exports are loaded on demand so stdlib-only path checks can import
+# ``backend.office.path_safety`` without installing binary Office readers.
+_PHASE_2_EXPORTS = {
+    "analyze_word_template": (".word_template", "analyze_word_template"),
+    "fill_word_template": (".word_template", "fill_word_template"),
+    "generate_pdf": (".pdf", "generate_pdf"),
+    "read_pdf": (".pdf", "read_pdf"),
+    "fill_pdf_form": (".pdf_forms", "fill_pdf_form"),
+    "read_pdf_form": (".pdf_forms", "read_pdf_form"),
+}
+
+__all__ = list(_PHASE_2_EXPORTS)
+
+
+def __getattr__(name):
+    """Load optional Phase 2 exports only when they are requested."""
+    try:
+        module_name, attribute_name = _PHASE_2_EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+
+    from importlib import import_module
+
+    attribute = getattr(import_module(module_name, __name__), attribute_name)
+    globals()[name] = attribute
+    return attribute
