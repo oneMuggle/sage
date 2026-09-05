@@ -1,5 +1,6 @@
 """Unit tests for Word template analysis."""
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -174,6 +175,11 @@ def test_fill_simple_template(simple_template: Path, tmp_path: Path):
     assert result.filled_count == 3
     assert len(result.unfilled_placeholders) == 0
     assert Path(result.output_path).exists()
+    filled_doc = Document(result.output_path)
+    filled_text = "\n".join(paragraph.text for paragraph in filled_doc.paragraphs)
+    assert "甲方：张三" in filled_text
+    assert "乙方：李四" in filled_text
+    assert "合同金额：100,000" in filled_text
 
 
 def test_fill_template_partial_data(simple_template: Path, tmp_path: Path):
@@ -198,8 +204,76 @@ def test_fill_rejects_output_path_traversal(simple_template: Path):
         data={},
     )
 
-    with pytest.raises(OfficePathError):
+    with pytest.raises(OfficeTemplateFillError):
         fill_word_template(req)
+
+
+def test_fill_rejects_output_path_boundaries(simple_template: Path, tmp_path: Path):
+    for output_filename in ("", "/tmp/absolute.docx", "../escape.docx"):
+        req = WordTemplateFillRequest(
+            workspace_path=str(simple_template.parent),
+            template_path=str(simple_template),
+            output_filename=output_filename,
+            data={},
+        )
+        with pytest.raises(OfficeTemplateFillError):
+            fill_word_template(req)
+
+    outside = tmp_path.parent / "outside-output.docx"
+    outside.write_bytes(b"existing")
+    symlink = simple_template.parent / "link.docx"
+    symlink.symlink_to(outside)
+    req = WordTemplateFillRequest(
+        workspace_path=str(simple_template.parent),
+        template_path=str(simple_template),
+        output_filename="link.docx",
+        data={},
+    )
+    with pytest.raises(OfficeTemplateFillError):
+        fill_word_template(req)
+
+
+def test_fill_rejects_dangerous_jinja_expressions(tmp_path: Path):
+    for expression in ("{{ ''.__class__.__mro__ }}", "{% import 'os' as os %}", "{% include 'evil.txt' %}"):
+        template = tmp_path / "dangerous.docx"
+        doc = Document()
+        doc.add_paragraph(expression)
+        doc.save(str(template))
+        req = WordTemplateFillRequest(
+            workspace_path=str(tmp_path),
+            template_path=str(template),
+            output_filename="output.docx",
+            data={},
+        )
+        with pytest.raises(OfficeTemplateFillError):
+            fill_word_template(req)
+        assert not (tmp_path / "output.docx").exists()
+
+
+def test_fill_date_and_image_placeholders(tmp_path: Path, fixture_dir: Path):
+    image_path = fixture_dir / "signature.png"
+    image_path.write_bytes(
+        __import__("base64").b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        )
+    )
+    doc = Document()
+    doc.add_paragraph("日期：{{合同日期}}")
+    doc.add_paragraph("签名：{{签名图片}}")
+    template = tmp_path / "image-date.docx"
+    doc.save(str(template))
+    req = WordTemplateFillRequest(
+        workspace_path=str(tmp_path),
+        template_path=str(template),
+        output_filename="image-date-filled.docx",
+        data={"合同日期": date(2026, 9, 5)},
+        images={"签名图片": str(image_path)},
+    )
+    result = fill_word_template(req)
+    output = Document(result.output_path)
+    text = "\n".join(paragraph.text for paragraph in output.paragraphs)
+    assert "2026-09-05" in text
+    assert len(output.inline_shapes) == 1
 
 
 def test_fill_wraps_render_errors(simple_template: Path, monkeypatch):

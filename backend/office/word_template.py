@@ -8,17 +8,22 @@ docxtpl extends python-docx with Jinja2-like template syntax:
 
 from __future__ import annotations
 
+import base64
 import re
 import time
 import zipfile
+from datetime import date, datetime
+from io import BytesIO
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from docx import Document
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
+from jinja2.sandbox import SandboxedEnvironment
 
 from .errors import (
     OfficeFileNotFoundError,
+    OfficePathError,
     OfficeSizeLimitError,
     OfficeTemplateFillError,
     OfficeTemplateParseError,
@@ -43,6 +48,11 @@ JINJA_CONTROL_RE = re.compile(r"\{%[^%]+%\}")
 MAX_DOCX_COMPRESSED_SIZE = 50 * 1024 * 1024
 MAX_DOCX_MEMBERS = 10_000
 MAX_DOCX_UNCOMPRESSED_SIZE = 250 * 1024 * 1024
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+_DANGEROUS_TEMPLATE_RE = re.compile(
+    r"(?:\{%\s*(?:import|include)\b|__class__|__subclasses__|__mro__|__globals__|__builtins__)",
+    re.IGNORECASE,
+)
 
 
 def _validate_docx_zip(file_path: Path) -> None:
@@ -284,41 +294,99 @@ def analyze_word_template(
     )
 
 
+def _validate_template_safety(file_path: Path) -> None:
+    """Reject template constructs that could access files or Python internals."""
+    try:
+        with zipfile.ZipFile(str(file_path)) as archive:
+            xml_members = (
+                member for member in archive.infolist() if member.filename.endswith(".xml")
+            )
+            for member in xml_members:
+                if _DANGEROUS_TEMPLATE_RE.search(archive.read(member).decode("utf-8", "ignore")):
+                    raise OfficeTemplateFillError("Template contains unsafe expressions")
+    except OfficeTemplateFillError:
+        raise
+    except Exception as exc:
+        raise OfficeTemplateFillError("Template safety check failed") from exc
+
+
+def _normalize_template_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ")
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def _load_image_descriptor(value: str, workspace: Path) -> BytesIO:
+    if value.startswith("data:image/"):
+        try:
+            _, encoded = value.split(",", 1)
+            payload = base64.b64decode(encoded, validate=True)
+        except (ValueError, base64.binascii.Error) as exc:
+            raise OfficeTemplateFillError("Invalid image data") from exc
+    else:
+        image_path = resolve_within(workspace, Path(value))
+        if not image_path.is_file():
+            raise OfficeTemplateFillError("Image file is unavailable")
+        try:
+            payload = image_path.read_bytes()
+        except OSError as exc:
+            raise OfficeTemplateFillError("Image file cannot be read") from exc
+    if len(payload) > _MAX_IMAGE_BYTES:
+        raise OfficeTemplateFillError("Image exceeds size limit")
+    return BytesIO(payload)
+
+
+def _build_fill_context(
+    template: DocxTemplate,
+    req: WordTemplateFillRequest,
+    placeholder_names: set,
+    workspace: Path,
+) -> Dict[str, Any]:
+    context = {
+        name: _normalize_template_value(req.data.get(name, ""))
+        for name in placeholder_names
+    }
+    for name, descriptor in (req.images or {}).items():
+        context[name] = InlineImage(template, _load_image_descriptor(descriptor, workspace))
+    return context
+
+
 def fill_word_template(req: WordTemplateFillRequest) -> WordTemplateFillResult:
-    """Fill a Word template with data using docxtpl."""
+    """Fill a Word template with a restricted docxtpl environment."""
     template_path = Path(req.template_path)
-
-    analysis = analyze_word_template(
-        template_path,
-        workspace_path=req.workspace_path,
-    )
+    analysis = analyze_word_template(template_path, workspace_path=req.workspace_path)
     template_path = Path(analysis.file_path)
-    placeholder_names = {placeholder.name for placeholder in analysis.placeholders}
-    unfilled = sorted(placeholder_names - set(req.data.keys()))
-
     workspace = validate_workspace(Path(req.workspace_path))
-    output_path = resolve_within(workspace, template_path.parent / req.output_filename)
+    _validate_template_safety(template_path)
 
+    output_name = req.output_filename
+    if not output_name or Path(output_name).is_absolute():
+        raise OfficeTemplateFillError("Invalid output filename")
+    try:
+        output_path = resolve_within(workspace, template_path.parent / output_name)
+    except OfficePathError as exc:
+        raise OfficeTemplateFillError("Invalid output filename") from exc
+    if output_path == template_path or output_path.is_dir():
+        raise OfficeTemplateFillError("Invalid output filename")
+
+    placeholder_names = {placeholder.name for placeholder in analysis.placeholders}
+    provided_names = set(req.data.keys()) | set((req.images or {}).keys())
+    unfilled = sorted(placeholder_names - provided_names)
     try:
         template = DocxTemplate(str(template_path))
-        context = {
-            name: req.data.get(name, "")
-            for name in placeholder_names
-        }
-        template.render(context)
+        context = _build_fill_context(template, req, placeholder_names, workspace)
+        template.render(context, jinja_env=SandboxedEnvironment(autoescape=False))
         template.save(str(output_path))
-        filled_count = len(placeholder_names) - len(unfilled)
         return WordTemplateFillResult(
             output_path=str(output_path),
-            filename=req.output_filename,
+            filename=output_name,
             file_size_bytes=output_path.stat().st_size,
-            filled_count=filled_count,
+            filled_count=len(placeholder_names) - len(unfilled),
             unfilled_placeholders=unfilled,
         )
     except OfficeTemplateFillError:
         raise
     except Exception as exc:
-        raise OfficeTemplateFillError(
-            f"Template fill failed: {exc}",
-            file_path=template_path,
-        ) from exc
+        raise OfficeTemplateFillError("Template fill failed") from exc
