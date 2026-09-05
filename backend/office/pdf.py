@@ -41,6 +41,7 @@ from .storage import validate_workspace
 # PDF preflight limits — analogous to ``MAX_DOCX_*`` in ``word_template.py``.
 MAX_PDF_SIZE = 50 * 1024 * 1024  # 50 MiB
 MAX_PDF_PAGES = 10_000
+MAX_PDF_OUTPUT_SIZE = 200 * 1024 * 1024  # 200 MiB
 
 
 def _validate_pdf_file(file_path: Path) -> None:
@@ -116,7 +117,7 @@ def read_pdf(
     file_path = resolve_within(workspace, file_path)
 
     if not file_path.is_file():
-        raise OfficePdfParseError("Path is not a file", file_path=file_path)
+        raise OfficePathError("Path is not a regular file", file_path=file_path)
 
     _validate_pdf_file(file_path)
 
@@ -232,6 +233,10 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
     except Exception as exc:
         # GENERIC message — never interpolate ``exc`` or the path.
         raise OfficePdfGenerateError("PDF generation failed") from exc
+
+    if output_path.stat().st_size > MAX_PDF_OUTPUT_SIZE:
+        output_path.unlink()
+        raise OfficePdfGenerateError("Generated PDF exceeds size limit")
 
     return PdfGenerateResult(
         output_path=str(output_path),

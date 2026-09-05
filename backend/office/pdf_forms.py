@@ -71,9 +71,7 @@ def read_pdf_form(
     file_path = resolve_within(workspace, file_path)
 
     if not file_path.is_file():
-        raise OfficePdfParseError(
-            "Path is not a file", file_path=file_path
-        )
+        raise OfficePathError("Path is not a regular file", file_path=file_path)
 
     _validate_pdf_file(file_path)
 
