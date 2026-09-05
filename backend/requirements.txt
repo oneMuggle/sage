@@ -62,6 +62,12 @@ openpyxl==3.1.5       # XLSX read/write (low-level), ~1MB wheel
 # pandas 2.2.3 is the last release that supports numpy 1.24+ which is what we already pin.
 pandas==2.2.3         # DataFrame Excel ops, ~15MB wheel + numpy transitively
 
+# Office template + PDF features (Phase 2, 2026-09-05)
+# See docs/superpowers/specs/2026-09-05-word-template-pdf-operations-design.md
+docxtpl>=0.20.0       # Word template fill with {{variable}} placeholders, ~0.5MB wheel
+PyMuPDF>=1.25.0       # PDF read + form fill (C extension, wheels available for py38+), ~15MB wheel
+reportlab>=4.0.0      # PDF generation from structured data, ~3MB wheel
+
 # certifi: provides Mozilla CA bundle for httpx / requests / curl SSL verification
 # (LTS Pin 2024.7.4, matches release/win7 PR #348 / PR #347 lxml wheel strategy)
 certifi>=2024.7.4

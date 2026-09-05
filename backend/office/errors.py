@@ -95,6 +95,61 @@ class OfficeContentShapeError(OfficeError):
     """LLM 传来的 content 结构不符合该 doc_type 的要求（缺 sheets / slides 等）。"""
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Template errors (Phase 2 — Word template operations)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class OfficeTemplateError(OfficeError):
+    """Base class for Word template operation errors."""
+    pass
+
+
+class OfficeTemplateParseError(OfficeTemplateError):
+    """Template file cannot be parsed (invalid DOCX, no placeholders, etc.)."""
+
+    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+        super().__init__(message, file_path=file_path)
+
+
+class OfficeTemplateFillError(OfficeTemplateError):
+    """Template fill failed (missing data, type mismatch, etc.)."""
+
+    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+        super().__init__(message, file_path=file_path)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# PDF errors (Phase 2 — PDF operations)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class OfficePdfError(OfficeError):
+    """Base class for PDF operation errors."""
+    pass
+
+
+class OfficePdfParseError(OfficePdfError):
+    """PDF file cannot be parsed (corrupt, wrong format, etc.)."""
+
+    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+        super().__init__(message, file_path=file_path)
+
+
+class OfficePdfGenerateError(OfficePdfError):
+    """PDF generation failed."""
+
+    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+        super().__init__(message, file_path=file_path)
+
+
+class OfficePdfFormError(OfficePdfError):
+    """PDF form operation failed (field not found, read-only, etc.)."""
+
+    def __init__(self, message: str, *, file_path: Optional[Path] = None) -> None:
+        super().__init__(message, file_path=file_path)
+
+
 #: 写入类失败 → 500（元组常量避免 UP038 的 isinstance union 语法，保持 py38 兼容）
 _WRITE_FAILURE_ERRORS = (OfficeGenerateError, OfficeEditError)
 
@@ -114,6 +169,18 @@ def office_error_to_http_status(error: OfficeError) -> int:  # noqa: PLR0911 —
         return 422
     if isinstance(error, OfficeSizeLimitError):
         return 413
+    # Template errors (Phase 2)
+    if isinstance(error, OfficeTemplateParseError):
+        return 400
+    if isinstance(error, OfficeTemplateFillError):
+        return 422
+    # PDF errors (Phase 2)
+    if isinstance(error, OfficePdfParseError):
+        return 400
+    if isinstance(error, OfficePdfGenerateError):
+        return 500
+    if isinstance(error, OfficePdfFormError):
+        return 422
     if isinstance(error, _WRITE_FAILURE_ERRORS):
         return 500
     return 500  # base OfficeError or unknown subclass
