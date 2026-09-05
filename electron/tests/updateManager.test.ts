@@ -10,6 +10,8 @@ vi.mock('electron', () => ({
       throw new Error(`Unknown path: ${name}`);
     },
     getVersion: () => '1.0.0',
+    relaunch: vi.fn(),
+    exit: vi.fn(),
   },
   BrowserWindow: vi.fn(),
 }));
@@ -707,7 +709,7 @@ describe('UpdateManager', () => {
       expect(state.crashCount).toBe(1);
     });
 
-    it('throws auto-rollback error when crash count reaches threshold', async () => {
+    it('triggers rollback when crash count reaches threshold', async () => {
       mockRunPostStartupChecks.mockResolvedValue({
         passed: false,
         details: [{ name: 'backend', passed: false, error: 'unhealthy' }],
@@ -719,14 +721,22 @@ describe('UpdateManager', () => {
         ...base,
         crashCount: 2,
         lastRecordedVersion: base.currentVersion,
+        lastKnownGoodVersion: '0.9.0',
       });
 
-      await expect(
-        updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow),
-      ).rejects.toThrow('Auto-rollback triggered: 3 consecutive failed startups');
+      // Mock rollback to avoid actual rollback execution
+      const rollbackSpy = vi
+        .spyOn(updateManager, 'rollback')
+          .mockResolvedValue(undefined);
+
+      await updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow);
+
+      expect(rollbackSpy).toHaveBeenCalledWith('auto-rollback:health-check-failed');
 
       const state = await readState();
       expect(state.crashCount).toBe(3);
+
+      rollbackSpy.mockRestore();
     });
 
     it('resets crash count to 0 when health checks pass after prior failures', async () => {
@@ -770,6 +780,325 @@ describe('UpdateManager', () => {
       const state = await readState();
       // Was 1, incremented to 2 (version did not change, so no reset)
       expect(state.crashCount).toBe(2);
+    });
+  });
+
+  describe('rollback', () => {
+    const tempInstallRoot = '/tmp/test-install-root-rollback';
+    const tempInstallDir = `${tempInstallRoot}/app`;
+    const tempPrevDir = `${tempInstallRoot}/.prev`;
+    let originalExecPath: string;
+
+    beforeEach(async () => {
+      originalExecPath = process.execPath;
+      Object.defineProperty(process, 'execPath', {
+        value: `${tempInstallDir}/Sage`,
+        configurable: true,
+      });
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+      await fs.mkdir(tempInstallDir, { recursive: true });
+      // Clear app mocks
+      const { app } = await import('electron');
+      vi.mocked(app.relaunch).mockClear();
+      vi.mocked(app.exit).mockClear();
+    });
+
+    afterEach(async () => {
+      Object.defineProperty(process, 'execPath', {
+        value: originalExecPath,
+        configurable: true,
+      });
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+    });
+
+    it('restores .prev directory and updates state', async () => {
+      // Setup: create .prev directory
+      await fs.mkdir(tempPrevDir, { recursive: true });
+      await fs.writeFile(`${tempPrevDir}/marker.txt`, 'previous version');
+
+      // Seed state
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        currentVersion: '1.3.0',
+        lastKnownGoodVersion: '1.0.0',
+        crashCount: 3,
+      });
+
+      // Mock fetch to ignore the rollback event report
+      vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+
+      await updateManager.rollback('test-rollback');
+
+      // Verify .prev was renamed to install dir
+      await expect(fs.access(tempInstallDir)).resolves.toBeUndefined();
+      await expect(fs.access(tempPrevDir)).rejects.toThrow();
+
+      // Verify marker file is preserved
+      const marker = await fs.readFile(`${tempInstallDir}/marker.txt`, 'utf8');
+      expect(marker).toBe('previous version');
+
+      // Verify state was updated
+      const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+      expect(state.currentVersion).toBe('1.0.0');
+      expect(state.crashCount).toBe(0);
+    });
+
+    it('calls app.relaunch and app.exit after rollback', async () => {
+      await fs.mkdir(tempPrevDir, { recursive: true });
+      vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+
+      const { app } = await import('electron');
+      const mockApp = vi.mocked(app);
+
+      await updateManager.rollback('test-rollback');
+
+      expect(mockApp.relaunch).toHaveBeenCalledTimes(1);
+      expect(mockApp.exit).toHaveBeenCalledWith(0);
+    });
+
+    it('reports rollback event to backend', async () => {
+      await fs.mkdir(tempPrevDir, { recursive: true });
+      const fetchMock = vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        currentVersion: '1.3.0',
+        lastKnownGoodVersion: '1.0.0',
+        crashCount: 3,
+      });
+
+      await updateManager.rollback('test-reason');
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://updates.sage.app/api/v1/updates/rollbacks',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      const callBody = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+      expect(callBody).toMatchObject({
+        from_version: '1.3.0',
+        to_version: '1.0.0',
+        reason: 'test-reason',
+        crash_count: 3,
+      });
+      expect(callBody.timestamp).toEqual(expect.any(String));
+    });
+
+    it('ignores rollback event reporting failures', async () => {
+      await fs.mkdir(tempPrevDir, { recursive: true });
+      vi.mocked(fetch).mockRejectedValue(new Error('network error'));
+
+      // Should not throw
+      await expect(updateManager.rollback('test-rollback')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('rollback with package reinstall', () => {
+    const tempInstallRoot = '/tmp/test-install-root-reinstall';
+    const tempInstallDir = `${tempInstallRoot}/app`;
+    let originalExecPath: string;
+
+    beforeEach(async () => {
+      originalExecPath = process.execPath;
+      Object.defineProperty(process, 'execPath', {
+        value: `${tempInstallDir}/Sage.exe`,
+        configurable: true,
+      });
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+      await fs.mkdir(tempInstallDir, { recursive: true });
+      // Clear app mocks
+      const { app } = await import('electron');
+      vi.mocked(app.relaunch).mockClear();
+      vi.mocked(app.exit).mockClear();
+    });
+
+    afterEach(async () => {
+      Object.defineProperty(process, 'execPath', {
+        value: originalExecPath,
+        configurable: true,
+      });
+      await fs.rm(tempInstallRoot, { recursive: true, force: true });
+    });
+
+    it('throws when no cached package exists', async () => {
+      // No .prev, no cached package
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        lastKnownGoodVersion: '1.0.0',
+      });
+
+      vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+
+      await expect(updateManager.rollback('test-rollback')).rejects.toThrow(
+        'No rollback package available',
+      );
+    });
+
+    it('spawns installer from cached package', async () => {
+      // Create cached package
+      const cacheDir = `${mockUserData}/updates/cache`;
+      await fs.mkdir(cacheDir, { recursive: true });
+      await fs.writeFile(`${cacheDir}/Sage-Setup-1.0.0.exe`, 'fake installer');
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        lastKnownGoodVersion: '1.0.0',
+      });
+
+      vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+
+      // Mock child_process.spawn
+      const mockSpawn = vi.fn().mockReturnValue({
+        on: (event: string, callback: (code: number) => void) => {
+          if (event === 'exit') {
+            setTimeout(() => callback(0), 0);
+          }
+        },
+      });
+
+      vi.doMock('child_process', () => ({ spawn: mockSpawn }));
+
+      // Need to re-import to pick up the mock
+      const { UpdateManager: FreshUpdateManager } = await import('../updateManager');
+      const freshManager = new FreshUpdateManager(updater);
+
+      const { app } = await import('electron');
+      const mockApp = vi.mocked(app);
+
+      await freshManager.rollback('test-rollback');
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        `${cacheDir}/Sage-Setup-1.0.0.exe`,
+        ['/S', `/D=${tempInstallDir}`],
+      );
+      expect(mockApp.relaunch).toHaveBeenCalled();
+      expect(mockApp.exit).toHaveBeenCalledWith(0);
+
+      vi.doUnmock('child_process');
+    });
+
+    it('throws when installer exits with non-zero code', async () => {
+      const cacheDir = `${mockUserData}/updates/cache`;
+      await fs.mkdir(cacheDir, { recursive: true });
+      await fs.writeFile(`${cacheDir}/Sage-Setup-1.0.0.exe`, 'fake installer');
+
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        lastKnownGoodVersion: '1.0.0',
+      });
+
+      vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+
+      const mockSpawn = vi.fn().mockReturnValue({
+        on: (event: string, callback: (code: number) => void) => {
+          if (event === 'exit') {
+            setTimeout(() => callback(1), 0);
+          }
+        },
+      });
+
+      vi.doMock('child_process', () => ({ spawn: mockSpawn }));
+
+      const { UpdateManager: FreshUpdateManager } = await import('../updateManager');
+      const freshManager = new FreshUpdateManager(updater);
+
+      await expect(freshManager.rollback('test-rollback')).rejects.toThrow(
+        'Installer exited with code 1',
+      );
+
+      vi.doUnmock('child_process');
+    });
+  });
+
+  describe('canManualRollback', () => {
+    it('returns allowed: true when conditions are met', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        currentVersion: '1.3.0',
+        lastKnownGoodVersion: '1.0.0',
+        lastKnownGoodInstallDate: new Date().toISOString(),
+      });
+
+      const result = await updateManager.canManualRollback();
+
+      expect(result.allowed).toBe(true);
+    });
+
+    it('returns allowed: false when no lastKnownGoodVersion', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        lastKnownGoodVersion: '',
+      });
+
+      const result = await updateManager.canManualRollback();
+
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('No known stable version available');
+    });
+
+    it('returns allowed: false when already on stable version', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        currentVersion: '1.0.0',
+        lastKnownGoodVersion: '1.0.0',
+      });
+
+      const result = await updateManager.canManualRollback();
+
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('Already on stable version');
+    });
+
+    it('returns allowed: false when rollback window expired', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+      await stateManager.setState({
+        ...base,
+        currentVersion: '1.3.0',
+        lastKnownGoodVersion: '1.0.0',
+        lastKnownGoodInstallDate: eightDaysAgo,
+      });
+
+      const result = await updateManager.canManualRollback();
+
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('Rollback window closed');
+    });
+
+    it('returns allowed: false when install date is unknown', async () => {
+      const stateManager = new StateManager();
+      const base = await stateManager.getState();
+      await stateManager.setState({
+        ...base,
+        currentVersion: '1.3.0',
+        lastKnownGoodVersion: '1.0.0',
+        lastKnownGoodInstallDate: '',
+      });
+
+      const result = await updateManager.canManualRollback();
+
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('Rollback window unknown');
     });
   });
 });

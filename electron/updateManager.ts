@@ -1,8 +1,9 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { StateManager } from './updateState';
+import type { UpdateState } from './updateState';
 import { ConfigManager } from './updateConfig';
 import { LauncherHealthChecker } from './updateHealthChecker';
 
@@ -268,8 +269,8 @@ export class UpdateManager {
 
       const config = await this.configManager.getConfig();
       if (state.crashCount >= config.autoRollbackThreshold) {
-        // Actual rollback execution is Task 8 — for now, just throw to signal the caller.
-        throw new Error(`Auto-rollback triggered: ${state.crashCount} consecutive failed startups`);
+        await this.rollback('auto-rollback:health-check-failed');
+        return; // rollback() calls app.exit(), but TypeScript needs this
       }
 
       throw new Error(`Health check failed (${state.crashCount}/${config.autoRollbackThreshold})`);
@@ -279,6 +280,129 @@ export class UpdateManager {
     if (state.crashCount > 0) {
       state.crashCount = 0;
       await this.stateManager.setState(state);
+    }
+  }
+
+  async rollback(reason: string): Promise<void> {
+    const state = await this.stateManager.getState();
+
+    // 1. Report rollback event (non-blocking)
+    await this.reportRollbackEvent(reason, state);
+
+    // 2. Check if .prev exists
+    const installDir = path.dirname(process.execPath);
+    const prevDir = path.join(path.dirname(installDir), '.prev');
+
+    if (!(await this.pathExists(prevDir))) {
+      // No .prev, try reinstalling from cached package
+      await this.reinstallFromPackage(state, installDir);
+      return;
+    }
+
+    // 3. Delete current install dir
+    await fs.rm(installDir, { recursive: true, force: true });
+
+    // 4. Restore .prev as install dir
+    await fs.rename(prevDir, installDir);
+
+    // 5. Update state
+    await this.stateManager.setState({
+      ...state,
+      currentVersion: state.lastKnownGoodVersion,
+      crashCount: 0,
+    });
+
+    // 6. Restart app
+    app.relaunch();
+    app.exit(0);
+  }
+
+  async canManualRollback(): Promise<{ allowed: boolean; reason?: string }> {
+    const state = await this.stateManager.getState();
+
+    if (!state.lastKnownGoodVersion) {
+      return { allowed: false, reason: 'No known stable version available' };
+    }
+
+    if (state.currentVersion === state.lastKnownGoodVersion) {
+      return { allowed: false, reason: 'Already on stable version' };
+    }
+
+    const config = await this.configManager.getConfig();
+    const installDate = state.lastKnownGoodInstallDate
+      ? new Date(state.lastKnownGoodInstallDate)
+      : null;
+
+    if (!installDate) {
+      return { allowed: false, reason: 'Rollback window unknown' };
+    }
+
+    const daysSinceInstall = (Date.now() - installDate.getTime()) / (1000 * 60 * 60 * 24);
+
+    if (daysSinceInstall > config.rollbackWindowDays) {
+      return {
+        allowed: false,
+        reason: `Rollback window closed (${config.rollbackWindowDays} days)`,
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  private async reportRollbackEvent(reason: string, state: UpdateState): Promise<void> {
+    try {
+      const config = await this.configManager.getConfig();
+      await fetch(`${config.updateServerUrl}/api/v1/updates/rollbacks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_version: state.currentVersion,
+          to_version: state.lastKnownGoodVersion,
+          reason,
+          crash_count: state.crashCount,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+    } catch {
+      // Non-blocking: ignore reporting failures
+    }
+  }
+
+  private async reinstallFromPackage(state: UpdateState, installDir: string): Promise<void> {
+    const cacheDir = path.join(app.getPath('userData'), 'updates', 'cache');
+    const packagePath = path.join(
+      cacheDir,
+      `Sage-Setup-${state.lastKnownGoodVersion}.exe`,
+    );
+
+    if (!(await this.pathExists(packagePath))) {
+      throw new Error('No rollback package available');
+    }
+
+    const { spawn } = await import('child_process');
+    const installer = spawn(packagePath, ['/S', `/D=${installDir}`]);
+
+    await new Promise<void>((resolve, reject) => {
+      installer.on('exit', (code: number) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Installer exited with code ${code}`));
+        }
+      });
+    });
+
+    // Restart app after reinstall
+    app.relaunch();
+    app.exit(0);
+  }
+
+  private async pathExists(p: string): Promise<boolean> {
+    try {
+      await fs.access(p);
+      return true;
+    } catch {
+      return false;
     }
   }
 
