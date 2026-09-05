@@ -15,11 +15,16 @@ vi.mock('electron', () => ({
 
 const { UpdateManager } = await import('../updateManager');
 
-const platformKey = process.platform === 'linux'
-  ? 'linux-x64'
-  : process.platform === 'darwin'
-    ? (process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64')
-    : (process.arch === 'x64' ? 'win-x64' : 'win-ia32');
+const platformKey =
+  process.platform === 'linux'
+    ? 'linux-x64'
+    : process.platform === 'darwin'
+      ? process.arch === 'arm64'
+        ? 'mac-arm64'
+        : 'mac-x64'
+      : process.arch === 'x64'
+        ? 'win-x64'
+        : 'win-ia32';
 
 function createResponse(status: number, body: unknown): Response {
   return {
@@ -29,22 +34,27 @@ function createResponse(status: number, body: unknown): Response {
   } as Response;
 }
 
-function createManifest(version: string): Record<string, unknown> {
+function createManifest(
+  version: string,
+  options: { minimum?: string; includePlatformFile?: boolean } = {},
+): Record<string, unknown> {
   return {
     version,
     channel: 'stable',
     release_date: '2026-09-05T12:00:00Z',
     release_notes: '## New features',
-    min_upgradable_version: '1.0.0',
-    files: {
-      [platformKey]: {
-        filename: `Sage-Setup-${version}.bin`,
-        url: `https://updates.sage.app/Sage-Setup-${version}.bin`,
-        sha512: 'a'.repeat(128),
-        size: 104857600,
-        signature: 'sig',
-      },
-    },
+    min_upgradable_version: options.minimum ?? '1.0.0',
+    files: options.includePlatformFile === false
+      ? {}
+      : {
+          [platformKey]: {
+            filename: `Sage-Setup-${version}.bin`,
+            url: `https://updates.sage.app/Sage-Setup-${version}.bin`,
+            sha512: 'a'.repeat(128),
+            size: 104857600,
+            signature: 'sig',
+          },
+        },
     components: {},
   };
 }
@@ -90,6 +100,80 @@ describe('UpdateManager', () => {
     const result = await updateManager.checkForUpdates();
 
     expect(result.updateAvailable).toBe(false);
+  });
+
+  it('records last check time when server returns 404', async () => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(404, {}));
+
+    await updateManager.checkForUpdates();
+
+    const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+    expect(state.lastCheckTime).toEqual(expect.any(String));
+  });
+
+  it('rejects an update when current version is below minimum', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      createResponse(200, createManifest('1.3.0', { minimum: '1.1.0' })),
+    );
+
+    const result = await updateManager.checkForUpdates();
+
+    expect(result.updateAvailable).toBe(false);
+  });
+
+  it('compares prerelease versions according to semver ordering', () => {
+    const compareVersions = (updateManager as unknown as {
+      compareVersions: (left: unknown, right: unknown) => number;
+    }).compareVersions;
+    const parseVersion = (updateManager as unknown as {
+      parseVersion: (version: string, field: string) => unknown;
+    }).parseVersion;
+
+    expect(compareVersions(parseVersion('1.0.0-beta.2', 'test'), parseVersion('1.0.0-beta.11', 'test')))
+      .toBeLessThan(0);
+    expect(compareVersions(parseVersion('1.0.0', 'test'), parseVersion('1.0.0-rc.1', 'test')))
+      .toBeGreaterThan(0);
+  });
+
+  it('throws a diagnostic error for an invalid manifest', async () => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, { version: 'not-a-version' }));
+
+    await expect(updateManager.checkForUpdates()).rejects.toThrow('min_upgradable_version');
+  });
+
+  it('throws when the platform file is missing', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      createResponse(200, createManifest('1.3.0', { includePlatformFile: false })),
+    );
+
+    await expect(updateManager.checkForUpdates()).rejects.toThrow(`files.${platformKey}`);
+  });
+
+  it('rejects invalid download URLs', async () => {
+    const manifest = createManifest('1.3.0');
+    (manifest.files as Record<string, Record<string, string>>)[platformKey].url = 'not-a-url';
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, manifest));
+
+    await expect(updateManager.checkForUpdates()).rejects.toThrow(`files.${platformKey}.url`);
+  });
+
+  it('rejects incomplete file metadata', async () => {
+    const manifest = createManifest('1.3.0');
+    delete (manifest.files as Record<string, Record<string, unknown>>)[platformKey].sha512;
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, manifest));
+
+    await expect(updateManager.checkForUpdates()).rejects.toThrow(`files.${platformKey}.sha512`);
+  });
+
+  it('rejects unsupported host architectures instead of selecting another platform file', async () => {
+    const originalArch = process.arch;
+    Object.defineProperty(process, 'arch', { value: 'arm64', configurable: true });
+    try {
+      expect(() => (updateManager as unknown as { getPlatformKey: () => string }).getPlatformKey())
+        .toThrow(`Unsupported platform: ${process.platform}-arm64`);
+    } finally {
+      Object.defineProperty(process, 'arch', { value: originalArch, configurable: true });
+    }
   });
 
   it('throws error when server returns 500', async () => {

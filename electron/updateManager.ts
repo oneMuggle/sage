@@ -1,5 +1,5 @@
-import { StateManager, UpdateState } from './updateState';
-import { ConfigManager, UpdateConfig } from './updateConfig';
+import { StateManager } from './updateState';
+import { ConfigManager } from './updateConfig';
 
 export interface CheckResult {
   updateAvailable: boolean;
@@ -7,6 +7,30 @@ export interface CheckResult {
   releaseNotes?: string;
   downloadUrl?: string;
 }
+
+interface SemVer {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: Array<number | string>;
+}
+
+interface UpdateFile {
+  filename: string;
+  url: string;
+  sha512: string;
+  size: number;
+  signature: string;
+}
+
+interface UpdateManifest {
+  version: string;
+  min_upgradable_version: string;
+  release_notes?: string;
+  files: Record<string, UpdateFile>;
+}
+
+const SEMVER_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export class UpdateManager {
   private stateManager: StateManager;
@@ -24,23 +48,27 @@ export class UpdateManager {
     try {
       // Fetch latest manifest from server
       const response = await fetch(
-        `${config.updateServerUrl}/api/v1/updates/latest?channel=${config.channel}`
+        `${config.updateServerUrl}/api/v1/updates/latest?channel=${config.channel}`,
       );
 
       if (!response.ok) {
         if (response.status === 404) {
+          state.lastCheckTime = new Date().toISOString();
+          await this.stateManager.setState(state);
           return { updateAvailable: false };
         }
         throw new Error(`Server returned ${response.status}`);
       }
 
-      const manifest = await response.json();
+      const manifest = this.validateManifest(await response.json());
 
       // Check if version is newer than current
       if (this.isNewerVersion(manifest.version, state.currentVersion)) {
         // Check if current version meets minimum upgradable version
         if (!this.meetsMinimumVersion(state.currentVersion, manifest.min_upgradable_version)) {
-          console.warn(`Current version ${state.currentVersion} cannot upgrade to ${manifest.version}`);
+          console.warn(
+            `Current version ${state.currentVersion} cannot upgrade to ${manifest.version}`,
+          );
           return { updateAvailable: false };
         }
 
@@ -87,21 +115,14 @@ export class UpdateManager {
   }
 
   private isNewerVersion(latest: string, current: string): boolean {
-    const [latestMajor, latestMinor, latestPatch] = latest.split('.').map(Number);
-    const [currentMajor, currentMinor, currentPatch] = current.split('.').map(Number);
-
-    if (latestMajor !== currentMajor) return latestMajor > currentMajor;
-    if (latestMinor !== currentMinor) return latestMinor > currentMinor;
-    return latestPatch > currentPatch;
+    return this.compareVersions(this.parseVersion(latest, 'latest'), this.parseVersion(current, 'currentVersion')) > 0;
   }
 
   private meetsMinimumVersion(current: string, minimum: string): boolean {
-    const [currentMajor, currentMinor, currentPatch] = current.split('.').map(Number);
-    const [minMajor, minMinor, minPatch] = minimum.split('.').map(Number);
-
-    if (currentMajor !== minMajor) return currentMajor >= minMajor;
-    if (currentMinor !== minMinor) return currentMinor >= minMinor;
-    return currentPatch >= minPatch;
+    return this.compareVersions(
+      this.parseVersion(current, 'currentVersion'),
+      this.parseVersion(minimum, 'minimum'),
+    ) >= 0;
   }
 
   private getPlatformKey(): string {
@@ -109,13 +130,111 @@ export class UpdateManager {
     const arch = process.arch;
 
     if (platform === 'win32') {
-      return arch === 'x64' ? 'win-x64' : 'win-ia32';
+      if (arch === 'x64') return 'win-x64';
+      if (arch === 'ia32') return 'win-ia32';
+      throw new Error(`Unsupported platform: ${platform}-${arch}`);
     } else if (platform === 'linux') {
-      return 'linux-x64';
+      if (arch === 'x64') return 'linux-x64';
+      throw new Error(`Unsupported platform: ${platform}-${arch}`);
     } else if (platform === 'darwin') {
       return arch === 'arm64' ? 'mac-arm64' : 'mac-x64';
     }
 
     throw new Error(`Unsupported platform: ${platform}-${arch}`);
+  }
+
+  private parseVersion(version: string, field: string): SemVer {
+    const match = SEMVER_PATTERN.exec(version);
+    if (!match) throw new Error(`Invalid ${field}: ${JSON.stringify(version)}`);
+    const prerelease = (match[4] ?? '').split('.').filter(Boolean).map((identifier) => {
+      if (/^\d+$/.test(identifier)) {
+        if (identifier.length > 1 && identifier.startsWith('0')) {
+          throw new Error(`Invalid ${field}: ${JSON.stringify(version)}`);
+        }
+        return Number(identifier);
+      }
+      return identifier;
+    });
+    return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease };
+  }
+
+  private compareVersions(left: SemVer, right: SemVer): number {
+    for (const field of ['major', 'minor', 'patch'] as const) {
+      if (left[field] !== right[field]) return left[field] > right[field] ? 1 : -1;
+    }
+    if (left.prerelease.length === 0 && right.prerelease.length === 0) return 0;
+    if (left.prerelease.length === 0) return 1;
+    if (right.prerelease.length === 0) return -1;
+    const length = Math.max(left.prerelease.length, right.prerelease.length);
+    for (let index = 0; index < length; index += 1) {
+      const leftIdentifier = left.prerelease[index];
+      const rightIdentifier = right.prerelease[index];
+      if (leftIdentifier === undefined) return -1;
+      if (rightIdentifier === undefined) return 1;
+      if (leftIdentifier === rightIdentifier) continue;
+      if (typeof leftIdentifier === 'number' && typeof rightIdentifier === 'string') return -1;
+      if (typeof leftIdentifier === 'string' && typeof rightIdentifier === 'number') return 1;
+      return leftIdentifier > rightIdentifier ? 1 : -1;
+    }
+    return 0;
+  }
+
+  private validateManifest(value: unknown): UpdateManifest {
+    if (!this.isRecord(value)) throw new Error('Invalid update manifest: expected an object');
+    if (typeof value.version !== 'string') throw new Error('Invalid update manifest.version');
+    if (typeof value.min_upgradable_version !== 'string') {
+      throw new Error('Invalid update manifest.min_upgradable_version');
+    }
+    this.parseVersion(value.version, 'manifest.version');
+    this.parseVersion(value.min_upgradable_version, 'manifest.min_upgradable_version');
+    if (value.release_notes !== undefined && typeof value.release_notes !== 'string') {
+      throw new Error('Invalid update manifest.release_notes');
+    }
+    if (!this.isRecord(value.files)) throw new Error('Invalid update manifest.files');
+    const platformKey = this.getPlatformKey();
+    const file = value.files[platformKey];
+    if (!this.isRecord(file)) throw new Error(`Invalid update manifest.files.${platformKey}`);
+    if (typeof file.filename !== 'string' || file.filename.length === 0) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.filename`);
+    }
+    if (typeof file.url !== 'string' || !this.isHttpUrl(file.url)) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.url`);
+    }
+    if (typeof file.sha512 !== 'string' || !/^[a-fA-F0-9]{128}$/.test(file.sha512)) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.sha512`);
+    }
+    if (typeof file.size !== 'number' || !Number.isSafeInteger(file.size) || file.size <= 0) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.size`);
+    }
+    if (typeof file.signature !== 'string' || file.signature.length === 0) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.signature`);
+    }
+    return {
+      version: value.version,
+      min_upgradable_version: value.min_upgradable_version,
+      release_notes: value.release_notes,
+      files: {
+        [platformKey]: {
+          filename: file.filename,
+          url: file.url,
+          sha512: file.sha512,
+          size: file.size,
+          signature: file.signature,
+        },
+      },
+    };
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private isHttpUrl(value: string): boolean {
+    try {
+      const protocol = new URL(value).protocol;
+      return protocol === 'http:' || protocol === 'https:';
+    } catch {
+      return false;
+    }
   }
 }
