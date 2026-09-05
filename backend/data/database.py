@@ -983,10 +983,6 @@ class Database:
                 "ADD COLUMN expected_task_revision INTEGER"
             )
 
-        # FTS 幂等回填：把 memories_semantic 现有行同步进索引（含绕过 SemanticMemory
-        # 直接写主表的行，如 evolution 晋升；重建后 force 全量重填，否则行数一致即跳过）
-        backfill_semantic_fts(conn, force=fts_rebuilt)
-
         conn.commit()
         print(f"数据库初始化完成: {self.db_path}")  # noqa: T201 (历史遗留, init 阶段一次性输出)
 

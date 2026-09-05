@@ -85,14 +85,14 @@ export async function* subscribeOrchEvents(
   const { runId, afterSeq = 0, signal } = options;
 
   // Electron IPC relay path
-  if (typeof window !== 'undefined' && (window as any).electronAPI?.listen) {
+  if (typeof window !== 'undefined' && window.electronAPI?.listen) {
     const eventName = afterSeq > 0 ? `orch-events-${runId}-seq-${afterSeq}` : `orch-events-${runId}`;
     const eventQueue: RunEvent[] = [];
     let resolveNext: (() => void) | null = null;
     let done = false;
-    let error: Error | null = null;
+    const error: Error | null = null;
 
-    const unsubscribe = (window as any).electronAPI.listen(
+    const unsubscribe = await window.electronAPI.listen(
       eventName,
       (rawEvent: unknown) => {
         const parsed = parseOrchEventFromIpc(rawEvent);

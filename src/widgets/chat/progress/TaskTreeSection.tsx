@@ -3,8 +3,9 @@ import { useState } from 'react';
 
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
-import type { TaskStatusValue } from '../../../shared/api';
 import type { TaskBoard } from '../../../features/send-message/useChat';
+import type { TaskStatusValue } from '../../../shared/api';
+
 import { SubagentDetailDrawer } from './SubagentDetailDrawer';
 
 const STATUS_ICON: Record<TaskStatusValue, string> = {

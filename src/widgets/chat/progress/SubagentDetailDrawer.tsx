@@ -14,10 +14,9 @@ import { useMemo } from 'react';
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
 import { useOrchEventSubscription } from '../../../entities/orchestration/useOrchEventSubscription';
 import type { RunEvent, TaskSummary } from '../../../shared/api/orchEvents';
-import { ContextInput } from './ContextInput';
-import { EventTimeline } from './EventTimeline';
 
-interface SubagentDetailDrawerProps {
+import { ContextInput } from './ContextInput';
+import { EventTimeline } from './EventTimeline';interface SubagentDetailDrawerProps {
   /** Currently visible (controlled by parent) */
   open: boolean;
   /** Called when the drawer should close */
