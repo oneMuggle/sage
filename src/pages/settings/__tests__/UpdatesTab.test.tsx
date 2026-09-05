@@ -62,12 +62,9 @@ describe('UpdatesTab', () => {
 
     const select = await screen.findByTestId('updates-channel-select');
     await waitFor(() => expect((select as HTMLSelectElement).value).toBe('stable'));
-    expect(Array.from((select as HTMLSelectElement).options).map((option) => option.value)).toEqual([
-      '',
-      'stable',
-      'beta',
-      'alpha',
-    ]);
+    expect(Array.from((select as HTMLSelectElement).options).map((option) => option.value)).toEqual(
+      ['', 'stable', 'beta', 'alpha'],
+    );
   });
 
   it('persists strategy and channel changes', async () => {

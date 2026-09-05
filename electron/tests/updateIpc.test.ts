@@ -92,9 +92,9 @@ describe('registerUpdateIpc', () => {
     await expect(ipc.handlers.get('update:get-config')?.(untrustedEvent)).rejects.toThrow(
       '未授权的窗口请求',
     );
-    await expect(
-      ipc.handlers.get('update:set-channel')?.(untrustedEvent, 'beta'),
-    ).rejects.toThrow('未授权的窗口请求');
+    await expect(ipc.handlers.get('update:set-channel')?.(untrustedEvent, 'beta')).rejects.toThrow(
+      '未授权的窗口请求',
+    );
     expect(manager.checkForUpdates).not.toHaveBeenCalled();
     expect(manager.setStrategy).not.toHaveBeenCalled();
   });

@@ -167,7 +167,8 @@ export const en: Record<TranslationKey, string> = {
   'updates.strategy.autoDownload': 'Auto-download, manual install',
   'updates.strategy.autoDownload.desc': 'Recommended: download quietly, confirm before installing',
   'updates.strategy.autoInstall': 'Auto-download and install',
-  'updates.strategy.autoInstall.desc': 'Most aggressive: install automatically after download, restart to apply',
+  'updates.strategy.autoInstall.desc':
+    'Most aggressive: install automatically after download, restart to apply',
   'updates.channel': 'Update channel',
   'updates.channel.stable': 'Stable (recommended)',
   'updates.channel.beta': 'Beta (may contain bugs)',
