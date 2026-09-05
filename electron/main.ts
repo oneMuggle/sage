@@ -1758,6 +1758,15 @@ app.whenReady().then(async () => {
       logger.info('main: backend ready', { url: BACKEND_URL });
       createMainWindow();
       buildApplicationMenu();
+      // Fire-and-forget: startup health check runs post-window so the
+      // LauncherHealthChecker can probe the renderer. Failures are logged
+      // and drive the crash counter / auto-rollback path; they must not
+      // block the UI from appearing.
+      void updateManager
+        ?.onAppStartup(() => mainWindow)
+        .catch((err) =>
+          logger.warn('main: startup health check failed', { error: String(err) }),
+        );
       return;
     }
     // 'open-logs' or 'quit' — quit is handled inside showStartupFailureDialog
@@ -1767,6 +1776,15 @@ app.whenReady().then(async () => {
   createMainWindow();
   // Step 6: build native application menu (File / Help with log dir shortcuts)
   buildApplicationMenu();
+  // Fire-and-forget: startup health check runs AFTER the window exists so
+  // LauncherHealthChecker can probe renderer responsiveness. A failed check
+  // increments the crash counter and may trigger auto-rollback; it must not
+  // block the UI. Errors are logged for diagnostics.
+  void updateManager
+    ?.onAppStartup(() => mainWindow)
+    .catch((err) =>
+      logger.warn('main: startup health check failed', { error: String(err) }),
+    );
 });
 
 app.on('window-all-closed', () => {

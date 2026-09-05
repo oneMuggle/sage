@@ -371,11 +371,16 @@ export class UpdateManager {
       throw new Error('No pending update to install');
     }
 
+    // Prepare the filesystem before committing state. If preparation fails,
+    // the current installation is still active and the pending update must
+    // remain retryable rather than being recorded as already installed.
     await this.prepareForUpgrade();
 
-    this.updater.quitAndInstall();
-
-    // If we reach here, quitAndInstall() hasn't exited the process yet.
+    // CRITICAL: persist the post-install state BEFORE calling quitAndInstall().
+    // quitAndInstall() hands off to the native installer and may exit the
+    // process synchronously (NSIS on Windows) or within milliseconds (Linux
+    // AppImage). Writing first guarantees the next launch sees the intended
+    // version and rollback baseline even if the process is killed mid-handoff.
     const newState: UpdateState = {
       ...state,
       currentVersion: state.pendingUpdate.version,
@@ -388,6 +393,8 @@ export class UpdateManager {
     };
     await this.stateManager.setState(newState);
     this.notifyStateChange(newState);
+
+    this.updater.quitAndInstall();
   }
 
   async onAppStartup(getWindow: () => BrowserWindow | null): Promise<void> {
