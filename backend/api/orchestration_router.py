@@ -27,6 +27,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.orchestration.events import EventProvenance, EventRecorder, EventStream, LaneEvent
+from backend.orchestration.execution_registry import execution_registry
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.llm_factory import load_llm_config_from_settings
 from backend.orchestration.models import HeartbeatStatus, Lane, LaneStatus, Task
@@ -384,6 +385,10 @@ def build_router() -> APIRouter:
                 status_code=500,
                 detail=f"Failed to cancel lane {lane_id}",
             )
+        from backend.orchestration.task_registry import TaskRegistry
+
+        execution_registry.cancel(lane_id)
+        TaskRegistry().mark_stopped(lane.task_id)
 
         refreshed = lane_registry.get_lane(lane_id)
         assert refreshed is not None  # Just updated, should exist
@@ -398,9 +403,12 @@ def build_router() -> APIRouter:
         ``LaneBoardSnapshot.project`` 只保留 lifecycle 字段族并附
         redaction_provenance；非法 view → 400。
         """
+        from backend.orchestration.events import EventStream
         from backend.orchestration.lane_board import LaneBoardBuilder
 
-        builder = LaneBoardBuilder(lane_registry=LaneRegistry())
+        builder = LaneBoardBuilder(
+            lane_registry=LaneRegistry(), event_stream=EventStream()
+        )
         snapshot = builder.build_snapshot(actor="http-api")
         if view == "ops_full":
             return snapshot.to_dict()
@@ -503,59 +511,93 @@ async def _execute_plan_lanes(
     data_dir = Path(get_database().db_path).parent
     scratch_root_dir = data_dir / settings.scratch_root / f"api-{plan.team_id}"
 
-    async def run_one(lane: Any) -> None:
-        async with sem:
-            task = task_registry.get_task(lane.task_id)
-            if task is None:  # 防御：task 缺失 → lane failed
-                lane_registry.mark_failed(lane.lane_id, error="task not found")
-                return
-            goal = task.description or ""
-            task.packet = TaskPacket(
-                objective=goal,
-                recovery_policy=RecoveryPolicy(
-                    on_failure="retry", max_retries=settings.max_retries
-                ),
+    async def run_one(lane: Any) -> None:  # noqa: PLR0911 — 7 returns: cancel/perm/fail/succeed/retry/abort/default
+        interrupt_event = asyncio.Event()
+        current_task = asyncio.current_task()
+        if current_task is None:  # pragma: no cover - called from create_task/gather
+            return
+        execution_registry.register(lane.lane_id, current_task, interrupt_event)
+
+        def was_cancelled() -> bool:
+            current = lane_registry.get_lane(lane.lane_id)
+            return interrupt_event.is_set() or (
+                current is not None and current.status in {
+                    LaneStatus.STOPPED,
+                    LaneStatus.CANCELLED,
+                }
             )
-            scratch_dir = scratch_root_dir / lane.lane_id
-            scratch_dir.mkdir(parents=True, exist_ok=True)
-            # P0-3 工作区隔离接线：SubagentRunner 只读
-            # task.parameters["goal"] / ["scratch_dir"]（chat_dispatcher.py
-            # 同款写法）。不写则子 agent 收空 user message 且拿不到 scratch
-            # 根，隔离静默失效。必须与 packet 一起落库，故 repo.update 挪到
-            # scratch 目录创建之后。
-            task.parameters["goal"] = goal
-            task.parameters["scratch_dir"] = str(scratch_dir)
-            task_registry.repo.update(task)
-            task_registry.mark_running(lane.task_id)
-            lane_registry.mark_running(lane.lane_id)
-            executor = LaneExecutor(
-                lane_registry=lane_registry,
-                task_registry=task_registry,
-                event_recorder=event_recorder,
-                agent_runner=SubagentRunner(llm_config),
-            )
-            result = await run_lane_with_retry(executor, lane, lane.agent_id)
-            iterations = 0
-            while result.get("status") == "retrying":
-                iterations += 1
-                if iterations >= settings.max_lane_iterations:
-                    lane_registry.mark_failed(
-                        lane.lane_id,
-                        error=(
-                            f"MAX_ITERATIONS_EXCEEDED: retry loop exceeded "
-                            f"max_iterations={settings.max_lane_iterations}"
-                        ),
-                    )
-                    task_registry.mark_failed(lane.task_id, error="max iterations")
+
+        try:
+            async with sem:
+                if was_cancelled():
                     return
+                task = task_registry.get_task(lane.task_id)
+                if task is None:  # 防御：task 缺失 → lane failed
+                    if not was_cancelled():
+                        lane_registry.mark_failed(lane.lane_id, error="task not found")
+                    return
+                goal = task.description or ""
+                task.packet = TaskPacket(
+                    objective=goal,
+                    recovery_policy=RecoveryPolicy(
+                        on_failure="retry", max_retries=settings.max_retries
+                    ),
+                )
+                scratch_dir = scratch_root_dir / lane.lane_id
+                scratch_dir.mkdir(parents=True, exist_ok=True)
+                task.parameters["goal"] = goal
+                task.parameters["scratch_dir"] = str(scratch_dir)
+                task_registry.repo.update(task)
+                if was_cancelled():
+                    return
+                task_registry.mark_running(lane.task_id)
+                lane_registry.mark_running(lane.lane_id)
+                try:
+                    agent_runner = SubagentRunner(
+                        llm_config, interrupt_event=interrupt_event
+                    )
+                except TypeError as exc:
+                    # Keep compatibility with lightweight test/adaptor factories
+                    # that still expose the historical one-argument constructor.
+                    if "interrupt_event" not in str(exc):
+                        raise
+                    agent_runner = SubagentRunner(llm_config)
+                executor = LaneExecutor(
+                    lane_registry=lane_registry,
+                    task_registry=task_registry,
+                    event_recorder=event_recorder,
+                    agent_runner=agent_runner,
+                    interrupt_event=interrupt_event,
+                )
                 result = await run_lane_with_retry(executor, lane, lane.agent_id)
-            if result.get("status") == "succeeded":
-                lane_registry.mark_completed(lane.lane_id, result=result.get("result"))
-                task_registry.mark_completed(lane.task_id, result=result.get("result"))
-            else:
-                err = result.get("error", "lane failed")
-                lane_registry.mark_failed(lane.lane_id, error=err)
-                task_registry.mark_failed(lane.task_id, error=err)
+                iterations = 0
+                while result.get("status") == "retrying":
+                    if was_cancelled():
+                        return
+                    iterations += 1
+                    if iterations >= settings.max_lane_iterations:
+                        if not was_cancelled():
+                            lane_registry.mark_failed(
+                                lane.lane_id,
+                                error=(
+                                    f"MAX_ITERATIONS_EXCEEDED: retry loop exceeded "
+                                    f"max_iterations={settings.max_lane_iterations}"
+                                ),
+                            )
+                            task_registry.mark_failed(lane.task_id, error="max iterations")
+                        return
+                    result = await run_lane_with_retry(executor, lane, lane.agent_id)
+                if was_cancelled():
+                    return
+                if result.get("status") == "succeeded":
+                    lane_registry.mark_completed(lane.lane_id, result=result.get("result"))
+                    task_registry.mark_completed(lane.task_id, result=result.get("result"))
+                else:
+                    err = result.get("error", "lane failed")
+                    lane_registry.mark_failed(lane.lane_id, error=err)
+                    task_registry.mark_failed(lane.task_id, error=err)
+        finally:
+            execution_registry.unregister(lane.lane_id, current_task)
 
     await asyncio.gather(*(run_one(lane_obj) for lane_obj in lanes if lane_obj is not None))
 
