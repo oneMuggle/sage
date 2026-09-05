@@ -72,3 +72,5 @@ export function MarkdownPreview({ content }: { content: string }) {
     </div>
   );
 }
+
+export default MarkdownPreview;
