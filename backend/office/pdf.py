@@ -237,6 +237,10 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
     try:
         output_size = output_path.stat().st_size
     except OSError as exc:
+        try:
+            output_path.unlink()
+        except OSError:
+            pass
         raise OfficePdfGenerateError("Unable to validate generated PDF") from exc
 
     if output_size > MAX_PDF_OUTPUT_SIZE:
@@ -249,6 +253,6 @@ def generate_pdf(req: PdfGenerateRequest) -> PdfGenerateResult:
     return PdfGenerateResult(
         output_path=str(output_path),
         filename=filename,
-        file_size_bytes=output_path.stat().st_size,
+        file_size_bytes=output_size,
         page_count=len(req.pages),
     )
