@@ -424,4 +424,22 @@ export const en: Record<TranslationKey, string> = {
   // ─── Brand (BrandLogo component) ──────
   // U-Brand: a11y alt text. Only rendered on <img>; sidebar.brand is the wordmark.
   'brand.alt': 'Sage logo',
+
+  // ─── Skill Draft (PR-2 UX closure) ─────
+  'skill_draft.loading': 'Loading drafts...',
+  'skill_draft.load_failed': 'Failed to load: {error}',
+  'skill_draft.retry': 'Retry',
+  'skill_draft.no_drafts': 'No pending drafts',
+  'skill_draft.when_to_use': 'When to use: {text}',
+  'skill_draft.approve': 'Approve',
+  'skill_draft.reject': 'Reject',
+  'skill_draft.approved': 'Approved {name}',
+  'skill_draft.approve_failed': 'Approve failed: {error}',
+  'skill_draft.rejected': 'Rejected {name}',
+  'skill_draft.reject_failed': 'Reject failed: {error}',
+  'skill_draft.preview': 'Preview',
+
+  'chat.learn_reviewing': 'Reviewing...',
+  'chat.learn_queued': 'Review queued — check Pending Drafts',
+  'chat.learn_failed': 'Review failed: {error}',
 };

@@ -140,3 +140,6 @@ data/orch_scratch/
 
 # Git worktrees (隔离开发目录)
 .worktrees/
+
+# SDD workspace (scratch for subagent-driven-development)
+.superpowers/

@@ -417,6 +417,24 @@ export const zh = {
   // ─── 品牌 (BrandLogo component) ──────
   // U-Brand: a11y alt 文本。仅在 <img> 渲染时使用，sidebar.brand 是 wordmark 文案。
   'brand.alt': 'Sage 标志',
+
+  // ─── Skill Draft (PR-2 UX closure) ─────
+  'skill_draft.loading': '加载草稿中...',
+  'skill_draft.load_failed': '加载失败: {error}',
+  'skill_draft.retry': '重试',
+  'skill_draft.no_drafts': '暂无待审草稿',
+  'skill_draft.when_to_use': '何时使用: {text}',
+  'skill_draft.approve': '批准',
+  'skill_draft.reject': '拒绝',
+  'skill_draft.approved': '已批准 {name}',
+  'skill_draft.approve_failed': '批准失败: {error}',
+  'skill_draft.rejected': '已拒绝 {name}',
+  'skill_draft.reject_failed': '拒绝失败: {error}',
+  'skill_draft.preview': '预览',
+
+  'chat.learn_reviewing': '正在生成技能草稿...',
+  'chat.learn_queued': '已加入审核队列 — 查看待审草稿',
+  'chat.learn_failed': '审核失败: {error}',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

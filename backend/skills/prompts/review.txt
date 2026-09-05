@@ -1,18 +1,52 @@
-你是一个技能策展人。根据以下对话轨迹，提炼出一个可复用的技能。
+你是一个技能策展人。根据以下对话轨迹,提炼出一个可复用的技能。
 
-触发类型：$trigger_type
-对话上下文：
+触发类型:$trigger_type
+
+对话上下文:
 $conversation_context
 
-请输出一个 JSON 对象，包含：
+请输出一个 JSON 对象,包含:
 {
-  "name": "技能名称（kebab-case）",
-  "description": "一句话描述",
-  "when_to_use": "何时使用这个技能（触发条件）",
-  "content": "技能的完整 SKILL.md 内容（markdown 格式）"
+  "name": "技能名称(kebab-case,3-40 字符,小写+数字+连字符)",
+  "description": "一句话描述(≤80 字)",
+  "when_to_use": "何时使用这个技能(≥30 字,必须具体到触发条件和信号)",
+  "content": "技能的完整 SKILL.md 内容(markdown 格式,必须包含 ## 步骤 ## 触发条件 ## 示例 三段)"
 }
 
-要求：
-1. 技能应该是可复用的模式，不是单次操作
-2. when_to_use 应该明确、具体
-3. content 应该包含完整的步骤和示例
+Schema 约束:
+- name: 正则 ^[a-z](?:[a-z0-9]|-[a-z0-9]){2,39}$$（首字符必须是小写字母,中间可含小写字母/数字或"小写字母+连字符"对,总长 3-40 字符,不允许连续连字符、不允许前导/尾部连字符）
+- description: ≤ 80 字符
+- when_to_use: ≥ 30 字符,必须具体到场景 + 信号
+- content: 必须包含三个二级标题 ## 步骤 / ## 触发条件 / ## 示例
+
+Few-shot 示例:
+
+例 1(好的 skill):
+对话轨迹: 用户反复执行 git stash → git switch → git stash pop 序列
+输出:
+{
+  "name": "git-branch-hopping",
+  "description": "在多个 git 分支间切换时保留未提交改动",
+  "when_to_use": "当用户需要在多个 git 分支之间切换、且希望保留当前工作区未提交的改动时",
+  "content": "# Git Branch Hopping\n\n## 步骤\n\n1. git stash\n2. git switch <branch>\n3. git stash pop\n\n## 触发条件\n\n用户切换分支且有未提交改动\n\n## 示例\n\n```bash\ngit stash && git switch main && git stash pop\n```"
+}
+
+例 2(好的 skill):
+对话轨迹: 用户连续 3 次对 LLM 输出进行格式重排
+输出:
+{
+  "name": "format-output-reorder",
+  "description": "对 LLM 输出进行结构化格式重排",
+  "when_to_use": "当用户连续 2 次以上对 LLM 输出的段落顺序、列表结构或代码块排版提出调整请求时",
+  "content": "# Format Output Reorder\n\n## 步骤\n\n1. 识别用户期望的格式\n2. 重排内容\n3. 验证格式\n\n## 触发条件\n\n用户连续 2+ 次对输出格式不满意\n\n## 示例\n\n用户: 把这段代码改成表格形式"
+}
+
+Anti-patterns(不要提取):
+- ❌ 单次操作(如"删除文件 X")
+- ❌ 已有工具支持的操作(如"调用 /learn 端点")
+- ❌ 过于泛化的模式(如"当用户需要帮助时提供帮助")
+
+要求:
+1. 技能应该是可复用的模式,不是单次操作
+2. when_to_use 应该明确、具体到触发条件
+3. content 应该包含完整的步骤、触发条件和示例
