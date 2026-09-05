@@ -8,7 +8,6 @@ docxtpl extends python-docx with Jinja2-like template syntax:
 
 from __future__ import annotations
 
-import logging
 import re
 import time
 from pathlib import Path
@@ -27,8 +26,6 @@ from .models import (
     TemplatePlaceholderType,
     WordTemplateAnalysis,
 )
-
-logger = logging.getLogger(__name__)
 
 PLACEHOLDER_RE = re.compile(r"\{\{([^}]+)\}\}")
 JINJA_CONTROL_RE = re.compile(r"\{%[^%]+%\}")
@@ -105,35 +102,63 @@ def _scan_tables(doc: Document) -> List[TemplatePlaceholder]:
     return placeholders
 
 
-def _scan_headers_footers(doc: Document) -> List[TemplatePlaceholder]:
-    """Scan headers and footers for placeholders."""
+def _scan_story_tables(story, location: PlaceholderLocation) -> List[TemplatePlaceholder]:
+    """Scan tables in a document story, preserving its location."""
     placeholders = []
-    for section in doc.sections:
-        if section.header and section.header.paragraphs:
-            for para in section.header.paragraphs:
-                if PLACEHOLDER_RE.search(para.text):
+    for table_idx, table in enumerate(story.tables):
+        for row_idx, row in enumerate(table.rows):
+            for col_idx, cell in enumerate(row.cells):
+                if PLACEHOLDER_RE.search(cell.text):
                     placeholders.extend(
                         _extract_placeholders_from_text(
-                            para.text, PlaceholderLocation.HEADER
-                        )
-                    )
-        if section.footer and section.footer.paragraphs:
-            for para in section.footer.paragraphs:
-                if PLACEHOLDER_RE.search(para.text):
-                    placeholders.extend(
-                        _extract_placeholders_from_text(
-                            para.text, PlaceholderLocation.FOOTER
+                            cell.text,
+                            location,
+                            table_index=table_idx,
+                            row_index=row_idx,
+                            col_index=col_idx,
                         )
                     )
     return placeholders
 
 
+def _scan_headers_footers(doc: Document) -> List[TemplatePlaceholder]:
+    """Scan paragraphs and tables in headers and footers."""
+    placeholders = []
+    for section in doc.sections:
+        for story, location in (
+            (section.header, PlaceholderLocation.HEADER),
+            (section.footer, PlaceholderLocation.FOOTER),
+        ):
+            for para in story.paragraphs:
+                if PLACEHOLDER_RE.search(para.text):
+                    placeholders.extend(
+                        _extract_placeholders_from_text(para.text, location)
+                    )
+            placeholders.extend(_scan_story_tables(story, location))
+    return placeholders
+
+
+def _story_has_jinja_control(story) -> bool:
+    """Check paragraphs and table cells in one document story."""
+    if any(JINJA_CONTROL_RE.search(para.text) for para in story.paragraphs):
+        return True
+    return any(
+        JINJA_CONTROL_RE.search(cell.text)
+        for table in story.tables
+        for row in table.rows
+        for cell in row.cells
+    )
+
+
 def _has_jinja_control(doc: Document) -> bool:
-    """Check if document has Jinja2 control tags."""
-    for para in doc.paragraphs:
-        if JINJA_CONTROL_RE.search(para.text):
-            return True
-    return False
+    """Check body, tables, headers, and footers for Jinja2 controls."""
+    if _story_has_jinja_control(doc):
+        return True
+    return any(
+        _story_has_jinja_control(story)
+        for section in doc.sections
+        for story in (section.header, section.footer)
+    )
 
 
 def _build_template_summary(
