@@ -30,16 +30,16 @@ def _make_plain_pdf(path: Path, text: str = "Plain PDF") -> Path:
 
 def _make_form_pdf(path: Path, field_names: list[str] | None = None) -> Path:
     """Create a PDF with AcroForm text fields using PyMuPDF's widget API."""
-    import fitz
+    import pymupdf
 
     field_names = field_names or ["name", "email"]
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page()
     for i, name in enumerate(field_names):
-        widget = fitz.Widget()
+        widget = pymupdf.Widget()
         widget.field_name = name
-        widget.field_type = fitz.PDF_WIDGET_TYPE_TEXT
-        widget.rect = fitz.Rect(72, 72 + i * 40, 300, 100 + i * 40)
+        widget.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
+        widget.rect = pymupdf.Rect(72, 72 + i * 40, 300, 100 + i * 40)
         widget.field_value = ""
         page.add_widget(widget)
     doc.save(str(path))
@@ -147,7 +147,7 @@ def test_fill_pdf_form_no_fields(tmp_path: Path):
 
 def test_fill_pdf_form_sets_field_values(tmp_path: Path):
     """Filling a form PDF sets the field values in the output."""
-    import fitz
+    import pymupdf
 
     from backend.office.pdf_forms import fill_pdf_form
 
@@ -163,7 +163,7 @@ def test_fill_pdf_form_sets_field_values(tmp_path: Path):
     assert result.filled_count == 2
 
     # Verify field values in the output PDF.
-    doc = fitz.open(result.output_path)
+    doc = pymupdf.open(result.output_path)
     values = {}
     for page in doc:
         for w in page.widgets():
@@ -174,7 +174,7 @@ def test_fill_pdf_form_sets_field_values(tmp_path: Path):
 
 def test_fill_pdf_form_flatten(tmp_path: Path):
     """Flatten=True makes fields read-only in the output."""
-    import fitz
+    import pymupdf
 
     from backend.office.pdf_forms import fill_pdf_form
 
@@ -189,7 +189,7 @@ def test_fill_pdf_form_flatten(tmp_path: Path):
     result = fill_pdf_form(req)
     assert result.filled_count == 1
 
-    doc = fitz.open(result.output_path)
+    doc = pymupdf.open(result.output_path)
     for page in doc:
         for w in page.widgets():
             # Read-only is bit 0 of field_flags (PDF_FIELD_IS_READ_ONLY).
