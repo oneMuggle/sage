@@ -42,7 +42,7 @@ interface UpdateManifest {
 export interface UpdaterBoundary {
   setFeedURL(options: { provider: 'generic'; url: string; channel: string }): void;
   checkForUpdates(): Promise<unknown>;
-  downloadUpdate(): Promise<unknown>;
+  downloadUpdate(): Promise<string[]>;
   quitAndInstall(): void;
   on(event: 'download-progress', listener: (event: { percent: number }) => void): void;
   off(event: 'download-progress', listener: (event: { percent: number }) => void): void;
@@ -293,7 +293,13 @@ export class UpdateManager {
       ) {
         throw new Error('Updater metadata does not match the checked update');
       }
-      await this.updater.downloadUpdate();
+      const downloadedFiles = await this.updater.downloadUpdate();
+      const downloadedFile = downloadedFiles.find(
+        (file) => decodeURIComponent(path.basename(file)) === checkedUpdate.filename,
+      );
+      if (!downloadedFile || !this.isUpdaterCachePath(downloadedFile)) {
+        throw new Error('Updater did not return a valid downloaded artifact path');
+      }
 
       const state = await this.stateManager.getState();
       const newState: UpdateState = {
@@ -311,11 +317,12 @@ export class UpdateManager {
           signature: checkedUpdate.signature,
         },
         cachedRollbackPackage: {
-          path: path.join(app.getPath('userData'), 'updates', 'cache', checkedUpdate.filename),
+          path: downloadedFile,
           version: checkedUpdate.version,
           sha512: checkedUpdate.sha512,
           size: checkedUpdate.size,
           signature: checkedUpdate.signature,
+          fileUrl: checkedUpdate.fileUrl,
         },
       };
       await this.stateManager.setState(newState);
@@ -351,6 +358,11 @@ export class UpdateManager {
     this.lastCheckedUpdate = null;
   }
 
+  private isUpdaterCachePath(filePath: string): boolean {
+    const resolved = path.resolve(filePath);
+    const cacheRoot = path.resolve(app.getPath('userData'));
+    return resolved.startsWith(`${cacheRoot}${path.sep}`);
+  }
   private getFeedUrl(fileUrl: string): string {
     const url = new URL(fileUrl);
     const directoryPath = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1);
@@ -383,6 +395,17 @@ export class UpdateManager {
     // the current installation is still active and the pending update must
     // remain retryable rather than being recorded as already installed.
     const prepared = await this.prepareForUpgrade();
+    const preparedAt = new Date().toISOString();
+    await this.stateManager.setState({
+      ...state,
+      pendingInstallAttempt: {
+        version: state.pendingUpdate.version,
+        startedAt: preparedAt,
+        phase: 'prepared',
+        previousVersion: state.currentVersion,
+        pendingUpdate: state.pendingUpdate,
+      },
+    });
 
     // CRITICAL: persist the post-install state BEFORE calling quitAndInstall().
     // quitAndInstall() hands off to the native installer and may exit the
@@ -402,6 +425,13 @@ export class UpdateManager {
         version: state.pendingUpdate.version,
         installedAt: new Date().toISOString(),
       },
+      pendingInstallAttempt: {
+        version: state.pendingUpdate.version,
+        startedAt: preparedAt,
+        phase: 'requested',
+        previousVersion: state.currentVersion,
+        pendingUpdate: state.pendingUpdate,
+      },
     };
     try {
       await this.stateManager.setState(newState);
@@ -416,7 +446,24 @@ export class UpdateManager {
     }
     this.notifyStateChange(newState);
 
-    this.updater.quitAndInstall();
+    try {
+      this.updater.quitAndInstall();
+    } catch (error) {
+      const failedState: UpdateState = {
+        ...state,
+        pendingInstallAttempt: {
+          version: state.pendingUpdate.version,
+          startedAt: preparedAt,
+          phase: 'failed',
+          previousVersion: state.currentVersion,
+          pendingUpdate: state.pendingUpdate,
+        },
+      };
+      await this.stateManager.setState(failedState);
+      if (prepared?.wasRenamed) await this.restorePreparedUpgrade(prepared);
+      this.notifyStateChange(failedState);
+      throw error;
+    }
   }
 
   async onAppStartup(
@@ -424,6 +471,23 @@ export class UpdateManager {
     backendUrl = 'http://127.0.0.1:8765',
   ): Promise<void> {
     const state = await this.stateManager.getState();
+
+    const installAttempt = state.pendingInstallAttempt;
+    if (installAttempt && app.getVersion() !== installAttempt.version) {
+      // The native installer did not install the requested version. Reconcile
+      // persisted optimistic state with the version that actually launched.
+      const recoveredState: UpdateState = {
+        ...state,
+        currentVersion: app.getVersion(),
+        lastKnownGoodVersion: installAttempt.previousVersion,
+        pendingUpdate: installAttempt.pendingUpdate,
+        pendingInstallAttempt: null,
+        postInstallMarker: null,
+      };
+      await this.stateManager.setState(recoveredState);
+      this.notifyStateChange(recoveredState);
+      Object.assign(state, recoveredState);
+    }
 
     // Reset crash count if version changed since last recording
     if (state.currentVersion !== state.lastRecordedVersion) {
@@ -591,8 +655,8 @@ export class UpdateManager {
       throw new Error('No verified rollback package available');
     }
     const packagePath = path.resolve(cached.path);
-    const cacheRoot = path.resolve(path.join(app.getPath('userData'), 'updates', 'cache'));
-    if (path.dirname(packagePath) !== cacheRoot) {
+    const cacheRoot = path.resolve(app.getPath('userData'));
+    if (!packagePath.startsWith(`${cacheRoot}${path.sep}`)) {
       throw new Error('Rollback package path is invalid');
     }
     if (!(await this.pathExists(packagePath))) {
@@ -605,10 +669,7 @@ export class UpdateManager {
     const noFollow = (fssync.constants as { O_NOFOLLOW?: number }).O_NOFOLLOW ?? 0;
     let handle: fs.FileHandle | undefined;
     try {
-      handle = await fs.open(
-        packagePath,
-        fssync.constants.O_RDONLY | noFollow,
-      );
+      handle = await fs.open(packagePath, fssync.constants.O_RDONLY | noFollow);
       const stats = await handle.stat();
       if (stats.isSymbolicLink()) {
         throw new Error('Rollback package is a symbolic link');
@@ -622,7 +683,7 @@ export class UpdateManager {
         !this.verifyArtifactSignature({
           version: cached.version,
           filename: path.basename(packagePath),
-          url: `https://updates.sage.app/releases/${cached.version}/${path.basename(packagePath)}`,
+          url: cached.fileUrl ?? `https://updates.sage.app/releases/${cached.version}/${path.basename(packagePath)}`,
           sha512: digest,
           size: cached.size,
           signature: cached.signature,

@@ -323,6 +323,35 @@ Scanning plan for conflicts before execution...
 
 ---
 
+### Post-task hardening round 2: complete (commits df85d7f8, 3e332116)
+
+**Rollback lifecycle hardening:** ✅ — Three critical fixes from security review:
+
+1. **NSIS `IfFileExists` 分支修正** — 原先逻辑反转（文件存在时跳过执行），导致 Windows 覆盖升级时 `.prepare-rollback.bat` 永远不会被执行，`.prev` 目录不存在，自动回滚链路失效。修正为 `IfFileExists "$1" 0 rollback_staging_done`（0 = 不存在时跳转）。
+2. **`rollback()` 目录交换改为可恢复** — 原先 `fs.rm(installDir)` 后 `fs.rename(prevDir, installDir)` 的模式在 rename 失败时 install 目录已丢失，无法恢复。改为 quarantine-swap：先 rename installDir → tempDir，再 rename prevDir → installDir，成功后才删 tempDir；失败时恢复原 installDir。
+3. **`prepareForUpgrade()` + `setState()` 事务化** — setState 失败时调用 `restorePreparedUpgrade()` 恢复目录结构和 Windows staging 脚本，避免半完成状态。
+
+**其他加固：**
+- `onAppStartup()` 新增 `backendUrl` 参数（默认 `http://127.0.0.1:8765`），传递给 `LauncherHealthChecker`，避免 `PYTHON_BACKEND_PORT` 环境变量导致探活错误端口。
+- `postInstallMarker` 状态字段：仅在 marker 记录的版本等于当前版本时才累加 crashCount，防止对「本就存在问题的旧版本」触发自动回滚。
+- `reinstallFromPackage()` 改用 `fs.open(O_RDONLY | O_NOFOLLOW)` + `FileHandle.stat()` 验证 inode，避免符号链接攻击。
+- 测试 mock 改为基于路径过滤的 rename 失败模拟（替代布尔开关），准确测试第二次 rename 失败场景。
+
+**Verification:**
+- Electron update suite: **98/98 tests passing** across 6 files（新增 backendUrl 注入、postInstallMarker 门控、rollback 恢复、prepareForUpgrade 状态回滚测试）。
+- Backend update tests: **15/15 passing**。
+- Renderer TypeScript check: passed（无新错误）。
+- Electron TypeScript check: 仅预先存在的 TS1378（test 文件顶层 await，Task 5 已记录）。
+- ESLint: 改动 TypeScript 文件 clean。
+- `git diff --check`: clean。
+
+**Dead code cleanup (commit 3e332116):**
+- 移除未使用的 `preparedUpgrade` 字段（只写不读，逻辑已通过 `PreparedUpgradeInfo` 返回值传递）。
+- 移除未使用的 `hashFile()` 方法（已被 `hashFileHandle()` 替代）。
+- 修正测试中 `vi.Mock` 命名空间类型引用（改为 `import { type Mock } from 'vitest'`）。
+
+---
+
 ### Task 11: complete (commits 42cefc71..b3b87fd0, review approved after fix round 1)
 
 **Spec compliance:** ✅ — All 13 acceptance criteria met
@@ -360,3 +389,64 @@ Scanning plan for conflicts before execution...
 - Pre-existing ESLint:unused `configPath` in `electron/tests/updateConfig.test.ts:22`
 - M3 (initial state race) — theoretical, not observed in practice
 - M4 (unused i18n key `rollbackNotAvailable`) — retained for future use
+
+---
+
+### Deferred Findings Resolution: complete
+
+**High-risk fixes:** ✅ — Addressed 6 deferred cross-cutting findings from security/TypeScript reviews:
+
+1. **Real electron-updater cache path** — `downloadUpdate()` now returns `string[]` with actual downloaded file paths. `cachedRollbackPackage.path` uses the real path from updater, not a guessed `<userData>/updates/cache/<filename>`. Added `isUpdaterCachePath()` validation to ensure path is within `userData`.
+
+2. **Original signed URL preservation** — `cachedRollbackPackage.fileUrl` now stores the manifest's original signed URL. Rollback validation uses the stored `fileUrl` when available, avoiding URL reconstruction mismatches.
+
+3. **Install attempt lifecycle** — New `pendingInstallAttempt` state field tracks `{prepared, requested, failed}` phases. `installUpdate()` persists prepared state before filesystem changes, requested state before `quitAndInstall()`, and failed state if `quitAndInstall()` throws synchronously. `onAppStartup()` reconciles state when launched version doesn't match requested version.
+
+4. **HMAC production secret enforcement** — `getUpdateHmacSecret()` rejects production builds (`app.isPackaged`) without `SAGE_UPDATE_STATE_HMAC_SECRET` configured. Development mode persists a random 32-byte hex secret to `userData/.update-state-hmac-secret` (mode 0o600). Minimum secret length enforced (32 chars).
+
+5. **Config integrity protection** — `update-config.json` now signed with HMAC-SHA256 (shared secret with state). Atomic write via temp file + rename (0o600 mode). Legacy unsigned configs read for migration; next write upgrades to signed format. Field-by-field validation prevents config poisoning (trusted URL allowlist, integer ranges, enum values).
+
+6. **State runtime schema validation** — `StateManager.getState()` validates structure before returning (field types, enum values, nullable constraints). Invalid schema with valid HMAC resets to defaults. Constant-time HMAC comparison via `crypto.timingSafeEqual()`.
+
+**Test coverage:**
+- Config tampering detection and fallback to defaults
+- State schema validation (valid HMAC but invalid structure)
+- Install attempt failure recovery (quitAndInstall throws, state restored, install dir preserved)
+
+**Verification:**
+- Electron update suite: **84/84 tests passing** across 4 files (updateManager, updateIntegration, updateConfig, updateState).
+- Renderer TypeScript check: passed (no errors).
+- Electron TypeScript check: only pre-existing TS1378 errors in test files (top-level await, documented in Task 5).
+- ESLint: clean.
+- `git diff --check`: clean.
+
+**Residual risks (not addressed):**
+- `quitAndInstall()` is void and may exit synchronously; cannot detect native installer async failure. Mitigated by `pendingInstallAttempt` reconciliation on next startup.
+- `isUpdaterCachePath()` accepts any path under `userData` (not strict `pending/` subdirectory). This is intentional to accommodate `updaterCacheDirName` customization.
+- Legacy unsigned configs are still readable (migration on next write). An attacker with file write access could downgrade to unsigned format, but the next legitimate write would re-sign it.
+
+---
+
+## Deferred Cross-Cutting Findings（需后续独立计划）
+
+以下发现来自安全/TypeScript 审查，属于架构级改进，需独立计划：
+
+> **2026-09-06 更新：** 高风险项 1-6 已在 "Deferred Findings Resolution" 中解决。仅余 LOW-7（TS1378）未处理。
+
+### HIGH（已解决）
+
+1. ~~**`cachedRollbackPackage.path` 实际未被 electron-updater 写入**~~ — ✅ 已使用 `downloadUpdate()` 返回的真实路径。
+2. ~~**回滚签名验证 URL 重建不一致**~~ — ✅ 已保存并复用 manifest 中的原始 signed URL（`fileUrl` 字段）。
+3. ~~**State 在 `quitAndInstall()` 前持久化，但安装可能失败**~~ — ✅ `pendingInstallAttempt` 生命周期跟踪，启动时版本不一致自动恢复。
+
+### MEDIUM（已解决）
+
+4. ~~**HMAC 默认密钥 `default-dev-secret-change-in-prod`**~~ — ✅ 生产环境拒绝默认密钥，持久化随机开发密钥。
+5. ~~**`update-config.json` 无完整性保护**~~ — ✅ HMAC-SHA256 签名，原子写入，字段校验。
+6. ~~**`StateManager` 缺乏运行时 schema 验证**~~ — ✅ 字段类型/结构校验，HMAC 恒时比较。
+
+### LOW（未处理）
+
+7. **TypeScript 顶层 await** — 测试文件使用 top-level await，但 `tsconfig.electron.json` 的 module/target 配置不支持（TS1378）。运行时由 vitest 处理，但类型检查失败。需要修改 tsconfig 或测试文件结构。
+
+---

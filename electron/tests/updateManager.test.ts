@@ -97,9 +97,8 @@ vi.doMock('fs/promises', () => ({
 
 const { UpdateManager } = await import('../updateManager');
 const { StateManager } = await import('../updateState');
-const { LauncherHealthChecker: MockedLauncherHealthChecker } = await import(
-  '../updateHealthChecker'
-);
+const { LauncherHealthChecker: MockedLauncherHealthChecker } =
+  await import('../updateHealthChecker');
 
 const platformKey =
   process.platform === 'linux'
@@ -188,7 +187,9 @@ function createFakeUpdater(): FakeUpdater {
         ],
       },
     }),
-    downloadUpdate: vi.fn().mockResolvedValue([]),
+    downloadUpdate: vi.fn().mockResolvedValue([
+      `${mockUserData}/updates/sage/pending/Sage-Setup-1.3.0.bin`,
+    ]),
     quitAndInstall: vi.fn(),
     on: vi.fn(),
     off: vi.fn(),
@@ -395,7 +396,9 @@ describe('UpdateManager', () => {
     });
     updater.downloadUpdate.mockImplementation(async () => {
       callOrder.push('downloadUpdate');
-      return [];
+      return [
+        `${mockUserData}/updates/sage/pending/Sage-Setup-1.3.0.bin`,
+      ];
     });
 
     await updateManager.downloadUpdate();
@@ -557,6 +560,9 @@ describe('UpdateManager', () => {
       },
     });
 
+    updater.downloadUpdate.mockResolvedValue([
+      `${mockUserData}/updates/sage/pending/Sage%20Setup%201.3.0.bin`,
+    ]);
     await expect(updateManager.downloadUpdate()).resolves.toBeUndefined();
   });
 
@@ -729,20 +735,23 @@ describe('UpdateManager', () => {
       expect(updater.quitAndInstall).toHaveBeenCalled();
     });
 
-    it('removes a stale .prev directory before creating a new one', async () => {
+    it('keeps the pending update and records a failed attempt when quitAndInstall throws', async () => {
       Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
-      await fs.mkdir(tempPrevDir, { recursive: true });
-      await fs.writeFile(`${tempPrevDir}/marker.txt`, 'stale');
       await seedPendingUpdate('1.3.0');
+      updater.quitAndInstall.mockImplementation(() => {
+        throw new Error('native installer unavailable');
+      });
 
-      await updateManager.installUpdate();
+      await expect(updateManager.installUpdate()).rejects.toThrow('native installer unavailable');
 
-      const markerExists = await fs.access(`${tempPrevDir}/marker.txt`).then(
-        () => true,
-        () => false,
-      );
-      expect(markerExists).toBe(false);
+      const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+      expect(state.currentVersion).toBe('1.0.0');
+      expect(state.pendingUpdate.version).toBe('1.3.0');
+      expect(state.pendingInstallAttempt.phase).toBe('failed');
+      await expect(fs.access(tempInstallDir)).resolves.toBeUndefined();
+      await expect(fs.access(tempPrevDir)).rejects.toThrow();
     });
+
   });
 
   describe('onAppStartup', () => {

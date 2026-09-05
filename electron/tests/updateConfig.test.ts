@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 
 // Mock Electron app
 const mockUserData = '/tmp/test-user-data-config';
@@ -52,8 +53,18 @@ describe('ConfigManager', () => {
     await configManager.setConfig(newConfig);
     const retrieved = await configManager.getConfig();
 
-    expect(retrieved.updateStrategy).toBe('manual');
-    expect(retrieved.channel).toBe('beta');
-    expect(retrieved.rollbackWindowDays).toBe(14);
+    expect(retrieved).toEqual(newConfig);
+  });
+
+  it('falls back to defaults when a persisted config is tampered', async () => {
+    const config = await configManager.getConfig();
+    await configManager.setConfig(config);
+    const configPath = path.join(mockUserData, 'update-config.json');
+    const persisted = JSON.parse(await fs.readFile(configPath, 'utf8')) as Record<string, unknown>;
+    persisted.updateServerUrl = 'https://attacker.example.test';
+    await fs.writeFile(configPath, JSON.stringify(persisted), 'utf8');
+
+    const recovered = await configManager.getConfig();
+    expect(recovered.updateServerUrl).toBe('https://updates.sage.app');
   });
 });

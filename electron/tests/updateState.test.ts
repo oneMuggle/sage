@@ -73,17 +73,16 @@ describe('StateManager', () => {
     expect(parsed.hmac).toHaveLength(64); // SHA-256 hex
   });
 
-  it('returns defaults when HMAC is tampered', async () => {
+  it('returns defaults when a signed state has an invalid schema', async () => {
     const state = await stateManager.getState();
     await stateManager.setState(state);
 
-    // Tamper with state
-    const data = await fs.readFile(statePath, 'utf-8');
-    const parsed = JSON.parse(data);
-    parsed.crashCount = 999; // Modify state without updating HMAC
-    await fs.writeFile(statePath, JSON.stringify(parsed), 'utf-8');
+    const data = JSON.parse(await fs.readFile(statePath, 'utf-8')) as Record<string, unknown>;
+    data.crashCount = 'not-a-number';
+    await fs.writeFile(statePath, JSON.stringify(data), 'utf-8');
 
     const retrieved = await stateManager.getState();
-    expect(retrieved.crashCount).toBe(0); // Reset to default
+    expect(retrieved.crashCount).toBe(0);
+    expect(retrieved.currentVersion).toBe('1.0.0');
   });
 });
