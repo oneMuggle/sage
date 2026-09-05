@@ -17,3 +17,11 @@ Verification:
 
 Concerns:
 - `npm run build` remains blocked by the pre-existing TypeScript configuration issue: Electron test files use top-level `await`, while `tsconfig.electron.json` does not permit it.
+
+Fix round 3 (third review):
+- Restricted Darwin platform mapping to `x64` -> `mac-x64` and `arm64` -> `mac-arm64`; unsupported Darwin architectures now throw explicitly.
+- Made architecture boundary coverage deterministic by mocking both `process.platform` (`darwin`) and `process.arch` (`riscv64`), then restoring both values.
+
+Verification:
+- Command: `npm test -- --run electron/tests/updateManager.test.ts`
+- Output: `1` test file passed, `12` tests passed.

@@ -123,18 +123,19 @@ describe('UpdateManager', () => {
   });
 
   it('compares prerelease versions and large numeric identifiers according to semver ordering', () => {
-    const compareVersions = (updateManager as unknown as {
-      compareVersions: (left: unknown, right: unknown) => number;
-    }).compareVersions.bind(updateManager);
-    const parseVersion = (updateManager as unknown as {
-      parseVersion: (version: string, field: string) => unknown;
-    }).parseVersion;
+    const compareVersions = (
+      updateManager as unknown as {
+        compareVersions: (left: unknown, right: unknown) => number;
+      }
+    ).compareVersions.bind(updateManager);
+    const parseVersion = (
+      updateManager as unknown as {
+        parseVersion: (version: string, field: string) => unknown;
+      }
+    ).parseVersion;
 
     expect(
-      compareVersions(
-        parseVersion('1.0.0-beta.2', 'test'),
-        parseVersion('1.0.0-beta.11', 'test'),
-      ),
+      compareVersions(parseVersion('1.0.0-beta.2', 'test'), parseVersion('1.0.0-beta.11', 'test')),
     ).toBeLessThan(0);
     expect(
       compareVersions(parseVersion('1.0.0', 'test'), parseVersion('1.0.0-rc.1', 'test')),
@@ -183,16 +184,22 @@ describe('UpdateManager', () => {
     await expect(updateManager.checkForUpdates()).rejects.toThrow(`files.${platformKey}.sha512`);
   });
 
-  it('rejects unsupported host architectures instead of selecting another platform file', () => {
+  it('rejects unsupported platform and architecture combinations', () => {
+    const originalPlatform = process.platform;
     const originalArch = process.arch;
-    const unsupportedArch = process.platform === 'darwin' ? 'ia32' : 'arm64';
-    Object.defineProperty(process, 'arch', { value: unsupportedArch, configurable: true });
+    Object.defineProperties(process, {
+      platform: { value: 'darwin', configurable: true },
+      arch: { value: 'riscv64', configurable: true },
+    });
     try {
       expect(() =>
         (updateManager as unknown as { getPlatformKey: () => string }).getPlatformKey(),
-      ).toThrow(`Unsupported platform: ${process.platform}-${unsupportedArch}`);
+      ).toThrow('Unsupported platform: darwin-riscv64');
     } finally {
-      Object.defineProperty(process, 'arch', { value: originalArch, configurable: true });
+      Object.defineProperties(process, {
+        platform: { value: originalPlatform, configurable: true },
+        arch: { value: originalArch, configurable: true },
+      });
     }
   });
 

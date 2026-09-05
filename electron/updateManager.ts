@@ -145,7 +145,9 @@ export class UpdateManager {
       if (arch === 'x64') return 'linux-x64';
       throw new Error(`Unsupported platform: ${platform}-${arch}`);
     } else if (platform === 'darwin') {
-      return arch === 'arm64' ? 'mac-arm64' : 'mac-x64';
+      if (arch === 'x64') return 'mac-x64';
+      if (arch === 'arm64') return 'mac-arm64';
+      throw new Error(`Unsupported platform: ${platform}-${arch}`);
     }
 
     throw new Error(`Unsupported platform: ${platform}-${arch}`);
