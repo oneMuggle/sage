@@ -407,10 +407,10 @@ class TestMain:
         data = json.loads(out)
         assert "checks" in data
         assert "summary" in data
-        # 2026-09-04: 14→15 (加 runtime_env)
-        assert len(data["checks"]) == 15
+        # 2026-09-05: 15→16 (加 network)
+        assert len(data["checks"]) == 16
 
-    def test_main_runs_all_fifteen_checks(self, capsys):
+    def test_main_runs_all_sixteen_checks(self, capsys):
         main([])
         out = capsys.readouterr().out
         expected_names = [
@@ -430,6 +430,8 @@ class TestMain:
             "skills",
             # 2026-09-04: 本地开发环境助手 — Python/Node.js 探测
             "runtime_env",
+            # 2026-09-05: 网络访问策略（mode / host 白名单 / httpx 依赖）
+            "network",
         ]
         for n in expected_names:
             assert n in out, f"missing check: {n}"
@@ -528,8 +530,8 @@ class TestImportAllChecks:
         before = len(d.ALL_CHECKS)
         d._import_all_checks()
         # After import, 8 unique classes should be registered
-        # 2026-09-04: 14→15 (加 runtime_env)
-        assert len(d.ALL_CHECKS) >= 15
+        # 2026-09-05: 15→16 (加 network)
+        assert len(d.ALL_CHECKS) >= 16
         # Calling twice doesn't crash (may double-register; that's fine)
         d._import_all_checks()
         assert len(d.ALL_CHECKS) >= before
