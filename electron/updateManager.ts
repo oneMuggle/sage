@@ -683,7 +683,9 @@ export class UpdateManager {
         !this.verifyArtifactSignature({
           version: cached.version,
           filename: path.basename(packagePath),
-          url: cached.fileUrl ?? `https://updates.sage.app/releases/${cached.version}/${path.basename(packagePath)}`,
+          url:
+            cached.fileUrl ??
+            `https://updates.sage.app/releases/${cached.version}/${path.basename(packagePath)}`,
           sha512: digest,
           size: cached.size,
           signature: cached.signature,

@@ -175,9 +175,11 @@ function createFakeUpdater(): FakeUpdater {
         ],
       },
     }),
-    downloadUpdate: vi.fn().mockResolvedValue([
-      `${mockUserData ?? '/tmp/test-user-data'}/updates/sage/pending/Sage-Setup-2.0.0.bin`,
-    ]),
+    downloadUpdate: vi
+      .fn()
+      .mockResolvedValue([
+        `${mockUserData ?? '/tmp/test-user-data'}/updates/sage/pending/Sage-Setup-2.0.0.bin`,
+      ]),
     quitAndInstall: vi.fn(),
     on: vi.fn(),
     off: vi.fn(),
@@ -197,9 +199,11 @@ function resetFakeUpdaterDefaults(updater: FakeUpdater): void {
       ],
     },
   });
-  updater.downloadUpdate.mockReset().mockResolvedValue([
-    `${mockUserData ?? '/tmp/test-user-data'}/updates/sage/pending/Sage-Setup-2.0.0.bin`,
-  ]);
+  updater.downloadUpdate
+    .mockReset()
+    .mockResolvedValue([
+      `${mockUserData ?? '/tmp/test-user-data'}/updates/sage/pending/Sage-Setup-2.0.0.bin`,
+    ]);
   updater.setFeedURL.mockClear();
   updater.quitAndInstall.mockClear();
   updater.on.mockClear();

@@ -187,9 +187,9 @@ function createFakeUpdater(): FakeUpdater {
         ],
       },
     }),
-    downloadUpdate: vi.fn().mockResolvedValue([
-      `${mockUserData}/updates/sage/pending/Sage-Setup-1.3.0.bin`,
-    ]),
+    downloadUpdate: vi
+      .fn()
+      .mockResolvedValue([`${mockUserData}/updates/sage/pending/Sage-Setup-1.3.0.bin`]),
     quitAndInstall: vi.fn(),
     on: vi.fn(),
     off: vi.fn(),
@@ -396,9 +396,7 @@ describe('UpdateManager', () => {
     });
     updater.downloadUpdate.mockImplementation(async () => {
       callOrder.push('downloadUpdate');
-      return [
-        `${mockUserData}/updates/sage/pending/Sage-Setup-1.3.0.bin`,
-      ];
+      return [`${mockUserData}/updates/sage/pending/Sage-Setup-1.3.0.bin`];
     });
 
     await updateManager.downloadUpdate();
@@ -751,7 +749,6 @@ describe('UpdateManager', () => {
       await expect(fs.access(tempInstallDir)).resolves.toBeUndefined();
       await expect(fs.access(tempPrevDir)).rejects.toThrow();
     });
-
   });
 
   describe('onAppStartup', () => {
