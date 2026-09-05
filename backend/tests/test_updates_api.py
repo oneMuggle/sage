@@ -103,3 +103,22 @@ def test_get_channels(client):
     assert "stable" in channels
     assert "beta" in channels
     assert "alpha" in channels
+
+
+def test_invalid_channel_rejected(client):
+    """Test that invalid channels are rejected with 400 Bad Request."""
+    for invalid_channel in ["nightly", "dev", "../etc", "stable/beta", ""]:
+        response = client.get(f"/api/v1/updates/latest?channel={invalid_channel}")
+        assert response.status_code == 400
+        assert "Invalid update channel" in response.json()["detail"]
+
+        response = client.get(f"/api/v1/updates/history?channel={invalid_channel}")
+        assert response.status_code == 400
+        assert "Invalid update channel" in response.json()["detail"]
+
+
+def test_valid_channels_accepted(client):
+    """Test that all valid channels are accepted."""
+    for valid_channel in ["stable", "beta", "alpha"]:
+        response = client.get(f"/api/v1/updates/latest?channel={valid_channel}")
+        assert response.status_code == 404  # No manifests, but no validation error

@@ -60,6 +60,10 @@ export function registerUpdateIpc(
     if (reason.length === 0) {
       throw new Error('回滚原因必须是非空字符串');
     }
+    const checked = await updateManager.canManualRollback();
+    if (!checked.allowed) {
+      throw new Error(checked.reason ?? '手动回滚不可用');
+    }
     return updateManager.rollback(reason);
   });
   register('update:can-rollback', async (event) => {

@@ -143,3 +143,25 @@ def test_cache_invalidation(metadata_dir, sample_manifest):
     result3 = service.get_latest("stable")
     assert result3 is not None
     assert result3.version == "1.2.3"
+
+
+def test_channel_validation_rejects_invalid_channels(metadata_dir):
+    """Test that invalid channels are rejected with ValueError."""
+    service = UpdateMetadataService(str(metadata_dir))
+
+    for invalid_channel in ["nightly", "dev", "../etc", "stable/beta", ""]:
+        with pytest.raises(ValueError, match="Invalid update channel"):
+            service.get_latest(invalid_channel)
+
+        with pytest.raises(ValueError, match="Invalid update channel"):
+            service.get_history(invalid_channel, limit=10)
+
+
+def test_channel_validation_accepts_valid_channels(metadata_dir):
+    """Test that valid channels are accepted."""
+    service = UpdateMetadataService(str(metadata_dir))
+
+    for valid_channel in ["stable", "beta", "alpha"]:
+        result = service.get_latest(valid_channel)
+        assert result is None  # No manifests, but no error
+

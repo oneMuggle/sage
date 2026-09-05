@@ -20,6 +20,19 @@ export interface UpdateState {
     version: string;
     downloadedAt: string; // ISO 8601
     releaseNotes?: string;
+    fileUrl?: string;
+    filename?: string;
+    sha512?: string;
+    size?: number;
+    signature?: string;
+  } | null;
+  /** Metadata required to authenticate a cached installer before rollback. */
+  cachedRollbackPackage?: {
+    path: string;
+    version: string;
+    sha512: string;
+    size: number;
+    signature: string;
   } | null;
   lastRecordedVersion: string;
 }
@@ -77,6 +90,7 @@ export class StateManager {
       updateAvailable: false,
       availableUpdate: null,
       pendingUpdate: null,
+      cachedRollbackPackage: null,
       lastRecordedVersion: currentVersion,
     };
   }

@@ -49,12 +49,7 @@ describe('LauncherHealthChecker', () => {
 
     expect(result.passed).toBe(true);
     expect(result.details).toHaveLength(4);
-    expect(result.details.map((d) => d.name)).toEqual([
-      'mainWindow',
-      'backend',
-      'database',
-      'ipc',
-    ]);
+    expect(result.details.map((d) => d.name)).toEqual(['mainWindow', 'backend', 'database', 'ipc']);
     expect(result.details.every((d) => d.passed)).toBe(true);
   });
 

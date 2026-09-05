@@ -1,8 +1,50 @@
 // @vitest-environment node
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs/promises';
+import * as crypto from 'crypto';
 
 const mockUserData = '/tmp/test-user-data-update-manager';
+const TEST_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDbz7ioZ/o9J/Co
+D3tJPnH7cxbVR22D1QkMHaAvkI/nm1EzaQyDeoWSTdtjnjwGAmwBURnFHIT6NLpx
+LixMoQr7ojdzC3rs0NSp59ey0aISqP6Hw+p1dczBpc7tpov1bA0DV/j2+1+zI5xt
+pRs+Jwa7InZ59dBhcU2DR5K9E2BsfgIqLPWMvQRaQ43BjlPabrFf9or2jyFHkpbc
+TjaAAUTwpUKfi2mqEkNHM9uxMuq+QT0d6KzPMuWg6tikPUW0byX2Rg4S12DAlGcf
+GPlLhPF4vioPqcS0kzZxYXoVtitVZJ/oytSQ60YRFhGNp3SOB93R+qTRXvOBHm4W
+AVu/IpXlAgMBAAECggEAW5fEVeQxyT710EnXMQ+EtmbgGlIvp7HjGbnUkE1YMYWu
+QdJhpP2uX+byZqG+WDC1KZ1ONCzsmkfTcqrvSaUHaxBOs7EScVCZdQ0G+9vPgaAK
+o6726SgDgKOjRLLT+hmimISVWPEpEP/jRGr6nZzseJjlLm/H+3qXdn8h/Yhv8vSO
+3dNG0jtRtC1sDCack417XszcwtpJQJP2lQRc1eFpeE35l/1u9naRRPw5unhAAx7y
+iLH8eqsYD90brwe/fHF1Lv6RsxmnT72zR2GZsTbZunYPtSf4uVZEYxI8rxzKMpPx
+VOsraEMmgYxL6xiwL6mvAXUi3c3VhkwgmZNoCE0pVwKBgQD6Y8lyOhgJmM1joos0
+AStPCy7aCXpi+4C8xF0UMAfS5Pk8VA9ZjjN2WzdzvHb8K0lj4OV4xpkmdMxriSlN
+S59adY8HhhnxwUklLkUTMYOgbeDLpRl3wlyZzCGb7QecQctaWjnYVdiiP/babuTC
+KJ2BLlJr6adNpdfmEqZKxCpc7wKBgQDgvIojgd8H6aTFlJC43qONQ11umueka6P9
+/19J+Rvxz8GWKxiN7sGA3fd1hzt3Obqt6wPDmvZBbftJMim8y8cHWWax3WOZjZ2V
+RzMasFihR4mhc0oe1xCzKNm1TVhkNqch74LqfYqPHJn95ABAQojftd2RnFYP8e/G
+82Ls/EoiawKBgQC14A3Pfws+zVNDcCoVGFRREhpyHjhb9bvJYgkKROkp81Bm1dhg
+gL441oEs/FShTv/8ILwOQpO0L1rdMcBieO/DUWkXWf02ceOjsjxSeMDXo3iJ897P
+8so4nOI81KuWgOQpOSiTT6gQEs5IVAyuS7o8v1z3Lb1s1W5BnIJWBK+Q2QKBgFPJ
+t275kp+umoIXm8VxLGUUgpckJc0FXMTsGyjHOYX0QWatdqAkLfzPxN0KqD8RROpm
+vqaE9d77FD779teu2euBh2o08ldjlyb6vrDqooCu3T9WboIFCPLi/hg8WAI05ice
+1x5549jrfvZLtVQ/+iv98DfDo8qaFx2DzJQyk6k1AoGBANwr58qQWnTY/WNYN3Aq
+by66PnejGaia/DEiBQUIQCP9XlvIsIB2GeETynlBT4Vucgf/b1StFHKalE5V9WOL
++g1Ftfoc6tsbMF9w7L7+1FW1lh7SSUluynJwbd/3+SwvyXwfCe6jrYio/c4c5R1Y
+3ACQnebMTHqG7A1+4bzHkN8s
+-----END PRIVATE KEY-----`;
+
+function signArtifact(
+  version: string,
+  filename: string,
+  url: string,
+  sha512: string,
+  size: number,
+): string {
+  const signer = crypto.createSign('RSA-SHA256');
+  signer.update([version, filename, url, sha512.toLowerCase(), String(size)].join('\n'));
+  signer.end();
+  return signer.sign(TEST_PRIVATE_KEY).toString('base64');
+}
 
 vi.mock('electron', () => ({
   app: {
@@ -83,7 +125,13 @@ function createManifest(
               url: `https://updates.sage.app/releases/${version}/${updaterChannelFile(channel)}`,
               sha512: 'a'.repeat(128),
               size: 104857600,
-              signature: 'sig',
+              signature: signArtifact(
+                version,
+                `Sage-Setup-${version}.bin`,
+                `https://updates.sage.app/releases/${version}/${updaterChannelFile(channel)}`,
+                'a'.repeat(128),
+                104857600,
+              ),
             },
           },
     components: {},
@@ -460,6 +508,14 @@ describe('UpdateManager', () => {
     const manifest = createManifest('1.3.0');
     (manifest.files as Record<string, Record<string, unknown>>)[platformKey].filename =
       'Sage Setup 1.3.0.bin';
+    (manifest.files as Record<string, Record<string, unknown>>)[platformKey].signature =
+      signArtifact(
+        '1.3.0',
+        'Sage Setup 1.3.0.bin',
+        `https://updates.sage.app/releases/1.3.0/${updaterChannelFile('stable')}`,
+        'a'.repeat(128),
+        104857600,
+      );
     vi.mocked(fetch).mockResolvedValue(createResponse(200, manifest));
     await updateManager.checkForUpdates();
     updater.checkForUpdates.mockResolvedValue({
@@ -952,7 +1008,7 @@ describe('UpdateManager', () => {
       vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
 
       await expect(updateManager.rollback('test-rollback')).rejects.toThrow(
-        'No rollback package available',
+        'No verified rollback package available',
       );
     });
 
@@ -960,13 +1016,30 @@ describe('UpdateManager', () => {
       // Create cached package
       const cacheDir = `${mockUserData}/updates/cache`;
       await fs.mkdir(cacheDir, { recursive: true });
-      await fs.writeFile(`${cacheDir}/Sage-Setup-1.0.0.exe`, 'fake installer');
+      const packageContent = 'fake installer';
+      const packagePath = `${cacheDir}/Sage-Setup-1.0.0.exe`;
+      await fs.writeFile(packagePath, packageContent);
 
       const stateManager = new StateManager();
       const base = await stateManager.getState();
+      const sha512 = crypto.createHash('sha512').update(packageContent).digest('hex');
+      const signature = signArtifact(
+        '1.0.0',
+        'Sage-Setup-1.0.0.exe',
+        `https://updates.sage.app/releases/1.0.0/Sage-Setup-1.0.0.exe`,
+        sha512,
+        packageContent.length,
+      );
       await stateManager.setState({
         ...base,
         lastKnownGoodVersion: '1.0.0',
+        cachedRollbackPackage: {
+          path: packagePath,
+          version: '1.0.0',
+          sha512,
+          size: packageContent.length,
+          signature,
+        },
       });
 
       vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
@@ -1004,13 +1077,30 @@ describe('UpdateManager', () => {
     it('throws when installer exits with non-zero code', async () => {
       const cacheDir = `${mockUserData}/updates/cache`;
       await fs.mkdir(cacheDir, { recursive: true });
-      await fs.writeFile(`${cacheDir}/Sage-Setup-1.0.0.exe`, 'fake installer');
+      const packageContent = 'fake installer';
+      const packagePath = `${cacheDir}/Sage-Setup-1.0.0.exe`;
+      await fs.writeFile(packagePath, packageContent);
 
       const stateManager = new StateManager();
       const base = await stateManager.getState();
+      const sha512 = crypto.createHash('sha512').update(packageContent).digest('hex');
+      const signature = signArtifact(
+        '1.0.0',
+        'Sage-Setup-1.0.0.exe',
+        `https://updates.sage.app/releases/1.0.0/Sage-Setup-1.0.0.exe`,
+        sha512,
+        packageContent.length,
+      );
       await stateManager.setState({
         ...base,
         lastKnownGoodVersion: '1.0.0',
+        cachedRollbackPackage: {
+          path: packagePath,
+          version: '1.0.0',
+          sha512,
+          size: packageContent.length,
+          signature,
+        },
       });
 
       vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
@@ -1112,6 +1202,41 @@ describe('UpdateManager', () => {
 
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe('Rollback window unknown');
+    });
+  });
+
+  describe('security validations', () => {
+    it('rejects manifest with invalid signature', async () => {
+      const manifest = createManifest('1.3.0');
+      (manifest.files as Record<string, Record<string, unknown>>)[platformKey].signature =
+        'invalid-signature';
+      vi.mocked(fetch).mockResolvedValue(createResponse(200, manifest));
+
+      await expect(updateManager.checkForUpdates()).rejects.toThrow(
+        `Invalid update manifest.files.${platformKey}.signature`,
+      );
+    });
+
+    it('rejects manifest with non-HTTPS URL', async () => {
+      const manifest = createManifest('1.3.0');
+      (manifest.files as Record<string, Record<string, unknown>>)[platformKey].url =
+        'http://updates.sage.app/releases/1.3.0/latest.yml';
+      vi.mocked(fetch).mockResolvedValue(createResponse(200, manifest));
+
+      await expect(updateManager.checkForUpdates()).rejects.toThrow(
+        `Invalid update manifest.files.${platformKey}.url`,
+      );
+    });
+
+    it('deduplicates concurrent checkForUpdates calls', async () => {
+      vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+
+      const promise1 = updateManager.checkForUpdates();
+      const promise2 = updateManager.checkForUpdates();
+
+      await Promise.all([promise1, promise2]);
+
+      expect(fetch).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List
-from backend.services.update_metadata import UpdateMetadataService
+from backend.services.update_metadata import UpdateMetadataService, validate_channel
 from backend.models.update import UpdateManifest
 
 router = APIRouter(prefix="/updates", tags=["updates"])
@@ -14,6 +14,10 @@ async def get_latest_manifest(
     channel: str = Query("stable", description="Update channel"),
 ):
     """Get the latest manifest for a channel."""
+    try:
+        validate_channel(channel)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     manifest = _metadata_service.get_latest(channel)
     if not manifest:
         raise HTTPException(
@@ -29,6 +33,10 @@ async def get_version_history(
     limit: int = Query(10, ge=1, le=100, description="Max results"),
 ):
     """Get version history for a channel."""
+    try:
+        validate_channel(channel)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return _metadata_service.get_history(channel, limit)
 
 

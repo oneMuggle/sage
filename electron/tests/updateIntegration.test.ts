@@ -12,6 +12,7 @@
  */
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs/promises';
+import * as crypto from 'crypto';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -26,6 +27,49 @@ const platformKey =
       : process.arch === 'x64'
         ? 'win-x64'
         : 'win-ia32';
+
+// ─── Test signing key (matches the embedded public key in updateManager.ts) ──
+const TEST_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDbz7ioZ/o9J/Co
+D3tJPnH7cxbVR22D1QkMHaAvkI/nm1EzaQyDeoWSTdtjnjwGAmwBURnFHIT6NLpx
+LixMoQr7ojdzC3rs0NSp59ey0aISqP6Hw+p1dczBpc7tpov1bA0DV/j2+1+zI5xt
+pRs+Jwa7InZ59dBhcU2DR5K9E2BsfgIqLPWMvQRaQ43BjlPabrFf9or2jyFHkpbc
+TjaAAUTwpUKfi2mqEkNHM9uxMuq+QT0d6KzPMuWg6tikPUW0byX2Rg4S12DAlGcf
+GPlLhPF4vioPqcS0kzZxYXoVtitVZJ/oytSQ60YRFhGNp3SOB93R+qTRXvOBHm4W
+AVu/IpXlAgMBAAECggEAW5fEVeQxyT710EnXMQ+EtmbgGlIvp7HjGbnUkE1YMYWu
+QdJhpP2uX+byZqG+WDC1KZ1ONCzsmkfTcqrvSaUHaxBOs7EScVCZdQ0G+9vPgaAK
+o6726SgDgKOjRLLT+hmimISVWPEpEP/jRGr6nZzseJjlLm/H+3qXdn8h/Yhv8vSO
+3dNG0jtRtC1sDCack417XszcwtpJQJP2lQRc1eFpeE35l/1u9naRRPw5unhAAx7y
+iLH8eqsYD90brwe/fHF1Lv6RsxmnT72zR2GZsTbZunYPtSf4uVZEYxI8rxzKMpPx
+VOsraEMmgYxL6xiwL6mvAXUi3c3VhkwgmZNoCE0pVwKBgQD6Y8lyOhgJmM1joos0
+AStPCy7aCXpi+4C8xF0UMAfS5Pk8VA9ZjjN2WzdzvHb8K0lj4OV4xpkmdMxriSlN
+S59adY8HhhnxwUklLkUTMYOgbeDLpRl3wlyZzCGb7QecQctaWjnYVdiiP/babuTC
+KJ2BLlJr6adNpdfmEqZKxCpc7wKBgQDgvIojgd8H6aTFlJC43qONQ11umueka6P9
+/19J+Rvxz8GWKxiN7sGA3fd1hzt3Obqt6wPDmvZBbftJMim8y8cHWWax3WOZjZ2V
+RzMasFihR4mhc0oe1xCzKNm1TVhkNqch74LqfYqPHJn95ABAQojftd2RnFYP8e/G
+82Ls/EoiawKBgQC14A3Pfws+zVNDcCoVGFRREhpyHjhb9bvJYgkKROkp81Bm1dhg
+gL441oEs/FShTv/8ILwOQpO0L1rdMcBieO/DUWkXWf02ceOjsjxSeMDXo3iJ897P
+8so4nOI81KuWgOQpOSiTT6gQEs5IVAyuS7o8v1z3Lb1s1W5BnIJWBK+Q2QKBgFPJ
+t275kp+umoIXm8VxLGUUgpckJc0FXMTsGyjHOYX0QWatdqAkLfzPxN0KqD8RROpm
+vqaE9d77FD779teu2euBh2o08ldjlyb6vrDqooCu3T9WboIFCPLi/hg8WAI05ice
+1x5549jrfvZLtVQ/+iv98DfDo8qaFx2DzJQyk6k1AoGBANwr58qQWnTY/WNYN3Aq
+by66PnejGaia/DEiBQUIQCP9XlvIsIB2GeETynlBT4Vucgf/b1StFHKalE5V9WOL
++g1Ftfoc6tsbMF9w7L7+1FW1lh7SSUluynJwbd/3+SwvyXwfCe6jrYio/c4c5R1Y
+3ACQnebMTHqG7A1+4bzHkN8s
+-----END PRIVATE KEY-----`;
+
+function signArtifact(
+  version: string,
+  filename: string,
+  url: string,
+  sha512: string,
+  size: number,
+): string {
+  const signer = crypto.createSign('RSA-SHA256');
+  signer.update([version, filename, url, sha512.toLowerCase(), String(size)].join('\n'));
+  signer.end();
+  return signer.sign(TEST_PRIVATE_KEY).toString('base64');
+}
 
 // ─── Shared mutable state ─────────────────────────────────────────────────────
 let mockUserData: string | undefined;
@@ -84,6 +128,10 @@ function createManifest(
   } = {},
 ): Record<string, unknown> {
   const channel = options.channel ?? 'stable';
+  const filename = `Sage-Setup-${version}.bin`;
+  const url = `https://updates.sage.app/releases/${version}/${updaterChannelFile(channel)}`;
+  const sha512 = 'a'.repeat(128);
+  const size = 104857600;
   return {
     version,
     channel,
@@ -92,11 +140,11 @@ function createManifest(
     min_upgradable_version: options.minimum ?? '1.0.0',
     files: {
       [platformKey]: {
-        filename: `Sage-Setup-${version}.bin`,
-        url: `https://updates.sage.app/releases/${version}/${updaterChannelFile(channel)}`,
-        sha512: 'a'.repeat(128),
-        size: 104857600,
-        signature: 'sig',
+        filename,
+        url,
+        sha512,
+        size,
+        signature: signArtifact(version, filename, url, sha512, size),
       },
     },
     components: {},

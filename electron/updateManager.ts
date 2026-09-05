@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { StateManager } from './updateState';
 import type { UpdateState } from './updateState';
 import { ConfigManager } from './updateConfig';
@@ -63,8 +64,19 @@ interface CheckedUpdate {
   filename: string;
   sha512: string;
   size: number;
+  signature: string;
   channel: string;
 }
+
+const UPDATE_SIGNING_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA28+4qGf6PSfwqA97ST5x
++3MW1Udtg9UJDB2gL5CP55tRM2kMg3qFkk3bY548BgJsAVEZxRyE+jS6cS4sTKEK
++6I3cwt67NDUqefXstGiEqj+h8PqdXXMwaXO7aaL9WwNA1f49vtfsyOcbaUbPicG
+uyJ2efXQYXFNg0eSvRNgbH4CKiz1jL0EWkONwY5T2m6xX/aK9o8hR5KW3E42gAFE
+8KVCn4tpqhJDRzPbsTLqvkE9HeiszzLloOrYpD1FtG8l9kYOEtdgwJRnHxj5S4Tx
+eL4qD6nEtJM2cWF6FbYrVWSf6MrUkOtGERYRjad0jgfd0fqk0V7zgR5uFgFbvyKV
+5QIDAQAB
+-----END PUBLIC KEY-----`;
 
 const SEMVER_PATTERN =
   /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
@@ -77,6 +89,7 @@ export class UpdateManager {
   private lastCheckedReleaseNotes: string | undefined = undefined;
   private stateChangeListeners: Array<(state: UpdateState) => void> = [];
   private automaticUpdateInProgress = false;
+  private checkPromise: Promise<CheckResult> | null = null;
 
   constructor(updater: UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary) {
     this.stateManager = new StateManager();
@@ -108,6 +121,16 @@ export class UpdateManager {
   }
 
   async checkForUpdates(): Promise<CheckResult> {
+    if (this.checkPromise) return this.checkPromise;
+    this.checkPromise = this.performCheckForUpdates();
+    try {
+      return await this.checkPromise;
+    } finally {
+      this.checkPromise = null;
+    }
+  }
+
+  private async performCheckForUpdates(): Promise<CheckResult> {
     this.lastCheckedUpdate = null;
     this.lastCheckedReleaseNotes = undefined;
     const config = await this.configManager.getConfig();
@@ -179,13 +202,18 @@ export class UpdateManager {
           filename: fileMeta.filename,
           sha512: fileMeta.sha512,
           size: fileMeta.size,
+          signature: fileMeta.signature,
           channel: config.channel,
         };
         this.lastCheckedReleaseNotes = manifest.release_notes;
         this.notifyStateChange(state);
 
         if (config.updateStrategy !== 'manual' && !this.automaticUpdateInProgress) {
-          await this.runAutomaticUpdate(config.updateStrategy);
+          await this.runAutomaticUpdate(
+            config.updateStrategy,
+            this.lastCheckedUpdate,
+            manifest.release_notes,
+          );
         }
 
         return {
@@ -210,10 +238,14 @@ export class UpdateManager {
     }
   }
 
-  private async runAutomaticUpdate(strategy: UpdateStrategy): Promise<void> {
+  private async runAutomaticUpdate(
+    strategy: UpdateStrategy,
+    checkedUpdate: CheckedUpdate,
+    releaseNotes?: string,
+  ): Promise<void> {
     this.automaticUpdateInProgress = true;
     try {
-      await this.downloadUpdate();
+      await this.downloadUpdate(checkedUpdate, releaseNotes);
       if (strategy === 'auto-install') {
         await this.installUpdate();
       }
@@ -222,8 +254,11 @@ export class UpdateManager {
     }
   }
 
-  async downloadUpdate(): Promise<void> {
-    const checkedUpdate = this.lastCheckedUpdate;
+  async downloadUpdate(
+    updateOverride?: CheckedUpdate,
+    releaseNotesOverride?: string,
+  ): Promise<void> {
+    const checkedUpdate = updateOverride ?? this.lastCheckedUpdate;
     if (!checkedUpdate) {
       throw new Error('No update is available to download');
     }
@@ -260,7 +295,19 @@ export class UpdateManager {
         pendingUpdate: {
           version: checkedUpdate.version,
           downloadedAt: new Date().toISOString(),
-          releaseNotes: this.lastCheckedReleaseNotes,
+          releaseNotes: releaseNotesOverride ?? this.lastCheckedReleaseNotes,
+          fileUrl: checkedUpdate.fileUrl,
+          filename: checkedUpdate.filename,
+          sha512: checkedUpdate.sha512,
+          size: checkedUpdate.size,
+          signature: checkedUpdate.signature,
+        },
+        cachedRollbackPackage: {
+          path: path.join(app.getPath('userData'), 'updates', 'cache', checkedUpdate.filename),
+          version: checkedUpdate.version,
+          sha512: checkedUpdate.sha512,
+          size: checkedUpdate.size,
+          signature: checkedUpdate.signature,
         },
       };
       await this.stateManager.setState(newState);
@@ -463,11 +510,35 @@ export class UpdateManager {
   }
 
   private async reinstallFromPackage(state: UpdateState, installDir: string): Promise<void> {
-    const cacheDir = path.join(app.getPath('userData'), 'updates', 'cache');
-    const packagePath = path.join(cacheDir, `Sage-Setup-${state.lastKnownGoodVersion}.exe`);
-
+    const cached = state.cachedRollbackPackage;
+    if (!cached || cached.version !== state.lastKnownGoodVersion) {
+      throw new Error('No verified rollback package available');
+    }
+    const packagePath = path.resolve(cached.path);
+    const cacheRoot = path.resolve(path.join(app.getPath('userData'), 'updates', 'cache'));
+    if (path.dirname(packagePath) !== cacheRoot) {
+      throw new Error('Rollback package path is invalid');
+    }
     if (!(await this.pathExists(packagePath))) {
-      throw new Error('No rollback package available');
+      throw new Error('No verified rollback package available');
+    }
+    const stats = await fs.stat(packagePath);
+    if (stats.size !== cached.size || !/^[a-f0-9]{128}$/i.test(cached.sha512)) {
+      throw new Error('Rollback package integrity validation failed');
+    }
+    const digest = await this.hashFile(packagePath);
+    if (
+      digest !== cached.sha512.toLowerCase() ||
+      !this.verifyArtifactSignature({
+        version: cached.version,
+        filename: path.basename(packagePath),
+        url: `https://updates.sage.app/releases/${cached.version}/${path.basename(packagePath)}`,
+        sha512: digest,
+        size: cached.size,
+        signature: cached.signature,
+      })
+    ) {
+      throw new Error('Rollback package signature validation failed');
     }
 
     const { spawn } = await import('child_process');
@@ -495,6 +566,11 @@ export class UpdateManager {
     } catch {
       return false;
     }
+  }
+
+  private async hashFile(filePath: string): Promise<string> {
+    const content = await fs.readFile(filePath);
+    return crypto.createHash('sha512').update(content).digest('hex');
   }
 
   private async prepareForUpgrade(): Promise<void> {
@@ -644,7 +720,7 @@ export class UpdateManager {
     if (typeof file.filename !== 'string' || file.filename.length === 0) {
       throw new Error(`Invalid update manifest.files.${platformKey}.filename`);
     }
-    if (typeof file.url !== 'string' || !this.isHttpUrl(file.url)) {
+    if (typeof file.url !== 'string' || !this.isTrustedArtifactUrl(file.url)) {
       throw new Error(`Invalid update manifest.files.${platformKey}.url`);
     }
     if (typeof file.sha512 !== 'string' || !/^[a-fA-F0-9]{128}$/.test(file.sha512)) {
@@ -653,7 +729,17 @@ export class UpdateManager {
     if (typeof file.size !== 'number' || !Number.isSafeInteger(file.size) || file.size <= 0) {
       throw new Error(`Invalid update manifest.files.${platformKey}.size`);
     }
-    if (typeof file.signature !== 'string' || file.signature.length === 0) {
+    if (
+      typeof file.signature !== 'string' ||
+      !this.verifyArtifactSignature({
+        version: value.version,
+        filename: file.filename,
+        url: file.url,
+        sha512: file.sha512,
+        size: file.size,
+        signature: file.signature,
+      })
+    ) {
       throw new Error(`Invalid update manifest.files.${platformKey}.signature`);
     }
     return {
@@ -676,10 +762,37 @@ export class UpdateManager {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
-  private isHttpUrl(value: string): boolean {
+  private isTrustedArtifactUrl(value: string): boolean {
     try {
-      const protocol = new URL(value).protocol;
-      return protocol === 'http:' || protocol === 'https:';
+      const url = new URL(value);
+      return url.protocol === 'https:' && url.hostname === 'updates.sage.app';
+    } catch {
+      return false;
+    }
+  }
+
+  private verifyArtifactSignature(metadata: {
+    version: string;
+    filename: string;
+    url: string;
+    sha512: string;
+    size: number;
+    signature: string;
+  }): boolean {
+    try {
+      const verifier = crypto.createVerify('RSA-SHA256');
+      verifier.update(
+        [
+          metadata.version,
+          metadata.filename,
+          metadata.url,
+          metadata.sha512.toLowerCase(),
+          String(metadata.size),
+        ].join('\n'),
+        'utf8',
+      );
+      verifier.end();
+      return verifier.verify(UPDATE_SIGNING_PUBLIC_KEY, Buffer.from(metadata.signature, 'base64'));
     } catch {
       return false;
     }

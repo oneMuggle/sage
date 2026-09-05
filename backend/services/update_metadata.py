@@ -5,6 +5,15 @@ from packaging.version import Version
 from backend.models.update import UpdateManifest
 
 
+VALID_CHANNELS = frozenset(("stable", "beta", "alpha"))
+
+
+def validate_channel(channel: str) -> str:
+    if channel not in VALID_CHANNELS:
+        raise ValueError("Invalid update channel")
+    return channel
+
+
 class UpdateMetadataService:
     """Manages update manifest storage and retrieval."""
 
@@ -14,7 +23,8 @@ class UpdateMetadataService:
         self._cache: Dict[str, List[UpdateManifest]] = {}
 
     def _load_manifests(self, channel: str) -> List[UpdateManifest]:
-        """Load all manifests for a channel from JSON files."""
+        """Load all manifests for a validated channel from JSON files."""
+        validate_channel(channel)
         if channel in self._cache:
             return self._cache[channel]
 

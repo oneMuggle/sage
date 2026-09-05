@@ -72,7 +72,7 @@ describe('registerUpdateIpc', () => {
     expect(manager.downloadUpdate).toHaveBeenCalledOnce();
     expect(manager.installUpdate).toHaveBeenCalledOnce();
     expect(manager.rollback).toHaveBeenCalledWith('user requested');
-    expect(manager.canManualRollback).toHaveBeenCalledOnce();
+    expect(manager.canManualRollback).toHaveBeenCalledTimes(2);
     expect(manager.setStrategy).toHaveBeenCalledWith('auto-install');
     expect(manager.getConfig).toHaveBeenCalledOnce();
     expect(manager.setChannel).toHaveBeenCalledWith('beta');
