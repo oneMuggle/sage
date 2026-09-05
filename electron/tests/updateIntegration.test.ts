@@ -27,14 +27,17 @@ const platformKey =
         : 'win-ia32';
 
 // ─── Shared mutable state ─────────────────────────────────────────────────────
-let mockUserData = '/tmp/test-update-integration';
-let mockInstallRoot = '/tmp/test-update-integration-install';
+let mockUserData: string | undefined;
+let mockInstallRoot: string | undefined;
 
 // ─── Mock factories ───────────────────────────────────────────────────────────
 vi.mock('electron', () => ({
   app: {
     getPath: (name: string) => {
-      if (name === 'userData') return mockUserData;
+      if (name === 'userData') {
+        if (!mockUserData) throw new Error('Test userData directory is not initialized');
+        return mockUserData;
+      }
       throw new Error(`Unknown path: ${name}`);
     },
     getVersion: () => '1.0.0',
@@ -130,8 +133,8 @@ function createFakeUpdater(): FakeUpdater {
   };
 }
 
-function setupFakeUpdaterDefaults(updater: FakeUpdater): void {
-  updater.checkForUpdates.mockResolvedValue({
+function resetFakeUpdaterDefaults(updater: FakeUpdater): void {
+  updater.checkForUpdates.mockReset().mockResolvedValue({
     updateInfo: {
       version: '2.0.0',
       files: [
@@ -143,7 +146,11 @@ function setupFakeUpdaterDefaults(updater: FakeUpdater): void {
       ],
     },
   });
-  updater.downloadUpdate.mockResolvedValue([]);
+  updater.downloadUpdate.mockReset().mockResolvedValue([]);
+  updater.setFeedURL.mockClear();
+  updater.quitAndInstall.mockClear();
+  updater.on.mockClear();
+  updater.off.mockClear();
 }
 
 // ─── Dynamic imports (after vi.mock / vi.doMock) ─────────────────────────────
@@ -156,20 +163,25 @@ describe('Update System Integration', () => {
   let updateManager: InstanceType<typeof UpdateManager>;
   let configManager: InstanceType<typeof ConfigManager>;
   let updater: FakeUpdater;
-  let originalExecPath: string;
+  let originalExecPath: string | undefined;
 
   beforeEach(async () => {
-    // Fresh temp directories per test
+    vi.clearAllMocks();
+    mockRunPostStartupChecks.mockResolvedValue({ passed: true, details: [] });
+
+    // Fresh temp directories per test. Keep each path undefined until its
+    // mkdtemp call succeeds so cleanup can never target a guessed path.
     mockUserData = await fs.mkdtemp(path.join(os.tmpdir(), 'update-integ-state-'));
-    mockInstallRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'update-integ-install-'));
+    try {
+      mockInstallRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'update-integ-install-'));
+    } catch (error) {
+      await fs.rm(mockUserData, { recursive: true, force: true });
+      mockUserData = undefined;
+      throw error;
+    }
 
     updater = createFakeUpdater();
-    setupFakeUpdaterDefaults(updater);
-
-    // Reset the health checker mock to its default (passing) behavior.
-    // Do NOT reassign mockRunPostStartupChecks — the mock factory captures
-    // the original vi.fn() by reference; reassignment would break the link.
-    mockRunPostStartupChecks.mockResolvedValue({ passed: true, details: [] });
+    resetFakeUpdaterDefaults(updater);
 
     updateManager = new UpdateManager(updater);
     configManager = new ConfigManager();
@@ -182,30 +194,39 @@ describe('Update System Integration', () => {
   afterEach(async () => {
     vi.unstubAllGlobals();
 
-    if (originalExecPath) {
+    if (originalExecPath !== undefined) {
       Object.defineProperty(process, 'execPath', {
         value: originalExecPath,
         configurable: true,
       });
-      originalExecPath = '';
+      originalExecPath = undefined;
     }
 
-    await fs.rm(mockUserData, { recursive: true, force: true });
-    await fs.rm(mockInstallRoot, { recursive: true, force: true });
+    if (mockUserData !== undefined) {
+      await fs.rm(mockUserData, { recursive: true, force: true });
+      mockUserData = undefined;
+    }
+    if (mockInstallRoot !== undefined) {
+      await fs.rm(mockInstallRoot, { recursive: true, force: true });
+      mockInstallRoot = undefined;
+    }
   });
 
   // ── Shared helpers ────────────────────────────────────────────────────────
   async function readState(): Promise<Record<string, unknown>> {
+    if (!mockUserData) throw new Error('Test userData directory is not initialized');
     const data = await fs.readFile(path.join(mockUserData, 'update-state.json'), 'utf8');
     return JSON.parse(data);
   }
 
   async function readConfig(): Promise<Record<string, unknown>> {
+    if (!mockUserData) throw new Error('Test userData directory is not initialized');
     const data = await fs.readFile(path.join(mockUserData, 'update-config.json'), 'utf8');
     return JSON.parse(data);
   }
 
   function useTempInstallDir(): { installDir: string; prevDir: string } {
+    if (!mockInstallRoot) throw new Error('Test install directory is not initialized');
     const installDir = path.join(mockInstallRoot, 'app');
     const prevDir = path.join(mockInstallRoot, '.prev');
 
@@ -444,9 +465,7 @@ describe('Update System Integration', () => {
       });
 
       // onAppStartup: health fails → crashCount 2→3 → threshold reached → rollback
-      await updateManager.onAppStartup(
-        () => createVisibleWindow() as Electron.BrowserWindow,
-      );
+      await updateManager.onAppStartup(() => createVisibleWindow() as Electron.BrowserWindow);
 
       // Verify rollback executed
       const state = await readState();
@@ -521,9 +540,7 @@ describe('Update System Integration', () => {
         ...baseState,
         currentVersion: '2.0.0',
         lastKnownGoodVersion: '1.0.0',
-        lastKnownGoodInstallDate: new Date(
-          Date.now() - 3 * 24 * 60 * 60 * 1000,
-        ).toISOString(),
+        lastKnownGoodInstallDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
         crashCount: 0,
       });
 
@@ -556,9 +573,7 @@ describe('Update System Integration', () => {
         ...baseState,
         currentVersion: '2.0.0',
         lastKnownGoodVersion: '1.0.0',
-        lastKnownGoodInstallDate: new Date(
-          Date.now() - 10 * 24 * 60 * 60 * 1000,
-        ).toISOString(),
+        lastKnownGoodInstallDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
       const canRollback = await updateManager.canManualRollback();
@@ -608,9 +623,7 @@ describe('Update System Integration', () => {
 
       // Verify beta updater channel
       await updateManager.downloadUpdate();
-      expect(updater.setFeedURL).toHaveBeenCalledWith(
-        expect.objectContaining({ channel: 'beta' }),
-      );
+      expect(updater.setFeedURL).toHaveBeenCalledWith(expect.objectContaining({ channel: 'beta' }));
 
       // Config persists across reads
       const savedConfig = await readConfig();
