@@ -553,7 +553,7 @@ class TestSchemaValidation:
 
     @pytest.mark.asyncio()
     @pytest.mark.parametrize(
-        "missing_section, content",
+        ("missing_section", "content"),
         [
             (
                 "## 步骤",
@@ -608,7 +608,7 @@ class TestSchemaValidation:
 
     @pytest.mark.asyncio()
     @pytest.mark.parametrize(
-        "field, raw_value, expected_fragment",
+        ("field", "raw_value", "expected_fragment"),
         [
             ("name", 123, "name must be a string, got int"),
             ("description", None, "description must be a string, got NoneType"),
