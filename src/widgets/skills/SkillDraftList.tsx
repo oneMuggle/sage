@@ -13,6 +13,8 @@ import { toast } from 'sonner';
 import { skillDraftsApi, type SkillDraft } from '../../shared/api';
 import { useI18n } from '../../shared/lib/i18n';
 
+import SkillDraftDetail from './SkillDraftDetail';
+
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
   return Object.entries(vars).reduce(
@@ -27,6 +29,7 @@ const SkillDraftList: React.FC = () => {
   const [drafts, setDrafts] = useState<SkillDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedDraft, setSelectedDraft] = useState<SkillDraft | null>(null);
 
   const { t } = useI18n();
 
@@ -48,29 +51,33 @@ const SkillDraftList: React.FC = () => {
     return () => window.clearInterval(interval);
   }, [fetchDrafts]);
 
-  const handleApprove = useCallback(async (draft: SkillDraft) => {
-    try {
-      await skillDraftsApi.approve(draft.id);
-      setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
-      toast.success(fill(t('skill_draft.approved'), { name: draft.name }));
-    } catch (err) {
-      toast.error(
-        fill(t('skill_draft.approve_failed'), { error: (err as Error).message }),
-      );
-    }
-  }, [t]);
+  const handleApprove = useCallback(
+    async (draft: SkillDraft) => {
+      try {
+        await skillDraftsApi.approve(draft.id);
+        setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+        setSelectedDraft(null);
+        toast.success(fill(t('skill_draft.approved'), { name: draft.name }));
+      } catch (err) {
+        toast.error(fill(t('skill_draft.approve_failed'), { error: (err as Error).message }));
+      }
+    },
+    [t],
+  );
 
-  const handleReject = useCallback(async (draft: SkillDraft) => {
-    try {
-      await skillDraftsApi.reject(draft.id);
-      setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
-      toast.success(fill(t('skill_draft.rejected'), { name: draft.name }));
-    } catch (err) {
-      toast.error(
-        fill(t('skill_draft.reject_failed'), { error: (err as Error).message }),
-      );
-    }
-  }, [t]);
+  const handleReject = useCallback(
+    async (draft: SkillDraft) => {
+      try {
+        await skillDraftsApi.reject(draft.id);
+        setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+        setSelectedDraft(null);
+        toast.success(fill(t('skill_draft.rejected'), { name: draft.name }));
+      } catch (err) {
+        toast.error(fill(t('skill_draft.reject_failed'), { error: (err as Error).message }));
+      }
+    },
+    [t],
+  );
 
   if (loading) {
     return (
@@ -123,26 +130,24 @@ const SkillDraftList: React.FC = () => {
             </strong>{' '}
             {draft.when_to_use}
           </p>
-          <div className="flex items-center gap-2 mt-auto pt-2">
+          <div className="mt-auto pt-2">
             <button
               type="button"
-              onClick={() => handleApprove(draft)}
-              aria-label={`${t('skill_draft.approve')} ${draft.name}`}
-              className="flex-1 px-3 py-1.5 text-xs rounded-radius-sm bg-success/10 text-success hover:bg-success/20 transition-colors"
+              onClick={() => setSelectedDraft(draft)}
+              aria-label={`${t('skill_draft.preview')} ${draft.name}`}
+              className="w-full px-3 py-1.5 text-xs rounded-radius-sm bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
             >
-              {t('skill_draft.approve')}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleReject(draft)}
-              aria-label={`${t('skill_draft.reject')} ${draft.name}`}
-              className="flex-1 px-3 py-1.5 text-xs rounded-radius-sm bg-error/10 text-error hover:bg-error/20 transition-colors"
-            >
-              {t('skill_draft.reject')}
+              {t('skill_draft.preview')}
             </button>
           </div>
         </div>
       ))}
+      <SkillDraftDetail
+        draft={selectedDraft}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        onClose={() => setSelectedDraft(null)}
+      />
     </div>
   );
 };
