@@ -35,6 +35,15 @@ export interface RunControlState {
   /** Runs that need snapshot resync after a sequence gap */
   resyncRequiredRunIds: Set<string>;
 
+  /**
+   * Runs whose terminal status was set explicitly by a run-level event
+   * (run.completed / run.failed / run.cancelled). Explicit terminal status
+   * is authoritative and cannot be overridden by subsequent task events.
+   * Task-derived terminal statuses are NOT tracked here, so they may be
+   * recomputed when new task events arrive.
+   */
+  explicitTerminalRunIds: Set<string>;
+
   /** NDJSON connection status */
   connectionStatus: ConnectionStatus;
 
@@ -87,7 +96,8 @@ export interface RunControlState {
 function applyEventToSnapshot(
   runs: Map<string, RunSnapshot>,
   event: RunEvent,
-): Map<string, RunSnapshot> {
+  explicitTerminalRunIds: Set<string>,
+): { runs: Map<string, RunSnapshot>; explicitTerminalRunIds: Set<string> } {
   const { run_id, event_type, entity, payload } = event;
 
   // Ensure run exists
@@ -116,12 +126,19 @@ function applyEventToSnapshot(
       'run.cancelled': 'cancelled',
       'run.paused': 'paused',
     };
+    const terminalRunStatuses = new Set(['completed', 'failed', 'cancelled']);
     if (statusMap[event_type]) {
       run = { ...run, status: statusMap[event_type] };
     }
+    // Explicit run-level terminal status is authoritative — record it so
+    // subsequent task events cannot override it via derivation.
     const next = new Map(runs);
     next.set(run_id, run);
-    return next;
+    const nextExplicit = new Set(explicitTerminalRunIds);
+    if (terminalRunStatuses.has(statusMap[event_type])) {
+      nextExplicit.add(run_id);
+    }
+    return { runs: next, explicitTerminalRunIds: nextExplicit };
   }
 
   // Handle task-level events
@@ -129,7 +146,7 @@ function applyEventToSnapshot(
   if (!taskId) {
     const next = new Map(runs);
     next.set(run_id, run);
-    return next;
+    return { runs: next, explicitTerminalRunIds };
   }
 
   const tasks = [...run.tasks];
@@ -199,16 +216,20 @@ function applyEventToSnapshot(
   run = { ...run, tasks, summary };
 
   // Derive run-level status from terminal task states.
-  // Priority: failed > cancelled > completed. Run-level events
-  // (run.completed/run.failed/run.cancelled) always take precedence
-  // over this heuristic — they're applied in the run.* branch above
-  // and short-circuit before reaching this point.
+  // Priority: failed > cancelled > completed.
   //
-  // Apply whenever the run is not already in a terminal state. Some
-  // backends may emit terminal task events without a preceding
-  // `run.started` (e.g., crash recovery, or synthetic test fixtures),
-  // so gating on `run.status === 'running'` would miss those cases.
-  const terminalRunStatuses = new Set(['completed', 'failed', 'cancelled']);
+  // Skip derivation when the run has an explicit terminal status set by
+  // a run-level event (run.completed/run.failed/run.cancelled) — those
+  // are authoritative and must not be overwritten by later task events.
+  // Task-derived terminal statuses are NOT recorded in
+  // `explicitTerminalRunIds`, so they remain recomputable: if a
+  // one-task run was derived-completed by task.succeeded and then a
+  // task.failed event arrives, the next derivation sees all-terminal
+  // again and upgrades the status to 'failed'.
+  //
+  // Apply even when the run is not in 'running' state — some backends
+  // may emit terminal task events without a preceding `run.started`
+  // (e.g., crash recovery, synthetic test fixtures).
   const allTerminal = tasks.every(
     (t) =>
       t.status === 'succeeded' ||
@@ -216,7 +237,8 @@ function applyEventToSnapshot(
       t.status === 'failed' ||
       t.status === 'cancelled',
   );
-  if (allTerminal && tasks.length > 0 && !terminalRunStatuses.has(run.status)) {
+  const isExplicitTerminal = explicitTerminalRunIds.has(run_id);
+  if (allTerminal && tasks.length > 0 && !isExplicitTerminal) {
     const hasFailed = tasks.some((t) => t.status === 'failed');
     const hasCancelled = tasks.some((t) => t.status === 'cancelled');
     const derivedStatus: RunSnapshot['status'] = hasFailed
@@ -229,7 +251,7 @@ function applyEventToSnapshot(
 
   const next = new Map(runs);
   next.set(run_id, run);
-  return next;
+  return { runs: next, explicitTerminalRunIds };
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +264,7 @@ export const useRunControlStore = create<RunControlState>((set, get) => ({
   seenEventIdsByRunId: new Map<string, Set<string>>(),
   eventsByRunId: new Map<string, RunEvent[]>(),
   resyncRequiredRunIds: new Set<string>(),
+  explicitTerminalRunIds: new Set<string>(),
   connectionStatus: 'disconnected' as ConnectionStatus,
   selectedRunId: null as string | null,
   selectedTaskId: null as string | null,
@@ -259,7 +282,8 @@ export const useRunControlStore = create<RunControlState>((set, get) => ({
       }
 
       // Apply event to snapshots
-      const newRuns = applyEventToSnapshot(prev.runs, event);
+      const { runs: newRuns, explicitTerminalRunIds: newExplicit } =
+        applyEventToSnapshot(prev.runs, event, prev.explicitTerminalRunIds);
 
       // Keep a bounded immutable event history for the timeline.
       const newEvents = new Map(prev.eventsByRunId);
@@ -275,6 +299,7 @@ export const useRunControlStore = create<RunControlState>((set, get) => ({
 
       return {
         runs: newRuns,
+        explicitTerminalRunIds: newExplicit,
         eventsByRunId: newEvents,
         seenEventIdsByRunId: newSeen,
         lastSeqByRunId: newLastSeq,
@@ -346,6 +371,7 @@ export const useRunControlStore = create<RunControlState>((set, get) => ({
       seenEventIdsByRunId: new Map<string, Set<string>>(),
       eventsByRunId: new Map<string, RunEvent[]>(),
       resyncRequiredRunIds: new Set<string>(),
+      explicitTerminalRunIds: new Set<string>(),
       connectionStatus: 'disconnected',
       selectedRunId: null,
       selectedTaskId: null,
