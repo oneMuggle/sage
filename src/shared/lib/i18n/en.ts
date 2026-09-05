@@ -179,6 +179,22 @@ export const en: Record<TranslationKey, string> = {
   'updates.available': 'New version {version} available',
   'updates.checkFailed': 'Failed to check for updates. Please try again later.',
 
+  // ─── Update dialog ────────────────
+  'updateDialog.newVersion': 'New version {version} available',
+  'updateDialog.releaseNotes': 'Release notes',
+  'updateDialog.noReleaseNotes': 'No release notes',
+  'updateDialog.downloadNow': 'Download now',
+  'updateDialog.later': 'Later',
+  'updateDialog.downloading': 'Downloading {version}...',
+  'updateDialog.readyToInstall': 'Update ready — restart to apply',
+  'updateDialog.readyMessage': 'Version {version} has been downloaded. Install and restart now?',
+  'updateDialog.installNow': 'Install now',
+  'updateDialog.restartLater': 'Restart later',
+  'updateDialog.rollback': 'Roll back to previous version',
+  'updateDialog.rollbackConfirm':
+    'Are you sure you want to roll back? The application will restart.',
+  'updateDialog.rollbackNotAvailable': 'Rollback unavailable: {reason}',
+
   // ─── Decorative themes ───────────
   'theme.name.mint_blue': 'Mint Blue',
   'theme.name.sakura': 'Sakura',

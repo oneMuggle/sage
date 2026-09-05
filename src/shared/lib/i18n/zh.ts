@@ -174,6 +174,21 @@ export const zh = {
   'updates.available': '发现新版本 {version}',
   'updates.checkFailed': '检查更新失败，请稍后重试',
 
+  // ─── 更新对话框 ────────────────────
+  'updateDialog.newVersion': '发现新版本 {version}',
+  'updateDialog.releaseNotes': '发布说明',
+  'updateDialog.noReleaseNotes': '无发布说明',
+  'updateDialog.downloadNow': '立即下载',
+  'updateDialog.later': '稍后提醒',
+  'updateDialog.downloading': '正在下载 {version}...',
+  'updateDialog.readyToInstall': '更新已就绪，重启后生效',
+  'updateDialog.readyMessage': '版本 {version} 已下载完成。立即安装并重启？',
+  'updateDialog.installNow': '立即安装',
+  'updateDialog.restartLater': '稍后重启',
+  'updateDialog.rollback': '回退到上一版本',
+  'updateDialog.rollbackConfirm': '确定要回退到上一版本吗？回退后需要重启应用。',
+  'updateDialog.rollbackNotAvailable': '当前无法回退：{reason}',
+
   // ─── 装饰主题 ─────────────────────
   'theme.name.mint_blue': '薄荷蓝',
   'theme.name.sakura': '樱花粉',
