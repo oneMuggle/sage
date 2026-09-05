@@ -13,6 +13,10 @@ vi.mock('electron', () => ({
   },
 }));
 
+vi.mock('electron-updater', () => ({
+  autoUpdater: {},
+}));
+
 const { UpdateManager } = await import('../updateManager');
 
 const platformKey =
@@ -60,14 +64,36 @@ function createManifest(
   };
 }
 
+interface FakeUpdater {
+  setFeedURL: ReturnType<typeof vi.fn>;
+  checkForUpdates: ReturnType<typeof vi.fn>;
+  downloadUpdate: ReturnType<typeof vi.fn>;
+  quitAndInstall: ReturnType<typeof vi.fn>;
+  on: ReturnType<typeof vi.fn>;
+  off: ReturnType<typeof vi.fn>;
+}
+
+function createFakeUpdater(): FakeUpdater {
+  return {
+    setFeedURL: vi.fn(),
+    checkForUpdates: vi.fn().mockResolvedValue(null),
+    downloadUpdate: vi.fn().mockResolvedValue([]),
+    quitAndInstall: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+  };
+}
+
 describe('UpdateManager', () => {
   let updateManager: InstanceType<typeof UpdateManager>;
+  let updater: FakeUpdater;
 
   beforeEach(async () => {
     await fs.mkdir(mockUserData, { recursive: true });
     await fs.rm(`${mockUserData}/update-state.json`, { force: true });
     await fs.rm(`${mockUserData}/update-config.json`, { force: true });
-    updateManager = new UpdateManager();
+    updater = createFakeUpdater();
+    updateManager = new UpdateManager(updater);
     vi.stubGlobal('fetch', vi.fn());
   });
 
@@ -207,5 +233,80 @@ describe('UpdateManager', () => {
     vi.mocked(fetch).mockResolvedValue(createResponse(500, {}));
 
     await expect(updateManager.checkForUpdates()).rejects.toThrow('Server returned 500');
+  });
+
+  it('rejects downloadUpdate before an available update check', async () => {
+    await expect(updateManager.downloadUpdate()).rejects.toThrow('No update is available');
+
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.0.0')));
+    await updateManager.checkForUpdates();
+
+    await expect(updateManager.downloadUpdate()).rejects.toThrow('No update is available');
+    expect(updater.downloadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('configures a generic feed and calls updater methods in order', async () => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+    await updateManager.checkForUpdates();
+
+    const callOrder: string[] = [];
+    updater.setFeedURL.mockImplementation(() => callOrder.push('setFeedURL'));
+    updater.checkForUpdates.mockImplementation(async () => {
+      callOrder.push('checkForUpdates');
+      return null;
+    });
+    updater.downloadUpdate.mockImplementation(async () => {
+      callOrder.push('downloadUpdate');
+      return [];
+    });
+
+    await updateManager.downloadUpdate();
+
+    expect(updater.setFeedURL).toHaveBeenCalledWith({
+      provider: 'generic',
+      url: 'https://updates.sage.app/',
+    });
+    expect(callOrder).toEqual(['setFeedURL', 'checkForUpdates', 'downloadUpdate']);
+  });
+
+  it('persists pendingUpdate after a successful download', async () => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+    await updateManager.checkForUpdates();
+
+    const before = Date.now();
+    await updateManager.downloadUpdate();
+    const after = Date.now();
+    const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+
+    expect(state.pendingUpdate.version).toBe('1.3.0');
+    expect(Date.parse(state.pendingUpdate.downloadedAt)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(state.pendingUpdate.downloadedAt)).toBeLessThanOrEqual(after);
+  });
+
+  it('does not persist pendingUpdate when download fails', async () => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+    await updateManager.checkForUpdates();
+    updater.downloadUpdate.mockRejectedValue(new Error('network unavailable'));
+
+    await expect(updateManager.downloadUpdate()).rejects.toThrow(
+      'Failed to download update: network unavailable',
+    );
+    const state = JSON.parse(await fs.readFile(`${mockUserData}/update-state.json`, 'utf8'));
+    expect(state.pendingUpdate).toBeNull();
+  });
+
+  it('forwards download progress and removes the listener when unsubscribed', async () => {
+    const progressHandler = vi.fn();
+    const unsubscribe = updateManager.onDownloadProgress(progressHandler);
+    const updaterListener = updater.on.mock.calls[0]?.[1] as
+      | ((event: { percent: number }) => void)
+      | undefined;
+
+    expect(updater.on).toHaveBeenCalledWith('download-progress', expect.any(Function));
+    updaterListener?.({ percent: 42.5 });
+    expect(progressHandler).toHaveBeenCalledWith(42.5);
+
+    unsubscribe();
+    expect(updater.off).toHaveBeenCalledWith('download-progress', expect.any(Function));
   });
 });

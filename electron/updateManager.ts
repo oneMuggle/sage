@@ -1,3 +1,4 @@
+import { autoUpdater } from 'electron-updater';
 import { StateManager } from './updateState';
 import { ConfigManager } from './updateConfig';
 
@@ -30,19 +31,37 @@ interface UpdateManifest {
   files: Record<string, UpdateFile>;
 }
 
+export interface UpdaterBoundary {
+  setFeedURL(options: { provider: 'generic'; url: string }): void;
+  checkForUpdates(): Promise<unknown>;
+  downloadUpdate(): Promise<unknown>;
+  quitAndInstall(): void;
+  on(event: 'download-progress', listener: (event: { percent: number }) => void): void;
+  off(event: 'download-progress', listener: (event: { percent: number }) => void): void;
+}
+
+interface CheckedUpdate {
+  version: string;
+  fileUrl: string;
+}
+
 const SEMVER_PATTERN =
   /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export class UpdateManager {
   private stateManager: StateManager;
   private configManager: ConfigManager;
+  private updater: UpdaterBoundary;
+  private lastCheckedUpdate: CheckedUpdate | null = null;
 
-  constructor() {
+  constructor(updater: UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary) {
     this.stateManager = new StateManager();
     this.configManager = new ConfigManager();
+    this.updater = updater;
   }
 
   async checkForUpdates(): Promise<CheckResult> {
+    this.lastCheckedUpdate = null;
     const config = await this.configManager.getConfig();
     const state = await this.stateManager.getState();
 
@@ -53,6 +72,7 @@ export class UpdateManager {
       );
 
       if (!response.ok) {
+        this.lastCheckedUpdate = null;
         if (response.status === 404) {
           state.lastCheckTime = new Date().toISOString();
           await this.stateManager.setState(state);
@@ -67,6 +87,7 @@ export class UpdateManager {
       if (this.isNewerVersion(manifest.version, state.currentVersion)) {
         // Check if current version meets minimum upgradable version
         if (!this.meetsMinimumVersion(state.currentVersion, manifest.min_upgradable_version)) {
+          this.lastCheckedUpdate = null;
           console.warn(
             `Current version ${state.currentVersion} cannot upgrade to ${manifest.version}`,
           );
@@ -78,6 +99,7 @@ export class UpdateManager {
         const fileMeta = manifest.files[platformKey];
 
         if (!fileMeta) {
+          this.lastCheckedUpdate = null;
           console.warn(`No update file for platform ${platformKey}`);
           return { updateAvailable: false };
         }
@@ -85,6 +107,7 @@ export class UpdateManager {
         // Update state with check time
         state.lastCheckTime = new Date().toISOString();
         await this.stateManager.setState(state);
+        this.lastCheckedUpdate = { version: manifest.version, fileUrl: fileMeta.url };
 
         return {
           updateAvailable: true,
@@ -95,6 +118,7 @@ export class UpdateManager {
       }
 
       // No update available
+      this.lastCheckedUpdate = null;
       state.lastCheckTime = new Date().toISOString();
       await this.stateManager.setState(state);
 
@@ -106,8 +130,41 @@ export class UpdateManager {
   }
 
   async downloadUpdate(): Promise<void> {
-    // TODO: Implement in Task 5 (electron-updater integration)
-    throw new Error('Not implemented');
+    const checkedUpdate = this.lastCheckedUpdate;
+    if (!checkedUpdate) {
+      throw new Error('No update is available to download');
+    }
+
+    try {
+      const feedUrl = this.getFeedUrl(checkedUpdate.fileUrl);
+      this.updater.setFeedURL({ provider: 'generic', url: feedUrl });
+      await this.updater.checkForUpdates();
+      await this.updater.downloadUpdate();
+
+      const state = await this.stateManager.getState();
+      await this.stateManager.setState({
+        ...state,
+        pendingUpdate: {
+          version: checkedUpdate.version,
+          downloadedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to download update: ${message}`);
+    }
+  }
+
+  onDownloadProgress(callback: (percent: number) => void): () => void {
+    const listener = (event: { percent: number }) => callback(event.percent);
+    this.updater.on('download-progress', listener);
+    return () => this.updater.off('download-progress', listener);
+  }
+
+  private getFeedUrl(fileUrl: string): string {
+    const url = new URL(fileUrl);
+    const directoryPath = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1);
+    return `${url.origin}${directoryPath}`;
   }
 
   async installUpdate(): Promise<void> {
