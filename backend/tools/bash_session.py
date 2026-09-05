@@ -95,10 +95,17 @@ class _PendingCleanup:
 class BashSessionRegistry:
     """线程安全的后台会话表；shell_id 永不用于构造文件路径。"""
 
-    def __init__(self) -> None:
+    def __init__(self, max_sessions: Optional[int] = None) -> None:
+        # max_sessions=None → 模块默认（PR-2 前的硬编码行为）。经 get_registry()
+        # 创建的实例由 load_bash_config() 供给配置值；直接构造（多数单测）不变。
+        self._max_sessions = MAX_BACKGROUND_SESSIONS if max_sessions is None else int(max_sessions)
         self._sessions: Dict[str, BashSession] = {}
         self._pending_cleanup: List[_PendingCleanup] = []
         self._lock = threading.RLock()
+
+    @property
+    def max_sessions(self) -> int:
+        return self._max_sessions
 
     def count(self) -> int:
         with self._lock:
@@ -117,7 +124,7 @@ class BashSessionRegistry:
         process = verified.process
         with self._lock:
             self._retry_pending_cleanup()
-            if len(self._sessions) >= MAX_BACKGROUND_SESSIONS:
+            if len(self._sessions) >= self._max_sessions:
                 self._reject_over_limit(
                     process,
                     verified.process_group_id,
@@ -126,7 +133,7 @@ class BashSessionRegistry:
                     collectors,
                 )
                 raise SessionLimitExceeded(
-                    f"后台 shell 数已达上限 {MAX_BACKGROUND_SESSIONS}，请先用 kill_shell 结束不需要的会话"
+                    f"后台 shell 数已达上限 {self._max_sessions}，请先用 kill_shell 结束不需要的会话"
                 )
             session = BashSession(
                 shell_id=uuid.uuid4().hex,
@@ -410,10 +417,18 @@ class BashSessionRegistry:
         }
 
 
-_REGISTRY = BashSessionRegistry()
+#: 进程级单例。惰性创建（首次 get_registry() 才读 bash_config，import 期
+#: 不碰 DB —— 同 conftest "AST-only tests 不在收集期 import application" 约束）。
+_REGISTRY: Optional[BashSessionRegistry] = None
 
 
 def get_registry() -> BashSessionRegistry:
+    global _REGISTRY
+    if _REGISTRY is None:
+        # 函数内 import：bash_config 仅标准库，但保持与消费方同一注入时点
+        from .bash_config import load_bash_config
+
+        _REGISTRY = BashSessionRegistry(max_sessions=load_bash_config().max_sessions)
     return _REGISTRY
 
 

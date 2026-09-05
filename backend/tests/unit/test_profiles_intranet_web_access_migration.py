@@ -35,15 +35,22 @@ def test_default_seed_coder_uses_current_tool_names():
     旧名 "terminal" 在 tools/ 已不存在。同时 file_read/file_write 是
     拼写错位(真实工具名是 read_file/write_file)。coder 硬编码若不修,
     UI 选 coder 后 LLM 看到的工具列表近乎为空。
-
-    2026-09-04: 加入本地开发环境三件套 (runtime_probe / project_diagnose /
-    runtime_exec) —— coder 是唯一拿 runtime_exec 的 agent（PR #396 coordinator/
-    executor 边界 —— primary 不直接执行）。
+    2026-09-04: bash 三件齐备 (bash/bash_output/kill_shell) —
+    run_in_background 的 shell_id 必须可轮询、可终止, 否则后台进程成孤儿。
+    同日合并本地开发环境三件套 (runtime_probe / project_diagnose /
+    runtime_exec) —— coder 是唯一拿 runtime_exec 的 agent。
     """
     coder = next(a for a in profiles.create_default_agents() if a.id == "coder")
     assert coder.tools == [
-        "read_file", "write_file", "bash", "calculator",
-        "runtime_probe", "project_diagnose", "runtime_exec",
+        "read_file",
+        "write_file",
+        "bash",
+        "bash_output",
+        "kill_shell",
+        "calculator",
+        "runtime_probe",
+        "project_diagnose",
+        "runtime_exec",
     ]
 
 

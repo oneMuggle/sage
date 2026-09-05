@@ -1,0 +1,102 @@
+"""内置工具名的单一来源（防漂移）。
+
+历史教训：profiles.py 曾以字符串字面量引用工具名，两次漂移都到运行期
+才暴露 —— 旧名 ``terminal``（工具已改名 ``bash``，PR #381）与拼写错位
+``file_read`` / ``file_write``（真实名 read_file / write_file，PR #402
+/#404 修复），表现为 UI 选 coder 后 LLM 工具面近乎为空。
+
+本模块是 backend 内置工具名的唯一定义点：
+
+- profiles.py 的种子白名单与 ``EXEC_TOOLS`` 三件套约束从这里组合；
+- 启动期校验（main.py lifespan → ``profiles.validate_profile_tools``）
+  以 ``ALL_BUILTIN_TOOL_NAMES`` 为已知名集合。
+
+放在 domain 层而非 tools/ 包：``from backend.tools.names import ...``
+会先执行 tools 包的 ``__init__``（eager import 全部工具模块，httpx 等
+重依赖）；domain 层仅标准库，application（agents/profiles）与 adapters
+（tools/__init__.py）都能向内安全引用，模式同 domain/risk.py。
+
+清单语义 = ``register_all_tools`` 的静态注册面。``web_search`` /
+``web_fetch`` / ``http_download`` 的注册与否受 NetworkPolicy 门禁，
+但名字恒为已知 —— 校验不受网络模式影响。
+
+不在清单内的名字（引用它们的白名单会收到启动告警，仅告警不剔除）：
+- ``wiki_search`` / ``wiki_answer``：定义于 tools/wiki_tool.py，当前未注册；
+- ``dispatch_subagents``：legacy_routes 编排模式下按会话动态注册；
+- MCP 工具：外部服务器运行期提供。
+"""
+
+from __future__ import annotations
+
+# 执行三件套：bash 起进程（run_in_background=true 返回 shell_id），
+# bash_output 轮询输出，kill_shell 终止。暴露 bash 的白名单必须三件
+# 齐备 —— 缺后两件时后台 shell 无法轮询/终止，成为孤儿进程直至退出清理。
+EXEC_TOOLS = ("bash", "bash_output", "kill_shell")
+
+# 文件读写与目录（EditTool 的 schema 名是 edit_file）
+FILE_TOOLS = ("read_file", "write_file", "list_dir", "edit_file")
+
+# 代码探索三件套（全部 READ，无副作用风险）
+CODE_SEARCH_TOOLS = ("grep_search", "glob_search", "file_summary")
+
+# 出网工具
+WEB_SEARCH_TOOLS = ("web_search",)
+WEB_FETCH_TOOLS = ("web_fetch", "http_download")
+WEB_TOOLS = WEB_SEARCH_TOOLS + WEB_FETCH_TOOLS
+
+MEMORY_TOOLS = ("memory_search", "memory_save")
+
+# Office CRUD 六件套（PR-2 archive/restore 补 office_restore）
+OFFICE_TOOLS = (
+    "office_list",
+    "office_read",
+    "office_create",
+    "office_update",
+    "office_delete",
+    "office_restore",
+)
+
+# 本地开发环境助手（2026-09-04）：只读探测/诊断两件 + 审批后执行一件。
+# primary 只拿 PROBE 两件（READ 类，coordinator 边界）；coder 三件全拿。
+RUNTIME_PROBE_TOOLS = ("runtime_probe", "project_diagnose")
+RUNTIME_EXEC_TOOLS = ("runtime_exec",)
+RUNTIME_TOOLS = RUNTIME_PROBE_TOOLS + RUNTIME_EXEC_TOOLS
+
+# 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 技能 / 用户提问
+ORCH_TOOLS = ("agent", "todo_write", "structured_output", "skill", "ask_user_question")
+
+SANDBOX_TOOLS = ("calculator", "repl")
+
+#: 全部静态注册的内置工具名（排序去重）。新增内置工具时把名字加进对应
+#: 分组即可；tests/unit/test_tool_names.py 会对照 register_all_tools 的
+#: 实际注册面校验本清单无遗漏、无多余。
+ALL_BUILTIN_TOOL_NAMES = tuple(
+    sorted(
+        set(EXEC_TOOLS)
+        | set(FILE_TOOLS)
+        | set(CODE_SEARCH_TOOLS)
+        | set(WEB_TOOLS)
+        | set(MEMORY_TOOLS)
+        | set(OFFICE_TOOLS)
+        | set(RUNTIME_TOOLS)
+        | set(ORCH_TOOLS)
+        | set(SANDBOX_TOOLS)
+    )
+)
+
+__all__ = [
+    "ALL_BUILTIN_TOOL_NAMES",
+    "CODE_SEARCH_TOOLS",
+    "EXEC_TOOLS",
+    "FILE_TOOLS",
+    "MEMORY_TOOLS",
+    "OFFICE_TOOLS",
+    "ORCH_TOOLS",
+    "RUNTIME_EXEC_TOOLS",
+    "RUNTIME_PROBE_TOOLS",
+    "RUNTIME_TOOLS",
+    "SANDBOX_TOOLS",
+    "WEB_FETCH_TOOLS",
+    "WEB_SEARCH_TOOLS",
+    "WEB_TOOLS",
+]

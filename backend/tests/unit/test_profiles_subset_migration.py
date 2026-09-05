@@ -126,7 +126,12 @@ def test_already_current_no_upsert(monkeypatch):
             "id": "writer", "enabled": True,
             "tools": list(profiles._WRITER_CURRENT_DEFAULT_TOOLS),
         },
-        "coder": {"id": "coder", "enabled": True, "tools": ["read_file", "write_file", "bash", "calculator"]},
+        "coder": {
+            "id": "coder", "enabled": True,
+            # 2026-09-04 合并 bash 三件套迁移 (T2) 后的 coder 当前种子形状;
+            # 旧的 4 工具形状会触发 T2 精确命中段补齐 bash_output/kill_shell。
+            "tools": list(profiles._CODER_SEED_TOOLS),
+        },
         "memory_manager": {"id": "memory_manager", "enabled": True, "tools": ["memory_search", "memory_save"]},
         "reviewer": {"id": "reviewer", "enabled": True, "tools": []},
     }
