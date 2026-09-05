@@ -528,6 +528,25 @@ async def lifespan(app: FastAPI):
     await app.state.heartbeat_monitor.start()
     logger.info("Multi-agent core 已装配（Planner + Router + HeartbeatMonitor 已启动）")
 
+    # Phase 1 observability: SnapshotStore + EventHub + REST endpoints
+    from backend.api import orch_run_control
+    from backend.data.orch_events_repo import OrchEventRepository
+    from backend.orchestration.event_hub import EventHub
+    from backend.orchestration.snapshot_store import SnapshotStore
+
+    app.state.snapshot_store = SnapshotStore()
+    app.state.orch_event_repository = OrchEventRepository()
+    app.state.event_hub = EventHub(
+        event_repository=app.state.orch_event_repository,
+        event_applier=app.state.snapshot_store.apply_event,
+    )
+    restored_events = await app.state.event_hub.restore_runs()
+    orch_run_control.configure(app.state.snapshot_store, app.state.event_hub)
+    logger.info(
+        "Phase 1 observability: SnapshotStore + EventHub + /orch/runs 已就绪，恢复 %s 个事件",
+        restored_events,
+    )
+
     # Hex 模式：装配 ChatService 并注入到 hex_routes 的 DI 工厂
     # Important-1 (final review): 默认值与路由装配对齐 — 实际 serving 的是
     # legacy 路由（PG-A1 临时默认），lifespan 不该默认构建一个无人使用的
@@ -729,6 +748,10 @@ app.include_router(permission_router, prefix="/api/v1")
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
+# Phase 1 observability: run snapshot + NDJSON event stream
+from backend.api.orch_run_control import router as orch_run_router
+
+app.include_router(orch_run_router, prefix="/api/v1")
 app.include_router(wiki_router, prefix="/api/v1")
 # M6 生态扩展: 用量/成本面板 (内存态 tracker, 与 API_MODE 无关)
 app.include_router(usage_router, prefix="/api/v1")

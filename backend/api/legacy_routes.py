@@ -2464,13 +2464,14 @@ async def chat_stream_attach(stream_id: str, request: Request):
     logger.info(f"chat-stream attach: streamId={stream_id} status={entry.status}")
 
     async def event_generator():
+        subscriber_queue = await registry.subscribe(stream_id)
+        if subscriber_queue is None:
+            return
         try:
             while True:
                 try:
                     # 短 timeout 让多消费者场景下能感知 producer done 状态。
-                    # SENTINEL 只入队一次,只有一个 attach 能拿到 — 其余
-                    # attach 必须靠 status 字段判断流是否结束。
-                    event = await asyncio.wait_for(entry.queue.get(), timeout=1.0)
+                    event = await asyncio.wait_for(subscriber_queue.get(), timeout=1.0)
                 except asyncio.TimeoutError:  # noqa: UP041 — Py3.10 中 asyncio.TimeoutError ≠ built-in TimeoutError
                     # 1s 内没新事件 — 检查 producer 是否已结束
                     # 注: Python 3.10 中 asyncio.TimeoutError 不等同内置 TimeoutError
@@ -2481,9 +2482,11 @@ async def chat_stream_attach(stream_id: str, request: Request):
                     break
                 yield _ndjson(event)
         except asyncio.CancelledError:
-            # 客户端断开 — 后台 producer 继续跑,队列中未消费的事件留给下次 attach
+            # 客户端断开 — 后台 producer 继续跑，其他 subscriber 不受影响。
             logger.info(f"chat-stream attach cancelled: streamId={stream_id}")
             return
+        finally:
+            await registry.unsubscribe(stream_id, subscriber_queue)
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
