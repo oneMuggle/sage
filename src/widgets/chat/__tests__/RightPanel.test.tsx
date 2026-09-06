@@ -28,13 +28,13 @@ const props = {
 describe('RightPanel', () => {
   it('renders both tabs', () => {
     render(<RightPanel {...props} />);
-    expect(screen.getByText('Progress')).toBeInTheDocument();
-    expect(screen.getByText('Artifacts')).toBeInTheDocument();
+    expect(screen.getByText('进度')).toBeInTheDocument();
+    expect(screen.getByText('产物')).toBeInTheDocument();
   });
 
   it('switches to Artifacts tab', () => {
     render(<RightPanel {...props} />);
-    fireEvent.click(screen.getByText('Artifacts'));
+    fireEvent.click(screen.getByText('产物'));
     expect(screen.getByText(/暂无产物/)).toBeInTheDocument();
   });
 });
@@ -55,7 +55,7 @@ describe('RightPanel - close button', () => {
   it('clicking close button in Artifacts tab invokes onToggle', () => {
     const onToggle = vi.fn();
     render(<RightPanel {...props} onToggle={onToggle} />);
-    fireEvent.click(screen.getByText('Artifacts'));
+    fireEvent.click(screen.getByText('产物'));
     fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
