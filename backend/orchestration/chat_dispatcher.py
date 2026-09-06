@@ -497,9 +497,10 @@ class ChatDispatcher:
         aggregated = self._aggregate(states)
         # P0-2 验证环：仅当本次调用已覆盖 plan 全部任务后跑 reviewer；
         # 失败降级跳过（绝不阻塞聊天）。
-        # Wave 2 P1-4: 加 _reviewed 一次性守卫 —— 同一 run 只 review 一次，
-        # 二次触发会撞 review 落库唯一约束（IntegrityError）；review 抛异常则
-        # 复位 _reviewed，下次 dispatch 可重试。
+        # Wave 2 P1-4: 加 _reviewed 一次性守卫 —— 同一 run 只 review 一次。
+        # 2026-09-06: repo 层已改为 INSERT OR REPLACE（幂等 upsert），不再
+        # 因重复 task_id 抛 IntegrityError，但保留 _reviewed 守卫避免浪费
+        # token 重复跑 reviewer。
         # P2-9/A8 fix round 1 (2026-08-14): 取消后不再拉 reviewer —— 单批全量
         # dispatch 中 cancel 时 plan_covered 已满足，跳过验证环避免浪费 token /
         # 落 review / 给已取消 run 推 task_review 事件。
@@ -516,7 +517,6 @@ class ChatDispatcher:
                     review = await self._run_review(aggregated)
                     aggregated = aggregated + review["block"]
                 except Exception as exc:  # noqa: BLE001 — 复核失败降级
-                    self._reviewed = False
                     logger.warning("编排复核失败，跳过验证: %s", exc)
         return aggregated
 
