@@ -18,6 +18,7 @@ from backend.domain.tool_names import (
     GIT_TOOLS,
     MEMORY_TOOLS,
     OFFICE_TOOLS,
+    PATCH_TOOLS,
     RUNTIME_EXEC_TOOLS,
     RUNTIME_PROBE_TOOLS,
     WEB_FETCH_TOOLS,
@@ -129,6 +130,9 @@ _CODER_SEED_TOOLS = (
     *RUNTIME_EXEC_TOOLS,
     *GIT_TOOLS,
     *CHECKPOINT_TOOLS,
+    # 2026-09-06 对标增强 Phase-2: apply_patch —— 多文件原子精确编辑
+    # （编码场景主消费者；WRITE_LOCAL 审批，与 write_file/edit_file 同门禁）。
+    *PATCH_TOOLS,
 )
 
 

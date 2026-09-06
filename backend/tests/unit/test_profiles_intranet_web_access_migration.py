@@ -39,7 +39,8 @@ def test_default_seed_coder_uses_current_tool_names():
     run_in_background 的 shell_id 必须可轮询、可终止, 否则后台进程成孤儿。
     同日合并本地开发环境三件套 (runtime_probe / project_diagnose /
     runtime_exec) —— coder 是唯一拿 runtime_exec 的 agent。
-    2026-09-06: git 工具组 + 工作区检查点（对标增强 Phase-1）。
+    2026-09-06: git 工具组 + 工作区检查点（对标增强 Phase-1）+ apply_patch
+    （Phase-2 多文件原子编辑）。
     """
     coder = next(a for a in profiles.create_default_agents() if a.id == "coder")
     assert coder.tools == [
@@ -59,6 +60,7 @@ def test_default_seed_coder_uses_current_tool_names():
         "checkpoint_create",
         "checkpoint_list",
         "checkpoint_restore",
+        "apply_patch",
     ]
 
 
