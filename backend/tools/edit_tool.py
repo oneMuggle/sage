@@ -277,13 +277,19 @@ class EditTool(BaseTool):
 
         target.write_bytes(updated_bytes)
 
+        # G8 (2026-09-06): Python 文件编辑后语法诊断 —— 失败不影响编辑结果
+        from .write_diagnostics import attach_diagnostics
+
         return ToolResult(
             success=True,
-            content={
-                "path": str(target.resolve()),
-                "replacements": replacements,
-                "lines_removed": _count_logical_lines(old_string) * replacements,
-                "lines_added": _count_logical_lines(new_string) * replacements,
-                "bytes_written": len(updated_bytes),
-            },
+            content=attach_diagnostics(
+                {
+                    "path": str(target.resolve()),
+                    "replacements": replacements,
+                    "lines_removed": _count_logical_lines(old_string) * replacements,
+                    "lines_added": _count_logical_lines(new_string) * replacements,
+                    "bytes_written": len(updated_bytes),
+                },
+                str(target),
+            ),
         )

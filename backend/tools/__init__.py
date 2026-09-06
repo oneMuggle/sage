@@ -15,6 +15,7 @@ from .base import BaseTool, ToolResult, ToolSchema
 from .bash_tool import BashOutputTool, BashTool, KillShellTool
 from .calculator import CalculatorTool
 from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
+from .commit_message_tool import GitCommitMessageTool
 from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
 from .file_summary_tool import FileSummaryTool
@@ -28,6 +29,7 @@ from .office_restore_tool import OfficeRestoreTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
 from .patch_tool import ApplyPatchTool
+from .plan_tool import PlanWriteTool
 from .project_diagnose import ProjectDiagnoseTool
 from .registry import ToolRegistry
 from .repl_tool import ReplTool
@@ -37,6 +39,7 @@ from .search_tools import GlobSearchTool, GrepSearchTool
 from .skill import SkillHotLoader
 from .skill_tool import SkillTool
 from .structured_output_tool import StructuredOutputTool
+from .symbol_search_tool import SymbolSearchTool
 from .todo_tool import TodoWriteTool
 from .web_tool import WebFetchTool, WebSearchTool
 
@@ -121,6 +124,8 @@ def register_all_tools(
     registry.register(GitStatusTool(policy=policy))
     registry.register(GitDiffTool(policy=policy))
     registry.register(GitLogTool(policy=policy))
+    # G9: commit message 素材工具（READ）—— diff 摘要 + 既有 message 风格
+    registry.register(GitCommitMessageTool(policy=policy))
     registry.register(GitCommitTool(policy=policy))
     registry.register(CheckpointCreateTool(policy=policy))
     registry.register(CheckpointListTool(policy=policy))
@@ -128,6 +133,10 @@ def register_all_tools(
     # 2026-09-06 对标增强 Phase-2: apply_patch —— 多文件原子精确编辑
     # （Codex apply_patch 对标；先整体校验后落盘，任一失败整批不写）。
     registry.register(ApplyPatchTool(policy=policy))
+    # G3: plan_write —— 会话内结构化执行计划（先规划后执行，READ 无副作用）
+    registry.register(PlanWriteTool(policy=policy))
+    # G4: symbol_search —— 代码库 Python 符号索引（ast 提取定义处，READ）
+    registry.register(SymbolSearchTool(policy=policy))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
@@ -179,11 +188,14 @@ __all__ = [
     "GitStatusTool",
     "GitDiffTool",
     "GitLogTool",
+    "GitCommitMessageTool",
     "GitCommitTool",
     "CheckpointCreateTool",
     "CheckpointListTool",
     "CheckpointRestoreTool",
     "ApplyPatchTool",
+    "PlanWriteTool",
+    "SymbolSearchTool",
     "SkillHotLoader",
     "register_all_tools",
 ]
