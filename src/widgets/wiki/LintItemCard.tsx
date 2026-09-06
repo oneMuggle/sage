@@ -1,5 +1,15 @@
 // Lint Item Card - 单个 Lint 检查项卡片
-import { AlertCircle, AlertTriangle, Info, Link2, Unlink } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  FileWarning,
+  FileX2,
+  FolderX,
+  Info,
+  Link2,
+  ListMinus,
+  Unlink,
+} from 'lucide-react';
 
 import type { LintItem } from '../../shared/types/wiki';
 
@@ -9,7 +19,14 @@ interface LintItemCardProps {
   onDismiss?: (id: string) => void;
 }
 
-const TYPE_CONFIG = {
+interface TypeConfig {
+  icon: React.ElementType;
+  label: string;
+  color: string;
+  bgColor: string;
+}
+
+const TYPE_CONFIG: Record<string, TypeConfig> = {
   orphan: {
     icon: Unlink,
     label: '孤儿页',
@@ -23,7 +40,7 @@ const TYPE_CONFIG = {
     bgColor: 'bg-red-500/10',
   },
   'no-outlinks': {
-    icon: AlertCircle,
+    icon: ListMinus,
     label: '无出链',
     color: 'text-yellow-500',
     bgColor: 'bg-yellow-500/10',
@@ -34,11 +51,63 @@ const TYPE_CONFIG = {
     color: 'text-blue-500',
     bgColor: 'bg-blue-500/10',
   },
+  // --- Backend-backed lint types ---
+  required_dir: {
+    icon: FolderX,
+    label: '必需目录缺失',
+    color: 'text-red-500',
+    bgColor: 'bg-red-500/10',
+  },
+  required_file: {
+    icon: FileX2,
+    label: '必需文件缺失',
+    color: 'text-red-500',
+    bgColor: 'bg-red-500/10',
+  },
+  frontmatter_missing: {
+    icon: FileWarning,
+    label: '缺少 frontmatter',
+    color: 'text-amber-500',
+    bgColor: 'bg-amber-500/10',
+  },
+  frontmatter_title: {
+    icon: FileWarning,
+    label: '缺少 title 字段',
+    color: 'text-amber-500',
+    bgColor: 'bg-amber-500/10',
+  },
+  wikilink_broken: {
+    icon: Link2,
+    label: '断链',
+    color: 'text-red-500',
+    bgColor: 'bg-red-500/10',
+  },
+};
+
+const FALLBACK_CONFIG: TypeConfig = {
+  icon: AlertCircle,
+  label: '其他',
+  color: 'text-muted',
+  bgColor: 'bg-bg-muted',
+};
+
+const SEVERITY_ICON: Record<string, React.ElementType> = {
+  error: AlertTriangle,
+  warning: AlertTriangle,
+  info: Info,
+};
+
+const SEVERITY_COLOR: Record<string, string> = {
+  error: 'text-red-500',
+  warning: 'text-amber-500',
+  info: 'text-blue-500',
 };
 
 export function LintItemCard({ item, onFix, onDismiss }: LintItemCardProps) {
-  const config = TYPE_CONFIG[item.type];
+  const config = TYPE_CONFIG[item.type] ?? FALLBACK_CONFIG;
   const Icon = config.icon;
+  const SeverityIcon = SEVERITY_ICON[item.severity] ?? Info;
+  const severityColor = SEVERITY_COLOR[item.severity] ?? 'text-muted';
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4 hover:border-primary/30 transition-colors">
@@ -56,12 +125,8 @@ export function LintItemCard({ item, onFix, onDismiss }: LintItemCardProps) {
             >
               {config.label}
             </span>
-            <span className="text-xs text-muted">
-              {item.severity === 'warning' ? (
-                <AlertTriangle className="inline h-3 w-3 mr-0.5" />
-              ) : (
-                <Info className="inline h-3 w-3 mr-0.5" />
-              )}
+            <span className={`text-xs ${severityColor}`}>
+              <SeverityIcon className="inline h-3 w-3 mr-0.5" />
               {item.severity}
             </span>
           </div>
