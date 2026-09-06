@@ -22,8 +22,9 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
+from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
-from backend.tools import browser_cdp, browser_tool
+from backend.tools import browser_cdp, browser_tool, web_render
 from backend.tools.browser_cdp import BrowserSession, BrowserSessionManager
 from backend.tools.browser_tool import (
     BrowserCloseTool,
@@ -236,7 +237,12 @@ def test_manager_cap():
 
 @pytest.fixture()
 def stubbed(monkeypatch):
-    """固定一个活会话 + 可编程的 cdp_command 假体。"""
+    """固定一个活会话 + 可编程的 cdp_command 假体。
+
+    W2 起 navigate 的就绪/稳定等待统一走 web_render.wait_page_ready，
+    它引用 web_render.cdp_command / web_render.time —— 一并对齐同一假体
+    与假时钟（就绪等待零真实耗时）。
+    """
     session = _fake_session("b1")
     manager = BrowserSessionManager()
     manager.register(session)
@@ -249,6 +255,19 @@ def stubbed(monkeypatch):
 
     _fake_cdp.results = []  # type: ignore[attr-defined]
     monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
+    monkeypatch.setattr(web_render, "cdp_command", _fake_cdp)
+
+    class _FakeClock:
+        def __init__(self) -> None:
+            self.now = 0.0
+
+        def monotonic(self) -> float:
+            return self.now
+
+        def sleep(self, seconds: float) -> None:
+            self.now += seconds
+
+    monkeypatch.setattr(web_render, "time", _FakeClock())
     return SimpleNamespace(session=session, calls=calls, results=_fake_cdp.results)
 
 
@@ -261,6 +280,9 @@ def test_navigate_happy_path_with_settle(stubbed, monkeypatch):
         [
             {},  # Page.navigate
             {"result": {"value": "complete"}},  # readyState poll
+            {"result": {"value": 0}},  # settle: innerText 长度（SPA hydrate 窗口）
+            {"result": {"value": 0}},
+            {"result": {"value": 0}},  # 连续 2 轮不变 → 稳定，提前返回
             {"result": {"value": json.dumps({"url": "https://x/", "title": "X"})}},
         ]
     )
@@ -268,6 +290,53 @@ def test_navigate_happy_path_with_settle(stubbed, monkeypatch):
     assert result.success is True
     assert result.content["title"] == "X"
     assert stubbed.calls[0]["method"] == "Page.navigate"
+
+
+def test_navigate_offline_gate_blocks_http_only(stubbed, monkeypatch):
+    """W4：http/https 受网络模式门禁；about: 等无网络 scheme 不误伤。"""
+    monkeypatch.setattr(
+        browser_tool,
+        "load_network_policy",
+        lambda: NetworkPolicy(mode=NetworkMode.OFFLINE),
+    )
+    result = _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1")
+    assert result.success is False
+    assert "network_mode_offline" in result.error
+
+    monkeypatch.setattr(
+        browser_tool,
+        "load_network_policy",
+        lambda: NetworkPolicy(
+            mode=NetworkMode.INTRANET, allowed_hosts=("*.example.internal",)
+        ),
+    )
+    result = _tool(BrowserNavigateTool).execute(url="https://evil.example/", browser_id="b1")
+    assert result.success is False
+    assert "host_not_allowed" in result.error
+
+    # about:blank 无网络访问 —— 过门禁，走到导航层（stub 下成功）
+    stubbed.results.extend(
+        [
+            {},  # Page.navigate
+            {"result": {"value": "complete"}},
+            {"result": {"value": 0}},
+            {"result": {"value": 0}},
+            {"result": {"value": 0}},
+            {"result": {"value": json.dumps({"url": "about:blank", "title": ""})}},
+        ]
+    )
+    result = _tool(BrowserNavigateTool).execute(url="about:blank", browser_id="b1")
+    assert result.success is True
+
+
+def test_wait_page_settled_delegates_to_web_render(stubbed, monkeypatch):
+    """W2：就绪/稳定等待逻辑收口在 web_render，browser_tool 只留委派壳。"""
+    seen = []
+    monkeypatch.setattr(
+        browser_tool, "wait_page_ready", lambda session, target: seen.append((session, target))
+    )
+    browser_tool._wait_page_settled(stubbed.session, "t1")
+    assert seen == [(stubbed.session, "t1")]
 
 
 def test_navigate_rejects_bad_scheme_and_reports_error_text(stubbed):
