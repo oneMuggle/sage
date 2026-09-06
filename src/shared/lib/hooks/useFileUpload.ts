@@ -17,6 +17,8 @@ interface UseFileUploadReturn {
   clearAll: () => void;
   handleDrop: (e: React.DragEvent) => void;
   handleDragOver: (e: React.DragEvent) => void;
+  /** U13: 剪贴板粘贴图片（无图片时放行为默认粘贴文本） */
+  handlePaste: (e: React.ClipboardEvent) => void;
   isDragOver: boolean;
 }
 
@@ -85,6 +87,22 @@ export function useFileUpload(): UseFileUploadReturn {
     setIsDragOver(true);
   }, []);
 
+  // U13 (对标增强第二轮批次 B): 剪贴板粘贴图片 — 与拖放/按钮上传同管道
+  // (G6 images 附件)。剪贴板无图片时不 preventDefault,保持默认文本粘贴。
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const imageFiles = items
+        .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+      if (imageFiles.length === 0) return;
+      e.preventDefault();
+      imageFiles.forEach((file) => addImage(file));
+    },
+    [addImage],
+  );
+
   return {
     files,
     images,
@@ -95,6 +113,7 @@ export function useFileUpload(): UseFileUploadReturn {
     clearAll,
     handleDrop,
     handleDragOver,
+    handlePaste,
     isDragOver,
   };
 }

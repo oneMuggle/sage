@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { useBtwState } from '../../entities/chat/btwState';
 import { usePermissionState } from '../../entities/permission/permissionState';
@@ -70,6 +71,18 @@ export function useChat() {
   // P0-2 (2026-08-20): 当前 streamId —— interrupt 需要它让后端定位真实 agent。
   const streamIdRef = useRef<string | null>(null);
 
+  // U5 (对标增强第二轮批次 B): 流式中用户继续发送 → 入队,当前回复自然
+  // 结束(onDone)后自动发送。错误/中断路径不自动 flush——连续失败场景
+  // 自动重发只会重复报错。
+  const pendingMessagesRef = useRef<
+    Array<{
+      content: string;
+      sid?: string;
+      orchestrationMode?: ChatConfig['orchestrationMode'];
+    }>
+  >([]);
+  const sendMessageRef = useRef<typeof sendMessage | null>(null);
+
   // 流式当前 assistant 消息的内容覆盖 (派生 messages 的最后一条) —— 2026-08-19
   // 搬到 chatStreamStore(独立 zustand),跨路由切换保留,避免 Chat 页卸载后
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
@@ -117,7 +130,13 @@ export function useChat() {
       opts?: { planOverride?: TaskPlanItem[]; runId?: string },
     ) => {
       const sid = sessionId ?? currentSessionId;
-      if (!sid || isLoading || loadingRef.current) return;
+      if (!sid) return;
+      if (isLoading || loadingRef.current) {
+        // U5: 忙时不再丢弃消息——入队,当前回复自然结束后自动发送
+        pendingMessagesRef.current.push({ content, sid, orchestrationMode });
+        toast.info('已加入队列,当前回复完成后自动发送');
+        return;
+      }
 
       // 取消上一次还在飞的 chatStream (React StrictMode 双调用 / 用户双击 /
       // 路由切换等场景),避免两个流并存导致 invoke 重复 + LLM 双调用 + 流事件混乱
@@ -257,7 +276,8 @@ export function useChat() {
       // 因为 ref 里混了 '🤔 思考中…' 占位符)。finishStream 用这个写 store。
       let finished = false;
       let lastDoneContent: string | null = null;
-      const finishStream = (): void => {
+      // flushQueue=true 仅限流自然结束(onDone) —— 错误/中断不自动发队列消息
+      const finishStream = (flushQueue = false): void => {
         if (finished) return;
         finished = true;
         // 2026-08-19: 从 store 读最新流式内容(跨路由保留,finishStream 内
@@ -309,6 +329,20 @@ export function useChat() {
         // 流结束后刷新侧栏会话列表（获取自动生成的标题）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
         void useStore.getState().loadSessions();
+        // U5: 流自然结束后发送队列中的下一条(短暂让位,避免与收尾渲染竞争)
+        if (flushQueue) {
+          const pending = pendingMessagesRef.current.shift();
+          if (pending) {
+            window.setTimeout(() => {
+              void sendMessageRef.current?.(
+                pending.content,
+                pending.sid,
+                undefined,
+                pending.orchestrationMode,
+              );
+            }, 300);
+          }
+        }
       };
       // HIGH-4: 注册 finishStream 到 ref 供 interrupt 调用
       finishStreamRef.current = finishStream;
@@ -544,7 +578,8 @@ export function useChat() {
             onDone: () => {
               // 流自然结束 — 把 streaming.content 写回 store,
               // 然后清掉 streaming overlay 让消息退回 store 视图
-              finishStream();
+              // U5: 自然结束才 flush 队列(错误/中断路径 flushQueue=false)
+              finishStream(true);
             },
           },
           config,
@@ -563,6 +598,8 @@ export function useChat() {
     },
     [currentSessionId, isLoading, chatEndpoint, settings, addMessage, updateMessage],
   );
+  // U5: 队列 flush 用 ref 取最新 sendMessage(避免闭包捕获旧 isLoading)
+  sendMessageRef.current = sendMessage;
 
   /** Wave 3 (2026-08-14): 取消执行后清空任务板。 */
   const clearTaskBoard = useCallback(() => useChatStreamStore.getState().setTaskBoard(null), []);
