@@ -20,9 +20,15 @@ pytestmark = [pytest.mark.unit]
 def workspace(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()
-    (ws / "a.py").write_text("alpha = 1\nbeta = 2\n", encoding="utf-8", newline="")
-    (ws / "b.py").write_text("print('b')\n", encoding="utf-8", newline="")
+    _write_text(ws / "a.py", "alpha = 1\nbeta = 2\n")
+    _write_text(ws / "b.py", "print('b')\n")
     return ws
+
+
+def _write_text(path: Path, text: str) -> None:
+    """py3.8 兼容的按字面行尾写入（write_text 的 newline= 参数 3.10 才有）。"""
+    with open(str(path), "w", encoding="utf-8", newline="") as handle:
+        handle.write(text)
 
 
 def _tool(ws: Path) -> ApplyPatchTool:
@@ -72,7 +78,7 @@ def test_same_file_patches_apply_sequentially(workspace):
 
 
 def test_replace_all_entry(workspace):
-    (workspace / "c.py").write_text("x x x\n", encoding="utf-8", newline="")
+    _write_text(workspace / "c.py", "x x x\n")
     result = _tool(workspace).execute(
         patches=[_patch("c.py", "x", "y", replace_all=True)]
     )
@@ -107,7 +113,7 @@ def test_atomic_rollback_on_miss(workspace):
 
 
 def test_atomic_rollback_on_ambiguous_match(workspace):
-    (workspace / "dup.py").write_text("dup dup\n", encoding="utf-8", newline="")
+    _write_text(workspace / "dup.py", "dup dup\n")
     result = _tool(workspace).execute(
         patches=[_patch("dup.py", "dup", "unique", replace_all=False)]
     )
