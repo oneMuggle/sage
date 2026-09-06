@@ -362,6 +362,8 @@ def _import_all_checks() -> None:
         "runtime_env",
         # §1.6 三期扩容(2026-09-05) — 网络访问策略（mode / host 白名单 / httpx 依赖）。
         "network",
+        # L15(2026-09-06) — API Key 静态加密状态(SecretBox scheme / 加密覆盖率)。
+        "secret_storage",
     ):
         importlib.import_module(f"{pkg}.{mod_name}")
 

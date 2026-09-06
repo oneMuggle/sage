@@ -244,6 +244,18 @@ async def lifespan(app: FastAPI):
     db.init_db()
     app.state.db = db
 
+    # L15 SecretBox: 历史明文 apiKey 一次性加密回写(Windows DPAPI / macOS keychain /
+    # Linux secret-tool)。fail-open — 任何失败保留明文, 不阻塞启动, doctor
+    # secret_storage 检查会持续告警。
+    from backend.services.secret_box import migrate_plaintext_settings
+
+    try:
+        _secret_report = migrate_plaintext_settings()
+        if _secret_report.get("encrypted_now"):
+            logger.info("SecretBox 迁移完成: %s", _secret_report)
+    except Exception:
+        logger.exception("SecretBox 迁移失败(保留明文, 不影响启动)")
+
     # PR-3: agents 表种子化 — 用 ensure_default_agents 替代 seed_defaults_if_empty:
     # 首次启动插全量默认集, 已存在的 DB 增量补 writer 等新增默认角色。
     from backend.agents.profiles import ensure_default_agents, validate_profile_tools
