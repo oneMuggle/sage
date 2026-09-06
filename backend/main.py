@@ -8,7 +8,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from sage_core import Message, Role
 
 
-def configure_ssl_ca_bundle(where: Callable[[], str]) -> Optional[str]:
+def configure_ssl_ca_bundle(where: Callable[[], str]) -> str | None:
     """为 ``httpx`` / ``requests`` / ``curl`` 兜底注入 certifi 的 CA bundle。
 
     返回最终选中的 CA 路径；任何异常（certifi 缺失、文件不存在、文件为空）
@@ -74,6 +74,7 @@ from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
 from backend.api.usage_routes import router as usage_router
+from backend.api.v1 import updates as updates_router_module
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService
@@ -595,6 +596,9 @@ app.include_router(usage_router, prefix="/api/v1")
 app.include_router(export_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
+
+# Update system: /api/v1/updates/{latest, history, channels}
+app.include_router(updates_router_module.router, prefix="/api/v1")
 
 # 本地开发环境助手: /api/v1/runtime/{probe, diagnose, exec}
 # 复用 ChatService.tools 路径, runtime_exec 自动走 PermissionEnforcer 审批

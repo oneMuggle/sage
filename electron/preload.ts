@@ -27,7 +27,11 @@ import type {
   RescanResult,
   SavedOfficeFile,
   SkillsElectronApiBridge,
+  UpdateElectronApiBridge,
 } from '../src/shared/types/electron-api';
+import type { CheckResult } from './updateManager';
+import type { UpdateStateChangedEvent } from './updateIpc';
+import type { UpdateChannel, UpdateConfig, UpdateStrategy } from './updateConfig';
 import type { LogLevel } from '../src/shared/log/levels';
 
 /** UnlistenFn signature mirrors Tauri 2.x for drop-in Phase 2 compatibility. */
@@ -177,14 +181,28 @@ const electronAPI = {
       ipcRenderer.invoke('office:show-in-folder', ref) as Promise<void>,
   } satisfies OfficeElectronApiBridge,
 
+  updates: {
+    check: () => ipcRenderer.invoke('update:check') as Promise<CheckResult>,
+    download: () => ipcRenderer.invoke('update:download') as Promise<void>,
+    install: () => ipcRenderer.invoke('update:install') as Promise<void>,
+    rollback: (reason?: string) => ipcRenderer.invoke('update:rollback', reason) as Promise<void>,
+    canRollback: () =>
+      ipcRenderer.invoke('update:can-rollback') as Promise<{ allowed: boolean; reason?: string }>,
+    setStrategy: (strategy: UpdateStrategy) =>
+      ipcRenderer.invoke('update:set-strategy', strategy) as Promise<void>,
+    getConfig: () => ipcRenderer.invoke('update:get-config') as Promise<UpdateConfig>,
+    setChannel: (channel: UpdateChannel) =>
+      ipcRenderer.invoke('update:set-channel', channel) as Promise<void>,
+    onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void): UnlistenFn => {
+      const listener = (_event: IpcRendererEvent, payload: UpdateStateChangedEvent) =>
+        handler(payload);
+      ipcRenderer.on('update:state-changed', listener);
+      return () => ipcRenderer.off('update:state-changed', listener);
+    },
+  } satisfies UpdateElectronApiBridge,
+
   /**
    * T13 (2026-07-02): Log management bridge — Diagnostics card on Settings page.
-   * - listLogFiles: scan log dir → [{ name, sizeBytes, mtimeMs }] sorted newest first
-   * - openLogDir: shell.openPath() + return resolved dir
-   * - copyLogPath: clipboard.writeText() + return resolved dir
-   * - cleanupLogs: rotate + unlink files older than 7 days → { removed }
-   * - setLogLevel: update process.env.SAGE_LOG_LEVEL → { ok: true }
-   */
   listLogFiles(): Promise<Array<{ name: string; sizeBytes: number; mtimeMs: number }>> {
     return ipcRenderer.invoke('sage:log:list-files') as Promise<
       Array<{ name: string; sizeBytes: number; mtimeMs: number }>

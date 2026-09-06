@@ -70,6 +70,8 @@ import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
+import { registerUpdateIpc } from './updateIpc';
+import { UpdateManager } from './updateManager';
 import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
@@ -171,6 +173,8 @@ let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
+let updateManager: UpdateManager | null = null;
+let cleanupUpdateIpc: (() => void) | null = null;
 
 // PR-B: backend auto-restart state
 //
@@ -791,6 +795,9 @@ function createMainWindow(): void {
     });
     // Diagnostic: log when page finishes loading (or fails)
     win.webContents.on('did-finish-load', () => {
+      updateManager?.getState().then((state) => {
+        win.webContents.send('update:state-changed', { type: 'state', state });
+      });
       logger.info('main: frontend did-finish-load', { url: win.webContents.getURL() });
       // Diagnostic: check if React root is mounted after page loads
       win.webContents
@@ -1225,6 +1232,19 @@ function registerIpcHandlers(): void {
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
   registerLogIpc(ipcMain, (sender) => isTrustedRenderer(sender));
+  // Lazy-init UpdateManager inside registerIpcHandlers (after app.whenReady)
+  // to avoid constructing managers before the app is ready.
+  if (!updateManager) updateManager = new UpdateManager();
+  cleanupUpdateIpc?.();
+  cleanupUpdateIpc = registerUpdateIpc(ipcMain, updateManager, {
+    isTrustedRenderer,
+    // mainWindow is captured by closure — it's a module-level `let` that
+    // `setMainWindow()` updates, so the callback always reads the current
+    // live window reference (including after window recreation).
+    sendToRenderer: (_channel, payload) => {
+      mainWindow?.webContents.send('update:state-changed', payload);
+    },
+  });
 }
 
 /**
@@ -1663,7 +1683,8 @@ app.whenReady().then(async () => {
       });
       if (probe.status === 401) {
         logger.error(
-          'main: backend rejected local auth token (HTTP 401) at ' + PROBE_PATH +
+          'main: backend rejected local auth token (HTTP 401) at ' +
+            PROBE_PATH +
             ' — Electron 与后端 SAGE_LOCAL_AUTH_TOKEN 失配。请重启 Sage 桌面端恢复。',
         );
         mainWindow?.webContents.send('backend:auth-failed', { status: 401 });
@@ -1762,6 +1783,13 @@ app.whenReady().then(async () => {
       logger.info('main: backend ready', { url: BACKEND_URL });
       createMainWindow();
       buildApplicationMenu();
+      // Fire-and-forget: startup health check runs post-window so the
+      // LauncherHealthChecker can probe the renderer. Failures are logged
+      // and drive the crash counter / auto-rollback path; they must not
+      // block the UI from appearing.
+      void updateManager
+        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
     // 'open-logs' or 'quit' — quit is handled inside showStartupFailureDialog
@@ -1771,6 +1799,13 @@ app.whenReady().then(async () => {
   createMainWindow();
   // Step 6: build native application menu (File / Help with log dir shortcuts)
   buildApplicationMenu();
+  // Fire-and-forget: startup health check runs AFTER the window exists so
+  // LauncherHealthChecker can probe renderer responsiveness. A failed check
+  // increments the crash counter and may trigger auto-rollback; it must not
+  // block the UI. Errors are logged for diagnostics.
+  void updateManager
+    ?.onAppStartup(() => mainWindow, BACKEND_URL)
+    .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
 });
 
 app.on('window-all-closed', () => {
@@ -1785,6 +1820,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   appIsQuitting = true;
+  cleanupUpdateIpc?.();
+  cleanupUpdateIpc = null;
   void shutdownBackend();
 });
 

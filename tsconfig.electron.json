@@ -16,5 +16,5 @@
     "sourceMap": true
   },
   "include": ["electron/**/*.ts", "src/shared/api/windowControlsClient.ts", "src/shared/types/**/*.ts"],
-  "exclude": ["node_modules", "dist", "dist-electron", "archive"]
+  "exclude": ["node_modules", "dist", "dist-electron", "archive", "electron/tests/**/*.test.ts"]
 }
