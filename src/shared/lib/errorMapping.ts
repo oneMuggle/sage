@@ -50,6 +50,8 @@ export function mapLLMErrorToText(err: LLMErrorResponse): string {
 export const AGENT_RUNTIME_MESSAGES: Record<string, string> = {
   max_iterations_exceeded: '任务复杂度超出当前迭代上限，可在 Agent 管理页调高"最大迭代次数"后重试',
   tool_budget_exceeded: '工具调用次数超出单轮预算，请拆分任务后重试',
+  spend_limit_exceeded:
+    '已达到今日花费限额（可在 设置 → 通用 调整），为控制成本本次请求未发送',
   subagent_loop_failed: '子代理执行未完成，请重试或简化子任务',
   subagent_exhausted_iterations: '子代理未在迭代预算内收敛，请拆分任务后重试',
 };

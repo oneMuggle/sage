@@ -504,6 +504,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
   usage_summary: { method: 'GET', path: () => '/api/v1/usage' },
+  // U14 (批次 C): 会话级持久化用量
+  usage_get_session: {
+    method: 'GET',
+    path: (a) => `/api/v1/usage/session/${encodeURIComponent(String(a.sessionId))}`,
+  },
   // 2026-09-04: 本地开发环境助手 — 复用 ChatService.tools 路径,
   // runtime_exec 在后端经 PermissionEnforcer 审批 (与 bash 同等闸口)。
   // 见 docs/plans/2026-09-04_local-development-assistant.md Stage 4。
