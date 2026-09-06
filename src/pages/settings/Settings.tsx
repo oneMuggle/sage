@@ -16,12 +16,22 @@ import { MemoryTab } from './MemoryTab';
 import { ModelsTab } from './ModelsTab';
 import { NetworkTab } from './NetworkTab';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
+import { UpdatesTab } from './UpdatesTab';
 
 // NOTE (win7 sync #292): main 移除了 network tab(代理设置为死设置,
 // proxyMode/proxyUrl/tlsVersion 无实际消费点,已从 schema/canonicalizer 删除)。
 // win7 保留顶部 tab 布局(#292 只清理假功能,不含 main 的 U15 左侧导航改版)。
 // NOTE (win7 sync): 加 'runtime' tab 用于本地开发环境助手。
-type SettingsTab = 'general' | 'endpoints' | 'models' | 'memory' | 'network' | 'mcp' | 'runtime' | 'evolution';
+type SettingsTab =
+  | 'general'
+  | 'endpoints'
+  | 'models'
+  | 'memory'
+  | 'network'
+  | 'mcp'
+  | 'runtime'
+  | 'evolution'
+  | 'updates';
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -36,6 +46,7 @@ export function Settings() {
     { key: 'mcp', label: 'MCP' },
     { key: 'runtime', label: '开发环境' },
     { key: 'evolution', label: '进化' },
+    { key: 'updates', label: '更新' },
   ];
 
   return (
@@ -63,7 +74,7 @@ export function Settings() {
         </nav>
       </div>
 
-{/* Right content panel */}
+      {/* Right content panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-3xl mx-auto">
@@ -86,6 +97,7 @@ export function Settings() {
                 <EvolutionLog />
               </div>
             )}
+            {activeTab === 'updates' && <UpdatesTab />}
           </div>
         </div>
       </div>

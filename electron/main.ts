@@ -46,6 +46,7 @@ logger.info('main: process started', {
 import { spawn, ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import http from 'node:http';
 import fetch from 'node-fetch';
 
@@ -56,6 +57,8 @@ import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
+import { registerUpdateIpc } from './updateIpc';
+import { UpdateManager } from './updateManager';
 import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backendLauncher';
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
@@ -171,6 +174,8 @@ let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
+let updateManager: UpdateManager | null = null;
+let cleanupUpdateIpc: (() => void) | null = null;
 
 // PR-B: backend auto-restart state
 //
@@ -506,24 +511,25 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
             headers: { 'X-Sage-Backend-Ownership': expectedBackend.ownershipToken },
           },
           (res) => {
-          let body = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk: string) => {
-            body += chunk;
-          });
-          res.on('end', () => {
-            if (res.statusCode !== 200) {
-              resolve(null);
-              return;
-            }
-            try {
-              resolve(JSON.parse(body) as unknown);
-            } catch {
-              resolve(null);
-            }
-          });
-          res.resume();
-        });
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', (chunk: string) => {
+              body += chunk;
+            });
+            res.on('end', () => {
+              if (res.statusCode !== 200) {
+                resolve(null);
+                return;
+              }
+              try {
+                resolve(JSON.parse(body) as unknown);
+              } catch {
+                resolve(null);
+              }
+            });
+            res.resume();
+          },
+        );
         req.on('error', () => resolve(null));
         req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();
@@ -641,6 +647,41 @@ async function isPortStillBoundByPid(
  * 详见该文件头注)。本文件只保留 IPC handler 注册 + Electron 生命周期。
  */
 
+function isTrustedRendererUrl(url: string): boolean {
+  if (isDev) {
+    try {
+      const current = new URL(url);
+      const expected = new URL(VITE_DEV_URL);
+      return (
+        current.origin === expected.origin &&
+        current.pathname.replace(/\/$/, '') === expected.pathname.replace(/\/$/, '')
+      );
+    } catch {
+      return false;
+    }
+  }
+  const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
+  try {
+    const current = new URL(url);
+    const expected = new URL(pathToFileURL(indexHtml).toString());
+    return (
+      current.protocol === 'file:' &&
+      current.host === '' &&
+      current.username === '' &&
+      current.password === '' &&
+      current.pathname === expected.pathname &&
+      current.search === ''
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isTrustedRenderer(sender: Electron.WebContents): boolean {
+  const senderWindow = BrowserWindow.fromWebContents(sender);
+  return senderWindow === mainWindow && isTrustedRendererUrl(sender.getURL());
+}
+
 function createMainWindow(): void {
   // Platform-specific titlebar configuration:
   // - macOS: hide traffic light area, custom titlebar from y=28
@@ -696,6 +737,9 @@ function createMainWindow(): void {
     });
     // Diagnostic: log when page finishes loading (or fails)
     win.webContents.on('did-finish-load', () => {
+      updateManager?.getState().then((state) => {
+        win.webContents.send('update:state-changed', { type: 'state', state });
+      });
       logger.info('main: frontend did-finish-load', { url: win.webContents.getURL() });
       // Diagnostic: check if React root is mounted after page loads
       win.webContents
@@ -1042,6 +1086,19 @@ function registerIpcHandlers(): void {
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
   registerLogIpc(ipcMain);
+  // Lazy-init UpdateManager inside registerIpcHandlers (after app.whenReady)
+  // to avoid constructing managers before the app is ready.
+  if (!updateManager) updateManager = new UpdateManager();
+  cleanupUpdateIpc?.();
+  cleanupUpdateIpc = registerUpdateIpc(ipcMain, updateManager, {
+    isTrustedRenderer,
+    // mainWindow is captured by closure — it's a module-level `let` that
+    // `setMainWindow()` updates, so the callback always reads the current
+    // live window reference (including after window recreation).
+    sendToRenderer: (_channel, payload) => {
+      mainWindow?.webContents.send('update:state-changed', payload);
+    },
+  });
 }
 
 /**
@@ -1563,6 +1620,13 @@ app.whenReady().then(async () => {
       logger.info('main: backend ready', { url: BACKEND_URL });
       createMainWindow();
       buildApplicationMenu();
+      // Fire-and-forget: startup health check runs post-window so the
+      // LauncherHealthChecker can probe the renderer. Failures are logged
+      // and drive the crash counter / auto-rollback path; they must not
+      // block the UI from appearing.
+      void updateManager
+        ?.onAppStartup(() => mainWindow, BACKEND_URL)
+        .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
       return;
     }
     // 'open-logs' or 'quit' — quit is handled inside showStartupFailureDialog
@@ -1572,6 +1636,13 @@ app.whenReady().then(async () => {
   createMainWindow();
   // Step 6: build native application menu (File / Help with log dir shortcuts)
   buildApplicationMenu();
+  // Fire-and-forget: startup health check runs AFTER the window exists so
+  // LauncherHealthChecker can probe renderer responsiveness. A failed check
+  // increments the crash counter and may trigger auto-rollback; it must not
+  // block the UI. Errors are logged for diagnostics.
+  void updateManager
+    ?.onAppStartup(() => mainWindow, BACKEND_URL)
+    .catch((err) => logger.warn('main: startup health check failed', { error: String(err) }));
 });
 
 app.on('window-all-closed', () => {
@@ -1586,6 +1657,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   appIsQuitting = true;
+  cleanupUpdateIpc?.();
+  cleanupUpdateIpc = null;
   void shutdownBackend();
 });
 

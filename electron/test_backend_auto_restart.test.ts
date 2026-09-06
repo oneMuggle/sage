@@ -50,11 +50,22 @@ vi.mock('electron', () => ({
     on: vi.fn(),
     quit: vi.fn(),
     getPath: vi.fn(() => '/tmp/userdata'),
+    getVersion: vi.fn(() => '1.0.0-test'),
   },
   BrowserWindow: vi.fn(),
   dialog: { showOpenDialog: vi.fn() },
   ipcMain: { handle: vi.fn(), on: vi.fn() },
   shell: { openExternal: vi.fn() },
+}));
+vi.mock('electron-updater', () => ({
+  autoUpdater: {
+    setFeedURL: vi.fn(),
+    checkForUpdates: vi.fn(() => Promise.resolve()),
+    downloadUpdate: vi.fn(() => Promise.resolve([])),
+    quitAndInstall: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+  },
 }));
 vi.mock('./backendLauncher', () => ({
   resolveBackendLaunchCommand: vi.fn().mockReturnValue({
