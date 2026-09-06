@@ -10,7 +10,7 @@ import pytest
 from backend.wiki.ingest_queue import IngestQueue, IngestTask, QueueStatus
 
 
-@pytest.fixture
+@pytest.fixture()
 def project_root(tmp_path: Path) -> Path:
     """创建临时项目目录。"""
     project = tmp_path / "wiki-project"
@@ -19,7 +19,7 @@ def project_root(tmp_path: Path) -> Path:
     return project
 
 
-@pytest.fixture
+@pytest.fixture()
 def queue(project_root: Path) -> IngestQueue:
     """创建测试队列。"""
     return IngestQueue(project_root)

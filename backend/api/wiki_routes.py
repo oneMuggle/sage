@@ -648,7 +648,7 @@ async def search(query: str, project_path: str, limit: int = 20) -> SearchRespon
 
 
 # ============================================================================
-# Lint (质量检查)
+# Lint (质量检查) # noqa: ERA001
 # ============================================================================
 
 
@@ -679,7 +679,7 @@ async def lint(project_path: str) -> dict:
 
 
 # ============================================================================
-# Review (内容审核)
+# Review (内容审核) # noqa: ERA001
 # ============================================================================
 
 
@@ -970,10 +970,7 @@ async def queue_clear(project_path: str, completed_only: bool = False):
 
     queue = IngestQueue(project_root)
 
-    if completed_only:
-        count = queue.clear_completed()
-    else:
-        count = queue.clear_all()
+    count = queue.clear_completed() if completed_only else queue.clear_all()
 
     return {"cleared": count}
 

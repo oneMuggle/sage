@@ -17,11 +17,11 @@
 
 输出数据模型参考 llm_wiki 的 LintResult / LintItem 形状。
 """
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Set
-import re
 
 
 class LintSeverity(str, Enum):
@@ -308,7 +308,7 @@ class WikiLint:
                         type=LintType.ORPHAN_PAGE,
                         severity=LintSeverity.INFO,
                         page=rel_path,
-                        detail=f"孤立页面: 未被任何 wikilink 引用",
+                        detail="孤立页面: 未被任何 wikilink 引用",
                         suggested_source=(
                             f"在相关页面中添加 [[{stem}]] 链接，"
                             f"或将页面移入 wiki/queries/ 作为临时笔记"

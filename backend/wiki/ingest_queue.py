@@ -2,14 +2,14 @@
 
 支持崩溃恢复、取消/重试机制。队列数据存储在 `.llm-wiki/ingest-queue.json`。
 """
-from dataclasses import dataclass, field
+import json
+import logging
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional, List, Dict, Any
-import json
-import uuid
-import logging
-from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

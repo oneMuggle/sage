@@ -1,8 +1,9 @@
 // WikiLintView - Wiki 质量检查结果视图
-import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useLintStore } from '../../entities/wiki/lint-store';
+
 import { LintItemCard } from './LintItemCard';
 
 interface WikiLintViewProps {
