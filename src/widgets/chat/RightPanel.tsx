@@ -9,6 +9,7 @@ import type { ToolCall } from '../../shared/lib/store';
 
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
+import { ChangesSection } from './changes/ChangesSection';
 import { ProgressSection } from './progress/ProgressSection';
 
 interface RightPanelProps {
@@ -21,7 +22,13 @@ interface RightPanelProps {
   sessionId: string | null;
 }
 
-type Tab = 'progress' | 'artifacts';
+type Tab = 'progress' | 'artifacts' | 'changes';
+
+const TAB_LABELS: Record<Tab, string> = {
+  progress: 'Progress',
+  artifacts: 'Artifacts',
+  changes: 'Changes',
+};
 
 interface PanelHeaderProps {
   tab?: Tab;
@@ -34,7 +41,7 @@ export function PanelHeader({ tab, onTabChange, onClose }: PanelHeaderProps) {
   if (tab !== undefined && onTabChange) {
     return (
       <div className="flex border-b border-border items-center">
-        {(['progress', 'artifacts'] as Tab[]).map((t) => (
+        {(['progress', 'changes', 'artifacts'] as Tab[]).map((t) => (
           <button
             key={t}
             className={
@@ -45,7 +52,7 @@ export function PanelHeader({ tab, onTabChange, onClose }: PanelHeaderProps) {
             }
             onClick={() => onTabChange(t)}
           >
-            {t === 'progress' ? 'Progress' : 'Artifacts'}
+            {TAB_LABELS[t]}
           </button>
         ))}
         <button
@@ -112,6 +119,8 @@ export function RightPanel({
             toolCalls={toolCalls}
             isLoading={isLoading}
           />
+        ) : tab === 'changes' ? (
+          <ChangesSection sessionId={sessionId} />
         ) : (
           <ArtifactsSection
             artifacts={artifacts}

@@ -154,6 +154,21 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     },
   },
 
+  // U1 变更面板 (对标增强第二轮): 会话工作区 git 变更清单 + 按文件 diff,均只读
+  workspace_get_changes: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/changes`,
+  },
+  workspace_get_changes_diff: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = encodeURIComponent(String(a.sessionId));
+      const path = encodeURIComponent(String(a.path ?? ''));
+      const staged = a.staged ? 'true' : 'false';
+      return `/api/v1/sessions/${sessionId}/workspace/changes/diff?path=${path}&staged=${staged}`;
+    },
+  },
+
   // messages
   get_messages: {
     method: 'GET',
