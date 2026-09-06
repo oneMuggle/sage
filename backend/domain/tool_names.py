@@ -70,6 +70,10 @@ GIT_TOOLS = ("git_commit", "git_diff", "git_log", "git_status")
 # 自有数据目录 → READ；restore 覆盖工作区 → WRITE_LOCAL 审批。
 CHECKPOINT_TOOLS = ("checkpoint_create", "checkpoint_list", "checkpoint_restore")
 
+# 多文件原子编辑（2026-09-06 对标增强 Phase-2，Codex apply_patch 对标）：
+# 全部补丁先校验后落盘，任一失败整批不写。WRITE_LOCAL 审批。
+PATCH_TOOLS = ("apply_patch",)
+
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 技能 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "skill", "ask_user_question")
 
@@ -89,6 +93,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(RUNTIME_TOOLS)
         | set(GIT_TOOLS)
         | set(CHECKPOINT_TOOLS)
+        | set(PATCH_TOOLS)
         | set(ORCH_TOOLS)
         | set(SANDBOX_TOOLS)
     )
@@ -104,6 +109,7 @@ __all__ = [
     "MEMORY_TOOLS",
     "OFFICE_TOOLS",
     "ORCH_TOOLS",
+    "PATCH_TOOLS",
     "RUNTIME_EXEC_TOOLS",
     "RUNTIME_PROBE_TOOLS",
     "RUNTIME_TOOLS",
