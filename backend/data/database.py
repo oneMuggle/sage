@@ -124,6 +124,9 @@ class Database:
         cursor = conn.cursor()
 
         # 会话表
+        # S1 (2026-09-06): run_status/last_error/last_run_at —— 会话级运行态
+        # 持久化,侧边栏状态徽章数据源。idle=无运行;running/suspended=活跃流;
+        # completed/failed=上一轮流终态(带时间戳与错误摘要)。
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
@@ -138,6 +141,9 @@ class Database:
                 is_pinned INTEGER DEFAULT 0,
                 is_archived INTEGER DEFAULT 0,
                 parent_id TEXT,
+                run_status TEXT DEFAULT 'idle',
+                last_error TEXT,
+                last_run_at INTEGER,
                 FOREIGN KEY (parent_id) REFERENCES sessions(id)
             )
         """)
@@ -208,6 +214,14 @@ class Database:
             cursor.execute("ALTER TABLE sessions ADD COLUMN fork_root TEXT")
         if "forked_at_message_id" not in session_columns:
             cursor.execute("ALTER TABLE sessions ADD COLUMN forked_at_message_id TEXT")
+        # S1 (2026-09-06) 迁移: 会话运行态三列。均可空/带默认值,存量行
+        # run_status 为 NULL → 仓储层读时兜底 'idle',无需回填。
+        if "run_status" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN run_status TEXT DEFAULT 'idle'")
+        if "last_error" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN last_error TEXT")
+        if "last_run_at" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN last_run_at INTEGER")
         conn.commit()
 
         # 情景记忆表

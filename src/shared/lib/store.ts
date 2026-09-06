@@ -23,6 +23,13 @@ export interface Session {
   fork_root?: string | null;
   /** M4: 分叉点消息 id（源会话中的 id）；null = 分叉到源会话末尾 */
   forked_at_message_id?: string | null;
+  /** S1 (2026-09-06): 会话运行态（后端 sessions.run_status 透传），侧栏状态徽章数据源。
+   *  idle=无运行; running/suspended=活跃; completed/failed=上一轮流终态。 */
+  run_status?: string;
+  /** S1: 上一轮流失败原因摘要（仅 run_status='failed' 时有值），侧栏错误 tooltip */
+  last_error?: string | null;
+  /** S1: 最近一次运行态迁移时间（epoch ms） */
+  last_run_at?: number | null;
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）

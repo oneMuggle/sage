@@ -140,6 +140,8 @@ export type AgentState =
   | 'task_review'
   // P1 todo 接线 (2026-08-21): agent 任务清单全量快照,与 llmStream.ts 双处一致。
   | 'todo_snapshot'
+  // S7 (2026-09-06): 工具落库产物后经活跃流推送的事件,载荷见 AgentEvent.artifact。
+  | 'artifact_created'
   // live-events P0 (2026-09-06): 子代理内部事件投影镜像(工具调用/结果/
   // 审批/提问/失败),见 SubagentLiveState。不进消息气泡,进任务板 live 态。
   | 'subagent_event'
@@ -392,6 +394,15 @@ export interface AgentEvent {
   // P1 todo 接线: todo_snapshot 全量快照字段,与 llmStream.ts 双处一致。
   todos?: TodoItem[];
   session_id?: string;
+  // S7 (2026-09-06): artifact_created 事件载荷（工具线程落库后经活跃流推送）。
+  artifact?: {
+    id: string;
+    path: string;
+    name: string;
+    kind: string;
+    size: number;
+    created_at: number;
+  };
   // live-events P0 (2026-09-06): subagent_event 镜像字段(收敛类型见
   // SubagentLiveEvent,这里保持宽松 AgentEvent 可直接 cast)。
   phase?: SubagentEventPhase;

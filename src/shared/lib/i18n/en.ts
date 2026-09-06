@@ -459,6 +459,16 @@ export const en: Record<TranslationKey, string> = {
   'session.export_html': 'Export as HTML',
   'session.export_html_exporting': 'Exporting…',
 
+  // ─── Session status badges (S4/S5/S7/S9 multi-session parallel) ──────
+  'session.status_running': 'Running',
+  'session.status_completed': 'Completed',
+  'session.status_failed': 'Failed',
+  'session.status_suspended': 'Suspended, waiting for wake',
+  'session.attention': 'Pending approval or question',
+  'session.cron_badge': 'A scheduled task targets this session',
+  'session.artifacts_badge': '{count} artifacts produced this run',
+  'session.changes_badge': '{count} files changed this run',
+
   // ─── Brand (BrandLogo component) ──────
   // U-Brand: a11y alt text. Only rendered on <img>; sidebar.brand is the wordmark.
   'brand.alt': 'Sage logo',
