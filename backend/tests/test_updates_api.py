@@ -1,25 +1,25 @@
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
-from datetime import datetime
+
+from backend.api.v1 import updates
 from backend.main import app
-from backend.models.update import UpdateManifest, FileMeta
+from backend.models.update import FileMeta, UpdateManifest
+from backend.services.update_metadata import UpdateMetadataService
 
 
-@pytest.fixture
+@pytest.fixture()
 def client():
     """Create test client."""
     return TestClient(app)
 
 
-@pytest.fixture
+@pytest.fixture()
 def metadata_dir(tmp_path, monkeypatch):
     """Override metadata directory for tests."""
     test_dir = tmp_path / "test-metadata"
     test_dir.mkdir()
-
-    # Monkeypatch the service instance in the updates module
-    from backend.api.v1 import updates
-    from backend.services.update_metadata import UpdateMetadataService
 
     test_service = UpdateMetadataService(str(test_dir))
     monkeypatch.setattr(updates, "_metadata_service", test_service)
@@ -27,13 +27,13 @@ def metadata_dir(tmp_path, monkeypatch):
     return test_dir
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_manifest():
     """Create a sample manifest."""
     return UpdateManifest(
         version="1.2.3",
         channel="stable",
-        release_date=datetime(2026, 9, 5, 12, 0, 0),
+        release_date=datetime(2026, 9, 5, 12, 0, 0, tzinfo=UTC),
         release_notes="## What's New\n- Feature A",
         min_upgradable_version="1.0.0",
         files={

@@ -8,7 +8,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from sage_core import Message, Role
 
 
-def configure_ssl_ca_bundle(where: Callable[[], str]) -> Optional[str]:
+def configure_ssl_ca_bundle(where: Callable[[], str]) -> str | None:
     """为 ``httpx`` / ``requests`` / ``curl`` 兜底注入 certifi 的 CA bundle。
 
     返回最终选中的 CA 路径；任何异常（certifi 缺失、文件不存在、文件为空）
@@ -52,7 +52,6 @@ from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
 from backend.api.chat_stream_registry import StreamRegistry
-from backend.api.v1 import updates as updates_router_module
 from backend.api.export_routes import router as export_router
 from backend.api.hex_routes import router as hex_router
 from backend.api.legacy_routes import router as legacy_router
@@ -75,6 +74,7 @@ from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.theme_router import router as theme_router
 from backend.api.usage_routes import router as usage_router
+from backend.api.v1 import updates as updates_router_module
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.application.services.chat_service import ChatService

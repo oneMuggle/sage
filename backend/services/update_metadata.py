@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
-from packaging.version import Version
-from backend.models.update import UpdateManifest
+from typing import Dict, List
 
+from packaging.version import Version
+
+from backend.models.update import UpdateManifest
 
 VALID_CHANNELS = frozenset(("stable", "beta", "alpha"))
 
@@ -34,7 +35,7 @@ class UpdateMetadataService:
 
         manifests = []
         for manifest_file in channel_dir.glob("*.json"):
-            with open(manifest_file, 'r', encoding='utf-8') as f:
+            with open(manifest_file, encoding="utf-8") as f:
                 data = json.load(f)
                 manifests.append(UpdateManifest(**data))
 
@@ -43,7 +44,7 @@ class UpdateMetadataService:
         self._cache[channel] = manifests
         return manifests
 
-    def get_latest(self, channel: str) -> Optional[UpdateManifest]:
+    def get_latest(self, channel: str) -> UpdateManifest | None:
         """Get the latest manifest for a channel."""
         manifests = self._load_manifests(channel)
         return manifests[0] if manifests else None

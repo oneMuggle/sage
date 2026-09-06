@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
 from typing import List
-from backend.services.update_metadata import UpdateMetadataService, validate_channel
+
+from fastapi import APIRouter, HTTPException, Query
+
 from backend.models.update import UpdateManifest
+from backend.services.update_metadata import UpdateMetadataService, validate_channel
 
 router = APIRouter(prefix="/updates", tags=["updates"])
 
