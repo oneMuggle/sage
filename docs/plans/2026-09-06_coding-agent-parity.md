@@ -1,6 +1,6 @@
 # 编码代理功能对标与增强方案（2026-09-06）
 
-- **状态**：Phase-1 实施中
+- **状态**：Phase-1 已交付（#440/#441 合入）；Phase-2 实施中（G10 apply_patch 已落地）
 - **对标对象**：ZCode（CLI 编码代理）、Qoder（Agentic 编码 IDE）、Codex（OpenAI 编码代理）
 - **范围**：main 落地后 cherry-pick 对齐 `release/win7`（沿用 PR #402→#404 惯例路径）
 
@@ -39,7 +39,7 @@
 | G7 | 浏览器自动化 / GUI 操作 | ZCode browser-use / computer-use | 中：需 Electron 侧驱动，跨端改动大 | Phase-3 |
 | G8 | LSP/编译器诊断接入（写后即时 lint 反馈） | Qoder 实时诊断 | 中：可作为 write/edit 后置钩子 | Phase-3 |
 | G9 | Commit message 生成 / PR 创建流 | Codex/Qoder | 低-中：G1 落地后薄封装 | Phase-3 |
-| G10 | 多文件原子 apply_patch | Codex apply_patch | 低：edit_file + G2 检查点已覆盖主要风险 | Phase-3 |
+| G10 | 多文件原子 apply_patch | Codex apply_patch | 低：edit_file + G2 检查点已覆盖主要风险 | ✅ Phase-2（提前实施） |
 
 ## 3. Phase-1 规格（本轮实施）
 
