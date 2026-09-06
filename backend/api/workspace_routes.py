@@ -76,6 +76,32 @@ class WorkspaceSearchResponse(BaseModel):
     total: int
 
 
+class WorkspaceChangeEntryModel(BaseModel):
+    class Config:
+        extra = "forbid"
+    index_status: str
+    worktree_status: str
+    path: str
+
+
+class WorkspaceChangesResponse(BaseModel):
+    class Config:
+        extra = "forbid"
+    branch: str
+    upstream: str
+    ahead: int
+    behind: int
+    clean: bool
+    changes: List[WorkspaceChangeEntryModel]
+
+
+class WorkspaceDiffResponse(BaseModel):
+    class Config:
+        extra = "forbid"
+    diff: str
+    truncated: bool
+
+
 def _connection() -> sqlite3.Connection:
     return get_database().get_connection()
 
@@ -173,6 +199,76 @@ def search_workspace(
         raise _error(422, "invalid_search", str(exc)) from exc
     models = [_search_model(result) for result in results]
     return WorkspaceSearchResponse(results=models, total=len(models))
+
+
+def _bound_workspace_or_raise(conn: sqlite3.Connection, session_id: str) -> str:
+    """取会话绑定的工作区路径;未绑定直接 403(变更面板前置条件)。"""
+    if not _session_exists(conn, session_id):
+        raise _error(404, "session_not_found", "会话不存在")
+    binding = get_workspace_binding(conn, session_id)
+    if binding is None or not binding.workspace_path:
+        raise _error(403, "workspace_not_bound", "当前会话尚未绑定工作区")
+    return binding.workspace_path
+
+
+@router.get("/changes", response_model=WorkspaceChangesResponse)
+def get_workspace_changes(session_id: str) -> WorkspaceChangesResponse:
+    """会话工作区的 git 变更清单（U1 变更面板数据源，只读）。
+
+    复用 LLM 工具面 ``git_status`` 的实现口径：porcelain v1 输出结构化
+    解析、30s 超时、utf-8 replace 解码。非 git 仓库 / git 不可用 → 502。
+    """
+    from backend.domain.tool_policy import ToolPolicy
+    from backend.tools.git_tool import GitStatusTool
+
+    root = _bound_workspace_or_raise(_connection(), session_id)
+    result = GitStatusTool(ToolPolicy(workspace_root=root)).execute()
+    if not result.success:
+        raise _error(502, "git_error", result.error or "git 命令失败")
+    content = result.content if isinstance(result.content, dict) else {}
+    return WorkspaceChangesResponse(
+        branch=str(content.get("branch", "")),
+        upstream=str(content.get("upstream", "")),
+        ahead=int(content.get("ahead", 0)),
+        behind=int(content.get("behind", 0)),
+        clean=bool(content.get("clean", False)),
+        changes=[
+            WorkspaceChangeEntryModel(
+                index_status=str(entry.get("index_status", "")),
+                worktree_status=str(entry.get("worktree_status", "")),
+                path=str(entry.get("path", "")),
+            )
+            for entry in content.get("changes", [])
+            if isinstance(entry, dict)
+        ],
+    )
+
+
+@router.get("/changes/diff", response_model=WorkspaceDiffResponse)
+def get_workspace_change_diff(
+    session_id: str,
+    path: str = Query(default="", max_length=1024),
+    staged: bool = False,
+) -> WorkspaceDiffResponse:
+    """指定文件的未提交 diff（U1 变更面板 diff 视图数据源，只读）。
+
+    ``path`` 为相对仓库根的路径；空串取全仓库 diff（前端按文件拉取，
+    避免一次性传输超大 diff）。
+    """
+    from backend.domain.tool_policy import ToolPolicy
+    from backend.tools.git_tool import GitDiffTool
+
+    root = _bound_workspace_or_raise(_connection(), session_id)
+    result = GitDiffTool(ToolPolicy(workspace_root=root)).execute(
+        staged=staged, path=path
+    )
+    if not result.success:
+        raise _error(502, "git_error", result.error or "git 命令失败")
+    content = result.content if isinstance(result.content, dict) else {}
+    return WorkspaceDiffResponse(
+        diff=str(content.get("diff", "")),
+        truncated=bool(content.get("truncated", False)),
+    )
 
 
 __all__ = ["router"]
