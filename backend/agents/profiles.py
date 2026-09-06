@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 # 不写字面量 —— 历史两次漂移（terminal、file_read）见 tool_names 模块注释。
 from backend.domain.tool_names import (
     ALL_BUILTIN_TOOL_NAMES,
+    BROWSER_TOOLS,
     CHECKPOINT_TOOLS,
     CODE_SEARCH_TOOLS,
     EXEC_TOOLS,
@@ -137,6 +138,9 @@ _CODER_SEED_TOOLS = (
     # 2026-09-06 对标增强 Phase-2: apply_patch + symbol_search（编码场景主消费者）
     *PATCH_TOOLS,
     *SYMBOL_TOOLS,
+    # G7: 浏览器自动化 —— coder 是 executor，浏览器操作属执行域
+    # （primary 委派给 coder；launch=EXEC、navigate=EXTERNAL 均有审批门禁）
+    *BROWSER_TOOLS,
 )
 
 

@@ -12,6 +12,14 @@ from .agent_tool import AgentTool
 from .ask_user_tool import AskUserQuestionTool
 from .base import BaseTool, ToolResult, ToolSchema
 from .bash_tool import BashOutputTool, BashTool, KillShellTool
+from .browser_tool import (
+    BrowserCloseTool,
+    BrowserInteractTool,
+    BrowserLaunchTool,
+    BrowserNavigateTool,
+    BrowserScreenshotTool,
+    BrowserSnapshotTool,
+)
 from .calculator import CalculatorTool
 from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
 from .commit_message_tool import GitCommitMessageTool
@@ -135,6 +143,14 @@ def register_all_tools(
     registry.register(PlanWriteTool(policy=policy))
     # G4: symbol_search —— 代码库 Python 符号索引（ast 提取定义处，READ）
     registry.register(SymbolSearchTool(policy=policy))
+    # G7: 浏览器自动化 —— CDP 驱动本机 Chrome/Edge（launch=EXEC /
+    # navigate=EXTERNAL 逐次审批 / snapshot+screenshot=READ / interact+close=WRITE_LOCAL）
+    registry.register(BrowserLaunchTool(policy=policy))
+    registry.register(BrowserNavigateTool(policy=policy))
+    registry.register(BrowserSnapshotTool(policy=policy))
+    registry.register(BrowserInteractTool(policy=policy))
+    registry.register(BrowserScreenshotTool(policy=policy))
+    registry.register(BrowserCloseTool(policy=policy))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
@@ -194,6 +210,12 @@ __all__ = [
     "ApplyPatchTool",
     "PlanWriteTool",
     "SymbolSearchTool",
+    "BrowserLaunchTool",
+    "BrowserNavigateTool",
+    "BrowserSnapshotTool",
+    "BrowserInteractTool",
+    "BrowserScreenshotTool",
+    "BrowserCloseTool",
     "SkillHotLoader",
     "register_all_tools",
 ]
