@@ -27,6 +27,7 @@ from .office_delete_tool import OfficeDeleteTool
 from .office_restore_tool import OfficeRestoreTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
+from .patch_tool import ApplyPatchTool
 from .project_diagnose import ProjectDiagnoseTool
 from .registry import ToolRegistry
 from .repl_tool import ReplTool
@@ -124,6 +125,9 @@ def register_all_tools(
     registry.register(CheckpointCreateTool(policy=policy))
     registry.register(CheckpointListTool(policy=policy))
     registry.register(CheckpointRestoreTool(policy=policy))
+    # 2026-09-06 对标增强 Phase-2: apply_patch —— 多文件原子精确编辑
+    # （Codex apply_patch 对标；先整体校验后落盘，任一失败整批不写）。
+    registry.register(ApplyPatchTool(policy=policy))
 
     # Register MCP tools (from external MCP servers like draw.io)
     try:
@@ -179,6 +183,7 @@ __all__ = [
     "CheckpointCreateTool",
     "CheckpointListTool",
     "CheckpointRestoreTool",
+    "ApplyPatchTool",
     "SkillHotLoader",
     "register_all_tools",
 ]
