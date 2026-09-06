@@ -51,6 +51,11 @@ PRICING_PER_MILLION_TOKENS: Dict[str, Tuple[float, float]] = {
 }
 
 
+#: 缓存命中 token 的计价折扣（L4）: OpenAI cached / DeepSeek hit / Anthropic
+#: cache-read 均为全价输入的 10% 左右, 统一按 0.1 折算估算。
+CACHE_INPUT_PRICE_FACTOR = 0.1
+
+
 def pricing_for_model(model: str) -> Optional[Tuple[float, float]]:
     """返回模型的 (input, output) USD/1M 定价; 未知模型 → None。
 
@@ -71,25 +76,38 @@ def pricing_for_model(model: str) -> Optional[Tuple[float, float]]:
     return PRICING_PER_MILLION_TOKENS[best]
 
 
-def estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> Optional[float]:
-    """估算单次请求的美元成本; 未知模型 → None。"""
+def estimate_cost_usd(
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cached_tokens: int = 0,
+) -> Optional[float]:
+    """估算单次请求的美元成本; 未知模型 → None。
+
+    L4: ``cached_tokens`` 是 prompt 中命中缓存的部分（各家 usage 口径中
+    prompt_tokens 已含命中）——命中部分按缓存价（全价输入 × 0.1）折算。
+    """
     pricing = pricing_for_model(model)
     if pricing is None:
         return None
-    input_cost = prompt_tokens / 1_000_000.0 * pricing[0]
-    output_cost = completion_tokens / 1_000_000.0 * pricing[1]
-    return round(input_cost + output_cost, 8)
+    cached = max(0, min(int(cached_tokens), int(prompt_tokens)))
+    uncached = int(prompt_tokens) - cached
+    input_cost = uncached / 1_000_000.0 * pricing[0]
+    cached_cost = cached / 1_000_000.0 * pricing[0] * CACHE_INPUT_PRICE_FACTOR
+    output_cost = int(completion_tokens) / 1_000_000.0 * pricing[1]
+    return round(input_cost + cached_cost + output_cost, 8)
 
 
 @dataclass
 class UsageRecord:
-    """一次 LLM 请求的用量记录。"""
+    """一次 LLM 用量记录。"""
 
     model: str
     prompt_tokens: int
     completion_tokens: int
     estimated_cost_usd: Optional[float]
     at: str  # ISO-8601 (UTC)
+    cached_tokens: int = 0  # L4: prompt 中命中缓存的部分
 
 
 def _empty_bucket() -> Dict[str, Any]:
@@ -97,14 +115,22 @@ def _empty_bucket() -> Dict[str, Any]:
         "requests": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,
+        "cached_tokens": 0,
         "estimated_cost_usd": None,
     }
 
 
-def _accumulate(bucket: Dict[str, Any], prompt_tokens: int, completion_tokens: int, cost: Optional[float]) -> None:
+def _accumulate(
+    bucket: Dict[str, Any],
+    prompt_tokens: int,
+    completion_tokens: int,
+    cost: Optional[float],
+    cached_tokens: int = 0,
+) -> None:
     bucket["requests"] += 1
     bucket["prompt_tokens"] += prompt_tokens
     bucket["completion_tokens"] += completion_tokens
+    bucket["cached_tokens"] += cached_tokens
     if cost is not None:
         base = bucket["estimated_cost_usd"] or 0.0
         bucket["estimated_cost_usd"] = round(base + cost, 8)
@@ -126,13 +152,16 @@ class UsageTracker:
         prompt_tokens: int,
         completion_tokens: int,
         session_id: Optional[str] = None,
+        cached_tokens: int = 0,
     ) -> UsageRecord:
         """记录一次 LLM 调用; 返回生成的 UsageRecord。
 
         L8 (批次 C): 同步 best-effort 落库 (usage_events 表, 带会话维度),
         失败只 debug 日志——内存聚合与调用方永不受 DB 故障影响。
+        L4: ``cached_tokens`` 参与缓存价成本折算并随记录持久化。
         """
-        cost = estimate_cost_usd(model, prompt_tokens, completion_tokens)
+        cached = max(0, int(cached_tokens or 0))
+        cost = estimate_cost_usd(model, prompt_tokens, completion_tokens, cached_tokens=cached)
         entry = UsageRecord(
             model=model,
             prompt_tokens=int(prompt_tokens),
@@ -140,15 +169,16 @@ class UsageTracker:
             estimated_cost_usd=cost,
             # noqa UP017: datetime.UTC 需 py3.11+, timezone.utc 是 py3.8 兼容写法
             at=datetime.now(timezone.utc).isoformat(),  # noqa: UP017
+            cached_tokens=cached,
         )
         day = datetime.now().strftime("%Y-%m-%d")
         with self._lock:
             self._records.append(entry)
-            _accumulate(self._totals, entry.prompt_tokens, entry.completion_tokens, cost)
+            _accumulate(self._totals, entry.prompt_tokens, entry.completion_tokens, cost, cached)
             model_bucket = self._by_model.setdefault(model, _empty_bucket())
-            _accumulate(model_bucket, entry.prompt_tokens, entry.completion_tokens, cost)
+            _accumulate(model_bucket, entry.prompt_tokens, entry.completion_tokens, cost, cached)
             day_bucket = self._daily.setdefault(day, _empty_bucket())
-            _accumulate(day_bucket, entry.prompt_tokens, entry.completion_tokens, cost)
+            _accumulate(day_bucket, entry.prompt_tokens, entry.completion_tokens, cost, cached)
         self._persist(entry, session_id)
         return entry
 
@@ -169,12 +199,14 @@ class UsageTracker:
                 entry.prompt_tokens + entry.completion_tokens,
                 entry.estimated_cost_usd,
                 int(time.time() * 1000),
+                entry.cached_tokens,
             )
             with _SQLITE_LOCK:
                 get_database().get_connection().execute(
                     "INSERT INTO usage_events (id, session_id, model, prompt_tokens,"
-                    " completion_tokens, total_tokens, estimated_cost_usd, created_at)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    " completion_tokens, total_tokens, estimated_cost_usd, created_at,"
+                    " cached_tokens)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     row,
                 )
                 get_database().get_connection().commit()
@@ -193,6 +225,7 @@ class UsageTracker:
                     " COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,"
                     " COALESCE(SUM(completion_tokens), 0) AS completion_tokens,"
                     " COALESCE(SUM(total_tokens), 0) AS total_tokens,"
+                    " COALESCE(SUM(cached_tokens), 0) AS cached_tokens,"
                     " COALESCE(SUM(estimated_cost_usd), 0) AS estimated_cost_usd"
                     " FROM usage_events WHERE session_id = ?",
                     (session_id,),
@@ -203,6 +236,7 @@ class UsageTracker:
                 "prompt_tokens": int(row["prompt_tokens"]) if row else 0,
                 "completion_tokens": int(row["completion_tokens"]) if row else 0,
                 "total_tokens": int(row["total_tokens"]) if row else 0,
+                "cached_tokens": int(row["cached_tokens"]) if row else 0,
                 "estimated_cost_usd": float(row["estimated_cost_usd"]) if row else 0.0,
             }
         except Exception as exc:  # noqa: BLE001
@@ -213,6 +247,7 @@ class UsageTracker:
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "total_tokens": 0,
+                "cached_tokens": 0,
                 "estimated_cost_usd": 0.0,
             }
 
