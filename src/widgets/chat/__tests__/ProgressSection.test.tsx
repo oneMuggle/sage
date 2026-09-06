@@ -112,10 +112,10 @@ describe('ProgressSection', () => {
     expect(screen.getByTestId('task-progress-summary')).toHaveTextContent('(1 已取消)');
   });
 
-  // Wave 4 (2026-09-06): 历史编排记录已移除，taskBoard == null 不再渲染 PlanCardList。
-  // 保留测试: taskBoard 未派发 → 渲染 PlanCard（可编辑）
+  // Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域,
+  // ProgressSection 未派发时不再渲染 PlanCard,仅显示「计划待执行」标签。
 
-  it('taskBoard 未派发 → 渲染 PlanCard（可编辑）', () => {
+  it('taskBoard 未派发 → 不渲染 PlanCard,显示计划待执行标签', () => {
     const board: TaskBoard = {
       runId: 'r1',
       plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }],
@@ -131,7 +131,8 @@ describe('ProgressSection', () => {
         taskBoard={board}
       />,
     );
-    expect(screen.getByTestId('plan-card')).toBeInTheDocument();
+    expect(screen.queryByTestId('plan-card')).not.toBeInTheDocument();
+    expect(screen.getByTestId('plan-pending-label')).toBeInTheDocument();
   });
 
   it('taskBoard 已派发 → 渲染 TaskTreeSection', () => {
@@ -153,28 +154,8 @@ describe('ProgressSection', () => {
     expect(screen.getByTestId('task-tree')).toBeInTheDocument();
   });
 
-  // Wave 3 C4+H1 (2026-08-15): 取消统一委托 onCancelExecution(runId)
-  it('taskBoard 未派发：取消 → onCancelExecution(runId)', () => {
-    const onCancelExecution = vi.fn();
-    const board: TaskBoard = {
-      runId: 'r1',
-      plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }],
-      statuses: {},
-      dispatchedAt: null,
-    };
-    render(
-      <ProgressSection
-        iteration={0}
-        streamingState={null}
-        toolCalls={[]}
-        isLoading={false}
-        taskBoard={board}
-        onCancelExecution={onCancelExecution}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('plan-cancel'));
-    expect(onCancelExecution).toHaveBeenCalledWith('r1');
-  });
+  // Fix #2 (2026-09-06): 未派发时取消按钮已随 PlanCard 移至 Chat.tsx,
+  // ProgressSection 不再渲染 plan-cancel,此处只保留已派发场景的取消测试。
 
   it('taskBoard 已派发：task-tree 取消按钮 → onCancelExecution(runId)', () => {
     const onCancelExecution = vi.fn();

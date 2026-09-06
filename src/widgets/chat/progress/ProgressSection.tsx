@@ -1,5 +1,5 @@
 // src/widgets/chat/progress/ProgressSection.tsx
-import { PlanCard } from '../../../components/PlanCard';
+// Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域,此处仅保留状态摘要 + 任务树。
 import { useChatStreamStore } from '../../../features/send-message/chatStreamStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { ToolCall } from '../../../shared/lib/store';
@@ -96,19 +96,10 @@ export function ProgressSection({
       {/* P1 todo 接线: agent 自维护任务清单 + PR-C 编排计划镜像 */}
       <TodoListSection todos={todos} taskBoard={taskBoard} />
 
-      {/* Wave 4 (2026-09-06): 两态 —— 历史编排记录已移除。
-         无编排 → 空态; 未派发 → 计划卡(可编辑); 已派发 → 任务树 */}
-      {taskBoard == null ? null : taskBoard.dispatchedAt ? (
+      {/* Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域。
+         侧边栏仅展示已派发的任务树。 */}
+      {taskBoard?.dispatchedAt && (
         <TaskTreeSection board={taskBoard} onCancel={() => onCancelExecution?.(taskBoard.runId)} />
-      ) : (
-        <PlanCard
-          runId={taskBoard.runId}
-          plan={taskBoard.plan}
-          locked={false}
-          // C4+H1 (2026-08-15): 任意阶段取消都回落 onCancelExecution →
-          // Chat.handleCancelRun 统一 cancelRun + 清空 taskBoard。
-          onCancel={() => onCancelExecution?.(taskBoard.runId)}
-        />
       )}
     </div>
   );

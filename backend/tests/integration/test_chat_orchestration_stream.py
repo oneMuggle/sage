@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
@@ -57,6 +58,35 @@ async def _stream_events(ac: httpx.AsyncClient, payload: dict) -> list[dict]:
     create_resp = await ac.post(CHAT_STREAM_PATH, json=payload)
     assert create_resp.status_code == 200, create_resp.text
     stream_id = create_resp.json()["streamId"]
+    # Multi-agent producers pause after task_plan until the user confirms.
+    # Wait for this stream's run binding, then model that confirmation before
+    # attaching to the completed stream. This avoids selecting another test's run.
+    mode = payload.get("orchestration_mode") or ""
+    is_multi = (
+        mode == "force_multi"
+        or mode.startswith("template:")
+        or bool(payload.get("plan_override"))
+    )
+    if is_multi:
+        from backend.api.legacy_routes import _ACTIVE_STREAMS
+        from backend.data.orch_run_repo import OrchRunRepository
+
+        # Wait for this stream to bind a run_id AND persist the run to the repo.
+        # If the planner degrades to single (one task), no run is created — skip confirm.
+        pending_run_id = None
+        repo = OrchRunRepository()
+        for _ in range(200):
+            entry = _ACTIVE_STREAMS.get(stream_id) or {}
+            pending_run_id = entry.get("run_id")
+            if pending_run_id and repo.get(pending_run_id) is not None:
+                break
+            pending_run_id = None
+            await asyncio.sleep(0.02)
+        if pending_run_id:
+            confirm_resp = await ac.post(
+                f"/api/v1/orch/runs/{pending_run_id}/confirm"
+            )
+            assert confirm_resp.status_code == 200, confirm_resp.text
     attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
     assert attach_resp.status_code == 200
     # attach 返回 NDJSON（每行一个 JSON 对象）——逐行解析为 dict

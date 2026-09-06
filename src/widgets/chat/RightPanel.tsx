@@ -117,7 +117,7 @@ export function RightPanel({
         <PanelHeader tab={tab} onTabChange={setTab} onClose={onToggle} />
       )}
 
-      <div className="h-[calc(100%-2.5rem)]">
+      <div className="h-[calc(100%-2.5rem)] overflow-y-auto min-h-0">
         {selected && sessionId ? (
           <ArtifactViewer artifact={selected} sessionId={sessionId} onBack={() => setSelected(null)} />
         ) : tab === 'progress' ? (
