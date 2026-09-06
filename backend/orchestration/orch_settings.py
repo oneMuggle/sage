@@ -21,6 +21,7 @@ _RAW_KEYS = {
     "maxSubagentIterations": "max_subagent_iterations",
     "scratchRoot": "scratch_root",
     "worktreeIsolation": "worktree_isolation",
+    "subagentApprovalMode": "subagent_approval_mode",
 }
 
 
@@ -36,6 +37,11 @@ class OrchSettings:
     max_subagent_iterations: int = 6
     scratch_root: str = "orch_scratch"
     worktree_isolation: bool = False
+    #: live-events P1: 新 run 的子代理审批模式默认值 —— "ask"（逐次审批，
+    #: 审批请求转发前端）| "auto"（非危险工具自动批准，危险仍转人工）。
+    #: run 级可在任务树头部经 ``POST /orch/runs/{id}/approval-mode`` 随时
+    #: 切换（仅当前 run 生效，不持久化）。
+    subagent_approval_mode: str = "ask"
 
 
 def load_orch_settings() -> OrchSettings:
@@ -65,6 +71,9 @@ def load_orch_settings() -> OrchSettings:
             settings = replace(settings, **{field_name: value})
         elif isinstance(current, str) and isinstance(value, str):
             settings = replace(settings, **{field_name: _sanitize_scratch_root(value, current)})
+    # live-events P1: 审批模式白名单校验（str 分支通用清洗不覆盖枚举语义）。
+    if settings.subagent_approval_mode not in ("ask", "auto"):
+        settings = replace(settings, subagent_approval_mode="ask")
     return settings
 
 

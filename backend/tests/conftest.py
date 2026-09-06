@@ -66,7 +66,15 @@ def tmp_db_path():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         yield f.name
     if os.path.exists(f.name):
-        os.unlink(f.name)
+        # Windows fix (2026-09-06): 测试中 Repo 层未显式 close 的 sqlite 连接
+        # 可能仍被循环引用持有，直接 unlink 报 WinError 32（文件被占用）。
+        # gc.collect() 触发连接对象终结器释放文件句柄后再删除。
+        import contextlib
+        import gc
+
+        gc.collect()
+        with contextlib.suppress(PermissionError):
+            os.unlink(f.name)
 
 
 @pytest.fixture(autouse=True)

@@ -1,10 +1,12 @@
 // src/widgets/chat/progress/TaskTreeSection.tsx
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
 // TaskStatusValue 定义在 shared/api（Task 7 已 re-export），不从 useChat import
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
+import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 
 import { SubagentDetailDrawer } from './SubagentDetailDrawer';
 
@@ -36,6 +38,26 @@ interface TaskTreeSectionProps {
 export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selectTask = useRunControlStore((s) => s.selectTask);
+  // live-events P1: run 级审批模式开关（乐观更新，后端 approval_mode 事件
+  // 回显为准；失败回滚到 board 上的值）。
+  const [approvalMode, setApprovalMode] = useState<'ask' | 'auto'>(
+    board.approvalMode ?? 'ask',
+  );
+  const [approvalPending, setApprovalPending] = useState(false);
+
+  const toggleApprovalMode = () => {
+    if (approvalPending) return;
+    const next = approvalMode === 'auto' ? 'ask' : 'auto';
+    setApprovalPending(true);
+    setApprovalMode(next); // 乐观
+    orchRunControlClient
+      .setApprovalMode({ run_id: board.runId, mode: next })
+      .catch(() => {
+        setApprovalMode(board.approvalMode ?? 'ask'); // 回滚
+        toast.error('审批模式切换失败（run 已结束?）');
+      })
+      .finally(() => setApprovalPending(false));
+  };
 
   const handleTaskClick = (taskId: string, runId: string) => {
     selectTask(runId, taskId);
@@ -76,6 +98,25 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
           {failed > 0 && <span className="text-error ml-1">({failed} 失败)</span>}
           {cancelled > 0 && <span className="text-text-secondary ml-1">({cancelled} 已取消)</span>}
         </div>
+        {/* live-events P1 (2026-09-06): run 级子代理审批模式开关 —— auto =
+            非危险工具自动批准（破坏性/可疑/边界升级仍弹审批）。仅活动 run
+            显示；后端 approval_mode 事件到达后 board.approvalMode 对齐。 */}
+        {!allDone && board.runId && (
+          <button
+            type="button"
+            onClick={toggleApprovalMode}
+            disabled={approvalPending}
+            data-testid="task-tree-approval-mode"
+            title="自动批准子代理的非危险工具调用（破坏性/可疑命令仍需确认）"
+            className={`px-2 py-1 text-xs border rounded shrink-0 transition-colors disabled:opacity-50 ${
+              approvalMode === 'auto'
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'border-border text-text-secondary'
+            }`}
+          >
+            {approvalMode === 'auto' ? '⚡ 自动批准：开' : '⚡ 自动批准：关'}
+          </button>
+        )}
         {/* Wave 3 H2 (2026-08-15): 运行中取消按钮 —— 全部完成/无 onCancel 时隐藏 */}
         {!allDone && onCancel && (
           <button
@@ -107,6 +148,9 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
         const st = board.statuses[item.task_id];
         const status: TaskStatusValue = st?.status ?? 'queued';
         const preview = st?.output_preview ?? st?.error ?? null;
+        // live-events P0 (2026-09-06): 子代理实时执行态（subagent_event 镜像）。
+        const live = board.live?.[item.task_id];
+        const recentEvents = live ? [...live.events].reverse().slice(0, 10) : [];
         // P1-6 (2026-08-14): depends_on 透传 —— 有依赖的任务缩进 + 标记行。
         const dependsOn = item.depends_on ?? [];
         const hasDeps = dependsOn.length > 0;
@@ -151,6 +195,57 @@ export function TaskTreeSection({ board, onCancel }: TaskTreeSectionProps) {
                 </span>
               )}
             </div>
+            {/* live-events P0: 等待审批徽章（ApprovalDialog 之外的行内提示） */}
+            {live?.waitingApproval && status === 'running' && (
+              <div
+                data-testid={`task-tree-approval-${item.task_id}`}
+                className="pl-6 text-[11px] text-warning"
+              >
+                ⏳ 等待审批: {live.waitingApproval}
+              </div>
+            )}
+            {/* live-events P0: 行内实时步骤（running 时显示最新一条投影） */}
+            {live?.liveStep && status === 'running' && (
+              <div
+                data-testid={`task-tree-live-${item.task_id}`}
+                className="pl-6 text-[11px] text-primary animate-pulse truncate"
+              >
+                {live.liveStep}
+              </div>
+            )}
+            {/* live-events P0: 最近事件环形缓冲（最多展示最近 10 条,尾新头旧） */}
+            {recentEvents.length > 0 && (
+              <details className="pl-6">
+                <summary className="text-[11px] text-muted">
+                  实时动态（{live!.events.length} 条）
+                </summary>
+                <ul
+                  data-testid={`task-tree-events-${item.task_id}`}
+                  className="mt-1 space-y-0.5 text-muted"
+                >
+                  {recentEvents.map((evt, idx) => (
+                    <li key={`${evt.ts ?? idx}-${idx}`} className="truncate">
+                      <span className="text-text-tertiary">
+                        {evt.ts ? new Date(evt.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
+                      </span>{' '}
+                      {evt.phase === 'approval_requested'
+                        ? `⏳ 等待审批: ${evt.tool_name ?? 'tool'}`
+                        : evt.phase === 'approval_resolved'
+                          ? evt.approved
+                            ? '✓ 已批准'
+                            : '✗ 已拒绝'
+                          : evt.phase === 'question'
+                            ? '❓ 向用户提问'
+                            : evt.phase === 'failed'
+                              ? '✗ 失败'
+                              : evt.phase === 'tool_result'
+                                ? `👀 ${evt.tool_name ?? 'tool'} ${evt.is_error ? '（错误）' : ''}`
+                                : `🔧 ${evt.tool_name ?? 'tool'}`}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             {preview && status !== 'queued' && (
               <details className="pl-6 text-muted">
                 <summary>{status === 'failed' ? '错误详情' : '结果预览'}</summary>

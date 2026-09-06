@@ -44,7 +44,7 @@ class ContextEntry:
     """一个被收集的指令文件。"""
 
     path: str
-    source: str  # "sage_md" | "claude_md"
+    source: str  # "sage_md" | "claude_md" | "user_sage_md"
     content: str
     truncated: bool = False
 
@@ -87,6 +87,49 @@ def _iter_candidates(root: Path) -> Iterator[Tuple[Path, str]]:
             yield directory / filename, source
 
 
+def _user_level_entries(seen_hashes: set, total_chars: int) -> Tuple[List[ContextEntry], int]:
+    """F6 (批次 C): 用户级规则 ~/.sage/SAGE.md —— 跨工作区生效的全局层。
+
+    排在工作区条目之前 (全局约定先于项目约定)。同样遵守单文件/总量
+    截断预算与内容哈希去重; 文件不存在/不可读 → 空列表, 永不抛。
+    """
+    entries: List[ContextEntry] = []
+    try:
+        user_file = Path.home() / ".sage" / "SAGE.md"
+        if not user_file.is_file():
+            return entries, total_chars
+        resolved = Path(os.path.realpath(str(user_file)))
+        content = resolved.read_text(encoding="utf-8")
+        if not content.strip():
+            return entries, total_chars
+        digest = hashlib.sha256(content.strip().encode("utf-8", "replace")).hexdigest()
+        if digest in seen_hashes:
+            return entries, total_chars
+        seen_hashes.add(digest)
+        truncated = False
+        capped = content
+        if len(capped) > PER_FILE_CHAR_CAP:
+            capped = capped[:PER_FILE_CHAR_CAP]
+            truncated = True
+        remaining = TOTAL_CHAR_CAP - total_chars
+        if len(capped) > remaining:
+            capped = capped[: max(remaining, 0)]
+            truncated = True
+        if capped.strip():
+            entries.append(
+                ContextEntry(
+                    path=str(user_file),
+                    source="user_sage_md",
+                    content=capped,
+                    truncated=truncated,
+                )
+            )
+            total_chars += len(capped)
+    except Exception as exc:  # noqa: BLE001 — 全局规则读取失败静默省略
+        logger.debug("user-level SAGE.md skip: %s", exc)
+    return entries, total_chars
+
+
 def discover_project_context(workspace_root: Union[str, Path]) -> ProjectContext:
     """向上发现 SAGE.md/CLAUDE.md; 失败永远返回(可能为空的)上下文, 不抛。"""
     root_str = str(workspace_root)
@@ -98,6 +141,10 @@ def discover_project_context(workspace_root: Union[str, Path]) -> ProjectContext
         entries: List[ContextEntry] = []
         seen_hashes: set = set()
         total_chars = 0
+
+        # F6: 用户级 ~/.sage/SAGE.md 最先 (全局约定先于项目约定)
+        user_entries, total_chars = _user_level_entries(seen_hashes, total_chars)
+        entries.extend(user_entries)
 
         for candidate, source in _iter_candidates(root):
             if total_chars >= TOTAL_CHAR_CAP:

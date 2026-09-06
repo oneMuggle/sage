@@ -9,6 +9,7 @@ import {
   ApiException,
   type ChatConfig,
   type ChatOfficeRef,
+  type SubagentLiveEvent,
   type TaskPlanItem,
   type TaskProgressEvent,
   type TaskReviewEvent,
@@ -24,7 +25,7 @@ import { logger } from '../../shared/lib/logger';
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
 import { useSettings } from '../manage-settings/useSettings';
 
-import { useChatStreamStore, type TaskBoardState } from './chatStreamStore';
+import { mergeLiveEvent, useChatStreamStore, type TaskBoardState } from './chatStreamStore';
 
 /**
  * 从 endpoint baseUrl 启发式推导 LLM provider 字符串。
@@ -378,6 +379,7 @@ export function useChat() {
                   runId: evt.run_id,
                   plan: evt.plan,
                   statuses: {},
+                  live: {},
                 });
                 return;
               }
@@ -473,6 +475,36 @@ export function useChat() {
                   .updateTaskBoard(runId, (prev) =>
                     prev && prev.runId === runId ? { ...prev, review } : prev,
                   );
+                return;
+              }
+
+              // live-events P0 (2026-09-06): subagent_event 镜像 → 任务板
+              // live 态（行内实时步骤/审批徽章/最近事件环形缓冲）。
+              // 不进消息气泡 —— agentStateMapping 对该 state 返回 null。
+              if (evt.state === 'subagent_event' && evt.run_id && evt.task_id) {
+                const runId = evt.run_id;
+                const taskId = evt.task_id;
+                const liveEvent = evt as SubagentLiveEvent;
+                useChatStreamStore.getState().updateTaskBoard(runId, (prev) => {
+                  if (!prev || prev.runId !== runId) return prev;
+                  return {
+                    ...prev,
+                    live: {
+                      ...(prev.live ?? {}),
+                      [taskId]: mergeLiveEvent(prev.live?.[taskId], liveEvent),
+                    },
+                  };
+                });
+                return;
+              }
+              // live-events P1 (2026-09-06): approval_mode 切换回显 → 任务板
+              // 头部开关状态（后端 set_approval_mode 成功后推送）。
+              if (evt.state === 'approval_mode' && evt.run_id) {
+                const runId = evt.run_id;
+                const mode = evt.mode === 'auto' ? 'auto' : 'ask';
+                useChatStreamStore.getState().updateTaskBoard(runId, (prev) =>
+                  prev && prev.runId === runId ? { ...prev, approvalMode: mode } : prev,
+                );
                 return;
               }
 

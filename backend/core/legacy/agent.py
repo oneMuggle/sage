@@ -588,6 +588,7 @@ class SageAgent:
         messages: List[Dict[str, Any]],
         max_iterations: Optional[int] = None,
         llm_config: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
     ):
         """ReAct 主循环。
 
@@ -601,6 +602,8 @@ class SageAgent:
             llm_config: 可选的动态 LLM 配置(覆盖初始化时的配置),允许调用方
                 在 agent 实例没有默认 LLM 时通过 per-request 配置运行。
                 如果同时存在 self.llm_client,会临时覆盖并在循环结束后恢复。
+            session_id: 可选的会话归因 (L8, 批次 C) —— 注入 llm_client 供
+                usage_tracker 落库 usage_events;None 时用量记为 unattributed。
 
         Yields:
             AgentEvent:状态机事件,前端通过流式响应(NDJSON)接收。每个事件携带
@@ -639,6 +642,12 @@ class SageAgent:
                     llm_config.get("provider"), llm_config.get("model")
                 )
             )
+
+        # L8: 会话归因注入 (批次 C) —— usage_tracker 落库 usage_events 用。
+        # client 可能是动态新建的,也可能是构造时注入的;统一设置属性。
+        if session_id and self.llm_client is not None:
+            with contextlib.suppress(Exception):  # 测试替身可能拒绝设属性
+                self.llm_client.session_id = session_id
 
         # M1: 权限执行器在 run 起点构造一次（读 settings: permission_mode /
         # permission_rules），整轮循环复用——避免每次工具调用都打 DB。
@@ -1010,9 +1019,15 @@ class SageAgent:
                                         # (ChatDispatcher gather) and push
                                         # task_status straight to the stream
                                         # queue. Sync execute() cannot do that.
-                                        # Minimal special-case; general tool dispatch
-                                        # stays inline.
-                                        result = await tool.execute_async(**args)
+                                        # Same minimal special-case as "agent";
+                                        # general tool dispatch stays inline.
+                                        # live-events P0: 透传本工具调用 ID ——
+                                        # dispatcher 给子任务标 parent_tool_call_id，
+                                        # 前端把子代理实时步骤挂到 Delegate 卡片。
+                                        # dict 重建覆盖 LLM 可能注入的同名 key。
+                                        dispatch_kwargs = dict(args)
+                                        dispatch_kwargs["_tool_call_id"] = tc.id
+                                        result = await tool.execute_async(**dispatch_kwargs)
                                     elif getattr(tool, "is_blocking", False):
                                         # 阻塞型工具（bash / repl，见
                                         # BaseTool.is_blocking）：execute() 可长至

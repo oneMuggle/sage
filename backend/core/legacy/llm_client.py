@@ -226,6 +226,9 @@ class LLMClient:
         # （部分上游不支持 stream+tools 或 stream_options）。置位后
         # run_loop 直接走非流式,避免每次迭代都白白多打一个失败请求。
         self.stream_unsupported = False
+        # L8 (批次 C): 用量归因的会话维度——run_loop 按需注入,缺省 None
+        # (usage_events 落库为 unattributed 行)。
+        self.session_id: Optional[str] = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """获取或创建 HTTP 客户端
@@ -495,6 +498,7 @@ class LLMClient:
                     data.get("model", self.config.model),
                     usage_dict["prompt_tokens"],
                     usage_dict["completion_tokens"],
+                    session_id=self.session_id,
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking skipped: %s", usage_err)
@@ -587,6 +591,7 @@ class LLMClient:
                         stream_model,
                         int(stream_usage.get("prompt_tokens") or 0),
                         int(stream_usage.get("completion_tokens") or 0),
+                        session_id=self.session_id,
                     )
                 except Exception as usage_err:
                     logger.debug("usage tracking (stream) skipped: %s", usage_err)
@@ -754,6 +759,7 @@ class LLMClient:
                     stream_model,
                     usage_dict["prompt_tokens"],
                     usage_dict["completion_tokens"],
+                    session_id=self.session_id,
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking (stream) skipped: %s", usage_err)

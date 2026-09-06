@@ -12,10 +12,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 from backend.agents.profiles import build_system_base, get_enabled_agent
 from backend.core.legacy.agent import SageAgent
+from backend.core.legacy.agent_state import AgentEvent
 from backend.domain.tool_policy import ToolPolicy
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.models import Lane
@@ -76,12 +77,21 @@ class SubagentRunner:
         self,
         llm_config: Optional[Dict[str, Any]] = None,
         interrupt_event: Optional[asyncio.Event] = None,
+        event_sink: Optional[Callable[[AgentEvent], Awaitable[None]]] = None,
+        approval_mode: str = "ask",
     ) -> None:
         self._llm_config = llm_config
         # P0-3 (2026-08-20): 取消事件 —— ChatDispatcher._cancelled 传入，
         # 置位后 watcher 调 child.interrupt()，子 run_loop 在下轮迭代顶部
         # 发 FAILED 终止（P0-1 通道）。
         self._interrupt_event = interrupt_event
+        # live-events P0: 子 run_loop 中间事件投影回调（SubagentEventSink）。
+        # None = 不转发（老调用方/测试兼容，行为与历史一致）。
+        self._event_sink = event_sink
+        # live-events P1: "ask"（默认，风险工具逐次审批）| "auto"
+        # （非危险工具自动批准，危险仍转人工）。经 build_subagent_enforcer
+        # 注入 AutoApproveEnforcer。
+        self._approval_mode = approval_mode
 
     async def __call__(self, task: Any, agent_id: Optional[str]) -> Dict[str, Any]:
         """Run one subtask via SageAgent.run_loop; return executor-usable dict.
@@ -125,6 +135,15 @@ class SubagentRunner:
             )
 
         child = SageAgent(agent_id=agent_id, policy=policy)
+        # live-events P1: auto 模式注入自动批准包装 enforcer（非危险工具
+        # 放行，破坏性/可疑/边界升级仍转人工）。构造失败 → None → 子代理
+        # 走默认路径（从 settings 现读，逐次审批）。
+        if self._approval_mode == "auto":
+            from backend.orchestration.subagent_approval import build_subagent_enforcer
+
+            auto_enforcer = build_subagent_enforcer("auto")
+            if auto_enforcer is not None:
+                child.permission_enforcer = auto_enforcer
         history = task.parameters.get("history")
         if (
             isinstance(history, list)
@@ -153,6 +172,11 @@ class SubagentRunner:
 
         try:
             async for evt in child.run_loop(messages, llm_config=self._llm_config):
+                # live-events P0: 中间事件投影转发（acting/observing/审批/
+                # 提问/failed → 聊天镜像 + canonical task.step.*）。sink
+                # 自身吞错（观测绝不杀死执行）；None = 老调用方不转发。
+                if self._event_sink is not None:
+                    await self._event_sink(evt)
                 if evt.state.value == "done" and evt.content:
                     collected.append(evt.content)
                 elif evt.state.value == "failed" and evt.error:
