@@ -131,6 +131,8 @@ export function RightPanel({
             toolCalls={toolCalls}
             isLoading={isLoading}
             taskBoard={taskBoard}
+            // S2: todos 从该会话的键控槽位读取（切会话看该会话的清单）
+            sessionId={sessionId}
             onCancelExecution={onCancelExecution}
           />
         ) : tab === 'changes' ? (

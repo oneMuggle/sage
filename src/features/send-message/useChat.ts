@@ -22,9 +22,14 @@ import {
 } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
+import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
 import { useSettings } from '../manage-settings/useSettings';
 
-import { useChatStreamStore, type TaskBoardState } from './chatStreamStore';
+import {
+  selectSessionSlots,
+  useChatStreamStore,
+  type TaskBoardState,
+} from './chatStreamStore';
 
 /**
  * 从 endpoint baseUrl 启发式推导 LLM provider 字符串。
@@ -54,26 +59,33 @@ function inferProviderFromBaseUrl(baseUrl: string | undefined): string | undefin
  */
 export type TaskBoard = TaskBoardState;
 
+/** S3 (2026-09-06): 单个会话的活跃流句柄 —— interrupt / 取消旧流按会话定位。 */
+interface ActiveStreamHandle {
+  /** 后端 streamId（P0-2: interrupt 让后端命中真实 agent） */
+  streamId: string | null;
+  /** 前端 listener 取消函数（unlisten） */
+  cancel: (() => void) | null;
+  /** finishStream —— interrupt 时触发清理（HIGH-4） */
+  finish: (() => void) | null;
+}
+
 export function useChat() {
-  // isLoading / error / isBtwStreaming 仍为 component-local,表征的是这个
-  // hook 实例自身的 UI 状态,跨页面保留没意义(页面卸载 → UI 自然消失)。
-  const [isLoading, setIsLoading] = useState(false);
+  // S3 (2026-09-06) 多会话并行: "在流中"状态从 hook 级单布尔改为 **按会话**
+  // 的 Set。跨会话互不阻塞（会话 A 流式中可直接在会话 B 发送 → 两条流后端
+  // 并行跑），同会话内仍串行 —— 忙时消息入队（U5），当前回复结束后自动发送。
+  // activeSids(state) 驱动 re-render；activeSidsRef 同步镜像供守卫读取。
+  const [activeSids, setActiveSids] = useState<ReadonlySet<string>>(new Set());
+  const activeSidsRef = useRef<Set<string>>(new Set());
+  // sid → 活跃流句柄（S3: cancelRef/streamIdRef/finishStreamRef 单例的键控版）
+  const activeHandleRef = useRef<Map<string, ActiveStreamHandle>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const { messages, addMessage, updateMessage, currentSessionId, loadMessages } = useStore();
   const { settings } = useSettings();
-  // refs 保留:loadingRef / cancelRef / finishStreamRef / btwCancelRef 都是
-  // hook 实例级别的协调状态,不需要跨路由保留。
-  const loadingRef = useRef(false);
-  const cancelRef = useRef<(() => void) | null>(null);
-  // HIGH-4 修复: finishStream 是 sendMessage 闭包内的函数,interrupt() 无法直接调用
-  // 用 ref 把 finishStream 暴露出去,让 interrupt 也能触发清理流程
-  const finishStreamRef = useRef<(() => void) | null>(null);
-  // P0-2 (2026-08-20): 当前 streamId —— interrupt 需要它让后端定位真实 agent。
-  const streamIdRef = useRef<string | null>(null);
 
   // U5 (对标增强第二轮批次 B): 流式中用户继续发送 → 入队,当前回复自然
   // 结束(onDone)后自动发送。错误/中断路径不自动 flush——连续失败场景
-  // 自动重发只会重复报错。
+  // 自动重发只会重复报错。S3: 队列按会话隔离,A 队列的消息不会在 B 的
+  // 流结束后被误发。
   const pendingMessagesRef = useRef<
     Array<{
       content: string;
@@ -86,15 +98,35 @@ export function useChat() {
   // 流式当前 assistant 消息的内容覆盖 (派生 messages 的最后一条) —— 2026-08-19
   // 搬到 chatStreamStore(独立 zustand),跨路由切换保留,避免 Chat 页卸载后
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
-  const streaming = useChatStreamStore((s) => s.streaming);
-  const streamingToolCalls = useChatStreamStore((s) => s.streamingToolCalls);
-  const taskBoard = useChatStreamStore((s) => s.taskBoard);
+  // S2: 读当前会话的槽位 —— 切到会话 B 就看 B 的实时进度(A 的流在后台
+  // 继续累积,切回 A 时内容完整可见)。
+  const { streaming, streamingToolCalls, taskBoard } = useChatStreamStore((s) =>
+    selectSessionSlots(s, currentSessionId),
+  );
 
   // Phase 6: /btw 补充消息状态(component-local,与流式 chat 无关)
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
   const btwCancelRef = useRef<(() => void) | null>(null);
 
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
+
+  // S3: isLoading 语义收窄为"当前会话是否在流中"（此前是 hook 级单布尔,
+  //  会话 A 流式中切到 B,B 的输入框也被禁用）。Chat 页所有 isLoading 消费
+  //  (ChatInput 禁用 / compact / learn / fork 守卫)都是当前会话语义,收窄后
+  //  行为恰好正确;流仍在后台跑,不受影响。
+  const isLoading = currentSessionId != null && activeSids.has(currentSessionId);
+
+  const markStreamActive = useCallback((sid: string, handle: ActiveStreamHandle): void => {
+    activeHandleRef.current.set(sid, handle);
+    activeSidsRef.current.add(sid);
+    setActiveSids(new Set(activeSidsRef.current));
+  }, []);
+
+  const markStreamIdle = useCallback((sid: string): void => {
+    activeHandleRef.current.delete(sid);
+    activeSidsRef.current.delete(sid);
+    setActiveSids(new Set(activeSidsRef.current));
+  }, []);
 
   /**
    * 派生 messages: 当 streaming 时, 替换 store.messages 中对应 id 的 content 和 reasoning_content
@@ -131,28 +163,34 @@ export function useChat() {
     ) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid) return;
-      if (isLoading || loadingRef.current) {
+      // S3: 守卫按会话 —— 只有**同一会话**已有流在跑时才入队;其它会话
+      // 的流与本会话无关,不再被 isLoading 全局守卫误伤。
+      if (activeSidsRef.current.has(sid)) {
         // U5: 忙时不再丢弃消息——入队,当前回复自然结束后自动发送
         pendingMessagesRef.current.push({ content, sid, orchestrationMode });
         toast.info('已加入队列,当前回复完成后自动发送');
         return;
       }
 
-      // 取消上一次还在飞的 chatStream (React StrictMode 双调用 / 用户双击 /
-      // 路由切换等场景),避免两个流并存导致 invoke 重复 + LLM 双调用 + 流事件混乱
-      if (cancelRef.current) {
-        try {
-          cancelRef.current();
-        } catch {
-          /* ignore */
+      // 安全网: 清理该会话的遗留流(React StrictMode 双调用 / 双击等极端
+      // 场景)。正常路径守卫已拦住,不会走到这里。S3: 只清**同会话**的流,
+      // 跨会话流保持后台并行(旧实现 cancelRef 单例会误伤其它会话)。
+      const prevHandle = activeHandleRef.current.get(sid);
+      if (prevHandle) {
+        if (prevHandle.cancel) {
+          try {
+            prevHandle.cancel();
+          } catch {
+            /* ignore */
+          }
+          activeHandleRef.current.delete(sid);
+          // MEDIUM-1: 同时通知后端中断正在跑的 stream,避免 cancel 只 unlisten 前端
+          // 而后端继续消耗 LLM token。fire-and-forget — interrupt 失败不影响新消息发送
+          // P0-2 (2026-08-20): 把 streamId 传给后端,让 /interrupt 命中真实 agent。
+          chatApi.interrupt(prevHandle.streamId ?? undefined).catch(() => {
+            /* Interrupt failures are non-critical */
+          });
         }
-        cancelRef.current = null;
-        // MEDIUM-1: 同时通知后端中断正在跑的 stream,避免 cancel 只 unlisten 前端
-        // 而后端继续消耗 LLM token。fire-and-forget — interrupt 失败不影响新消息发送
-        // P0-2 (2026-08-20): 把当前 streamId 传给后端,让 /interrupt 命中真实 agent。
-        chatApi.interrupt(streamIdRef.current ?? undefined).catch(() => {
-          /* Interrupt failures are non-critical */
-        });
       }
 
       // 即使 settings 缺失,user 消息也必须先 addMessage 再校验失败返回 —
@@ -166,8 +204,7 @@ export function useChat() {
         hasModel: Boolean(settings.modelSelections.chatModel.modelId),
       });
 
-      loadingRef.current = true;
-      setIsLoading(true);
+      markStreamActive(sid, { streamId: null, cancel: null, finish: null });
       setError(null);
 
       const userMessage: Message = {
@@ -179,21 +216,16 @@ export function useChat() {
       };
       addMessage(userMessage);
 
-      const resetLoading = (): void => {
-        loadingRef.current = false;
-        setIsLoading(false);
-      };
-
       if (!chatEndpoint?.baseUrl) {
         // 仍记录错误供上层展示,但消息已经进 store
         setError('未配置 API 地址，请在设置中配置');
-        resetLoading();
+        markStreamIdle(sid);
         return;
       }
 
       if (!settings.modelSelections.chatModel.modelId) {
         setError('未选择对话模型，请在设置中配置');
-        resetLoading();
+        markStreamIdle(sid);
         return;
       }
 
@@ -207,9 +239,12 @@ export function useChat() {
         created_at: Date.now(),
       };
       addMessage(assistantMessage);
-      // startStream 内部已重置 content/reasoning/streamingToolCalls/taskBoard —
-      // 流式进度全部走 store,跨路由切换保留(2026-08-19)
-      useChatStreamStore.getState().startStream(assistantId, { initialContent: '🤔 思考中…' });
+      // startStream 内部已重置该会话槽位的 content/reasoning/streamingToolCalls/
+      // taskBoard — 流式进度全部走 store,跨路由切换保留(2026-08-19)。
+      // S2: 只重置本会话槽位,并行会话互不覆盖。
+      useChatStreamStore.getState().startStream(sid, assistantId, {
+        initialContent: '🤔 思考中…',
+      });
 
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
@@ -230,7 +265,7 @@ export function useChat() {
 
       const appendContent = (next: string): void => {
         // I5: 流式逐字 — appendContent 通过 store 累加 (跨路由切换保留)
-        useChatStreamStore.getState().appendContent(assistantId, next);
+        useChatStreamStore.getState().appendContent(sid, assistantId, next);
       };
 
       // I5-2: 中间态 (thinking/acting/observing) 的 uiText 应"覆盖"而非"追加"，
@@ -238,7 +273,7 @@ export function useChat() {
       // appendContent 用于累积真实回答 (content_delta / done.content)，
       // replaceContent 用于切换中间态占位符。
       const replaceContent = (next: string): void => {
-        useChatStreamStore.getState().replaceContent(assistantId, next);
+        useChatStreamStore.getState().replaceContent(sid, assistantId, next);
       };
 
       const handleError = (err: unknown): void => {
@@ -281,13 +316,14 @@ export function useChat() {
         if (finished) return;
         finished = true;
         // 2026-08-19: 从 store 读最新流式内容(跨路由保留,finishStream 内
-        // 不再持有 ref — store 是单一数据源)
-        const streamSnapshot = useChatStreamStore.getState().streaming;
+        // 不再持有 ref — store 是单一数据源)。S2: 读本会话槽位。
+        const streamSnapshot = selectSessionSlots(useChatStreamStore.getState(), sid).streaming;
         // 优先用 done 事件自带的完整 content (避免混入 thinking 占位符)
         // 退回到 store streaming.content (向后兼容旧的非流式 done 事件)
         let finalContent = lastDoneContent ?? streamSnapshot?.content ?? '';
         const finalReasoning = streamSnapshot?.reasoning ?? '';
-        const finalToolCalls = useChatStreamStore.getState().streamingToolCalls;
+        const finalToolCalls = selectSessionSlots(useChatStreamStore.getState(), sid)
+          .streamingToolCalls;
         // MEDIUM-2: 若 LLM 没返回任何 content (后端只发 thinking 但没 done.content),
         // 占位符 '🤔 思考中…' 会留在 store。fallback 到错误文案让用户看到明确失败
         if (!finalContent && !finalReasoning && finalToolCalls.length === 0) {
@@ -313,43 +349,43 @@ export function useChat() {
         //  "accumulates task_plan then task_status into board" 等依赖
         //  finishStream 后 taskBoard 仍可见。clearStream + resetToolCalls
         //  组合即可,语义等价于旧 setStreaming(null) + 清 ref)
-        useChatStreamStore.getState().clearStream(assistantId);
-        useChatStreamStore.getState().resetToolCalls();
-        cancelRef.current = null;
-        resetLoading();
+        useChatStreamStore.getState().clearStream(sid, assistantId);
+        useChatStreamStore.getState().resetToolCalls(sid);
+        // S3: 注销本会话的活跃句柄(替代旧 cancelRef/streamIdRef/finishStreamRef 清理)
+        markStreamIdle(sid);
         // M1: 流结束/错误 → 关闭遗留的审批对话框(后端 gate 已超时 fail-closed,
-        // 对话框里的请求必然已失效,不能再让 UI 卡着)
-        usePermissionState.getState().resolve();
+        // 对话框里的请求必然已失效,不能再让 UI 卡着)。S3: 只关**本会话**的
+        // 挂起审批 —— 并行会话 B 的审批不能被 A 的流结束误关。
+        usePermissionState.getState().resolve(sid);
         // M2 part B: 同理关闭遗留的提问对话框(后端 gate 已超时按空应答处理)
-        useQuestionState.getState().resolve();
-        // HIGH-4: 清空 ref 让 interrupt 知道当前 stream 已结束
-        finishStreamRef.current = null;
-        // P0-2 (2026-08-20): 清空 streamId —— 流已结束，interrupt 不应命中陈旧实例。
-        streamIdRef.current = null;
-        // 流结束后刷新侧栏会话列表（获取自动生成的标题）
+        useQuestionState.getState().resolve(sid);
+        // 流结束后刷新侧栏会话列表（获取自动生成的标题 + S1 落库的运行态徽章）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
         void useStore.getState().loadSessions();
-        // U5: 流自然结束后发送队列中的下一条(短暂让位,避免与收尾渲染竞争)
+        // U5 + S3: 流自然结束后发送**该会话**队列中的下一条(短暂让位,避免与
+        // 收尾渲染竞争)。其它会话的队列不受影响。
         if (flushQueue) {
-          const pending = pendingMessagesRef.current.shift();
-          if (pending) {
+          const pending = pendingMessagesRef.current;
+          const idx = pending.findIndex((p) => p.sid === sid);
+          if (idx >= 0) {
+            const [next] = pending.splice(idx, 1);
             window.setTimeout(() => {
               void sendMessageRef.current?.(
-                pending.content,
-                pending.sid,
+                next.content,
+                next.sid,
                 undefined,
-                pending.orchestrationMode,
+                next.orchestrationMode,
               );
             }, 300);
           }
         }
       };
-      // HIGH-4: 注册 finishStream 到 ref 供 interrupt 调用
-      finishStreamRef.current = finishStream;
+      // S3: 注册本会话句柄（HIGH-4: interrupt 经句柄触发 finishStream 清理）
+      markStreamActive(sid, { streamId: null, cancel: null, finish: finishStream });
 
       try {
-        // 解构 cancel 用于下次 sendMessage 时取消 (cancel-prev)
-        // P0-2 (2026-08-20): 同时解构 streamId,存入 ref 供 interrupt 回调使用。
+        // 解构 cancel/streamId 存入本会话句柄
+        // P0-2 (2026-08-20): interrupt 用 streamId 让后端命中真实 agent。
         const { streamId, cancel } = await chatApi.chatStream(
           sid,
           content,
@@ -364,7 +400,7 @@ export function useChat() {
 
               // 阶段 4: 累积 agent_id + 迭代轮次 (供前端显示"当前处理 agent")
               if (evt.agent_id || evt.iteration) {
-                useChatStreamStore.getState().setStreamingMeta(assistantId, {
+                useChatStreamStore.getState().setStreamingMeta(sid, assistantId, {
                   currentAgentId: evt.agent_id ?? null,
                   iteration: evt.iteration ?? 0,
                 });
@@ -374,23 +410,32 @@ export function useChat() {
               // 全局 ApprovalDialog 弹出。后端 gate 阻塞等待应答(最长 300s,
               // fail-closed),随后的 observing 事件自然覆盖流式状态。
               // uiText 分支对该 state 返回 null,不会碰消息气泡占位符。
+              // S4: 记录所属会话 —— 侧边栏按会话聚合"待审批"注意力点。
               if (evt.state === 'permission_request' && evt.permission_request) {
-                usePermissionState.getState().setFromEvent(evt.permission_request);
+                usePermissionState.getState().setFromEvent(evt.permission_request, sid);
               }
 
               // M2 part B: ask_user_question 事件 → 写入 question store,
               // 全局 QuestionDialog 弹出。后端 gate 阻塞等待应答(最长 300s,
               // 超时 = 空应答软结果),随后的 observing 事件自然覆盖流式状态。
               // uiText 分支对该 state 返回 null,不会碰消息气泡占位符。
+              // S4: 同上,按会话记录。
               if (evt.state === 'ask_user_question' && evt.user_question) {
-                useQuestionState.getState().setFromEvent(evt.user_question);
+                useQuestionState.getState().setFromEvent(evt.user_question, sid);
+              }
+
+              // S7 (2026-09-06): 产物事件 → 计数 store。右侧产物面板与侧栏
+              // 徽章事件驱动刷新（此前只能手动刷新）。
+              if (evt.state === 'artifact_created' && evt.artifact) {
+                bumpArtifactEvent(sid);
+                return;
               }
 
               // Multi-Agent Orchestration: task_plan 事件 → 初始化编排任务板。
               // 与 permission_request 一样"先消费、不进内容累加器" —
               // 不产生消息气泡占位文本,后续 uiText 分支不会命中。
               if (evt.state === 'task_plan' && evt.run_id && evt.plan) {
-                useChatStreamStore.getState().setTaskBoard({
+                useChatStreamStore.getState().setTaskBoard(sid, {
                   runId: evt.run_id,
                   plan: evt.plan,
                   statuses: {},
@@ -406,7 +451,7 @@ export function useChat() {
                 // 闭包内 TS 不保留 evt 字段的 narrowing,先捕获为 const
                 const runId = evt.run_id;
                 const taskId = evt.task_id;
-                useChatStreamStore.getState().updateTaskBoard(runId, (prev) => {
+                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) => {
                   if (!prev || prev.runId !== runId) return prev;
                   const nextStatuses = {
                     ...prev.statuses,
@@ -444,7 +489,7 @@ export function useChat() {
               if (evt.state === 'task_progress' && evt.run_id) {
                 const runId = evt.run_id;
                 const tp = evt as TaskProgressEvent;
-                useChatStreamStore.getState().updateTaskBoard(runId, (prev) =>
+                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) =>
                   prev && prev.runId === runId
                     ? {
                         ...prev,
@@ -470,7 +515,7 @@ export function useChat() {
                 const review = evt as TaskReviewEvent;
                 useChatStreamStore
                   .getState()
-                  .updateTaskBoard(runId, (prev) =>
+                  .updateTaskBoard(sid, runId, (prev) =>
                     prev && prev.runId === runId ? { ...prev, review } : prev,
                   );
                 return;
@@ -479,7 +524,7 @@ export function useChat() {
               // P1 todo 接线 (2026-08-21): todo_write 全量快照 → store。
               // 不进消息气泡（agentStateMapping 对编排事件同类处理）。
               if (evt.state === 'todo_snapshot' && Array.isArray(evt.todos)) {
-                useChatStreamStore.getState().setTodos(evt.todos);
+                useChatStreamStore.getState().setTodos(sid, evt.todos);
                 return;
               }
 
@@ -489,11 +534,11 @@ export function useChat() {
               //   - reasoning_final: 后端每段末尾发 done_reasoning 全量, replace 替换
               //                     (不再 append → 避免与 reasoning_delta 重复显示)
               if (evt.state === 'reasoning_delta' && evt.reasoning) {
-                useChatStreamStore.getState().appendReasoning(assistantId, evt.reasoning);
+                useChatStreamStore.getState().appendReasoning(sid, assistantId, evt.reasoning);
               } else if (evt.state === 'reasoning' && evt.reasoning) {
-                useChatStreamStore.getState().appendReasoning(assistantId, evt.reasoning);
+                useChatStreamStore.getState().appendReasoning(sid, assistantId, evt.reasoning);
               } else if (evt.state === 'reasoning_final' && evt.reasoning) {
-                useChatStreamStore.getState().replaceReasoning(assistantId, evt.reasoning);
+                useChatStreamStore.getState().replaceReasoning(sid, assistantId, evt.reasoning);
               }
 
               // P0: 实时工具调用 — acting 事件到达时立即追加到 store
@@ -507,7 +552,7 @@ export function useChat() {
                   // ignore parse errors
                 }
                 // HIGH-3: 记录 tool_call.id,供 observing 用 id 精确匹配 (而非按 index 错配)
-                useChatStreamStore.getState().appendOrUpdateToolCall({
+                useChatStreamStore.getState().appendOrUpdateToolCall(sid, {
                   id: tc.id,
                   name: tc.function.name,
                   args,
@@ -520,7 +565,10 @@ export function useChat() {
                 const tr = evt.tool_result;
                 // HIGH-3: 用 tr.tool_call_id 查找匹配项;fallback 到最后一个 (兼容无 id 场景)
                 const targetId = tr.tool_call_id;
-                const currentTcs = useChatStreamStore.getState().streamingToolCalls;
+                const currentTcs = selectSessionSlots(
+                  useChatStreamStore.getState(),
+                  sid,
+                ).streamingToolCalls;
                 const targetIdx = targetId
                   ? currentTcs.findIndex((t) => t.id === targetId)
                   : currentTcs.length - 1;
@@ -536,7 +584,7 @@ export function useChat() {
                   } catch {
                     // Not JSON, ignore
                   }
-                  useChatStreamStore.getState().appendOrUpdateToolCall({
+                  useChatStreamStore.getState().appendOrUpdateToolCall(sid, {
                     ...targetTc,
                     result: tr.content,
                     metadata,
@@ -559,16 +607,22 @@ export function useChat() {
                 // reasoning_delta 复用同一处理,避免依赖 producer 必须以
                 // 完整 reasoning 事件收尾的顺序不变式。
                 // reasoning_final (2026-09-02): 后端每段末尾全量对齐事件,同样不进 content。
-                useChatStreamStore.getState().setStreamingMeta(assistantId, { state: evt.state });
+                useChatStreamStore.getState().setStreamingMeta(sid, assistantId, {
+                  state: evt.state,
+                });
               } else if (typeof evt.content === 'string' && evt.content.length > 0) {
                 appendContent(evt.content);
                 if (evt.state === 'done') {
                   lastDoneContent = evt.content;
                 }
-                useChatStreamStore.getState().setStreamingMeta(assistantId, { state: evt.state });
+                useChatStreamStore
+                  .getState()
+                  .setStreamingMeta(sid, assistantId, { state: evt.state });
               } else if (uiText) {
                 replaceContent(uiText);
-                useChatStreamStore.getState().setStreamingMeta(assistantId, { state: evt.state });
+                useChatStreamStore
+                  .getState()
+                  .setStreamingMeta(sid, assistantId, { state: evt.state });
               }
             },
             onError: (err) => {
@@ -585,10 +639,12 @@ export function useChat() {
           config,
           officeRefs,
         );
-        // 存 cancel 用于下次 sendMessage 取消 + interrupt 用
-        cancelRef.current = cancel;
-        // P0-2 (2026-08-20): 记录当前 streamId，interrupt 时让后端命中真实 agent。
-        streamIdRef.current = streamId;
+        // S3: 记入本会话句柄（cancel 用于同会话安全网取消 + interrupt 用）
+        const handle = activeHandleRef.current.get(sid);
+        if (handle) {
+          handle.cancel = cancel;
+          handle.streamId = streamId;
+        }
       } catch (err: unknown) {
         // chatStream 启动失败 (validate / listen 失败等)
         // onDone/onError 不会触发,这里兜底
@@ -596,27 +652,34 @@ export function useChat() {
         finishStream();
       }
     },
-    [currentSessionId, isLoading, chatEndpoint, settings, addMessage, updateMessage],
+    [currentSessionId, chatEndpoint, settings, addMessage, updateMessage, markStreamActive, markStreamIdle],
   );
   // U5: 队列 flush 用 ref 取最新 sendMessage(避免闭包捕获旧 isLoading)
   sendMessageRef.current = sendMessage;
 
-  /** Wave 3 (2026-08-14): 取消执行后清空任务板。 */
-  const clearTaskBoard = useCallback(() => useChatStreamStore.getState().setTaskBoard(null), []);
+  /** Wave 3 (2026-08-14): 取消执行后清空任务板。S2: 只清当前会话的。 */
+  const clearTaskBoard = useCallback(() => {
+    if (currentSessionId == null) return;
+    useChatStreamStore.getState().setTaskBoard(currentSessionId, null);
+  }, [currentSessionId]);
 
   const interrupt = useCallback(async () => {
+    // S3: 只中断**当前会话**的活跃流(旧实现 cancelRef 单例只能表达一条流)。
+    // 其它会话的后台流不受影响 —— 这正是多会话并行的核心语义。
+    if (currentSessionId == null) return;
+    const handle = activeHandleRef.current.get(currentSessionId);
+    if (!handle) return;
     // PR-6: 先取消前端 listener, 再请求后端中断
-    if (cancelRef.current) {
+    if (handle.cancel) {
       try {
-        cancelRef.current();
+        handle.cancel();
       } catch {
         // ignore
       }
-      cancelRef.current = null;
     }
     try {
-      // P0-2 (2026-08-20): 带上当前 streamId 让后端命中真实运行的 agent。
-      await chatApi.interrupt(streamIdRef.current ?? undefined);
+      // P0-2 (2026-08-20): 带上 streamId 让后端命中真实运行的 agent。
+      await chatApi.interrupt(handle.streamId ?? undefined);
     } catch {
       // Interrupt failures are non-critical
     }
@@ -624,8 +687,8 @@ export function useChat() {
     // (之前 interrupt 只调了 cancel + 后端 interrupt,没有清 setStreaming(null),
     //  导致用户看到 '🤔 思考中…' 占位符永远不消失、ActiveAgentIndicator 不消失、
     //  isLoading 不重置、streamingToolCallsRef 持有陈旧数据)
-    finishStreamRef.current?.();
-  }, []);
+    handle.finish?.();
+  }, [currentSessionId]);
 
   const loadMessagesCallback = useCallback(
     async (sessionId: string) => {

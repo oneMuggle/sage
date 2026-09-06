@@ -13,7 +13,7 @@ import { SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/settin
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
 import { useStore } from '../../../shared/lib/store';
-import { useChatStreamStore } from '../chatStreamStore';
+import { selectSessionSlots, useChatStreamStore } from '../chatStreamStore';
 import { useChat } from '../useChat';
 
 // 必须使用工厂函数，vitest 才能正确 hoist
@@ -432,7 +432,10 @@ describe('useChat', () => {
       .getState()
       .messages.find((message) => message.id === assistantMessage?.id);
     expect(finalAssistant?.content).toBe('route switch answer');
-    expect(useChatStreamStore.getState().streaming).toBeNull();
+    // S2: 槽位按会话键控 —— 断言当前会话槽位的 streaming 已清空
+    expect(
+      selectSessionSlots(useChatStreamStore.getState(), VALID_SESSION_ID).streaming,
+    ).toBeNull();
   });
 
   // 回归保护: cancel-prev 路径 — sendMessage 必须把 chatStream 返回的
@@ -872,8 +875,11 @@ describe('useChat M1 permission_request wiring', () => {
       });
     });
 
-    // 对话框数据到位
-    expect(usePermissionState.getState().currentRequest).toEqual(PERM_PAYLOAD);
+    // 对话框数据到位（S4: currentRequest 附带来源会话 id）
+    expect(usePermissionState.getState().currentRequest).toEqual({
+      ...PERM_PAYLOAD,
+      session_id: VALID_SESSION_ID,
+    });
     // 且没有污染消息气泡（permission_request 不产生占位文本,保留 acting 占位）
     const mid = result.current.messages.find((m) => m.role === 'assistant');
     expect(mid?.content).toBe('🔧 行动中…');
@@ -1046,8 +1052,11 @@ describe('useChat M2 ask_user_question wiring', () => {
       });
     });
 
-    // 对话框数据到位
-    expect(useQuestionState.getState().currentQuestion).toEqual(QUESTION_PAYLOAD);
+    // 对话框数据到位（S4: currentQuestion 附带来源会话 id）
+    expect(useQuestionState.getState().currentQuestion).toEqual({
+      ...QUESTION_PAYLOAD,
+      session_id: VALID_SESSION_ID,
+    });
     // 且没有污染消息气泡（ask_user_question 不产生占位文本,保留 acting 占位）
     const mid = result.current.messages.find((m) => m.role === 'assistant');
     expect(mid?.content).toBe('🔧 行动中…');
@@ -1477,7 +1486,7 @@ describe('useChat taskBoard', () => {
     });
 
     await waitFor(() => {
-      const board = useChatStreamStore.getState().taskBoard;
+      const board = selectSessionSlots(useChatStreamStore.getState(), VALID_SESSION_ID).taskBoard;
       expect(board?.review?.verdict).toBe('fail');
       expect(board?.review?.summary).toBe('结论缺少数据支撑');
     });
