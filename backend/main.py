@@ -244,6 +244,13 @@ async def lifespan(app: FastAPI):
     db.init_db()
     app.state.db = db
 
+    # S1 (2026-09-06): 会话运行态启动恢复 —— 上次进程被杀时 producer 的
+    # finally 写库点没有机会执行，遗留 running 统一收口为 failed（与编排
+    # finalize 的 default-failed 语义一致）；suspended 不动（A4 wake 仍在）。
+    _stale_runs = SessionRepository().recover_stale_run_states()
+    if _stale_runs:
+        logger.info("启动恢复: %d 个遗留 running 会话已标记为 failed", _stale_runs)
+
     # PR-3: agents 表种子化 — 用 ensure_default_agents 替代 seed_defaults_if_empty:
     # 首次启动插全量默认集, 已存在的 DB 增量补 writer 等新增默认角色。
     from backend.agents.profiles import ensure_default_agents, validate_profile_tools

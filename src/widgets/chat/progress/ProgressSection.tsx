@@ -1,6 +1,6 @@
 // src/widgets/chat/progress/ProgressSection.tsx
 // Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域,此处仅保留状态摘要 + 任务树。
-import { useChatStreamStore } from '../../../features/send-message/chatStreamStore';
+import { useChatStreamStore, selectSessionSlots } from '../../../features/send-message/chatStreamStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { ToolCall } from '../../../shared/lib/store';
 
@@ -15,6 +15,8 @@ interface ProgressSectionProps {
   toolCalls: ToolCall[];
   isLoading: boolean;
   taskBoard?: TaskBoard | null; // 新增：编排任务板（null/缺省 = 无编排）
+  // S2 (2026-09-06): todos 改从该会话的键控槽位读取（并行会话各自的清单）
+  sessionId?: string | null;
   // Wave 3 (2026-08-14): 计划卡接线回调。
   // M4 (2026-08-15): onPlanStart 已删 —— PlanCard.handleStart 内部
   // 自调 updatePlan 落库，派发由后端驱动，前端无需计划开始回调。
@@ -34,10 +36,12 @@ export function ProgressSection({
   streamingState,
   isLoading,
   taskBoard,
+  sessionId,
   onCancelExecution,
 }: ProgressSectionProps) {
-  // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）
-  const todos = useChatStreamStore((s) => s.todos);
+  // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）。
+  // S2: 按会话键控 —— 显示的是当前打开会话的清单。
+  const todos = useChatStreamStore((s) => selectSessionSlots(s, sessionId).todos);
   const stateLabel = streamingState ? (STATE_LABELS[streamingState] ?? streamingState) : null;
   // 进度可视化 P0-2 (2026-08-12): 编排进行中有 taskBoard 时,用 5 元组
   // 摘要替代"等待输入"占位文,避免误导用户以为主进程空闲。

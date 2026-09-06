@@ -459,6 +459,16 @@ export const zh = {
   'session.export_html': '导出为 HTML',
   'session.export_html_exporting': '正在导出…',
 
+  // ─── 会话状态徽章 (S4/S5/S7/S9 多会话并行) ──────
+  'session.status_running': '运行中',
+  'session.status_completed': '已完成',
+  'session.status_failed': '运行失败',
+  'session.status_suspended': '已挂起，等待唤醒',
+  'session.attention': '有待处理的审批或提问',
+  'session.cron_badge': '有定时任务指向此会话',
+  'session.artifacts_badge': '本次运行产出 {count} 个产物',
+  'session.changes_badge': '本次运行变更 {count} 个文件',
+
   // ─── 品牌 (BrandLogo component) ──────
   // U-Brand: a11y alt 文本。仅在 <img> 渲染时使用，sidebar.brand 是 wordmark 文案。
   'brand.alt': 'Sage 标志',

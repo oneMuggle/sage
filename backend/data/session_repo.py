@@ -34,6 +34,11 @@ class Session:
     # 分叉点（源会话中被复制的最后一条消息的 *源* id，None 表示复制到末尾）。
     fork_root: Optional[str] = None
     forked_at_message_id: Optional[str] = None
+    # S1 (2026-09-06): 会话级运行态 —— 侧边栏状态徽章数据源。
+    # idle=无运行; running/suspended=活跃流; completed/failed=上一轮流终态。
+    run_status: str = "idle"
+    last_error: Optional[str] = None
+    last_run_at: Optional[int] = None
 
     @classmethod
     def from_row(cls, row) -> Session:
@@ -52,6 +57,10 @@ class Session:
             parent_id=row["parent_id"],
             fork_root=row["fork_root"],
             forked_at_message_id=row["forked_at_message_id"],
+            # S1: 迁移前的存量行三列为 NULL/缺失 → 兜底 idle
+            run_status=row["run_status"] or "idle",
+            last_error=row["last_error"],
+            last_run_at=row["last_run_at"],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -67,6 +76,10 @@ class Session:
             # M4: 侧栏 fork 徽标依赖这两个字段（list_sessions 序列化必须带上）
             "fork_root": self.fork_root,
             "forked_at_message_id": self.forked_at_message_id,
+            # S1: 侧栏状态徽章 / 错误 tooltip 依赖
+            "run_status": self.run_status,
+            "last_error": self.last_error,
+            "last_run_at": self.last_run_at,
         }
 
 
@@ -172,6 +185,50 @@ class SessionRepository:
     def pin(self, session_id: str, pinned: bool = True) -> bool:
         """置顶/取消置顶会话"""
         return self.update(session_id, is_pinned=1 if pinned else 0)
+
+    def update_run_status(
+        self, session_id: str, status: str, error: Optional[str] = None
+    ) -> bool:
+        """更新会话运行态（S1，2026-09-06）。
+
+        与通用 ``update`` 的区别：**不动 updated_at** —— 运行态变化不应
+        重排侧栏（list 按 updated_at DESC 排序）。``last_run_at`` 记录本次
+        状态迁移时间（epoch ms）；``error`` 仅在终态为 failed 时传入（其余
+        状态传 None 清空旧错误），截断到 500 字符防长堆刷库。
+
+        会话不存在（如 /btw 伪会话 ``__btw__``）时静默返回 False。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        now = int(time.time() * 1000)
+        cursor.execute(
+            "UPDATE sessions SET run_status = ?, last_run_at = ?, last_error = ? WHERE id = ?",
+            (status, now, error[:500] if error else None, session_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def recover_stale_run_states(self) -> int:
+        """启动恢复（S1）：遗留 ``running`` 会话统一标记为 failed。
+
+        后端随应用退出被杀时，producer 的 finally 写库点没有机会执行，
+        sessions.run_status 会滞留 running。与编排 finalize 的 default-failed
+        语义一致（legacy_routes._finalize_orch_run），重启后统一按"运行中断"
+        收口；suspended 不动 —— A4 wake 记录仍在，语义上仍是"等待唤醒"。
+
+        Returns:
+            被改写的会话数（用于启动日志）。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        now = int(time.time() * 1000)
+        cursor.execute(
+            "UPDATE sessions SET run_status = 'failed', last_error = ?, last_run_at = ? "
+            "WHERE run_status = 'running'",
+            ("应用重启，运行中断", now),
+        )
+        conn.commit()
+        return cursor.rowcount
 
 
 # ==================== 消息仓储 ====================
