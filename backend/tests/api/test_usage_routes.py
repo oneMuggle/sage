@@ -24,10 +24,12 @@ async def test_usage_summary_contract_empty(client):
     assert resp.status_code == 200
     body = resp.json()
     assert set(body.keys()) == {"totals", "by_model", "today"}
+    # L4: totals 增加 cached_tokens 维度（缓存感知记账）
     assert body["totals"] == {
         "requests": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,
+        "cached_tokens": 0,
         "estimated_cost_usd": None,
     }
     assert body["by_model"] == []

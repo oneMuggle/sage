@@ -10,6 +10,8 @@ import type {
   ProjectCheckResponse,
   RecentProject,
   RecordRecentRequest,
+  LintResponse,
+  ReviewResponse,
 } from '../types/wiki';
 
 // Backend API base URL
@@ -151,6 +153,33 @@ export async function wikiSearch(
     query,
     project_path: projectPath,
     limit: limit ?? 20,
+  });
+}
+
+// ==================== Lint API ====================
+
+/**
+ * 运行 Wiki 质量检查。
+ *
+ * 对应后端 `GET /api/v1/wiki/lint`,返回结构/前端/断链/孤立页面等问题的聚合。
+ */
+export async function wikiLintRun(projectPath: string): Promise<LintResponse> {
+  return httpGet<LintResponse>('/wiki/lint', {
+    project_path: projectPath,
+  });
+}
+
+// ==================== Review API ====================
+
+/**
+ * 运行 Wiki 内容审核。
+ *
+ * 对应后端 `GET /api/v1/wiki/review`,返回重复/矛盾/缺失页/待确认/建议等
+ * 需要人工或 LLM 复核的条目聚合。
+ */
+export async function wikiReviewRun(projectPath: string): Promise<ReviewResponse> {
+  return httpGet<ReviewResponse>('/wiki/review', {
+    project_path: projectPath,
   });
 }
 
@@ -371,4 +400,114 @@ export async function getRecentWikiProjects(): Promise<RecentProject[]> {
 
 export async function recordRecentWikiProject(req: RecordRecentRequest): Promise<void> {
   await httpPost<void>('/wiki/recent-projects/record', req);
+}
+
+// ==================== Ingest Queue API ====================
+// Added 2026-09-06: 持久化摄入队列（崩溃恢复、取消、重试）
+
+export type QueueStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+
+export interface QueueStatusSummary {
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+}
+
+export interface IngestTask {
+  task_id: string;
+  source_path: string;
+  project_root: string;
+  status: QueueStatus;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error_message: string | null;
+  retry_count: number;
+  max_retries: number;
+  result: Record<string, unknown> | null;
+}
+
+export interface QueueAddResponse {
+  task_id: string;
+  status: QueueStatus;
+}
+
+export interface QueueTasksResponse {
+  tasks: IngestTask[];
+}
+
+export interface QueueNextResponse {
+  task: IngestTask | null;
+}
+
+export interface QueueClearResponse {
+  cleared: number;
+}
+
+export interface SuccessResponse {
+  success: boolean;
+}
+
+export async function queueAddTask(
+  projectPath: string,
+  sourcePath: string,
+  maxRetries = 3,
+): Promise<QueueAddResponse> {
+  return httpPost<QueueAddResponse>('/wiki/ingest/queue/add', {
+    project_path: projectPath,
+    source_path: sourcePath,
+    max_retries: maxRetries,
+  });
+}
+
+export async function queueGetStatus(projectPath: string): Promise<QueueStatusSummary> {
+  return httpGet<QueueStatusSummary>('/wiki/ingest/queue/status', {
+    project_path: projectPath,
+  });
+}
+
+export async function queueListTasks(
+  projectPath: string,
+  status?: QueueStatus,
+): Promise<QueueTasksResponse> {
+  return httpGet<QueueTasksResponse>('/wiki/ingest/queue/tasks', {
+    project_path: projectPath,
+    status,
+  });
+}
+
+export async function queueCancelTask(
+  projectPath: string,
+  taskId: string,
+): Promise<SuccessResponse> {
+  return httpPost<SuccessResponse>(`/wiki/ingest/queue/cancel/${encodeURIComponent(taskId)}`, {
+    project_path: projectPath,
+  });
+}
+
+export async function queueRetryTask(
+  projectPath: string,
+  taskId: string,
+): Promise<SuccessResponse> {
+  return httpPost<SuccessResponse>(`/wiki/ingest/queue/retry/${encodeURIComponent(taskId)}`, {
+    project_path: projectPath,
+  });
+}
+
+export async function queueGetNext(projectPath: string): Promise<QueueNextResponse> {
+  return httpGet<QueueNextResponse>('/wiki/ingest/queue/next', {
+    project_path: projectPath,
+  });
+}
+
+export async function queueClearTasks(
+  projectPath: string,
+  completedOnly = false,
+): Promise<QueueClearResponse> {
+  return httpPost<QueueClearResponse>('/wiki/ingest/queue/clear', {
+    project_path: projectPath,
+    completed_only: completedOnly,
+  });
 }

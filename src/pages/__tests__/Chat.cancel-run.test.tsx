@@ -8,8 +8,8 @@
  *   - H1：未派发取消不再"仅前端清理"——必须调后端 cancelRun。
  *   - H2：已派发运行中 → TaskTreeSection 出现取消按钮并走同一路径。
  *
- * 渲染链路真实：Chat → RightPanel → ProgressSection → PlanCard(未派发)/
- * TaskTreeSection(已派发)。useChat / orchRunClient 都被 mock，
+ * 渲染链路真实：Chat → PlanCard(未派发，主对话区域) /
+ * RightPanel → ProgressSection → TaskTreeSection(已派发)。useChat / orchRunClient 都被 mock，
  * ChatInput 也 mock 掉避免 AtFileMenu 依赖。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -36,10 +36,16 @@ vi.mock('../../features/send-message/useChat', () => ({
 }));
 
 const cancelRunMock = vi.fn();
+const updatePlanMock = vi.fn();
+const confirmRunMock = vi.fn();
 vi.mock('../../shared/api/orchRunClient', () => ({
   orchRunClient: {
     listRuns: vi.fn().mockResolvedValue([]),
     cancelRun: (...args: unknown[]) => cancelRunMock(...args),
+    // Fix #3 (2026-09-06): PlanCard 现于 Chat.tsx 渲染,补全 updatePlan/confirmRun
+    // 防止取消测试中无意触发 handleStart 时 TypeError。
+    updatePlan: (...args: unknown[]) => updatePlanMock(...args),
+    confirmRun: (...args: unknown[]) => confirmRunMock(...args),
   },
 }));
 
@@ -108,7 +114,6 @@ function baseChat(overrides: Record<string, unknown> = {}) {
     streamingState: null,
     streamingToolCalls: [],
     taskBoard: null,
-    resumeOrchestration: vi.fn(),
     clearTaskBoard: clearTaskBoardMock,
     ...overrides,
   };

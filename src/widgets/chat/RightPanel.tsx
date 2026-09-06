@@ -10,6 +10,7 @@ import type { ToolCall } from '../../shared/lib/store';
 
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
+import { ChangesSection } from './changes/ChangesSection';
 import { ProgressSection } from './progress/ProgressSection';
 
 interface RightPanelProps {
@@ -21,14 +22,19 @@ interface RightPanelProps {
   isLoading: boolean;
   sessionId: string | null;
   taskBoard?: TaskBoard | null; // 新增：编排任务板
-  // Wave 3 (2026-08-14): 历史恢复 / 计划卡接线回调透传。
-  // M4 (2026-08-15): onPlanStart 已删 —— PlanCard.handleStart 内部
-  // 自调 updatePlan 落库，派发由后端驱动，前端无需计划开始回调。
-  onResumeRun?: (runId: string) => void;
+  // Wave 3 (2026-08-14): 计划卡接线回调透传。
+  // M4 (2026-08-15): onPlanStart 已删。
+  // Wave 4 (2026-09-06): onResumeRun 已删 —— 历史编排记录功能移除。
   onCancelExecution?: (runId: string) => void;
 }
 
-type Tab = 'progress' | 'artifacts';
+type Tab = 'progress' | 'artifacts' | 'changes';
+
+const TAB_LABELS: Record<Tab, string> = {
+  progress: '进度',
+  artifacts: '产物',
+  changes: '变更',
+};
 
 interface PanelHeaderProps {
   tab?: Tab;
@@ -41,7 +47,7 @@ export function PanelHeader({ tab, onTabChange, onClose }: PanelHeaderProps) {
   if (tab !== undefined && onTabChange) {
     return (
       <div className="flex border-b border-border items-center">
-        {(['progress', 'artifacts'] as Tab[]).map((t) => (
+        {(['progress', 'changes', 'artifacts'] as Tab[]).map((t) => (
           <button
             key={t}
             className={
@@ -52,7 +58,7 @@ export function PanelHeader({ tab, onTabChange, onClose }: PanelHeaderProps) {
             }
             onClick={() => onTabChange(t)}
           >
-            {t === 'progress' ? 'Progress' : 'Artifacts'}
+            {TAB_LABELS[t]}
           </button>
         ))}
         <button
@@ -91,7 +97,6 @@ export function RightPanel({
   isLoading,
   sessionId,
   taskBoard,
-  onResumeRun,
   onCancelExecution,
 }: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('progress');
@@ -112,7 +117,7 @@ export function RightPanel({
         <PanelHeader tab={tab} onTabChange={setTab} onClose={onToggle} />
       )}
 
-      <div className="h-[calc(100%-2.5rem)]">
+      <div className="h-[calc(100%-2.5rem)] overflow-y-auto min-h-0">
         {selected && sessionId ? (
           <ArtifactViewer
             artifact={selected}
@@ -126,9 +131,12 @@ export function RightPanel({
             toolCalls={toolCalls}
             isLoading={isLoading}
             taskBoard={taskBoard}
-            onResumeRun={onResumeRun}
+            // S2: todos 从该会话的键控槽位读取（切会话看该会话的清单）
+            sessionId={sessionId}
             onCancelExecution={onCancelExecution}
           />
+        ) : tab === 'changes' ? (
+          <ChangesSection sessionId={sessionId} />
         ) : (
           <ArtifactsSection
             artifacts={artifacts}

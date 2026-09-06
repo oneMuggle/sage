@@ -5,6 +5,7 @@ LLM Client - 大语言模型客户端
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -23,6 +24,82 @@ logger = logging.getLogger(__name__)
 # 预编译：提取 LLM 输出中的 <think>...</think> 推理块。
 # 部分 provider（如 DeepSeek）把推理内容用此标签包裹在 content 字段中。
 THINK_TAG_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+
+# ===== L3 请求层重试退避（对标增强第二轮批次 B）=====
+#: 默认最大尝试次数（首次 + 2 次重试）；env ``SAGE_LLM_RETRY_MAX_ATTEMPTS`` 覆盖
+_LLM_RETRY_MAX_ATTEMPTS = 3
+#: 指数退避基数秒数；env ``SAGE_LLM_RETRY_BASE_DELAY_S`` 覆盖
+_LLM_RETRY_BASE_DELAY_S = 1.0
+#: 单次退避上限
+_LLM_RETRY_MAX_DELAY_S = 15.0
+#: 可重试的错误类型：限流 / 服务端错误 / 超时 / 网络不可达
+_RETRYABLE_ERROR_TYPES = frozenset(
+    {
+        LLMErrorType.RATE_LIMITED,
+        LLMErrorType.SERVER_ERROR,
+        LLMErrorType.TIMEOUT,
+        LLMErrorType.NETWORK,
+    }
+)
+
+
+def _retry_settings() -> Tuple[int, float]:
+    """读重试配置：env 覆盖 > 默认。任何解析失败回退默认，永不抛错。"""
+    max_attempts = _LLM_RETRY_MAX_ATTEMPTS
+    base_delay = _LLM_RETRY_BASE_DELAY_S
+    raw_attempts = os.environ.get("SAGE_LLM_RETRY_MAX_ATTEMPTS", "").strip()
+    if raw_attempts:
+        try:
+            value = int(raw_attempts)
+            if value >= 1:
+                max_attempts = value
+        except ValueError:
+            logger.warning("env SAGE_LLM_RETRY_MAX_ATTEMPTS=%r 非法,回退默认", raw_attempts)
+    raw_delay = os.environ.get("SAGE_LLM_RETRY_BASE_DELAY_S", "").strip()
+    if raw_delay:
+        try:
+            value = float(raw_delay)
+            if value >= 0:
+                base_delay = value
+        except ValueError:
+            logger.warning("env SAGE_LLM_RETRY_BASE_DELAY_S=%r 非法,回退默认", raw_delay)
+    return max_attempts, base_delay
+
+
+def _retry_backoff_seconds(err: LLMError, attempt: int, base_delay: float) -> float:
+    """第 attempt 次失败后的退避秒数：retry-after 优先,否则指数退避封顶。"""
+    if err.retry_after:
+        return min(float(err.retry_after), _LLM_RETRY_MAX_DELAY_S)
+    return min(base_delay * (2 ** (attempt - 1)), _LLM_RETRY_MAX_DELAY_S)
+
+
+def extract_cached_tokens(usage: Dict[str, Any]) -> int:
+    """多 provider 缓存命中字段归一化（L4 缓存感知记账）。
+
+    全链路走 OpenAI 兼容线格式,缓存命中字段各家不同:
+    - OpenAI 系: ``usage.prompt_tokens_details.cached_tokens``
+    - DeepSeek: ``usage.prompt_cache_hit_tokens``
+    - Anthropic 原生形态（经兼容网关透传时）: ``usage.cache_read_input_tokens``
+
+    注意: prompt_tokens 已**包含**命中部分（OpenAI/DeepSeek 口径）,
+    调用方拆账时用 prompt - cached 计全价输入。
+    """
+    if not isinstance(usage, dict):
+        return 0
+    details = usage.get("prompt_tokens_details")
+    if isinstance(details, dict):
+        try:
+            return int(details.get("cached_tokens") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for key in ("prompt_cache_hit_tokens", "cache_read_input_tokens"):
+        value = usage.get(key)
+        if value:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+    return 0
 
 
 @dataclass
@@ -77,7 +154,6 @@ class LLMResponse:
 @dataclass
 class LLMConfig:
     """LLM 连接配置"""
-
     provider: str = "openai"  # openai, claude, gemini, deepseek, ollama, custom
     api_key: str = ""
     base_url: str = "https://api.openai.com/v1"
@@ -104,6 +180,59 @@ class LLMConfig:
     use_proxy: bool = True
 
 
+class StreamToolCallAggregator:
+    """把流式响应中的 tool_calls 增量按 index 聚合成完整调用（L2 真流式）。
+
+    OpenAI 兼容流式协议里,一次工具调用拆成多个 delta:
+    ``{"index": 0, "id": "call_x", "function": {"name": "f", "arguments": "{\"a\"}}``
+    ``{"index": 0, "function": {"arguments": ": 1}"}}``
+    arguments 字符串逐段拼接,id/name 只在首块出现。部分上游省略 index ——
+    按 0 处理（单调用场景唯一合理默认）。
+    """
+
+    def __init__(self) -> None:
+        # index -> {"id": str, "name": str, "arguments": str}
+        self._partials: Dict[int, Dict[str, str]] = {}
+
+    def feed(self, delta_tool_calls: Any) -> None:
+        """消费一个 chunk 的 ``delta.tool_calls``（list 或 None），非法形状静默跳过。"""
+        if not isinstance(delta_tool_calls, list):
+            return
+        for delta in delta_tool_calls:
+            if not isinstance(delta, dict):
+                continue
+            index = delta.get("index")
+            if isinstance(index, bool) or not isinstance(index, int):
+                index = 0
+            slot = self._partials.setdefault(index, {"id": "", "name": "", "arguments": ""})
+            if isinstance(delta.get("id"), str) and delta["id"] and not slot["id"]:
+                slot["id"] = delta["id"]
+            function = delta.get("function")
+            if not isinstance(function, dict):
+                continue
+            if isinstance(function.get("name"), str) and function["name"] and not slot["name"]:
+                slot["name"] = function["name"]
+            arguments_piece = function.get("arguments")
+            if isinstance(arguments_piece, str):
+                slot["arguments"] += arguments_piece
+
+    def build(self) -> List[LLMToolCall]:
+        """按 index 升序输出聚合结果；name 为空的残缺调用丢弃。"""
+        calls: List[LLMToolCall] = []
+        for index in sorted(self._partials):
+            slot = self._partials[index]
+            if not slot["name"]:
+                continue
+            calls.append(
+                LLMToolCall(
+                    id=slot["id"] or f"call_{index}",
+                    name=slot["name"],
+                    arguments=slot["arguments"] or "{}",
+                )
+            )
+        return calls
+
+
 class LLMClient:
     """
     LLM 客户端，支持 OpenAI-compatible API
@@ -121,6 +250,13 @@ class LLMClient:
     def __init__(self, config: LLMConfig):
         self.config = config
         self._client: Optional[httpx.AsyncClient] = None
+        # L2 真流式 (2026-09-06): 流式 + tools 首块前失败过的 provider 标记
+        # （部分上游不支持 stream+tools 或 stream_options）。置位后
+        # run_loop 直接走非流式,避免每次迭代都白白多打一个失败请求。
+        self.stream_unsupported = False
+        # L8 (批次 C): 用量归因的会话维度——run_loop 按需注入,缺省 None
+        # (usage_events 落库为 unattributed 行)。
+        self.session_id: Optional[str] = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """获取或创建 HTTP 客户端
@@ -310,12 +446,35 @@ class LLMClient:
 
         start_time = time.time()
 
-        try:
-            response = await client.post("/v1/chat/completions", json=body)
-            response.raise_for_status()
-            data = response.json()
-        except Exception as e:
-            self._raise_classified_error(e)
+        # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
+        # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
+        max_attempts, base_delay = _retry_settings()
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                response = await client.post("/v1/chat/completions", json=body)
+                response.raise_for_status()
+                data = response.json()
+                break
+            except Exception as e:
+                try:
+                    self._raise_classified_error(e)  # 总是抛出
+                except LLMError as llm_err:
+                    if (
+                        attempt >= max_attempts
+                        or llm_err.type not in _RETRYABLE_ERROR_TYPES
+                    ):
+                        raise
+                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay)
+                    logger.warning(
+                        "LLM 请求失败(%s/%s): %s — %.1fs 后重试",
+                        attempt,
+                        max_attempts,
+                        llm_err.message,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
 
         elapsed = time.time() - start_time
         logger.debug(f"LLM 响应耗时: {elapsed:.2f}s")
@@ -359,6 +518,8 @@ class LLMClient:
                 "prompt_tokens": int(usage.get("prompt_tokens") or 0),
                 "completion_tokens": int(usage.get("completion_tokens") or 0),
                 "total_tokens": int(usage.get("total_tokens") or 0),
+                # L4: 缓存命中拆账（OpenAI details / DeepSeek / Anthropic 形态归一）
+                "cached_tokens": extract_cached_tokens(usage),
             }
             try:
                 from backend.services.usage_tracker import usage_tracker
@@ -367,6 +528,8 @@ class LLMClient:
                     data.get("model", self.config.model),
                     usage_dict["prompt_tokens"],
                     usage_dict["completion_tokens"],
+                    session_id=self.session_id,
+                    cached_tokens=usage_dict["cached_tokens"],
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking skipped: %s", usage_err)
@@ -459,6 +622,8 @@ class LLMClient:
                         stream_model,
                         int(stream_usage.get("prompt_tokens") or 0),
                         int(stream_usage.get("completion_tokens") or 0),
+                        session_id=self.session_id,
+                        cached_tokens=extract_cached_tokens(stream_usage),
                     )
                 except Exception as usage_err:
                     logger.debug("usage tracking (stream) skipped: %s", usage_err)
@@ -466,6 +631,188 @@ class LLMClient:
 
         except Exception as e:
             self._raise_classified_error(e)
+
+    async def chat_stream_events(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
+    ) -> AsyncGenerator[Tuple[str, Any], None]:
+        """流式 chat（L2 真流式）：内容/推理增量实时产出，工具调用增量聚合。
+
+        与 ``chat_stream``（纯文本、无 tools、无聚合）的区别：本方法发送
+        ``tools`` 与 ``stream_options.include_usage``，yield 结构化事件元组：
+
+        - ``("content_delta", str)``      内容增量（原始流，未做 <think> 清理）
+        - ``("reasoning_delta", str)``    推理增量（delta.reasoning_content / reasoning）
+        - ``("response", LLMResponse)``   流结束（终值仅 yield 一次）：content 为
+          全量（已做 <think> 提取），tool_calls 为聚合结果，usage 已记入 tracker
+
+        请求失败时抛 ``LLMError``（与 ``chat()`` 同一套分类规则）。首个事件
+        之前失败（如上游不支持 stream+tools 返回 4xx）时调用方可安全回退
+        ``chat()`` 非流式；**已产出 content_delta 之后**失败不可重放，应按
+        失败终止。调用方（agent.run_loop）据 ``stream_unsupported`` 标记跳过
+        后续迭代的流式尝试。
+
+        Args:
+            messages: 消息列表
+            tools: OpenAI 格式工具 schema 列表（可选）
+            tool_choice: "auto" | "none" | "required"
+        """
+        client = self._get_client()
+
+        body: Dict[str, Any] = {
+            "model": self.config.model,
+            "messages": self._convert_messages(messages),
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+            "stream": True,
+            # OpenAI / DeepSeek / 多数兼容网关支持；不支持的由 run_loop
+            # 回退非流式（本方法只在首个事件前抛错，重放安全）。
+            "stream_options": {"include_usage": True},
+        }
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = tool_choice or "auto"
+        if self.config.reasoning_effort is not None:
+            body["reasoning_effort"] = self.config.reasoning_effort
+        if self.config.thinking_budget is not None:
+            body["thinking_budget"] = self.config.thinking_budget
+
+        aggregator = StreamToolCallAggregator()
+        content_parts: List[str] = []
+        reasoning_parts: List[str] = []
+        finish_reason: Optional[str] = None
+        stream_model: str = self.config.model
+        stream_usage: Optional[Dict[str, Any]] = None
+
+        # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
+        # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
+        # 错误面终止（调用方语义见 run_loop）。
+        max_attempts, base_delay = _retry_settings()
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                async with client.stream(
+                    "POST", "/v1/chat/completions", json=body
+                ) as response:
+                    response.raise_for_status()
+
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data_str = line[6:]
+                        if data_str.strip() == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
+
+                        if isinstance(data.get("model"), str):
+                            stream_model = data["model"]
+                        if isinstance(data.get("usage"), dict) and data["usage"]:
+                            stream_usage = data["usage"]
+
+                        choices = data.get("choices", [])
+                        if not choices:
+                            continue
+                        choice = choices[0]
+                        if choice.get("finish_reason"):
+                            finish_reason = choice["finish_reason"]
+                        delta = choice.get("delta") or {}
+
+                        reasoning_piece = delta.get("reasoning_content") or delta.get(
+                            "reasoning"
+                        )
+                        if isinstance(reasoning_piece, str) and reasoning_piece:
+                            reasoning_parts.append(reasoning_piece)
+                            yield ("reasoning_delta", reasoning_piece)
+
+                        content_piece = delta.get("content")
+                        if isinstance(content_piece, str) and content_piece:
+                            content_parts.append(content_piece)
+                            yield ("content_delta", content_piece)
+
+                        if delta.get("tool_calls"):
+                            aggregator.feed(delta["tool_calls"])
+                break  # 流正常结束
+
+            except Exception as e:
+                try:
+                    self._raise_classified_error(e)  # 总是抛出
+                except LLMError as llm_err:
+                    nothing_yielded = not content_parts and not reasoning_parts
+                    if (
+                        attempt >= max_attempts
+                        or llm_err.type not in _RETRYABLE_ERROR_TYPES
+                        or not nothing_yielded
+                    ):
+                        raise
+                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay)
+                    logger.warning(
+                        "LLM 流式请求失败(%s/%s): %s — %.1fs 后重试",
+                        attempt,
+                        max_attempts,
+                        llm_err.message,
+                        delay,
+                    )
+                    # 重置累积器,保证重放从零开始
+                    aggregator = StreamToolCallAggregator()
+                    content_parts = []
+                    reasoning_parts = []
+                    finish_reason = None
+                    stream_usage = None
+                    await asyncio.sleep(delay)
+
+        raw_content = "".join(content_parts)
+        reasoning_content = "".join(reasoning_parts) or None
+        if raw_content:
+            # <think> 标签清理与 chat() 同口径：字段缺失时用标签内容兜底。
+            # 已知限制：流式期间 <think> 原文会先以 content_delta 下发,
+            # 最终 response.content 为清理后的版本（DONE 收尾对齐）。
+            parsed_reasoning, parsed_content = self._extract_think_tags(raw_content)
+            if not reasoning_content and parsed_reasoning is not None:
+                reasoning_content = parsed_reasoning
+            raw_content = parsed_content
+
+        usage_dict: Optional[Dict[str, int]] = None
+        if isinstance(stream_usage, dict) and stream_usage:
+            usage_dict = {
+                "prompt_tokens": int(stream_usage.get("prompt_tokens") or 0),
+                "completion_tokens": int(stream_usage.get("completion_tokens") or 0),
+                "total_tokens": int(stream_usage.get("total_tokens") or 0),
+                # L4: 缓存命中拆账（与 chat() 同口径）
+                "cached_tokens": extract_cached_tokens(stream_usage),
+            }
+            try:
+                from backend.services.usage_tracker import usage_tracker
+
+                usage_tracker.record(
+                    stream_model,
+                    usage_dict["prompt_tokens"],
+                    usage_dict["completion_tokens"],
+                    session_id=self.session_id,
+                    cached_tokens=usage_dict["cached_tokens"],
+                )
+            except Exception as usage_err:
+                logger.debug("usage tracking (stream) skipped: %s", usage_err)
+
+        yield (
+            "response",
+            LLMResponse(
+                content=raw_content,
+                reasoning_content=reasoning_content,
+                model=stream_model,
+                finish_reason=finish_reason,
+                tool_calls=aggregator.build(),
+                input_tokens=usage_dict["prompt_tokens"] if usage_dict else 0,
+                output_tokens=usage_dict["completion_tokens"] if usage_dict else 0,
+                total_tokens=usage_dict["total_tokens"] if usage_dict else 0,
+                usage=usage_dict,
+            ),
+        )
 
     async def complete(self, prompt: str) -> str:
         """

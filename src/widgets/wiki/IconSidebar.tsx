@@ -9,6 +9,7 @@ import {
   Globe,
   MessageCircle,
   Sparkles,
+  ListTodo,
 } from 'lucide-react';
 
 import { useResearchStore } from '../../entities/wiki/research-store';
@@ -25,6 +26,7 @@ const NAV_ITEMS: { view: WikiView; icon: React.ElementType; label: string }[] = 
   { view: 'lint', icon: CheckSquare, label: '质量检查' },
   { view: 'review', icon: ClipboardList, label: '审核' },
   { view: 'sources', icon: FolderOpen, label: '来源' },
+  { view: 'queue', icon: ListTodo, label: '摄入队列' },
 ];
 
 export function IconSidebar() {

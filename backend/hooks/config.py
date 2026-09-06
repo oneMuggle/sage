@@ -7,8 +7,10 @@ claw-code ``rust/crates/runtime/src/hooks.rs`` (PreToolUse / PostToolUse
 单个钩子条目形状::
 
     {
-        "event": "pre_tool_use" | "post_tool_use",
-        "matcher": "tool-name glob",   # 可选, 默认 "*"
+        "event": "pre_tool_use" | "post_tool_use"
+                 | "user_prompt_submit" | "stop",   # L11 (批次 C-2)
+        "matcher": "tool-name glob",   # 可选, 默认 "*"; 提示词/停止事件
+                                       # 的 matcher 匹配空工具名(即只 "*" 有意义)
         "command": "shell command",    # 必填; STDIN 收 JSON payload
         "timeout_seconds": 10          # 可选, 默认 10
     }
@@ -25,7 +27,9 @@ from typing import Any, List
 
 logger = logging.getLogger(__name__)
 
-HOOK_EVENTS = ("pre_tool_use", "post_tool_use")
+# L11 (批次 C-2): 新增 user_prompt_submit(提示词提交, deny 可拦截消息)
+# 与 stop(run 结束通知, observe-only)。
+HOOK_EVENTS = ("pre_tool_use", "post_tool_use", "user_prompt_submit", "stop")
 MAX_HOOKS = 20
 DEFAULT_TIMEOUT_SECONDS = 10.0
 _MIN_TIMEOUT_SECONDS = 0.1

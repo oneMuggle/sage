@@ -6,15 +6,17 @@ SageAgent - 核心对话引擎
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 import hashlib
 import json
 import logging
+import os
 import time
 import uuid
 from collections import deque
 from threading import Lock
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.core.errors import LLMError, LLMErrorType
 from backend.core.exceptions import AgentError, ToolCallError
@@ -229,7 +231,13 @@ class SageAgent:
         self.session_repo = SessionRepository()
         self.message_repo = MessageRepository()
         self._interrupted = False
+        # L12-lite (批次 C-3): 中断事件 —— run_loop 起点创建, interrupt()
+        # 置位; 工具执行以 task 竞争该事件, 中断先到即取消当前工具。
+        self._interrupt_event: Optional[asyncio.Event] = None
         self._current_session_id: Optional[str] = None
+        # L7: 每-run 工具调用数守卫的配置来源（register_all_tools 透传同一
+        # policy;此处自留一份供 run_loop 读 max_tool_calls_per_run）。
+        self.tool_policy = policy or ToolPolicy()
 
         # 加载 agent profile (阶段 1: Profile → 运行时)
         # 从 SQLite 读最新版本, 用户刚 PATCH 的 enabled/system_prompt 立即生效
@@ -554,11 +562,154 @@ class SageAgent:
         # 让 LLMError 透传给调用方，由 chat() 统一处理
         return await self.llm_client.chat(messages)
 
-    async def run_loop(
+    def _is_parallel_eligible(  # noqa: PLR0911 — 守卫链逐条 return 可读性更好
+        self,
+        batch: List[Any],
+        enforcer: Any,
+        hooks: List[Any],
+        tool_calls_used: int,
+    ) -> bool:
+        """L6 (批次 C-3): 判断本批 tool_calls 能否并行执行。
+
+        全部满足才并行（否则回退串行, 语义与旧版完全一致）:
+        - 批大小 >= 2, 且未处于中断;
+        - 无 pre_tool_use 钩子（钩子的 deny/modify 是顺序语义）;
+        - 预算余量足够整批;
+        - 每个工具: 存在、声明 READ、非阻塞、非特殊工具
+          (ask_user / agent / dispatch_subagents);
+        - 权限预检全部免审放行（避免并行弹多个审批框）。
+        """
+        if len(batch) < 2 or self.is_interrupted() or hooks:
+            return False
+        if tool_calls_used + len(batch) > self._effective_max_tool_calls_per_run():
+            return False
+        from backend.domain.risk import RiskClass
+
+        for tc in batch:
+            if tc.name in (
+                ASK_USER_QUESTION_TOOL_NAME,
+                "agent",
+                "dispatch_subagents",
+            ):
+                return False
+            tool = self.tool_registry.get(tc.name)
+            if tool is None:
+                return False
+            if getattr(tool, "risk", RiskClass.READ) != RiskClass.READ:
+                return False
+            if getattr(tool, "is_blocking", False):
+                return False
+            try:
+                args = (
+                    json.loads(tc.arguments)
+                    if isinstance(tc.arguments, str)
+                    else tc.arguments
+                )
+            except json.JSONDecodeError:
+                return False
+            if not isinstance(args, dict):
+                return False
+            decision = enforcer.check(tc.name, args)
+            if decision.needs_approval or not decision.allowed:
+                return False
+        return True
+
+    async def _await_tool_execution(
+        self,
+        tool: Any,
+        name: str,
+        args: Dict[str, Any],
+        tool_call_id: Optional[str] = None,
+    ) -> Tuple[bool, Any]:
+        """L12-lite: 执行工具并与中断事件竞争。
+
+        返回 ``(cancelled, result)``。同步内联工具瞬时完成不参与竞争;
+        agent / dispatch_subagents / 阻塞型工具包成 task —— 中断先到时
+        取消执行任务（executor 线程内的子进程尽力等其自然超时, 事件循环
+        立即恢复）, cancelled=True。
+
+        live-events P0: ``tool_call_id`` 仅用于 dispatch_subagents —— 注入
+        ``_tool_call_id``（dict 重建覆盖 LLM 可能注入的同名 key）, dispatcher
+        给子任务标 parent_tool_call_id, 前端把子代理实时步骤挂到 Delegate 卡片。
+        """
+        if name == "agent":
+            coro = asyncio.get_running_loop().run_in_executor(
+                None, functools.partial(tool.execute, **args)
+            )
+        elif name == "dispatch_subagents":
+            dispatch_kwargs = dict(args)
+            if tool_call_id:
+                dispatch_kwargs["_tool_call_id"] = tool_call_id
+            coro = tool.execute_async(**dispatch_kwargs)
+        elif getattr(tool, "is_blocking", False):
+            coro = asyncio.get_running_loop().run_in_executor(
+                None, functools.partial(tool.execute, **args)
+            )
+        else:
+            return False, tool.execute(**args)
+
+        event = self._interrupt_event
+        if event is None or event.is_set():
+            return False, await coro
+
+        exec_task = asyncio.ensure_future(coro)
+        stop_waiter = asyncio.ensure_future(event.wait())
+        try:
+            done, _pending = await asyncio.wait(
+                {exec_task, stop_waiter}, return_when=asyncio.FIRST_COMPLETED
+            )
+        finally:
+            stop_waiter.cancel()
+        if exec_task in done:
+            return False, exec_task.result()
+        # 中断先到 → 取消执行。注意不 await: run_in_executor 的底层线程
+        # 不可强杀(进程内命令会跑到自然超时), 等它等于没取消。挂一个
+        # 回调消费 future 异常, 防止 "exception never retrieved" 告警。
+        exec_task.cancel()
+
+        def _consume_exception(fut: asyncio.Future) -> None:
+            if not fut.cancelled():
+                fut.exception()
+
+        exec_task.add_done_callback(_consume_exception)
+        return True, None
+
+    def _effective_max_tool_calls_per_run(self) -> int:
+        """L7: 每-run 工具调用数上限（env ``SAGE_MAX_TOOL_CALLS_PER_RUN`` 可覆盖）。
+
+        默认取 ``self.tool_policy.max_tool_calls_per_run``（ToolPolicy 默认 25）。
+        env 非法值静默回退，本方法永不抛错。
+        """
+        raw = os.environ.get("SAGE_MAX_TOOL_CALLS_PER_RUN", "").strip()
+        if raw:
+            try:
+                value = int(raw)
+                if value >= 1:
+                    return value
+            except ValueError:
+                logger.warning("env SAGE_MAX_TOOL_CALLS_PER_RUN=%r 非法,回退 policy 默认", raw)
+        return int(getattr(self.tool_policy, "max_tool_calls_per_run", 25) or 25)
+
+    @staticmethod
+    def _should_stream(llm_client: Optional[LLMClient]) -> bool:
+        """是否尝试流式 LLM 调用（L2 真流式开关）。
+
+        - env ``SAGE_LLM_STREAMING`` 设为 0/false/off/no 时全局关闭；
+        - 该 client 实例流式已失败过一次（``stream_unsupported``）则跳过,
+          避免每次迭代都白打一个失败请求；
+        - 其余情况默认开启（失败自动回退非流式,不影响可用性）。
+        """
+        raw = os.environ.get("SAGE_LLM_STREAMING", "").strip().lower()
+        if raw in {"0", "false", "off", "no"}:
+            return False
+        return not getattr(llm_client, "stream_unsupported", False)
+
+    async def run_loop(  # noqa: PLR0911 — 状态机多出口
         self,
         messages: List[Dict[str, Any]],
         max_iterations: Optional[int] = None,
         llm_config: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
     ):
         """ReAct 主循环。
 
@@ -572,6 +723,8 @@ class SageAgent:
             llm_config: 可选的动态 LLM 配置(覆盖初始化时的配置),允许调用方
                 在 agent 实例没有默认 LLM 时通过 per-request 配置运行。
                 如果同时存在 self.llm_client,会临时覆盖并在循环结束后恢复。
+            session_id: 可选的会话归因 (L8, 批次 C) —— 注入 llm_client 供
+                usage_tracker 落库 usage_events;None 时用量记为 unattributed。
 
         Yields:
             AgentEvent:状态机事件,前端通过流式响应(NDJSON)接收。每个事件携带
@@ -585,6 +738,10 @@ class SageAgent:
 
         # 每次 run_loop 重置未应答计数(跨会话不累积)
         self._consecutive_unanswered = 0
+        # L12-lite: 本轮 run 的中断事件 (fresh, 绑定当前事件循环)
+        self._interrupt_event = asyncio.Event()
+        # L7: 每-run 工具调用计数（跨迭代累计,超 ToolPolicy.max_tool_calls_per_run 终止）
+        tool_calls_used = 0
 
         # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 DEFAULT_MAX_ITERATIONS
         effective_max_iterations = (
@@ -608,6 +765,12 @@ class SageAgent:
                     llm_config.get("provider"), llm_config.get("model")
                 )
             )
+
+        # L8: 会话归因注入 (批次 C) —— usage_tracker 落库 usage_events 用。
+        # client 可能是动态新建的,也可能是构造时注入的;统一设置属性。
+        if session_id and self.llm_client is not None:
+            with contextlib.suppress(Exception):  # 测试替身可能拒绝设属性
+                self.llm_client.session_id = session_id
 
         # M1: 权限执行器在 run 起点构造一次（读 settings: permission_mode /
         # permission_rules），整轮循环复用——避免每次工具调用都打 DB。
@@ -634,19 +797,65 @@ class SageAgent:
 
                 # Pass available tools to LLM so it can call them
                 available_tools = self.get_available_tools()
-                response: LLMResponse = await self.llm_client.chat(
-                    messages, tools=available_tools or None
-                )
 
-                # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
-                # 这允许前端展示 LLM 的思考/推理过程
-                if response.reasoning_content:
-                    yield AgentEvent(
-                        state=AgentState.REASONING,
-                        iteration=i,
-                        reasoning=response.reasoning_content,
-                        agent_id=self.agent_id,
+                # L2 真流式 (对标增强第二轮, docs/plans/2026-09-06-parity-round2):
+                # THINKING 段优先走流式 tool-calling —— 内容增量以 CONTENT_DELTA
+                # 事件实时下发（前端 appendContent 既有契约），工具调用增量在
+                # 流内聚合。流式不可用（上游不支持 stream+tools / stream_options,
+                # 或首个增量前请求失败）时自动回退非流式 chat(),行为与旧版完全
+                # 一致;首个增量之后失败无法安全重放,按原错误面终止。
+                response: Optional[LLMResponse] = None
+                if self._should_stream(self.llm_client):
+                    saw_content_delta = False
+                    stream_reasoning_parts: List[str] = []
+                    try:
+                        async for evt_kind, payload in self.llm_client.chat_stream_events(
+                            messages, tools=available_tools or None
+                        ):
+                            if evt_kind == "content_delta":
+                                saw_content_delta = True
+                                yield AgentEvent(
+                                    state=AgentState.CONTENT_DELTA,
+                                    iteration=i,
+                                    content=payload,
+                                    agent_id=self.agent_id,
+                                )
+                            elif evt_kind == "reasoning_delta":
+                                # 汇总后在流收尾统一发一条 REASONING（producer
+                                # 会再做 reasoning_delta 切块,拆成多事件会重复）
+                                stream_reasoning_parts.append(payload)
+                            elif evt_kind == "response":
+                                response = payload
+                    except LLMError as stream_err:
+                        if saw_content_delta:
+                            raise
+                        logger.warning(
+                            "流式 LLM 调用失败(首个增量前),回退非流式: %s", stream_err
+                        )
+                        # 标记该 client 实例,本次 run_loop 后续迭代直接走非流式
+                        with contextlib.suppress(AttributeError):  # 测试替身可能没有该属性
+                            self.llm_client.stream_unsupported = True
+                        response = None
+                    if response is not None and stream_reasoning_parts:
+                        yield AgentEvent(
+                            state=AgentState.REASONING,
+                            iteration=i,
+                            reasoning="".join(stream_reasoning_parts),
+                            agent_id=self.agent_id,
+                        )
+                if response is None:
+                    response = await self.llm_client.chat(
+                        messages, tools=available_tools or None
                     )
+                    # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
+                    # 这允许前端展示 LLM 的思考/推理过程
+                    if response.reasoning_content:
+                        yield AgentEvent(
+                            state=AgentState.REASONING,
+                            iteration=i,
+                            reasoning=response.reasoning_content,
+                            agent_id=self.agent_id,
+                        )
 
                 if not response.tool_calls:
                     messages.append(
@@ -685,15 +894,137 @@ class SageAgent:
                 # tool call 都读一次 settings + 校验, 并行工具批次下 N 倍浪费)
                 m6_hooks = self._load_m6_hooks()
 
+                # ===== L6 并行只读批次 BEGIN (批次 C-3) =====
+                # 全只读/免审/无钩子的批次并发执行 —— 多文件读/多搜索场景
+                # 耗时从串行叠加降为最慢单工具。事件与消息仍按原顺序产出,
+                # 对 LLM 与前端完全透明。不满足严格条件即回退串行。
+                if self._is_parallel_eligible(
+                    response.tool_calls, enforcer, m6_hooks, tool_calls_used
+                ):
+                    tool_calls_used += len(response.tool_calls)
+
+                    def _run_one(tc: Any) -> Tuple[str, bool]:
+                        try:
+                            args_p = json.loads(tc.arguments) if isinstance(tc.arguments, str) else tc.arguments
+                            tool_p = self.tool_registry.get(tc.name)
+                            if tool_p is None:
+                                return f"[错误] 工具不存在: {tc.name}", True
+                            result_p = tool_p.execute(**args_p)
+                            if hasattr(result_p, "success") and hasattr(result_p, "content"):
+                                if result_p.success:
+                                    value = (
+                                        result_p.output
+                                        if isinstance(result_p, ToolResult)
+                                        and result_p.output is not None
+                                        else result_p.content
+                                    )
+                                    return json.dumps(value, ensure_ascii=False), False
+                                return result_p.error or "工具执行失败", True
+                            return json.dumps(result_p, ensure_ascii=False, default=str), False
+                        except Exception as exc:  # noqa: BLE001
+                            logger.error(f"并行工具执行失败: {tc.name}, error: {exc}")
+                            return f"[工具错误] {exc}", True
+
+                    for tc_p in response.tool_calls:
+                        yield AgentEvent(
+                            state=AgentState.ACTING,
+                            iteration=i,
+                            tool_call=ToolCallRequest(
+                                id=tc_p.id,
+                                name=tc_p.name,
+                                arguments=json.loads(tc_p.arguments)
+                                if isinstance(tc_p.arguments, str)
+                                else tc_p.arguments,
+                            ),
+                            agent_id=self.agent_id,
+                        )
+
+                    results_p = await asyncio.gather(
+                        *(
+                            asyncio.get_running_loop().run_in_executor(
+                                None, functools.partial(_run_one, tc_p)
+                            )
+                            for tc_p in response.tool_calls
+                        )
+                    )
+
+                    for tc_p, (content_p, err_p) in zip(response.tool_calls, results_p, strict=False):
+                        args_p = json.loads(tc_p.arguments) if isinstance(tc_p.arguments, str) else tc_p.arguments
+                        yield AgentEvent(
+                            state=AgentState.OBSERVING,
+                            iteration=i,
+                            tool_call=ToolCallRequest(id=tc_p.id, name=tc_p.name, arguments=args_p),
+                            tool_result=ToolCallResult(
+                                tool_call_id=tc_p.id, content=content_p, is_error=err_p
+                            ),
+                            agent_id=self.agent_id,
+                        )
+                        messages.append(
+                            {"role": "tool", "tool_call_id": tc_p.id, "content": content_p}
+                        )
+                        await run_event_hooks(
+                            m6_hooks,
+                            "post_tool_use",
+                            tc_p.name,
+                            build_payload(
+                                "post_tool_use",
+                                tc_p.name,
+                                args_p,
+                                tool_output=content_p,
+                                is_error=err_p,
+                            ),
+                        )
+                    continue
+                # ===== L6 并行只读批次 END =====
+
                 for tc in response.tool_calls:
+                    # L7 每-run 工具调用数守卫 (对标增强第二轮批次 B):
+                    # ToolPolicy.max_tool_calls_per_run 此前只在 hex 路径生效,
+                    # legacy run_loop 无刹车。超限时终止本次 run（与前端
+                    # mapAgentErrorToText 的 "tool_budget_exceeded" 文案对齐）。
+                    tool_calls_used += 1
+                    if tool_calls_used > self._effective_max_tool_calls_per_run():
+                        yield AgentEvent(
+                            state=AgentState.FAILED,
+                            iteration=i,
+                            error="tool_budget_exceeded",
+                            agent_id=self.agent_id,
+                        )
+                        return
+
+                    # L7: 参数解析失败回传 LLM——此前静默变 {}，LLM 无从得知
+                    # 参数错了会原样重犯。现在作为 is_error 工具结果回传，LLM
+                    # 可修正参数重试。不发 ACTING 事件（工具并未执行）。
                     try:
                         args = (
                             json.loads(tc.arguments)
                             if isinstance(tc.arguments, str)
                             else tc.arguments
                         )
-                    except json.JSONDecodeError:
-                        args = {}
+                    except json.JSONDecodeError as parse_err:
+                        parse_content = (
+                            f"[参数错误] 工具 {tc.name} 的 arguments 不是合法 JSON: {parse_err}。"
+                            "请修正参数后重新调用。"
+                        )
+                        yield AgentEvent(
+                            state=AgentState.OBSERVING,
+                            iteration=i,
+                            tool_call=ToolCallRequest(id=tc.id, name=tc.name, arguments={}),
+                            tool_result=ToolCallResult(
+                                tool_call_id=tc.id,
+                                content=parse_content,
+                                is_error=True,
+                            ),
+                            agent_id=self.agent_id,
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": parse_content,
+                            }
+                        )
+                        continue
 
                     # ===== M6 HOOKS BEGIN: pre_tool_use (deny/modify) =====
                     # 用户自定义钩子 (backend/hooks/)。Fail-open: 钩子故障
@@ -868,57 +1199,20 @@ class SageAgent:
                                     result_content = f"[错误] 工具不存在: {tc.name}"
                                     is_error = True
                                 else:
-                                    if tc.name == "agent":
-                                        # The agent tool blocks (future.result on
-                                        # the sub-run, bounded by
-                                        # SUBAGENT_TIMEOUT_S). Run it on an
-                                        # executor thread so the event loop stays
-                                        # responsive (health endpoint, board
-                                        # polling, other sessions) during the
-                                        # whole sub-run. Minimal special-case —
-                                        # general tool dispatch stays inline.
-                                        # ContextVar note: run_in_executor copies
-                                        # the current context (Python 3.7.1+);
-                                        # harmless here because AgentTool.execute
-                                        # never reads the ToolExecutionContext
-                                        # ContextVar — it builds all of its state
-                                        # itself (verified in
-                                        # backend/tools/agent_tool.py).
-                                        result = await asyncio.get_running_loop().run_in_executor(
-                                            None, functools.partial(tool.execute, **args)
-                                        )
-                                    elif tc.name == "dispatch_subagents":
-                                        # Multi-agent orchestration: this tool is
-                                        # async by design — child agents run
-                                        # concurrently on the event loop
-                                        # (ChatDispatcher gather) and push
-                                        # task_status straight to the stream
-                                        # queue. Sync execute() cannot do that.
-                                        # Same minimal special-case as "agent";
-                                        # general tool dispatch stays inline.
-                                        # live-events P0: 透传本工具调用 ID ——
-                                        # dispatcher 给子任务标 parent_tool_call_id，
-                                        # 前端把子代理实时步骤挂到 Delegate 卡片。
-                                        # dict 重建覆盖 LLM 可能注入的同名 key。
-                                        dispatch_kwargs = dict(args)
-                                        dispatch_kwargs["_tool_call_id"] = tc.id
-                                        result = await tool.execute_async(**dispatch_kwargs)
-                                    elif getattr(tool, "is_blocking", False):
-                                        # 阻塞型工具（bash / repl，见
-                                        # BaseTool.is_blocking）：execute() 可长至
-                                        # 超时上限（bash 默认 120s、上限 600s），
-                                        # 必须卸载到 executor 线程，否则一条慢命令
-                                        # 卡死整个事件循环（健康检查、看板轮询、
-                                        # 其他并发会话）。run_in_executor 复制当前
-                                        # contextvars（Python 3.7.1+），工具内对
-                                        # ToolExecutionContext ContextVar 的读取
-                                        # 不受影响。
-                                        result = await asyncio.get_running_loop().run_in_executor(
-                                            None, functools.partial(tool.execute, **args)
-                                        )
-                                    else:
-                                        result = tool.execute(**args)
-                                    if hasattr(result, "success") and hasattr(result, "content"):
+                                    # L12-lite: 可等待执行统一走中断竞争,
+                                    # 中断先到即取消当前工具、事件循环立即恢复,
+                                    # 否则语义与旧版完全一致。
+                                    # live-events P0: dispatch_subagents 透传本工具
+                                    # 调用 ID（helper 内注入）—— dispatcher 给子
+                                    # 任务标 parent_tool_call_id，前端把子代理
+                                    # 实时步骤挂到 Delegate 卡片。
+                                    cancelled, result = await self._await_tool_execution(
+                                        tool, tc.name, args, tool_call_id=tc.id
+                                    )
+                                    if cancelled:
+                                        result_content = "[中断] 工具执行被用户取消"
+                                        is_error = True
+                                    elif hasattr(result, "success") and hasattr(result, "content"):
                                         is_error = not result.success
                                         if result.success:
                                             # ToolResult.output is the machine-readable
@@ -1041,14 +1335,24 @@ class SageAgent:
     def _build_approval_request(
         self, tool_name: str, args: Dict[str, Any], decision: PermissionDecision
     ) -> ApprovalRequest:
-        """组装审批请求: 脱敏参数摘要 + bash 风险等级（非 EXECUTE 工具为 safe）。"""
+        """组装审批请求: 脱敏参数摘要 + bash 风险等级 + 写类工具 diff 预览（U15）。"""
         risk = "safe"
         if classify_tool(tool_name) is ToolCapability.EXECUTE:
             command = args.get("command")
             if isinstance(command, str) and command.strip():
                 risk = validate_bash(command).risk.value
+        # diff 预览需要相对路径锚点 — 复用 office 边界解析器取会话绑定工作区;
+        # 解析失败不阻塞审批（预览退化为 args_summary）。
+        try:
+            workspace_root = self._office_boundary_resolver()
+        except Exception:  # noqa: BLE001 — 预览是尽力而为
+            workspace_root = None
         return ApprovalRequest.create(
-            tool_name=tool_name, args=args, risk=risk, message=decision.reason
+            tool_name=tool_name,
+            args=args,
+            risk=risk,
+            message=decision.reason,
+            workspace_root=workspace_root,
         )
 
     async def _await_approval_answer(self, req: ApprovalRequest) -> ApprovalAnswer:
@@ -1182,6 +1486,12 @@ class SageAgent:
     def interrupt(self):
         """中断当前 Agent 操作"""
         self._interrupted = True
+        # L12-lite: 唤醒工具执行的竞争等待者 (同事件循环; 跨线程调用时
+        # Event.set 理论上非线程安全, 但本标志的既有语义也是尽力而为)
+        event = self._interrupt_event
+        if event is not None:
+            with contextlib.suppress(Exception):  # 跨循环/已关闭等场景尽力而为
+                event.set()
         logger.info("Agent 被中断")
 
     def is_interrupted(self) -> bool:

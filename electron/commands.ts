@@ -43,7 +43,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // on CAS revision mismatch.
   orchestration_steer_task: {
     method: 'POST',
-    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/steer`,
+    path: (a) =>
+      `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/steer`,
   },
 
   // Phase 3: run cancellation control — POST /orch/runs/{run_id}/cancel
@@ -160,6 +161,32 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const limit = normalizeWorkspaceSearchLimit(a.limit);
       return `/api/v1/sessions/${sessionId}/workspace/files?q=${query}&limit=${limit}`;
     },
+  },
+
+  // U1 变更面板 (对标增强第二轮): 会话工作区 git 变更清单 + 按文件 diff,均只读
+  workspace_get_changes: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/changes`,
+  },
+  workspace_get_changes_diff: {
+    method: 'GET',
+    path: (a) => {
+      const sessionId = encodeURIComponent(String(a.sessionId));
+      const path = encodeURIComponent(String(a.path ?? ''));
+      const staged = a.staged ? 'true' : 'false';
+      return `/api/v1/sessions/${sessionId}/workspace/changes/diff?path=${path}&staged=${staged}`;
+    },
+  },
+
+  // U8 (批次 B): 会话级模型覆盖 (G5 收尾,只改模型不改端点)
+  session_get_model: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/model`,
+  },
+  session_set_model: {
+    method: 'PUT',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/model`,
+    body: (a) => ({ model: a.model }),
   },
 
   // messages
@@ -426,25 +453,9 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     },
   },
 
-  // Wave 2 P1-4/P1-5 (2026-08-14): run 生命周期 —— 历史列表 / 详情 / 恢复
-  // / plan 更新,对应 backend/api/orch_routes.py 的 /api/v1/orch/runs 4 端点。
-  orchestration_list_runs: {
-    method: 'GET',
-    path: (a) => {
-      // params 显式 cast（tsconfig.electron.json 下 a.params 推导为 '{}'，
-      // 直接 .limit 报 TS2339）—— 与 orchestration_list_lanes 同构。
-      const params = (a?.params as Record<string, unknown>) ?? {};
-      return `/api/v1/orch/runs?limit=${params.limit ?? 50}`;
-    },
-  },
-  orchestration_get_run: {
-    method: 'GET',
-    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}`,
-  },
-  orchestration_resume_run: {
-    method: 'POST',
-    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/resume`,
-  },
+  // Wave 2 P1-4 (2026-08-14): run 生命周期 —— plan 更新 / run 取消,
+  // 对应 backend/api/orch_routes.py 的 /api/v1/orch/runs 端点。
+  // Wave 4 (2026-09-06): 历史编排记录功能移除 —— 删除 list_runs / get_run / resume_run。
   orchestration_cancel_run: {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/cancel`,
@@ -453,6 +464,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/plan`,
     body: (a) => ({ plan: a.plan }),
+  },
+  // Fix #3 (2026-09-06): 用户确认编排计划 → 唤醒 producer 开始执行。
+  orchestration_confirm_run: {
+    method: 'POST',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/confirm`,
   },
 
   // Office document features (Phase 1.3, plan §4.1.3 step 14).
@@ -502,6 +518,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   },
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
   usage_summary: { method: 'GET', path: () => '/api/v1/usage' },
+  // U14 (批次 C): 会话级持久化用量
+  usage_get_session: {
+    method: 'GET',
+    path: (a) => `/api/v1/usage/session/${encodeURIComponent(String(a.sessionId))}`,
+  },
   // 2026-09-04: 本地开发环境助手 — 复用 ChatService.tools 路径,
   // runtime_exec 在后端经 PermissionEnforcer 审批 (与 bash 同等闸口)。
   // 见 docs/plans/2026-09-04_local-development-assistant.md Stage 4。

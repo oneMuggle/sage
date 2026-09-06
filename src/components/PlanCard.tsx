@@ -27,9 +27,19 @@ interface PlanCardProps {
   plan: TaskPlanItem[];
   locked: boolean; // 派发后转 true
   onCancel: () => void; // C4+H1：任意阶段取消 → 委托上层统一 cancelRun + 清空 taskBoard
+  // Fix #3 (2026-09-06): 需要用户显式确认才开始执行。
+  // true → handleStart 调 updatePlan + confirmRun（唤醒 producer 启动 conductor）。
+  // false → 仅调 updatePlan（旧行为，依赖 conductor 自动 dispatch）。
+  needConfirm?: boolean;
 }
 
-export function PlanCard({ runId, plan: initialPlan, locked, onCancel }: PlanCardProps) {
+export function PlanCard({
+  runId,
+  plan: initialPlan,
+  locked,
+  onCancel,
+  needConfirm = false,
+}: PlanCardProps) {
   const [items, setItems] = useState(initialPlan);
   // C4：开始执行落库成功后的本地锁定（后端首 status 事件到达前防重复点击）。
   const [locallyLocked, setLocallyLocked] = useState(false);
@@ -52,6 +62,11 @@ export function PlanCard({ runId, plan: initialPlan, locked, onCancel }: PlanCar
     startingRef.current = true;
     try {
       await orchRunClient.updatePlan(runId, items);
+      // Fix #3 (2026-09-06): needConfirm 模式下,updatePlan 后调 confirmRun
+      // 唤醒后端 producer（producer 在 task_plan 后暂停等待用户确认）。
+      if (needConfirm) {
+        await orchRunClient.confirmRun(runId);
+      }
     } catch (err) {
       startingRef.current = false; // 失败后允许重试
       // 409（派发竞态）→ 静默保持编辑态，TaskBoard 首 status 事件会锁。

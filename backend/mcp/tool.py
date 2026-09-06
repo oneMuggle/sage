@@ -156,3 +156,91 @@ def register_mcp_tools(registry: Any) -> None:
 def shutdown_mcp_clients() -> None:
     """Stop all MCP server processes held by the global pool."""
     get_pool().shutdown_all()
+
+
+class McpResourceTool(BaseTool):
+    """L10 (批次 C-3): 读取 MCP 服务器资源的合成工具。
+
+    spec 由 ``pool.synthesize_extra_specs`` 生成 (uri 枚举限定在
+    resources/list 结果内), execute 走 pool.read_resource。
+    """
+
+    def __init__(self, pool: McpServerPool, server_name: str, tool_spec: Dict[str, Any]):
+        self._pool = pool
+        self._server_name = server_name
+        self._tool_spec = tool_spec
+        super().__init__()
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name=namespaced_tool_name(self._server_name, self._tool_spec["name"]),
+            description=f"[MCP:{self._server_name}] {self._tool_spec.get('description', '')}",
+            parameters=self._tool_spec.get("inputSchema", {}),
+        )
+
+    def execute(self, **kwargs: Any) -> ToolResult:
+        uri = str(kwargs.get("uri", ""))
+        if not uri:
+            return ToolResult(success=False, error="uri 必填")
+        try:
+            result = self._pool.read_resource(self._server_name, uri)
+        except McpClientError as exc:
+            return ToolResult(success=False, error=str(exc))
+        except Exception as exc:  # noqa: BLE001 — 工具错误不崩溃 agent
+            return ToolResult(success=False, error=f"读取资源失败: {exc}")
+        contents = result.get("contents") if isinstance(result, dict) else None
+        texts = [
+            str(item.get("text", ""))
+            for item in (contents or [])
+            if isinstance(item, dict) and item.get("text") is not None
+        ]
+        return ToolResult(success=True, content={"uri": uri, "texts": texts})
+
+
+def _render_prompt_result(result: Dict[str, Any]) -> str:
+    """把 prompts/get 结果渲染为纯文本 (messages 列表)。"""
+    parts = []
+    for message in result.get("messages", []):
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if isinstance(content, dict):
+            parts.append(str(content.get("text", "")))
+        elif isinstance(content, list):
+            parts.extend(str(item.get("text", "")) for item in content if isinstance(item, dict))
+    return "\n".join(part for part in parts if part)
+
+
+class McpPromptTool(BaseTool):
+    """L10 (批次 C-3): MCP prompt 模板的合成工具。
+
+    execute → pool.get_prompt → 把模板消息渲染为纯文本返回。
+    """
+
+    def __init__(self, pool: McpServerPool, server_name: str, tool_spec: Dict[str, Any]):
+        self._pool = pool
+        self._server_name = server_name
+        self._tool_spec = tool_spec
+        super().__init__()
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name=namespaced_tool_name(self._server_name, self._tool_spec["name"]),
+            description=f"[MCP:{self._server_name}] {self._tool_spec.get('description', '')}",
+            parameters={
+                "type": "object",
+                "properties": self._tool_spec.get("inputSchema", {}).get("properties", {}),
+            },
+        )
+
+    def execute(self, **kwargs: Any) -> ToolResult:
+        prompt_name = str(self._tool_spec.get("_sage_prompt_name", ""))
+        if not prompt_name:
+            return ToolResult(success=False, error="prompt name missing")
+        try:
+            result = self._pool.get_prompt(self._server_name, prompt_name, kwargs)
+        except McpClientError as exc:
+            return ToolResult(success=False, error=str(exc))
+        except Exception as exc:  # noqa: BLE001 — 工具错误不崩溃 agent
+            return ToolResult(success=False, error=f"获取 prompt 失败: {exc}")
+        return ToolResult(success=True, content=_render_prompt_result(result if isinstance(result, dict) else {}))

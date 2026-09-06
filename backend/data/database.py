@@ -242,6 +242,9 @@ class Database:
         cursor = conn.cursor()
 
         # 会话表
+        # S1 (2026-09-06): run_status/last_error/last_run_at —— 会话级运行态
+        # 持久化,侧边栏状态徽章数据源。idle=无运行;running/suspended=活跃流;
+        # completed/failed=上一轮流终态(带时间戳与错误摘要)。
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
@@ -256,6 +259,9 @@ class Database:
                 is_pinned INTEGER DEFAULT 0,
                 is_archived INTEGER DEFAULT 0,
                 parent_id TEXT,
+                run_status TEXT DEFAULT 'idle',
+                last_error TEXT,
+                last_run_at INTEGER,
                 FOREIGN KEY (parent_id) REFERENCES sessions(id)
             )
         """)
@@ -326,6 +332,14 @@ class Database:
             cursor.execute("ALTER TABLE sessions ADD COLUMN fork_root TEXT")
         if "forked_at_message_id" not in session_columns:
             cursor.execute("ALTER TABLE sessions ADD COLUMN forked_at_message_id TEXT")
+        # S1 (2026-09-06) 迁移: 会话运行态三列。均可空/带默认值,存量行
+        # run_status 为 NULL → 仓储层读时兜底 'idle',无需回填。
+        if "run_status" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN run_status TEXT DEFAULT 'idle'")
+        if "last_error" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN last_error TEXT")
+        if "last_run_at" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN last_run_at INTEGER")
         conn.commit()
 
         # 情景记忆表
@@ -562,6 +576,39 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_artifacts_session
             ON artifacts(session_id, created_at DESC)
         """)
+
+        # L8 用量事件表 (对标增强第二轮批次 C): 每次成功 LLM 调用一行,
+        # 支撑会话级用量/成本显示 (U14) 与花费限额 (F5)。内存 tracker
+        # (usage_tracker) 重启即失, 此表为持久事实源。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS usage_events (
+                id TEXT PRIMARY KEY,
+                session_id TEXT,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL,
+                completion_tokens INTEGER NOT NULL,
+                total_tokens INTEGER NOT NULL,
+                estimated_cost_usd REAL,
+                created_at INTEGER NOT NULL,
+                cached_tokens INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_events_session
+            ON usage_events(session_id, created_at DESC)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_events_created
+            ON usage_events(created_at DESC)
+        """)
+        # L4 缓存感知记账: 为已有库补 cached_tokens 列（新装库建表已含）
+        cursor.execute("PRAGMA table_info(usage_events)")
+        _usage_cols = [row["name"] for row in cursor.fetchall()]
+        if "cached_tokens" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.commit()
 
         # Agent 配置表 (PR-3)
         # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan

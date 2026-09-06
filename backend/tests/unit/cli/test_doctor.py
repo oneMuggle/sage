@@ -407,8 +407,8 @@ class TestMain:
         data = json.loads(out)
         assert "checks" in data
         assert "summary" in data
-        # 2026-09-05: 15→16 (加 network)
-        assert len(data["checks"]) == 16
+        # 2026-09-05: 15→16 (加 network); 2026-09-06: 16→17 (L15 加 secret_storage)
+        assert len(data["checks"]) == 17
 
     def test_main_runs_all_sixteen_checks(self, capsys):
         main([])

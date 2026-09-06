@@ -74,6 +74,7 @@ async def test_parity_plain_chat_reply(mock_server):
         "prompt_tokens": 11,
         "completion_tokens": 5,
         "total_tokens": 16,
+        "cached_tokens": 0,
     }
     assert response.input_tokens == 11
     assert response.output_tokens == 5

@@ -10,6 +10,8 @@ import { Copy, Check } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createHighlighter, type Highlighter } from 'shiki';
 
+import { useI18n } from '../../shared/lib/i18n';
+
 /** 全局 highlighter 单例 */
 let highlighterPromise: Promise<Highlighter> | null = null;
 
@@ -48,6 +50,7 @@ interface ShikiCodeBlockProps {
 }
 
 export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
+  const { t } = useI18n();
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const langRef = useRef(language);
@@ -91,17 +94,17 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
         <button
           onClick={handleCopy}
           className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10 text-gray-300 hover:text-white"
-          title="复制代码"
+          title={t('codeBlock.copy')}
         >
           {copied ? (
             <>
               <Check className="w-3.5 h-3.5 text-green-400" />
-              <span>已复制</span>
+              <span>{t('codeBlock.copied')}</span>
             </>
           ) : (
             <>
               <Copy className="w-3.5 h-3.5" />
-              <span>复制</span>
+              <span>{t('codeBlock.copy')}</span>
             </>
           )}
         </button>

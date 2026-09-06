@@ -7,10 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // orchRunClient.updatePlan;取消语义统一委托上层 onCancel
 // （Chat.handleCancelRun 负责 cancelRun + 清空 taskBoard），
 // 故本文件断言"不调 cancelRun + onCancel 被调"。
+// Fix #3 (2026-09-06): PlanCard.handleStart 在 needConfirm 模式下会调
+// orchRunClient.confirmRun(runId) 唤醒后端 producer,本文件 mock 补齐 confirmRun。
 vi.mock('../../../shared/api/orchRunClient', () => ({
   orchRunClient: {
     cancelRun: vi.fn(),
     updatePlan: vi.fn(),
+    confirmRun: vi.fn(),
   },
 }));
 
@@ -149,6 +152,52 @@ describe('PlanCard §13.7 (C4 双击 + 错误处理)', () => {
     await waitFor(() => expect(orchRunClient.updatePlan).toHaveBeenCalledTimes(1));
     expect(toastErrorSpy).not.toHaveBeenCalled();
     expect(btn).not.toBeDisabled(); // 保持编辑态
+    toastErrorSpy.mockRestore();
+  });
+});
+
+// ===== Fix #3 (2026-09-06): needConfirm 模式 —— 用户显式确认才触发执行 =====
+describe('PlanCard needConfirm (Fix #3)', () => {
+  const plan = [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('needConfirm=true: 开始执行 → updatePlan + confirmRun 依次调用', async () => {
+    vi.mocked(orchRunClient.updatePlan).mockResolvedValue({ ok: true });
+    vi.mocked(orchRunClient.confirmRun).mockResolvedValue({ ok: true });
+    render(
+      <PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} needConfirm />,
+    );
+    fireEvent.click(screen.getByTestId('plan-start'));
+    await waitFor(() => expect(orchRunClient.updatePlan).toHaveBeenCalledWith('r1', plan));
+    await waitFor(() => expect(orchRunClient.confirmRun).toHaveBeenCalledWith('r1'));
+    // confirmRun 调成功后本地锁定
+    await waitFor(() => expect(screen.getByTestId('plan-start')).toBeDisabled());
+  });
+
+  it('needConfirm=false (默认): 开始执行 → 只调 updatePlan,不调 confirmRun', async () => {
+    vi.mocked(orchRunClient.updatePlan).mockResolvedValue({ ok: true });
+    render(
+      <PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} />,
+    );
+    fireEvent.click(screen.getByTestId('plan-start'));
+    await waitFor(() => expect(orchRunClient.updatePlan).toHaveBeenCalledTimes(1));
+    expect(orchRunClient.confirmRun).not.toHaveBeenCalled();
+  });
+
+  it('needConfirm=true: updatePlan 失败 → confirmRun 不调用', async () => {
+    const toastErrorSpy = vi.spyOn(toast, 'error').mockImplementation(() => '');
+    vi.mocked(orchRunClient.updatePlan).mockRejectedValue(new Error('network down'));
+    render(
+      <PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} needConfirm />,
+    );
+    fireEvent.click(screen.getByTestId('plan-start'));
+    await waitFor(() =>
+      expect(toastErrorSpy).toHaveBeenCalledWith(expect.stringContaining('计划保存失败')),
+    );
+    expect(orchRunClient.confirmRun).not.toHaveBeenCalled();
     toastErrorSpy.mockRestore();
   });
 });

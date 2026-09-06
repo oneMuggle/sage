@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import sys
 from typing import List
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
@@ -38,8 +39,13 @@ from backend.chat.compaction import (
     should_compact,
 )
 from backend.chat.executors import resolve_attachments
+from backend.chat.history_context import build_request_messages, history_token_budget
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
+from backend.data.artifact_repo import (  # S7: 产物事件 → 活跃流推送
+    add_artifact_listener,
+    remove_artifact_listener,
+)
 from backend.data.database import get_database
 from backend.data.session_repo import (
     ForkSourceNotFoundError,
@@ -356,6 +362,10 @@ def get_session_repo() -> SessionRepository:
 # 正在跑的 agent。producer 在 run_loop 前登记、finally 注销。
 _ACTIVE_STREAMS: Dict[str, Dict[str, Any]] = {}
 _PENDING_RUN_CANCELLATIONS: Set[str] = set()
+# Fix #3 (2026-09-06): 用户确认事件 —— producer 发 task_plan 后等待用户在前端
+# 点击"开始执行"。orch_routes.confirm_run 设置事件唤醒 producer。
+# cancel_run 也会设置事件（以取消状态退出等待）。
+_RUN_CONFIRM_EVENTS: Dict[str, asyncio.Event] = {}
 
 
 class InterruptRequest(BaseModel):
@@ -745,12 +755,9 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
     LLM 客户端优先用本次请求自带的 llm_config（与聊天同配置），
     缺省时回退到 app_settings 里的持久化配置。
 
-    已知限制（review HIGH-1）：当前 legacy chat producer 只组装
-    ``[system, attachments?, user]`` 交给 run_loop，**尚未注入持久化历史**，
-    因此自动压缩的实际收益 = 持久化存储有界 + UI / fork 健全性；
-    **每轮 LLM token 节省要等聊天路径开始把持久化历史喂给 run_loop
-    才会生效**（跟进标记见 docs/plans/2026-07-29_session-compact-fork-m4.md
-    §6「已知限制」）。
+    L1 (2026-09-06)：producer 现在把持久化历史注入本轮 LLM 请求，压缩
+    直接决定每轮请求的上下文长度 —— 本函数因此必须在历史加载之前调用。
+    调用顺序约定见 producer 内注释。
 
     本函数**可以抛 CompactionError / 其他异常**——调用方（producer）
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
@@ -1954,6 +1961,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug("todo_snapshot 推送失败（队列满/关闭），忽略")
 
         add_todo_listener(_push_todo_snapshot)
+
+        # S7 (2026-09-06): 产物事件 → 活跃流推送。工具线程在 record_artifact
+        # 落库后广播，这里按会话过滤后入队；前端据此事件驱动刷新产物面板 +
+        # 侧栏徽章（不再依赖手动刷新）。队列满静默降级（尽力而为）。
+        def _push_artifact_event(event: Dict[str, Any]) -> None:
+            if event.get("session_id") != data.session_id:
+                return
+            try:
+                entry.queue.put_nowait(event)
+            except Exception:  # noqa: BLE001 — 降级铁律
+                logger.debug("artifact_created 推送失败（队列满/关闭），忽略")
+
+        add_artifact_listener(_push_artifact_event)
         try:
             # P0-4 (2026-08-20): 终态变量前置到 try 顶部 —— finally 无条件读取
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
@@ -1961,6 +1981,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 又跳过后续的 reset_tool_context 清理。
             done_content: Optional[str] = None
             run_outcome = "failed"
+            # S1 (2026-09-06): 失败原因摘要 —— finally 落库 sessions.last_error。
+            _producer_error: Optional[str] = None
+
+            # S1 (2026-09-06): 会话运行态落库（running）。写库点收敛两处：
+            # 此处置 running，finally 落终态；失败 fail-open 只 debug，不影响主流。
+            # /btw 等伪会话（sessions 表无行）update 零命中，静默即可。
+            # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
+            # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
+            try:
+                SessionRepository().update_run_status(data.session_id, "running")
+            except Exception as status_err:  # noqa: BLE001 — fail-open
+                logger.debug("会话运行态(running)写入失败: %s", status_err)
 
             llm_config = None
             if data.api_key and data.api_url:
@@ -1982,6 +2014,79 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] /chat/stream producer using custom LLM: "
                     f"model={_safe_log_field(llm_config['model'])}"
                 )
+
+            # ===== L11 user_prompt_submit 钩子 BEGIN (批次 C-2) =====
+            # 用户自定义钩子可在消息进入 agent 循环前检查/拦截 (deny)。
+            # fail-open: 钩子故障视为放行。deny → failed 事件, 不消耗 LLM。
+            try:
+                from backend.data.settings_repo import SettingsRepository
+                from backend.hooks.config import load_hooks
+                from backend.hooks.runner import run_event_hooks
+
+                l11_hooks = load_hooks(SettingsRepository())
+                if l11_hooks:
+                    l11_outcome = await run_event_hooks(
+                        l11_hooks,
+                        "user_prompt_submit",
+                        "",  # 无工具名; matcher 仅 "*" 对本事件有意义
+                        {
+                            "hook_event_name": "user_prompt_submit",
+                            "prompt": data.message,
+                            "session_id": data.session_id,
+                        },
+                    )
+                    if l11_outcome.denied:
+                        logger.info(
+                            "[REQ %s] user_prompt_submit 钩子拦截: %s",
+                            request_id,
+                            l11_outcome.reason,
+                        )
+                        await entry.queue.put(
+                            {
+                                "state": "failed",
+                                "error": "prompt_blocked_by_hook",
+                            }
+                        )
+                        return
+            except Exception as l11_prompt_err:
+                logger.debug(
+                    f"[REQ {request_id}] user_prompt_submit hooks skipped: {l11_prompt_err}"
+                )
+            # ===== L11 user_prompt_submit 钩子 END =====
+
+            # F5 花费限额 (批次 C): 今日已花费(持久化估算, 重启不丢)达到
+            # 限额时拒绝本次聊天。限额 0/未配置 = 不限。DB 故障 fail-open
+            # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 前置
+            # 初始化 —— 此处可能提前 return, finally 无条件读取它们 (P0-4)。
+            run_id: Optional[str] = None
+            dispatcher = None
+            try:
+                from backend.data.settings_repo import SettingsRepository
+                from backend.services.usage_tracker import usage_tracker as _usage_tracker
+
+                _raw_limit = SettingsRepository().get("spend_limit_usd")
+                _spend_limit = float(_raw_limit) if _raw_limit and _raw_limit.strip() else 0.0
+            except Exception as limit_read_err:
+                logger.debug(f"[REQ {request_id}] 花费限额读取失败(视为不限): {limit_read_err}")
+                _spend_limit = 0.0
+            if _spend_limit > 0:
+                _today_cost = _usage_tracker.today_cost_usd()
+                if _today_cost >= _spend_limit:
+                    logger.warning(
+                        "[REQ %s] 花费限额拦截: today=%.4f USD >= limit=%.2f USD",
+                        request_id,
+                        _today_cost,
+                        _spend_limit,
+                    )
+                    # S1: finally 落库 failed + 原因
+                    _producer_error = "今日花费已达限额（spend_limit_exceeded）"
+                    await entry.queue.put(
+                        {
+                            "state": "failed",
+                            "error": "spend_limit_exceeded",
+                        }
+                    )
+                    return
 
             agent = SageAgent(agent_id=data.agent_id or "primary")
             # P0 cancellation: register the primary before any blocking await.
@@ -2020,8 +2125,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
                     mode = "single"
-            run_id: Optional[str] = None
-            dispatcher = None
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
                 from backend.orchestration.planner import Planner
@@ -2207,6 +2310,34 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             "failed": 0,
                         }
                     )
+                    # Fix #3 (2026-09-06): 用户确认门控 —— producer 在此暂停,
+                    # 等待前端调用 POST /orch/runs/{id}/confirm（用户点击
+                    # "开始执行"）。cancel_run 也会唤醒（以取消状态退出）。
+                    # 超时 10 分钟自动取消,避免 producer 永久挂起。
+                    confirm_event = asyncio.Event()
+                    _RUN_CONFIRM_EVENTS[run_id] = confirm_event
+                    try:
+                        try:
+                            await asyncio.wait_for(confirm_event.wait(), timeout=600)
+                        except TimeoutError:
+                            logger.warning(
+                                "编排确认超时 (600s)，自动取消 run %s", run_id
+                            )
+                            from backend.data.orch_run_repo import OrchRunRepository
+
+                            OrchRunRepository().update_status(run_id, "cancelled")
+                            await entry.queue.put(
+                                {
+                                    "state": "task_review",
+                                    "run_id": run_id,
+                                    "verdict": "cancelled",
+                                    "summary": "编排计划确认超时（10 分钟无响应），已自动取消",
+                                    "assertions": [],
+                                }
+                            )
+                            mode = "single"  # 跳过后续 conductor 启动
+                    finally:
+                        _RUN_CONFIRM_EVENTS.pop(run_id, None)
             try:
                 from backend.core.diagram_prompt import (
                     DIAGRAM_TOOL_PROMPT,
@@ -2244,25 +2375,113 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug(f"[REQ {request_id}] M6 project context skipped: {m6_ctx_err}")
             # ===== M6 PROJECT CONTEXT END =====
 
-            attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
-            messages = [{"role": "system", "content": system_content}]
-            if attachment_block:
-                messages.append(
-                    {
-                        "role": "system",
-                        "content": (
-                            "The user has referenced the following attached documents. "
-                            "Treat them as primary context for the user's request.\n\n"
-                            f"{attachment_block}"
-                        ),
-                    }
+            # ===== L5 环境上下文 + 技能清单 BEGIN (对标增强第二轮批次 B) =====
+            # 告知模型平台/日期/工作区/git 状态与可用技能（此前模型对工作区
+            # 状态零感知、技能只能盲调 skill 工具发现）。内部全 fail-safe:
+            # 任何一段收集失败静默省略,绝不阻断聊天。独立标记块, rebase 友好。
+            try:
+                from backend.chat.env_context import (
+                    build_environment_block,
+                    build_skills_block,
                 )
-            messages.append({"role": "user", "content": data.message})
-            # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）
+
+                l5_binding = get_workspace_binding(
+                    get_database().get_connection(), data.session_id
+                )
+                system_content += "\n\n" + build_environment_block(
+                    workspace_path=(
+                        l5_binding.workspace_path if l5_binding is not None else None
+                    )
+                )
+                skills_block = build_skills_block()
+                if skills_block:
+                    system_content += "\n\n" + skills_block
+            except Exception as l5_env_err:
+                logger.debug(
+                    f"[REQ {request_id}] L5 environment context skipped: {l5_env_err}"
+                )
+            # ===== L5 环境上下文 + 技能清单 END =====
+
+            # ===== L13 记忆上下文注入 BEGIN (对标增强第二轮批次 C) =====
+            # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
+            # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
+            # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
+            try:
+                l13_memory_manager = getattr(agent, "memory_manager", None)
+                if l13_memory_manager is not None:
+                    l13_memory = l13_memory_manager.get_context(
+                        limit=10, session_id=data.session_id
+                    )
+                    if l13_memory and str(l13_memory).strip():
+                        system_content += (
+                            "\n\n以下是相关的记忆上下文：\n" + str(l13_memory)
+                        )
+            except Exception as l13_mem_err:
+                logger.debug(
+                    f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
+                )
+            # ===== L13 记忆上下文注入 END =====
+
+            attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
+
+            # G6 (2026-09-06): 图片附件校验提前（多模态 user 消息在下方
+            # 历史组装后转换,与 L1 历史接线共用 build_request_messages 流程）
             if data.images:
                 multimodal_error = _validate_chat_images(data.images)
                 if multimodal_error:
                     raise HTTPException(status_code=400, detail=multimodal_error)
+
+            # M4 自动压缩: run_loop 之前检查历史是否达到压缩阈值,达到则
+            # 先压缩再继续。整块 try/except 隔离——压缩失败只记日志,
+            # 绝不阻塞本次聊天(流式事件照常产出)。注: AgentEvent 没有
+            # notice 类事件, 本里程碑不向前端推送压缩状态。
+            # L1 (2026-09-06): 压缩必须在加载历史之前 —— 它缩的是持久化
+            # 历史,而历史马上会注入本轮 LLM 请求(见下)。
+            try:
+                await _maybe_auto_compact_session(data.session_id, llm_config)
+            except Exception as compact_err:
+                logger.warning(
+                    f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"
+                )
+
+            # L1 会话历史接线 (对标增强第二轮, docs/plans/2026-09-06-parity-round2):
+            # 把持久化历史注入本轮 LLM 请求 —— 此前只发 [system, attachments?, user],
+            # 用户第二条消息起 agent"失忆",压缩也不省每轮 token。此处本轮 user
+            # 消息尚未落盘(落盘在下方),历史天然不含本轮消息。历史加载失败时
+            # 降级为无历史的旧行为,绝不阻断聊天。
+            try:
+                history_rows = MessageRepository().get_by_session(
+                    data.session_id, limit=100000
+                )
+            except Exception as hist_err:
+                logger.warning(
+                    f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
+                )
+                history_rows = []
+            # L9-lite (批次 C-3): 历史预算感知模型窗口 —— 前端上报的
+            # max_context 有效时, 历史预算 = 窗口 - 16k 预留(system/工具
+            # schema/回复), 下限 4k; 否则用默认推导(history_token_budget)。
+            l9_budget = history_token_budget()
+            if data.max_context is not None and data.max_context >= 20000:
+                l9_budget = max(4000, int(data.max_context) - 16384)
+            messages, omitted_history = build_request_messages(
+                system_content=system_content,
+                user_text=data.message,
+                history_rows=history_rows,
+                attachment_block=attachment_block or None,
+                budget_tokens=l9_budget,
+            )
+            if omitted_history > 0:
+                logger.info(
+                    "[REQ %s] 历史超过预算(%s tokens),已省略最早 %s 条",
+                    request_id,
+                    history_token_budget(),
+                    omitted_history,
+                )
+
+            # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）。
+            # 校验已在 attachment 之后提前完成,此处只做末条 user 消息的形态转换。
+            if data.images:
                 messages[-1] = {
                     "role": "user",
                     "content": [
@@ -2273,16 +2492,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         ],
                     ],
                 }
-            # M4 自动压缩: run_loop 之前检查历史是否达到压缩阈值,达到则
-            # 先压缩再继续。整块 try/except 隔离——压缩失败只记日志,
-            # 绝不阻塞本次聊天(流式事件照常产出)。注: AgentEvent 没有
-            # notice 类事件, 本里程碑不向前端推送压缩状态。
-            try:
-                await _maybe_auto_compact_session(data.session_id, llm_config)
-            except Exception as compact_err:
-                logger.warning(
-                    f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"
-                )
 
             # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
@@ -2306,6 +2515,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             done_reasoning: Optional[str] = None
 
+            # L2 真流式 (2026-09-06): run_loop 在 THINKING 段实时发 CONTENT_DELTA
+            # 事件时置位 —— 此时 DONE.content 已实时下发过,不再做假切块,
+            # 否则前端会收到两遍内容。
+            streamed_content_delta = False
+
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
@@ -2325,23 +2539,32 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 elif stream_entry.get("cancelled") and dispatcher is not None:
                     dispatcher.cancel()
 
-            async for evt in agent.run_loop(messages, llm_config=llm_config):
+            async for evt in agent.run_loop(
+                messages, llm_config=llm_config, session_id=data.session_id
+            ):
+                # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
+                # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
+                if evt.state.value == "content_delta":
+                    streamed_content_delta = True
+                    await entry.queue.put(evt.to_dict())
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
-                # 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls,
-                # 那是更大的重构;这个 producer 端的 fake stream 给出 90% 视觉效果。
-                if evt.state.value == "done" and evt.content:
+                # 真 LLM streaming 已由 run_loop 的 CONTENT_DELTA 覆盖(streamed_content_delta
+                # 置位时跳过);非流式回退路径(不支持的 provider / 流式首块前失败)
+                # 仍走这里,保持旧视觉行为。
+                elif evt.state.value == "done" and evt.content:
                     done_content = evt.content
-                    content = evt.content
-                    for i in range(0, len(content), _STREAMING_CHUNK_SIZE):
-                        delta = content[i : i + _STREAMING_CHUNK_SIZE]
-                        await entry.queue.put(
-                            {
-                                "state": "content_delta",
-                                "iteration": evt.iteration,
-                                "content": delta,
-                            }
-                        )
-                        await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
+                    if not streamed_content_delta:
+                        content = evt.content
+                        for i in range(0, len(content), _STREAMING_CHUNK_SIZE):
+                            delta = content[i : i + _STREAMING_CHUNK_SIZE]
+                            await entry.queue.put(
+                                {
+                                    "state": "content_delta",
+                                    "iteration": evt.iteration,
+                                    "content": delta,
+                                }
+                            )
+                            await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
                     # 暂存 DONE 事件，不立即推入队列 —
                     # 待 post-loop 标题生成 + session_updated 事件后再推送，
                     # 保证前端 onDone → loadSessions() 时标题已落盘。
@@ -2408,6 +2631,30 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
                 # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
                 if assistant_persisted:
+                    # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
+                    # run 正常结束通知; deny/modify 无语义, 一律忽略。
+                    try:
+                        import backend.data.settings_repo as _settings_repo_mod
+                        from backend.hooks.config import load_hooks as _load_hooks_fn
+                        from backend.hooks.runner import run_event_hooks as _run_hooks_fn
+
+                        _stop_hooks = _load_hooks_fn(_settings_repo_mod.SettingsRepository())
+                        if _stop_hooks:
+                            _capped = done_content[:4096]
+                            await _run_hooks_fn(
+                                _stop_hooks,
+                                "stop",
+                                "",
+                                {
+                                    "hook_event_name": "stop",
+                                    "session_id": data.session_id,
+                                    "final_content": _capped,
+                                },
+                            )
+                    except Exception as l11_stop_err:
+                        logger.debug(
+                            f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
+                        )
                     await _extract_legacy_chat_memory(
                         request_id, data.session_id, data.message, done_content
                     )
@@ -2458,8 +2705,41 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 f"[REQ {request_id}] /chat/stream LLM error: "
                 f"type={e.type.value}, message={e.message}"
             )
+            # S1: finally 落库 failed + 原因
+            _producer_error = e.message
             await entry.queue.put({"error": e.to_dict(), "state": "failed"})
         finally:
+            # S1 (2026-09-06): 会话运行态终态落库。优先级：
+            #   suspended > 用户中断(idle) > completed > failed。
+            # cancelled 标志必须在 _ACTIVE_STREAMS 注销前读取；未捕获异常时
+            # sys.exc_info() 仍在传播中，可取到错误摘要。/btw 伪会话零命中静默。
+            _cancelled_by_user = bool(_ACTIVE_STREAMS.get(stream_id, {}).get("cancelled"))
+            if getattr(entry, "status", None) == "suspended":
+                _terminal_status = "suspended"
+                _terminal_error = None
+            elif _cancelled_by_user:
+                _terminal_status = "idle"
+                _terminal_error = None
+            elif run_outcome == "completed":
+                _terminal_status = "completed"
+                _terminal_error = None
+            else:
+                _terminal_status = "failed"
+                if _producer_error:
+                    _terminal_error = _producer_error
+                else:
+                    _exc_info = sys.exc_info()
+                    _terminal_error = (
+                        str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
+                    )
+            try:
+                SessionRepository().update_run_status(
+                    data.session_id, _terminal_status, _terminal_error
+                )
+            except Exception as status_err:  # noqa: BLE001 — fail-open
+                logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)
+            # S7: 注销产物事件监听器（闭包持有 entry/queue 引用，不注销会泄漏）
+            remove_artifact_listener(_push_artifact_event)
             # P2-9 (2026-08-14): 长连接结束注销注册表条目（run 级 cancel 不再命中）。
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:

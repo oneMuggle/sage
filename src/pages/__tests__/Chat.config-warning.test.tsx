@@ -28,7 +28,9 @@ vi.mock('../../features/manage-settings/useSettings', () => ({
   useSettings: () => useSettingsMock(),
 }));
 
-// C3 (2026-08-15): Chat → ProgressSection → PlanCardList 渲染链挂载即调
+// C3 (2026-08-15): Chat → TaskTreeSection(已派发)/PlanCard(未派发,主对话区域) 渲染链挂载即调
+// Wave 4 (2026-09-06): PlanCardList 已删,历史编排记录移除
+// Fix #2 (2026-09-06): PlanCard 移至 Chat.tsx 主对话区域,ProgressSection 仅保留 TaskTreeSection
 // orchRunClient.listRuns();mock 掉避免真实 IPC 抛错 (unhandled rejection)。
 vi.mock('../../shared/api/orchRunClient', () => ({
   orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },

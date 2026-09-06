@@ -1483,8 +1483,6 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
   },
 
   orchestration_cancel_lane: () => ({ ok: true }),
-  orchestration_list_runs: () => [],
-  orchestration_get_run: () => null,
   orchestration_cancel_run: () => ({ ok: true }),
   orchestration_update_plan: () => ({ ok: true }),
 

@@ -1,8 +1,10 @@
-"""Wave 2 P1-4 — orch_routes 4 endpoints 单测。
+"""Wave 2 P1-4 — orch_routes 端点单测。
 
-Plan Step 1:list_runs 倒序 / get_run 404 / resume 新 run_id / plan 更新
-409 锁定（dispatched_at 非 None）+ 未派发 200 + 422 min_length 验证。
+Plan Step 1:get_run 404 / plan 更新 409 锁定（dispatched_at 非 None）+
+未派发 200 + 422 min_length 验证。
 fixture 用 main 的 app（legacy_routes 无 app 变量）。
+
+Wave 4 (2026-09-06): 历史编排记录功能移除 —— 删除 list_runs / resume_run 测试。
 """
 from __future__ import annotations
 
@@ -28,46 +30,10 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-def test_list_runs_returns_recent_first(client):
-    """list_runs 按 created_at DESC。"""
-    repo = OrchRunRepository()
-    repo.upsert(OrchRun(
-        run_id="orch-old", session_id="s-1", status="completed",
-        created_at=1000, plan_json='{"tasks":[]}',
-    ))
-    repo.upsert(OrchRun(
-        run_id="orch-new", session_id="s-1", status="running",
-        created_at=2000, plan_json='{"tasks":[]}',
-    ))
-    r = client.get("/api/v1/orch/runs")
-    assert r.status_code == 200
-    body = r.json()
-    assert len(body) == 2
-    assert body[0]["run_id"] == "orch-new"
-    assert body[1]["run_id"] == "orch-old"
-
-
 def test_get_run_returns_404(client):
     """不存在的 run → 404。"""
     r = client.get("/api/v1/orch/runs/orch-missing")
     assert r.status_code == 404
-
-
-def test_resume_run_returns_new_run_id(client):
-    """resume → 新 run_id + 原 session_id + plan。"""
-    repo = OrchRunRepository()
-    repo.upsert(OrchRun(
-        run_id="orch-orig", session_id="s-1", status="completed",
-        created_at=1000,
-        plan_json='{"tasks":[{"task_id":"t1","agent_id":"primary","goal":"g"}]}',
-    ))
-    r = client.post("/api/v1/orch/runs/orch-orig/resume")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["ok"] is True
-    assert body["new_run_id"] != "orch-orig"
-    assert body["session_id"] == "s-1"
-    assert body["plan"] == [{"task_id": "t1", "agent_id": "primary", "goal": "g"}]
 
 
 def test_update_plan_after_dispatch_returns_409(client):
@@ -117,3 +83,36 @@ def test_update_plan_min_one_item_validation(client):
     ))
     r = client.post("/api/v1/orch/runs/orch-running/plan", json={"plan": []})
     assert r.status_code == 422
+
+
+# Fix #3 (2026-09-06): 用户确认端点测试
+
+
+def test_confirm_run_returns_404(client):
+    """不存在的 run → 404。"""
+    r = client.post("/api/v1/orch/runs/orch-missing/confirm")
+    assert r.status_code == 404
+
+
+def test_confirm_run_returns_409_when_cancelled(client):
+    """已取消的 run → 409。"""
+    repo = OrchRunRepository()
+    repo.upsert(OrchRun(
+        run_id="orch-cancelled", session_id="s-1", status="cancelled",
+        created_at=1000, plan_json='{"tasks":[]}',
+    ))
+    r = client.post("/api/v1/orch/runs/orch-cancelled/confirm")
+    assert r.status_code == 409
+
+
+def test_confirm_run_running_succeeds(client):
+    """running 状态的 run → 200 确认成功（即使无 pending confirm event 也返回 ok）。"""
+    repo = OrchRunRepository()
+    repo.upsert(OrchRun(
+        run_id="orch-confirm-test", session_id="s-1", status="running",
+        created_at=1000, plan_json='{"tasks":[]}',
+    ))
+    r = client.post("/api/v1/orch/runs/orch-confirm-test/confirm")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert r.json()["run_id"] == "orch-confirm-test"

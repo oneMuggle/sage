@@ -144,7 +144,9 @@ export type AgentState =
   // 审批/提问/失败),见 SubagentLiveState。不进消息气泡,进任务板 live 态。
   | 'subagent_event'
   // live-events P1 (2026-09-06): run 级子代理审批模式切换回显(ask|auto)。
-  | 'approval_mode';
+  | 'approval_mode'
+  // S7 (2026-09-06): 工具落库产物后经活跃流推送的事件,载荷见 AgentEvent.artifact。
+  | 'artifact_created';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -176,6 +178,8 @@ export interface PermissionRequest {
     agent_id: string;
     goal: string;
   };
+  /** U15: 写类工具的将写入内容 unified diff（无法生成时缺省，回退 args_summary） */
+  diff_preview?: string;
 }
 
 /** 问题选项 — QuestionDialog 渲染为可选卡片 */
@@ -405,6 +409,15 @@ export interface AgentEvent {
   ts?: number;
   // live-events P1: approval_mode 切换回显字段。
   mode?: 'ask' | 'auto';
+  // S7 (2026-09-06): artifact_created 事件载荷（工具线程落库后经活跃流推送）。
+  artifact?: {
+    id: string;
+    path: string;
+    name: string;
+    kind: string;
+    size: number;
+    created_at: number;
+  };
 }
 
 // ==================== 错误类型定义 ====================
