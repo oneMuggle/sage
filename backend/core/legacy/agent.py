@@ -6,10 +6,12 @@ SageAgent - 核心对话引擎
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 import hashlib
 import json
 import logging
+import os
 import time
 import uuid
 from collections import deque
@@ -554,6 +556,20 @@ class SageAgent:
         # 让 LLMError 透传给调用方，由 chat() 统一处理
         return await self.llm_client.chat(messages)
 
+    @staticmethod
+    def _should_stream(llm_client: Optional[LLMClient]) -> bool:
+        """是否尝试流式 LLM 调用（L2 真流式开关）。
+
+        - env ``SAGE_LLM_STREAMING`` 设为 0/false/off/no 时全局关闭；
+        - 该 client 实例流式已失败过一次（``stream_unsupported``）则跳过,
+          避免每次迭代都白打一个失败请求；
+        - 其余情况默认开启（失败自动回退非流式,不影响可用性）。
+        """
+        raw = os.environ.get("SAGE_LLM_STREAMING", "").strip().lower()
+        if raw in {"0", "false", "off", "no"}:
+            return False
+        return not getattr(llm_client, "stream_unsupported", False)
+
     async def run_loop(
         self,
         messages: List[Dict[str, Any]],
@@ -634,19 +650,65 @@ class SageAgent:
 
                 # Pass available tools to LLM so it can call them
                 available_tools = self.get_available_tools()
-                response: LLMResponse = await self.llm_client.chat(
-                    messages, tools=available_tools or None
-                )
 
-                # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
-                # 这允许前端展示 LLM 的思考/推理过程
-                if response.reasoning_content:
-                    yield AgentEvent(
-                        state=AgentState.REASONING,
-                        iteration=i,
-                        reasoning=response.reasoning_content,
-                        agent_id=self.agent_id,
+                # L2 真流式 (对标增强第二轮, docs/plans/2026-09-06-parity-round2):
+                # THINKING 段优先走流式 tool-calling —— 内容增量以 CONTENT_DELTA
+                # 事件实时下发（前端 appendContent 既有契约），工具调用增量在
+                # 流内聚合。流式不可用（上游不支持 stream+tools / stream_options,
+                # 或首个增量前请求失败）时自动回退非流式 chat(),行为与旧版完全
+                # 一致;首个增量之后失败无法安全重放,按原错误面终止。
+                response: Optional[LLMResponse] = None
+                if self._should_stream(self.llm_client):
+                    saw_content_delta = False
+                    stream_reasoning_parts: List[str] = []
+                    try:
+                        async for evt_kind, payload in self.llm_client.chat_stream_events(
+                            messages, tools=available_tools or None
+                        ):
+                            if evt_kind == "content_delta":
+                                saw_content_delta = True
+                                yield AgentEvent(
+                                    state=AgentState.CONTENT_DELTA,
+                                    iteration=i,
+                                    content=payload,
+                                    agent_id=self.agent_id,
+                                )
+                            elif evt_kind == "reasoning_delta":
+                                # 汇总后在流收尾统一发一条 REASONING（producer
+                                # 会再做 reasoning_delta 切块,拆成多事件会重复）
+                                stream_reasoning_parts.append(payload)
+                            elif evt_kind == "response":
+                                response = payload
+                    except LLMError as stream_err:
+                        if saw_content_delta:
+                            raise
+                        logger.warning(
+                            "流式 LLM 调用失败(首个增量前),回退非流式: %s", stream_err
+                        )
+                        # 标记该 client 实例,本次 run_loop 后续迭代直接走非流式
+                        with contextlib.suppress(AttributeError):  # 测试替身可能没有该属性
+                            self.llm_client.stream_unsupported = True
+                        response = None
+                    if response is not None and stream_reasoning_parts:
+                        yield AgentEvent(
+                            state=AgentState.REASONING,
+                            iteration=i,
+                            reasoning="".join(stream_reasoning_parts),
+                            agent_id=self.agent_id,
+                        )
+                if response is None:
+                    response = await self.llm_client.chat(
+                        messages, tools=available_tools or None
                     )
+                    # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
+                    # 这允许前端展示 LLM 的思考/推理过程
+                    if response.reasoning_content:
+                        yield AgentEvent(
+                            state=AgentState.REASONING,
+                            iteration=i,
+                            reasoning=response.reasoning_content,
+                            agent_id=self.agent_id,
+                        )
 
                 if not response.tool_calls:
                     messages.append(
