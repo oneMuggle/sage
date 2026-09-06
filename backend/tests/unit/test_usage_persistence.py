@@ -25,17 +25,11 @@ def tracker_with_db(monkeypatch, tmp_path: Path) -> UsageTracker:
     return UsageTracker()
 
 
-def _drain_persist_pool() -> None:
-    """win7: 落库走后台池, 测试断言前排空。"""
-    UsageTracker._persist_pool.submit(lambda: None).result()
-
-
 def test_record_persists_to_usage_events(tracker_with_db: UsageTracker):
     from backend.data.database import get_database
 
     tracker_with_db.record("gpt-4o", 100, 50, session_id="s1")
     tracker_with_db.record("gpt-4o", 10, 5, session_id=None)
-    _drain_persist_pool()
 
     rows = get_database().get_connection().execute(
         "SELECT session_id, model, prompt_tokens, completion_tokens, total_tokens"
@@ -52,7 +46,6 @@ def test_session_summary_aggregates(tracker_with_db: UsageTracker):
     tracker_with_db.record("gpt-4o", 100, 50, session_id="s1")
     tracker_with_db.record("gpt-4o-mini", 20, 10, session_id="s1")
     tracker_with_db.record("gpt-4o", 999, 999, session_id="s2")  # 别的会话
-    _drain_persist_pool()
 
     summary = tracker_with_db.session_summary("s1")
     assert summary["requests"] == 2
@@ -74,7 +67,6 @@ def test_today_cost_usd_sums_all_sessions(tracker_with_db: UsageTracker):
     # 成本估算依赖内置价格表; 用已知模型保证 > 0
     tracker_with_db.record("gpt-4o", 1_000_000, 1_000_000, session_id="s1")
     tracker_with_db.record("gpt-4o", 1_000_000, 0, session_id="s2")
-    _drain_persist_pool()
     expected = (
         get_database()
         .get_connection()

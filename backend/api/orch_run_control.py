@@ -54,6 +54,15 @@ def configure(
     _steer_attempts.clear()
 
 
+def get_event_hub() -> Optional[EventHub]:
+    """返回启动时装配的 EventHub（live-events P0）。
+
+    ChatDispatcher 发布 canonical ``task.step.*`` 事件时惰性取用 ——
+    未启动/未装配返回 ``None``，调用方降级为仅镜像聊天流。
+    """
+    return _event_hub
+
+
 @router.get("/{run_id}/snapshot")
 async def get_snapshot(run_id: str) -> JSONResponse:
     """返回 run 的当前快照。"""

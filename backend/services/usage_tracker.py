@@ -17,7 +17,6 @@ import logging
 import threading
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Deque, Dict, List, Optional, Tuple
@@ -153,20 +152,14 @@ class UsageTracker:
         self._persist(entry, session_id)
         return entry
 
-    # win7 惯例 (PR A §1.2): 落库可能在事件循环线程被调用, 改为投递到
-    # 单 worker 后台池——序列化写入 + 永不阻塞调用方。队列满/关停 fail-open。
-    _persist_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="usage-persist")
-
-    @classmethod
-    def _persist(cls, entry: UsageRecord, session_id: Optional[str]) -> None:
-        """单行落库 (L8), 后台执行。任何失败静默——用量是增强信息。"""
-        try:
-            cls._persist_pool.submit(cls._persist_sync, entry, session_id)
-        except Exception as exc:  # noqa: BLE001 — fail-open 铁律
-            logger.debug("usage_events 落库投递失败: %s", exc)
-
     @staticmethod
-    def _persist_sync(entry: UsageRecord, session_id: Optional[str]) -> None:
+    def _persist(entry: UsageRecord, session_id: Optional[str]) -> None:
+        """单行落库 (L8), 行内同步 + _SQLITE_LOCK 保护。
+
+        win7 备注: 曾试过后台线程池, 但池线程与主线程并发触碰共享
+        sqlite 连接在 py3.8 下段错误 (CI 实证) —— 回退行内写, 单行
+        微秒级, 持锁时长可忽略。任何失败静默 (fail-open)。
+        """
         try:
             import uuid
 

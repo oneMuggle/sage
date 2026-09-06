@@ -90,6 +90,11 @@ export interface OrchSettings {
   // ``OrchSettings.max_subagent_iterations`` 默认对齐；用户可在此调整。
   maxSubagentIterations: number; // 6
   worktreeIsolation: boolean; // false
+  // live-events P1 (2026-09-06): 新 run 子代理审批模式默认值。
+  // "ask" = 风险工具逐次审批（子代理审批请求转发前端弹窗）;
+  // "auto" = 非危险工具自动批准（破坏性/可疑命令/工作区越界仍转人工）。
+  // 与后端 ``OrchSettings.subagent_approval_mode`` camelCase 对齐。
+  subagentApprovalMode: 'ask' | 'auto'; // 'ask'
 }
 
 /** All application settings */
@@ -160,6 +165,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxLaneIterations: 8,
   maxSubagentIterations: 6,
   worktreeIsolation: false,
+  subagentApprovalMode: 'ask',
 };
 
 /** Sensible defaults for all settings */

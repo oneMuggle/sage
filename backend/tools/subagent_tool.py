@@ -80,8 +80,19 @@ class DispatchSubagentsTool(BaseTool):
         )
 
     async def execute_async(self, **kwargs: Any) -> ToolResult:
-        """异步执行 —— 子 agent 在事件循环上并发（ChatDispatcher 内 gather）。"""
+        """异步执行 —— 子 agent 在事件循环上并发（ChatDispatcher 内 gather）。
+
+        ``_tool_call_id``（可选）由 run_loop 的 dispatch special-case 注入
+        （conductor 本工具调用的 ID），dispatcher 据此为子任务标记
+        ``parent_tool_call_id``，前端把子代理实时步骤关联到聊天流的
+        "Delegate <goal>" 卡片。非 run_loop 调用方不传则保持 None。
+        """
         tasks: List[Dict[str, str]] = kwargs.get("tasks", [])
+        tool_call_id = kwargs.get("_tool_call_id")
+        if tool_call_id:
+            notify = getattr(self._dispatcher, "notify_tool_call", None)
+            if callable(notify):
+                notify(str(tool_call_id))
         try:
             aggregated = await self._dispatcher.dispatch(tasks)
             return ToolResult(success=True, content=aggregated)
