@@ -1,0 +1,987 @@
+import { app, BrowserWindow } from 'electron';
+import { autoUpdater } from 'electron-updater';
+import * as fs from 'fs/promises';
+import * as fssync from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
+import { StateManager } from './updateState';
+import type { UpdateState } from './updateState';
+import { ConfigManager } from './updateConfig';
+import type { UpdateChannel, UpdateConfig, UpdateStrategy } from './updateConfig';
+import { LauncherHealthChecker } from './updateHealthChecker';
+
+export interface CheckResult {
+  updateAvailable: boolean;
+  version?: string;
+  releaseNotes?: string;
+  downloadUrl?: string;
+}
+
+interface SemVer {
+  major: string;
+  minor: string;
+  patch: string;
+  prerelease: string[];
+}
+
+interface UpdateFile {
+  filename: string;
+  url: string;
+  sha512: string;
+  size: number;
+  signature: string;
+}
+
+interface UpdateManifest {
+  version: string;
+  min_upgradable_version: string;
+  release_notes?: string;
+  files: Record<string, UpdateFile>;
+}
+
+export interface UpdaterBoundary {
+  setFeedURL(options: { provider: 'generic'; url: string; channel: string }): void;
+  checkForUpdates(): Promise<unknown>;
+  downloadUpdate(): Promise<string[]>;
+  quitAndInstall(): void;
+  on(event: 'download-progress', listener: (event: { percent: number }) => void): void;
+  off(event: 'download-progress', listener: (event: { percent: number }) => void): void;
+}
+
+interface UpdaterCheckResult {
+  updateInfo?: {
+    version?: string;
+    files?: Array<{
+      url?: string;
+      sha512?: string;
+      size?: number;
+    }>;
+  };
+}
+
+interface CheckedUpdate {
+  version: string;
+  fileUrl: string;
+  filename: string;
+  sha512: string;
+  size: number;
+  signature: string;
+  channel: string;
+}
+
+interface PreparedUpgradeInfo {
+  version: string;
+  installDir: string;
+  prevDir: string;
+  wasRenamed: boolean;
+}
+
+const UPDATE_SIGNING_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA28+4qGf6PSfwqA97ST5x
++3MW1Udtg9UJDB2gL5CP55tRM2kMg3qFkk3bY548BgJsAVEZxRyE+jS6cS4sTKEK
++6I3cwt67NDUqefXstGiEqj+h8PqdXXMwaXO7aaL9WwNA1f49vtfsyOcbaUbPicG
+uyJ2efXQYXFNg0eSvRNgbH4CKiz1jL0EWkONwY5T2m6xX/aK9o8hR5KW3E42gAFE
+8KVCn4tpqhJDRzPbsTLqvkE9HeiszzLloOrYpD1FtG8l9kYOEtdgwJRnHxj5S4Tx
+eL4qD6nEtJM2cWF6FbYrVWSf6MrUkOtGERYRjad0jgfd0fqk0V7zgR5uFgFbvyKV
+5QIDAQAB
+-----END PUBLIC KEY-----`;
+
+const SEMVER_PATTERN =
+  /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+export class UpdateManager {
+  private stateManager: StateManager;
+  private configManager: ConfigManager;
+  private updater: UpdaterBoundary;
+  private lastCheckedUpdate: CheckedUpdate | null = null;
+  private lastCheckedReleaseNotes: string | undefined = undefined;
+  private stateChangeListeners: Array<(state: UpdateState) => void> = [];
+  private automaticUpdateInProgress = false;
+  private checkPromise: Promise<CheckResult> | null = null;
+
+  constructor(updater: UpdaterBoundary = autoUpdater as unknown as UpdaterBoundary) {
+    this.stateManager = new StateManager();
+    this.configManager = new ConfigManager();
+    this.updater = updater;
+  }
+
+  /** Return the current persisted state for renderer initialization. */
+  async getState(): Promise<UpdateState> {
+    return this.stateManager.getState();
+  }
+
+  /** Register a listener that fires after every state mutation. */
+  onStateChange(listener: (state: UpdateState) => void): () => void {
+    this.stateChangeListeners.push(listener);
+    return () => {
+      this.stateChangeListeners = this.stateChangeListeners.filter((l) => l !== listener);
+    };
+  }
+
+  private notifyStateChange(state: UpdateState): void {
+    for (const listener of this.stateChangeListeners) {
+      try {
+        listener(state);
+      } catch {
+        // Listener errors must not break the update flow
+      }
+    }
+  }
+
+  async checkForUpdates(): Promise<CheckResult> {
+    if (this.checkPromise) return this.checkPromise;
+    this.checkPromise = this.performCheckForUpdates();
+    try {
+      return await this.checkPromise;
+    } finally {
+      this.checkPromise = null;
+    }
+  }
+
+  private async performCheckForUpdates(): Promise<CheckResult> {
+    this.lastCheckedUpdate = null;
+    this.lastCheckedReleaseNotes = undefined;
+    const config = await this.configManager.getConfig();
+    const state = await this.stateManager.getState();
+
+    try {
+      // Fetch latest manifest from server
+      const response = await fetch(
+        `${config.updateServerUrl}/api/v1/updates/latest?channel=${config.channel}`,
+      );
+
+      if (!response.ok) {
+        this.lastCheckedUpdate = null;
+        if (response.status === 404) {
+          state.lastCheckTime = new Date().toISOString();
+          state.updateAvailable = false;
+          state.availableUpdate = null;
+          await this.stateManager.setState(state);
+          this.notifyStateChange(state);
+          return { updateAvailable: false };
+        }
+        throw new Error(`Server returned ${response.status}`);
+      }
+
+      const manifest = this.validateManifest(await response.json());
+
+      // Check if version is newer than current
+      if (this.isNewerVersion(manifest.version, state.currentVersion)) {
+        // Check if current version meets minimum upgradable version
+        if (!this.meetsMinimumVersion(state.currentVersion, manifest.min_upgradable_version)) {
+          this.lastCheckedUpdate = null;
+          console.warn(
+            `Current version ${state.currentVersion} cannot upgrade to ${manifest.version}`,
+          );
+          state.lastCheckTime = new Date().toISOString();
+          state.updateAvailable = false;
+          state.availableUpdate = null;
+          await this.stateManager.setState(state);
+          this.notifyStateChange(state);
+          return { updateAvailable: false };
+        }
+
+        // Determine platform-specific file
+        const platformKey = this.getPlatformKey();
+        const fileMeta = manifest.files[platformKey];
+
+        if (!fileMeta) {
+          this.lastCheckedUpdate = null;
+          console.warn(`No update file for platform ${platformKey}`);
+          state.lastCheckTime = new Date().toISOString();
+          state.updateAvailable = false;
+          state.availableUpdate = null;
+          await this.stateManager.setState(state);
+          this.notifyStateChange(state);
+          return { updateAvailable: false };
+        }
+
+        // Update state with check time and availability
+        state.lastCheckTime = new Date().toISOString();
+        state.updateAvailable = true;
+        state.availableUpdate = {
+          version: manifest.version,
+          releaseNotes: manifest.release_notes,
+        };
+        await this.stateManager.setState(state);
+        this.lastCheckedUpdate = {
+          version: manifest.version,
+          fileUrl: fileMeta.url,
+          filename: fileMeta.filename,
+          sha512: fileMeta.sha512,
+          size: fileMeta.size,
+          signature: fileMeta.signature,
+          channel: config.channel,
+        };
+        this.lastCheckedReleaseNotes = manifest.release_notes;
+        this.notifyStateChange(state);
+
+        if (config.updateStrategy !== 'manual' && !this.automaticUpdateInProgress) {
+          await this.runAutomaticUpdate(
+            config.updateStrategy,
+            this.lastCheckedUpdate,
+            manifest.release_notes,
+          );
+        }
+
+        return {
+          updateAvailable: true,
+          version: manifest.version,
+          releaseNotes: manifest.release_notes,
+          downloadUrl: fileMeta.url,
+        };
+      }
+
+      // No update available
+      this.lastCheckedUpdate = null;
+      state.lastCheckTime = new Date().toISOString();
+      state.updateAvailable = false;
+      await this.stateManager.setState(state);
+      this.notifyStateChange(state);
+
+      return { updateAvailable: false };
+    } catch (error) {
+      console.error('Failed to check for updates:', error);
+      throw error;
+    }
+  }
+
+  private async runAutomaticUpdate(
+    strategy: UpdateStrategy,
+    checkedUpdate: CheckedUpdate,
+    releaseNotes?: string,
+  ): Promise<void> {
+    this.automaticUpdateInProgress = true;
+    try {
+      await this.downloadUpdate(checkedUpdate, releaseNotes);
+      if (strategy === 'auto-install') {
+        await this.installUpdate();
+      }
+    } finally {
+      this.automaticUpdateInProgress = false;
+    }
+  }
+
+  async downloadUpdate(
+    updateOverride?: CheckedUpdate,
+    releaseNotesOverride?: string,
+  ): Promise<void> {
+    const checkedUpdate = updateOverride ?? this.lastCheckedUpdate;
+    if (!checkedUpdate) {
+      throw new Error('No update is available to download');
+    }
+
+    try {
+      const feedUrl = this.getFeedUrl(checkedUpdate.fileUrl);
+      this.updater.setFeedURL({
+        provider: 'generic',
+        url: feedUrl,
+        channel: this.getUpdaterChannel(checkedUpdate.channel),
+      });
+      const updaterResult = (await this.updater.checkForUpdates()) as UpdaterCheckResult | null;
+      const updaterVersion = updaterResult?.updateInfo?.version;
+      if (!updaterVersion || updaterVersion !== checkedUpdate.version) {
+        throw new Error('Updater metadata does not match the checked update');
+      }
+      const updaterFile = updaterResult?.updateInfo?.files?.find(
+        (file) => this.getArtifactBasename(file.url, feedUrl) === checkedUpdate.filename,
+      );
+      if (
+        !updaterFile ||
+        updaterFile.sha512 !== checkedUpdate.sha512 ||
+        updaterFile.size !== checkedUpdate.size
+      ) {
+        throw new Error('Updater metadata does not match the checked update');
+      }
+      const downloadedFiles = await this.updater.downloadUpdate();
+      const downloadedFile = downloadedFiles.find(
+        (file) => decodeURIComponent(path.basename(file)) === checkedUpdate.filename,
+      );
+      if (!downloadedFile || !this.isUpdaterCachePath(downloadedFile)) {
+        throw new Error('Updater did not return a valid downloaded artifact path');
+      }
+
+      const state = await this.stateManager.getState();
+      const newState: UpdateState = {
+        ...state,
+        updateAvailable: false,
+        availableUpdate: null,
+        pendingUpdate: {
+          version: checkedUpdate.version,
+          downloadedAt: new Date().toISOString(),
+          releaseNotes: releaseNotesOverride ?? this.lastCheckedReleaseNotes,
+          fileUrl: checkedUpdate.fileUrl,
+          filename: checkedUpdate.filename,
+          sha512: checkedUpdate.sha512,
+          size: checkedUpdate.size,
+          signature: checkedUpdate.signature,
+        },
+        cachedRollbackPackage: {
+          path: downloadedFile,
+          version: checkedUpdate.version,
+          sha512: checkedUpdate.sha512,
+          size: checkedUpdate.size,
+          signature: checkedUpdate.signature,
+          fileUrl: checkedUpdate.fileUrl,
+        },
+      };
+      await this.stateManager.setState(newState);
+      this.notifyStateChange(newState);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to download update: ${message}`);
+    }
+  }
+
+  onDownloadProgress(callback: (percent: number) => void): () => void {
+    const listener = (event: { percent: number }) => callback(event.percent);
+    this.updater.on('download-progress', listener);
+    return () => this.updater.off('download-progress', listener);
+  }
+
+  async setStrategy(strategy: UpdateStrategy): Promise<void> {
+    // TODO (Task 10): read-modify-write is non-atomic; concurrent calls may
+    // cause lost updates. Add mutex or atomic rename in ConfigManager.
+    const config = await this.configManager.getConfig();
+    await this.configManager.setConfig({ ...config, updateStrategy: strategy });
+  }
+
+  async getConfig(): Promise<UpdateConfig> {
+    return this.configManager.getConfig();
+  }
+
+  async setChannel(channel: UpdateChannel): Promise<void> {
+    const config = await this.configManager.getConfig();
+    await this.configManager.setConfig({ ...config, channel });
+    // Channel change invalidates any cached check result from a previous
+    // check (which may have targeted a different channel's manifest).
+    this.lastCheckedUpdate = null;
+  }
+
+  private isUpdaterCachePath(filePath: string): boolean {
+    const resolved = path.resolve(filePath);
+    const cacheRoot = path.resolve(app.getPath('userData'));
+    return resolved.startsWith(`${cacheRoot}${path.sep}`);
+  }
+  private getFeedUrl(fileUrl: string): string {
+    const url = new URL(fileUrl);
+    const directoryPath = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1);
+    return `${url.origin}${directoryPath}`;
+  }
+
+  private getUpdaterChannel(channel: string): string {
+    return channel === 'stable' ? 'latest' : channel;
+  }
+
+  private getArtifactBasename(fileUrl: string | undefined, baseUrl: string): string | null {
+    if (!fileUrl) return null;
+    try {
+      const pathname = new URL(fileUrl, baseUrl).pathname;
+      const basename = pathname.slice(pathname.lastIndexOf('/') + 1);
+      return decodeURIComponent(basename);
+    } catch {
+      return null;
+    }
+  }
+
+  async installUpdate(): Promise<void> {
+    const state = await this.stateManager.getState();
+
+    if (!state.pendingUpdate) {
+      throw new Error('No pending update to install');
+    }
+
+    // Prepare the filesystem before committing state. If preparation fails,
+    // the current installation is still active and the pending update must
+    // remain retryable rather than being recorded as already installed.
+    const prepared = await this.prepareForUpgrade();
+    const preparedAt = new Date().toISOString();
+    await this.stateManager.setState({
+      ...state,
+      pendingInstallAttempt: {
+        version: state.pendingUpdate.version,
+        startedAt: preparedAt,
+        phase: 'prepared',
+        previousVersion: state.currentVersion,
+        pendingUpdate: state.pendingUpdate,
+      },
+    });
+
+    // CRITICAL: persist the post-install state BEFORE calling quitAndInstall().
+    // quitAndInstall() hands off to the native installer and may exit the
+    // process synchronously (NSIS on Windows) or within milliseconds (Linux
+    // AppImage). Writing first guarantees the next launch sees the intended
+    // version and rollback baseline even if the process is killed mid-handoff.
+    const newState: UpdateState = {
+      ...state,
+      currentVersion: state.pendingUpdate.version,
+      lastKnownGoodVersion: state.currentVersion,
+      lastKnownGoodInstallDate: new Date().toISOString(),
+      crashCount: 0,
+      pendingUpdate: null,
+      updateAvailable: false,
+      availableUpdate: null,
+      postInstallMarker: {
+        version: state.pendingUpdate.version,
+        installedAt: new Date().toISOString(),
+      },
+      pendingInstallAttempt: {
+        version: state.pendingUpdate.version,
+        startedAt: preparedAt,
+        phase: 'requested',
+        previousVersion: state.currentVersion,
+        pendingUpdate: state.pendingUpdate,
+      },
+    };
+    try {
+      await this.stateManager.setState(newState);
+    } catch (setStateError) {
+      // State write failed after prepareForUpgrade renamed the install dir
+      // (non-Windows). Attempt to restore before giving up so the app can
+      // still launch from the previous installation.
+      if (prepared?.wasRenamed) {
+        await this.restorePreparedUpgrade(prepared);
+      }
+      throw setStateError;
+    }
+    this.notifyStateChange(newState);
+
+    try {
+      this.updater.quitAndInstall();
+    } catch (error) {
+      const failedState: UpdateState = {
+        ...state,
+        pendingInstallAttempt: {
+          version: state.pendingUpdate.version,
+          startedAt: preparedAt,
+          phase: 'failed',
+          previousVersion: state.currentVersion,
+          pendingUpdate: state.pendingUpdate,
+        },
+      };
+      await this.stateManager.setState(failedState);
+      if (prepared?.wasRenamed) await this.restorePreparedUpgrade(prepared);
+      this.notifyStateChange(failedState);
+      throw error;
+    }
+  }
+
+  async onAppStartup(
+    getWindow: () => BrowserWindow | null,
+    backendUrl = 'http://127.0.0.1:8765',
+  ): Promise<void> {
+    const state = await this.stateManager.getState();
+
+    const installAttempt = state.pendingInstallAttempt;
+    if (installAttempt && app.getVersion() !== installAttempt.version) {
+      // The native installer did not install the requested version. Reconcile
+      // persisted optimistic state with the version that actually launched.
+      const recoveredState: UpdateState = {
+        ...state,
+        currentVersion: app.getVersion(),
+        lastKnownGoodVersion: installAttempt.previousVersion,
+        pendingUpdate: installAttempt.pendingUpdate,
+        pendingInstallAttempt: null,
+        postInstallMarker: null,
+      };
+      await this.stateManager.setState(recoveredState);
+      this.notifyStateChange(recoveredState);
+      Object.assign(state, recoveredState);
+    }
+
+    // Reset crash count if version changed since last recording
+    if (state.currentVersion !== state.lastRecordedVersion) {
+      state.crashCount = 0;
+      state.lastRecordedVersion = state.currentVersion;
+      await this.stateManager.setState(state);
+    }
+
+    // Run post-startup health checks
+    const healthChecker = new LauncherHealthChecker({ getWindow, backendUrl });
+    const health = await healthChecker.runPostStartupChecks();
+
+    if (!health.passed) {
+      // Auto-rollback only proceeds when a postInstallMarker confirms the
+      // current version was genuinely installed (not just a stale state file
+      // pointing at a version that never completed installation).
+      const marker = state.postInstallMarker;
+      if (marker && marker.version === state.currentVersion) {
+        state.crashCount += 1;
+        await this.stateManager.setState(state);
+
+        const config = await this.configManager.getConfig();
+        if (state.crashCount >= config.autoRollbackThreshold) {
+          await this.rollback('auto-rollback:health-check-failed');
+          return; // rollback() calls app.exit(), but TypeScript needs this
+        }
+
+        throw new Error(
+          `Health check failed (${state.crashCount}/${config.autoRollbackThreshold})`,
+        );
+      }
+
+      // No matching post-install marker: skip crash counting / auto-rollback
+      // because the current version was not installed by this update flow.
+      throw new Error('Health check failed (no post-install marker for current version)');
+    }
+
+    // Health checks passed: clear postInstallMarker and reset crash count
+    const needsMarkerClear = !!state.postInstallMarker;
+    const needsCrashReset = state.crashCount > 0;
+    if (needsMarkerClear || needsCrashReset) {
+      if (needsMarkerClear) state.postInstallMarker = null;
+      if (needsCrashReset) state.crashCount = 0;
+      await this.stateManager.setState(state);
+    }
+  }
+
+  async rollback(reason: string): Promise<void> {
+    const state = await this.stateManager.getState();
+
+    // 1. Report rollback event (non-blocking)
+    await this.reportRollbackEvent(reason, state);
+
+    // 2. Check if .prev exists
+    const installDir = path.dirname(process.execPath);
+    const prevDir = path.join(path.dirname(installDir), '.prev');
+
+    if (!(await this.pathExists(prevDir))) {
+      // No .prev, try reinstalling from cached package
+      await this.reinstallFromPackage(state);
+      return;
+    }
+
+    // 3. Recoverable directory swap:
+    //    a) rename installDir → tempDir (preserves data as fallback)
+    //    b) rename prevDir → installDir
+    //    c) only after (b) succeeds, delete tempDir
+    //    On failure at any step, restore original layout before propagating.
+    const tempDir = `${installDir}.rollback-temp-${Date.now()}`;
+    try {
+      await fs.rename(installDir, tempDir);
+    } catch (renameCurrentErr) {
+      throw new Error(
+        `Failed to move current install for rollback: ${(renameCurrentErr as Error).message}`,
+      );
+    }
+
+    try {
+      await fs.rename(prevDir, installDir);
+    } catch (renamePrevErr) {
+      // Restore: move tempDir back to installDir
+      try {
+        await fs.rename(tempDir, installDir);
+      } catch {
+        // Best-effort; if this also fails the install dir is missing
+      }
+      throw new Error(
+        `Failed to restore .prev as install dir: ${(renamePrevErr as Error).message}`,
+      );
+    }
+
+    // Success — safe to remove the temp copy of the failed install
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // Non-fatal: temp dir will be cleaned up on next rollback attempt
+    }
+
+    // 4. Update state
+    await this.stateManager.setState({
+      ...state,
+      currentVersion: state.lastKnownGoodVersion,
+      crashCount: 0,
+    });
+
+    // 5. Restart app
+    app.relaunch();
+    app.exit(0);
+  }
+
+  async canManualRollback(): Promise<{ allowed: boolean; reason?: string }> {
+    const state = await this.stateManager.getState();
+
+    if (!state.lastKnownGoodVersion) {
+      return { allowed: false, reason: 'No known stable version available' };
+    }
+
+    if (state.currentVersion === state.lastKnownGoodVersion) {
+      return { allowed: false, reason: 'Already on stable version' };
+    }
+
+    const config = await this.configManager.getConfig();
+    const installDate = state.lastKnownGoodInstallDate
+      ? new Date(state.lastKnownGoodInstallDate)
+      : null;
+
+    if (!installDate) {
+      return { allowed: false, reason: 'Rollback window unknown' };
+    }
+
+    const daysSinceInstall = (Date.now() - installDate.getTime()) / (1000 * 60 * 60 * 24);
+
+    if (daysSinceInstall > config.rollbackWindowDays) {
+      return {
+        allowed: false,
+        reason: `Rollback window closed (${config.rollbackWindowDays} days)`,
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  private async reportRollbackEvent(reason: string, state: UpdateState): Promise<void> {
+    try {
+      const config = await this.configManager.getConfig();
+      await fetch(`${config.updateServerUrl}/api/v1/updates/rollbacks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_version: state.currentVersion,
+          to_version: state.lastKnownGoodVersion,
+          reason,
+          crash_count: state.crashCount,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+    } catch {
+      // Non-blocking: ignore reporting failures
+    }
+  }
+
+  private async reinstallFromPackage(state: UpdateState): Promise<void> {
+    const cached = state.cachedRollbackPackage;
+    if (!cached || cached.version !== state.lastKnownGoodVersion) {
+      throw new Error('No verified rollback package available');
+    }
+    const packagePath = path.resolve(cached.path);
+    const cacheRoot = path.resolve(app.getPath('userData'));
+    if (!packagePath.startsWith(`${cacheRoot}${path.sep}`)) {
+      throw new Error('Rollback package path is invalid');
+    }
+    if (!(await this.pathExists(packagePath))) {
+      throw new Error('No verified rollback package available');
+    }
+
+    // Open with O_NOFOLLOW to reject symlinks — an attacker who replaces
+    // the cached installer with a symlink could redirect hash verification
+    // at an arbitrary file on disk.
+    const noFollow = (fssync.constants as { O_NOFOLLOW?: number }).O_NOFOLLOW ?? 0;
+    let handle: fs.FileHandle | undefined;
+    try {
+      handle = await fs.open(packagePath, fssync.constants.O_RDONLY | noFollow);
+      const stats = await handle.stat();
+      if (stats.isSymbolicLink()) {
+        throw new Error('Rollback package is a symbolic link');
+      }
+      if (stats.size !== cached.size || !/^[a-f0-9]{128}$/i.test(cached.sha512)) {
+        throw new Error('Rollback package integrity validation failed');
+      }
+      const digest = await this.hashFileHandle(handle);
+      if (
+        digest !== cached.sha512.toLowerCase() ||
+        !this.verifyArtifactSignature({
+          version: cached.version,
+          filename: path.basename(packagePath),
+          url:
+            cached.fileUrl ??
+            `https://updates.sage.app/releases/${cached.version}/${path.basename(packagePath)}`,
+          sha512: digest,
+          size: cached.size,
+          signature: cached.signature,
+        })
+      ) {
+        throw new Error('Rollback package signature validation failed');
+      }
+    } catch (err) {
+      // Distinguish O_NOFOLLOW rejection (ELOOP) from other open failures
+      if (
+        err instanceof Error &&
+        'code' in err &&
+        (err as NodeJS.ErrnoException).code === 'ELOOP'
+      ) {
+        throw new Error('Rollback package is a symbolic link');
+      }
+      throw err;
+    } finally {
+      await handle?.close();
+    }
+
+    const installDir = path.dirname(process.execPath);
+    const { spawn } = await import('child_process');
+    const installer = spawn(packagePath, ['/S', `/D=${installDir}`]);
+
+    await new Promise<void>((resolve, reject) => {
+      installer.on('exit', (code: number) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Installer exited with code ${code}`));
+        }
+      });
+    });
+
+    // Restart app after reinstall
+    app.relaunch();
+    app.exit(0);
+  }
+
+  private async pathExists(p: string): Promise<boolean> {
+    try {
+      await fs.access(p);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async hashFileHandle(handle: fs.FileHandle): Promise<string> {
+    const { size } = await handle.stat();
+    const buffer = Buffer.alloc(size);
+    await handle.read(buffer, 0, size, 0);
+    return crypto.createHash('sha512').update(buffer).digest('hex');
+  }
+
+  private async prepareForUpgrade(): Promise<PreparedUpgradeInfo | null> {
+    const installDir = path.dirname(process.execPath);
+    const prevDir = path.join(path.dirname(installDir), '.prev');
+
+    // Clean up stale .prev from a prior upgrade
+    try {
+      await fs.rm(prevDir, { recursive: true, force: true });
+    } catch {
+      // Ignore if absent or not removable
+    }
+
+    if (process.platform === 'win32') {
+      // Windows locks the running executable's directory, so defer the rename
+      // to a post-exit batch script that the installer can invoke.
+      const scriptPath = path.join(path.dirname(installDir), '.prepare-rollback.bat');
+      const script = [
+        '@echo off',
+        'timeout /t 2 /nobreak >nul',
+        `move /y "${installDir}" "${prevDir}"`,
+        'del "%~f0"',
+        '',
+      ].join('\r\n');
+      await fs.writeFile(scriptPath, script, { mode: 0o755 });
+      // On Windows the rename is deferred; no filesystem change to track
+      return null;
+    }
+
+    // On Linux/macOS, rename the install directory directly.
+    await fs.rename(installDir, prevDir);
+    const info: PreparedUpgradeInfo = {
+      version: '',
+      installDir,
+      prevDir,
+      wasRenamed: true,
+    };
+    return info;
+  }
+
+  private async restorePreparedUpgrade(info: PreparedUpgradeInfo): Promise<void> {
+    if (!info.wasRenamed) return;
+    try {
+      await fs.rename(info.prevDir, info.installDir);
+    } catch {
+      // Best-effort restoration; if this also fails the install dir is missing
+    }
+  }
+
+  private isNewerVersion(latest: string, current: string): boolean {
+    return (
+      this.compareVersions(
+        this.parseVersion(latest, 'latest'),
+        this.parseVersion(current, 'currentVersion'),
+      ) > 0
+    );
+  }
+
+  private meetsMinimumVersion(current: string, minimum: string): boolean {
+    return (
+      this.compareVersions(
+        this.parseVersion(current, 'currentVersion'),
+        this.parseVersion(minimum, 'minimum'),
+      ) >= 0
+    );
+  }
+
+  private getPlatformKey(): string {
+    const platform = process.platform;
+    const arch = process.arch;
+
+    if (platform === 'win32') {
+      if (arch === 'x64') return 'win-x64';
+      if (arch === 'ia32') return 'win-ia32';
+      throw new Error(`Unsupported platform: ${platform}-${arch}`);
+    } else if (platform === 'linux') {
+      if (arch === 'x64') return 'linux-x64';
+      throw new Error(`Unsupported platform: ${platform}-${arch}`);
+    } else if (platform === 'darwin') {
+      if (arch === 'x64') return 'mac-x64';
+      if (arch === 'arm64') return 'mac-arm64';
+      throw new Error(`Unsupported platform: ${platform}-${arch}`);
+    }
+
+    throw new Error(`Unsupported platform: ${platform}-${arch}`);
+  }
+
+  private parseVersion(version: string, field: string): SemVer {
+    const match = SEMVER_PATTERN.exec(version);
+    if (!match) throw new Error(`Invalid ${field}: ${JSON.stringify(version)}`);
+    const prerelease = (match[4] ?? '')
+      .split('.')
+      .filter(Boolean)
+      .map((identifier) => {
+        if (/^\d+$/.test(identifier)) {
+          if (identifier.length > 1 && identifier.startsWith('0')) {
+            throw new Error(`Invalid ${field}: ${JSON.stringify(version)}`);
+          }
+          return identifier;
+        }
+        return identifier;
+      });
+    return {
+      major: match[1],
+      minor: match[2],
+      patch: match[3],
+      prerelease,
+    };
+  }
+
+  private compareVersions(left: SemVer, right: SemVer): number {
+    for (const field of ['major', 'minor', 'patch'] as const) {
+      const comparison = this.compareNumericIdentifiers(left[field], right[field]);
+      if (comparison !== 0) return comparison;
+    }
+    if (left.prerelease.length === 0 && right.prerelease.length === 0) return 0;
+    if (left.prerelease.length === 0) return 1;
+    if (right.prerelease.length === 0) return -1;
+    const length = Math.max(left.prerelease.length, right.prerelease.length);
+    for (let index = 0; index < length; index += 1) {
+      const leftIdentifier = left.prerelease[index];
+      const rightIdentifier = right.prerelease[index];
+      if (leftIdentifier === undefined) return -1;
+      if (rightIdentifier === undefined) return 1;
+      if (leftIdentifier === rightIdentifier) continue;
+      const leftIsNumeric = /^\d+$/.test(leftIdentifier);
+      const rightIsNumeric = /^\d+$/.test(rightIdentifier);
+      if (leftIsNumeric && !rightIsNumeric) return -1;
+      if (!leftIsNumeric && rightIsNumeric) return 1;
+      if (leftIsNumeric && rightIsNumeric) {
+        const comparison = this.compareNumericIdentifiers(leftIdentifier, rightIdentifier);
+        if (comparison !== 0) return comparison;
+      } else {
+        return leftIdentifier > rightIdentifier ? 1 : -1;
+      }
+    }
+    return 0;
+  }
+
+  private compareNumericIdentifiers(left: string, right: string): number {
+    const normalizedLeft = left.replace(/^0+(?=\d)/, '');
+    const normalizedRight = right.replace(/^0+(?=\d)/, '');
+    if (normalizedLeft.length !== normalizedRight.length) {
+      return normalizedLeft.length > normalizedRight.length ? 1 : -1;
+    }
+    if (normalizedLeft === normalizedRight) return 0;
+    return normalizedLeft > normalizedRight ? 1 : -1;
+  }
+
+  private validateManifest(value: unknown): UpdateManifest {
+    if (!this.isRecord(value)) throw new Error('Invalid update manifest: expected an object');
+    if (typeof value.version !== 'string') throw new Error('Invalid update manifest.version');
+    if (typeof value.min_upgradable_version !== 'string') {
+      throw new Error('Invalid update manifest.min_upgradable_version');
+    }
+    this.parseVersion(value.version, 'manifest.version');
+    this.parseVersion(value.min_upgradable_version, 'manifest.min_upgradable_version');
+    if (value.release_notes !== undefined && typeof value.release_notes !== 'string') {
+      throw new Error('Invalid update manifest.release_notes');
+    }
+    if (!this.isRecord(value.files)) throw new Error('Invalid update manifest.files');
+    const platformKey = this.getPlatformKey();
+    const file = value.files[platformKey];
+    if (!this.isRecord(file)) throw new Error(`Invalid update manifest.files.${platformKey}`);
+    if (typeof file.filename !== 'string' || file.filename.length === 0) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.filename`);
+    }
+    if (typeof file.url !== 'string' || !this.isTrustedArtifactUrl(file.url)) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.url`);
+    }
+    if (typeof file.sha512 !== 'string' || !/^[a-fA-F0-9]{128}$/.test(file.sha512)) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.sha512`);
+    }
+    if (typeof file.size !== 'number' || !Number.isSafeInteger(file.size) || file.size <= 0) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.size`);
+    }
+    if (
+      typeof file.signature !== 'string' ||
+      !this.verifyArtifactSignature({
+        version: value.version,
+        filename: file.filename,
+        url: file.url,
+        sha512: file.sha512,
+        size: file.size,
+        signature: file.signature,
+      })
+    ) {
+      throw new Error(`Invalid update manifest.files.${platformKey}.signature`);
+    }
+    return {
+      version: value.version,
+      min_upgradable_version: value.min_upgradable_version,
+      release_notes: typeof value.release_notes === 'string' ? value.release_notes : undefined,
+      files: {
+        [platformKey]: {
+          filename: file.filename,
+          url: file.url,
+          sha512: file.sha512,
+          size: file.size,
+          signature: file.signature,
+        },
+      },
+    };
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private isTrustedArtifactUrl(value: string): boolean {
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' && url.hostname === 'updates.sage.app';
+    } catch {
+      return false;
+    }
+  }
+
+  private verifyArtifactSignature(metadata: {
+    version: string;
+    filename: string;
+    url: string;
+    sha512: string;
+    size: number;
+    signature: string;
+  }): boolean {
+    try {
+      const verifier = crypto.createVerify('RSA-SHA256');
+      verifier.update(
+        [
+          metadata.version,
+          metadata.filename,
+          metadata.url,
+          metadata.sha512.toLowerCase(),
+          String(metadata.size),
+        ].join('\n'),
+        'utf8',
+      );
+      verifier.end();
+      return verifier.verify(UPDATE_SIGNING_PUBLIC_KEY, Buffer.from(metadata.signature, 'base64'));
+    } catch {
+      return false;
+    }
+  }
+}

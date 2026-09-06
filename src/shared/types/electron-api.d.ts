@@ -10,6 +10,9 @@
  * PR-C (2026-07-02): added skills bridge for Rescan + Import buttons.
  */
 
+import type { UpdateChannel, UpdateConfig, UpdateStrategy } from '../../../electron/updateConfig';
+import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
+import type { CheckResult } from '../../../electron/updateManager';
 import type { WindowControlsBridge } from '../api/windowControlsClient';
 import type { LogLevel } from '../log/levels';
 
@@ -165,6 +168,18 @@ export interface BackendRequest {
   timeoutMs?: number;
 }
 
+export interface UpdateElectronApiBridge {
+  check: () => Promise<CheckResult>;
+  download: () => Promise<void>;
+  install: () => Promise<void>;
+  rollback: (reason?: string) => Promise<void>;
+  canRollback: () => Promise<{ allowed: boolean; reason?: string }>;
+  setStrategy: (strategy: UpdateStrategy) => Promise<void>;
+  getConfig: () => Promise<UpdateConfig>;
+  setChannel: (channel: UpdateChannel) => Promise<void>;
+  onStateChanged: (handler: (payload: UpdateStateChangedEvent) => void) => UnlistenFn;
+}
+
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -182,6 +197,7 @@ export interface ElectronAPI {
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
   office: OfficeElectronApiBridge;
+  updates: UpdateElectronApiBridge;
   /**
    * Memory IPC bridge (Gap B + Gap D). Surfaced via `electron/preload.ts`
    * which delegates to `sage:invoke` IPC commands defined in
