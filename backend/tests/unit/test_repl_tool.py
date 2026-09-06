@@ -412,3 +412,10 @@ def test_repl_huge_output_capped_at_100kib(tool):
     stdout_bytes = len(result.content["stdout"].encode("utf-8"))
     assert stdout_bytes <= MAX_OUTPUT_BYTES + 100  # 截断标记尾巴余量
     assert "已截断" in result.content["stdout"]
+
+
+def test_repl_declares_blocking():
+    """repl 与 bash 同理是长命令工具（子进程执行，可达超时上限），
+    必须声明 is_blocking 供 run_loop 卸载到 executor 线程。"""
+    # Arrange / Act / Assert
+    assert ReplTool.is_blocking is True

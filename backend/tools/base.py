@@ -108,6 +108,13 @@ class BaseTool(ABC):
     # risk，并同步扩充 test_risk.py 的内置工具验收表。
     risk: RiskClass = RiskClass.READ
 
+    # 阻塞型工具声明：execute() 可能长时间不返回（bash 默认超时 120s、
+    # 上限 600s；repl 同量级）。run_loop 分发点据此把这类工具卸载到
+    # executor 线程执行，避免一条慢命令卡死整个 asyncio 事件循环
+    # （健康检查、看板轮询、其他并发会话）。快操作工具（bash_output /
+    # kill_shell 等）保持 False，内联执行零额外开销。
+    is_blocking: bool = False
+
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         self._schema: Optional[ToolSchema] = None
         self._policy = policy or ToolPolicy()

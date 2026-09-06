@@ -4,8 +4,26 @@ Agent Profiles - Agent 角色定义和配置
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
+
+# 工具名单一来源（防漂移）：种子白名单的工具名一律从这里组合，
+# 不写字面量 —— 历史两次漂移（terminal、file_read）见 tool_names 模块注释。
+from backend.domain.tool_names import (
+    ALL_BUILTIN_TOOL_NAMES,
+    CHECKPOINT_TOOLS,
+    CODE_SEARCH_TOOLS,
+    EXEC_TOOLS,
+    GIT_TOOLS,
+    MEMORY_TOOLS,
+    OFFICE_TOOLS,
+    RUNTIME_EXEC_TOOLS,
+    RUNTIME_PROBE_TOOLS,
+    WEB_FETCH_TOOLS,
+)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -55,6 +73,65 @@ class AgentProfile:
         return cls(model_config=model_config, **data)
 
 
+# ---------------------------------------------------------------------------
+# 种子白名单（名字来自 domain.tool_names，防漂移）
+# ---------------------------------------------------------------------------
+
+# primary 基础面：记忆 + 文件读 + 代码探索三件套 + 循环内编排。
+# 2026-07-30 加 list_dir/read_file 让 chat 默认能跑代码 review;
+# max_iterations=15 给 coder 类工作流留出预算(否则会复现 max_iterations_exceeded)。
+# 2026-08-01 加代码探索三件套，解决大代码库分析时 max_iterations_exceeded
+# 问题（PR #264）。agent/todo_write 见下方迁移段注释。
+_PRIMARY_CORE_TOOLS = (
+    "calculator",
+    *MEMORY_TOOLS,
+    "list_dir",
+    "read_file",
+    *CODE_SEARCH_TOOLS,
+    "agent",
+    "todo_write",
+)
+
+# 2026-09-04 (D1 决策): primary 接入 bash 三件套 —— 默认聊天可执行命令。
+# INTERACTIVE（默认模式）下 EXEC 风险先询问用户，权限安全网已存在；
+# 三件齐备保证 run_in_background 的 shell_id 可轮询（bash_output）、
+# 可终止（kill_shell）。出网两件套见 primary 种子内注释。
+_PRIMARY_SEED_TOOLS = (
+    *_PRIMARY_CORE_TOOLS,
+    *WEB_FETCH_TOOLS,
+    # PR-1 (office CRUD 闭环接线) + PR-2 (archive/restore): primary 代用户
+    # 执行增/改/删/还原。office_* doc_id 模式走 session binding 守护。
+    *OFFICE_TOOLS,
+    # 2026-09-04: 本地开发环境助手 — 只拿探测+诊断（READ 类，coordinator
+    # 安全）; runtime_exec 不放 primary（EXEC，与 PR #396 coordinator/executor
+    # 边界一致 —— primary 不直接执行，由 coder 子代理委派）。
+    *RUNTIME_PROBE_TOOLS,
+    # D1: bash 三件套尾部追加。
+    *EXEC_TOOLS,
+    # 2026-09-06 对标增强 Phase-1: 一等 git 工具组 + 工作区检查点。
+    # git_commit / checkpoint_restore 为 WRITE_LOCAL（INTERACTIVE 先审批）。
+    *GIT_TOOLS,
+    *CHECKPOINT_TOOLS,
+)
+
+# coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为
+# BashTool (name="bash")；file_read/file_write 是拼写错位（真实工具名
+# read_file/write_file），旧种子曾导致 UI 选 coder 后 LLM 工具面近乎为空。
+# 2026-09-04: 本地开发环境三件套 — coder 是唯一拿 runtime_exec 的 agent
+# （探测+诊断只读，runtime_exec 与 bash 同样受 PermissionEnforcer 审批）。
+# 2026-09-06: git 工具组 + 工作区检查点（编码场景主消费者）。
+_CODER_SEED_TOOLS = (
+    "read_file",
+    "write_file",
+    *EXEC_TOOLS,
+    "calculator",
+    *RUNTIME_PROBE_TOOLS,
+    *RUNTIME_EXEC_TOOLS,
+    *GIT_TOOLS,
+    *CHECKPOINT_TOOLS,
+)
+
+
 def create_default_agents() -> List[AgentProfile]:
     """创建默认的 Agent 配置"""
     return [
@@ -67,54 +144,12 @@ def create_default_agents() -> List[AgentProfile]:
             # 简单 fetch/download 由 primary 直调 (用户可见 LLM 行为, 便于分步指导)；
             # 复杂多步研究仍走 agent 工具委派给只读子代理 —— 守 PR #396 coordinator/executor 边界。
             system_prompt=PRIMARY_SYSTEM_PROMPT_WITH_FETCH_DIRECT,
-            # 2026-07-30: 加 list_dir/read_file 让 chat 默认能跑代码 review;
-            # max_iterations=15 给 coder 类工作流留出预算(否则会复现 max_iterations_exceeded)
-            # 2026-08-01: 加 grep_search/glob_search/file_summary 三件套，
-            # 解决大代码库分析时 max_iterations_exceeded 问题（PR #264）
-            # 2026-09-03: 加 web_fetch/http_download —— 用户可见 LLM 取页/下载行为,
-            # 便于分步指导。OFFLINE 模式下 ToolRegistry 不注册 (NetworkPolicy 门禁)。
-            tools=[
-                "calculator",
-                "memory_search",
-                "memory_save",
-                "list_dir",
-                "read_file",
-                # 代码探索三件套（全部 READ 操作，无副作用风险）
-                "grep_search",    # 正则内容搜索（GrepSearchTool）
-                "glob_search",    # glob 文件名搜索（GlobSearchTool）
-                "file_summary",   # 文件结构摘要（FileSummaryTool）
-                # P0-5 (2026-08-20): 循环内只读子代理工具 —— 让主助手能在
-                # ReAct 循环内派遣子 agent（AgentTool 只读，无写副作用）。
-                "agent",
-                # P1 todo 接线 (2026-08-21): 任务清单工具 —— 主助手可在多步
-                # 任务中记录/更新计划（todo_state 存会话，无文件副作用）。
-                "todo_write",
-                # 2026-09-03 (post-§2 subset 迁移): 用户可见 LLM 取页/下载行为,
-                # 便于分步指导和交互。受 NetworkPolicy 门禁, OFFLINE 不注册。
-                "web_fetch",
-                "http_download",
-                # 2026-09-04: Office CRUD 五件套接线 —— system prompt 已声明这些
-                # 能力（_OFFICE_CREATE_CAPABILITY_PROMPT），但白名单一直没有，
-                # LLM 从来看不见。office_list / office_read 标记了
-                # requires_tool_context 工具上下文依赖 —— 未绑定工作区时由
-                # ToolRegistry 自动隐藏。
-                # PR-2: 增加 office_restore（PR #405 没挂 profile, 本批补齐）。
-                # file_path 模式仍受 path_boundary_validator 升级审批,
-                # 不会因本白名单变更而绕过。
-                "office_list",
-                "office_read",
-                "office_create",
-                "office_update",
-                "office_delete",
-                "office_restore",
-                # 2026-09-04: 本地开发环境助手 — runtime_probe + project_diagnose
-                # (READ 类, coordinator 安全); runtime_exec 不放 primary 白名单
-                # (EXEC, 与 PR #396 coordinator/executor 边界一致 —— primary 不
-                # 直接执行, 由 coder 子代理委派)。OFFLINE 模式下 ToolRegistry
-                # 仍会注册 (NetworkPolicy 不门禁本地子进程)。
-                "runtime_probe",
-                "project_diagnose",
-            ],
+            # 组成见 _PRIMARY_CORE_TOOLS / _PRIMARY_SEED_TOOLS 注释：
+            # 记忆 + 文件读 + 代码探索 + agent/todo_write + 出网两件套 +
+            # office 六件套 + runtime 探测两件 + bash 三件套（2026-09-04 D1）。
+            # web_fetch/http_download 受 NetworkPolicy 门禁，OFFLINE 模式下
+            # ToolRegistry 不注册。
+            tools=list(_PRIMARY_SEED_TOOLS),
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
             max_iterations=15,
@@ -139,18 +174,9 @@ def create_default_agents() -> List[AgentProfile]:
             role="coder",
             description="负责代码生成、调试和解释的 Agent",
             system_prompt="你是一个专业的编码 Agent。负责生成高质量代码、调试、代码审查。",
-            # 2026-09-03: PR #381 把 TerminalTool 重写为 BashTool (name="bash"),
-            # file_read/file_write 是拼写错位(真实工具名 read_file/write_file)。
-            tools=[
-                "read_file", "write_file", "bash", "calculator",
-                # 2026-09-04: 本地开发环境助手 — coder 直接拿到 3 件套:
-                # runtime_probe / project_diagnose / runtime_exec。
-                # 探测 + 诊断全程只读,EXEC 类的 runtime_exec 与 bash 同样需
-                # 用户审批(M1 PermissionEnforcer 矩阵统一门禁),不破既有边界。
-                "runtime_probe",
-                "project_diagnose",
-                "runtime_exec",
-            ],
+            # 组成见 _CODER_SEED_TOOLS 注释；bash 三件齐备 + 本地开发环境
+            # 三件套（2026-09-04）。
+            tools=list(_CODER_SEED_TOOLS),
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.3),
             max_iterations=15,
@@ -225,6 +251,37 @@ _PRIMARY_TOOLS_BEFORE_TODO = {
     "grep_search", "glob_search", "file_summary", "agent",
 }
 
+# 2026-09-04 (D1 bash 三件套): 加 bash/bash_output/kill_shell 之前的 primary
+# 种子集合 —— 存量 DB 三段升级判定。合并远端 office CRUD + 本地开发环境助手
+# 后，快照 = fetch_direct 种子 + office 六件套 + runtime 探测两件（remote 在
+# WIP 期间演进出的形状）。历史快照有意写字面量：种子未来演进时判定集必须
+# 保持冻结，否则旧 DB 无法命中；快照之后的新增项（bash 三件套、2026-09-06
+# 的 git 工具组与检查点）由差集兜底段按 CURRENT_DEFAULT 补齐。
+_PRIMARY_TOOLS_BEFORE_BASH = {
+    "calculator", "memory_search", "memory_save", "list_dir", "read_file",
+    "grep_search", "glob_search", "file_summary", "agent", "todo_write",
+    "web_fetch", "http_download",
+    "office_list", "office_read", "office_create", "office_update",
+    "office_delete", "office_restore",
+    "runtime_probe", "project_diagnose",
+}
+
+# 2026-09-04 补链：PR #396 §2 给 primary 种子加了 web_fetch/http_download，
+# 但 ensure_default_agents 里从未有对应迁移段 —— 沿 agent/todo 链升级的
+# 存量 DB 停在 10 工具形状，永远到不了 BEFORE_BASH 的 12 工具判定集，
+# 链在这里断开。本段补上缺失一环，使最旧 DB 也能链式升到当前种子。
+_PRIMARY_TOOLS_BEFORE_FETCH = {
+    "calculator", "memory_search", "memory_save", "list_dir", "read_file",
+    "grep_search", "glob_search", "file_summary", "agent", "todo_write",
+}
+
+# 2026-09-04 (T2 孤儿 shell 修复): 加 bash_output/kill_shell 之前的 coder
+# 种子集合（= PR #402 修复后的形状）—— 存量 DB coder 升级判定。缺后两件时
+# run_in_background 的 shell_id 无法轮询/终止，后台进程成孤儿直至退出清理。
+_CODER_TOOLS_BEFORE_BASH_OUTPUT = {
+    "read_file", "write_file", "bash", "calculator",
+}
+
 # 2026-09-03 (PR #396 后置迁移): 加 "http_download" 之前的 researcher 种子集合
 # —— 存量 DB 三段升级判定。仅当白名单恰好等于旧种子时追加 http_download;
 # 用户自定义（任何增删）一律不动。
@@ -281,24 +338,10 @@ LEGACY_TOOL_NAME_RENAMES: Dict[str, str] = {
 
 # 2026-09-04: 差集兜底段用的"当前默认"列表。既有 4 段迁移用"集合相等"判定,
 # 存量 DB 只要落在任何历史快照之外就全部哑炮 —— 差集段兜住所有子集情况。
-# primary 不含 bash 是 PR #396 的架构决定(coordinator 不直接执行);
-# 变更时手动维护, 与既有 _BEFORE_* 常量同模式。
-_PRIMARY_CURRENT_DEFAULT_TOOLS: List[str] = [
-    "calculator", "memory_search", "memory_save",
-    "list_dir", "read_file",
-    "grep_search", "glob_search", "file_summary",
-    "agent", "todo_write",
-    "web_fetch", "http_download",
-    # 2026-09-04: Office CRUD 五件套 —— 与上方白名单同步, 存量 DB 差集段
-    # 必须带 office_* 才能补齐; 反向约束由 test_office_tools_are_in_current_default_constants 锁。
-    # PR-2 (cherry-picked to win7): 增 office_restore。
-    "office_list", "office_read", "office_create", "office_update", "office_delete",
-    "office_restore",
-    # 2026-09-04: 本地开发环境助手 — primary 只拿探测+诊断(READ 类)。
-    # runtime_exec 不放 primary (EXEC, 与 PR #396 coordinator/executor 边界一致)。
-    "runtime_probe",
-    "project_diagnose",
-]
+# 曾经"primary 不含 bash 是 PR #396 的架构决定"; 2026-09-04 D1 决策推翻:
+# primary 尾部接入 bash 三件套。自此本列表直接从种子常量派生，杜绝
+# 手动维护漂移（test_office_tools_are_in_current_default_constants 锁一致）。
+_PRIMARY_CURRENT_DEFAULT_TOOLS: List[str] = list(_PRIMARY_SEED_TOOLS)
 
 # 2026-09-04: 注意 —— coder 没有 _CODER_CURRENT_DEFAULT_TOOLS 兜底常量。
 # 历史 primary / researcher / writer 都有, 因为他们的 fallback 段在
@@ -396,6 +439,18 @@ def ensure_default_agents() -> int:
         if set(tools) == _PRIMARY_TOOLS_BEFORE_TODO:
             primary["tools"] = tools + ["todo_write"]
             repo.upsert(primary)
+        # 2026-09-04 补链：PR #396 §2 缺失的 web 两件套迁移段（见
+        # _PRIMARY_TOOLS_BEFORE_FETCH 注释）。
+        tools = primary.get("tools") or []
+        if set(tools) == _PRIMARY_TOOLS_BEFORE_FETCH:
+            primary["tools"] = tools + ["web_fetch", "http_download"]
+            repo.upsert(primary)
+        # 2026-09-04 (D1): 存量 DB 三段升级 —— 种子白名单追加 bash 三件套。
+        # 判定集 = 上一段升级后的精确集合，链式生效；自定义白名单不动。
+        tools = primary.get("tools") or []
+        if set(tools) == _PRIMARY_TOOLS_BEFORE_BASH:
+            primary["tools"] = tools + list(EXEC_TOOLS)
+            repo.upsert(primary)
         # 2026-09-03 (PR #396 后置迁移): 存量 DB primary system_prompt 升级。
         # 链式合并：BEFORE_DELEGATION → WITH_DELEGATION → WITH_FETCH_DIRECT。
         # 任一段命中就一气呵成, 合并为单次 upsert 防 updated_at 抖动。
@@ -428,7 +483,44 @@ def ensure_default_agents() -> int:
         row = repo.get(agent_id)
         if row is not None and _append_missing_tools(row, current_defaults):
             repo.upsert(row)
+    # 2026-09-04 (T2): 存量 DB coder 升级 —— 补齐 bash_output / kill_shell。
+    # 与 primary 升级模式一致：仅当白名单恰好等于旧集合时追加，自定义不动。
+    # coder 不走差集兜底（见 _CODER_SEED_TOOLS 附近注释），仅此精确命中一段。
+    coder = repo.get("coder")
+    if coder is not None:
+        tools = coder.get("tools") or []
+        if set(tools) == _CODER_TOOLS_BEFORE_BASH_OUTPUT:
+            coder["tools"] = tools + ["bash_output", "kill_shell"]
+            repo.upsert(coder)
     return inserted
+
+
+def validate_profile_tools(repo: Any | None = None) -> int:
+    """启动期校验所有 profile 白名单 ⊆ 内置工具名（T3 防漂移，仅告警）。
+
+    未注册名对 LLM 本就不可见（``get_schemas_for_llm`` 只遍历已注册工具），
+    所以只 warning 不改库 —— 剔除会误伤引用 MCP 等动态工具的自定义
+    profile。MCP / ``dispatch_subagents`` / ``wiki_*`` 等动态名字会产生
+    告警噪音，属预期（见 domain/tool_names.py 模块注释）。
+
+    Returns:
+        告警的 profile 数（测试断言用）。
+    """
+    if repo is None:
+        repo = _repo_factory_for_tests() if _repo_factory_for_tests else _default_repo()
+    known = set(ALL_BUILTIN_TOOL_NAMES)
+    warned = 0
+    for profile in repo.list_all():
+        unknown = [t for t in (profile.get("tools") or []) if t not in known]
+        if unknown:
+            warned += 1
+            logger.warning(
+                "agent profile %r 白名单引用了未注册工具名 %s —— 对 LLM 不可见，"
+                "请检查是否为工具改名/拼写漂移（当前内置名单见 domain/tool_names.py）",
+                profile.get("id"),
+                unknown,
+            )
+    return warned
 
 
 # 全局 Agent 注册表
