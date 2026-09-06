@@ -1,17 +1,18 @@
-"""``orch_routes`` — 编排 run 的读取/resume/计划更新端点（Wave 2 P1-4）。
+"""``orch_routes`` — 编排 run 的详情/计划更新/取消端点（Wave 2 P1-4）。
 
-``list_runs`` / ``get_run`` 供前端历史列表/详情展示；``resume`` 基于已落库的
-plan_json 重建新 run；``plan`` 更新仅允许未派发状态（首次 dispatch 后锁定,
+``get_run`` 供前端详情展示；``plan`` 更新仅允许未派发状态（首次 dispatch 后锁定,
 防改已跑计划,返回 409）。由 legacy_router 挂载（``router.include_router``），
 最终前缀 ``/api/v1/orch``。
+
+Wave 4 (2026-09-06): 历史编排记录功能移除 —— 删除 ``list_runs`` (GET /runs)
+和 ``resume_run`` (POST /runs/{id}/resume) 端点及其模型 (OrchRunSummary /
+ResumeResponse)。
 """
 
 from __future__ import annotations
 
 import functools
 import json
-import time
-import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -42,14 +43,6 @@ def with_db_lock(func):
     return wrapper
 
 
-class OrchRunSummary(BaseModel):
-    run_id: str
-    session_id: str
-    status: str
-    created_at: int
-    final_summary: Optional[str] = None
-
-
 class OrchRunDetail(BaseModel):
     run_id: str
     session_id: str
@@ -70,30 +63,6 @@ class PlanUpdateRequest(BaseModel):
         if not value:
             raise ValueError("plan must contain at least one item")
         return value
-
-
-class ResumeResponse(BaseModel):
-    ok: bool
-    new_run_id: str
-    session_id: str
-    plan: List[Dict[str, Any]]
-    original_request: Optional[str] = None
-
-
-@router.get("/runs", response_model=List[OrchRunSummary])
-@with_db_lock
-def list_runs(limit: int = 50, offset: int = 0) -> List[OrchRunSummary]:
-    repo = OrchRunRepository()
-    return [
-        OrchRunSummary(
-            run_id=r.run_id,
-            session_id=r.session_id,
-            status=r.status,
-            created_at=r.created_at,
-            final_summary=r.final_summary,
-        )
-        for r in repo.list(limit=limit, offset=offset)
-    ]
 
 
 @router.get("/runs/{run_id}", response_model=OrchRunDetail)
@@ -127,32 +96,6 @@ def get_run(run_id: str) -> OrchRunDetail:
         created_at=run.created_at,
         plan=plan,
         tasks=tasks,
-        original_request=run.original_request,
-    )
-
-
-@router.post("/runs/{run_id}/resume", response_model=ResumeResponse)
-@with_db_lock
-def resume_run(run_id: str) -> ResumeResponse:
-    repo = OrchRunRepository()
-    run = repo.get(run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="run not found")
-    new_run_id = f"orch-{uuid.uuid4().hex[:12]}"
-    repo.upsert(OrchRun(
-        run_id=new_run_id,
-        session_id=run.session_id,
-        status="running",
-        created_at=int(time.time() * 1000),
-        plan_json=run.plan_json,
-        original_request=run.original_request,
-    ))
-    plan = json.loads(run.plan_json).get("tasks", [])
-    return ResumeResponse(
-        ok=True,
-        new_run_id=new_run_id,
-        session_id=run.session_id,
-        plan=plan,
         original_request=run.original_request,
     )
 

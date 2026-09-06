@@ -6,7 +6,8 @@ vi.mock('../../../features/artifacts/useArtifacts', () => ({
   useArtifacts: vi.fn(() => ({ artifacts: [], loading: false, refresh: vi.fn() })),
 }));
 
-// C3 (2026-08-15): RightPanel → ProgressSection → PlanCardList 渲染链挂载即调
+// C3 (2026-08-15): RightPanel → ProgressSection → TaskTreeSection/PlanCard 渲染链挂载即调
+// Wave 4 (2026-09-06): PlanCardList 已删,历史编排记录移除
 // orchRunClient.listRuns();mock 掉避免真实 IPC 抛错。
 vi.mock('../../../shared/api/orchRunClient', () => ({
   orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },

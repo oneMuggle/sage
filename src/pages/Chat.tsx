@@ -48,7 +48,6 @@ export function Chat() {
     streamingState, // P2: 当前流式状态
     streamingToolCalls, // 右侧面板 Progress: 实时流式工具调用
     taskBoard, // Multi-Agent Orchestration: 编排任务板
-    resumeOrchestration, // Wave 3: resume 恢复流入口（计划卡恢复按钮）
     clearTaskBoard, // Wave 3: 取消执行后清空任务板
   } = useChat();
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
@@ -406,9 +405,6 @@ export function Chat() {
         isLoading={isLoading}
         sessionId={currentSessionId}
         taskBoard={taskBoard ?? null}
-        onResumeRun={(runId) => {
-          void resumeOrchestration(runId);
-        }}
         // C4+H1 (2026-08-15): 任意阶段取消都走 handleCancelRun ——
         // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
         // 自动派发）+ 清空 taskBoard。

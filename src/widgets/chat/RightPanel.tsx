@@ -21,10 +21,9 @@ interface RightPanelProps {
   isLoading: boolean;
   sessionId: string | null;
   taskBoard?: TaskBoard | null; // 新增：编排任务板
-  // Wave 3 (2026-08-14): 历史恢复 / 计划卡接线回调透传。
-  // M4 (2026-08-15): onPlanStart 已删 —— PlanCard.handleStart 内部
-  // 自调 updatePlan 落库，派发由后端驱动，前端无需计划开始回调。
-  onResumeRun?: (runId: string) => void;
+  // Wave 3 (2026-08-14): 计划卡接线回调透传。
+  // M4 (2026-08-15): onPlanStart 已删。
+  // Wave 4 (2026-09-06): onResumeRun 已删 —— 历史编排记录功能移除。
   onCancelExecution?: (runId: string) => void;
 }
 
@@ -91,7 +90,6 @@ export function RightPanel({
   isLoading,
   sessionId,
   taskBoard,
-  onResumeRun,
   onCancelExecution,
 }: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('progress');
@@ -126,7 +124,6 @@ export function RightPanel({
             toolCalls={toolCalls}
             isLoading={isLoading}
             taskBoard={taskBoard}
-            onResumeRun={onResumeRun}
             onCancelExecution={onCancelExecution}
           />
         ) : (

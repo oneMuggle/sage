@@ -648,26 +648,7 @@ describe('agent_* IPC commands', () => {
   });
 
   // ===== Wave 2 P1-4/P1-5: orchestration run lifecycle (2026-08-14) =====
-  it('orchestration_list_runs is GET /api/v1/orch/runs with limit param', () => {
-    const route = COMMAND_ROUTES['orchestration_list_runs'];
-    expect(route.method).toBe('GET');
-    expect(route.path({ params: { limit: 5 } })).toBe('/api/v1/orch/runs?limit=5');
-    expect(route.path({})).toBe('/api/v1/orch/runs?limit=50');
-  });
-
-  it('orchestration_get_run is GET /api/v1/orch/runs/{run_id} (url-encoded)', () => {
-    const route = COMMAND_ROUTES['orchestration_get_run'];
-    expect(route.method).toBe('GET');
-    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc');
-    expect(route.path({ run_id: 'a/b' })).toBe('/api/v1/orch/runs/a%2Fb');
-  });
-
-  it('orchestration_resume_run is POST /api/v1/orch/runs/{run_id}/resume', () => {
-    const route = COMMAND_ROUTES['orchestration_resume_run'];
-    expect(route.method).toBe('POST');
-    expect(route.path({ run_id: 'orch-abc' })).toBe('/api/v1/orch/runs/orch-abc/resume');
-  });
-
+  // Wave 4 (2026-09-06): list_runs / get_run / resume_run 路由已删 —— 历史编排记录功能移除。
   it('orchestration_cancel_run is POST /api/v1/orch/runs/{run_id}/cancel (PR C C1)', () => {
     const route = COMMAND_ROUTES['orchestration_cancel_run'];
     expect(route.method).toBe('POST');
