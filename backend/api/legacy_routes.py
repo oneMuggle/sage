@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import sys
 from typing import List
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
@@ -41,6 +42,10 @@ from backend.chat.executors import resolve_attachments
 from backend.chat.history_context import build_request_messages, history_token_budget
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
+from backend.data.artifact_repo import (  # S7: 产物事件 → 活跃流推送
+    add_artifact_listener,
+    remove_artifact_listener,
+)
 from backend.data.database import get_database
 from backend.data.session_repo import (
     ForkSourceNotFoundError,
@@ -1987,6 +1992,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug("todo_snapshot 推送失败（队列满/关闭），忽略")
 
         add_todo_listener(_push_todo_snapshot)
+
+        # S7 (2026-09-06): 产物事件 → 活跃流推送。工具线程在 record_artifact
+        # 落库后广播，这里按会话过滤后入队；前端据此事件驱动刷新产物面板 +
+        # 侧栏徽章（不再依赖手动刷新）。队列满静默降级（尽力而为）。
+        def _push_artifact_event(event: Dict[str, Any]) -> None:
+            if event.get("session_id") != data.session_id:
+                return
+            try:
+                entry.queue.put_nowait(event)
+            except Exception:  # noqa: BLE001 — 降级铁律
+                logger.debug("artifact_created 推送失败（队列满/关闭），忽略")
+
+        add_artifact_listener(_push_artifact_event)
         try:
             # P0-4 (2026-08-20): 终态变量前置到 try 顶部 —— finally 无条件读取
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
@@ -1994,6 +2012,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 又跳过后续的 reset_tool_context 清理。
             done_content: Optional[str] = None
             run_outcome = "failed"
+            # S1 (2026-09-06): 失败原因摘要 —— finally 落库 sessions.last_error。
+            _producer_error: Optional[str] = None
+
+            # S1 (2026-09-06): 会话运行态落库（running）。写库点收敛两处：
+            # 此处置 running，finally 落终态；失败 fail-open 只 debug，不影响主流。
+            # /btw 等伪会话（sessions 表无行）update 零命中，静默即可。
+            # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
+            # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
+            try:
+                SessionRepository().update_run_status(data.session_id, "running")
+            except Exception as status_err:  # noqa: BLE001 — fail-open
+                logger.debug("会话运行态(running)写入失败: %s", status_err)
 
             llm_config = None
             if data.api_key and data.api_url:
@@ -2015,6 +2045,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] /chat/stream producer using custom LLM: "
                     f"model={_safe_log_field(llm_config['model'])}"
                 )
+
+            # S3(win7 cherry-pick): run_id/dispatcher 前置初始化（原随 F5 块在
+            # main 分支引入；win7 未同步 F5，但 finally 的 S1 终态落库与
+            # _finalize_orch_run 无条件读取它们 —— 编排判定早期异常路径
+            # 不能 UnboundLocalError）。
+            run_id: Optional[str] = None
+            dispatcher = None
 
             agent = SageAgent(agent_id=data.agent_id or "primary")
             # P0 cancellation: register the primary before any blocking await.
@@ -2053,8 +2090,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
                     mode = "single"
-            run_id: Optional[str] = None
-            dispatcher = None
+            # run_id/dispatcher 已在 producer try 顶部前置初始化（S3 win7 同步）
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
                 from backend.orchestration.planner import Planner
@@ -2620,8 +2656,41 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 f"[REQ {request_id}] /chat/stream LLM error: "
                 f"type={e.type.value}, message={e.message}"
             )
+            # S1: finally 落库 failed + 原因
+            _producer_error = e.message
             await entry.queue.put({"error": e.to_dict(), "state": "failed"})
         finally:
+            # S1 (2026-09-06): 会话运行态终态落库。优先级：
+            #   suspended > 用户中断(idle) > completed > failed。
+            # cancelled 标志必须在 _ACTIVE_STREAMS 注销前读取；未捕获异常时
+            # sys.exc_info() 仍在传播中，可取到错误摘要。/btw 伪会话零命中静默。
+            _cancelled_by_user = bool(_ACTIVE_STREAMS.get(stream_id, {}).get("cancelled"))
+            if getattr(entry, "status", None) == "suspended":
+                _terminal_status = "suspended"
+                _terminal_error = None
+            elif _cancelled_by_user:
+                _terminal_status = "idle"
+                _terminal_error = None
+            elif run_outcome == "completed":
+                _terminal_status = "completed"
+                _terminal_error = None
+            else:
+                _terminal_status = "failed"
+                if _producer_error:
+                    _terminal_error = _producer_error
+                else:
+                    _exc_info = sys.exc_info()
+                    _terminal_error = (
+                        str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
+                    )
+            try:
+                SessionRepository().update_run_status(
+                    data.session_id, _terminal_status, _terminal_error
+                )
+            except Exception as status_err:  # noqa: BLE001 — fail-open
+                logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)
+            # S7: 注销产物事件监听器（闭包持有 entry/queue 引用，不注销会泄漏）
+            remove_artifact_listener(_push_artifact_event)
             # P2-9 (2026-08-14): 长连接结束注销注册表条目（run 级 cancel 不再命中）。
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:

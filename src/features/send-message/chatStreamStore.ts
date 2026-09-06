@@ -8,6 +8,16 @@
 // '🤔 思考中…' 占位符，看不到 LLM 真实进度（虽然后端 stream 还在跑，
 //  权限确认 IPC 还能弹 — 与用户报告的现象完全一致）。
 //
+// S2 键控改造（2026-09-06，对标 ZCode 多会话并行）：
+// - 状态从"全局单槽"改为 `sessions: Record<sessionId, SessionStreamSlots>`
+//   —— 每个会话独立的 streaming/toolCalls/taskBoard/todos 槽位。
+//   会话 A 在后台流式时切到会话 B，B 的进度看 B 的槽位，互不覆盖；
+//   侧边栏也可按会话聚合出运行态/进度徽章。
+// - 所有 action 以 sessionId 为第一参数；messageId/runId 守卫逻辑不变，
+//   只是守卫范围从"全局唯一流"收窄为"该会话内的流"。
+// - /btw 侧问的伪会话 '__btw__' 天然获得独立槽位（此前与主流共享单槽,
+//   btw 期间的 taskBoard 事件会污染主对话面板）。
+//
 // 设计：
 // - 独立 zustand store，module-singleton，跨组件实例 / 跨路由保留
 // - 每个 action 校验 messageId，避免上一个流的迟到事件污染下一个流
@@ -54,21 +64,46 @@ export interface TaskBoardState {
   review?: TaskReviewEvent | null;
 }
 
-interface ChatStreamStoreState {
+/** 单个会话的流式槽位（S2 键控） */
+export interface SessionStreamSlots {
   streaming: StreamingState | null;
   streamingToolCalls: ToolCall[];
   taskBoard: TaskBoardState | null;
   // P1 todo 接线 (2026-08-21): todo_snapshot 全量快照（agent 自维护清单）。
   todos: TodoItem[];
+}
 
-  // —— 流式生命周期 ——
+const EMPTY_SLOTS: SessionStreamSlots = {
+  streaming: null,
+  streamingToolCalls: [],
+  taskBoard: null,
+  todos: [],
+};
+
+/** 读取某会话的槽位；无该会话（或 sessionId 为 null）时返回共享空槽位。
+ *  共享引用保证 zustand 默认引用相等语义下"无流会话"的选择器结果稳定，
+ *  不会触发无谓 re-render。 */
+export function selectSessionSlots(
+  state: { sessions: Record<string, SessionStreamSlots> },
+  sessionId: string | null | undefined,
+): SessionStreamSlots {
+  if (sessionId == null) return EMPTY_SLOTS;
+  return state.sessions[sessionId] ?? EMPTY_SLOTS;
+}
+
+interface ChatStreamStoreState {
+  /** S2: sessionId → 该会话的流式槽位（并行会话各自独立） */
+  sessions: Record<string, SessionStreamSlots>;
+
+  // —— 流式生命周期（均以 sessionId 为第一参数） ——
   startStream: (
+    sessionId: string,
     messageId: string,
     opts?: { initialContent?: string; agentId?: string | null },
   ) => void;
-  appendContent: (messageId: string, next: string) => void;
-  replaceContent: (messageId: string, next: string) => void;
-  appendReasoning: (messageId: string, next: string) => void;
+  appendContent: (sessionId: string, messageId: string, next: string) => void;
+  replaceContent: (sessionId: string, messageId: string, next: string) => void;
+  appendReasoning: (sessionId: string, messageId: string, next: string) => void;
   /**
    * 整体替换 streaming.reasoning —— 2026-09-02 修复引入 (win7 cherry-pick)。
    * 后端在每段 reasoning 流式末尾发一条 `state: 'reasoning_final'` 事件,
@@ -76,122 +111,171 @@ interface ChatStreamStoreState {
    * 否则 deltas + final 双重累积会导致用户视觉上"思考过程重复两遍"。
    * 与已有 replaceContent 对称 — append 用于流式 delta,replace 用于收尾全量。
    */
-  replaceReasoning: (messageId: string, next: string) => void;
+  replaceReasoning: (sessionId: string, messageId: string, next: string) => void;
   /** 更新 meta 字段（currentAgentId / iteration / state），不碰 content/reasoning */
   setStreamingMeta: (
+    sessionId: string,
     messageId: string,
     patch: Partial<Pick<StreamingState, 'state' | 'currentAgentId' | 'iteration'>>,
   ) => void;
-  clearStream: (messageId: string) => void;
+  clearStream: (sessionId: string, messageId: string) => void;
 
   // —— 工具调用 ——
-  resetToolCalls: () => void;
-  appendOrUpdateToolCall: (tc: ToolCall) => void;
+  resetToolCalls: (sessionId: string) => void;
+  appendOrUpdateToolCall: (sessionId: string, tc: ToolCall) => void;
 
   // —— 任务板 ——
-  setTaskBoard: (board: TaskBoardState | null) => void;
+  setTaskBoard: (sessionId: string, board: TaskBoardState | null) => void;
   updateTaskBoard: (
+    sessionId: string,
     runId: string,
     updater: (prev: TaskBoardState | null) => TaskBoardState | null,
   ) => void;
 
   // —— todo 清单（P1 接线） ——
-  setTodos: (todos: TodoItem[]) => void;
+  setTodos: (sessionId: string, todos: TodoItem[]) => void;
+
+  // —— 会话删除时清理槽位，防 Map 泄漏 / 迟到事件复活死会话 ——
+  clearSession: (sessionId: string) => void;
 
   // —— 一锅端（reset / 测试清理 / 异常恢复） ——
   resetAll: () => void;
 }
 
-const initial = {
-  streaming: null as StreamingState | null,
-  streamingToolCalls: [] as ToolCall[],
-  taskBoard: null as TaskBoardState | null,
-  todos: [] as TodoItem[],
-};
+type SessionSlotsDraft = Partial<SessionStreamSlots>;
+
+function writeSlots(
+  prev: Record<string, SessionStreamSlots>,
+  sessionId: string,
+  draft: SessionSlotsDraft,
+): Record<string, SessionStreamSlots> {
+  const slots = prev[sessionId] ?? EMPTY_SLOTS;
+  return { ...prev, [sessionId]: { ...slots, ...draft } };
+}
 
 export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
-  ...initial,
+  sessions: {},
 
-  startStream: (messageId, opts) =>
-    set({
-      streaming: {
-        messageId,
-        content: opts?.initialContent ?? '',
-        reasoning: '',
-        state: 'thinking',
-        currentAgentId: opts?.agentId ?? null,
-        iteration: 0,
-      },
-      streamingToolCalls: [],
-      taskBoard: null,
-      todos: [],
+  startStream: (sessionId, messageId, opts) =>
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, {
+        streaming: {
+          messageId,
+          content: opts?.initialContent ?? '',
+          reasoning: '',
+          state: 'thinking',
+          currentAgentId: opts?.agentId ?? null,
+          iteration: 0,
+        },
+        streamingToolCalls: [],
+        taskBoard: null,
+        todos: [],
+      }),
+    })),
+
+  appendContent: (sessionId, messageId, next) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      return slots.streaming && slots.streaming.messageId === messageId
+        ? {
+            sessions: writeSlots(prev.sessions, sessionId, {
+              streaming: { ...slots.streaming, content: slots.streaming.content + next },
+            }),
+          }
+        : prev;
     }),
 
-  appendContent: (messageId, next) =>
-    set((prev) =>
-      prev.streaming && prev.streaming.messageId === messageId
-        ? { streaming: { ...prev.streaming, content: prev.streaming.content + next } }
-        : prev,
-    ),
+  replaceContent: (sessionId, messageId, next) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      return slots.streaming && slots.streaming.messageId === messageId
+        ? {
+            sessions: writeSlots(prev.sessions, sessionId, {
+              streaming: { ...slots.streaming, content: next },
+            }),
+          }
+        : prev;
+    }),
 
-  replaceContent: (messageId, next) =>
-    set((prev) =>
-      prev.streaming && prev.streaming.messageId === messageId
-        ? { streaming: { ...prev.streaming, content: next } }
-        : prev,
-    ),
-
-  appendReasoning: (messageId, next) =>
-    set((prev) =>
-      prev.streaming && prev.streaming.messageId === messageId
-        ? { streaming: { ...prev.streaming, reasoning: prev.streaming.reasoning + next } }
-        : prev,
-    ),
+  appendReasoning: (sessionId, messageId, next) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      return slots.streaming && slots.streaming.messageId === messageId
+        ? {
+            sessions: writeSlots(prev.sessions, sessionId, {
+              streaming: { ...slots.streaming, reasoning: slots.streaming.reasoning + next },
+            }),
+          }
+        : prev;
+    }),
 
   // 2026-09-02 bug fix (win7 cherry-pick): 与 replaceContent 对称, 用于替换 reasoning 全量。
   // 后端 reasoning_final 事件带 done_reasoning 全量 → 整体替换,不追加。
-  replaceReasoning: (messageId: string, next: string): void =>
-    set((prev) =>
-      prev.streaming && prev.streaming.messageId === messageId
-        ? { streaming: { ...prev.streaming, reasoning: next } }
-        : prev,
-    ),
-
-  setStreamingMeta: (messageId, patch) =>
-    set((prev) =>
-      prev.streaming && prev.streaming.messageId === messageId
-        ? { streaming: { ...prev.streaming, ...patch } }
-        : prev,
-    ),
-
-  clearStream: (messageId) =>
-    set((prev) =>
-      prev.streaming && prev.streaming.messageId === messageId ? { streaming: null } : prev,
-    ),
-
-  resetToolCalls: () => set({ streamingToolCalls: [] }),
-
-  appendOrUpdateToolCall: (tc) =>
+  replaceReasoning: (sessionId, messageId, next) =>
     set((prev) => {
-      const idx = tc.id ? prev.streamingToolCalls.findIndex((t) => t.id === tc.id) : -1;
-      if (idx < 0) {
-        return { streamingToolCalls: [...prev.streamingToolCalls, tc] };
-      }
-      const next = prev.streamingToolCalls.slice();
-      next[idx] = { ...next[idx], ...tc };
-      return { streamingToolCalls: next };
+      const slots = selectSessionSlots(prev, sessionId);
+      return slots.streaming && slots.streaming.messageId === messageId
+        ? {
+            sessions: writeSlots(prev.sessions, sessionId, {
+              streaming: { ...slots.streaming, reasoning: next },
+            }),
+          }
+        : prev;
     }),
 
-  setTaskBoard: (board) => set({ taskBoard: board }),
-
-  setTodos: (todos) => set({ todos }),
-
-  updateTaskBoard: (_runId, updater) =>
+  setStreamingMeta: (sessionId, messageId, patch) =>
     set((prev) => {
-      const next = updater(prev.taskBoard);
+      const slots = selectSessionSlots(prev, sessionId);
+      return slots.streaming && slots.streaming.messageId === messageId
+        ? {
+            sessions: writeSlots(prev.sessions, sessionId, {
+              streaming: { ...slots.streaming, ...patch },
+            }),
+          }
+        : prev;
+    }),
+
+  clearStream: (sessionId, messageId) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      return slots.streaming && slots.streaming.messageId === messageId
+        ? { sessions: writeSlots(prev.sessions, sessionId, { streaming: null }) }
+        : prev;
+    }),
+
+  resetToolCalls: (sessionId) =>
+    set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { streamingToolCalls: [] }) })),
+
+  appendOrUpdateToolCall: (sessionId, tc) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      const tcs = slots.streamingToolCalls;
+      const idx = tc.id ? tcs.findIndex((t) => t.id === tc.id) : -1;
+      const next = idx < 0 ? [...tcs, tc] : tcs.map((t, i) => (i === idx ? { ...t, ...tc } : t));
+      return { sessions: writeSlots(prev.sessions, sessionId, { streamingToolCalls: next }) };
+    }),
+
+  setTaskBoard: (sessionId, board) =>
+    set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { taskBoard: board }) })),
+
+  setTodos: (sessionId, todos) =>
+    set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { todos }) })),
+
+  updateTaskBoard: (sessionId, _runId, updater) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      const next = updater(slots.taskBoard);
       // updater 内部已经做了 runId 匹配；store 层不再二次校验以保留灵活性
-      return { taskBoard: next };
+      return { sessions: writeSlots(prev.sessions, sessionId, { taskBoard: next }) };
     }),
 
-  resetAll: () => set({ ...initial }),
+  clearSession: (sessionId) =>
+    set((prev) => {
+      if (!(sessionId in prev.sessions)) return prev;
+      const next = { ...prev.sessions };
+      delete next[sessionId];
+      return { sessions: next };
+    }),
+
+  resetAll: () => set({ sessions: {} }),
 }));
