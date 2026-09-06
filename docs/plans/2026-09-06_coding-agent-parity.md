@@ -1,6 +1,6 @@
 # 编码代理功能对标与增强方案（2026-09-06）
 
-- **状态**：Phase-1 已交付（#440/#441 合入）；Phase-2 实施中（G10 apply_patch 已落地）
+- **状态**：Phase-1 已交付（#440/#441）；Phase-2 进行中 —— G10 已交付（#443/#444），G3-G7 已完成路径勘察待实施
 - **对标对象**：ZCode（CLI 编码代理）、Qoder（Agentic 编码 IDE）、Codex（OpenAI 编码代理）
 - **范围**：main 落地后 cherry-pick 对齐 `release/win7`（沿用 PR #402→#404 惯例路径）
 
@@ -40,6 +40,14 @@
 | G8 | LSP/编译器诊断接入（写后即时 lint 反馈） | Qoder 实时诊断 | 中：可作为 write/edit 后置钩子 | Phase-3 |
 | G9 | Commit message 生成 / PR 创建流 | Codex/Qoder | 低-中：G1 落地后薄封装 | Phase-3 |
 | G10 | 多文件原子 apply_patch | Codex apply_patch | 低：edit_file + G2 检查点已覆盖主要风险 | ✅ Phase-2（提前实施） |
+
+## 2.1 剩余项实施路径勘察（2026-09-06）
+
+- **G5 多模型切换（推荐下一个）**：`LLMConfig`（core/legacy/llm_client.py:78）已支持 openai/claude/gemini/deepseek/ollama/custom 多 provider；注入点为 `SageAgent(llm_config=dict)`（agent.py:300）。落地路径：preferences KV 新增 `model_override`（仿 bash_config 的 fail-safe KV 模式）→ chat_service 构造 llm_config 时按「会话覆盖 > profile.model_config > 全局 config.yaml」三级取值 → 设置页加 provider/model 下拉。改动面：后端 2 文件 + 前端 1 设置页。
+- **G6 聊天图片输入**：vision 通道已有（wiki ingest），缺 chat 消息体的 image 附件字段与前端上传入口；需动 chat API 契约，前端改 Dashboard 输入组件。
+- **G3 Plan 模式**：已有 todo_write（会话内）与 docs/plans 约定（跨会话文件），产品化 = plan 工具 + UI 视图；建议在 G5 之后做（模型选择影响 plan 生成质量）。
+- **G4 语义索引**：wiki 向量库（hnsw）可复用；需独立索引器与增量更新，工作量最大。
+- **G7 浏览器自动化**：依赖 Electron 侧 CDP/playwright 桥，跨端改动最大。
 
 ## 3. Phase-1 规格（本轮实施）
 
