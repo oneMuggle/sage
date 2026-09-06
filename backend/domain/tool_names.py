@@ -89,6 +89,18 @@ PLAN_TOOLS = ("plan_write",)
 # stdlib ast 提取 Python 符号 + 内存倒排索引，按名称/概念搜定义处。READ。
 SYMBOL_TOOLS = ("symbol_search",)
 
+# 浏览器自动化（2026-09-06 对标增强 G7）：CDP 驱动本机 Chrome/Edge。
+# launch=EXEC / navigate=EXTERNAL（逐次审批）/ snapshot+screenshot=READ /
+# interact+close=WRITE_LOCAL。v1 只给 coder（executor 边界）。
+BROWSER_TOOLS = (
+    "browser_launch",
+    "browser_navigate",
+    "browser_snapshot",
+    "browser_interact",
+    "browser_screenshot",
+    "browser_close",
+)
+
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 技能 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "skill", "ask_user_question")
 
@@ -111,6 +123,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(PATCH_TOOLS)
         | set(PLAN_TOOLS)
         | set(SYMBOL_TOOLS)
+        | set(BROWSER_TOOLS)
         | set(ORCH_TOOLS)
         | set(SANDBOX_TOOLS)
     )
@@ -118,6 +131,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
 
 __all__ = [
     "ALL_BUILTIN_TOOL_NAMES",
+    "BROWSER_TOOLS",
     "CHECKPOINT_TOOLS",
     "CODE_SEARCH_TOOLS",
     "EXEC_TOOLS",

@@ -120,6 +120,18 @@ def _shutdown_bash_sessions() -> None:
         logger.warning("后台 shell shutdown failed（异常类型=%s）", type(exc).__name__)
 
 
+def _shutdown_browser_sessions() -> None:
+    """在后端退出时终止全部受控浏览器实例并清理临时目录（G7）。"""
+    try:
+        from backend.tools.browser_cdp import get_browser_manager
+
+        closed = get_browser_manager().close_all()
+        if closed:
+            logger.info("已关闭 %d 个受控浏览器实例", closed)
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("浏览器 shutdown failed（异常类型=%s）", type(exc).__name__)
+
+
 def _shutdown_repl_cleanups() -> None:
     """在后端退出时尽力清理 REPL 残留资源。"""
     try:
@@ -428,6 +440,7 @@ async def lifespan(app: FastAPI):
 
     # 关闭时清理
     _shutdown_bash_sessions()
+    _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
     sweeper_task.cancel()
     with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
