@@ -16,6 +16,7 @@ import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
+import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
@@ -353,8 +354,9 @@ export function Chat() {
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
         <div className="flex items-center gap-4 min-w-0">
           <h2 className="text-sm font-semibold text-text shrink-0">对话</h2>
-          {/* U8: 会话级模型切换(G5 收尾) */}
+          {/* U8: 会话级模型切换(G5 收尾) · U14: 会话用量徽章 */}
           <SessionModelPicker sessionId={currentSessionId} />
+          <SessionUsageBadge sessionId={currentSessionId} />
         </div>
         <div className="flex items-center gap-2">
           <button

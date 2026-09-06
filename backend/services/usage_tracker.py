@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Deque, Dict, List, Optional, Tuple
@@ -124,8 +126,13 @@ class UsageTracker:
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
+        session_id: Optional[str] = None,
     ) -> UsageRecord:
-        """记录一次 LLM 调用; 返回生成的 UsageRecord。"""
+        """记录一次 LLM 调用; 返回生成的 UsageRecord。
+
+        L8 (批次 C): 同步 best-effort 落库 (usage_events 表, 带会话维度),
+        失败只 debug 日志——内存聚合与调用方永不受 DB 故障影响。
+        """
         cost = estimate_cost_usd(model, prompt_tokens, completion_tokens)
         entry = UsageRecord(
             model=model,
@@ -143,7 +150,101 @@ class UsageTracker:
             _accumulate(model_bucket, entry.prompt_tokens, entry.completion_tokens, cost)
             day_bucket = self._daily.setdefault(day, _empty_bucket())
             _accumulate(day_bucket, entry.prompt_tokens, entry.completion_tokens, cost)
+        self._persist(entry, session_id)
         return entry
+
+    # win7 惯例 (PR A §1.2): 落库可能在事件循环线程被调用, 改为投递到
+    # 单 worker 后台池——序列化写入 + 永不阻塞调用方。队列满/关停 fail-open。
+    _persist_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="usage-persist")
+
+    @classmethod
+    def _persist(cls, entry: UsageRecord, session_id: Optional[str]) -> None:
+        """单行落库 (L8), 后台执行。任何失败静默——用量是增强信息。"""
+        try:
+            cls._persist_pool.submit(cls._persist_sync, entry, session_id)
+        except Exception as exc:  # noqa: BLE001 — fail-open 铁律
+            logger.debug("usage_events 落库投递失败: %s", exc)
+
+    @staticmethod
+    def _persist_sync(entry: UsageRecord, session_id: Optional[str]) -> None:
+        try:
+            import uuid
+
+            from backend.data.database import _SQLITE_LOCK, get_database
+
+            row = (
+                str(uuid.uuid4()),
+                session_id,
+                entry.model,
+                entry.prompt_tokens,
+                entry.completion_tokens,
+                entry.prompt_tokens + entry.completion_tokens,
+                entry.estimated_cost_usd,
+                int(time.time() * 1000),
+            )
+            with _SQLITE_LOCK:
+                get_database().get_connection().execute(
+                    "INSERT INTO usage_events (id, session_id, model, prompt_tokens,"
+                    " completion_tokens, total_tokens, estimated_cost_usd, created_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    row,
+                )
+                get_database().get_connection().commit()
+        except Exception as exc:  # noqa: BLE001 — fail-open 铁律
+            logger.debug("usage_events 落库跳过: %s", exc)
+
+    def session_summary(self, session_id: str) -> Dict[str, Any]:
+        """U14: 某会话的持久化用量聚合 (DB 直查, 重启不丢)。"""
+        try:
+            from backend.data.database import _SQLITE_LOCK, get_database
+
+            with _SQLITE_LOCK:
+                conn = get_database().get_connection()
+                row = conn.execute(
+                    "SELECT COUNT(*) AS requests,"
+                    " COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,"
+                    " COALESCE(SUM(completion_tokens), 0) AS completion_tokens,"
+                    " COALESCE(SUM(total_tokens), 0) AS total_tokens,"
+                    " COALESCE(SUM(estimated_cost_usd), 0) AS estimated_cost_usd"
+                    " FROM usage_events WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+            return {
+                "session_id": session_id,
+                "requests": int(row["requests"]) if row else 0,
+                "prompt_tokens": int(row["prompt_tokens"]) if row else 0,
+                "completion_tokens": int(row["completion_tokens"]) if row else 0,
+                "total_tokens": int(row["total_tokens"]) if row else 0,
+                "estimated_cost_usd": float(row["estimated_cost_usd"]) if row else 0.0,
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("session_summary 读取失败: %s", exc)
+            return {
+                "session_id": session_id,
+                "requests": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            }
+
+    def today_cost_usd(self) -> float:
+        """F5: 今日已花费的持久化估算 (本地日界)。DB 不可用 → 0 (限额失效)。"""
+        try:
+            from backend.data.database import _SQLITE_LOCK, get_database
+
+            day_start = datetime.strptime(datetime.now().strftime("%Y-%m-%d"), "%Y-%m-%d")  # noqa: DTZ007 — 本地日界, 非时区敏感
+            start_ms = int(day_start.timestamp() * 1000)
+            with _SQLITE_LOCK:
+                row = get_database().get_connection().execute(
+                    "SELECT COALESCE(SUM(estimated_cost_usd), 0) AS total"
+                    " FROM usage_events WHERE created_at >= ?",
+                    (start_ms,),
+                ).fetchone()
+            return float(row["total"]) if row else 0.0
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("today_cost_usd 读取失败: %s", exc)
+            return 0.0
 
     def summary(self) -> Dict[str, Any]:
         """返回 {totals, by_model: [...], today: {...}} 快照。"""
