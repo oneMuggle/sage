@@ -18,20 +18,35 @@ import type { PermissionRequest } from '../../shared/api';
  *
  * 同一时刻至多一个待审批请求（后端单 agent 循环串行卡点）；
  * 重复 setFromEvent 直接替换（后到者覆盖，与后端 gate 行为一致）。
+ *
+ * S4 (2026-09-06) 多会话并行：请求记录归属会话（session_id），侧边栏
+ * 据此按会话聚合"待审批"注意力点；resolve(sessionId) 定向清除 ——
+ * 会话 A 的流结束不能误关会话 B 的审批对话框。无参 resolve() 保留
+ * ApprovalDialog 等旧调用方的全清语义。
  */
+export type PendingPermissionRequest = PermissionRequest & { /** 事件来源会话（S4） */ session_id?: string };
+
 export interface PermissionState {
   /** 当前待审批请求；null 表示无挂起审批（对话框隐藏） */
-  currentRequest: PermissionRequest | null;
-  /** 流事件到达 → 弹出对话框（不可变替换，不 mutate 旧对象） */
-  setFromEvent: (payload: PermissionRequest) => void;
-  /** 审批完成 / 流结束 / 流错误 → 关闭对话框 */
-  resolve: () => void;
+  currentRequest: PendingPermissionRequest | null;
+  /** 流事件到达 → 弹出对话框（不可变替换，不 mutate 旧对象）；sessionId 记录归属 */
+  setFromEvent: (payload: PermissionRequest, sessionId?: string) => void;
+  /** 审批完成 / 流结束 / 流错误 → 关闭对话框；传 sessionId 时仅清除该会话的请求 */
+  resolve: (sessionId?: string) => void;
 }
 
 export const usePermissionState = create<PermissionState>((set) => ({
   currentRequest: null,
   // 浅拷贝载荷：流事件对象来自 IPC 反序列化，复制一份避免调用方
   // 后续 mutate 同一引用造成 UI 与 store 不一致。
-  setFromEvent: (payload) => set({ currentRequest: { ...payload } }),
-  resolve: () => set({ currentRequest: null }),
+  setFromEvent: (payload, sessionId) =>
+    set({ currentRequest: { ...payload, session_id: sessionId } }),
+  resolve: (sessionId) =>
+    set((prev) => {
+      // 未指定会话 = 全清（ApprovalDialog 批准/拒绝后调用）
+      if (sessionId == null) return { currentRequest: null };
+      // 指定会话但当前请求属于其它会话 → 不动（并行会话隔离）
+      if (prev.currentRequest?.session_id !== sessionId) return prev;
+      return { currentRequest: null };
+    }),
 }));

@@ -1,6 +1,14 @@
-import { Download, GitBranch, Pin } from 'lucide-react';
-import { useState } from 'react';
+import { AlertCircle, Check, Clock, GitBranch, Loader2, Paperclip, PauseCircle, Pin, Download } from 'lucide-react';
+import { useEffect, useReducer, useState } from 'react';
 
+import { usePermissionState } from '../../entities/permission/permissionState';
+import { useQuestionState } from '../../entities/question/questionState';
+import { useScheduledTaskStore } from '../../entities/scheduled/taskStore';
+import { useArtifactEventsStore } from '../../features/artifacts/artifactEventsStore';
+import {
+  selectSessionSlots,
+  useChatStreamStore,
+} from '../../features/send-message/chatStreamStore';
 import { downloadHtmlFile, sessionApi } from '../../shared/api/sessionApi';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Session } from '../../shared/lib/store';
@@ -13,9 +21,54 @@ interface SessionItemProps {
   onDelete: () => void;
 }
 
+/** 文件变更类工具（S6-lite: 本次运行的变更文件计数徽章）。
+ *  与后端工具注册名对齐：file_tool.py write_file / edit_tool.py edit_file /
+ *  patch_tool.py apply_patch。 */
+const FILE_CHANGE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch']);
+
+/** S4: completed ✓ 徽章的保鲜期 —— 超过后不再显示（避免整列表常亮绿勾）。 */
+const COMPLETED_FRESH_MS = 60_000;
+
 export function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
+
+  // S2/S4: 该会话的实时流槽位 —— 运行中指示、mini 进度、变更计数都从这里
+  // 派生（跨页面保留；会话无流时返回共享空槽位，引用稳定不触发重渲染）。
+  const slots = useChatStreamStore((s) => selectSessionSlots(s, session.id));
+  // S7: 本次运行产物计数徽章
+  const artifactCount = useArtifactEventsStore((s) => s.counts[session.id] ?? 0);
+  // S4: 注意力点按会话聚合（旧实现是全局计数挂在"对话"导航上）
+  const hasPendingApproval = usePermissionState(
+    (s) => s.currentRequest?.session_id === session.id,
+  );
+  const hasPendingQuestion = useQuestionState(
+    (s) => s.currentQuestion?.session_id === session.id,
+  );
+  // S9: 有启用的定时任务指向该会话 → ⏰ 标记
+  const hasCron = useScheduledTaskStore(
+    (s) => s.tasks.some((task) => task.session_id === session.id && task.enabled),
+  );
+
+  const isLive = slots.streaming != null;
+  const dbStatus = session.run_status ?? 'idle';
+  // 保鲜的 completed ✓：刚完成 60s 内显示，之后回归 idle 观感
+  const completedFresh =
+    !isLive && dbStatus === 'completed' && hasFreshRunAt(session.last_run_at);
+  const showCompletedTick = useExpireAfter(completedFresh, session.last_run_at, COMPLETED_FRESH_MS);
+  const failed = !isLive && dbStatus === 'failed';
+  const suspended = !isLive && dbStatus === 'suspended';
+  const hasAttention = hasPendingApproval || hasPendingQuestion;
+
+  // S5: mini 进度 —— 编排 5 元组优先，todo 完成度兜底
+  const progress = slots.taskBoard?.progress;
+  const todoDone = slots.todos.filter((td) => td.status === 'completed').length;
+  const todoTotal = slots.todos.length;
+
+  // S6-lite: 本次运行的文件变更计数（只统计已有结果的调用 = 已执行完成）
+  const changeCount = slots.streamingToolCalls.filter(
+    (tc) => FILE_CHANGE_TOOLS.has(tc.name) && tc.result != null,
+  ).length;
 
   // U18: 导出完整会话为自包含 HTML(离线可开,含工具调用/diff/思考过程)
   const handleExport = async (e: React.MouseEvent) => {
@@ -47,6 +100,7 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
       tabIndex={0}
       data-testid="session-item"
       data-session-id={session.id}
+      data-run-status={isLive ? 'running' : dbStatus}
       aria-label={`选择会话 ${session.title}`}
       aria-pressed={isActive}
       onClick={onSelect}
@@ -72,8 +126,106 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
             </span>
           )}
           <span className="truncate">{session.title}</span>
+          {/* S4: 会话状态徽章 —— 优先级 注意力 > 运行中 > 失败 > 挂起 > 刚完成 */}
+          {hasAttention && (
+            <span
+              data-testid="session-attention"
+              aria-label={t('session.attention')}
+              title={t('session.attention')}
+              className="inline-flex flex-shrink-0 w-2 h-2 rounded-full bg-warning animate-pulse"
+            />
+          )}
+          {isLive && (
+            <span
+              data-testid="session-running"
+              aria-label={t('session.status_running')}
+              title={t('session.status_running')}
+              className="inline-flex flex-shrink-0 text-primary"
+            >
+              <Loader2 className="w-3 h-3 animate-spin" />
+            </span>
+          )}
+          {!isLive && failed && (
+            <span
+              data-testid="session-failed"
+              aria-label={t('session.status_failed')}
+              title={
+                session.last_error
+                  ? `${t('session.status_failed')}: ${session.last_error}`
+                  : t('session.status_failed')
+              }
+              className="inline-flex flex-shrink-0 text-error"
+            >
+              <AlertCircle className="w-3 h-3" />
+            </span>
+          )}
+          {!isLive && suspended && (
+            <span
+              data-testid="session-suspended"
+              aria-label={t('session.status_suspended')}
+              title={t('session.status_suspended')}
+              className="inline-flex flex-shrink-0 text-muted"
+            >
+              <PauseCircle className="w-3 h-3" />
+            </span>
+          )}
+          {!isLive && showCompletedTick && (
+            <span
+              data-testid="session-completed"
+              aria-label={t('session.status_completed')}
+              title={t('session.status_completed')}
+              className="inline-flex flex-shrink-0 text-success"
+            >
+              <Check className="w-3 h-3" />
+            </span>
+          )}
+          {!isLive && hasCron && (
+            <span
+              data-testid="session-cron"
+              aria-label={t('session.cron_badge')}
+              title={t('session.cron_badge')}
+              className="inline-flex flex-shrink-0 text-muted"
+            >
+              <Clock className="w-3 h-3" />
+            </span>
+          )}
+          {/* S7: 产物计数（本次运行） */}
+          {artifactCount > 0 && (
+            <span
+              data-testid="session-artifacts-badge"
+              title={t('session.artifacts_badge').replace('{count}', String(artifactCount))}
+              className="inline-flex flex-shrink-0 items-center gap-0.5 text-[10px] text-muted"
+            >
+              <Paperclip className="w-3 h-3" />
+              {artifactCount}
+            </span>
+          )}
+          {/* S6-lite: 文件变更计数（本次运行） */}
+          {changeCount > 0 && (
+            <span
+              data-testid="session-changes-badge"
+              title={t('session.changes_badge').replace('{count}', String(changeCount))}
+              className="inline-flex flex-shrink-0 text-[10px] font-medium text-primary"
+            >
+              +{changeCount}
+            </span>
+          )}
         </p>
         <p className="text-xs text-muted">{new Date(session.updated_at).toLocaleDateString()}</p>
+        {/* S5: mini 进度条 —— 编排 5 元组 / todo 完成度（仅运行中显示） */}
+        {isLive && (progress != null || todoTotal > 0) && (
+          <div className="mt-1 flex items-center gap-1.5" data-testid="session-progress">
+            <div className="flex-1 h-0.5 rounded bg-bg-hover overflow-hidden min-w-6">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${progressPercent(progress, todoDone, todoTotal)}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-muted flex-shrink-0">
+              {progress != null ? `${progress.done}/${progress.total}` : `${todoDone}/${todoTotal}`}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 操作按钮 */}
@@ -101,4 +253,36 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
       </div>
     </div>
   );
+}
+
+function hasFreshRunAt(lastRunAt?: number | null): boolean {
+  if (lastRunAt == null) return false;
+  return Date.now() - lastRunAt < COMPLETED_FRESH_MS;
+}
+
+/** completed ✓ 保鲜到期后强制一次重渲染让徽章消失（不引入全局 ticker）。 */
+function useExpireAfter(visible: boolean, lastRunAt: number | undefined | null, ttlMs: number) {
+  const [, tick] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    if (!visible || lastRunAt == null) return;
+    const remaining = lastRunAt + ttlMs - Date.now();
+    if (remaining <= 0) {
+      tick();
+      return;
+    }
+    const timer = setTimeout(tick, remaining);
+    return () => clearTimeout(timer);
+  }, [visible, lastRunAt, ttlMs]);
+  return visible;
+}
+
+function progressPercent(
+  progress: { total: number; done: number } | undefined,
+  todoDone: number,
+  todoTotal: number,
+): number {
+  const done = progress != null ? progress.done : todoDone;
+  const total = progress != null ? progress.total : todoTotal;
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((done / total) * 100));
 }

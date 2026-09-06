@@ -139,7 +139,9 @@ export type AgentState =
   // Wave 2 (2026-08-14): reviewer 复核结论事件,见 TaskReviewEvent。
   | 'task_review'
   // P1 todo 接线 (2026-08-21): agent 任务清单全量快照,与 llmStream.ts 双处一致。
-  | 'todo_snapshot';
+  | 'todo_snapshot'
+  // S7 (2026-09-06): 工具落库产物后经活跃流推送的事件,载荷见 AgentEvent.artifact。
+  | 'artifact_created';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -335,6 +337,15 @@ export interface AgentEvent {
   // P1 todo 接线: todo_snapshot 全量快照字段,与 llmStream.ts 双处一致。
   todos?: TodoItem[];
   session_id?: string;
+  // S7 (2026-09-06): artifact_created 事件载荷（工具线程落库后经活跃流推送）。
+  artifact?: {
+    id: string;
+    path: string;
+    name: string;
+    kind: string;
+    size: number;
+    created_at: number;
+  };
 }
 
 // ==================== 错误类型定义 ====================
