@@ -360,6 +360,8 @@ def _import_all_checks() -> None:
         # 2026-09-04: 本地开发环境助手 — runtime_probe 工具的 doctor 集成。
         # 只探 Python/Node.js 可用性, 不附带工具链明细 (避免 doctor 变慢)。
         "runtime_env",
+        # L15(2026-09-06) — API Key 静态加密状态(SecretBox scheme / 加密覆盖率)。
+        "secret_storage",
     ):
         importlib.import_module(f"{pkg}.{mod_name}")
 
