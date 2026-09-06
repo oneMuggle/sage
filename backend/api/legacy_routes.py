@@ -360,7 +360,7 @@ _PENDING_RUN_CANCELLATIONS: Set[str] = set()
 # Fix #3 (2026-09-06): 用户确认事件 —— producer 发 task_plan 后等待用户在前端
 # 点击"开始执行"。orch_routes.confirm_run 设置事件唤醒 producer。
 # cancel_run 也会设置事件（以取消状态退出等待）。
-_RUN_CONFIRM_EVENTS: Dict[str, "asyncio.Event"] = {}
+_RUN_CONFIRM_EVENTS: Dict[str, asyncio.Event] = {}
 
 
 class InterruptRequest(BaseModel):
@@ -2218,7 +2218,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     try:
                         try:
                             await asyncio.wait_for(confirm_event.wait(), timeout=600)
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             logger.warning(
                                 "编排确认超时 (600s)，自动取消 run %s", run_id
                             )
