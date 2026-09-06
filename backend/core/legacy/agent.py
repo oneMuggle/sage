@@ -896,7 +896,13 @@ class SageAgent:
                                         # queue. Sync execute() cannot do that.
                                         # Same minimal special-case as "agent";
                                         # general tool dispatch stays inline.
-                                        result = await tool.execute_async(**args)
+                                        # live-events P0: 透传本工具调用 ID ——
+                                        # dispatcher 给子任务标 parent_tool_call_id，
+                                        # 前端把子代理实时步骤挂到 Delegate 卡片。
+                                        # dict 重建覆盖 LLM 可能注入的同名 key。
+                                        dispatch_kwargs = dict(args)
+                                        dispatch_kwargs["_tool_call_id"] = tc.id
+                                        result = await tool.execute_async(**dispatch_kwargs)
                                     elif getattr(tool, "is_blocking", False):
                                         # 阻塞型工具（bash / repl，见
                                         # BaseTool.is_blocking）：execute() 可长至

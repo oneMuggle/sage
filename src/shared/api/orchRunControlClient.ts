@@ -37,6 +37,17 @@ export interface CancelRunResponse {
   status: string;
 }
 
+export interface SetApprovalModeParams {
+  run_id: string;
+  mode: 'ask' | 'auto';
+}
+
+export interface SetApprovalModeResponse {
+  ok: boolean;
+  run_id: string;
+  mode: 'ask' | 'auto';
+}
+
 export const orchRunControlClient = {
   /** GET /orch/runs/{runId}/snapshot */
   async getSnapshot(runId: string): Promise<RunSnapshot> {
@@ -64,5 +75,16 @@ export const orchRunControlClient = {
    */
   async cancelRun(params: CancelRunParams): Promise<CancelRunResponse> {
     return invoke<CancelRunResponse>('orchestration_cancel_run_control', { ...params });
+  },
+
+  /**
+   * POST /orch/runs/{runId}/approval-mode
+   *
+   * live-events P1: run 级子代理审批模式切换（ask = 逐次审批; auto =
+   * 非危险工具自动批准）。仅活动中的 run 有效（404 = run 不在进程内）。
+   * 成功后端会向聊天流推 `approval_mode` 事件供任务树开关回显。
+   */
+  async setApprovalMode(params: SetApprovalModeParams): Promise<SetApprovalModeResponse> {
+    return invoke<SetApprovalModeResponse>('orchestration_set_approval_mode', { ...params });
   },
 };

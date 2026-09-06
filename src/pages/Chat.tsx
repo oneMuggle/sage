@@ -12,7 +12,7 @@ import { useStore } from '../shared/lib/store';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
-import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
+import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 
@@ -364,6 +364,11 @@ export function Chat() {
         iteration={iteration}
         streamingState={streamingState}
       />
+
+      {/* live-events P0 (2026-09-06): 编排子代理实时执行面板 —— 派发后
+          conductor 阻塞在 dispatch_subagents 内,这里逐行展示每个子任务的
+          实时步骤,消除"只能被动等待"的黑盒感。 */}
+      <SubagentLivePanel />
 
       {showConfigWarning && (
         <div

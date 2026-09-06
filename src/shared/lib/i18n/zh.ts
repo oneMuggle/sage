@@ -330,6 +330,7 @@ export const zh = {
   'permission.approve': '允许',
   'permission.deny': '拒绝',
   'permission.toast.failed': '审批应答失败',
+  'permission.subagent_context': '编排子任务请求审批',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': '助手需要您的回答',

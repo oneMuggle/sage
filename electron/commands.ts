@@ -53,6 +53,14 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/cancel`,
   },
 
+  // live-events P1: subagent approval mode — POST /orch/runs/{run_id}/approval-mode
+  // body {mode: 'ask' | 'auto'}; 404 when the run is not active in-process.
+  orchestration_set_approval_mode: {
+    method: 'POST',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/approval-mode`,
+    body: (a) => ({ mode: a.mode }),
+  },
+
   // chat
   // I2: create + attach split — POST 立即返回 {streamId} 启动后台 LLM 调用,
   // GET attach 到同一 stream 拉取 NDJSON 事件。LLM 只跑一次。

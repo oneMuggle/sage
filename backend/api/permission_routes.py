@@ -177,6 +177,19 @@ async def answer_approval(
     if body.remember:
         _persist_remembered_rule(req.tool_name, body.approved)
 
+    # live-events P1: 子代理审批回填 —— 命中编排 run 时回发
+    # ``task.approval_resolved``（canonical）+ ``subagent_event`` 镜像
+    # （聊天），任务树 live 行从"等待审批"切回执行态。best-effort：
+    # 未命中（主 agent 审批）或通道失败都不影响应答结果。
+    try:
+        from backend.orchestration.chat_dispatcher import find_dispatcher_for_approval
+
+        dispatcher = find_dispatcher_for_approval(request_id)
+        if dispatcher is not None:
+            await dispatcher.resolve_approval(request_id, body.approved)
+    except Exception as exc:  # noqa: BLE001 — 回填失败不阻塞应答
+        logger.warning("子代理审批回填失败 request_id=%s: %s", request_id, exc)
+
     return {"ok": True}
 
 
