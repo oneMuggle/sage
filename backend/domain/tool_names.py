@@ -62,9 +62,16 @@ RUNTIME_PROBE_TOOLS = ("runtime_probe", "project_diagnose")
 RUNTIME_EXEC_TOOLS = ("runtime_exec",)
 RUNTIME_TOOLS = RUNTIME_PROBE_TOOLS + RUNTIME_EXEC_TOOLS
 
-# 一等 git 工具组（2026-09-06 对标增强 Phase-1）：读三件 READ 免审，
-# git_commit 为 WRITE_LOCAL 审批；只 commit 不 push。
-GIT_TOOLS = ("git_commit", "git_diff", "git_log", "git_status")
+# 一等 git 工具组（2026-09-06 对标增强 Phase-1）：读四件 READ 免审
+# （commit_message 为提交素材只读辅助），git_commit 为 WRITE_LOCAL 审批；
+# 只 commit 不 push。
+GIT_TOOLS = (
+    "git_commit",
+    "git_commit_message",
+    "git_diff",
+    "git_log",
+    "git_status",
+)
 
 # 工作区检查点（2026-09-06 对标增强 Phase-1）：create/list 只写 sage
 # 自有数据目录 → READ；restore 覆盖工作区 → WRITE_LOCAL 审批。
@@ -73,6 +80,14 @@ CHECKPOINT_TOOLS = ("checkpoint_create", "checkpoint_list", "checkpoint_restore"
 # 多文件原子编辑（2026-09-06 对标增强 Phase-2，Codex apply_patch 对标）：
 # 全部补丁先校验后落盘，任一失败整批不写。WRITE_LOCAL 审批。
 PATCH_TOOLS = ("apply_patch",)
+
+# Plan 模式（2026-09-06 对标增强 Phase-2，Qoder Quest 对标）：
+# 会话内结构化执行计划（先规划后执行）。会话内存状态 → READ。
+PLAN_TOOLS = ("plan_write",)
+
+# 代码库符号索引（2026-09-06 对标增强 Phase-2，G4 务实版）：
+# stdlib ast 提取 Python 符号 + 内存倒排索引，按名称/概念搜定义处。READ。
+SYMBOL_TOOLS = ("symbol_search",)
 
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 技能 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "skill", "ask_user_question")
@@ -94,6 +109,8 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(GIT_TOOLS)
         | set(CHECKPOINT_TOOLS)
         | set(PATCH_TOOLS)
+        | set(PLAN_TOOLS)
+        | set(SYMBOL_TOOLS)
         | set(ORCH_TOOLS)
         | set(SANDBOX_TOOLS)
     )
@@ -110,10 +127,12 @@ __all__ = [
     "OFFICE_TOOLS",
     "ORCH_TOOLS",
     "PATCH_TOOLS",
+    "PLAN_TOOLS",
     "RUNTIME_EXEC_TOOLS",
     "RUNTIME_PROBE_TOOLS",
     "RUNTIME_TOOLS",
     "SANDBOX_TOOLS",
+    "SYMBOL_TOOLS",
     "WEB_FETCH_TOOLS",
     "WEB_SEARCH_TOOLS",
     "WEB_TOOLS",

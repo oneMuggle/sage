@@ -47,6 +47,9 @@ class SettingsRepository:
             # bash 工具运行参数: 超时/输出截断/后台会话上限 (JSON)
             # 见 backend/tools/bash_config.py
             "bash_config",
+            # G5 会话级模型覆盖: {session_id: model_id} (JSON)
+            # 见 backend/orchestration/llm_factory.py
+            "session_model_overrides",
         }
     )
 

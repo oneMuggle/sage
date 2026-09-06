@@ -379,9 +379,12 @@ class WriteFileTool(BaseTool):
             # 记录产物(供 Chat 右侧 Artifacts 面板展示)
             _record_artifact_safely(result["path"], content_bytes)
 
+            # G8 (2026-09-06): Python 文件写后语法诊断 —— 失败不影响写入结果
+            from .write_diagnostics import attach_diagnostics
+
             return ToolResult(
                 success=True,
-                content=result,
+                content=attach_diagnostics(result, result.get("path", "")),
             )
 
         except Exception as e:

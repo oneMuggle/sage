@@ -266,10 +266,22 @@ class ApplyPatchTool(BaseTool):
                     "lines_removed": planned_edit.lines_removed,
                 }
             )
-        return ToolResult(
-            success=True,
-            content={"files_changed": written, "count": len(written)},
-        )
+
+        # G8 (2026-09-06): Python 文件批量写后语法诊断 —— 逐文件收集，不失败
+        from .write_diagnostics import _syntax_check
+
+        diagnostics = []
+        for planned_edit in plan:
+            issue = _syntax_check(planned_edit.path)
+            if issue is not None:
+                diagnostics.append({"path": str(planned_edit.path), **issue})
+        content: Dict[str, Any] = {"files_changed": written, "count": len(written)}
+        if diagnostics:
+            content["diagnostics"] = diagnostics
+            content["diagnostics_note"] = (
+                f"{len(diagnostics)} 个文件存在语法问题 —— 请修正后重新 apply_patch"
+            )
+        return ToolResult(success=True, content=content)
 
 
 __all__ = ["ApplyPatchTool", "MAX_PATCHES_PER_CALL"]

@@ -1,6 +1,6 @@
 # 编码代理功能对标与增强方案（2026-09-06）
 
-- **状态**：Phase-1 已交付（#440/#441 合入）；Phase-2 实施中（G10 apply_patch 已落地）
+- **状态**：Phase-1 已交付（#440/#441）；Phase-2 已交付（G3/G4/G5/G6/G8/G9/G10，#443/#444/#447）—— 仅剩 G7 浏览器自动化（需 Electron 跨端里程碑）
 - **对标对象**：ZCode（CLI 编码代理）、Qoder（Agentic 编码 IDE）、Codex（OpenAI 编码代理）
 - **范围**：main 落地后 cherry-pick 对齐 `release/win7`（沿用 PR #402→#404 惯例路径）
 
@@ -32,14 +32,22 @@
 | --- | --- | --- | --- | --- |
 | G1 | **一等 Git 工具组**（status/diff/log/commit，结构化输出 + 审批门禁） | Codex/ZCode 均以工具面暴露 git；Qoder 内置 SCM 感知 | 高：LLM 现在只能裸 bash 拼 git 命令，无结构化结果、无按操作分级审批 | ✅ Phase-1 |
 | G2 | **工作区检查点/回滚**（代理改文件前可快照、可恢复） | ZCode rewind、Cursor checkpoints、Codex 回滚 | 高：代理批量写文件缺乏 undo 安全网 | ✅ Phase-1 |
-| G3 | Plan 模式 / 规范驱动任务（Quest 式：spec → 分解 → 执行 → 验收） | Qoder Quest Mode、ZCode 计划模式 | 中：已有 docs/plans 约定 + todo 工具，缺产品化闭环 | Phase-2 |
-| G4 | 代码库语义索引（embedding/图谱检索） | Qoder Context Engine、ZCode 代码检索 | 中：wiki 已有 hnsw 向量库，可复用到代码库 | Phase-2 |
-| G5 | 多模型/多供应商运行时切换（按 agent / 按会话选模型） | 三家均支持 | 中：config.yaml 单 provider，profile 有 model 字段但无路由 | Phase-2 |
-| G6 | 聊天图片输入（vision） | 三家均支持 | 中：wiki 已有 vision 通道，chat 未接 | Phase-2 |
+| G3 | Plan 模式（plan_write 结构化计划：goal + steps + status） | Qoder Quest Mode、ZCode 计划模式 | 中 | ✅ Phase-2（后端工具；UI 接入属前端里程碑） |
+| G4 | 代码库索引/检索（symbol_search：ast 符号提取 + 分词概念匹配） | Qoder Context Engine、ZCode 代码检索 | 中 | ✅ Phase-2（务实版；embedding 版留待有实证需求） |
+| G5 | 多模型切换：全局端点选择已有；新增会话级覆盖（session → model KV）+ profile 模型路由 | 三家均支持 | 中 | ✅ Phase-2（后端 + REST；设置页属前端里程碑） |
+| G6 | 聊天图片输入（ChatRequest.images → OpenAI 多模态 content，4 张/5MiB 校验） | 三家均支持 | 中 | ✅ Phase-2（后端；上传 UI 属前端里程碑） |
 | G7 | 浏览器自动化 / GUI 操作 | ZCode browser-use / computer-use | 中：需 Electron 侧驱动，跨端改动大 | Phase-3 |
-| G8 | LSP/编译器诊断接入（写后即时 lint 反馈） | Qoder 实时诊断 | 中：可作为 write/edit 后置钩子 | Phase-3 |
-| G9 | Commit message 生成 / PR 创建流 | Codex/Qoder | 低-中：G1 落地后薄封装 | Phase-3 |
+| G8 | 写后语法诊断（stdlib ast，write/edit/apply_patch 成功结果附 diagnostics） | Qoder 实时诊断 | 中 | ✅ Phase-2（提前实施；LSP 语义层留待后续） |
+| G9 | Commit message 素材工具（git_commit_message：staged 摘要 + 风格参照） | Codex/Qoder | 低-中 | ✅ Phase-2（提前实施） |
 | G10 | 多文件原子 apply_patch | Codex apply_patch | 低：edit_file + G2 检查点已覆盖主要风险 | ✅ Phase-2（提前实施） |
+
+## 2.1 剩余项实施路径勘察（2026-09-06）
+
+- **G5 多模型切换（推荐下一个）**：`LLMConfig`（core/legacy/llm_client.py:78）已支持 openai/claude/gemini/deepseek/ollama/custom 多 provider；注入点为 `SageAgent(llm_config=dict)`（agent.py:300）。落地路径：preferences KV 新增 `model_override`（仿 bash_config 的 fail-safe KV 模式）→ chat_service 构造 llm_config 时按「会话覆盖 > profile.model_config > 全局 config.yaml」三级取值 → 设置页加 provider/model 下拉。改动面：后端 2 文件 + 前端 1 设置页。
+- **G6 聊天图片输入**：vision 通道已有（wiki ingest），缺 chat 消息体的 image 附件字段与前端上传入口；需动 chat API 契约，前端改 Dashboard 输入组件。
+- **G3 Plan 模式**：已有 todo_write（会话内）与 docs/plans 约定（跨会话文件），产品化 = plan 工具 + UI 视图；建议在 G5 之后做（模型选择影响 plan 生成质量）。
+- **G4 语义索引**：wiki 向量库（hnsw）可复用；需独立索引器与增量更新，工作量最大。
+- **G7 浏览器自动化**：依赖 Electron 侧 CDP/playwright 桥，跨端改动最大。
 
 ## 3. Phase-1 规格（本轮实施）
 
