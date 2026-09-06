@@ -2273,6 +2273,33 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 logger.debug(f"[REQ {request_id}] M6 project context skipped: {m6_ctx_err}")
             # ===== M6 PROJECT CONTEXT END =====
 
+            # ===== L5 环境上下文 + 技能清单 BEGIN (对标增强第二轮批次 B) =====
+            # 告知模型平台/日期/工作区/git 状态与可用技能（此前模型对工作区
+            # 状态零感知、技能只能盲调 skill 工具发现）。内部全 fail-safe:
+            # 任何一段收集失败静默省略,绝不阻断聊天。独立标记块, rebase 友好。
+            try:
+                from backend.chat.env_context import (
+                    build_environment_block,
+                    build_skills_block,
+                )
+
+                l5_binding = get_workspace_binding(
+                    get_database().get_connection(), data.session_id
+                )
+                system_content += "\n\n" + build_environment_block(
+                    workspace_path=(
+                        l5_binding.workspace_path if l5_binding is not None else None
+                    )
+                )
+                skills_block = build_skills_block()
+                if skills_block:
+                    system_content += "\n\n" + skills_block
+            except Exception as l5_env_err:
+                logger.debug(
+                    f"[REQ {request_id}] L5 environment context skipped: {l5_env_err}"
+                )
+            # ===== L5 环境上下文 + 技能清单 END =====
+
             attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
 
             # G6 (2026-09-06): 图片附件校验提前（多模态 user 消息在下方

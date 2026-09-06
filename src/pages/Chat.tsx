@@ -15,6 +15,7 @@ import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
+import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
@@ -350,7 +351,11 @@ export function Chat() {
     <div className="flex-1 flex flex-col min-h-0">
       {/* 页面头部 */}
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-        <h2 className="text-sm font-semibold text-text">对话</h2>
+        <div className="flex items-center gap-4 min-w-0">
+          <h2 className="text-sm font-semibold text-text shrink-0">对话</h2>
+          {/* U8: 会话级模型切换(G5 收尾) */}
+          <SessionModelPicker sessionId={currentSessionId} />
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleNewSession}

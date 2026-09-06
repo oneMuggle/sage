@@ -150,6 +150,7 @@ export function ChatInput({
     clearAll,
     handleDrop,
     handleDragOver,
+    handlePaste,
     isDragOver,
   } = useFileUpload();
 
@@ -420,6 +421,7 @@ export function ChatInput({
       onFileSelect={handleFileSelect}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
+      onPaste={handlePaste}
       isDragOver={isDragOver}
       showSlashMenu={slashMenuOpen}
       slashCommands={slashCommands}
