@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { WorkspaceChanges, WorkspaceDiff } from '../../../shared/api/workspaceApi';
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { ChangesSection } from '../changes/ChangesSection';
 
 const mockGetChanges = vi.fn<() => Promise<WorkspaceChanges>>();
@@ -35,13 +36,21 @@ describe('ChangesSection', () => {
   });
 
   it('prompts to select session when sessionId null', () => {
-    render(<ChangesSection sessionId={null} />);
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId={null} />
+      </I18nProvider>,
+    );
     expect(screen.getByText(/请先选择会话/)).toBeInTheDocument();
   });
 
   it('renders change list with branch and ahead/behind', async () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
-    render(<ChangesSection sessionId="s1" />);
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText('src/app.ts')).toBeInTheDocument();
@@ -65,7 +74,11 @@ describe('ChangesSection', () => {
       clean: true,
       changes: [],
     });
-    render(<ChangesSection sessionId="s1" />);
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
     await waitFor(() => {
       expect(screen.getByText(/工作区干净/)).toBeInTheDocument();
     });
@@ -73,7 +86,11 @@ describe('ChangesSection', () => {
 
   it('shows error message on failure', async () => {
     mockGetChanges.mockRejectedValue(new Error('git 不可用'));
-    render(<ChangesSection sessionId="s1" />);
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
     await waitFor(() => {
       expect(screen.getByText(/git 不可用/)).toBeInTheDocument();
     });
@@ -85,7 +102,11 @@ describe('ChangesSection', () => {
       diff: '--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
       truncated: false,
     });
-    render(<ChangesSection sessionId="s1" />);
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText('src/app.ts')).toBeInTheDocument();
@@ -109,7 +130,11 @@ describe('ChangesSection', () => {
   it('shows untracked note for empty diff', async () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
     mockGetChangeDiff.mockResolvedValue({ diff: '', truncated: false });
-    render(<ChangesSection sessionId="s1" />);
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
 
     await waitFor(() => {
       expect(screen.getByText('notes.md')).toBeInTheDocument();
