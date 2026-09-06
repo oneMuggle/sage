@@ -444,25 +444,9 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     },
   },
 
-  // Wave 2 P1-4/P1-5 (2026-08-14): run 生命周期 —— 历史列表 / 详情 / 恢复
-  // / plan 更新,对应 backend/api/orch_routes.py 的 /api/v1/orch/runs 4 端点。
-  orchestration_list_runs: {
-    method: 'GET',
-    path: (a) => {
-      // params 显式 cast（tsconfig.electron.json 下 a.params 推导为 '{}'，
-      // 直接 .limit 报 TS2339）—— 与 orchestration_list_lanes 同构。
-      const params = (a?.params as Record<string, unknown>) ?? {};
-      return `/api/v1/orch/runs?limit=${params.limit ?? 50}`;
-    },
-  },
-  orchestration_get_run: {
-    method: 'GET',
-    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}`,
-  },
-  orchestration_resume_run: {
-    method: 'POST',
-    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/resume`,
-  },
+  // Wave 2 P1-4 (2026-08-14): run 生命周期 —— plan 更新 / run 取消,
+  // 对应 backend/api/orch_routes.py 的 /api/v1/orch/runs 端点。
+  // Wave 4 (2026-09-06): 历史编排记录功能移除 —— 删除 list_runs / get_run / resume_run。
   orchestration_cancel_run: {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/cancel`,

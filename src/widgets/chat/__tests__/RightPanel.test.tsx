@@ -6,12 +6,6 @@ vi.mock('../../../features/artifacts/useArtifacts', () => ({
   useArtifacts: vi.fn(() => ({ artifacts: [], loading: false, refresh: vi.fn() })),
 }));
 
-// Progress tab 渲染链含 PlanCardList，挂载即调 orchRunClient.listRuns()；
-// mock 掉避免 unhandled rejection（coverage 模式下 vitest 会因此 exit 1）。
-vi.mock('../../../shared/api/orchRunClient', () => ({
-  orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },
-}));
-
 import { RightPanel } from '../RightPanel';
 
 const props = {
@@ -27,13 +21,13 @@ const props = {
 describe('RightPanel', () => {
   it('renders both tabs', () => {
     render(<RightPanel {...props} />);
-    expect(screen.getByText('Progress')).toBeInTheDocument();
-    expect(screen.getByText('Artifacts')).toBeInTheDocument();
+    expect(screen.getByText('进度')).toBeInTheDocument();
+    expect(screen.getByText('产物')).toBeInTheDocument();
   });
 
   it('switches to Artifacts tab', () => {
     render(<RightPanel {...props} />);
-    fireEvent.click(screen.getByText('Artifacts'));
+    fireEvent.click(screen.getByText('产物'));
     expect(screen.getByText(/暂无产物/)).toBeInTheDocument();
   });
 });
@@ -54,7 +48,7 @@ describe('RightPanel - close button', () => {
   it('clicking close button in Artifacts tab invokes onToggle', () => {
     const onToggle = vi.fn();
     render(<RightPanel {...props} onToggle={onToggle} />);
-    fireEvent.click(screen.getByText('Artifacts'));
+    fireEvent.click(screen.getByText('产物'));
     fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
     expect(onToggle).toHaveBeenCalledTimes(1);
   });

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
+import type { TaskBoard } from '../../features/send-message/useChat';
 import type { ToolCall } from '../../shared/lib/store';
 
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
@@ -20,14 +21,19 @@ interface RightPanelProps {
   toolCalls: ToolCall[];
   isLoading: boolean;
   sessionId: string | null;
+  taskBoard?: TaskBoard | null; // 新增：编排任务板
+  // Wave 3 (2026-08-14): 计划卡接线回调透传。
+  // M4 (2026-08-15): onPlanStart 已删。
+  // Wave 4 (2026-09-06): onResumeRun 已删 —— 历史编排记录功能移除。
+  onCancelExecution?: (runId: string) => void;
 }
 
 type Tab = 'progress' | 'artifacts' | 'changes';
 
 const TAB_LABELS: Record<Tab, string> = {
-  progress: 'Progress',
-  artifacts: 'Artifacts',
-  changes: 'Changes',
+  progress: '进度',
+  artifacts: '产物',
+  changes: '变更',
 };
 
 interface PanelHeaderProps {
@@ -90,6 +96,8 @@ export function RightPanel({
   toolCalls,
   isLoading,
   sessionId,
+  taskBoard,
+  onCancelExecution,
 }: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('progress');
   const [selected, setSelected] = useState<Artifact | null>(null);
@@ -118,6 +126,8 @@ export function RightPanel({
             streamingState={streamingState}
             toolCalls={toolCalls}
             isLoading={isLoading}
+            taskBoard={taskBoard}
+            onCancelExecution={onCancelExecution}
           />
         ) : tab === 'changes' ? (
           <ChangesSection sessionId={sessionId} />

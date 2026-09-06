@@ -50,7 +50,15 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
     workspaceApi
       .getChanges(sessionId)
       .then(setChanges)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => {
+        // 友好处理 workspace_not_bound 错误
+        const errMsg = e instanceof Error ? e.message : String(e);
+        if (errMsg.includes('workspace_not_bound') || errMsg.includes('尚未绑定工作区')) {
+          setError('当前会话尚未绑定工作区，无法查看变更');
+        } else {
+          setError(errMsg);
+        }
+      })
       .finally(() => setLoading(false));
   }, [sessionId]);
 
@@ -172,7 +180,9 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
                 onClick={() => openDiff(entry.path)}
               >
                 <span
-                  className={'text-xs font-medium shrink-0 w-12 ' + statusColor(entry.worktreeStatus)}
+                  className={
+                    'text-xs font-medium shrink-0 w-12 ' + statusColor(entry.worktreeStatus)
+                  }
                 >
                   {statusLabel(entry)}
                 </span>
