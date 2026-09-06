@@ -19,8 +19,10 @@ from backend.domain.tool_names import (
     MEMORY_TOOLS,
     OFFICE_TOOLS,
     PATCH_TOOLS,
+    PLAN_TOOLS,
     RUNTIME_EXEC_TOOLS,
     RUNTIME_PROBE_TOOLS,
+    SYMBOL_TOOLS,
     WEB_FETCH_TOOLS,
 )
 
@@ -113,6 +115,8 @@ _PRIMARY_SEED_TOOLS = (
     # git_commit / checkpoint_restore 为 WRITE_LOCAL（INTERACTIVE 先审批）。
     *GIT_TOOLS,
     *CHECKPOINT_TOOLS,
+    # 2026-09-06 对标增强 Phase-2: G3 plan_write（先规划后执行，coordinator 职责）
+    *PLAN_TOOLS,
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为
@@ -130,9 +134,9 @@ _CODER_SEED_TOOLS = (
     *RUNTIME_EXEC_TOOLS,
     *GIT_TOOLS,
     *CHECKPOINT_TOOLS,
-    # 2026-09-06 对标增强 Phase-2: apply_patch —— 多文件原子精确编辑
-    # （编码场景主消费者；WRITE_LOCAL 审批，与 write_file/edit_file 同门禁）。
+    # 2026-09-06 对标增强 Phase-2: apply_patch + symbol_search（编码场景主消费者）
     *PATCH_TOOLS,
+    *SYMBOL_TOOLS,
 )
 
 

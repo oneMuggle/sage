@@ -256,3 +256,77 @@ def build_llm_client_from_settings() -> Optional[Any]:
     except Exception as exc:
         logger.warning("llm_factory: failed to build LLMClient: %s", exc)
         return None
+
+
+# ---------------------------------------------------------------------------
+# G5 会话级模型覆盖（2026-09-06 对标增强 Phase-2，docs/plans §2.1）
+# ---------------------------------------------------------------------------
+
+#: preferences KV key：{session_id: model_id} 的 JSON 映射（会话 → 模型）。
+#: 用户在某个会话里切换模型后，该会话固定用选定模型，不影响其他会话。
+SESSION_MODEL_OVERRIDES_KEY = "session_model_overrides"
+
+#: profile.model_config.model 的种子默认占位值 —— 无法区分"用户有意设置"
+#: 与"create_default_agents 的默认"，统一视为未设置，不参与路由。
+_PROFILE_MODEL_PLACEHOLDERS = frozenset(
+    {"gpt-4", "gpt-3.5-turbo", "gpt-4-turbo-preview"}
+)
+
+
+def load_session_model_overrides() -> Dict[str, str]:
+    """读取会话 → 模型覆盖映射；任何失败返回空 dict（fail-safe）。"""
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get_json(SESSION_MODEL_OVERRIDES_KEY)
+    except Exception as exc:  # DB unavailable — degrade
+        logger.warning("llm_factory: failed to read session model overrides: %s", exc)
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    # 只保留非空 str→非空 str；畸形条目静默丢弃而非整体失败
+    return {
+        sid: model
+        for sid, model in raw.items()
+        if isinstance(sid, str) and sid.strip()
+        and isinstance(model, str) and model.strip()
+    }
+
+
+def resolve_chat_model(
+    session_id: Optional[str], profile_model: Optional[str] = None
+) -> Optional[str]:
+    """按「会话覆盖 > profile 声明（非占位）」解析模型；都不命中返回 None。
+
+    返回 None 表示沿用全局选择（app_settings.modelSelections）——
+    调用方据此不覆盖 load_llm_config_from_settings 的结果。
+    """
+    if session_id:
+        override = load_session_model_overrides().get(session_id)
+        if override:
+            return override
+    if (
+        isinstance(profile_model, str)
+        and profile_model.strip()
+        and profile_model not in _PROFILE_MODEL_PLACEHOLDERS
+    ):
+        return profile_model.strip()
+    return None
+
+
+def load_llm_config_for_chat(
+    session_id: Optional[str] = None,
+    profile_model: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """全局端点配置 + 会话/profile 模型覆盖 → LLMConfig 兼容 dict。
+
+    端点（api_key/base_url/provider）恒取全局选择 —— 会话级只覆盖模型名，
+    不换端点（换端点属全局设置页职责）。无可用端点 → None（调用方降级）。
+    """
+    base = load_llm_config_from_settings()
+    if base is None:
+        return None
+    override = resolve_chat_model(session_id, profile_model)
+    if override:
+        return {**base, "model": override}
+    return base
