@@ -363,6 +363,17 @@ async def lifespan(app: FastAPI):
     # to mark it as internal.
     app.state._watchdog_query_fn = _fetch_stale_session_ids
     logger.info("Session-end watchdog 已启动 (60s 周期)")
+    # L15 SecretBox: 历史明文 apiKey 一次性加密回写(Windows DPAPI / macOS keychain /
+    # Linux secret-tool)。fail-open — 任何失败保留明文, 不阻塞启动, doctor
+    # secret_storage 检查会持续告警。
+    from backend.services.secret_box import migrate_plaintext_settings
+
+    try:
+        _secret_report = migrate_plaintext_settings()
+        if _secret_report.get("encrypted_now"):
+            logger.info("SecretBox 迁移完成: %s", _secret_report)
+    except Exception:
+        logger.exception("SecretBox 迁移失败(保留明文, 不影响启动)")
 
     # S1 (2026-09-06): 会话运行态启动恢复 —— 上次进程被杀时 producer 的
     # finally 写库点没有机会执行，遗留 running 统一收口为 failed（与编排

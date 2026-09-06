@@ -178,6 +178,8 @@ export interface PermissionRequest {
     agent_id: string;
     goal: string;
   };
+  /** U15: 写类工具的将写入内容 unified diff（无法生成时缺省，回退 args_summary） */
+  diff_preview?: string;
 }
 
 /** 问题选项 — QuestionDialog 渲染为可选卡片 */

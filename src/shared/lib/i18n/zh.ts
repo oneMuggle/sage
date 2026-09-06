@@ -319,6 +319,9 @@ export const zh = {
   'permission.deny': '拒绝',
   'permission.toast.failed': '审批应答失败',
   'permission.subagent_context': '编排子任务请求审批',
+  'permission.diff': '将写入的变更',
+  'codeBlock.copy': '复制',
+  'codeBlock.copied': '已复制',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': '助手需要您的回答',

@@ -184,7 +184,13 @@ async def test_llm_response_carries_usage_and_tracker_records():
     with patch.object(client, "_get_client", return_value=_mock_http(_openai_body())):
         response = await client.chat([{"role": "user", "content": "hi"}])
 
-    assert response.usage == {"prompt_tokens": 12, "completion_tokens": 7, "total_tokens": 19}
+    # L4: usage 携带 cached_tokens（无缓存命中时为 0）
+    assert response.usage == {
+        "prompt_tokens": 12,
+        "completion_tokens": 7,
+        "total_tokens": 19,
+        "cached_tokens": 0,
+    }
     summary = usage_tracker.summary()
     assert summary["totals"]["requests"] == 1
     assert summary["totals"]["prompt_tokens"] == 12

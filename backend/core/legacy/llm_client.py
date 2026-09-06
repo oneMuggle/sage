@@ -73,6 +73,35 @@ def _retry_backoff_seconds(err: LLMError, attempt: int, base_delay: float) -> fl
     return min(base_delay * (2 ** (attempt - 1)), _LLM_RETRY_MAX_DELAY_S)
 
 
+def extract_cached_tokens(usage: Dict[str, Any]) -> int:
+    """多 provider 缓存命中字段归一化（L4 缓存感知记账）。
+
+    全链路走 OpenAI 兼容线格式,缓存命中字段各家不同:
+    - OpenAI 系: ``usage.prompt_tokens_details.cached_tokens``
+    - DeepSeek: ``usage.prompt_cache_hit_tokens``
+    - Anthropic 原生形态（经兼容网关透传时）: ``usage.cache_read_input_tokens``
+
+    注意: prompt_tokens 已**包含**命中部分（OpenAI/DeepSeek 口径）,
+    调用方拆账时用 prompt - cached 计全价输入。
+    """
+    if not isinstance(usage, dict):
+        return 0
+    details = usage.get("prompt_tokens_details")
+    if isinstance(details, dict):
+        try:
+            return int(details.get("cached_tokens") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for key in ("prompt_cache_hit_tokens", "cache_read_input_tokens"):
+        value = usage.get(key)
+        if value:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+    return 0
+
+
 @dataclass
 class LLMMessage:
     """单条对话消息"""
@@ -125,7 +154,6 @@ class LLMResponse:
 @dataclass
 class LLMConfig:
     """LLM 连接配置"""
-
     provider: str = "openai"  # openai, claude, gemini, deepseek, ollama, custom
     api_key: str = ""
     base_url: str = "https://api.openai.com/v1"
@@ -490,6 +518,8 @@ class LLMClient:
                 "prompt_tokens": int(usage.get("prompt_tokens") or 0),
                 "completion_tokens": int(usage.get("completion_tokens") or 0),
                 "total_tokens": int(usage.get("total_tokens") or 0),
+                # L4: 缓存命中拆账（OpenAI details / DeepSeek / Anthropic 形态归一）
+                "cached_tokens": extract_cached_tokens(usage),
             }
             try:
                 from backend.services.usage_tracker import usage_tracker
@@ -499,6 +529,7 @@ class LLMClient:
                     usage_dict["prompt_tokens"],
                     usage_dict["completion_tokens"],
                     session_id=self.session_id,
+                    cached_tokens=usage_dict["cached_tokens"],
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking skipped: %s", usage_err)
@@ -592,6 +623,7 @@ class LLMClient:
                         int(stream_usage.get("prompt_tokens") or 0),
                         int(stream_usage.get("completion_tokens") or 0),
                         session_id=self.session_id,
+                        cached_tokens=extract_cached_tokens(stream_usage),
                     )
                 except Exception as usage_err:
                     logger.debug("usage tracking (stream) skipped: %s", usage_err)
@@ -751,6 +783,8 @@ class LLMClient:
                 "prompt_tokens": int(stream_usage.get("prompt_tokens") or 0),
                 "completion_tokens": int(stream_usage.get("completion_tokens") or 0),
                 "total_tokens": int(stream_usage.get("total_tokens") or 0),
+                # L4: 缓存命中拆账（与 chat() 同口径）
+                "cached_tokens": extract_cached_tokens(stream_usage),
             }
             try:
                 from backend.services.usage_tracker import usage_tracker
@@ -760,6 +794,7 @@ class LLMClient:
                     usage_dict["prompt_tokens"],
                     usage_dict["completion_tokens"],
                     session_id=self.session_id,
+                    cached_tokens=usage_dict["cached_tokens"],
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking (stream) skipped: %s", usage_err)

@@ -103,7 +103,8 @@ class TestDoctorCLIJsonMode:
         result = _run_doctor("--json")
         data = json.loads(result.stdout)
         assert isinstance(data["checks"], list)
-        assert len(data["checks"]) == 15
+        # L15(2026-09-06): 15→16 (加 secret_storage; win7 线无 network 检查)
+        assert len(data["checks"]) == 16
 
     def test_json_check_entry_shape(self):
         result = _run_doctor("--json")
@@ -119,7 +120,7 @@ class TestDoctorCLIJsonMode:
         result = _run_doctor("--json")
         data = json.loads(result.stdout)
         summary = data["summary"]
-        assert summary["critical"] + summary["warn"] + summary["info"] == 15
+        assert summary["critical"] + summary["warn"] + summary["info"] == 16
 
     def test_json_python_version_format(self):
         result = _run_doctor("--json")
@@ -176,7 +177,7 @@ class TestDoctorCLIExitCodes:
         data = json.loads(json_result.stdout)
         assert text_result.returncode == json_result.returncode
         assert "总计:" in text_result.stdout
-        assert data["summary"]["critical"] + data["summary"]["warn"] + data["summary"]["info"] == 15
+        assert data["summary"]["critical"] + data["summary"]["warn"] + data["summary"]["info"] == 16
 
 
 class TestDoctorCLIHelp:
