@@ -1,6 +1,6 @@
 # 编码代理功能对标与增强方案（2026-09-06）
 
-- **状态**：Phase-1 已交付（#440/#441）；Phase-2 已交付（G3/G4/G5/G6/G8/G9/G10，#443/#444/#447）—— 仅剩 G7 浏览器自动化（需 Electron 跨端里程碑）
+- **状态**：Phase-1/2 全部交付（G1-G10，#440-#449）；G7 浏览器自动化以 CDP 后端驱动方案交付（#450）—— 无需 Electron 改动
 - **对标对象**：ZCode（CLI 编码代理）、Qoder（Agentic 编码 IDE）、Codex（OpenAI 编码代理）
 - **范围**：main 落地后 cherry-pick 对齐 `release/win7`（沿用 PR #402→#404 惯例路径）
 
@@ -36,7 +36,7 @@
 | G4 | 代码库索引/检索（symbol_search：ast 符号提取 + 分词概念匹配） | Qoder Context Engine、ZCode 代码检索 | 中 | ✅ Phase-2（务实版；embedding 版留待有实证需求） |
 | G5 | 多模型切换：全局端点选择已有；新增会话级覆盖（session → model KV）+ profile 模型路由 | 三家均支持 | 中 | ✅ Phase-2（后端 + REST；设置页属前端里程碑） |
 | G6 | 聊天图片输入（ChatRequest.images → OpenAI 多模态 content，4 张/5MiB 校验） | 三家均支持 | 中 | ✅ Phase-2（后端；上传 UI 属前端里程碑） |
-| G7 | 浏览器自动化 / GUI 操作 | ZCode browser-use / computer-use | 中：需 Electron 侧驱动，跨端改动大 | Phase-3 |
+| G7 | 浏览器自动化（browser_launch/navigate/snapshot/interact/screenshot/close，CDP 直驱本机 Chrome/Edge，stdlib WS 客户端零新依赖） | ZCode browser-use | 中 | ✅ Phase-2（规避 Electron 改动；GUI 操作不在 v1） |
 | G8 | 写后语法诊断（stdlib ast，write/edit/apply_patch 成功结果附 diagnostics） | Qoder 实时诊断 | 中 | ✅ Phase-2（提前实施；LSP 语义层留待后续） |
 | G9 | Commit message 素材工具（git_commit_message：staged 摘要 + 风格参照） | Codex/Qoder | 低-中 | ✅ Phase-2（提前实施） |
 | G10 | 多文件原子 apply_patch | Codex apply_patch | 低：edit_file + G2 检查点已覆盖主要风险 | ✅ Phase-2（提前实施） |
@@ -47,7 +47,7 @@
 - **G6 聊天图片输入**：vision 通道已有（wiki ingest），缺 chat 消息体的 image 附件字段与前端上传入口；需动 chat API 契约，前端改 Dashboard 输入组件。
 - **G3 Plan 模式**：已有 todo_write（会话内）与 docs/plans 约定（跨会话文件），产品化 = plan 工具 + UI 视图；建议在 G5 之后做（模型选择影响 plan 生成质量）。
 - **G4 语义索引**：wiki 向量库（hnsw）可复用；需独立索引器与增量更新，工作量最大。
-- **G7 浏览器自动化**：依赖 Electron 侧 CDP/playwright 桥，跨端改动最大。
+- ~~**G7 浏览器自动化**~~：已交付（2026-09-06）—— 方案改为**后端经 CDP 直驱本机浏览器**（--remote-debugging-port=0 + DevToolsActivePort 握手），避免 Electron 跨端改动；WS 帧层用 stdlib 实现（PyPI 不可达 + py3.8 兼容），零新依赖。v1 工具面给 coder；GUI 操作（computer-use 类）仍留后续。
 
 ## 3. Phase-1 规格（本轮实施）
 
