@@ -10,6 +10,7 @@ from httpx import Response
 
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
+from backend.tools import web_render
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
 
 pytestmark = [pytest.mark.unit]
@@ -49,8 +50,8 @@ def test_web_search_parses_results():
     assert "Python" in results[0]["snippet"] or "学习" in results[0]["snippet"]
 
 
-def test_web_search_fallback_when_no_results_in_html():
-    """无解析结果时返回占位条目"""
+def test_web_search_no_results_is_explicit_not_fabricated():
+    """W3：解析为空 → 空 results + note，绝不返回伪造占位条目（幻觉源）。"""
     with respx.mock(base_url="https://html.duckduckgo.com", assert_all_called=False) as mock:
         mock.get("/html/").mock(
             return_value=Response(200, text="<html><body>no results</body></html>")
@@ -59,9 +60,28 @@ def test_web_search_fallback_when_no_results_in_html():
         result = tool.execute(query="rare-query")
 
     assert result.success is True
-    results = result.content["results"]
-    assert len(results) == 1
-    assert "rare-query" in results[0]["title"]
+    assert result.content["results"] == []
+    assert "note" in result.content
+
+
+def test_web_search_resolves_ddg_redirect_urls():
+    """W3：result__a 的 href 是 //duckduckgo.com/l/?uddg=<urlencoded> 跳转，
+    解析器必须还原真实 URL（此前恒为空串）。"""
+    html = (
+        '<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fdocs'
+        '.python.org%2F3%2F&amp;rut=abc">Python 文档</a>\n'
+        '<a class="result__snippet" href="x">官方文档站点</a>'
+    )
+    with respx.mock(base_url="https://html.duckduckgo.com", assert_all_called=False) as mock:
+        mock.get("/html/").mock(return_value=Response(200, text=html))
+        tool = WebSearchTool()
+        result = tool.execute(query="python docs")
+
+    assert result.success is True
+    entry = result.content["results"][0]
+    assert entry["url"] == "https://docs.python.org/3/"
+    assert entry["title"] == "Python 文档"
+    assert entry["snippet"] == "官方文档站点"
 
 
 def test_web_search_limit_truncates():
@@ -544,3 +564,182 @@ def test_web_fetch_max_length_truncates_extracted_text():
         result = tool.execute(url="https://mirror.example.internal/long", max_length=100)
 
     assert len(result.content["content"]) == 100
+
+
+# ---------- JS 渲染降级（W1，docs/plans/2026-09-06_web-dynamic-render-access.md） ----------
+
+
+_SPA_SHELL = (
+    "<html><head><title>App</title>"
+    '<script src="/static/app.js"></script></head>'
+    '<body><div id="root"></div></body></html>'
+)
+
+
+def test_web_fetch_auto_renders_spa_shell(monkeypatch):
+    """auto：静态抽取命中 JS 壳 → 自动渲染并返回渲染正文。"""
+    seen = {}
+
+    def _fake_render(url, network_policy):
+        seen["url"] = url
+        return {
+            "url": url,
+            "title": "SPA 应用",
+            "content": "客户端渲染后的正文内容",
+            "rendered": True,
+            "truncated": False,
+        }
+
+    monkeypatch.setattr(web_render, "render_page", _fake_render)
+    with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
+        mock.get("/").mock(
+            return_value=Response(200, text=_SPA_SHELL, headers={"content-type": "text/html"})
+        )
+        tool = WebFetchTool(network_policy=_intranet("spa.example"))
+        result = tool.execute(url="https://spa.example/")
+
+    assert result.success is True
+    assert result.content["rendered"] is True
+    assert "客户端渲染后" in result.content["content"]
+    assert seen["url"] == "https://spa.example/"
+
+
+def test_web_fetch_auto_skips_static_pages(monkeypatch):
+    """auto：静态页（无脚本、无挂载点）零开销不回退。"""
+
+    def _fail(*args, **kwargs):
+        raise AssertionError("静态页不应触发渲染")
+
+    monkeypatch.setattr(web_render, "render_page", _fail)
+    with respx.mock(base_url="https://plain.example", assert_all_called=False) as mock:
+        mock.get("/p").mock(
+            return_value=Response(
+                200,
+                text="<html><body>" + ("正文内容" * 200) + "</body></html>",
+                headers={"content-type": "text/html"},
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("plain.example"))
+        result = tool.execute(url="https://plain.example/p")
+
+    assert result.success is True
+    assert "rendered" not in result.content
+
+
+def test_web_fetch_auto_skips_when_max_length_below_shell_threshold(monkeypatch):
+    """max_length 低于壳阈值时正文被截断、"正文过短"判定失真 —— 不做 auto 渲染。"""
+
+    def _fail(*args, **kwargs):
+        raise AssertionError("截断判定失真时不应自动渲染")
+
+    monkeypatch.setattr(web_render, "render_page", _fail)
+    with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
+        mock.get("/short").mock(
+            return_value=Response(
+                200, text=_SPA_SHELL, headers={"content-type": "text/html"}
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("spa.example"))
+        result = tool.execute(url="https://spa.example/short", max_length=100)
+
+    assert result.success is True
+    assert "rendered" not in result.content
+
+
+def test_web_fetch_render_never_skips_shell(monkeypatch):
+    """render=never：显式关闭渲染，壳页也返回静态结果。"""
+
+    def _fail(*args, **kwargs):
+        raise AssertionError("never 不应触发渲染")
+
+    monkeypatch.setattr(web_render, "render_page", _fail)
+    with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
+        mock.get("/n").mock(
+            return_value=Response(
+                200, text=_SPA_SHELL, headers={"content-type": "text/html"}
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("spa.example"))
+        result = tool.execute(url="https://spa.example/n", render="never")
+
+    assert result.success is True
+    assert "rendered" not in result.content
+
+
+def test_web_fetch_render_always_forces_rendering(monkeypatch):
+    """render=always：静态正文充足的页面也强制渲染。"""
+
+    def _fake_render(url, network_policy):
+        return {"url": url, "title": "渲染版", "content": "强制渲染正文", "rendered": True}
+
+    monkeypatch.setattr(web_render, "render_page", _fake_render)
+    with respx.mock(base_url="https://plain.example", assert_all_called=False) as mock:
+        mock.get("/p").mock(
+            return_value=Response(
+                200,
+                text="<html><body>" + ("静态正文" * 200) + "</body></html>",
+                headers={"content-type": "text/html"},
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("plain.example"))
+        result = tool.execute(url="https://plain.example/p", render="always")
+
+    assert result.success is True
+    assert result.content["rendered"] is True
+    assert result.content["content"] == "强制渲染正文"
+
+
+def test_web_fetch_render_failure_reports_guidance(monkeypatch):
+    """渲染失败独立语义：明确错误 + 手动路径指引，不吞成通用失败。"""
+
+    def _boom(url, network_policy):
+        raise web_render.RenderError("JS 渲染失败: 浏览器不可用（可经 coder 用 browser_launch + browser_navigate 手动渲染，或 web_fetch render=never 取静态内容）")
+
+    monkeypatch.setattr(web_render, "render_page", _boom)
+    with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
+        mock.get("/f").mock(
+            return_value=Response(
+                200, text=_SPA_SHELL, headers={"content-type": "text/html"}
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("spa.example"))
+        result = tool.execute(url="https://spa.example/f")
+
+    assert result.success is False
+    assert "render=never" in result.error
+    assert "browser_launch" in result.error
+
+
+def test_web_fetch_render_links_mode_notes_limitation(monkeypatch):
+    """渲染分支暂不支持 links/tables —— 带说明而非静默缺失。"""
+
+    def _fake_render(url, network_policy):
+        return {"url": url, "title": "SPA", "content": "渲染正文", "rendered": True}
+
+    monkeypatch.setattr(web_render, "render_page", _fake_render)
+    with respx.mock(base_url="https://spa.example", assert_all_called=False) as mock:
+        mock.get("/l").mock(
+            return_value=Response(
+                200, text=_SPA_SHELL, headers={"content-type": "text/html"}
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("spa.example"))
+        result = tool.execute(url="https://spa.example/l", mode="links")
+
+    assert result.success is True
+    assert "note" in result.content
+    assert "links" not in result.content
+
+
+def test_web_fetch_rejects_unknown_render_mode():
+    tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+    result = tool.execute(url="https://mirror.example.internal/p", render="bogus")
+    assert result.success is False
+    assert "render" in result.error
+
+
+def test_web_fetch_schema_advertises_render():
+    tool = WebFetchTool()
+    schema = tool.schema
+    render_prop = schema.parameters["properties"]["render"]
+    assert render_prop["enum"] == ["auto", "never", "always"]
