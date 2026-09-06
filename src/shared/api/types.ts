@@ -163,6 +163,8 @@ export interface PermissionRequest {
   message: string;
   /** 创建时间戳（epoch 秒，浮点） */
   created_at: number;
+  /** U15: 写类工具的将写入内容 unified diff（无法生成时缺省，回退 args_summary） */
+  diff_preview?: string;
 }
 
 /** 问题选项 — QuestionDialog 渲染为可选卡片 */

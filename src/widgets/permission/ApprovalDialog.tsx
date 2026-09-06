@@ -22,6 +22,7 @@ import { usePermissionState } from '../../entities/permission/permissionState';
 import type { PermissionRequest } from '../../shared/api';
 import { invoke } from '../../shared/api/desktopInvoke';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { ShikiCodeBlock } from '../chat/ShikiCodeBlock';
 
 /** permissions_answer 应答体（HTTP 恒 200，ok 字段区分成败） */
 interface AnswerResponse {
@@ -137,6 +138,20 @@ export function ApprovalDialog() {
               {currentRequest.args_summary}
             </pre>
           </div>
+
+          {/* U15: 写类工具展示将写入内容的 diff — 用户不再"盲批"。
+              生成失败时后端不下发该字段，回退纯 args_summary 展示。 */}
+          {currentRequest.diff_preview ? (
+            <div>
+              <span className="block text-xs text-text-secondary mb-1">{t('permission.diff')}</span>
+              <div
+                data-testid="permission-diff"
+                className="max-h-60 overflow-auto rounded border border-border"
+              >
+                <ShikiCodeBlock language="diff">{currentRequest.diff_preview}</ShikiCodeBlock>
+              </div>
+            </div>
+          ) : null}
 
           <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
             <input

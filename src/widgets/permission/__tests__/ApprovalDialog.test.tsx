@@ -207,4 +207,26 @@ describe('ApprovalDialog', () => {
       expect((screen.getByTestId('permission-remember') as HTMLInputElement).checked).toBe(false);
     });
   });
+
+  // U15: 写类工具 diff 预览 — 有 diff_preview 时展示, 用户不再"盲批"
+  it('renders diff preview when the request carries one', () => {
+    seedRequest({
+      tool_name: 'write_file',
+      diff_preview: '--- a/main.py\n+++ b/main.py\n@@ -1,1 +1,1 @@\n-old\n+new',
+    });
+    renderDialog();
+
+    const diff = screen.getByTestId('permission-diff');
+    expect(diff).toBeInTheDocument();
+    expect(diff).toHaveTextContent('-old');
+    expect(diff).toHaveTextContent('+new');
+  });
+
+  it('omits the diff section when no preview is present', () => {
+    seedRequest({ tool_name: 'terminal' });
+    renderDialog();
+
+    expect(screen.queryByTestId('permission-diff')).toBeNull();
+    expect(screen.getByTestId('permission-args')).toBeInTheDocument();
+  });
 });
