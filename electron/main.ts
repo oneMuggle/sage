@@ -682,10 +682,6 @@ function isTrustedRenderer(sender: Electron.WebContents): boolean {
   return senderWindow === mainWindow && isTrustedRendererUrl(sender.getURL());
 }
 
-function isDemoProcess(): boolean {
-  return process.env.SAGE_DEMO_MODE === '1';
-}
-
 function createMainWindow(): void {
   // Platform-specific titlebar configuration:
   // - macOS: hide traffic light area, custom titlebar from y=28
