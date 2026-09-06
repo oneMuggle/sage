@@ -154,7 +154,56 @@ export const sessionApi = {
       }
     });
   },
+
+  // ===== U8 (批次 B): 会话级模型覆盖 (G5 收尾) =====
+
+  /** 读取会话的模型覆盖;未设置返回 null(跟随全局)。 */
+  async getModelOverride(sessionId: string): Promise<string | null> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        const resp = await invoke<SessionModelWire>('session_get_model', { sessionId });
+        return resp.model ?? null;
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /** 设置会话模型覆盖;传空串清除,回到全局选择。返回生效值(清除后为 null)。 */
+  async setModelOverride(sessionId: string, model: string): Promise<string | null> {
+    if (!isValidSessionId(sessionId)) {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的会话ID格式',
+        details: { sessionId },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        const resp = await invoke<SessionModelWire>('session_set_model', {
+          sessionId,
+          model,
+        });
+        return resp.model ?? null;
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
 };
+
+/** U8: 后端 GET/PUT /sessions/{id}/model 的 wire 形状 */
+interface SessionModelWire {
+  session_id: string;
+  model: string | null;
+}
 
 /**
  * U18: 把导出 HTML 文本作为文件下载（Blob + 临时 <a download>）。

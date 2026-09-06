@@ -169,6 +169,17 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     },
   },
 
+  // U8 (批次 B): 会话级模型覆盖 (G5 收尾,只改模型不改端点)
+  session_get_model: {
+    method: 'GET',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/model`,
+  },
+  session_set_model: {
+    method: 'PUT',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/model`,
+    body: (a) => ({ model: a.model }),
+  },
+
   // messages
   get_messages: {
     method: 'GET',
