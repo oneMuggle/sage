@@ -81,6 +81,9 @@ export interface InputCardProps {
   onDragOver?: (e: React.DragEvent) => void;
   isDragOver?: boolean;
 
+  // U13: 剪贴板粘贴图片
+  onPaste?: (e: React.ClipboardEvent) => void;
+
   // Slash menu
   showSlashMenu?: boolean;
   slashCommands?: SlashCommand[];
@@ -123,6 +126,7 @@ export function InputCard({
   onFileSelect,
   onDrop,
   onDragOver,
+  onPaste,
   isDragOver = false,
   showSlashMenu = false,
   slashCommands = [],
@@ -295,6 +299,7 @@ export function InputCard({
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={onPaste}
               placeholder={placeholder}
               disabled={disabled}
               autoFocus={autoFocus}
