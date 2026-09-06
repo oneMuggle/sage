@@ -20,7 +20,7 @@ REPL 工具 - Python 代码片段隔离执行（移植 claw-code execute_repl）
 - stdout/stderr 各截断到 100 KiB 上限。
 """
 # Python 3.8 compatibility requires Optional annotations in this module.
-# ruff: noqa: UP045
+# ruff: noqa: UP007
 
 import contextlib
 import logging
@@ -248,6 +248,9 @@ def _read_capped_output(file_path: str) -> Tuple[str, bool]:
 
 class ReplTool(BaseTool):
     """REPL 工具 - 在隔离子进程中执行 Python 片段"""
+
+    # 子进程执行可达超时上限，与 BashTool 同理需卸载到 executor 线程。
+    is_blocking = True
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(

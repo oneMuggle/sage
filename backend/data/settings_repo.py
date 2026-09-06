@@ -32,6 +32,9 @@ class SettingsRepository:
             # 内网 Web 访问: 网络模式 + host 白名单 (JSON)
             # 见 backend/tools/network_config.py
             "network_policy",
+            # bash 工具运行参数: 超时/输出截断/后台会话上限 (JSON)
+            # 见 backend/tools/bash_config.py
+            "bash_config",
         }
     )
 

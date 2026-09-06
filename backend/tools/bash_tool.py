@@ -37,9 +37,9 @@ from typing import Any, Dict, Optional, Tuple
 
 from backend.domain.risk import RiskClass
 
-from .base import BaseTool, ToolResult, ToolSchema
+from .base import BaseTool, ToolPolicy, ToolResult, ToolSchema
+from .bash_config import BashConfig, load_bash_config
 from .bash_session import (
-    MAX_BACKGROUND_SESSIONS,
     STATUS_RUNNING,
     SessionLimitExceeded,
     get_registry,
@@ -78,6 +78,24 @@ class BashTool(BaseTool):
 
     risk = RiskClass.EXEC
 
+    # 同步执行可长至 BASH_MAX_TIMEOUT_SECONDS（600s），必须在 executor
+    # 线程中运行，否则阻塞 asyncio 事件循环（见 BaseTool.is_blocking）。
+    is_blocking = True
+
+    def __init__(
+        self,
+        policy: Optional[ToolPolicy] = None,
+        config: Optional[BashConfig] = None,
+    ) -> None:
+        # config=None → 读 preferences KV（无配置时 = 模块常量，行为同硬编码时代）。
+        # 先于 super()：schema 惰性构建时已需读 cfg 的超时值。
+        self._cfg = config if config is not None else load_bash_config()
+        super().__init__(policy=policy)
+
+    def _clamp_timeout(self, value: float) -> float:
+        """把超时夹到 ``[BASH_MIN, cfg.timeout_max]`` 区间（上限可配置）。"""
+        return min(max(float(value), BASH_MIN_TIMEOUT_SECONDS), self._cfg.timeout_max)
+
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="bash",
@@ -85,8 +103,8 @@ class BashTool(BaseTool):
                 "在 shell 中执行命令并返回 stdout/stderr/exit_code。"
                 "支持完整 shell 语法：管道 |、串联 && ||、重定向 > >>、命令替换 $()。"
                 "需要切换目录时写 `cd <dir> && <command>`（cwd 参数不跨调用保留）。"
-                f"默认超时 {BASH_DEFAULT_TIMEOUT_SECONDS:.0f} 秒"
-                f"（上限 {BASH_MAX_TIMEOUT_SECONDS:.0f}）。"
+                f"默认超时 {self._cfg.timeout_default:.0f} 秒"
+                f"（上限 {self._cfg.timeout_max:.0f}）。"
                 "长时间运行的命令（开发服务器、watch 模式）设 run_in_background=true，"
                 "用 bash_output 读取输出、kill_shell 结束。"
             ),
@@ -101,8 +119,8 @@ class BashTool(BaseTool):
                     "timeout": {
                         "type": "number",
                         "description": (
-                            f"超时秒数（默认 {BASH_DEFAULT_TIMEOUT_SECONDS:.0f}，"
-                            f"上限 {BASH_MAX_TIMEOUT_SECONDS:.0f}；后台执行时忽略）"
+                            f"超时秒数（默认 {self._cfg.timeout_default:.0f}，"
+                            f"上限 {self._cfg.timeout_max:.0f}；后台执行时忽略）"
                         ),
                     },
                     "run_in_background": {
@@ -118,11 +136,14 @@ class BashTool(BaseTool):
         self,
         command: str = "",
         cwd: Optional[str] = None,
-        timeout: float = BASH_DEFAULT_TIMEOUT_SECONDS,
+        timeout: Optional[float] = None,
         run_in_background: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
         """执行命令。
+
+        ``timeout=None``（省略）时用配置的默认超时（``cfg.timeout_default``）；
+        显式传入的值夹到 ``[BASH_MIN, cfg.timeout_max]``。
 
         Returns:
             同步：``content`` 含 ``exit_code`` / ``stdout`` / ``stderr`` /
@@ -141,6 +162,8 @@ class BashTool(BaseTool):
             )
         if not isinstance(command, str) or not command.strip():
             return ToolResult(success=False, error="command 不能为空")
+        if timeout is None:
+            timeout = self._cfg.timeout_default
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):  # noqa: UP038 — py3.8 不支持 X | Y isinstance
             return ToolResult(success=False, error="timeout 必须是数字")
 
@@ -151,7 +174,7 @@ class BashTool(BaseTool):
         shell = resolve_shell()
         if run_in_background:
             return self._run_background(command, resolved_cwd, shell)
-        return self._run_foreground(command, resolved_cwd, shell, clamp_bash_timeout(timeout))
+        return self._run_foreground(command, resolved_cwd, shell, self._clamp_timeout(timeout))
 
     def _resolve_cwd(self, cwd: Optional[str]) -> Tuple[Optional[str], Optional[ToolResult]]:
         """确定工作目录；越界返回拒绝结果。
@@ -239,8 +262,8 @@ class BashTool(BaseTool):
                     error=f"命令执行超时（{timeout:g} 秒），子进程组已被终止",
                 )
 
-            stdout, out_truncated, _ = read_capped_output(stdout_path, cap=BASH_MAX_OUTPUT_BYTES)
-            stderr, err_truncated, _ = read_capped_output(stderr_path, cap=BASH_MAX_OUTPUT_BYTES)
+            stdout, out_truncated, _ = read_capped_output(stdout_path, cap=self._cfg.output_cap)
+            stderr, err_truncated, _ = read_capped_output(stderr_path, cap=self._cfg.output_cap)
             return ToolResult(
                 success=True,
                 content=self._decorate(
@@ -268,11 +291,12 @@ class BashTool(BaseTool):
         watch 模式）。生命周期由 ``bash_output`` / ``kill_shell`` 管理。
         """
         registry = get_registry()
-        if registry.count() >= MAX_BACKGROUND_SESSIONS:
+        # 双保险第一道：工具按配置上限预检查（registry 自身还有一道，兜并发竞态）
+        if registry.count() >= self._cfg.max_sessions:
             return ToolResult(
                 success=False,
                 error=(
-                    f"后台 shell 数已达上限 {MAX_BACKGROUND_SESSIONS}，"
+                    f"后台 shell 数已达上限 {self._cfg.max_sessions}，"
                     "请先用 kill_shell 结束不需要的会话"
                 ),
             )
@@ -330,6 +354,14 @@ class BashOutputTool(BaseTool):
 
     risk = RiskClass.READ
 
+    def __init__(
+        self,
+        policy: Optional[ToolPolicy] = None,
+        config: Optional[BashConfig] = None,
+    ) -> None:
+        self._cfg = config if config is not None else load_bash_config()
+        super().__init__(policy=policy)
+
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="bash_output",
@@ -357,7 +389,7 @@ class BashOutputTool(BaseTool):
         if not isinstance(shell_id, str) or not shell_id.strip():
             return ToolResult(success=False, error="shell_id 不能为空")
 
-        payload = get_registry().read_increment(shell_id, cap=BASH_MAX_OUTPUT_BYTES)
+        payload = get_registry().read_increment(shell_id, cap=self._cfg.output_cap)
         if payload is None:
             return ToolResult(
                 success=False,
@@ -370,6 +402,14 @@ class KillShellTool(BaseTool):
     """终止后台 shell 并清理其资源。"""
 
     risk = RiskClass.WRITE_LOCAL
+
+    def __init__(
+        self,
+        policy: Optional[ToolPolicy] = None,
+        config: Optional[BashConfig] = None,
+    ) -> None:
+        self._cfg = config if config is not None else load_bash_config()
+        super().__init__(policy=policy)
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -397,7 +437,7 @@ class KillShellTool(BaseTool):
         if not isinstance(shell_id, str) or not shell_id.strip():
             return ToolResult(success=False, error="shell_id 不能为空")
 
-        payload = get_registry().terminate(shell_id, cap=BASH_MAX_OUTPUT_BYTES)
+        payload = get_registry().terminate(shell_id, cap=self._cfg.output_cap)
         if payload is None:
             return ToolResult(
                 success=False,

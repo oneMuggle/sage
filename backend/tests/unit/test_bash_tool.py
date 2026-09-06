@@ -417,3 +417,12 @@ def test_background_tools_declare_expected_risk():
     # Arrange / Act / Assert
     assert BashOutputTool().risk is RiskClass.READ
     assert KillShellTool().risk is RiskClass.WRITE_LOCAL
+
+
+def test_blocking_declaration():
+    """is_blocking 声明：bash 长命令需卸载到 executor 线程（run_loop 分发点
+    依据，防事件循环阻塞）；bash_output / kill_shell 是快操作，保持内联。"""
+    # Arrange / Act / Assert
+    assert BashTool.is_blocking is True
+    assert BashOutputTool.is_blocking is False
+    assert KillShellTool.is_blocking is False

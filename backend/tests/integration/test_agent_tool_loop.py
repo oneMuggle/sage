@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -19,9 +21,11 @@ import pytest
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse, LLMToolCall
+from backend.domain.risk import RiskClass
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import LaneStatus
 from backend.tools.agent_tool import AgentTool
+from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.bash_validation import validate_bash
 from backend.tools.permissions import (
     PermissionEnforcer,
@@ -320,3 +324,97 @@ class TestAgentToolPermissions:
 
         # 子代理从未真正启动
         sub_llm.chat.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# 阻塞型工具卸载（2026-09-04 T1：bash/repl 不得阻塞事件循环）
+# ---------------------------------------------------------------------------
+
+
+class _SlowBlockingTool(BaseTool):
+    """is_blocking=True 的假工具：execute() 内同步 sleep，模拟长命令。"""
+
+    risk = RiskClass.READ  # 无副作用 → 免走审批矩阵，聚焦分发机制本身
+    is_blocking = True  # 被测行为：run_loop 须据此卸载到 executor 线程
+
+    def __init__(self, seconds, started, finished):
+        super().__init__()
+        self._seconds = seconds
+        self._started = started
+        self._finished = finished
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="slow_blocking",
+            description="测试用阻塞工具：同步 sleep 后返回。",
+            parameters={"type": "object", "properties": {}},
+        )
+
+    def execute(self, **kwargs) -> ToolResult:
+        self._started.set()
+        time.sleep(self._seconds)
+        self._finished.set()
+        return ToolResult(success=True, content={"slept": self._seconds})
+
+
+class TestBlockingToolOffload:
+    @pytest.mark.asyncio()
+    async def test_blocking_tool_keeps_event_loop_responsive(self):
+        """is_blocking=True 的工具在 executor 线程执行 —— 工具 sleep 期间，
+        同一事件循环上的心跳协程持续推进（未卸载时 ticks 只有 1）。"""
+        # Arrange
+        agent = SageAgent()
+        agent.permission_enforcer = PermissionEnforcer(
+            mode=PermissionMode.WORKSPACE_WRITE,
+            rules=[PermissionRule(tool_pattern="slow_blocking", decision="allow")],
+            bash_validator=validate_bash,
+        )
+        llm = MagicMock()
+        llm.chat = AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="",
+                    finish_reason="tool_calls",
+                    tool_calls=[
+                        LLMToolCall(
+                            id="call_block_1",
+                            name="slow_blocking",
+                            arguments=json.dumps({}),
+                        )
+                    ],
+                ),
+                LLMResponse(content="done after blocking call", finish_reason="stop"),
+            ]
+        )
+        agent.llm_client = llm
+
+        started = threading.Event()
+        finished = threading.Event()
+        agent.tool_registry.register(_SlowBlockingTool(0.5, started, finished))
+
+        messages = [
+            {"role": "system", "content": "You are Sage."},
+            {"role": "user", "content": "run the slow tool"},
+        ]
+
+        ticks = []
+
+        async def _heartbeat():
+            while not finished.is_set():
+                ticks.append(True)
+                await asyncio.sleep(0.05)
+
+        heartbeat = asyncio.create_task(_heartbeat())
+
+        # Act
+        events = [event async for event in agent.run_loop(messages, max_iterations=5)]
+        await heartbeat
+
+        # Assert — 工具确实执行过，且 sleep 期间事件循环保持响应。
+        assert started.is_set()
+        assert finished.is_set()
+        assert any(e.state == AgentState.DONE for e in events)
+        assert len(ticks) >= 3, (
+            f"事件循环在阻塞工具执行期间被卡死（ticks={len(ticks)}）—— "
+            "is_blocking 卸载失效"
+        )

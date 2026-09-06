@@ -897,6 +897,19 @@ class SageAgent:
                                         # Same minimal special-case as "agent";
                                         # general tool dispatch stays inline.
                                         result = await tool.execute_async(**args)
+                                    elif getattr(tool, "is_blocking", False):
+                                        # 阻塞型工具（bash / repl，见
+                                        # BaseTool.is_blocking）：execute() 可长至
+                                        # 超时上限（bash 默认 120s、上限 600s），
+                                        # 必须卸载到 executor 线程，否则一条慢命令
+                                        # 卡死整个事件循环（健康检查、看板轮询、
+                                        # 其他并发会话）。run_in_executor 复制当前
+                                        # contextvars（Python 3.7.1+），工具内对
+                                        # ToolExecutionContext ContextVar 的读取
+                                        # 不受影响。
+                                        result = await asyncio.get_running_loop().run_in_executor(
+                                            None, functools.partial(tool.execute, **args)
+                                        )
                                     else:
                                         result = tool.execute(**args)
                                     if hasattr(result, "success") and hasattr(result, "content"):
@@ -1087,6 +1100,10 @@ class SageAgent:
 
         M1: 同步入口同样先过权限执行器。同步上下文没有流事件通道，
         needs_approval 按 default-deny 处理（不静默放行）。
+
+        注意：本方法是同步实现，阻塞型工具（is_blocking=True，如 bash）
+        会阻塞调用线程。当前无生产调用方（仅测试引用）；若未来接入
+        async 路由，需与 run_loop 分发点一致走 run_in_executor 卸载。
 
         Args:
             tool_name: 工具名称
