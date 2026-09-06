@@ -11,10 +11,11 @@ describe('PanelHeader', () => {
       onClose: vi.fn(),
     };
 
-    it('renders Progress and Artifacts tabs', () => {
+    it('renders 进度, 变更, 产物 tabs', () => {
       render(<PanelHeader {...listProps} />);
-      expect(screen.getByText('Progress')).toBeInTheDocument();
-      expect(screen.getByText('Artifacts')).toBeInTheDocument();
+      expect(screen.getByText('进度')).toBeInTheDocument();
+      expect(screen.getByText('变更')).toBeInTheDocument();
+      expect(screen.getByText('产物')).toBeInTheDocument();
     });
 
     it('renders close button with aria-label', () => {
@@ -38,8 +39,9 @@ describe('PanelHeader', () => {
 
     it('does not render tab buttons', () => {
       render(<PanelHeader onClose={vi.fn()} />);
-      expect(screen.queryByText('Progress')).not.toBeInTheDocument();
-      expect(screen.queryByText('Artifacts')).not.toBeInTheDocument();
+      expect(screen.queryByText('进度')).not.toBeInTheDocument();
+      expect(screen.queryByText('变更')).not.toBeInTheDocument();
+      expect(screen.queryByText('产物')).not.toBeInTheDocument();
     });
 
     it('clicking close button invokes onClose', () => {
