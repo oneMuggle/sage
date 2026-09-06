@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { PlanCard } from '../components/PlanCard';
-import { PlanCardList } from '../components/PlanCardList';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
@@ -17,7 +15,6 @@ import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
-import { TaskTreeSection } from '../widgets/chat/progress/TaskTreeSection';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 function fill(template: string, vars: Record<string, string | number>): string {
@@ -50,7 +47,6 @@ export function Chat() {
     iteration, // P2: ReAct 迭代轮次
     streamingState, // P2: 当前流式状态
     taskBoard, // Multi-Agent Orchestration: 编排任务板
-    resumeOrchestration, // Wave 3: resume 恢复流入口（计划卡恢复按钮）
     clearTaskBoard, // Wave 3: 取消执行后清空任务板
     streamingToolCalls, // 右侧面板 Progress: 实时流式工具调用
   } = useChat();
@@ -419,24 +415,6 @@ export function Chat() {
         </div>
       )}
 
-      {/* Wave 3 三态 (win7 适配, 复用 main ProgressSection 分发):
-          无编排 → 历史编排记录; 未派发 → 计划卡(可编辑); 已派发 → 任务树 */}
-      {taskBoard == null ? (
-        <PlanCardList onResume={(runId) => void resumeOrchestration(runId)} />
-      ) : taskBoard.dispatchedAt ? (
-        <TaskTreeSection board={taskBoard} onCancel={() => void handleCancelRun(taskBoard.runId)} />
-      ) : (
-        <PlanCard
-          runId={taskBoard.runId}
-          plan={taskBoard.plan}
-          locked={false}
-          // C4+H1 (2026-08-15): 任意阶段取消都走 handleCancelRun ——
-          // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
-          // 自动派发）+ 清空 taskBoard。
-          onCancel={() => void handleCancelRun(taskBoard.runId)}
-        />
-      )}
-
       <ChatInput
         onSend={handleSendMessage}
         onInterrupt={interrupt}
@@ -458,6 +436,11 @@ export function Chat() {
         toolCalls={streamingToolCalls ?? []}
         isLoading={isLoading}
         sessionId={currentSessionId}
+        taskBoard={taskBoard ?? null}
+        // C4+H1 (2026-08-15): 任意阶段取消都走 handleCancelRun ——
+        // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
+        // 自动派发）+ 清空 taskBoard。
+        onCancelExecution={(runId) => void handleCancelRun(runId)}
       />
     </div>
   );

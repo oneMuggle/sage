@@ -1,6 +1,5 @@
 // src/widgets/chat/progress/ProgressSection.tsx
 import { PlanCard } from '../../../components/PlanCard';
-import { PlanCardList } from '../../../components/PlanCardList';
 import { useChatStreamStore } from '../../../features/send-message/chatStreamStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { ToolCall } from '../../../shared/lib/store';
@@ -16,10 +15,10 @@ interface ProgressSectionProps {
   toolCalls: ToolCall[];
   isLoading: boolean;
   taskBoard?: TaskBoard | null; // 新增：编排任务板（null/缺省 = 无编排）
-  // Wave 3 (2026-08-14): 历史恢复 / 计划卡接线回调。
+  // Wave 3 (2026-08-14): 计划卡接线回调。
   // M4 (2026-08-15): onPlanStart 已删 —— PlanCard.handleStart 内部
   // 自调 updatePlan 落库，派发由后端驱动，前端无需计划开始回调。
-  onResumeRun?: (runId: string) => void;
+  // Wave 4 (2026-09-06): onResumeRun 已删 —— 历史编排记录功能移除。
   onCancelExecution?: (runId: string) => void;
 }
 
@@ -36,7 +35,6 @@ export function ProgressSection({
   toolCalls,
   isLoading,
   taskBoard,
-  onResumeRun,
   onCancelExecution,
 }: ProgressSectionProps) {
   // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）
@@ -98,10 +96,9 @@ export function ProgressSection({
       {/* P1 todo 接线: agent 自维护任务清单 + PR-C 编排计划镜像 */}
       <TodoListSection todos={todos} taskBoard={taskBoard} />
 
-      {/* Wave 3 C3 (2026-08-15): 三态 —— 无编排→历史记录;未派发→计划卡(可编辑);已派发→任务树 */}
-      {taskBoard == null ? (
-        <PlanCardList onResume={onResumeRun ?? (() => {})} />
-      ) : taskBoard.dispatchedAt ? (
+      {/* Wave 4 (2026-09-06): 两态 —— 历史编排记录已移除。
+         无编排 → 空态; 未派发 → 计划卡(可编辑); 已派发 → 任务树 */}
+      {taskBoard == null ? null : taskBoard.dispatchedAt ? (
         <TaskTreeSection board={taskBoard} onCancel={() => onCancelExecution?.(taskBoard.runId)} />
       ) : (
         <PlanCard
