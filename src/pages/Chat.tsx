@@ -164,6 +164,7 @@ export function Chat() {
         planCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- taskBoard 整体不加入依赖，仅跟踪 runId + dispatchedAt 变化
   }, [taskBoard?.runId, taskBoard?.dispatchedAt]);
 
   const scrollToLatest = () => {
