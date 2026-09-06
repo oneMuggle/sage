@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
 import { useBtwState } from '../../entities/chat/btwState';
 import { usePermissionState } from '../../entities/permission/permissionState';
@@ -14,7 +13,6 @@ import {
   type TaskReviewEvent,
   type TaskStatusEvent,
 } from '../../shared/api';
-import { orchRunClient } from '../../shared/api/orchRunClient';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import {
   mapAgentErrorToText,
@@ -566,24 +564,6 @@ export function useChat() {
     [currentSessionId, isLoading, chatEndpoint, settings, addMessage, updateMessage],
   );
 
-  /** Wave 3 (2026-08-14): resume 恢复流 —— resumeRun → sendMessage(original_request, plan_override)。 */
-  const resumeOrchestration = useCallback(
-    async (runId: string) => {
-      const resp = await orchRunClient.resumeRun(runId);
-      // §13.7 (2026-08-15): 旧库 NULL original_request 兜底 —— 占位文案继续 + 提示，
-      // 避免空串被当成正常消息发给 LLM（ChatRequest.message 无非空校验）。
-      const content = resp.original_request ?? '（旧记录无原始请求，已从计划恢复）';
-      if (!resp.original_request) {
-        toast.info('该记录缺少原始请求，已从计划恢复执行');
-      }
-      await sendMessage(content, undefined, undefined, 'force_multi', {
-        planOverride: resp.plan,
-        runId: resp.new_run_id,
-      });
-    },
-    [sendMessage],
-  );
-
   /** Wave 3 (2026-08-14): 取消执行后清空任务板。 */
   const clearTaskBoard = useCallback(() => useChatStreamStore.getState().setTaskBoard(null), []);
 
@@ -716,8 +696,6 @@ export function useChat() {
     streamingToolCalls,
     /** Multi-Agent Orchestration: 编排任务板 (供 TaskTreeSection 渲染任务树) */
     taskBoard,
-    /** Wave 3: resume 恢复流入口 (计划卡恢复按钮调用) */
-    resumeOrchestration,
     /** Wave 3: 取消执行后清空任务板 */
     clearTaskBoard,
     /** Phase 6: /btw 补充消息方法 */

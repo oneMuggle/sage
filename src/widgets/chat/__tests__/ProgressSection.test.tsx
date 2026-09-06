@@ -2,12 +2,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
-// C3 (2026-08-15): taskBoard==null 三态渲染 PlanCardList（历史编排记录），
-// 挂载即调 orchRunClient.listRuns()；mock 掉避免真实 IPC 抛错。
-vi.mock('../../../shared/api/orchRunClient', () => ({
-  orchRunClient: { listRuns: vi.fn().mockResolvedValue([]) },
-}));
-
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import { ProgressSection } from '../progress/ProgressSection';
 
@@ -106,19 +100,8 @@ describe('ProgressSection', () => {
     expect(screen.getByTestId('task-progress-summary')).toHaveTextContent('(1 已取消)');
   });
 
-  it('taskBoard == null → 渲染 PlanCardList（历史记录）', () => {
-    render(
-      <ProgressSection
-        iteration={0}
-        streamingState={null}
-        toolCalls={[]}
-        isLoading={false}
-        taskBoard={null}
-        onResumeRun={vi.fn()}
-      />,
-    );
-    expect(screen.getByTestId('plan-card-list')).toBeInTheDocument();
-  });
+  // Wave 4 (2026-09-06): 历史编排记录已移除，taskBoard == null 不再渲染 PlanCardList。
+  // 保留测试: taskBoard 未派发 → 渲染 PlanCard（可编辑）
 
   it('taskBoard 未派发 → 渲染 PlanCard（可编辑）', () => {
     const board: TaskBoard = {
@@ -134,7 +117,6 @@ describe('ProgressSection', () => {
         toolCalls={[]}
         isLoading={false}
         taskBoard={board}
-        onResumeRun={vi.fn()}
       />,
     );
     expect(screen.getByTestId('plan-card')).toBeInTheDocument();
@@ -154,7 +136,6 @@ describe('ProgressSection', () => {
         toolCalls={[]}
         isLoading={false}
         taskBoard={board}
-        onResumeRun={vi.fn()}
       />,
     );
     expect(screen.getByTestId('task-tree')).toBeInTheDocument();
@@ -176,7 +157,6 @@ describe('ProgressSection', () => {
         toolCalls={[]}
         isLoading={false}
         taskBoard={board}
-        onResumeRun={vi.fn()}
         onCancelExecution={onCancelExecution}
       />,
     );
@@ -199,7 +179,6 @@ describe('ProgressSection', () => {
         toolCalls={[]}
         isLoading={false}
         taskBoard={board}
-        onResumeRun={vi.fn()}
         onCancelExecution={onCancelExecution}
       />,
     );

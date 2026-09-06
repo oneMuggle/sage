@@ -108,7 +108,6 @@ function baseChat(overrides: Record<string, unknown> = {}) {
     streamingState: null,
     streamingToolCalls: [],
     taskBoard: null,
-    resumeOrchestration: vi.fn(),
     clearTaskBoard: clearTaskBoardMock,
     ...overrides,
   };
