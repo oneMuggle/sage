@@ -23,4 +23,8 @@ export const orchRunClient = {
   updatePlan(runId: string, plan: TaskPlanItem[]): Promise<{ ok: boolean }> {
     return invoke<{ ok: boolean }>('orchestration_update_plan', { run_id: runId, plan });
   },
+  // Fix #3 (2026-09-06): 用户确认 → 唤醒 producer 启动 conductor 执行。
+  confirmRun(runId: string): Promise<{ ok: boolean }> {
+    return invoke<{ ok: boolean }>('orchestration_confirm_run', { run_id: runId });
+  },
 };

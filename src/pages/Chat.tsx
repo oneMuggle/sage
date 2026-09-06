@@ -13,6 +13,7 @@ import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList } from '../widgets/chat';
+import { PlanCard } from '../components/PlanCard';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
@@ -346,6 +347,18 @@ export function Chat() {
             streamingMessageId={streamingMessageId}
             onFork={handleFork}
           />
+        )}
+        {/* 编排计划确认卡 (Fix #2): 未派发时在主对话区域显示,方便用户查看和确认 */}
+        {taskBoard && !taskBoard.dispatchedAt && (
+          <div className="px-4 pb-2">
+            <PlanCard
+              runId={taskBoard.runId}
+              plan={taskBoard.plan}
+              locked={false}
+              needConfirm={true}
+              onCancel={() => void handleCancelRun(taskBoard.runId)}
+            />
+          </div>
         )}
         {/* Task 2: sticky-bottom "跳到最新" 按钮 — 用户离开底部 + 流式进行中显示,
             固定右下角,a11y ``aria-label="跳到最新"``。点击后 scrollTop=scrollHeight

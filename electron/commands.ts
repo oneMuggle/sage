@@ -43,7 +43,8 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // on CAS revision mismatch.
   orchestration_steer_task: {
     method: 'POST',
-    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/steer`,
+    path: (a) =>
+      `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/steer`,
   },
 
   // Phase 3: run cancellation control — POST /orch/runs/{run_id}/cancel
@@ -455,6 +456,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/plan`,
     body: (a) => ({ plan: a.plan }),
+  },
+  // Fix #3 (2026-09-06): 用户确认编排计划 → 唤醒 producer 开始执行。
+  orchestration_confirm_run: {
+    method: 'POST',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/confirm`,
   },
 
   // Office document features (Phase 1.3, plan §4.1.3 step 14).

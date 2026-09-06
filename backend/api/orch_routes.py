@@ -135,6 +135,15 @@ def cancel_run(run_id: str, body: Optional[CancelRunRequest] = None) -> CancelRu
     if run.status in ("cancelled", "completed", "failed"):
         raise HTTPException(status_code=409, detail=f"run already in terminal state: {run.status}")
     repo.update_status(run_id, "cancelled")
+    # Fix #3 (2026-09-06): 若 producer 正在等待用户确认,唤醒它以取消状态退出。
+    try:
+        from backend.api.legacy_routes import _RUN_CONFIRM_EVENTS
+
+        evt = _RUN_CONFIRM_EVENTS.get(run_id)
+        if evt is not None:
+            evt.set()
+    except Exception:  # noqa: BLE001
+        pass
     # 进程内注册表定位 dispatcher 与 primary agent 并置位。
     # late import 避免 orch_routes ↔ legacy_routes 的模块初始化环。
     try:
@@ -150,3 +159,51 @@ def cancel_run(run_id: str, body: Optional[CancelRunRequest] = None) -> CancelRu
             "run cancellation bridge failed for %s: %s", run_id, exc
         )
     return CancelRunResponse(ok=True, run_id=run_id, status="cancelled")
+
+
+# Fix #3 (2026-09-06): 用户确认端点 —— 前端 PlanCard "开始执行" 按钮调用。
+# 唤醒在 legacy_routes.producer 中等待的 asyncio.Event,触发 conductor 启动。
+
+
+class ConfirmRunResponse(BaseModel):
+    ok: bool
+    run_id: str
+
+
+@router.post("/runs/{run_id}/confirm", response_model=ConfirmRunResponse)
+def confirm_run(run_id: str) -> ConfirmRunResponse:
+    """用户确认编排计划 → 唤醒 producer 开始 conductor 执行。
+
+    前置条件: run 状态为 running 且尚未派发 (dispatched_at is None)。
+    若 run 不存在或已终态 → 404/409。
+    """
+    repo = OrchRunRepository()
+    run = repo.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    if run.status != "running":
+        raise HTTPException(
+            status_code=409, detail=f"run not in running state: {run.status}"
+        )
+    # 设置确认事件唤醒 producer。
+    try:
+        from backend.api.legacy_routes import _RUN_CONFIRM_EVENTS
+
+        evt = _RUN_CONFIRM_EVENTS.get(run_id)
+        if evt is not None:
+            evt.set()
+        else:
+            # producer 可能已跳过等待（超时或竞态）,不影响确认语义
+            import logging
+
+            logging.getLogger(__name__).debug(
+                "confirm_run: no pending confirm event for %s (producer may have passed)",
+                run_id,
+            )
+    except Exception as exc:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "confirm_run: failed to set confirm event for %s: %s", run_id, exc
+        )
+    return ConfirmRunResponse(ok=True, run_id=run_id)
