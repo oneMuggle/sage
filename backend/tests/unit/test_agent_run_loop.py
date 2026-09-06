@@ -310,8 +310,9 @@ async def test_run_loop_tool_raises_exception_is_caught():
 
 
 @pytest.mark.asyncio()
-async def test_run_loop_malformed_tool_arguments_fall_back_to_empty_dict():
-    """LLM 返回的 tool_call.arguments 是非 JSON 字符串时,降级为 {} 而不抛。"""
+async def test_run_loop_malformed_tool_arguments_return_error_to_llm():
+    """LLM 返回的 tool_call.arguments 是非 JSON 字符串时,不再静默降级 {} 执行
+    （L7）——改为 is_error 工具结果回传 LLM,工具不执行,循环正常收敛 DONE。"""
     tool_call = LLMToolCall(
         id="call_bad_json",
         name="noop",
@@ -337,13 +338,22 @@ async def test_run_loop_malformed_tool_arguments_fall_back_to_empty_dict():
     agent.tool_registry.get = MagicMock(return_value=mock_tool)
 
     events = []
-    async for evt in agent.run_loop([{"role": "user", "content": "x"}]):
+    messages = [{"role": "user", "content": "x"}]
+    async for evt in agent.run_loop(messages):
         events.append(evt)
 
     # 不应抛 JSONDecodeError,正常收敛到 DONE
     assert events[-1].state == AgentState.DONE
-    # 工具用空 dict 调用
-    mock_tool.execute.assert_called_once_with()
+    # L7: 工具不执行（原行为是静默用空 dict 调用）
+    mock_tool.execute.assert_not_called()
+    # 观察事件携带 is_error 结果,内容说明参数非法
+    observing = [e for e in events if e.state == AgentState.OBSERVING and e.tool_result]
+    assert observing
+    assert observing[0].tool_result.is_error
+    assert "不是合法 JSON" in observing[0].tool_result.content
+    # tool 消息回传进上下文,LLM 可修正重试
+    tool_messages = [m for m in messages if m.get("role") == "tool"]
+    assert len(tool_messages) == 1
 
 
 @pytest.mark.asyncio()

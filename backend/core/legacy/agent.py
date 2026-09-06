@@ -232,6 +232,9 @@ class SageAgent:
         self.message_repo = MessageRepository()
         self._interrupted = False
         self._current_session_id: Optional[str] = None
+        # L7: 每-run 工具调用数守卫的配置来源（register_all_tools 透传同一
+        # policy;此处自留一份供 run_loop 读 max_tool_calls_per_run）。
+        self.tool_policy = policy or ToolPolicy()
 
         # 加载 agent profile (阶段 1: Profile → 运行时)
         # 从 SQLite 读最新版本, 用户刚 PATCH 的 enabled/system_prompt 立即生效
@@ -556,6 +559,22 @@ class SageAgent:
         # 让 LLMError 透传给调用方，由 chat() 统一处理
         return await self.llm_client.chat(messages)
 
+    def _effective_max_tool_calls_per_run(self) -> int:
+        """L7: 每-run 工具调用数上限（env ``SAGE_MAX_TOOL_CALLS_PER_RUN`` 可覆盖）。
+
+        默认取 ``self.tool_policy.max_tool_calls_per_run``（ToolPolicy 默认 25）。
+        env 非法值静默回退，本方法永不抛错。
+        """
+        raw = os.environ.get("SAGE_MAX_TOOL_CALLS_PER_RUN", "").strip()
+        if raw:
+            try:
+                value = int(raw)
+                if value >= 1:
+                    return value
+            except ValueError:
+                logger.warning("env SAGE_MAX_TOOL_CALLS_PER_RUN=%r 非法,回退 policy 默认", raw)
+        return int(getattr(self.tool_policy, "max_tool_calls_per_run", 25) or 25)
+
     @staticmethod
     def _should_stream(llm_client: Optional[LLMClient]) -> bool:
         """是否尝试流式 LLM 调用（L2 真流式开关）。
@@ -601,6 +620,8 @@ class SageAgent:
 
         # 每次 run_loop 重置未应答计数(跨会话不累积)
         self._consecutive_unanswered = 0
+        # L7: 每-run 工具调用计数（跨迭代累计,超 ToolPolicy.max_tool_calls_per_run 终止）
+        tool_calls_used = 0
 
         # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 DEFAULT_MAX_ITERATIONS
         effective_max_iterations = (
@@ -748,14 +769,53 @@ class SageAgent:
                 m6_hooks = self._load_m6_hooks()
 
                 for tc in response.tool_calls:
+                    # L7 每-run 工具调用数守卫 (对标增强第二轮批次 B):
+                    # ToolPolicy.max_tool_calls_per_run 此前只在 hex 路径生效,
+                    # legacy run_loop 无刹车。超限时终止本次 run（与前端
+                    # mapAgentErrorToText 的 "tool_budget_exceeded" 文案对齐）。
+                    tool_calls_used += 1
+                    if tool_calls_used > self._effective_max_tool_calls_per_run():
+                        yield AgentEvent(
+                            state=AgentState.FAILED,
+                            iteration=i,
+                            error="tool_budget_exceeded",
+                            agent_id=self.agent_id,
+                        )
+                        return
+
+                    # L7: 参数解析失败回传 LLM——此前静默变 {}，LLM 无从得知
+                    # 参数错了会原样重犯。现在作为 is_error 工具结果回传，LLM
+                    # 可修正参数重试。不发 ACTING 事件（工具并未执行）。
                     try:
                         args = (
                             json.loads(tc.arguments)
                             if isinstance(tc.arguments, str)
                             else tc.arguments
                         )
-                    except json.JSONDecodeError:
-                        args = {}
+                    except json.JSONDecodeError as parse_err:
+                        parse_content = (
+                            f"[参数错误] 工具 {tc.name} 的 arguments 不是合法 JSON: {parse_err}。"
+                            "请修正参数后重新调用。"
+                        )
+                        yield AgentEvent(
+                            state=AgentState.OBSERVING,
+                            iteration=i,
+                            tool_call=ToolCallRequest(id=tc.id, name=tc.name, arguments={}),
+                            tool_result=ToolCallResult(
+                                tool_call_id=tc.id,
+                                content=parse_content,
+                                is_error=True,
+                            ),
+                            agent_id=self.agent_id,
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": parse_content,
+                            }
+                        )
+                        continue
 
                     # ===== M6 HOOKS BEGIN: pre_tool_use (deny/modify) =====
                     # 用户自定义钩子 (backend/hooks/)。Fail-open: 钩子故障
