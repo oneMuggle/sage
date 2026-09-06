@@ -31,9 +31,9 @@ interface RightPanelProps {
 type Tab = 'progress' | 'artifacts' | 'changes';
 
 const TAB_LABELS: Record<Tab, string> = {
-  progress: 'Progress',
-  artifacts: 'Artifacts',
-  changes: 'Changes',
+  progress: '进度',
+  artifacts: '产物',
+  changes: '变更',
 };
 
 interface PanelHeaderProps {
