@@ -14,13 +14,13 @@ class FileMeta(BaseModel):
     signature: Optional[str] = Field(None, description="Code signature (Authenticode/GPG)")
 
     @validator("url")
-    def validate_https(cls, v: str) -> str:
+    def validate_https(cls, v: str) -> str:  # noqa: N805
         if not v.startswith("https://"):
             raise ValueError("File URL must use HTTPS")
         return v
 
     @validator("sha512")
-    def validate_sha512(cls, v: str) -> str:
+    def validate_sha512(cls, v: str) -> str:  # noqa: N805
         if not re.match(r"^[a-f0-9]{128}$", v):
             raise ValueError("SHA-512 must be 128 hex characters")
         return v
@@ -37,13 +37,13 @@ class UpdateManifest(BaseModel):
     components: Dict[str, str] = Field(default_factory=dict, description="Component versions (future use)")
 
     @validator("version")
-    def validate_semver(cls, v: str) -> str:
+    def validate_semver(cls, v: str) -> str:  # noqa: N805
         if not re.match(r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$", v):
             raise ValueError("Version must be semantic version")
         return v
 
     @validator("channel")
-    def validate_channel(cls, v: str) -> str:
+    def validate_channel(cls, v: str) -> str:  # noqa: N805
         if v not in ("stable", "beta", "alpha"):
             raise ValueError("Channel must be stable, beta, or alpha")
         return v

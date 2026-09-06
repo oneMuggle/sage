@@ -511,24 +511,25 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
             headers: { 'X-Sage-Backend-Ownership': expectedBackend.ownershipToken },
           },
           (res) => {
-          let body = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk: string) => {
-            body += chunk;
-          });
-          res.on('end', () => {
-            if (res.statusCode !== 200) {
-              resolve(null);
-              return;
-            }
-            try {
-              resolve(JSON.parse(body) as unknown);
-            } catch {
-              resolve(null);
-            }
-          });
-          res.resume();
-        });
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', (chunk: string) => {
+              body += chunk;
+            });
+            res.on('end', () => {
+              if (res.statusCode !== 200) {
+                resolve(null);
+                return;
+              }
+              try {
+                resolve(JSON.parse(body) as unknown);
+              } catch {
+                resolve(null);
+              }
+            });
+            res.resume();
+          },
+        );
         req.on('error', () => resolve(null));
         req.setTimeout(HTTP_REQUEST_TIMEOUT_MS, () => {
           req.destroy();

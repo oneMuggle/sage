@@ -18,7 +18,7 @@ def sample_manifest():
     return UpdateManifest(
         version="1.2.3",
         channel="stable",
-        release_date=datetime(2026, 9, 5, 12, 0, 0, tzinfo=timezone.utc),
+        release_date=datetime(2026, 9, 5, 12, 0, 0, tzinfo=timezone.utc),  # noqa: UP017
         release_notes="## What's New\n- Feature A\n- Bug fix B",
         min_upgradable_version="1.0.0",
         files={
