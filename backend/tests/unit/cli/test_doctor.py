@@ -407,8 +407,8 @@ class TestMain:
         data = json.loads(out)
         assert "checks" in data
         assert "summary" in data
-        # 2026-09-04: 14→15 (加 runtime_env)
-        assert len(data["checks"]) == 15
+        # 2026-09-04: 14→15 (加 runtime_env); L15(2026-09-06): 15→16 (加 secret_storage)
+        assert len(data["checks"]) == 16
 
     def test_main_runs_all_fifteen_checks(self, capsys):
         main([])
@@ -430,6 +430,8 @@ class TestMain:
             "skills",
             # 2026-09-04: 本地开发环境助手 — Python/Node.js 探测
             "runtime_env",
+            # L15(2026-09-06) — API Key 静态加密状态
+            "secret_storage",
         ]
         for n in expected_names:
             assert n in out, f"missing check: {n}"

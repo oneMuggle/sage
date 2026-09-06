@@ -1,6 +1,6 @@
 // src/widgets/chat/progress/ProgressSection.tsx
-import { PlanCard } from '../../../components/PlanCard';
-import { useChatStreamStore } from '../../../features/send-message/chatStreamStore';
+// Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域,此处仅保留状态摘要 + 任务树。
+import { useChatStreamStore, selectSessionSlots } from '../../../features/send-message/chatStreamStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { ToolCall } from '../../../shared/lib/store';
 
@@ -15,6 +15,8 @@ interface ProgressSectionProps {
   toolCalls: ToolCall[];
   isLoading: boolean;
   taskBoard?: TaskBoard | null; // 新增：编排任务板（null/缺省 = 无编排）
+  // S2 (2026-09-06): todos 改从该会话的键控槽位读取（并行会话各自的清单）
+  sessionId?: string | null;
   // Wave 3 (2026-08-14): 计划卡接线回调。
   // M4 (2026-08-15): onPlanStart 已删 —— PlanCard.handleStart 内部
   // 自调 updatePlan 落库，派发由后端驱动，前端无需计划开始回调。
@@ -35,10 +37,12 @@ export function ProgressSection({
   toolCalls,
   isLoading,
   taskBoard,
+  sessionId,
   onCancelExecution,
 }: ProgressSectionProps) {
-  // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）
-  const todos = useChatStreamStore((s) => s.todos);
+  // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）。
+  // S2: 按会话键控 —— 显示的是当前打开会话的清单。
+  const todos = useChatStreamStore((s) => selectSessionSlots(s, sessionId).todos);
   const stateLabel = streamingState ? (STATE_LABELS[streamingState] ?? streamingState) : null;
   // 进度可视化 P0-2 (2026-08-12): 编排进行中有 taskBoard 时,用 5 元组
   // 摘要替代"等待输入"占位文,避免误导用户以为主进程空闲。
@@ -96,19 +100,10 @@ export function ProgressSection({
       {/* P1 todo 接线: agent 自维护任务清单 + PR-C 编排计划镜像 */}
       <TodoListSection todos={todos} taskBoard={taskBoard} />
 
-      {/* Wave 4 (2026-09-06): 两态 —— 历史编排记录已移除。
-         无编排 → 空态; 未派发 → 计划卡(可编辑); 已派发 → 任务树 */}
-      {taskBoard == null ? null : taskBoard.dispatchedAt ? (
+      {/* Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域。
+         侧边栏仅展示已派发的任务树。 */}
+      {taskBoard?.dispatchedAt && (
         <TaskTreeSection board={taskBoard} onCancel={() => onCancelExecution?.(taskBoard.runId)} />
-      ) : (
-        <PlanCard
-          runId={taskBoard.runId}
-          plan={taskBoard.plan}
-          locked={false}
-          // C4+H1 (2026-08-15): 任意阶段取消都回落 onCancelExecution →
-          // Chat.handleCancelRun 统一 cancelRun + 清空 taskBoard。
-          onCancel={() => onCancelExecution?.(taskBoard.runId)}
-        />
       )}
     </div>
   );

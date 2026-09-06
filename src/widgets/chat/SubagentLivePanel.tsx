@@ -11,13 +11,17 @@
 // 渲染约定：仅 isLoading 且有 running 子任务时渲染；每行 =
 // 状态符 + [task · agent] + live_step（后端预拼装,截断防刷屏）。
 
-import { useChatStreamStore } from '../../features/send-message/chatStreamStore';
+import { selectSessionSlots, useChatStreamStore } from '../../features/send-message/chatStreamStore';
+import { useStore } from '../../shared/lib/store';
 
 export function SubagentLivePanel() {
-  const taskBoard = useChatStreamStore((s) => s.taskBoard);
-  const isLoading = useChatStreamStore(
-    (s) => s.streaming !== null && s.streaming.state !== 'done',
-  );
+  // S2: 读当前会话的键控槽位 —— 并行会话各自的面板互不串扰
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const taskBoard = useChatStreamStore((s) => selectSessionSlots(s, currentSessionId).taskBoard);
+  const isLoading = useChatStreamStore((s) => {
+    const streaming = selectSessionSlots(s, currentSessionId).streaming;
+    return streaming !== null && streaming.state !== 'done';
+  });
 
   if (!isLoading || !taskBoard) return null;
 

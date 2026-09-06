@@ -117,7 +117,7 @@ export function RightPanel({
         <PanelHeader tab={tab} onTabChange={setTab} onClose={onToggle} />
       )}
 
-      <div className="h-[calc(100%-2.5rem)]">
+      <div className="h-[calc(100%-2.5rem)] overflow-y-auto min-h-0">
         {selected && sessionId ? (
           <ArtifactViewer artifact={selected} sessionId={sessionId} onBack={() => setSelected(null)} />
         ) : tab === 'progress' ? (
@@ -127,6 +127,8 @@ export function RightPanel({
             toolCalls={toolCalls}
             isLoading={isLoading}
             taskBoard={taskBoard}
+            // S2: todos 从该会话的键控槽位读取（切会话看该会话的清单）
+            sessionId={sessionId}
             onCancelExecution={onCancelExecution}
           />
         ) : tab === 'changes' ? (

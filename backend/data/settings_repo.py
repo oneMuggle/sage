@@ -66,7 +66,14 @@ class SettingsRepository:
         if key not in self.KEYS:
             return None
         row = self._conn().execute("SELECT value FROM preferences WHERE key = ?", (key,)).fetchone()
-        return row["value"] if row else None
+        value = row["value"] if row else None
+        # L15 SecretBox: app_settings 落库静态加密 — 读侧透明解密(字符串层咽喉点,
+        # legacy/hex 与 preferences 路由全部覆盖)。解析/解密失败均 fail-open 原样返回。
+        if key == "app_settings" and value is not None:
+            from backend.services.secret_box import unwrap_settings_json
+
+            value = unwrap_settings_json(value)
+        return value
 
     def get_json(self, key: str) -> Any | None:
         raw = self.get(key)
@@ -86,6 +93,12 @@ class SettingsRepository:
     ) -> None:
         if key not in self.KEYS:
             raise ValueError(f"key {key!r} not in whitelist")
+        # L15 SecretBox: 写侧透明加密(endpoints[*].apiKey → enc:<scheme>:v1:<payload>;
+        # scheme=none 平台原样落库, 由 doctor secret_storage 告警)。
+        if key == "app_settings" and value is not None:
+            from backend.services.secret_box import wrap_settings_json
+
+            value = wrap_settings_json(value)
         now = int(time.time() * 1000)
         conn = self._conn()
         existing = conn.execute("SELECT key FROM preferences WHERE key = ?", (key,)).fetchone()

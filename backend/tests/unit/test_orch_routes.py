@@ -83,3 +83,36 @@ def test_update_plan_min_one_item_validation(client):
     ))
     r = client.post("/api/v1/orch/runs/orch-running/plan", json={"plan": []})
     assert r.status_code == 422
+
+
+# Fix #3 (2026-09-06): 用户确认端点测试
+
+
+def test_confirm_run_returns_404(client):
+    """不存在的 run → 404。"""
+    r = client.post("/api/v1/orch/runs/orch-missing/confirm")
+    assert r.status_code == 404
+
+
+def test_confirm_run_returns_409_when_cancelled(client):
+    """已取消的 run → 409。"""
+    repo = OrchRunRepository()
+    repo.upsert(OrchRun(
+        run_id="orch-cancelled", session_id="s-1", status="cancelled",
+        created_at=1000, plan_json='{"tasks":[]}',
+    ))
+    r = client.post("/api/v1/orch/runs/orch-cancelled/confirm")
+    assert r.status_code == 409
+
+
+def test_confirm_run_running_succeeds(client):
+    """running 状态的 run → 200 确认成功（即使无 pending confirm event 也返回 ok）。"""
+    repo = OrchRunRepository()
+    repo.upsert(OrchRun(
+        run_id="orch-confirm-test", session_id="s-1", status="running",
+        created_at=1000, plan_json='{"tasks":[]}',
+    ))
+    r = client.post("/api/v1/orch/runs/orch-confirm-test/confirm")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert r.json()["run_id"] == "orch-confirm-test"
