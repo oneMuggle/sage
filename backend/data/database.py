@@ -479,7 +479,8 @@ class Database:
                 completion_tokens INTEGER NOT NULL,
                 total_tokens INTEGER NOT NULL,
                 estimated_cost_usd REAL,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                cached_tokens INTEGER NOT NULL DEFAULT 0
             )
         """)
         cursor.execute("""
@@ -490,6 +491,14 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_usage_events_created
             ON usage_events(created_at DESC)
         """)
+        # L4 缓存感知记账: 为已有库补 cached_tokens 列（新装库建表已含）
+        cursor.execute("PRAGMA table_info(usage_events)")
+        _usage_cols = [row["name"] for row in cursor.fetchall()]
+        if "cached_tokens" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.commit()
 
         # Agent 配置表 (PR-3)
         # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan
