@@ -13,7 +13,9 @@ import {
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 
 import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
@@ -277,7 +279,8 @@ function MessageComponent({
           {isAssistant ? (
             <div className="max-w-none">
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
                 components={{
                   code({ className, children }) {
                     const match = /language-(\w+)/.exec(className || '');
