@@ -134,6 +134,14 @@ def test_web_fetch_invalid_url_scheme():
     assert "无效" in result.error or "http" in result.error.lower()
 
 
+def test_web_fetch_rejects_malformed_ipv6_url():
+    tool = WebFetchTool()
+    result = tool.execute(url="http://[bad")
+
+    assert result.success is False
+    assert "无效的 URL" in result.error
+
+
 def test_web_fetch_truncates_by_max_length():
     """max_length 截断响应"""
     big = "A" * 5000
@@ -155,6 +163,24 @@ def test_web_fetch_http_error():
 
     assert result.success is False
     assert "HTTP" in result.error or "失败" in result.error
+
+
+def test_web_fetch_http_error_closes_stream_response(monkeypatch):
+    closed = []
+    original_close = httpx.Response.close
+
+    def recording_close(response):
+        closed.append(response)
+        return original_close(response)
+
+    monkeypatch.setattr(httpx.Response, "close", recording_close)
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/server-error").mock(return_value=Response(500, text="server down"))
+        tool = WebFetchTool()
+        result = tool.execute(url="https://example.com/server-error")
+
+    assert result.success is False
+    assert closed
 
 
 def test_web_fetch_subagent_blocks_private_destinations():
@@ -180,7 +206,9 @@ def test_web_fetch_subagent_blocks_private_destinations():
 def test_web_fetch_subagent_blocks_non_global_literal_addresses(address):
     tool = WebFetchTool(policy=ToolPolicy(subagent_only=True))
 
-    result = tool.execute(url=f"http://[{address}]/metadata" if ":" in address else f"http://{address}/metadata")
+    result = tool.execute(
+        url=f"http://[{address}]/metadata" if ":" in address else f"http://{address}/metadata"
+    )
 
     assert result.success is False
     assert "subagent_web_fetch_blocked" in result.error
@@ -314,6 +342,58 @@ def test_web_fetch_intranet_redirect_target_must_also_pass_whitelist():
     assert "host_not_allowed" in result.error
 
 
+def test_web_fetch_intranet_follows_relative_redirect():
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get("https://mirror.example.internal/start").mock(
+            return_value=Response(302, headers={"location": "/page"})
+        )
+        mock.get("https://mirror.example.internal/page").mock(
+            return_value=Response(200, text="final")
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/start")
+
+    assert result.success is True
+    assert result.content["url"] == "https://mirror.example.internal/page"
+    assert result.content["content"] == "final"
+
+
+def test_web_fetch_rejects_redirect_with_invalid_final_scheme():
+    with respx.mock(assert_all_called=True) as mock:
+        mock.get("https://mirror.example.internal/start").mock(
+            return_value=Response(302, headers={"location": "ftp://mirror.example.internal/file"})
+        )
+        tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
+        result = tool.execute(url="https://mirror.example.internal/start")
+
+    assert result.success is False
+    assert "无效的 URL" in result.error
+
+
+def test_web_fetch_sets_tls_verification_per_target(monkeypatch):
+    calls = []
+    original_client = httpx.Client
+
+    class RecordingClient(original_client):
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs.get("verify"))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("backend.tools.web_tool.httpx.Client", RecordingClient)
+    policy = NetworkPolicy(
+        mode=NetworkMode.INTRANET,
+        allowed_hosts=("*.example.internal",),
+        insecure_tls_hosts=("mirror.example.internal",),
+    )
+    with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
+        mock.get("/page").mock(return_value=Response(200, text="ok"))
+        tool = WebFetchTool(network_policy=policy)
+        result = tool.execute(url="https://mirror.example.internal/page")
+
+    assert result.success is True
+    assert calls[-1] is False
+
+
 def test_web_fetch_loads_policy_from_settings_when_not_injected(monkeypatch):
     """未注入 network_policy 时每次 execute 现读 —— 改白名单立即生效。"""
     calls = []
@@ -390,9 +470,7 @@ def test_web_fetch_mode_controls_returned_sections(mode, present, absent):
 def test_web_fetch_links_are_absolutized():
     with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
         mock.get("/list").mock(
-            return_value=Response(
-                200, text=_MIRROR_PAGE, headers={"content-type": "text/html"}
-            )
+            return_value=Response(200, text=_MIRROR_PAGE, headers={"content-type": "text/html"})
         )
         tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
         result = tool.execute(url="https://mirror.example.internal/list", mode="links")
@@ -404,9 +482,7 @@ def test_web_fetch_links_are_absolutized():
 def test_web_fetch_tables_become_nested_lists():
     with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
         mock.get("/t").mock(
-            return_value=Response(
-                200, text=_MIRROR_PAGE, headers={"content-type": "text/html"}
-            )
+            return_value=Response(200, text=_MIRROR_PAGE, headers={"content-type": "text/html"})
         )
         tool = WebFetchTool(network_policy=_intranet("*.example.internal"))
         result = tool.execute(url="https://mirror.example.internal/t", mode="tables")
@@ -458,9 +534,7 @@ def test_web_fetch_non_html_content_type_skips_extraction():
 
 def test_web_fetch_max_length_truncates_extracted_text():
     long_body = (
-        '<html><head><meta charset="utf-8"></head><body><p>'
-        + ("甲" * 5000)
-        + "</p></body></html>"
+        '<html><head><meta charset="utf-8"></head><body><p>' + ("甲" * 5000) + "</p></body></html>"
     )
     with respx.mock(base_url="https://mirror.example.internal", assert_all_called=False) as mock:
         mock.get("/long").mock(
