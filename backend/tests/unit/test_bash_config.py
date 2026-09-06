@@ -231,8 +231,8 @@ def test_get_registry_singleton_applies_configured_max(monkeypatch):
 )
 def test_registry_register_enforces_configured_limit():
     """registry 自身的 register() 一道也按配置上限拦截（CI/Linux 覆盖）。"""
-    from backend.tools.bash_session import SessionLimitExceeded, make_temp_output_file
-    from backend.tools.subprocess_util import spawn_verified
+    from backend.tools.bash_session import SessionLimitExceeded
+    from backend.tools.subprocess_util import make_temp_output_file, spawn_verified
 
     registry = BashSessionRegistry(max_sessions=1)
 
