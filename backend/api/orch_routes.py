@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from backend.data.database import _SQLITE_LOCK
-from backend.data.orch_run_repo import OrchRun, OrchRunRepository
+from backend.data.orch_run_repo import OrchRunRepository
 from backend.data.orch_task_repo import OrchTaskRepository
 
 router = APIRouter(prefix="/orch", tags=["orchestration-runs"])
