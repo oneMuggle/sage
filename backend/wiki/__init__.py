@@ -9,6 +9,7 @@ from .deep_research import ResearchTask, deep_research
 from .embeddings import EmbeddingConfig
 from .graph import GraphData, build_graph, get_graph_cached
 from .ingest import IngestConfig, ingest_source, ingest_source_stream
+from .ingest_queue import IngestQueue, IngestTask, QueueStatus
 from .insights import (
     GraphInsights,
     KnowledgeGap,
@@ -16,6 +17,7 @@ from .insights import (
     analyze_graph,
 )
 from .lifecycle import cascade_delete_source
+from .lint import LintIssue, LintResult, LintSeverity, WikiLint
 from .models import (
     Analysis,
     AnalysisConcept,
@@ -34,6 +36,7 @@ from .models import (
     WikiPage,
     WikiProject,
 )
+from .review import ReviewItem, ReviewResult, ReviewType, WikiReview
 from .search import search_wiki
 from .vectorstore import VectorStore
 from .vision import (
@@ -103,6 +106,17 @@ __all__ = [
     "ImageCaption",
     "VisionProvider",
     "VisionIngestConfig",
+    "IngestQueue",
+    "IngestTask",
+    "QueueStatus",
+    "LintSeverity",
+    "LintIssue",
+    "LintResult",
+    "WikiLint",
+    "ReviewType",
+    "ReviewItem",
+    "ReviewResult",
+    "WikiReview",
     # Functions
     "ingest_source",
     "ingest_source_stream",

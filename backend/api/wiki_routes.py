@@ -22,7 +22,11 @@ from backend.wiki import (
     ChatConfig,
     GraphData,
     IngestConfig,
+    IngestQueue,
+    QueueStatus,
     SearchResponse,
+    WikiLint,
+    WikiReview,
     chat_with_wiki_stream,
     get_graph_cached,
     ingest_source_stream,
@@ -644,6 +648,66 @@ async def search(query: str, project_path: str, limit: int = 20) -> SearchRespon
 
 
 # ============================================================================
+# Lint (质量检查)
+# ============================================================================
+
+
+@router.get("/lint")
+async def lint(project_path: str) -> dict:
+    """对 Wiki 项目运行质量检查。
+
+    检查内容:
+
+    - **结构**: 必需目录 (wiki/entities, wiki/concepts, wiki/sources,
+      wiki/queries) 与文件 (wiki/schema.md) 是否存在。
+    - **Frontmatter**: 每个 Wiki 页面是否有 YAML frontmatter 且包含
+      ``title`` 字段。
+    - **Wikilink 断链**: ``[[目标]]`` 链接是否指向存在的页面。
+    - **孤立页面**: 未被任何 wikilink 引用的页面 (schema.md /
+      overview.md 除外)。
+
+    Args:
+        project_path: 项目根目录
+
+    Returns:
+        dict: ``{"total": int, "by_severity": {...}, "issues": [...]}``
+    """
+    project_root = authorize_registered_project(project_path)
+    checker = WikiLint(project_root)
+    result = checker.check_all()
+    return result.to_dict()
+
+
+# ============================================================================
+# Review (内容审核)
+# ============================================================================
+
+
+@router.get("/review")
+async def review(project_path: str) -> dict:
+    """对 Wiki 项目运行内容审核。
+
+    检测内容层面的问题，需要人工或 LLM 复核：
+
+    - **缺失页**: 被 ``[[wikilink]]`` 引用但不存在的页面。
+    - **疑似重复**: 标题 token 重叠度较高的页面对。
+    - **元数据矛盾**: frontmatter 中 ``created`` > ``updated`` 等矛盾。
+    - **改进建议**: 正文过短、缺 ``title`` 字段等。
+    - **待确认项**: 无入链的孤立页，需要人工判断。
+
+    Args:
+        project_path: 项目根目录
+
+    Returns:
+        dict: ``{"total": int, "by_type": {...}, "items": [...]}``
+    """
+    project_root = authorize_registered_project(project_path)
+    reviewer = WikiReview(project_root)
+    result = reviewer.check_all()
+    return result.to_dict()
+
+
+# ============================================================================
 # Ingest
 # ============================================================================
 
@@ -737,6 +801,181 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ============================================================================
+# Ingest Queue (持久化摄入队列)
+# ============================================================================
+
+
+class QueueAddRequest(BaseModel):
+    """队列入请求。"""
+
+    project_path: str
+    source_path: str
+    max_retries: int = 3
+
+
+@router.post("/ingest/queue/add")
+async def queue_add(req: QueueAddRequest):
+    """添加入任务到队列。
+
+    用于批量文件摄入场景。任务会被持久化，支持崩溃恢复、取消和重试。
+
+    Args:
+        req: 队列入请求
+
+    Returns:
+        dict: 包含 task_id 和状态
+    """
+    project_root = _canonical_project_root(req.project_path)
+    authorize_registered_project(req.project_path)
+
+    queue = IngestQueue(project_root)
+    task_id = queue.add(req.source_path, max_retries=req.max_retries)
+
+    return {"task_id": task_id, "status": "pending"}
+
+
+@router.get("/ingest/queue/status")
+async def queue_status(project_path: str):
+    """获取队列状态摘要。
+
+    Args:
+        project_path: 项目路径
+
+    Returns:
+        dict: 各状态的任务数量
+    """
+    project_root = _canonical_project_root(project_path)
+    authorize_registered_project(project_path)
+
+    queue = IngestQueue(project_root)
+    return queue.get_status_summary()
+
+
+@router.get("/ingest/queue/tasks")
+async def queue_tasks(project_path: str, status: Optional[str] = None):
+    """获取队列中的任务列表。
+
+    Args:
+        project_path: 项目路径
+        status: 可选，按状态过滤（pending/processing/completed/failed/cancelled）
+
+    Returns:
+        dict: 任务列表
+    """
+    project_root = _canonical_project_root(project_path)
+    authorize_registered_project(project_path)
+
+    queue = IngestQueue(project_root)
+
+    if status:
+        try:
+            status_enum = QueueStatus(status)
+            tasks = queue.get_by_status(status_enum)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"无效的状态: {status}")
+    else:
+        tasks = queue.get_all()
+
+    return {"tasks": [t.to_dict() for t in tasks]}
+
+
+@router.post("/ingest/queue/cancel/{task_id}")
+async def queue_cancel(task_id: str, project_path: str):
+    """取消队列中的任务。
+
+    只有 PENDING 或 FAILED 状态的任务可以取消。
+
+    Args:
+        task_id: 任务 ID
+        project_path: 项目路径
+
+    Returns:
+        dict: 是否成功取消
+    """
+    project_root = _canonical_project_root(project_path)
+    authorize_registered_project(project_path)
+
+    queue = IngestQueue(project_root)
+    success = queue.cancel(task_id)
+
+    if not success:
+        raise HTTPException(status_code=400, detail="无法取消任务（任务不存在或状态不允许取消）")
+
+    return {"success": True}
+
+
+@router.post("/ingest/queue/retry/{task_id}")
+async def queue_retry(task_id: str, project_path: str):
+    """重试失败的任务。
+
+    只有 FAILED 状态且重试次数未超限的任务可以重试。
+
+    Args:
+        task_id: 任务 ID
+        project_path: 项目路径
+
+    Returns:
+        dict: 是否成功重试
+    """
+    project_root = _canonical_project_root(project_path)
+    authorize_registered_project(project_path)
+
+    queue = IngestQueue(project_root)
+    success = queue.retry(task_id)
+
+    if not success:
+        raise HTTPException(status_code=400, detail="无法重试任务（任务不存在、非失败状态或已达最大重试次数）")
+
+    return {"success": True}
+
+
+@router.get("/ingest/queue/next")
+async def queue_next(project_path: str):
+    """获取下一个待处理任务。
+
+    Args:
+        project_path: 项目路径
+
+    Returns:
+        dict: 下一个待处理任务，如果队列为空则返回 null
+    """
+    project_root = _canonical_project_root(project_path)
+    authorize_registered_project(project_path)
+
+    queue = IngestQueue(project_root)
+    task = queue.get_next_pending()
+
+    if task is None:
+        return {"task": None}
+
+    return {"task": task.to_dict()}
+
+
+@router.post("/ingest/queue/clear")
+async def queue_clear(project_path: str, completed_only: bool = False):
+    """清除队列中的任务。
+
+    Args:
+        project_path: 项目路径
+        completed_only: 如果为 True，只清除已完成的任务；否则清除所有任务
+
+    Returns:
+        dict: 清除的任务数量
+    """
+    project_root = _canonical_project_root(project_path)
+    authorize_registered_project(project_path)
+
+    queue = IngestQueue(project_root)
+
+    if completed_only:
+        count = queue.clear_completed()
+    else:
+        count = queue.clear_all()
+
+    return {"cleared": count}
 
 
 # ============================================================================
