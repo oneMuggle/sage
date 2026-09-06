@@ -50,6 +50,9 @@ class SettingsRepository:
             # G5 会话级模型覆盖: {session_id: model_id} (JSON)
             # 见 backend/orchestration/llm_factory.py
             "session_model_overrides",
+            # F5 花费限额 (批次 C): 今日美元成本上限, 0/缺省 = 不限
+            # 读取口径见 backend/api/legacy_routes.py producer F5 块
+            "spend_limit_usd",
         }
     )
 

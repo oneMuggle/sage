@@ -28,8 +28,30 @@ interface I18nProviderProps {
   defaultLocale?: Locale;
 }
 
+// U10 (批次 C): locale 持久化 —— localStorage 优先于默认值
+const LOCALE_STORAGE_KEY = 'sage.locale';
+
+function loadStoredLocale(defaultLocale: Locale): Locale {
+  try {
+    const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (stored === 'zh' || stored === 'en') return stored;
+  } catch {
+    /* localStorage 不可用 (隐私模式等) → 默认 */
+  }
+  return defaultLocale;
+}
+
 export function I18nProvider({ children, defaultLocale = 'zh' }: I18nProviderProps) {
-  const [locale, setLocale] = useState<Locale>(defaultLocale);
+  const [locale, setLocaleState] = useState<Locale>(() => loadStoredLocale(defaultLocale));
+
+  const setLocale = useCallback((next: Locale) => {
+    setLocaleState(next);
+    try {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
+    } catch {
+      /* 忽略持久化失败 */
+    }
+  }, []);
 
   const t = useCallback(
     (key: TranslationKey): string => {

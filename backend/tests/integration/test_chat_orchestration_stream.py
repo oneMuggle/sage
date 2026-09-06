@@ -372,6 +372,15 @@ async def test_explicit_null_orchestration_mode_does_not_422():
                         "orchestration_mode": None,  # explicit null —— IPC `?? null` 产物
                     },
                 )
+                # producer 在后台任务里跑到 classify —— POST 返回后立即退出
+                # patch 作用域会解除 mock, 断言变成时序竞态(C-1 起前置增加了
+                # await 往返必输)。轮询必须在补丁作用域内完成。
+                import asyncio
+                import time as _time
+
+                deadline = _time.monotonic() + 5
+                while mock_classify.await_count < 1 and _time.monotonic() < deadline:
+                    await asyncio.sleep(0.05)
 
     assert resp.status_code == 200, (
         f"explicit null orchestration_mode 不应 422, 实际 {resp.status_code}: {resp.text}"

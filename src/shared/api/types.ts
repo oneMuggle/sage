@@ -141,7 +141,12 @@ export type AgentState =
   // P1 todo 接线 (2026-08-21): agent 任务清单全量快照,与 llmStream.ts 双处一致。
   | 'todo_snapshot'
   // S7 (2026-09-06): 工具落库产物后经活跃流推送的事件,载荷见 AgentEvent.artifact。
-  | 'artifact_created';
+  | 'artifact_created'
+  // live-events P0 (2026-09-06): 子代理内部事件投影镜像(工具调用/结果/
+  // 审批/提问/失败),见 SubagentLiveState。不进消息气泡,进任务板 live 态。
+  | 'subagent_event'
+  // live-events P1 (2026-09-06): run 级子代理审批模式切换回显(ask|auto)。
+  | 'approval_mode';
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -163,6 +168,16 @@ export interface PermissionRequest {
   message: string;
   /** 创建时间戳（epoch 秒，浮点） */
   created_at: number;
+  /**
+   * live-events P1 (2026-09-06): 请求来自编排子代理时携带的任务上下文
+   * （后端 SubagentEventSink 注入）。主 agent 审批请求无此字段。
+   */
+  subagent?: {
+    run_id: string;
+    task_id: string;
+    agent_id: string;
+    goal: string;
+  };
 }
 
 /** 问题选项 — QuestionDialog 渲染为可选卡片 */
@@ -242,6 +257,50 @@ export interface TaskStatusEvent {
   output_preview: string | null;
   // P0-7 (2026-08-20): 重试次数 —— 后端 _emit_task_status 一直携带,此前前端未声明被静默丢弃。
   retry_count?: number;
+  // live-events P0 (2026-09-06): 派发本批次的 conductor 工具调用 ID —— 聊天流内
+  // 把子代理实时步骤关联到 "Delegate <goal>" 卡片的关联键。
+  parent_tool_call_id?: string | null;
+}
+
+// ─── live-events P0 (2026-09-06): 子代理实时执行镜像 ───────────────────
+
+/** 子代理单条执行事件的阶段（后端 subagent_events.PHASE_* 镜像） */
+export type SubagentEventPhase =
+  | 'tool_call'
+  | 'tool_result'
+  | 'approval_requested'
+  | 'approval_resolved'
+  | 'question'
+  | 'failed';
+
+/** 后端 ``subagent_event`` 镜像事件（与 useChat 宽松 AgentEvent 同步收敛） */
+export interface SubagentLiveEvent {
+  state: 'subagent_event';
+  run_id: string;
+  task_id: string;
+  agent_id: string;
+  goal: string;
+  parent_tool_call_id?: string | null;
+  phase: SubagentEventPhase;
+  iteration?: number;
+  /** 任务树行内实时步骤文案（后端预拼装,截断防刷屏） */
+  live_step?: string;
+  tool_name?: string | null;
+  args_summary?: string | null;
+  preview?: string | null;
+  is_error?: boolean;
+  approved?: boolean;
+  ts?: number;
+}
+
+/** 单个子任务的实时执行态（任务板 ``live[task_id]``,环形缓冲最近 20 条） */
+export interface SubagentLiveState {
+  /** 行内实时步骤文案(最新一条,如 "🔧 read_file src/x.py") */
+  liveStep: string | null;
+  /** 等待审批时的工具名(ApprovalDialog 之外,任务行上的 ⏳ 徽章) */
+  waitingApproval: string | null;
+  /** 最近事件环形缓冲(尾新头旧,后端预算封顶 + 前端 20 条封顶) */
+  events: SubagentLiveEvent[];
 }
 
 /** 进度可视化 P0-2 (2026-08-12): 整盘概览事件。
@@ -344,6 +403,19 @@ export interface AgentEvent {
     size: number;
     created_at: number;
   };
+  // live-events P0 (2026-09-06): subagent_event 镜像字段(收敛类型见
+  // SubagentLiveEvent,这里保持宽松 AgentEvent 可直接 cast)。
+  phase?: SubagentEventPhase;
+  live_step?: string;
+  tool_name?: string | null;
+  args_summary?: string | null;
+  preview?: string | null;
+  is_error?: boolean;
+  approved?: boolean;
+  parent_tool_call_id?: string | null;
+  ts?: number;
+  // live-events P1: approval_mode 切换回显字段。
+  mode?: 'ask' | 'auto';
 }
 
 // ==================== 错误类型定义 ====================

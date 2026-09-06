@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { invoke } from '../../shared/api/desktopInvoke';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { DiagnosticsCard } from '../../widgets/settings/DiagnosticsCard';
@@ -110,6 +111,64 @@ function PermissionModeSelector() {
   );
 }
 
+/** U10 (批次 C): 界面语言切换 — useI18n.setLocale + localStorage 持久化 */
+function LanguageSelect(): JSX.Element {
+  const { locale, setLocale } = useI18n();
+  return (
+    <select
+      data-testid="settings-language-select"
+      value={locale}
+      onChange={(e) => setLocale(e.target.value as 'zh' | 'en')}
+      className="text-xs border border-border rounded-radius-sm px-2 py-1 bg-surface text-text"
+      aria-label="界面语言"
+    >
+      <option value="zh">中文</option>
+      <option value="en">English</option>
+    </select>
+  );
+}
+
+/** F5 (批次 C): 每日花费限额 (USD) — preferences KV spend_limit_usd */
+function SpendLimitInput(): JSX.Element {
+  const [limit, setLimit] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    invoke<{ value: string | null }>('get_preference', { key: 'spend_limit_usd' })
+      .then((resp) => setLimit(resp.value ?? ''))
+      .catch(() => setLimit(''))
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const save = (raw: string): void => {
+    setLimit(raw);
+    const parsed = Number.parseFloat(raw);
+    const value = Number.isFinite(parsed) && parsed >= 0 ? String(parsed) : '0';
+    invoke('set_preference', { key: 'spend_limit_usd', value, value_type: 'string' }).catch(
+      () => undefined,
+    );
+  };
+
+  return (
+    <SettingRow
+      label="每日花费限额 (USD)"
+      desc="按估算成本拦截当日请求；0 或留空 = 不限。保存即生效"
+    >
+      <input
+        type="number"
+        step="0.5"
+        min="0"
+        disabled={!loaded}
+        data-testid="settings-spend-limit-input"
+        value={limit}
+        onChange={(e) => save(e.target.value)}
+        placeholder="0"
+        className="w-24 text-xs border border-border rounded-radius-sm px-2 py-1 bg-surface text-text"
+      />
+    </SettingRow>
+  );
+}
+
 export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
   const { settings, updateSettings } = useSettings();
   const { t } = useI18n();
@@ -119,6 +178,12 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">主题</h3>
         <ThemeSelector />
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">语言 / Language</h3>
+        <SettingRow label="界面语言" desc="界面显示语言 (U10, 本地持久化)">
+          <LanguageSelect />
+        </SettingRow>
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">外观</h3>
@@ -196,6 +261,19 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
           value={settings.orch.maxSubagentIterations}
           onChange={(v) => updateSettings({ orch: { ...settings.orch, maxSubagentIterations: v } })}
         />
+        <SettingRow
+          label="子代理自动批准非危险工具"
+          desc="编排子代理遇到需审批的工具时,自动放行非危险调用;破坏性/可疑命令与工作区越界仍弹窗确认"
+        >
+          <Toggle
+            value={settings.orch.subagentApprovalMode === 'auto'}
+            onChange={(v) =>
+              updateSettings({
+                orch: { ...settings.orch, subagentApprovalMode: v ? 'auto' : 'ask' },
+              })
+            }
+          />
+        </SettingRow>
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
@@ -212,6 +290,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.usage')}</h3>
+        <SpendLimitInput />
         <UsagePanel />
       </section>
       <section>

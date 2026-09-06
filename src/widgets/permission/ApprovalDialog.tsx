@@ -111,6 +111,18 @@ export function ApprovalDialog() {
         </div>
 
         <div className="space-y-3">
+          {/* live-events P1 (2026-09-06): 子代理审批上下文 —— 该请求来自编排
+              子代理时,标明所属任务/角色/目标,避免"不知道谁在要权限"。 */}
+          {currentRequest.subagent && (
+            <div
+              data-testid="permission-subagent-context"
+              className="px-2 py-1.5 rounded bg-primary/10 text-xs text-primary leading-relaxed"
+            >
+              {t('permission.subagent_context')} [
+              {currentRequest.subagent.task_id} · {currentRequest.subagent.agent_id}]
+              {currentRequest.subagent.goal ? `：${currentRequest.subagent.goal}` : ''}
+            </div>
+          )}
           <div className="flex items-baseline gap-2 text-sm">
             <span className="text-text-secondary shrink-0">{t('permission.tool')}</span>
             <code

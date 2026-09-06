@@ -38,6 +38,10 @@ logger = logging.getLogger(__name__)
 #: 并发浏览器实例上限（每个实例是独立 Chromium 进程 + 临时目录）
 MAX_BROWSER_SESSIONS = 4
 
+#: web_fetch 渲染池的保留 browser_id（web_render 专用）。"唯一实例"解析
+#: 跳过它 —— 渲染池后台常驻时 browser_snapshot 仍应能免 id 解析用户实例。
+RESERVED_BROWSER_ID = "render-pool"
+
 #: 启动握手超时（等待 DevToolsActivePort 文件出现）
 LAUNCH_TIMEOUT_SECONDS = 30.0
 
@@ -147,11 +151,19 @@ class BrowserSessionManager:
         self._sessions[session.browser_id] = session
 
     def get(self, browser_id: Optional[str]) -> Optional[BrowserSession]:
-        """按 id 取会话；None → 唯一实例（单实例场景免传 id）。"""
+        """按 id 取会话；None → 唯一"用户"实例（单实例场景免传 id）。
+
+        保留 id（RESERVED_BROWSER_ID，web_fetch 渲染池）不算用户实例。
+        """
         if browser_id:
             return self._sessions.get(browser_id)
-        if len(self._sessions) == 1:
-            return next(iter(self._sessions.values()))
+        user_sessions = [
+            session
+            for session_id, session in self._sessions.items()
+            if session_id != RESERVED_BROWSER_ID
+        ]
+        if len(user_sessions) == 1:
+            return user_sessions[0]
         return None
 
     def require(self, browser_id: Optional[str]) -> BrowserSession:
@@ -206,8 +218,15 @@ def get_browser_manager() -> BrowserSessionManager:
     return _manager
 
 
-def launch_browser(headless: bool = True) -> BrowserSession:
+def launch_browser(
+    headless: bool = True, browser_id: Optional[str] = None
+) -> BrowserSession:
     """启动浏览器实例并完成 DevToolsActivePort 握手。
+
+    Args:
+        headless:   无头模式（web_fetch 渲染池恒为 True）。
+        browser_id: 显式指定会话 id（web_fetch 渲染池传保留 id
+                    RESERVED_BROWSER_ID）；缺省生成随机 id。
 
     Raises:
         BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限。
@@ -262,7 +281,7 @@ def launch_browser(headless: bool = True) -> BrowserSession:
                 continue
             if port > 0 and ws_path.startswith("/devtools/"):
                 session = BrowserSession(
-                    browser_id=uuid.uuid4().hex[:12],
+                    browser_id=browser_id or uuid.uuid4().hex[:12],
                     executable=executable,
                     headless=headless,
                     user_data_dir=user_data_dir,
@@ -390,6 +409,7 @@ __all__ = [
     "CDP_TIMEOUT_SECONDS",
     "LAUNCH_TIMEOUT_SECONDS",
     "MAX_BROWSER_SESSIONS",
+    "RESERVED_BROWSER_ID",
     "cdp_command",
     "discover_browser_executable",
     "ensure_page_target",

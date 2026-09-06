@@ -36,15 +36,13 @@ from .browser_cdp import (
     launch_browser,
 )
 from .file_tool import _record_artifact_safely
+from .network_config import load_network_policy
+from .web_render import wait_page_ready
 
 logger = logging.getLogger(__name__)
 
 #: 页面文本快照上限（字节，超出截断）
 SNAPSHOT_TEXT_CAP = 30 * 1024
-
-#: navigate 后等待 document.readyState=complete 的轮询窗口
-_LOAD_SETTLE_SECONDS = 10.0
-_LOAD_POLL_INTERVAL = 0.3
 
 #: 允许的 URL scheme（file:// 可读本地文件 → 坚决拒绝；javascript: 注入面）
 _ALLOWED_SCHEMES = frozenset({"http", "https", "about", "data"})
@@ -206,16 +204,12 @@ def _validate_action_args(action: str, selector: str, text: str, value: str) -> 
 
 
 def _wait_page_settled(session: BrowserSession, target_id: Optional[str]) -> None:
-    """navigate 后轮询 readyState，避免 LLM 拿到半加载页。"""
-    deadline = time.monotonic() + _LOAD_SETTLE_SECONDS
-    while time.monotonic() < deadline:
-        try:
-            state = _evaluate_json(session, "document.readyState", target_id)
-        except BrowserCDPError:
-            return  # 导航引发的上下文销毁 —— 交给后续调用自查
-        if state in ("complete", "interactive"):
-            return
-        time.sleep(_LOAD_POLL_INTERVAL)
+    """navigate 后等页面可用（readyState + 正文稳定，见 web_render.wait_page_ready）。
+
+    SPA 的 hydrate 发生在 readyState=complete 之后 —— 只等 readyState 会
+    拿到半空页面，稳定等待逻辑统一收口在 web_render（渲染分支共用，W2）。
+    """
+    wait_page_ready(session, target_id)
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +272,8 @@ class BrowserNavigateTool(BaseTool):
             name="browser_navigate",
             description=(
                 "让受控浏览器打开 URL（仅 http/https/about/data；file:// "
-                "被拒绝）。等待页面基本加载后返回标题与最终 URL。多实例时"
+                "被拒绝；受网络模式门禁约束，OFFLINE/白名单外拒绝）。等待"
+                "页面就绪（含 SPA 渲染稳定）后返回标题与最终 URL。多实例时"
                 "传 browser_id。"
             ),
             parameters={
@@ -292,7 +287,7 @@ class BrowserNavigateTool(BaseTool):
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — 每个拒绝路径独立 return，扁平比提取辅助函数更直读
         self, url: str = "", browser_id: str = "", new_tab: bool = False, **kwargs: Any
     ) -> ToolResult:
         if kwargs:
@@ -303,6 +298,14 @@ class BrowserNavigateTool(BaseTool):
         scheme_error = validate_url(url)
         if scheme_error is not None:
             return ToolResult(success=False, error=scheme_error)
+        # 网络模式门禁，与 web_fetch 同口径（W4）：仅 http/https 出网导航受
+        # check_host 约束，否则离线/内网白名单模式下浏览器可绕过 web_fetch
+        # 的注册门禁。about:/data: 无网络访问不在此列 —— check_host 解析不
+        # 出其主机名，会误伤 G7 明确允许的测试导航。
+        if (urlsplit(url.strip()).scheme or "").lower() in ("http", "https"):
+            network_rejection = load_network_policy().check_host(url)
+            if network_rejection:
+                return ToolResult(success=False, error=network_rejection)
         try:
             session = _resolve_session(browser_id or None)
             if new_tab:

@@ -2046,12 +2046,48 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"model={_safe_log_field(llm_config['model'])}"
                 )
 
-            # S3(win7 cherry-pick): run_id/dispatcher 前置初始化（原随 F5 块在
-            # main 分支引入；win7 未同步 F5，但 finally 的 S1 终态落库与
-            # _finalize_orch_run 无条件读取它们 —— 编排判定早期异常路径
-            # 不能 UnboundLocalError）。
+            # F5 花费限额 (批次 C): 今日已花费(持久化估算, 重启不丢)达到
+            # 限额时拒绝本次聊天。限额 0/未配置 = 不限。DB 故障 fail-open
+            # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 前置
+            # 初始化 —— 此处可能提前 return, finally 无条件读取它们 (P0-4)。
             run_id: Optional[str] = None
             dispatcher = None
+            try:
+                # win7 惯例 (PR A §1.2): 同步 DB 读经 _run_db_sync; today_cost_usd
+                # 内部自带 _SQLITE_LOCK, 不能再包 _run_db_sync(非重入死锁),
+                # 改走裸 executor 线程。
+                from backend.data.settings_repo import SettingsRepository
+                from backend.services.usage_tracker import usage_tracker as _usage_tracker
+
+                _raw_limit = await _run_db_sync(
+                    SettingsRepository().get, "spend_limit_usd"
+                )
+                _spend_limit = float(_raw_limit) if _raw_limit and _raw_limit.strip() else 0.0
+            except Exception as limit_read_err:
+                logger.debug(f"[REQ {request_id}] 花费限额读取失败(视为不限): {limit_read_err}")
+                _spend_limit = 0.0
+            if _spend_limit > 0:
+                import asyncio as _asyncio
+
+                _today_cost = await _asyncio.get_running_loop().run_in_executor(
+                    None, _usage_tracker.today_cost_usd
+                )
+                if _today_cost >= _spend_limit:
+                    logger.warning(
+                        "[REQ %s] 花费限额拦截: today=%.4f USD >= limit=%.2f USD",
+                        request_id,
+                        _today_cost,
+                        _spend_limit,
+                    )
+                    # S1 (2026-09-06): finally 落库 failed + 原因
+                    _producer_error = "今日花费已达限额（spend_limit_exceeded）"
+                    await entry.queue.put(
+                        {
+                            "state": "failed",
+                            "error": "spend_limit_exceeded",
+                        }
+                    )
+                    return
 
             agent = SageAgent(agent_id=data.agent_id or "primary")
             # P0 cancellation: register the primary before any blocking await.
@@ -2090,7 +2126,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
                     mode = "single"
-            # run_id/dispatcher 已在 producer try 顶部前置初始化（S3 win7 同步）
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
                 from backend.orchestration.planner import Planner
@@ -2368,6 +2403,30 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             # ===== L5 环境上下文 + 技能清单 END =====
 
+            # ===== L13 记忆上下文注入 BEGIN (对标增强第二轮批次 C) =====
+            # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
+            # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
+            # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
+            try:
+                l13_memory_manager = getattr(agent, "memory_manager", None)
+                if l13_memory_manager is not None:
+                    # win7 惯例 (PR A §1.2): get_context 背后的 episodic 查询
+                    # 直连共享连接, 统一经 _run_db_sync 拿锁, 防跨事务冲突。
+                    l13_memory = await _run_db_sync(
+                        l13_memory_manager.get_context,
+                        limit=10,
+                        session_id=data.session_id,
+                    )
+                    if l13_memory and str(l13_memory).strip():
+                        system_content += (
+                            "\n\n以下是相关的记忆上下文：\n" + str(l13_memory)
+                        )
+            except Exception as l13_mem_err:
+                logger.debug(
+                    f"[REQ {request_id}] L13 memory context skipped: {l13_mem_err}"
+                )
+            # ===== L13 记忆上下文注入 END =====
+
             attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
 
             # G6 (2026-09-06): 图片附件校验提前（多模态 user 消息在下方
@@ -2486,7 +2545,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 elif stream_entry.get("cancelled") and dispatcher is not None:
                     dispatcher.cancel()
 
-            async for evt in agent.run_loop(messages, llm_config=llm_config):
+            async for evt in agent.run_loop(
+                messages, llm_config=llm_config, session_id=data.session_id
+            ):
                 # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
                 # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
                 if evt.state.value == "content_delta":

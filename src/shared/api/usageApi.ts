@@ -26,3 +26,17 @@ export interface UsageSummary {
 export async function fetchUsageSummary(): Promise<UsageSummary> {
   return invoke<UsageSummary>('usage_summary');
 }
+
+/** U14 (批次 C): 某会话的持久化用量聚合 (usage_events 表, 重启不丢) */
+export interface SessionUsage {
+  session_id: string;
+  requests: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+}
+
+export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {
+  return invoke<SessionUsage>('usage_get_session', { sessionId });
+}

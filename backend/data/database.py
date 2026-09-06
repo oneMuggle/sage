@@ -467,6 +467,30 @@ class Database:
             ON artifacts(session_id, created_at DESC)
         """)
 
+        # L8 用量事件表 (对标增强第二轮批次 C): 每次成功 LLM 调用一行,
+        # 支撑会话级用量/成本显示 (U14) 与花费限额 (F5)。内存 tracker
+        # (usage_tracker) 重启即失, 此表为持久事实源。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS usage_events (
+                id TEXT PRIMARY KEY,
+                session_id TEXT,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL,
+                completion_tokens INTEGER NOT NULL,
+                total_tokens INTEGER NOT NULL,
+                estimated_cost_usd REAL,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_events_session
+            ON usage_events(session_id, created_at DESC)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_events_created
+            ON usage_events(created_at DESC)
+        """)
+
         # Agent 配置表 (PR-3)
         # 4 个默认 agent (primary/researcher/coder/memory_manager) 在 lifespan
         # 启动时由 backend/data/agent_repo.py:AgentRepository.seed_defaults_if_empty 种子化

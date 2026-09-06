@@ -61,6 +61,9 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'todo_snapshot': // P1 todo 接线 (2026-08-21): 清单快照进 store,不进消息气泡
     case 'artifact_created': // S7 (2026-09-06): 产物事件进计数 store,不进消息气泡
       return null;
+    case 'subagent_event': // live-events P0: 子代理镜像进任务板 live 态,不进消息气泡
+    case 'approval_mode': // live-events P1: 审批模式回显进任务板,不进消息气泡
+      return null;
     default:
       return assertNever(state);
   }
@@ -102,6 +105,9 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'task_review': // Wave 2 (2026-08-14): 复核结论事件,无 UI 阶段展示
     case 'todo_snapshot': // P1 todo 接线 (2026-08-21): 清单快照,无 UI 阶段展示
     case 'artifact_created': // S7 (2026-09-06): 产物事件,无 UI 阶段展示
+      return null;
+    case 'subagent_event': // live-events P0: 子代理镜像由任务树/内联面板展示
+    case 'approval_mode': // live-events P1: 审批模式由任务树开关回显
       return null;
     default:
       return assertNever(state);
