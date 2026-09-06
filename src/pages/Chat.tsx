@@ -152,6 +152,20 @@ export function Chat() {
     };
   }, [streamingMessageId]);
 
+  // Fix #4 (2026-09-06): PlanCard 出现时自动滚动到可视区域。
+  // 当 taskBoard 首次设置且未派发时，PlanCard 在消息列表下方渲染，
+  // 但自动滚动依赖项（messages.length 等）不变，用户可能看不到。
+  // 此 effect 在 taskBoard.runId 变化（新计划到达）或 dispatchedAt 从 null
+  // 变为非 null（已派发）时触发，将 PlanCard 滚动到视口中心。
+  useEffect(() => {
+    if (taskBoard && !taskBoard.dispatchedAt && scrollRef.current) {
+      const planCard = scrollRef.current.querySelector('[data-testid="plan-card"]');
+      if (planCard) {
+        planCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [taskBoard?.runId, taskBoard?.dispatchedAt]);
+
   const scrollToLatest = () => {
     const el = scrollRef.current;
     if (!el) return;
