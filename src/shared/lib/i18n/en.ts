@@ -337,6 +337,9 @@ export const en: Record<TranslationKey, string> = {
   'permission.approve': 'Allow',
   'permission.deny': 'Deny',
   'permission.toast.failed': 'Failed to submit approval answer',
+  'permission.diff': 'Proposed changes',
+  'codeBlock.copy': 'Copy',
+  'codeBlock.copied': 'Copied',
 
   // ─── M2 AskUserQuestion ───────────
   'question.title': 'The assistant needs your answer',

@@ -22,12 +22,14 @@ await——Future 跨 task 解析是 asyncio 的常规用法。
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import re
 import time
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,17 @@ _SECRET_KEY_RE = re.compile(r"(key|token|password|secret|credential|auth)", re.I
 
 #: 未指定超时时的默认等待秒数（5 分钟，与 claw-code 审批超时一致）
 DEFAULT_APPROVAL_TIMEOUT_S = 300.0
+
+# ==================== U15: 写类工具审批 diff 预览 ====================
+
+#: diff 预览整体最大字符数（超出尾部截断，防撑爆流事件）
+DIFF_PREVIEW_MAX_CHARS = 8000
+
+#: 预览读取源文件的字节上限（超大文件只 diff 可见前缀）
+_DIFF_READ_MAX_BYTES = 262144
+
+#: 生成 diff 预览的写类工具集合
+_DIFF_PREVIEW_TOOLS = frozenset({"write_file", "edit_file", "apply_patch"})
 
 
 #: 脱敏递归深度上限——防自引用结构（``d["self"] = d``）导致无限递归；
@@ -71,6 +84,119 @@ def _scrub_value(value: Any, depth: int) -> Any:
             return "…(超过嵌套深度上限)"
         return [_scrub_value(item, depth + 1) for item in value]
     return value
+
+
+def _resolve_preview_path(raw: str, workspace_root: Optional[str]) -> Optional[Path]:
+    """把工具参数里的路径解析为可读路径；相对路径挂在 workspace 下。"""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    path = Path(raw)
+    if not path.is_absolute() and workspace_root:
+        path = Path(workspace_root) / path
+    return path
+
+
+def _read_text_capped(path: Path) -> Optional[str]:
+    """读取现文件内容（截到 ``_DIFF_READ_MAX_BYTES``）；不存在/不可读返回 None。"""
+    try:
+        if not path.is_file():
+            return None
+        with open(path, "rb") as fh:
+            data = fh.read(_DIFF_READ_MAX_BYTES)
+        return data.decode("utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _unified_diff(label: str, before: str, after: str) -> str:
+    """单文件 unified diff；无差异返回空串。"""
+    return "".join(
+        difflib.unified_diff(
+            before.splitlines(keepends=True),
+            after.splitlines(keepends=True),
+            fromfile="a/" + label,
+            tofile="b/" + label,
+        )
+    )
+
+
+def _collect_diff_sections(
+    tool_name: str,
+    args: Dict[str, Any],
+    workspace_root: Optional[str],
+) -> List[str]:
+    """按工具语义收集各文件的 diff 片段（只读，不落盘）。"""
+    sections: List[str] = []
+
+    def _edit_section(raw_path: str, old: str, new: str, replace_all: bool) -> None:
+        path = _resolve_preview_path(raw_path, workspace_root)
+        if path is None:
+            return
+        current = _read_text_capped(path)
+        if current is None:
+            return
+        after = current.replace(old, new) if replace_all else current.replace(old, new, 1)
+        diff = _unified_diff(raw_path, current, after)
+        if diff:
+            sections.append(diff)
+
+    if tool_name == "write_file":
+        path = _resolve_preview_path(str(args.get("path") or ""), workspace_root)
+        content = args.get("content")
+        if path is None or not isinstance(content, str):
+            return sections
+        current = _read_text_capped(path)
+        diff = _unified_diff(str(args.get("path")), current or "", content)
+        if diff:
+            sections.append(diff)
+    elif tool_name == "edit_file":
+        raw_path = args.get("file_path")
+        old, new = args.get("old_string"), args.get("new_string")
+        if isinstance(raw_path, str) and isinstance(old, str) and isinstance(new, str):
+            _edit_section(raw_path, old, new, False)
+    elif tool_name == "apply_patch":
+        patches = args.get("patches")
+        if isinstance(patches, list):
+            for patch in patches:
+                if not isinstance(patch, dict):
+                    continue
+                raw_path = patch.get("file_path")
+                old, new = patch.get("old_string"), patch.get("new_string")
+                if not isinstance(raw_path, str) or not isinstance(old, str) or not isinstance(new, str):
+                    continue
+                replace_all = bool(patch.get("replace_all"))
+                _edit_section(raw_path, old, new, replace_all)
+    return sections
+
+
+def build_diff_preview(
+    tool_name: str,
+    args: Optional[Dict[str, Any]],
+    workspace_root: Optional[str] = None,
+) -> Optional[str]:
+    """为写类工具生成将写入内容的 unified diff（U15 审批透明化）。
+
+    - ``write_file``: 现文件（不存在视为空）vs ``args["content"]``
+    - ``edit_file``: 现文件 vs ``old_string→new_string`` 替换一次后的结果
+    - ``apply_patch``: 逐条 ``{file_path, old_string, new_string, replace_all?}``
+      与 edit 同语义，多文件 diff 顺序拼接
+
+    任何一步失败（参数缺失/路径不可读/编码异常）→ ``None``，审批回退展示
+    ``args_summary``，绝不阻塞审批流。**本函数只读，不落盘**。
+    """
+    if not isinstance(args, dict) or tool_name not in _DIFF_PREVIEW_TOOLS:
+        return None
+    try:
+        sections = _collect_diff_sections(tool_name, args, workspace_root)
+    except Exception:  # noqa: BLE001 — 预览是尽力而为, 不阻塞审批
+        logger.debug("diff 预览生成失败: tool=%s", tool_name, exc_info=True)
+        return None
+    if not sections:
+        return None
+    preview = "\n".join(sections)
+    if len(preview) > DIFF_PREVIEW_MAX_CHARS:
+        preview = preview[:DIFF_PREVIEW_MAX_CHARS] + "\n…(diff 已截断)"
+    return preview
 
 
 def summarize_tool_args(args: Optional[Dict[str, Any]]) -> str:
@@ -133,6 +259,8 @@ class ApprovalRequest:
         risk:         风险等级（bash 校验结果或 "safe"）。
         message:      展示给用户的完整原因（来自 PermissionDecision.reason）。
         created_at:   创建时间（epoch 秒）。
+        diff_preview: 写类工具的将写入内容 unified diff（U15）；
+                      None = 无法生成（非写类工具 / 读取失败），回退 args_summary。
     """
 
     request_id: str
@@ -141,10 +269,11 @@ class ApprovalRequest:
     risk: str
     message: str
     created_at: float
+    diff_preview: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """流事件 / REST 响应共用的 JSON 形态。"""
-        return {
+        payload: Dict[str, Any] = {
             "request_id": self.request_id,
             "tool_name": self.tool_name,
             "args_summary": self.args_summary,
@@ -152,6 +281,9 @@ class ApprovalRequest:
             "message": self.message,
             "created_at": self.created_at,
         }
+        if self.diff_preview:
+            payload["diff_preview"] = self.diff_preview
+        return payload
 
     @classmethod
     def create(
@@ -160,8 +292,9 @@ class ApprovalRequest:
         args: Optional[Dict[str, Any]],
         risk: str,
         message: str,
+        workspace_root: Optional[str] = None,
     ) -> ApprovalRequest:
-        """工厂：生成 UUID + 时间戳 + 脱敏参数摘要。"""
+        """工厂：生成 UUID + 时间戳 + 脱敏参数摘要 + 写类工具 diff 预览。"""
         return cls(
             request_id=str(uuid.uuid4()),
             tool_name=tool_name,
@@ -169,6 +302,7 @@ class ApprovalRequest:
             risk=risk,
             message=message,
             created_at=time.time(),
+            diff_preview=build_diff_preview(tool_name, args, workspace_root),
         )
 
 
@@ -262,8 +396,10 @@ __all__ = [
     "ApprovalGate",
     "DEFAULT_APPROVAL_TIMEOUT_S",
     "ARG_VALUE_MAX_CHARS",
+    "DIFF_PREVIEW_MAX_CHARS",
     "MAX_SCRUB_DEPTH",
     "summarize_tool_args",
+    "build_diff_preview",
     "init_permission_gate",
     "get_permission_gate",
     "reset_permission_gate",

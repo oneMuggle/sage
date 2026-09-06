@@ -1166,14 +1166,24 @@ class SageAgent:
     def _build_approval_request(
         self, tool_name: str, args: Dict[str, Any], decision: PermissionDecision
     ) -> ApprovalRequest:
-        """组装审批请求: 脱敏参数摘要 + bash 风险等级（非 EXECUTE 工具为 safe）。"""
+        """组装审批请求: 脱敏参数摘要 + bash 风险等级 + 写类工具 diff 预览（U15）。"""
         risk = "safe"
         if classify_tool(tool_name) is ToolCapability.EXECUTE:
             command = args.get("command")
             if isinstance(command, str) and command.strip():
                 risk = validate_bash(command).risk.value
+        # diff 预览需要相对路径锚点 — 复用 office 边界解析器取会话绑定工作区;
+        # 解析失败不阻塞审批（预览退化为 args_summary）。
+        try:
+            workspace_root = self._office_boundary_resolver()
+        except Exception:  # noqa: BLE001 — 预览是尽力而为
+            workspace_root = None
         return ApprovalRequest.create(
-            tool_name=tool_name, args=args, risk=risk, message=decision.reason
+            tool_name=tool_name,
+            args=args,
+            risk=risk,
+            message=decision.reason,
+            workspace_root=workspace_root,
         )
 
     async def _await_approval_answer(self, req: ApprovalRequest) -> ApprovalAnswer:
