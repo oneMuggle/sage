@@ -2015,6 +2015,45 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"model={_safe_log_field(llm_config['model'])}"
                 )
 
+            # ===== L11 user_prompt_submit 钩子 BEGIN (批次 C-2) =====
+            # 用户自定义钩子可在消息进入 agent 循环前检查/拦截 (deny)。
+            # fail-open: 钩子故障视为放行。deny → failed 事件, 不消耗 LLM。
+            try:
+                from backend.data.settings_repo import SettingsRepository
+                from backend.hooks.config import load_hooks
+                from backend.hooks.runner import run_event_hooks
+
+                l11_hooks = load_hooks(SettingsRepository())
+                if l11_hooks:
+                    l11_outcome = await run_event_hooks(
+                        l11_hooks,
+                        "user_prompt_submit",
+                        "",  # 无工具名; matcher 仅 "*" 对本事件有意义
+                        {
+                            "hook_event_name": "user_prompt_submit",
+                            "prompt": data.message,
+                            "session_id": data.session_id,
+                        },
+                    )
+                    if l11_outcome.denied:
+                        logger.info(
+                            "[REQ %s] user_prompt_submit 钩子拦截: %s",
+                            request_id,
+                            l11_outcome.reason,
+                        )
+                        await entry.queue.put(
+                            {
+                                "state": "failed",
+                                "error": "prompt_blocked_by_hook",
+                            }
+                        )
+                        return
+            except Exception as l11_prompt_err:
+                logger.debug(
+                    f"[REQ {request_id}] user_prompt_submit hooks skipped: {l11_prompt_err}"
+                )
+            # ===== L11 user_prompt_submit 钩子 END =====
+
             # F5 花费限额 (批次 C): 今日已花费(持久化估算, 重启不丢)达到
             # 限额时拒绝本次聊天。限额 0/未配置 = 不限。DB 故障 fail-open
             # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 前置
@@ -2585,6 +2624,30 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
                 # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
                 if assistant_persisted:
+                    # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
+                    # run 正常结束通知; deny/modify 无语义, 一律忽略。
+                    try:
+                        import backend.data.settings_repo as _settings_repo_mod
+                        from backend.hooks.config import load_hooks as _load_hooks_fn
+                        from backend.hooks.runner import run_event_hooks as _run_hooks_fn
+
+                        _stop_hooks = _load_hooks_fn(_settings_repo_mod.SettingsRepository())
+                        if _stop_hooks:
+                            _capped = done_content[:4096]
+                            await _run_hooks_fn(
+                                _stop_hooks,
+                                "stop",
+                                "",
+                                {
+                                    "hook_event_name": "stop",
+                                    "session_id": data.session_id,
+                                    "final_content": _capped,
+                                },
+                            )
+                    except Exception as l11_stop_err:
+                        logger.debug(
+                            f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
+                        )
                     await _extract_legacy_chat_memory(
                         request_id, data.session_id, data.message, done_content
                     )
