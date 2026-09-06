@@ -5,6 +5,7 @@ LLM Client - 大语言模型客户端
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -23,6 +24,53 @@ logger = logging.getLogger(__name__)
 # 预编译：提取 LLM 输出中的 <think>...</think> 推理块。
 # 部分 provider（如 DeepSeek）把推理内容用此标签包裹在 content 字段中。
 THINK_TAG_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+
+# ===== L3 请求层重试退避（对标增强第二轮批次 B）=====
+#: 默认最大尝试次数（首次 + 2 次重试）；env ``SAGE_LLM_RETRY_MAX_ATTEMPTS`` 覆盖
+_LLM_RETRY_MAX_ATTEMPTS = 3
+#: 指数退避基数秒数；env ``SAGE_LLM_RETRY_BASE_DELAY_S`` 覆盖
+_LLM_RETRY_BASE_DELAY_S = 1.0
+#: 单次退避上限
+_LLM_RETRY_MAX_DELAY_S = 15.0
+#: 可重试的错误类型：限流 / 服务端错误 / 超时 / 网络不可达
+_RETRYABLE_ERROR_TYPES = frozenset(
+    {
+        LLMErrorType.RATE_LIMITED,
+        LLMErrorType.SERVER_ERROR,
+        LLMErrorType.TIMEOUT,
+        LLMErrorType.NETWORK,
+    }
+)
+
+
+def _retry_settings() -> Tuple[int, float]:
+    """读重试配置：env 覆盖 > 默认。任何解析失败回退默认，永不抛错。"""
+    max_attempts = _LLM_RETRY_MAX_ATTEMPTS
+    base_delay = _LLM_RETRY_BASE_DELAY_S
+    raw_attempts = os.environ.get("SAGE_LLM_RETRY_MAX_ATTEMPTS", "").strip()
+    if raw_attempts:
+        try:
+            value = int(raw_attempts)
+            if value >= 1:
+                max_attempts = value
+        except ValueError:
+            logger.warning("env SAGE_LLM_RETRY_MAX_ATTEMPTS=%r 非法,回退默认", raw_attempts)
+    raw_delay = os.environ.get("SAGE_LLM_RETRY_BASE_DELAY_S", "").strip()
+    if raw_delay:
+        try:
+            value = float(raw_delay)
+            if value >= 0:
+                base_delay = value
+        except ValueError:
+            logger.warning("env SAGE_LLM_RETRY_BASE_DELAY_S=%r 非法,回退默认", raw_delay)
+    return max_attempts, base_delay
+
+
+def _retry_backoff_seconds(err: LLMError, attempt: int, base_delay: float) -> float:
+    """第 attempt 次失败后的退避秒数：retry-after 优先,否则指数退避封顶。"""
+    if err.retry_after:
+        return min(float(err.retry_after), _LLM_RETRY_MAX_DELAY_S)
+    return min(base_delay * (2 ** (attempt - 1)), _LLM_RETRY_MAX_DELAY_S)
 
 
 @dataclass
@@ -367,12 +415,35 @@ class LLMClient:
 
         start_time = time.time()
 
-        try:
-            response = await client.post("/v1/chat/completions", json=body)
-            response.raise_for_status()
-            data = response.json()
-        except Exception as e:
-            self._raise_classified_error(e)
+        # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
+        # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
+        max_attempts, base_delay = _retry_settings()
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                response = await client.post("/v1/chat/completions", json=body)
+                response.raise_for_status()
+                data = response.json()
+                break
+            except Exception as e:
+                try:
+                    self._raise_classified_error(e)  # 总是抛出
+                except LLMError as llm_err:
+                    if (
+                        attempt >= max_attempts
+                        or llm_err.type not in _RETRYABLE_ERROR_TYPES
+                    ):
+                        raise
+                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay)
+                    logger.warning(
+                        "LLM 请求失败(%s/%s): %s — %.1fs 后重试",
+                        attempt,
+                        max_attempts,
+                        llm_err.message,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
 
         elapsed = time.time() - start_time
         logger.debug(f"LLM 响应耗时: {elapsed:.2f}s")
@@ -578,49 +649,85 @@ class LLMClient:
         stream_model: str = self.config.model
         stream_usage: Optional[Dict[str, Any]] = None
 
-        try:
-            async with client.stream("POST", "/v1/chat/completions", json=body) as response:
-                response.raise_for_status()
+        # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
+        # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
+        # 错误面终止（调用方语义见 run_loop）。
+        max_attempts, base_delay = _retry_settings()
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                async with client.stream(
+                    "POST", "/v1/chat/completions", json=body
+                ) as response:
+                    response.raise_for_status()
 
-                async for line in response.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    data_str = line[6:]
-                    if data_str.strip() == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data_str = line[6:]
+                        if data_str.strip() == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
 
-                    if isinstance(data.get("model"), str):
-                        stream_model = data["model"]
-                    if isinstance(data.get("usage"), dict) and data["usage"]:
-                        stream_usage = data["usage"]
+                        if isinstance(data.get("model"), str):
+                            stream_model = data["model"]
+                        if isinstance(data.get("usage"), dict) and data["usage"]:
+                            stream_usage = data["usage"]
 
-                    choices = data.get("choices", [])
-                    if not choices:
-                        continue
-                    choice = choices[0]
-                    if choice.get("finish_reason"):
-                        finish_reason = choice["finish_reason"]
-                    delta = choice.get("delta") or {}
+                        choices = data.get("choices", [])
+                        if not choices:
+                            continue
+                        choice = choices[0]
+                        if choice.get("finish_reason"):
+                            finish_reason = choice["finish_reason"]
+                        delta = choice.get("delta") or {}
 
-                    reasoning_piece = delta.get("reasoning_content") or delta.get("reasoning")
-                    if isinstance(reasoning_piece, str) and reasoning_piece:
-                        reasoning_parts.append(reasoning_piece)
-                        yield ("reasoning_delta", reasoning_piece)
+                        reasoning_piece = delta.get("reasoning_content") or delta.get(
+                            "reasoning"
+                        )
+                        if isinstance(reasoning_piece, str) and reasoning_piece:
+                            reasoning_parts.append(reasoning_piece)
+                            yield ("reasoning_delta", reasoning_piece)
 
-                    content_piece = delta.get("content")
-                    if isinstance(content_piece, str) and content_piece:
-                        content_parts.append(content_piece)
-                        yield ("content_delta", content_piece)
+                        content_piece = delta.get("content")
+                        if isinstance(content_piece, str) and content_piece:
+                            content_parts.append(content_piece)
+                            yield ("content_delta", content_piece)
 
-                    if delta.get("tool_calls"):
-                        aggregator.feed(delta["tool_calls"])
+                        if delta.get("tool_calls"):
+                            aggregator.feed(delta["tool_calls"])
+                break  # 流正常结束
 
-        except Exception as e:
-            self._raise_classified_error(e)
+            except Exception as e:
+                try:
+                    self._raise_classified_error(e)  # 总是抛出
+                except LLMError as llm_err:
+                    nothing_yielded = not content_parts and not reasoning_parts
+                    if (
+                        attempt >= max_attempts
+                        or llm_err.type not in _RETRYABLE_ERROR_TYPES
+                        or not nothing_yielded
+                    ):
+                        raise
+                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay)
+                    logger.warning(
+                        "LLM 流式请求失败(%s/%s): %s — %.1fs 后重试",
+                        attempt,
+                        max_attempts,
+                        llm_err.message,
+                        delay,
+                    )
+                    # 重置累积器,保证重放从零开始
+                    aggregator = StreamToolCallAggregator()
+                    content_parts = []
+                    reasoning_parts = []
+                    finish_reason = None
+                    stream_usage = None
+                    await asyncio.sleep(delay)
 
         raw_content = "".join(content_parts)
         reasoning_content = "".join(reasoning_parts) or None
