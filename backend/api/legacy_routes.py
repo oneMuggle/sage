@@ -2504,11 +2504,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
                 )
                 history_rows = []
+            # L9-lite (批次 C-3): 历史预算感知模型窗口 —— 前端上报的
+            # max_context 有效时, 历史预算 = 窗口 - 16k 预留(system/工具
+            # schema/回复), 下限 4k; 否则用默认推导(history_token_budget)。
+            l9_budget = history_token_budget()
+            if data.max_context is not None and data.max_context >= 20000:
+                l9_budget = max(4000, int(data.max_context) - 16384)
             messages, omitted_history = build_request_messages(
                 system_content=system_content,
                 user_text=data.message,
                 history_rows=history_rows,
                 attachment_block=attachment_block or None,
+                budget_tokens=l9_budget,
             )
             if omitted_history > 0:
                 logger.info(
