@@ -87,6 +87,12 @@ def test_tracker_fail_open_on_db_error(monkeypatch):
         def get_connection(self):
             raise RuntimeError("db down")
 
+        def close(self):
+            return None
+
+        def init_db(self):
+            return None
+
     monkeypatch.setattr(db_mod, "_db", _Boom())
     # get_database() 读取 _db 失败 → _persist 静默
     entry = tracker.record("gpt-4o", 10, 5, session_id="s1")
