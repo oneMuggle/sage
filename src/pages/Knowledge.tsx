@@ -11,7 +11,10 @@ import {
   WikiEditor,
   WikiGraphView,
   WikiInsightsPanel,
+  WikiLintView,
   WikiProjectPicker,
+  WikiQueuePanel,
+  WikiReviewView,
   WikiSearch,
 } from '../widgets/wiki';
 
@@ -21,7 +24,10 @@ const VIEW_TITLES: Record<string, string> = {
   chat: '对话',
   graph: '图谱',
   insights: '洞察',
+  lint: '质量检查',
+  review: '内容审核',
   sources: '来源文件',
+  queue: '摄入队列',
 };
 
 interface WikiState {
@@ -156,8 +162,32 @@ function renderMainView(activeView: string, props: MainViewProps) {
           请先选择项目
         </div>
       );
+    case 'lint':
+      return props.project ? (
+        <WikiLintView projectPath={props.project.path} />
+      ) : (
+        <div className="flex h-full items-center justify-center text-muted text-sm">
+          请先选择项目
+        </div>
+      );
+    case 'review':
+      return props.project ? (
+        <WikiReviewView projectPath={props.project.path} />
+      ) : (
+        <div className="flex h-full items-center justify-center text-muted text-sm">
+          请先选择项目
+        </div>
+      );
     case 'sources':
       return <SourcesView />;
+    case 'queue':
+      return props.project ? (
+        <WikiQueuePanel projectPath={props.project.path} />
+      ) : (
+        <div className="flex h-full items-center justify-center text-muted text-sm">
+          请先选择项目
+        </div>
+      );
     default:
       return <WikiEditor />;
   }

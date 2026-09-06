@@ -45,16 +45,59 @@ export type WikiView =
   | 'lint'
   | 'review'
   | 'sources'
-  | 'insights';
+  | 'insights'
+  | 'queue';
 
 // Lint 检查项
 export interface LintItem {
   id: string;
-  type: 'orphan' | 'broken-link' | 'no-outlinks' | 'semantic';
-  severity: 'warning' | 'info';
+  type:
+    | 'orphan'
+    | 'broken-link'
+    | 'no-outlinks'
+    | 'semantic'
+    // Backend-backed lint types (backend/wiki/lint.py → LintType)
+    | 'required_dir'
+    | 'required_file'
+    | 'frontmatter_missing'
+    | 'frontmatter_title'
+    | 'wikilink_broken';
+  severity: 'error' | 'warning' | 'info';
   page: string;
   message: string;
   suggestion?: string;
+  // Backend-backed fields (optional — populated when sourced from API)
+  detail?: string;
+  broken_target?: string;
+  suggested_target?: string;
+  suggested_source?: string;
+  affected_pages?: string[];
+}
+
+// Lint 检查整体响应 (对齐 backend LintResult.to_dict())
+export interface LintResponse {
+  total: number;
+  by_severity: { error: number; warning: number; info: number };
+  issues: LintIssueRaw[];
+}
+
+// 后端 Lint 原始问题形状 (snake_case,从 API 返回;
+// 前端 lint-store 会把它映射为 LintItem)
+export interface LintIssueRaw {
+  type:
+    | 'required_dir'
+    | 'required_file'
+    | 'frontmatter_missing'
+    | 'frontmatter_title'
+    | 'wikilink_broken'
+    | 'orphan';
+  severity: 'error' | 'warning' | 'info';
+  page: string;
+  detail: string;
+  broken_target?: string | null;
+  suggested_target?: string | null;
+  suggested_source?: string | null;
+  affected_pages?: string[] | null;
 }
 
 // Review 审核项
@@ -66,12 +109,42 @@ export interface ReviewItem {
   affectedPages: string[];
   resolved: boolean;
   actions: ReviewAction[];
+  // Backend-backed fields (optional — populated when sourced from API)
+  confidence?: number;
+  detail?: string;
+  suggestion?: string;
 }
 
 export interface ReviewAction {
   id: string;
   label: string;
   type: 'research' | 'open' | 'create' | 'dismiss' | 'delete';
+}
+
+// Review 检查整体响应 (对齐 backend ReviewResult.to_dict())
+export interface ReviewResponse {
+  total: number;
+  by_type: {
+    duplicate: number;
+    contradiction: number;
+    'missing-page': number;
+    confirm: number;
+    suggestion: number;
+  };
+  items: ReviewItemRaw[];
+}
+
+// 后端 Review 原始问题形状 (snake_case,从 API 返回;
+// 前端 review-store 会把它映射为 ReviewItem)
+export interface ReviewItemRaw {
+  id: string;
+  type: 'contradiction' | 'duplicate' | 'missing-page' | 'confirm' | 'suggestion';
+  title: string;
+  description: string;
+  affected_pages: string[];
+  confidence: number;
+  detail?: string;
+  suggestion?: string;
 }
 
 // Activity 活动项

@@ -111,6 +111,49 @@ MVP 复用 chat 端点作 embedding 端点(需要端点支持 `/v1/embeddings`)�
 
 顶部搜索框可高亮匹配节点,节点 click 跳到浏览视图。
 
+## 摄入队列（高级）
+
+侧栏 → "摄入队列" 视图。适用于批量导入场景:
+
+- **状态**：pending / processing / completed / failed / cancelled 五态
+- **操作**：取消 pending 任务 / 重试 failed 任务 / 清空已完成
+- **崩溃恢复**：任务持久化在 `.llm-wiki/ingest-queue.json`，重启后自动续传
+- **重试策略**：默认 3 次，失败后标 failed 等待人工干预
+
+## 质量检查（Lint）
+
+侧栏 → "质量检查" 视图。自动扫描 wiki 目录的结构合规性:
+
+- **error**：缺必需目录（`wiki/entities`、`wiki/concepts`、`wiki/sources`）或缺必需文件（`wiki/index.md`、`wiki/overview.md`、`wiki/schema.md`）
+- **warning**：缺 frontmatter / frontmatter title 与文件名不一致 / `[[wikilink]]` 断链
+- **info**：孤儿页（零入链）
+
+顶部 toolbar 显示 severity 过滤 tabs + 计数 + 上次运行时间。挂载时自动跑一次。
+
+## 内容审核（Review）
+
+侧栏 → "内容审核" 视图。检测需要人工复核的内容质量问题:
+
+- **缺页**（missing-page）：`[[wikilink]]` 指向不存在的页（置信度 1.0）
+- **重复**（duplicate）：标题 token 集合 Jaccard ≥ 0.6（例如"Deep Transformer Model Architecture" vs "Deep Transformer Model Implementation"）
+- **矛盾**（contradiction）：frontmatter `created > updated`（日期倒置）
+- **建议**（suggestion）：内容 < 150 字符的短页或缺 title 的页
+- **待确认**（confirm）：孤儿页（零入链，豁免 `wiki/schema.md`、`wiki/overview.md`）
+
+审核是**确定性**的（无 LLM 调用），毫秒级完成。每项有稳定 ID（`rv-<16hex>`），跨次运行可对比。
+
+操作：每张卡片右上角 X 忽略，或点击 action 标为 resolved。
+
+## Chrome Web Clipper（浏览器扩展）
+
+位置：`extension/wiki-clipper/`。需手动加载到 Chrome:
+
+1. `chrome://extensions/` → 开启"开发者模式"
+2. "加载已解压的扩展程序" → 选 `extension/wiki-clipper/` 目录
+3. 在任意网页点扩展图标 → 选目标项目 → 点 Clip
+
+扩展会用 Readability.js 提取正文、Turndown.js 转 Markdown、POST 到 `/api/v1/wiki/clip` 保存。
+
 ## LLM 配置
 
 Wiki 用 sage 已配置的端点。Settings → 模型选择:
@@ -144,4 +187,5 @@ Wiki 用 sage 已配置的端点。Settings → 模型选择:
 ## 相关文档
 
 - 技术: [`docs/technical/25-llm-wiki-integration.md`](../technical/25-llm-wiki-integration.md)
+- 完整性优化（队列/Lint/Review/Clipper）: [`docs/technical/50-wiki-completeness-optimization.md`](../technical/50-wiki-completeness-optimization.md)
 - 参考实现: `/home/fz/project/llm_wiki`
