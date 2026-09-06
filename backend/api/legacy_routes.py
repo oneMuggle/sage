@@ -63,6 +63,11 @@ from backend.orchestration.chat_dispatcher import (
     ChatDispatcher,
     _classify_orchestration_mode,
 )
+from backend.orchestration.llm_factory import (  # G5: 会话级模型覆盖
+    SESSION_MODEL_OVERRIDES_KEY,
+    load_llm_config_for_chat,
+    load_session_model_overrides,
+)
 from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs
 from backend.skills.draft_store import get_skill_draft_store
@@ -183,6 +188,12 @@ class ChatRequest(BaseModel):
     # 用 forward ref 避免 route→domain 循环导入; ``model_rebuild`` 在
     # legacy_routes 模块加载完毕时自动被 Pydantic v2 调用.
     office_refs: List[ChatOfficeRef] = Field(default_factory=list)
+
+    # G6 (2026-09-06): 聊天图片输入 —— base64 data URL 列表（data:image/png;base64,...）。
+    # 非空时 user 消息转 OpenAI 多模态 content（text + image_url 分段），
+    # 依赖 llm_client._convert_messages 对 list 型 content 的原样透传。
+    # 上限 4 张 / 单张 5MiB（解码后字节计）—— 防上下文爆炸。
+    images: List[str] = Field(default_factory=list)
 
     # Multi-Agent Orchestration (spec 2026-08-11): 编排模式开关。
     # auto（默认）—— 轻量 LLM 二分类决定；force_multi / force_single ——
@@ -485,6 +496,83 @@ def list_sessions(
     """获取会话列表"""
     sessions = repo.list(limit=limit, offset=offset)
     return [s.to_dict() for s in sessions]
+
+
+# ---------------------------------------------------------------------------
+# G5 (2026-09-06): 会话级模型覆盖 —— {session_id: model_id} KV
+# ---------------------------------------------------------------------------
+
+#: G6: 图片附件上限（张数 / 单张解码后字节数）
+_CHAT_IMAGE_MAX_COUNT = 4
+_CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+
+_ALLOWED_IMAGE_MIME_PREFIXES = ("data:image/png", "data:image/jpeg", "data:image/webp", "data:image/gif")
+
+
+def _validate_chat_images(images: List[str]) -> Optional[str]:
+    """校验 base64 data URL 图片列表；返回错误文案或 None（全部合法）。"""
+    if len(images) > _CHAT_IMAGE_MAX_COUNT:
+        return f"图片数量 {len(images)} 超过上限 {_CHAT_IMAGE_MAX_COUNT}"
+    import base64 as _base64
+
+    for index, image_url in enumerate(images):
+        if not isinstance(image_url, str) or not image_url.startswith(_ALLOWED_IMAGE_MIME_PREFIXES):
+            return (
+                f"images[{index}] 不是合法的图片 data URL"
+                f"（支持 png/jpeg/webp/gif）"
+            )
+        _, _, payload = image_url.partition(",")
+        if not payload:
+            return f"images[{index}] 缺少 base64 数据段"
+        try:
+            decoded_size = len(_base64.b64decode(payload, validate=True))
+        except Exception:
+            return f"images[{index}] base64 解码失败"
+        if decoded_size > _CHAT_IMAGE_MAX_BYTES:
+            return (
+                f"images[{index}] 解码后 {decoded_size} 字节超过单张上限 "
+                f"{_CHAT_IMAGE_MAX_BYTES} 字节 (5 MiB)"
+            )
+    return None
+
+
+class SessionModelOverride(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    model: str
+
+
+@router.get("/sessions/{session_id}/model")
+def get_session_model(session_id: str):
+    """读取某会话的模型覆盖；未设置返回 {"model": null}。"""
+    override = load_session_model_overrides().get(session_id)
+    return {"session_id": session_id, "model": override}
+
+
+@router.put("/sessions/{session_id}/model")
+def set_session_model(session_id: str, payload: SessionModelOverride):
+    """设置/清除（model 传空串）某会话的模型覆盖。
+
+    设置后该会话的 chat 固定用此模型（端点仍取全局选择）；传空串清除
+    覆盖，回到全局选择。非法值整体拒绝，绝不部分写入。
+    """
+    model = payload.model.strip() if isinstance(payload.model, str) else ""
+    overrides = load_session_model_overrides()
+    if model:
+        overrides[session_id] = model
+    else:
+        overrides.pop(session_id, None)
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        SettingsRepository().set(
+            SESSION_MODEL_OVERRIDES_KEY,
+            json.dumps(overrides, ensure_ascii=False),
+            value_type="json",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"写入会话模型覆盖失败: {exc}")
+    return {"session_id": session_id, "model": model or None}
 
 
 @router.get("/sessions/{session_id}", response_model=dict)
@@ -1675,6 +1763,15 @@ async def chat(
         # 2026-07-30: chat 默认加载 primary profile,让 profile.tools 白名单生效
         # (memory_manager 之类窄权限 agent 才不会拿到 list_dir/read_file 全部工具)
         agent = SageAgent(agent_id=data.agent_id or "primary")
+        # G5 (2026-09-06): 请求未显式带端点配置时，用「全局端点 + 会话覆盖/
+        # profile 模型」解析 —— 会话里切换模型不影响其他会话与全局设置。
+        if llm_config is None:
+            profile_model = (
+                (agent.profile or {}).get("model_config") or {}
+            ).get("model")
+            llm_config = load_llm_config_for_chat(
+                session_id=data.session_id, profile_model=profile_model
+            )
         result = await agent.chat(data.session_id, data.message, llm_config=llm_config)
 
         # agent.chat() may return a structured error dict (Task 6 refactor) instead of raising
@@ -2161,6 +2258,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     }
                 )
             messages.append({"role": "user", "content": data.message})
+            # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）
+            if data.images:
+                multimodal_error = _validate_chat_images(data.images)
+                if multimodal_error:
+                    raise HTTPException(status_code=400, detail=multimodal_error)
+                messages[-1] = {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": data.message},
+                        *[
+                            {"type": "image_url", "image_url": {"url": image_url}}
+                            for image_url in data.images
+                        ],
+                    ],
+                }
             # M4 自动压缩: run_loop 之前检查历史是否达到压缩阈值,达到则
             # 先压缩再继续。整块 try/except 隔离——压缩失败只记日志,
             # 绝不阻塞本次聊天(流式事件照常产出)。注: AgentEvent 没有
