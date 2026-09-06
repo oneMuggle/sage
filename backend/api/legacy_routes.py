@@ -357,6 +357,10 @@ def get_session_repo() -> SessionRepository:
 # 正在跑的 agent。producer 在 run_loop 前登记、finally 注销。
 _ACTIVE_STREAMS: Dict[str, Dict[str, Any]] = {}
 _PENDING_RUN_CANCELLATIONS: Set[str] = set()
+# Fix #3 (2026-09-06): 用户确认事件 —— producer 发 task_plan 后等待用户在前端
+# 点击"开始执行"。orch_routes.confirm_run 设置事件唤醒 producer。
+# cancel_run 也会设置事件（以取消状态退出等待）。
+_RUN_CONFIRM_EVENTS: Dict[str, asyncio.Event] = {}
 
 
 class InterruptRequest(BaseModel):
@@ -2235,6 +2239,34 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             "failed": 0,
                         }
                     )
+                    # Fix #3 (2026-09-06): 用户确认门控 —— producer 在此暂停,
+                    # 等待前端调用 POST /orch/runs/{id}/confirm（用户点击
+                    # "开始执行"）。cancel_run 也会唤醒（以取消状态退出）。
+                    # 超时 10 分钟自动取消,避免 producer 永久挂起。
+                    confirm_event = asyncio.Event()
+                    _RUN_CONFIRM_EVENTS[run_id] = confirm_event
+                    try:
+                        try:
+                            await asyncio.wait_for(confirm_event.wait(), timeout=600)
+                        except TimeoutError:
+                            logger.warning(
+                                "编排确认超时 (600s)，自动取消 run %s", run_id
+                            )
+                            from backend.data.orch_run_repo import OrchRunRepository
+
+                            OrchRunRepository().update_status(run_id, "cancelled")
+                            await entry.queue.put(
+                                {
+                                    "state": "task_review",
+                                    "run_id": run_id,
+                                    "verdict": "cancelled",
+                                    "summary": "编排计划确认超时（10 分钟无响应），已自动取消",
+                                    "assertions": [],
+                                }
+                            )
+                            mode = "single"  # 跳过后续 conductor 启动
+                    finally:
+                        _RUN_CONFIRM_EVENTS.pop(run_id, None)
             try:
                 from backend.core.diagram_prompt import (
                     DIAGRAM_TOOL_PROMPT,

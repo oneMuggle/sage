@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { PlanCard } from '../components/PlanCard';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useChat } from '../features/send-message/useChat';
@@ -348,6 +349,18 @@ export function Chat() {
             streamingMessageId={streamingMessageId}
             onFork={handleFork}
           />
+        )}
+        {/* 编排计划确认卡 (Fix #2): 未派发时在主对话区域显示,方便用户查看和确认 */}
+        {taskBoard && !taskBoard.dispatchedAt && (
+          <div className="px-4 pb-2">
+            <PlanCard
+              runId={taskBoard.runId}
+              plan={taskBoard.plan}
+              locked={false}
+              needConfirm={true}
+              onCancel={() => void handleCancelRun(taskBoard.runId)}
+            />
+          </div>
         )}
         {/* Task 2: sticky-bottom "跳到最新" 按钮 — 用户离开底部 + 流式进行中显示,
             固定右下角,a11y ``aria-label="跳到最新"``。点击后 scrollTop=scrollHeight
