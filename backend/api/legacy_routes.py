@@ -38,6 +38,7 @@ from backend.chat.compaction import (
     should_compact,
 )
 from backend.chat.executors import resolve_attachments
+from backend.chat.history_context import build_request_messages, history_token_budget
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database
@@ -745,12 +746,9 @@ async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict
     LLM 客户端优先用本次请求自带的 llm_config（与聊天同配置），
     缺省时回退到 app_settings 里的持久化配置。
 
-    已知限制（review HIGH-1）：当前 legacy chat producer 只组装
-    ``[system, attachments?, user]`` 交给 run_loop，**尚未注入持久化历史**，
-    因此自动压缩的实际收益 = 持久化存储有界 + UI / fork 健全性；
-    **每轮 LLM token 节省要等聊天路径开始把持久化历史喂给 run_loop
-    才会生效**（跟进标记见 docs/plans/2026-07-29_session-compact-fork-m4.md
-    §6「已知限制」）。
+    L1 (2026-09-06)：producer 现在把持久化历史注入本轮 LLM 请求，压缩
+    直接决定每轮请求的上下文长度 —— 本函数因此必须在历史加载之前调用。
+    调用顺序约定见 producer 内注释。
 
     本函数**可以抛 CompactionError / 其他异常**——调用方（producer）
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
@@ -2245,24 +2243,58 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # ===== M6 PROJECT CONTEXT END =====
 
             attachment_block = await resolve_attachments(data.message, data.workspace_path or "")
-            messages = [{"role": "system", "content": system_content}]
-            if attachment_block:
-                messages.append(
-                    {
-                        "role": "system",
-                        "content": (
-                            "The user has referenced the following attached documents. "
-                            "Treat them as primary context for the user's request.\n\n"
-                            f"{attachment_block}"
-                        ),
-                    }
-                )
-            messages.append({"role": "user", "content": data.message})
-            # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）
+
+            # G6 (2026-09-06): 图片附件校验提前（多模态 user 消息在下方
+            # 历史组装后转换,与 L1 历史接线共用 build_request_messages 流程）
             if data.images:
                 multimodal_error = _validate_chat_images(data.images)
                 if multimodal_error:
                     raise HTTPException(status_code=400, detail=multimodal_error)
+
+            # M4 自动压缩: run_loop 之前检查历史是否达到压缩阈值,达到则
+            # 先压缩再继续。整块 try/except 隔离——压缩失败只记日志,
+            # 绝不阻塞本次聊天(流式事件照常产出)。注: AgentEvent 没有
+            # notice 类事件, 本里程碑不向前端推送压缩状态。
+            # L1 (2026-09-06): 压缩必须在加载历史之前 —— 它缩的是持久化
+            # 历史,而历史马上会注入本轮 LLM 请求(见下)。
+            try:
+                await _maybe_auto_compact_session(data.session_id, llm_config)
+            except Exception as compact_err:
+                logger.warning(
+                    f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"
+                )
+
+            # L1 会话历史接线 (对标增强第二轮, docs/plans/2026-09-06-parity-round2):
+            # 把持久化历史注入本轮 LLM 请求 —— 此前只发 [system, attachments?, user],
+            # 用户第二条消息起 agent"失忆",压缩也不省每轮 token。此处本轮 user
+            # 消息尚未落盘(落盘在下方),历史天然不含本轮消息。历史加载失败时
+            # 降级为无历史的旧行为,绝不阻断聊天。
+            try:
+                history_rows = MessageRepository().get_by_session(
+                    data.session_id, limit=100000
+                )
+            except Exception as hist_err:
+                logger.warning(
+                    f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
+                )
+                history_rows = []
+            messages, omitted_history = build_request_messages(
+                system_content=system_content,
+                user_text=data.message,
+                history_rows=history_rows,
+                attachment_block=attachment_block or None,
+            )
+            if omitted_history > 0:
+                logger.info(
+                    "[REQ %s] 历史超过预算(%s tokens),已省略最早 %s 条",
+                    request_id,
+                    history_token_budget(),
+                    omitted_history,
+                )
+
+            # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）。
+            # 校验已在 attachment 之后提前完成,此处只做末条 user 消息的形态转换。
+            if data.images:
                 messages[-1] = {
                     "role": "user",
                     "content": [
@@ -2273,16 +2305,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         ],
                     ],
                 }
-            # M4 自动压缩: run_loop 之前检查历史是否达到压缩阈值,达到则
-            # 先压缩再继续。整块 try/except 隔离——压缩失败只记日志,
-            # 绝不阻塞本次聊天(流式事件照常产出)。注: AgentEvent 没有
-            # notice 类事件, 本里程碑不向前端推送压缩状态。
-            try:
-                await _maybe_auto_compact_session(data.session_id, llm_config)
-            except Exception as compact_err:
-                logger.warning(
-                    f"[REQ {request_id}] 自动压缩失败(忽略, 继续未压缩聊天): {compact_err}"
-                )
 
             # PR-7: 流式 chat 持久化。run_loop() 自身不写库(保持通用 ReAct
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
@@ -2306,6 +2328,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             done_reasoning: Optional[str] = None
 
+            # L2 真流式 (2026-09-06): run_loop 在 THINKING 段实时发 CONTENT_DELTA
+            # 事件时置位 —— 此时 DONE.content 已实时下发过,不再做假切块,
+            # 否则前端会收到两遍内容。
+            streamed_content_delta = False
+
             # 暂存 DONE 事件 — 待 post-loop 标题生成后再推入队列，
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
@@ -2326,22 +2353,29 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     dispatcher.cancel()
 
             async for evt in agent.run_loop(messages, llm_config=llm_config):
+                # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
+                # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
+                if evt.state.value == "content_delta":
+                    streamed_content_delta = True
+                    await entry.queue.put(evt.to_dict())
                 # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
-                # 真 LLM streaming 需要 OpenAI stream=true + adapter 支持 tool_calls,
-                # 那是更大的重构;这个 producer 端的 fake stream 给出 90% 视觉效果。
-                if evt.state.value == "done" and evt.content:
+                # 真 LLM streaming 已由 run_loop 的 CONTENT_DELTA 覆盖(streamed_content_delta
+                # 置位时跳过);非流式回退路径(不支持的 provider / 流式首块前失败)
+                # 仍走这里,保持旧视觉行为。
+                elif evt.state.value == "done" and evt.content:
                     done_content = evt.content
-                    content = evt.content
-                    for i in range(0, len(content), _STREAMING_CHUNK_SIZE):
-                        delta = content[i : i + _STREAMING_CHUNK_SIZE]
-                        await entry.queue.put(
-                            {
-                                "state": "content_delta",
-                                "iteration": evt.iteration,
-                                "content": delta,
-                            }
-                        )
-                        await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
+                    if not streamed_content_delta:
+                        content = evt.content
+                        for i in range(0, len(content), _STREAMING_CHUNK_SIZE):
+                            delta = content[i : i + _STREAMING_CHUNK_SIZE]
+                            await entry.queue.put(
+                                {
+                                    "state": "content_delta",
+                                    "iteration": evt.iteration,
+                                    "content": delta,
+                                }
+                            )
+                            await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
                     # 暂存 DONE 事件，不立即推入队列 —
                     # 待 post-loop 标题生成 + session_updated 事件后再推送，
                     # 保证前端 onDone → loadSessions() 时标题已落盘。

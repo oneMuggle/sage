@@ -40,6 +40,40 @@ interface WorkspaceSearchWireResponse {
   total: number;
 }
 
+/** U1 变更面板 wire 类型（后端 snake_case） */
+interface WorkspaceChangesWire {
+  branch: string;
+  upstream: string;
+  ahead: number;
+  behind: number;
+  clean: boolean;
+  changes: Array<{
+    index_status: string;
+    worktree_status: string;
+    path: string;
+  }>;
+}
+
+/** git 变更清单（camelCase,渲染端消费） */
+export interface WorkspaceChanges {
+  branch: string;
+  upstream: string;
+  ahead: number;
+  behind: number;
+  clean: boolean;
+  changes: Array<{
+    indexStatus: string;
+    worktreeStatus: string;
+    path: string;
+  }>;
+}
+
+/** unified diff（可能因超长被后端截断） */
+export interface WorkspaceDiff {
+  diff: string;
+  truncated: boolean;
+}
+
 function mapBinding(binding: WorkspaceBindingWire): SessionWorkspaceBinding {
   return {
     sessionId: binding.session_id,
@@ -112,6 +146,48 @@ export const workspaceApi = {
         results: response.results.map(mapSearchResult),
         total: response.total,
       };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ===== U1 变更面板 (对标增强第二轮) =====
+
+  /** 会话工作区 git 变更清单（只读；未绑定工作区 / 非 git 仓库时抛错）。 */
+  async getChanges(sessionId: string): Promise<WorkspaceChanges> {
+    try {
+      const response = await invoke<WorkspaceChangesWire>('workspace_get_changes', {
+        sessionId,
+      });
+      return {
+        branch: response.branch,
+        upstream: response.upstream,
+        ahead: response.ahead,
+        behind: response.behind,
+        clean: response.clean,
+        changes: response.changes.map((entry) => ({
+          indexStatus: entry.index_status,
+          worktreeStatus: entry.worktree_status,
+          path: entry.path,
+        })),
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 指定文件（或全仓库）的未提交 diff（只读）。 */
+  async getChangeDiff(
+    sessionId: string,
+    path: string = '',
+    staged: boolean = false,
+  ): Promise<WorkspaceDiff> {
+    try {
+      return await invoke<WorkspaceDiff>('workspace_get_changes_diff', {
+        sessionId,
+        path,
+        staged,
+      });
     } catch (error) {
       throw handleApiError(error);
     }
