@@ -128,37 +128,6 @@ export interface OfficeElectronApiBridge {
   showOfficeDocumentInFolder: (ref: OfficeManagedRef) => Promise<void>;
 }
 
-/**
- * Memory bridge exposed at `window.electronAPI.memory`. Task 1 wired the
- * IPC commands; Task 2 (Gap B) types the shape and lands the Settings UI
- * toggle that calls `getAutoMemory` / `setAutoMemory`. The remaining 3
- * methods (`findByTurn`, `getProfile`, `getSummary`) type-stub for T5/T6.
- */
-export interface MemoryElectronApiBridge {
-  search: (args: { query: string; type?: string }) => Promise<unknown>;
-  save: (args: { content: string; importance?: number; category?: string }) => Promise<unknown>;
-  list: (args: { page?: number; page_size?: number; type?: string }) => Promise<unknown>;
-  delete: (args: { memory_id: string }) => Promise<unknown>;
-  /** GET /api/v1/preferences/auto_memory → "true" | "false" | null (default True). */
-  getAutoMemory: () => Promise<unknown>;
-  /** PUT /api/v1/preferences/auto_memory with body { value: boolean }. */
-  setAutoMemory: (args: { value: boolean }) => Promise<unknown>;
-  /** Important-2 — GET /api/v1/preferences/memory_retrieval → "true" | "false" | null (default True). */
-  getMemoryRetrieval: () => Promise<unknown>;
-  /** Important-2 — PUT /api/v1/preferences/memory_retrieval with body { value: boolean }. */
-  setMemoryRetrieval: (args: { value: boolean }) => Promise<unknown>;
-  findByTurn: (args: { turn_id: string }) => Promise<unknown>;
-  getProfile: () => Promise<unknown>;
-  getSummary: (args: { session_id: string }) => Promise<unknown>;
-  /**
-   * Task 6 — subscribe to backend memory_written SSE events (via main relay).
-   * The callback receives the raw JSON string payload of each SSE event.
-   * Resolves to an unsubscribe function, or `null` when the relay could not
-   * be established (caller should fall back to polling).
-   */
-  subscribe: (callback: (event: unknown) => void) => Promise<(() => void) | null>;
-}
-
 export interface BackendRequest {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
@@ -199,14 +168,6 @@ export interface ElectronAPI {
   office: OfficeElectronApiBridge;
   updates: UpdateElectronApiBridge;
   /**
-   * Memory IPC bridge (Gap B + Gap D). Surfaced via `electron/preload.ts`
-   * which delegates to `sage:invoke` IPC commands defined in
-   * `electron/commands.ts`. Backend wiring lives in
-   * `backend/memory/lifecycle.py` (auto_memory gate) and the existing
-   * `/api/v1/memory/*` endpoints (T1 wired the IPC routes).
-   */
-  memory: MemoryElectronApiBridge;
-  /**
    * Phase 6 (2026-06-27): Native folder picker (used by LLM Wiki and Office).
    * Returns absolute path string, or null if user cancelled.
    */
@@ -214,6 +175,11 @@ export interface ElectronAPI {
     intent: 'create' | 'open';
     defaultPath?: string;
   }) => Promise<string | null>;
+  /** live-events P1 附带: 审批等待 OS 通知（点击聚焦窗口; 不支持平台降级）。 */
+  notifyApproval?: (payload: { title?: string; body?: string }) => Promise<{
+    ok: boolean;
+    reason?: string;
+  }>;
   /** Optional bridge added in Task 8 (renderer→main log IPC). */
   log?: (level: LogLevel, msg: string, meta?: Record<string, unknown>) => Promise<unknown>;
   /** T13 (2026-07-02): Diagnostics card — list log files (newest first). */
@@ -226,6 +192,18 @@ export interface ElectronAPI {
   cleanupLogs?: () => Promise<{ removed: number }>;
   /** T13: Update SAGE_LOG_LEVEL for the main process logger. */
   setLogLevel?: (level: LogLevel) => Promise<{ ok: true }>;
+  /**
+   * 2026-08-27: 演示模式开关持久化. 用户在 Settings → 通用 切换后,
+   * 写入 <userData>/sage-demo-mode.json, 下次启动 main 进程读取生效.
+   */
+  resetDemoMode?: () => Promise<{ ok: boolean; error?: string }>;
+  setDemoMode?: (demoMode: boolean) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * 2026-08-27: 演示模式同步标志. main 进程激活演示模式时经
+   * webPreferences.additionalArguments → preload argv 注入, 首屏请求在
+   * settings 加载完成前即可命中拦截。
+   */
+  demoMode?: boolean;
 }
 
 declare global {

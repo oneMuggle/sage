@@ -209,6 +209,75 @@ class McpStatusReport:
         }
 
 
+def default_client_factory(config: ServerConfig) -> Any:
+    """L10: url 非空 → streamable-HTTP 客户端; 否则 stdio 子进程客户端。"""
+    if getattr(config, "url", None):
+        from backend.mcp.http_client import HttpClientMcpClient
+
+        return HttpClientMcpClient(config)
+    return McpClient(config)
+
+
+def synthesize_extra_specs(client: Any) -> List[Dict[str, Any]]:
+    """L10: 从 client 的 resources/prompts 能力合成工具 spec。
+
+    - 每服务器一个 ``read_resource`` 合成工具 (uri 枚举限定在已列资源);
+    - 每个已列 prompt 一个合成工具 (上限 10), 标记 ``_sage_synthetic`` 供
+      注册层选择适配器。任何失败返回已收集部分 (fail-open)。
+    """
+    specs: List[Dict[str, Any]] = []
+    list_resources = getattr(client, "list_resources", None)
+    if callable(list_resources):
+        try:
+            resources = list_resources()
+            uris = [str(r.get("uri")) for r in resources if isinstance(r, dict) and r.get("uri")]
+            if uris:
+                specs.append({
+                    "name": "read_resource",
+                    "description": "读取该 MCP 服务器已列出的资源内容 (uri 必须来自列表)",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"uri": {"type": "string", "enum": uris}},
+                        "required": ["uri"],
+                    },
+                    "_sage_synthetic": "resource",
+                })
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            logger.debug("resources/list skipped: %s", exc)
+    list_prompts = getattr(client, "list_prompts", None)
+    if callable(list_prompts):
+        try:
+            prompts = list_prompts()
+            for prompt in prompts[:10]:
+                if not isinstance(prompt, dict) or not prompt.get("name"):
+                    continue
+                specs.append({
+                    "name": f"prompt_{prompt['name']}",
+                    "description": prompt.get("description") or f"Prompt template {prompt['name']}",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": dict(prompt.get("arguments") or {}),
+                    },
+                    "_sage_synthetic": "prompt",
+                    "_sage_prompt_name": str(prompt["name"]),
+                })
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            logger.debug("prompts/list skipped: %s", exc)
+    return specs
+
+
+def _adapter_for(pool: McpServerPool, server_name: str, spec: Dict[str, Any]) -> Any:
+    """L10: 按 spec 标记选择适配器 —— 合成 spec 走专用工具, 其余走 McpTool。"""
+    from backend.mcp.tool import McpPromptTool, McpResourceTool, McpTool
+
+    kind = spec.get("_sage_synthetic")
+    if kind == "resource":
+        return McpResourceTool(pool, server_name, spec)
+    if kind == "prompt":
+        return McpPromptTool(pool, server_name, spec)
+    return McpTool(pool, server_name, spec)
+
+
 class McpServerPool:
     """Thread-safe multi-server pool with best-effort parallel discovery.
 
@@ -221,9 +290,10 @@ class McpServerPool:
 
     def __init__(
         self,
-        client_factory: Callable[[ServerConfig], Any] = McpClient,
+        client_factory: Callable[[ServerConfig], Any] | None = None,
         rediscovery_cooldown: float = REDISCOVERY_COOLDOWN_SECONDS,
     ) -> None:
+        client_factory = client_factory or default_client_factory
         self._client_factory = client_factory
         self._rediscovery_cooldown = rediscovery_cooldown
         self._lock = threading.RLock()
@@ -392,6 +462,12 @@ class McpServerPool:
                 logger.exception("[MCP:%s] unexpected discovery error", name)
                 self._unregister_server_tools(name)
                 return
+
+            # L10: resources/prompts 合成 spec (fail-open, 附加在真实工具后)
+            try:
+                tool_specs = tool_specs + synthesize_extra_specs(client)
+            except Exception as exc:  # noqa: BLE001 — fail-open
+                logger.debug("[MCP:%s] spec synthesis skipped: %s", name, exc)
 
             with self._lock:
                 record.client = client
@@ -687,6 +763,30 @@ class McpServerPool:
         with self._lock:
             return self._records.get(name)
 
+    # ---- L10: resources / prompts 透传 --------------------------------------
+
+    def read_resource(self, server_name: str, uri: str) -> Dict[str, Any]:
+        """读指定服务器的资源 (客户端需支持 resources/read)。"""
+        with self._lock:
+            record = self._records.get(server_name)
+        if record is None or record.client is None:
+            raise McpClientError(f"MCP server '{server_name}' is not available")
+        reader = getattr(record.client, "read_resource", None)
+        if not callable(reader):
+            raise McpClientError(f"MCP server '{server_name}' does not support resources")
+        return reader(uri)
+
+    def get_prompt(self, server_name: str, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """取指定服务器的 prompt 模板。"""
+        with self._lock:
+            record = self._records.get(server_name)
+        if record is None or record.client is None:
+            raise McpClientError(f"MCP server '{server_name}' is not available")
+        getter = getattr(record.client, "get_prompt", None)
+        if not callable(getter):
+            raise McpClientError(f"MCP server '{server_name}' does not support prompts")
+        return getter(name, arguments)
+
     # ---- tool registry fan-out ----------------------------------------------
 
     def track_registry(self, registry: Any) -> None:
@@ -703,7 +803,6 @@ class McpServerPool:
 
     def register_tools_into(self, registry: Any) -> int:
         """Register all READY servers' tools into one registry. Returns count."""
-        from backend.mcp.tool import McpTool
 
         count = 0
         with self._lock:
@@ -722,12 +821,11 @@ class McpServerPool:
                         tool_name,
                     )
                     continue
-                registry.register(McpTool(self, record.config.name, spec))
+                registry.register(_adapter_for(self, record.config.name, spec))
                 count += 1
         return count
 
     def _register_server_tools(self, record: ServerRecord) -> None:
-        from backend.mcp.tool import McpTool
 
         for registry in self._live_registries():
             for spec in record.tool_specs:
@@ -738,7 +836,7 @@ class McpServerPool:
                         tool_name,
                     )
                     continue
-                registry.register(McpTool(self, record.config.name, spec))
+                registry.register(_adapter_for(self, record.config.name, spec))
 
     def _unregister_server_tools(self, server_name: str) -> None:
         for registry in self._live_registries():

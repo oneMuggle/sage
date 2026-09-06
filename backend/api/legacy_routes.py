@@ -2046,6 +2046,45 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"model={_safe_log_field(llm_config['model'])}"
                 )
 
+            # ===== L11 user_prompt_submit 钩子 BEGIN (批次 C-2) =====
+            # 用户自定义钩子可在消息进入 agent 循环前检查/拦截 (deny)。
+            # fail-open: 钩子故障视为放行。deny → failed 事件, 不消耗 LLM。
+            try:
+                from backend.data.settings_repo import SettingsRepository
+                from backend.hooks.config import load_hooks
+                from backend.hooks.runner import run_event_hooks
+
+                l11_hooks = load_hooks(SettingsRepository())
+                if l11_hooks:
+                    l11_outcome = await run_event_hooks(
+                        l11_hooks,
+                        "user_prompt_submit",
+                        "",  # 无工具名; matcher 仅 "*" 对本事件有意义
+                        {
+                            "hook_event_name": "user_prompt_submit",
+                            "prompt": data.message,
+                            "session_id": data.session_id,
+                        },
+                    )
+                    if l11_outcome.denied:
+                        logger.info(
+                            "[REQ %s] user_prompt_submit 钩子拦截: %s",
+                            request_id,
+                            l11_outcome.reason,
+                        )
+                        await entry.queue.put(
+                            {
+                                "state": "failed",
+                                "error": "prompt_blocked_by_hook",
+                            }
+                        )
+                        return
+            except Exception as l11_prompt_err:
+                logger.debug(
+                    f"[REQ {request_id}] user_prompt_submit hooks skipped: {l11_prompt_err}"
+                )
+            # ===== L11 user_prompt_submit 钩子 END =====
+
             # F5 花费限额 (批次 C): 今日已花费(持久化估算, 重启不丢)达到
             # 限额时拒绝本次聊天。限额 0/未配置 = 不限。DB 故障 fail-open
             # (today_cost_usd 返回 0 → 永不拦截)。注: run_id/dispatcher 前置
@@ -2465,11 +2504,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
                 )
                 history_rows = []
+            # L9-lite (批次 C-3): 历史预算感知模型窗口 —— 前端上报的
+            # max_context 有效时, 历史预算 = 窗口 - 16k 预留(system/工具
+            # schema/回复), 下限 4k; 否则用默认推导(history_token_budget)。
+            l9_budget = history_token_budget()
+            if data.max_context is not None and data.max_context >= 20000:
+                l9_budget = max(4000, int(data.max_context) - 16384)
             messages, omitted_history = build_request_messages(
                 system_content=system_content,
                 user_text=data.message,
                 history_rows=history_rows,
                 attachment_block=attachment_block or None,
+                budget_tokens=l9_budget,
             )
             if omitted_history > 0:
                 logger.info(
@@ -2635,6 +2681,36 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
                 sess = None
+                # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
+                # run 正常结束通知; deny/modify 无语义, 一律忽略。
+                # 落盘成功判定沿用本分支的 assistant_message_id。
+                if assistant_message_id is not None:
+                    try:
+                        from backend.hooks.config import load_hooks as _load_hooks_fn
+                        from backend.hooks.runner import run_event_hooks as _run_hooks_fn
+
+                        def _load_stop_hooks():
+                            from backend.data.settings_repo import SettingsRepository
+
+                            return _load_hooks_fn(SettingsRepository())
+
+                        _stop_hooks = await _run_db_sync(_load_stop_hooks)
+                        if _stop_hooks:
+                            _capped = done_content[:4096]
+                            await _run_hooks_fn(
+                                _stop_hooks,
+                                "stop",
+                                "",
+                                {
+                                    "hook_event_name": "stop",
+                                    "session_id": data.session_id,
+                                    "final_content": _capped,
+                                },
+                            )
+                    except Exception as l11_stop_err:
+                        logger.debug(
+                            f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
+                        )
                 try:
                     sess = await _run_db_sync(
                         SessionRepository().get, data.session_id
