@@ -105,6 +105,11 @@ jobs:
 
       - name: Mypy (domain + ports)
         shell: bash -el {0}
+        env:
+          # runner 镜像 20260831.293 起 pip 25 的 PEP 660 可编辑安装
+          # (sage-core) 生成 __editable__ finder, mypy 无法解析 →
+          # import-not-found。MYPYPATH 直指源码目录绕开。
+          MYPYPATH: packages/sage-core
         run: |
           conda run -n sage-backend mypy backend/domain backend/ports
         continue-on-error: true # P0 期间允许，domain/ports 还没建
