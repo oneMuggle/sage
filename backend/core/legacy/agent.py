@@ -960,7 +960,7 @@ class SageAgent:
                         )
                     )
 
-                    for tc_p, (content_p, err_p) in zip(response.tool_calls, results_p, strict=False):
+                    for tc_p, (content_p, err_p) in zip(response.tool_calls, results_p):
                         args_p = json.loads(tc_p.arguments) if isinstance(tc_p.arguments, str) else tc_p.arguments
                         yield AgentEvent(
                             state=AgentState.OBSERVING,
