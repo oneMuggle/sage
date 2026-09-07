@@ -196,5 +196,36 @@ def test_history_load_never_raises_on_bad_rows():
     assert messages[-1]["role"] == "user"
 
 
+
+# ==================== L4' trailing_system (round4 批次 C) ====================
+
+
+def test_request_messages_trailing_system_before_user():
+    """易变上下文块作为独立 system 消息插在历史之后、末条 user 之前。"""
+    rows = [_row("user", "历史")]
+    messages, _ = build_request_messages(
+        system_content="SYS",
+        user_text="新",
+        history_rows=rows,
+        trailing_system="<environment>...</environment>",
+    )
+    assert [m["role"] for m in messages] == ["system", "user", "system", "user"]
+    assert messages[-2] == {"role": "system", "content": "<environment>...</environment>"}
+    assert messages[-1] == {"role": "user", "content": "新"}
+
+
+def test_request_messages_trailing_system_blank_omitted():
+    """空串/纯空白 trailing_system 不产生额外消息(与缺省行为一致)。"""
+    whitespace_only = "   " + "\n" + "\n" + "  "
+    for blank in (None, "", whitespace_only):
+        messages, _ = build_request_messages(
+            system_content="SYS",
+            user_text="新",
+            history_rows=[],
+            trailing_system=blank,
+        )
+        assert [m["role"] for m in messages] == ["system", "user"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

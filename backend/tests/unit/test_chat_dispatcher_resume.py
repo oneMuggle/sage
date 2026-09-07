@@ -34,8 +34,13 @@ async def test_review_blocked_by_reviewed_guard():
 
 
 @pytest.mark.asyncio()
-async def test_review_failure_resets_guard():
-    """review 抛异常 → _reviewed=False → 下次可重试。"""
+async def test_review_failure_keeps_guard():
+    """review 抛异常 → _reviewed 仍为 True（repo 已改为 INSERT OR REPLACE 幂等）。
+
+    2026-09-06: 旧行为是异常时复位 _reviewed=False 以便下次重试，但 review
+    使用确定性 task_id（task-review-{run_id}），重试会撞 UNIQUE 约束。
+    现在 repo 层改为 upsert 幂等，保留 _reviewed=True 避免浪费 token 重跑。
+    """
     from backend.orchestration.chat_dispatcher import ChatDispatcher
 
     dispatcher = ChatDispatcher(
@@ -51,7 +56,7 @@ async def test_review_failure_resets_guard():
         new=AsyncMock(side_effect=RuntimeError("boom")),
     ):
         await dispatcher.dispatch([])
-    assert dispatcher._reviewed is False
+    assert dispatcher._reviewed is True
 
 
 @pytest.mark.asyncio()

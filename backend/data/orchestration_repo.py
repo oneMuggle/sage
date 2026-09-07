@@ -54,13 +54,18 @@ class TaskRepository:
         self.db = get_database()
 
     def create(self, task: Task) -> Task:
-        """Insert a new task."""
+        """Insert or replace a task (idempotent upsert).
+
+        Uses ``INSERT OR REPLACE`` so callers that generate deterministic IDs
+        (e.g. the review step ``task-review-{run_id}``) are safe to invoke
+        multiple times without hitting a UNIQUE constraint error.
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
         cursor.execute(
             """
-            INSERT INTO orchestration_tasks
+            INSERT OR REPLACE INTO orchestration_tasks
             (task_id, name, description, status, priority, executor_type,
              parameters, packet, blocks, blocked_by, created_at, team_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -243,13 +248,18 @@ class LaneRepository:
         self.db = get_database()
 
     def create(self, lane: Lane) -> Lane:
-        """Insert a new lane."""
+        """Insert or replace a lane (idempotent upsert).
+
+        Uses ``INSERT OR REPLACE`` so callers that generate deterministic IDs
+        (e.g. the review step ``lane-review-{run_id}``) are safe to invoke
+        multiple times without hitting a UNIQUE constraint error.
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
         cursor.execute(
             """
-            INSERT INTO orchestration_lanes
+            INSERT OR REPLACE INTO orchestration_lanes
             (lane_id, task_id, agent_id, status, created_at, worktree,
              permission_preset, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)

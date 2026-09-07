@@ -18,7 +18,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from backend.agents.profiles import build_system_base, get_enabled_agent
+from backend.agents.profiles import (
+    _OFFICE_CREATE_CAPABILITY_PROMPT,
+    build_system_base,
+    get_enabled_agent,
+)
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse
@@ -287,3 +291,13 @@ async def test_sage_agent_events_carry_none_when_no_agent_id():
 
     for evt in events:
         assert evt.agent_id is None
+
+
+def test_office_prompt_mentions_markdown() -> None:
+    """system prompt 应告知 LLM 可以传 markdown 字符串。"""
+    assert "markdown" in _OFFICE_CREATE_CAPABILITY_PROMPT.lower()
+
+
+def test_office_prompt_mentions_font_family() -> None:
+    """system prompt 应告知 LLM 可以指定中文字体。"""
+    assert "font_family" in _OFFICE_CREATE_CAPABILITY_PROMPT or "字体" in _OFFICE_CREATE_CAPABILITY_PROMPT

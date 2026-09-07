@@ -180,6 +180,12 @@ export interface ElectronAPI {
     ok: boolean;
     reason?: string;
   }>;
+  /** S8 (round4): 分会话 OS 通知。main 展示原生 Notification,点击回发 session-notify-click。 */
+  notifySession?: (payload: {
+    sessionId: string;
+    title: string;
+    body: string;
+  }) => Promise<{ shown: boolean }>;
   /** Optional bridge added in Task 8 (renderer→main log IPC). */
   log?: (level: LogLevel, msg: string, meta?: Record<string, unknown>) => Promise<unknown>;
   /** T13 (2026-07-02): Diagnostics card — list log files (newest first). */

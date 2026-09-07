@@ -16,12 +16,14 @@ write outright when ``policy.workspace_root`` is bound (the hex chain).
 
 from __future__ import annotations
 
+import json as _json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
 from backend.office.excel import generate_xlsx
+from backend.office.markdown_to_paragraphs import parse_markdown_to_paragraphs
 from backend.office.models import (
     OfficeDocType,
     OfficeExcelGenerateRequest,
@@ -97,6 +99,13 @@ class OfficeCreateTool(BaseTool):
                         "description": (
                             "Output filename. Extension is appended if missing "
                             "(.docx/.xlsx/.pptx); a wrong extension is rejected."
+                        ),
+                    },
+                    "font_family": {
+                        "type": "string",
+                        "description": (
+                            "中文字体名（如'宋体'/'微软雅黑'/'等线'）。"
+                            "不传则默认宋体。"
                         ),
                     },
                     "content": {
@@ -200,6 +209,7 @@ class OfficeCreateTool(BaseTool):
         output_dir: Optional[str] = None,
         filename: Optional[str] = None,
         content: Optional[Dict[str, Any]] = None,
+        font_family: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
         # doc_type 大小写容错（T6 实测模型传 "Word"）：归一化后再校验。
@@ -229,7 +239,10 @@ class OfficeCreateTool(BaseTool):
         content = self._normalize_content(doc_type_enum, filename, content)
         if content is None:
             return ToolResult(success=False, error="content_required")
-        return self._generate_document(doc_type_enum, filename, content, target_dir)
+        return self._generate_document(
+            doc_type_enum, filename, content, target_dir,
+            font_family=font_family,
+        )
 
     @staticmethod
     def _try_delegate_to_bound_service(
@@ -288,20 +301,43 @@ class OfficeCreateTool(BaseTool):
         filename: str,
         content: Any,
     ) -> Optional[Dict[str, Any]]:
-        """把 LLM 常见的简化 content 归一化为结构化 dict。
+        """把 LLM 的 content 输入归一化为结构化 dict。
 
-        - 纯字符串 content（"今天天气很好"）→ word 正文段落（标题取文件名主名）。
-        - 其它类型保持原样（pydantic 校验兜底）。
-
-        Returns:
-            归一化的 dict；excel/ppt 收到纯字符串时返回 None（保持严格）。
+        四层兜底（仅 WORD；excel/ppt 保持严格）：
+        1. dict → 直接返回（结构化输入路径）
+        2. str + json.loads 成功 + 是 dict → 返回解析结果（修"内容显示不全"bug）
+        3. str + json.loads 失败 + markdown 有结构（多段 / heading / style）→ 解析
+        4. str 但 markdown 无结构 → 纯文本单段落（兜底，保持原有行为）
         """
-        if isinstance(content, str) and content.strip():
-            if doc_type_enum is OfficeDocType.WORD:
-                title = Path(filename).stem or "文档"
-                return {"title": title, "paragraphs": [{"text": content.strip()}]}
+        if isinstance(content, dict):
+            return content
+        if not isinstance(content, str) or not content.strip():
             return None
-        return content
+
+        if doc_type_enum is not OfficeDocType.WORD:
+            # excel/ppt 仍要求 dict，不做 markdown 猜测
+            return None
+
+        # ── 第 2 层：尝试 JSON 解析 ──
+        try:
+            parsed = _json.loads(content)
+            if isinstance(parsed, dict):
+                return parsed
+        except (ValueError, _json.JSONDecodeError):
+            pass
+
+        # ── 第 3 层：markdown 解析（仅当有结构时才采用 markdown 形式） ──
+        parsed_md = parse_markdown_to_paragraphs(content.strip())
+        if parsed_md and (
+            len(parsed_md) > 1
+            or any(p.get("heading") or p.get("style") for p in parsed_md)
+        ):
+            title = Path(filename).stem or "文档"
+            return {"title": title, "paragraphs": parsed_md}
+
+        # ── 第 4 层：纯文本兜底（单段无结构 → 保持原有用法） ──
+        title = Path(filename).stem or "文档"
+        return {"title": title, "paragraphs": [{"text": content.strip()}]}
 
     @staticmethod
     def _check_params(
@@ -365,6 +401,7 @@ class OfficeCreateTool(BaseTool):
         filename: str,
         content: Dict[str, Any],
         target_dir: Path,
+        font_family: Optional[str] = None,
     ) -> ToolResult:
         """构造生成请求并执行（复用生成器 + Pydantic 校验），返回结果。"""
         payload: Dict[str, Any] = dict(content)
@@ -373,6 +410,8 @@ class OfficeCreateTool(BaseTool):
         try:
             if doc_type_enum is OfficeDocType.WORD:
                 req = OfficeWordGenerateRequest(**payload)
+                if font_family:
+                    req = req.model_copy(update={"font_family": font_family})
                 output = generate_docx(req, output_dir=str(target_dir))
             elif doc_type_enum is OfficeDocType.EXCEL:
                 req = OfficeExcelGenerateRequest(**payload)
