@@ -11,14 +11,13 @@
 """
 
 from __future__ import annotations
-from typing import Dict, List, Set, Tuple
 
 import hashlib
 import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Iterable
+from typing import Dict, Iterable, List, Set, Tuple
 
 # 复用 lint 中的 wikilink 正则
 try:
