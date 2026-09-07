@@ -12,6 +12,24 @@ vi.mock('../../../shared/api/usageApi', () => ({
   fetchSessionUsage: (sessionId: string) => mockFetch(sessionId),
 }));
 
+/** U17 扩展字段后的完整 SessionUsage 夹具基座 */
+function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
+  return {
+    session_id: 's1',
+    requests: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    estimated_cost_usd: 0,
+    cached_tokens: 0,
+    last_model: null,
+    last_prompt_tokens: null,
+    last_cached_tokens: null,
+    last_at_ms: null,
+    ...overrides,
+  };
+}
+
 describe('SessionUsageBadge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -23,14 +41,15 @@ describe('SessionUsageBadge', () => {
   });
 
   it('shows token and cost when usage exists', async () => {
-    mockFetch.mockResolvedValue({
-      session_id: 's1',
-      requests: 5,
-      prompt_tokens: 900,
-      completion_tokens: 100,
-      total_tokens: 1000,
-      estimated_cost_usd: 0.0123,
-    });
+    mockFetch.mockResolvedValue(
+      usageFixture({
+        requests: 5,
+        prompt_tokens: 900,
+        completion_tokens: 100,
+        total_tokens: 1000,
+        estimated_cost_usd: 0.0123,
+      }),
+    );
     render(<SessionUsageBadge sessionId="s1" />);
     await waitFor(() => {
       expect(screen.getByTestId('session-usage-badge')).toBeInTheDocument();
@@ -40,14 +59,7 @@ describe('SessionUsageBadge', () => {
   });
 
   it('hides badge when session has no usage', async () => {
-    mockFetch.mockResolvedValue({
-      session_id: 's1',
-      requests: 0,
-      prompt_tokens: 0,
-      completion_tokens: 0,
-      total_tokens: 0,
-      estimated_cost_usd: 0,
-    });
+    mockFetch.mockResolvedValue(usageFixture({}));
     const { container } = render(<SessionUsageBadge sessionId="s1" />);
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('s1');

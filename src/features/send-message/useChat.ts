@@ -22,7 +22,9 @@ import {
   type LLMErrorResponse,
 } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
+import { historyBudgetFor } from '../../shared/lib/modelWindows';
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
+import { notifySession, shouldNotify } from './sessionNotify';
 import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
 import { useSettings } from '../manage-settings/useSettings';
 
@@ -252,7 +254,13 @@ export function useChat() {
         apiKey: chatEndpoint.apiKey,
         apiUrl: chatEndpoint.baseUrl,
         model: settings.modelSelections.chatModel.modelId ?? undefined,
-        maxContext: settings.maxContext,
+        // U17 (round4): L9-lite 历史预算——按模型窗口推导(窗口 × 0.75)。
+        // settings.maxContext 默认 4096 达不到后端 20000 有效性阈值而被忽略,
+        // 这里统一走推导;用户显式配置 ≥20000 时推导函数原样透传。
+        maxContext: historyBudgetFor(
+          settings.modelSelections.chatModel.modelId,
+          settings.maxContext,
+        ),
         temperature: settings.temperature,
         // 从 baseUrl 推导 provider,后端不再硬写 "custom"。
         // TODO(PR-7a+): 给 EndpointConfig 加 provider 字段,这里直接读,
@@ -268,6 +276,16 @@ export function useChat() {
       const appendContent = (next: string): void => {
         // I5: 流式逐字 — appendContent 通过 store 累加 (跨路由切换保留)
         useChatStreamStore.getState().appendContent(sid, assistantId, next);
+      };
+
+      // S8 (round4): 后台会话注意力通知 —— 目标会话非当前查看 / 窗口不可见
+      // 时,在完成/失败/等审批三个节点发 OS 通知;点击由 App 的桥接跳转回会话。
+      const maybeNotify = (kind: 'done' | 'failed' | 'approval', body: string): void => {
+        if (!shouldNotify(sid, currentSessionId)) return;
+        const labels = { done: '已完成', failed: '运行失败', approval: '等待审批' } as const;
+        const session = useStore.getState().sessions.find((s) => s.id === sid);
+        const title = session?.title ? `${session.title} · ${labels[kind]}` : labels[kind];
+        notifySession({ sessionId: sid, title, body });
       };
 
       // I5-2: 中间态 (thinking/acting/observing) 的 uiText 应"覆盖"而非"追加"，
@@ -415,6 +433,11 @@ export function useChat() {
               // S4: 记录所属会话 —— 侧边栏按会话聚合"待审批"注意力点。
               if (evt.state === 'permission_request' && evt.permission_request) {
                 usePermissionState.getState().setFromEvent(evt.permission_request, sid);
+                // S8: 后台会话卡在审批时用户看不到对话框 —— OS 通知提醒
+                maybeNotify(
+                  'approval',
+                  `${evt.permission_request.tool_name} 等待确认`,
+                );
               }
 
               // M2 part B: ask_user_question 事件 → 写入 question store,
@@ -686,9 +709,13 @@ export function useChat() {
             },
             onError: (err) => {
               handleError(err);
+              // S8: 后台会话失败提醒（前台当前会话不打扰）
+              maybeNotify('failed', err instanceof Error ? err.message.slice(0, 120) : '运行失败');
               finishStream();
             },
             onDone: () => {
+              // S8: 后台会话完成提醒
+              maybeNotify('done', (lastDoneContent ?? '').slice(0, 120));
               // 流自然结束 — 把 streaming.content 写回 store,
               // 然后清掉 streaming overlay 让消息退回 store 视图
               // U5: 自然结束才 flush 队列(错误/中断路径 flushQueue=false)
