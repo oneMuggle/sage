@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 # 工具名单一来源（防漂移）：种子白名单的工具名一律从这里组合，
 # 不写字面量 —— 历史两次漂移（terminal、file_read）见 tool_names 模块注释。
@@ -507,7 +507,7 @@ def ensure_default_agents() -> int:
     return inserted
 
 
-def validate_profile_tools(repo: Any | None = None) -> int:
+def validate_profile_tools(repo: Optional[Any] = None) -> int:
     """启动期校验所有 profile 白名单 ⊆ 内置工具名（T3 防漂移，仅告警）。
 
     未注册名对 LLM 本就不可见（``get_schemas_for_llm`` 只遍历已注册工具），
@@ -599,6 +599,11 @@ def format_agents_for_prompt() -> str:
 _OFFICE_CREATE_CAPABILITY_PROMPT = (
     "\n\n你可以对 Office 文档（Word/Excel/PPT）执行增删改查：\n"
     "- 创建：调用 office_create 工具（提供 doc_type / output_dir / filename / 内容结构）。\n"
+    "  · content 接受三种形式，按优先级处理：\n"
+    "    1) 结构化对象（首选）：{title, paragraphs:[{text, heading?}], tables:[{headers, rows[]}]}\n"
+    "    2) JSON 字符串：直接传 JSON 序列化后的对象字符串\n"
+    "    3) Markdown 字符串：传 # 标题 / ## 二级 / - bullet 等 markdown 文本\n"
+    "  · 可选 font_family 指定中文字体（宋体/微软雅黑/等线），默认宋体。\n"
     "- 查看当前会话工作区里的文档：office_list；读取内容：office_read。\n"
     "- 修改已有文档（原地编辑，按 op 列表执行）：office_update"
     "（用 doc_id 或绝对路径 file_path 定位文件）。\n"

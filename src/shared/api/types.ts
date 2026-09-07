@@ -1032,6 +1032,7 @@ export interface OfficePptGenerateRequest {
 
 export interface WordParagraphSpec {
   heading?: 'h1' | 'h2' | 'h3';
+  style?: 'bullet' | 'numbered';
   text: string;
 }
 
@@ -1046,6 +1047,8 @@ export interface OfficeWordGenerateRequest {
   title: string;
   paragraphs?: WordParagraphSpec[];
   tables?: WordTableSpec[];
+  font_family?: string;
+  ascii_font?: string;
 }
 
 export interface ExcelSheetSpec {

@@ -31,7 +31,7 @@ def test_schema_requires_no_tool_context_and_exposes_fields():
     tool = _tool()
     assert tool.requires_tool_context is False
     props = tool.schema.parameters["properties"]
-    assert set(props.keys()) == {"doc_type", "output_dir", "filename", "content"}
+    assert set(props.keys()) == {"doc_type", "output_dir", "filename", "content", "font_family"}
     # doc_type 合法取值必须与 models.OfficeDocType 枚举一致（单一事实来源）
     assert props["doc_type"]["enum"] == [t.value for t in OfficeDocType]
 
@@ -367,4 +367,47 @@ def test_create_without_binding_keeps_legacy_output_dir_behavior(tmp_path):
     assert result.success is True
     assert set(result.content.keys()) == {"path", "filename", "bytes"}
     assert (out_dir / "天气.docx").exists()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# T5: _normalize_content 三层兜底 (JSON / markdown / plain text)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_normalize_content_plain_string_wraps_as_paragraph() -> None:
+    """纯字符串 → 单段落。"""
+    out = OfficeCreateTool._normalize_content(
+        OfficeDocType.WORD, "report.md", "今天天气很好"
+    )
+    assert out == {"title": "report", "paragraphs": [{"text": "今天天气很好"}]}
+
+
+def test_normalize_content_json_string_parsed() -> None:
+    """字符串是 JSON dict → 直接解析。"""
+    json_str = '{"title": "T", "paragraphs": [{"text": "x", "heading": "h1"}]}'
+    out = OfficeCreateTool._normalize_content(
+        OfficeDocType.WORD, "report.md", json_str
+    )
+    assert out == {"title": "T", "paragraphs": [{"text": "x", "heading": "h1"}]}
+
+
+def test_normalize_content_markdown_string_parsed() -> None:
+    """非 JSON 字符串按 markdown 解析。"""
+    md = "# 标题\n\n段落\n\n- bullet 1\n- bullet 2"
+    out = OfficeCreateTool._normalize_content(
+        OfficeDocType.WORD, "report.md", md
+    )
+    assert out["title"] == "report"
+    paras = out["paragraphs"]
+    assert paras[0] == {"text": "标题", "heading": "h1", "style": None}
+    assert paras[1] == {"text": "段落", "heading": None, "style": None}
+    assert paras[2]["style"] == "bullet"
+    assert paras[2]["text"] == "bullet 1"
+
+
+def test_normalize_content_excel_string_still_rejected() -> None:
+    """excel 收到字符串仍然返回 None（保持严格语义）。"""
+    from backend.office.models import OfficeDocType
+    out = OfficeCreateTool._normalize_content(OfficeDocType.EXCEL, "book.xlsx", "data")
+    assert out is None
 
