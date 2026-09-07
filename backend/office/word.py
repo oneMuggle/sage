@@ -246,6 +246,11 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
 
     try:
         doc = _Doc()
+        # ★ 新增：显式设置字体（修"字体奇怪"bug）
+        ascii_font = getattr(req, "ascii_font", None) or DEFAULT_ASCII_FONT
+        ea_font = getattr(req, "font_family", None) or DEFAULT_EA_FONT
+        set_doc_default_font(doc, ascii_font, ea_font)
+
         # Title
         doc.add_heading(req.title, level=0)
         # Body paragraphs
@@ -256,6 +261,12 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 doc.add_heading(para.text, level=2)
             elif para.heading == "h3":
                 doc.add_heading(para.text, level=3)
+            elif para.style == "bullet":
+                # ★ 新增：bullet 列表
+                doc.add_paragraph(para.text, style="List Bullet")
+            elif para.style == "numbered":
+                # ★ 新增：numbered 列表
+                doc.add_paragraph(para.text, style="List Number")
             else:
                 doc.add_paragraph(para.text)
         # Tables
