@@ -74,6 +74,17 @@ export interface WorkspaceDiff {
   truncated: boolean;
 }
 
+/** U19 逐文件撤销结果 */
+export interface WorkspaceRevertResult {
+  reverted: string[];
+  errors: Array<{ path: string; error: string }>;
+}
+
+interface WorkspaceRevertWire {
+  reverted: string[];
+  errors: Array<{ path: string; error: string }>;
+}
+
 function mapBinding(binding: WorkspaceBindingWire): SessionWorkspaceBinding {
   return {
     sessionId: binding.session_id,
@@ -188,6 +199,47 @@ export const workspaceApi = {
         path,
         staged,
       });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ===== U19 逐文件/逐 hunk 撤销 (对标增强第四轮批次 B) =====
+
+  /** 逐文件撤销工作区改动（git checkout --；未跟踪文件需 deleteUntracked）。 */
+  async revertChanges(
+    sessionId: string,
+    paths: string[],
+    deleteUntracked = false,
+  ): Promise<WorkspaceRevertResult> {
+    try {
+      const response = await invoke<WorkspaceRevertWire>('workspace_revert_changes', {
+        sessionId,
+        paths,
+        deleteUntracked,
+      });
+      return {
+        reverted: response.reverted,
+        errors: response.errors.map((entry) => ({ path: entry.path, error: entry.error })),
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 撤销某文件未暂存 diff 的指定 hunk 子集（0-based 序号）。 */
+  async revertChangeHunks(
+    sessionId: string,
+    path: string,
+    hunkIndices: number[],
+  ): Promise<{ revertedHunks: number }> {
+    try {
+      const response = await invoke<{ reverted_hunks: number }>('workspace_revert_change_hunks', {
+        sessionId,
+        path,
+        hunkIndices,
+      });
+      return { revertedHunks: response.reverted_hunks };
     } catch (error) {
       throw handleApiError(error);
     }

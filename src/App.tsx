@@ -4,13 +4,15 @@ import {
   Routes,
   Route,
   Navigate,
-  useLocation,
+  useNavigate,
   useSearchParams,
+  useLocation,
 } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
+import { onSessionNotifyClick } from './features/send-message/sessionNotify';
 import { Settings } from './pages';
 import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
@@ -27,6 +29,7 @@ import { Layout } from './widgets/layout';
 import { ApprovalDialog } from './widgets/permission';
 import { QuestionDialog } from './widgets/question';
 import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
+import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
 
 // 批次三 step 6 (spec §4.3 line 150):
 // Memory 页"按会话查看摘要"或"来源会话跳转"以 /chat?session=<id> 深链形式进入。
@@ -75,8 +78,27 @@ function ChatRoute() {
   return <Chat />;
 }
 
+// S8 (round4): OS 通知点击 → 聚焦窗口后跳转对应会话。
+// 主进程 'sage:event:session-notify-click' 回发 sessionId,这里统一
+// 写 currentSessionId + 深链跳转（复用 ChatRoute 的 ?session= 消费链路）。
+function SessionNotifyBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const unlisten = onSessionNotifyClick((sessionId) => {
+      useStore.getState().setCurrentSessionId(sessionId);
+      navigate(`/chat?session=${encodeURIComponent(sessionId)}`);
+    });
+    return () => {
+      void unlisten?.then((fn) => fn?.());
+    };
+  }, [navigate]);
+  return null;
+}
+
 function App() {
   const [commandOpen, setCommandOpen] = useState(false);
+  // U18 (round4): 快捷键帮助覆盖层（非输入焦点下按 ? 打开）
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
 
   // 全局快捷键 Ctrl+K / Cmd+K 打开命令面板
   useEffect(() => {
@@ -84,6 +106,21 @@ function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setCommandOpen((prev) => !prev);
+        return;
+      }
+      // U18: '?' = Shift+/，输入焦点内不劫持（用户可能真的想输入问号）
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement | null;
+        const tag = target?.tagName;
+        const isTextInput =
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          target?.isContentEditable === true;
+        if (!isTextInput) {
+          e.preventDefault();
+          setShortcutHelpOpen((prev) => !prev);
+        }
       }
     };
     window.addEventListener('keydown', handler);
@@ -95,6 +132,7 @@ function App() {
       <NavHistoryProvider>
         <BackendStatusBanner />
         <AppStartupRestore />
+        <SessionNotifyBridge />
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/chat" replace />} />
@@ -111,6 +149,8 @@ function App() {
           </Route>
         </Routes>
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        {/* U18: 快捷键帮助覆盖层（? 触发，Esc/点背景关闭） */}
+        <ShortcutHelpOverlay open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
         {/* M1: 全局工具审批模态框 — 由 permission_request 流事件驱动 */}
         <ApprovalDialog />
         {/* M2 part B: 全局提问模态框 — 由 ask_user_question 流事件驱动 */}

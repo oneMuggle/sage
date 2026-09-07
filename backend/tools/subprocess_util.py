@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import re
 import select
 import signal
 import stat
@@ -328,12 +329,34 @@ def make_temp_output_file(prefix: str = "sage_") -> str:
         return handle.name
 
 
+#: U7 (round4 批次 E): ANSI/VT 转义序列三类（ECMA-48）：
+#: - OSC ``ESC ] ... BEL/ST``（窗口标题、超链接）—— 优先匹配，跨任意内容
+#: - CSI ``ESC [ 参数 中间 final``（颜色、光标）
+#: - 其余两字符转义与带 intermediate 字节的序列（字符集选择 ``ESC ( B`` 等）
+#: 子进程（ls --color、pytest、构建工具）在管道下仍可能输出着色转义码，
+#: LLM 与前端渲染都会被污染，读取时统一剥离。
+_ANSI_ESCAPE_RE = re.compile(
+    r"\x1b(?:"
+    r"\][^\x07\x1b]*(?:\x07|\x1b\\)"
+    r"|\[[0-9;?]*[ -/]*[@-~]"
+    r"|[@-Z\\-_]"
+    r"|[ -/]*[0-:@-~]"
+    r")"
+)
+
+
+def strip_ansi(text: str) -> str:
+    """剥离 ANSI/VT 转义序列（CSI / OSC / 单字符），纯函数。"""
+    return _ANSI_ESCAPE_RE.sub("", text)
+
+
 def read_capped_output(file_path: str, cap: int, offset: int = 0) -> Tuple[str, bool, int]:
     """从 ``offset`` 起读至多 ``cap`` 字节；返回 ``(文本, 是否截断, 新偏移)``。
 
     父进程内存占用恒定 ≤ ``cap`` + margin——子进程打印多少都不全量读。
     ``offset`` 支持后台 shell 的增量轮询：调用方存下返回的新偏移，下次
-    从那里继续。
+    从那里继续。返回文本已剥离 ANSI 转义（U7）；偏移始终按原始字节计，
+    strip 不影响增量续读正确性。
 
     读取失败（文件被删、权限变更等）返回说明文本而非抛异常——本函数常在
     清理路径调用，不允许崩。
@@ -381,8 +404,8 @@ def read_capped_output(file_path: str, cap: int, offset: int = 0) -> Tuple[str, 
             with contextlib.suppress(OSError):
                 os.close(fd)
     if len(raw) <= cap:
-        return raw.decode("utf-8", errors="replace"), False, offset + len(raw)
-    capped = raw[:cap].decode("utf-8", errors="replace")
+        return strip_ansi(raw.decode("utf-8", errors="replace")), False, offset + len(raw)
+    capped = strip_ansi(raw[:cap].decode("utf-8", errors="replace"))
     cap_kib = cap // 1024
     return (
         f"{capped}\n...[输出超过 {cap_kib} KiB 上限，已截断]",

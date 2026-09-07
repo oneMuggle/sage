@@ -208,3 +208,44 @@ async def test_llm_response_usage_none_when_absent():
     assert response.usage is None
     assert usage_tracker.summary()["totals"]["requests"] == 0
     await client.close()
+
+
+# ==================== U17: last_* 透出 (round4 批次 B) ====================
+
+
+def _patch_memory_db(monkeypatch: pytest.MonkeyPatch) -> None:
+    """usage_events 落库/查询走内存 DB（与集成测试同口径）。"""
+    from backend.data import database as database_module
+
+    test_db = database_module.Database(":memory:")
+    test_db.init_db()
+    monkeypatch.setattr(database_module, "_db", test_db)
+
+
+def test_session_summary_exposes_last_request(monkeypatch: pytest.MonkeyPatch):
+    import time
+
+    _patch_memory_db(monkeypatch)
+    tracker = UsageTracker()
+    tracker.record("gpt-4o", 100, 10, session_id="sess-u17", cached_tokens=40)
+    time.sleep(0.003)  # created_at 毫秒精度,错开保证"最近一行"确定
+    tracker.record("claude-sonnet", 200, 20, session_id="sess-u17", cached_tokens=50)
+
+    summary = tracker.session_summary("sess-u17")
+    assert summary["requests"] == 2
+    assert summary["last_model"] == "claude-sonnet"
+    assert summary["last_prompt_tokens"] == 200
+    assert summary["last_cached_tokens"] == 50
+    assert summary["last_at_ms"] > 0
+    assert tracker.last_request("sess-u17") is not None
+
+
+def test_session_summary_without_rows_returns_none_last(monkeypatch: pytest.MonkeyPatch):
+    _patch_memory_db(monkeypatch)
+    summary = UsageTracker().session_summary("no-such-session")
+    assert summary["requests"] == 0
+    assert summary["last_model"] is None
+    assert summary["last_prompt_tokens"] is None
+    assert summary["last_cached_tokens"] is None
+    assert summary["last_at_ms"] is None
+    assert UsageTracker().last_request("no-such-session") is None

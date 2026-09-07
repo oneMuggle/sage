@@ -6,7 +6,7 @@ import sqlite3
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
@@ -269,6 +269,76 @@ def get_workspace_change_diff(
         diff=str(content.get("diff", "")),
         truncated=bool(content.get("truncated", False)),
     )
+
+
+class WorkspaceRevertRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    paths: List[str] = Field(min_length=1, max_length=50)
+    delete_untracked: bool = False
+
+
+class WorkspaceRevertEntryModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    error: str
+
+
+class WorkspaceRevertResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reverted: List[str]
+    errors: List[WorkspaceRevertEntryModel]
+
+
+class WorkspaceRevertHunksRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str = Field(min_length=1, max_length=1024)
+    hunk_indices: List[int] = Field(min_length=1, max_length=200)
+
+
+class WorkspaceRevertHunksResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reverted_hunks: int
+
+
+@router.post("/changes/revert", response_model=WorkspaceRevertResponse)
+def revert_workspace_changes(
+    session_id: str, request: WorkspaceRevertRequest
+) -> WorkspaceRevertResponse:
+    """逐文件撤销工作区改动（U19，用户在变更面板显式触发，非 LLM 工具）。
+
+    语义为 ``git checkout -- <path>``（工作区恢复到 index/HEAD，不动暂存
+    区）；未跟踪文件需显式 ``delete_untracked=true``。单文件失败不阻断
+    其余文件，失败明细随响应返回。
+    """
+    from backend.office.workspace_revert import revert_files
+
+    root = _bound_workspace_or_raise(_connection(), session_id)
+    reverted, errors = revert_files(root, request.paths, request.delete_untracked)
+    return WorkspaceRevertResponse(
+        reverted=reverted,
+        errors=[WorkspaceRevertEntryModel(**entry) for entry in errors],
+    )
+
+
+@router.post("/changes/revert-hunks", response_model=WorkspaceRevertHunksResponse)
+def revert_workspace_change_hunks(
+    session_id: str, request: WorkspaceRevertHunksRequest
+) -> WorkspaceRevertHunksResponse:
+    """按 hunk 子集撤销某文件的工作区改动（U19）。
+
+    ``hunk_indices`` 为 0-based，与 GET /changes/diff 输出的 hunk 顺序
+    一致。git apply 原子：任一 hunk 应用失败则整体不动盘并返回 502。
+    """
+    from backend.office.workspace_revert import guard_rel_path, revert_hunks
+
+    root = _bound_workspace_or_raise(_connection(), session_id)
+    error = guard_rel_path(root, request.path)
+    if error is not None:
+        raise _error(400, "invalid_path", error)
+    count, error = revert_hunks(root, request.path, request.hunk_indices)
+    if error is not None:
+        raise _error(502, "git_error", error)
+    return WorkspaceRevertHunksResponse(reverted_hunks=count)
 
 
 __all__ = ["router"]

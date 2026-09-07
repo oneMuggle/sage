@@ -45,8 +45,16 @@ _LOG_PRETTY = f"%H{_LOG_FIELD_SEP}%an{_LOG_FIELD_SEP}%ci{_LOG_FIELD_SEP}%s"
 _BRANCH_RE = re.compile(r"^## (?P<branch>[^\s.]+)(?:\.\.\.(?P<upstream>\S+))?(?:\s+\[(?P<track>[^\]]+)\])?")
 
 
-def _run_git(args: List[str], cwd: str) -> Tuple[Optional[str], Optional[str]]:
-    """执行 git 子命令；返回 (stdout, error)。error 非 None 时 stdout 无意义。"""
+def _run_git(
+    args: List[str],
+    cwd: str,
+    input_bytes: Optional[bytes] = None,
+) -> Tuple[Optional[str], Optional[str]]:
+    """执行 git 子命令；返回 (stdout, error)。error 非 None 时 stdout 无意义。
+
+    ``input_bytes`` 供给 stdin（U19: ``git apply`` 补丁经 stdin 传入，
+    避免临时文件与编码问题）。
+    """
     try:
         completed = subprocess.run(
             [GIT_BINARY, *args],
@@ -54,6 +62,7 @@ def _run_git(args: List[str], cwd: str) -> Tuple[Optional[str], Optional[str]]:
             capture_output=True,
             timeout=GIT_TIMEOUT_SECONDS,
             check=False,
+            input=input_bytes,
         )
     except FileNotFoundError:
         return None, "git 可执行文件不可用：请确认 git 已安装并在 PATH 中"

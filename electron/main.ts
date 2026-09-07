@@ -36,6 +36,7 @@
 // runtime even though tsc --noEmit is happy.
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import { logger } from './logger';
+import { setupTrayAndGlobalShortcut } from './tray';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -913,6 +914,12 @@ function registerIpcHandlers(): void {
         return { ok: true, event };
       }
 
+      // S8: 主进程自主产生的事件（OS 通知点击回发）。无需后端 relay,
+      // renderer 侧 listen() 注册的 ipcRenderer.on 直接收 webContents.send。
+      if (event === 'session-notify-click') {
+        return { ok: true, event };
+      }
+
       // Unknown event: log + no-op (frontend listen() Promise still resolves)
       logger.warn('ipc: unknown event', { event });
       return { ok: true, event };
@@ -1014,6 +1021,46 @@ function registerIpcHandlers(): void {
   function getSenderWindow(evt: Electron.IpcMainInvokeEvent): BrowserWindow | null {
     return BrowserWindow.fromWebContents(evt.sender);
   }
+
+  // ─── S8 分会话 OS 通知 (对标增强第四轮批次 B) ───
+  // Renderer 判定"该不该打扰"(目标会话非当前查看 / 窗口不可见)后调本通道;
+  // 主进程负责原生 Notification 展示、3s 去抖与点击聚焦。点击后向
+  // renderer 回发 'sage:event:session-notify-click',由 App 的桥接组件
+  // 路由跳转到对应会话(/chat?session=<id>)。
+  const SESSION_NOTIFY_THROTTLE_MS = 3000;
+  const lastNotifyAtBySession = new Map<string, number>();
+
+  ipcMain.handle(
+    'sage:session:notify',
+    (evt, payload: { sessionId: string; title?: string; body?: string }) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      if (!Notification.isSupported()) return { shown: false };
+      const { sessionId } = payload;
+      if (!sessionId) return { shown: false };
+
+      const now = Date.now();
+      if (now - (lastNotifyAtBySession.get(sessionId) ?? 0) < SESSION_NOTIFY_THROTTLE_MS) {
+        return { shown: false };
+      }
+      lastNotifyAtBySession.set(sessionId, now);
+
+      const notification = new Notification({
+        title: payload.title || 'Sage',
+        body: (payload.body || '').slice(0, 200),
+        silent: false,
+      });
+      notification.on('click', () => {
+        const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+        if (!win) return;
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+        win.webContents.send('sage:event:session-notify-click', { sessionId });
+      });
+      notification.show();
+      return { shown: true };
+    },
+  );
 
   // live-events P1 附带 (2026-09-07): 审批等待 OS 通知 —— 用户不在窗口前时
   // 子代理/主 agent 的 permission_request 不再被错过。点击通知聚焦窗口。
@@ -1421,6 +1468,9 @@ async function isPortReleased(port: number, timeoutMs: number): Promise<void> {
 app.whenReady().then(async () => {
   // Step 3: prune log files older than 7 days on every cold start
   cleanupOlderThan(7);
+  // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
+  // 内部全量降级:托盘/快捷键不可用只记日志,绝不阻断启动。
+  setupTrayAndGlobalShortcut();
   // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
   // fail-open by design: doctor never blocks the app from launching — its output
   // is captured into the NDJSON startup log so the user can diagnose degraded
