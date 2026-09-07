@@ -299,3 +299,68 @@ def test_build_payload_truncates_oversized_tool_output():
     )
     assert len(payload["tool_output"]) <= PAYLOAD_OUTPUT_CAP + 16
     assert payload["tool_output"].endswith("…[截断]")
+
+
+# ==================== L11 (批次 C-2): user_prompt_submit / stop ====================
+
+
+def test_config_accepts_new_events():
+    """user_prompt_submit / stop 进入事件白名单。"""
+    hooks = validate_hooks(
+        [
+            {"event": "user_prompt_submit", "command": "echo ok"},
+            {"event": "stop", "command": "echo done"},
+        ]
+    )
+    assert [h.event for h in hooks] == ["user_prompt_submit", "stop"]
+
+
+def test_config_still_rejects_unknown_event():
+    with pytest.raises(HookConfigError):
+        validate_hooks([{"event": "session_start", "command": "echo x"}])
+
+
+@pytest.mark.asyncio()
+async def test_user_prompt_submit_deny_blocks_prompt():
+    """user_prompt_submit 钩子 deny → denied,producer 据此拦截消息。"""
+    deny = _cfg(
+        f'{PY} -c "import json,sys;print(json.dumps({{\'decision\':\'deny\',\'reason\':\'nope\'}}))"',
+        event="user_prompt_submit",
+    )
+    payload = {
+        "hook_event_name": "user_prompt_submit",
+        "prompt": "帮我删库",
+        "session_id": "s1",
+    }
+    outcome = await run_event_hooks([deny], "user_prompt_submit", "", payload)
+    assert outcome.denied
+    assert outcome.reason == "nope"
+
+
+@pytest.mark.asyncio()
+async def test_user_prompt_submit_allow_passes():
+    allow = _cfg(f'{PY} -c "print(\'\')"', event="user_prompt_submit")
+    outcome = await run_event_hooks(
+        [allow], "user_prompt_submit", "", {"hook_event_name": "user_prompt_submit", "prompt": "hi"}
+    )
+    assert not outcome.denied
+
+
+@pytest.mark.asyncio()
+async def test_stop_hook_runs_and_decisions_ignored_by_caller():
+    """stop 钩子可执行; 其 decision 由调用方忽略 (observe-only 语义)。"""
+    deny = _cfg(
+        f'{PY} -c "import json,sys;print(json.dumps({{\'decision\':\'deny\'}}))"',
+        event="stop",
+    )
+    outcome = await run_event_hooks(
+        [deny], "stop", "", {"hook_event_name": "stop", "session_id": "s1"}
+    )
+    # 钩子层面返回 denied, 但 producer 对 stop 的决策不做任何处理
+    assert outcome.denied
+
+
+def test_prompt_event_matcher_only_wildcard_meaningful():
+    """提示词事件的 matcher 匹配空工具名 —— 仅 "*" 命中。"""
+    assert matches_tool("*", "")
+    assert not matches_tool("bash*", "")

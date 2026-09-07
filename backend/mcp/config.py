@@ -36,7 +36,7 @@ import tempfile
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +75,10 @@ class ServerConfig:
     """Immutable configuration for a single MCP server."""
 
     name: str
-    command: str
+    # L10 (批次 C-3): url 非空 → streamable-HTTP 传输; 否则 command 走 stdio。
+    command: str = ""
     args: Tuple[str, ...] = ()
+    url: Optional[str] = None
     env: Dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     required: bool = False
@@ -93,6 +95,7 @@ class ServerConfig:
             "name": self.name,
             "command": self.command,
             "args": list(self.args),
+            "url": self.url,
             "env": dict(self.env),
             "enabled": self.enabled,
             "required": self.required,
@@ -107,12 +110,13 @@ McpServerConfig = ServerConfig
 
 def validate_server_config(
     name: str,
-    command: str,
+    command: str = "",
     args: Tuple[str, ...] = (),
     env: Dict[str, str] | None = None,
     enabled: bool = True,
     required: bool = False,
     timeout_seconds: float = 30.0,
+    url: str | None = None,
 ) -> ServerConfig:
     """Validate raw fields and return an immutable ServerConfig.
 
@@ -125,8 +129,14 @@ def validate_server_config(
         raise McpConfigError(
             f"invalid server name {name!r}: must match ^[a-z0-9_-]{{1,64}}$"
         )
-    if not isinstance(command, str) or not command.strip():
-        raise McpConfigError(f"server {name!r}: command must be a non-empty string")
+    # L10: url 与 command 二选一 (url 非空 → HTTP 传输)
+    has_url = isinstance(url, str) and url.strip() != ""
+    if has_url and not str(url).startswith(("http://", "https://")):
+        raise McpConfigError(f"server {name!r}: url must start with http(s)://")
+    if not has_url and (not isinstance(command, str) or not command.strip()):
+        raise McpConfigError(
+            f"server {name!r}: command must be a non-empty string when url is absent"
+        )
     args = tuple(args)
     for arg in args:
         if not isinstance(arg, str):
@@ -150,8 +160,9 @@ def validate_server_config(
         )
     return ServerConfig(
         name=name,
-        command=command.strip(),
+        command=command.strip() if isinstance(command, str) else "",
         args=args,
+        url=url,
         env=env,
         enabled=bool(enabled),
         required=bool(required),
