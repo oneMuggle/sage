@@ -83,3 +83,5 @@ class RuntimeEnvCheck:
                 "安装 Node.js ≥18 (https://nodejs.org)",
             )
         return CheckResult(self.name, Severity.INFO, summary)
+
+# ci: touch 2026-09-07 (retrigger, non-empty)
