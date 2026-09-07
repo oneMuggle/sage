@@ -18,12 +18,11 @@ These omissions are intentional per plan §1.3 "non-goals".
 """
 
 from __future__ import annotations
-from typing import Set
 
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from docx import Document
 from docx.oxml import OxmlElement
