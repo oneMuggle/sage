@@ -128,6 +128,7 @@ jobs:
 
       - name: Pytest legacy (smoke, no-cov)
         shell: bash -el {0}
+        timeout-minutes: 5
         run: |
           conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q"
         continue-on-error: true # 兜底：legacy 仅作安全网，单测不一致不阻塞 PR
