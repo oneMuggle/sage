@@ -32,23 +32,55 @@ DEFAULT_ASCII_FONT = "Times New Roman"
 DEFAULT_EA_FONT = "宋体"
 
 
-def set_doc_default_font(doc: Document, ascii_name: str, ea_name: str) -> None:
-    """改 styles.xml Normal.rPr.rFonts，强制 Word 用指定字体渲染。
+_STYLES_TO_PATCH = (
+    "Normal",
+    "Title",
+    "Heading 1",
+    "Heading 2",
+    "Heading 3",
+    "List Bullet",
+    "List Number",
+)
 
-    不写就 fallback 到 theme（Calibri + minorEastAsia），中文 Win 通常显示
-    MS ゴシック / MS 明朝；显式写 eastAsia=中文名后 Word 直接用。
+
+def _patch_style_rfonts(style, ascii_name: str, ea_name: str) -> None:
+    """向指定 style 的 rPr.rFonts 写入 ascii/hAnsi/eastAsia/cs，并清掉 theme 引用。
+
+    python-docx 默认模板中 Title/Heading 1-9/Subtitle 等样式携带
+    ``w:asciiTheme="majorHAnsi" w:eastAsiaTheme="majorEastAsia"``，这些
+    theme 引用优先级高于显式 ``w:eastAsia``——不删的话日语 Word 默认
+    theme 会解析为 ＭＳ ゴシック，让标题仍然渲染成日文字体。
     """
-    normal = doc.styles["Normal"]
-    normal.font.name = ascii_name
-    rPr = normal.element.get_or_add_rPr()
+    rPr = style.element.get_or_add_rPr()
     rFonts = rPr.find(qn("w:rFonts"))
     if rFonts is None:
         rFonts = OxmlElement("w:rFonts")
         rPr.append(rFonts)
+    for theme_attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+        attr = qn(f"w:{theme_attr}")
+        if attr in rFonts.attrib:
+            del rFonts.attrib[attr]
     rFonts.set(qn("w:ascii"), ascii_name)
     rFonts.set(qn("w:hAnsi"), ascii_name)
     rFonts.set(qn("w:eastAsia"), ea_name)
     rFonts.set(qn("w:cs"), ascii_name)
+
+
+def set_doc_default_font(doc: Document, ascii_name: str, ea_name: str) -> None:
+    """改 styles.xml 中所有 generator 用到的样式（Normal / Title / Heading
+    1-3 / List Bullet / List Number）的 rPr.rFonts，强制 Word 用指定字体渲染。
+
+    只改 Normal 不够——Title 与 Heading 1-9 默认携带 theme 引用，会让日语
+    Word 渲染成 ＭＳ ゴシック。List Bullet / List Number 没 rPr 会继承 Normal，
+    一并 patch 是为了 font_family 透传时也生效（例如用户传"微软雅黑"时，
+    bullet 也应该是微软雅黑而不是继承 Normal 的宋体）。
+    """
+    for style_name in _STYLES_TO_PATCH:
+        try:
+            style = doc.styles[style_name]
+        except KeyError:
+            continue
+        _patch_style_rfonts(style, ascii_name, ea_name)
 
 from .errors import OfficeFileNotFoundError, OfficeParseError
 from .models import (
