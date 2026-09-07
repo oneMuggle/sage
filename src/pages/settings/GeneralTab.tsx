@@ -9,6 +9,7 @@ import { invoke } from '../../shared/api/desktopInvoke';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { DiagnosticsCard } from '../../widgets/settings/DiagnosticsCard';
+import { HooksCard } from '../../widgets/settings/HooksCard';
 import { UsagePanel } from '../../widgets/settings/UsagePanel';
 
 import { ThemeSelector } from './ThemeSelector';
@@ -287,6 +288,10 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
         >
           恢复默认设置
         </button>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">钩子 (Hooks)</h3>
+        <HooksCard />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.usage')}</h3>
