@@ -434,8 +434,8 @@ export function useChat() {
               }
 
               // Multi-Agent Orchestration: task_plan 事件 → 初始化编排任务板。
-              // 与 permission_request 一样"先消费、不进内容累加器" —
-              // 不产生消息气泡占位文本,后续 uiText 分支不会命中。
+              // Fix #4 (2026-09-06): 同时更新消息占位符，告知用户计划已生成，
+              // 需要向下滚动查看 PlanCard 并点击"开始执行"。
               if (evt.state === 'task_plan' && evt.run_id && evt.plan) {
                 useChatStreamStore.getState().setTaskBoard(sid, {
                   runId: evt.run_id,
@@ -443,6 +443,8 @@ export function useChat() {
                   statuses: {},
                   live: {},
                 });
+                // 更新消息内容，替代"🤔 思考中…"占位符
+                replaceContent('📋 编排计划已生成，请向下滚动查看计划并点击"开始执行"按钮确认');
                 return;
               }
               // Multi-Agent Orchestration: task_status 事件 → 按 run_id 匹配合并进任务板。
