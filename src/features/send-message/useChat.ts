@@ -24,7 +24,6 @@ import {
 import { logger } from '../../shared/lib/logger';
 import { historyBudgetFor } from '../../shared/lib/modelWindows';
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
-import { notifySession, shouldNotify } from './sessionNotify';
 import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
 import { useSettings } from '../manage-settings/useSettings';
 
@@ -34,6 +33,7 @@ import {
   useChatStreamStore,
   type TaskBoardState,
 } from './chatStreamStore';
+import { notifySession, shouldNotify } from './sessionNotify';
 
 /**
  * 从 endpoint baseUrl 启发式推导 LLM provider 字符串。
