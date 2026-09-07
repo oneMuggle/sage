@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
-import { useChatStreamStore } from '../features/send-message/chatStreamStore';
 import { useLaneBoardStore } from '../entities/orchestration/laneBoardStore';
+import { useChatStreamStore } from '../features/send-message/chatStreamStore';
 import { subscribeOrchEvents } from '../shared/api/orchEventStream';
 import { LaneBoard } from '../widgets/orchestration/LaneBoard';
 
