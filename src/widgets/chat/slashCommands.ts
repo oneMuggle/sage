@@ -3,6 +3,7 @@ import {
   Trash2,
   Search,
   FileText,
+  FileDiff,
   Languages,
   Minimize2,
   BookOpen,
@@ -64,6 +65,15 @@ export const slashCommands: SlashCommand[] = [
     label: '总结',
     description: '总结当前对话内容',
     icon: FileText,
+    mode: 'prompt',
+  },
+  {
+    // F10 (round4 批次 D): 一键改动审查 —— 对标 Codex review 模式的轻入口。
+    // 走既有 git_diff/git_status 工具面,由 agent 读取工作区 diff 给出评审。
+    name: 'review',
+    label: '审查改动',
+    description: '审查当前工作区未提交改动的风险与质量',
+    icon: FileDiff,
     mode: 'prompt',
   },
   {
@@ -178,6 +188,12 @@ export function commandToPrompt(cmd: SlashCommand, args: string): string {
       return `请在知识库中搜索以下内容并总结结果：${args}`;
     case 'summarize':
       return '请总结我们当前对话的主要内容，包括关键决策和结论。';
+    case 'review':
+      return (
+        '请审查当前工作区的未提交改动：先用 git_status 查看变更清单，再逐个文件用 git_diff ' +
+        '查看改动内容。输出一份评审报告：1) 每个文件改了什么；2) 潜在风险（逻辑错误、安全、' +
+        '边界条件、遗漏的测试）；3) 改进建议。如果工作区没有改动，直接说明。'
+      );
     case 'translate':
       return '请将上一条消息翻译成英文（如果原文是英文则翻译成中文）。';
     default:

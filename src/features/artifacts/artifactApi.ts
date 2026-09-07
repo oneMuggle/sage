@@ -2,7 +2,14 @@
 
 import { backendRequest } from '../../shared/api/backendRequest';
 
-export type ArtifactKind = 'markdown' | 'code' | 'image' | 'csv' | 'json' | 'text';
+export type ArtifactKind =
+  | 'markdown'
+  | 'code'
+  | 'image'
+  | 'csv'
+  | 'json'
+  | 'pdf' // F11 (round4 批次 D): data_url iframe 内嵌预览
+  | 'text';
 
 export interface Artifact {
   id: string;

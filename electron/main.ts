@@ -36,6 +36,7 @@
 // runtime even though tsc --noEmit is happy.
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import { logger } from './logger';
+import { setupTrayAndGlobalShortcut } from './tray';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -1467,6 +1468,9 @@ async function isPortReleased(port: number, timeoutMs: number): Promise<void> {
 app.whenReady().then(async () => {
   // Step 3: prune log files older than 7 days on every cold start
   cleanupOlderThan(7);
+  // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
+  // 内部全量降级:托盘/快捷键不可用只记日志,绝不阻断启动。
+  setupTrayAndGlobalShortcut();
   // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
   // fail-open by design: doctor never blocks the app from launching — its output
   // is captured into the NDJSON startup log so the user can diagnose degraded

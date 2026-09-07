@@ -30,13 +30,22 @@
 
 | 批次 | 主题 | 内容 | 优先级 |
 | --- | --- | --- | --- |
-| **A** | 可靠性 | L14 收敛执行（按 §1 决策）、L16 run 级崩溃恢复（消息历史 + run 快照落盘可续跑）、W 系 web 渲染降级实施（CDP JS 渲染 fallback，方案已备） | P0 |
-| **B** | 信任感 UI（**本批实施**） | U17 ContextMeter 上下文用量指示、U19 逐文件/逐 hunk 变更撤销、S8 分会话 OS 通知 | P0 |
-| **C** | 工作流 | F1 PlanDrawer（plan_write 数据 → 可勾选计划卡，对齐 Qoder Quest Spec）、L4' prompt 前缀稳定化（环境上下文/技能清单移到消息尾部，保 OpenAI/DeepSeek 缓存命中）、L12 完整中断粒度（工具级 skip） | P1 |
-| **D** | 差异化闭环 | F11 Office 交付物内嵌预览（复用 office HTML 导出）、F2 代码库语义索引（复用 rag-service/vector_store）、F10 /review 轻入口（grep 版先行） | P1 |
-| **E** | 打磨 | U10 i18n 收尾（切换入口 + 持久化）、U18 快捷键帮助层（`?` 覆盖层）、U12 桌面壳（托盘 + 全局快捷键）、U7 Mermaid/ANSI 渲染、U20 diff 视图逐 hunk 勾选增强（随 U19 后续迭代） | P2 |
+| **A** | 可靠性（**本日收口**） | L14 收敛决策（§1，待评审）、L16 前端恢复横幅（后端启动恢复已在 main）、W 系渲染降级（核查已在 main） | P0 |
+| **B** | 信任感 UI（**已交付**，commit 3c2ec5b4） | U17 ContextMeter 上下文用量指示、U19 逐文件/逐 hunk 变更撤销、S8 分会话 OS 通知 | P0 |
+| **C** | 工作流（**L4' 已交付**） | L4' prompt 前缀稳定化（环境/记忆移尾 ✅）、F1 PlanDrawer（**勘误：PlanCard+todos 链路已大半覆盖**）、L12 完整中断粒度（→批次 F） | P1 |
+| **D** | 差异化闭环（**F10/F11-PDF 已交付**） | F10 /review 轻入口（grep 版 ✅）、F11 产物内嵌预览（PDF ✅；docx/xlsx/pptx 需后端转换 →批次 F）、F2 语义索引（→批次 F） | P1 |
+| **E** | 打磨（**U18/U12-MVP 已交付；U10 勘误已交付**） | U18 快捷键帮助层（`?` 覆盖层 ✅）、U12 桌面壳（托盘 + Alt+Shift+S 唤起 ✅，关闭行为未改）、U7 Mermaid（需引入 mermaid 依赖，单独评审）/ANSI（→批次 F）、U20 diff 视图增强（随 U19 后续迭代） | P2 |
 
 依赖关系：批次 A 的 L16 依赖 L14 决策；批次 C 的 L4' 依赖 L1（已交付）；批次 D 的 F10 语义版依赖 F2。批次 B 无前置依赖，先行实施。
+
+**批次 A 实施期勘误（2026-09-07）**：核查发现 L16 的后端部分（`SessionRepository.recover_stale_run_states`，`backend/main.py:262` lifespan 启动时调用）与 W 系渲染降级（`backend/tools/web_render.py`，W1/W2 已接入 `web_tool.py`）**均已在 main 交付**——round3 文档的"未做"清单过时。批次 A 剩余缺口只有 L16 的前端体验层：用户打开被标记 `failed`（"应用重启，运行中断"）的会话时无任何恢复入口。已补：`InterruptedRunBanner` 横幅（识别该终态 → 重发最后一条 user 消息 / 忽略）。L14 执行决策仍待评审拍板，不阻塞其余批次。
+
+**批次 C/D/E 实施期勘误（2026-09-07，同日第二轮核查）**：
+- **U10 i18n**：GeneralTab 已有"语言 / Language"切换（`LanguageSwitcher`，useI18n.setLocale + localStorage 持久化）——round3 的"半成品"描述过时，非差距。
+- **F1 PlanDrawer**：`components/PlanCard`（编排计划可编辑/确认/锁定）+ `todo_snapshot` → Progress 任务板已覆盖"计划→执行打钩"主链路；Qoder Quest 式"计划持久化为工件、跨会话引用"的增量暂缓，避免重复建设。
+- **F11**：`ArtifactViewer` 已支持 image/code/json/csv；本批补 PDF（base64 data URL + iframe 内嵌 Chromium PDF viewer，`detect_artifact_kind` 增 `.pdf`，20MB 上限，历史 text-kind PDF 后缀兜底）。docx/xlsx/pptx 二进制渲染需后端转换端点，归入批次 F。
+- **U12 范围收敛**：托盘（显示/退出菜单 + 点击唤起）+ 全局快捷键 Alt+Shift+S toggle 窗口已交付；刻意不做"关闭即隐藏到托盘"（不改变用户预期，后续批次评审）。
+- **归入批次 F（后续排期）**：L12 完整工具级中断、F2 语义索引（依赖 rag-service 复用评估）、docx/xlsx/pptx 产物预览、U7 Mermaid/ANSI 渲染（Mermaid 需引入 ~1MB 渲染依赖，单独评审）。
 
 ## 3. 批次 B 详细设计（本次实施）
 
