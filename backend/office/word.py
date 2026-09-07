@@ -25,6 +25,30 @@ from pathlib import Path
 from typing import List, Optional
 
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
+DEFAULT_ASCII_FONT = "Times New Roman"
+DEFAULT_EA_FONT = "宋体"
+
+
+def set_doc_default_font(doc: Document, ascii_name: str, ea_name: str) -> None:
+    """改 styles.xml Normal.rPr.rFonts，强制 Word 用指定字体渲染。
+
+    不写就 fallback 到 theme（Calibri + minorEastAsia），中文 Win 通常显示
+    MS ゴシック / MS 明朝；显式写 eastAsia=中文名后 Word 直接用。
+    """
+    normal = doc.styles["Normal"]
+    normal.font.name = ascii_name
+    rPr = normal.element.get_or_add_rPr()
+    rFonts = rPr.find(qn("w:rFonts"))
+    if rFonts is None:
+        rFonts = OxmlElement("w:rFonts")
+        rPr.append(rFonts)
+    rFonts.set(qn("w:ascii"), ascii_name)
+    rFonts.set(qn("w:hAnsi"), ascii_name)
+    rFonts.set(qn("w:eastAsia"), ea_name)
+    rFonts.set(qn("w:cs"), ascii_name)
 
 from .errors import OfficeFileNotFoundError, OfficeParseError
 from .models import (
