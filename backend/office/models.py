@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, conlist
 
@@ -273,6 +273,10 @@ class WordParagraphSpec(BaseModel):
         extra = "forbid"
 
     heading: Optional[str] = Field(default=None, description="'h1' | 'h2' | 'h3' or None")
+    style: Optional[Literal["bullet", "numbered"]] = Field(
+        default=None,
+        description="'bullet' 或 'numbered' 列表样式（与 heading 二选一）",
+    )
     text: str = Field(min_length=1, max_length=10000)
 
 
@@ -299,6 +303,14 @@ class OfficeWordGenerateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     paragraphs: _constrained_list(WordParagraphSpec, max_length=5000) = Field(default_factory=list)
     tables: _constrained_list(WordTableSpec, max_length=100) = Field(default_factory=list)
+    font_family: Optional[str] = Field(
+        default=None,
+        description="中文正文字体名（如'宋体'/'微软雅黑'/'等线'），默认宋体",
+    )
+    ascii_font: Optional[str] = Field(
+        default=None,
+        description="西文字体名，默认 Times New Roman",
+    )
 
 
 class ExcelSheetSpec(BaseModel):

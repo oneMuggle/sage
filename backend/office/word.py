@@ -25,6 +25,80 @@ from pathlib import Path
 from typing import List, Optional
 
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
+DEFAULT_ASCII_FONT = "Times New Roman"
+DEFAULT_EA_FONT = "宋体"
+
+
+_STYLES_TO_PATCH = (
+    "Normal",
+    "Title",
+    "Heading 1",
+    "Heading 2",
+    "Heading 3",
+    "List Bullet",
+    "List Number",
+)
+
+
+def _patch_style_rfonts(style, ascii_name: str, ea_name: str) -> None:
+    """向指定 style 的 rPr.rFonts 写入 ascii/hAnsi/eastAsia/cs，并清掉 theme 引用。
+
+    python-docx 默认模板中 Title/Heading 1-9/Subtitle 等样式携带
+    ``w:asciiTheme="majorHAnsi" w:eastAsiaTheme="majorEastAsia"``，这些
+    theme 引用优先级高于显式 ``w:eastAsia``——不删的话日语 Word 默认
+    theme 会解析为 ＭＳ ゴシック，让标题仍然渲染成日文字体。
+    """
+    rPr = style.element.get_or_add_rPr()
+    rFonts = rPr.find(qn("w:rFonts"))
+    if rFonts is None:
+        rFonts = OxmlElement("w:rFonts")
+        rPr.append(rFonts)
+    for theme_attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+        attr = qn(f"w:{theme_attr}")
+        if attr in rFonts.attrib:
+            del rFonts.attrib[attr]
+    rFonts.set(qn("w:ascii"), ascii_name)
+    rFonts.set(qn("w:hAnsi"), ascii_name)
+    rFonts.set(qn("w:eastAsia"), ea_name)
+    rFonts.set(qn("w:cs"), ascii_name)
+
+
+def _patch_linked_character_styles(doc: Document, ascii_name: str, ea_name: str) -> None:
+    """Patch 所有被 ``<w:link>`` 关联的 character styles（HeadingNChar /
+    TitleChar / SubtitleChar 等）。Word 渲染时，paragraph style 通过
+    ``<w:link>`` 关联的 character style 的 rFonts 会覆盖 paragraph style
+    本身的 rFonts——所以仅 patch paragraph style 不够，必须同步 patch 所有
+    linked character style。
+    """
+    linked_style_ids: set[str] = set()
+    for style in doc.styles:
+        link = style.element.find(qn("w:link"))
+        if link is not None:
+            linked_style_ids.add(link.get(qn("w:val")))
+    for style in doc.styles:
+        if style.style_id in linked_style_ids:
+            _patch_style_rfonts(style, ascii_name, ea_name)
+
+
+def set_doc_default_font(doc: Document, ascii_name: str, ea_name: str) -> None:
+    """改 styles.xml 中所有 generator 用到的样式（Normal / Title / Heading
+    1-3 / List Bullet / List Number）的 rPr.rFonts，强制 Word 用指定字体渲染。
+
+    只改 Normal 不够——Title 与 Heading 1-9 默认携带 theme 引用，会让日语
+    Word 渲染成 ＭＳ ゴシック；此外它们通过 ``<w:link>`` 关联的 character
+    styles（HeadingNChar / TitleChar）也会覆盖 paragraph style 的 rFonts，
+    必须同步 patch。
+    """
+    for style_name in _STYLES_TO_PATCH:
+        try:
+            style = doc.styles[style_name]
+        except KeyError:
+            continue
+        _patch_style_rfonts(style, ascii_name, ea_name)
+    _patch_linked_character_styles(doc, ascii_name, ea_name)
 
 from .errors import OfficeFileNotFoundError, OfficeParseError
 from .models import (
@@ -222,6 +296,11 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
 
     try:
         doc = _Doc()
+        # ★ 新增：显式设置字体（修"字体奇怪"bug）
+        ascii_font = getattr(req, "ascii_font", None) or DEFAULT_ASCII_FONT
+        ea_font = getattr(req, "font_family", None) or DEFAULT_EA_FONT
+        set_doc_default_font(doc, ascii_font, ea_font)
+
         # Title
         doc.add_heading(req.title, level=0)
         # Body paragraphs
@@ -232,6 +311,12 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 doc.add_heading(para.text, level=2)
             elif para.heading == "h3":
                 doc.add_heading(para.text, level=3)
+            elif para.style == "bullet":
+                # ★ 新增：bullet 列表
+                doc.add_paragraph(para.text, style="List Bullet")
+            elif para.style == "numbered":
+                # ★ 新增：numbered 列表
+                doc.add_paragraph(para.text, style="List Number")
             else:
                 doc.add_paragraph(para.text)
         # Tables
