@@ -18,7 +18,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from backend.agents.profiles import _OFFICE_CREATE_CAPABILITY_PROMPT, build_system_base, get_enabled_agent
+from backend.agents.profiles import (
+    _OFFICE_CREATE_CAPABILITY_PROMPT,
+    build_system_base,
+    get_enabled_agent,
+)
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.agent_state import AgentState
 from backend.core.legacy.llm_client import LLMResponse

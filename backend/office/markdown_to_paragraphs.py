@@ -35,8 +35,8 @@ def parse_markdown_to_paragraphs(
     blocks = re.split(r"\n\s*\n", text.strip())
 
     for block in blocks:
-        for line in block.split("\n"):
-            line = line.rstrip()
+        for raw_line in block.split("\n"):
+            line = raw_line.rstrip()
             if not line:
                 continue
             m = _HEADING_RE.match(line)

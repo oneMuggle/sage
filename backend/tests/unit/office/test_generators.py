@@ -24,7 +24,7 @@ from backend.office.models import (
     WordTableSpec,
 )
 from backend.office.ppt import generate_ppt
-from backend.office.word import DEFAULT_ASCII_FONT, DEFAULT_EA_FONT, generate_docx
+from backend.office.word import DEFAULT_ASCII_FONT, generate_docx
 
 # ──────────────────────────────────────────────────────────────────────
 # PPT generator tests

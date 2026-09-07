@@ -405,7 +405,7 @@ def test_normalize_content_markdown_string_parsed() -> None:
 
 def test_normalize_content_excel_string_still_rejected() -> None:
     """excel 收到字符串仍然返回 None（保持严格语义）。"""
-    from backend.office.models import OfficeDocType as T
-    out = OfficeCreateTool._normalize_content(T.EXCEL, "book.xlsx", "data")
+    from backend.office.models import OfficeDocType
+    out = OfficeCreateTool._normalize_content(OfficeDocType.EXCEL, "book.xlsx", "data")
     assert out is None
 
