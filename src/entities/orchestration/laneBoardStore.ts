@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 
 import { orchestrationClient } from '../../shared/api/orchestrationClient';
+import type { RunEvent } from '../../shared/api/orchEvents';
 import type {
   CreateLanesResponse,
   FreshnessSummaryInfo,
@@ -29,8 +30,28 @@ interface LaneBoardState {
   createLane: (goal: string, agent?: string) => Promise<CreateLanesResponse>;
   cancel: (laneId: string, reason?: string) => Promise<void>;
   applyEvent: (event: LaneEvent) => void;
+  /**
+   * live-events P2 (2026-09-07): canonical RunEvent → lane 卡片状态投影。
+   * ChatDispatcher 派发的子任务 lane 键为 ``lane-<task_id>``（task_id 为
+   * 聊天级 t1..tN）,与 canonical 事件 entity.task_id 一致 —— 只更新
+   * 现存卡片,未知 lane 忽略（不触发 refresh 防风暴）。
+   */
+  applyCanonicalEvent: (event: RunEvent) => void;
   computeBoard: () => LaneBoardGroup;
 }
+
+/** canonical task.* 事件 → LaneStatus 投影表 */
+const CANONICAL_TASK_STATUS: Record<string, LaneStatus> = {
+  'task.queued': 'ready',
+  'task.started': 'running',
+  'task.retrying': 'ready',
+  'task.waiting_approval': 'blocked',
+  'task.waiting_input': 'blocked',
+  'task.succeeded': 'succeeded',
+  'task.completed': 'succeeded',
+  'task.failed': 'failed',
+  'task.cancelled': 'cancelled',
+};
 
 const ACTIVE_STATUSES: ReadonlySet<LaneStatus> = new Set(['created', 'ready', 'running']);
 
@@ -177,6 +198,34 @@ export const useLaneBoardStore = create<LaneBoardState>((set, get) => ({
     set({
       lanes: lanes.map((l) => (l.lane_id === event.lane_id ? updated : l)),
     });
+  },
+
+  applyCanonicalEvent(event: RunEvent) {
+    const newStatus = CANONICAL_TASK_STATUS[event.event_type];
+    if (!newStatus) return;
+    const taskId = event.entity?.task_id;
+    if (!taskId) return;
+    const laneId = `lane-${taskId}`;
+    const { lanes } = get();
+    const index = lanes.findIndex((l) => l.lane_id === laneId);
+    if (index === -1) return; // 未知 lane（API 直建/已清理）—— 忽略
+
+    const existing = lanes[index] as Lane;
+    const terminal = newStatus === 'succeeded' || newStatus === 'failed' || newStatus === 'cancelled';
+    const updated: Lane = {
+      ...existing,
+      status: newStatus,
+      error:
+        event.event_type === 'task.failed'
+          ? String(event.payload?.error ?? existing.error ?? '')
+          : existing.error,
+      completed_at: terminal ? event.occurred_at : existing.completed_at,
+      started_at:
+        newStatus === 'running' && existing.started_at == null
+          ? event.occurred_at
+          : existing.started_at,
+    };
+    set({ lanes: lanes.map((l, i) => (i === index ? updated : l)) });
   },
 
   computeBoard(): LaneBoardGroup {

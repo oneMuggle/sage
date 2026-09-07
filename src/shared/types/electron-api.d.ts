@@ -150,6 +150,11 @@ export interface UpdateElectronApiBridge {
 }
 
 export interface ElectronAPI {
+  /** live-events P1 附带: 审批等待 OS 通知（点击聚焦窗口; 不支持平台降级）。 */
+  notifyApproval?: (payload: { title?: string; body?: string }) => Promise<{
+    ok: boolean;
+    reason?: string;
+  }>;
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
   invoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>;
