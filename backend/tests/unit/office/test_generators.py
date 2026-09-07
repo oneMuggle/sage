@@ -6,9 +6,11 @@ Covers: PPT/Word/Excel generate from structured Pydantic input.
 
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
 import pytest
+from docx import Document
 
 from backend.office.errors import OfficePathError
 from backend.office.excel import generate_xlsx
@@ -22,7 +24,7 @@ from backend.office.models import (
     WordTableSpec,
 )
 from backend.office.ppt import generate_ppt
-from backend.office.word import generate_docx
+from backend.office.word import DEFAULT_ASCII_FONT, generate_docx
 
 # ──────────────────────────────────────────────────────────────────────
 # PPT generator tests
@@ -136,6 +138,68 @@ def test_generate_docx_empty_paragraphs(fixture_dir: Path) -> None:
     )
     output_path = generate_docx(req)
     assert output_path.exists()
+
+
+def test_generate_docx_default_font_is_songti(fixture_dir: Path) -> None:
+    """不传 font_family，docx 的 Normal.rPr.rFonts.eastAsia = 宋体。"""
+    req = OfficeWordGenerateRequest(
+        workspace_path=str(fixture_dir),
+        filename="font-default",
+        title="T",
+    )
+    output_path = generate_docx(req)
+    with zipfile.ZipFile(output_path) as zf:
+        styles_xml = zf.read("word/styles.xml").decode("utf-8")
+    assert 'w:eastAsia="宋体"' in styles_xml
+    assert f'w:ascii="{DEFAULT_ASCII_FONT}"' in styles_xml
+
+
+def test_generate_docx_custom_font_family(fixture_dir: Path) -> None:
+    """传 font_family='微软雅黑'，styles.xml 用雅黑。"""
+    req = OfficeWordGenerateRequest(
+        workspace_path=str(fixture_dir),
+        filename="font-yahei",
+        title="T",
+        font_family="微软雅黑",
+    )
+    output_path = generate_docx(req)
+    with zipfile.ZipFile(output_path) as zf:
+        styles_xml = zf.read("word/styles.xml").decode("utf-8")
+    assert 'w:eastAsia="微软雅黑"' in styles_xml
+
+
+def test_generate_docx_bullet_paragraph(fixture_dir: Path) -> None:
+    """style='bullet' 渲染为 List Bullet 样式。"""
+    req = OfficeWordGenerateRequest(
+        workspace_path=str(fixture_dir),
+        filename="bullets",
+        title="T",
+        paragraphs=[
+            WordParagraphSpec(style="bullet", text="First bullet"),
+            WordParagraphSpec(style="bullet", text="Second bullet"),
+        ],
+    )
+    output_path = generate_docx(req)
+    doc = Document(str(output_path))
+    pstyles = [p.style.name for p in doc.paragraphs if p.text]
+    assert "List Bullet" in pstyles
+
+
+def test_generate_docx_numbered_paragraph(fixture_dir: Path) -> None:
+    """style='numbered' 渲染为 List Number 样式。"""
+    req = OfficeWordGenerateRequest(
+        workspace_path=str(fixture_dir),
+        filename="numbered",
+        title="T",
+        paragraphs=[
+            WordParagraphSpec(style="numbered", text="First"),
+            WordParagraphSpec(style="numbered", text="Second"),
+        ],
+    )
+    output_path = generate_docx(req)
+    doc = Document(str(output_path))
+    pstyles = [p.style.name for p in doc.paragraphs if p.text]
+    assert "List Number" in pstyles
 
 
 # ──────────────────────────────────────────────────────────────────────
