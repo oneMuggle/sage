@@ -536,7 +536,30 @@ export function useChat() {
                 const liveEvent = evt as SubagentLiveEvent;
                 // S2: 键控 —— 写入当前会话的任务板槽位
                 useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) => {
-                  if (!prev || prev.runId !== runId) return prev;
+                  // live-events P2: ``agent`` 工具单次委派没有 task_plan ——
+                  // 首条事件到达时用事件自描述合成轻量任务板（run_id 形如
+                  // agent-*）。已有编排板（orch-*）不可被替换,防串扰;
+                  // agent 临时板之间允许后来者接管（轻量面,单派遣可视）。
+                  if (!prev || prev.runId !== runId) {
+                    if (!prev || prev.runId.startsWith('agent-')) {
+                      return {
+                        runId,
+                        plan: [
+                          {
+                            task_id: taskId,
+                            agent_id: evt.agent_id ?? 'subagent',
+                            goal: evt.goal ?? '',
+                          },
+                        ],
+                        statuses: {},
+                        live: {
+                          // 合成即并入首条事件（否则首条被吞,liveStep 缺失）
+                          [taskId]: mergeLiveEvent(undefined, liveEvent),
+                        },
+                      };
+                    }
+                    return prev;
+                  }
                   return {
                     ...prev,
                     live: {

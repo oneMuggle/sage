@@ -619,9 +619,18 @@ class SageAgent:
         立即恢复）, cancelled=True。
         """
         if name == "agent":
-            coro = asyncio.get_running_loop().run_in_executor(
-                None, functools.partial(tool.execute, **args)
-            )
+            # live-events P2 (2026-09-07): 优先走 execute_async —— 子代理作为
+            # 原生协程落在事件循环上：wait_for 超时/中断取消都能真正收口
+            # （根修 L12 遗弃线程），子代理中间事件经 agent_event_bridge
+            # 投影进聊天流。仅当工具未实现 execute_async（测试桩/旧扩展）
+            # 才回落 run_in_executor 同步通路（行为与历史一致）。
+            afn = getattr(tool, "execute_async", None)
+            if callable(afn):
+                coro = afn(**args)
+            else:
+                coro = asyncio.get_running_loop().run_in_executor(
+                    None, functools.partial(tool.execute, **args)
+                )
         elif name == "dispatch_subagents":
             coro = tool.execute_async(**args)
         elif getattr(tool, "is_blocking", False):
@@ -1185,7 +1194,7 @@ class SageAgent:
                                     # live-events P0: dispatch_subagents 透传
                                     # _tool_call_id(副本注入, 不污染 hooks payload)。
                                     dispatch_args = args
-                                    if tc.name == "dispatch_subagents":
+                                    if tc.name in ("dispatch_subagents", "agent"):
                                         dispatch_args = {**args, "_tool_call_id": tc.id}
                                     # L12-lite: 可等待执行统一走中断竞争,
                                     # 中断先到即取消当前工具、事件循环立即恢复,

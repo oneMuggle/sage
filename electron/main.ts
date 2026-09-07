@@ -34,7 +34,7 @@
 // TypeScript preserves source order of imports; if `./logger` is required
 // before `electron`, the `app.isPackaged` reference throws a TDZ error at
 // runtime even though tsc --noEmit is happy.
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import { logger } from './logger';
 logger.info('main: process started', {
   pid: process.pid,
@@ -1014,6 +1014,29 @@ function registerIpcHandlers(): void {
   function getSenderWindow(evt: Electron.IpcMainInvokeEvent): BrowserWindow | null {
     return BrowserWindow.fromWebContents(evt.sender);
   }
+
+  // live-events P1 附带 (2026-09-07): 审批等待 OS 通知 —— 用户不在窗口前时
+  // 子代理/主 agent 的 permission_request 不再被错过。点击通知聚焦窗口。
+  // Win7/老系统 Notification 不可用时静默降级（isSupported 守卫）。
+  ipcMain.handle(
+    'sage:notify:approval',
+    (evt, payload: { title?: string; body?: string }) => {
+      if (!isTrustedRenderer(evt.sender)) return { ok: false, reason: 'untrusted' };
+      if (!Notification.isSupported()) return { ok: false, reason: 'unsupported' };
+      const title = String(payload?.title ?? 'Sage 需要你的审批').slice(0, 120);
+      const body = String(payload?.body ?? '').slice(0, 300);
+      const notification = new Notification({ title, body, silent: false });
+      notification.on('click', () => {
+        const win = getSenderWindow(evt);
+        if (!win) return;
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+      });
+      notification.show();
+      return { ok: true };
+    },
+  );
 
   ipcMain.handle('sage:window-controls:minimize', (evt) => {
     const win = getSenderWindow(evt);

@@ -1970,6 +1970,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 office_doc_scope=frozenset(),
             )
         _tool_ctx_token = set_tool_context(_tool_ctx)
+        # live-events P2 (2026-09-07): ``agent`` 工具事件桥 —— 单 agent 模式
+        # 派遣的只读子代理,其中间事件经本桥投影进聊天流（subagent_event）。
+        # producer 与 AgentTool.execute_async 同一事件循环,put_nowait 安全;
+        # finally 注销（闭包持有 queue 引用,不注销会向已关闭的流推送）。
+        from backend.tools.agent_event_bridge import register_stream_emitter
+
+        def _emit_agent_bridge_event(event: Dict[str, Any]) -> None:
+            try:
+                entry.queue.put_nowait(event)
+            except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞执行
+                logger.debug("agent 事件桥推送失败（队列满/关闭），忽略")
+
+        register_stream_emitter(data.session_id, _emit_agent_bridge_event)
         # P1 todo 接线 (spec 2026-08-21): todo_write 变更 → todo_snapshot
         # SSE 全量快照。会话过滤防跨流串扰；队列满静默降级（尽力而为）。
         from backend.tools.todo_state import (
@@ -2845,6 +2858,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # P1 todo 接线: 注销监听器（闭包持有 entry/queue 引用，
             # 不注销会随全局 _listeners 泄漏并推已关闭的流）。
             remove_todo_listener(_push_todo_snapshot)
+            # live-events P2: 注销 agent 事件桥（理由同 todo listener）。
+            from backend.tools.agent_event_bridge import unregister_stream_emitter
+
+            unregister_stream_emitter(data.session_id)
 
     await registry.create(stream_id, queue_maxsize=1000, producer=producer)
     return {"streamId": stream_id}
