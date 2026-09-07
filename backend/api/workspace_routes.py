@@ -6,7 +6,7 @@ import sqlite3
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
