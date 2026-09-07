@@ -11,6 +11,7 @@
 """
 
 from __future__ import annotations
+from typing import Dict, List, Set, Tuple
 
 import hashlib
 import re
@@ -42,7 +43,7 @@ class ReviewItem:
     type: ReviewType
     title: str
     description: str
-    affected_pages: list[str]
+    affected_pages: List[str]
     confidence: float  # 0.0 - 1.0
     detail: str = ""
     suggestion: str = ""
@@ -64,15 +65,15 @@ class ReviewItem:
 class ReviewResult:
     """审核结果集合"""
 
-    items: list[ReviewItem] = field(default_factory=list)
+    items: List[ReviewItem] = field(default_factory=list)
 
     @property
     def total(self) -> int:
         return len(self.items)
 
     @property
-    def by_type(self) -> dict[str, int]:
-        counts: dict[str, int] = {t.value: 0 for t in ReviewType}
+    def by_type(self) -> Dict[str, int]:
+        counts: Dict[str, int] = {t.value: 0 for t in ReviewType}
         for item in self.items:
             counts[item.type.value] += 1
         return counts
@@ -96,7 +97,7 @@ def _stable_id(type_: ReviewType, *keys: str) -> str:
     return f"rv-{digest}"
 
 
-def _strip_frontmatter(text: str) -> tuple[dict[str, str], str]:
+def _strip_frontmatter(text: str) -> Tuple[Dict[str, str], str]:
     """极简 frontmatter 抽取(无 yaml 依赖)，返回 (fields, body)"""
     if not text.startswith("---"):
         return {}, text
@@ -105,7 +106,7 @@ def _strip_frontmatter(text: str) -> tuple[dict[str, str], str]:
         return {}, text
     block = text[3:end].strip()
     body = text[end + 4 :]
-    fields: dict[str, str] = {}
+    fields: Dict[str, str] = {}
     for line in block.splitlines():
         if ":" not in line:
             continue
@@ -114,7 +115,7 @@ def _strip_frontmatter(text: str) -> tuple[dict[str, str], str]:
     return fields, body
 
 
-def _tokenize(text: str) -> list[str]:
+def _tokenize(text: str) -> List[str]:
     """简易 token 化:小写 + 拆分非字母数字，过滤短 token"""
     cleaned = text.lower()
     tokens = re.findall(r"[a-z0-9一-鿿]+", cleaned)
@@ -131,7 +132,7 @@ def _jaccard(a: Iterable[str], b: Iterable[str]) -> float:
     return inter / union if union else 0.0
 
 
-def _read_frontmatter(path: Path) -> tuple[dict[str, str], str]:
+def _read_frontmatter(path: Path) -> Tuple[Dict[str, str], str]:
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -191,22 +192,22 @@ class WikiReview:
 
     # ------------------------------------------------------------- detectors
 
-    def check_missing_pages(self) -> list[ReviewItem]:
+    def check_missing_pages(self) -> List[ReviewItem]:
         """找出被 [[wikilink]] 引用但实际不存在的页"""
         if not self.wiki_dir.exists():
             return []
 
         # 先收集 wiki 下所有现有 page 的"别名集"(stem 与 path)
-        existing_targets: set[str] = set()
+        existing_targets: Set[str] = set()
         for md in self.wiki_dir.rglob("*.md"):
             stem = md.stem.lower()
             existing_targets.add(stem)
             rel = _rel(md, self.wiki_dir)
             existing_targets.add(rel.replace("\\", "/").removesuffix(".md").lower())
 
-        items: list[ReviewItem] = []
+        items: List[ReviewItem] = []
         # target → 指向它的源文件列表
-        broken_map: dict[str, list[str]] = {}
+        broken_map: Dict[str, List[str]] = {}
         for md in self.wiki_dir.rglob("*.md"):
             try:
                 text = md.read_text(encoding="utf-8", errors="replace")
@@ -240,12 +241,12 @@ class WikiReview:
             )
         return items
 
-    def check_duplicates(self) -> list[ReviewItem]:
+    def check_duplicates(self) -> List[ReviewItem]:
         """基于标题 token 重叠检测可能重复的页"""
         if not self.wiki_dir.exists():
             return []
 
-        pages: list[tuple[Path, str, list[str]]] = []  # (path, title, tokens)
+        pages: List[Tuple[Path, str, List[str]]] = []  # (path, title, tokens)
         for md in self.wiki_dir.rglob("*.md"):
             fields, _body = _read_frontmatter(md)
             title = fields.get("title") or md.stem
@@ -253,8 +254,8 @@ class WikiReview:
             if tokens:
                 pages.append((md, title, tokens))
 
-        items: list[ReviewItem] = []
-        seen_pairs: set[tuple[str, str]] = set()
+        items: List[ReviewItem] = []
+        seen_pairs: Set[Tuple[str, str]] = set()
         threshold = 0.6
 
         for i in range(len(pages)):
@@ -290,12 +291,12 @@ class WikiReview:
                 )
         return items
 
-    def check_contradictions(self) -> list[ReviewItem]:
+    def check_contradictions(self) -> List[ReviewItem]:
         """检测 frontmatter 元数据矛盾(如 created > updated)"""
         if not self.wiki_dir.exists():
             return []
 
-        items: list[ReviewItem] = []
+        items: List[ReviewItem] = []
         for md in self.wiki_dir.rglob("*.md"):
             fields, _ = _read_frontmatter(md)
             created = fields.get("created") or fields.get("date")
@@ -318,12 +319,12 @@ class WikiReview:
                 )
         return items
 
-    def check_suggestions(self) -> list[ReviewItem]:
+    def check_suggestions(self) -> List[ReviewItem]:
         """基于启发式的改进建议(短页、缺 frontmatter 等)"""
         if not self.wiki_dir.exists():
             return []
 
-        items: list[ReviewItem] = []
+        items: List[ReviewItem] = []
         for md in self.wiki_dir.rglob("*.md"):
             rel = _rel(md, self.project_root)
             try:
@@ -365,14 +366,14 @@ class WikiReview:
                 )
         return items
 
-    def check_confirm(self) -> list[ReviewItem]:
+    def check_confirm(self) -> List[ReviewItem]:
         """低置信度确认项(需要人工判断):例如无 wikilink 的孤立页"""
         if not self.wiki_dir.exists():
             return []
 
         # 统计每个页被引用的次数
-        referenced: dict[str, int] = {}
-        all_pages: list[str] = []
+        referenced: Dict[str, int] = {}
+        all_pages: List[str] = []
         for md in self.wiki_dir.rglob("*.md"):
             rel = _rel(md, self.project_root)
             all_pages.append(rel)
@@ -386,7 +387,7 @@ class WikiReview:
                     continue
                 referenced[target.lower()] = referenced.get(target.lower(), 0) + 1
 
-        items: list[ReviewItem] = []
+        items: List[ReviewItem] = []
         exempt = {"wiki/schema.md", "wiki/overview.md"}
         for rel in all_pages:
             if rel in exempt:
