@@ -124,6 +124,41 @@ class CancelRunResponse(BaseModel):
     status: str
 
 
+class ApprovalModeRequest(BaseModel):
+    """run 级子代理审批模式切换请求（live-events P1）。"""
+
+    mode: str
+
+    @field_validator("mode")
+    @classmethod
+    def _require_known_mode(cls, value: str) -> str:
+        if value not in ("ask", "auto"):
+            raise ValueError("mode must be 'ask' or 'auto'")
+        return value
+
+
+@router.post("/runs/{run_id}/approval-mode")
+def set_approval_mode(run_id: str, body: ApprovalModeRequest) -> Dict[str, Any]:
+    """切换本 run 的子代理审批模式（live-events P1 分级信任）。
+
+    - ``ask``：风险工具逐次审批（默认；子代理审批请求会转发前端弹窗）
+    - ``auto``：非危险工具自动批准，破坏性/可疑/边界升级仍转人工
+
+    仅作用于**活动中的 run**（进程内注册表命中）；历史 run / 未派发 run
+    返回 404 —— 模式不持久化，新 run 继承全局 orch 设置
+    ``orch.subagentApprovalMode``。切换成功即向聊天流推 ``approval_mode``
+    事件供前端任务树头部开关回显。
+    """
+    from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+    dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
+    if dispatcher is None:
+        raise HTTPException(status_code=404, detail="active run not found")
+    if not dispatcher.set_approval_mode(body.mode):
+        raise HTTPException(status_code=422, detail=f"invalid mode: {body.mode}")
+    return {"ok": True, "run_id": run_id, "mode": body.mode}
+
+
 @router.post("/runs/{run_id}/cancel", response_model=CancelRunResponse)
 @with_db_lock
 def cancel_run(run_id: str, body: Optional[CancelRunRequest] = None) -> CancelRunResponse:

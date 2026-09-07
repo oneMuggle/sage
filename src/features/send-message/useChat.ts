@@ -9,6 +9,7 @@ import {
   ApiException,
   type ChatConfig,
   type ChatOfficeRef,
+  type SubagentLiveEvent,
   type TaskPlanItem,
   type TaskProgressEvent,
   type TaskReviewEvent,
@@ -26,6 +27,7 @@ import { bumpArtifactEvent } from '../artifacts/artifactEventsStore';
 import { useSettings } from '../manage-settings/useSettings';
 
 import {
+  mergeLiveEvent,
   selectSessionSlots,
   useChatStreamStore,
   type TaskBoardState,
@@ -439,6 +441,7 @@ export function useChat() {
                   runId: evt.run_id,
                   plan: evt.plan,
                   statuses: {},
+                  live: {},
                 });
                 return;
               }
@@ -518,6 +521,60 @@ export function useChat() {
                   .updateTaskBoard(sid, runId, (prev) =>
                     prev && prev.runId === runId ? { ...prev, review } : prev,
                   );
+                return;
+              }
+
+              // live-events P0 (2026-09-06): subagent_event 镜像 → 任务板
+              // live 态（行内实时步骤/审批徽章/最近事件环形缓冲）。
+              // 不进消息气泡 —— agentStateMapping 对该 state 返回 null。
+              if (evt.state === 'subagent_event' && evt.run_id && evt.task_id) {
+                const runId = evt.run_id;
+                const taskId = evt.task_id;
+                const liveEvent = evt as SubagentLiveEvent;
+                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) => {
+                  // live-events P2: ``agent`` 工具单次委派没有 task_plan ——
+                  // 首条事件到达时用事件自描述合成轻量任务板（run_id 形如
+                  // agent-*）。已有编排板（orch-*）不合并异 run 事件,防串扰。
+                  if (!prev || prev.runId !== runId) {
+                    // 编排板（orch-*）不可被 agent-* 事件替换;
+                    // agent 临时板之间允许后来者接管（轻量面,单派遣可视）。
+                    if (!prev || prev.runId.startsWith('agent-')) {
+                      return {
+                      runId,
+                      plan: [
+                        {
+                          task_id: taskId,
+                          agent_id: evt.agent_id ?? 'subagent',
+                          goal: evt.goal ?? '',
+                        },
+                      ],
+                      statuses: {},
+                        live: {
+                          // 合成即并入首条事件（否则首条被吞,liveStep 缺失）
+                          [taskId]: mergeLiveEvent(undefined, liveEvent),
+                        },
+                      };
+                    }
+                    return prev;
+                  }
+                  return {
+                    ...prev,
+                    live: {
+                      ...(prev.live ?? {}),
+                      [taskId]: mergeLiveEvent(prev.live?.[taskId], liveEvent),
+                    },
+                  };
+                });
+                return;
+              }
+              // live-events P1 (2026-09-06): approval_mode 切换回显 → 任务板
+              // 头部开关状态（后端 set_approval_mode 成功后推送）。
+              if (evt.state === 'approval_mode' && evt.run_id) {
+                const runId = evt.run_id;
+                const mode = evt.mode === 'auto' ? 'auto' : 'ask';
+                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) =>
+                  prev && prev.runId === runId ? { ...prev, approvalMode: mode } : prev,
+                );
                 return;
               }
 

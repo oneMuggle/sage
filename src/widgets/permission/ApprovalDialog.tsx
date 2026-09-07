@@ -58,6 +58,23 @@ export function ApprovalDialog() {
     setSubmitting(false);
   }, [requestId]);
 
+  // live-events P1 附带 (2026-09-07): 审批等待 OS 通知 —— 用户不在窗口前
+  // 时（尤其编排子代理并行跑批）permission_request 不再被错过。每个
+  // request 只通知一次; 非 Electron / 不支持平台静默跳过。
+  useEffect(() => {
+    if (!currentRequest) return;
+    const bridge = window.electronAPI?.notifyApproval;
+    if (typeof bridge !== 'function') return;
+    const sub = currentRequest.subagent;
+    const body = sub
+      ? `${currentRequest.tool_name} · 子任务 ${sub.task_id}（${sub.agent_id}）`
+      : currentRequest.tool_name;
+    bridge({ title: 'Sage 需要你的审批', body }).catch(() => {
+      // 通知失败不影响审批流程
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestId]);
+
   if (!currentRequest) return null;
 
   const risk = RISK_BADGE_CLASSES[currentRequest.risk] ? currentRequest.risk : ('safe' as const);
@@ -112,6 +129,18 @@ export function ApprovalDialog() {
         </div>
 
         <div className="space-y-3">
+          {/* live-events P1 (2026-09-06): 子代理审批上下文 —— 该请求来自编排
+              子代理时,标明所属任务/角色/目标,避免"不知道谁在要权限"。 */}
+          {currentRequest.subagent && (
+            <div
+              data-testid="permission-subagent-context"
+              className="px-2 py-1.5 rounded bg-primary/10 text-xs text-primary leading-relaxed"
+            >
+              {t('permission.subagent_context')} [
+              {currentRequest.subagent.task_id} · {currentRequest.subagent.agent_id}]
+              {currentRequest.subagent.goal ? `：${currentRequest.subagent.goal}` : ''}
+            </div>
+          )}
           <div className="flex items-baseline gap-2 text-sm">
             <span className="text-text-secondary shrink-0">{t('permission.tool')}</span>
             <code

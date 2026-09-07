@@ -23,12 +23,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from backend.data.database import get_database
+from backend.domain.orch_events import RunEvent, make_event
 from backend.orchestration.events import EventRecorder
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import Lane, RecoveryPolicy, Task, TaskPacket
 from backend.orchestration.orch_settings import OrchSettings, load_orch_settings
 from backend.orchestration.report_schema import Assertion
+from backend.orchestration.subagent_events import SubagentEventSink
 from backend.orchestration.subagent_runner import SubagentRunner, run_lane_with_retry
 from backend.orchestration.task_registry import TaskRegistry
 from backend.orchestration.topology import (
@@ -153,11 +155,18 @@ class ChatTaskState:
     # L2 (2026-08-23): followup_of 已携带但无法建立父依赖（不存在/未完成/自指）
     # → 降级为普通新任务并置位，聚合时对 conductor 显式提示不含续聊上下文。
     followup_degraded: bool = False
+    # live-events P0: 派发本次批次的 conductor 工具调用 ID —— 前端聊天流内
+    # 把 subagent_event 实时步骤关联到 "Delegate <goal>" 卡片的关联键。
+    parent_tool_call_id: Optional[str] = None
 
 
 # P2-9 (2026-08-14): 进程内活动 dispatcher 注册表 —— 供 run 级 cancel 端点
 # 定位并置位取消事件。producer 在构造后注册、finally 注销（长连接结束即删）。
+# live-events P1: 审批模式端点 / 审批 resolved 回填也经此定位 dispatcher。
 _ACTIVE_DISPATCHERS: Dict[str, ChatDispatcher] = {}
+
+#: 子代理审批模式合法取值（live-events P1）。
+_APPROVAL_MODES = ("ask", "auto")
 
 
 class ChatDispatcher:
@@ -175,6 +184,7 @@ class ChatDispatcher:
         total_tasks: Optional[int] = None,
         settings: Optional[OrchSettings] = None,
         workspace_root: Optional[str] = None,
+        event_hub: Optional[Any] = None,
     ) -> None:
         # 安全修复波 (2026-08-23): 白名单校验必须在任何副作用（DB 连接、
         # worktree 清扫）之前 —— 非法 run_id 直接拒绝构造。
@@ -221,6 +231,17 @@ class ChatDispatcher:
         self._dispatched_plan_ids: Set[str] = set()
         # P2-9 (2026-08-14): 取消事件 —— cancel() 幂等 set；_run_one 开头检查。
         self._cancelled = asyncio.Event()
+        # live-events P0: canonical RunEvent 通道（EventHub.publish）。None 时
+        # 惰性解析 orch_run_control.get_event_hub()（启动即装配），再取不到
+        # 则仅镜像聊天流 —— 双通道缺一不阻塞另一。
+        self._event_hub = event_hub
+        # live-events P0: 本批次 conductor 工具调用 ID（dispatch_subagents
+        # 经 notify_tool_call 注入），落到每个 ChatTaskState.parent_tool_call_id。
+        self._current_tool_call_id: Optional[str] = None
+        # live-events P1: 子代理审批模式（run 级，默认继承全局 orch 设置）。
+        self.approval_mode: str = getattr(self.settings, "subagent_approval_mode", "ask")
+        # live-events P1: 待决审批表 request_id → task_id，供 answer 路由回填。
+        self._pending_approvals: Dict[str, str] = {}
         # M1 终审 (2026-08-23): 崩溃残留机会性清扫 —— 同 run_id 重派时清掉上次
         # 进程崩溃遗留的孤儿 worktree 目录。必须在任何子任务创建 worktree 之前
         # 执行（构造期即完成）；失败全吞降级，绝不阻塞派发。
@@ -371,6 +392,7 @@ class ChatDispatcher:
                 output_schema=output_schema,
                 parent_task_id=parent_task_id,
                 followup_degraded=followup_degraded,
+                parent_tool_call_id=self._current_tool_call_id,
             )
             if followup_of is not None and state.parent_task_id is None:
                 logger.warning(
@@ -587,11 +609,32 @@ class ChatDispatcher:
         )
         self.lane_registry.create_lane(lane)
 
+        # live-events P0: 子代理中间事件投影 —— 聊天镜像 + canonical
+        # task.step.*。双通道均尽力而为，缺一不阻塞另一。
+        sink = SubagentEventSink(
+            run_id=self.run_id,
+            task_id=state.task_id,
+            entity_task_id=state.task_id,
+            agent_id=state.agent_id,
+            goal=state.goal,
+            parent_tool_call_id=state.parent_tool_call_id,
+            emit_chat=self._emit_chat_event,
+            publish_event=self._make_publisher(),
+            note_approval=lambda request_id: self._pending_approvals.setdefault(
+                request_id, state.task_id
+            ),
+        )
+
         executor = LaneExecutor(
             lane_registry=self.lane_registry,
             task_registry=self.task_registry,
             event_recorder=self.event_recorder,
-            agent_runner=SubagentRunner(self.llm_config, interrupt_event=self._cancelled),
+            agent_runner=SubagentRunner(
+                self.llm_config,
+                interrupt_event=self._cancelled,
+                event_sink=sink,
+                approval_mode=self.approval_mode,
+            ),
         )
         result = await run_lane_with_retry(executor, lane, state.agent_id)
         # Wave 2 Minor 2 fix: 防御性 max-iteration guard。run_lane_with_retry
@@ -663,9 +706,15 @@ class ChatDispatcher:
         data_dir = Path(get_database().db_path).parent
         root = (data_dir / self.settings.scratch_root / self.run_id).resolve()
         candidate = (root / state.task_id).resolve()
-        # containment: resolve() 后必须仍在 root 内，防符号链接或 ".." 逃逸
-        if not str(candidate).startswith(str(root) + "/"):
-            raise ValueError(f"task_id 路径穿越: {state.task_id!r}")
+        # containment: resolve() 后必须仍在 root 内，防符号链接或 ".." 逃逸。
+        # Windows fix (2026-09-06): 原实现用 ``startswith(str(root) + "/")``,
+        # 而 Windows 分隔符是 ``\`` —— 判断恒 False,每次 dispatch 都误报
+        # "task_id 路径穿越"。改用 ``Path.relative_to``（语义等价且跨平台,
+        # py3.8 兼容的 try/except 写法）。
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            raise ValueError(f"task_id 路径穿越: {state.task_id!r}") from None
         return candidate
 
     def _emit_task_status(self, state: ChatTaskState) -> None:
@@ -680,6 +729,7 @@ class ChatDispatcher:
             "error": state.error,
             "retry_count": state.retry_count,
             "output_preview": self._preview(state),
+            "parent_tool_call_id": state.parent_tool_call_id,
         }
         try:
             self.entry_queue.put_nowait(event)
@@ -688,6 +738,136 @@ class ChatDispatcher:
         # Wave 2 P1-4: 状态迁移同步写库。失败在 _persist_task_state 内部降级，
         # 绝不阻塞聊天进度推送。
         self._persist_task_state(state)
+        self._publish_task_lifecycle(state)
+
+    # ==================== live-events P0/P1 ====================
+
+    def notify_tool_call(self, tool_call_id: Optional[str]) -> None:
+        """记录本批次 conductor 的 dispatch_subagents 工具调用 ID。
+
+        由 ``DispatchSubagentsTool.execute_async`` 在 dispatch 前调用；
+        ``subagent_event`` / ``task_status`` 载荷携带它，前端据此把子代理
+        实时步骤关联到聊天流里的 "Delegate <goal>" 卡片。
+        """
+        self._current_tool_call_id = tool_call_id
+
+    _TASK_LIFECYCLE_EVENTS = {
+        "queued": "task.queued",
+        "running": "task.started",
+        "done": "task.succeeded",
+        "failed": "task.failed",
+        "cancelled": "task.cancelled",
+    }
+
+    def _publish_task_lifecycle(self, state: ChatTaskState) -> None:
+        """任务状态迁移 → canonical ``task.*`` 事件（fire-and-forget）。
+
+        canonical 流（Drawer/快照/observe_subagents 的事实源）此前在 chat
+        派发路径没有任务级事件源，task.step.* 事件会被快照层因"task 未建"
+        丢弃。这里把 task_status 迁移同步投影为 task.queued/started/
+        succeeded/failed/cancelled，让 step/审批事件有归属的 task 实体。
+        发布失败全吞（观测尽力而为，绝不阻塞派发循环）。
+        """
+        event_type = self._TASK_LIFECYCLE_EVENTS.get(state.status)
+        publisher = self._make_publisher()
+        if event_type is None or publisher is None:
+            return
+        payload: Dict[str, Any] = {"goal": state.goal, "agent_id": state.agent_id}
+        if state.status == "done":
+            payload["output_preview"] = self._preview(state)
+        elif state.status == "failed":
+            payload["error"] = state.error
+        event = make_event(
+            run_id=self.run_id,
+            seq=0,
+            event_type=event_type,
+            producer="chat-dispatcher",
+            entity={"task_id": state.task_id, "agent_id": state.agent_id},
+            payload=payload,
+        )
+
+        async def _run() -> None:
+            try:
+                await publisher(event)
+            except Exception as exc:  # noqa: BLE001 — 观测尽力而为
+                logger.debug("task lifecycle 事件发布失败 task=%s: %s",
+                             state.task_id, exc)
+
+        try:
+            asyncio.get_running_loop().create_task(_run())
+        except RuntimeError:  # pragma: no cover — 均在协程上下文调用
+            return
+
+    def set_approval_mode(self, mode: str) -> bool:
+        """切换本 run 的子代理审批模式（"ask" | "auto"）；非法值返回 False。
+
+        影响尚未启动的子任务（已运行中的子代理 enforcer 在构造时已定）。
+        切换成功即向聊天流推 ``approval_mode`` 事件，前端任务树头部开关回显。
+        """
+        if mode not in _APPROVAL_MODES:
+            return False
+        self.approval_mode = mode
+        self._emit_chat_event({
+            "state": "approval_mode",
+            "run_id": self.run_id,
+            "mode": mode,
+        })
+        return True
+
+    def _emit_chat_event(self, event: Optional[Dict[str, Any]]) -> None:
+        """聊天流入队（subagent_event / approval_mode 镜像），降级同 task_status。"""
+        if not event:
+            return
+        try:
+            self.entry_queue.put_nowait(event)
+        except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞执行
+            logger.debug("聊天镜像事件推送失败（队列满/关闭），忽略")
+
+    def _make_publisher(self):
+        """返回 canonical RunEvent 发布协程（EventHub.publish），未装配 → None。"""
+        hub = self._event_hub
+        if hub is None:
+            try:
+                from backend.api.orch_run_control import get_event_hub
+
+                hub = get_event_hub()
+            except Exception:  # noqa: BLE001 — 观测通道缺失不阻塞执行
+                hub = None
+        if hub is None:
+            return None
+
+        async def _publish(event: RunEvent) -> None:
+            await hub.publish(event)
+
+        return _publish
+
+    async def resolve_approval(self, request_id: str, approved: bool) -> bool:
+        """审批已应答 —— 回填 canonical ``task.approval_resolved`` + 聊天镜像。
+
+        由 ``/permissions/{request_id}/answer`` 路由在 gate.answer 成功后调用
+        （best-effort：未知 request_id / 通道缺失静默返回 False）。返回是否
+        命中本 dispatcher 的待决审批。
+        """
+        task_id = self._pending_approvals.pop(request_id, None)
+        if task_id is None:
+            return False
+        state = self._states.get(task_id)
+        publisher = self._make_publisher()
+        if publisher is not None:
+            sink = SubagentEventSink(
+                run_id=self.run_id,
+                task_id=task_id,
+                entity_task_id=task_id,
+                agent_id=state.agent_id if state is not None else "",
+                goal=state.goal if state is not None else "",
+                parent_tool_call_id=(
+                    state.parent_tool_call_id if state is not None else None
+                ),
+                emit_chat=self._emit_chat_event,
+                publish_event=publisher,
+            )
+            await sink.emit_approval_resolved(request_id, approved)
+        return True
 
     def init_orch_run(self, session_id: str, plan_json: str, original_request: str = "") -> None:
         """由 caller (legacy_routes) 在第一次 dispatch 前调一次。失败降级。
@@ -850,3 +1030,15 @@ class ChatDispatcher:
             self.entry_queue.put_nowait(event)
         except Exception:  # noqa: BLE001 — 降级铁律
             logger.debug("task_review 推送失败（队列满/关闭），忽略")
+
+
+def find_dispatcher_for_approval(request_id: str) -> Optional[ChatDispatcher]:
+    """在活动 dispatcher 注册表中定位持有该审批请求的 run（未命中 → None）。
+
+    live-events P1: ``/permissions/{request_id}/answer`` 路由在 gate.answer
+    成功后经此定位 dispatcher 并回填 ``task.approval_resolved`` 事件。
+    """
+    for dispatcher in _ACTIVE_DISPATCHERS.values():
+        if request_id in dispatcher._pending_approvals:
+            return dispatcher
+    return None

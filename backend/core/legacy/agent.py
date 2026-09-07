@@ -615,7 +615,11 @@ class SageAgent:
         return True
 
     async def _await_tool_execution(
-        self, tool: Any, name: str, args: Dict[str, Any]
+        self,
+        tool: Any,
+        name: str,
+        args: Dict[str, Any],
+        tool_call_id: Optional[str] = None,
     ) -> Tuple[bool, Any]:
         """L12-lite: 执行工具并与中断事件竞争。
 
@@ -623,13 +627,32 @@ class SageAgent:
         agent / dispatch_subagents / 阻塞型工具包成 task —— 中断先到时
         取消执行任务（executor 线程内的子进程尽力等其自然超时, 事件循环
         立即恢复）, cancelled=True。
+
+        live-events P0: ``tool_call_id`` 仅用于 dispatch_subagents —— 注入
+        ``_tool_call_id``（dict 重建覆盖 LLM 可能注入的同名 key）, dispatcher
+        给子任务标 parent_tool_call_id, 前端把子代理实时步骤挂到 Delegate 卡片。
         """
         if name == "agent":
-            coro = asyncio.get_running_loop().run_in_executor(
-                None, functools.partial(tool.execute, **args)
-            )
+            # live-events P2 (2026-09-07): 优先走 execute_async —— 子代理作为
+            # 原生协程落在事件循环上：wait_for 超时/中断取消都能真正收口
+            # （根修 L12 遗弃线程），子代理中间事件经 agent_event_bridge
+            # 投影进聊天流。仅当工具未实现 execute_async（测试桩/旧扩展）
+            # 才回落 run_in_executor 同步通路（行为与历史一致）。
+            afn = getattr(tool, "execute_async", None)
+            if callable(afn):
+                agent_kwargs = dict(args)
+                if tool_call_id:
+                    agent_kwargs["_tool_call_id"] = tool_call_id
+                coro = afn(**agent_kwargs)
+            else:
+                coro = asyncio.get_running_loop().run_in_executor(
+                    None, functools.partial(tool.execute, **args)
+                )
         elif name == "dispatch_subagents":
-            coro = tool.execute_async(**args)
+            dispatch_kwargs = dict(args)
+            if tool_call_id:
+                dispatch_kwargs["_tool_call_id"] = tool_call_id
+            coro = tool.execute_async(**dispatch_kwargs)
         elif getattr(tool, "is_blocking", False):
             coro = asyncio.get_running_loop().run_in_executor(
                 None, functools.partial(tool.execute, **args)
@@ -1191,8 +1214,12 @@ class SageAgent:
                                     # L12-lite: 可等待执行统一走中断竞争,
                                     # 中断先到即取消当前工具、事件循环立即恢复,
                                     # 否则语义与旧版完全一致。
+                                    # live-events P0: dispatch_subagents 透传本工具
+                                    # 调用 ID（helper 内注入）—— dispatcher 给子
+                                    # 任务标 parent_tool_call_id，前端把子代理
+                                    # 实时步骤挂到 Delegate 卡片。
                                     cancelled, result = await self._await_tool_execution(
-                                        tool, tc.name, args
+                                        tool, tc.name, args, tool_call_id=tc.id
                                     )
                                     if cancelled:
                                         result_content = "[中断] 工具执行被用户取消"

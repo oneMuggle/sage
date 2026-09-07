@@ -27,6 +27,8 @@ import { create } from 'zustand';
 
 import type {
   AgentEvent,
+  SubagentLiveEvent,
+  SubagentLiveState,
   TaskPlanItem,
   TaskReviewEvent,
   TaskStatusEvent,
@@ -62,6 +64,47 @@ export interface TaskBoardState {
   dispatchedAt?: number | null;
   /** P0-6 (2026-08-20): reviewer 复核结论（每 run 至多一条，后到覆盖先到）。 */
   review?: TaskReviewEvent | null;
+  /**
+   * live-events P0 (2026-09-06): 子任务实时执行态，按 task_id 索引。
+   * 由 ``subagent_event`` 镜像事件喂给 reducer（useChat），任务树行内
+   * 实时步骤 / 审批徽章 / 最近事件环形缓冲的唯一数据源。
+   */
+  live?: Record<string, SubagentLiveState>;
+  /** live-events P1: 本 run 子代理审批模式（"ask" | "auto"，开关回显）。 */
+  approvalMode?: 'ask' | 'auto';
+}
+
+/** live[task_id] 初始态 */
+export function emptyLiveState(): SubagentLiveState {
+  return { liveStep: null, waitingApproval: null, events: [] };
+}
+
+/** live 事件环形缓冲上限 —— 老事件从头丢弃。 */
+export const LIVE_EVENT_BUFFER_SIZE = 20;
+
+/**
+ * 合并一条 ``subagent_event`` 镜像进 live 态（不可变，reducer 纯函数）。
+ * 返回原引用当事件不属于该任务时;常规路径返回新对象供 React 浅比较。
+ */
+export function mergeLiveEvent(
+  prev: SubagentLiveState | undefined,
+  event: SubagentLiveEvent,
+): SubagentLiveState {
+  const base = prev ?? emptyLiveState();
+  const events: SubagentLiveEvent[] = [...base.events, event].slice(
+    -LIVE_EVENT_BUFFER_SIZE,
+  );
+  const next: SubagentLiveState = {
+    liveStep: event.live_step ?? base.liveStep,
+    waitingApproval: base.waitingApproval,
+    events,
+  };
+  if (event.phase === 'approval_requested') {
+    next.waitingApproval = event.tool_name ?? 'tool';
+  } else if (event.phase === 'approval_resolved') {
+    next.waitingApproval = null;
+  }
+  return next;
 }
 
 /** 单个会话的流式槽位（S2 键控） */

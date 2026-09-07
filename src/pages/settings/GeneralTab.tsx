@@ -330,6 +330,19 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => void }) {
           value={settings.orch.maxSubagentIterations}
           onChange={(v) => updateSettings({ orch: { ...settings.orch, maxSubagentIterations: v } })}
         />
+        <SettingRow
+          label="子代理自动批准非危险工具"
+          desc="编排子代理遇到需审批的工具时,自动放行非危险调用;破坏性/可疑命令与工作区越界仍弹窗确认"
+        >
+          <Toggle
+            value={settings.orch.subagentApprovalMode === 'auto'}
+            onChange={(v) =>
+              updateSettings({
+                orch: { ...settings.orch, subagentApprovalMode: v ? 'auto' : 'ask' },
+              })
+            }
+          />
+        </SettingRow>
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">数据</h3>

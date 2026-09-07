@@ -21,7 +21,10 @@ export type AgentState =
   // Wave 2 (2026-08-14): reviewer 复核结论事件,见 types.ts TaskReviewEvent。
   | 'task_review'
   // P1 todo 接线 (2026-08-21): agent 任务清单全量快照。
-  | 'todo_snapshot';
+  | 'todo_snapshot'
+  // live-events P0/P1 (2026-09-06): 子代理实时镜像 + 审批模式回显。
+  | 'subagent_event'
+  | 'approval_mode';
 
 // 窄类型事件接口 —— useChat taskBoard 状态机的数据类型。
 // AgentState / AgentEvent（宽松字段）见 types.ts —— 双处保持一致。
