@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -15,6 +15,7 @@ import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
+import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
@@ -61,8 +62,31 @@ export function Chat() {
     setCurrentSessionId,
     createSession,
     loadSessions,
+    sessions,
     isLoading: storeLoading,
   } = useStore();
+
+  // L16 (round4 批次 A): run 级崩溃恢复横幅 —— 后端启动时把滞留 running
+  // 的会话统一标记 failed(INTERRUPTED_RUN_ERROR);聊天页识别该终态后给出
+  // "重发最后一条消息"的恢复入口,而不是让用户对着侧栏灰点猜。
+  const currentSession = sessions.find((s) => s.id === currentSessionId);
+  const interruptedRun =
+    currentSession?.run_status === 'failed' &&
+    currentSession?.last_error === INTERRUPTED_RUN_ERROR;
+  const [dismissedInterrupts, setDismissedInterrupts] = useState<Set<string>>(new Set());
+  const showInterruptBanner =
+    currentSessionId != null && interruptedRun && !dismissedInterrupts.has(currentSessionId);
+
+  const retryInterruptedRun = useCallback(() => {
+    if (!currentSessionId) return;
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (!lastUser) {
+      toast.error('找不到可重发的消息');
+      return;
+    }
+    void sendMessage(lastUser.content, currentSessionId);
+  }, [currentSessionId, messages, sendMessage]);
+
   const { t } = useI18n();
   const { settings, isLoading: settingsLoading } = useSettings();
   const navigate = useNavigate();
@@ -355,6 +379,15 @@ export function Chat() {
           <RightPanelToggle open={rightPanelOpen} onClick={() => setRightPanelOpen((v) => !v)} />
         </div>
       </div>
+
+      {showInterruptBanner && (
+        <InterruptedRunBanner
+          onRetry={retryInterruptedRun}
+          onDismiss={() =>
+            setDismissedInterrupts((prev) => new Set(prev).add(currentSessionId ?? ''))
+          }
+        />
+      )}
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto relative">
         {isLoading && messages.length === 0 ? (
