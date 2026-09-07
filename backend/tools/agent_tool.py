@@ -52,6 +52,7 @@ import asyncio
 import concurrent.futures
 import logging
 import os
+import time
 import shutil
 import tempfile
 import uuid
@@ -482,12 +483,31 @@ class AgentTool(BaseTool):
                 publish_event=None,  # 合成 run 不入 canonical/快照,防污染编排历史
             )
 
+        started = time.monotonic()
+        timed_out = False
         try:
             answer, error = await asyncio.wait_for(
                 self._run_subagent_async(llm_client, description, prompt, event_sink=sink),
                 timeout=SUBAGENT_TIMEOUT_S,
             )
-        except TimeoutError:
+        except asyncio.CancelledError:
+            # py3.8 的 wait_for 超时会以 CancelledError 形态冒出（等待内层
+            # 取消完成后未转译）。用耗时区分：elapsed ≥ timeout → 超时取消;
+            # 否则为外部真取消，保持取消语义向上传播。
+            if time.monotonic() - started >= SUBAGENT_TIMEOUT_S:
+                timed_out = True
+            else:
+                raise
+        except (asyncio.TimeoutError, TimeoutError, concurrent.futures.TimeoutError):
+            # py3.8: asyncio.TimeoutError 是独立类（≠ 内建 TimeoutError），
+            # 三形态并列捕获。
+            timed_out = True
+        except Exception as exc:  # noqa: BLE001 — 子代理崩溃,lane 失败,主循环继续
+            logger.exception("Sub-agent execution crashed: %s", exc)
+            error = str(exc) or "subagent_failed"
+            answer = ""
+
+        if timed_out:
             # wait_for 已取消内层协程 —— 子 run_loop 在取消点收口,
             # 不存在遗弃线程（异步通路的 L12 根修）。
             logger.warning(
@@ -497,10 +517,6 @@ class AgentTool(BaseTool):
             error = (
                 f"timeout: 子代理执行超时（{SUBAGENT_TIMEOUT_S:g} 秒），已取消"
             )
-            answer = ""
-        except Exception as exc:  # noqa: BLE001 — 子代理崩溃,lane 失败,主循环继续
-            logger.exception("Sub-agent execution crashed: %s", exc)
-            error = str(exc)
             answer = ""
 
         if error is not None:
