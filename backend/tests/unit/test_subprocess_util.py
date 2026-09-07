@@ -386,7 +386,7 @@ def test_unlink_owned_identity_mismatch_does_not_remove_replacement(tmp_path):
 
 
 def test_strip_ansi_removes_csi_color_codes():
-    out = subprocess_util.strip_ansi("zzCANARY\x1b[32mgreen\x1b[0m plain \x1b[1;31mred\x1b[0m")
+    out = subprocess_util.strip_ansi("\x1b[32mgreen\x1b[0m plain \x1b[1;31mred\x1b[0m")
     assert out == "green plain red"
 
 
