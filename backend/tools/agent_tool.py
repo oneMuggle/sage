@@ -498,9 +498,11 @@ class AgentTool(BaseTool):
                 timed_out = True
             else:
                 raise
-        except (asyncio.TimeoutError, TimeoutError, concurrent.futures.TimeoutError):
-            # py3.8: asyncio.TimeoutError 是独立类（≠ 内建 TimeoutError），
-            # 三形态并列捕获。
+        except (
+            asyncio.TimeoutError,
+            TimeoutError,
+            concurrent.futures.TimeoutError,
+        ):  # noqa: UP041 — py3.8 下三者并非同一类,禁止 ruff 合并
             timed_out = True
         except Exception as exc:  # noqa: BLE001 — 子代理崩溃,lane 失败,主循环继续
             logger.exception("Sub-agent execution crashed: %s", exc)
