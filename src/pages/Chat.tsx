@@ -160,7 +160,8 @@ export function Chat() {
   useEffect(() => {
     if (taskBoard && !taskBoard.dispatchedAt && scrollRef.current) {
       const planCard = scrollRef.current.querySelector('[data-testid="plan-card"]');
-      if (planCard) {
+      // ``typeof scrollIntoView === 'function'`` 守卫 jsdom 等不支持的测试环境。
+      if (planCard && typeof planCard.scrollIntoView === 'function') {
         planCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
