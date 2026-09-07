@@ -1196,6 +1196,8 @@ class SageAgent:
                                     # 否则语义与旧版完全一致。
                                     # live-events P0: dispatch_subagents 透传
                                     # _tool_call_id(副本注入, 不污染 hooks payload)。
+                                    # live-events P2: agent 同样透传 —— 前端把
+                                    # 子代理实时步骤挂到 Delegate 卡片。
                                     dispatch_args = args
                                     if tc.name in ("dispatch_subagents", "agent"):
                                         dispatch_args = {**args, "_tool_call_id": tc.id}

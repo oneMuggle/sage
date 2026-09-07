@@ -19,7 +19,6 @@ from __future__ import annotations
 import logging
 
 from backend.cli.doctor import CheckResult, Severity, register
-from backend.tools.runtime_probe import RuntimeProbeTool
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,13 @@ class RuntimeEnvCheck:
     description = "探测本机可用编程语言运行时 (Python/Node.js)"
 
     def run(self) -> CheckResult:
+        # live-events P2 fix (2026-09-07): 惰性导入 —— 顶层导入会经
+        # ``backend/tools/__init__.py`` 形成循环导入（CI py38/Linux 实测
+        # doctor 子进程 ImportError, stdout 为空 → 15 例 doctor 测试全红）。
+        # 延迟到 run() 内导入,此时 doctor/cli 自身已完成初始化。
         try:
+            from backend.tools.runtime_probe import RuntimeProbeTool
+
             tool = RuntimeProbeTool()
             result = tool.execute(
                 languages=["python", "javascript"],

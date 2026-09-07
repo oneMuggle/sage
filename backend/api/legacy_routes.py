@@ -2694,10 +2694,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
                 sess = None
-                # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
-                # run 正常结束通知; deny/modify 无语义, 一律忽略。
-                # 落盘成功判定沿用本分支的 assistant_message_id。
+                # WS-C P0-2: 统一记忆写入路径 — assistant 落盘**成功后**才触发
+                # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
+                # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
                 if assistant_message_id is not None:
+                    # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
+                    # run 正常结束通知; deny/modify 无语义, 一律忽略。
                     try:
                         from backend.hooks.config import load_hooks as _load_hooks_fn
                         from backend.hooks.runner import run_event_hooks as _run_hooks_fn
