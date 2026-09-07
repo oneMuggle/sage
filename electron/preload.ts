@@ -153,6 +153,17 @@ const electronAPI = {
     ipcRenderer.invoke('sage:dialog:select-directory', opts) as Promise<string | null>,
 
   /**
+   * live-events P1 附带 (2026-09-07): 审批等待 OS 通知。main 进程经
+   * Electron Notification 弹系统通知; 点击聚焦窗口。不支持的平台
+   * （Win7 老系统）返回 {ok:false, reason:'unsupported'} 静默降级。
+   */
+  notifyApproval: (payload: { title?: string; body?: string }) =>
+    ipcRenderer.invoke('sage:notify:approval', payload) as Promise<{
+      ok: boolean;
+      reason?: string;
+    }>,
+
+  /**
    * PR-C (2026-07-02): Skills load-new bridge.
    * - pickSkillFiles: native multi-select dialog → string[] | null
    * - rescanSkills: POST /api/v1/skills/rescan → RescanResult

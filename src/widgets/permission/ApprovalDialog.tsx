@@ -58,6 +58,23 @@ export function ApprovalDialog() {
     setSubmitting(false);
   }, [requestId]);
 
+  // live-events P1 附带 (2026-09-07): 审批等待 OS 通知 —— 用户不在窗口前
+  // 时（尤其编排子代理并行跑批）permission_request 不再被错过。每个
+  // request 只通知一次; 非 Electron / 不支持平台静默跳过。
+  useEffect(() => {
+    if (!currentRequest) return;
+    const bridge = window.electronAPI?.notifyApproval;
+    if (typeof bridge !== 'function') return;
+    const sub = currentRequest.subagent;
+    const body = sub
+      ? `${currentRequest.tool_name} · 子任务 ${sub.task_id}（${sub.agent_id}）`
+      : currentRequest.tool_name;
+    bridge({ title: 'Sage 需要你的审批', body }).catch(() => {
+      // 通知失败不影响审批流程
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestId]);
+
   if (!currentRequest) return null;
 
   const risk = RISK_BADGE_CLASSES[currentRequest.risk] ? currentRequest.risk : ('safe' as const);

@@ -196,7 +196,9 @@ class TestAgentToolLoopSafety:
 
         tool = AgentTool(llm_client=MagicMock())
 
-        async def _hang(llm_client, description, prompt):
+        async def _hang(llm_client, description, prompt, event_sink=None):
+            # live-events P2: execute_async 走事件循环协程,签名带 event_sink;
+            # wait_for 超时会真正取消本协程（根修 L12 遗弃线程）。
             await asyncio.sleep(1.0)
             return "too late", None
 
@@ -240,7 +242,7 @@ class TestAgentToolLoopSafety:
         sub_llm.chat = AsyncMock(side_effect=[_sub_done_turn()])
         tool = AgentTool(llm_client=sub_llm)
 
-        async def _slow_run(llm_client, description, prompt):
+        async def _slow_run(llm_client, description, prompt, event_sink=None):
             await asyncio.sleep(0.5)
             return "sub answer: 42", None
 
