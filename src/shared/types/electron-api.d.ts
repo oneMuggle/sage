@@ -175,6 +175,11 @@ export interface ElectronAPI {
     intent: 'create' | 'open';
     defaultPath?: string;
   }) => Promise<string | null>;
+  /** live-events P1 附带: 审批等待 OS 通知（点击聚焦窗口; 不支持平台降级）。 */
+  notifyApproval?: (payload: { title?: string; body?: string }) => Promise<{
+    ok: boolean;
+    reason?: string;
+  }>;
   /** Optional bridge added in Task 8 (renderer→main log IPC). */
   log?: (level: LogLevel, msg: string, meta?: Record<string, unknown>) => Promise<unknown>;
   /** T13 (2026-07-02): Diagnostics card — list log files (newest first). */

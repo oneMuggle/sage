@@ -387,7 +387,7 @@ export function Chat() {
       {/* live-events P0 (2026-09-06): 编排子代理实时执行面板 —— 派发后
           conductor 阻塞在 dispatch_subagents 内,这里逐行展示每个子任务的
           实时步骤,消除"只能被动等待"的黑盒感。 */}
-      <SubagentLivePanel />
+      <SubagentLivePanel sessionId={currentSessionId} />
 
       {showConfigWarning && (
         <div

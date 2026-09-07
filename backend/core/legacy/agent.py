@@ -633,9 +633,21 @@ class SageAgent:
         给子任务标 parent_tool_call_id, 前端把子代理实时步骤挂到 Delegate 卡片。
         """
         if name == "agent":
-            coro = asyncio.get_running_loop().run_in_executor(
-                None, functools.partial(tool.execute, **args)
-            )
+            # live-events P2 (2026-09-07): 优先走 execute_async —— 子代理作为
+            # 原生协程落在事件循环上：wait_for 超时/中断取消都能真正收口
+            # （根修 L12 遗弃线程），子代理中间事件经 agent_event_bridge
+            # 投影进聊天流。仅当工具未实现 execute_async（测试桩/旧扩展）
+            # 才回落 run_in_executor 同步通路（行为与历史一致）。
+            afn = getattr(tool, "execute_async", None)
+            if callable(afn):
+                agent_kwargs = dict(args)
+                if tool_call_id:
+                    agent_kwargs["_tool_call_id"] = tool_call_id
+                coro = afn(**agent_kwargs)
+            else:
+                coro = asyncio.get_running_loop().run_in_executor(
+                    None, functools.partial(tool.execute, **args)
+                )
         elif name == "dispatch_subagents":
             dispatch_kwargs = dict(args)
             if tool_call_id:

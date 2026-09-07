@@ -1586,3 +1586,115 @@ describe('useChat taskBoard', () => {
     });
   });
 });
+
+// ─── live-events P2 (2026-09-07): agent 工具单次委派 → 合成轻量任务板 ───
+describe('useChat subagent_event synthesized board (agent tool)', () => {
+  it('synthesizes a board from agent-* events without a task_plan', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-agent-live' });
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: { payload: Record<string, unknown> }) => void,
+      ) => {
+        Promise.resolve().then(() => {
+          cb({
+            payload: {
+              state: 'subagent_event',
+              iteration: 0,
+              run_id: 'agent-abc123def456',
+              task_id: 'a1',
+              agent_id: 'subagent',
+              goal: '调研依赖',
+              phase: 'tool_call',
+              live_step: '🔧 read_file docs/a.md',
+              ts: 1700000000000,
+            },
+          });
+          cb({
+            payload: {
+              state: 'task_status',
+              iteration: 0,
+              run_id: 'agent-abc123def456',
+              task_id: 'a1',
+              status: 'done',
+              agent_id: 'subagent',
+              goal: '调研依赖',
+              error: null,
+              output_preview: '调研结论',
+              retry_count: 0,
+            },
+          });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('go');
+    });
+
+    await waitFor(() => {
+      const board = result.current.taskBoard;
+      expect(board?.runId).toBe('agent-abc123def456');
+      expect(board?.statuses['a1']?.status).toBe('done');
+    });
+    const board = result.current.taskBoard;
+    expect(board?.plan).toHaveLength(1);
+    expect(board?.plan[0]).toMatchObject({ task_id: 'a1', agent_id: 'subagent' });
+    expect(board?.live?.['a1']?.liveStep).toBe('🔧 read_file docs/a.md');
+  });
+
+  it('does not clobber an existing orchestration board with agent-* events', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-agent-guard' });
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: { payload: Record<string, unknown> }) => void,
+      ) => {
+        Promise.resolve().then(() => {
+          // 先建立编排板（正常多 agent 流程）
+          cb({
+            payload: {
+              state: 'task_plan',
+              iteration: 0,
+              run_id: 'orch-real',
+              plan: [{ task_id: 't1', agent_id: 'researcher', goal: '编排目标' }],
+            },
+          });
+          // 随后到达异 run 的 agent-* 事件 —— 不应替换编排板
+          cb({
+            payload: {
+              state: 'subagent_event',
+              iteration: 0,
+              run_id: 'agent-zzz',
+              task_id: 'a1',
+              agent_id: 'subagent',
+              goal: '串扰尝试',
+              phase: 'tool_call',
+              live_step: '🔧 x',
+            },
+          });
+        });
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+    await act(async () => {
+      await result.current.sendMessage('go');
+    });
+
+    await waitFor(() => {
+      expect(result.current.taskBoard?.runId).toBe('orch-real');
+    });
+    const board = result.current.taskBoard;
+    expect(board?.plan).toHaveLength(1);
+    expect(board?.plan[0]?.goal).toBe('编排目标');
+    expect(board?.live?.['a1']).toBeUndefined();
+  });
+});

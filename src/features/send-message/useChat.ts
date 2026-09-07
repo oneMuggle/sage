@@ -531,8 +531,32 @@ export function useChat() {
                 const runId = evt.run_id;
                 const taskId = evt.task_id;
                 const liveEvent = evt as SubagentLiveEvent;
-                useChatStreamStore.getState().updateTaskBoard(runId, (prev) => {
-                  if (!prev || prev.runId !== runId) return prev;
+                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) => {
+                  // live-events P2: ``agent`` 工具单次委派没有 task_plan ——
+                  // 首条事件到达时用事件自描述合成轻量任务板（run_id 形如
+                  // agent-*）。已有编排板（orch-*）不合并异 run 事件,防串扰。
+                  if (!prev || prev.runId !== runId) {
+                    // 编排板（orch-*）不可被 agent-* 事件替换;
+                    // agent 临时板之间允许后来者接管（轻量面,单派遣可视）。
+                    if (!prev || prev.runId.startsWith('agent-')) {
+                      return {
+                      runId,
+                      plan: [
+                        {
+                          task_id: taskId,
+                          agent_id: evt.agent_id ?? 'subagent',
+                          goal: evt.goal ?? '',
+                        },
+                      ],
+                      statuses: {},
+                        live: {
+                          // 合成即并入首条事件（否则首条被吞,liveStep 缺失）
+                          [taskId]: mergeLiveEvent(undefined, liveEvent),
+                        },
+                      };
+                    }
+                    return prev;
+                  }
                   return {
                     ...prev,
                     live: {
@@ -548,7 +572,7 @@ export function useChat() {
               if (evt.state === 'approval_mode' && evt.run_id) {
                 const runId = evt.run_id;
                 const mode = evt.mode === 'auto' ? 'auto' : 'ask';
-                useChatStreamStore.getState().updateTaskBoard(runId, (prev) =>
+                useChatStreamStore.getState().updateTaskBoard(sid, runId, (prev) =>
                   prev && prev.runId === runId ? { ...prev, approvalMode: mode } : prev,
                 );
                 return;
