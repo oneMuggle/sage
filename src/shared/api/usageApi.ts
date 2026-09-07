@@ -35,6 +35,14 @@ export interface SessionUsage {
   completion_tokens: number;
   total_tokens: number;
   estimated_cost_usd: number;
+  /** L4: 累计缓存命中 token */
+  cached_tokens: number;
+  // U17 (round4): 最近一次请求的模型与 prompt 用量——ContextMeter 数据源。
+  // 上一轮 prompt_tokens 即当前上下文占用的最佳代理;无记录时为 null。
+  last_model: string | null;
+  last_prompt_tokens: number | null;
+  last_cached_tokens: number | null;
+  last_at_ms: number | null;
 }
 
 export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {

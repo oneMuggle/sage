@@ -177,6 +177,19 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       return `/api/v1/sessions/${sessionId}/workspace/changes/diff?path=${path}&staged=${staged}`;
     },
   },
+  // U19 变更面板可操作化 (对标增强第四轮批次 B): 逐文件/逐 hunk 撤销
+  workspace_revert_changes: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/changes/revert`,
+    body: (a) => ({ paths: a.paths, delete_untracked: a.deleteUntracked === true }),
+  },
+  workspace_revert_change_hunks: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/changes/revert-hunks`,
+    body: (a) => ({ path: a.path, hunk_indices: a.hunkIndices }),
+  },
 
   // U8 (批次 B): 会话级模型覆盖 (G5 收尾,只改模型不改端点)
   session_get_model: {

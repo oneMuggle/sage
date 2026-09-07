@@ -164,6 +164,13 @@ const electronAPI = {
     }>,
 
   /**
+   * S8 (round4): 分会话 OS 通知。Renderer 判定"该不该打扰"后触发;
+   * 原生 Notification 展示与点击聚焦在 main('sage:session:notify')。
+   */
+  notifySession: (payload: { sessionId: string; title: string; body: string }) =>
+    ipcRenderer.invoke('sage:session:notify', payload) as Promise<{ shown: boolean }>,
+
+  /**
    * PR-C (2026-07-02): Skills load-new bridge.
    * - pickSkillFiles: native multi-select dialog → string[] | null
    * - rescanSkills: POST /api/v1/skills/rescan → RescanResult

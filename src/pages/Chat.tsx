@@ -14,6 +14,7 @@ import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
+import { ContextMeter } from '../widgets/chat/ContextMeter';
 import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
@@ -355,9 +356,10 @@ export function Chat() {
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
         <div className="flex items-center gap-4 min-w-0">
           <h2 className="text-sm font-semibold text-text shrink-0">对话</h2>
-          {/* U8: 会话级模型切换(G5 收尾) · U14: 会话用量徽章 */}
+          {/* U8: 会话级模型切换(G5 收尾) · U14: 会话用量徽章 · U17: 上下文占用 */}
           <SessionModelPicker sessionId={currentSessionId} />
           <SessionUsageBadge sessionId={currentSessionId} />
+          <ContextMeter sessionId={currentSessionId} />
         </div>
         <div className="flex items-center gap-2">
           <button

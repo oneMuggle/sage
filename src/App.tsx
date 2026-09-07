@@ -4,13 +4,14 @@ import {
   Routes,
   Route,
   Navigate,
+  useNavigate,
   useLocation,
-  useSearchParams,
 } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
 import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
+import { onSessionNotifyClick } from './features/send-message/sessionNotify';
 import { Settings } from './pages';
 import { Agents } from './pages/Agents';
 import { Chat } from './pages/Chat';
@@ -75,6 +76,23 @@ function ChatRoute() {
   return <Chat />;
 }
 
+// S8 (round4): OS 通知点击 → 聚焦窗口后跳转对应会话。
+// 主进程 'sage:event:session-notify-click' 回发 sessionId,这里统一
+// 写 currentSessionId + 深链跳转（复用 ChatRoute 的 ?session= 消费链路）。
+function SessionNotifyBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const unlisten = onSessionNotifyClick((sessionId) => {
+      useStore.getState().setCurrentSessionId(sessionId);
+      navigate(`/chat?session=${encodeURIComponent(sessionId)}`);
+    });
+    return () => {
+      void unlisten?.then((fn) => fn?.());
+    };
+  }, [navigate]);
+  return null;
+}
+
 function App() {
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -95,6 +113,7 @@ function App() {
       <NavHistoryProvider>
         <BackendStatusBanner />
         <AppStartupRestore />
+        <SessionNotifyBridge />
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/chat" replace />} />
