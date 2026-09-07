@@ -9,7 +9,6 @@ from typing import Optional
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
 
-from .agent_tool import AgentTool
 from .ask_user_tool import AskUserQuestionTool
 from .base import BaseTool, ToolResult, ToolSchema
 from .bash_tool import BashOutputTool, BashTool, KillShellTool
@@ -50,6 +49,40 @@ from .structured_output_tool import StructuredOutputTool
 from .symbol_search_tool import SymbolSearchTool
 from .todo_tool import TodoWriteTool
 from .web_tool import WebFetchTool, WebSearchTool
+
+
+def __getattr__(name):
+    """Lazy attribute access — breaks the ``backend.tools`` circular import.
+
+    ``agent_tool`` is intentionally NOT eagerly imported above. Its module
+    pulls in ``backend.orchestration.subagent_events`` which transitively
+    reaches ``backend.core.legacy.agent.py:54`` (``from backend.tools
+    import ToolRegistry, register_all_tools``) — a back-edge into this
+    package before its ``__init__`` finishes binding ``ToolRegistry`` at
+    line 42. Python 3.10 silently tolerated the cycle (it returns the
+    partially-initialized module); Python 3.11 (used by CI per
+    ``.github/workflows/ci.yml`` line 82) raises
+    ``ImportError: cannot import name 'ToolRegistry' from partially
+    initialized module 'backend.tools'``. Issue #484.
+
+    By deferring ``agent_tool`` to first-attribute-access via PEP 562,
+    ``backend.tools.__init__`` finishes binding all public symbols BEFORE
+    the back-edge fires; then ``register_all_tools`` (called after the
+    package is fully initialised) can safely ``from .agent_tool import
+    AgentTool`` at its call site.
+    """
+    if name == "AgentTool":
+        from .agent_tool import AgentTool as _AgentTool
+
+        return _AgentTool
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    """Make ``AgentTool`` discoverable via ``dir(backend.tools)`` and tab
+    completion, matching the pre-fix public surface.
+    """
+    return sorted({*globals().keys(), "AgentTool"})
 
 
 def register_all_tools(
@@ -123,6 +156,13 @@ def register_all_tools(
     # M5: in-loop sub-agent tool (claw-code execute_agent pattern). The
     # sub-agent itself only ever gets the read-only whitelist — see
     # agent_tool.SUBAGENT_TOOL_WHITELIST.
+    # Lazy import here (not at module top) — see __getattr__ docstring
+    # above for the cycle this avoids. Safe at runtime because this
+    # function is only called AFTER backend.tools.__init__ has fully
+    # finished, so the back-edge
+    # `backend.core.legacy.agent -> backend.tools` resolves cleanly.
+    from .agent_tool import AgentTool
+
     registry.register(AgentTool(policy=policy))
     # 2026-08-01: 代码探索工具 - 文件结构摘要（解决大代码库 max_iterations_exceeded）
     registry.register(FileSummaryTool(policy=policy))
