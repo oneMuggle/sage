@@ -57,7 +57,10 @@ import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+
+if TYPE_CHECKING:  # 避免循环:backend.tools → agent → tools (doctor CLI 等冷启动场景)
+    from backend.orchestration.subagent_events import SubagentEventSink
 
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
@@ -381,6 +384,200 @@ class AgentTool(BaseTool):
             },
         )
 
+    async def execute_async(
+        self,
+        description: str = "",
+        prompt: str = "",
+        subagent_type: Optional[str] = None,  # reserved for future specialization
+        _tool_call_id: Optional[str] = None,  # run_loop 注入的 conductor 工具调用 ID
+        **kwargs: Any,  # forward-compat: tolerate extra LLM-provided params
+    ) -> ToolResult:
+        """异步执行子代理 —— 原生协程,落在事件循环上（live-events P2）。
+
+        与同步 ``execute``（worker 线程 + ``asyncio.run``）等价,但:
+
+        - **L12 根修**: ``asyncio.wait_for`` 超时即取消内层协程 —— 子
+          run_loop 的 ``async for`` 在取消点收口,LLM 请求/工具等待被真正
+          中断,不再遗弃后台线程空跑 6×60s。
+        - **事件转发**: 经 ``agent_event_bridge`` 把子 run_loop 中间事件
+          投影为聊天流 ``subagent_event`` 镜像（仅异步通路 —— 跨线程不能
+          直接 ``put_nowait``）;结束时补发合成 ``task_status`` 让前端
+          轻量任务板收敛到终态。
+
+        run_loop 的 ``agent`` 分发点优先调用本方法;仅旧调用方/测试桩
+        （只实现 ``execute``）回落 ``run_in_executor``。
+        """
+        description = (description or "").strip()
+        prompt = (prompt or "").strip()
+        if not description or not prompt:
+            return ToolResult(
+                success=False,
+                error="agent tool requires non-empty 'description' and 'prompt'",
+            )
+
+        llm_client = self._injected_llm_client
+        if llm_client is None:
+            llm_client = build_llm_client_from_settings()
+        if llm_client is None:
+            return ToolResult(
+                success=False,
+                error="no_llm_configured: sub-agent requires a configured LLM endpoint",
+            )
+
+        # 事件桥: producer 在流开始时按 session 登记;子代理事件经它进聊天流。
+        # 无桥（非流上下文/测试）→ emitter=None,行为退化为纯执行。
+        from backend.tools.agent_event_bridge import get_stream_emitter
+
+        try:
+            from backend.tools.context import current_tool_context
+
+            ctx = current_tool_context()
+            session_id = ctx.session_id if ctx is not None else None
+        except Exception:  # noqa: BLE001 — 上下文缺失不阻塞执行
+            session_id = None
+        emitter = get_stream_emitter(session_id)
+
+        task_registry = TaskRegistry()
+        lane_registry = LaneRegistry()
+        event_recorder = EventRecorder()
+
+        task = Task(
+            task_id=f"task-{uuid.uuid4().hex[:12]}",
+            name=f"subagent: {description[:80]}",
+            description=prompt[:500],
+            task_type="research",
+            parameters={"source": "subagent"},
+        )
+        task_registry.create_task(task)
+        lane = lane_registry.create_lane(
+            task.task_id,
+            metadata={"source": "subagent", "description": description[:200]},
+        )
+        lane_registry.bind_agent(lane.lane_id, "subagent")
+        event_recorder.record(
+            LaneEvent.STARTED,
+            lane_id=lane.lane_id,
+            task_id=task.task_id,
+            agent_id="subagent",
+            provenance=EventProvenance.LIVE_LANE,
+            metadata={"source": "subagent"},
+        )
+        lane_registry.mark_ready(lane.lane_id)
+        lane_registry.mark_running(lane.lane_id)
+
+        # 前端轻量任务板的 run/task 键（与编排 run 空间隔离）
+        mirror_run_id = f"agent-{task.task_id}"
+        sink: Optional[SubagentEventSink] = None
+        if emitter is not None:
+            def _emit_chat(event: Dict[str, Any]) -> None:
+                if event:
+                    emitter(event)
+
+            # Lazy import to avoid cold-start circular: backend.tools → agent →
+            # tools (doctor CLI 等子进程冷启动路径下,subagent_events → agent_state
+            # → backend.core.legacy.agent 会反向 import backend.tools.ToolRegistry)。
+            from backend.orchestration.subagent_events import (
+                SubagentEventSink as _SubagentEventSink,
+            )
+
+            sink = _SubagentEventSink(
+                run_id=mirror_run_id,
+                task_id="a1",
+                entity_task_id="a1",
+                agent_id="subagent",
+                goal=description,
+                parent_tool_call_id=_tool_call_id,
+                emit_chat=_emit_chat,
+                publish_event=None,  # 合成 run 不入 canonical/快照,防污染编排历史
+            )
+
+        try:
+            answer, error = await asyncio.wait_for(
+                self._run_subagent_async(llm_client, description, prompt, event_sink=sink),
+                timeout=SUBAGENT_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:  # noqa: UP041 — py38: asyncio.TimeoutError ≠ TimeoutError
+            # wait_for 已取消内层协程 —— 子 run_loop 在取消点收口,
+            # 不存在遗弃线程（异步通路的 L12 根修）。
+            # 注意:Python 3.8-3.10 上 asyncio.TimeoutError 与内置 TimeoutError 是
+            # 不同类,这里必须显式用 asyncio.TimeoutError(3.11+ 才是同一类)。
+            logger.warning(
+                "Sub-agent timed out after %.1fs (coroutine cancelled, lane FAILED)",
+                SUBAGENT_TIMEOUT_S,
+            )
+            error = (
+                f"timeout: 子代理执行超时（{SUBAGENT_TIMEOUT_S:g} 秒），已取消"
+            )
+            answer = ""
+        except Exception as exc:  # noqa: BLE001 — 子代理崩溃,lane 失败,主循环继续
+            logger.exception("Sub-agent execution crashed: %s", exc)
+            error = str(exc)
+            answer = ""
+
+        if error is not None:
+            lane_registry.mark_failed(lane.lane_id, error=error)
+            event_recorder.record(
+                LaneEvent.FAILED,
+                lane_id=lane.lane_id,
+                task_id=task.task_id,
+                agent_id="subagent",
+                provenance=EventProvenance.LIVE_LANE,
+                metadata={"error": error[:500]},
+            )
+            task_registry.mark_failed(task.task_id, error=error)
+            if emitter is not None:
+                emitter({
+                    "state": "task_status",
+                    "run_id": mirror_run_id,
+                    "task_id": "a1",
+                    "status": "failed",
+                    "agent_id": "subagent",
+                    "goal": description,
+                    "error": error[:500],
+                    "retry_count": 0,
+                    "output_preview": None,
+                    "parent_tool_call_id": _tool_call_id,
+                })
+            return ToolResult(
+                success=False,
+                error=f"subagent_failed: {error}",
+                content={"lane_id": lane.lane_id},
+            )
+
+        lane_registry.mark_succeeded(lane.lane_id)
+        event_recorder.record(
+            LaneEvent.SUCCEEDED,
+            lane_id=lane.lane_id,
+            task_id=task.task_id,
+            agent_id="subagent",
+            provenance=EventProvenance.LIVE_LANE,
+            metadata={"answer_chars": len(answer)},
+        )
+        task_registry.mark_completed(task.task_id, result={"answer_chars": len(answer)})
+        if emitter is not None:
+            emitter({
+                "state": "task_status",
+                "run_id": mirror_run_id,
+                "task_id": "a1",
+                "status": "done",
+                "agent_id": "subagent",
+                "goal": description,
+                "error": None,
+                "retry_count": 0,
+                "output_preview": answer[:500],
+                "parent_tool_call_id": _tool_call_id,
+            })
+
+        truncated = len(answer) > SUBAGENT_ANSWER_CAP
+        return ToolResult(
+            success=True,
+            content={
+                "answer": answer[:SUBAGENT_ANSWER_CAP],
+                "lane_id": lane.lane_id,
+                "truncated": truncated,
+            },
+        )
+
     # ------------------------------------------------------------------
     # Sub-agent execution
     # ------------------------------------------------------------------
@@ -418,8 +615,13 @@ class AgentTool(BaseTool):
         llm_client: Any,
         description: str,
         prompt: str,
+        event_sink: Optional[SubagentEventSink] = None,
     ) -> Tuple[str, Optional[str]]:
-        """Drive ``run_loop`` to completion; return (answer, error)."""
+        """Drive ``run_loop`` to completion; return (answer, error).
+
+        ``event_sink``（live-events P2）非 None 时逐事件投影转发 —— sink
+        自身吞错，转发失败绝不杀死子代理执行。
+        """
         subagent = self._build_subagent()
         try:
             # Inject the LLM client post-construction so tests can pass mocks and
@@ -441,6 +643,8 @@ class AgentTool(BaseTool):
             async for event in subagent.run_loop(
                 messages, max_iterations=_resolve_subagent_iterations()
             ):
+                if event_sink is not None:
+                    await event_sink(event)
                 state = getattr(event, "state", None)
                 state_value = getattr(state, "value", state)
                 if state_value == "done":
