@@ -386,12 +386,12 @@ def test_unlink_owned_identity_mismatch_does_not_remove_replacement(tmp_path):
 
 
 def test_strip_ansi_removes_csi_color_codes():
-    out = subprocess_util.strip_ansi("[32mgreen[0m plain [1;31mred[0m")
+    out = subprocess_util.strip_ansi("\x1b[32mgreen\x1b[0m plain \x1b[1;31mred\x1b[0m")
     assert out == "green plain red"
 
 
 def test_strip_ansi_removes_osc_and_single_char():
-    text = "]0;window titletail(B more"
+    text = "\x1b]0;window titletail\x1b(B more"
     assert subprocess_util.strip_ansi(text) == "tail more"
 
 
@@ -400,7 +400,7 @@ def test_read_capped_output_strips_ansi(tmp_path):
     if os.name == "nt":
         pytest.skip("read_capped_output depends on O_NONBLOCK, unavailable on Windows")
     f = tmp_path / "out.out"
-    f.write_bytes(b"[32mhello[0m world")
+    f.write_bytes(b"\x1b[32mhello\x1b[0m world")
     text, truncated, _ = subprocess_util.read_capped_output(str(f), cap=1024)
     assert text == "hello world"
     assert truncated is False
