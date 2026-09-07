@@ -6,8 +6,8 @@
  */
 import { create } from 'zustand';
 
-import { orchestrationClient } from '../../shared/api/orchestrationClient';
 import type { RunEvent } from '../../shared/api/orchEvents';
+import { orchestrationClient } from '../../shared/api/orchestrationClient';
 import type {
   CreateLanesResponse,
   FreshnessSummaryInfo,
