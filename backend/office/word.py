@@ -18,6 +18,7 @@ These omissions are intentional per plan §1.3 "non-goals".
 """
 
 from __future__ import annotations
+from typing import Set
 
 import logging
 import time
@@ -73,7 +74,7 @@ def _patch_linked_character_styles(doc: Document, ascii_name: str, ea_name: str)
     本身的 rFonts——所以仅 patch paragraph style 不够，必须同步 patch 所有
     linked character style。
     """
-    linked_style_ids: set[str] = set()
+    linked_style_ids: Set[str] = set()
     for style in doc.styles:
         link = style.element.find(qn("w:link"))
         if link is not None:

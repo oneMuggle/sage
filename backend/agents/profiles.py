@@ -3,6 +3,7 @@ Agent Profiles - Agent 角色定义和配置
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import logging
 from dataclasses import dataclass, field
@@ -507,7 +508,7 @@ def ensure_default_agents() -> int:
     return inserted
 
 
-def validate_profile_tools(repo: Any | None = None) -> int:
+def validate_profile_tools(repo: Optional[Any] = None) -> int:
     """启动期校验所有 profile 白名单 ⊆ 内置工具名（T3 防漂移，仅告警）。
 
     未注册名对 LLM 本就不可见（``get_schemas_for_llm`` 只遍历已注册工具），
