@@ -150,6 +150,26 @@ export interface UpdateElectronApiBridge {
 }
 
 export interface ElectronAPI {
+  /**
+   * live-events P2 (2026-09-07): 记忆页桥类型补全 —— win7 分支 Memory 页 /
+   * MemoryTab 引用 ``window.electronAPI.memory``（list/search/getSummary/
+   * delete/getAutoMemory/setAutoMemory/getMemoryRetrieval/setMemoryRetrieval）。
+   * 仅类型声明：运行时桥未装配时页面已有 ``!api?.memory`` 降级守卫。
+   */
+  memory: {
+    list: (opts: { page: number; page_size: number; type?: string }) => Promise<unknown>;
+    search: (opts: { query: string; type?: string }) => Promise<unknown>;
+    getSummary: (opts: { session_id: string }) => Promise<unknown>;
+    delete: (opts: { memory_id: string }) => Promise<unknown>;
+    getAutoMemory: () => Promise<unknown>;
+    setAutoMemory: (opts: { value: boolean }) => Promise<unknown>;
+    getMemoryRetrieval: () => Promise<unknown>;
+    setMemoryRetrieval: (opts: { value: boolean }) => Promise<unknown>;
+    /** SSE 记忆事件订阅；返回 unlisten 回调（null = SSE 不可用,页面轮询回退） */
+    subscribe: (handler: (event: unknown) => void) => Promise<(() => void) | null>;
+    unsubscribe: () => Promise<void>;
+    getProfile: () => Promise<unknown>;
+  };
   /** live-events P1 附带: 审批等待 OS 通知（点击聚焦窗口; 不支持平台降级）。 */
   notifyApproval?: (payload: { title?: string; body?: string }) => Promise<{
     ok: boolean;
