@@ -380,3 +380,27 @@ def test_unlink_owned_identity_mismatch_does_not_remove_replacement(tmp_path):
 
     assert unlink_owned(str(path), identity) is False
     assert path.exists()
+
+
+# ==================== U7: ANSI 转义剥离 (round4 批次 E) ====================
+
+
+def test_strip_ansi_removes_csi_color_codes():
+    out = subprocess_util.strip_ansi("\x1b[32mgreen\x1b[0m plain \x1b[1;31mred\x1b[0m")
+    assert out == "green plain red"
+
+
+def test_strip_ansi_removes_osc_and_single_char():
+    text = "\x1b]0;window titletail\x1b(B more"
+    assert subprocess_util.strip_ansi(text) == "tail more"
+
+
+def test_read_capped_output_strips_ansi(tmp_path):
+    # read_capped_output uses O_NONBLOCK which does not exist on Windows
+    if os.name == "nt":
+        pytest.skip("read_capped_output depends on O_NONBLOCK, unavailable on Windows")
+    f = tmp_path / "out.out"
+    f.write_bytes(b"\x1b[32mhello\x1b[0m world")
+    text, truncated, _ = subprocess_util.read_capped_output(str(f), cap=1024)
+    assert text == "hello world"
+    assert truncated is False

@@ -132,11 +132,18 @@ def build_request_messages(
     history_rows: Sequence[Any],
     attachment_block: Optional[str] = None,
     budget_tokens: Optional[int] = None,
+    trailing_system: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """组装 producer 的完整请求消息（L1 主入口，纯函数）。
 
-    顺序：``[system(+省略说明), attachments?, *history, user]``。附件块属于
-    本轮请求的即时上下文，放在历史之后、当前消息之前（与既有实现一致）。
+    顺序：``[system(+省略说明), attachments?, *history, trailing_system?, user]``。
+    附件块属于本轮请求的即时上下文，放在历史之后、当前消息之前（与既有实现一致）。
+
+    L4' (round4 批次 C) prompt 前缀稳定化：环境上下文 / 记忆等**每轮都会
+    变化**的内容经 ``trailing_system`` 传入，作为独立 system 消息插在历史
+    之后、末条 user 之前——OpenAI 系 / DeepSeek 的前缀缓存按逐字节前缀
+    命中，头部 system + 追加式历史保持跨请求稳定即可吃到缓存；易变块若
+    混进头部 system，任何 git 状态/时间变化都会让整轮缓存失效。
 
     Returns:
         ``(messages, omitted_count)``。任何失败都不抛错 —— 历史注入是
@@ -161,6 +168,8 @@ def build_request_messages(
             }
         )
     messages.extend(kept)
+    if trailing_system and str(trailing_system).strip():
+        messages.append({"role": "system", "content": str(trailing_system)})
     messages.append({"role": "user", "content": user_text})
     return messages, omitted
 

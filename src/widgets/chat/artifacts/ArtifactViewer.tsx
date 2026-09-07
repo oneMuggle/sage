@@ -92,6 +92,13 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
           <div className="text-sm text-error">{content?.error ?? '加载失败'}</div>
         ) : content.kind === 'image' ? (
           <img src={content.data_url} alt={artifact.name} className="max-w-full" />
+        ) : content.kind === 'pdf' ? (
+          // F11 (round4 批次 D): Chromium 内置 PDF viewer 内嵌渲染,零依赖
+          <iframe
+            src={content.data_url}
+            title={artifact.name}
+            className="w-full h-full min-h-[24rem] rounded border border-border"
+          />
         ) : content.kind === 'code' || content.kind === 'json' ? (
           <pre className="whitespace-pre-wrap text-xs font-mono bg-bg-hover p-2 rounded">{content.content}</pre>
         ) : content.kind === 'csv' ? (

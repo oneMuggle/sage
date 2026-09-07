@@ -14,6 +14,7 @@ const KIND_ICONS: Record<ArtifactKind, typeof File> = {
   image: FileImage,
   csv: FileSpreadsheet,
   json: FileCode,
+  pdf: FileText, // F11 (round4 批次 D)
   text: File,
 };
 

@@ -2392,6 +2392,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 告知模型平台/日期/工作区/git 状态与可用技能（此前模型对工作区
             # 状态零感知、技能只能盲调 skill 工具发现）。内部全 fail-safe:
             # 任何一段收集失败静默省略,绝不阻断聊天。独立标记块, rebase 友好。
+            # L4' (round4 批次 C): 环境块含分钟级时间戳 + git 状态 —— 每轮必
+            # 变。若拼进头部 system,前缀缓存(OpenAI 系/DeepSeek 逐字节前缀
+            # 命中)每轮全灭;改为收集进 dynamic_context_parts,经
+            # build_request_messages(trailing_system=...) 注入到历史之后的
+            # 尾部独立 system 消息,让"稳定 system + 追加式历史"保持缓存前缀。
+            dynamic_context_parts: List[str] = []
             try:
                 from backend.chat.env_context import (
                     build_environment_block,
@@ -2401,13 +2407,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 l5_binding = get_workspace_binding(
                     get_database().get_connection(), data.session_id
                 )
-                system_content += "\n\n" + build_environment_block(
-                    workspace_path=(
-                        l5_binding.workspace_path if l5_binding is not None else None
+                dynamic_context_parts.append(
+                    build_environment_block(
+                        workspace_path=(
+                            l5_binding.workspace_path if l5_binding is not None else None
+                        )
                     )
                 )
                 skills_block = build_skills_block()
                 if skills_block:
+                    # 技能清单仅在注册表变化时变 —— 相对稳定,留头部前缀。
                     system_content += "\n\n" + skills_block
             except Exception as l5_env_err:
                 logger.debug(
@@ -2419,6 +2428,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # legacy /chat/stream 此前完全不注入记忆上下文(只能靠 LLM 主动
             # 调 memory_search)——与 PHILOSOPHY"记忆优先"定位相悖。对齐
             # agent.chat() 单发路径的注入口径(get_context limit=10),fail-safe。
+            # L4': 记忆随会话演进,同属易变上下文 → 并入尾部 dynamic 块。
             try:
                 l13_memory_manager = getattr(agent, "memory_manager", None)
                 if l13_memory_manager is not None:
@@ -2426,8 +2436,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         limit=10, session_id=data.session_id
                     )
                     if l13_memory and str(l13_memory).strip():
-                        system_content += (
-                            "\n\n以下是相关的记忆上下文：\n" + str(l13_memory)
+                        dynamic_context_parts.append(
+                            "以下是相关的记忆上下文：\n" + str(l13_memory)
                         )
             except Exception as l13_mem_err:
                 logger.debug(
@@ -2483,6 +2493,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 history_rows=history_rows,
                 attachment_block=attachment_block or None,
                 budget_tokens=l9_budget,
+                # L4': 易变上下文(环境块/记忆)注入尾部,保前缀缓存
+                trailing_system=(
+                    "\n\n".join(dynamic_context_parts)
+                    if dynamic_context_parts
+                    else None
+                ),
             )
             if omitted_history > 0:
                 logger.info(

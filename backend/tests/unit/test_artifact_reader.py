@@ -67,3 +67,30 @@ def test_reveal_in_file_manager(tmp_path):
 
     assert result["ok"] is True
     mock_run.assert_called_once()
+
+
+def test_read_pdf_returns_data_url(tmp_path):
+    # F11 (round4): PDF 走 base64 data URL,前端 iframe 内嵌渲染
+    pdf_bytes = b"%PDF-1.4 fake body"
+    f = tmp_path / "out.pdf"
+    f.write_bytes(pdf_bytes)
+    aid = artifact_repo.record_artifact("sess_001", str(f), "out.pdf", "pdf", len(pdf_bytes))
+
+    result = artifact_reader.read_pdf(aid)
+
+    assert result["ok"] is True
+    assert result["kind"] == "pdf"
+    assert result["data_url"].startswith("data:application/pdf;base64,")
+
+
+def test_read_pdf_oversize_rejected(tmp_path, monkeypatch):
+    pdf_bytes = b"%PDF-1.4 big"
+    f = tmp_path / "big.pdf"
+    f.write_bytes(pdf_bytes)
+    aid = artifact_repo.record_artifact("sess_001", str(f), "big.pdf", "pdf", len(pdf_bytes))
+
+    monkeypatch.setattr(artifact_reader, "MAX_PDF_BYTES", 4)
+    result = artifact_reader.read_pdf(aid)
+
+    assert result["ok"] is False
+    assert "20MB" in result["error"]

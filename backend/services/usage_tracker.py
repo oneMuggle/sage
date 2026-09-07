@@ -213,8 +213,41 @@ class UsageTracker:
         except Exception as exc:  # noqa: BLE001 — fail-open 铁律
             logger.debug("usage_events 落库跳过: %s", exc)
 
+    def last_request(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """U17: 该会话最近一次 LLM 请求的用量行。
+
+        上一轮请求的 ``prompt_tokens`` 是"当前上下文占用"的最佳可得代理:
+        本轮请求 = 历史 + system + 新消息, 恰为下一轮开始前的上下文基线。
+        DB 不可用 / 无记录 → None (前端隐藏指示器)。
+        """
+        try:
+            from backend.data.database import _SQLITE_LOCK, get_database
+
+            with _SQLITE_LOCK:
+                row = get_database().get_connection().execute(
+                    "SELECT model, prompt_tokens, cached_tokens, created_at"
+                    " FROM usage_events WHERE session_id = ?"
+                    " ORDER BY created_at DESC LIMIT 1",
+                    (session_id,),
+                ).fetchone()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("last_request 读取失败: %s", exc)
+            return None
+        if row is None:
+            return None
+        return {
+            "model": str(row["model"] or ""),
+            "prompt_tokens": int(row["prompt_tokens"] or 0),
+            "cached_tokens": int(row["cached_tokens"] or 0),
+            "at_ms": int(row["created_at"] or 0),
+        }
+
     def session_summary(self, session_id: str) -> Dict[str, Any]:
-        """U14: 某会话的持久化用量聚合 (DB 直查, 重启不丢)。"""
+        """U14: 某会话的持久化用量聚合 (DB 直查, 重启不丢)。
+
+        U17: 追加 ``last_*`` 字段——该会话最近一次请求的模型与 prompt
+        用量 (ContextMeter 数据源); 无记录时为 None。
+        """
         try:
             from backend.data.database import _SQLITE_LOCK, get_database
 
@@ -230,18 +263,9 @@ class UsageTracker:
                     " FROM usage_events WHERE session_id = ?",
                     (session_id,),
                 ).fetchone()
-            return {
-                "session_id": session_id,
-                "requests": int(row["requests"]) if row else 0,
-                "prompt_tokens": int(row["prompt_tokens"]) if row else 0,
-                "completion_tokens": int(row["completion_tokens"]) if row else 0,
-                "total_tokens": int(row["total_tokens"]) if row else 0,
-                "cached_tokens": int(row["cached_tokens"]) if row else 0,
-                "estimated_cost_usd": float(row["estimated_cost_usd"]) if row else 0.0,
-            }
         except Exception as exc:  # noqa: BLE001
             logger.debug("session_summary 读取失败: %s", exc)
-            return {
+            summary = {
                 "session_id": session_id,
                 "requests": 0,
                 "prompt_tokens": 0,
@@ -250,6 +274,27 @@ class UsageTracker:
                 "cached_tokens": 0,
                 "estimated_cost_usd": 0.0,
             }
+            last = None
+        else:
+            summary = {
+                "session_id": session_id,
+                "requests": int(row["requests"]) if row else 0,
+                "prompt_tokens": int(row["prompt_tokens"]) if row else 0,
+                "completion_tokens": int(row["completion_tokens"]) if row else 0,
+                "total_tokens": int(row["total_tokens"]) if row else 0,
+                "cached_tokens": int(row["cached_tokens"]) if row else 0,
+                "estimated_cost_usd": float(row["estimated_cost_usd"]) if row else 0.0,
+            }
+            last = self.last_request(session_id)
+        summary.update(
+            {
+                "last_model": last["model"] if last else None,
+                "last_prompt_tokens": last["prompt_tokens"] if last else None,
+                "last_cached_tokens": last["cached_tokens"] if last else None,
+                "last_at_ms": last["at_ms"] if last else None,
+            }
+        )
+        return summary
 
     def today_cost_usd(self) -> float:
         """F5: 今日已花费的持久化估算 (本地日界)。DB 不可用 → 0 (限额失效)。"""

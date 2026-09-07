@@ -4,7 +4,7 @@
  * 数据源: GET /api/v1/usage (经 IPC usage_summary)。内存态统计,
  * 后端重启归零 — 面板明确是轻量概览, 不做持久化。
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { fetchUsageSummary, UsageSummary } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
@@ -22,16 +22,28 @@ export function UsagePanel() {
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // 卸载守卫: load 的异步 continuation 可能在组件卸载（含测试环境拆除）
+  // 之后才 resolve,此刻 setState 会抛 unhandled rejection
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setSummary(await fetchUsageSummary());
+      const data = await fetchUsageSummary();
+      if (!mountedRef.current) return;
+      setSummary(data);
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
