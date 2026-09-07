@@ -101,3 +101,31 @@ def test_set_doc_default_font_propagates_font_family_to_all_styles() -> None:
         style = doc.styles[style_name]
         rFonts = style.element.get_or_add_rPr().find(qn("w:rFonts"))
         assert rFonts.get(qn("w:eastAsia")) == "微软雅黑", style_name
+
+
+def test_set_doc_default_font_patches_linked_character_styles() -> None:
+    """Title / Heading 1-3 通过 ``<w:link>`` 关联的 character styles
+    （TitleChar / HeadingNChar）也必须 patch——Word 中 linked character
+    style 的 rFonts 覆盖 paragraph style 的 rFonts。这是 B 文件 h2
+    "这是 JSON 传入的段落" 仍渲染为 ＭＳ ゴシック 的根因修复。"""
+    doc = Document()
+    set_doc_default_font(doc, DEFAULT_ASCII_FONT, DEFAULT_EA_FONT)
+    W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    for char_style_id in (
+        "TitleChar",
+        "Heading1Char",
+        "Heading2Char",
+        "Heading3Char",
+    ):
+        char_style = doc.styles.element.find(
+            f'{{{W_NS}}}style[@{{{W_NS}}}styleId="{char_style_id}"]'
+        )
+        assert char_style is not None, f"{char_style_id} missing in styles.xml"
+        rPr = char_style.find(qn("w:rPr"))
+        assert rPr is not None, f"{char_style_id}.rPr missing"
+        rFonts = rPr.find(qn("w:rFonts"))
+        assert rFonts is not None, f"{char_style_id}.rFonts missing"
+        assert rFonts.get(qn("w:eastAsia")) == "宋体", char_style_id
+        # theme 引用必须清掉
+        assert rFonts.get(qn("w:eastAsiaTheme")) is None, char_style_id
+        assert rFonts.get(qn("w:asciiTheme")) is None, char_style_id
