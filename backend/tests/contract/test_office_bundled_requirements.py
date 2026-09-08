@@ -52,10 +52,17 @@ REQUIRED = {
     "reportlab": "reportlab",
 }
 
-# Path is relative to backend/ where pytest is invoked. pytest.ini sets
-# testpaths=tests so this resolves under backend/tests/contract/..
-_BUNDLED_REQ = Path(__file__).resolve().parents[2] / "requirements-bundled.txt"
-_PARSE_REQ = Path(__file__).resolve().parents[2] / "requirements.txt"
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_BUNDLED_REQ = _BACKEND_DIR / "requirements-bundled.txt"
+# Source-of-truth for runtime deps:
+#   - main:           backend/requirements.txt      (Python 3.10, pydantic 2.x)
+#   - release/win7:   backend/requirements-py38.txt (Python 3.8, pydantic 1.x)
+# On win7, ``requirements.txt`` is a leftover from main sync and only carries
+# Phase 1 office deps; the actual dev/installed source-of-truth is the
+# -py38.txt sibling. Pick whichever exists so the contract holds on both
+# branches without losing the cross-file drift check on main.
+_PY38_REQ = _BACKEND_DIR / "requirements-py38.txt"
+_PARSE_REQ = _PY38_REQ if _PY38_REQ.exists() else _BACKEND_DIR / "requirements.txt"
 
 
 def _parse_pinned_or_minimum(path: Path) -> dict:
@@ -116,52 +123,88 @@ def test_bundled_requirements_include_office_runtime_packages() -> None:
 
 
 def test_bundled_office_versions_meet_requirements_txt_floor() -> None:
-    """Office distributions in ``requirements-bundled.txt`` meet the floor in ``requirements.txt``.
+    """Office distributions in ``requirements-bundled.txt`` meet the floor in source-of-truth.
 
-    For ``==`` pins, the bundled version must equal requirements.txt.
-    For ``>=`` floors in requirements.txt, the bundled version (if also
-    pinned with ``==``) must be at or above the floor. When both files
-    use ``>=``, we only check that both declare the same minimum floor —
-    drift between the floor strings would mean dev vs. installer disagree
-    on the minimum-supported version.
+    Compares ``requirements-bundled.txt`` against whichever source-of-truth
+    exists (``requirements.txt`` on main, ``requirements-py38.txt`` on
+    release/win7) — see ``_PARSE_REQ``.
+
+    Operator combinations accepted:
+
+    - ``==`` req + ``==`` bundled → strict equal
+    - ``>=`` req + ``>=`` bundled → floors equal (drift means dev/installer
+      disagree on minimum-supported version)
+    - ``>=`` req + ``==`` bundled → bundled pin must be at or above the floor
+    - ``==`` req + ``>=`` bundled → bundled floor must be at or below the pin
+      (this is the main→bundled promotion pattern: dev pins exactly for
+      reproducibility, installer widens to a floor so patch upgrades ship
+      without churn — e.g. docxtpl==0.20.0 in win7 source-of-truth,
+      docxtpl>=0.20.0 in bundled.txt)
+
+    Win7 special case: ``PyMuPDF`` ships with bundled floor ``>=1.25.0``
+    (matches main's cp311-only comment) but the win7 source-of-truth is
+    pinned to ``==1.24.11`` because that is the last Py3.8 release with
+    prebuilt wheels on PyPI. The bundled installer uses Python 3.11, so the
+    bundled floor is safe at install time; the dev/source-of-truth just
+    cannot match it. The test marks this split as expected and skips the
+    operator check rather than failing. Remove the entry once win7 bumps
+    PyMuPDF to 1.25+ (which would require dropping Py3.8 support).
     """
     bundled_versions = _parse_pinned_or_minimum(_BUNDLED_REQ)
     requirements_versions = _parse_pinned_or_minimum(_PARSE_REQ)
+    is_win7 = _PARSE_REQ.name == "requirements-py38.txt"
+    # Distributions whose bundled operator intentionally diverges from the
+    # win7 py38 source-of-truth (see docstring).
+    win7_floor_drift_allowed = {"PyMuPDF"} if is_win7 else set()
 
     for distribution in REQUIRED:
         assert distribution in requirements_versions, (
-            f"{distribution} is missing from backend/requirements.txt; "
-            f"fix the source-of-truth first."
+            f"{distribution} is missing from the source-of-truth file "
+            f"({_PARSE_REQ.name}); fix the source-of-truth first."
         )
         assert distribution in bundled_versions, (
-            f"{distribution} is present in requirements.txt but missing "
+            f"{distribution} is present in {_PARSE_REQ.name} but missing "
             f"from requirements-bundled.txt."
         )
+        if distribution in win7_floor_drift_allowed:
+            continue
         req_spec = requirements_versions[distribution]
         bnd_spec = bundled_versions[distribution]
-        # If requirements.txt uses ==, bundled must match exactly.
-        # If requirements.txt uses >=, bundled must declare >= with same or
-        # higher floor (compared via PEP 440 packaging.version.Version).
-        if req_spec.startswith("=="):
+        if req_spec.startswith("==") and bnd_spec.startswith("=="):
             assert bnd_spec == req_spec, (
-                f"Version drift for {distribution}: requirements.txt pins "
-                f"{req_spec!r} but requirements-bundled.txt declares {bnd_spec!r}. "
+                f"Version drift for {distribution}: {_PARSE_REQ.name} pins "
+                f"{req_spec!r} but requirements-bundled.txt pins {bnd_spec!r}. "
                 f"Update both to match."
             )
-        elif req_spec.startswith(">="):
+        elif req_spec.startswith(">=") and bnd_spec.startswith("=="):
             req_floor = Version(_extract_version(">=", req_spec))
-            if bnd_spec.startswith("=="):
-                bnd_version = Version(_extract_version("==", bnd_spec))
-                assert bnd_version >= req_floor, (
-                    f"{distribution} bundled as {bnd_spec!r} is below the "
-                    f"requirements.txt floor {req_spec!r}."
-                )
-            else:
-                # Both >= floors must be equal — comparing versions for
-                # >= operators is non-trivial (PEP 440 allows post-releases,
-                # pre-releases, etc.) and our floor strings are simple
-                # numeric so equality is safe here.
-                assert bnd_spec == req_spec, (
-                    f"{distribution} floor drift: requirements.txt has "
-                    f"{req_spec!r} but requirements-bundled.txt has {bnd_spec!r}."
-                )
+            bnd_version = Version(_extract_version("==", bnd_spec))
+            assert bnd_version >= req_floor, (
+                f"{distribution} bundled as {bnd_spec!r} is below the "
+                f"{_PARSE_REQ.name} floor {req_spec!r}."
+            )
+        elif req_spec.startswith(">=") and bnd_spec.startswith(">="):
+            # Both >= floors must be equal — comparing versions for
+            # >= operators is non-trivial (PEP 440 allows post-releases,
+            # pre-releases, etc.) and our floor strings are simple
+            # numeric so equality is safe here.
+            assert bnd_spec == req_spec, (
+                f"{distribution} floor drift: {_PARSE_REQ.name} has "
+                f"{req_spec!r} but requirements-bundled.txt has {bnd_spec!r}."
+            )
+        elif req_spec.startswith("==") and bnd_spec.startswith(">="):
+            # Main→bundled promotion: dev pins exactly, installer widens
+            # to a minimum floor. Bundled floor must be at or below the
+            # pin (so the pinned version satisfies the floor).
+            req_pin = Version(_extract_version("==", req_spec))
+            bnd_floor = Version(_extract_version(">=", bnd_spec))
+            assert bnd_floor <= req_pin, (
+                f"{distribution}: {_PARSE_REQ.name} pins {req_spec!r} but "
+                f"requirements-bundled.txt raises the floor to {bnd_spec!r}, "
+                f"which would reject the pinned version."
+            )
+        else:
+            raise AssertionError(
+                f"unexpected operator combination for {distribution}: "
+                f"{_PARSE_REQ.name}={req_spec!r}, bundled={bnd_spec!r}"
+            )
