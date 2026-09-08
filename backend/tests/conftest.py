@@ -18,6 +18,14 @@ import pytest_asyncio
 # fixtures / 测试模块的 import 行为——pytest 保证 conftest 在 collection 前就位。
 os.environ.setdefault("SAGE_TEST_FAST_SQLITE", "1")
 
+# feat/ci-orchestration-confirm-hang: 编排确认门控（legacy_routes producer）
+# 的用户确认等待默认 600s。multi-mode 集成测试（test_chat_orchestration_
+# stream.py 等 5+ 用例）不 confirm，曾各挂满 600s 才走超时取消路径，把 CI
+# Backend job 的 Pytest hex 步骤从 ~6min 顶到 ~77min。这里默认 1s：测试
+# 秒过超时取消路径；个别用例要验证"等待确认"本身时，用 monkeypatch.
+# setenv("SAGE_ORCH_CONFIRM_TIMEOUT", ...) 在用例内覆盖。
+os.environ.setdefault("SAGE_ORCH_CONFIRM_TIMEOUT", "1")
+
 # 确保项目根目录在 sys.path 中
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
