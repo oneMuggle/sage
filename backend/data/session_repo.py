@@ -115,7 +115,7 @@ class SessionRepository:
             parent_id=parent_id,
         )
 
-    def get(self, session_id: str) -> Session | None:
+    def get(self, session_id: str) -> Optional[Session]:
         """获取会话"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -520,7 +520,7 @@ class MessageRepository:
 
         return [Message.from_row(row) for row in cursor.fetchall()]
 
-    def get(self, message_id: str) -> Message | None:
+    def get(self, message_id: str) -> Optional[Message]:
         """获取单条消息"""
         conn = self.db.get_connection()
         cursor = conn.cursor()

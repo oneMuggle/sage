@@ -24,7 +24,7 @@ missing keys, snake_case residue) yields ``None`` rather than raising.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ def _provider_types() -> Dict[str, Any]:
     return _PROVIDER_TYPES
 
 
-def resolve_provider_and_model_from_settings() -> Optional[tuple[Any, str]]:  # noqa: PLR0911
+def resolve_provider_and_model_from_settings() -> Optional[Tuple[Any, str]]:  # noqa: PLR0911
     """Resolve the selected provider and the exact model it should receive.
 
     The endpoint and model are resolved together so callers cannot construct a

@@ -26,7 +26,7 @@ import logging
 import os
 import stat
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -174,7 +174,7 @@ def collect_required_bins(dirs: List[Path]) -> List[str]:
     :func:`build_gating_context` 对这些名称调用 ``shutil.which`` 判断。
     Malformed files are ignored here and reported by the normal load pass.
     """
-    required: set[str] = set()
+    required: Set[str] = set()
     for directory in dirs:
         if not directory.is_dir():
             continue

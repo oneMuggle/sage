@@ -25,7 +25,7 @@ SQLite ``agents`` 表 (见 ``backend/data/database.py:init_db``)。
 """
 
 from __future__ import annotations
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import json
 import time
@@ -57,7 +57,7 @@ class AgentRepository:
         cursor.execute("SELECT * FROM agents ORDER BY id ASC")
         return [self._row_to_dict(row) for row in cursor.fetchall()]
 
-    def get(self, agent_id: str) -> Dict[str, Any] | None:
+    def get(self, agent_id: str) -> Optional[Dict[str, Any]]:
         """按 id 取单个 agent。"""
         conn = self.db.get_connection()
         cursor = conn.cursor()

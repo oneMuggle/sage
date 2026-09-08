@@ -53,7 +53,7 @@ class TeamRegistry:
         self.repo.create(team)
         return team
 
-    def get_team(self, team_id: str) -> Team | None:
+    def get_team(self, team_id: str) -> Optional[Team]:
         """Fetch a team by ID."""
         return self.repo.get(team_id)
 

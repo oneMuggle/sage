@@ -134,7 +134,7 @@ class ApprovalTokenStore:
             self._tokens[token_id] = token
         return token
 
-    def get(self, token_id: str) -> ApprovalToken | None:
+    def get(self, token_id: str) -> Optional[ApprovalToken]:
         """Return the token with the given id, or None."""
         return self._tokens.get(token_id)
 

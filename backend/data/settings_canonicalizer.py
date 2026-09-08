@@ -8,6 +8,7 @@
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import logging
 import os
@@ -545,7 +546,7 @@ def validate_protocol(value: Any) -> Any:
     return value
 
 
-def validate_local_model_path(value: Any, platform: str | None = None) -> Any:
+def validate_local_model_path(value: Any, platform: Optional[str] = None) -> Any:
     """Endpoint.localModelPath 平台路径分隔符校验.
 
     - ``None`` / 空字符串视为"未设置", 直接返回.
@@ -585,7 +586,7 @@ def validate_local_model_path(value: Any, platform: str | None = None) -> Any:
     return value
 
 
-def validate_endpoint_payload(ep: Any, platform: str | None = None) -> Any:
+def validate_endpoint_payload(ep: Any, platform: Optional[str] = None) -> Any:
     """单条 endpoint dict 的全部字段语义校验 (protocol / localModelPath).
 
     在 ``validate_settings_shape`` 之前调用 — 后者只锁白名单 key, 不锁 value.
@@ -604,7 +605,7 @@ def validate_endpoint_payload(ep: Any, platform: str | None = None) -> Any:
 
 def validate_settings_payload(
     settings: Any,
-    platform: str | None = None,
+    platform: Optional[str] = None,
 ) -> None:
     """顶层 settings payload 全校验 (timezone + 全部 endpoint 子项).
 

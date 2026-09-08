@@ -60,7 +60,7 @@ async def _to_thread(func, *args, **kwargs):
 # ============================================================================
 
 
-def _serialize_tool_calls(tool_calls: List[ToolCall]) -> str | None:
+def _serialize_tool_calls(tool_calls: List[ToolCall]) -> Optional[str]:
     """``[ToolCall, ...]`` → JSON 字符串（与 messages.tool_calls TEXT 列兼容）。"""
     if not tool_calls:
         return None
@@ -191,11 +191,11 @@ class SqliteStorageAdapter:
             for s in sessions
         ]
 
-    async def get_session(self, session_id: str) -> Dict[str, Any] | None:
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """按 ID 取单个会话;不存在返 ``None``。"""
         return await _to_thread(self._sync_get_session, session_id)
 
-    def _sync_get_session(self, session_id: str) -> Dict[str, Any] | None:
+    def _sync_get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         with _SQLITE_LOCK:
             s = self._sessions.get(session_id)
         if s is None:

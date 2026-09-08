@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 from backend.cli.doctor import CheckResult, Severity, register
 
 
-def _conda_env_name(exe_parts: tuple) -> str | None:
+def _conda_env_name(exe_parts: tuple) -> Optional[str]:
     """从解释器路径段中识别 Sage conda 环境名。
 
     跨平台匹配 ``envs/<name>`` 连续段对:

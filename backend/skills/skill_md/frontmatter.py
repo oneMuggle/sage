@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -223,7 +223,7 @@ def _validate_command_dispatch(command_dispatch: Any) -> str:
     return command_dispatch
 
 
-def _validate_license(license_field: Any) -> str | None:
+def _validate_license(license_field: Any) -> Optional[str]:
     """校验 license 字段（agentskills.io spec, optional）。
 
     Args:
@@ -244,7 +244,7 @@ def _validate_license(license_field: Any) -> str | None:
     return license_field
 
 
-def _validate_compatibility(compat: Any) -> str | None:
+def _validate_compatibility(compat: Any) -> Optional[str]:
     """校验 compatibility 字段（agentskills.io spec, optional, ≤500 字符）。
 
     Args:
@@ -269,7 +269,7 @@ def _validate_compatibility(compat: Any) -> str | None:
     return compat
 
 
-def _validate_allowed_tools(tools: Any) -> str | None:
+def _validate_allowed_tools(tools: Any) -> Optional[str]:
     """校验 allowed-tools 字段（agentskills.io spec, optional, 空格分隔字符串）。
 
     注：解析为 tuple 由 loader.py Task 4 完成；此处只校验原始字符串类型。

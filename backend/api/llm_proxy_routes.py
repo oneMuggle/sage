@@ -46,7 +46,7 @@ import ssl
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from ipaddress import ip_address
-from typing import Dict, FrozenSet, Optional
+from typing import Dict, FrozenSet, List, Optional, Set
 from urllib.parse import urlparse
 
 import httpcore
@@ -138,7 +138,7 @@ LOCAL_PROVIDER_ALLOWLIST_ENV = "SAGE_LLM_PROXY_ALLOWED_HOSTS"
 _DANGEROUS_NETWORK_ERROR = "The upstream target is not allowed."
 
 
-def _configured_allowed_hosts() -> frozenset[str]:
+def _configured_allowed_hosts() -> FrozenSet[str]:
     return frozenset(
         item.strip().lower().rstrip(".")
         for item in os.environ.get(LOCAL_PROVIDER_ALLOWLIST_ENV, "").split(",")
@@ -296,7 +296,7 @@ async def _read_request_body(request: Request) -> bytes:
         except ValueError:
             pass
 
-    chunks: list[bytes] = []
+    chunks: List[bytes] = []
     size = 0
     async for chunk in request.stream():
         size += len(chunk)
@@ -323,7 +323,7 @@ async def _read_response_body_limited(response: httpx.Response) -> bytes:
             if str(exc) == "response exceeds configured limit":
                 raise
 
-    chunks: list[bytes] = []
+    chunks: List[bytes] = []
     size = 0
     async for chunk in response.aiter_raw():
         size += len(chunk)
@@ -428,13 +428,13 @@ def _is_tls_certificate_error(exc: BaseException) -> bool:
     但 message 含 "CERTIFICATE_VERIFY_FAILED".
     """
     current: Optional[BaseException] = exc
-    seen: set[int] = set()
+    seen: Set[int] = set()
     while current is not None and id(current) not in seen:
         seen.add(id(current))
         if isinstance(current, ssl.SSLCertVerificationError):
             return True
         # 同级: __cause__ (raise X from Y) → __context__ (implicit) → exceptions
-        next_exc: BaseException | None = None
+        next_exc: Optional[BaseException] = None
         if current.__cause__ is not None and current.__cause__ is not current:
             next_exc = current.__cause__
         elif current.__context__ is not None and current.__context__ is not current:
@@ -639,7 +639,7 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
 
     # 4. 透传头部与 body
     fwd_headers = _filter_request_headers(request, get_local_auth_token())
-    body: bytes | None = (
+    body: Optional[bytes] = (
         await _read_request_body(request)
         if request.method in {"POST", "PUT", "PATCH"}
         else None
@@ -762,8 +762,8 @@ async def _proxy_streaming(
     upstream_url: str,
     method: str,
     fwd_headers: Dict[str, str],
-    body: bytes | None,
-    resolved_address: str | None = None,
+    body: Optional[bytes],
+    resolved_address: Optional[str] = None,
 ) -> StreamingResponse:
     """v2: SSE/chunked 流式透传。
 

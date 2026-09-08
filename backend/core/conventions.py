@@ -137,7 +137,7 @@ class ConventionManager:
         conn.commit()
         return cursor.rowcount > 0
 
-    def get(self, convention_id: str) -> Convention | None:
+    def get(self, convention_id: str) -> Optional[Convention]:
         """获取单个惯例"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -241,7 +241,7 @@ class ConventionManager:
             logger.warning(f"惯例学习失败: {e}")
             return []
 
-    def _find_by_name(self, name: str) -> Convention | None:
+    def _find_by_name(self, name: str) -> Optional[Convention]:
         """按名称查找惯例"""
         conn = self.db.get_connection()
         cursor = conn.cursor()

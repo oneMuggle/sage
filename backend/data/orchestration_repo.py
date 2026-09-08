@@ -88,7 +88,7 @@ class TaskRepository:
         conn.commit()
         return task
 
-    def get(self, task_id: str) -> Task | None:
+    def get(self, task_id: str) -> Optional[Task]:
         """Fetch a task by ID."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -278,7 +278,7 @@ class LaneRepository:
         conn.commit()
         return lane
 
-    def get(self, lane_id: str) -> Lane | None:
+    def get(self, lane_id: str) -> Optional[Lane]:
         """Fetch a lane by ID."""
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -460,7 +460,7 @@ class TeamRepository:
         conn.commit()
         return team
 
-    def get(self, team_id: str) -> Team | None:
+    def get(self, team_id: str) -> Optional[Team]:
         """Fetch a team by ID."""
         conn = self.db.get_connection()
         cursor = conn.cursor()

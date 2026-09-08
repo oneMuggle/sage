@@ -29,7 +29,7 @@ import os
 import platform
 import sys
 from pathlib import Path
-from typing import Optional, Protocol, Union, runtime_checkable
+from typing import Dict, Optional, Protocol, Tuple, Union, runtime_checkable
 
 
 class Severity(str, enum.Enum):
@@ -407,8 +407,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _resolve_backend_context(
     args: argparse.Namespace,
-    environ: dict[str, str],
-) -> tuple[list | None, str | None, dict | None]:
+    environ: Dict[str, str],
+) -> Tuple[Optional[list], Optional[str], Optional[dict]]:
     """Resolve launcher-context overrides from CLI args or env vars.
 
     Round 2 (fast-follow E): Electron's supervisor serialises the
@@ -426,7 +426,7 @@ def _resolve_backend_context(
     cwd_raw = getattr(args, "backend_cwd", None) or environ.get("SAGE_BACKEND_CWD")
     env_raw = getattr(args, "backend_env", None) or environ.get("SAGE_BACKEND_ENV")
 
-    backend_command: list | None = None
+    backend_command: Optional[list] = None
     if cmd_raw:
         try:
             parsed = json.loads(cmd_raw)
@@ -435,9 +435,9 @@ def _resolve_backend_context(
         except json.JSONDecodeError:
             backend_command = None  # tolerate malformed override, fall back
 
-    backend_cwd: str | None = str(cwd_raw) if cwd_raw else None
+    backend_cwd: Optional[str] = str(cwd_raw) if cwd_raw else None
 
-    backend_env: dict | None = None
+    backend_env: Optional[dict] = None
     if env_raw:
         try:
             parsed = json.loads(env_raw)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+from typing import List, Optional
 
 import pytest
 
@@ -31,8 +32,8 @@ class FakeSink(RunEventSink):
     """Captures every RunEvent published through it."""
 
     def __init__(self) -> None:
-        self.published: list[RunEvent] = []
-        self.fail_for_event: str | None = None  # optional: simulate sink error
+        self.published: List[RunEvent] = []
+        self.fail_for_event: Optional[str] = None  # optional: simulate sink error
 
     async def publish(self, event: RunEvent) -> RunEvent:
         if self.fail_for_event == event.event_type:

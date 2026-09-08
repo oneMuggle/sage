@@ -119,7 +119,7 @@ class BaseTool(ABC):
         self._schema: Optional[ToolSchema] = None
         self._policy = policy or ToolPolicy()
 
-    def _enforce_workspace(self, path: str) -> ToolResult | None:
+    def _enforce_workspace(self, path: str) -> Optional[ToolResult]:
         """M3: 若 ``policy.workspace_root`` 非空则校验 ``path``。
 
         返回 ``ToolResult(success=False, ...)`` 表示拒绝（调用方应直接

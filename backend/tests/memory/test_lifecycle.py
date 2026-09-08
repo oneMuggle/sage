@@ -14,6 +14,8 @@ Covers both surfaces shipped so far:
 
 from __future__ import annotations
 
+from typing import List
+
 import pytest
 
 from backend.memory.lifecycle import MemoryLifecycleManager
@@ -268,7 +270,7 @@ async def test_on_turn_complete_extracts_persists_and_emits(tmp_db_path):
     # §1.3a FK (#290): memories_episodic.session_id → sessions(id) 被强制。
     ensure_session(manager.episodic.db, "session-1")
     hooks = HookRegistry()
-    events: list[object] = []
+    events: List[object] = []
     hooks.on("memory_written", lambda e: events.append(e))
 
     mgr = MemoryLifecycleManager(
@@ -327,7 +329,7 @@ async def test_on_session_end_consolidates_and_emits(tmp_db_path):
     )
 
     hooks = HookRegistry()
-    events: list[object] = []
+    events: List[object] = []
     hooks.on("session_ended", lambda e: events.append(e))
 
     mgr = MemoryLifecycleManager(
@@ -357,7 +359,7 @@ async def test_on_session_end_does_not_emit_when_consolidation_fails():
             return None
 
     hooks = HookRegistry()
-    events: list[object] = []
+    events: List[object] = []
     hooks.on("session_ended", lambda e: events.append(e))
 
     mgr = MemoryLifecycleManager(
@@ -378,7 +380,7 @@ async def test_on_pre_compress_snapshots_and_emits(tmp_db_path):
     manager.add_to_working("user", "hello snapshot me")
 
     hooks = HookRegistry()
-    events: list[object] = []
+    events: List[object] = []
     hooks.on("pre_compress", lambda e: events.append(e))
 
     mgr = MemoryLifecycleManager(
@@ -403,7 +405,7 @@ async def test_on_pre_compress_does_not_emit_when_snapshot_fails():
             raise RuntimeError("snapshot boom")
 
     hooks = HookRegistry()
-    events: list[object] = []
+    events: List[object] = []
     hooks.on("pre_compress", lambda e: events.append(e))
 
     mgr = MemoryLifecycleManager(

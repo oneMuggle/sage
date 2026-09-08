@@ -8,6 +8,7 @@ Database.init_db() with the correct column definitions.
 import os
 import sqlite3
 import tempfile
+from typing import List
 
 from backend.data.database import Database
 
@@ -22,7 +23,7 @@ def _init_fresh_db() -> str:
     return db_path
 
 
-def _table_columns(db_path: str, table_name: str) -> list[dict]:
+def _table_columns(db_path: str, table_name: str) -> List[dict]:
     """Return PRAGMA table_info rows for *table_name* as dicts."""
     with sqlite3.connect(db_path) as conn:
         cursor = conn.execute(f"PRAGMA table_info({table_name})")

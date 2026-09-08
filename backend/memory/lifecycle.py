@@ -16,7 +16,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +242,7 @@ class MemoryLifecycleManager:
                     "on_turn_complete: emit memory_written failed", exc_info=exc
                 )
 
-    def _split_messages(self, messages: list) -> tuple[str, str]:
+    def _split_messages(self, messages: list) -> Tuple[str, str]:
         """Derive the last user and assistant message texts from a turn.
 
         Accepts both plain dicts (``{"role", "content"}`` — the original

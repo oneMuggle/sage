@@ -120,7 +120,7 @@ class SessionService:
         all_sessions = await self.storage.list_sessions()
         return all_sessions[offset : offset + limit]
 
-    async def get_session(self, session_id: str) -> Dict[str, Any] | None:
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """取单个会话;不存在返 ``None``(路由层映射 404)。"""
         return await self.storage.get_session(session_id)
 
