@@ -13,10 +13,7 @@ import asyncio
 import pytest
 
 from backend.orchestration.chat_dispatcher import ChatDispatcher
-from backend.tests.unit.test_chat_dispatcher import (
-    _collect_events,
-    _make_queue,
-)
+from backend.tests.unit.test_chat_dispatcher import _make_queue
 from backend.tests.unit.test_chat_dispatcher_topology import _inject_plan
 
 
@@ -98,7 +95,8 @@ async def test_skip_running_task_interrupts(tmp_path, monkeypatch):
         ]
     )
     # merged 置位（软中断通道收到信号），run 级取消未置位
-    assert seen["t1"] is not None and seen["t1"].is_set()
+    assert seen["t1"] is not None
+    assert seen["t1"].is_set()
     assert d._cancelled.is_set() is False
     assert d._states["t1"].status == "cancelled"
     assert d._states["t2"].status == "done"  # 其余任务不受影响
