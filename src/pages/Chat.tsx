@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -28,6 +28,9 @@ function fill(template: string, vars: Record<string, string | number>): string {
     template,
   );
 }
+
+/** 稳定空数组: toolCalls 缺省时避免每次渲染产生新引用击穿 RightPanel memo (F1) */
+const EMPTY_TOOL_CALLS: readonly never[] = [];
 
 /**
  * Sticky-bottom 阈值(scrollTop 距底部 ≤ 此值视作"在底部")。
@@ -237,34 +240,40 @@ export function Chat() {
     navigate('/welcome');
   };
 
-  const handleSendMessage = async (
-    content: string,
-    options?: {
-      knowledgeRefs?: { id: string; title: string }[];
-      attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
-      images?: { name: string; size: number; type: string; dataUrl?: string }[];
-      officeRefs?: readonly ChatOfficeRef[];
-      // Wave 3 C6: 放宽为 string —— 编排模式条可传 'template:<id>' 等。
-      orchestrationMode?: string;
+  // useCallback 稳定回调引用: Message.tsx 的 memo 比较器逐一比较 onFork 等
+  // 回调 props, 每次渲染新建函数会把 60 条可见消息的 memo 全部击穿 —— 流式
+  // 期间每 token 全量重渲染 (F1)。
+  const handleSendMessage = useCallback(
+    async (
+      content: string,
+      options?: {
+        knowledgeRefs?: { id: string; title: string }[];
+        attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
+        images?: { name: string; size: number; type: string; dataUrl?: string }[];
+        officeRefs?: readonly ChatOfficeRef[];
+        // Wave 3 C6: 放宽为 string —— 编排模式条可传 'template:<id>' 等。
+        orchestrationMode?: string;
+      },
+    ) => {
+      clearError();
+      const officeRefs = options?.officeRefs;
+      const orchestrationMode = options?.orchestrationMode;
+      if (!currentSessionId) {
+        const sessionId = await createSession();
+        await sendMessage(content, sessionId, officeRefs, orchestrationMode);
+      } else {
+        await sendMessage(content, undefined, officeRefs, orchestrationMode);
+      }
     },
-  ) => {
-    clearError();
-    const officeRefs = options?.officeRefs;
-    const orchestrationMode = options?.orchestrationMode;
-    if (!currentSessionId) {
-      const sessionId = await createSession();
-      await sendMessage(content, sessionId, officeRefs, orchestrationMode);
-    } else {
-      await sendMessage(content, undefined, officeRefs, orchestrationMode);
-    }
-  };
+    [clearError, currentSessionId, createSession, sendMessage],
+  );
 
   // M4: /compact slash action — 调后端压缩当前会话，成功后重载消息
   // （续接摘要行由后端持久化，重载后即显示在聊天列表中）。
   // MEDIUM-1: 流式中（isLoading）early-return —— 两个并发手动压缩会在后端
   // 各自通过 should_compact 检查并写出重复续接行；前端守卫是必须的修复，
   // 后端 409 compact_in_progress 只是兜底。
-  const handleCompact = async () => {
+  const handleCompact = useCallback(async () => {
     if (!currentSessionId || isLoading) return;
     try {
       const result = await sessionApi.compact(currentSessionId);
@@ -289,12 +298,12 @@ export function Chat() {
         fill(t('chat.compact_failed'), { message: e instanceof Error ? e.message : String(e) }),
       );
     }
-  };
+  }, [currentSessionId, isLoading, loadMessages, t]);
 
   // Task 12 (2026-08-03): /learn slash action — 触发 Background Review
   // 当前会话，产生技能草案候选。成功后跳转到 Skills 页面的 Pending Drafts tab。
   // 与 /compact 对齐：流式中 early-return。
-  const handleLearn = async () => {
+  const handleLearn = useCallback(async () => {
     if (!currentSessionId || isLoading) return;
     try {
       toast.info(t('chat.learn_reviewing'));
@@ -306,25 +315,28 @@ export function Chat() {
         fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }),
       );
     }
-  };
+  }, [currentSessionId, isLoading, navigate, t]);
 
   // M4: 消息级分叉 — 非破坏性操作（无需确认）。成功后切换到新会话
   // （复用现有 session-switch 路径：setCurrentSessionId → loadMessages effect）。
   // MEDIUM-1: 流式中（isLoading）early-return —— 流式写入与 fork 前缀复制
   // 并发会复制出不完整的消息序列，且中途切换会话会打断流式 UI。
-  const handleFork = async (messageId: string) => {
-    if (!currentSessionId || isLoading) return;
-    try {
-      const forked = await sessionApi.fork(currentSessionId, messageId);
-      toast.success(t('chat.fork_success'));
-      void loadSessions(); // 刷新侧栏（含 fork 徽标）
-      setCurrentSessionId(forked.id);
-    } catch (e) {
-      toast.error(
-        fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
-      );
-    }
-  };
+  const handleFork = useCallback(
+    async (messageId: string) => {
+      if (!currentSessionId || isLoading) return;
+      try {
+        const forked = await sessionApi.fork(currentSessionId, messageId);
+        toast.success(t('chat.fork_success'));
+        void loadSessions(); // 刷新侧栏（含 fork 徽标）
+        setCurrentSessionId(forked.id);
+      } catch (e) {
+        toast.error(
+          fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
+        );
+      }
+    },
+    [currentSessionId, isLoading, loadSessions, setCurrentSessionId, t],
+  );
 
   // U5' (对标增强第五轮批次 A): 编辑重发。
   // ① 点击 user 消息的编辑按钮 → 原文回填输入框 + 进入编辑态（editResendTarget）；
@@ -337,50 +349,71 @@ export function Chat() {
     text: string;
     nonce: number;
   } | null>(null);
-
-  const handleStartEditResend = useCallback(
-    (messageId: string) => {
-      const target = messages.find((m) => m.id === messageId);
-      if (!target || target.role !== 'user') return;
-      setEditResendTarget({
-        messageId,
-        text: target.content,
-        nonce: Date.now(),
-      });
-    },
-    [messages],
+  // 传给 memo 组件的 props 引用需稳定: 内联箭头函数/对象字面量每次渲染
+  // 都是新引用, 会击穿 React.memo (F1)。
+  const cancelEditResend = useCallback(() => setEditResendTarget(null), []);
+  const editResendNotice = useMemo(
+    () => (editResendTarget ? { onCancel: cancelEditResend } : null),
+    [cancelEditResend, editResendTarget],
   );
+  const handleToggleRightPanel = useCallback(() => setRightPanelOpen((v) => !v), []);
 
-  const handleSendMessageWithEditResend = async (
-    content: string,
-    options?: Parameters<typeof handleSendMessage>[1],
-  ) => {
-    if (!editResendTarget) {
-      await handleSendMessage(content, options);
-      return;
-    }
-    const target = editResendTarget;
-    setEditResendTarget(null); // 先清编辑态，防 fork 失败重试时二次分叉
-    if (!currentSessionId || isLoading) {
-      await handleSendMessage(content, options);
-      return;
-    }
-    try {
-      const forked = await sessionApi.fork(currentSessionId, target.messageId, undefined, {
-        beforeMessage: true,
-      });
-      toast.success(t('chat.edit_resend_forked'));
-      void loadSessions();
-      setCurrentSessionId(forked.id);
-      await sendMessage(content, forked.id);
-    } catch (e) {
-      toast.error(
-        fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
-      );
-      // fork 失败退回普通发送，改写内容不丢
-      await handleSendMessage(content, options);
-    }
-  };
+  // messages 每 token 换新引用, 直接进 deps 会击穿 memo —— 经 ref 读取,
+  // 回调引用保持恒定 (F1)。
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const handleStartEditResend = useCallback((messageId: string) => {
+    const target = messagesRef.current.find((m) => m.id === messageId);
+    if (!target || target.role !== 'user') return;
+    setEditResendTarget({
+      messageId,
+      text: target.content,
+      nonce: Date.now(),
+    });
+  }, []);
+
+  const handleSendMessageWithEditResend = useCallback(
+    async (
+      content: string,
+      options?: Parameters<typeof handleSendMessage>[1],
+    ) => {
+      if (!editResendTarget) {
+        await handleSendMessage(content, options);
+        return;
+      }
+      const target = editResendTarget;
+      setEditResendTarget(null); // 先清编辑态，防 fork 失败重试时二次分叉
+      if (!currentSessionId || isLoading) {
+        await handleSendMessage(content, options);
+        return;
+      }
+      try {
+        const forked = await sessionApi.fork(currentSessionId, target.messageId, undefined, {
+          beforeMessage: true,
+        });
+        toast.success(t('chat.edit_resend_forked'));
+        void loadSessions();
+        setCurrentSessionId(forked.id);
+        await sendMessage(content, forked.id);
+      } catch (e) {
+        toast.error(
+          fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
+        );
+        // fork 失败退回普通发送，改写内容不丢
+        await handleSendMessage(content, options);
+      }
+    },
+    [
+      currentSessionId,
+      editResendTarget,
+      handleSendMessage,
+      isLoading,
+      loadSessions,
+      sendMessage,
+      setCurrentSessionId,
+      t,
+    ],
+  );
 
   // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
@@ -526,21 +559,17 @@ export function Chat() {
         placeholder="输入消息..."
         workspacePath={workspacePath}
         injectedDraft={editResendTarget}
-        editResendNotice={
-          editResendTarget
-            ? { onCancel: () => setEditResendTarget(null) }
-            : null
-        }
+        editResendNotice={editResendNotice}
       />
 
       {/* Artifacts Panel: 右侧抽屉（fixed 定位，叠加在页面右缘） */}
       <RightPanel
         open={rightPanelOpen}
-        onToggle={() => setRightPanelOpen((v) => !v)}
+        onToggle={handleToggleRightPanel}
         iteration={iteration}
         streamingState={streamingState}
         // ?? [] 为防御:个别测试 mock useChat 时可能缺该字段;生产 hook 保证非空
-        toolCalls={streamingToolCalls ?? []}
+        toolCalls={streamingToolCalls ?? EMPTY_TOOL_CALLS}
         isLoading={isLoading}
         sessionId={currentSessionId}
         taskBoard={taskBoard ?? null}
