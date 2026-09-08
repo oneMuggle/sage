@@ -10,7 +10,7 @@ import { isDemoMode } from './demoInterceptors';
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
 import type { AgentEvent, ChatConfig, ChatOfficeRef, ChatResponse } from './types';
-import { ApiException, handleApiError, isValidSessionId, sanitizeInput, withRetry } from './utils';
+import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
 
 // DIAG(2026-07-30): 当 stream 以 FAILED 收尾时,把整轮事件序列推到主进程日志,
 // 便于定位 '为什么 agent 跑到 max_iterations'。仅用于排查,不参与业务逻辑。
@@ -18,7 +18,8 @@ const STREAM_TRACE_MAX = 50;
 
 export const chatApi = {
   async chat(sessionId: string, message: string, config?: ChatConfig): Promise<ChatResponse> {
-    const safeMessage = sanitizeInput(message);
+    // 消息原文直传: 用户内容会进入 LLM 上下文并落库,任何转义都是数据污染
+    // (XSS 由渲染层 React 转义负责, 不在此处处理)。
     if (isDemoMode()) {
       throw new ApiException({
         error: 'DEMO_MODE_UNSUPPORTED',
@@ -41,7 +42,7 @@ export const chatApi = {
         try {
           const response = await invoke<ChatResponse>('agent_chat', {
             sessionId,
-            message: safeMessage,
+            message,
             apiKey: config?.apiKey ?? null,
             apiUrl: config?.apiUrl ?? null,
             model: config?.model ?? null,
@@ -96,7 +97,7 @@ export const chatApi = {
     config?: ChatConfig,
     officeRefs?: readonly ChatOfficeRef[],
   ): Promise<{ streamId: string; cancel: () => void }> {
-    const safeMessage = sanitizeInput(message);
+    // 消息原文直传,理由同 chat()。
     if (!handlers || typeof handlers.onEvent !== 'function') {
       throw new ApiException({
         error: 'VALIDATION_ERROR',
@@ -115,13 +116,13 @@ export const chatApi = {
     // 演示模式 (2026-08-27): 不发请求, 按脚本时间线推同形事件流。
     // 仅保留 /btw 使用的特殊会话，其余路径仍遵守 UUID 校验。
     if (isDemoMode()) {
-      return runDemoChatStream(sessionId, safeMessage, handlers);
+      return runDemoChatStream(sessionId, message, handlers);
     }
 
     // 1) 启动流 (同步 invoke, 立即返回 { streamId: "..." } 对象)
     const { streamId } = await invoke<{ streamId: string }>('agent_chat_stream', {
       sessionId,
-      message: safeMessage,
+      message,
       apiKey: config?.apiKey ?? null,
       apiUrl: config?.apiUrl ?? null,
       model: config?.model ?? null,
