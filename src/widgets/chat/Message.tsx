@@ -22,8 +22,8 @@ import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 
-import { ShikiCodeBlock } from './ShikiCodeBlock';
 import { MermaidBlock } from './MermaidBlock';
+import { ShikiCodeBlock } from './ShikiCodeBlock';
 
 interface MessageProps {
   message: MessageType;

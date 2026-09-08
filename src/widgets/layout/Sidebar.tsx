@@ -17,10 +17,10 @@ import { useQuestionState } from '../../entities/question/questionState';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { sessionApi } from '../../shared/api/sessionApi';
 import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
 import { useI18n } from '../../shared/lib/i18n';
-import { sessionApi } from '../../shared/api/sessionApi';
 import { useStore } from '../../shared/lib/store';
 import { AttnBadge, BrandLogo, LiveDot, type LiveState } from '../../shared/ui';
 import {

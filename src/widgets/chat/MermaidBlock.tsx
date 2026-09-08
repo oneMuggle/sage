@@ -13,7 +13,11 @@ import { useEffect, useState } from 'react';
 
 import { ShikiCodeBlock } from './ShikiCodeBlock';
 
-type MermaidApi = import('mermaid').default;
+/** 本组件实际消费的 mermaid 最小接口（不耦合其类型导出方式） */
+interface MermaidApi {
+  initialize(config: Record<string, unknown>): void;
+  render(id: string, code: string): Promise<{ svg: string }>;
+}
 
 let mermaidPromise: Promise<MermaidApi> | null = null;
 
@@ -23,13 +27,14 @@ function currentTheme(): 'dark' | 'default' {
 
 async function loadMermaid(): Promise<MermaidApi> {
   mermaidPromise ??= import('mermaid').then((mod) => {
-    mod.default.initialize({
+    const api = (mod.default ?? mod) as MermaidApi;
+    api.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
       maxTextSize: 50000,
       maxEdges: 500,
     });
-    return mod.default;
+    return api;
   });
   return mermaidPromise;
 }
