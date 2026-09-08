@@ -1,6 +1,6 @@
 // src/widgets/chat/RightPanel.tsx
 import { X } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
@@ -88,7 +88,7 @@ export function PanelHeader({ tab, onTabChange, onClose }: PanelHeaderProps) {
   );
 }
 
-export function RightPanel({
+function RightPanelInner({
   open,
   onToggle,
   iteration,
@@ -149,3 +149,6 @@ export function RightPanel({
     </aside>
   );
 }
+
+// memo (F1): 面板关闭时仅平移出屏不卸载, memo 避免流式期间无意义的整面板重渲染。
+export const RightPanel = memo(RightPanelInner);
