@@ -45,15 +45,33 @@ logger.info('main: process started', {
 });
 
 import { spawn, ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {
+  constants as fsConstants,
+  lstatSync,
+  existsSync,
+  openSync,
+  closeSync,
+  writeSync,
+  readFileSync,
+  mkdirSync,
+  renameSync,
+  unlinkSync,
+} from 'node:fs';
 import http from 'node:http';
 import fetch from 'node-fetch';
 
-import { relayChatStream, relayNdjsonToEvent, relayOrchEventsStream } from './relay';
+import {
+  relayChatStream,
+  relayNdjsonToEvent,
+  relayOrchEventsStream,
+  WIKI_STREAM_ERROR,
+} from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
+import { registerOfficeIpc } from './officeIpc';
 import { buildApplicationMenu } from './menu';
 import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
@@ -75,25 +93,6 @@ const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health/proof`;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:1420';
-
-// Local capability auth token — backend `LocalAuthMiddleware` requires every
-// non-public request to carry `Authorization: Bearer ${SAGE_LOCAL_AUTH_TOKEN}`.
-// Electron is the only thing that spawns the backend in normal mode, so we
-// mint a random bearer here and inject it into the Python subprocess env.
-// Mismatch → backend rejects everything with 401 "本地授权凭据无效或缺失".
-// Win7 minimal port of main's d280b851 token lifecycle — we don't pull in
-// main's 171-line main.ts rewrite, only the pieces needed to fix 401.
-//
-// SKIP_BACKEND mode: caller (developer / CI) sets SAGE_LOCAL_AUTH_TOKEN in
-// the Electron env; `mintBackendAuthToken()` honours it so both sides agree.
-let backendAuthToken: string | null = null;
-function mintBackendAuthToken(): string {
-  const explicit = process.env.SAGE_LOCAL_AUTH_TOKEN;
-  if (explicit && explicit.length > 0) return explicit;
-  // randomUUID hex (no dashes) — alphabet-compatible with backend's
-  // secrets.token_urlsafe(32) default and short enough for env var.
-  return randomUUID().replace(/-/g, '');
-}
 const buildManifest = loadBuildManifest(
   process.resourcesPath ? join(process.resourcesPath, 'build-manifest.json') : '',
   // CRITICAL: guard app.getVersion() for vitest environments where the
@@ -148,6 +147,10 @@ const MIN_WINDOW_WIDTH = 1024;
 const MIN_WINDOW_HEIGHT = 640;
 
 // Timeouts (milliseconds)
+// 2026-08-26: bump 30_000 → 90_000 — 实测 conda wrapper + Python + uvicorn 在
+// Linux 上启动 + bind 8765 需要 ~50-65s (60s 仍然卡边界超时). 90s 给后端充足
+// 启动窗口, 避免触发"startup failed"对话框. 用户实测在 60s 边界 listen 8765,
+// 后端实际可用但 Electron poll 已先 timeout.
 const BACKEND_HEALTH_TIMEOUT_MS = 90_000;
 const BACKEND_SHUTDOWN_TIMEOUT_MS = 3_000;
 const HTTP_REQUEST_TIMEOUT_MS = 1_000;
@@ -186,6 +189,7 @@ let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
+let backendAuthToken: string | null = null;
 let updateManager: UpdateManager | null = null;
 let cleanupUpdateIpc: (() => void) | null = null;
 
@@ -208,6 +212,43 @@ const MAX_RESTART_ATTEMPTS = 3;
 const RESTART_BASE_DELAY_MS = 1000;
 const RESTART_MAX_DELAY_MS = 8000;
 
+/**
+ * 演示模式持久化 (2026-08-27): 用户在 Settings → 通用 里打开"演示模式"
+ * 开关后, renderer 通过 IPC 写入 <userData>/sage-demo-mode.json。
+ * main 启动时读取该文件: true → 跳过 Python 后端 spawn, 镜像
+ * SAGE_DEMO_MODE=1 环境变量分支 (electron/main.ts:1329). 关掉开关
+ * 用户下次启动即恢复正常 LLM 路径。
+ *
+ * 文件位置选择: 与 SAGE_DB_PATH / SAGE_USER_DATA_DIR 的用户级写入策略
+ * 一致 (见 spawnBackend() 注释 line 213-215), packaged 模式用
+ * app.getPath('userData'), dev 模式用 <project>/data。
+ */
+function getDemoModePath(): string {
+  if (app.isPackaged) return join(app.getPath('userData'), 'sage-demo-mode.json');
+  return join(process.cwd(), 'data', 'sage-demo-mode.json');
+}
+
+function readDemoMode(): boolean {
+  try {
+    const raw = readFileSync(getDemoModePath(), 'utf-8');
+    const parsed = JSON.parse(raw) as { demoMode?: unknown };
+    return parsed.demoMode === true;
+  } catch {
+    // 文件不存在/JSON 损坏 → 默认 false (正常 LLM 路径)
+    return false;
+  }
+}
+
+let demoModeFromSettings = false;
+try {
+  demoModeFromSettings = readDemoMode();
+  if (demoModeFromSettings) {
+    logger.info('main: demo mode active (persisted settings) — backend spawn suppressed');
+  }
+} catch (err) {
+  logger.warn('main: failed to read demo mode settings', { error: String(err) });
+}
+
 // Set by spawnBackend() when the resolver reports a broken installer, so the
 // startup-failure path in app.whenReady() can SKIP its own dialog (which
 // would otherwise show a misleading "port 8765 occupied / conda not installed"
@@ -222,8 +263,7 @@ let reportedBrokenInstaller = false;
  *
  * Decision logic lives in `electron/backendLauncher.ts` (pure, unit-tested).
  * This wrapper:
- *   1. Computes SAGE_DB_PATH and SAGE_USER_DATA_DIR (uses electron's userData
- *      when packaged).
+ *   1. Computes SAGE_DB_PATH (uses electron's userData when packaged).
  *   2. Calls the resolver.
  *   3. spawns the returned cmd, OR — if the resolver says the installer is
  *      broken (bundled Python missing, macOS unsupported, etc.) — surfaces a
@@ -290,6 +330,7 @@ function spawnBackend(): ChildProcess {
   }
   const generation = ++backendGeneration;
   const ownershipToken = randomUUID();
+  backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? randomBytes(32).toString('base64url');
   currentBackend = { generation, pid: -1, ownershipToken };
   backendLifecycle = 'starting';
   // Task 0 review round 1, finding #6: tell the renderer the new lifecycle
@@ -317,9 +358,6 @@ function spawnBackend(): ChildProcess {
     });
   }
 
-  // Mint the capability token before spawning the backend so the Python
-  // subprocess picks up the matching SAGE_LOCAL_AUTH_TOKEN in its env.
-  backendAuthToken = mintBackendAuthToken();
   const proc = spawn(plan.command, plan.args, {
     cwd: plan.cwd,
     env: {
@@ -514,13 +552,6 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         const req = http.get(
           BACKEND_HEALTH,
           {
-            // /health/proof is gated by LocalAuthMiddleware's
-            // ``is_ownership_health_valid`` check — the supervisor's
-            // ownershipToken MUST be presented as
-            // X-Sage-Backend-Ownership for the request to be admitted.
-            // Without this header the endpoint returns 401 and
-            // ``ownsBackend`` never matches, leaving the desktop stuck in
-            // the "30s 无响应" loop even when the backend is up.
             headers: { 'X-Sage-Backend-Ownership': expectedBackend.ownershipToken },
           },
           (res) => {
@@ -695,6 +726,10 @@ function isTrustedRenderer(sender: Electron.WebContents): boolean {
   return senderWindow === mainWindow && isTrustedRendererUrl(sender.getURL());
 }
 
+function isDemoProcess(): boolean {
+  return process.env.SAGE_DEMO_MODE === '1' || demoModeFromSettings;
+}
+
 /**
  * 外链 scheme 白名单: 仅 http/https 交给 OS 打开。
  * 被拦截的导航/弹窗若不校验 scheme, file://、smb:// 或任意自定义协议
@@ -730,6 +765,10 @@ function createMainWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // Phase 3: keep false for Win7 compat (sandbox needs SUID)
+      // 演示模式 (2026-08-27): 同步把演示标志传给 renderer (preload 读 argv
+      // 暴露)。首屏请求早于 loadSettings 完成, renderer 的 isDemoMode() 若
+      // 只读 settings store 会竞态漏拦截 → 请求打到已跳过的后端报错。
+      ...(isDemoProcess() ? { additionalArguments: ['--sage-demo-mode=1'] } : {}),
     },
   });
   setMainWindow(win);
@@ -754,12 +793,30 @@ function createMainWindow(): void {
         detail: `URL: ${VITE_DEV_URL}\n错误: ${e.message}`,
       });
     });
-    win.webContents.openDevTools({ mode: 'detach' });
+    // 演示模式 (2026-08-27): 录屏时不弹分离式 DevTools, 避免入镜。
+    // 需要调试仍可手动 Ctrl+Shift+I 或菜单打开。
+    if (!isDemoProcess()) {
+      win.webContents.openDevTools({ mode: 'detach' });
+    }
   } else {
     // tsconfig.electron.json uses rootDirs: [electron, src], so the compiled
     // main.js lives at dist-electron/electron/main.js (one extra directory level
     // vs the legacy rootDir: electron setup). Go up two levels to reach dist/.
     const indexHtml = join(__dirname, '..', '..', 'dist', 'index.html');
+    logger.info('main: loading frontend', { path: indexHtml, __dirname });
+    // Diagnostic: read and log the contents of index.html to verify it has the
+    // correct script references (not the source /src/main.tsx)
+    try {
+      const htmlContent = readFileSync(indexHtml, 'utf-8');
+      logger.info('main: index.html contents', {
+        length: htmlContent.length,
+        hasScriptTag: htmlContent.includes('<script'),
+        hasSrcMainTsx: htmlContent.includes('/src/main.tsx'),
+        snippet: htmlContent.substring(0, 500),
+      });
+    } catch (e) {
+      logger.error('main: failed to read index.html', { error: (e as Error).message });
+    }
     win.loadFile(indexHtml).catch(async (e) => {
       logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
       await showStartupFailureDialog({
@@ -834,8 +891,13 @@ function createMainWindow(): void {
 function registerIpcHandlers(): void {
   ipcMain.handle(
     'sage:invoke',
-    async (_evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
-      // Streaming commands need their own dispatcher branch — they
+    async (evt, payload: { cmd: string; args?: Record<string, unknown> }) => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      if (isDemoProcess()) {
+        throw new Error('演示模式不支持该后端操作');
+      }
       // fire-and-forget the relay and return { streamId } immediately so
       // the renderer can subscribe + unlisten via the existing IPC
       // channels without waiting for the backend to complete.
@@ -857,10 +919,10 @@ function registerIpcHandlers(): void {
         throw new BackendNotReadyError();
       }
       if (payload.cmd === 'wiki_chat_stream') {
-        return startWikiChatStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
+        return startWikiChatStream(evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       if (payload.cmd === 'wiki_ingest_stream') {
-        return startWikiIngestStream(_evt.sender, payload.args ?? {}, BACKEND_URL);
+        return startWikiIngestStream(evt.sender, payload.args ?? {}, BACKEND_URL);
       }
       try {
         return await invokeBackend(
@@ -877,6 +939,77 @@ function registerIpcHandlers(): void {
     },
   );
 
+  ipcMain.handle(
+    'sage:backend-request',
+    async (
+      evt,
+      request: {
+        method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+        path: string;
+        headers?: Record<string, string>;
+        body?: unknown;
+        timeoutMs?: number;
+      },
+    ) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+      // Raw requests use the same lifecycle gate as sage:invoke. In particular,
+      // never probe a stale port with the previous generation's capability.
+      if (backendLifecycle !== 'ready') {
+        logger.warn('ipc: backend-request blocked — backend not ready', {
+          lifecycle: backendLifecycle,
+        });
+        throw new BackendNotReadyError();
+      }
+      if (!request || typeof request.path !== 'string') {
+        throw new Error('无效的后端请求路径');
+      }
+      let backendPath: string;
+      try {
+        const parsed = new URL(request.path, BACKEND_URL);
+        const backendOrigin = new URL(BACKEND_URL);
+        const isLoopbackBackendOrigin =
+          (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') &&
+          parsed.port === backendOrigin.port;
+        if (
+          (!isLoopbackBackendOrigin && parsed.origin !== BACKEND_URL) ||
+          !parsed.pathname.startsWith('/api/v1/')
+        ) {
+          throw new Error('outside backend API');
+        }
+        backendPath = `${parsed.pathname}${parsed.search}`;
+      } catch {
+        throw new Error('无效的后端请求路径');
+      }
+      const headers: Record<string, string> = {
+        ...(request.headers ?? {}),
+        'X-Sage-Local-Authorization': `Bearer ${backendAuthToken ?? ''}`,
+      };
+      const controller = new AbortController();
+      const timeoutMs =
+        typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs)
+          ? Math.min(Math.max(request.timeoutMs, 1), 60_000)
+          : undefined;
+      const timeout =
+        timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(`${BACKEND_URL}${backendPath}`, {
+          method: request.method ?? 'GET',
+          headers,
+          body: request.body === undefined ? undefined : JSON.stringify(request.body),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const text = await response.text().catch(() => '');
+          throw new Error(`Backend request failed: ${response.status} ${text}`);
+        }
+        return response.json();
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+      }
+    },
+  );
+
   // listen(event) → subscribe to backend event stream, forward each event
   // payload to renderer via webContents.send('sage:event:${event}', payload).
   //
@@ -889,6 +1022,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     'sage:listen',
     async (evt, payload: { event: string }): Promise<{ ok: true; event: string }> => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      if (isDemoProcess()) {
+        throw new Error('演示模式不支持该后端操作');
+      }
       const { event } = payload;
       const senderWebContents = evt.sender;
       logger.debug('ipc: listen subscribe', { event });
@@ -959,7 +1098,13 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'sage:unlisten',
-    async (_evt, payload: { event: string; streamId?: string }): Promise<{ ok: true }> => {
+    async (evt, payload: { event: string; streamId?: string }): Promise<{ ok: true }> => {
+      if (!isTrustedRenderer(evt.sender)) {
+        throw new Error('未授权的窗口请求');
+      }
+      if (isDemoProcess()) {
+        throw new Error('演示模式不支持该后端操作');
+      }
       const { event, streamId } = payload;
       // Streaming commands: abort the in-flight fetch so the backend
       // stops producing NDJSON. The relay's finally{} block will
@@ -984,74 +1129,80 @@ function registerIpcHandlers(): void {
     },
   );
 
-  // ─── Task 6: memory SSE relay ───────────────────────────────────────────
-  // Backend exposes GET /api/v1/memory/events (text/event-stream, 15s
-  // heartbeat). The renderer cannot reach the backend HTTP port directly
-  // (contextIsolation + no nodeIntegration), so main opens an EventSource
-  // per window and re-emits each payload to the renderer over
-  // `sage:memory:event`. `eventsource` package (not the Node global — even
-  // Node 25 lacks it, and Electron 21 embeds Node 16) is used deliberately.
-  const memoryEventSources = new Map<number, EventSource>();
-
-  ipcMain.handle('sage:memory:subscribe', (evt) => {
-    const sender = evt.sender;
-    // Idempotent: React StrictMode double-mount calls subscribe twice; a
-    // second call while a connection exists is a no-op (unsubscribe is the
-    // only way to close it).
-    if (memoryEventSources.has(sender.id)) {
-      return { subscribed: true };
-    }
-    let es: EventSource;
-    try {
-      es = new EventSource(`${BACKEND_URL}/api/v1/memory/events`);
-    } catch (e) {
-      // Guard: if the EventSource implementation cannot even construct here
-      // (e.g. a future package upgrade that again requires `globalThis.fetch`
-      // which Electron 21 main / Node 16 lacks), surface it so the renderer's
-      // preload can report SSE-unavailable and the Memory page falls back to
-      // polling instead of silently dead-airing.
-      logger.error('memory SSE construction failed', { err: String(e) });
-      return { subscribed: false, error: String(e) };
-    }
-    es.onmessage = (msg) => {
-      if (!sender.isDestroyed()) {
-        sender.send('sage:memory:event', msg.data);
-      }
-    };
-    es.onerror = (err) => {
-      logger.error('memory SSE error', { err: String(err) });
-      // Don't close — EventSource auto-reconnects on transient failures.
-    };
-    // Safety net: if the window dies without calling unsubscribe, drop the
-    // connection instead of leaking it until app quit.
-    sender.once('destroyed', () => {
-      const live = memoryEventSources.get(sender.id);
-      if (live) {
-        live.close();
-        memoryEventSources.delete(sender.id);
-      }
-    });
-    memoryEventSources.set(sender.id, es);
-    return { subscribed: true };
-  });
-
-  ipcMain.handle('sage:memory:unsubscribe', (evt) => {
-    const es = memoryEventSources.get(evt.sender.id);
-    if (es) {
-      es.close();
-      memoryEventSources.delete(evt.sender.id);
-    }
-    return { unsubscribed: true };
-  });
-
   // ─── Phase 5: Window controls IPC handlers ─────────────────────────────
   // These handlers back the custom titlebar buttons (minimize/maximize/close)
   // and page capture for feedback screenshots.
+
+  // Demo mode toggle (2026-08-27): renderer 在 Settings → 通用 改 demoMode
+  // 后调用此 IPC 写盘. 主进程下次启动时 readDemoMode() 读取生效.
+  // 注意: 当前会话不会立即跳过后端 (已经决定 spawn). 用户需重启应用.
+  ipcMain.handle('sage:demo-mode:set', (evt, payload: { demoMode: boolean }) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      return { ok: false, error: '未授权的窗口请求' };
+    }
+    let tempFile: string | undefined;
+    try {
+      const file = getDemoModePath();
+      tempFile = `${file}.${randomUUID()}.tmp`;
+      mkdirSync(dirname(file), { recursive: true });
+      if (existsSync(file) && lstatSync(file).isSymbolicLink()) {
+        throw new Error('演示模式设置文件类型无效');
+      }
+      const noFollow = (fsConstants as { O_NOFOLLOW?: number }).O_NOFOLLOW ?? 0;
+      const fd = openSync(
+        tempFile,
+        fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow,
+        0o600,
+      );
+      try {
+        const content = JSON.stringify({ demoMode: payload?.demoMode === true }, null, 2);
+        writeSync(fd, content, undefined, 'utf8');
+      } finally {
+        closeSync(fd);
+      }
+      renameSync(tempFile, file);
+      logger.info('main: demo mode persisted', { demoMode: payload?.demoMode === true });
+      return { ok: true };
+    } catch (err) {
+      if (tempFile) {
+        try {
+          unlinkSync(tempFile);
+        } catch {
+          // Ignore cleanup failure; the original error is returned below.
+        }
+      }
+      logger.error('main: failed to persist demo mode', { error: String(err) });
+      return { ok: false, error: '无法保存演示模式设置' };
+    }
+  });
 
   /** Helper: get the BrowserWindow that sent the IPC event. */
   function getSenderWindow(evt: Electron.IpcMainInvokeEvent): BrowserWindow | null {
     return BrowserWindow.fromWebContents(evt.sender);
   }
+
+  ipcMain.handle('sage:window-controls:minimize', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return;
+    const win = getSenderWindow(evt);
+    win?.minimize();
+  });
+
+  ipcMain.handle('sage:window-controls:toggle-maximize', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return;
+    const win = getSenderWindow(evt);
+    if (!win) return;
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+  });
+
+  ipcMain.handle('sage:window-controls:close', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return;
+    const win = getSenderWindow(evt);
+    win?.close();
+  });
 
   // ─── S8 分会话 OS 通知 (对标增强第四轮批次 B) ───
   // Renderer 判定"该不该打扰"(目标会话非当前查看 / 窗口不可见)后调本通道;
@@ -1093,6 +1244,12 @@ function registerIpcHandlers(): void {
     },
   );
 
+  ipcMain.handle('sage:window-controls:is-maximized', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return false;
+    const win = getSenderWindow(evt);
+    return win?.isMaximized() ?? false;
+  });
+
   // live-events P1 附带 (2026-09-07): 审批等待 OS 通知 —— 用户不在窗口前时
   // 子代理/主 agent 的 permission_request 不再被错过。点击通知聚焦窗口。
   // Win7/老系统 Notification 不可用时静默降级（isSupported 守卫）。
@@ -1113,32 +1270,8 @@ function registerIpcHandlers(): void {
     return { ok: true };
   });
 
-  ipcMain.handle('sage:window-controls:minimize', (evt) => {
-    const win = getSenderWindow(evt);
-    win?.minimize();
-  });
-
-  ipcMain.handle('sage:window-controls:toggle-maximize', (evt) => {
-    const win = getSenderWindow(evt);
-    if (!win) return;
-    if (win.isMaximized()) {
-      win.unmaximize();
-    } else {
-      win.maximize();
-    }
-  });
-
-  ipcMain.handle('sage:window-controls:close', (evt) => {
-    const win = getSenderWindow(evt);
-    win?.close();
-  });
-
-  ipcMain.handle('sage:window-controls:is-maximized', (evt) => {
-    const win = getSenderWindow(evt);
-    return win?.isMaximized() ?? false;
-  });
-
   ipcMain.handle('sage:window-controls:capture-page', async (evt) => {
+    if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
     const win = getSenderWindow(evt);
     if (!win) throw new Error('No sender window');
     const image = await win.capturePage();
@@ -1150,6 +1283,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     'sage:dialog:select-directory',
     async (evt, opts: { intent: 'create' | 'open'; defaultPath?: string }) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
       const win = BrowserWindow.fromWebContents(evt.sender);
       const properties: ('openDirectory' | 'createDirectory')[] = ['openDirectory'];
       if (opts?.intent === 'create') properties.push('createDirectory');
@@ -1169,21 +1303,32 @@ function registerIpcHandlers(): void {
   //   skills:pick-files → native multi-select dialog
   //   skills:rescan     → POST /api/v1/skills/rescan
   //   skills:import     → POST /api/v1/skills/import (multipart)
-  // Pass a getter (not a string) so skillsIpc reads the live token at
-  // request time — mintBackendAuthToken() runs inside spawnBackend(), which
-  // may execute AFTER this registerSkillsIpc call on cold start.
-  // `?? undefined` because SkillsAuthToken expects `string | undefined`,
-  // not `string | null` (skillIpc narrow in `resolveAuthToken`).
   registerSkillsIpc(
     (channel, handler) => {
-      ipcMain.handle(channel, handler as Parameters<typeof ipcMain.handle>[1]);
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(evt, ...args);
+      });
     },
     () => backendAuthToken ?? undefined,
   );
 
+  // Phase 1.3 (2026-07-16): Office document IPC handlers.
+  //   office:pick-file   → native open dialog filtered by doc type
+  //   office:save-dialog → native save dialog
+  // The 5 office_* HTTP routes are auto-routed via COMMAND_ROUTES in commands.ts.
+  registerOfficeIpc((channel, handler) => {
+    ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+      if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+      if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+      return handler(evt, ...args);
+    });
+  });
+
   // PR: log IPC — write renderer-side logs through the main process logger
   // so they share the same NDJSON sink + log rotate.
-  registerLogIpc(ipcMain);
+  registerLogIpc(ipcMain, (sender) => isTrustedRenderer(sender));
   // Lazy-init UpdateManager inside registerIpcHandlers (after app.whenReady)
   // to avoid constructing managers before the app is ready.
   if (!updateManager) updateManager = new UpdateManager();
@@ -1251,9 +1396,7 @@ function startWikiChatStream(
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
-        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, {
-          error: `HTTP ${res.status}`,
-        });
+        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, WIKI_STREAM_ERROR);
         return;
       }
       await relayNdjsonToEvent(
@@ -1264,7 +1407,7 @@ function startWikiChatStream(
       );
     } catch (e) {
       if (e instanceof Error && e.name !== 'AbortError') {
-        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, { error: String(e) });
+        wc.webContents.send(`sage:event:wiki-chat-stream-${streamId}-error`, WIKI_STREAM_ERROR);
       }
     } finally {
       streamControllers.delete(streamId);
@@ -1319,7 +1462,8 @@ function startWikiIngestStream(
         wc.webContents.send(`sage:event:wiki-ingest-${streamId}-progress`, {
           stage: 'failed',
           percent: 0,
-          message: `HTTP ${res.status}`,
+          message: WIKI_STREAM_ERROR.message,
+          code: WIKI_STREAM_ERROR.code,
         });
         return;
       }
@@ -1349,7 +1493,8 @@ function startWikiIngestStream(
               data: {
                 stage: 'failed',
                 percent: 0,
-                message: String((rawEvent as { data?: unknown }).data ?? 'unknown error'),
+                message: WIKI_STREAM_ERROR.message,
+                code: WIKI_STREAM_ERROR.code,
               },
             };
           }
@@ -1367,7 +1512,8 @@ function startWikiIngestStream(
         wc.webContents.send(`sage:event:wiki-ingest-${streamId}-progress`, {
           stage: 'failed',
           percent: 0,
-          message: String(e),
+          message: WIKI_STREAM_ERROR.message,
+          code: WIKI_STREAM_ERROR.code,
         });
       }
     } finally {
@@ -1502,15 +1648,17 @@ app.whenReady().then(async () => {
   // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
   // fail-open by design: doctor never blocks the app from launching — its output
   // is captured into the NDJSON startup log so the user can diagnose degraded
-  // experiences via Show Logs. Default 20s cap (was 5s pre-2026-09-08) lives in
-  // doctor.ts and can be tuned per-build via SAGE_DOCTOR_TIMEOUT_MS
-  // (CI smoke paths tighten it; alpha13+ cold-start jieba dict load needs it).
+  // experiences via Show Logs. Default 20s cap lives in doctor.ts and can be
+  // tuned per-build via SAGE_DOCTOR_TIMEOUT_MS (CI smoke paths tighten it).
   if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
     try {
-      // alpha.12-win7: derive the doctor launch plan from the supervisor plan
-      // so the doctor subprocess runs `python -m backend.cli.doctor --json`
-      // (NOT `python -m backend.main`, which would spawn uvicorn, bind 8765,
-      // and block the supervisor from binding the port after the 5s SIGTERM).
+      // 2026-08-26: use `resolveDoctorLaunchCommand` so the doctor
+      // subprocess runs under the EXACT same argv/env the supervisor will
+      // use for the backend — replacing `backend.main` with
+      // `backend.cli.doctor --json` in the same chain. Without this, dev-conda
+      // produced `conda -m backend.cli.doctor --json` (conda has no `-m`
+      // subcommand), and packaged supervisors had their PYTHONPATH
+      // clobbered by `doctor.ts`'s `PYTHONPATH: packageRoot` default.
       const supervisorPlan = resolveBackendLaunchCommand({
         env: process.env,
         resourcesPath: process.resourcesPath,
@@ -1539,8 +1687,8 @@ app.whenReady().then(async () => {
             })
           : undefined;
 
-      // Thread the supervisor's launcher context (command / cwd / env) into
-      // the doctor subprocess so `backend.cli.doctor._resolve_backend_context`
+      // Thread the supervisor's launcher context (command / cwd / env)
+      // into the doctor subprocess so `backend.cli.doctor._resolve_backend_context`
       // can probe the same plan. `resolveDoctorLaunchCommand` already merged
       // plan.env + plan.extraEnv into doctorPlan.env, so we only need to add
       // the SAGE_BACKEND_* JSON-encoded context keys on top.
@@ -1667,18 +1815,15 @@ app.whenReady().then(async () => {
   // and exposes window.electronAPI for IPC contract verification).
   if (process.env.SAGE_SKIP_BACKEND === '1') {
     logger.info('main: backend skipped (SAGE_SKIP_BACKEND=1)');
-    // In SKIP_BACKEND mode the Python backend is launched externally with
-    // its own SAGE_LOCAL_AUTH_TOKEN; Electron must read the SAME value from
-    // its env to send matching Authorization headers. spawnBackend() (which
-    // mints+injects) is bypassed in this mode, so we resolve the token here
-    // — and DO NOT mint a random fallback, because a minted value would
-    // disagree with the externally-launched backend and every IPC call would
-    // 401. If the caller forgot to export the env var, warn (probe will fire
-    // 401 and the renderer shows the diagnostic banner) but do not crash.
+    // SAGE_SKIP_BACKEND means any backend is owned by another process (for
+    // example, a CI smoke fixture or a developer's shell). Its capability
+    // token cannot be changed from this process, so it must be supplied before
+    // both processes start. Do not mint a token here that the backend cannot
+    // know; callers that need backend IPC must set SAGE_LOCAL_AUTH_TOKEN.
     backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? null;
     if (!backendAuthToken) {
       logger.warn(
-        'main: SAGE_SKIP_BACKEND=1 without SAGE_LOCAL_AUTH_TOKEN — every IPC call will 401 until you export the same token the backend uses',
+        'main: SAGE_SKIP_BACKEND=1 without SAGE_LOCAL_AUTH_TOKEN; backend IPC requires a shared token',
       );
     }
     // The IPC readiness gate (BackendNotReadyError) is meaningless when the
@@ -1696,21 +1841,37 @@ app.whenReady().then(async () => {
     void probeBackendAuthForSkipBackend();
     return;
   }
+  // Demo mode (录屏演示): skip Python backend spawn entirely so the
+  // frontend-only /demo scenario can record without conda/uvicorn.
+  // Mirrors SAGE_SKIP_BACKEND: flips lifecycle to 'ready' so any stray IPC
+  // call resolves BackendNotReadyError cleanly instead of crashing the bridge.
+  // 触发条件 (2026-08-27):
+  //   1. 环境变量 SAGE_DEMO_MODE=1 (CI / 命令行)
+  //   2. 持久化设置 demoModeFromSettings (用户在 Settings → 通用 开关)
+  if (isDemoProcess()) {
+    if (!demoModeFromSettings) {
+      logger.info('main: demo mode active (SAGE_DEMO_MODE=1) — backend spawn suppressed');
+    }
+    backendLifecycle = 'ready';
+    createMainWindow();
+    buildApplicationMenu();
+    return;
+  }
   backendProc = spawnBackend();
+  // If the resolver already fired the broken-installer dialog (because
+  // bundled Python is missing or the platform is unsupported), suppress the
+  // generic health-timeout dialog below so the user doesn't see two stacked
+  // modal dialogs describing the same problem from different angles.
+  if (reportedBrokenInstaller) {
+    logger.info('main: skipping health-timeout dialog (broken-installer dialog already shown)');
+    return;
+  }
   const ready = await waitForBackend();
   if (!ready) {
     logger.error('main: backend health timeout', {
       url: BACKEND_HEALTH,
       timeoutMs: BACKEND_HEALTH_TIMEOUT_MS,
     });
-    // If spawnBackend() already surfaced a broken-installer dialog, the
-    // user has the accurate cause (missing bundled Python, unsupported
-    // platform, etc.). Showing a second misleading "port occupied / conda
-    // not installed" dialog ~30s later would bury the real cause — skip it.
-    if (reportedBrokenInstaller) {
-      logger.info('main: skipping misleading 30s dialog (broken-installer already reported)');
-      return;
-    }
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
     const choice = await showStartupFailureDialog({
