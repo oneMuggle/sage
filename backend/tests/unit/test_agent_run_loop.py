@@ -794,3 +794,107 @@ async def test_run_loop_no_reasoning_event_when_llm_returns_no_reasoning():
     # 应该有 THINKING 和 DONE
     assert AgentState.THINKING in states
     assert AgentState.DONE in states
+
+
+# =============================================================================
+# B1: run 内工具结果上下文预算
+# =============================================================================
+
+
+def _tool_messages(llm_mock) -> list:
+    """从第二次 LLM 调用的实参里取 role=tool 的消息列表。"""
+    second_call = llm_mock.chat.call_args_list[1]
+    return [m for m in second_call.args[0] if m.get("role") == "tool"]
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_truncates_oversized_tool_result_in_context(monkeypatch):
+    """超过 SAGE_TOOL_RESULT_CAP_CHARS 的工具结果在 LLM 上下文中被截断。
+
+    UI 事件 (AgentEvent.tool_result.content) 保留全文; 进 LLM 的 tool
+    消息截断并附占位说明 —— 否则 read_file(上限 5MiB) 一类的大结果会在
+    后续每轮迭代重复全额发送。
+    """
+    monkeypatch.setenv("SAGE_TOOL_RESULT_CAP_CHARS", "200")
+
+    big_text = "x" * 5000
+    tool_call = LLMToolCall(id="call_big", name="read_file", arguments="{}")
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(content="", tool_calls=[tool_call]),
+            _make_response(content="done"),
+        ]
+    )
+    mock_tool = MagicMock()
+    mock_tool.execute = MagicMock(
+        return_value=MagicMock(success=True, content=big_text, error=None)
+    )
+    agent.tool_registry.get = MagicMock(return_value=mock_tool)
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "read it"}]):
+        events.append(evt)
+
+    states = [e.state for e in events]
+    assert AgentState.DONE in states
+    tool_msgs = _tool_messages(agent.llm_client)
+    assert len(tool_msgs) == 1
+    ctx_content = tool_msgs[0]["content"]
+    assert "[已截断" in ctx_content
+    assert "保留前 200 字符" in ctx_content
+    assert len(ctx_content) < 600
+
+    # UI 事件保留全文 (工具结果经 json.dumps 序列化后下发)
+    observing = next(e for e in events if e.state == AgentState.OBSERVING)
+    assert json.loads(observing.tool_result.content) == big_text
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_run_budget_exhaustion_stops_injecting_results(monkeypatch):
+    """run 级累计预算耗尽后, 后续工具结果不再注入上下文, 以占位说明替代。
+
+    预算 10 字符: 第一个结果 (json 后 ~52 字符) 只注入前 10 字符并耗尽
+    预算; 第二个结果 allowed=0 → 整条替换为"未注入上下文"占位说明。
+    """
+    monkeypatch.setenv("SAGE_TOOL_RESULT_CAP_CHARS", "10000")
+    monkeypatch.setenv("SAGE_TOOL_RESULT_RUN_BUDGET_CHARS", "10")
+
+    def _tool(name: str, body: str) -> LLMToolCall:
+        return LLMToolCall(id=f"call_{name}", name=name, arguments="{}")
+
+    call_a = _tool("a", "")
+    call_b = _tool("b", "")
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(content="", tool_calls=[call_a]),
+            _make_response(content="", tool_calls=[call_b]),
+            _make_response(content="done"),
+        ]
+    )
+
+    def _make_tool_registry(_: str):
+        mock_tool = MagicMock()
+        mock_tool.execute = MagicMock(
+            return_value=MagicMock(success=True, content="y" * 50, error=None)
+        )
+        return mock_tool
+
+    agent.tool_registry.get = MagicMock(side_effect=_make_tool_registry)
+
+    events = []
+    async for evt in agent.run_loop([{"role": "user", "content": "go"}]):
+        events.append(evt)
+
+    states = [e.state for e in events]
+    assert AgentState.DONE in states
+
+    tool_msgs = [m for m in agent.llm_client.chat.call_args_list[2].args[0]
+                 if m.get("role") == "tool"]
+    assert len(tool_msgs) == 2
+    # 第一个: 部分注入 (预算 10 字符) + 截断说明; 第二个: 预算耗尽 → 全占位
+    assert "保留前 10 字符" in tool_msgs[0]["content"]
+    assert "未注入上下文" in tool_msgs[1]["content"]

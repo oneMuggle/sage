@@ -804,6 +804,32 @@ class SageAgent:
         # permission_rules），整轮循环复用——避免每次工具调用都打 DB。
         enforcer = self._build_permission_enforcer()
 
+        # B1: run 内工具结果上下文预算。工具结果此前无截断直入 messages,并在
+        # 后续每轮迭代重复发送 —— read_file 上限 5MiB,一次大读取会把后续每轮
+        # 请求拖成巨型 payload（bash 的 30KiB 输出 cap 是唯一既有例外）。
+        # UI 事件 (AgentEvent.tool_result) 保留全文,只有进 LLM 的消息被截断。
+        tool_cap_chars = int(os.getenv("SAGE_TOOL_RESULT_CAP_CHARS", "32000"))
+        remaining_budget = int(os.getenv("SAGE_TOOL_RESULT_RUN_BUDGET_CHARS", "256000"))
+
+        def cap_result_for_context(content: str) -> str:
+            """按单结果上限 + run 级累计预算截断进 LLM 上下文的工具结果。"""
+            nonlocal remaining_budget
+            if len(content) <= tool_cap_chars and len(content) <= remaining_budget:
+                remaining_budget -= len(content)
+                return content
+            allowed = min(tool_cap_chars, remaining_budget)
+            if allowed <= 0:
+                return (
+                    f"[已截断] 工具结果超出 run 内上下文预算, "
+                    f"原始长度 {len(content)} 字符, 本次未注入上下文。"
+                )
+            remaining_budget -= allowed
+            return (
+                content[:allowed]
+                + f"\n[已截断: 原始长度 {len(content)} 字符, 保留前 {allowed} 字符, "
+                f"如需其余部分请用更精确的查询/offset 重试]"
+            )
+
         try:
             for i in range(effective_max_iterations):
                 # P0-1 (2026-08-20): 中断检查 —— 每轮迭代顶部消费一次中断信号（one-shot）。
@@ -988,7 +1014,11 @@ class SageAgent:
                             agent_id=self.agent_id,
                         )
                         messages.append(
-                            {"role": "tool", "tool_call_id": tc_p.id, "content": content_p}
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc_p.id,
+                                "content": cap_result_for_context(content_p),
+                            }
                         )
                         await run_event_hooks(
                             m6_hooks,
@@ -1287,7 +1317,7 @@ class SageAgent:
                         {
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "content": result_content,
+                            "content": cap_result_for_context(result_content),
                         }
                     )
 
