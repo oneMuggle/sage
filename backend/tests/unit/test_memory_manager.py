@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from typing import Dict, Optional
 
 import pytest
 
@@ -298,7 +299,7 @@ async def test_aremember_does_not_block_event_loop(
     """
 
     event_loop_thread_id = threading.get_ident()
-    save_thread_id: dict[str, int | None] = {"value": None}
+    save_thread_id: Dict[str, Optional[int]] = {"value": None}
     original_save = manager.episodic.save
 
     def _probe_save(*args, **kwargs):

@@ -62,7 +62,7 @@ class SettingsRepository:
     def _conn(self):
         return self.db.get_connection()
 
-    def get(self, key: str) -> str | None:
+    def get(self, key: str) -> Optional[str]:
         if key not in self.KEYS:
             return None
         row = self._conn().execute("SELECT value FROM preferences WHERE key = ?", (key,)).fetchone()
@@ -75,7 +75,7 @@ class SettingsRepository:
             value = unwrap_settings_json(value)
         return value
 
-    def get_json(self, key: str) -> Any | None:
+    def get_json(self, key: str) -> Optional[Any]:
         raw = self.get(key)
         if raw is None:
             return None

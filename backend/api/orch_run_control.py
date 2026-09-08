@@ -14,7 +14,7 @@ import json
 import logging
 import time
 from collections import defaultdict, deque
-from typing import Deque, Optional
+from typing import Deque, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -135,7 +135,7 @@ _VALID_APPLY_MODES = {"next_boundary", "new_followup"}
 _VALID_SOURCES = {"user", "parent_agent", "system"}
 _STEER_RATE_LIMIT = 10
 _STEER_RATE_WINDOW_SECONDS = 60.0
-_steer_attempts: dict[tuple[str, str], Deque[float]] = defaultdict(deque)
+_steer_attempts: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
 
 
 @router.post("/{run_id}/tasks/{task_id}/steer")

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from sage_core import Message, Role
 
@@ -30,8 +30,8 @@ from sage_core import Message, Role
 @dataclass
 class CompletionRequest:
     """Completion 请求"""
-    messages: list[Message]
-    tools: Optional[list[Any]] = None
+    messages: List[Message]
+    tools: Optional[List[Any]] = None
     tool_choice: Optional[Any] = None
     temperature: float = 0.7
     max_tokens: int = 2048
@@ -42,7 +42,7 @@ class CompletionResponse:
     """Completion 响应"""
     content: str
     model: str = "faux-model"
-    usage: dict[str, int] = field(default_factory=lambda: {
+    usage: Dict[str, int] = field(default_factory=lambda: {
         "input": 10,
         "output": 20,
         "total": 30,
@@ -74,7 +74,7 @@ class FauxProvider:
 
     def __init__(
         self,
-        responses: Optional[list[str]] = None,
+        responses: Optional[List[str]] = None,
         default_response: str = "This is a faux response.",
     ) -> None:
         """
@@ -138,8 +138,8 @@ class FauxProvider:
 
     async def chat(
         self,
-        messages: list[Message],
-        tools: Optional[list[Any]] = None,
+        messages: List[Message],
+        tools: Optional[List[Any]] = None,
         tool_choice: Optional[Any] = None,
     ) -> Message:
         """LLMPort.chat 兼容接口"""
@@ -153,7 +153,7 @@ class FauxProvider:
 
     async def chat_stream(
         self,
-        messages: list[Message],
+        messages: List[Message],
     ) -> AsyncIterator[str]:
         """LLMPort.chat_stream 兼容接口"""
         req = CompletionRequest(messages=messages)
@@ -162,6 +162,6 @@ class FauxProvider:
 
 
 # 便捷函数
-def create_faux_provider(responses: Optional[list[str]] = None) -> FauxProvider:
+def create_faux_provider(responses: Optional[List[str]] = None) -> FauxProvider:
     """创建 FauxProvider（便捷函数）"""
     return FauxProvider(responses=responses)

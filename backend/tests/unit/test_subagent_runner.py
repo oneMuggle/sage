@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Optional
 from unittest.mock import patch
 
 import pytest
@@ -56,7 +57,7 @@ class _FakeSageAgent:
 _DUMMY_PROFILE = {"system_prompt": "你是测试子 agent", "tools": []}
 
 
-def _make_task(goal: str = "调研 X", scratch: str | None = None):
+def _make_task(goal: str = "调研 X", scratch: Optional[str] = None):
     from backend.orchestration.models import Task
 
     params = {"goal": goal}
@@ -287,7 +288,7 @@ class _CapturingSageAgent:
 
     def __init__(self, content: str = "子任务输出"):
         self.content = content
-        self.captured_user_content: str | None = None
+        self.captured_user_content: Optional[str] = None
 
     async def run_loop(self, messages, max_iterations=None, llm_config=None):
         from backend.core.legacy.agent_state import AgentEvent, AgentState
@@ -296,7 +297,7 @@ class _CapturingSageAgent:
         yield AgentEvent(state=AgentState.DONE, content=self.content)
 
 
-def _make_schema_task(goal: str = "调研 X", schema: dict | None = None):
+def _make_schema_task(goal: str = "调研 X", schema: Optional[dict] = None):
     from backend.orchestration.models import Task
 
     params: dict = {"goal": goal}

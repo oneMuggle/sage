@@ -394,7 +394,7 @@ class SemanticMemory:
         """
         return self.get_recent(limit=10000)
 
-    def get_by_id(self, memory_id: str) -> Dict[str, Any] | None:
+    def get_by_id(self, memory_id: str) -> Optional[Dict[str, Any]]:
         """
         根据 ID 获取记忆
 

@@ -26,7 +26,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sage_core import Message
 from sage_core.repositories import StoragePort  # noqa: F401  (structural typing target)
@@ -84,10 +84,10 @@ class MemoryStorageAdapter:
             for sid, state in self._sessions.items()
         ]
 
-    async def get_session(self, session_id: str) -> Dict[str, Any] | None:
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         return await _to_thread(self._sync_get_session, session_id)
 
-    def _sync_get_session(self, session_id: str) -> Dict[str, Any] | None:
+    def _sync_get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         state = self._sessions.get(session_id)
         if state is None:
             return None

@@ -112,11 +112,11 @@ def validate_server_config(
     name: str,
     command: str = "",
     args: Tuple[str, ...] = (),
-    env: Dict[str, str] | None = None,
+    env: Optional[Dict[str, str]] = None,
     enabled: bool = True,
     required: bool = False,
     timeout_seconds: float = 30.0,
-    url: str | None = None,
+    url: Optional[str] = None,
 ) -> ServerConfig:
     """Validate raw fields and return an immutable ServerConfig.
 
@@ -235,7 +235,7 @@ def _config_from_dict(raw: Dict[str, object]) -> ServerConfig:
     )
 
 
-def load_user_server_configs(path: Path | None = None) -> List[ServerConfig]:
+def load_user_server_configs(path: Optional[Path] = None) -> List[ServerConfig]:
     """Load user server configs from the JSON file.
 
     Missing file → empty list (not an error). Corrupt file or invalid
@@ -283,7 +283,7 @@ def load_user_server_configs(path: Path | None = None) -> List[ServerConfig]:
     return configs
 
 
-def save_user_server_configs(configs: List[ServerConfig], path: Path | None = None) -> None:
+def save_user_server_configs(configs: List[ServerConfig], path: Optional[Path] = None) -> None:
     """Atomically persist user server configs (temp file + rename).
 
     Raises:
@@ -314,7 +314,7 @@ def save_user_server_configs(configs: List[ServerConfig], path: Path | None = No
         raise
 
 
-def load_server_configs(path: Path | None = None) -> List[ServerConfig]:
+def load_server_configs(path: Optional[Path] = None) -> List[ServerConfig]:
     """Merged view: built-ins overlaid with user entries (user wins by name)."""
     merged: Dict[str, ServerConfig] = {}
     for config in builtin_server_configs():
@@ -324,7 +324,7 @@ def load_server_configs(path: Path | None = None) -> List[ServerConfig]:
     return list(merged.values())
 
 
-def upsert_user_server_config(config: ServerConfig, path: Path | None = None) -> List[ServerConfig]:
+def upsert_user_server_config(config: ServerConfig, path: Optional[Path] = None) -> List[ServerConfig]:
     """Insert or replace one user entry and persist atomically.
 
     The read-modify-write is one critical section under
@@ -338,7 +338,7 @@ def upsert_user_server_config(config: ServerConfig, path: Path | None = None) ->
         return configs
 
 
-def delete_user_server_config(name: str, path: Path | None = None) -> bool:
+def delete_user_server_config(name: str, path: Optional[Path] = None) -> bool:
     """Remove a user entry by name; returns True if an entry was removed.
 
     Serialized under :func:`config_file_lock` (see upsert).

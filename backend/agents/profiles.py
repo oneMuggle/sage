@@ -552,7 +552,7 @@ def register_agent(profile: AgentProfile) -> None:
     _agent_registry[profile.id] = profile
 
 
-def get_agent(agent_id: str) -> AgentProfile | None:
+def get_agent(agent_id: str) -> Optional[AgentProfile]:
     """获取指定 Agent 的配置"""
     return get_agent_registry().get(agent_id)
 
@@ -562,7 +562,7 @@ def list_agents() -> List[AgentProfile]:
     return list(get_agent_registry().values())
 
 
-def get_enabled_agent(agent_id: str) -> Dict[str, Any] | None:
+def get_enabled_agent(agent_id: str) -> Optional[Dict[str, Any]]:
     """从 SQLite 获取启用的 agent profile（运行时读取最新版本）。
 
     返回 agent dict（与 ``AgentRepository.get()`` 同形态），或：

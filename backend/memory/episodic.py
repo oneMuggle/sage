@@ -313,7 +313,7 @@ class EpisodicMemory:
 
         conn.commit()
 
-    def get_by_id(self, memory_id: str) -> Dict[str, Any] | None:
+    def get_by_id(self, memory_id: str) -> Optional[Dict[str, Any]]:
         """
         根据 ID 获取记忆
 

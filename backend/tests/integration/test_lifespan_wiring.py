@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+from typing import Dict, Optional
 
 import pytest
 
@@ -117,7 +118,7 @@ async def test_watchdog_fetch_runs_sql_off_event_loop(tmp_db_path: str) -> None:
         # Wrap db.get_connection so we can observe which thread runs it.
         db = app.state.db
         original_get_connection = db.get_connection
-        connection_thread_id: dict[str, int | None] = {"value": None}
+        connection_thread_id: Dict[str, Optional[int]] = {"value": None}
 
         def _probe_get_connection():
             connection_thread_id["value"] = threading.get_ident()

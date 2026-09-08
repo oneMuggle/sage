@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from backend.agents.profiles import build_system_base, get_enabled_agent
 from backend.core.legacy.agent import SageAgent
@@ -157,7 +157,7 @@ class SubagentRunner:
                 {"role": "system", "content": child_system},
                 {"role": "user", "content": user_content},
             ]
-        collected: list[str] = []
+        collected: List[str] = []
         last_error: Optional[str] = None
 
         # P0-3 (2026-08-20): interrupt watcher —— 与 child.run_loop 并发，

@@ -88,7 +88,7 @@ class TaskRegistry:
 
         return task
 
-    def get_task(self, task_id: str) -> Task | None:
+    def get_task(self, task_id: str) -> Optional[Task]:
         """Fetch a task by ID."""
         return self.repo.get(task_id)
 

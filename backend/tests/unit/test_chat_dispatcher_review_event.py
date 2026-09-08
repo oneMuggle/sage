@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import warnings
+from typing import List, Optional
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ from backend.orchestration.chat_dispatcher import ChatDispatcher
 from backend.orchestration.orch_settings import OrchSettings
 
 
-def _dispatcher(settings: OrchSettings | None = None) -> ChatDispatcher:
+def _dispatcher(settings: Optional[OrchSettings] = None) -> ChatDispatcher:
     return ChatDispatcher(
         stream_id="s1",
         entry_queue=asyncio.Queue(),
@@ -42,7 +43,7 @@ async def test_run_review_emits_task_review_event():
         # 0 assertion → verdict=fail,note="reviewer 未产出"
         await dispatcher._run_review("aggregated content")
 
-    events: list[dict] = []
+    events: List[dict] = []
     while not dispatcher.entry_queue.empty():
         events.append(dispatcher.entry_queue.get_nowait())
     review_events = [e for e in events if e.get("state") == "task_review"]

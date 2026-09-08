@@ -219,7 +219,7 @@ class MemoryManager:
         importance: int = 5,
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> str | None:
+    ) -> Optional[str]:
         """
         通用记忆存储接口
 

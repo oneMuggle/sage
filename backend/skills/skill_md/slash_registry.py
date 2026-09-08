@@ -49,7 +49,7 @@ class SlashCommandRegistry:
             mapping[normalized] = skill
         return cls(mapping)
 
-    def resolve(self, command_name: str) -> SkillMdSkill | None:
+    def resolve(self, command_name: str) -> Optional[SkillMdSkill]:
         """解析命令名为 skill,未找到返回 None。
 
         接受 ``"/foo"`` / ``"foo"`` / ``"//foo"`` 等变体,内部规范化。

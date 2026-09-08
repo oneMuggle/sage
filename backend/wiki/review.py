@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Iterable, List, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 # 复用 lint 中的 wikilink 正则
 try:
@@ -146,7 +146,7 @@ def _rel(path: Path, root: Path) -> str:
         return str(path)
 
 
-def _resolve_wikilink(target: str, wiki_dir: Path) -> Path | None:
+def _resolve_wikilink(target: str, wiki_dir: Path) -> Optional[Path]:
     """尝试把 wikilink 解析为现有 .md 文件"""
     target = target.strip()
     if not target:

@@ -14,6 +14,7 @@ the task still completes (no-op).
 from __future__ import annotations
 
 from datetime import datetime
+from typing import List
 from unittest.mock import MagicMock
 
 import pytest
@@ -44,7 +45,7 @@ async def test_daily_summary_emits_evolution_completed(tmp_db_path, hooks):
     db = Database(db_path=tmp_db_path)
     db.init_db()
 
-    events: list[dict] = []
+    events: List[dict] = []
 
     def listener(payload):
         events.append(payload)
@@ -76,7 +77,7 @@ async def test_memory_pruning_emits_evolution_completed(tmp_db_path, hooks):
     db = Database(db_path=tmp_db_path)
     db.init_db()
 
-    events: list[dict] = []
+    events: List[dict] = []
     hooks.on("evolution_completed", lambda p: events.append(p))
 
     task = MemoryPruningTask(db=db)
@@ -97,7 +98,7 @@ async def test_no_hook_emitted_on_failure(tmp_db_path):
     db.init_db()
 
     hooks = HookRegistry()
-    events: list[dict] = []
+    events: List[dict] = []
     hooks.on("evolution_completed", lambda p: events.append(p))
 
     task = MemoryPruningTask(db=db)
@@ -143,7 +144,7 @@ async def test_preference_learning_emits_evolution_completed(tmp_db_path, hooks)
     db = Database(db_path=tmp_db_path)
     db.init_db()
 
-    events: list[dict] = []
+    events: List[dict] = []
     hooks.on("evolution_completed", lambda p: events.append(p))
 
     task = PreferenceLearningTask(db=db)
@@ -169,7 +170,7 @@ async def test_importance_reevaluation_emits_evolution_completed(tmp_db_path, ho
     db = Database(db_path=tmp_db_path)
     db.init_db()
 
-    events: list[dict] = []
+    events: List[dict] = []
     hooks.on("evolution_completed", lambda p: events.append(p))
 
     task = ImportanceReevaluationTask(db=db)
@@ -204,7 +205,7 @@ async def test_memory_consolidation_emits_evolution_completed(tmp_db_path, hooks
         semantic=SemanticMemory(db),
     )
 
-    events: list[dict] = []
+    events: List[dict] = []
     hooks.on("evolution_completed", lambda p: events.append(p))
 
     task = MemoryConsolidationTask(db=db, memory_manager=manager)

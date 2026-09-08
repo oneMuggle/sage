@@ -112,7 +112,7 @@ class QueryCache:
         key_str = f"{session_id}:{message}"
         return hashlib.md5(key_str.encode()).hexdigest()
 
-    def get(self, session_id: str, message: str) -> Dict[str, Any] | None:
+    def get(self, session_id: str, message: str) -> Optional[Dict[str, Any]]:
         """
         获取缓存结果
 

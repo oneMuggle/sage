@@ -76,7 +76,7 @@ class LaneRegistry:
         self.repo.create(lane)
         return lane
 
-    def get_lane(self, lane_id: str) -> Lane | None:
+    def get_lane(self, lane_id: str) -> Optional[Lane]:
         """Fetch a lane by ID."""
         return self.repo.get(lane_id)
 

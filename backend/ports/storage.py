@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from sage_core import Message
 
@@ -41,7 +41,7 @@ class StoragePort(Protocol):
         """列出当前所有会话（字典形式，键集由实现定义）。"""
         ...
 
-    async def get_session(self, session_id: str) -> Dict[str, Any] | None:
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """按 ID 取单个会话；不存在返 ``None``（路由层映射 404）。"""
         ...
 

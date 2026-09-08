@@ -221,7 +221,7 @@ class StreamRegistry:
         await entry.queue.put({"state": "suspended", "wake_id": wake_id, "note": note})
         return True
 
-    def get(self, stream_id: str) -> StreamEntry | None:
+    def get(self, stream_id: str) -> Optional[StreamEntry]:
         return self._entries.get(stream_id)
 
     async def subscribe(self, stream_id: str) -> Optional[asyncio.Queue]:

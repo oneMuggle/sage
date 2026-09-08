@@ -5,9 +5,8 @@
 
 from __future__ import annotations
 
-import builtins
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from .base import BaseSkill, SkillResult, SkillSchema
 
@@ -57,7 +56,7 @@ class SkillRegistry:
             return True
         return False
 
-    def get(self, name: str) -> BaseSkill | None:
+    def get(self, name: str) -> Optional[BaseSkill]:
         """
         获取技能
 
@@ -78,7 +77,7 @@ class SkillRegistry:
         """
         return [skill.schema for skill in self._skills.values()]
 
-    def list_names(self) -> builtins.list[str]:
+    def list_names(self) -> List[str]:
         """
         列出所有已注册技能的名称
 
@@ -87,7 +86,7 @@ class SkillRegistry:
         """
         return list(self._skills.keys())
 
-    def match(self, text: str) -> BaseSkill | None:
+    def match(self, text: str) -> Optional[BaseSkill]:
         """
         查找匹配的技能（第一个匹配）
 
@@ -102,7 +101,7 @@ class SkillRegistry:
                 return skill
         return None
 
-    def match_all(self, text: str) -> builtins.list[BaseSkill]:
+    def match_all(self, text: str) -> List[BaseSkill]:
         """
         查找所有匹配的技能
 
@@ -114,7 +113,7 @@ class SkillRegistry:
         """
         return [skill for skill in self._skills.values() if skill.match(text)]
 
-    def execute(self, text: str, params: dict, context: dict) -> SkillResult | None:
+    def execute(self, text: str, params: dict, context: dict) -> Optional[SkillResult]:
         """
         匹配并执行技能
 

@@ -213,7 +213,7 @@ class DailySummaryTask(BaseEvolutionTask):
 
         return processed
 
-    async def _generate_summary(self, messages: List[dict]) -> str | None:
+    async def _generate_summary(self, messages: List[dict]) -> Optional[str]:
         """
         生成对话摘要
 

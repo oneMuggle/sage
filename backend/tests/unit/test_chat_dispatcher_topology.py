@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import List
+
 import pytest
 
 from backend.orchestration.chat_dispatcher import (
@@ -32,7 +34,7 @@ def _inject_plan(dispatcher, tasks_with_deps):
     dispatcher._plan_loaded = True
 
 
-def _drain_events(queue) -> list[dict]:
+def _drain_events(queue) -> List[dict]:
     """排空队列取全部事件 —— 事件数由场景决定，写死 n 会因 QueueEmpty 崩。"""
     events = []
     while not queue.empty():

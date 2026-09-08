@@ -425,7 +425,7 @@ class SchedulerService:
 _global_service: Optional[SchedulerService] = None
 
 
-def get_scheduler_service() -> SchedulerService | None:
+def get_scheduler_service() -> Optional[SchedulerService]:
     """Return the process-wide SchedulerService if it has been initialised."""
     return _global_service
 

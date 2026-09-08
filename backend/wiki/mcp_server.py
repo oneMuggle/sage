@@ -2,13 +2,12 @@
 
 实现 7 个 MCP 工具，让 Claude 等外部 Agent 能查询 Sage Wiki。
 """
-
 import json
 import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from fastapi import HTTPException
 
@@ -120,7 +119,7 @@ def _authorized_project_root(project_path: str) -> Path:
     denied (fail closed).
     """
     root = _canonical_project_root(project_path)
-    configured: set[str] = set()
+    configured: Set[str] = set()
     for item in os.environ.get(_MCP_PROJECT_ROOTS_ENV, "").split(os.pathsep):
         if not item.strip():
             continue
@@ -129,7 +128,7 @@ def _authorized_project_root(project_path: str) -> Path:
         except HTTPException:
             continue
 
-    registered: set[str] = set()
+    registered: Set[str] = set()
     for item in load_recent():
         if not item.path:
             continue

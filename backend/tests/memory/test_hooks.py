@@ -9,6 +9,8 @@ Contract from task-4-brief.md step 1:
 
 from __future__ import annotations
 
+from typing import List, Tuple
+
 import pytest
 
 from backend.memory.hooks import HookRegistry
@@ -20,7 +22,7 @@ pytestmark = pytest.mark.unit
 async def test_emit_calls_all_listeners():
     """All registered listeners (sync + async) receive the payload."""
     reg = HookRegistry()
-    calls: list[tuple[str, object]] = []
+    calls: List[Tuple[str, object]] = []
     reg.on("test", lambda x: calls.append(("sync", x)))
 
     async def async_listener(x):
@@ -38,7 +40,7 @@ async def test_listener_exception_does_not_block_others():
     and remaining listeners still run."""
 
     reg = HookRegistry()
-    calls: list[str] = []
+    calls: List[str] = []
 
     def bad(x):  # noqa: ARG001
         raise RuntimeError("boom")
@@ -55,7 +57,7 @@ async def test_off_removes_listener():
     """off() detaches a previously registered listener so it no longer fires."""
 
     reg = HookRegistry()
-    calls: list[str] = []
+    calls: List[str] = []
 
     def cb(x):
         calls.append(x)
@@ -85,7 +87,7 @@ def test_emit_sync_without_running_loop_runs_to_completion():
     """emit_sync() with no running event loop runs listeners synchronously
     to completion (via asyncio.run)."""
     reg = HookRegistry()
-    calls: list[str] = []
+    calls: List[str] = []
     reg.on("test", lambda x: calls.append(x))
     reg.emit_sync("test", "p")
     assert calls == ["p"]
@@ -97,7 +99,7 @@ def test_emit_sync_inside_running_loop_schedules_listeners():
     import asyncio
 
     reg = HookRegistry()
-    calls: list[str] = []
+    calls: List[str] = []
 
     async def async_listener(x):
         calls.append(x)

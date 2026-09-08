@@ -290,7 +290,7 @@ class McpServerPool:
 
     def __init__(
         self,
-        client_factory: Callable[[ServerConfig], Any] | None = None,
+        client_factory: Optional[Callable[[ServerConfig], Any]] = None,
         rediscovery_cooldown: float = REDISCOVERY_COOLDOWN_SECONDS,
     ) -> None:
         client_factory = client_factory or default_client_factory

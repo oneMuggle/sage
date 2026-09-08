@@ -126,7 +126,7 @@ def _make_registry(tools: Dict[str, _FakeTool]) -> Any:
     """构造一个最简 registry：暴露 ``get``/``list``，兼容 adapter 期望。"""
 
     class _Reg:
-        def get(self, name: str) -> _FakeTool | None:
+        def get(self, name: str) -> Optional[_FakeTool]:
             return tools.get(name)
 
         def list(self):  # type: ignore[no-untyped-def]

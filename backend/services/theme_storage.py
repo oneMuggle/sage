@@ -65,7 +65,7 @@ class ThemeStorage:
                 logger.warning("跳过损坏的主题文件 %s: %s", path.name, exc)
         return results
 
-    def get(self, theme_id: str) -> dict | None:
+    def get(self, theme_id: str) -> Optional[dict]:
         """按 id 获取主题"""
         path = self._path(theme_id)
         if not path.exists():

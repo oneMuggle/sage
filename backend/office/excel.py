@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from openpyxl import load_workbook
 
@@ -69,7 +69,7 @@ def _cell_value_to_str(value: Any) -> str:
         return repr(value)
 
 
-def _extract_sheet_rows(ws) -> tuple[List[List[str]], int, int]:
+def _extract_sheet_rows(ws) -> Tuple[List[List[str]], int, int]:
     """Extract all rows from a worksheet as List[List[str]] + max_row + max_col.
 
     Merged cells: only the top-left cell has the value; other cells in the

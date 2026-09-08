@@ -282,7 +282,7 @@ class UltragoalStore:
             self._persist_goals()
             return goal
 
-    def get_goal(self, goal_id: str) -> Ultragoal | None:
+    def get_goal(self, goal_id: str) -> Optional[Ultragoal]:
         return self._goals.get(goal_id)
 
     def list_active_goals(self) -> List[Ultragoal]:

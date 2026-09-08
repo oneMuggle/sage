@@ -13,7 +13,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Set, Tuple
 
 from backend.domain.runtime import (
     Diagnostic,
@@ -48,7 +48,7 @@ class NodeAdapter:
         ctx: AdapterContext,
     ) -> List[RuntimeInfo]:
         results: List[RuntimeInfo] = []
-        seen: set[str] = set()
+        seen: Set[str] = set()
 
         for path in self._candidate_paths(NODE_CANDIDATE_NAMES, request.include_paths):
             info = self._probe_node(path, ctx)
@@ -245,7 +245,7 @@ class NodeAdapter:
 
 def _mark_default(results: List[RuntimeInfo]) -> List[RuntimeInfo]:
     """选择第一个 Node.js 作为默认；同名工具只保留一份。"""
-    seen_kind: set[str] = set()
+    seen_kind: Set[str] = set()
     default_set = False
     new_results: List[RuntimeInfo] = []
     for r in results:

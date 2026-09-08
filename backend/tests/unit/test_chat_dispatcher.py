@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 from contextlib import ExitStack
+from typing import List, Optional
 from unittest.mock import patch
 
 import pytest
@@ -29,7 +30,7 @@ class _FakeSageAgent:
         results=("ok",),
         delay: float = 0.0,
         fail_times: int = 0,
-        fail_goal: str | None = None,
+        fail_goal: Optional[str] = None,
     ):
         self.results = list(results)
         self.delay = delay
@@ -67,7 +68,7 @@ class _BrokenReview(_FakeSageAgent):
     兼容既有 reviewer 崩溃测试的零参构造）。
     """
 
-    def __init__(self, exc: Exception | None = None) -> None:
+    def __init__(self, exc: Optional[Exception] = None) -> None:
         self.exc = exc if exc is not None else RuntimeError("reviewer boom")
 
     async def run_loop(self, messages=None, max_iterations=None, llm_config=None):
@@ -80,7 +81,7 @@ def _make_queue():
     return asyncio.Queue()
 
 
-def _collect_events(queue: asyncio.Queue, n: int) -> list[dict]:
+def _collect_events(queue: asyncio.Queue, n: int) -> List[dict]:
     return [queue.get_nowait() for _ in range(n)]
 
 
