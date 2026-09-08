@@ -432,44 +432,26 @@ sage doctor - 2026-08-07 01:17:44
 ### 41.5.1 入口：`electron/doctor.ts`
 
 ```typescript
-// electron/doctor.ts (核心片段)
+// electron/doctor.ts (核心片段,2026-09-08 更新)
 export async function runDoctorCheck(
-  pythonBin: string,
-  projectRoot: string,
-  timeoutMs: number = 5000,
+  pythonBinOrOptions: string | DoctorLaunchOptions,
+  projectRoot?: string,
+  // 2026-09-08: 默认 5s → 20s, 对齐 backend.cli.doctor 自己的
+  // _try_import_backend 探针上限。alpha13 检查集 + jieba 冷启动让单次
+  // runDoctorCheck 跑 ~8-10s, 5s 会被 SIGTERM 误判 timeout。CI smoke
+  // 路径可通过 SAGE_DOCTOR_TIMEOUT_MS env 收紧到 3-5s。
+  timeoutMs: number = resolveTimeoutMs(),
 ): Promise<DoctorSummary> {
-  const proc = spawn(pythonBin, ['-m', 'backend.cli.doctor', '--json'], {
-    cwd: projectRoot,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
+  // ...spawn + SIGTERM/SIGKILL ladder 同上,500ms grace...
 
-  // 收集 stdout / stderr
-  let stdout = '';
-  let stderr = '';
-  proc.stdout?.on('data', (b: Buffer) => { stdout += b.toString('utf-8'); });
-  proc.stderr?.on('data', (b: Buffer) => { stderr += b.toString('utf-8'); });
-
-  // 5 秒硬超时：SIGTERM → 500ms 后 SIGKILL
-  const killTimer = setTimeout(() => {
-    try { proc.kill('SIGTERM'); } catch { /* ignore */ }
-    setTimeout(() => {
-      try { proc.kill('SIGKILL'); } catch { /* ignore */ }
-    }, 500).unref();
-  }, timeoutMs);
-  killTimer.unref();
-
-  // 映射 Python exit code → DoctorStatus
-  // 0=ok / 1=warn / 2=critical / 其他=error
-  // 超时 → status: 'timeout'
-  // spawn 错误 → status: 'error'
+  // 20 秒硬超时（alpha9 5s 在 alpha13 误判 timeout, alpha14 保持 20s）
 }
 ```
 
 **关键设计**:
 
 - 永远不抛异常 — 所有失败模式（spawn 错、超时、非零退出码、JSON 解析失败）折叠成 `DoctorSummary.status` 字段
-- 5 秒硬超时（健康环境 doctor < 200ms，超时只在 broken-installer 场景触发）
+- 20 秒硬超时（2026-09-08 从 5s 上调以容纳 alpha13+ 检查集；可通过 `SAGE_DOCTOR_TIMEOUT_MS` env 覆盖，CI smoke 通常收紧到 3-5s）
 - SIGTERM → 500ms grace → SIGKILL 双保险（Win7 上 SIGTERM 可被忽略）
 - `killTimer.unref()` 保证不阻止 Node 进程退出
 
