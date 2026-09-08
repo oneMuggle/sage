@@ -48,6 +48,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -74,7 +75,17 @@ def _atomic_replace(doc_obj: Any, target: Path, saver: Callable[[Any, str], None
     os.close(fd)
     try:
         saver(doc_obj, tmp_name)
-        Path(tmp_name).replace(target)
+        # Windows: 刚写完的文件可能被 Defender 等实时扫描短暂锁住,
+        # os.replace 报 WinError 5；高 CPU 负载(如 pytest-xdist 并行)下
+        # 竞态窗口更大。短暂退避重试；POSIX 上一次成功,行为不变。
+        for attempt in range(5):
+            try:
+                Path(tmp_name).replace(target)
+                break
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.2 * (attempt + 1))
     except Exception:
         with contextlib.suppress(OSError):
             os.unlink(tmp_name)
