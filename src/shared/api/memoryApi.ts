@@ -22,7 +22,7 @@
 import { isDemoMode, searchDemoMemories } from './demoInterceptors';
 import { invoke } from './desktopInvoke';
 import type { Memory, MemoryListResponse, MemorySummariesListResponse } from './types';
-import { ApiException, handleApiError, sanitizeInput, withRetry } from './utils';
+import { ApiException, handleApiError, withRetry } from './utils';
 
 const MEMORY_LAYERS = ['episodic', 'semantic', 'working', 'session_summary', 'all'] as const;
 
@@ -236,13 +236,11 @@ export const memoryApi = {
     if (isDemoMode()) {
       return searchDemoMemories(query, memoryType);
     }
-    // 安全化查询输入
-    const safeQuery = sanitizeInput(query);
-
+    // 查询词原文直传: 转义会破坏检索匹配
     return withRetry(async () => {
       try {
         return await invoke<Memory[]>('search_memory', {
-          query: safeQuery,
+          query,
           memoryType: memoryType || null,
           limit: 20,
         });
@@ -261,20 +259,18 @@ export const memoryApi = {
     importance: number = 5,
     tags?: string[],
   ): Promise<Memory> {
-    // 安全化内容输入
-    const safeContent = sanitizeInput(content);
-    const safeTags = Array.isArray(tags) ? tags.map((t) => sanitizeInput(t)) : [];
-
+    // 内容/标签原文直传: 记忆会进入 LLM 上下文并落库, 转义是数据污染
+    // (XSS 由渲染层 React 转义负责, 不在此处处理)。
     // 验证重要性值
     const safeImportance = Math.min(10, Math.max(0, Number(importance) || 5));
 
     return withRetry(async () => {
       try {
         return await invoke<Memory>('save_memory', {
-          content: safeContent,
+          content,
           memoryType,
           importance: safeImportance,
-          tags: safeTags,
+          tags: Array.isArray(tags) ? tags : [],
         });
       } catch (error) {
         throw handleApiError(error);

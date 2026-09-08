@@ -24,8 +24,8 @@
 import { lstatSync, readFileSync, realpathSync } from 'fs';
 import { basename, resolve } from 'path';
 import { randomBytes } from 'crypto';
-import fetch from 'node-fetch';
 import { BrowserWindow, dialog } from 'electron';
+import { fetchCompat } from './fetchCompat';
 
 /** Default backend base URL; PYTHON_BACKEND_URL overrides (used in CI). */
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8765';
@@ -53,11 +53,6 @@ export type SkillsAuthToken = string | (() => string | undefined);
 
 function resolveAuthToken(authToken?: SkillsAuthToken): string | undefined {
   return typeof authToken === 'function' ? authToken() : authToken;
-}
-
-function requestFetch(...args: Parameters<typeof fetch>): ReturnType<typeof fetch> {
-  const runtimeFetch = (globalThis as unknown as { fetch?: typeof fetch }).fetch ?? fetch;
-  return runtimeFetch(...args);
 }
 
 function buildMultipart(paths: string[]): { body: Buffer; contentType: string } {
@@ -125,7 +120,7 @@ export function registerSkillsIpc(register: RegisterIpcHandler, authToken?: Skil
   register('skills:rescan', async () => {
     const baseUrl = getBackendBaseUrl();
     const token = resolveAuthToken(authToken);
-    const resp = await requestFetch(`${baseUrl}/api/v1/skills/rescan`, {
+    const resp = await fetchCompat(`${baseUrl}/api/v1/skills/rescan`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -150,7 +145,7 @@ export function registerSkillsIpc(register: RegisterIpcHandler, authToken?: Skil
     };
     if (token) headers.Authorization = `Bearer ${token}`;
     const baseUrl = getBackendBaseUrl();
-    const resp = await requestFetch(`${baseUrl}/api/v1/skills/import`, {
+    const resp = await fetchCompat(`${baseUrl}/api/v1/skills/import`, {
       method: 'POST',
       headers,
       body: multipart.body,
