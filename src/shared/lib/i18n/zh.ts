@@ -535,6 +535,9 @@ export const zh = {
   'chat.edit_resend_notice': '正在编辑重发：发送后将分叉出新会话（原会话保留）',
   'chat.edit_resend_cancel': '取消编辑',
   'chat.edit_resend_forked': '已分叉出新会话，改写内容已发送',
+
+  // ─── F12 消息全文搜索 (对标增强第五轮批次 B) ─────
+  'session.message_hits': '消息内容命中 {count} 条',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

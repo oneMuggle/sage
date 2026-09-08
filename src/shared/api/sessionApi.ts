@@ -231,12 +231,65 @@ export const sessionApi = {
       }
     });
   },
+
+  // ===== F12 (对标增强第五轮批次 B): 跨会话消息全文搜索 =====
+
+  /**
+   * 跨会话搜索 user/assistant 消息内容（LIKE 子串匹配，新→旧）。
+   *
+   * q 最少 2 字符（后端 422 兜底）；sessionId 缺省跨全部会话。
+   */
+  async searchMessages(
+    query: string,
+    opts?: { sessionId?: string; limit?: number },
+  ): Promise<MessageSearchResult[]> {
+    try {
+      const resp = await invoke<MessageSearchWire>('search_messages', {
+        query,
+        sessionId: opts?.sessionId,
+        limit: opts?.limit ?? 20,
+      });
+      return resp.results.map((r) => ({
+        messageId: r.message_id,
+        sessionId: r.session_id,
+        sessionTitle: r.session_title,
+        role: r.role,
+        snippet: r.snippet,
+        createdAt: r.created_at,
+      }));
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
 };
 
 /** U8: 后端 GET/PUT /sessions/{id}/model 的 wire 形状 */
 interface SessionModelWire {
   session_id: string;
   model: string | null;
+}
+
+/** F12: 单条消息搜索命中（camelCase，渲染端消费） */
+export interface MessageSearchResult {
+  messageId: string;
+  sessionId: string;
+  sessionTitle: string;
+  role: 'user' | 'assistant';
+  snippet: string;
+  createdAt: number;
+}
+
+/** F12: 后端 /search/messages 响应 wire 形状 */
+interface MessageSearchWire {
+  results: Array<{
+    message_id: string;
+    session_id: string;
+    session_title: string;
+    role: 'user' | 'assistant';
+    snippet: string;
+    created_at: number;
+  }>;
+  has_more: boolean;
 }
 
 /**

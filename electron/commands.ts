@@ -232,6 +232,18 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     body: (a) => ({ title: a.title }),
   },
 
+  // F12 (对标增强第五轮批次 B): 跨会话消息全文搜索（侧栏搜索框数据源）
+  search_messages: {
+    method: 'GET',
+    path: (a) => {
+      const q = encodeURIComponent(String(a.query));
+      const limit = typeof a.limit === 'number' ? a.limit : 20;
+      const sessionId =
+        a.sessionId != null ? `&session_id=${encodeURIComponent(String(a.sessionId))}` : '';
+      return `/api/v1/search/messages?q=${q}&limit=${limit}${sessionId}`;
+    },
+  },
+
   // messages
   get_messages: {
     method: 'GET',

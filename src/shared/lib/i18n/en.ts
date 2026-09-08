@@ -544,4 +544,7 @@ export const en: Record<TranslationKey, string> = {
     'Editing & resending: sending forks into a new session (original preserved)',
   'chat.edit_resend_cancel': 'Cancel editing',
   'chat.edit_resend_forked': 'Forked into a new session; edited message sent',
+
+  // ─── F12 Message full-text search (parity round 5 batch B) ─────
+  'session.message_hits': '{count} message hits',
 };
