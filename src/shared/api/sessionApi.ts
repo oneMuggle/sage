@@ -110,7 +110,8 @@ export const sessionApi = {
   /**
    * U4' (对标增强第五轮批次 A): 会话重命名。
    *
-   * PATCH 幂等,走 withRetry;标题经 sanitizeInput 与 create 同口径安全化。
+   * PATCH 幂等,走 withRetry;标题原文直传（对齐 #516 数据污染修正——
+   * 渲染层由 React 转义,此处转义会让标题以 HTML 实体形式落库）。
    */
   async rename(sessionId: string, title: string): Promise<Session> {
     if (!isValidSessionId(sessionId)) {
@@ -120,10 +121,9 @@ export const sessionApi = {
         details: { sessionId },
       });
     }
-    const safeTitle = sanitizeInput(title);
     return withRetry(async () => {
       try {
-        return await invoke<Session>('session_update', { sessionId, title: safeTitle });
+        return await invoke<Session>('session_update', { sessionId, title });
       } catch (error) {
         throw handleApiError(error);
       }
