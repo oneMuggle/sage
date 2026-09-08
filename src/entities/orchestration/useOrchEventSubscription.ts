@@ -25,7 +25,12 @@ export function useOrchEventSubscription(runId: string | null, enabled = true) {
   const setRunSnapshot = useRunControlStore((s) => s.setRunSnapshot);
   const setConnectionStatus = useRunControlStore((s) => s.setConnectionStatus);
   const markGapDetected = useRunControlStore((s) => s.markGapDetected);
-  const lastSeqByRunId = useRunControlStore((s) => s.lastSeqByRunId);
+  // 注意: lastSeqByRunId 故意不走 hook 订阅 —— 它是 Map, applyEvent 每条
+  // 事件都产生新引用, 订阅 + deps 会让本 effect 在每条事件后 abort → 重新
+  // getSnapshot → 重订阅 (订阅风暴); 事件循环里读到的还是闭包旧 Map, gap
+  // 检测失准。统一经 getState() 实时读取。
+  const readLastSeq = (id: string): number =>
+    useRunControlStore.getState().lastSeqByRunId.get(id) ?? 0;
 
   useEffect(() => {
     if (!runId || !enabled) return;
@@ -52,7 +57,7 @@ export function useOrchEventSubscription(runId: string | null, enabled = true) {
       });
 
     // Subscribe to event stream
-    const afterSeq = lastSeqByRunId.get(runId) ?? 0;
+    const afterSeq = readLastSeq(runId);
     const stream = subscribeOrchEvents({
       runId,
       afterSeq,
@@ -73,8 +78,8 @@ export function useOrchEventSubscription(runId: string | null, enabled = true) {
           if (abort.signal.aborted) break;
           applyEvent(event);
 
-          // Check for sequence gaps
-          const expectedSeq = (lastSeqByRunId.get(runId) ?? 0) + 1;
+          // Check for sequence gaps (实时读 store, 避免闭包旧 Map)
+          const expectedSeq = readLastSeq(runId) + 1;
           if (event.seq > expectedSeq) {
             markGapDetected(runId, expectedSeq, event.seq);
           }
@@ -95,13 +100,5 @@ export function useOrchEventSubscription(runId: string | null, enabled = true) {
       abortRef.current = null;
       setConnectionStatus('disconnected');
     };
-  }, [
-    runId,
-    enabled,
-    applyEvent,
-    setRunSnapshot,
-    setConnectionStatus,
-    markGapDetected,
-    lastSeqByRunId,
-  ]);
+  }, [runId, enabled, applyEvent, setRunSnapshot, setConnectionStatus, markGapDetected]);
 }
