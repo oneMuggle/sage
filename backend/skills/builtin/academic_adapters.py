@@ -29,8 +29,7 @@ class AcademicSiteAdapter(Protocol):
 
     name: str
 
-    def build_search_url(self, query: str, **kwargs: Any) -> str:
-        ...
+    def build_search_url(self, query: str, **kwargs: Any) -> str: ...
 
 
 class CNKIAdapter:
@@ -88,9 +87,7 @@ def get_site_adapter(name: str) -> AcademicSiteAdapter:
     """
     if name not in _DEFAULT_ADAPTERS:
         available = sorted(_DEFAULT_ADAPTERS)
-        raise ValueError(
-            f"Unknown academic site: {name!r}. Available: {available}"
-        )
+        raise ValueError(f"Unknown academic site: {name!r}. Available: {available}")
     return _DEFAULT_ADAPTERS[name]
 
 

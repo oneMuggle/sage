@@ -26,7 +26,9 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 
-def _mock_tool(name: str, *, success: bool = True, content: Any = None, error: Optional[str] = None) -> Mock:
+def _mock_tool(
+    name: str, *, success: bool = True, content: Any = None, error: Optional[str] = None
+) -> Mock:
     """构造一个返回 ToolResult 形状的 tool mock。"""
     tool = Mock()
     tool.name = name
@@ -85,6 +87,7 @@ class TestHappyPath:
         assert "cnki.net" in call_kwargs["url"]
         # URL 是 percent-encoded;解码后包含 query 原文
         from urllib.parse import parse_qs, urlparse
+
         qs = parse_qs(urlparse(call_kwargs["url"]).query)
         assert qs["Txt"] == ["大语言模型综述"]
         assert qs["t"] == ["5"]
@@ -165,9 +168,7 @@ class TestFailureModes:
     def test_web_fetch_failure_propagates_error(self):
         """web_fetch 工具返回 success=False 时,skill 不应继续往下走。"""
         skill = AcademicSearchSkill()
-        web_fetch = _mock_tool(
-            "web_fetch", success=False, error="network timeout"
-        )
+        web_fetch = _mock_tool("web_fetch", success=False, error="network timeout")
         result = skill.execute(
             params={"query": "x"},
             context={"tools": {"web_fetch": web_fetch}},
@@ -196,9 +197,7 @@ def test_custom_site_adapter_can_be_used_via_register():
     try:
         register_site_adapter(_StubAdapter())  # type: ignore[arg-type]
         skill = AcademicSearchSkill()
-        web_fetch = _mock_tool(
-            "web_fetch", success=True, content="page"
-        )
+        web_fetch = _mock_tool("web_fetch", success=True, content="page")
         result = skill.execute(
             params={"query": "x", "site": "stub-site"},
             context={"tools": {"web_fetch": web_fetch}},

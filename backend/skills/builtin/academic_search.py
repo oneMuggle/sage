@@ -86,9 +86,7 @@ class AcademicSearchSkill(BaseSkill):
             ],
         )
 
-    def execute(
-        self, params: Dict[str, Any], context: Dict[str, Any]
-    ) -> SkillResult:
+    def execute(self, params: Dict[str, Any], context: Dict[str, Any]) -> SkillResult:
         """执行学术检索流程。
 
         Args:
@@ -119,17 +117,13 @@ class AcademicSearchSkill(BaseSkill):
         tools = context.get("tools", {}) or {}
         web_fetch = tools.get("web_fetch")
         if web_fetch is None:
-            return SkillResult(
-                success=False, error="web_fetch 工具不可用,无法抓检索结果页"
-            )
+            return SkillResult(success=False, error="web_fetch 工具不可用,无法抓检索结果页")
 
         # 3. 抓检索结果页
         fetch_result = web_fetch.execute(url=search_url)
         if not getattr(fetch_result, "success", False):
             err = getattr(fetch_result, "error", None) or "fetch failed"
-            return SkillResult(
-                success=False, error=f"web_fetch 抓取 {site} 检索页失败: {err}"
-            )
+            return SkillResult(success=False, error=f"web_fetch 抓取 {site} 检索页失败: {err}")
 
         fetch_content = getattr(fetch_result, "content", None) or ""
 
@@ -183,8 +177,10 @@ class AcademicSearchSkill(BaseSkill):
         fetch_content: str,
     ) -> str:
         """组装给 LLM 的结构化 prompt。"""
-        snippet = fetch_content if len(fetch_content) <= 4000 else (
-            fetch_content[:4000] + "\n... (已截断)"
+        snippet = (
+            fetch_content
+            if len(fetch_content) <= 4000
+            else (fetch_content[:4000] + "\n... (已截断)")
         )
         return (
             f"用户需求:在 {site} 上检索「{query}」,期望 {limit} 条结果,"

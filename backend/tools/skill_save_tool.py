@@ -169,23 +169,15 @@ class SkillSaveTool(BaseTool):
         try:
             service = get_review_service()
             draft = _run_async(
-                service.generate_draft(
-                    trigger_type="user_explicit_save", context=context
-                )
+                service.generate_draft(trigger_type="user_explicit_save", context=context)
             )
         except ValueError as exc:
-            return ToolResult(
-                success=False, error=f"review pipeline 拒绝草稿: {exc}"
-            )
+            return ToolResult(success=False, error=f"review pipeline 拒绝草稿: {exc}")
         except KeyError as exc:
-            return ToolResult(
-                success=False, error=f"review pipeline 缺字段: {exc}"
-            )
+            return ToolResult(success=False, error=f"review pipeline 缺字段: {exc}")
         except Exception as exc:
             logger.exception("skill_save 工具执行失败")
-            return ToolResult(
-                success=False, error=f"review pipeline 异常: {exc}"
-            )
+            return ToolResult(success=False, error=f"review pipeline 异常: {exc}")
 
         # 5. 持久化到 draft_store
         try:
