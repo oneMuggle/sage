@@ -1,5 +1,5 @@
 // Knowledge Page - Wiki workspace with multi-panel layout
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 import { useWikiStore } from '../entities/wiki/store';
 import {
@@ -30,33 +30,13 @@ const VIEW_TITLES: Record<string, string> = {
   queue: '摄入队列',
 };
 
-interface WikiState {
-  activeView: string;
-  project: ReturnType<typeof useWikiStore.getState>['project'];
-  graphData: ReturnType<typeof useWikiStore.getState>['graphData'];
-}
-
 export function Knowledge() {
-  // 用 useState 镜像整个 wiki store 状态（确保每次 store 变化都重新渲染）
-  const [state, setState] = useState<WikiState>(() => ({
-    activeView: useWikiStore.getState().activeView,
-    project: useWikiStore.getState().project,
-    graphData: useWikiStore.getState().graphData,
-  }));
-
-  // 订阅 store 变化（带 selector，只在关心的字段变化时更新）
-  useEffect(() => {
-    const unsubscribe = useWikiStore.subscribe((s) => {
-      setState({
-        activeView: s.activeView,
-        project: s.project,
-        graphData: s.graphData,
-      });
-    });
-    return unsubscribe;
-  }, []);
-
-  const { activeView, project, graphData } = state;
+  // selector 订阅 (F4): 只在关心的字段变化时重渲染。此前的 useState 镜像 +
+  // 无 selector 的 store.subscribe 让 store 任何字段变化都整页重渲染,
+  // 与旁边注释宣称的"带 selector"相反。
+  const activeView = useWikiStore((s) => s.activeView);
+  const project = useWikiStore((s) => s.project);
+  const graphData = useWikiStore((s) => s.graphData);
   const loadGraph = useWikiStore.getState().loadGraph;
   const openFile = useWikiStore.getState().openFile;
 
