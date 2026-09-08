@@ -62,6 +62,15 @@ jobs:
         run: |
           conda run -n sage-backend-py38 ruff check backend/
 
+      # PEP 604 (`X | Y`) / PEP 585 (`list[T]`) guardrail — fails fast before
+      # the 40-min pytest runs when a future cherry-pick leaks Py3.10+ syntax
+      # into the win7 backend. Pure stdlib AST scan (no deps). See
+      # scripts/check_py38_compat.py docstring for the failure modes.
+      - name: PEP 604/585 py38 compat guardrail
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend-py38 python scripts/check_py38_compat.py
+
       # xdist 并行:同 main(见 backend job 注释)。test_event_loop_blocking
       # 的 P99 延迟断言对 CPU 争用敏感,单独串行跑(--cov-append 保持覆盖率合并)
       - name: Pytest (py38, hex mode) with coverage
