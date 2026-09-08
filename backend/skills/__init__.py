@@ -5,6 +5,7 @@
 """
 
 from .base import BaseSkill, SkillResult, SkillSchema
+from .builtin.academic_search import AcademicSearchSkill
 from .builtin.coder import CoderSkill
 from .builtin.search import SearchSkill
 from .builtin.travel import TravelSkill
@@ -24,6 +25,7 @@ def register_all_skills(registry: SkillRegistry) -> None:
     registry.register(WriterSkill())
     registry.register(CoderSkill())
     registry.register(TravelSkill())
+    registry.register(AcademicSearchSkill())
 
 
 __all__ = [
@@ -35,6 +37,7 @@ __all__ = [
     "WriterSkill",
     "CoderSkill",
     "TravelSkill",
+    "AcademicSearchSkill",
     "register_all_skills",
     "register_skill_md_skills",
 ]
