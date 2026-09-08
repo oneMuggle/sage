@@ -743,3 +743,66 @@ def test_web_fetch_schema_advertises_render():
     schema = tool.schema
     render_prop = schema.parameters["properties"]["render"]
     assert render_prop["enum"] == ["auto", "never", "always"]
+
+
+# ---------- 默认请求头与解压护栏（incorrect header check / 403 根因） ----------
+
+
+def test_web_fetch_client_uses_browser_user_agent():
+    """403 根因之一：httpx 默认 UA 是 'python-httpx/...'，部分站点按 bot 拒访问。
+    工具 client 必须带浏览器级 UA，避免最常见 UA 鉴权失败。"""
+    tool = WebFetchTool()
+
+    ua = tool.client.headers.get("User-Agent", "")
+    assert ua.startswith("Mozilla/")
+    assert "python-httpx" not in ua
+
+
+def test_web_fetch_request_disables_auto_decompression():
+    """incorrect header check 根因：httpx 默认加 Accept-Encoding: gzip/deflate,
+    遇到上游声明 gzip 但响应不是合法 gzip 流时会抛 zlib.error。
+    工具每次请求必须显式 Accept-Encoding: identity，禁用自动解压。
+
+    与 backend/api/llm_proxy_routes.py 中的同款修复保持一致。
+    """
+    seen = {}
+
+    def _capture(request):
+        seen["accept_encoding"] = request.headers.get("Accept-Encoding")
+        return Response(200, text="<html><body>ok</body></html>")
+
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/p").mock(side_effect=_capture)
+        tool = WebFetchTool(network_policy=_intranet("example.com"))
+        result = tool.execute(url="https://example.com/p")
+
+    assert result.success is True
+    assert seen["accept_encoding"] == "identity"
+
+
+def test_web_fetch_request_keeps_user_agent_after_identity_override():
+    """Accept-Encoding: identity 是 per-request 覆盖,不应吞掉 client 级 UA。"""
+    seen = {}
+
+    def _capture(request):
+        seen["ua"] = request.headers.get("User-Agent")
+        seen["ae"] = request.headers.get("Accept-Encoding")
+        return Response(200, text="<html><body>ok</body></html>")
+
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/p").mock(side_effect=_capture)
+        tool = WebFetchTool(network_policy=_intranet("example.com"))
+        result = tool.execute(url="https://example.com/p")
+
+    assert result.success is True
+    assert seen["ae"] == "identity"
+    assert seen["ua"].startswith("Mozilla/")
+
+
+def test_web_search_client_uses_browser_user_agent():
+    """DDG 等搜索引擎对 python-httpx UA 也可能拒绝,WebSearchTool 必须同样带 UA。"""
+    tool = WebSearchTool()
+
+    ua = tool.client.headers.get("User-Agent", "")
+    assert ua.startswith("Mozilla/")
+    assert "python-httpx" not in ua
