@@ -259,8 +259,20 @@ class SageAgent:
                 )
 
         # 初始化查询缓存 (TTL=5分钟)
+        # 2026-09: 聊天回复缓存默认关闭。相同 (session, message) 重发通常意味着
+        # 用户想要一个新答案(或刚切换模型/配置)，返回陈旧缓存反直觉；且缓存
+        # 命中路径会跳过用户消息落库。设 SAGE_CHAT_CACHE=1 显式开启。
+        self._cache_enabled = os.getenv("SAGE_CHAT_CACHE", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
         self._cache = QueryCache(ttl=300, max_size=100)
-        logger.info("查询缓存初始化完成，TTL=300秒，最大条目=100")
+        if self._cache_enabled:
+            logger.info("查询缓存已启用 (SAGE_CHAT_CACHE=1)，TTL=300秒，最大条目=100")
+        else:
+            logger.info("查询缓存默认关闭 (设 SAGE_CHAT_CACHE=1 开启)")
 
         if bare:
             # 轻量构造：run_loop 不触碰记忆栈，默认工具注册表也会被
@@ -331,6 +343,28 @@ class SageAgent:
                 summary_store=self.memory_manager.summary_store,
             )
 
+    async def _restore_llm_after_dynamic(
+        self,
+        llm_config: Optional[Dict[str, Any]],
+        original_llm_client: Optional[LLMClient],
+        original_llm_config: Optional[LLMConfig],
+    ) -> None:
+        """恢复原始 LLM client/config, 并关闭动态配置新建的 client。
+
+        动态配置路径每次 new 一个 LLMClient(内部持独立 httpx.AsyncClient),
+        只恢复引用不 close 会让半开连接随调用次数累积 —— 长会话高频切换
+        模型时泄漏放大。动态 client 与原 client 是同一实例时(例如上层直接
+        复用)不关闭。
+        """
+        if not llm_config:
+            return
+        dynamic_client = self.llm_client
+        self.llm_client = original_llm_client
+        self.llm_config = original_llm_config
+        if dynamic_client is not None and dynamic_client is not original_llm_client:
+            with contextlib.suppress(Exception):  # 关闭失败不影响恢复语义
+                await dynamic_client.close()
+
     async def chat(
         self, session_id: str, message: str, llm_config: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
@@ -346,11 +380,12 @@ class SageAgent:
             包含 message 和 session 的字典
         """
         try:
-            # 检查缓存
-            cached_result = self._cache.get(session_id, message)
-            if cached_result:
-                logger.info(f"返回缓存结果，会话: {session_id}")
-                return cached_result
+            # 检查缓存 (默认关闭, SAGE_CHAT_CACHE=1 开启)
+            if self._cache_enabled:
+                cached_result = self._cache.get(session_id, message)
+                if cached_result:
+                    logger.info(f"返回缓存结果，会话: {session_id}")
+                    return cached_result
 
             self._current_session_id = session_id
             self._interrupted = False
@@ -452,22 +487,23 @@ class SageAgent:
                 "session": session.to_dict() if session else None,
             }
 
-            # 存入缓存
-            self._cache.set(session_id, message, result)
+            # 存入缓存 (仅 SAGE_CHAT_CACHE=1 时生效)
+            if self._cache_enabled:
+                self._cache.set(session_id, message, result)
 
-            # 恢复原始 LLM 配置
-            if llm_config:
-                self.llm_config = original_llm_config
-                self.llm_client = original_llm_client
+            # 恢复原始 LLM 配置 (并关闭动态新建的 client)
+            await self._restore_llm_after_dynamic(
+                llm_config, original_llm_client, original_llm_config
+            )
 
             return result
 
         except LLMError as e:
             logger.error(f"chat LLM 错误: type={e.type.value}, message={e.message}")
-            # 恢复原始 LLM 配置
-            if llm_config:
-                self.llm_config = original_llm_config
-                self.llm_client = original_llm_client
+            # 恢复原始 LLM 配置 (并关闭动态新建的 client)
+            await self._restore_llm_after_dynamic(
+                llm_config, original_llm_client, original_llm_config
+            )
             return {
                 "error": e.to_dict(),
                 "message": None,
@@ -475,10 +511,10 @@ class SageAgent:
             }
         except Exception as e:
             logger.exception(f"chat 处理异常: {str(e)}")
-            # 恢复原始 LLM 配置
-            if llm_config:
-                self.llm_config = original_llm_config
-                self.llm_client = original_llm_client
+            # 恢复原始 LLM 配置 (并关闭动态新建的 client)
+            await self._restore_llm_after_dynamic(
+                llm_config, original_llm_client, original_llm_config
+            )
             wrapped = LLMError(LLMErrorType.UNKNOWN, str(e))
             return {
                 "error": wrapped.to_dict(),
@@ -1278,10 +1314,11 @@ class SageAgent:
                 agent_id=self.agent_id,
             )
         finally:
-            # 恢复 agent 实例的原始 LLM client / config(不污染跨请求状态)
-            if llm_config:
-                self.llm_client = original_llm_client
-                self.llm_config = original_llm_config
+            # 恢复 agent 实例的原始 LLM client / config(不污染跨请求状态);
+            # 动态新建的 client 一并关闭, 防止 httpx 连接泄漏。
+            await self._restore_llm_after_dynamic(
+                llm_config, original_llm_client, original_llm_config
+            )
 
     # ------------------------------------------------------------------
     # M1 工具安全加固: 权限执行辅助

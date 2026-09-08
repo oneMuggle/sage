@@ -267,8 +267,12 @@ def test_agent_init_with_llm_config_creates_llm_client():
 
 @pytest.mark.asyncio()
 async def test_chat_returns_cached_result_when_cache_hit():
-    """缓存命中时,chat() 应直接返回缓存,完全不走 LLM 路径。"""
+    """缓存命中时,chat() 应直接返回缓存,完全不走 LLM 路径。
+
+    注: 聊天缓存默认关闭(2026-09 起), 需显式打开 _cache_enabled 才走该路径。
+    """
     agent = SageAgent()
+    agent._cache_enabled = True
     cached = {
         "message": {"id": "cached", "content": "from cache", "role": "assistant"},
         "session": None,
@@ -618,7 +622,7 @@ async def test_chat_handles_missing_session_gracefully():
 
 @pytest.mark.asyncio()
 async def test_chat_caches_successful_result():
-    """成功返回的 result 应被写入 _cache,下次同 query 命中缓存。"""
+    """显式开启缓存时,成功返回的 result 应被写入 _cache,下次同 query 命中缓存。"""
     agent = SageAgent(
         llm_config={
             "provider": "openai",
@@ -627,6 +631,7 @@ async def test_chat_caches_successful_result():
             "model": "gpt-3.5-turbo",
         }
     )
+    agent._cache_enabled = True
     agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
 
     result1 = await agent.chat("s-cache", "hello")
@@ -634,3 +639,26 @@ async def test_chat_caches_successful_result():
     cached = agent._cache.get("s-cache", "hello")
     assert cached is not None
     assert cached["message"]["content"] == result1["message"]["content"]
+
+
+@pytest.mark.asyncio()
+async def test_chat_cache_disabled_by_default():
+    """默认(SAGE_CHAT_CACHE 未设)重复同 query 不应命中缓存,应再次调用 LLM。
+
+    触发原因: 缓存命中路径会返回陈旧回复且跳过用户消息落库,
+    对聊天助手是反直觉行为 (2026-09 起默认关闭)。
+    """
+    agent = SageAgent(
+        llm_config={
+            "provider": "openai",
+            "api_key": "k",
+            "base_url": "https://api.example.com/v1",
+            "model": "gpt-3.5-turbo",
+        }
+    )
+    assert agent._cache_enabled is False
+    agent.llm_client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
+
+    await agent.chat("s-nocache", "hello")
+    await agent.chat("s-nocache", "hello")
+    assert agent.llm_client.chat.await_count == 2
