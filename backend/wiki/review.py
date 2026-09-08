@@ -201,8 +201,11 @@ class WikiReview:
         for md in self.wiki_dir.rglob("*.md"):
             stem = md.stem.lower()
             existing_targets.add(stem)
-            rel = _rel(md, self.wiki_dir)
-            existing_targets.add(rel.replace("\\", "/").removesuffix(".md").lower())
+            rel = _rel(md, self.wiki_dir).replace("\\", "/")
+            # py3.8 无 str.removesuffix（py3.9+）
+            if rel.endswith(".md"):
+                rel = rel[: -len(".md")]
+            existing_targets.add(rel.lower())
 
         items: List[ReviewItem] = []
         # target → 指向它的源文件列表
