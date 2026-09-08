@@ -101,8 +101,14 @@ BROWSER_TOOLS = (
     "browser_close",
 )
 
-# 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 技能 / 用户提问
-ORCH_TOOLS = ("agent", "todo_write", "structured_output", "skill", "ask_user_question")
+# 技能类（2026-09 academic-search M1）：``skill`` 是循环内调用已有 skill
+# （EXECUTE，M1 审批闸口按模式矩阵拦截），``skill_save`` 是显式把跑通的
+# 工具调用序列沉淀为 SQLite 草稿（WRITE_LOCAL 写本地文件）。两者都通过
+# 启动期白名单校验防止 profile 漂移。
+SKILL_TOOLS = ("skill", "skill_save")
+
+# 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 用户提问
+ORCH_TOOLS = ("agent", "todo_write", "structured_output", "ask_user_question")
 
 SANDBOX_TOOLS = ("calculator", "repl")
 
@@ -124,6 +130,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(PLAN_TOOLS)
         | set(SYMBOL_TOOLS)
         | set(BROWSER_TOOLS)
+        | set(SKILL_TOOLS)
         | set(ORCH_TOOLS)
         | set(SANDBOX_TOOLS)
     )
@@ -146,6 +153,7 @@ __all__ = [
     "RUNTIME_PROBE_TOOLS",
     "RUNTIME_TOOLS",
     "SANDBOX_TOOLS",
+    "SKILL_TOOLS",
     "SYMBOL_TOOLS",
     "WEB_FETCH_TOOLS",
     "WEB_SEARCH_TOOLS",

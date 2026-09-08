@@ -221,6 +221,7 @@ const electronAPI = {
 
   /**
    * T13 (2026-07-02): Log management bridge — Diagnostics card on Settings page.
+   */
   listLogFiles(): Promise<Array<{ name: string; sizeBytes: number; mtimeMs: number }>> {
     return ipcRenderer.invoke('sage:log:list-files') as Promise<
       Array<{ name: string; sizeBytes: number; mtimeMs: number }>

@@ -87,6 +87,21 @@ python-pptx==0.6.23
 python-docx==1.1.2
 openpyxl==3.1.5
 
+# Office template + PDF features (Phase 2, 2026-09-05)
+# backend/api/office_routes.py does ``from backend.office.pdf import generate_pdf``
+# at module load, which transitively does ``import pymupdf``. Without these
+# three packages in the bundled Python 3.11, the Windows installer ships
+# with a backend that 500s on every request — release CI red on run
+# 34224333217 (2026-09-08) with "ModuleNotFoundError: No module named 'pymupdf'".
+#
+# PyMuPDF is a C extension (~15MB wheel) but ships prebuilt cp311 win_amd64
+# wheels on PyPI — no source compile needed at bundle time, so bundling stays
+# fast. Matches the LTS strategy used in release/win7 (which has had these
+# three since 2026-09-05 and bundles them into the Win7 installer).
+docxtpl>=0.20.0       # Word template fill with {{variable}} placeholders, ~0.5MB wheel
+PyMuPDF>=1.25.0       # PDF read + form fill (C extension, cp311 win_amd64 wheel), ~15MB wheel
+reportlab>=4.0.0      # PDF generation from structured data, ~3MB wheel
+
 # certifi: provides Mozilla CA bundle for httpx / requests / curl SSL verification
 # (LTS Pin 2024.7.4, matches release/win7 PR #348 / PR #347 lxml wheel strategy)
 certifi>=2024.7.4

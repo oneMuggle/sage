@@ -63,7 +63,12 @@ import {
 import http from 'node:http';
 import fetch from 'node-fetch';
 
-import { relayChatStream, relayNdjsonToEvent, relayOrchEventsStream, WIKI_STREAM_ERROR } from './relay';
+import {
+  relayChatStream,
+  relayNdjsonToEvent,
+  relayOrchEventsStream,
+  WIKI_STREAM_ERROR,
+} from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
 import { registerOfficeIpc } from './officeIpc';
@@ -80,6 +85,7 @@ import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
+import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
 import { mainWindow, setMainWindow } from './mainWindow';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
@@ -123,6 +129,16 @@ if (!gotSingleInstanceLock) {
   app.quit();
   process.exit(0);
 }
+
+// 二次启动时聚焦/还原已有主窗口。没有这个处理器, 双击图标会静默退出,
+// 用户观感是"点了没反应"。
+app.on('second-instance', () => {
+  const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+});
 
 // Window dimensions
 const DEFAULT_WINDOW_WIDTH = 1280;
@@ -270,14 +286,15 @@ function spawnBackend(): ChildProcess {
   //     critical for Win installs to C:\Program Files\Sage which is a
   //     system-protected directory and rejects writes from non-admin users).
   // SAGE_DB_PATH / SAGE_USER_DATA_DIR env vars always win (for CI / override).
-  const sageDbPath =
-    process.env.SAGE_DB_PATH ??
-    (app.isPackaged
-      ? join(app.getPath('userData'), 'sage.db')
-      : join(process.cwd(), 'data', 'sage.db'));
-  const sageUserDataDir =
-    process.env.SAGE_USER_DATA_DIR ??
-    (app.isPackaged ? app.getPath('userData') : join(process.cwd(), 'data'));
+  //
+  // 2026-09-08 (Win7 launch incident): extracted into `./userDataPaths.ts`
+  // so the doctor spawn path can use the same resolver. The previous inline
+  // logic was duplicated between backend spawn (here) and doctor spawn
+  // (in `app.whenReady`), and the doctor copy silently dropped the
+  // `app.isPackaged` branch, producing three false-positive CRITICAL
+  // doctor checks on Win7.
+  const sageDbPath = resolveSageDbPath();
+  const sageUserDataDir = resolveSageUserDataDir();
 
   const plan = resolveBackendLaunchCommand({
     env: process.env,
@@ -713,6 +730,19 @@ function isDemoProcess(): boolean {
   return process.env.SAGE_DEMO_MODE === '1' || demoModeFromSettings;
 }
 
+/**
+ * 外链 scheme 白名单: 仅 http/https 交给 OS 打开。
+ * 被拦截的导航/弹窗若不校验 scheme, file://、smb:// 或任意自定义协议
+ * 都会被递交 OS 处理 —— 渲染层一旦出现恶意链接即成攻击面。
+ */
+function openExternalSafely(url: string): void {
+  if (!/^https?:\/\//i.test(url)) {
+    logger.warn('main: blocked non-http(s) openExternal', { url: url.slice(0, 200) });
+    return;
+  }
+  shell.openExternal(url).catch(() => undefined);
+}
+
 function createMainWindow(): void {
   // Platform-specific titlebar configuration:
   // - macOS: hide traffic light area, custom titlebar from y=28
@@ -745,13 +775,13 @@ function createMainWindow(): void {
 
   // Open external links in OS browser, not in-app
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url).catch(() => undefined);
+    openExternalSafely(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
     if (!isTrustedRendererUrl(url)) {
       event.preventDefault();
-      shell.openExternal(url).catch(() => undefined);
+      openExternalSafely(url);
     }
   });
 
@@ -1223,25 +1253,22 @@ function registerIpcHandlers(): void {
   // live-events P1 附带 (2026-09-07): 审批等待 OS 通知 —— 用户不在窗口前时
   // 子代理/主 agent 的 permission_request 不再被错过。点击通知聚焦窗口。
   // Win7/老系统 Notification 不可用时静默降级（isSupported 守卫）。
-  ipcMain.handle(
-    'sage:notify:approval',
-    (evt, payload: { title?: string; body?: string }) => {
-      if (!isTrustedRenderer(evt.sender)) return { ok: false, reason: 'untrusted' };
-      if (!Notification.isSupported()) return { ok: false, reason: 'unsupported' };
-      const title = String(payload?.title ?? 'Sage 需要你的审批').slice(0, 120);
-      const body = String(payload?.body ?? '').slice(0, 300);
-      const notification = new Notification({ title, body, silent: false });
-      notification.on('click', () => {
-        const win = getSenderWindow(evt);
-        if (!win) return;
-        if (win.isMinimized()) win.restore();
-        win.show();
-        win.focus();
-      });
-      notification.show();
-      return { ok: true };
-    },
-  );
+  ipcMain.handle('sage:notify:approval', (evt, payload: { title?: string; body?: string }) => {
+    if (!isTrustedRenderer(evt.sender)) return { ok: false, reason: 'untrusted' };
+    if (!Notification.isSupported()) return { ok: false, reason: 'unsupported' };
+    const title = String(payload?.title ?? 'Sage 需要你的审批').slice(0, 120);
+    const body = String(payload?.body ?? '').slice(0, 300);
+    const notification = new Notification({ title, body, silent: false });
+    notification.on('click', () => {
+      const win = getSenderWindow(evt);
+      if (!win) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    });
+    notification.show();
+    return { ok: true };
+  });
 
   ipcMain.handle('sage:window-controls:capture-page', async (evt) => {
     if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
@@ -1621,7 +1648,8 @@ app.whenReady().then(async () => {
   // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
   // fail-open by design: doctor never blocks the app from launching — its output
   // is captured into the NDJSON startup log so the user can diagnose degraded
-  // experiences via Show Logs. Hard 5s timeout is enforced inside runDoctorCheck.
+  // experiences via Show Logs. Default 20s cap lives in doctor.ts and can be
+  // tuned per-build via SAGE_DOCTOR_TIMEOUT_MS (CI smoke paths tighten it).
   if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
     try {
       // 2026-08-26: use `resolveDoctorLaunchCommand` so the doctor
@@ -1636,8 +1664,12 @@ app.whenReady().then(async () => {
         resourcesPath: process.resourcesPath,
         platform: process.platform,
         isPackaged: app.isPackaged,
-        sageDbPath: process.env.SAGE_DB_PATH ?? join(process.cwd(), 'data', 'sage.db'),
-        sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
+        // 2026-09-08 (Win7 launch incident): go through the shared helper so
+        // the doctor subprocess targets `<userData>` on packaged Win installs
+        // (where cwd resolves to `C:\Program Files\Sage` — read-only for
+        // non-admins) instead of the install dir. See electron/userDataPaths.ts.
+        sageDbPath: resolveSageDbPath(),
+        sageUserDataDir: resolveSageUserDataDir(),
         port: BACKEND_PORT,
       });
       const doctorPlan =
@@ -1647,8 +1679,10 @@ app.whenReady().then(async () => {
               resourcesPath: process.resourcesPath,
               platform: process.platform,
               isPackaged: app.isPackaged,
-              sageDbPath: process.env.SAGE_DB_PATH ?? join(process.cwd(), 'data', 'sage.db'),
-              sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
+              // 2026-09-08: same helper as supervisor — packaged Win7
+              // doctor must probe %APPDATA%\Sage, not cwd/data.
+              sageDbPath: resolveSageDbPath(),
+              sageUserDataDir: resolveSageUserDataDir(),
               port: BACKEND_PORT,
             })
           : undefined;
@@ -1841,7 +1875,7 @@ app.whenReady().then(async () => {
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
     const choice = await showStartupFailureDialog({
-      reason: '后端服务在 30 秒内未响应',
+      reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应`,
       detail: `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`,
     });
     if (choice === 'retry') {

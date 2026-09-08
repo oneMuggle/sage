@@ -4,16 +4,14 @@
 
 import { invoke } from './desktopInvoke';
 import type { Message, Session, SessionCompactResult, SessionExportResult } from './types';
-import { ApiException, handleApiError, isValidSessionId, sanitizeInput, withRetry } from './utils';
+import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
 
 export const sessionApi = {
   async create(title: string = '新对话'): Promise<Session> {
-    // 安全化标题输入
-    const safeTitle = sanitizeInput(title);
-
+    // 标题原文直传: React 渲染层负责转义, 此处转义会让标题以 HTML 实体形式落库
     return withRetry(async () => {
       try {
-        const session = await invoke<Session>('create_session', { title: safeTitle });
+        const session = await invoke<Session>('create_session', { title });
         return session;
       } catch (error) {
         throw handleApiError(error);
