@@ -271,11 +271,23 @@ class AnnotationRewriter(cst.CSTTransformer):
         """
         if not isinstance(node, cst.Subscript):
             return node
-        # Only convert when value is a Name matching a builtin generic.
-        if not isinstance(node.value, cst.Name):
-            return node
-        builtin_name = node.value.value
-        if builtin_name not in PEP585_BUILTINS:
+        # Match either bare `list` (cst.Name) or qualified `builtins.list`
+        # (cst.Attribute on the builtins module). Both forms are PEP 585
+        # built-in generics — handle identically.
+        builtin_name: str | None = None
+        if isinstance(node.value, cst.Name):
+            builtin_name = node.value.value
+        elif isinstance(node.value, cst.Attribute):
+            # builtins.list / builtins.dict / ...
+            # node.value.attr is a cst.Name, not a string.
+            if (
+                isinstance(node.value.attr, cst.Name)
+                and node.value.attr.value in PEP585_BUILTINS
+                and isinstance(node.value.value, cst.Name)
+                and node.value.value.value == "builtins"
+            ):
+                builtin_name = node.value.attr.value
+        if builtin_name is None or builtin_name not in PEP585_BUILTINS:
             return node
         typing_name = PEP585_BUILTINS[builtin_name]
         # Recursively rewrite the slice contents (handles nested cases):
