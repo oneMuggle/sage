@@ -166,6 +166,99 @@ async def test_fork_does_not_touch_source_session(client):
     assert source.fork_root is None
 
 
+@pytest.mark.asyncio()
+async def test_fork_inherits_active_workspace_binding(client, tmp_path):
+    """B1 (对标增强第五轮批次 A): fork 复制源会话的活跃工作区绑定。
+
+    workspace_path 原样带走;generation 是 per-session 陈旧检测序号,
+    新会话从 1 起算;revoked_at 为 NULL(活跃)。
+    """
+    create = await client.post(f"{PREFIX}/sessions", json={"title": "绑定继承"})
+    source_id = create.json()["id"]
+    _seed_messages(source_id, n=2)
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    bound = await client.put(
+        f"{PREFIX}/sessions/{source_id}/workspace",
+        json={"workspace_path": str(workspace)},
+    )
+    assert bound.status_code == 200
+
+    forked = (
+        await client.post(
+            f"{PREFIX}/sessions/{source_id}/fork", json={"at_message_id": "fork-seed-0"}
+        )
+    ).json()
+
+    got = await client.get(f"{PREFIX}/sessions/{forked['id']}/workspace")
+    assert got.status_code == 200
+    binding = got.json()["binding"]
+    assert binding is not None
+    assert binding["workspace_path"] == str(workspace.resolve())
+    assert binding["generation"] == 1
+    assert binding["revoked_at"] is None
+
+    # 源会话绑定不动(仍为活跃且 generation 不变)
+    source_got = await client.get(f"{PREFIX}/sessions/{source_id}/workspace")
+    source_binding = source_got.json()["binding"]
+    assert source_binding["session_id"] == source_id
+    assert source_binding["generation"] == 1
+
+
+@pytest.mark.asyncio()
+async def test_fork_without_binding_leaves_fork_unbound(client):
+    """B1 边界: 源会话无绑定 → fork 会话同样无绑定(binding 为 null)。"""
+    create = await client.post(f"{PREFIX}/sessions", json={"title": "无绑定"})
+    source_id = create.json()["id"]
+    _seed_messages(source_id, n=2)
+
+    forked = (await client.post(f"{PREFIX}/sessions/{source_id}/fork", json={})).json()
+    got = await client.get(f"{PREFIX}/sessions/{forked['id']}/workspace")
+    assert got.status_code == 200
+    assert got.json()["binding"] is None
+
+
+@pytest.mark.asyncio()
+async def test_fork_before_message_exclusive_cut(client):
+    """U5' before_message=True → 开区间截断：复制分叉点之前（不含本身）。
+
+    U5' 编辑重发依赖此语义——编辑某条消息 = 分叉其前缀后重发改写内容。
+    首条消息场景得到空前缀会话（0 条消息，合法）。
+    """
+    create = await client.post(f"{PREFIX}/sessions", json={"title": "开区间分叉"})
+    source_id = create.json()["id"]
+    ids = _seed_messages(source_id, n=4)
+
+    # 截到 fork-seed-2 之前 → 保留 0..1 共 2 条
+    resp = await client.post(
+        f"{PREFIX}/sessions/{source_id}/fork",
+        json={"at_message_id": ids[2], "before_message": True},
+    )
+    assert resp.status_code == 200
+    forked = resp.json()
+    rows = MessageRepository().get_by_session(forked["id"])
+    assert [r.content for r in rows] == ["分叉测试消息 #0", "分叉测试消息 #1"]
+    assert forked["forked_at_message_id"] == ids[2]
+
+    # 首条消息开区间 → 空前缀会话
+    resp_first = await client.post(
+        f"{PREFIX}/sessions/{source_id}/fork",
+        json={"at_message_id": ids[0], "before_message": True},
+    )
+    assert resp_first.status_code == 200
+    first_fork = resp_first.json()
+    assert first_fork["message_count"] == 0
+    assert MessageRepository().get_by_session(first_fork["id"]) == []
+
+    # 不传 before_message → 默认闭区间（回归保护）
+    resp_default = await client.post(
+        f"{PREFIX}/sessions/{source_id}/fork", json={"at_message_id": ids[2]}
+    )
+    assert resp_default.status_code == 200
+    assert resp_default.json()["message_count"] == 3
+
+
 def test_fork_mid_copy_failure_leaves_no_orphan(monkeypatch):
     """MEDIUM-2: 复制到一半失败 → 整个事务回滚，不留孤儿会话/消息行。
 

@@ -323,6 +323,7 @@ def fork_session(
     source_id: str,
     at_message_id: Optional[str] = None,
     title: Optional[str] = None,
+    before_message: bool = False,
 ) -> Session:
     """从源会话分叉出一个新会话（M4，全量前缀复制，单事务原子落盘）。
 
@@ -333,6 +334,9 @@ def fork_session(
     语义:
         - 复制源会话中 ``at_message_id`` 及之前的全部消息；``at_message_id``
           省略时复制全部消息。
+        - ``before_message=True`` 时改为**开区间**：复制 ``at_message_id``
+          **之前**的消息（不含本身）；目标是首条消息时得到空前缀会话。
+          U5' 编辑重发依赖此语义——编辑某条 user 消息 = 分叉其前缀。
         - 复制的消息获得**新 id**，但保留原顺序 / role / content / 时间戳 /
           model / provider / tool 字段。
         - 新会话写入 ``fork_root=<源 id>``；``forked_at_message_id`` 取显式
@@ -347,6 +351,7 @@ def fork_session(
         source_id: 源会话 id
         at_message_id: 可选分叉点消息 id（必须属于源会话）
         title: 可选新标题；缺省为 ``"Fork: <源标题>"``
+        before_message: 开区间截断开关（见语义段）
 
     Returns:
         新创建的 Session（含 fork_root / forked_at_message_id）
@@ -366,7 +371,9 @@ def fork_session(
         )
         if cut_index is None:
             raise ForkSourceNotFoundError("message", at_message_id)
-        prefix = all_messages[: cut_index + 1]  # 含分叉点本身
+        prefix = (
+            all_messages[:cut_index] if before_message else all_messages[: cut_index + 1]
+        )
     else:
         prefix = all_messages
 
@@ -399,6 +406,22 @@ def fork_session(
         # ORDER BY created_at ASC（同值按 rowid）保持序。
         for src_msg in prefix:
             _insert_forked_message_row(cursor, new_session_id, src_msg)
+        # B1 (对标增强第五轮批次 A): fork 继承源会话的活跃工作区绑定——
+        # 分叉的是"同一段工作在另一条分支上的延续"，丢了绑定 agent 就没有
+        # 工作区。workspace_path 原样带走；generation 是 per-session 的
+        # 陈旧缓存检测序号，新会话无旧缓存，从 1 重新起算；activated_at
+        # 取 fork 时刻（对新会话而言是一次全新激活）。
+        cursor.execute(
+            """
+            INSERT INTO session_workspace_bindings (
+                session_id, workspace_path, generation, activated_at, revoked_at
+            )
+            SELECT ?, workspace_path, 1, ?, NULL
+            FROM session_workspace_bindings
+            WHERE session_id = ? AND revoked_at IS NULL
+            """,
+            (new_session_id, now, source.id),
+        )
         conn.commit()
     except Exception:
         conn.rollback()

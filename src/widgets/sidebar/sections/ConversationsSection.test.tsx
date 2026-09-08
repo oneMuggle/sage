@@ -67,4 +67,28 @@ describe('ConversationsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: '折叠' }));
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
+
+  it("U4': filters sessions by title (case-insensitive) and shows no-match", () => {
+    renderWithI18n(<ConversationsSection {...baseProps} />);
+    const search = screen.getByTestId('session-search');
+
+    fireEvent.change(search, { target: { value: 'FIR' } });
+    expect(screen.getByText('first')).toBeInTheDocument();
+    expect(screen.queryByText('second')).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: 'zzz' } });
+    expect(screen.queryByText('first')).not.toBeInTheDocument();
+    expect(screen.getByText('无匹配会话')).toBeInTheDocument();
+
+    // 清空恢复完整列表
+    fireEvent.change(search, { target: { value: '' } });
+    expect(screen.getByText('first')).toBeInTheDocument();
+    expect(screen.getByText('second')).toBeInTheDocument();
+  });
+
+  it("U4': passes onRename down to session items", () => {
+    const onRename = vi.fn().mockResolvedValue(undefined);
+    renderWithI18n(<ConversationsSection {...baseProps} onRename={onRename} />);
+    expect(screen.getAllByTestId('rename-session').length).toBe(sessions.length);
+  });
 });
