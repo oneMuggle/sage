@@ -185,6 +185,7 @@ class ChatDispatcher:
         settings: Optional[OrchSettings] = None,
         workspace_root: Optional[str] = None,
         event_hub: Optional[Any] = None,
+        session_id: Optional[str] = None,
     ) -> None:
         # 安全修复波 (2026-08-23): 白名单校验必须在任何副作用（DB 连接、
         # worktree 清扫）之前 —— 非法 run_id 直接拒绝构造。
@@ -219,6 +220,19 @@ class ChatDispatcher:
 
         self._orch_run_repo = OrchRunRepository()
         self._orch_task_repo = OrchTaskRepository()
+        # O3 (2026-09-08): 会话归因 —— 透传给 SubagentRunner → child.run_loop
+        # → llm_client，让子代理 LLM 消耗落 usage_events.session_id（此前
+        # 恒 NULL，会话级花费统计不含子代理）。init_orch_run 兜底再赋值。
+        self.session_id = session_id
+        # O1 (2026-09-08): steering 边界投递的 repo（构造失败降级 None，
+        # 投递整体跳过 —— steering 是增强能力，绝不阻塞派发）。
+        try:
+            from backend.data.orch_context_repo import OrchestrationContextRepository
+
+            self._context_repo = OrchestrationContextRepository()
+        except Exception as exc:  # noqa: BLE001 — 降级铁律
+            logger.debug("orch context repo 初始化失败，steering 投递停用: %s", exc)
+            self._context_repo = None
         # Wave 2 P1-4 (2026-08-14): review 一次性守卫 —— 防重复 review 触发
         # IntegrityError（同一 run 二次 review 会撞唯一约束）；_first_dispatch_at
         # 记录首次 dispatch 时间（resume 场景前端展示用）。
@@ -437,10 +451,28 @@ class ChatDispatcher:
                 self._emit_task_status(state)
                 # 让其他子任务也有机会 emit running,保证 queued/running/done 三阶段序
                 await asyncio.sleep(0)
+                # O2 (2026-09-08): wall-clock 超时 —— wait_for 取消内层协程
+                # （子 run_loop 的 async for 在取消点收口，同 agent_tool 异步
+                # 通路的 L12 根修语义）。0 = 关闭。超时任务置 failed（error
+                # 前缀 task_timeout:），下游依赖任务由既有级联闭包收口。
+                task_timeout = getattr(self.settings, "subagent_task_timeout_s", 0)
                 try:
-                    content = await self._run_subagent(state)
+                    if task_timeout and task_timeout > 0:
+                        content = await asyncio.wait_for(
+                            self._run_subagent(state), timeout=task_timeout
+                        )
+                    else:
+                        content = await self._run_subagent(state)
                     state.status = "done"
                     state.output = content
+                except asyncio.TimeoutError:  # noqa: UP041 — py3.8 下 ≠ 内建 TimeoutError
+                    state.status = "failed"
+                    state.error = (
+                        f"task_timeout: 子任务执行超过 {task_timeout} 秒，已强制终止"
+                    )
+                    logger.warning(
+                        "subagent %s 超时（%ss），已终止", state.task_id, task_timeout
+                    )
                 except Exception as exc:  # noqa: BLE001 — 单任务失败隔离
                     # P0-3 (2026-08-20): cancel 触发的异常 → cancelled 而非 failed
                     # （SubagentRunner 已有 interrupt 通道，见 P0-1/P0-3）。
@@ -634,21 +666,38 @@ class ChatDispatcher:
                 interrupt_event=self._cancelled,
                 event_sink=sink,
                 approval_mode=self.approval_mode,
+                session_id=self.session_id,
+                context_repo=self._context_repo,
+                # O1: 投递用 canonical task_id（t1..tN，与 steer 端点一致），
+                # 不是 lane 空间的 "task-tN"。
+                context_task_id=state.task_id,
             ),
         )
-        result = await run_lane_with_retry(executor, lane, state.agent_id)
-        # Wave 2 Minor 2 fix: 防御性 max-iteration guard。run_lane_with_retry
-        # 理论上内循环会收敛（max_retries 耗尽 → failed 终态），但防未来
-        # executor 退化一直返回 retrying 导致 hang，调用层设硬上限。
-        iterations = 0
-        while result.get("status") == "retrying":
-            iterations += 1
-            if iterations >= self.settings.max_lane_iterations:
-                raise RuntimeError(
-                    f"MAX_ITERATIONS_EXCEEDED: retry loop exceeded "
-                    f"max_iterations={self.settings.max_lane_iterations}"
-                )
+        # O5 (2026-09-08): 子代理执行期间置位嵌套深度 —— AgentTool 据此
+        # 拒绝孙代理派生（自定义 profile 白名单含 agent 工具时防穿透）。
+        from backend.orchestration.depth import (
+            current_subagent_depth,
+            enter_subagent_depth,
+            exit_subagent_depth,
+        )
+
+        depth_token = enter_subagent_depth(current_subagent_depth() + 1)
+        try:
             result = await run_lane_with_retry(executor, lane, state.agent_id)
+            # Wave 2 Minor 2 fix: 防御性 max-iteration guard。run_lane_with_retry
+            # 理论上内循环会收敛（max_retries 耗尽 → failed 终态），但防未来
+            # executor 退化一直返回 retrying 导致 hang，调用层设硬上限。
+            iterations = 0
+            while result.get("status") == "retrying":
+                iterations += 1
+                if iterations >= self.settings.max_lane_iterations:
+                    raise RuntimeError(
+                        f"MAX_ITERATIONS_EXCEEDED: retry loop exceeded "
+                        f"max_iterations={self.settings.max_lane_iterations}"
+                    )
+                result = await run_lane_with_retry(executor, lane, state.agent_id)
+        finally:
+            exit_subagent_depth(depth_token)
 
         # 重试信息回填 state → task_status 事件携带
         state.retry_count = lane.metadata.get("retry_count", 0) if lane.metadata else 0
@@ -874,6 +923,9 @@ class ChatDispatcher:
 
         original_request: resume 恢复流的原始请求（前端逐字重发）。
         """
+        # O3: 构造未传 session_id 时兜底赋值（调用方总是持有会话 id）。
+        if session_id and not self.session_id:
+            self.session_id = session_id
         try:
             from backend.data.orch_run_repo import OrchRun
 

@@ -56,45 +56,66 @@ class ObserveSubagentsTool(BaseTool):
             parameters=_INPUT_SCHEMA,
         )
 
-    async def execute_async(self, **kwargs: Any) -> ToolResult:
-        run_id = kwargs.get("run_id") or self._default_run_id
-        if not run_id:
-            return ToolResult(success=False, error="run_id 缺失且无默认值")
+    def _read_snapshot(
+        self,
+        run_id: str,
+        task_ids: Optional[List[str]],
+    ) -> tuple:
+        """O4 (2026-09-08): 同步读取 run 快照 —— 纯内存读，无需事件循环。
 
-        task_ids: Optional[List[str]] = kwargs.get("task_ids")
-
+        Returns:
+            ``(payload, None)`` 成功；``(None, error_message)`` 失败。
+        """
         snapshot = self._snapshot_store.get_run_snapshot(run_id)
         if snapshot is None:
-            return ToolResult(success=False, error=f"run {run_id} 不存在")
+            return None, f"run {run_id} 不存在"
 
         tasks_data = snapshot.to_dict()["tasks"]
         if task_ids:
             wanted = set(task_ids)
             tasks_data = [t for t in tasks_data if t["task_id"] in wanted]
 
-        result = {
-            "run_id": run_id,
-            "run_status": snapshot.status,
-            "last_event_seq": snapshot.last_event_seq,
-            "tasks": tasks_data,
-        }
-        return ToolResult(success=True, content=json.dumps(result, ensure_ascii=False))
+        return (
+            {
+                "run_id": run_id,
+                "run_status": snapshot.status,
+                "last_event_seq": snapshot.last_event_seq,
+                "tasks": tasks_data,
+            },
+            None,
+        )
+
+    async def execute_async(self, **kwargs: Any) -> ToolResult:
+        run_id = kwargs.get("run_id") or self._default_run_id
+        if not run_id:
+            return ToolResult(success=False, error="run_id 缺失且无默认值")
+
+        payload, error = self._read_snapshot(run_id, kwargs.get("task_ids"))
+        if error is not None:
+            return ToolResult(success=False, error=error)
+        return ToolResult(
+            success=True, content=json.dumps(payload, ensure_ascii=False)
+        )
 
     def execute(self, **kwargs: Any) -> ToolResult:
-        """同步调用也支持（纯内存读）。"""
-        import asyncio
+        """同步读 —— 与 execute_async 等价（快照读是纯内存操作）。
 
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
+        O4 (2026-09-08): 此前本方法在检测到运行中的事件循环时自拒
+        （"应在 async 上下文调用"）—— 恰好命中 run_loop 对非特判工具的
+        同步直调路径（observe_subagents 不在 agent.py 的 execute_async
+        special-case 清单），工具注册后 conductor 永远拿到错误。快照读
+        无异步依赖，直接同步返回。
+        """
+        run_id = kwargs.get("run_id") or self._default_run_id
+        if not run_id:
+            return ToolResult(success=False, error="run_id 缺失且无默认值")
 
-        if loop and loop.is_running():
-            return ToolResult(
-                success=False,
-                error="observe_subagents 应在 async 上下文调用",
-            )
-        return asyncio.run(self.execute_async(**kwargs))
+        payload, error = self._read_snapshot(run_id, kwargs.get("task_ids"))
+        if error is not None:
+            return ToolResult(success=False, error=error)
+        return ToolResult(
+            success=True, content=json.dumps(payload, ensure_ascii=False)
+        )
 
 
 __all__ = ["ObserveSubagentsTool"]

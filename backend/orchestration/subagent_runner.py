@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from backend.agents.profiles import build_system_base, get_enabled_agent
 from backend.core.legacy.agent import SageAgent
@@ -32,6 +32,26 @@ _SCHEMA_DIRECTIVE = (
     "\n\n输出格式硬性要求：你的最终回复必须只包含一个符合以下 JSON Schema "
     "的 JSON 对象（可放在代码围栏中），不要输出其他文字。\n"
 )
+
+
+def run_loop_accepts_session_id(agent: Any) -> bool:
+    """探测 agent 的 ``run_loop`` 是否接受 ``session_id`` kwarg（O3）。
+
+    生产 SageAgent.run_loop 接受；测试桩/旧扩展可能只有三参签名 ——
+    透传前探测，避免 TypeError 杀死子任务。
+    """
+    import inspect
+
+    try:
+        sig = inspect.signature(agent.run_loop)
+    except (TypeError, ValueError):  # noqa: BLE001 — 内建/ exotic 可调用
+        return False
+    if "session_id" in sig.parameters:
+        return True
+    return any(
+        p.kind == inspect.Parameter.VAR_KEYWORD
+        for p in sig.parameters.values()
+    )
 
 
 def extract_json_payload(text: str) -> Optional[Dict[str, Any]]:
@@ -79,6 +99,9 @@ class SubagentRunner:
         interrupt_event: Optional[asyncio.Event] = None,
         event_sink: Optional[Callable[[AgentEvent], Awaitable[None]]] = None,
         approval_mode: str = "ask",
+        session_id: Optional[str] = None,
+        context_repo: Optional[Any] = None,
+        context_task_id: Optional[str] = None,
     ) -> None:
         self._llm_config = llm_config
         # P0-3 (2026-08-20): 取消事件 —— ChatDispatcher._cancelled 传入，
@@ -92,6 +115,17 @@ class SubagentRunner:
         # （非危险工具自动批准，危险仍转人工）。经 build_subagent_enforcer
         # 注入 AutoApproveEnforcer。
         self._approval_mode = approval_mode
+        # O3 (2026-09-08): 会话归因 —— 透传给 child.run_loop 的 session_id，
+        # 经 llm_client 注入 usage_tracker，让子代理的 LLM 消耗落
+        # usage_events.session_id（此前恒 NULL，会话级花费统计不含子代理）。
+        self._session_id = session_id
+        # O1 (2026-09-08): steering 边界投递 —— repo 非 None 且
+        # context_task_id 非空时，在 run 启动前与每轮 THINKING 迭代边界，
+        # 拉取该任务 pending 的 next_boundary steering 消息注入子代理上下文。
+        # 注意 task_id 用 canonical 空间（t1..tN，与 steer 端点/快照一致），
+        # 不是 lane 的 "task-<id>" 前缀空间。
+        self._context_repo = context_repo
+        self._context_task_id = context_task_id
 
     async def __call__(self, task: Any, agent_id: Optional[str]) -> Dict[str, Any]:
         """Run one subtask via SageAgent.run_loop; return executor-usable dict.
@@ -160,6 +194,16 @@ class SubagentRunner:
         collected: list[str] = []
         last_error: Optional[str] = None
 
+        # O1: run 启动前投递一次 —— 捕获任务启动前（排队/确认窗口期）
+        # 已写入的 pending steering。
+        self._deliver_pending_context(messages)
+
+        # O3: session_id 仅在非空且 run_loop 接受时透传 —— 兼容只接受
+        # (messages, max_iterations, llm_config) 的测试桩/老调用方。
+        run_kwargs: Dict[str, Any] = {"llm_config": self._llm_config}
+        if self._session_id and run_loop_accepts_session_id(child):
+            run_kwargs["session_id"] = self._session_id
+
         # P0-3 (2026-08-20): interrupt watcher —— 与 child.run_loop 并发，
         # 取消事件到达即置位子 agent 中断标志；正常结束时 finally 撤销。
         watcher: Optional[asyncio.Task] = None
@@ -171,12 +215,20 @@ class SubagentRunner:
             watcher = asyncio.create_task(_watch())
 
         try:
-            async for evt in child.run_loop(messages, llm_config=self._llm_config):
+            async for evt in child.run_loop(messages, **run_kwargs):
                 # live-events P0: 中间事件投影转发（acting/observing/审批/
                 # 提问/failed → 聊天镜像 + canonical task.step.*）。sink
                 # 自身吞错（观测绝不杀死执行）；None = 老调用方不转发。
                 if self._event_sink is not None:
                     await self._event_sink(evt)
+                # O1: THINKING 事件 = 一次 LLM 迭代的边界 —— 在边界拉取
+                # pending steering 注入下一轮上下文（messages 就地修改，
+                # 下轮 THINKING 前的 LLM 调用自然带上）。
+                if (
+                    self._context_repo is not None
+                    and evt.state.value == "thinking"
+                ):
+                    self._deliver_pending_context(messages)
                 if evt.state.value == "done" and evt.content:
                     collected.append(evt.content)
                 elif evt.state.value == "failed" and evt.error:
@@ -197,6 +249,50 @@ class SubagentRunner:
             "output": structured if structured is not None else raw_output,
             "messages": messages,
         }
+
+    def _deliver_pending_context(self, messages: List[Dict[str, Any]]) -> None:
+        """O1 (2026-09-08): 拉取 pending steering 消息注入子代理上下文。
+
+        每条消息以 user role 追加（带来源/类型前缀），随后 mark_delivered
+        完成 pending → delivered 生命周期迁移。任何失败只 debug 降级 ——
+        steering 是增强能力，绝不因此杀死或阻塞子任务。repo 未接线
+        （None）时不做任何事（老调用方/测试零感知）。
+        """
+        if self._context_repo is None or not self._context_task_id:
+            return
+        try:
+            pending = self._context_repo.list_pending(
+                self._context_task_id, apply_mode="next_boundary"
+            )
+        except Exception as exc:  # noqa: BLE001 — 拉取失败降级
+            logger.debug(
+                "steering 拉取失败（忽略）task=%s: %s", self._context_task_id, exc
+            )
+            return
+        for message in pending:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"【父代理/用户补充 · {message.message_type}】"
+                        f"{message.content_redacted}"
+                    ),
+                }
+            )
+            try:
+                self._context_repo.mark_delivered(message.context_id)
+            except Exception as exc:  # noqa: BLE001 — 迁移失败降级
+                logger.debug(
+                    "steering mark_delivered 失败（忽略）ctx=%s: %s",
+                    message.context_id,
+                    exc,
+                )
+            logger.info(
+                "steering 已投递 task=%s ctx=%s type=%s",
+                self._context_task_id,
+                message.context_id,
+                message.message_type,
+            )
 
     @staticmethod
     def _structured_output(

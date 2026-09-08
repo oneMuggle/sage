@@ -139,3 +139,30 @@ class OrchRunRepository:
             (status, final_summary, run_id),
         )
         conn.commit()
+
+    def fail_stale_running_runs(self) -> int:
+        """启动恢复（O6, 2026-09-08）：遗留 ``running`` 的编排 run 收口为 failed。
+
+        与会话级 ``SessionRepository.recover_stale_run_states`` 同语义：
+        后端被杀时 producer finally 的 finalize 没机会执行，orch_runs.status
+        滞留 running。``run_id LIKE 'orch-%'`` 限定编排前缀，避开非编排
+        写入行；已有 final_summary 的行不覆盖。
+
+        仅启动期单线程调用（与 recover_stale_run_states 一致，不加锁）。
+
+        Returns:
+            被改写的行数（用于启动日志）；失败降级返回 0。
+        """
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE orch_runs SET status = 'failed', "
+                "final_summary = COALESCE(final_summary, ?) "
+                "WHERE status = 'running' AND run_id LIKE 'orch-%'",
+                ("应用重启，编排运行中断",),
+            )
+            conn.commit()
+            return cursor.rowcount
+        except Exception:  # noqa: BLE001 — 恢复失败不阻塞启动
+            return 0

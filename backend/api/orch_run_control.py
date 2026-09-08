@@ -63,6 +63,15 @@ def get_event_hub() -> Optional[EventHub]:
     return _event_hub
 
 
+def get_snapshot_store() -> Optional[SnapshotStore]:
+    """返回启动时装配的 SnapshotStore（O4, 2026-09-08）。
+
+    producer 在 multi 模式注册 ``observe_subagents`` 工具时取用 ——
+    未启动/未装配返回 ``None``，调用方降级为不注册该工具。
+    """
+    return _snapshot_store
+
+
 @router.get("/{run_id}/snapshot")
 async def get_snapshot(run_id: str) -> JSONResponse:
     """返回 run 的当前快照。"""
