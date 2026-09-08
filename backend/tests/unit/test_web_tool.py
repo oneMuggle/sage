@@ -162,6 +162,57 @@ def test_web_fetch_rejects_malformed_ipv6_url():
     assert "无效的 URL" in result.error
 
 
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "https://www.qishux xia.com/",  # 模型分词把域名切成两段,中间多空格
+        "https://exa mple.com/",
+        "https://www.example\x00.com/",  # hostname 含 NUL 控制字符
+    ],
+)
+def test_web_fetch_rejects_hostname_with_illegal_chars(bad_url):
+    """hostname 含空格/控制字符 → 显式拒绝,不让 httpx encode 后 DNS 报
+    '[Errno -2] Name or service not known' 这种上游分词错误,误导用户。
+
+    校验在 execute 早期发生,任何 respx mock 都不该被触发。
+    urlparse 已把 tab/换行归入 path(不在 hostname),所以测试只覆盖
+    hostname 段能塞进非法字符的真实场景:空格与 NUL。
+    """
+    seen = []
+
+    def _capture(request):
+        seen.append(request.url)
+        return Response(200, text="ok")
+
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/").mock(side_effect=_capture)
+        tool = WebFetchTool(network_policy=_intranet("example.com"))
+        result = tool.execute(url=bad_url)
+
+    assert result.success is False
+    assert "非法字符" in result.error
+    assert not seen, f"非法 hostname 不该触发 httpx 请求,实际发出: {seen}"
+
+
+def test_web_fetch_allows_normal_urls_with_spaces_in_path():
+    """路径里的空格是合法字符(httpx 会自动 percent-encode),不应误伤。
+    只校验 hostname,不改 path。
+    """
+    with respx.mock(base_url="https://example.com", assert_all_called=False) as mock:
+        mock.get("/path%20with%20space").mock(
+            return_value=Response(
+                200,
+                text="<html><body>path 空格 OK</body></html>",
+                headers={"content-type": "text/html"},
+            )
+        )
+        tool = WebFetchTool(network_policy=_intranet("example.com"))
+        result = tool.execute(url="https://example.com/path with space")
+
+    assert result.success is True
+    assert "path 空格 OK" in result.content["content"]
+
+
 def test_web_fetch_truncates_by_max_length():
     """max_length 截断响应"""
     big = "A" * 5000

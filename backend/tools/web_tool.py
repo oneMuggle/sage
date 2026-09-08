@@ -346,6 +346,12 @@ class WebFetchTool(BaseTool):
             return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
             return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        # hostname 里有空格/控制字符会让 urlparse 把整串当 host,
+        # httpx 会把空格 encode 成 %20 后 DNS 解析报
+        # ``[Errno -2] Name or service not known`` —— 这种错是上游(模型/调用方)
+        # 把域名错误分词产生的,显式拦下比让底层 DNS 失败更易诊断。
+        if any(ch.isspace() or ord(ch) < 0x20 or ord(ch) == 0x7F for ch in parsed.hostname):
+            return "无效的 URL：hostname 含非法字符（空格或控制字符）"
         return None
 
     def _get_with_redirects(
