@@ -2,7 +2,7 @@
 
 > **创建日期**: 2026-09-08
 > **分支**: `feat/academic-search-skill`
-> **状态**: ✅ 已交付（M1 skill_save + O2 AcademicSearchSkill + CNKI adapter）
+> **状态**: ✅ 已交付(M1 skill_save + O2 SKILL.md 模板形态 + academic_adapters 库 + CNKI adapter)
 
 ---
 
@@ -12,13 +12,15 @@
 
 - **`skill_save` 工具**(M1)——让 LLM 在用户授权下,把一次成功的多步工具调用序列
   + 用户给定的描述,沉淀为草稿 skill(进入 `skill_drafts` 表等人工 review)。
-- **`AcademicSearchSkill`**(O2)——一个示例 builtin skill,把"在文献站点检索 →
-  抓结果页 → 让用户挑排序偏好 → 整理摘要"这一流程**骨架**化,实际页面解析
-  仍交给 LLM,站点差异通过 `academic_adapters` 的 URL 模板适配。
+- **`academic-search` SKILL.md 模板**(O2)——一个随包分发的**基础版 skill**,
+  LLM-driven playbook 形态:把"在文献站点检索 → 抓结果页 → 让用户挑排序偏好
+  → 整理摘要"这一流程写进 markdown body,实际执行交给 LLM,站点差异通过
+  `academic_adapters` 的 URL 模板适配。**不注册为 builtin**,触发词留空,
+  让用户根据使用情况自定义。
 
-两者配合实现了"先有基础能力 + skill 复用机制,再有一个具体示例"的闭环:CNKI
-只是其中一个 adapter,后续要加 PubMed / Google Scholar / arXiv 等只需注册新
-adapter,不必改 skill 本体。
+两者配合实现了"基础能力 + skill 复用机制 + starter 模板"的三件套:CNKI 只是其中
+一个 adapter,后续要加 PubMed / Google Scholar / arXiv 等只需注册新 adapter;
+trigger / 触发条件 / 站点偏好由用户在 starter 基础上派生或覆盖。
 
 ---
 
@@ -113,31 +115,56 @@ adapter,不必改 skill 本体。
 - ⚠️ `tool_sequence` 会被 normalizer 过滤,只保留 `{"tool", "args"}` 形态;不要
   把包含敏感参数的调用(如 API token)塞进去。
 
-### 3.2 `AcademicSearchSkill`(O2)
+### 3.2 `academic-search` SKILL.md 模板(O2,已改为模板形态)
 
-**位置**: `backend/skills/builtin/academic_search.py`
+**位置**:
+- 随包分发: `backend/skills/skill_md/shipped/academic-search/SKILL.md`
+- 文档镜像: `docs/templates/academic-search/SKILL.md`
 
-**触发词**: `["找文献", "检索论文", "学术搜索", "literature search",
-"find papers", "academic search"]`
+**装载机制**:`backend/skills/skill_md/loader.py` 的两个 API 协作:
 
-**剧本要点**(YAGNI,只做骨架):
+- `discover_skill_md_dirs()` 返回**用户层**(env / `$CWD/skills` / `~/.sage/skills`),**不含 shipped** —— 因为 `InprocSkillAdapter` 用它算 `ScriptRunner.allowed_roots`,把 shipped 加进去会放宽脚本沙箱边界。
+- `register_skill_md_skills(registry, dirs=None)` 默认 (`dirs=None`) 走 `discover_skill_md_dirs() + shipped` 拼起来的 effective_dirs,shipped 作为最低优先级 fallback;显式传 `dirs` 时调用方完全掌控,不自动追加 shipped。
 
-1. 接收 `{query, site?, limit?}` 参数;校验 query 非空。
-2. `get_site_adapter(site).build_search_url(query, limit)` → 构造检索结果页 URL。
-3. 从 `context["tools"]` 取 `web_fetch`,抓检索页 HTML/Markdown。
-4. (可选)从 `context["tools"]` 取 `ask_user_question`,让用户挑排序方式
-   (按相关度 / 按时间 / 按引用数)。
-5. 把以上信息 + 抓取到的页面片段(截断到 4000 字符)组装成结构化 prompt,
-   让 LLM 完成**真正的语义提取**(标题/作者/期刊/年份/摘要)。
-6. 返回 `SkillResult(success=True, content=<prompt>, metadata={query, site,
-   limit, sort_pref, search_url, asked_user})`。
+用户在前 3 个目录放同名 skill 自动覆盖 shipped 版本。
+
+**关键设计决策:triggers 留空**
+
+模板 frontmatter:
+```yaml
+---
+name: academic-search
+description: 在文献站点(默认 CNKI)检索学术论文并整理成 Markdown 摘要列表。
+license: Apache-2.0
+compatibility: Requires Python 3.10+,需要 backend.skills.builtin.academic_adapters 模块
+when_to_use: 当用户想查找学术文献、综述、期刊文章,或用"找文献""检索论文""find papers""literature search"等表达时使用
+allowed-tools: web_fetch ask_user_question
+triggers: []
+---
+```
+
+**为什么 triggers 留空而不是预设**:
+- ❌ 预设 `"找文献"` / `"检索论文"` 会**全局占用**这些关键中文短语,后续用户基于
+  同意图做差异化 skill(综述专用 / pubmed 专用 / 按引用排序专用)会被 builtin
+  抢在前面,没法自然沉淀出定制版本
+- ✅ 留空 + `when_to_use` 描述触发语义,让 LLM 在 chat 层根据 description 自己
+  判断是否激活 —— 用户派生 skill 时可自由加 `triggers: [找综述, pubmed 检索]`,
+  与 starter 互不冲突
+
+**模板 body 概要**:
+
+1. **解析查询** —— 从用户消息提取 `query` / `limit` / `site`
+2. **构造检索 URL** —— `get_site_adapter(site).build_search_url(query, limit)`
+3. **抓取结果页** —— 调 `web_fetch` 工具
+4. **(可选)询问排序** —— 调 `ask_user_question`(按相关度/时间/引用数)
+5. **解析并输出** —— LLM 自己解析页面,按偏好输出 Markdown 文献列表
 
 **不做的事**(YAGNI):
 
-- ❌ 不内嵌 CNKI / PubMed / Google Scholar 的 HTML 解析——站点差异通过
-  adapter URL 模板处理,页面解析交给 LLM。
-- ❌ 不管理登录态——adapter 只构造 URL,登录后的结果不在 skill 范围内。
-- ❌ 不引入新工具——复用 `web_fetch` / `ask_user_question` / `memory_save`。
+- ❌ 不内嵌 HTML 解析——LLM 解析更稳,站点改版也不破
+- ❌ 不实现 PubMed / Scholar / arXiv adapter——扩展点留好
+- ❌ 不管理登录态——adapter 只构造公开检索页
+- ❌ 不预设 triggers——让用户基于此模板自定义
 
 ### 3.3 `academic_adapters` 注册表
 
@@ -177,43 +204,62 @@ AcademicSearchSkill(site="pubmed")  # 或 params={"site": "pubmed"}
 注册表是简单的 `dict[str, AcademicSiteAdapter]`,**没有 plugin 系统**(真有 N
 个站点再升级)。
 
+### 3.4 模板怎么变成用户专属版本
+
+starter SKILL.md 是**只读模板**,4 条路径可派生自定义版本:
+
+| 路径 | 操作 | 适用场景 |
+| --- | --- | --- |
+| **A. 编辑同名覆盖** | 把 starter 复制到 `~/.sage/skills/academic-search/SKILL.md`,改 triggers / when_to_use / 步骤 | 想调整 starter 的默认行为(如换默认 site = pubmed) |
+| **B. 派生新 skill** | 复制整个目录为 `~/.sage/skills/my-cnki-survey/SKILL.md`,改 `name` + 自定 triggers | 想基于学术检索做差异化变体(综述专用 / 期刊专用 / pubmed 专用) |
+| **C. skill_save 沉淀** | 跑通一次后调 `skill_save` 工具,LLM 把工具序列沉淀为草稿,经人工 review | 想把"我这次怎么用的"复刻为可复用 skill |
+| **D. 写 Python skill** | 继承 `AcademicSearchSkill` 类(库代码保留),自定义 `triggers` / `execute()`,然后 `registry.register()` | 高级用户想加 builtin 行为(例:加缓存、加并发抓取) |
+
+路径 A/B 的优先级由 `register_skill_md_skills()` 决定:`$SAGE_SKILLS_DIR` > `$CWD/skills` >
+`~/.sage/skills` > shipped,前 3 个任何同名 skill 自动覆盖 shipped。
+
+> **安全注意**:`ScriptRunner.allowed_roots` **不**包含 shipped 目录 —— 只用
+> `discover_skill_md_dirs()` 算根,避免把 shipped SKILL.md 模板路径纳入脚本沙箱
+> 允许根。这点由 `discover_skill_md_dirs()` 的契约保证(明确不含 shipped)。
+
+> **设计意图**:shipped 只装"装包即用"的 starter,**不预设触发词**,把
+> "找文献 / 检索论文"等关键中文短语留给用户基于真实使用情况派生定制版。
+
 ---
 
 ## 4. 完整示例对话
 
 > **用户**: 帮我找 5 篇大语言模型综述
 >
-> **LLM**: (检测到触发词"找文献",调用 `AcademicSearchSkill.execute(
-> params={"query": "大语言模型综述", "limit": 5},
-> context={"tools": {"web_fetch": ..., "ask_user_question": ...}})`)
+> **LLM**: (读到 shipped `academic-search/SKILL.md`,看 `when_to_use` 命中
+> 用户意图,按 body 步骤执行)
 >
-> **Skill**:
-> 1. `get_site_adapter("cnki").build_search_url("大语言模型综述", limit=5)`
->    → `https://www.cnki.net/old/kns/brief/default_result.aspx?QueryID=0&
+> **Skill 流程**:
+> 1. 解析 → `query="大语言模型综述"`, `limit=5`
+> 2. URL → `get_site_adapter("cnki").build_search_url("大语言模型综述", limit=5)`
+>    = `https://www.cnki.net/old/kns/brief/default_result.aspx?QueryID=0&
 >    Txt=...&t=5`
-> 2. `web_fetch.execute(url=...)` → 拿到结果页 HTML
-> 3. `ask_user_question.execute(question="已从 cnki 检索到「大语言模型综述」的
->    结果,如何排序?", options=["按相关度", "按时间", "按引用数"])`
->    → 用户答"按相关度"
-> 4. 组装 prompt 返回 SkillResult
->
-> **LLM**: 解析结果页后,输出 5 篇文献的 Markdown 列表(标题 / 作者 / 期刊 /
-> 年份 / 摘要)。
+> 3. `web_fetch(url=...)` → 拿到结果页 HTML
+> 4. `ask_user_question("已从 cnki 检索到「大语言模型综述」的结果,如何排序?",
+>    ["按相关度", "按时间", "按引用数"])` → 用户答"按相关度"
+> 5. LLM 自己解析页面,按用户偏好输出 5 篇综述的 Markdown 列表
+>    (标题 / 作者 / 期刊 / 年份 / 摘要)
 >
 > **用户**: 这个流程挺好的,以后我每次想找文献都能用。帮我把这个流程存为 skill
-> 吧,叫 `academic-search-cnki`。
+> 吧,叫 `academic-search-cnki`,触发词加"LLM 综述"和"大模型 survey"。
 >
 > **LLM**: (检测到"存为 skill"触发词,先确认 when_to_use,然后调用
 > `skill_save.execute(name="academic-search-cnki", description="在 CNKI 上检索
 > 学术文献并整理摘要", when_to_use="当用户需要检索 CNKI 上的学术论文并按主题
-> 整理摘要时使用", tool_sequence=[{"tool": "web_fetch", ...}, {"tool":
-> "ask_user_question", ...}], session_id="sess-...")`)
+> 整理摘要时使用,特别是 LLM 综述/大模型 survey 时", tool_sequence=[{"tool":
+> "web_fetch", ...}, {"tool": "ask_user_question", ...}], session_id="sess-...")`)
 >
 > **Skill**: 走 review pipeline → SQLite 落盘 → 返回
 > `draft_id="draft-abc123"`。
 >
 > **LLM**: ✅ 草稿已保存到 review 队列,`draft_id=draft-abc123`,等待人工审核。
-> 审核通过后下次就能直接复用这个 skill。
+> 审核通过后下次就能直接复用这个 skill,而且**不会**和 shipped
+> `academic-search` 冲突(triggers 不同,`when_to_use` 描述更精确)。
 
 ---
 
@@ -251,8 +297,9 @@ AcademicSearchSkill(site="pubmed")  # 或 params={"site": "pubmed"}
 | 实现 N 个站点的 adapter(PubMed / Scholar / arXiv) | YAGNI;扩展点已留好,按需加 |
 | 自动 `ToolExecutionContext.tool_calls` 字段 | 当前 tool 调用上下文是隐式的;显式字段属于下一次重构 |
 | skill 自动审核(LLM self-review 后直接 approved) | 必须人工 review;trust LLM to review itself 是 anti-pattern |
-| `academic-search` skill 注册为 builtin 自动加载 | 当前靠触发词匹配,LLM 在 `find papers` 时主动调用;不强行 inject 到系统 prompt |
+| **`academic-search` 注册为 builtin 自动加载** | **占"找文献 / 检索论文"等关键触发词,后续用户派生定制版会被抢占。改为 shipped SKILL.md starter,triggers 留空,留出空间给用户自定义** |
 | Adapter 的 schema 校验(`Pydantic` 模型) | dict 注册足够;真有 N 个站点再升级 |
+| 给 starter 预设触发词 | 同上;让用户基于真实使用情况派生 |
 
 ---
 
@@ -261,5 +308,6 @@ AcademicSearchSkill(site="pubmed")  # 或 params={"site": "pubmed"}
 | 范围 | 文件 | 测试数 |
 | --- | --- | --- |
 | `CNKIAdapter` URL 构造 / `get_site_adapter` 注册 | `backend/tests/unit/test_academic_adapters.py` | 9 |
-| `AcademicSearchSkill` schema / happy path / 失败模式 / 自定义 site | `backend/tests/unit/test_academic_search.py` | 8 |
+| `AcademicSearchSkill` schema / happy path / 失败模式 / 自定义 site(库代码,未注册) | `backend/tests/unit/test_academic_search.py` | 8 |
+| **shipped SKILL.md 模板 + discover/register 分离 + register fallback** | `backend/tests/unit/test_skill_md_loader.py` | **3 新增** |
 | `skill_save` 端到端 pipeline(真 review + 真 SQLite + fake LLM) | `backend/tests/integration/test_skill_save_pipeline.py` | 1 |

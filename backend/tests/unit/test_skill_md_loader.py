@@ -101,6 +101,117 @@ def test_discover_dirs_includes_cwd_skills(tmp_path, monkeypatch):
     assert cwd_skills.resolve() in result
 
 
+def test_discover_dirs_does_not_include_shipped(tmp_path, monkeypatch):
+    """``discover_skill_md_dirs()`` 只返回用户层(env/cwd/user),不包含 shipped。
+
+    shipped 是 ``register_skill_md_skills()`` 的兜底装载路径,**不**进入
+    ``ScriptRunner.allowed_roots`` (避免放宽脚本沙箱边界)。
+    """
+    monkeypatch.setenv("SAGE_SKILLS_DIR", "")
+    monkeypatch.chdir(tmp_path)
+
+    result = [Path(d).resolve() for d in discover_skill_md_dirs()]
+    shipped_resolved = (Path(skill_md_loader.__file__).parent / "shipped").resolve()
+    assert shipped_resolved not in result
+
+
+def test_register_skill_md_skills_appends_shipped_as_fallback(tmp_path, monkeypatch):
+    """``register_skill_md_skills(registry, dirs=None)`` 会自动拼接 shipped 作为最低优先级 fallback。
+
+    即使 env/cwd/user 三个高层目录都是空的,shipped starter 仍然会被
+    装载到 registry —— 这是 shipped 设计的初衷: 装包即用。
+    """
+    monkeypatch.setenv("SAGE_SKILLS_DIR", "")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "pathlib.Path.home", classmethod(lambda cls: tmp_path)
+    )  # ~/.sage/skills 不存在
+
+    registry = SkillRegistry()
+    register_skill_md_skills(registry, dirs=None)
+    assert registry.exists("academic-search"), (
+        "register_skill_md_skills 没把 shipped academic-search 兜底装载,"
+        "说明 fallback 链路断了"
+    )
+
+
+def test_register_skill_md_skills_no_shipped_when_dirs_explicit(tmp_path):
+    """显式传 dirs 时,``register_skill_md_skills()`` 不自动追加 shipped —— 调用方完全掌控。"""
+    # 在 tmp_path 写一个 user-only skill,调 register 时显式传 dirs
+    user_skill_dir = tmp_path / "user-skill"
+    user_skill_dir.mkdir()
+    (user_skill_dir / "SKILL.md").write_text(
+        "---\nname: user-skill\ndescription: user\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    registry = SkillRegistry()
+    register_skill_md_skills(registry, dirs=[str(tmp_path)])
+    assert registry.exists("user-skill")
+    # shipped academic-search 在 tmp_path 里没有 → 不该被装载
+    assert not registry.exists("academic-search")
+
+
+def test_shipped_academic_search_skill_md_parses():
+    """随包分发的 academic-search/SKILL.md 是合法 spec-compliant SKILL.md。
+
+    frontmatter 字段约定:
+      - ``when_to_use`` 是主键(下划线),``when-to-use`` 是别名
+      - ``allowed-tools`` 必须连字符,无别名
+    """
+    from backend.skills.skill_md.frontmatter import parse_file
+
+    shipped = Path(skill_md_loader.__file__).parent / "shipped" / "academic-search" / "SKILL.md"
+    assert shipped.is_file(), f"shipped SKILL.md 缺失: {shipped}"
+
+    meta, body = parse_file(shipped)
+    # 必填字段
+    assert meta["name"] == "academic-search"
+    assert isinstance(meta.get("description"), str)
+    assert meta.get("description"), "description 不能为空字符串"
+    # 关键:triggers 必须留空,避免占用"找文献 / 检索论文"
+    assert meta.get("triggers", []) == []
+    # when_to_use 必须含触发语义,让 LLM 自检激活(下划线主键)
+    assert "文献" in meta["when_to_use"] or "论文" in meta["when_to_use"]
+    assert "find papers" in meta["when_to_use"] or "literature search" in meta["when_to_use"]
+    # 允许使用的工具白名单(连字符 key)
+    assert "web_fetch" in meta["allowed-tools"]
+    assert "ask_user_question" in meta["allowed-tools"]
+    # spec optional 字段
+    assert meta.get("license") == "Apache-2.0"
+    assert meta.get("compatibility") is not None
+    assert "Python 3.10" in meta["compatibility"]
+    # body 必须有清晰的步骤说明
+    assert "## 步骤" in body
+    assert "学术检索" in body
+
+
+def test_register_skill_md_skills_loads_shipped_academic_search(tmp_path, monkeypatch):
+    """register_skill_md_skills() 能识别随包分发的 academic-search 模板。"""
+    # 清空 env/cwd/user 三个高层目录,让 discover 只剩 shipped
+    monkeypatch.setenv("SAGE_SKILLS_DIR", "")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "pathlib.Path.home", classmethod(lambda cls: tmp_path)
+    )  # ~/.sage/skills 不存在 → 不出现
+
+    registry = SkillRegistry()
+    register_skill_md_skills(registry, dirs=None)
+    # shipped SKILL.md 应该被加载
+    assert registry.exists("academic-search"), (
+        "shipped academic-search/SKILL.md 未被 register_skill_md_skills 加载,"
+        "说明 shipped 目录未正确接入 discover_skill_md_dirs()"
+    )
+    skill = registry.get("academic-search")
+    # 触发词留空 → schema fallback 用 name.lower()
+    assert skill.triggers == ["academic-search"]
+    # execute 返回成功 + body
+    result = skill.execute(params={}, context={})
+    assert result.success is True
+    assert "学术检索" in result.content
+    assert result.metadata["source"] == "skillmd"
+
+
 # =====================================================================
 # SkillMdHotLoader — scan_and_load
 # =====================================================================
