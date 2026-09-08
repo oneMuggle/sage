@@ -131,6 +131,16 @@ if (!gotSingleInstanceLock) {
   process.exit(0);
 }
 
+// 二次启动时聚焦/还原已有主窗口。没有这个处理器, 双击图标会静默退出,
+// 用户观感是"点了没反应"。
+app.on('second-instance', () => {
+  const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+});
+
 // Window dimensions
 const DEFAULT_WINDOW_WIDTH = 1280;
 const DEFAULT_WINDOW_HEIGHT = 800;
@@ -685,6 +695,19 @@ function isTrustedRenderer(sender: Electron.WebContents): boolean {
   return senderWindow === mainWindow && isTrustedRendererUrl(sender.getURL());
 }
 
+/**
+ * 外链 scheme 白名单: 仅 http/https 交给 OS 打开。
+ * 被拦截的导航/弹窗若不校验 scheme, file://、smb:// 或任意自定义协议
+ * 都会被递交 OS 处理 —— 渲染层一旦出现恶意链接即成攻击面。
+ */
+function openExternalSafely(url: string): void {
+  if (!/^https?:\/\//i.test(url)) {
+    logger.warn('main: blocked non-http(s) openExternal', { url: url.slice(0, 200) });
+    return;
+  }
+  shell.openExternal(url).catch(() => undefined);
+}
+
 function createMainWindow(): void {
   // Platform-specific titlebar configuration:
   // - macOS: hide traffic light area, custom titlebar from y=28
@@ -713,8 +736,14 @@ function createMainWindow(): void {
 
   // Open external links in OS browser, not in-app
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url).catch(() => undefined);
+    openExternalSafely(url);
     return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedRendererUrl(url)) {
+      event.preventDefault();
+      openExternalSafely(url);
+    }
   });
 
   if (isDev) {
@@ -1685,7 +1714,7 @@ app.whenReady().then(async () => {
     // Step 4: replace bare app.quit() with 3-button startup-failure dialog.
     // User can open logs, retry the health check, or quit.
     const choice = await showStartupFailureDialog({
-      reason: '后端服务在 30 秒内未响应',
+      reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应`,
       detail: `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。`,
     });
     if (choice === 'retry') {

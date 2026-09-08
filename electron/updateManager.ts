@@ -9,6 +9,7 @@ import type { UpdateState } from './updateState';
 import { ConfigManager } from './updateConfig';
 import type { UpdateChannel, UpdateConfig, UpdateStrategy } from './updateConfig';
 import { LauncherHealthChecker } from './updateHealthChecker';
+import { fetchCompat } from './fetchCompat';
 
 export interface CheckResult {
   updateAvailable: boolean;
@@ -146,7 +147,7 @@ export class UpdateManager {
 
     try {
       // Fetch latest manifest from server
-      const response = await fetch(
+      const response = await fetchCompat(
         `${config.updateServerUrl}/api/v1/updates/latest?channel=${config.channel}`,
       );
 
@@ -633,7 +634,7 @@ export class UpdateManager {
   private async reportRollbackEvent(reason: string, state: UpdateState): Promise<void> {
     try {
       const config = await this.configManager.getConfig();
-      await fetch(`${config.updateServerUrl}/api/v1/updates/rollbacks`, {
+      await fetchCompat(`${config.updateServerUrl}/api/v1/updates/rollbacks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
