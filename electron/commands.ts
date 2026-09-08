@@ -122,11 +122,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   session_fork: {
     method: 'POST',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/fork`,
-    // 后端 ForkSessionRequest 用 snake_case 字段；省略的参数不下发
+    // 后端 ForkSessionRequest 用 snake_case 字段；省略的参数不下发。
+    // beforeMessage (U5'): 开区间截断——复制 atMessageId 之前的消息。
     body: (a) => {
       const body: Record<string, unknown> = {};
       if (a.atMessageId != null) body.at_message_id = a.atMessageId;
       if (a.title != null) body.title = a.title;
+      if (a.beforeMessage != null) body.before_message = a.beforeMessage;
       return body;
     },
   },

@@ -56,6 +56,16 @@ interface ChatInputProps {
   disabled?: boolean;
   placeholder?: string;
   /**
+   * U5' (对标增强第五轮批次 A): 编辑重发——外部注入输入框内容。
+   * `nonce` 变化时用 `text` 覆盖当前草稿（点击同一条消息两次也能重注入）。
+   */
+  injectedDraft?: { text: string; nonce: number } | null;
+  /**
+   * U5': 编辑重发提示条。非 null 时在输入卡片上方渲染"正在编辑重发"
+   * 横条，onCancel 由 Chat 页清除编辑态。
+   */
+  editResendNotice?: { onCancel: () => void } | null;
+  /**
    * Optional workspace root — kept for backwards-compat with callers that
    * haven't migrated to the SessionWorkspaceProvider yet. When the
    * provider is mounted (Chat page via SessionWorkspaceProvider), the
@@ -83,6 +93,8 @@ export function ChatInput({
   disabled = false,
   placeholder,
   workspacePath,
+  injectedDraft,
+  editResendNotice,
 }: ChatInputProps) {
   const { t } = useI18n();
 
@@ -98,6 +110,16 @@ export function ChatInput({
 
   // Per-session draft persistence (U13 from OpenWorker)
   const [value, setValue] = useSessionDraft(effectiveSessionId);
+
+  // U5': 编辑重发注入——nonce 变化时用外部文本覆盖当前草稿
+  // （依赖只取 nonce：同一条消息重复点击也要重注入，text 变化不单独触发）。
+  const injectedNonce = injectedDraft?.nonce;
+  useEffect(() => {
+    if (injectedDraft && injectedNonce != null) {
+      setValue(injectedDraft.text);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只由 nonce 驱动
+  }, [injectedNonce]);
 
   const [cursorPos, setCursorPos] = useState(0);
   const [knowledgeRefs, setKnowledgeRefs] = useState<{ id: string; title: string }[]>([]);
@@ -394,7 +416,24 @@ export function ChatInput({
   void effectiveSessionId;
 
   return (
-    <InputCard
+    <div className="flex flex-col">
+      {editResendNotice && (
+        <div
+          data-testid="edit-resend-banner"
+          className="mx-4 mb-1 px-3 py-1.5 rounded-t-radius-md bg-primary/10 border border-b-0 border-primary/30 text-xs text-text flex items-center gap-2"
+        >
+          <span className="flex-1">{t('chat.edit_resend_notice')}</span>
+          <button
+            type="button"
+            onClick={editResendNotice.onCancel}
+            aria-label={t('chat.edit_resend_cancel')}
+            className="px-1.5 py-0.5 rounded hover:bg-bg-hover text-text-secondary"
+          >
+            {t('chat.edit_resend_cancel')}
+          </button>
+        </div>
+      )}
+      <InputCard
       value={value}
       onChange={handleChange}
       onSubmit={handleSend}
@@ -459,6 +498,7 @@ export function ChatInput({
         </div>
       }
       hint={t('chat.hint')}
-    />
+      />
+    </div>
   );
 }

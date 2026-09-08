@@ -135,9 +135,17 @@ export const sessionApi = {
   /**
    * M4: 从会话分叉。复制 atMessageId 及之前的消息（缺省全部）到新会话。
    *
+   * U5': `options.beforeMessage` 切换为**开区间**——复制 atMessageId 之前
+   * 的消息（不含本身）；编辑重发据此分叉出被编辑消息之前的前缀。
+   *
    * 刻意**不走 withRetry**：fork 非幂等，重试会创建重复会话。
    */
-  async fork(sessionId: string, atMessageId?: string, title?: string): Promise<Session> {
+  async fork(
+    sessionId: string,
+    atMessageId?: string,
+    title?: string,
+    options?: { beforeMessage?: boolean },
+  ): Promise<Session> {
     if (!isValidSessionId(sessionId)) {
       throw new ApiException({
         error: 'VALIDATION_ERROR',
@@ -146,7 +154,12 @@ export const sessionApi = {
       });
     }
     try {
-      return await invoke<Session>('session_fork', { sessionId, atMessageId, title });
+      return await invoke<Session>('session_fork', {
+        sessionId,
+        atMessageId,
+        title,
+        beforeMessage: options?.beforeMessage,
+      });
     } catch (error) {
       throw handleApiError(error);
     }
