@@ -125,15 +125,12 @@ class TestSuccessPath:
         store = _make_store()
 
         tool = SkillSaveTool()
-        with (
-            patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ),
-            patch(
-                "backend.tools.skill_save_tool.get_skill_draft_store",
-                return_value=store,
-            ),
+        with patch(
+            "backend.tools.skill_save_tool.get_review_service",
+            return_value=service,
+        ), patch(
+            "backend.tools.skill_save_tool.get_skill_draft_store",
+            return_value=store,
         ):
             result = tool.execute(
                 name="academic-search-cnki",
@@ -167,15 +164,12 @@ class TestSuccessPath:
             seq.append(_ok_call(f"later_tool_{i}"))
 
         tool = SkillSaveTool()
-        with (
-            patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ),
-            patch(
-                "backend.tools.skill_save_tool.get_skill_draft_store",
-                return_value=store,
-            ),
+        with patch(
+            "backend.tools.skill_save_tool.get_review_service",
+            return_value=service,
+        ), patch(
+            "backend.tools.skill_save_tool.get_skill_draft_store",
+            return_value=store,
         ):
             result = tool.execute(
                 name="academic-search-cnki",
@@ -198,15 +192,12 @@ class TestSuccessPath:
         store = _make_store()
 
         tool = SkillSaveTool()
-        with (
-            patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ),
-            patch(
-                "backend.tools.skill_save_tool.get_skill_draft_store",
-                return_value=store,
-            ),
+        with patch(
+            "backend.tools.skill_save_tool.get_review_service",
+            return_value=service,
+        ), patch(
+            "backend.tools.skill_save_tool.get_skill_draft_store",
+            return_value=store,
         ):
             tool.execute(
                 name="academic-search-cnki",
@@ -235,15 +226,12 @@ class TestFailureModes:
         store = _make_store()
 
         tool = SkillSaveTool()
-        with (
-            patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ),
-            patch(
-                "backend.tools.skill_save_tool.get_skill_draft_store",
-                return_value=store,
-            ),
+        with patch(
+            "backend.tools.skill_save_tool.get_review_service",
+            return_value=service,
+        ), patch(
+            "backend.tools.skill_save_tool.get_skill_draft_store",
+            return_value=store,
         ):
             result = tool.execute(
                 name="academic-search-cnki",
@@ -266,15 +254,12 @@ class TestFailureModes:
         store.insert = Mock(side_effect=RuntimeError("sqlite locked"))
 
         tool = SkillSaveTool()
-        with (
-            patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ),
-            patch(
-                "backend.tools.skill_save_tool.get_skill_draft_store",
-                return_value=store,
-            ),
+        with patch(
+            "backend.tools.skill_save_tool.get_review_service",
+            return_value=service,
+        ), patch(
+            "backend.tools.skill_save_tool.get_skill_draft_store",
+            return_value=store,
         ):
             result = tool.execute(
                 name="academic-search-cnki",
