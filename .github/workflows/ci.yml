@@ -126,16 +126,19 @@ jobs:
       # PG2.12：双轨回归
       # - 主路径：API_MODE=hex（默认），强制 coverage ≥ 80%，并上传 codecov
       # - 兜底路径：API_MODE=legacy，no-cov 冒烟（continue-on-error，作为安全网）
+      # - xdist 并行：-n auto --dist loadfile —— 按文件分worker,避免跨文件
+      #   全局单例(App registry/DB)互踩; pytest-cov 自动合并各 worker 覆盖率
       - name: Pytest hex (default) with coverage
         shell: bash -el {0}
+        timeout-minutes: 40
         run: |
-          conda run -n sage-backend bash -c "cd backend && pytest --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+          conda run -n sage-backend bash -c "cd backend && pytest -n auto --dist loadfile --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
 
       - name: Pytest legacy (smoke, no-cov)
         shell: bash -el {0}
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
-          conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q"
+          conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile"
         continue-on-error: true # 兜底：legacy 仅作安全网，单测不一致不阻塞 PR
 
       - name: Upload coverage
