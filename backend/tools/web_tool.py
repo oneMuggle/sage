@@ -24,6 +24,21 @@ from . import web_render
 from .base import BaseTool, ToolResult, ToolSchema
 from .web_render import RenderError
 
+# 浏览器级默认请求头。
+# 缺 User-Agent 的请求会被很多站点（小说站 / 学术站 / 论坛）按 bot 拒 403;
+# Accept-Language 让国内站点返回中文页,避免西文 fallback 误判。
+_DEFAULT_HEADERS: Dict[str, str] = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+}
+
 
 class WebSearchTool(BaseTool):
     """网络搜索工具"""
@@ -33,7 +48,10 @@ class WebSearchTool(BaseTool):
 
     def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
         super().__init__(policy=policy)
-        self.client = httpx.Client(timeout=30.0)
+        self.client = httpx.Client(
+            timeout=30.0,
+            headers=_DEFAULT_HEADERS,
+        )
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -179,6 +197,7 @@ class WebFetchTool(BaseTool):
             timeout=30.0,
             follow_redirects=False,
             trust_env=not self._policy.subagent_only,
+            headers=_DEFAULT_HEADERS,
         )
 
     def _effective_network_policy(self) -> NetworkPolicy:
@@ -327,6 +346,12 @@ class WebFetchTool(BaseTool):
             return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
             return "无效的 URL，必须包含 http:// 或 https:// 以及主机名"
+        # hostname 里有空格/控制字符会让 urlparse 把整串当 host,
+        # httpx 会把空格 encode 成 %20 后 DNS 解析报
+        # ``[Errno -2] Name or service not known`` —— 这种错是上游(模型/调用方)
+        # 把域名错误分词产生的,显式拦下比让底层 DNS 失败更易诊断。
+        if any(ch.isspace() or ord(ch) < 0x20 or ord(ch) == 0x7F for ch in parsed.hostname):
+            return "无效的 URL：hostname 含非法字符（空格或控制字符）"
         return None
 
     def _get_with_redirects(
@@ -353,8 +378,20 @@ class WebFetchTool(BaseTool):
                 follow_redirects=False,
                 verify=not network_policy.allows_insecure_tls(current_url),
                 trust_env=not self._policy.subagent_only,
+                headers=_DEFAULT_HEADERS,
             ) as client:
-                request = client.build_request("GET", current_url)
+                # 强制 ``Accept-Encoding: identity`` 禁用 httpx 自动解压。
+                # 部分站点声明 ``Content-Encoding: gzip`` 但响应体实际不是合法
+                # gzip 流(常见于上游 CDN/反代),httpx 解压会抛
+                # ``zlib.error: Error -3 ... incorrect header check``。同款修复
+                # 已在 ``backend/api/llm_proxy_routes.py`` 应用,这里保持一致。
+                # 同时保留 UA 等默认头——重定向后站点只看 hop-by-hop,新 host
+                # 仍按默认头身份访问。
+                request = client.build_request(
+                    "GET",
+                    current_url,
+                    headers={"Accept-Encoding": "identity"},
+                )
                 response = client.send(request, stream=True)
                 try:
                     if response.is_redirect:
