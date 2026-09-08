@@ -29,6 +29,8 @@ dependencies:
       - pytest-cov==5.0.0
       # pytest.ini timeout=120 护栏依赖本插件; --strict-config 下缺插件直接报错
       - pytest-timeout==2.3.1
+      # CI hex/legacy 步骤用 -n auto --dist loadfile 并行(见 ci.yml)
+      - pytest-xdist==3.6.1
       - respx==0.21.1
       # Quality
       - ruff==0.4.4
