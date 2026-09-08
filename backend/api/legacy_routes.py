@@ -21,6 +21,7 @@ _STREAMING_CHUNK_SIZE = 6
 _STREAMING_CHUNK_DELAY_S = 0.04
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Any, Dict, Optional, Set, Union
@@ -2366,15 +2367,29 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # Fix #3 (2026-09-06): 用户确认门控 —— producer 在此暂停,
                     # 等待前端调用 POST /orch/runs/{id}/confirm（用户点击
                     # "开始执行"）。cancel_run 也会唤醒（以取消状态退出）。
-                    # 超时 10 分钟自动取消,避免 producer 永久挂起。
+                    # 超时自动取消,避免 producer 永久挂起。
+                    # SAGE_ORCH_CONFIRM_TIMEOUT: 等待秒数（默认 600）。测试套件
+                    # 里 5 个 multi-mode 集成测试不 confirm,曾各挂满 600s 导致
+                    # CI Backend job 从 ~6min 涨到 ~77min（#1587 起的回归）;
+                    # tests/conftest.py 将其设为 1s,测试走超时取消路径秒过。
+                    confirm_timeout = float(
+                        os.environ.get("SAGE_ORCH_CONFIRM_TIMEOUT", "600")
+                    )
                     confirm_event = asyncio.Event()
                     _RUN_CONFIRM_EVENTS[run_id] = confirm_event
                     try:
                         try:
-                            await asyncio.wait_for(confirm_event.wait(), timeout=600)
-                        except TimeoutError:
+                            await asyncio.wait_for(
+                                confirm_event.wait(), timeout=confirm_timeout
+                            )
+                        except asyncio.TimeoutError:  # noqa: UP041 — win7 跑 py3.8: asyncio.TimeoutError ≠ builtin TimeoutError(3.11 才统一),必须显式接 asyncio 别名
+                            # py3.8(win7): asyncio.TimeoutError ≠ builtin
+                            # TimeoutError(3.11 才统一)——裸 TimeoutError 在
+                            # py38 上接不住,超时会直接炸 producer。
                             logger.warning(
-                                "编排确认超时 (600s)，自动取消 run %s", run_id
+                                "编排确认超时 (%ss)，自动取消 run %s",
+                                confirm_timeout,
+                                run_id,
                             )
                             from backend.data.orch_run_repo import OrchRunRepository
 
@@ -2384,7 +2399,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     "state": "task_review",
                                     "run_id": run_id,
                                     "verdict": "cancelled",
-                                    "summary": "编排计划确认超时（10 分钟无响应），已自动取消",
+                                    "summary": (
+                                        "编排计划确认超时（"
+                                        f"{confirm_timeout:g} 秒无响应），已自动取消"
+                                    ),
                                     "assertions": [],
                                 }
                             )
