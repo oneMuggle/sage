@@ -10,7 +10,7 @@ import { useI18n } from '../shared/lib/i18n';
 
 export function ScheduledTasks() {
   const { t, locale } = useI18n();
-  const { tasks, load, delete: deleteTask, runNow, update } = useScheduledTaskStore();
+  const { tasks, loading, load, delete: deleteTask, runNow, update } = useScheduledTaskStore();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduledTask | undefined>(undefined);
 
@@ -66,7 +66,16 @@ export function ScheduledTasks() {
         </button>
       </header>
 
-      {tasks.length === 0 ? (
+      {/* 初载闪空态修复: store 有 loading 字段但此前未消费, 初次 load 期间
+          tasks.length === 0 会先渲染"暂无任务"再跳成列表。 */}
+      {loading && tasks.length === 0 ? (
+        <div
+          className="flex-1 flex items-center justify-center text-text-secondary text-sm"
+          role="status"
+        >
+          {t('common.loading')}
+        </div>
+      ) : tasks.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-text-secondary text-sm">
           {t('scheduled.empty')}
         </div>
