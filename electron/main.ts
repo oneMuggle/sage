@@ -1065,25 +1065,22 @@ function registerIpcHandlers(): void {
   // live-events P1 附带 (2026-09-07): 审批等待 OS 通知 —— 用户不在窗口前时
   // 子代理/主 agent 的 permission_request 不再被错过。点击通知聚焦窗口。
   // Win7/老系统 Notification 不可用时静默降级（isSupported 守卫）。
-  ipcMain.handle(
-    'sage:notify:approval',
-    (evt, payload: { title?: string; body?: string }) => {
-      if (!isTrustedRenderer(evt.sender)) return { ok: false, reason: 'untrusted' };
-      if (!Notification.isSupported()) return { ok: false, reason: 'unsupported' };
-      const title = String(payload?.title ?? 'Sage 需要你的审批').slice(0, 120);
-      const body = String(payload?.body ?? '').slice(0, 300);
-      const notification = new Notification({ title, body, silent: false });
-      notification.on('click', () => {
-        const win = getSenderWindow(evt);
-        if (!win) return;
-        if (win.isMinimized()) win.restore();
-        win.show();
-        win.focus();
-      });
-      notification.show();
-      return { ok: true };
-    },
-  );
+  ipcMain.handle('sage:notify:approval', (evt, payload: { title?: string; body?: string }) => {
+    if (!isTrustedRenderer(evt.sender)) return { ok: false, reason: 'untrusted' };
+    if (!Notification.isSupported()) return { ok: false, reason: 'unsupported' };
+    const title = String(payload?.title ?? 'Sage 需要你的审批').slice(0, 120);
+    const body = String(payload?.body ?? '').slice(0, 300);
+    const notification = new Notification({ title, body, silent: false });
+    notification.on('click', () => {
+      const win = getSenderWindow(evt);
+      if (!win) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    });
+    notification.show();
+    return { ok: true };
+  });
 
   ipcMain.handle('sage:window-controls:minimize', (evt) => {
     const win = getSenderWindow(evt);
@@ -1474,7 +1471,9 @@ app.whenReady().then(async () => {
   // Phase 4: pre-launch self-check (skippable via SAGE_DOCTOR_ON_START=false for CI).
   // fail-open by design: doctor never blocks the app from launching — its output
   // is captured into the NDJSON startup log so the user can diagnose degraded
-  // experiences via Show Logs. Hard 5s timeout is enforced inside runDoctorCheck.
+  // experiences via Show Logs. Default 20s cap (was 5s pre-2026-09-08) lives in
+  // doctor.ts and can be tuned per-build via SAGE_DOCTOR_TIMEOUT_MS
+  // (CI smoke paths tighten it; alpha13+ cold-start jieba dict load needs it).
   if (process.env.SAGE_DOCTOR_ON_START !== 'false') {
     try {
       // alpha.12-win7: derive the doctor launch plan from the supervisor plan

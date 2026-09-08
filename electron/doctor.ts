@@ -125,7 +125,27 @@ export interface DoctorSummary {
   package_root?: string;
 }
 
-const DEFAULT_TIMEOUT_MS = 5000;
+// 2026-09-08 (cherry from main PR #503): default raised from 5s → 20s to
+// match ``backend.cli.doctor._try_import_backend``'s own 20s probe budget.
+// Alpha9 doctor ran in <200ms, but alpha13+ adds heavy check expansion
+// (hooks/render, mcp, secret_box, web_fetch httpx probe, …) plus jieba
+// dict load via ``import backend.main``; on a packaged Win32 cold start
+// the full subprocess takes ~8-10s, so 5s was false-positive timeout noise.
+// The cap can still be tightened via ``SAGE_DOCTOR_TIMEOUT_MS`` for CI smoke.
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+function resolveTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.SAGE_DOCTOR_TIMEOUT_MS;
+  if (raw === undefined || raw === '') return DEFAULT_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_TIMEOUT_MS;
+  return parsed;
+}
+
+// Exported for unit tests (2026-09-08 cherry from main PR #503).
+// Use only from test files; runtime callers should let runDoctorCheck
+// apply the default.
+export const __testing__ = { resolveTimeoutMs };
 
 interface ParsedDoctorOutput {
   summary?: DoctorSummary['summary'];
@@ -153,8 +173,9 @@ function parseJsonOutput(stdout: string): ParsedDoctorOutput | undefined {
  *
  * The subprocess always runs with ``--json`` so we get a deterministic
  * payload; if JSON parsing fails we still return ``raw`` for the caller to
- * surface in logs. The 5s default cap is generous: a healthy doctor run
- * completes in <200ms, so the timeout only kicks in on broken-installers.
+ * surface in logs. The 20s default cap (2026-09-08, was 5s in alpha9) leaves
+ * ~4x headroom for cold-start jieba dict load on Win32; override via
+ * ``SAGE_DOCTOR_TIMEOUT_MS`` env for CI smoke paths.
  *
  * Never throws — all failure modes (spawn error, timeout, non-zero exit,
  * unparseable output) collapse into a structured status field on the
@@ -163,7 +184,7 @@ function parseJsonOutput(stdout: string): ParsedDoctorOutput | undefined {
 export async function runDoctorCheck(
   pythonBinOrOptions: string | DoctorLaunchOptions,
   projectRoot?: string,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  timeoutMs: number = resolveTimeoutMs(),
   extraEnv: Record<string, string> = {},
 ): Promise<DoctorSummary> {
   const options: DoctorLaunchOptions =
