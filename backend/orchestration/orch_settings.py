@@ -19,6 +19,7 @@ _RAW_KEYS = {
     "maxRetries": "max_retries",
     "maxLaneIterations": "max_lane_iterations",
     "maxSubagentIterations": "max_subagent_iterations",
+    "taskTimeoutSeconds": "subagent_task_timeout_s",
     "scratchRoot": "scratch_root",
     "worktreeIsolation": "worktree_isolation",
     "subagentApprovalMode": "subagent_approval_mode",
@@ -42,6 +43,11 @@ class OrchSettings:
     #: run 级可在任务树头部经 ``POST /orch/runs/{id}/approval-mode`` 随时
     #: 切换（仅当前 run 生效，不持久化）。
     subagent_approval_mode: str = "ask"
+    #: O2 (2026-09-08): 编排子任务 wall-clock 超时（秒）。0 = 关闭。
+    #: 此前子任务只受 profile 迭代上限 × LLM 单请求超时兜底，无墙钟上限 ——
+    #: 卡死的子任务会占住并发信号量拖垮整个 run。超时经 asyncio.wait_for
+    #: 取消内层协程（与 agent_tool 异步通路的 L12 根修同一语义）。
+    subagent_task_timeout_s: int = 900
 
 
 def load_orch_settings() -> OrchSettings:

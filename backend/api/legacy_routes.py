@@ -458,6 +458,7 @@ def _build_orchestration_dispatcher(
     llm_config: Optional[Dict[str, Any]],
     total_tasks: Optional[int],
     workspace_root: Optional[str],
+    session_id: Optional[str] = None,
 ) -> ChatDispatcher:
     """构造 ChatDispatcher；非法 run_id 的 ValueError 重抛为前端可读文案。
 
@@ -476,6 +477,7 @@ def _build_orchestration_dispatcher(
             total_tasks=total_tasks,
             settings=load_orch_settings(),
             workspace_root=workspace_root,
+            session_id=session_id,
         )
     except ValueError as exc:
         raise ValueError(
@@ -2237,6 +2239,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         llm_config=llm_config,
                         total_tasks=len(plan_items),
                         workspace_root=dispatcher_workspace_root,
+                        # O3 (2026-09-08): 会话归因 —— 子代理用量计入本会话。
+                        session_id=data.session_id,
                     )
                     # P2-9 (2026-08-14): 进程内注册表登记 —— 长连接期间 run 级
                     # cancel 端点能定位到本 dispatcher 并置位取消事件。
@@ -2259,6 +2263,29 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         and agent.profile.get("tools") is not None
                     ):
                         agent.profile["tools"].append("dispatch_subagents")
+                    # O4 (2026-09-08): observe_subagents 注册 —— conductor 主动
+                    # 轮询子任务进度的只读工具（此前类已实现但从未接线，生产
+                    # 不可用）。快照通道未装配时降级不注册，不阻塞编排。
+                    try:
+                        from backend.api.orch_run_control import get_snapshot_store
+                        from backend.tools.observe_tool import ObserveSubagentsTool
+
+                        snapshot_store = get_snapshot_store()
+                        if snapshot_store is not None:
+                            agent.tool_registry.register(
+                                ObserveSubagentsTool(
+                                    snapshot_store, default_run_id=run_id
+                                )
+                            )
+                            if (
+                                agent.profile is not None
+                                and agent.profile.get("tools") is not None
+                            ):
+                                agent.profile["tools"].append("observe_subagents")
+                    except Exception as obs_exc:  # noqa: BLE001 — 观测降级
+                        logger.warning(
+                            "observe_subagents 注册失败（跳过）: %s", obs_exc
+                        )
                     # 计划块注入 system prompt —— conductor 依据计划调用工具
                     # 注: system_content 已在插入点之前由 build_system_base()
                     # 赋值（L1598），这里只追加计划块，不再重新赋值（否则覆盖）。
