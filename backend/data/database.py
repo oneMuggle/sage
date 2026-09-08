@@ -577,6 +577,16 @@ class Database:
             ON artifacts(session_id, created_at DESC)
         """)
 
+        # B4 (2026-09-09): 会话 todo 清单持久化 —— todo_write 全量替换时
+        # write-through，重启/重开会话后任务板可恢复（此前纯内存，重启即失）。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_todos (
+                session_id TEXT PRIMARY KEY,
+                todos_json TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+
         # L8 用量事件表 (对标增强第二轮批次 C): 每次成功 LLM 调用一行,
         # 支撑会话级用量/成本显示 (U14) 与花费限额 (F5)。内存 tracker
         # (usage_tracker) 重启即失, 此表为持久事实源。

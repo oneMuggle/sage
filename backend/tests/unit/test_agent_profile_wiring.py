@@ -301,3 +301,12 @@ def test_office_prompt_mentions_markdown() -> None:
 def test_office_prompt_mentions_font_family() -> None:
     """system prompt 应告知 LLM 可以指定中文字体。"""
     assert "font_family" in _OFFICE_CREATE_CAPABILITY_PROMPT or "字体" in _OFFICE_CREATE_CAPABILITY_PROMPT
+
+
+def test_build_system_base_has_todo_guidance():
+    """D1 (2026-09-09): system prompt 携带任务拆解/todo 引导（此前唯一引导
+    来自 todo_write 工具 description，复杂任务的清单维护全靠模型自觉）。"""
+    prompt = build_system_base()
+    assert "todo_write" in prompt
+    assert "in_progress" in prompt
+    assert "任务清单" in prompt
