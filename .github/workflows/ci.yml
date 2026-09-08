@@ -62,10 +62,19 @@ jobs:
         run: |
           conda run -n sage-backend-py38 ruff check backend/
 
+      # xdist 并行:同 main(见 backend job 注释)。test_event_loop_blocking
+      # 的 P99 延迟断言对 CPU 争用敏感,单独串行跑(--cov-append 保持覆盖率合并)
       - name: Pytest (py38, hex mode) with coverage
         shell: bash -el {0}
+        timeout-minutes: 40
         run: |
-          conda run -n sage-backend-py38 bash -c "cd backend && pytest --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+          conda run -n sage-backend-py38 bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+
+      - name: Pytest serial (latency-sensitive file)
+        shell: bash -el {0}
+        timeout-minutes: 10
+        run: |
+          conda run -n sage-backend-py38 bash -c "cd backend && pytest tests/integration/test_event_loop_blocking.py --cov --cov-append --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
 
       - name: Upload coverage
         if: always()

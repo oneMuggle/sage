@@ -2382,7 +2382,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             await asyncio.wait_for(
                                 confirm_event.wait(), timeout=confirm_timeout
                             )
-                        except TimeoutError:
+                        except asyncio.TimeoutError:  # noqa: UP041 — win7 跑 py3.8: asyncio.TimeoutError ≠ builtin TimeoutError(3.11 才统一),必须显式接 asyncio 别名
+                            # py3.8(win7): asyncio.TimeoutError ≠ builtin
+                            # TimeoutError(3.11 才统一)——裸 TimeoutError 在
+                            # py38 上接不住,超时会直接炸 producer。
                             logger.warning(
                                 "编排确认超时 (%ss)，自动取消 run %s",
                                 confirm_timeout,
