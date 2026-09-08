@@ -1,5 +1,5 @@
 // electron/__tests__/doctor.test.ts
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { Readable } from 'node:stream';
 
@@ -227,5 +227,58 @@ describe('runDoctorCheck cwd + interface', () => {
       args: ['-m', 'backend.cli.doctor', '--json'],
     };
     expect(opts.args).toEqual(['-m', 'backend.cli.doctor', '--json']);
+  });
+});
+
+// 2026-09-08 (cherry from main PR #503): SAGE_DOCTOR_TIMEOUT_MS env override.
+// Alpha13+ doctor takes ~8-10s on packaged Win32 cold start (jieba dict +
+// 17-check expansion); the Electron-side default is now 20s (was 5s).
+// CI smoke paths tighten via the env var. resolveTimeoutMs is exported
+// from doctor.ts as a pure function so we can unit-test it without the
+// child_process mock dance.
+import { __testing__ } from '../doctor';
+
+describe('resolveTimeoutMs (2026-09-08 cherry from main PR #503)', () => {
+  const ORIGINAL_ENV = process.env.SAGE_DOCTOR_TIMEOUT_MS;
+  const { resolveTimeoutMs } = __testing__;
+
+  afterEach(() => {
+    if (ORIGINAL_ENV === undefined) {
+      delete process.env.SAGE_DOCTOR_TIMEOUT_MS;
+    } else {
+      process.env.SAGE_DOCTOR_TIMEOUT_MS = ORIGINAL_ENV;
+    }
+  });
+
+  it('env unset → returns 20_000 (default after alpha13)', () => {
+    delete process.env.SAGE_DOCTOR_TIMEOUT_MS;
+    expect(resolveTimeoutMs()).toBe(20_000);
+  });
+
+  it('env=3000 → returns 3000 (CI smoke tightening)', () => {
+    process.env.SAGE_DOCTOR_TIMEOUT_MS = '3000';
+    expect(resolveTimeoutMs()).toBe(3_000);
+  });
+
+  it('env=malformed → falls back to default 20_000', () => {
+    process.env.SAGE_DOCTOR_TIMEOUT_MS = 'not-a-number';
+    expect(resolveTimeoutMs()).toBe(20_000);
+  });
+
+  it('env=0 → falls back to default (does NOT silently disable timeout)', () => {
+    // Number.parseInt('0') = 0 → setTimeout(cb, 0) fires next tick → no
+    // timeout. Guard rejects <= 0 so this can't happen.
+    process.env.SAGE_DOCTOR_TIMEOUT_MS = '0';
+    expect(resolveTimeoutMs()).toBe(20_000);
+  });
+
+  it('env=empty string → falls back to default', () => {
+    process.env.SAGE_DOCTOR_TIMEOUT_MS = '';
+    expect(resolveTimeoutMs()).toBe(20_000);
+  });
+
+  it('env=negative → falls back to default', () => {
+    process.env.SAGE_DOCTOR_TIMEOUT_MS = '-1000';
+    expect(resolveTimeoutMs()).toBe(20_000);
   });
 });

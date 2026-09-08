@@ -468,7 +468,7 @@ export async function runDoctorCheck(
 **关键设计**:
 
 - 永远不抛异常 — 所有失败模式（spawn 错、超时、非零退出码、JSON 解析失败）折叠成 `DoctorSummary.status` 字段
-- 5 秒硬超时（健康环境 doctor < 200ms，超时只在 broken-installer 场景触发）
+- 20 秒硬超时（2026-09-08 从 5s 上调以容纳 alpha13+ 检查集 + jieba 词典冷启动；可通过 `SAGE_DOCTOR_TIMEOUT_MS` env 覆盖，CI smoke 通常收紧到 3-5s）
 - SIGTERM → 500ms grace → SIGKILL 双保险（Win7 上 SIGTERM 可被忽略）
 - `killTimer.unref()` 保证不阻止 Node 进程退出
 
