@@ -27,6 +27,8 @@ dependencies:
       - pytest==7.4.4
       - pytest-asyncio==0.23.3
       - pytest-cov==5.0.0
+      # pytest.ini timeout=120 护栏依赖本插件; --strict-config 下缺插件直接报错
+      - pytest-timeout==2.3.1
       - respx==0.21.1
       # Quality
       - ruff==0.4.4
