@@ -9,6 +9,7 @@ import {
   GitBranch,
   Eye,
   EyeOff,
+  Pencil,
 } from 'lucide-react';
 import { memo } from 'react';
 import { useEffect, useState } from 'react';
@@ -21,6 +22,7 @@ import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 
+import { MermaidBlock } from './MermaidBlock';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
 
 interface MessageProps {
@@ -32,6 +34,8 @@ interface MessageProps {
   isStreaming?: boolean;
   /** M4: 从此消息分叉新会话（非破坏性，无需确认） */
   onFork?: (messageId: string) => void;
+  /** U5': 编辑此条 user 消息并重发（分叉其前缀，原会话保留） */
+  onEditResend?: (messageId: string) => void;
 }
 
 /** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
@@ -156,6 +160,7 @@ function MessageComponent({
   attachments,
   isStreaming,
   onFork,
+  onEditResend,
 }: MessageProps) {
   const { t } = useI18n();
   const isUser = message.role === 'user';
@@ -164,6 +169,8 @@ function MessageComponent({
   const toolCalls: ToolCall[] = message.tool_calls ?? [];
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
+  // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）
+  const canEditResend = Boolean(onEditResend) && isUser;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
@@ -302,6 +309,10 @@ function MessageComponent({
                         </code>
                       );
                     }
+                    // U7': Mermaid 图表渲染（动态加载，失败回退源码展示）
+                    if (lang === 'mermaid') {
+                      return <MermaidBlock code={content} />;
+                    }
                     return <CodeBlock language={lang}>{content}</CodeBlock>;
                   },
                   pre({ children }) {
@@ -390,7 +401,7 @@ function MessageComponent({
         </div>
 
         {/* Action buttons */}
-        {(onFeedback || canFork) && (
+        {(onFeedback || canFork || canEditResend) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
             {onFeedback && (
               <>
@@ -416,6 +427,17 @@ function MessageComponent({
                   <ThumbsDown className="w-4 h-4" />
                 </button>
               </>
+            )}
+            {canEditResend && (
+              <button
+                onClick={() => onEditResend?.(message.id)}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.edit_resend')}
+                aria-label={t('chat.edit_resend')}
+                data-testid="edit-resend"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
             )}
             {canFork && (
               <button
@@ -443,6 +465,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onFeedback === next.onFeedback &&
     prev.knowledgeRefs === next.knowledgeRefs &&
     prev.attachments === next.attachments &&
-    prev.onFork === next.onFork
+    prev.onFork === next.onFork &&
+    prev.onEditResend === next.onEditResend
   );
 });

@@ -10,14 +10,17 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { sessionApi } from '../../shared/api/sessionApi';
 import { useStoredSiderOrder } from '../../shared/lib/dnd/useStoredSiderOrder';
 import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
+import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import { AttnBadge, BrandLogo, LiveDot, type LiveState } from '../../shared/ui';
 import {
@@ -62,7 +65,8 @@ interface SidebarProps {
 export function Sidebar({ width = 240 }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { sessions, currentSessionId, setCurrentSessionId, loadSessions, deleteSession } =
+  const { t } = useI18n();
+  const { sessions, currentSessionId, setCurrentSessionId, loadSessions, deleteSession, updateSession } =
     useStore();
   const { settings } = useSettings();
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
@@ -140,6 +144,17 @@ export function Sidebar({ width = 240 }: SidebarProps) {
     navigate('/welcome');
   };
 
+  // U4': 重命名——API 成功后原地更新 store(侧栏/聊天头部即时同步),不整表 reload
+  const handleRenameSession = async (sessionId: string, title: string) => {
+    try {
+      const updated = await sessionApi.rename(sessionId, title);
+      updateSession(sessionId, { title: updated.title });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(t('session.rename_failed').replace('{message}', message));
+    }
+  };
+
   const renderSection = (key: string) => {
     const isCollapsed = collapsed.has(key);
 
@@ -162,6 +177,7 @@ export function Sidebar({ width = 240 }: SidebarProps) {
             }}
             onDelete={(id) => deleteSession(id)}
             onNewSession={handleNewSession}
+            onRename={handleRenameSession}
             onOrderChange={(newOrder) => {
               const oldIndex = orderedSessionIds.indexOf(String(newOrder[0]));
               const newIndex = newOrder.indexOf(String(newOrder[0]));

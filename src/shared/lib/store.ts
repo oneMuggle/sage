@@ -75,6 +75,8 @@ interface StoreState {
   setCurrentSessionId: (id: string | null) => void;
   createSession: () => Promise<string>;
   deleteSession: (id: string) => Promise<void>;
+  /** U4': 原地更新会话元数据 (如重命名),避免整表 reload 抖动 */
+  updateSession: (id: string, patch: Partial<Session>) => void;
 
   loadMessages: (sessionId: string) => Promise<void>;
   addMessage: (message: Message) => void;
@@ -144,6 +146,13 @@ export const useStore = create<StoreState>((set, _get) => ({
       clientLogger.error('store.createSession failed', { error: String(error) });
       throw error;
     }
+  },
+
+  // U4': 原地更新会话元数据 (重命名等)——不 reload,侧栏/聊天头部即时同步
+  updateSession: (id, patch) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    }));
   },
 
   // 删除会话

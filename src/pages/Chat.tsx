@@ -371,6 +371,62 @@ export function Chat() {
     }
   };
 
+  // U5' (对标增强第五轮批次 A): 编辑重发。
+  // ① 点击 user 消息的编辑按钮 → 原文回填输入框 + 进入编辑态（editResendTarget）；
+  // ② 用户改写后发送 → fork 当前会话（before_message 开区间截到该消息之前，
+  //    首条消息得到空前缀会话）→ 对 fork 会话发送改写内容 → 跳转 fork 会话。
+  // 原会话完整保留（透明可控：编辑重发不截断历史）。fork 会话经 B1 继承
+  // 源会话工作区绑定，agent 上下文不断链。
+  const [editResendTarget, setEditResendTarget] = useState<{
+    messageId: string;
+    text: string;
+    nonce: number;
+  } | null>(null);
+
+  const handleStartEditResend = useCallback(
+    (messageId: string) => {
+      const target = messages.find((m) => m.id === messageId);
+      if (!target || target.role !== 'user') return;
+      setEditResendTarget({
+        messageId,
+        text: target.content,
+        nonce: Date.now(),
+      });
+    },
+    [messages],
+  );
+
+  const handleSendMessageWithEditResend = async (
+    content: string,
+    options?: Parameters<typeof handleSendMessage>[1],
+  ) => {
+    if (!editResendTarget) {
+      await handleSendMessage(content, options);
+      return;
+    }
+    const target = editResendTarget;
+    setEditResendTarget(null); // 先清编辑态，防 fork 失败重试时二次分叉
+    if (!currentSessionId || isLoading) {
+      await handleSendMessage(content, options);
+      return;
+    }
+    try {
+      const forked = await sessionApi.fork(currentSessionId, target.messageId, undefined, {
+        beforeMessage: true,
+      });
+      toast.success(t('chat.edit_resend_forked'));
+      void loadSessions();
+      setCurrentSessionId(forked.id);
+      await sendMessage(content, forked.id);
+    } catch (e) {
+      toast.error(
+        fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
+      );
+      // fork 失败退回普通发送，改写内容不丢
+      await handleSendMessage(content, options);
+    }
+  };
+
   // 顶层错误：渲染整页 ErrorState，提供"关闭"清除错误后回到聊天
   if (error) {
     return (
@@ -431,6 +487,7 @@ export function Chat() {
             messages={messages}
             streamingMessageId={streamingMessageId}
             onFork={handleFork}
+            onEditResend={handleStartEditResend}
           />
         )}
         {/* 编排计划确认卡 (Fix #2): 未派发时在主对话区域显示,方便用户查看和确认 */}
@@ -492,7 +549,7 @@ export function Chat() {
       )}
 
       <ChatInput
-        onSend={handleSendMessage}
+        onSend={handleSendMessageWithEditResend}
         onInterrupt={interrupt}
         onCompact={handleCompact}
         onLearn={handleLearn}
@@ -500,6 +557,12 @@ export function Chat() {
         disabled={!hasConfig}
         placeholder="输入消息..."
         workspacePath={workspacePath}
+        injectedDraft={editResendTarget}
+        editResendNotice={
+          editResendTarget
+            ? { onCancel: () => setEditResendTarget(null) }
+            : null
+        }
       />
 
       {/* Artifacts Panel: 右侧抽屉（fixed 定位，叠加在页面右缘） */}
