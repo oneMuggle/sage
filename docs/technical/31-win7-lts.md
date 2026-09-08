@@ -191,3 +191,56 @@ git push origin v0.5.0-beta.1-win7
 ```
 
 详细的预发布构建矩阵（artifact 后缀 / cache key 隔离）见 [`26-packaging-matrix.md` §7](./26-packaging-matrix.md)；4 档分级系统的完整说明见 [`30-release-tiers.md`](./30-release-tiers.md)。
+
+## 10. 近期 cherry-pick 进度（2026-08 → 2026-09）
+
+> 此章节记录 main → release/win7 的 backport 流水，作为后续 cherry-pick 的参考样本。
+> 完整 PR 列表（main 端）见 [`30-release-tiers.md`](./30-release-tiers.md) §8；
+> 完整 commit log 见 `git log origin/release/win7 --oneline`。
+
+### 10.1 已合入 win7 的 PR 批次
+
+| Cherry-pick PR | main 源 PR | 范围 | 关键改动 |
+|---|---|---|---|
+| [#490](https://github.com/oneMuggle/sage/pull/490) | #489 | 对标第四轮 | U17 上下文指示 / U19 逐 hunk 撤销 / S8 分会话通知 / L4' 缓存前缀 / U18/U12/F10/F11/U7 |
+| [#491](https://github.com/oneMuggle/sage/pull/491) | #466/#482 | Office + 编排 | Word 3 修复（font/parse/format）+ review `task_id` UNIQUE 约束幂等化 |
+| [#495](https://github.com/oneMuggle/sage/pull/495) | #485/#486/#492 | main 对齐一批 | `backend.tools` 循环导入根修（py3.11 CI red 同步 win7）/ mypy MYPYPATH / legacy 超时 / bundled office 依赖 |
+| [#501](https://github.com/oneMuggle/sage/pull/501) | #496/#498 | CI 性能 + 护栏 | 编排确认门控超时可配 / pytest-timeout 护栏 / pytest-xdist 并行 |
+| [#504](https://github.com/oneMuggle/sage/pull/504) | #503 | Doctor timeout | Electron 端 `5s → 20s` + `SAGE_DOCTOR_TIMEOUT_MS` 可配 |
+| [#506](https://github.com/oneMuggle/sage/pull/506) | #502 | Academic-search skill | skill_save 工具 + 学术检索 builtin；win7 侧修复 `with` 语法 py38 兼容 |
+| [#508](https://github.com/oneMuggle/sage/pull/508) | (win7 特有) | PEP 604/585 清理 | AST 重写清 53 文件 105 处违规（历史 cherry-pick 累积） |
+| [#509](https://github.com/oneMuggle/sage/pull/509) | (win7 特有) | 护栏集成 CI | 把 `scripts/check_py38_compat.py` 集成到 `backend-py38` job（854 文件 ~3s 扫） |
+| [#510](https://github.com/oneMuggle/sage/pull/510) | (win7 特有) | pydantic v1 conlist | `_constrained_list` helper 替换 `Field(min_length=...)` 等 v2-only 语法 |
+| [#514](https://github.com/oneMuggle/sage/pull/514) | #513 | Doctor spawn + tray | doctor spawn 改用 `userData` + tray 图标打包进 `app.asar` |
+| [#515](https://github.com/oneMuggle/sage/pull/515) | #507 | Phase 2 bundled | docxtpl/PyMuPDF/reportlab/certifi 打入 Win7 安装包；contract test 三处 win7 适配 |
+
+### 10.2 工作流模式（实战沉淀）
+
+| 模式 | 描述 | 典型 PR |
+|---|---|---|
+| **冲突解决优先取 main 侧** | main 通常更详细（含更多注释 + 后续依赖声明），win7 侧往往是早期行数精简版 | #507（`requirements-bundled.txt` 取 main 的 9 行注释 + certifi） |
+| **跨文件 contract test 必须 win7 适配** | main 的契约测试常硬编码 `backend/requirements.txt` 作为 source-of-truth，win7 真正源是 `backend/requirements-py38.txt` | #507（`_PARSE_REQ` 自动检测 `requirements-py38.txt` 存在性） |
+| **C extension 包存在 py38 wheel 截止** | PyMuPDF 1.24.x 是 Py3.8 wheel 最后一版；bundled floor 与 dev pin 必须有意分裂 | #507（PyMuPDF `==1.24.11` vs `>=1.25.0`，需在测试中显式 skip operator check） |
+| **dev pin → installer floor 推广** | 同一包在 source-of-truth 用 `==`（可复现），bundled 用 `>=`（patch 升级自动），contract test 必须接受四种 op 组合 | #507（加 `(==, >=)` case：bundled floor ≤ dev pin） |
+| **win7 特有 PR 不必 cherry-pick 回 main** | `_constrained_list` / `check_py38_compat.py` 是 Py3.8 专属，main 不需要 | #505/#508/#509/#510 |
+| **PEP 604/585 自动重写** | 历史 cherry-pick 累积的 `X \| Y` / `list[int]` 写法，由 `scripts/check_py38_compat.py` AST 扫描 + `py38_compat_rewrite.py` libcst 自动清 | #508（53 文件 105 处违规 → 0） |
+| **零依赖护栏脚本** | CI 步骤只用 stdlib AST，避免 ruff/libcst 版本漂移 | #505/#509 |
+| **CI 步骤用 `bash -el {0}`** | 加载 conda env 后再跑 `pytest` / `python scripts/...` | #509 |
+
+### 10.3 新增工具（win7 侧）
+
+| 路径 | 用途 |
+|---|---|
+| `scripts/check_py38_compat.py` | AST 扫 PEP 604/585 违规（零依赖，~3s 扫 854 文件） |
+| `scripts/py38_compat_rewrite.py` | libcst 自动重写（带 typing import 行加 `from typing import ...` 触发 ruff F811） |
+| `backend/_constrained_list.py` | pydantic v1 替代 v2 `Field(min_length=...)` 的 `List[X]` 长度约束 helper |
+
+### 10.4 当前开放 PR（待用户 merge）
+
+| PR | 状态 | 关联 main |
+|---|---|---|
+| [#512](https://github.com/oneMuggle/sage/pull/512) | open / CI 全绿 | electron/main.ts 完整对齐（demo mode + IPC guards + OfficeIpc + WIKI_STREAM_ERROR 统一错误格式，491 行差异 27 类别） |
+| [#515](https://github.com/oneMuggle/sage/pull/515) | open / CI 全绿 | #507（Phase 2 bundled deps + certifi） |
+
+> Cherry-pick 原则（见 §2）:**单 commit cherry-pick, commit message 加 `(cherry picked from main commit XXX)`**。
+> 避免把 main 的 release 元数据（CHANGELOG / version bump）带回 win7。
