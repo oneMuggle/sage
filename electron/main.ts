@@ -85,6 +85,7 @@ import { killOrphanedBackendOnPort } from './orphanBackendKiller';
 import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
+import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
 import { mainWindow, setMainWindow } from './mainWindow';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
@@ -275,14 +276,15 @@ function spawnBackend(): ChildProcess {
   //     critical for Win installs to C:\Program Files\Sage which is a
   //     system-protected directory and rejects writes from non-admin users).
   // SAGE_DB_PATH / SAGE_USER_DATA_DIR env vars always win (for CI / override).
-  const sageDbPath =
-    process.env.SAGE_DB_PATH ??
-    (app.isPackaged
-      ? join(app.getPath('userData'), 'sage.db')
-      : join(process.cwd(), 'data', 'sage.db'));
-  const sageUserDataDir =
-    process.env.SAGE_USER_DATA_DIR ??
-    (app.isPackaged ? app.getPath('userData') : join(process.cwd(), 'data'));
+  //
+  // 2026-09-08 (Win7 launch incident): extracted into `./userDataPaths.ts`
+  // so the doctor spawn path can use the same resolver. The previous inline
+  // logic was duplicated between backend spawn (here) and doctor spawn
+  // (in `app.whenReady`), and the doctor copy silently dropped the
+  // `app.isPackaged` branch, producing three false-positive CRITICAL
+  // doctor checks on Win7.
+  const sageDbPath = resolveSageDbPath();
+  const sageUserDataDir = resolveSageUserDataDir();
 
   const plan = resolveBackendLaunchCommand({
     env: process.env,
@@ -1639,8 +1641,12 @@ app.whenReady().then(async () => {
         resourcesPath: process.resourcesPath,
         platform: process.platform,
         isPackaged: app.isPackaged,
-        sageDbPath: process.env.SAGE_DB_PATH ?? join(process.cwd(), 'data', 'sage.db'),
-        sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
+        // 2026-09-08 (Win7 launch incident): go through the shared helper so
+        // the doctor subprocess targets `<userData>` on packaged Win installs
+        // (where cwd resolves to `C:\Program Files\Sage` — read-only for
+        // non-admins) instead of the install dir. See electron/userDataPaths.ts.
+        sageDbPath: resolveSageDbPath(),
+        sageUserDataDir: resolveSageUserDataDir(),
         port: BACKEND_PORT,
       });
       const doctorPlan =
@@ -1650,8 +1656,10 @@ app.whenReady().then(async () => {
               resourcesPath: process.resourcesPath,
               platform: process.platform,
               isPackaged: app.isPackaged,
-              sageDbPath: process.env.SAGE_DB_PATH ?? join(process.cwd(), 'data', 'sage.db'),
-              sageUserDataDir: process.env.SAGE_USER_DATA_DIR ?? join(process.cwd(), 'data'),
+              // 2026-09-08: same helper as supervisor — packaged Win7
+              // doctor must probe %APPDATA%\Sage, not cwd/data.
+              sageDbPath: resolveSageDbPath(),
+              sageUserDataDir: resolveSageUserDataDir(),
               port: BACKEND_PORT,
             })
           : undefined;
