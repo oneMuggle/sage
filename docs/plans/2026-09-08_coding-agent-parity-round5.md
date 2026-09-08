@@ -1,6 +1,7 @@
 # 编码代理对标差距分析·第五轮：信任闭环还账（2026-09-08）
 
-- **状态**：批次 A 实施中（worktree `.worktrees/feat-parity-r5-batch-a`，分支 `feat/parity-r5-batch-a`，基线 `aa8ec52d` = origin/main）
+- **状态**：批次 A 全部交付 ✅（main 分支 `feat/parity-r5-batch-a`，基线 `aa8ec52d` = origin/main；b084ea82 方案 / e8fc17bb U2' / 08f8e6c8 U4' / f9cc278b U5'+B1 / 0e2b58f9 U7' / 890dd733 lint）
+- **本地验证记录**：tsc --noEmit 零错误；改动面 eslint 清洁；vitest 全量 1699 passed（13 失败均在基线 stash 复核为既有 Windows electron 日志/路径类，与本批无关——本批 electron 仅 commands.ts 纯新增）；后端 api 96 passed；session/checkpoint/workspace 单测 66 passed（1 个 Windows symlink 语义失败为既有）；integration 的 repl/office/wiki/skill 失败与 orchestration_stream 挂起均逐一在 aa8ec52d 基线复现，非本批引入（CI Linux 为准）
 - **上游文档**：[2026-09-07_coding-agent-parity-round4.md](./2026-09-07_coding-agent-parity-round4.md)（第四轮：批次 A/B/C/D/E 已交付，剩余项归入其"批次 F"）、[2026-09-06_coding-agent-parity-round3.md](./2026-09-06_coding-agent-parity-round3.md)（批次 D 交付，E/F 部分脱落）、[2026-09-06_coding-agent-parity-round2.md](./2026-09-06_coding-agent-parity-round2.md)（全交付，但 U2/U4/U5 存在名义交付与实际范围出入）——本文不重复已交付项
 - **对标对象**：Claude Code 2.0（checkpoints/一键 rewind）、Cursor（checkpoints、消息编辑重发）、ChatGPT / Claude.ai（消息编辑交互）、主流聊天 UI（Mermaid 渲染标配）
 - **编号约定**：延续 L / U / F 编号；带 `'` 的为历史编号的"补交付"（此前批次清单脱落或范围缩水）
