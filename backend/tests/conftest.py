@@ -2,6 +2,7 @@
 Sage 后端测试 - 共享 fixtures
 """
 
+import asyncio
 import contextlib
 import os
 import sys
@@ -25,6 +26,27 @@ os.environ.setdefault("SAGE_TEST_FAST_SQLITE", "1")
 # 秒过超时取消路径；个别用例要验证"等待确认"本身时，用 monkeypatch.
 # setenv("SAGE_ORCH_CONFIRM_TIMEOUT", ...) 在用例内覆盖。
 os.environ.setdefault("SAGE_ORCH_CONFIRM_TIMEOUT", "1")
+
+
+# win7/py3.8 专用兜底（run #1694 实证）: 某些清理路径会 set_event_loop(None)
+# （pytest-asyncio 0.23 的事件循环管理 + 个别用例的手动清理），py3.8 的
+# get_event_loop 从此在 MainThread 也永久 RuntimeError（policy _set_called
+# 置位）。串行下文件顺序碰不到；xdist --dist loadfile 的分桶顺序把它暴露，
+# test_orch_run_control_steer.py 整文件炸 "There is no current event loop"。
+# 每个用例前确保存在可用 loop；py3.10+ 已改语义，直接跳过。
+@pytest.fixture(autouse=True)
+def _ensure_usable_event_loop():
+    # noqa 下一行: ruff 按 3.11 视角认为版本判断"过时",但 win7 运行时是
+    # py3.8,这里的分支就是给 py3.8 用的。
+    if sys.version_info >= (3, 10):  # noqa: UP036
+        yield
+        return
+    loop = None
+    with contextlib.suppress(RuntimeError):
+        loop = asyncio.get_event_loop()
+    if loop is None or loop.is_closed():
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    yield
 
 # 确保项目根目录在 sys.path 中
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
