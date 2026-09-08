@@ -502,4 +502,10 @@ export const en: Record<TranslationKey, string> = {
   'chat.learn_reviewing': 'Reviewing...',
   'chat.learn_queued': 'Review queued — check Pending Drafts',
   'chat.learn_failed': 'Review failed: {error}',
+
+  // ─── U4' Session management closure (parity round 5 batch A) ─────
+  'session.rename': 'Rename session',
+  'session.rename_failed': 'Rename failed: {message}',
+  'sidebar.search_sessions': 'Search sessions',
+  'sidebar.no_match': 'No matching sessions',
 };

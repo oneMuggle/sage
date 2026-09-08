@@ -1,5 +1,5 @@
-import { AlertCircle, Check, Clock, GitBranch, Loader2, Paperclip, PauseCircle, Pin, Download } from 'lucide-react';
-import { useEffect, useReducer, useState } from 'react';
+import { AlertCircle, Check, Clock, GitBranch, Loader2, Paperclip, PauseCircle, Pencil, Pin, Download } from 'lucide-react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
@@ -19,6 +19,8 @@ interface SessionItemProps {
   isActive: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  /** U4': 重命名回调——API 与 store 更新由上层负责,组件只管 inline 编辑态 */
+  onRename?: (sessionId: string, title: string) => Promise<void>;
 }
 
 /** 文件变更类工具（S6-lite: 本次运行的变更文件计数徽章）。
@@ -29,9 +31,13 @@ const FILE_CHANGE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch']);
 /** S4: completed ✓ 徽章的保鲜期 —— 超过后不再显示（避免整列表常亮绿勾）。 */
 const COMPLETED_FRESH_MS = 60_000;
 
-export function SessionItem({ session, isActive, onSelect, onDelete }: SessionItemProps) {
+export function SessionItem({ session, isActive, onSelect, onDelete, onRename }: SessionItemProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
+  // U4': inline 重命名态(标题位置换成输入框,Enter 提交 / Esc 取消)
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // S2/S4: 该会话的实时流槽位 —— 运行中指示、mini 进度、变更计数都从这里
   // 派生（跨页面保留；会话无流时返回共享空槽位，引用稳定不触发重渲染）。
@@ -94,6 +100,24 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
     }
   };
 
+  // U4': 进入 inline 编辑;拖拽激活距离 8px 不影响双击/按钮点击
+  const startRename = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRenameDraft(session.title);
+    setRenaming(true);
+    // 等输入框挂载后聚焦并全选,便于直接覆盖输入
+    requestAnimationFrame(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    });
+  };
+  const submitRename = () => {
+    const next = renameDraft.trim();
+    setRenaming(false);
+    if (!next || next === session.title) return;
+    void onRename?.(session.id, next);
+  };
+
   return (
     <div
       role="button"
@@ -125,7 +149,45 @@ export function SessionItem({ session, isActive, onSelect, onDelete }: SessionIt
               <GitBranch className="w-3 h-3 text-muted" />
             </span>
           )}
-          <span className="truncate">{session.title}</span>
+          {/* U4': inline 重命名态——输入框替换标题文本,Enter 提交 / Esc 取消 */}
+          {renaming ? (
+            <input
+              ref={renameInputRef}
+              data-testid="rename-session-input"
+              value={renameDraft}
+              onChange={(e) => setRenameDraft(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitRename();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setRenaming(false);
+                }
+              }}
+              onBlur={submitRename}
+              maxLength={200}
+              aria-label={t('session.rename')}
+              className="flex-1 min-w-0 text-sm font-medium bg-bg-hover border border-primary rounded px-1 py-0 focus:outline-none"
+            />
+          ) : (
+            <span className="truncate">{session.title}</span>
+          )}
+          {/* U4': 双击标题进入 inline 重命名 */}
+          {onRename && !renaming && (
+            <span
+              className="hidden group-hover:inline-flex flex-shrink-0 text-muted hover:text-primary"
+              title={t('session.rename')}
+              aria-label={t('session.rename')}
+              data-testid="rename-session"
+              onClick={startRename}
+              onDoubleClick={startRename}
+            >
+              <Pencil className="w-3 h-3" />
+            </span>
+          )}
           {/* S4: 会话状态徽章 —— 优先级 注意力 > 运行中 > 失败 > 挂起 > 刚完成 */}
           {hasAttention && (
             <span

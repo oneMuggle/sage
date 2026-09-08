@@ -221,6 +221,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/model`,
     body: (a) => ({ model: a.model }),
   },
+  // U4' (对标增强第五轮批次 A): 会话重命名——后端 PATCH 路由早已存在
+  // (SessionUpdate extra="forbid"),只透传 title;置顶仍由既有单独语义覆盖。
+  session_update: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}`,
+    body: (a) => ({ title: a.title }),
+  },
 
   // messages
   get_messages: {

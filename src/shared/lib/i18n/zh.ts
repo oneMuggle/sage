@@ -494,6 +494,12 @@ export const zh = {
   'chat.learn_reviewing': '正在生成技能草稿...',
   'chat.learn_queued': '已加入审核队列 — 查看待审草稿',
   'chat.learn_failed': '审核失败: {error}',
+
+  // ─── U4' 会话管理收尾 (对标增强第五轮批次 A) ─────
+  'session.rename': '重命名会话',
+  'session.rename_failed': '重命名失败：{message}',
+  'sidebar.search_sessions': '搜索会话',
+  'sidebar.no_match': '无匹配会话',
 } as const;
 
 export type TranslationKey = keyof typeof zh;
