@@ -962,6 +962,9 @@ class ForkSessionRequest(BaseModel):
 
     at_message_id: Optional[str] = None
     title: Optional[str] = None
+    # U5' (对标增强第五轮批次 A): 开区间截断——复制 at_message_id 之前的
+    # 消息（不含本身）。编辑重发据此分叉出"被编辑消息之前"的前缀。
+    before_message: bool = False
 
 
 @router.post("/sessions/{session_id}/fork", response_model=dict)
@@ -986,6 +989,7 @@ def fork_session(session_id: str, data: ForkSessionRequest):
             session_id,
             at_message_id=data.at_message_id,
             title=data.title,
+            before_message=data.before_message,
         )
     except ForkSourceNotFoundError as exc:
         raise HTTPException(

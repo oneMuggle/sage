@@ -280,6 +280,120 @@ class WorkspaceRevertResponse(BaseModel):
     errors: List[WorkspaceRevertEntryModel]
 
 
+class WorkspaceCheckpointModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    checkpoint_id: str
+    created_at: str
+    bytes: int
+    files: Optional[int]
+
+
+class WorkspaceCheckpointsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    checkpoints: List[WorkspaceCheckpointModel]
+
+
+class WorkspaceCheckpointCreateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    checkpoint_id: str
+    files: int
+    skipped: List[str]
+    bytes: int
+
+
+class WorkspaceCheckpointRestoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    checkpoint_id: str = Field(min_length=1, max_length=100)
+
+
+class WorkspaceCheckpointRestoreResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    checkpoint_id: str
+    restored: int
+
+
+def _checkpoint_tool_error(result: object) -> HTTPException:
+    """checkpoint 工具失败 → 502（快照写入/恢复是本机文件操作，非请求方过错）。"""
+    error = getattr(result, "error", None) or "checkpoint 操作失败"
+    return _error(502, "checkpoint_error", str(error))
+
+
+def _valid_checkpoint_id(checkpoint_id: str) -> bool:
+    """与 CheckpointRestoreTool 同口径的 id 预校验：<时间>-<hex> 形态。"""
+    return bool(checkpoint_id) and checkpoint_id.replace("-", "").isalnum()
+
+
+@router.get("/checkpoints", response_model=WorkspaceCheckpointsResponse)
+def list_workspace_checkpoints(session_id: str) -> WorkspaceCheckpointsResponse:
+    """列出工作区已有检查点快照（U2' 检查点面板数据源，新→旧）。"""
+    from backend.domain.tool_policy import ToolPolicy
+    from backend.tools.checkpoint_tool import CheckpointListTool
+
+    root = _bound_workspace_or_raise(_connection(), session_id)
+    result = CheckpointListTool(ToolPolicy(workspace_root=root)).execute()
+    if not result.success:
+        raise _checkpoint_tool_error(result)
+    content = result.content if isinstance(result.content, dict) else {}
+    checkpoints = [
+        WorkspaceCheckpointModel(
+            checkpoint_id=str(entry.get("checkpoint_id", "")),
+            created_at=str(entry.get("created_at", "")),
+            bytes=int(entry.get("bytes", 0)),
+            files=entry.get("files") if isinstance(entry.get("files"), int) else None,
+        )
+        for entry in content.get("checkpoints", [])
+        if isinstance(entry, dict)
+    ]
+    return WorkspaceCheckpointsResponse(checkpoints=checkpoints)
+
+
+@router.post("/checkpoints", response_model=WorkspaceCheckpointCreateResponse)
+def create_workspace_checkpoint(session_id: str) -> WorkspaceCheckpointCreateResponse:
+    """手动创建工作区快照（U2'，用户在变更面板显式触发，非 LLM 工具）。"""
+    from backend.domain.tool_policy import ToolPolicy
+    from backend.tools.checkpoint_tool import CheckpointCreateTool
+
+    root = _bound_workspace_or_raise(_connection(), session_id)
+    result = CheckpointCreateTool(ToolPolicy(workspace_root=root)).execute()
+    if not result.success:
+        raise _checkpoint_tool_error(result)
+    content = result.content if isinstance(result.content, dict) else {}
+    return WorkspaceCheckpointCreateResponse(
+        checkpoint_id=str(content.get("checkpoint_id", "")),
+        files=int(content.get("files", 0)),
+        skipped=[str(name) for name in content.get("skipped", [])],
+        bytes=int(content.get("bytes", 0)),
+    )
+
+
+@router.post(
+    "/checkpoints/restore", response_model=WorkspaceCheckpointRestoreResponse
+)
+def restore_workspace_checkpoint(
+    session_id: str, request: WorkspaceCheckpointRestoreRequest
+) -> WorkspaceCheckpointRestoreResponse:
+    """覆盖恢复指定快照到工作区（U2'，confirm 对话框代审批，语义只覆盖不删除）。"""
+    from backend.domain.tool_policy import ToolPolicy
+    from backend.tools.checkpoint_tool import CheckpointRestoreTool
+
+    if not _valid_checkpoint_id(request.checkpoint_id):
+        raise _error(400, "invalid_checkpoint_id", "checkpoint_id 格式非法")
+    root = _bound_workspace_or_raise(_connection(), session_id)
+    result = CheckpointRestoreTool(ToolPolicy(workspace_root=root)).execute(
+        checkpoint_id=request.checkpoint_id
+    )
+    if not result.success:
+        message = str(result.error or "")
+        if "快照不存在" in message:
+            raise _error(404, "checkpoint_not_found", message)
+        raise _checkpoint_tool_error(result)
+    content = result.content if isinstance(result.content, dict) else {}
+    return WorkspaceCheckpointRestoreResponse(
+        checkpoint_id=str(content.get("checkpoint_id", request.checkpoint_id)),
+        restored=int(content.get("restored", 0)),
+    )
+
+
 class WorkspaceRevertHunksRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str = Field(min_length=1, max_length=1024)

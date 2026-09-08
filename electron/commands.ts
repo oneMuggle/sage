@@ -122,11 +122,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   session_fork: {
     method: 'POST',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/fork`,
-    // 后端 ForkSessionRequest 用 snake_case 字段；省略的参数不下发
+    // 后端 ForkSessionRequest 用 snake_case 字段；省略的参数不下发。
+    // beforeMessage (U5'): 开区间截断——复制 atMessageId 之前的消息。
     body: (a) => {
       const body: Record<string, unknown> = {};
       if (a.atMessageId != null) body.at_message_id = a.atMessageId;
       if (a.title != null) body.title = a.title;
+      if (a.beforeMessage != null) body.before_message = a.beforeMessage;
       return body;
     },
   },
@@ -190,6 +192,26 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/changes/revert-hunks`,
     body: (a) => ({ path: a.path, hunk_indices: a.hunkIndices }),
   },
+  // U2' 检查点面板 (对标增强第五轮批次 A): 快照列表 / 手动快照 / 覆盖恢复。
+  // restore 语义"只覆盖不删除"由前端 confirm 文案明示;POST body 必须
+  // 剥掉路径参数 (后端 extra="forbid",与 workspace_revert_changes 同理)。
+  workspace_list_checkpoints: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/checkpoints`,
+  },
+  workspace_create_checkpoint: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/checkpoints`,
+    body: () => ({}),
+  },
+  workspace_restore_checkpoint: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/checkpoints/restore`,
+    body: (a) => ({ checkpoint_id: a.checkpointId }),
+  },
 
   // U8 (批次 B): 会话级模型覆盖 (G5 收尾,只改模型不改端点)
   session_get_model: {
@@ -200,6 +222,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'PUT',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/model`,
     body: (a) => ({ model: a.model }),
+  },
+  // U4' (对标增强第五轮批次 A): 会话重命名——后端 PATCH 路由早已存在
+  // (SessionUpdate extra="forbid"),只透传 title;置顶仍由既有单独语义覆盖。
+  session_update: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}`,
+    body: (a) => ({ title: a.title }),
   },
 
   // messages

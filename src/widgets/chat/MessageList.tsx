@@ -17,6 +17,8 @@ interface MessageListProps {
   streamingMessageId?: string | null;
   /** M4: 消息级分叉回调（提供时 user/assistant 消息显示分叉按钮） */
   onFork?: (messageId: string) => void;
+  /** U5': 编辑重发回调（提供时 user 消息显示编辑按钮） */
+  onEditResend?: (messageId: string) => void;
 }
 
 export function MessageList({
@@ -25,6 +27,7 @@ export function MessageList({
   attachments,
   streamingMessageId,
   onFork,
+  onEditResend,
 }: MessageListProps) {
   // U11: 只渲染最近 WINDOW_STEP 条, 更早的按需加载 —— 避免长会话全量
   // 重渲染(每条 Message 都可能含 ReactMarkdown/Shiki)。
@@ -69,6 +72,7 @@ export function MessageList({
             attachments={attachments?.[message.id]}
             isStreaming={message.id === streamingMessageId}
             onFork={onFork}
+            onEditResend={onEditResend}
           />
         ))}
       </div>

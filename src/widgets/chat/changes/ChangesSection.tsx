@@ -8,13 +8,27 @@
 // U19 可操作化 (对标增强第四轮批次 B, docs/plans/2026-09-07_coding-agent-parity-round4.md):
 // 逐文件撤销 (git checkout --) + 逐 hunk 勾选反向应用 (git apply --reverse)。
 // 撤销只作用于工作区改动,不碰暂存区;未跟踪文件走显式删除。
+//
+// U2' 检查点面板 (对标增强第五轮批次 A, docs/plans/2026-09-08_coding-agent-parity-round5.md):
+// 工作区快照的列表 / 手动创建 / 覆盖恢复。restore 走 confirm 对话框
+// (用户主动操作,与 U19 revert 同先例,不经 agent 审批门禁)。
 
-import { ArrowLeft, GitBranch, RefreshCw, Trash2, Undo2 } from 'lucide-react';
+import {
+  Archive,
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  GitBranch,
+  History,
+  RefreshCw,
+  Trash2,
+  Undo2,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { workspaceApi } from '../../../shared/api/workspaceApi';
-import type { WorkspaceChanges } from '../../../shared/api/workspaceApi';
+import type { WorkspaceChanges, WorkspaceCheckpoint } from '../../../shared/api/workspaceApi';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
 import { splitDiffHunks } from './diffHunks';
@@ -41,6 +55,13 @@ function statusLabel(entry: { indexStatus: string; worktreeStatus: string }): st
   return (idx + wt).trim() || '变更';
 }
 
+/** 快照体积展示（B/KB/MB 一位小数） */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function ChangesSection({ sessionId }: ChangesSectionProps) {
   const [changes, setChanges] = useState<WorkspaceChanges | null>(null);
   const [loading, setLoading] = useState(false);
@@ -52,6 +73,11 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
   // U19: 勾选待撤销的 hunk (0-based,与后端 revert-hunks 序号一致)
   const [selectedHunks, setSelectedHunks] = useState<Set<number>>(new Set());
   const [reverting, setReverting] = useState(false);
+  // U2': 检查点快照列表 / 折叠态 / 操作互斥;未绑定工作区时整个检查点区隐藏
+  const [checkpoints, setCheckpoints] = useState<WorkspaceCheckpoint[] | null>(null);
+  const [checkpointsOpen, setCheckpointsOpen] = useState(false);
+  const [checkpointBusy, setCheckpointBusy] = useState(false);
+  const [notBound, setNotBound] = useState(false);
 
   const refresh = useCallback(() => {
     if (!sessionId) return;
@@ -65,6 +91,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
         const errMsg = e instanceof Error ? e.message : String(e);
         if (errMsg.includes('workspace_not_bound') || errMsg.includes('尚未绑定工作区')) {
           setError('当前会话尚未绑定工作区，无法查看变更');
+          setNotBound(true);
         } else {
           setError(errMsg);
         }
@@ -72,11 +99,23 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
       .finally(() => setLoading(false));
   }, [sessionId]);
 
+  const refreshCheckpoints = useCallback(() => {
+    if (!sessionId) return;
+    // 检查点是辅助信息:失败静默(列表置空),不与变更错误通道互相干扰
+    workspaceApi
+      .listCheckpoints(sessionId)
+      .then(setCheckpoints)
+      .catch(() => setCheckpoints(null));
+  }, [sessionId]);
+
   useEffect(() => {
     setChanges(null);
     setSelectedPath(null);
     setDiff(null);
     setError(null);
+    setCheckpoints(null);
+    setCheckpointsOpen(false);
+    setNotBound(false);
     refresh();
   }, [refresh]);
 
@@ -146,6 +185,45 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)))
       .finally(() => setReverting(false));
   }, [sessionId, selectedPath, selectedHunks, refresh, openDiff]);
+
+  // U2': 手动创建当前状态快照
+  const createCheckpoint = useCallback(() => {
+    if (!sessionId) return;
+    setCheckpointBusy(true);
+    workspaceApi
+      .createCheckpoint(sessionId)
+      .then((cp) => {
+        toast.success(`已创建快照（${cp.files} 个文件，${formatBytes(cp.bytes)}）`);
+        refreshCheckpoints();
+      })
+      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)))
+      .finally(() => setCheckpointBusy(false));
+  }, [sessionId, refreshCheckpoints]);
+
+  // U2': 覆盖恢复快照(只覆盖快照内文件,不删除快照后新建的文件)
+  const restoreCheckpoint = useCallback(
+    (cp: WorkspaceCheckpoint) => {
+      if (!sessionId) return;
+      const confirmed = window.confirm(
+        `恢复快照 ${cp.checkpointId}？\n` +
+          '将覆盖工作区中快照包含的文件；快照之后新建的文件会保留。\n' +
+          '建议先创建一份当前状态的快照。',
+      );
+      if (!confirmed) return;
+      setCheckpointBusy(true);
+      workspaceApi
+        .restoreCheckpoint(sessionId, cp.checkpointId)
+        .then((result) => {
+          toast.success(`已恢复 ${result.restored} 个文件`);
+          refresh();
+          refreshCheckpoints();
+          if (selectedPath) openDiff(selectedPath);
+        })
+        .catch((e: unknown) => toast.error(e instanceof Error ? e.message : String(e)))
+        .finally(() => setCheckpointBusy(false));
+    },
+    [sessionId, refresh, refreshCheckpoints, selectedPath, openDiff],
+  );
 
   const hunks = useMemo(() => (diff ? splitDiffHunks(diff) : []), [diff]);
 
@@ -284,6 +362,74 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
           <RefreshCw className={'w-4 h-4' + (loading ? ' animate-spin' : '')} />
         </button>
       </div>
+      {!notBound && (
+        <div className="border-b border-border">
+          <div className="flex items-center gap-1 px-2 py-1">
+            <button
+              className="flex items-center gap-1 px-1 py-0.5 rounded text-xs text-text-secondary hover:bg-bg-hover"
+              data-testid="checkpoint-toggle"
+              aria-expanded={checkpointsOpen}
+              onClick={() => {
+                const next = !checkpointsOpen;
+                setCheckpointsOpen(next);
+                if (next && checkpoints === null) refreshCheckpoints();
+              }}
+            >
+              {checkpointsOpen ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+              <Archive className="w-3.5 h-3.5" />
+              <span>检查点{checkpoints !== null && checkpoints.length > 0 ? `（${checkpoints.length}）` : ''}</span>
+            </button>
+            <span className="flex-1" />
+            <button
+              className="p-1 rounded hover:bg-bg-hover text-text-secondary disabled:opacity-50"
+              title="为当前工作区创建快照"
+              aria-label="创建快照"
+              data-testid="create-checkpoint-button"
+              disabled={checkpointBusy}
+              onClick={createCheckpoint}
+            >
+              <Archive className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          {checkpointsOpen &&
+            (checkpoints === null ? (
+              <div className="px-3 pb-2 text-xs text-muted">加载检查点…</div>
+            ) : checkpoints.length === 0 ? (
+              <div className="px-3 pb-2 text-xs text-muted">暂无快照</div>
+            ) : (
+              <div className="divide-y divide-border border-t border-border">
+                {checkpoints.map((cp) => (
+                  <div
+                    key={cp.checkpointId}
+                    className="flex items-center gap-2 px-3 py-1.5"
+                    data-testid="checkpoint-row"
+                  >
+                    <span className="text-xs truncate flex-1" title={cp.checkpointId}>
+                      {cp.checkpointId}
+                    </span>
+                    <span className="text-xs text-text-secondary shrink-0">
+                      {cp.files ?? '?'} 个文件 · {formatBytes(cp.bytes)}
+                    </span>
+                    <button
+                      className="p-1 rounded hover:bg-bg-hover text-text-secondary shrink-0 disabled:opacity-50"
+                      title="恢复此快照（覆盖工作区，不删除快照后新建的文件）"
+                      aria-label={`恢复快照 ${cp.checkpointId}`}
+                      data-testid={`restore-checkpoint-${cp.checkpointId}`}
+                      disabled={checkpointBusy}
+                      onClick={() => restoreCheckpoint(cp)}
+                    >
+                      <History className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))}
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto">
         {error ? (
           <div className="p-3 text-sm text-red-500">{error}</div>
