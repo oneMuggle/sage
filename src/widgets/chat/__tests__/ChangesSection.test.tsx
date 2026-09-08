@@ -3,7 +3,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import type { WorkspaceChanges, WorkspaceDiff } from '../../../shared/api/workspaceApi';
+import type {
+  WorkspaceChanges,
+  WorkspaceCheckpoint,
+  WorkspaceDiff,
+} from '../../../shared/api/workspaceApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { ChangesSection } from '../changes/ChangesSection';
 
@@ -11,6 +15,9 @@ const mockGetChanges = vi.fn<() => Promise<WorkspaceChanges>>();
 const mockGetChangeDiff = vi.fn<(path?: string, staged?: boolean) => Promise<WorkspaceDiff>>();
 const mockRevertChanges = vi.fn<(...args: unknown[]) => Promise<{ reverted: string[]; errors: Array<{ path: string; error: string }> }>>();
 const mockRevertHunks = vi.fn<(...args: unknown[]) => Promise<{ revertedHunks: number }>>();
+const mockListCheckpoints = vi.fn<(...args: unknown[]) => Promise<WorkspaceCheckpoint[]>>();
+const mockCreateCheckpoint = vi.fn<(...args: unknown[]) => Promise<{ checkpointId: string; files: number; skipped: string[]; bytes: number }>>();
+const mockRestoreCheckpoint = vi.fn<(...args: unknown[]) => Promise<{ restored: number }>>();
 
 vi.mock('../../../shared/api/workspaceApi', () => ({
   workspaceApi: {
@@ -18,6 +25,9 @@ vi.mock('../../../shared/api/workspaceApi', () => ({
     getChangeDiff: (path?: string, staged?: boolean) => mockGetChangeDiff(path, staged),
     revertChanges: (...args: unknown[]) => mockRevertChanges(...args),
     revertChangeHunks: (...args: unknown[]) => mockRevertHunks(...args),
+    listCheckpoints: (...args: unknown[]) => mockListCheckpoints(...args),
+    createCheckpoint: (...args: unknown[]) => mockCreateCheckpoint(...args),
+    restoreCheckpoint: (...args: unknown[]) => mockRestoreCheckpoint(...args),
   },
 }));
 
@@ -224,5 +234,100 @@ describe('ChangesSection', () => {
       expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['notes.md'], true);
     });
     confirmSpy.mockRestore();
+  });
+
+  it('U2\': 检查点区默认收起，展开后创建快照并刷新列表', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockListCheckpoints
+      .mockResolvedValueOnce([
+        { checkpointId: '20260908-120000-ab12cd', createdAt: '2026-09-08T12:00:00', bytes: 2048, files: 3 },
+      ])
+      .mockResolvedValue([
+        { checkpointId: '20260908-120000-ab12cd', createdAt: '2026-09-08T12:00:00', bytes: 2048, files: 3 },
+        { checkpointId: '20260908-130000-ef34ab', createdAt: '2026-09-08T13:00:00', bytes: 4096, files: 5 },
+      ]);
+    mockCreateCheckpoint.mockResolvedValue({
+      checkpointId: '20260908-130000-ef34ab',
+      files: 5,
+      skipped: [],
+      bytes: 4096,
+    });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    // 默认收起:检查点标题可见,列表未加载
+    expect(screen.queryByTestId('checkpoint-row')).not.toBeInTheDocument();
+    expect(mockListCheckpoints).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('checkpoint-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('checkpoint-row')).toBeInTheDocument();
+    });
+    expect(mockListCheckpoints).toHaveBeenCalledWith('s1');
+    expect(screen.getByText(/20260908-120000-ab12cd/)).toBeInTheDocument();
+
+    // 手动创建 → 列表刷新
+    fireEvent.click(screen.getByTestId('create-checkpoint-button'));
+    await waitFor(() => {
+      expect(mockCreateCheckpoint).toHaveBeenCalledWith('s1');
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/20260908-130000-ef34ab/)).toBeInTheDocument();
+    });
+  });
+
+  it('U2\': 恢复快照需 confirm，成功后刷新变更与快照列表', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockListCheckpoints.mockResolvedValue([
+      { checkpointId: '20260908-120000-ab12cd', createdAt: '2026-09-08T12:00:00', bytes: 2048, files: 3 },
+    ]);
+    mockRestoreCheckpoint.mockResolvedValue({ restored: 3 });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('checkpoint-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('checkpoint-row')).toBeInTheDocument();
+    });
+
+    const callsBefore = mockGetChanges.mock.calls.length;
+    fireEvent.click(screen.getByTestId('restore-checkpoint-20260908-120000-ab12cd'));
+    await waitFor(() => {
+      expect(mockRestoreCheckpoint).toHaveBeenCalledWith('s1', '20260908-120000-ab12cd');
+    });
+    // 恢复后变更清单 + 快照列表都刷新
+    await waitFor(() => {
+      expect(mockGetChanges.mock.calls.length).toBeGreaterThan(callsBefore);
+      expect(mockListCheckpoints.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('U2\': 未绑定工作区时不渲染检查点区', async () => {
+    mockGetChanges.mockRejectedValue(new Error('当前会话尚未绑定工作区'));
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/尚未绑定工作区/)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('checkpoint-toggle')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('create-checkpoint-button')).not.toBeInTheDocument();
   });
 });

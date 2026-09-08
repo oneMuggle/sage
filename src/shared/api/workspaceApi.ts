@@ -80,9 +80,44 @@ export interface WorkspaceRevertResult {
   errors: Array<{ path: string; error: string }>;
 }
 
+/** U2' 检查点快照元数据（camelCase，渲染端消费） */
+export interface WorkspaceCheckpoint {
+  checkpointId: string;
+  createdAt: string;
+  bytes: number;
+  files: number | null;
+}
+
+/** U2' 手动快照结果 */
+export interface WorkspaceCheckpointCreated {
+  checkpointId: string;
+  files: number;
+  skipped: string[];
+  bytes: number;
+}
+
 interface WorkspaceRevertWire {
   reverted: string[];
   errors: Array<{ path: string; error: string }>;
+}
+
+/** U2' 检查点 wire 类型（后端 snake_case） */
+interface WorkspaceCheckpointWire {
+  checkpoint_id: string;
+  created_at: string;
+  bytes: number;
+  files: number | null;
+}
+
+interface WorkspaceCheckpointsWire {
+  checkpoints: WorkspaceCheckpointWire[];
+}
+
+interface WorkspaceCheckpointCreateWire {
+  checkpoint_id: string;
+  files: number;
+  skipped: string[];
+  bytes: number;
 }
 
 function mapBinding(binding: WorkspaceBindingWire): SessionWorkspaceBinding {
@@ -240,6 +275,55 @@ export const workspaceApi = {
         hunkIndices,
       });
       return { revertedHunks: response.reverted_hunks };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ===== U2' 检查点面板 (对标增强第五轮批次 A) =====
+
+  /** 工作区检查点快照列表（新→旧；未绑定工作区时抛错）。 */
+  async listCheckpoints(sessionId: string): Promise<WorkspaceCheckpoint[]> {
+    try {
+      const response = await invoke<WorkspaceCheckpointsWire>('workspace_list_checkpoints', {
+        sessionId,
+      });
+      return response.checkpoints.map((entry) => ({
+        checkpointId: entry.checkpoint_id,
+        createdAt: entry.created_at,
+        bytes: entry.bytes,
+        files: entry.files,
+      }));
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 手动创建工作区快照（zip 存 Sage 数据目录，不动工作区）。 */
+  async createCheckpoint(sessionId: string): Promise<WorkspaceCheckpointCreated> {
+    try {
+      const response = await invoke<WorkspaceCheckpointCreateWire>('workspace_create_checkpoint', {
+        sessionId,
+      });
+      return {
+        checkpointId: response.checkpoint_id,
+        files: response.files,
+        skipped: response.skipped,
+        bytes: response.bytes,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 覆盖恢复指定快照（只覆盖快照内文件，不删除快照后新建的文件）。 */
+  async restoreCheckpoint(sessionId: string, checkpointId: string): Promise<{ restored: number }> {
+    try {
+      const response = await invoke<{ checkpoint_id: string; restored: number }>(
+        'workspace_restore_checkpoint',
+        { sessionId, checkpointId },
+      );
+      return { restored: response.restored };
     } catch (error) {
       throw handleApiError(error);
     }

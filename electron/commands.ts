@@ -190,6 +190,26 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/changes/revert-hunks`,
     body: (a) => ({ path: a.path, hunk_indices: a.hunkIndices }),
   },
+  // U2' 检查点面板 (对标增强第五轮批次 A): 快照列表 / 手动快照 / 覆盖恢复。
+  // restore 语义"只覆盖不删除"由前端 confirm 文案明示;POST body 必须
+  // 剥掉路径参数 (后端 extra="forbid",与 workspace_revert_changes 同理)。
+  workspace_list_checkpoints: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/checkpoints`,
+  },
+  workspace_create_checkpoint: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/checkpoints`,
+    body: () => ({}),
+  },
+  workspace_restore_checkpoint: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace/checkpoints/restore`,
+    body: (a) => ({ checkpoint_id: a.checkpointId }),
+  },
 
   // U8 (批次 B): 会话级模型覆盖 (G5 收尾,只改模型不改端点)
   session_get_model: {
