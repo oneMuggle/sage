@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
-from backend.office.models import OfficeDocType
+from backend.office.models import OfficeDocType, _constrained_list
 from backend.office.session_workspace import (
     SessionWorkspaceBinding,
     bind_session_workspace,
@@ -31,6 +31,7 @@ router = APIRouter(prefix="/sessions/{session_id}/workspace", tags=["workspace"]
 class WorkspaceBindingModel(BaseModel):
     class Config:
         extra = "forbid"
+
     session_id: str
     workspace_path: str
     generation: int
@@ -41,18 +42,21 @@ class WorkspaceBindingModel(BaseModel):
 class WorkspaceBindRequest(BaseModel):
     class Config:
         extra = "forbid"
+
     workspace_path: str = Field(min_length=1)
 
 
 class WorkspaceBindingResponse(BaseModel):
     class Config:
         extra = "forbid"
+
     binding: Optional[WorkspaceBindingModel]
 
 
 class WorkspaceRevokeResponse(BaseModel):
     class Config:
         extra = "forbid"
+
     revoked: bool
     generation: int
 
@@ -60,6 +64,7 @@ class WorkspaceRevokeResponse(BaseModel):
 class WorkspaceSearchResultModel(BaseModel):
     class Config:
         extra = "forbid"
+
     name: str
     kind: str
     doc_type: Optional[OfficeDocType]
@@ -72,6 +77,7 @@ class WorkspaceSearchResultModel(BaseModel):
 class WorkspaceSearchResponse(BaseModel):
     class Config:
         extra = "forbid"
+
     results: List[WorkspaceSearchResultModel]
     total: int
 
@@ -79,6 +85,7 @@ class WorkspaceSearchResponse(BaseModel):
 class WorkspaceChangeEntryModel(BaseModel):
     class Config:
         extra = "forbid"
+
     index_status: str
     worktree_status: str
     path: str
@@ -87,6 +94,7 @@ class WorkspaceChangeEntryModel(BaseModel):
 class WorkspaceChangesResponse(BaseModel):
     class Config:
         extra = "forbid"
+
     branch: str
     upstream: str
     ahead: int
@@ -98,6 +106,7 @@ class WorkspaceChangesResponse(BaseModel):
 class WorkspaceDiffResponse(BaseModel):
     class Config:
         extra = "forbid"
+
     diff: str
     truncated: bool
 
@@ -259,9 +268,7 @@ def get_workspace_change_diff(
     from backend.tools.git_tool import GitDiffTool
 
     root = _bound_workspace_or_raise(_connection(), session_id)
-    result = GitDiffTool(ToolPolicy(workspace_root=root)).execute(
-        staged=staged, path=path
-    )
+    result = GitDiffTool(ToolPolicy(workspace_root=root)).execute(staged=staged, path=path)
     if not result.success:
         raise _error(502, "git_error", result.error or "git 命令失败")
     content = result.content if isinstance(result.content, dict) else {}
@@ -273,7 +280,12 @@ def get_workspace_change_diff(
 
 class WorkspaceRevertRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    paths: List[str] = Field(min_length=1, max_length=50)
+    # pydantic v1.10.x silently ignores Field min_length/max_length on
+    # List types — only string/bytes fields are enforced. _constrained_list
+    # is the project-wide v1/v2 cross-version factory (see
+    # backend/office/models.py); win7 falls through to its TypeError branch
+    # which rewrites min_length → min_items / max_length → max_items.
+    paths: _constrained_list(str, min_length=1, max_length=50)
     delete_untracked: bool = False
 
 
@@ -292,7 +304,9 @@ class WorkspaceRevertResponse(BaseModel):
 class WorkspaceRevertHunksRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str = Field(min_length=1, max_length=1024)
-    hunk_indices: List[int] = Field(min_length=1, max_length=200)
+    # See WorkspaceRevertRequest.paths — _constrained_list handles v1/v2
+    # kwarg name differences internally.
+    hunk_indices: _constrained_list(int, min_length=1, max_length=200)
 
 
 class WorkspaceRevertHunksResponse(BaseModel):
