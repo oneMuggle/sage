@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron';
+import { fetchCompat } from './fetchCompat';
 
 export interface HealthCheckDetail {
   name: string;
@@ -76,7 +77,7 @@ export class LauncherHealthChecker {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
 
-        const response = await fetch(`${this.backendUrl}/health`, {
+        const response = await fetchCompat(`${this.backendUrl}/health`, {
           signal: controller.signal,
         });
 
