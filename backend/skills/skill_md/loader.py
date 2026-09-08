@@ -65,7 +65,7 @@ def _parse_allowed_tools(tools_str: Any) -> Tuple[str, ...]:
 
 
 def discover_skill_md_dirs() -> List[Path]:
-    """按优先级返回 SKILL.md 搜索根列表。
+    """按优先级返回 SKILL.md 搜索根列表(用户层)。
 
     优先级:
       1. ``$SAGE_SKILLS_DIR`` 环境变量指向的目录 (若存在)
@@ -73,6 +73,13 @@ def discover_skill_md_dirs() -> List[Path]:
       3. ``~/.sage/skills`` (若存在)
 
     不存在的目录会被过滤掉 (而不是抛错), 调用方拿到的列表都是可直接扫描的。
+
+    Note:
+        **不**包含随包分发的 ``shipped`` 目录 —— shipped 是只读模板,
+        用途是 ``register_skill_md_skills()`` 兜底装载,不应参与
+        ``ScriptRunner.allowed_roots`` (否则会放宽脚本沙箱边界)。
+        需要完整列表请直接调 ``register_skill_md_skills()``, 或
+        手动拼接 ``discover_skill_md_dirs() + _discover_shipped_dir()``。
     """
     roots: List[Path] = []
 
@@ -91,6 +98,22 @@ def discover_skill_md_dirs() -> List[Path]:
         roots.append(user_skills)
 
     return roots
+
+
+def _discover_shipped_dir() -> Optional[Path]:
+    """返回随包分发的 SKILL.md 默认模板目录(若存在)。
+
+    shipped 是只读 starter(例: ``academic-search``),作为
+    ``register_skill_md_skills()`` 装载时的最低优先级 fallback,
+    让用户能立刻在 LLM 里触发基础流程,再根据使用情况自定义。
+    用户在更高优先级目录(``~/.sage/skills`` 等)放同名 SKILL.md
+    会自动覆盖 shipped 版本。
+
+    Returns:
+        ``Path`` 或 ``None`` (shipped 目录不存在时)。
+    """
+    shipped = Path(__file__).parent / "shipped"
+    return shipped if shipped.is_dir() else None
 
 
 def _has_symlink_component(path: Path) -> bool:
@@ -531,21 +554,35 @@ def register_skill_md_skills(
     gating_ctx: Optional[GatingContext] = None,
     script_runner: Optional[ScriptRunner] = None,
 ) -> int:
-    """便捷封装: 从 ``dirs`` (或 ``discover_skill_md_dirs()``) 加载 SKILL.md。
+    """便捷封装: 从 ``dirs`` (或 ``discover_skill_md_dirs() + shipped``) 加载 SKILL.md。
 
     Args:
         registry: 技能注册表
-        dirs: 搜索目录列表 (None = 使用默认发现逻辑)
+        dirs: 搜索目录列表 (None = 用 ``discover_skill_md_dirs()`` + shipped 兜底)
         gating_ctx: 门控上下文 (None = 不门控, v1 行为)
+        script_runner: 注入到 SkillMdSkill 的脚本执行器 (含 sandbox + allowed_roots)
 
     Returns:
         成功加载的 skill 数量 (跳过的不计)。
 
     Notes:
-        调用方应负责异常隔离 (本函数不抛异常, 失败记 WARNING)。
-        主要供 ``InprocSkillAdapter`` 在 ``__init__`` 末尾 guarded 调用。
+        - 调用方应负责异常隔离 (本函数不抛异常, 失败记 WARNING)。
+        - 主要供 ``InprocSkillAdapter`` 在 ``__init__`` 末尾 guarded 调用。
+        - 默认装载路径 (``dirs is None``) 会拼上随包分发的 shipped starter
+          (例: ``academic-search``) 作为最低优先级 fallback。显式传 ``dirs``
+          时调用方完全掌控,不自动追加 shipped。
+        - shipped dir **不**参与 ``ScriptRunner.allowed_roots`` (那是
+          ``discover_skill_md_dirs()`` 的职责),避免放宽脚本沙箱边界。
     """
-    skill_dirs = discover_skill_md_dirs() if dirs is None else [Path(d) for d in dirs]
+    if dirs is None:
+        user_dirs = discover_skill_md_dirs()
+        shipped = _discover_shipped_dir()
+        effective_dirs = list(user_dirs)
+        if shipped is not None and shipped not in effective_dirs:
+            effective_dirs.append(shipped)
+        skill_dirs = effective_dirs
+    else:
+        skill_dirs = [Path(d) for d in dirs]
 
     if not skill_dirs:
         return 0
