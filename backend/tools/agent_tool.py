@@ -503,13 +503,18 @@ class AgentTool(BaseTool):
             )
 
         try:
+            # O3: session_id 仅在非空且内层方法接受时透传 —— 集成测试常以
+            # 窄签名桩整体替换 _run_subagent_async，探测后透传兼容两者。
+            from backend.orchestration.subagent_runner import func_accepts_kwarg
+
+            inner_kwargs: Dict[str, Any] = {"event_sink": sink}
+            if session_id and func_accepts_kwarg(
+                self._run_subagent_async, "session_id"
+            ):
+                inner_kwargs["session_id"] = session_id
             answer, error = await asyncio.wait_for(
                 self._run_subagent_async(
-                    llm_client,
-                    description,
-                    prompt,
-                    event_sink=sink,
-                    session_id=session_id,
+                    llm_client, description, prompt, **inner_kwargs
                 ),
                 timeout=SUBAGENT_TIMEOUT_S,
             )

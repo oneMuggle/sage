@@ -34,24 +34,29 @@ _SCHEMA_DIRECTIVE = (
 )
 
 
-def run_loop_accepts_session_id(agent: Any) -> bool:
-    """探测 agent 的 ``run_loop`` 是否接受 ``session_id`` kwarg（O3）。
+def func_accepts_kwarg(func: Any, kwarg: str) -> bool:
+    """探测可调用对象是否接受 ``kwarg`` 关键字参数（O3 兼容层）。
 
-    生产 SageAgent.run_loop 接受；测试桩/旧扩展可能只有三参签名 ——
-    透传前探测，避免 TypeError 杀死子任务。
+    测试桩/旧扩展常以窄签名替换内部方法 —— 透传新 kwarg 前先探测，
+    避免 TypeError 杀死执行。
     """
     import inspect
 
     try:
-        sig = inspect.signature(agent.run_loop)
+        sig = inspect.signature(func)
     except (TypeError, ValueError):  # noqa: BLE001 — 内建/ exotic 可调用
         return False
-    if "session_id" in sig.parameters:
+    if kwarg in sig.parameters:
         return True
     return any(
         p.kind == inspect.Parameter.VAR_KEYWORD
         for p in sig.parameters.values()
     )
+
+
+def run_loop_accepts_session_id(agent: Any) -> bool:
+    """探测 agent 的 ``run_loop`` 是否接受 ``session_id`` kwarg（O3）。"""
+    return func_accepts_kwarg(agent.run_loop, "session_id")
 
 
 def extract_json_payload(text: str) -> Optional[Dict[str, Any]]:
