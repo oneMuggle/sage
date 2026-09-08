@@ -23,6 +23,7 @@ import { useI18n } from '../../shared/lib/i18n';
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 
 import { ShikiCodeBlock } from './ShikiCodeBlock';
+import { MermaidBlock } from './MermaidBlock';
 
 interface MessageProps {
   message: MessageType;
@@ -307,6 +308,10 @@ function MessageComponent({
                           {content}
                         </code>
                       );
+                    }
+                    // U7': Mermaid 图表渲染（动态加载，失败回退源码展示）
+                    if (lang === 'mermaid') {
+                      return <MermaidBlock code={content} />;
                     }
                     return <CodeBlock language={lang}>{content}</CodeBlock>;
                   },
