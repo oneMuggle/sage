@@ -144,6 +144,21 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ### Changed
 
+
+## [v0.4.9-alpha.35] - 2026-09-09
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。包含 **Win7 启动崩溃 P0 修复** (#513):doctor 自检在 packaged 环境误报 CRITICAL(`SAGE_USER_DATA_DIR` fallback 用 `process.cwd()` 解析到只读目录)+ tray 图标未打包导致加载失败,新增 `electron/userDataPaths.ts` 统一路径解析、`build/icon.{ico,png}` 进 asar;**P0/P1 快赢批次** (#516):数据污染/回复缓存/裸 fetch/二次启动/外链白名单/连接泄漏;**parity-r5 批次 A** (#520) 与**多智能体编排第六轮收口** (#521)。
+
+### Added
+- feat(orchestration): 第六轮对标——多智能体编排与通信收口（O1-O6） (#521)
+- feat(parity-r5): 第五轮对标批次 A——信任闭环还账（U2'/U4'/U5'+B1/U7'） (#520)
+
+### Fixed
+- fix: P0/P1 快赢批次 —— 数据污染/回复缓存/裸fetch/托盘图标/二次启动/外链白名单/连接泄漏 (#516)
+- fix(electron): doctor spawn 改用 userData + tray 图标打包进 app.asar (#513)
+
+🔗 Milestone(s): Win7 启动崩溃 P0 修复, P0/P1 快赢批次, parity-r5 批次 A, 多智能体编排 r6
+
 ## [v0.4.5-alpha.3] - 2026-07-11
 
 > 🧪 **Alpha tier** — Sage 贡献者内测。**SAGE_USER_DATA_DIR 修复**(PR #134):v0.4.5-alpha.2 NSIS installer 安装到 `C:\Program Files\Sage\` 后约 4-5 秒必崩(`PermissionError: [WinError 5] 拒绝访问`),因为 backend 写 themes/scheduled_tasks JSON/audit JSONL/logs 到 bundled `resources/backend/data/`,而程序目录对普通用户只读。新 `SAGE_USER_DATA_DIR` env 让 packaged Electron 注入 `<userData>` 作为运行时可变路径,dev 透传 `<project>/data`。4 个 backend 写路径(theme + scheduler JSON + audit JSONL + log)统一签名;`electron/main.ts` + `electron/backendLauncher.ts` 增加 `sageUserDataDir` 在所有 4 个 spawn 分支都注入。
@@ -315,3 +330,4 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 [v0.1.2]: https://github.com/oneMuggle/sage/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/oneMuggle/sage/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/oneMuggle/sage/releases/tag/v0.1.0
+
