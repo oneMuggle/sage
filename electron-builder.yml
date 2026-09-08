@@ -10,7 +10,6 @@ directories:
 files:
   - dist/**/*
   - dist-electron/**/*
-  - electron/**/*
   - package.json
   # 2026-09-08 (Win7 launch incident): tray icon + window icon live under
   # repo-root/build/. tray.ts and main.ts resolve
@@ -23,6 +22,8 @@ files:
   # the next time someone removes "an unused" entry.
   - build/icon.ico
   - build/icon.png
+  # electron/**/* (TS 源码) 不进安装包: 编译产物已在 dist-electron/**/*,
+  # 运行时无任何代码读取 asar 内的源码目录, 纯属安装包死重。
   - "!**/.git"
   - "!**/node_modules/.cache"
   - "!**/archive/**"
