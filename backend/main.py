@@ -382,6 +382,15 @@ async def lifespan(app: FastAPI):
     if _stale_runs:
         logger.info("启动恢复: %d 个遗留 running 会话已标记为 failed", _stale_runs)
 
+    # O6 (2026-09-08): 编排 run 级启动恢复 —— orch_runs 滞留 running 同样
+    # 收口为 failed（此前只有会话级有恢复，run 级永远滞留）。
+    from backend.data.orch_run_repo import OrchRunRepository
+
+    _stale_orch_runs = OrchRunRepository().fail_stale_running_runs()
+    if _stale_orch_runs:
+        logger.info(
+            "启动恢复: %d 个遗留 running 编排 run 已标记为 failed", _stale_orch_runs
+        )
 
     # PR-3: agents 表种子化 — 用 ensure_default_agents 替代 seed_defaults_if_empty:
     # 首次启动插全量默认集, 已存在的 DB 增量补 writer 等新增默认角色。

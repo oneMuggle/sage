@@ -64,6 +64,11 @@ if TYPE_CHECKING:  # 避免循环:backend.tools → agent → tools (doctor CLI 
 
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
+from backend.orchestration.depth import (
+    current_subagent_depth,
+    is_nesting_allowed,
+    max_nested_subagent_depth,
+)
 from backend.orchestration.events import EventProvenance, EventRecorder, LaneEvent
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.llm_factory import build_llm_client_from_settings
@@ -415,6 +420,21 @@ class AgentTool(BaseTool):
                 error="agent tool requires non-empty 'description' and 'prompt'",
             )
 
+        # O5 (2026-09-08): 嵌套深度守卫 —— 编排子代理（depth ≥ 1）不允许
+        # 经本工具再生孙代理。此前仅靠 profile 白名单结构性拦截（种子角色
+        # 均不含 agent），自定义 profile 加白即可穿透且无深度限制。
+        # 限制：同步 execute 遗弃线程通路不复制 contextvars，不设防（生产
+        # run_loop 对 agent 工具优先走本异步通路）。
+        if not is_nesting_allowed():
+            return ToolResult(
+                success=False,
+                error=(
+                    "subagent_depth_exceeded: 当前已处于子代理上下文"
+                    f"（深度 {current_subagent_depth()}），不允许再派生子代理"
+                    f"（上限 {max_nested_subagent_depth()}）"
+                ),
+            )
+
         llm_client = self._injected_llm_client
         if llm_client is None:
             llm_client = build_llm_client_from_settings()
@@ -492,8 +512,19 @@ class AgentTool(BaseTool):
             )
 
         try:
+            # O3: session_id 仅在非空且内层方法接受时透传 —— 集成测试常以
+            # 窄签名桩整体替换 _run_subagent_async，探测后透传兼容两者。
+            from backend.orchestration.subagent_runner import func_accepts_kwarg
+
+            inner_kwargs: Dict[str, Any] = {"event_sink": sink}
+            if session_id and func_accepts_kwarg(
+                self._run_subagent_async, "session_id"
+            ):
+                inner_kwargs["session_id"] = session_id
             answer, error = await asyncio.wait_for(
-                self._run_subagent_async(llm_client, description, prompt, event_sink=sink),
+                self._run_subagent_async(
+                    llm_client, description, prompt, **inner_kwargs
+                ),
                 timeout=SUBAGENT_TIMEOUT_S,
             )
         except asyncio.TimeoutError:  # noqa: UP041 — py38: asyncio.TimeoutError ≠ TimeoutError
@@ -616,11 +647,15 @@ class AgentTool(BaseTool):
         description: str,
         prompt: str,
         event_sink: Optional[SubagentEventSink] = None,
+        session_id: Optional[str] = None,
     ) -> Tuple[str, Optional[str]]:
         """Drive ``run_loop`` to completion; return (answer, error).
 
         ``event_sink``（live-events P2）非 None 时逐事件投影转发 —— sink
         自身吞错，转发失败绝不杀死子代理执行。
+
+        ``session_id``（O3, 2026-09-08）非空时透传 child.run_loop 做
+        usage_events 会话归因 —— 单委派子代理的 LLM 消耗自此计入主会话。
         """
         subagent = self._build_subagent()
         try:
@@ -640,9 +675,20 @@ class AgentTool(BaseTool):
             answer = ""
             error: Optional[str] = None
             saw_done = False
-            async for event in subagent.run_loop(
-                messages, max_iterations=_resolve_subagent_iterations()
-            ):
+            # O3: session_id 仅在非空且 run_loop 接受时透传 —— 兼容只接受
+            # (messages, max_iterations) 的测试桩。惰性导入探测 helper：
+            # subagent_runner 顶层 import SageAgent（反向依赖 backend.tools），
+            # 模块顶层导入会成环。
+            from backend.orchestration.subagent_runner import (
+                run_loop_accepts_session_id,
+            )
+
+            run_kwargs: Dict[str, Any] = {
+                "max_iterations": _resolve_subagent_iterations()
+            }
+            if session_id and run_loop_accepts_session_id(subagent):
+                run_kwargs["session_id"] = session_id
+            async for event in subagent.run_loop(messages, **run_kwargs):
                 if event_sink is not None:
                     await event_sink(event)
                 state = getattr(event, "state", None)
