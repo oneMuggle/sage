@@ -1,6 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  // 跟随应用内主题设置 (.dark class), 而非操作系统:
+  // ThemeProvider 与 index.html boot 脚本都同步维护 .dark + [data-theme]。
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
