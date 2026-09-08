@@ -45,8 +45,12 @@ function checkRateLimit(senderId: number): boolean {
   return true;
 }
 
-export function registerLogIpc(ipcMain: IpcMain): void {
+export function registerLogIpc(
+  ipcMain: IpcMain,
+  isTrustedSender: (sender: Electron.WebContents) => boolean = () => true,
+): void {
   ipcMain.handle('sage:log:write', async (evt, payload: LogPayload) => {
+    if (!isTrustedSender(evt.sender)) return { ok: false, reason: 'unauthorized' };
     const senderId = evt.sender.id;
     if (!checkRateLimit(senderId)) return { ok: false, reason: 'rate-limited' };
     logger._logFromSource(payload.level, 'renderer', payload.msg, payload.meta);
@@ -58,7 +62,8 @@ export function registerLogIpc(ipcMain: IpcMain): void {
    * All return plain serializable values; renderer invokes via window.electronAPI.*.
    */
 
-  ipcMain.handle('sage:log:list-files', async () => {
+  ipcMain.handle('sage:log:list-files', async (evt) => {
+    if (!isTrustedSender(evt.sender)) return [];
     const dir = getLogDir();
     if (!existsSync(dir)) return [];
     const entries = readdirSync(dir);
@@ -72,19 +77,22 @@ export function registerLogIpc(ipcMain: IpcMain): void {
       .sort((a, b) => b.mtimeMs - a.mtimeMs);
   });
 
-  ipcMain.handle('sage:log:open-dir', async () => {
+  ipcMain.handle('sage:log:open-dir', async (evt) => {
+    if (!isTrustedSender(evt.sender)) throw new Error('未授权的窗口请求');
     const dir = getLogDir();
     await shell.openPath(dir);
     return dir;
   });
 
-  ipcMain.handle('sage:log:copy-path', async () => {
+  ipcMain.handle('sage:log:copy-path', async (evt) => {
+    if (!isTrustedSender(evt.sender)) throw new Error('未授权的窗口请求');
     const dir = getLogDir();
     clipboard.writeText(dir);
     return dir;
   });
 
-  ipcMain.handle('sage:log:cleanup', async () => {
+  ipcMain.handle('sage:log:cleanup', async (evt) => {
+    if (!isTrustedSender(evt.sender)) return { removed: 0 };
     const dir = getLogDir();
     if (!existsSync(dir)) return { removed: 0 };
     const before = readdirSync(dir).length;
@@ -93,13 +101,11 @@ export function registerLogIpc(ipcMain: IpcMain): void {
     return { removed: before - after };
   });
 
-  ipcMain.handle(
-    'sage:log:set-level',
-    async (_evt, payload: { level: LogLevel }) => {
-      process.env.SAGE_LOG_LEVEL = payload.level;
-      setLogLevel(payload.level);
-      logger.info('main: log level changed', { level: payload.level });
-      return { ok: true };
-    },
-  );
+  ipcMain.handle('sage:log:set-level', async (evt, payload: { level: LogLevel }) => {
+    if (!isTrustedSender(evt.sender)) return { ok: false, reason: 'unauthorized' };
+    process.env.SAGE_LOG_LEVEL = payload.level;
+    setLogLevel(payload.level);
+    logger.info('main: log level changed', { level: payload.level });
+    return { ok: true };
+  });
 }
