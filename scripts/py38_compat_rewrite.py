@@ -118,32 +118,53 @@ class AnnotationRewriter(cst.CSTTransformer):
     # Annotation positions — only entry points.
     #
     # NOTE on libcst hook signatures:
-    # - Node-level hooks (`leave_Param`, `leave_FunctionReturn`,
-    #   `leave_AnnAssign`, `leave_TypeAlias`) are called with
-    #   `(original_node, updated_node)` and their RETURN VALUE replaces
-    #   updated_node. These are how we modify the tree.
+    # - Node-level hooks (`leave_Param`, `leave_FunctionDef`,
+    #   `leave_AsyncFunctionDef`, `leave_AnnAssign`, `leave_TypeAlias`)
+    #   are called with `(original_node, updated_node)` and their RETURN
+    #   VALUE replaces updated_node. These are how we modify the tree.
     # - Attribute-level hooks (`leave_Param_annotation`, etc.) are
     #   state-management only — their return value is DISCARDED by
     #   on_leave_attribute. So they CANNOT mutate the tree; we MUST
     #   use the node-level hooks instead.
+    #
+    # NOTE on libcst version compat (≥1.0):
+    # - In older libcst (≤0.4), FunctionReturn was a separate node type
+    #   with its own leave hook. In modern libcst (this codebase pins 1.x),
+    #   returns is just an Annotation field directly under
+    #   FunctionDef/AsyncFunctionDef. We handle the modern shape via
+    #   leave_FunctionDef/leave_AsyncFunctionDef.
+    # - This was a real bug — return-type annotations like `Dict[str, Any] | None`
+    #   were silently ignored because no hook ever fired for them.
     # ------------------------------------------------------------------
 
-    def leave_Param(
-        self, original_node: cst.Param, updated_node: cst.Param
-    ) -> cst.Param:
-        if updated_node.annotation is None:
+    def _rewrite_returns(
+        self, updated_node: cst.FunctionDef | cst.AsyncFunctionDef
+    ) -> cst.FunctionDef | cst.AsyncFunctionDef:
+        if updated_node.returns is None:
             return updated_node
-        inner = updated_node.annotation.annotation
+        inner = updated_node.returns.annotation
         new_inner = self._rewrite_annotation(inner)
         if new_inner is inner:
             return updated_node
         self.changed = True
-        new_annotation = updated_node.annotation.with_changes(annotation=new_inner)
-        return updated_node.with_changes(annotation=new_annotation)
+        new_returns = updated_node.returns.with_changes(annotation=new_inner)
+        return updated_node.with_changes(returns=new_returns)
 
-    def leave_FunctionReturn(
-        self, original_node: cst.FunctionReturn, updated_node: cst.FunctionReturn
-    ) -> cst.FunctionReturn:
+    def leave_FunctionDef(
+        self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
+    ) -> cst.FunctionDef:
+        return self._rewrite_returns(updated_node)
+
+    def leave_AsyncFunctionDef(
+        self,
+        original_node: cst.AsyncFunctionDef,
+        updated_node: cst.AsyncFunctionDef,
+    ) -> cst.AsyncFunctionDef:
+        return self._rewrite_returns(updated_node)
+
+    def leave_Param(
+        self, original_node: cst.Param, updated_node: cst.Param
+    ) -> cst.Param:
         if updated_node.annotation is None:
             return updated_node
         inner = updated_node.annotation.annotation
