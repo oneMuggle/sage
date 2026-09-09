@@ -9,6 +9,7 @@ import type {
   WorkspaceDiff,
 } from '../../../shared/api/workspaceApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ChangesSection } from '../changes/ChangesSection';
 
 const mockGetChanges = vi.fn<() => Promise<WorkspaceChanges>>();
@@ -19,6 +20,9 @@ const mockListCheckpoints = vi.fn<(...args: unknown[]) => Promise<WorkspaceCheck
 const mockCreateCheckpoint = vi.fn<(...args: unknown[]) => Promise<{ checkpointId: string; files: number; skipped: string[]; bytes: number }>>();
 const mockRestoreCheckpoint = vi.fn<(...args: unknown[]) => Promise<{ restored: number }>>();
 
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: vi.fn(async () => true),
+}));
 vi.mock('../../../shared/api/workspaceApi', () => ({
   workspaceApi: {
     getChanges: () => mockGetChanges(),
@@ -180,7 +184,7 @@ describe('ChangesSection', () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
     mockGetChangeDiff.mockResolvedValue({ diff: TWO_HUNK_DIFF, truncated: false });
     mockRevertHunks.mockResolvedValue({ revertedHunks: 1 });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(confirmDialog).mockClear();
     render(
       <I18nProvider>
         <ChangesSection sessionId="s1" />
@@ -207,14 +211,13 @@ describe('ChangesSection', () => {
     await waitFor(() => {
       expect(mockRevertHunks).toHaveBeenCalledWith('s1', 'src/app.ts', [0]);
     });
-    expect(confirmSpy).toHaveBeenCalled();
-    confirmSpy.mockRestore();
+    expect(confirmDialog).toHaveBeenCalled();
   });
 
   it('U19: 文件清单提供撤销入口（受跟踪 → revertChanges，未跟踪 → 删除）', async () => {
     mockGetChanges.mockResolvedValue(sampleChanges);
     mockRevertChanges.mockResolvedValue({ reverted: ['src/app.ts'], errors: [] });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(confirmDialog).mockClear();
     render(
       <I18nProvider>
         <ChangesSection sessionId="s1" />
@@ -233,7 +236,6 @@ describe('ChangesSection', () => {
     await waitFor(() => {
       expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['notes.md'], true);
     });
-    confirmSpy.mockRestore();
   });
 
   it('U2\': 检查点区默认收起，展开后创建快照并刷新列表', async () => {
@@ -288,7 +290,7 @@ describe('ChangesSection', () => {
       { checkpointId: '20260908-120000-ab12cd', createdAt: '2026-09-08T12:00:00', bytes: 2048, files: 3 },
     ]);
     mockRestoreCheckpoint.mockResolvedValue({ restored: 3 });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(confirmDialog).mockClear();
     render(
       <I18nProvider>
         <ChangesSection sessionId="s1" />
@@ -313,8 +315,7 @@ describe('ChangesSection', () => {
       expect(mockGetChanges.mock.calls.length).toBeGreaterThan(callsBefore);
       expect(mockListCheckpoints.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
-    expect(confirmSpy).toHaveBeenCalled();
-    confirmSpy.mockRestore();
+    expect(confirmDialog).toHaveBeenCalled();
   });
 
   it('U2\': 未绑定工作区时不渲染检查点区', async () => {
