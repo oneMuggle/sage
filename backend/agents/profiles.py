@@ -224,6 +224,7 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_create",
                 "office_update",
                 "office_restore",
+                "office_archive",
             ],
             memory_access=["semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.4),
@@ -375,9 +376,10 @@ _RESEARCHER_CURRENT_DEFAULT_TOOLS: List[str] = [
 
 _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "read_file", "write_file", "memory_search",
-    # 2026-09-04: 写作 agent 的 Office 读写五件套(不给 delete, 给 restore),
+    # 2026-09-09: 写作 agent 的 Office 读写六件套(不给 delete, 给 restore + archive),
     # 与上方 writer.tools 同步。
     "office_list", "office_read", "office_create", "office_update", "office_restore",
+    "office_archive",
 ]
 
 
