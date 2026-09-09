@@ -135,10 +135,23 @@ function SpendLimitInput(): JSX.Element {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    // 卸载守卫: vitest 切换测试环境(jsdom→node)后 promise 才 resolve 时,
+    // setState 会在无 window 的上下文执行并产生 unhandled rejection
+    // (Frontend job 因此间歇红)。get_preference/set_preference 同理均需守卫。
+    let mounted = true;
     invoke<{ value: string | null }>('get_preference', { key: 'spend_limit_usd' })
-      .then((resp) => setLimit(resp.value ?? ''))
-      .catch(() => setLimit(''))
-      .finally(() => setLoaded(true));
+      .then((resp) => {
+        if (mounted) setLimit(resp.value ?? '');
+      })
+      .catch(() => {
+        if (mounted) setLimit('');
+      })
+      .finally(() => {
+        if (mounted) setLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const save = (raw: string): void => {
