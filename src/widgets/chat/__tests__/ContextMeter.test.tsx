@@ -63,7 +63,7 @@ describe('ContextMeter', () => {
     await waitFor(() => {
       expect(screen.getByText('95%')).toBeInTheDocument();
     });
-    expect(screen.getByText('95%').className).toContain('text-red-500');
+    expect(screen.getByText('95%').className).toContain('text-error');
   });
 
   it('tooltip 含 token 明细与缓存命中', async () => {

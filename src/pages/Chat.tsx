@@ -629,7 +629,7 @@ export function Chat() {
       {showConfigWarning && (
         <div
           data-testid="config-warning"
-          className="px-4 py-2 bg-yellow-50 border-t border-yellow-300 text-yellow-900 text-xs flex items-center gap-2"
+          className="px-4 py-2 bg-warning/10 border-t border-warning/40 text-warning text-xs flex items-center gap-2"
         >
           <span aria-hidden="true">⚠️</span>
           <span>
@@ -637,7 +637,7 @@ export function Chat() {
             <button
               type="button"
               onClick={() => navigate('/settings')}
-              className="underline text-yellow-900 hover:text-yellow-700 transition-colors"
+              className="underline text-warning hover:text-warning/80 transition-colors"
             >
               前往设置
             </button>
