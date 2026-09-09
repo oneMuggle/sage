@@ -39,6 +39,7 @@ from backend.office.models import (
 )
 from backend.office.path_safety import OfficePathError, validate_supported_filename
 from backend.office.ppt import generate_ppt, read_ppt
+from backend.office.selfcheck_history import record
 from backend.office.session_workspace import (
     get_active_workspace,
     get_document_in_workspace,
@@ -574,6 +575,15 @@ class OfficeCreateTool(BaseTool):
             )
             if self_check is not None:
                 content["self_check"] = self_check
+                # N4 (round-3) 自检历史：受管 create 落一行（best-effort，
+                # 失败由 helper 自吞，绝不影响主结果）。
+                record(
+                    doc_id,
+                    "create",
+                    bool(self_check.get("ok")),
+                    self_check.get("summary"),
+                    conn=conn,
+                )
         return ToolResult(success=True, content=content)
 
     @staticmethod
@@ -715,8 +725,15 @@ class OfficeCreateTool(BaseTool):
             "filename": output.name,
             "bytes": stat.st_size,
         }
-        result_content["self_check"] = build_self_check(
-            doc_type_enum.value, output, requested=content
+        self_check = build_self_check(doc_type_enum.value, output, requested=content)
+        result_content["self_check"] = self_check
+        # N4 (round-3) 自检历史：best-effort 落一行。legacy output_dir 路径
+        # 没有受管 doc row，行记在 ""（纯审计，受管历史查询不会命中）。
+        record(
+            "",
+            "create",
+            bool(self_check.get("ok")),
+            self_check.get("summary"),
         )
         return ToolResult(success=True, content=result_content)
 

@@ -48,7 +48,22 @@ export interface ElectronWithStub {
   stub: StubBackend;
 }
 
-export async function launchElectronWithStub(): Promise<ElectronWithStub> {
+export interface LaunchElectronWithStubOptions {
+  /**
+   * Extra env vars merged over the default launch env. Used by the demo-mode
+   * specs (round-3 N1): `SAGE_DEMO_MODE=1` makes main.ts treat the process as
+   * a demo run (electron/main.ts isDemoProcess) and forward
+   * `--sage-demo-mode=1` to the renderer, so `isDemoMode()` is true from the
+   * first paint and src/shared/api/demoInterceptors.ts answers every
+   * registered channel (all office_* channels live there — the Python stub
+   * has no /office routes).
+   */
+  env?: Record<string, string>;
+}
+
+export async function launchElectronWithStub(
+  options: LaunchElectronWithStubOptions = {},
+): Promise<ElectronWithStub> {
   if (!existsSync(MAIN_JS)) {
     throw new Error(
       `${MAIN_JS} not found — run \`npm run build:electron\` before launching the smoke suite.`,
@@ -66,6 +81,7 @@ export async function launchElectronWithStub(): Promise<ElectronWithStub> {
       SAGE_BACKEND_URL: stub.url,
       PYTHON_BACKEND_PORT: String(stub.port),
       SAGE_SKIP_BACKEND: '1',
+      ...options.env,
     },
     timeout: 30_000,
   });

@@ -1214,9 +1214,10 @@ let demoOfficeDocs: OfficeDocumentSummary[] = [...DEMO_OFFICE_DOCS];
 let demoMemories: Memory[] = [...DEMO_MEMORIES];
 let demoScheduled: ScheduledTask[] = [...DEMO_SCHEDULED_TASKS];
 
-// Office parity batch 3 (item 3.2): 内置 Word 模板演示数据 — 两条内置,
-// 覆盖文本/日期与表格/富文本占位符类型。工作区模板依赖磁盘上的
-// templates/*.docx, 演示模式不伪造 (列表自然为空)。
+// Office parity batch 3 (item 3.2): 内置模板演示数据。Round-3 N2 后覆盖
+// word/excel/ppt 三种 doc_type — word 两条 (文本/日期与表格/富文本占位符),
+// excel/ppt 各一条验证标签页过滤。工作区模板依赖磁盘上的 templates/*,
+// 演示模式不伪造 (列表自然为空)。
 const DEMO_OFFICE_TEMPLATES: OfficeTemplateMeta[] = [
   {
     id: 'weekly_report',
@@ -1240,6 +1241,28 @@ const DEMO_OFFICE_TEMPLATES: OfficeTemplateMeta[] = [
       { name: 'title', type: 'text', description: '会议主题' },
       { name: 'attendees', type: 'text', description: '参会人' },
       { name: 'conclusions', type: 'rich_text', description: '会议结论' },
+    ],
+    source: 'builtin',
+  },
+  {
+    id: 'budget_sheet',
+    name: '预算表模板',
+    description: '部门预算：填入部门与预算明细表。',
+    doc_type: 'excel',
+    placeholders: [
+      { name: 'department', type: 'text', description: '部门名称' },
+      { name: 'budget_table', type: 'table', description: '预算明细' },
+    ],
+    source: 'builtin',
+  },
+  {
+    id: 'project_review',
+    name: '项目评审模板',
+    description: '项目评审：项目名、评审日期与结论。',
+    doc_type: 'ppt',
+    placeholders: [
+      { name: 'project', type: 'text', description: '项目名称' },
+      { name: 'review_date', type: 'date', description: '评审日期' },
     ],
     source: 'builtin',
   },
@@ -1687,6 +1710,33 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
   office_ppt_read: () => DEMO_PPT_READ,
   office_pdf_read: () => DEMO_PDF_READ,
 
+  // Round-3 N1: PDF 生成演示路径（生成表单 e2e 的正向用例依赖）
+  office_pdf_generate: (args) => {
+    const workspacePath =
+      asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
+    const filename = asStr(args.filename) || '文档.pdf';
+    const doc: OfficeDocumentSummary = {
+      id: demoUUID(),
+      workspace_path: workspacePath,
+      doc_type: 'pdf',
+      original_filename: null,
+      generated_filename: filename,
+      status: 'generated',
+      created_at: NOW_S,
+      updated_at: NOW_S,
+      metadata: { page_count: 2, file_size_bytes: 88320 },
+      derived_from: null,
+      archived_at: null,
+    };
+    demoOfficeDocs = [doc, ...demoOfficeDocs];
+    return {
+      output_path: `${workspacePath}/${filename}`,
+      filename,
+      file_size_bytes: 88320,
+      page_count: 2,
+    };
+  },
+
   // Office parity batch 1 (item 1.7): archive / restore + snapshots.
   office_archive_document: (args) => {
     const docId = asStr(args.docId) || asStr(args.id);
@@ -1868,9 +1918,10 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
     return result;
   },
 
-  // Office parity batch 3 (item 3.2): Word 模板库 — 列表返回 2 条内置模板;
-  // instantiate 走 office_word_generate 同款入库桩 (新文档出现在文档列表),
-  // 并按 fill-template 结果形状回填 filled_count / unfilled_placeholders。
+  // Office parity batch 3 (item 3.2): 模板库 — 列表返回内置模板 (round-3
+  // N2 起覆盖 word/excel/ppt); instantiate 走 office_*_generate 同款入库桩
+  // (新文档出现在文档列表, doc_type 按扩展名推断), 并按 fill-template 结果
+  // 形状回填 filled_count / unfilled_placeholders。
   office_list_templates: (): OfficeTemplateListResponse => ({
     templates: DEMO_OFFICE_TEMPLATES,
   }),
@@ -1880,16 +1931,29 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       asStr(args.workspacePath) || asStr(args.workspace_path) || DEMO_WORKSPACE_PATH;
     const filename = asStr(args.filename) || '模板文档.docx';
     const data = (args.data as Record<string, string>) ?? {};
+    // Round-3 N2: the backend picks the filler by the template's
+    // doc_type — the demo stub infers it from the output extension.
+    const docType: OfficeDocumentSummary['doc_type'] = filename.toLowerCase().endsWith('.xlsx')
+      ? 'excel'
+      : filename.toLowerCase().endsWith('.pptx')
+        ? 'ppt'
+        : 'word';
+    const metadata: OfficeDocumentSummary['metadata'] =
+      docType === 'excel'
+        ? { sheet_count: 1, file_size_bytes: 12000 }
+        : docType === 'ppt'
+          ? { page_count: 1, file_size_bytes: 30000 }
+          : { paragraph_count: 8, table_count: 0, file_size_bytes: 21504 };
     const doc: OfficeDocumentSummary = {
       id: demoUUID(),
       workspace_path: workspacePath,
-      doc_type: 'word',
+      doc_type: docType,
       original_filename: null,
       generated_filename: filename,
       status: 'generated',
       created_at: NOW_S,
       updated_at: NOW_S,
-      metadata: { paragraph_count: 8, table_count: 0, file_size_bytes: 21504 },
+      metadata,
       derived_from: null,
       archived_at: null,
     };
@@ -1898,7 +1962,7 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
     const result: OfficeTemplateInstantiateResult = {
       output_path: `${workspacePath}/${filename}`,
       filename,
-      file_size_bytes: 21504,
+      file_size_bytes: metadata.file_size_bytes,
       filled_count: filledCount,
       unfilled_placeholders: [],
     };

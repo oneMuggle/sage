@@ -198,7 +198,8 @@ def test_scanner_filter_in_table_cell_is_rich_text(tmp_path: Path):
 
 def test_list_templates_without_workspace_returns_builtins():
     response = list_templates(None)
-    assert [t.source for t in response.templates].count("builtin") == 6
+    # round 3 N2: registry = 6 word + 2 excel + 2 ppt builtins
+    assert [t.source for t in response.templates].count("builtin") == 10
     assert all(t.filename is None for t in response.templates)
     weekly = next(t for t in response.templates if t.id == "weekly_report")
     assert weekly.name == "周报"
@@ -230,12 +231,12 @@ def test_list_templates_workspace_dir_with_broken_docx_skipped(tmp_path: Path):
     assert entry.id.startswith("ws_")
     assert {p.name for p in entry.placeholders} == {"contract_name", "amount"}
     # builtins are still listed alongside
-    assert len([t for t in response.templates if t.source == "builtin"]) == 6
+    assert len([t for t in response.templates if t.source == "builtin"]) == 10
 
 
 def test_list_templates_missing_templates_dir_returns_builtins_only(tmp_path: Path):
     response = list_templates(str(tmp_path))
-    assert len(response.templates) == 6
+    assert len(response.templates) == 10
     assert all(t.source == "builtin" for t in response.templates)
 
 

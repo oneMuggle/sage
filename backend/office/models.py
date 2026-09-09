@@ -648,23 +648,27 @@ class OfficeTemplateInstantiateRequest(BaseModel):
     """POST /api/v1/office/templates/instantiate.
 
     ``template_id``（builtin）与 ``workspace_template``（office/templates/ 下的
-    文件名）二选一；同时给出报 400。
+    文件名）二选一；同时给出报 400。round 3 N2 起 builtin 模板覆盖 word /
+    excel / ppt 三种 doc_type，输出文件名扩展名须与模板类型一致。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     workspace_path: str
     template_id: Optional[str] = Field(
-        default=None, description="builtin 模板 id，如 'weekly_report'"
+        default=None, description="builtin 模板 id，如 'weekly_report'（word）、'budget_sheet'（excel）、'kickoff_deck'（ppt）"
     )
     workspace_template: Optional[str] = Field(
         default=None,
-        description="workspace 模板文件名（office/templates/ 内，含扩展名可省 .docx）",
+        description=(
+            "workspace 模板文件名（office/templates/ 内，支持 .docx/.xlsx/.pptx；"
+            "省略扩展名时按 docx→xlsx→pptx 顺序匹配）"
+        ),
     )
     filename: str = Field(
         min_length=1,
         max_length=200,
-        description="输出文件名（缺 .docx 扩展名时自动补全）",
+        description="输出文件名（缺扩展名时自动补全，须与模板 doc_type 一致：.docx/.xlsx/.pptx）",
     )
     data: Dict[str, Any] = Field(default_factory=dict)
     images: Optional[Dict[str, str]] = Field(

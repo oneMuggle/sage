@@ -45,6 +45,7 @@ from backend.office.diff_preview import preview_update
 from backend.office.edit import update_document
 from backend.office.models import OfficeDocType
 from backend.office.path_safety import validate_supported_filename
+from backend.office.selfcheck_history import record
 from backend.office.session_workspace import (
     get_active_workspace,
     get_document_in_workspace,
@@ -223,6 +224,15 @@ class OfficeUpdateTool(BaseTool):
             self_check = self._managed_self_check(ctx, edited_id, doc_type_value)
             if self_check is not None:
                 content["self_check"] = self_check
+                # N4 (round-3) 自检历史：受管 update 落一行（best-effort，
+                # 失败由 helper 自吞，绝不影响主结果）。
+                record(
+                    edited_id,
+                    "update",
+                    bool(self_check.get("ok")),
+                    self_check.get("summary"),
+                    conn=conn,
+                )
         return ToolResult(success=True, content=content)
 
     def _managed_self_check(
@@ -364,6 +374,15 @@ class OfficeUpdateTool(BaseTool):
             )
         # plan 3.4 自校验回读：编辑成功后回读摘要（best-effort，失败也得
         # 到 {ok: False} 占位，主结果保持 success）。
+        self_check = build_self_check(doc_type, path, requested=ops)
+        # N4 (round-3) 自检历史：file_path 模式无受管 doc row，行记在 ""
+        # （纯审计；dry_run 预览路径不落历史）。
+        record(
+            "",
+            "update",
+            bool(self_check.get("ok")),
+            self_check.get("summary"),
+        )
         return ToolResult(
             success=True,
             content={
@@ -371,7 +390,7 @@ class OfficeUpdateTool(BaseTool):
                 "filename": path.name,
                 "bytes": path.stat().st_size,
                 "results": results,
-                "self_check": build_self_check(doc_type, path, requested=ops),
+                "self_check": self_check,
             },
         )
 

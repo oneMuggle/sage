@@ -78,6 +78,7 @@ from backend.office.models import (
 from backend.office.path_safety import resolve_within
 from backend.office.pdf import MAX_PDF_SIZE, generate_pdf, read_pdf
 from backend.office.pdf_forms import fill_pdf_form, read_pdf_form
+from backend.office.pdf_to_word import PdfToWordRequest, PdfToWordResult, convert_pdf_to_word
 from backend.office.ppt import generate_ppt, read_ppt
 from backend.office.storage import (
     archive_document,
@@ -687,12 +688,14 @@ def list_templates_endpoint(workspace_path: Optional[str] = None) -> TemplateLib
 def instantiate_template_endpoint(
     req: OfficeTemplateInstantiateRequest,
 ) -> WordTemplateFillResult:
-    """Instantiate a library template into ``office/word/<uuid>/<filename>``.
+    """Instantiate a library template (word/excel/ppt) into the managed layout.
 
-    Fills through the same docxtpl machinery as /word/fill-template (ZIP
-    guards, dangerous-Jinja scan, SandboxedEnvironment, ≤10MB images). The
-    generated row is persisted here (like the other generate routes) so the
-    document shows up in GET /documents.
+    Fills through the same machinery per doc_type (word: docxtpl with ZIP
+    guards, dangerous-Jinja scan, SandboxedEnvironment, ≤10MB images; xlsx/
+    pptx: {{marker}} replacement per Round-3 N2). The generated row is
+    persisted here (like the other generate routes) so the document shows up
+    in GET /documents — doc_type derived from the output extension so excel/
+    ppt templates land in the right list.
     """
     result = instantiate_template(
         req.workspace_path,
@@ -702,9 +705,12 @@ def instantiate_template_endpoint(
         data=req.data,
         images=req.images,
     )
+    output_path = Path(result.output_path)
+    ext = output_path.suffix.lstrip(".").lower()
+    doc_type = {"docx": OfficeDocType.WORD, "xlsx": OfficeDocType.EXCEL, "pptx": OfficeDocType.PPT}.get(ext, OfficeDocType.WORD)
     _build_summary_for_generated(
-        file_path=Path(result.output_path),
-        doc_type=OfficeDocType.WORD,
+        file_path=output_path,
+        doc_type=doc_type,
         workspace_path=req.workspace_path,
     )
     return result
@@ -735,6 +741,74 @@ def update_document_endpoint(
     conn = _db().get_connection()
     doc = _require_document(conn, doc_id)
     return apply_doc_update(conn, doc, req.ops)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# PDF → Word conversion + self-check history (Office parity round 3 — N3/N4)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.post("/pdf/to-word", response_model=PdfToWordResult)
+def pdf_to_word_endpoint(req: PdfToWordRequest) -> PdfToWordResult:
+    """Convert a text-layer PDF into a managed .docx (round-3 N3).
+
+    The service function (:func:`backend.office.pdf_to_word.convert_pdf_to_word`)
+    never raises and returns ``PdfToWordResult(ok=False, error=...)`` on any
+    failure; this handler only adds the boundary checks that map to HTTP
+    errors (400/404 via the OfficeError handler) and the persistence step:
+
+    - ``file_path`` must lie inside ``workspace_path`` (path traversal → 400);
+    - ``source_doc_id``, when given, must exist (unknown id → 404) and becomes
+      the generated Word row's ``derived_from`` lineage.
+    """
+    logger.info("Converting PDF to Word: %s", req.file_path)
+    file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
+    if req.source_doc_id:
+        _require_document(_db().get_connection(), req.source_doc_id)
+    result = convert_pdf_to_word(
+        file_path,
+        Path(req.workspace_path).resolve(),
+        req.out_filename or "",
+    )
+    if result.ok:
+        # Persist the generated row like the other generate routes.
+        # _build_summary_for_generated() takes no derived_from (its existing
+        # call sites don't track lineage), so the lineage is attached after
+        # the helper ran and the row is re-saved (INSERT OR REPLACE keeps
+        # this a plain overwrite of the row we just created).
+        summary = _build_summary_for_generated(
+            file_path=Path(result.output_path),
+            doc_type=OfficeDocType.WORD,
+            workspace_path=req.workspace_path,
+        )
+        if req.source_doc_id:
+            summary.derived_from = req.source_doc_id
+            save_document(_db().get_connection(), summary)
+    return result
+
+
+@router.get("/doc/{doc_id}/self-checks")
+def list_self_checks_endpoint(doc_id: str, limit: int = 50) -> dict:
+    """List a document's self-check verification history (round-3 N4).
+
+    Response shape is the fixed frontend contract:
+    ``{"items": [{id, doc_id, action, ok, summary, created_at}, ...], "total"}``
+    — newest first, ``ok`` a bool, ``summary`` the deserialized readback dict.
+    ``total`` mirrors ``len(items)`` (same convention as the snapshots
+    endpoint) because the backend list query has no pagination offset.
+
+    The ``backend.office.selfcheck_history`` module is imported lazily at
+    call time (same parallel-delivery pattern as ``export_pdf``), keeping
+    this router importable even if the history module is absent.
+    """
+    conn = _db().get_connection()
+    _require_document(conn, doc_id)
+    # Clamp the page size: at least 1 row, never more than 500 per call.
+    clamped_limit = max(1, min(limit, 500))
+    from backend.office.selfcheck_history import list_for_document
+
+    items = list_for_document(conn, doc_id, limit=clamped_limit)
+    return {"items": items, "total": len(items)}
 
 
 __all__ = [
@@ -768,4 +842,8 @@ __all__ = [
     "instantiate_template_endpoint",
     # Office parity round 2 (R1): apply update ops to a managed document
     "update_document_endpoint",
+    # Office parity round 3 (N3): PDF → Word text-level conversion
+    "pdf_to_word_endpoint",
+    # Office parity round 3 (N4): self-check verification history
+    "list_self_checks_endpoint",
 ]

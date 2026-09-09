@@ -656,6 +656,29 @@ class Database:
         )
         conn.commit()
 
+        # Office self-check history (round-3 Office parity, N4). Every
+        # office write that produces a self_check readback (create / update
+        # / apply / archive / restore / snapshot_restore) appends one audit
+        # row so the doc detail view can replay the verification timeline.
+        # ``doc_id`` is "" for unmanaged writes (legacy output_dir /
+        # file_path paths) — pure audit trail no managed query matches.
+        # Additive + idempotent, same pattern as office_documents above.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS office_self_checks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                ok INTEGER NOT NULL,
+                summary TEXT,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_self_checks_doc "
+            "ON office_self_checks(doc_id, created_at)"
+        )
+        conn.commit()
+
         # 进化日志表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS evolution_log (

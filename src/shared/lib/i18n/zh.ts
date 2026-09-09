@@ -562,6 +562,17 @@ export const zh = {
   'office.template.selectFirst': '请先选择一个模板',
   'office.template.unfilled': '未填充变量',
 
+  // ─── Office parity round 3: 批量归档/恢复 (item N5) + 模板扩展 (N2) ─────
+  'office.batch.archive': '批量归档',
+  'office.batch.restore': '批量恢复',
+  'office.batch.start': '开始批量操作…',
+  'office.batch.done': '批量操作完成：{n} 项',
+  'office.batch.doneWithFailures': '批量操作完成：成功 {n} 项，失败 {m} 项',
+  'office.batch.failed': '批量操作失败',
+  'office.batch.selectAll': '全选',
+  'office.batch.selectedCount': '已选 {n} 项',
+  'office.batch.selectRow': '选择该文档',
+
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': '加载中…',
   'orchestration.error': '错误:',

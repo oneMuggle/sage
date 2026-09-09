@@ -382,11 +382,11 @@ export const officeApi = {
   },
 
   /**
-   * List Word templates available in a workspace (batch 3, item 3.2) —
-   * builtin entries shipped with the backend plus the workspace's own
-   * `templates/*.docx`. Only doc_type 'word' is produced today; the
-   * picker filters on it anyway so a future ppt/excel kind degrades
-   * gracefully.
+   * List document templates available in a workspace (batch 3, item 3.2;
+   * round 3 N2 adds excel/ppt) — builtin entries shipped with the backend
+   * plus the workspace's own `templates/*.docx|xlsx|pptx`. Each entry
+   * carries `doc_type`; the picker filters on the tab's kind so unknown
+   * future kinds degrade gracefully.
    *
    * Bounded retry — read-only and idempotent, same policy as listDocuments.
    */
@@ -403,17 +403,17 @@ export const officeApi = {
   },
 
   /**
-   * Instantiate a Word template with placeholder data (batch 3, item 3.2).
-   * Returns the same shape as the word fill-template result (backend
-   * `WordTemplateFillResult`) — `output_path` / `filename` /
-   * `file_size_bytes` / `filled_count` / `unfilled_placeholders`. The
-   * backend persists a document row, so the result shows up in the
-   * document list after a refresh.
+   * Instantiate a template with placeholder data (batch 3, item 3.2;
+   * round 3 N2: works for word/excel/ppt templates — the backend picks
+   * the filler by the template's doc_type). Returns
+   * `output_path` / `filename` / `file_size_bytes` / `filled_count` /
+   * `unfilled_placeholders`. The backend persists a document row, so the
+   * result shows up in the document list after a refresh.
    *
    * Route is `rawBody` — see OfficeTemplateInstantiateRequest for why the
    * placeholder-name keys in `data` / `images` must not be key-translated.
    *
-   * No retry — side-effecting (creates a new .docx + document row).
+   * No retry — side-effecting (creates a new OOXML file + document row).
    */
   async instantiateTemplate(
     req: OfficeTemplateInstantiateRequest,

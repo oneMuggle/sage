@@ -31,6 +31,7 @@ from typing import Any, Dict, Optional
 
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
+from backend.office.selfcheck_history import record
 from backend.office.session_workspace import (
     get_active_workspace,
     get_document_in_workspace_any_status,
@@ -144,8 +145,15 @@ class OfficeArchiveTool(BaseTool):
         # R7 自校验回读：工作区归档计数 + 触达文档指纹（best-effort，
         # 回读失败得到 {ok: False, error} 占位，主结果保持 success）。
         content = dict(result.get("content") or {})
-        content["self_check"] = workspace_count_self_check(
-            conn, ctx, doc_id, "archived_count"
+        self_check = workspace_count_self_check(conn, ctx, doc_id, "archived_count")
+        content["self_check"] = self_check
+        # N4 (round-3) 自检历史：archive 落一行（best-effort，helper 自吞）。
+        record(
+            doc_id,
+            "archive",
+            bool(self_check.get("ok")),
+            self_check.get("summary"),
+            conn=conn,
         )
         return ToolResult(success=True, content=content)
 

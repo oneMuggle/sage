@@ -154,14 +154,21 @@ describe('demo office doc update apply (parity round 2, R1)', () => {
   });
 });
 
-describe('demo office template library (parity batch 3, item 3.2)', () => {
-  it('office_list_templates returns exactly 2 builtin word templates', () => {
+describe('demo office template library (parity batch 3, item 3.2; round-3 N2)', () => {
+  it('office_list_templates returns builtin templates covering word/excel/ppt', () => {
     const res = demoInvoke('office_list_templates', { workspacePath: '/ws' });
     expect(res.hit).toBe(true);
     const value = res.value as { templates: Array<Record<string, unknown>> };
-    expect(value.templates).toHaveLength(2);
+    // Round-3 N2: 2 word + 1 excel + 1 ppt builtin entries.
+    expect(value.templates).toHaveLength(4);
+    expect(value.templates.map((tpl) => tpl.doc_type).sort()).toEqual([
+      'excel',
+      'ppt',
+      'word',
+      'word',
+    ]);
     for (const tpl of value.templates) {
-      expect(tpl).toMatchObject({ doc_type: 'word', source: 'builtin' });
+      expect(tpl).toMatchObject({ source: 'builtin' });
       expect(typeof tpl.id).toBe('string');
       expect(Array.isArray(tpl.placeholders)).toBe(true);
     }
@@ -189,6 +196,24 @@ describe('demo office template library (parity batch 3, item 3.2)', () => {
       doc_type: 'word',
       status: 'generated',
       generated_filename: '周报模板-2026-09-10.docx',
+    });
+  });
+
+  it('office_templates_instantiate infers doc_type from the output extension (round-3 N2)', () => {
+    const res = demoInvoke('office_templates_instantiate', {
+      workspacePath: '/ws',
+      templateId: 'project_review',
+      filename: '项目评审模板-2026-09-10.pptx',
+      data: { project: 'Atlas' },
+    });
+    expect(res.hit).toBe(true);
+    const after = demoInvoke('office_list_documents', {}).value as {
+      documents: Array<Record<string, unknown>>;
+    };
+    expect(after.documents[0]).toMatchObject({
+      doc_type: 'ppt',
+      status: 'generated',
+      generated_filename: '项目评审模板-2026-09-10.pptx',
     });
   });
 });

@@ -54,6 +54,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .edit import update_document
 from .errors import OfficeContentShapeError, OfficeEditError, OfficeFileNotFoundError
 from .models import OfficeDocStatus, OfficeDocumentSummary
+from .selfcheck_history import record
 from .storage import document_path, save_document, snapshot_pre_edit
 
 logger = logging.getLogger(__name__)
@@ -184,9 +185,13 @@ def apply_doc_update(
     except Exception:  # noqa: BLE001 — 文件已改成功，登记失败只记日志
         logger.warning("office edit applied but DB refresh failed: doc=%s", doc.id)
 
+    self_check = _self_check(doc.doc_type.value, file_path, ops)
+    # N4 (round-3) 自检历史：apply 落一行（best-effort，失败由 helper
+    # 自吞——编辑本身已成功，历史绝不令请求失败）。
+    record(doc.id, "apply", bool(self_check.get("ok")), self_check.get("summary"), conn=conn)
     return OfficeDocUpdateResult(
         ok=True,
         summary=doc,
-        self_check=_self_check(doc.doc_type.value, file_path, ops),
+        self_check=self_check,
         results=per_op_results,
     )

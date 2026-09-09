@@ -571,6 +571,17 @@ export const en: Record<TranslationKey, string> = {
   'office.template.selectFirst': 'Pick a template first',
   'office.template.unfilled': 'Unfilled placeholders',
 
+  // ─── Office parity round 3: batch archive/restore (item N5) + template extension (N2) ─────
+  'office.batch.archive': 'Archive selected',
+  'office.batch.restore': 'Restore selected',
+  'office.batch.start': 'Batch operation started…',
+  'office.batch.done': 'Batch complete: {n} items',
+  'office.batch.doneWithFailures': 'Batch complete: {n} succeeded, {m} failed',
+  'office.batch.failed': 'Batch operation failed',
+  'office.batch.selectAll': 'Select all',
+  'office.batch.selectedCount': '{n} selected',
+  'office.batch.selectRow': 'Select document',
+
   // ─── M6 生态扩展: 编排看板补充 i18n 键 ─────
   'orchestration.loading': 'Loading…',
   'orchestration.error': 'Error:',
