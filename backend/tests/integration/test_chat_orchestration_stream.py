@@ -331,20 +331,26 @@ async def test_explicit_null_orchestration_mode_does_not_422():
             "backend.api.legacy_routes._classify_orchestration_mode",
             return_value="single",
         ) as mock_classify:
+            # 必须 drain 整个 stream —— producer 是后台 task,
+            # 不等 producer 跑完,后续 mock_classify.assert_awaited_once()
+            # 可能在 _classify_orchestration_mode 被 await 之前就触发
+            # (race: 早期 producer 前置代码短,有时能撞过;加了 B-2/L11/F5
+            # 等前置后稳定在 assert 之前未跑到 classify)。
             async with httpx.AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as ac:
-                resp = await ac.post(
-                    CHAT_STREAM_PATH,
-                    json={
+                events = await _stream_events(
+                    ac,
+                    {
                         "session_id": "s",
                         "message": "今天天气怎么样",
                         "orchestration_mode": None,  # explicit null —— IPC `?? null` 产物
                     },
                 )
 
-    assert resp.status_code == 200, (
-        f"explicit null orchestration_mode 不应 422, 实际 {resp.status_code}: {resp.text}"
+    states = [e["state"] for e in events]
+    assert "done" in states, (
+        f"explicit null orchestration_mode 流应正常结束, 实际 events={states}"
     )
     # 业务层用 `data.orchestration_mode or "auto"`,所以 classifier 收到 "auto"
     mock_classify.assert_awaited_once()
