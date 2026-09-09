@@ -5,12 +5,12 @@
  * displayed below with size + path.
  */
 
-import { FileSpreadsheet, FileText, Presentation, Sparkles } from 'lucide-react';
+import { FileSpreadsheet, FileText, FileType, Presentation, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { officeApi } from '../../shared/api/officeApi';
-import type { OfficeDocType } from '../../shared/api/types';
+import type { OfficeDocType, PdfPageSize } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 
 export interface OfficeGenerateFormProps {
@@ -43,6 +43,12 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const [sheetHeaders, setSheetHeaders] = useState('Name,Age,City');
   const [sheetRows, setSheetRows] = useState('Alice,30,Beijing\nBob,25,Shanghai');
 
+  // PDF (parity batch 1, item 1.2) — backend page_size values are the
+  // reportlab literals "A4" / "Letter" / "Legal" (backend/office/pdf.py:187).
+  const [pdfTitle, setPdfTitle] = useState('');
+  const [pdfParagraphs, setPdfParagraphs] = useState('First paragraph of the document.');
+  const [pdfPageSize, setPdfPageSize] = useState<PdfPageSize>('A4');
+
   const handleGenerate = async () => {
     if (!filename.trim()) {
       toast.error(t('office.generate.filenameRequired'));
@@ -68,6 +74,17 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
           filename,
           title: wordTitle,
           paragraphs: [{ text: wordBody }],
+        });
+      } else if (docType === 'pdf') {
+        const paragraphs = pdfParagraphs
+          .split('\n')
+          .map((p) => p.trim())
+          .filter(Boolean);
+        out = await officeApi.generatePdf({
+          workspace_path: workspacePath,
+          filename,
+          pages: [{ title: pdfTitle.trim() || null, paragraphs }],
+          page_size: pdfPageSize,
         });
       } else {
         const headers = sheetHeaders
@@ -103,7 +120,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       </div>
 
       <div className="flex gap-2">
-        {(['ppt', 'word', 'excel'] as OfficeDocType[]).map((type) => (
+        {(['ppt', 'word', 'excel', 'pdf'] as OfficeDocType[]).map((type) => (
           <button
             key={type}
             type="button"
@@ -118,6 +135,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
             {type === 'ppt' && <Presentation className="w-3.5 h-3.5" />}
             {type === 'word' && <FileText className="w-3.5 h-3.5" />}
             {type === 'excel' && <FileSpreadsheet className="w-3.5 h-3.5" />}
+            {type === 'pdf' && <FileType className="w-3.5 h-3.5" />}
             {type.toUpperCase()}
           </button>
         ))}
@@ -176,6 +194,45 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
               rows={3}
               className="w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text"
             />
+          </div>
+        </div>
+      )}
+
+      {docType === 'pdf' && (
+        <div className="space-y-2">
+          <div>
+            <label className="block text-xs text-muted mb-1">{t('office.generate.pdfTitle')}</label>
+            <input
+              type="text"
+              value={pdfTitle}
+              onChange={(e) => setPdfTitle(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">
+              {t('office.generate.pdfParagraphs')}
+            </label>
+            <textarea
+              value={pdfParagraphs}
+              onChange={(e) => setPdfParagraphs(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">
+              {t('office.generate.pdfPageSize')}
+            </label>
+            <select
+              value={pdfPageSize}
+              onChange={(e) => setPdfPageSize(e.target.value as PdfPageSize)}
+              className="w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text"
+            >
+              <option value="A4">A4</option>
+              <option value="Letter">Letter</option>
+              <option value="Legal">Legal</option>
+            </select>
           </div>
         </div>
       )}

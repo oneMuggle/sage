@@ -120,6 +120,10 @@ class OfficeReadTool(BaseTool):
     - ``"all"``     -- summary + full content; degraded to bounded head
       with ``truncated=True`` when the serialized payload exceeds
       ``max_output_bytes``.
+
+    ``formulas`` (Excel only) switches the reader to formula mode: formula
+    cells are reported as ``CELL=formula_text`` entries alongside their
+    cached values (where Excel has stored them).
     """
 
     requires_tool_context = True
@@ -151,6 +155,16 @@ class OfficeReadTool(BaseTool):
                         ),
                         "default": "summary",
                     },
+                    "formulas": {
+                        "type": "boolean",
+                        "description": (
+                            "Excel only: also report formula cells as "
+                            "'CELL=formula_text' entries per sheet (a note "
+                            "marks formulas whose computed value is not "
+                            "cached yet). Ignored for word/ppt. Default false."
+                        ),
+                        "default": False,
+                    },
                 },
                 "required": ["doc_id"],
             },
@@ -160,6 +174,7 @@ class OfficeReadTool(BaseTool):
         self,
         doc_id: str,
         section: str = "summary",
+        formulas: bool = False,
         **kwargs: Any,
     ) -> ToolResult:
         ctx = current_tool_context()
@@ -175,6 +190,7 @@ class OfficeReadTool(BaseTool):
                 ctx.binding_generation,
                 doc_id,
                 section=section,
+                formula_mode=formulas,
             )
         except Exception:
             # Unexpected backend error: return a safe, non-leaking error.

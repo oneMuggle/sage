@@ -54,12 +54,20 @@ def _visible_office_tools(registry, ctx, allowed_tools):
 def test_primary_sees_all_office_tools(registry, bound_ctx):
     visible = _visible_office_tools(registry, bound_ctx, _profile("primary").tools)
     # 2026-09-09: PR-3 (office_archive) 给 primary 加了 archive, 测试同步更新。
+    # 2026-09 Parity Batch-1: primary 经 *OFFICE_TOOLS 继承 PDF 三类 +
+    # Word 模板两件, 测试同步更新。
     assert visible == [
+        "office_analyze_word_template",
         "office_archive",
         "office_create",
         "office_delete",
+        "office_fill_pdf_form",
+        "office_fill_word_template",
+        "office_generate_pdf",
         "office_list",
         "office_read",
+        "office_read_pdf",
+        "office_read_pdf_form",
         "office_restore",
         "office_update",
     ]
@@ -68,11 +76,19 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
 def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
     visible = _visible_office_tools(registry, bound_ctx, _profile("writer").tools)
     # 2026-09-09: PR-3 (office_archive) 给 writer 加了 archive, 测试同步更新。
+    # 2026-09 Parity Batch-1: writer 白名单补 PDF 三类 + Word 模板两件
+    # （仍不给 office_delete）, 测试同步更新。
     assert visible == [
+        "office_analyze_word_template",
         "office_archive",
         "office_create",
+        "office_fill_pdf_form",
+        "office_fill_word_template",
+        "office_generate_pdf",
         "office_list",
         "office_read",
+        "office_read_pdf",
+        "office_read_pdf_form",
         "office_restore",
         "office_update",
     ]
@@ -88,10 +104,21 @@ def test_list_and_read_hidden_without_workspace_binding(registry):
     """未绑定工作区(context=None) → requires_tool_context 的工具自动隐藏。
 
     office_create / office_update / office_delete 的 requires_tool_context 是
-    False(它们支持 file_path 模式), 所以仍可见 —— 这是有意的。
+    False(它们支持 file_path 模式), 所以仍可见 —— 这是有意的。2026-09
+    Parity Batch-1: 写三件(office_generate_pdf / office_fill_pdf_form /
+    office_fill_word_template)同样是 file_path 模式 → False 仍可见; 读三件
+    (office_read_pdf / office_read_pdf_form / office_analyze_word_template)
+    与 office_list/read/restore/archive 一样隐藏。
     """
     visible = _visible_office_tools(registry, None, _profile("primary").tools)
-    assert visible == ["office_create", "office_delete", "office_update"]
+    assert visible == [
+        "office_create",
+        "office_delete",
+        "office_fill_pdf_form",
+        "office_fill_word_template",
+        "office_generate_pdf",
+        "office_update",
+    ]
 
 
 def test_office_tools_are_in_current_default_constants():

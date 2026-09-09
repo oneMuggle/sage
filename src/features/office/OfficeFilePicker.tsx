@@ -58,12 +58,14 @@ const DOC_TYPE_LABELS: Record<OfficeDocType, string> = {
   ppt: 'PowerPoint (.pptx)',
   word: 'Word (.docx)',
   excel: 'Excel (.xlsx)',
+  pdf: 'PDF (.pdf)',
 };
 
 const DOC_TYPE_MODERN_EXT: Record<OfficeDocType, string> = {
   ppt: 'pptx',
   word: 'docx',
   excel: 'xlsx',
+  pdf: 'pdf',
 };
 
 /**

@@ -73,7 +73,7 @@ def test_extract_mentions_empty_string() -> None:
 
 
 def test_office_exts_is_frozen() -> None:
-    assert frozenset({".pptx", ".docx", ".xlsx"}) == OFFICE_EXTS
+    assert frozenset({".pptx", ".docx", ".xlsx", ".pdf"}) == OFFICE_EXTS
 
 
 # ─── resolve_mentions (mock _digest_*) ───────────────────────────

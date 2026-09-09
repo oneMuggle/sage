@@ -7,6 +7,8 @@
  * - importAndRead: pick (or drop) → import → read → complete-or-discard
  * - saveAs / open / showInFolder: native gateway actions via the
  *   Electron managed-file bridge (M0 Task 5)
+ * - archiveDocument / restoreDocument + view toggle: soft-delete
+ *   lifecycle (parity batch 1, item 1.7)
  * - refresh: re-fetch documents list
  *
  * M0 Task 6 (2026-07-23): the hook now owns the import-token lifecycle.
@@ -27,6 +29,7 @@ import type {
   OfficeDocType,
   OfficeDocumentSummary,
   OfficeExcelReadResult,
+  OfficePdfReadResult,
   OfficePptReadResult,
   OfficeWordReadResult,
 } from '../../shared/api/types';
@@ -34,13 +37,27 @@ import type {
 import { importOfficeByType } from './importOfficeReference';
 
 /** Read result union — OfficePreviewPanel is doc-type-agnostic. */
-export type OfficeReadResult = OfficePptReadResult | OfficeWordReadResult | OfficeExcelReadResult;
+export type OfficeReadResult =
+  | OfficePptReadResult
+  | OfficeWordReadResult
+  | OfficeExcelReadResult
+  | OfficePdfReadResult;
+
+/** Which slice of the document lifecycle the list renders (item 1.7). */
+export type OfficeListView = 'live' | 'archived';
 
 export interface UseOfficeDocumentsReturn {
   documents: OfficeDocumentSummary[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  /**
+   * Which lifecycle slice `documents` renders (item 1.7). `'live'` is the
+   * default list (backend hides archived rows); `'archived'` fetches with
+   * include_archived and keeps only soft-deleted rows.
+   */
+  view: OfficeListView;
+  setView: (view: OfficeListView) => void;
   /**
    * Pick a file via the native dialog, import it into the managed
    * directory, run the type-specific read, then call
@@ -70,6 +87,20 @@ export interface UseOfficeDocumentsReturn {
    */
   showInFolder: (docId: string) => Promise<void>;
   /**
+   * Archive (soft-delete) a document, then re-fetch the current view.
+   * The row hides from the live list but stays recoverable (item 1.7).
+   */
+  archiveDocument: (docId: string) => Promise<void>;
+  /**
+   * Restore (un-archive) a document, then re-fetch the current view.
+   */
+  restoreDocument: (docId: string) => Promise<void>;
+  /**
+   * Re-read a document's managed file and return the fresh read result —
+   * used after a snapshot restore to refresh the preview (item 1.7).
+   */
+  readDocument: (docId: string) => Promise<OfficeReadResult>;
+  /**
    * Read-only access to the workspace documents for callers that need
    * to reconstruct an `OfficeManagedRef` from the document ID.
    */
@@ -86,6 +117,24 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
   const [documents, setDocuments] = useState<OfficeDocumentSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Item 1.7: 'live' (default) vs 'archived' list slice.
+  const [view, setView] = useState<OfficeListView>('live');
+
+  const fetchDocuments = useCallback(
+    async (currentView: OfficeListView): Promise<OfficeDocumentSummary[]> => {
+      if (!workspacePath) return [];
+      const result = await officeApi.listDocuments(workspacePath, {
+        includeArchived: currentView === 'archived',
+      });
+      // include_archived=true returns live + archived rows; the archived
+      // view only wants the soft-deleted slice.
+      if (currentView === 'archived') {
+        return result.documents.filter((d) => d.archived_at != null);
+      }
+      return result.documents;
+    },
+    [workspacePath],
+  );
 
   const refresh = useCallback(async () => {
     if (!workspacePath) {
@@ -95,15 +144,14 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     setLoading(true);
     setError(null);
     try {
-      const result = await officeApi.listDocuments(workspacePath);
-      setDocuments(result.documents);
+      setDocuments(await fetchDocuments(view));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setDocuments([]);
     } finally {
       setLoading(false);
     }
-  }, [workspacePath]);
+  }, [workspacePath, fetchDocuments, view]);
 
   // Workspace entry: list first, then sweep with the known id set.
   // Cancellation guard prevents a stale resolution from a prior
@@ -120,7 +168,7 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     setError(null);
     void (async () => {
       try {
-        const { documents } = await officeApi.listDocuments(workspacePath);
+        const documents = await fetchDocuments(view);
         if (cancelled) return;
         setDocuments(documents);
         // Best-effort: a sweep failure surfaces via setError but does
@@ -145,7 +193,7 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     return () => {
       cancelled = true;
     };
-  }, [workspacePath]);
+  }, [workspacePath, fetchDocuments, view]);
 
   const findDocument = useCallback(
     (docId: string) => documents.find((d) => d.id === docId),
@@ -160,6 +208,10 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
       }
       if (docType === 'word') {
         return officeApi.readWord({ workspace_path: workspacePath, file_path: managedPath });
+      }
+      if (docType === 'pdf') {
+        // PdfReadRequest is extra="forbid" — only the two path fields.
+        return officeApi.readPdf({ workspace_path: workspacePath, file_path: managedPath });
       }
       return officeApi.readExcel({ workspace_path: workspacePath, file_path: managedPath });
     },
@@ -266,16 +318,63 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     [documents, workspacePath],
   );
 
+  // Item 1.7: soft-delete lifecycle. Both actions re-fetch the current
+  // view so the row moves between the live and archived lists immediately.
+  const archiveDocument = useCallback(
+    async (docId: string): Promise<void> => {
+      await officeApi.archiveDocument(docId);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const restoreDocument = useCallback(
+    async (docId: string): Promise<void> => {
+      await officeApi.restoreDocument(docId);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  /**
+   * Re-read a document's managed file (snapshot-restore follow-up).
+   * The managed layout `<workspace>/office/<docType>/<docId>/<filename>`
+   * mirrors electron/officePaths.buildManagedPath; the renderer keeps no
+   * absolute path state, so it is rebuilt from the document record.
+   */
+  const readDocument = useCallback(
+    async (docId: string): Promise<OfficeReadResult> => {
+      const doc = documents.find((d) => d.id === docId);
+      if (!doc || !workspacePath) {
+        throw new Error('Document or workspace not found');
+      }
+      const managedPath = [
+        workspacePath,
+        'office',
+        doc.doc_type,
+        doc.id,
+        doc.generated_filename,
+      ].join('/');
+      return readByType(doc.doc_type, managedPath);
+    },
+    [documents, workspacePath, readByType],
+  );
+
   return {
     documents,
     loading,
     error,
     refresh,
+    view,
+    setView,
     importAndRead,
     readDropped,
     saveAs,
     open,
     showInFolder,
+    archiveDocument,
+    restoreDocument,
+    readDocument,
     findDocument,
   };
 }

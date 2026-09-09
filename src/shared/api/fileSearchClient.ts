@@ -137,7 +137,10 @@ export const fileSearchClient = {
         size: r.sizeBytes,
         kind: r.kind,
         docId: r.docId,
-        docType: r.docType,
+        // Chat @-menu pdf support is deferred (OfficeDocType now carries
+        // 'pdf' for the /office page); coalesce to null so a managed pdf
+        // doc degrades to the plain-file insertion path in chat.
+        docType: r.docType === 'pdf' ? null : r.docType,
         sourcePath: r.sourcePath,
       })),
     );

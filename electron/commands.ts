@@ -546,10 +546,21 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   office_ppt_read: { method: 'POST', path: () => '/api/v1/office/ppt/read' },
   office_word_read: { method: 'POST', path: () => '/api/v1/office/word/read' },
   office_excel_read: { method: 'POST', path: () => '/api/v1/office/excel/read' },
+  // Office parity batch 1 (item 1.2): PDF read/generate.
+  // Backend: backend/api/office_routes.py:495-508 (POST /pdf/read, POST /pdf/generate).
+  // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send
+  // ONLY workspacePath + filePath (no max_size_bytes / original_filename).
+  office_pdf_read: { method: 'POST', path: () => '/api/v1/office/pdf/read' },
+  // include_archived (item 1.7): archive-restore UI lists soft-deleted rows.
+  // Path builder reads the raw camelCase arg and serializes snake_case into
+  // the query string (query args are NOT auto-translated by invokeBackend).
   office_list_documents: {
     method: 'GET',
-    path: (a) =>
-      `/api/v1/office/documents?workspace_path=${encodeURIComponent(String(a.workspacePath))}`,
+    path: (a) => {
+      let path = `/api/v1/office/documents?workspace_path=${encodeURIComponent(String(a.workspacePath))}`;
+      if (a.includeArchived === true) path += '&include_archived=true';
+      return path;
+    },
   },
   office_delete_document: {
     method: 'DELETE',
@@ -559,6 +570,29 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   office_ppt_generate: { method: 'POST', path: () => '/api/v1/office/ppt/generate' },
   office_word_generate: { method: 'POST', path: () => '/api/v1/office/word/generate' },
   office_excel_generate: { method: 'POST', path: () => '/api/v1/office/excel/generate' },
+  office_pdf_generate: { method: 'POST', path: () => '/api/v1/office/pdf/generate' },
+  // Office parity batch 1 (item 1.7): archive/restore + snapshot lifecycle.
+  // Backend service layer lives in backend/office/tool_service.py:601-716
+  // (archive / restore) and backend/office/storage.py:316-360 (snapshots);
+  // the HTTP routes land in backend/api/office_routes.py in the same batch.
+  // Route prefix follows the agreed snapshot contract (/office/doc/{id}/…).
+  office_archive_document: {
+    method: 'POST',
+    path: (a) => `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/archive`,
+  },
+  office_restore_document: {
+    method: 'POST',
+    path: (a) => `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/restore`,
+  },
+  office_list_snapshots: {
+    method: 'GET',
+    path: (a) => `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/snapshots`,
+  },
+  office_restore_snapshot: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/snapshots/${encodeURIComponent(String(a.snapshotId))}/restore`,
+  },
 
   // M3: MCP multi-server management (backend/api/mcp_routes.py).
   // mcp_server_add: args are the full server config, forwarded as body.

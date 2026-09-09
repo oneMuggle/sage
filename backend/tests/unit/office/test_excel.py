@@ -22,7 +22,8 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 from backend.office.errors import OfficeFileNotFoundError, OfficeParseError
-from backend.office.excel import read_xlsx
+from backend.office.excel import generate_xlsx, read_xlsx
+from backend.office.models import ExcelSheetSpec, OfficeExcelGenerateRequest
 
 
 def _build_empty_xlsx(path: Path) -> Path:
@@ -189,3 +190,96 @@ def test_read_xlsx_numeric_cells_become_strings(fixture_dir: Path) -> None:
     assert age_cell == "30"
     # Suppress unused-import warning
     _ = get_column_letter
+
+
+# ──────────────────────────────────────────────────────────────────────
+# generate_xlsx formula cells + include_formulas read view (Item 1.4)
+# ──────────────────────────────────────────────────────────────────────
+
+#: read_xlsx(include_formulas=True) 在公式缺缓存值时附的一行提示
+_FORMULA_CACHE_NOTE = "公式计算值需在 Excel 中打开后生效"
+
+
+def _generate_formula_workbook(fixture_dir: Path) -> Path:
+    """Generated workbook: label column + one '=SUM(...)' formula cell (B4)."""
+    req = OfficeExcelGenerateRequest(
+        workspace_path=str(fixture_dir),
+        filename="formula-gen.xlsx",
+        sheets=[
+            ExcelSheetSpec(
+                name="Calc",
+                headers=["Item", "Amount"],
+                rows=[["A", "10"], ["B", "20"], ["Sum", "=SUM(B2:B3)"]],
+            ),
+        ],
+    )
+    return generate_xlsx(req)
+
+
+def test_generate_xlsx_writes_formula_cells(fixture_dir: Path) -> None:
+    """'=' 前缀字符串经 generate_xlsx 后是真公式（data_type='f'），不是文本。"""
+    from openpyxl import load_workbook
+
+    path = _generate_formula_workbook(fixture_dir)
+    wb = load_workbook(str(path), data_only=False)
+    try:
+        ws = wb["Calc"]
+        assert ws["B4"].value == "=SUM(B2:B3)"
+        assert ws["B4"].data_type == "f"
+        # 相邻文本/数值单元格不受影响
+        assert ws["A4"].value == "Sum"
+        assert ws["B2"].value == "10"
+    finally:
+        wb.close()
+
+
+def test_read_xlsx_formula_mode_lists_formulas_and_note(fixture_dir: Path) -> None:
+    """include_formulas=True: 公式以 'CELL=formula_text' 列出 + 缺缓存值提示。"""
+    path = _generate_formula_workbook(fixture_dir)
+    result = read_xlsx(path, include_formulas=True)
+    sheet = result.sheets[0]
+    assert sheet.formulas == ["B4=SUM(B2:B3)"]
+    assert sheet.note == _FORMULA_CACHE_NOTE
+    # 值网格不变：无缓存值 → 公式单元格读为空串
+    assert sheet.rows[-1] == ["Sum", ""]
+
+
+def test_read_xlsx_without_flag_keeps_legacy_shape(fixture_dir: Path) -> None:
+    """默认读取形状不变：无 formulas/note，公式单元格表现为空串。"""
+    path = _generate_formula_workbook(fixture_dir)
+    result = read_xlsx(path)
+    sheet = result.sheets[0]
+    assert sheet.formulas is None
+    assert sheet.note is None
+    assert sheet.rows[-1] == ["Sum", ""]
+
+
+def test_read_xlsx_formula_mode_shows_cached_value(fixture_dir: Path) -> None:
+    """有缓存值时公式条目附带 '→ 值'，且不再附加缺缓存提示。
+
+    openpyxl 不会写公式缓存值，这里手工往 sheet XML 注入 ``<v>30</v>``
+    模拟 Excel 打开保存后的文件。
+    """
+    import re
+    import zipfile
+
+    path = _generate_formula_workbook(fixture_dir)
+    patched = fixture_dir / "formula-cached.xlsx"
+    # openpyxl 在公式后写一个空的 <v></v>；注入时一并替换
+    injection = re.compile(r'(<c r="B4"[^>]*>)(<f>SUM\(B2:B3\)</f>)(?:<v>[^<]*</v>)?(</c>)')
+    with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(patched, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename.endswith("sheet1.xml"):
+                text = data.decode("utf-8")
+                patched_text, hits = injection.subn(
+                    r"\1\2<v>30</v>\3", text
+                )
+                assert hits == 1  # 注入必须命中，否则测试自身失效
+                data = patched_text.encode("utf-8")
+            zout.writestr(item, data)
+
+    result = read_xlsx(patched, include_formulas=True)
+    sheet = result.sheets[0]
+    assert sheet.formulas == ["B4=SUM(B2:B3) → 30"]
+    assert sheet.note is None

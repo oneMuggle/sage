@@ -171,6 +171,19 @@ class ExcelSheetContent(BaseModel):
     rows: List[List[str]]
     max_row: int = Field(ge=0)
     max_col: int = Field(ge=0)
+    # Item 1.4 公式视图：仅 read_xlsx(include_formulas=True) 时填充，默认
+    # None 保持既有 IPC 契约不变（additive 字段，前端可忽略）。
+    formulas: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "公式单元格列表，格式 'B4=SUM(B2:B3)'；有缓存值时为 "
+            "'B4=SUM(B2:B3) → 30'。None 表示未启用公式视图或无公式。"
+        ),
+    )
+    note: Optional[str] = Field(
+        default=None,
+        description="公式缺缓存值时的一行提示（openpyxl 无法计算公式）。",
+    )
 
 
 class OfficeExcelReadResult(BaseModel):
@@ -238,7 +251,6 @@ class OfficePptGenerateRequest(BaseModel):
         description="Output filename (without .pptx extension is OK; we'll add it)",
     )
     slides: _constrained_list(PptSlideSpec, min_length=1, max_length=100)
-    template: Optional[str] = Field(default=None, description="'default' | 'minimal'")
 
 
 class WordParagraphSpec(BaseModel):
@@ -324,6 +336,36 @@ class OfficeDeleteResponse(BaseModel):
 
     id: str
     deleted: bool
+
+
+class OfficeSnapshotInfo(BaseModel):
+    """One pre-edit snapshot file under ``<managed_dir>/.snapshots/``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: str = Field(
+        description="快照文件名 '<ms>-<generated_filename>'，restore 时原样回传"
+    )
+    size_bytes: int = Field(ge=0)
+    created_at: int = Field(description="快照时间，Unix 毫秒时间戳（取自文件名前缀）")
+
+
+class OfficeSnapshotListResponse(BaseModel):
+    """GET /api/v1/office/doc/{doc_id}/snapshots."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    snapshots: List[OfficeSnapshotInfo]
+    total: int = Field(ge=0)
+
+
+class OfficeDocumentActionResponse(BaseModel):
+    """POST /doc/{doc_id}/archive | /restore | /snapshots/{sid}/restore."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    summary: OfficeDocumentSummary
 
 
 # ──────────────────────────────────────────────────────────────────────

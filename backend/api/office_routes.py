@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 from backend.data.database import Database, get_database
 from backend.office.errors import (
     OfficeError,
+    OfficeFileNotFoundError,
     OfficePathError,
     OfficeSizeLimitError,
     office_error_to_http_status,
@@ -36,6 +37,7 @@ from backend.office.models import (
     OfficeDeleteResponse,
     OfficeDocStatus,
     OfficeDocType,
+    OfficeDocumentActionResponse,
     OfficeDocumentListResponse,
     OfficeDocumentMetadata,
     OfficeDocumentSummary,
@@ -44,6 +46,7 @@ from backend.office.models import (
     OfficePptGenerateRequest,
     OfficePptReadResult,
     OfficeReadRequest,
+    OfficeSnapshotListResponse,
     OfficeWordGenerateRequest,
     OfficeWordReadResult,
     PdfFormFillRequest,
@@ -60,13 +63,17 @@ from backend.office.models import (
     WordTemplateFillResult,
 )
 from backend.office.path_safety import resolve_within
-from backend.office.pdf import generate_pdf, read_pdf
+from backend.office.pdf import MAX_PDF_SIZE, generate_pdf, read_pdf
 from backend.office.pdf_forms import fill_pdf_form, read_pdf_form
 from backend.office.ppt import generate_ppt, read_ppt
 from backend.office.storage import (
+    archive_document,
     delete_document,
     get_document,
     list_documents,
+    list_snapshots,
+    restore_document,
+    restore_from_snapshot,
     save_document,
     validate_workspace,
 )
@@ -380,7 +387,9 @@ def read_excel_endpoint(req: OfficeReadRequest) -> OfficeExcelReadResult:
 
 
 @router.get("/documents", response_model=OfficeDocumentListResponse)
-def list_documents_endpoint(workspace_path: str) -> OfficeDocumentListResponse:
+def list_documents_endpoint(
+    workspace_path: str, include_archived: bool = False
+) -> OfficeDocumentListResponse:
     """List all office documents in a workspace.
 
     Canonicalizes ``workspace_path`` so callers that pass ``/tmp/./ws``
@@ -388,9 +397,14 @@ def list_documents_endpoint(workspace_path: str) -> OfficeDocumentListResponse:
     rows always store the resolved form because every write path
     (``_build_summary_for_generated``, ``_persist_read_summary``)
     normalizes before INSERT.
+
+    ``include_archived``（Item 1.7 归档 UI）：True 时包含软删除行，
+    前端「归档文档」视图用；默认只返回 live 文档。
     """
     canonical_workspace = str(Path(workspace_path).resolve())
-    documents = list_documents(_db().get_connection(), canonical_workspace)
+    documents = list_documents(
+        _db().get_connection(), canonical_workspace, include_archived=include_archived
+    )
     return OfficeDocumentListResponse(documents=documents, total=len(documents))
 
 
@@ -402,6 +416,63 @@ def delete_document_endpoint(doc_id: str) -> OfficeDeleteResponse:
     """
     deleted = _delete_office_doc_record_and_files(doc_id)
     return OfficeDeleteResponse(id=doc_id, deleted=deleted)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Archive / restore / snapshot endpoints (Item 1.7 — 前端归档 + 版本回滚)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _require_document(conn, doc_id: str) -> OfficeDocumentSummary:
+    """Fetch a document or raise 404-mapped OfficeFileNotFoundError."""
+    doc = get_document(conn, doc_id)
+    if doc is None:
+        # OfficeFileNotFoundError 只接受 file_path（message 由基类拼装）
+        raise OfficeFileNotFoundError(Path(doc_id))
+    return doc
+
+
+@router.post("/doc/{doc_id}/archive", response_model=OfficeDocumentActionResponse)
+def archive_document_endpoint(doc_id: str) -> OfficeDocumentActionResponse:
+    """Soft-delete a document (row stays; default list hides it). Idempotent."""
+    conn = _db().get_connection()
+    _require_document(conn, doc_id)
+    archive_document(conn, doc_id)
+    return OfficeDocumentActionResponse(ok=True, summary=get_document(conn, doc_id))
+
+
+@router.post("/doc/{doc_id}/restore", response_model=OfficeDocumentActionResponse)
+def restore_document_endpoint(doc_id: str) -> OfficeDocumentActionResponse:
+    """Un-archive a soft-deleted document. Idempotent."""
+    conn = _db().get_connection()
+    _require_document(conn, doc_id)
+    restore_document(conn, doc_id)
+    return OfficeDocumentActionResponse(ok=True, summary=get_document(conn, doc_id))
+
+
+@router.get("/doc/{doc_id}/snapshots", response_model=OfficeSnapshotListResponse)
+def list_snapshots_endpoint(doc_id: str) -> OfficeSnapshotListResponse:
+    """List a document's pre-edit snapshots (newest first)."""
+    conn = _db().get_connection()
+    doc = _require_document(conn, doc_id)
+    snapshots = list_snapshots(doc)
+    return OfficeSnapshotListResponse(snapshots=snapshots, total=len(snapshots))
+
+
+@router.post(
+    "/doc/{doc_id}/snapshots/{snapshot_id}/restore",
+    response_model=OfficeDocumentActionResponse,
+)
+def restore_snapshot_endpoint(doc_id: str, snapshot_id: str) -> OfficeDocumentActionResponse:
+    """Revert the document file to a pre-edit snapshot.
+
+    恢复前 storage 层会先把当前文件再快照一份（恢复本身可撤销），
+    并刷新 DB 的 ``updated_at`` / ``file_size_bytes``。
+    """
+    conn = _db().get_connection()
+    doc = _require_document(conn, doc_id)
+    updated = restore_from_snapshot(conn, doc, snapshot_id)
+    return OfficeDocumentActionResponse(ok=True, summary=updated)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -496,7 +567,17 @@ def fill_word_template_endpoint(
 def read_pdf_endpoint(req: PdfReadRequest) -> PdfReadResult:
     """Read a PDF file and extract content."""
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
-    return read_pdf(file_path, workspace_path=req.workspace_path)
+    _check_size_limit(file_path, MAX_PDF_SIZE)
+    canonical_workspace = str(Path(req.workspace_path).resolve())
+    result = read_pdf(file_path, workspace_path=req.workspace_path)
+    # Item 1.2: PDF 读取与 PPT/Word/Excel 一致入库，出现在文档列表里
+    _persist_read_summary(
+        result,
+        file_path=file_path,
+        canonical_workspace=canonical_workspace,
+        original_filename=None,
+    )
+    return result
 
 
 @router.post("/pdf/generate", response_model=PdfGenerateResult)
@@ -542,4 +623,9 @@ __all__ = [
     "generate_pdf_endpoint",
     "read_pdf_form_endpoint",
     "fill_pdf_form_endpoint",
+    # Item 1.7: archive / restore / snapshots
+    "archive_document_endpoint",
+    "restore_document_endpoint",
+    "list_snapshots_endpoint",
+    "restore_snapshot_endpoint",
 ]
