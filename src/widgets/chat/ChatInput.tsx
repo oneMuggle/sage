@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useState } from 'react';
 
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
-import { skillsApi } from '../../shared/api';
+import { knowledgeApi, skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
 import type { ChatOfficeRef } from '../../shared/api/types';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
@@ -74,15 +74,6 @@ interface ChatInputProps {
   workspacePath?: string;
 }
 
-const KNOWLEDGE_DOCS: KnowledgeDocType[] = [
-  { id: 'prd', title: '产品需求文档', desc: 'Sage 核心功能定义' },
-  { id: 'api-docs', title: 'API 接口文档', desc: '内部 API 网关说明' },
-  { id: 'deploy-guide', title: '部署指南', desc: 'Windows 环境部署步骤' },
-  { id: 'memory-arch', title: '记忆系统架构', desc: '本地存储与同步策略' },
-  { id: 'ui-spec', title: 'UI 设计规范', desc: '设计令牌与组件库' },
-  { id: 'test-data', title: '测试数据集', desc: '样本对话和测试用例' },
-];
-
 function ChatInputInner({
   onSend,
   onInterrupt,
@@ -127,6 +118,26 @@ function ChatInputInner({
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  // U3 (P5): 知识引用接真实知识库 —— 此前是硬编码演示列表, 用户勾选的
+  // '引用'并非真实存在的文档, 极易误导。加载失败降级为空态不阻塞输入。
+  const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDocType[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    knowledgeApi
+      .list()
+      .then((docs) => {
+        if (cancelled) return;
+        setKnowledgeDocs(
+          docs.map((d) => ({ id: d.id, title: d.title, desc: d.description })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setKnowledgeDocs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Path B: dynamic SKILL.md slash command names fetched from the backend.
   // On fetch failure we silently fall back to an empty list (no slash skills).
   const [dynamicSlashCommands, setDynamicSlashCommands] = useState<DynamicSlashSkill[]>([]);
@@ -369,7 +380,7 @@ function ChatInputInner({
     e.target.value = '';
   };
 
-  const toggleKnowledgeRef = (doc: (typeof KNOWLEDGE_DOCS)[number]) => {
+  const toggleKnowledgeRef = (doc: KnowledgeDocType) => {
     setKnowledgeRefs((prev) =>
       prev.find((r) => r.id === doc.id)
         ? prev.filter((r) => r.id !== doc.id)
@@ -449,11 +460,11 @@ function ChatInputInner({
       onRemoveImage={removeImage}
       onRemoveKnowledge={(idx) => setKnowledgeRefs((prev) => prev.filter((_, i) => i !== idx))}
       onRemoveOfficeRef={removeOfficeRef}
-      knowledgeDocs={KNOWLEDGE_DOCS}
+      knowledgeDocs={knowledgeDocs}
       showKnowledgeSelector={showKnowledgeSelector}
       onToggleKnowledgeSelector={setShowKnowledgeSelector}
       onToggleKnowledge={(docId) => {
-        const doc = KNOWLEDGE_DOCS.find((d) => d.id === docId);
+        const doc = knowledgeDocs.find((d) => d.id === docId);
         if (doc) toggleKnowledgeRef(doc);
       }}
       onImageSelect={handleImageSelect}
@@ -466,6 +477,8 @@ function ChatInputInner({
       slashCommands={slashCommands}
       slashSelectedIndex={slashSelectedIndex}
       onSlashSelect={handleSlashSelect}
+      onSlashHighlight={setSlashSelectedIndex}
+      onSlashClose={() => setSlashMenuOpen(false)}
       atFileMenu={
         atQuery.query !== null && (
           <AtFileMenu
